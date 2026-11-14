@@ -7,11 +7,12 @@ import {
   HORN,
   MELEE,
   PROPS,
-  propKind,
   SPAWNS,
   STEP,
   WEAPON,
   type Door,
+  type Box,
+  type Prop,
   type PropKind,
 } from "./level.js";
 import {
@@ -86,6 +87,15 @@ function shape(kind: PropKind) {
     .setFriction(0.8)
     .setRestitution(0.18);
 }
+export type SimulationLayout = {
+  level: Box[];
+  doors: Door[];
+  props: Prop[];
+  spawns: readonly (readonly number[])[];
+};
+const DEFAULT_LAYOUT: SimulationLayout = {
+  level: LEVEL, doors: DOORS, props: PROPS, spawns: SPAWNS,
+};
 export class Simulation {
   world = new RAPIER.World({ x: 0, y: -18, z: 0 });
   players = new Map<number, Character>();
@@ -98,15 +108,16 @@ export class Simulation {
   private meleeCooldowns = new Map<number, number>();
   private hornCooldowns = new Map<number, number>();
   private frame = 0;
-  constructor(public prediction = false) {
+  constructor(public prediction = false, private layout = DEFAULT_LAYOUT) {
+    if (!layout.spawns.length) throw new Error("A layout needs a spawn");
     this.world.timestep = STEP;
-    for (const b of LEVEL)
+    for (const b of layout.level)
       this.world.createCollider(
         RAPIER.ColliderDesc.cuboid(b.s[0] / 2, b.s[1] / 2, b.s[2] / 2)
           .setTranslation(...b.p)
           .setFriction(0.8),
       );
-    for (const def of DOORS) {
+    for (const def of layout.doors) {
       const body = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(...def.p),
       );
@@ -127,7 +138,7 @@ export class Simulation {
         progress: 0,
       });
     }
-    PROPS.forEach((prop, i) => {
+    layout.props.forEach((prop, i) => {
       const bouncy = prop.kind === "ball";
       const body = this.world.createRigidBody(
         (prediction
@@ -146,7 +157,7 @@ export class Simulation {
     this.world.step();
   }
   addPlayer(id: number) {
-    const spawn = SPAWNS[(id - 1) % SPAWNS.length];
+    const spawn = this.layout.spawns[(id - 1) % this.layout.spawns.length];
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
         spawn[0],
@@ -304,7 +315,8 @@ export class Simulation {
     };
   }
   /** Stable hand pose shared by physics and shot visuals for compact tools. */
-  heldPose(s: PlayerState, kind = propKind(s.held)) {
+  private propKind(id: number) { return this.layout.props[id - 1]?.kind; }
+  heldPose(s: PlayerState, kind = this.propKind(s.held)) {
     const eye = this.eye(s),
       d = this.direction(s),
       span = Math.max(0.001, Math.hypot(d.x, d.z)),
@@ -415,7 +427,7 @@ export class Simulation {
    */
   shoot(playerId: number): Shot | null {
     const c = this.players.get(playerId);
-    if (!c || PROPS[c.state.held - 1]?.kind !== "gun") return null;
+    if (!c || this.propKind(c.state.held) !== "gun") return null;
     if (this.frame < (this.cooldowns.get(playerId) ?? 0)) return null;
     this.cooldowns.set(playerId, this.frame + WEAPON.cooldown);
     const s = c.state,
@@ -458,7 +470,7 @@ export class Simulation {
   /** Swing the held bat through a forgiving capsule-sized lane in front. */
   swing(playerId: number): Swing | null {
     const c = this.players.get(playerId);
-    if (!c || propKind(c.state.held) !== "bat") return null;
+    if (!c || this.propKind(c.state.held) !== "bat") return null;
     if (this.frame < (this.meleeCooldowns.get(playerId) ?? 0)) return null;
     this.meleeCooldowns.set(playerId, this.frame + MELEE.cooldown);
     const s = c.state,
@@ -495,7 +507,7 @@ export class Simulation {
   }
   honk(playerId: number) {
     const c = this.players.get(playerId);
-    if (!c || propKind(c.state.held) !== "horn") return false;
+    if (!c || this.propKind(c.state.held) !== "horn") return false;
     if (this.frame < (this.hornCooldowns.get(playerId) ?? 0)) return false;
     this.hornCooldowns.set(playerId, this.frame + HORN.cooldown);
     return true;
@@ -583,7 +595,7 @@ export class Simulation {
       if (!c.state.held) continue;
       // Compact tools stay locked to one stable hand pose. Bulky throwable
       // props still pull back when a wall would clip them.
-      const kind = propKind(c.state.held),
+      const kind = this.propKind(c.state.held),
         tool = kind === "gun" || kind === "bat" || kind === "horn",
         gun = kind === "gun",
         reach = gun ? 1.5 : 2.25,
@@ -650,7 +662,7 @@ export class Simulation {
     if (!this.prediction)
       for (const [id, body] of this.props) {
         if (body.translation().y < -8) {
-          const p = PROPS[id - 1].p;
+          const p = this.layout.props[id - 1].p;
           body.setTranslation({ x: p[0], y: p[1] + 1.5, z: p[2] }, true);
           body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         }
