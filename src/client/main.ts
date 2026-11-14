@@ -532,7 +532,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-move]").forEach(button => {
     if (!connected || !$("pause").hidden) return;
     button.setPointerCapture(e.pointerId); keys.add(button.dataset.move!); e.preventDefault();
   };
-  button.onpointerup = button.onpointercancel = () => keys.delete(button.dataset.move!);
+  button.onpointerup = button.onpointercancel = button.onlostpointercapture = () => keys.delete(button.dataset.move!);
 });
 let finger: { id: number; x: number; y: number } | undefined;
 canvas.addEventListener("pointerdown", e => {
@@ -695,7 +695,10 @@ addEventListener("keydown", (e) => {
   }
   keys.add(e.code);
   if (["Space", "ControlLeft", "Tab"].includes(e.code)) e.preventDefault();
-  if (!e.repeat && e.code === "KeyE") interact();
+  if (!e.repeat && e.code === "KeyE") {
+    keys.delete(e.code);
+    if (!museum.open() && !postOffice.open()) interact();
+  }
   if (!e.repeat && e.code === "KeyQ") interact(true);
   if (!e.repeat && e.code === "KeyF") fire();
 });

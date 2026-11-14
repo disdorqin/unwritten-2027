@@ -10,6 +10,24 @@ async function enter(page: Page, name: string, room?: string) {
 }
 const state = (page: Page) => page.evaluate(() => (window as any).__friendslop.state);
 
+async function walk(page: Page, points: number[][]) {
+  await page.evaluate(async points => {
+    const game = (window as any).__friendslop;
+    for (const [x, z] of points) {
+      const started = performance.now();
+      game.input("ShiftLeft", true); game.input("KeyW", true);
+      try {
+        while (performance.now() - started < 20000) {
+          const dx = x - game.state.x, dz = z - game.state.z;
+          if (Math.hypot(dx, dz) < 0.45) break;
+          game.look(Math.atan2(-dx, -dz), 0);
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+      } finally { game.input("KeyW", false); game.input("ShiftLeft", false); }
+    }
+  }, points);
+}
+
 test("snow town: two rendered clients, shared movement, safe chat and reconnect", async ({ page, context }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -83,23 +101,10 @@ test("museum: walk through doorway, read and close without moving or changing ca
   await enter(page, "纪念馆访客");
   // Enter the existing unlocked controls mode before driving the shared motor.
   await page.locator("#chat-text").focus();
-  await page.evaluate(async () => {
-    const game = (window as any).__friendslop;
-    for (const [x, z] of [[-18, 4], [-18, -8]]) {
-      const started = performance.now();
-      game.input("ShiftLeft", true); game.input("KeyW", true);
-      try {
-        while (performance.now() - started < 20000) {
-          const dx = x - game.state.x, dz = z - game.state.z;
-          if (Math.hypot(dx, dz) < 0.45) break;
-          game.look(Math.atan2(-dx, -dz), 0);
-          await new Promise(resolve => requestAnimationFrame(resolve));
-        }
-      } finally { game.input("KeyW", false); game.input("ShiftLeft", false); }
-    }
-  });
+  await walk(page, [[-18, 4], [-18, -8]]);
   await expect(page.locator("#museum-read")).toBeVisible();
-  await page.locator("#museum-read").click();
+  await page.locator("#chat-text").blur();
+  await page.keyboard.press("e");
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.locator("#museum-title")).toHaveText("十二个月的时间长廊");
   const before = await state(page);
@@ -111,4 +116,42 @@ test("museum: walk through doorway, read and close without moving or changing ca
   expect(await page.evaluate(() => (window as any).__friendslop.cameraMode)).toBe("first");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
+});
+
+
+test("post office: keyboard access, modal isolation and save without local draft storage", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await enter(page, "邮局访客");
+  await page.locator("#chat-text").focus();
+  await walk(page, [[17, 5], [17, -1.5]]);
+  await expect(page.locator("#post-open")).toBeVisible();
+  await page.locator("#chat-text").blur();
+  await page.keyboard.press("e");
+  await expect(page.locator("#post-panel")).toBeVisible();
+  expect(await page.locator("#post-panel").evaluate(panel => panel.matches(":modal"))).toBe(true);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === "unwritten:letter-draft") throw new DOMException("Storage unavailable", "QuotaExceededError");
+      original.call(this, key, value);
+    };
+  });
+  await page.locator("#post-text").fill("愿新的一年还能和朋友相聚。");
+  await expect(page.locator("#post-status")).toContainText("无法保留草稿");
+  await page.locator("#post-close").focus();
+  const before = await state(page);
+  await page.keyboard.press("Tab");
+  await page.keyboard.down("w");
+  await page.waitForTimeout(400);
+  await page.keyboard.up("w");
+  expect((await state(page)).z).toBeCloseTo(before.z, 1);
+  expect(await page.evaluate(() => (window as any).__friendslop.cameraMode)).toBe("first");
+  await page.locator("#post-save").click();
+  await expect(page.locator("#post-status")).toContainText("信已收好");
+  await expect(page.locator("#post-text")).toHaveValue("");
+  await expect(page.locator("#chat-messages")).not.toContainText("愿新的一年");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#post-panel")).toBeHidden();
+  expect(errors).toEqual([]);
 });

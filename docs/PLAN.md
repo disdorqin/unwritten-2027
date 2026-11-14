@@ -201,3 +201,13 @@ GitHub仓库：https://github.com/disdorqin/unwritten-2027 （私有，已创建
 - 再次实际执行纪念馆浏览器用例：`PORT=42809 BROKER_PORT=44493 CHROMIUM_PATH=/usr/bin/chromium npx playwright test tests/browser/town.spec.ts --grep 'museum:'`，服务启动，但Chromium仍在 `process_singleton_posix.cc` 因 `socket() failed: Operation not permitted (1)` 退出。没有进入页面，视觉、手机和完整交互仍未验收；不依赖Box或本机在线。
 - 提交前再次 `git fetch origin main`，仍报缺少GitHub Username/认证，未能核对远端最新main；本轮不尝试强推，成果暂存本地提交，待可用授权恢复后先fetch、检查分歧再推送。
 - 下一步：优先完成现有未提交交互修正的检查与合并，在允许浏览器运行的环境实玩验收；保留255人数协议边界及首版语音关闭，暂不扩展木马/舞台/烟花。
+
+### 交互修正收尾（2026-11-15）
+
+- 接手HEAD为 `a2990e7`。五个未提交文件与前轮记录一致，时间戳及差异未继续变化；本轮接手审阅并收拢这批已有工作，没有重做邮局或纪念馆，也未扩展游乐内容。
+- E键优先打开附近的纪念馆展板或邮局写信界面，保留原有场景交互作为后备；手机仍可点击按钮。写信窗口改用原生模态dialog，按键事件在窗口内处理，避免Tab切换游戏镜头或写信时触发移动；离开书桌范围或断开连接时关闭窗口。手机方向按钮在失去指针捕获时释放对应移动按键。
+- 草稿写入/清除localStorage失败不会再直接抛错中断写信流程；存储失败时显示提示，信件仍可交给服务器。尚未收到服务端确认时继续保留页面中的内容，不声称草稿一定已保存在设备上。
+- 检查：`git diff --check`、38项核心/服务端测试及 `node tools/run.mjs build` 通过；包含真实24客户端移动/聊天隔离、双客户端纪念馆移动及邮局服务重启去重检查。
+- 实际执行完整的 `tests/browser/town.spec.ts` 四个用例（双客户端、移动触控、纪念馆、邮局）。四项均在Chromium启动阶段因 `process_singleton_posix.cc: socket() failed: Operation not permitted (1)` 失败，未加载页面。新增/调整的交互用例仍属待执行验收，不能将上述构建或协议测试算作界面、触屏或视觉验收通过。
+- GitHub fetch仍因当前云端缺少可用认证失败，不能确认远端最新main，所有新增提交仍应按待推送处理。本轮只做本地提交；没有修改凭据配置，没有强推。
+- 下一步：恢复可运行浏览器的验收环境后先跑这四项用例并修复实际问题，再检查手机横竖屏、界面动线与建筑精修；可用GitHub授权恢复后先fetch检查远端分歧，再正常推送。
