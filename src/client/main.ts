@@ -20,6 +20,7 @@ import { GameScene } from "./rendering/scene";
 import { Voice } from "./audio/voice";
 import { TOWN_LAYOUT } from "../shared/town";
 import { setupPostOffice } from "./post-office";
+import { setupMuseum } from "./museum";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
@@ -32,6 +33,7 @@ $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
 <aside id="help" class="drawer" hidden><button class="close" data-close="help" aria-label="Close help">×</button><h3>A little field guide</h3><div class="help-grid"><div><kbd class="key">W A S D</kbd></div><span>Move around</span><div><kbd class="key">Mouse</kbd></div><span>Look around</span><div><kbd class="key">Tab</kbd></div><span>First / third person</span><div><kbd class="key">Shift</kbd></div><span>Sprint</span><div><kbd class="key">Ctrl / C</kbd></div><span>Crouch</span><div><kbd class="key">Space</kbd></div><span>Jump</span><div><kbd class="key">E</kbd></div><span>Pick up / drop</span><div><kbd class="key">Q</kbd></div><span>Throw held object</span><div><kbd class="key">Click / F</kbd></div><span>Fire, swing or honk</span><div><kbd class="key">V</kbd></div><span>Push to talk</span><div><kbd class="key">M</kbd></div><span>Mute microphone</span><div><kbd class="key">Esc</kbd></div><span>Release mouse</span></div><p class="about-copy">Voices get quieter with distance. Walk into the hall to hear the room change.</p><p class="about-copy">Doors open with <b>E</b>; the workshop doors open by themselves. Nobody can be hurt here — a hit just shoves you.</p></aside>
 <aside id="about" class="drawer" hidden><button class="close" data-close="about" aria-label="Close about">×</button><h3>A starting point, together.</h3><p class="about-copy">Friendslop is an open-source starter for small multiplayer games. A shared world, physical objects and voices that live in the room.</p><p class="about-copy">This is the common room. The game you make from it is entirely up to you.</p><p class="debug-note">Three.js · Rapier · TypeScript<br>Original Blender characters & synthetic acoustics</p></aside><div id="toast" class="toast" hidden></div><div id="loading" class="loading">正在打开雪夜小镇…</div>`;
 const scene = new GameScene($("world"), "town");
+const museum = setupMuseum(() => { previewControls = true; keys.clear(); document.exitPointerLock(); $("pause").hidden = true; });
 const postOffice = setupPostOffice({
   send,
   canSave: () => connected && network?.mode === "server",
@@ -153,7 +155,7 @@ if (params.has("fresh")) {
 }
 const movementSounds = new MovementSounds((position, kind) => voice.spatial?.effect(position, kind));
 function setPlaying(value: boolean) {
-  if (!value) postOffice.reset();
+  if (!value) { postOffice.reset(); museum.reset(); }
   movementSounds.clear();
   document.body.classList.toggle("playing", value);
   for (const name of ["lobby", "shade", "footer", "top-actions"])
@@ -790,6 +792,8 @@ function renderMembers() {
 }
 /** Where you are, in the words the HUD uses. Mirrors the acoustics regions. */
 function zone(s: { x: number; y: number; z: number }): [string, string] {
+  if (sim && s.x > -23 && s.x < -13 && s.z < 0 && s.z > -10) return ["2026 纪念馆", "走近展板 · 点击阅读"];
+  if (sim && s.x > 13 && s.x < 21 && s.z < -0.5 && s.z > -7.5) return ["新年邮局", "走近书桌 · 写给2027"];
   if (sim) return ["钟楼广场", "雪夜相遇 · 北京时间跨年"];
   if (s.z < -11)
     return s.x < -6.9 && s.z < -19.9
@@ -838,6 +842,7 @@ function frame(now: number) {
   acc += dt;
   if (connected && sim && local) {
     postOffice.update(local.state);
+    museum.update(local.state);
     let steps = 0;
     while (acc >= STEP && steps++ < 5) {
       acc -= STEP;

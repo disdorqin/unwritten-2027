@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BENCHES, LANTERNS, TOWN, TOWN_LAYOUT } from "../../shared/town";
+import { MUSEUM_EXHIBITS } from "../../shared/museum";
 
 /** Rendering only; shared/town owns placement and authority-side collision. */
 export class SnowTown {
@@ -58,6 +59,18 @@ export class SnowTown {
     const signTexture = new THREE.CanvasTexture(signCanvas); signTexture.colorSpace = THREE.SRGBColorSpace;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 0.77), new THREE.MeshBasicMaterial({ map: signTexture }));
     sign.position.set(17, 3.15, -0.38); this.root.add(sign);
+    // The museum shell above comes from the same layout as server collision.
+    this.label("2026 纪念馆", [-18, 3.5, 0.13], [3.9, 0.65]);
+    for (const x of [-22.8, -13.2]) for (const z of [-9.8, 0.1]) this.box([x, 2, z], [0.24, 4, 0.24], "#795a3a");
+    for (const exhibit of MUSEUM_EXHIBITS) {
+      const [x, y, z] = exhibit.position;
+      this.box([x, y, z], [2.65, 1.9, 0.12], "#795a3a");
+      this.label(exhibit.title, [x, y + 0.36, z + 0.07], [2.4, 0.48]);
+      this.label("走近 · 点击阅读", [x, y - 0.35, z + 0.07], [2.3, 0.4]);
+    }
+    const museumLight = new THREE.PointLight("#ffdda7", 38, 13, 2);
+    museumLight.position.set(-18, 3.5, -5); this.root.add(museumLight);
+    for (const z of [1.4, 3.4, 5.4]) this.box([-18, 0.02, z], [3, 0.04, 1.5], "#9aa6af");
     for (const [x, y, z] of BENCHES) {
       this.box([x, y + 0.25, z], [3.1, 0.16, 0.75], "#805236");
       this.box([x, y + 0.7, z - 0.3], [3.1, 0.9, 0.13], "#684329");
@@ -114,6 +127,16 @@ export class SnowTown {
   private material(color: string) {
     if (!this.materials.has(color)) this.materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));
     return this.materials.get(color)!;
+  }
+  private label(text: string, position: [number, number, number], size: [number, number]) {
+    const canvas = document.createElement("canvas"); canvas.width = 1024; canvas.height = 160;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#61472f"; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#fae6b7"; context.font = "64px sans-serif"; context.textAlign = "center"; context.textBaseline = "middle";
+    context.fillText(text, 512, 80, 980);
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(...size), new THREE.MeshBasicMaterial({ map: texture }));
+    mesh.position.set(...position); this.root.add(mesh);
   }
   private box(p: readonly number[], s: readonly number[], color: string) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(s[0], s[1], s[2]), this.material(color));

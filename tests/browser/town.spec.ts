@@ -78,3 +78,37 @@ test("mobile viewport: real touch movement, release, look and chat", async ({ br
     expect(errors).toEqual([]);
   } finally { await context.close(); }
 });
+
+test("museum: walk through doorway, read and close without moving or changing camera", async ({ page }) => {
+  await enter(page, "纪念馆访客");
+  // Enter the existing unlocked controls mode before driving the shared motor.
+  await page.locator("#chat-text").focus();
+  await page.evaluate(async () => {
+    const game = (window as any).__friendslop;
+    for (const [x, z] of [[-18, 4], [-18, -8]]) {
+      const started = performance.now();
+      game.input("ShiftLeft", true); game.input("KeyW", true);
+      try {
+        while (performance.now() - started < 20000) {
+          const dx = x - game.state.x, dz = z - game.state.z;
+          if (Math.hypot(dx, dz) < 0.45) break;
+          game.look(Math.atan2(-dx, -dz), 0);
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+      } finally { game.input("KeyW", false); game.input("ShiftLeft", false); }
+    }
+  });
+  await expect(page.locator("#museum-read")).toBeVisible();
+  await page.locator("#museum-read").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator("#museum-title")).toHaveText("十二个月的时间长廊");
+  const before = await state(page);
+  await page.keyboard.down("w");
+  await page.waitForTimeout(400);
+  await page.keyboard.up("w");
+  expect(Math.abs((await state(page)).z - before.z)).toBeLessThan(0.2);
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => (window as any).__friendslop.cameraMode)).toBe("first");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+});

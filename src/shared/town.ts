@@ -1,5 +1,6 @@
 import type { Box } from "./level.js";
 import type { SimulationLayout } from "./simulation.js";
+import { MUSEUM_BOXES } from "./museum.js";
 
 export const TOWN = {
   tower: [0, 0, -7] as const,
@@ -14,6 +15,7 @@ export const LANTERNS = [
 ] as const;
 export const POST_DESK = [17, 0, -5] as const;
 const level: Box[] = [
+  ...MUSEUM_BOXES,
   { p: [0, -0.3, 0], s: [60, 0.6, 60], color: "#e3eaf0" },
   // First walk-in building: the post office, with an open two-metre doorway.
   { p: [17, 0.05, -4], s: [8, 0.1, 7], color: "#98734c" },

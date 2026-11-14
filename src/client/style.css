@@ -1031,3 +1031,11 @@ body.turning * {
 #post-panel .post-note { font-size: 12px; color: #796751; line-height: 1.7; }
 #post-save { width: 100%; padding: 12px; border-radius: 9px; background: #b64834; color: white; }
 #post-status { line-height: 1.7; }
+
+#museum-read { position: fixed; right: 16px; top: 110px; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 10px; background: #785739; color: #fff2da; pointer-events: auto; }
+#museum-read[hidden] { display: none; }
+#museum-panel { width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid #b9a180; border-radius: 16px; padding: 26px; background: #f6ecd9; color: #3a3027; }
+#museum-panel::backdrop { background: #101c2dbb; }
+#museum-panel h2 { margin: 12px 0; font-size: 25px; }
+#museum-text { white-space: pre-line; line-height: 1.85; margin-bottom: 22px; }
+#museum-panel button { padding: 12px 18px; border-radius: 8px; background: #785739; color: #fff2da; }
