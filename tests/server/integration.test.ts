@@ -71,20 +71,22 @@ async function media(m: Awaited<ReturnType<typeof member>>) {
   await ready;
   return ws;
 }
-test("eight-player room cap and server-controlled moderator reassignment", async () => {
+test("24 players can join one room and moderator reassignment still works", async () => {
   const a = await member(),
     code = a.welcome.code;
   const clients = [a];
-  for (let i = 1; i < 8; i++) clients.push(await member(code));
-  const ninth = await member(code);
-  assert.match(ninth.welcome.message, /full/);
+  for (let i = 1; i < 24; i++) {
+    const joined = await member(code);
+    assert.equal(joined.welcome.type, "welcome");
+    clients.push(joined);
+  }
   const update = wait(
     clients[1].ws,
     (m) => m.type === "members" && m.host === clients[1].welcome.id,
   );
   a.ws.close();
   await update;
-  assert.equal(app.rooms.get(code)!.sim.players.size, 8);
+  assert.equal(app.rooms.get(code)!.sim.players.size, 24);
 });
 test("relay isolation, authenticated source stamping, two-sided upgrade", async () => {
   const a = await member(),

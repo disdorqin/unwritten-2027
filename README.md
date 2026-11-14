@@ -1,127 +1,42 @@
-<p align="center">
-  <img src="public/favicon.svg" width="96" alt="Friendslop Base logo">
-</p>
+# UNWRITTEN 2027
 
-<h1 align="center">Friendslop Base</h1>
+第一人称多人跨年雪镇：公共2026纪念馆、旋转木马、舞台、邮局、烟花、合照和钟声。
 
-An open-source browser multiplayer starter for 2–8 people. It provides a shared
-3D building and yard, authoritative physics, throwable props, bouncy balls,
-shove-only guns, sliding doors, and proximity voice. There are no accounts,
-objectives, scores, health, or deaths—the game you build supplies those.
+当前完成技术基座初始化，画面仍为上游样例。首个视觉交付是精致的中式童话雪镇广场。
 
-The stack is TypeScript, Three.js, Rapier, WebSockets/WebRTC, Vite, and
-Playwright. Code and original assets are MIT licensed.
+## 运行
 
-<p align="center">
-  <img src="docs/media/lobby.webp" width="49%" alt="Friendslop Base landing page with three characters talking in the common room">
-  <img src="docs/media/character.webp" width="49%" alt="Seven Friendslop players using proximity voice in the common room">
-</p>
-
-## Run locally
-
-Requires Node.js 22.20+ and desktop Chrome.
+Node.js 22.20+。
 
 ```sh
 npm ci
-npm run dev
+node tools/run.mjs dev
 ```
 
-Open <http://localhost:3000>, create a room, and share its six-character code.
-Microphone access is optional. HTTPS is required for voice outside localhost.
-
-| Control | Action |
-| --- | --- |
-| WASD / mouse | Move / look |
-| Shift / Ctrl or C / Space | Sprint / crouch / jump |
-| E / Q | Pick up or drop / throw |
-| Click or F | Fire a held gun |
-| V / M | Push to talk / mute |
-| Escape | Release the mouse |
-
-## How it works
-
-One `Simulation` owns positions, physics, doors, prop ownership, and shots.
-Clients send inputs—not positions—and run the same simulation for prediction and
-reconciliation. Remote players are interpolated. Voice prefers direct WebRTC
-and falls back to relayed Opus frames, with HRTF positioning and room reverb.
-
-The same client supports two deployment modes:
-
-- **Node server:** one process and one public port serve the client, game and
-  signaling WebSocket, voice fallback, and `/healthz`.
-- **Static/P2P:** the room creator runs the authority in a browser worker;
-  PeerJS is used only to establish WebRTC connections.
-
-Rooms exist only in memory and end when the server—or P2P host tab—stops.
-There is no database, account service, TURN server, or separate media server.
-See [architecture](docs/architecture.md), [voice](docs/voice.md), and
-[deployment](docs/deployment.md) for the detailed contracts and tradeoffs.
-
-## Build your own game
-
-Start with these files:
-
-| Change | Main file |
-| --- | --- |
-| Rooms, spawns, props, doors, weapons, voice range | `src/shared/level.ts` |
-| Movement and authoritative physics | `src/shared/simulation.ts` |
-| Actions, validation, rooms, signaling | `src/host/index.ts` |
-| Input, HUD, prediction and reconciliation | `src/client/main.ts` |
-| Three.js scene and avatars | `src/client/rendering/scene.ts` |
-| Binary network state | `src/shared/protocol.ts` |
-
-Keep authority on the host: never trust client-supplied positions, ownership,
-or hit results. Code under `src/shared`, `src/host`, and `src/net` must remain
-usable in both Node and browser-hosted mode. Incompatible protocol changes must
-update the encoder, decoder, tests, documentation, and protocol version.
-
-### Work with an AI coding agent
-
-The repository includes [AGENTS.md](AGENTS.md), a tool-neutral operating manual
-covering architecture, file ownership, invariants, commands, browser testing,
-and known sharp edges. Ask any repository-aware coding agent to read it before
-making changes. `CLAUDE.md` provides a small compatibility entry point for
-Claude Code; other agents can use `AGENTS.md` directly.
-
-Example request:
-
-> Read AGENTS.md completely. Add [feature]. Preserve server authority, both
-> deployment modes, and the one-process/one-port design. Update tests and docs,
-> then run every required gate and report anything you could not verify.
-
-Review generated changes like any other contribution. In particular, inspect
-network validation, privacy behavior, dependency licenses, and generated assets
-rather than treating agent output as trusted.
-
-## Verify and deploy
+本地地址：http://localhost:3000 。
 
 ```sh
-npm run typecheck
-npm test
-npm run test:server
-npm run test:browser
-npm run build
-npm start
+node tools/run.mjs build
+node tools/run.mjs start
 ```
 
-The browser suite uses installed Chrome and synthetic microphone audio. Static
-hosts use `npm run build:client`; the Dockerfile and `render.yaml` build the
-single-process Node deployment. More options are in
-[docs/deployment.md](docs/deployment.md).
+## 技术与目录
 
-GitHub Pages deployment is included in
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml). Enable Pages with
-**GitHub Actions** as its source; pushes to `main` then publish the static/P2P
-client.
+TypeScript + Three.js + Rapier + Vite；Node.js/WebSocket单服务；GLB/glTF模型，Blender编辑素材。
 
-Relayed voice is encrypted in transit with HTTPS/WSS but is readable by the
-authority process; it is not application-level end-to-end encrypted. Direct
-WebRTC voice is peer encrypted. Operators should disclose this distinction to
-players and provide any privacy notice required for their deployment.
+| 目录 | 内容 |
+| --- | --- |
+| src/ | 客户端、共享玩法、联机服务 |
+| public/ | 游戏模型、音乐、字体、图片 |
+| assets-source/ | 可编辑美术源文件 |
+| tools/ | 运行、构建、模型处理脚本 |
+| tests/ | 沿用的必要检查 |
+| docs/ | 需求、技术说明、素材署名 |
 
-## License and third-party software
+[完整计划](docs/PLAN.md)。首版采用固定舒缓的新年纯音乐，暂不做点歌、语音与个人展区。
 
-Friendslop Base code, procedural models, and synthesized audio are available
-under the [MIT License](LICENSE). Bundled fonts and Opus components keep their
-own permissive licenses and notices. See
-[third-party materials](docs/THIRD_PARTY.md) before redistributing a build.
+不设20人业务门槛。当前协议人数编码的技术边界是255，实际场景与服务器容量还要实测；已通过24人同房连接检查。手机触控、文字聊天、存档及正式同镇入口尚未制作。
+
+## 来源
+
+基于MIT许可的 [Friendslop Base](https://github.com/larshurrelb/friendslop-base)，保留上游Git历史及 [LICENSE](LICENSE)。复用第一人称移动、碰撞、角色、预测与多人同步。上游样例中的射击道具、P2P、语音不作为首版功能目标。第三方材料见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。

@@ -2,7 +2,7 @@
 import { WebSocket } from "ws";
 import { encodeInputs, decodeSnapshot } from "../src/shared/protocol.js";
 const url = process.env.SERVER_URL ?? "ws://localhost:3000/ws";
-const count = Math.min(8, Math.max(1, Number(process.env.BOTS ?? 8))),
+const count = Math.min(255, Math.max(1, Number(process.env.BOTS ?? 24))),
   seconds = Number(process.env.SECONDS ?? 30);
 let code = process.env.ROOM_CODE ?? "";
 const clients: {

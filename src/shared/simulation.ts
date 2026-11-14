@@ -146,7 +146,7 @@ export class Simulation {
     this.world.step();
   }
   addPlayer(id: number) {
-    const spawn = SPAWNS[(id - 1) % 8];
+    const spawn = SPAWNS[(id - 1) % SPAWNS.length];
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
         spawn[0],

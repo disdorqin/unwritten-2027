@@ -229,7 +229,7 @@ export async function createHost(options: { maxRooms?: number } = {}) {
             if (id > 65000) throw Error("Room lifetime exceeded");
             member = {
               id,
-              color: Array.from({ length: MAX_PLAYERS }, (_, i) => i).find((color) => ![...room!.members.values()].some((m) => m.color === color))!,
+              color: (id - 1) % 8,
               name:
                 String(msg.name || "Guest")
                   .replace(/[\x00-\x1f]/g, "")

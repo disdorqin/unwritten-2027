@@ -74,8 +74,8 @@ quaternion 4×i16 scaled by 32767, owner u16 (0 = free). Normalize reconstructed
 quaternions. The room must fit ±327.67 m on each axis. IDs are not reused within
 a room lifetime.
 
-All players appear in every snapshot; prop records are sparse. This deliberately
-keeps full-precision local reconciliation simple at the eight-player limit.
+All players appear in every snapshot; prop records are sparse. The u8 player count has a protocol boundary of 255; this fork does not
+apply an eight- or twenty-player product cap. Actual capacity must be measured.
 There are no variable per-field masks or smallest-three quaternions in v2.
 
 Full baselines are sent on join, every two seconds and when resynchronization

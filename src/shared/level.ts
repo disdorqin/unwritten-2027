@@ -211,7 +211,9 @@ export const CHARACTER_PALETTE = [
   "#ff288f",
 ];
 export const STEP = 1 / 60;
-export const MAX_PLAYERS = 8;
+// Binary snapshots encode the player count as u8. This is a protocol bound,
+// not a 20-person event limit or a promise that a server can render 255 people.
+export const MAX_PLAYERS = 255;
 /** Seconds for a leaf to travel, and how close an automatic door watches for. */
 export const DOOR_TRAVEL = 0.9;
 export const AUTO_RANGE = 3.4;

@@ -186,7 +186,7 @@ export function decodeSnapshot(b: ArrayBuffer): Snapshot {
     baseline = r.u32(),
     np = r.u8(),
     no = r.u16();
-  if (np > 8 || no > 128) throw Error("Entity limit");
+  if (no > 128) throw Error("Entity limit");
   const players: PlayerState[] = [],
     props: PropState[] = [];
   for (let i = 0; i < np; i++)
