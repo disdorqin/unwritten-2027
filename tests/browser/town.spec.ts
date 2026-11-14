@@ -63,6 +63,24 @@ test("snow town: two rendered clients, shared movement, safe chat and reconnect"
   expect(errors).toEqual([]);
 });
 
+test("browser storage denied: nickname entry and chat still work", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => {
+    for (const area of ["localStorage", "sessionStorage"]) Object.defineProperty(window, area, {
+      configurable: true,
+      get() { throw new DOMException("Storage denied", "SecurityError"); },
+    });
+  });
+  await enter(page, "临时访客");
+  await page.locator("#chat-text").fill("不保存昵称也能相遇");
+  await page.locator("#chat-form button").click();
+  await expect(page.locator("#chat-messages")).toContainText("临时访客：不保存昵称也能相遇");
+  await expect(page.locator("#player-count")).toHaveText("1 人在线");
+  await expect(page.locator("#enable-voice")).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
 test("mobile viewport: real touch movement, release, look and chat", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();

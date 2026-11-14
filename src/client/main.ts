@@ -21,6 +21,7 @@ import { Voice } from "./audio/voice";
 import { TOWN_LAYOUT } from "../shared/town";
 import { setupPostOffice } from "./post-office";
 import { setupMuseum } from "./museum";
+import { getStored, setStored, removeStored, readRoomSession } from "./storage";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
@@ -144,11 +145,11 @@ const networkReady = detect(params).then((config) => {
     : "Game + voice over WebRTC to the host<br>No server. The host's browser owns the room.";
 });
 $("join-code").setAttribute("value", params.get("room") ?? "");
-if (localStorage.getItem("friendslop:name"))
-  $("name").setAttribute("value", localStorage.getItem("friendslop:name")!);
+const rememberedName = getStored("localStorage", "friendslop:name");
+if (rememberedName) $("name").setAttribute("value", rememberedName);
 if (params.get("name")) $("name").setAttribute("value", params.get("name")!);
 if (params.has("fresh")) {
-  sessionStorage.removeItem("friendslop:session");
+  removeStored("sessionStorage", "friendslop:session");
   const clean = new URL(location.href);
   clean.searchParams.delete("fresh");
   history.replaceState(null, "", clean);
@@ -167,15 +168,13 @@ function setPlaying(value: boolean) {
 async function join(wanted: string) {
   if (connected) return;
   name = $<HTMLInputElement>("name").value.trim() || "Guest";
-  localStorage.setItem("friendslop:name", name);
+  setStored("localStorage", "friendslop:name", name);
   $("entry-error").hidden = true;
   $<HTMLButtonElement>("create").disabled = true;
   intentional = false;
   code = wanted;
   token = "";
-  const saved = JSON.parse(
-    sessionStorage.getItem("friendslop:session") ?? "null",
-  );
+  const saved = readRoomSession();
   if (saved?.code === code) token = saved.token;
   await connect();
 }
@@ -236,7 +235,8 @@ async function connect() {
         if (Array.isArray(m.doors)) sim.syncDoors(m.doors);
         local = sim.addPlayer(id);
         connected = true;
-        sessionStorage.setItem(
+        setStored(
+          "sessionStorage",
           "friendslop:session",
           JSON.stringify({ code, token }),
         );
@@ -375,7 +375,7 @@ async function connect() {
         $<HTMLButtonElement>("create").disabled = false;
         if (!connected) {
           intentional = true;
-          sessionStorage.removeItem("friendslop:session");
+          removeStored("sessionStorage", "friendslop:session");
           voice.disconnect();
           setPlaying(false);
           document.exitPointerLock();
@@ -761,7 +761,7 @@ $("leave").onclick = () => {
   voice.disconnect();
   connected = false;
   cameraMode = "first";
-  sessionStorage.removeItem("friendslop:session");
+  removeStored("sessionStorage", "friendslop:session");
   pauseControls();
   for (const [pid] of scene.avatars) if (pid < 60000) scene.removePlayer(pid);
   sim?.dispose();
