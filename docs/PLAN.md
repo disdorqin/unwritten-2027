@@ -146,7 +146,9 @@
 Voxelize为Rust/TypeScript全栈体素引擎，依赖链与当前精细固定场景需求相比更重；本轮不作为主基座。Snep为Godot单人场景，未核实明确开放许可，暂作美术参考而非直接复制资产。Comfy Island/Mossmeet没有在本轮核实到可直接复用的完整源码授权，不把可玩页面当作开源授权。
 
 本机主工程：D:/computer learning/vibe_coding/unwritten-2027 。
-目标GitHub仓库：disdorqin/unwritten-2027（私有；以实际创建/推送结果为准）。
+GitHub仓库：https://github.com/disdorqin/unwritten-2027 （私有，已创建并推送）。
 主目录沿用src/、public/、assets-source/、tools/、tests/、docs/；需求统一保存在docs/PLAN.md。
 
 基座适配：解除原8人限制，支持超过20人的连接；当前快照u8人数编码的技术边界为255，并非已验证的承载人数。颜色按调色盘循环，修复快照解码8人限制。首版语音入口关闭。当前画面仍为上游样例，手机触控、文字聊天、持久化、统一同镇入口和雪镇内容还需制作。
+
+本轮验收：TypeScript检查与前后端构建通过；原有核心检查15项、服务检查7项通过；Chrome实际入场、画布与语音关闭状态通过，无页面脚本错误；24个同房协议客户端运行约3秒，均收到约60帧快照并推进约177–180个物理tick。该短时基座检查不代表正式美术场景、真实手机或云服务器负载已通过。首次推送网络重置后以同仓库重试成功。
