@@ -34,5 +34,8 @@ const level: Box[] = [
   ]),
 ];
 export const TOWN_LAYOUT: SimulationLayout = {
-  level, doors: [], props: [], spawns: [TOWN.spawn],
+  level, doors: [], props: [], spawns: [
+    TOWN.spawn, [-2, 1, 12], [2, 1, 12], [-4, 1, 12],
+    [4, 1, 12], [-2, 1, 15], [0, 1, 15], [2, 1, 15],
+  ],
 };

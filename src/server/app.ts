@@ -2,8 +2,8 @@ import type { Server } from "node:http";
 import { WebSocketServer } from "ws";
 import { createHost } from "../host/index.js";
 import { nodeChannel } from "../net/ws-node.js";
-export async function attachApplication(server: Server) {
-  const host = await createHost({ maxRooms: Number(process.env.MAX_ROOMS ?? 16) });
+export async function attachApplication(server: Server, options: { world?: "base" | "town" } = {}) {
+  const host = await createHost({ maxRooms: Number(process.env.MAX_ROOMS ?? 16), world: options.world ?? "town" });
   const game = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024, perMessageDeflate: false });
   const voice = new WebSocketServer({ noServer: true, maxPayload: 2048, perMessageDeflate: false });
   const upgrades = (req: any, socket: any, head: any) => {

@@ -6,7 +6,7 @@ let handle: ((m: ToWorker) => void) | undefined;
 self.onmessage = (e: MessageEvent<ToWorker>) =>
   handle ? handle(e.data) : queued.push(e.data);
 
-const host = await createHost({ maxRooms: 1 });
+const host = await createHost({ maxRooms: 1, world: "town" });
 const bridge = bridgeFromMain(
   (channel, kind) => host.accept(channel, kind),
   (m) => self.postMessage(m),
