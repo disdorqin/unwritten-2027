@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    channel: "chrome",
+    ...(process.env.CHROMIUM_PATH ? {} : { channel: "chrome" }),
     headless: true,
     viewport: { width: 1440, height: 900 },
     baseURL: process.env.PRODUCTION
@@ -15,6 +15,7 @@ export default defineConfig({
       : `http://localhost:${process.env.PORT ?? 3000}`,
     permissions: ["microphone"],
     launchOptions: {
+      executablePath: process.env.CHROMIUM_PATH || undefined,
       args: [
         "--use-fake-ui-for-media-stream",
         "--use-fake-device-for-media-stream",

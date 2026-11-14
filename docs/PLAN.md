@@ -169,3 +169,13 @@ GitHub仓库：https://github.com/disdorqin/unwritten-2027 （私有，已创建
 3. 后续：旋转木马、舞蹈互动、烟花仪式和全镇建筑精修。先稳定前两项，不为了齐全而堆粗糙建筑。
 
 明早交付实际入口、GitHub提交、已完成/未完成清单与关键验收结果。外部付费建模、真实手机、正式公网服务器部署若未具备条件必须明确标为未验收；不自动购买服务或改换技术栈。
+
+### 云端浏览器检查补充（2026-11-15）
+
+- 当前工作副本可读写，基于 `126fa60`。发现邮局代码仍在另一轮编辑，本轮未修改或提交这些未完成文件；纪念馆也未在本轮扩展。
+- 复跑24个真实WebSocket客户端的同镇移动、聊天与房间隔离，以及雪镇碰撞检查，共3项通过；类型检查与生产构建通过。
+- 随后对当前工作树运行 `node --import tsx --test tests/*.test.ts tests/server/*.test.ts`，33项通过，含另一轮新增的邮局存储、私密回执和门口碰撞检查。这些结果对应运行时的未提交工作树，不表示本轮已经提交邮局功能。
+- 新增 `tests/browser/town.spec.ts`：双客户端角色位置、昵称聊天与HTML文本安全、刷新重连，以及移动尺寸真实触摸事件的移动/松手/转向/聊天检查。配置支持 `CHROMIUM_PATH` 指定现有浏览器，不要求重新安装Chrome。
+- 实际启动命令：`PORT=33319 BROKER_PORT=43511 CHROMIUM_PATH=/usr/bin/chromium npx playwright test tests/browser/town.spec.ts`。服务可启动，但两个用例均在浏览器启动阶段失败：`process_singleton_posix.cc: socket() failed: Operation not permitted (1)`；没有进入页面，不能认定视觉或手机操作验收通过。
+- `git fetch origin main` 因当前云端缺少可用GitHub凭据失败。未能核实远端最新状态；本轮只提交独立验收文件及此处状态，不强推、不把本地提交记为已推送。
+- 下一步：在允许Chromium进程通信的环境执行上述两项实玩检查并修复交互；与正在编辑的邮局改动合流后验证落盘、重启和私信隔离，再进入纪念馆首个室内。
