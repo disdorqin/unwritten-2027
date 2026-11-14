@@ -63,3 +63,69 @@ test("letter saving requires the real postal desk, uses server identity, and rep
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("concurrent letter retries write once and a rejected request does not block later saves", async () => {
+  const root = await mkdtemp(join(tmpdir(), "unwritten-letter-queue-"));
+  try {
+    const file = join(root, "letters.jsonl"), store = new LetterStore(file);
+    const draft = { id: "queued-letter", name: "访客", text: "等到明年再见。" };
+    const receipts = await Promise.all(Array.from({ length: 12 }, () => store.save(draft)));
+    assert.ok(receipts.every(receipt => receipt.createdAt === receipts[0].createdAt));
+    await assert.rejects(store.save({ ...draft, text: "冲突内容" }));
+    await store.save({ ...draft, id: "next-letter" });
+    assert.equal((await readFile(file, "utf8")).trim().split("\n").length, 2);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("server restart preserves private letters and acknowledges retry without another record", async () => {
+  const root = await mkdtemp(join(tmpdir(), "unwritten-postal-restart-"));
+  async function start() {
+    const server = http.createServer(), app = await attachApplication(server, { dataDirectory: root });
+    const sockets: WebSocket[] = [];
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    return {
+      app,
+      async join(code = "") {
+        const ws = new WebSocket(`ws://127.0.0.1:${(server.address() as any).port}/ws`); sockets.push(ws);
+        await new Promise<void>((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
+        const ready = wait(ws, m => m.type === "welcome");
+        ws.send(JSON.stringify({ type: "join", code, name: "重返小镇的朋友" }));
+        const welcome = await ready;
+        const room = app.rooms.get(welcome.code)!, player = room.sim.players.get(welcome.id)!;
+        room.sim.restore(player, { ...player.state, x: 17, y: 0.97, z: -3.4 });
+        return { ws, welcome };
+      },
+      async close() {
+        for (const ws of sockets) ws.terminate();
+        app.dispose(); await new Promise<void>(resolve => server.close(() => resolve()));
+      },
+    };
+  }
+  let running: Awaited<ReturnType<typeof start>> | undefined;
+  try {
+    running = await start();
+    const first = await running.join();
+    const draft = { type: "letter", request: "restart-letter-123", text: "重启之后也要留住这封信。" };
+    const reply = wait(first.ws, m => m.type === "letter-saved");
+    first.ws.send(JSON.stringify(draft));
+    const original = await reply;
+    await running.close(); running = undefined;
+
+    running = await start();
+    const returning = await running.join(), observer = await running.join(returning.welcome.code);
+    const otherMessages: any[] = [];
+    observer.ws.on("message", (raw, binary) => { if (!binary) otherMessages.push(JSON.parse(String(raw))); });
+    const retried = wait(returning.ws, m => m.type === "letter-saved");
+    returning.ws.send(JSON.stringify(draft));
+    assert.deepEqual((await retried).receipt, original.receipt);
+    // A subsequent message on the same connection provides a delivery barrier.
+    const barrier = wait(observer.ws, m => m.type === "chat");
+    returning.ws.send(JSON.stringify({ type: "chat", text: "我回来了" })); await barrier;
+    assert.ok(!otherMessages.some(m => m.type.startsWith("letter")));
+    const records = (await readFile(join(root, "letters.jsonl"), "utf8")).trim().split("\n");
+    assert.equal(records.length, 1);
+    assert.equal(JSON.parse(records[0]).text, draft.text);
+  } finally {
+    await running?.close(); await rm(root, { recursive: true, force: true });
+  }
+});

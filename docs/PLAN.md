@@ -191,3 +191,13 @@ GitHub仓库：https://github.com/disdorqin/unwritten-2027 （私有，已创建
 - 检查：`node --import tsx --test tests/*.test.ts tests/server/*.test.ts` 共36项通过；类型检查及生产构建通过。新增检查覆盖纪念馆门口进出、墙体碰撞、室内阅读范围；两名真实WebSocket客户端收到同一房间内的馆内权威移动快照。原24客户端同房移动/聊天隔离、邮局保存/重读/私密回执检查仍通过。
 - 新增浏览器纪念馆步行和阅读用例；实际执行 `PORT=33319 BROKER_PORT=43511 CHROMIUM_PATH=/usr/bin/chromium npx playwright test tests/browser/town.spec.ts --grep 'museum:'` 在启动Chromium时失败，仍为 `process_singleton_posix.cc: socket() failed: Operation not permitted (1)`。未加载页面，没有视觉通过证据，真实手机未验收。
 - 下一步优先：在可运行浏览器的环境验证入口、左右建筑动线、阅读窗口与手机按键；修正实际交互问题，再做建筑精修与经来源核实的年度内容，不扩展游乐设施。
+
+### 邮局落盘与服务重启检查（2026-11-15，04:00轮）
+
+- 本轮接手的本地HEAD为 `c797d75`。已有未提交文件：`src/client/main.ts`、`src/client/museum.ts`、`src/client/post-office.ts`、`src/client/style.css`、`tests/browser/town.spec.ts`，包含触控释放、E键阅读/写信及写信模态窗口等修改。本轮保留这些工作，不覆盖、不暂存、不将其算作本轮完成。
+- 邮局服务端追加写入显式启用 `flush: true`，文件刷盘成功后才发保存回执。仍为原有单进程、单文件存储，没有新增服务或改变信件可见范围；不将此等同于完整的断电恢复方案。
+- 新增并通过真实连接的服务重启检查：保存信件、关闭服务器、用同一数据目录新建服务器、重新连接并重试原请求，返回原收信编号和时间，文件仅有一条记录；同房其他客户端在后续聊天消息送达后仍未收到任何信件消息。另验证12次并发重试只写一份，冲突请求失败后后续保存仍能完成。
+- 检查：邮局专项4项通过；完整核心/服务端38项通过，含24客户端同镇移动与聊天隔离、双客户端纪念馆权威移动；`node tools/run.mjs build` 通过。全量检查与构建针对包含上述未提交界面修改的当前工作树；本轮提交仅含服务端落盘、邮局测试和本计划记录。
+- 再次实际执行纪念馆浏览器用例：`PORT=42809 BROKER_PORT=44493 CHROMIUM_PATH=/usr/bin/chromium npx playwright test tests/browser/town.spec.ts --grep 'museum:'`，服务启动，但Chromium仍在 `process_singleton_posix.cc` 因 `socket() failed: Operation not permitted (1)` 退出。没有进入页面，视觉、手机和完整交互仍未验收；不依赖Box或本机在线。
+- 提交前再次 `git fetch origin main`，仍报缺少GitHub Username/认证，未能核对远端最新main；本轮不尝试强推，成果暂存本地提交，待可用授权恢复后先fetch、检查分歧再推送。
+- 下一步：优先完成现有未提交交互修正的检查与合并，在允许浏览器运行的环境实玩验收；保留255人数协议边界及首版语音关闭，暂不扩展木马/舞台/烟花。

@@ -25,7 +25,8 @@ export class LetterStore {
       }
       const record = { ...draft, createdAt: Date.now() };
       await mkdir(dirname(this.file), { recursive: true, mode: 0o700 });
-      await appendFile(this.file, JSON.stringify(record) + "\n", { encoding: "utf8", mode: 0o600 });
+      // Confirm only after Node has flushed the file, before issuing a receipt.
+      await appendFile(this.file, JSON.stringify(record) + "\n", { encoding: "utf8", mode: 0o600, flush: true });
       this.saved.set(record.id, record);
       return { id: record.id, createdAt: record.createdAt };
     });
