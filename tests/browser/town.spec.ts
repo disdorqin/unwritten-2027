@@ -3,12 +3,30 @@ import { test, expect, type Page } from "@playwright/test";
 async function enter(page: Page, name: string, room?: string) {
   await page.goto(`/?test=1&fresh=1${room ? `&room=${room}` : ""}`);
   await expect(page.locator("#loading")).toBeHidden();
-  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("你的昵称").fill(name);
   await page.locator(room ? "#join" : "#create").click();
   await expect(page.locator("#hud")).toBeVisible();
   return (await page.locator("#room-code").textContent())!;
 }
 const state = (page: Page) => page.evaluate(() => (window as any).__friendslop.state);
+
+test("Chinese entry and help describe the current town instead of voice controls", async ({ page }) => {
+  await page.goto("/?test=1&fresh=1");
+  await expect(page.locator("#loading")).toBeHidden();
+  await expect(page.getByLabel("你的昵称", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("小镇邀请码", { exact: true })).toBeVisible();
+  await page.locator("#join-code").fill("ABC");
+  await page.locator("#join").click();
+  await expect(page.locator("#entry-error")).toHaveText("请输入六位小镇邀请码。");
+  await page.getByRole("button", { name: "操作与帮助", exact: true }).click();
+  await expect(page.locator("#help")).toBeVisible();
+  await expect(page.locator("#help")).toContainText("方向按钮移动");
+  await expect(page.locator("#help")).toContainText("首版暂不开放语音");
+  await expect(page.locator("#help")).toContainText("信件保存到服务器，不进入公共聊天");
+  await expect(page.locator("#help")).not.toContainText("Push to talk");
+  await page.getByRole("button", { name: "关闭操作帮助", exact: true }).click();
+  await expect(page.locator("#help")).toBeHidden();
+});
 
 async function walk(page: Page, points: number[][]) {
   await page.evaluate(async points => {

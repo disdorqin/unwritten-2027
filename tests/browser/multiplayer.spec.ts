@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 async function create(page: Page, name: string) {
   await page.goto("/?test=1");
   await expect(page.locator("#loading")).toBeHidden();
-  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("你的昵称").fill(name);
   await page.getByRole("button", { name: "Create a room" }).click();
   await expect(page.locator("#hud")).toBeVisible();
   return (await page.locator("#room-code").textContent())!;
@@ -10,7 +10,7 @@ async function create(page: Page, name: string) {
 async function join(page: Page, code: string, name: string, wasm = false) {
   await page.goto(`/?test=1&fresh=1&room=${code}${wasm ? "&wasm=1" : ""}`);
   await expect(page.locator("#loading")).toBeHidden();
-  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("你的昵称").fill(name);
   await page.getByRole("button", { name: "Join →", exact: true }).click();
   await expect(page.locator("#hud")).toBeVisible();
 }
@@ -64,11 +64,11 @@ test("Chrome lobby, authoritative movement and reconnect", async ({
   await page.goto("/");
   await expect(page.locator("#loading")).toBeHidden();
   const github = page.getByRole("link", {
-    name: "Get Friendslop Base on GitHub",
+    name: "查看项目仓库",
   });
   await expect(github).toHaveAttribute(
     "href",
-    "https://github.com/larshurrelb/friendslop-base",
+    "https://github.com/disdorqin/unwritten-2027",
   );
   await expect(github).toHaveAttribute("target", "_blank");
   await page.screenshot({ path: "test-results/lobby.png" });

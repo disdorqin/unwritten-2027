@@ -25,14 +25,14 @@ import { getStored, setStored, removeStored, readRoomSession } from "./storage";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
-<header class="topbar"><button id="about-button" class="brand" aria-label="About Friendslop Base"><span class="brand-mark"><svg viewBox="0 0 192 192" aria-hidden="true"><rect x="17" y="17" width="158" height="158" rx="46" fill="#26382d" transform="rotate(-11 96 96)"/><g fill="#d5ec99"><path d="M53.5 34.5L65.95 54.43A23.5 23.5 0 1 1 76.87 36.96Z"/><path d="M4 114a49.5 49.5 0 0 1 99 0Z"/><path d="M140 87.5L126.02 66.77A25 25 0 1 1 115 87.5Z"/><path d="M89 170a50.5 50.5 0 0 1 101 0Z"/></g></svg></span><span class="brand-word">UNWRITTEN <b>2027</b></span><small></small></button><div id="top-actions" class="top-actions"><span id="net-mode" class="pill net-mode" hidden><i class="dot"></i> <span id="net-mode-text"></span></span><button id="help-button" class="icon-button" aria-label="Controls and help">?</button></div></header>
-<main id="lobby" class="lobby"><div class="eyebrow">2026 的回忆 · 2027 的相遇</div><h1><span class="line"><span>一起走进</span></span><span class="line"><span><em>新的一年。</em></span></span></h1><p class="intro">一座留住回忆的跨年小镇。<br>和朋友走进雪夜钟楼广场。</p><a class="github-button" href="https://github.com/disdorqin/unwritten-2027" target="_blank" rel="noopener noreferrer" aria-label="Get Friendslop Base on GitHub">Get it on GitHub <span class="github-arrow" aria-hidden="true">↗</span></a><form id="entry" class="entry-card"><label for="name">你想叫什么名字？</label><div class="name-input"><div class="avatar-chip">✳</div><input id="name" aria-label="Your name" autocomplete="nickname" maxlength="20" placeholder="输入昵称" required value="Guest"></div><button class="primary" id="create" type="submit">创建小镇 <span>↗</span></button><div class="separator">或加入朋友的小镇</div><div class="join-row"><input id="join-code" aria-label="Room code" placeholder="小镇邀请码" maxlength="6" autocomplete="off"><button id="join" type="button">加入 →</button></div><div class="entry-note">无需注册，分享邀请链接即可加入。</div><p id="entry-error" class="error" hidden></p></form><div class="lobby-foot"><span>第一人称探索</span><span>和朋友相遇</span><span>留下共同回忆</span></div><p class="mobile-notice">手机可使用方向按钮与滑动转向。</p></main>
-<footer id="footer" class="footer"><span>A small beginning for a very good time.</span><span class="version">UNWRITTEN 2027 &nbsp; / &nbsp; 开发中</span></footer>
-<div id="hud" class="hud" hidden><div class="room-bar"><div><small>YOUR ROOM</small><span id="room-code" class="room-code">------</span></div><button id="copy-room" aria-label="Copy room invite">复制邀请 ↗</button><span id="player-count" class="count">1 人在线</span></div><div id="crosshair" class="crosshair"></div><div id="hitflash" class="hitflash"></div><div id="interact" class="interact" hidden></div><div class="bottom-left"><span class="zone-icon">⌂</span><div><div id="zone-name" class="zone-name">The common room</div><div id="zone-desc" class="zone-desc">SMALL ROOM · SOFT REFLECTIONS</div></div></div><div class="voice-controls"><button id="enable-voice">Enable voice</button><button id="mute" hidden aria-label="Mute microphone">Mic on</button><select id="voice-mode" aria-label="Microphone mode"><option value="open">Open mic</option><option value="ptt">Push to talk</option></select><span id="speaking-light" class="speaking-light"></span></div><div class="bottom-right"><button id="friends-button">Friends <span id="friend-number">1</span></button><button id="debug-button">Diagnostics <span>⌁</span></button></div><div id="pause" class="pause"><div class="eyebrow" style="justify-content:center">You’re in good company</div><h2>走进雪夜小镇。</h2><p>邀请朋友一起散步、聊天。<br>更多建筑和互动正在制作。</p><button id="resume" class="primary">进入广场 →</button><small>WASD to move · Mouse to look · Esc to pause</small></div></div>
-<aside id="friends" class="drawer" hidden><button class="close" data-close="friends" aria-label="Close friends">×</button><h3>In good company</h3><div id="member-list"></div><button id="solo-tab" class="primary">Open a second player <span>↗</span></button><p class="debug-note">Test solo in another tab. Use headphones when testing microphones.</p><button id="leave" class="primary" style="background:transparent;color:#637554;border-color:#c4d0b6">Leave room</button></aside>
-<aside id="debug" class="drawer" hidden><button class="close" data-close="debug" aria-label="Close diagnostics">×</button><h3>Under the hood</h3><div id="metrics" class="metrics"></div><div id="peer-debug"></div><p id="codec-status" class="debug-note"></p><p id="net-detail" class="debug-note"></p></aside>
-<aside id="help" class="drawer" hidden><button class="close" data-close="help" aria-label="Close help">×</button><h3>A little field guide</h3><div class="help-grid"><div><kbd class="key">W A S D</kbd></div><span>Move around</span><div><kbd class="key">Mouse</kbd></div><span>Look around</span><div><kbd class="key">Tab</kbd></div><span>First / third person</span><div><kbd class="key">Shift</kbd></div><span>Sprint</span><div><kbd class="key">Ctrl / C</kbd></div><span>Crouch</span><div><kbd class="key">Space</kbd></div><span>Jump</span><div><kbd class="key">E</kbd></div><span>Pick up / drop</span><div><kbd class="key">Q</kbd></div><span>Throw held object</span><div><kbd class="key">Click / F</kbd></div><span>Fire, swing or honk</span><div><kbd class="key">V</kbd></div><span>Push to talk</span><div><kbd class="key">M</kbd></div><span>Mute microphone</span><div><kbd class="key">Esc</kbd></div><span>Release mouse</span></div><p class="about-copy">Voices get quieter with distance. Walk into the hall to hear the room change.</p><p class="about-copy">Doors open with <b>E</b>; the workshop doors open by themselves. Nobody can be hurt here — a hit just shoves you.</p></aside>
-<aside id="about" class="drawer" hidden><button class="close" data-close="about" aria-label="Close about">×</button><h3>A starting point, together.</h3><p class="about-copy">Friendslop is an open-source starter for small multiplayer games. A shared world, physical objects and voices that live in the room.</p><p class="about-copy">This is the common room. The game you make from it is entirely up to you.</p><p class="debug-note">Three.js · Rapier · TypeScript<br>Original Blender characters & synthetic acoustics</p></aside><div id="toast" class="toast" hidden></div><div id="loading" class="loading">正在打开雪夜小镇…</div>`;
+<header class="topbar"><button id="about-button" class="brand" aria-label="关于跨年小镇"><span class="brand-mark"><svg viewBox="0 0 192 192" aria-hidden="true"><rect x="17" y="17" width="158" height="158" rx="46" fill="#26382d" transform="rotate(-11 96 96)"/><g fill="#d5ec99"><path d="M53.5 34.5L65.95 54.43A23.5 23.5 0 1 1 76.87 36.96Z"/><path d="M4 114a49.5 49.5 0 0 1 99 0Z"/><path d="M140 87.5L126.02 66.77A25 25 0 1 1 115 87.5Z"/><path d="M89 170a50.5 50.5 0 0 1 101 0Z"/></g></svg></span><span class="brand-word">UNWRITTEN <b>2027</b></span><small></small></button><div id="top-actions" class="top-actions"><span id="net-mode" class="pill net-mode" hidden><i class="dot"></i> <span id="net-mode-text"></span></span><button id="help-button" class="icon-button" aria-label="操作与帮助">?</button></div></header>
+<main id="lobby" class="lobby"><div class="eyebrow">2026 的回忆 · 2027 的相遇</div><h1><span class="line"><span>一起走进</span></span><span class="line"><span><em>新的一年。</em></span></span></h1><p class="intro">一座留住回忆的跨年小镇。<br>和朋友走进雪夜钟楼广场。</p><a class="github-button" href="https://github.com/disdorqin/unwritten-2027" target="_blank" rel="noopener noreferrer" aria-label="查看项目仓库">项目仓库 <span class="github-arrow" aria-hidden="true">↗</span></a><form id="entry" class="entry-card"><label for="name">你想叫什么名字？</label><div class="name-input"><div class="avatar-chip">✳</div><input id="name" aria-label="你的昵称" autocomplete="nickname" maxlength="20" placeholder="输入昵称" required value="访客"></div><button class="primary" id="create" type="submit">创建小镇 <span>↗</span></button><div class="separator">或加入朋友的小镇</div><div class="join-row"><input id="join-code" aria-label="小镇邀请码" placeholder="小镇邀请码" maxlength="6" autocomplete="off"><button id="join" type="button">加入 →</button></div><div class="entry-note">无需注册，分享邀请链接即可加入。</div><p id="entry-error" class="error" hidden></p></form><div class="lobby-foot"><span>第一人称探索</span><span>和朋友相遇</span><span>留下共同回忆</span></div><p class="mobile-notice">手机可使用方向按钮与滑动转向。</p></main>
+<footer id="footer" class="footer"><span>在雪夜相聚，迎接新的一年。</span><span class="version">UNWRITTEN 2027 &nbsp; / &nbsp; 开发中</span></footer>
+<div id="hud" class="hud" hidden><div class="room-bar"><div><small>小镇邀请码</small><span id="room-code" class="room-code">------</span></div><button id="copy-room" aria-label="复制小镇邀请">复制邀请 ↗</button><span id="player-count" class="count">1 人在线</span></div><div id="crosshair" class="crosshair"></div><div id="hitflash" class="hitflash"></div><div id="interact" class="interact" hidden></div><div class="bottom-left"><span class="zone-icon">⌂</span><div><div id="zone-name" class="zone-name">钟楼广场</div><div id="zone-desc" class="zone-desc">雪夜相遇 · 北京时间跨年</div></div></div><div class="voice-controls"><button id="enable-voice">Enable voice</button><button id="mute" hidden aria-label="Mute microphone">Mic on</button><select id="voice-mode" aria-label="Microphone mode"><option value="open">Open mic</option><option value="ptt">Push to talk</option></select><span id="speaking-light" class="speaking-light"></span></div><div class="bottom-right"><button id="friends-button">同行伙伴 <span id="friend-number">1</span></button><button id="debug-button">运行状态 <span>⌁</span></button></div><div id="pause" class="pause"><div class="eyebrow" style="justify-content:center">和朋友一起过年</div><h2>走进雪夜小镇。</h2><p>邀请朋友一起散步、聊天。<br>更多建筑和互动正在制作。</p><button id="resume" class="primary">进入广场 →</button><small>WASD 移动 · 鼠标转向 · E 阅读/写信 · Esc 暂停</small></div></div>
+<aside id="friends" class="drawer" hidden><button class="close" data-close="friends" aria-label="关闭伙伴列表">×</button><h3>同行伙伴</h3><div id="member-list"></div><button id="solo-tab" class="primary">在新标签页加入 <span>↗</span></button><p class="debug-note">打开新标签页，可用另一个昵称加入同一座小镇。</p><button id="leave" class="primary" style="background:transparent;color:#637554;border-color:#c4d0b6">离开小镇</button></aside>
+<aside id="debug" class="drawer" hidden><button class="close" data-close="debug" aria-label="关闭运行状态">×</button><h3>运行状态</h3><div id="metrics" class="metrics"></div><div id="peer-debug"></div><p id="codec-status" class="debug-note"></p><p id="net-detail" class="debug-note"></p></aside>
+<aside id="help" class="drawer" hidden><button class="close" data-close="help" aria-label="关闭操作帮助">×</button><h3>小镇游览指南</h3><div class="help-grid"><div><kbd class="key">W A S D</kbd></div><span>移动</span><div><kbd class="key">鼠标</kbd></div><span>转向</span><div><kbd class="key">Tab</kbd></div><span>切换第一/第三人称</span><div><kbd class="key">Shift</kbd></div><span>奔跑</span><div><kbd class="key">Ctrl / C</kbd></div><span>蹲下</span><div><kbd class="key">Space</kbd></div><span>跳跃</span><div><kbd class="key">E</kbd></div><span>阅读展板 / 写信 / 物品互动</span><div><kbd class="key">Esc</kbd></div><span>关闭阅读窗口或暂停</span></div><p class="about-copy">手机：左下方向按钮移动，在场景中滑动转向，右下按钮跳跃；走近展板或书桌后点击阅读或写信。</p><p class="about-copy">广场左侧是2026纪念馆，当前开放导览样件；右侧是新年邮局，走到书桌旁写信。信件保存到服务器，不进入公共聊天。</p><p class="about-copy">在左侧聊天框和同一座小镇的朋友交流。首版暂不开放语音。</p></aside>
+<aside id="about" class="drawer" hidden><button class="close" data-close="about" aria-label="关闭关于">×</button><h3>UNWRITTEN 2027 · 跨年小镇</h3><p class="about-copy">和朋友在雪夜小镇散步、聊天，走进纪念馆，写一封给2027的信。</p><p class="about-copy">基于 MIT 许可的 Friendslop Base 开发，保留上游代码与角色素材署名。</p><p class="debug-note">Three.js · Rapier · TypeScript<br>角色与底层音效基座：Friendslop Base</p></aside><div id="toast" class="toast" hidden></div><div id="loading" class="loading">正在打开雪夜小镇…</div>`;
 const scene = new GameScene($("world"), "town");
 const museum = setupMuseum(() => { previewControls = true; keys.clear(); document.exitPointerLock(); $("pause").hidden = true; });
 const postOffice = setupPostOffice({
@@ -55,7 +55,7 @@ let sim: Simulation | undefined,
   id = 0,
   code = "",
   token = "",
-  name = "Guest",
+  name = "访客",
   seq = 0,
   baseline = 0,
   action = 0;
@@ -133,11 +133,11 @@ const networkReady = detect(params).then((config) => {
   const server = config.mode === "server";
   const badge = $("net-mode");
   $("net-mode-text").textContent = server
-    ? "LIVE SERVER"
-    : "STATIC · BROWSER-HOSTED";
+    ? "小镇在线"
+    : "浏览器临时小镇";
   badge.title = server
-    ? "A server owns this room's physics, so anyone can join."
-    : "No game server: whoever creates a room hosts it in their browser. Very strict networks may not be able to connect.";
+    ? "由小镇服务器同步玩家位置和互动。"
+    : "当前由创建者的浏览器临时主持；请保持其页面打开。部分网络可能无法连接。";
   badge.dataset.mode = config.mode;
   badge.hidden = false;
   $("net-detail").innerHTML = server
@@ -167,7 +167,7 @@ function setPlaying(value: boolean) {
 }
 async function join(wanted: string) {
   if (connected) return;
-  name = $<HTMLInputElement>("name").value.trim() || "Guest";
+  name = $<HTMLInputElement>("name").value.trim() || "访客";
   setStored("localStorage", "friendslop:name", name);
   $("entry-error").hidden = true;
   $<HTMLButtonElement>("create").disabled = true;
@@ -199,7 +199,7 @@ async function connect() {
     channel = await openChannel("game");
   } catch (e) {
     const message =
-      e instanceof Error ? e.message : "Could not reach that room.";
+      e instanceof Error ? e.message : "暂时无法连接这座小镇，请稍后重试。";
     $("entry-error").textContent = message;
     $("entry-error").hidden = false;
     toast(message);
@@ -392,7 +392,7 @@ async function connect() {
     voice.disconnect();
     $<HTMLButtonElement>("create").disabled = false;
     if (intentional) return;
-    toast("Connection interrupted. Rejoining your room…");
+    toast("连接中断，正在尝试返回小镇…");
     setTimeout(() => {
       if (!intentional && socket === channel) void connect();
     }, 1500);
@@ -511,7 +511,7 @@ $("entry").addEventListener("submit", (e) => {
 $("join").onclick = () => {
   const value = $<HTMLInputElement>("join-code").value.trim().toUpperCase();
   if (value.length !== 6) {
-    $("entry-error").textContent = "Enter the six-character room code.";
+    $("entry-error").textContent = "请输入六位小镇邀请码。";
     $("entry-error").hidden = false;
     return;
   }
@@ -549,7 +549,7 @@ canvas.addEventListener("pointermove", e => {
 for (const event of ["pointerup", "pointercancel"]) canvas.addEventListener(event, () => { finger = undefined; });
 addEventListener("blur", () => { keys.clear(); finger = undefined; });
 canvas.tabIndex = 0;
-canvas.setAttribute("aria-label", "Game world — click to move, WASD and mouse");
+canvas.setAttribute("aria-label", "雪夜小镇：点击进入，WASD移动，鼠标或触屏转向");
 function pauseControls() {
   previewControls = false;
   keys.clear();
@@ -564,11 +564,11 @@ function previewFallback() {
   canvas.focus({ preventScroll: true });
   canvas.style.cursor = "grab";
   $("pause").hidden = true;
-  toast("Preview controls: WASD to move · drag to look · Esc to pause");
+  toast("自由操作：WASD或方向按钮移动 · 拖动转向 · Esc暂停");
 }
 async function lock() {
   if (!connected) return;
-  void voice.prepareAudio().catch(() => toast("Game audio could not start. Click the world to retry."));
+  void voice.prepareAudio().catch(() => toast("环境音暂未启动，可点击场景重试。"));
   canvas.focus({ preventScroll: true });
   if (matchMedia("(pointer: coarse)").matches || typeof canvas.requestPointerLock !== "function") {
     previewFallback();
@@ -689,7 +689,7 @@ addEventListener("keydown", (e) => {
         pitch = cameraPitch;
         scene.removePlayer(id);
       }
-      toast(cameraMode === "third" ? "Third-person view" : "First-person view");
+      toast(cameraMode === "third" ? "第三人称视角" : "第一人称视角");
     }
     return;
   }
@@ -735,9 +735,9 @@ $("copy-room").onclick = async () => {
     await navigator.clipboard.writeText(
       new URL(`?room=${code}`, document.baseURI).href,
     );
-    toast("Invite link copied. Bring your people.");
+    toast("邀请链接已复制，发给朋友一起进入。");
   } catch {
-    toast(`Your room code is ${code}`);
+    toast(`小镇邀请码：${code}`);
   }
 };
 $("solo-tab").onclick = () =>
@@ -782,12 +782,12 @@ function renderMembers() {
     const info = document.createElement("div"),
       label = document.createElement("div"),
       status = document.createElement("small");
-    label.textContent = m.name + (m.id === id ? " (you)" : "");
+    label.textContent = m.name + (m.id === id ? "（你）" : "");
     status.textContent = !m.connected
-      ? "Reconnecting…"
+      ? "正在重连…"
       : m.voiceReady
-        ? "Voice enabled"
-        : "Exploring quietly";
+        ? "已连接"
+        : "正在探索小镇";
     info.append(label, status);
     row.append(dot, info);
     list.append(row);
@@ -810,7 +810,7 @@ function zone(s: { x: number; y: number; z: number }): [string, string] {
     return s.y > 2.4
       ? ["The mezzanine", "ABOVE THE HALL · MIND THE EDGE"]
       : ["The hall", "LARGE HALL · LONG REFLECTIONS"];
-  return ["The common room", "SMALL ROOM · SOFT REFLECTIONS"];
+  return ["钟楼广场", "雪夜相遇 · 北京时间跨年"];
 }
 let debugTime = 0;
 function debug(now: number) {
@@ -938,7 +938,7 @@ function frame(now: number) {
         };
         scene.updatePlayer(
           r,
-          members.find((m) => m.id === r.id)?.name ?? "Guest",
+          members.find((m) => m.id === r.id)?.name ?? "访客",
           dt,
           members.find((m) => m.id === r.id)?.color,
         );
@@ -1018,7 +1018,7 @@ try {
   document.body.classList.add("ready");
   requestAnimationFrame(frame);
 } catch (e) {
-  $("loading").textContent = `Could not open the room: ${String(e)}`;
+  $("loading").textContent = `小镇暂时无法打开：${String(e)}`;
   console.error(e);
 }
 setInterval(() => {

@@ -8,7 +8,7 @@ const state = (page: Page) =>
 async function host(page: Page, name: string) {
   await page.goto("/?test=1&net=p2p");
   await expect(page.locator("#loading")).toBeHidden();
-  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("你的昵称").fill(name);
   await page.getByRole("button", { name: "Create a room" }).click();
   await expect(page.locator("#hud")).toBeVisible({ timeout: 30000 });
   return (await page.locator("#room-code").textContent())!;
@@ -16,7 +16,7 @@ async function host(page: Page, name: string) {
 async function guest(page: Page, code: string, name: string) {
   await page.goto(`/?test=1&fresh=1&net=p2p&room=${code}`);
   await expect(page.locator("#loading")).toBeHidden();
-  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("你的昵称").fill(name);
   await page.getByRole("button", { name: "Join →", exact: true }).click();
   await expect(page.locator("#hud")).toBeVisible({ timeout: 30000 });
 }
