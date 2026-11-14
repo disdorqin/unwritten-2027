@@ -8,7 +8,7 @@ import {
   type Input,
   type PropState,
 } from "../shared/protocol.js";
-import { TOWN_LAYOUT } from "../shared/town.js";
+import { TOWN_LAYOUT, POST_DESK } from "../shared/town.js";
 import { MAX_PLAYERS, STEP } from "../shared/level.js";
 type Member = {
   id: number;
@@ -54,11 +54,16 @@ const send = (ws: Channel | null, data: unknown) => {
   if (ws?.open && ws.bufferedAmount < 128 * 1024)
     ws.send(typeof data === "string" ? data : JSON.stringify(data));
 };
-export async function createHost(options: { maxRooms?: number; world?: "base" | "town" } = {}) {
+export async function createHost(options: {
+  maxRooms?: number;
+  world?: "base" | "town";
+  onLetter?: (draft: { id: string; name: string; text: string }) => Promise<{ id: string; createdAt: number }>;
+} = {}) {
   await initPhysics();
   const rooms = new Map<string, Room>();
   const channels = new Set<Channel>();
   const lastChats = new WeakMap<Channel, number>();
+  const pendingLetters = new WeakSet<Channel>();
   const lastMessages = new Map<Channel, number>();
   let disposed = false;
   function accept(ws: Channel, kind: ChannelKind) {
@@ -274,6 +279,24 @@ export async function createHost(options: { maxRooms?: number; world?: "base" | 
           return;
         }
         if (!room) return;
+        if (msg.type === "letter") {
+          const text = typeof msg.text === "string" ? msg.text.trim() : "";
+          const request = typeof msg.request === "string" ? msg.request : "";
+          const player = room.sim.players.get(member.id)?.state;
+          const near = player && Math.hypot(player.x - POST_DESK[0], player.z - POST_DESK[2]) <= 3 && player.y < 3;
+          if (!options.onLetter || options.world !== "town" || !near || !text || text.length > 2000 || !/^[a-zA-Z0-9-]{8,80}$/.test(request)) {
+            send(ws, { type: "letter-error", request, message: "请在邮局书桌旁写信，内容为1—2000字；保存需要服务器小镇。" });
+            return;
+          }
+          if (pendingLetters.has(ws)) return;
+          pendingLetters.add(ws);
+          void options.onLetter({ id: request, name: member.name, text }).then(receipt => {
+            send(ws, { type: "letter-saved", request, receipt });
+          }).catch(() => {
+            send(ws, { type: "letter-error", request, message: "信件尚未保存成功，请保留草稿并重试。" });
+          }).finally(() => pendingLetters.delete(ws));
+          return;
+        }
         if (msg.type === "chat") {
           const text = typeof msg.text === "string" ? msg.text.trim() : "";
           if (!text || text.length > 300 || Date.now() - (lastChats.get(ws) ?? 0) < 900) {

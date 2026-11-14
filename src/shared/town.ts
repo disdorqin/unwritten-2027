@@ -12,8 +12,19 @@ export const BENCHES = [
 export const LANTERNS = [
   [-12, 0, 8], [12, 0, 8], [-12, 0, -10], [12, 0, -10],
 ] as const;
+export const POST_DESK = [17, 0, -5] as const;
 const level: Box[] = [
   { p: [0, -0.3, 0], s: [60, 0.6, 60], color: "#e3eaf0" },
+  // First walk-in building: the post office, with an open two-metre doorway.
+  { p: [17, 0.05, -4], s: [8, 0.1, 7], color: "#98734c" },
+  { p: [13, 1.8, -4], s: [0.2, 3.6, 7], color: "#d0b99a" },
+  { p: [21, 1.8, -4], s: [0.2, 3.6, 7], color: "#d0b99a" },
+  { p: [17, 1.8, -7.5], s: [8, 3.6, 0.2], color: "#d0b99a" },
+  { p: [14.5, 1.8, -0.5], s: [3, 3.6, 0.2], color: "#d0b99a" },
+  { p: [19.5, 1.8, -0.5], s: [3, 3.6, 0.2], color: "#d0b99a" },
+  { p: [17, 3.2, -0.5], s: [2, 0.8, 0.2], color: "#785439" },
+  { p: [17, 3.7, -4], s: [8.5, 0.2, 7.5], color: "#70533e" },
+  { p: [17, 0.65, -5], s: [3, 1.3, 1.1], color: "#805438" },
   // Exact tower origin shared with rendering. Interior remains closed in this slice.
   { p: [0, 3, -7], s: [4, 6, 4], color: "#665345", kind: "collision" },
   ...[0, 1, 2].map((n): Box => ({

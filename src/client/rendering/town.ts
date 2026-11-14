@@ -36,6 +36,28 @@ export class SnowTown {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(12.5, 0.065, 4, 64), this.material("#d5c3a2"));
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.065; this.root.add(ring);
     this.box([0, 0.025, 19], [4, 0.05, 16], "#9aa6af");
+    // Post office shell is shared with physics; these are its roof and furnishings.
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.3, 1.8, 4), this.material("#52616c"));
+    roof.rotation.y = Math.PI / 4; roof.scale.z = 0.88; roof.position.set(17, 4.5, -4);
+    roof.castShadow = true; this.root.add(roof);
+    const roofSnow = new THREE.Mesh(new THREE.ConeGeometry(6.2, 1.7, 4), this.material("#e2ebf2"));
+    roofSnow.rotation.copy(roof.rotation); roofSnow.scale.copy(roof.scale); roofSnow.position.set(17, 4.61, -4); this.root.add(roofSnow);
+    for (const x of [13.15, 20.85]) for (const z of [-7.35, -0.35]) this.box([x, 1.8, z], [0.2, 3.6, 0.2], "#795033");
+    for (const z of [-7.32, -0.32]) this.box([17, 3.45, z], [7.9, 0.2, 0.2], "#795033");
+    this.box([17, 1.325, -4.9], [0.5, 0.025, 0.34], "#f2e5c9");
+    this.box([18, 1.42, -5], [0.2, 0.18, 0.22], "#a6402e");
+    this.box([19.2, 1.1, -7.3], [2, 2.2, 0.35], "#805438");
+    for (let i = 0; i < 4; i++) this.box([19.2, 0.4 + i * 0.5, -7.05], [1.85, 0.07, 0.4], "#bd9e70");
+    const deskLamp = new THREE.PointLight("#ffd7a2", 26, 9, 2);
+    deskLamp.position.set(17, 2.8, -4); this.root.add(deskLamp);
+    const signCanvas = document.createElement("canvas"); signCanvas.width = 512; signCanvas.height = 128;
+    const context = signCanvas.getContext("2d")!;
+    context.fillStyle = "#71472e"; context.fillRect(0, 0, 512, 128);
+    context.fillStyle = "#fae6b7"; context.font = "56px sans-serif"; context.textAlign = "center"; context.textBaseline = "middle";
+    context.fillText("新年邮局", 256, 64);
+    const signTexture = new THREE.CanvasTexture(signCanvas); signTexture.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 0.77), new THREE.MeshBasicMaterial({ map: signTexture }));
+    sign.position.set(17, 3.15, -0.38); this.root.add(sign);
     for (const [x, y, z] of BENCHES) {
       this.box([x, y + 0.25, z], [3.1, 0.16, 0.75], "#805236");
       this.box([x, y + 0.7, z - 0.3], [3.1, 0.9, 0.13], "#684329");

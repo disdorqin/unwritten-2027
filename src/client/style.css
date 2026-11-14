@@ -1022,3 +1022,12 @@ body.turning * {
   #town-move button:nth-child(2) { grid-column: 1; }
   #town-jump { display: block; position: fixed; bottom: 35px; right: 22px; background: #b64834; color: white; padding: 12px; border-radius: 10px; pointer-events: auto; touch-action: none; }
 }
+#post-open { position: fixed; right: 20px; top: 110px; padding: 12px 18px; border-radius: 10px; background: #b64834; color: #fff2da; pointer-events: auto; }
+#post-open[hidden], #post-panel[hidden] { display: none; }
+#post-panel { position: fixed; z-index: 20; width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 30px); overflow-y: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 18px; padding: 26px; background: #f6ecd9; color: #3a3027; box-shadow: 0 20px 90px #0008; }
+#post-close { position: absolute; top: 10px; right: 13px; font-size: 26px; background: transparent; }
+#post-panel h2 { margin: 10px 0; }
+#post-text { display: block; width: 100%; margin: 8px 0; padding: 12px; border: 1px solid #bbaa91; border-radius: 9px; background: #fffaf1; color: #3a3027; font: inherit; resize: vertical; }
+#post-panel .post-note { font-size: 12px; color: #796751; line-height: 1.7; }
+#post-save { width: 100%; padding: 12px; border-radius: 9px; background: #b64834; color: white; }
+#post-status { line-height: 1.7; }

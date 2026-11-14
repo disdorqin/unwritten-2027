@@ -29,3 +29,15 @@ test("custom-layout spawn count wraps independently of the original eight spots"
     assert.equal(sim.addPlayer(3).state.x, 4);
   } finally { sim.dispose(); }
 });
+
+test("the post office doorway is walkable and its writing desk blocks movement", () => {
+  const sim = new Simulation(true, TOWN_LAYOUT), player = sim.addPlayer(1);
+  try {
+    sim.restore(player, { ...player.state, x: 17, y: 1, z: 3 });
+    for (let seq = 1; seq <= 240; seq++) {
+      sim.motor(player, { seq, x: 0, z: 1, yaw: 0, pitch: 0, buttons: 0 }); sim.step();
+    }
+    assert.ok(player.state.z < -3.8 && player.state.z > -4.2, "walk through the open entrance and stop at the desk");
+    assert.ok(Math.abs(player.state.y - 0.97) < 0.08);
+  } finally { sim.dispose(); }
+});

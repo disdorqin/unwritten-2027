@@ -19,6 +19,7 @@ import {
 import { GameScene } from "./rendering/scene";
 import { Voice } from "./audio/voice";
 import { TOWN_LAYOUT } from "../shared/town";
+import { setupPostOffice } from "./post-office";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
@@ -31,6 +32,11 @@ $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
 <aside id="help" class="drawer" hidden><button class="close" data-close="help" aria-label="Close help">×</button><h3>A little field guide</h3><div class="help-grid"><div><kbd class="key">W A S D</kbd></div><span>Move around</span><div><kbd class="key">Mouse</kbd></div><span>Look around</span><div><kbd class="key">Tab</kbd></div><span>First / third person</span><div><kbd class="key">Shift</kbd></div><span>Sprint</span><div><kbd class="key">Ctrl / C</kbd></div><span>Crouch</span><div><kbd class="key">Space</kbd></div><span>Jump</span><div><kbd class="key">E</kbd></div><span>Pick up / drop</span><div><kbd class="key">Q</kbd></div><span>Throw held object</span><div><kbd class="key">Click / F</kbd></div><span>Fire, swing or honk</span><div><kbd class="key">V</kbd></div><span>Push to talk</span><div><kbd class="key">M</kbd></div><span>Mute microphone</span><div><kbd class="key">Esc</kbd></div><span>Release mouse</span></div><p class="about-copy">Voices get quieter with distance. Walk into the hall to hear the room change.</p><p class="about-copy">Doors open with <b>E</b>; the workshop doors open by themselves. Nobody can be hurt here — a hit just shoves you.</p></aside>
 <aside id="about" class="drawer" hidden><button class="close" data-close="about" aria-label="Close about">×</button><h3>A starting point, together.</h3><p class="about-copy">Friendslop is an open-source starter for small multiplayer games. A shared world, physical objects and voices that live in the room.</p><p class="about-copy">This is the common room. The game you make from it is entirely up to you.</p><p class="debug-note">Three.js · Rapier · TypeScript<br>Original Blender characters & synthetic acoustics</p></aside><div id="toast" class="toast" hidden></div><div id="loading" class="loading">正在打开雪夜小镇…</div>`;
 const scene = new GameScene($("world"), "town");
+const postOffice = setupPostOffice({
+  send,
+  canSave: () => connected && network?.mode === "server",
+  pauseForPanel: () => { previewControls = true; keys.clear(); document.exitPointerLock(); $("pause").hidden = true; },
+});
 $("hud").insertAdjacentHTML("beforeend", `<section id="town-chat" aria-label="小镇聊天"><div id="chat-messages" role="log" aria-live="polite"></div><form id="chat-form"><input id="chat-text" aria-label="聊天消息" maxlength="300" placeholder="和小镇里的朋友说句话…" autocomplete="off"><button type="submit">发送</button></form></section><div id="town-move"><button data-move="KeyW" aria-label="前进">↑</button><button data-move="KeyA" aria-label="左移">←</button><button data-move="KeyS" aria-label="后退">↓</button><button data-move="KeyD" aria-label="右移">→</button></div><button id="town-jump" data-move="Space">跳跃</button>`);
 function appendChat(message: { name: string; text: string }) {
   if (typeof message?.name !== "string" || typeof message?.text !== "string") return;
@@ -147,6 +153,7 @@ if (params.has("fresh")) {
 }
 const movementSounds = new MovementSounds((position, kind) => voice.spatial?.effect(position, kind));
 function setPlaying(value: boolean) {
+  if (!value) postOffice.reset();
   movementSounds.clear();
   document.body.classList.toggle("playing", value);
   for (const name of ["lobby", "shade", "footer", "top-actions"])
@@ -209,6 +216,7 @@ async function connect() {
         return;
       }
       const m = JSON.parse(data);
+      if (m.type === "letter-saved" || m.type === "letter-error") { postOffice.message(m); return; }
       if (m.type === "chat") { appendChat(m.message); return; }
       if (m.type === "chat-error") { toast(m.message); return; }
       if (m.type === "welcome") {
@@ -829,6 +837,7 @@ function frame(now: number) {
   last = now;
   acc += dt;
   if (connected && sim && local) {
+    postOffice.update(local.state);
     let steps = 0;
     while (acc >= STEP && steps++ < 5) {
       acc -= STEP;
