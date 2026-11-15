@@ -6,6 +6,8 @@ playwright-report
 capture-output
 capture-*-output
 assets-source
+data
+artifacts
 .env
 .env.*
 *.key

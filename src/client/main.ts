@@ -33,7 +33,23 @@ $("app").innerHTML = `<div id="world"></div><div id="shade" class="shade"></div>
 <aside id="debug" class="drawer" hidden><button class="close" data-close="debug" aria-label="关闭运行状态">×</button><h3>运行状态</h3><div id="metrics" class="metrics"></div><div id="peer-debug"></div><p id="codec-status" class="debug-note"></p><p id="net-detail" class="debug-note"></p></aside>
 <aside id="help" class="drawer" hidden><button class="close" data-close="help" aria-label="关闭操作帮助">×</button><h3>小镇游览指南</h3><div class="help-grid"><div><kbd class="key">W A S D</kbd></div><span>移动</span><div><kbd class="key">鼠标</kbd></div><span>转向</span><div><kbd class="key">Tab</kbd></div><span>切换第一/第三人称</span><div><kbd class="key">Shift</kbd></div><span>奔跑</span><div><kbd class="key">Ctrl / C</kbd></div><span>蹲下</span><div><kbd class="key">Space</kbd></div><span>跳跃</span><div><kbd class="key">E</kbd></div><span>阅读展板 / 写信 / 物品互动</span><div><kbd class="key">Esc</kbd></div><span>关闭阅读窗口或暂停</span></div><p class="about-copy">手机：左下方向按钮移动，在场景中滑动转向，右下按钮跳跃；走近展板或书桌后点击阅读或写信。</p><p class="about-copy">广场左侧是2026纪念馆，当前开放导览样件；右侧是新年邮局，走到书桌旁写信。信件保存到服务器，不进入公共聊天。</p><p class="about-copy">在左侧聊天框和同一座小镇的朋友交流。首版暂不开放语音。</p></aside>
 <aside id="about" class="drawer" hidden><button class="close" data-close="about" aria-label="关闭关于">×</button><h3>UNWRITTEN 2027 · 跨年小镇</h3><p class="about-copy">和朋友在雪夜小镇散步、聊天，走进纪念馆，写一封给2027的信。</p><p class="about-copy">基于 MIT 许可的 Friendslop Base 开发，保留上游代码与角色素材署名。</p><p class="debug-note">Three.js · Rapier · TypeScript<br>角色与底层音效基座：Friendslop Base</p></aside><div id="toast" class="toast" hidden></div><div id="loading" class="loading">正在打开雪夜小镇…</div>`;
-const scene = new GameScene($("world"), "town");
+const scene = (() => {
+  try { return new GameScene($("world"), "town"); }
+  catch (error) {
+    const loading = $("loading");
+    loading.setAttribute("role", "alert");
+    loading.style.flexDirection = "column";
+    loading.style.gap = "20px";
+    loading.style.padding = "24px";
+    loading.style.textAlign = "center";
+    loading.textContent = "当前浏览器无法显示 3D 小镇。请使用支持 WebGL 2 的浏览器，并检查硬件加速是否开启。";
+    const retry = document.createElement("button");
+    retry.textContent = "重新打开小镇";
+    retry.onclick = () => location.reload();
+    loading.append(retry);
+    throw error;
+  }
+})();
 const museum = setupMuseum(() => { previewControls = true; keys.clear(); document.exitPointerLock(); $("pause").hidden = true; });
 const postOffice = setupPostOffice({
   send,
