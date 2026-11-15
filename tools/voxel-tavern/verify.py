@@ -30,14 +30,32 @@ async def main():
                   if (!await page.evaluate(() => !!window.tavernProbe)) return {initial};
                   await page.waitForTimeout(4000);
                   const results={initial, views:[]};
-                  for (const name of ['outside','hall','upstairs']) {
+                  for (const name of ['outside','hall','upstairs','balcony']) {
                     await page.locator(`[data-view="${name}"]`).click();
                     await page.waitForTimeout(1500);
                     const filename=ARTIFACTS+'/'+name+'.png';
                     await page.screenshot({path:filename});
                     results.views.push({name, filename, diagnostics:await page.evaluate(()=>({position:window.tavernProbe.controls.object.position.toArray(),drawCalls:window.tavernProbe.renderer.info.render.calls,triangles:window.tavernProbe.renderer.info.render.triangles,stats:window.tavernProbe.stats}))});
                   }
-                  results.mode='offline visual QA, multiplayer separately tested against Rust server';
+                  await page.locator('[data-view="outside"]').click();
+                  await page.locator('#night').click();await page.waitForTimeout(750);
+                  await page.screenshot({path:ARTIFACTS+'/night.png'});
+                  await page.locator('#night').click();
+                  results.walk=await page.evaluate(async()=>{
+                    const c=window.tavernProbe.controls;
+                    c.body.gravityMultiplier=1;c.teleportToExact(0,4.6,11.5);
+                    await new Promise(r=>setTimeout(r,500));
+                    const path=[[0,4.3],[5,4.3],[5,-3.5],[2.5,-3.5],[2.5,4.3],[0,4.3],[0,7]],out=[];
+                    for(const [x,z]of path){
+                      const end=performance.now()+6000;c.movements.front=true;
+                      while(performance.now()<end){const p=c.object.position;if(Math.hypot(x-p.x,z-p.z)<.25)break;c.setDirection(x-p.x,0,z-p.z);await new Promise(r=>setTimeout(r,25));}
+                      c.movements.front=false;await new Promise(r=>setTimeout(r,120));
+                      const p=c.object.position.toArray();out.push({target:[x,z],position:p,reached:Math.hypot(x-p[0],z-p[2])<.65});
+                      if(!out[out.length-1].reached)break;
+                    }
+                    return {route:out,passed:out.length===path.length&&out.every(p=>p.reached)&&out[out.length-1].position[1]>9};
+                  });
+                  results.mode='authored offline construction; new building multiplayer not retested';
                   return results;
                 }'''.replace('ARTIFACTS',json.dumps(str(artifacts).replace('\\','/')))
                 code_tool=next(t.name for t in available.tools if t.name in ('browser_run_code','browser_run_code_unsafe'))

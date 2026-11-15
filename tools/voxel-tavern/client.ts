@@ -2,15 +2,16 @@ import * as V from '@voxelize/core';
 import * as T from 'three';
 import blueprint from './tavern.json';
 import snapshotBase64 from './snapshot';
+import {makeVoxelTexture} from './textures';
 
 const status=document.querySelector('#status')!;
 async function start(){
  const offline=new URLSearchParams(location.search).has('snapshot');
- const world=new V.World({textureUnitDimension:8});
- const camera=new T.PerspectiveCamera(65,innerWidth/innerHeight,.1,200);
+ const world=new V.World({textureUnitDimension:16});
+ const camera=new T.PerspectiveCamera(68,innerWidth/innerHeight,.1,200);
  const renderer=new T.WebGLRenderer({canvas:document.querySelector('#view')!,antialias:true});
  renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
- world.background=new T.Color('#253747');
+ world.background=new T.Color('#8dabb9');
  const inputs=new V.Inputs();
  const controls=new V.RigidControls(camera,renderer.domElement,world,{initialPosition:[14,5,20]});
  controls.connect(inputs,'in-game');
@@ -31,24 +32,20 @@ async function start(){
   world.onMessage(snapshot.init);
  }else{await network.connect(target.toString());await network.join('tavern');}
  await world.initialize();
- await world.applyBlockTexture(1,['px','nx','py','ny','pz','nz'],new T.Color(blueprint.palette.snow));
- for(let i=0;i<blueprint.catalogue.length;i++)for(let j=0;j<blueprint.catalogue[i].length;j++){
-  const part=blueprint.catalogue[i][j];const prefix=`${part.m}${j}`;
-  const faces=world.getBlockById(i+2).faces.filter(f=>f.name.startsWith(prefix)).map(f=>f.name);
-  await world.applyBlockTexture(i+2,faces,new T.Color(blueprint.palette[part.m as keyof typeof blueprint.palette]));
- }
+ for(const [name,color]of Object.entries(blueprint.palette))await world.applyTextureGroup(name,await makeVoxelTexture(name,color));
  world.renderRadius=3;
  if(offline){
   for(const c of snapshot.load.chunks){c.voxels=new Uint32Array(c.voxels);c.lights=new Uint32Array(c.lights);for(const m of c.meshes)for(const g of m.geometries){g.positions=new Float32Array(g.positions);g.indices=new Uint32Array(g.indices);g.uvs=new Float32Array(g.uvs);g.lights=new Uint32Array(g.lights);}}
   world.onMessage(snapshot.load);
-  document.querySelector('h1')!.textContent='酒馆 · 离线建筑查看';
+  document.querySelector('h1')!.textContent='未写酒馆';
  }
- const views={outside:{p:[14,5,20],look:[0,6,0]},hall:{p:[0,4.5,3],look:[-1,4,-4]},upstairs:{p:[1,8,4],look:[-3,7.5,-2]}};
- function view(name:keyof typeof views){const v=views[name];controls.teleportToExact(...v.p as [number,number,number]);controls.setDirection(v.look[0]-v.p[0],v.look[1]-v.p[1],v.look[2]-v.p[2]);}
+ const views={outside:{p:[17,10,23],look:[0,8,0]},hall:{p:[1.5,4.6,3.75],look:[-2,4.5,-4]},upstairs:{p:[2.75,9.6,4.5],look:[-3,9,-3]},balcony:{p:[.5,9.6,7],look:[-5,9,4]}};
+ function view(name:keyof typeof views){const v=views[name];controls.body.gravityMultiplier=name==='outside'?0:1;controls.teleportToExact(...v.p as [number,number,number]);controls.setDirection(v.look[0]-v.p[0],v.look[1]-v.p[1],v.look[2]-v.p[2]);}
  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view as keyof typeof views));
- document.querySelector('#enter')!.addEventListener('click',()=>controls.lock());
+ document.querySelector('#enter')!.addEventListener('click',()=>{controls.body.gravityMultiplier=1;controls.teleportToExact(0,4.6,10);controls.setDirection(0,0,-1);controls.lock();});
+ document.querySelector('#night')!.addEventListener('click',()=>{world.time=world.time<12000?18000:6000;world.background=new T.Color(world.time<12000?'#8dabb9':'#172532');});
  let frames=0;
- renderer.setAnimationLoop(()=>{controls.update();world.update(controls.object.position,camera.getWorldDirection(new T.Vector3()),camera);world.updateShaderLighting(camera,controls.object.position);peers.update();renderer.render(world,camera);if(++frames%60===0)status.textContent=offline?`真实服务器地图快照 · ${blueprint.stats.pieces} 件构件 · 此查看器未联机`:`已连接 · ${peers.map.size+1} 人 · ${blueprint.stats.pieces} 件构件`;});
+ renderer.setAnimationLoop(()=>{controls.update();world.update(controls.object.position,camera.getWorldDirection(new T.Vector3()),camera);world.updateShaderLighting(camera,controls.object.position);peers.update();renderer.render(world,camera);if(++frames%60===0)status.textContent=offline?'离线建筑样板 · 可行走 · 此版本尚未联机':`已连接 · ${peers.map.size+1} 人`;});
  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
  view('outside');
  // Read-only diagnostics for the sample's browser acceptance.
