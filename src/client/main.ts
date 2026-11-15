@@ -811,6 +811,9 @@ function renderMembers() {
 }
 /** Where you are, in the words the HUD uses. Mirrors the acoustics regions. */
 function zone(s: { x: number; y: number; z: number }): [string, string] {
+  if (sim && s.x > 11.4 && s.x < 22.6 && s.z > -24.6 && s.z < -13.8) return s.y > 3.7
+    ? ["雪夜酒馆 · 二楼", "围坐休息 · 阳台看雪"]
+    : ["雪夜酒馆", "围坐聊天 · 小舞台与吧台"];
   if (sim && s.x > -23 && s.x < -13 && s.z < 0 && s.z > -10) return ["2026 纪念馆", "走近展板 · 点击阅读"];
   if (sim && s.x > 13 && s.x < 21 && s.z < -0.5 && s.z > -7.5) return ["新年邮局", "走近书桌 · 写给2027"];
   if (sim) return ["钟楼广场", "雪夜相遇 · 北京时间跨年"];

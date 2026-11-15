@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { BENCHES, LANTERNS, TOWN, TOWN_LAYOUT } from "../../shared/town";
 import { MUSEUM_EXHIBITS } from "../../shared/museum";
+import { TAVERN_ORIGIN } from "../../shared/tavern";
 
 /** Rendering only; shared/town owns placement and authority-side collision. */
 export class SnowTown {
@@ -120,7 +121,16 @@ export class SnowTown {
       this.hourRest = this.hour?.quaternion.clone(); this.minuteRest = this.minute?.quaternion.clone();
       this.root.add(g.scene); this.update();
     });
-    this.loaded = Promise.all([postalLoaded, towerLoaded]).then(() => {});
+    const tavernLoaded = loader.loadAsync(new URL("models/tavern.glb", document.baseURI).href).then(g => {
+      g.scene.name = "Tavern"; g.scene.position.set(...TAVERN_ORIGIN);
+      g.scene.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.root.add(g.scene);
+    });
+    for (const [x, y, z, power] of [[0, 2.9, 0, 55], [0, 6.0, 0, 40], [-2.5, 2.5, 6.32, 15], [2.5, 2.5, 6.32, 15]]) {
+      const light = new THREE.PointLight("#ffcb89", power, 11, 2);
+      light.position.set(TAVERN_ORIGIN[0] + x, y, TAVERN_ORIGIN[2] + z); this.root.add(light);
+    }
+    this.loaded = Promise.all([postalLoaded, towerLoaded, tavernLoaded]).then(() => {});
   }
   private material(color: string) {
     if (!this.materials.has(color)) this.materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));

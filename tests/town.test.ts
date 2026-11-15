@@ -41,3 +41,26 @@ test("the post office doorway is walkable and its writing desk blocks movement",
     assert.ok(Math.abs(player.state.y - 0.97) < 0.08);
   } finally { sim.dispose(); }
 });
+
+test("tavern visitors enter, climb to the upper landing and reach a guarded balcony", () => {
+  const sim = new Simulation(true, TOWN_LAYOUT), player = sim.addPlayer(1);
+  let seq = 0;
+  const walk = (x: number, z: number, ticks: number) => {
+    for (let i = 0; i < ticks; i++) {
+      sim.motor(player, { seq: ++seq, x, z, yaw: 0, pitch: 0, buttons: 0 }); sim.step();
+    }
+  };
+  try {
+    sim.restore(player, { ...player.state, x: 17, y: 1, z: -13 });
+    walk(0, 1, 280);
+    assert.ok(player.state.z < -21.8 && player.state.z > -22.5, "entry aisle reaches the bar without passing through it");
+    sim.restore(player, { ...player.state, x: 21.4, y: 1, z: -16.9 });
+    walk(0, 1, 340);
+    assert.ok(player.state.y > 4.4 && player.state.y < 4.7, "stairs reach the actual upper-floor height");
+    for (let i = 0; i < 200 && player.state.x > 16.4; i++) walk(-1, 0, 1);
+    assert.ok(player.state.x > 16.0 && player.state.x < 16.7, "upper rear landing connects to the main floor");
+    walk(0, -1, 400);
+    assert.ok(player.state.z > -15 && player.state.z < -14.3, "the balcony rail stops outward movement");
+    assert.ok(player.state.y > 4.4, "visitor stays on the upper floor and balcony");
+  } finally { sim.dispose(); }
+});
