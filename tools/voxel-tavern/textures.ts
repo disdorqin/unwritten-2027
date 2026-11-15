@@ -28,7 +28,15 @@ export async function makeVoxelTexture(name:string,hex:string):Promise<HTMLImage
   else if(name==='bottle'){n*=.4;if(x===3||x===4)n+=30;}
   else if(name==='snow'){n*=.35;if((x+y*3)%17===0)n-=15;}
   else if(name==='pot'){if(y===2||y===12)n-=24;}
+  else if(name==='ceramic'){n*=.3;if(y===2||y===13||((x-8)**2+(y-8)**2<10))n-=68;}
+  else if(name==='shutter'){n+=(x%3===0?-24:5);if(y%7===0)n+=12;}
+  else if(name==='paper'){n*=.3;if(y%3===1&&x>2&&x<13)n-=48;if(x===8&&y>2&&y<14)n-=15;}
+  else if(name==='painting'){n*=.3;if(y>7+Math.round(Math.sin(x*.6)*3))n-=45;if(y>12)n+=20;}
   ctx.fillStyle=shade(n);ctx.fillRect(x,y,1,1);
+ }
+ if(name.startsWith('sign')){
+  ctx.fillStyle='#392e28';ctx.fillRect(0,0,16,16);ctx.fillStyle='#e5c681';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 13px "Microsoft YaHei",sans-serif';ctx.fillText('未写酒馆'[Number(name.slice(4))]??'',8,8);
  }
  const img=new Image();img.src=c.toDataURL('image/png');await img.decode();return img;
 }

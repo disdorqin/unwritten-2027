@@ -1,8 +1,10 @@
 // Individual unit blocks, stairs, slabs and 1/16 m furniture components.
 import {writeFileSync,readFileSync} from 'node:fs';
 import {gzipSync} from 'node:zlib';
+import {refineTavern} from './refine-tavern.mjs';
 const template=JSON.parse(readFileSync(new URL('./block-template.json',import.meta.url)));
 const palette={snow:'#dde5e8',stone:'#697478',cobble:'#525e62',brick:'#89928c',wood:'#60432e',plank:'#a47949',dark:'#392e28',plaster:'#c8b88e',roof:'#3b5558',red:'#8e3e32',gold:'#c99b4e',glow:'#ffc676',green:'#435a3a',bottle:'#334e39',cream:'#e8d7aa',iron:'#414749',book:'#663b33',cloth:'#80342e',pot:'#925f42'};
+Object.assign(palette,{bronze:'#a48449',ceramic:'#c6d5d0',wine:'#69383c',paper:'#d2bb8a',shutter:'#864739',painting:'#829596',sign0:'#392e28',sign1:'#392e28',sign2:'#392e28',sign3:'#392e28'});
 const boxes=[];
 const box=(m,x,y,z,w=1,h=1,d=1)=>{const b=[x,y,z,x+w,y+h,z+d].map(v=>Math.round(v*16)/16);if(b[3]>b[0]&&b[4]>b[1]&&b[5]>b[2])boxes.push({m,b});};
 const cube=(m,x,y,z)=>box(m,x,y,z);
@@ -54,8 +56,8 @@ for(let z=-5;z<-2;z++){cube('plank',2,3,z);box('dark',2,4,z,1,.125,1);}
 function bottle(x,y,z,m='bottle',tall=false){
  const h=tall?.375:.25;box(m,x,y,z,.1875,h,.1875);box(m,x+.03125,y+h,z+.03125,.125,.0625,.125);box(m,x+.0625,y+h+.0625,z+.0625,.0625,.1875,.0625);box('gold',x+.0625,y+h+.1875,z+.0625,.0625,.0625,.0625);box('cream',x+.03125,y+.0625,z+.1875,.125,.125,.0625);
 }
-for(const y of [3.375,4.375,5.375]){beam('dark',-5.75,y,-5.625,8,.125,.5);for(let x=-5.625;x<2;x+=.375)bottle(x,y+.125,-5.5,Math.round(x*8)%3?'bottle':'red',Math.round(x*8)%2===0);}
-for(const x of [-5.875,-3.375,-.875,2.125])box('wood',x,3,-5.75,.125,3,.625);
+for(const y of [3.375,4.375,5.375]){beam('dark',-5.75,y,-4.875,8,.125,.5);for(let x=-5.625;x<2;x+=.375)bottle(x,y+.125,-4.75,(Math.round((x+5.625)/.375)+Math.floor(y))%3?'bottle':'wine',Math.round(x*8)%2===0);}
+for(const x of [-5.875,-3.375,-.875,2.125])box('wood',x,3,-4.9375,.125,3,.625);
 function mug(x,y,z){box('cream',x,y,z,.25,.0625,.25);for(const dx of [0,.1875])box('cream',x+dx,y+.0625,z,.0625,.25,.25);for(const dz of [0,.1875])box('cream',x+.0625,y+.0625,z+dz,.125,.25,.0625);box('gold',x+.0625,y+.1875,z+.0625,.125,.0625,.125);box('cream',x+.25,y+.0625,z+.0625,.125,.0625,.125);box('cream',x+.3125,y+.0625,z+.0625,.0625,.1875,.125);}
 function chair(x,y,z,reverse=false){
  for(const dx of [0,.625])for(const dz of [0,.625])box('wood',x+dx,y,z+dz,.125,.5,.125);
@@ -80,8 +82,8 @@ box('dark',3,3,-3.9375,2,1.25,.125);box('glow',3.25,3.125,-3.75,1.5,.5,.125);
 for(let x=3.25;x<4.75;x+=.375)box('wood',x,3.0625,-3.5625,.25,.1875,.375);beam('stone',2.75,4.25,-4.0625,2.5,.25,1.25);
 beam('plank',-6,3,2.5,2.5,.25,2.5);box('dark',-5.75,3.25,3,1.75,1.5,.625);box('wood',-5.875,4.75,2.9375,2,.125,.75);
 for(let i=0;i<18;i++){box('cream',-5.75+i*.09375,4,3.625,.0625,.0625,.3125);if(i%3!==2)box('dark',-5.71875+i*.09375,4.0625,3.625,.0625,.0625,.1875);}chair(-5.25,3.25,4.25,true);
-for(const y of [8.125,8.875,9.625,10.375]){beam('wood',-5.875,y,-5.5,5,.125,.625);for(let i=0;i<27;i++)box(i%4?'book':'green',-5.75+i*.175,y+.125,-5.375,.125,.5-(i%3)*.0625,.375);}
-for(const x of [-5.875,-.875])box('wood',x,8,-5.5,.125,2.875,.625);
+for(const y of [8.125,8.875,9.625,10.375]){beam('wood',-5.875,y,-4.75,5,.125,.625);for(let i=0;i<27;i++)box(i%4?'book':'green',-5.75+i*.175,y+.125,-4.625,.125,.5-(i%3)*.0625,.375);}
+for(const x of [-5.875,-.875])box('wood',x,8,-4.75,.125,2.875,.625);
 beam('plank',-5.75,8,-.25,1,.5,2);beam('cloth',-5.625,8.5,-.125,.75,.25,1.75);box('wood',-5.875,8.5,-.25,.125,.875,2);
 for(let x=-2.5;x<2;x+=.5)for(let z=-1;z<3;z+=.5)box((Math.round(x*2)+Math.round(z*2))%2?'cloth':'red',x,8,z,.5,.0625,.5);
 function barrel(x,y,z){box('plank',x+.125,y,z+.125,.75,1,.75);box('plank',x,y+.125,z+.25,1,.75,.5);box('plank',x+.25,y+.125,z,.5,.75,1);for(const yy of [y+.1875,y+.75]){box('iron',x-.0625,yy,z+.1875,1.125,.125,.625);box('iron',x+.1875,yy,z-.0625,.625,.125,1.125);}box('dark',x+.4375,y+.375,z+1,.125,.125,.1875);}
@@ -94,6 +96,7 @@ function lantern(x,y,z){box('iron',x+.25,y+.75,z+.25,.0625,.75,.0625);box('glow'
 for(const [x,y,z]of [[-2,5.5,6.5],[1.5,5.5,6.5],[-5.5,10.25,7],[4.5,10.25,7],[-2,5.5,.5],[1,5.5,.5],[-2,10.5,-1],[1,10.5,-1]])lantern(x,y,z);
 for(let z=5.5;z<8;z+=.5)box('wood',6.75,6.25,z,.1875,.25,.5);
 for(let i=0;i<3;i++)box('dark',6.6875,5.125+i*.25,7.625,.125,.25,1.25);
+refineTavern({box,beam,mug,bottle});
 const cells=new Map();
 for(const {m,b}of boxes)for(let x=Math.floor(b[0]);x<Math.ceil(b[3]);x++)for(let y=Math.floor(b[1]);y<Math.ceil(b[4]);y++)for(let z=Math.floor(b[2]);z<Math.ceil(b[5]);z++){
  const v=[Math.max(b[0]-x,0),Math.max(b[1]-y,0),Math.max(b[2]-z,0),Math.min(b[3]-x,1),Math.min(b[4]-y,1),Math.min(b[5]-z,1)];const k=[x,y,z].join(',');if(!cells.has(k))cells.set(k,[]);cells.get(k).push({m,b:v});
@@ -110,7 +113,7 @@ for(let i=0;i<catalogue.length;i++){
  const b={...structuredClone(template.partial),id:i+2,name:`Tavern ${i}`,faces:[],aabbs:[],isOpaque:full,isTransparent:Array(6).fill(!full),lightAttenuation:full?1:0,occludesFluid:full};
  for(let j=0;j<ps.length;j++){
   const p=ps[j],a=p.b;b.aabbs.push({minX:a[0],minY:a[1],minZ:a[2],maxX:a[3],maxY:a[4],maxZ:a[5]});
-  for(const f of template.cube.faces){const face=structuredClone(f);face.name=`${p.m}${j}-${f.name}`;face.textureGroup=p.m;face.range={startU:0,endU:1,startV:0,endV:1};for(const c of face.corners){c.pos=c.pos.map((v,k)=>a[k]+v*(a[k+3]-a[k]));const ax=f.dir[0]?[2,1]:f.dir[1]?[0,2]:[0,1];c.uv=c.uv.map((v,k)=>v*(a[ax[k]+3]-a[ax[k]]));}b.faces.push(face);}
+  for(const f of template.cube.faces){const face=structuredClone(f);face.name=`${p.m}${j}-${f.name}`;face.textureGroup=p.m;face.range={startU:0,endU:1,startV:0,endV:1};for(const c of face.corners){c.pos=c.pos.map((v,k)=>a[k]+v*(a[k+3]-a[k]));const ax=f.dir[0]?[2,1]:f.dir[1]?[0,2]:[0,1];if(!p.m.startsWith('sign'))c.uv=c.uv.map((v,k)=>v*(a[ax[k]+3]-a[ax[k]]));}b.faces.push(face);}
  }
  if(ps.some(p=>p.m==='glow'))Object.assign(b,{isLight:true,redLightLevel:15,greenLightLevel:11,blueLightLevel:6});blocks[b.name.toLowerCase()]=b;
 }

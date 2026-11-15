@@ -37,7 +37,7 @@ async fn main() -> std::io::Result<()> {
             for face in &mut f.faces {
                 face.texture_group=Some(p.m.clone());
                 let axes=if face.dir[0]!=0 {[2,1]} else if face.dir[1]!=0 {[0,2]} else {[0,1]};
-                for corner in &mut face.corners { for k in 0..2 { corner.uv[k] *= b[axes[k]+3]-b[axes[k]]; } }
+                if !p.m.starts_with("sign") { for corner in &mut face.corners { for k in 0..2 { corner.uv[k] *= b[axes[k]+3]-b[axes[k]]; } } }
             }
             aabbs.push(AABB::from_faces(&f));
             faces=faces+f;

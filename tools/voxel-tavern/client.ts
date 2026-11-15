@@ -39,8 +39,8 @@ async function start(){
   world.onMessage(snapshot.load);
   document.querySelector('h1')!.textContent='未写酒馆';
  }
- const views={outside:{p:[17,10,23],look:[0,8,0]},hall:{p:[1.5,4.6,3.75],look:[-2,4.5,-4]},upstairs:{p:[2.75,9.6,4.5],look:[-3,9,-3]},balcony:{p:[.5,9.6,7],look:[-5,9,4]}};
- function view(name:keyof typeof views){const v=views[name];controls.body.gravityMultiplier=name==='outside'?0:1;controls.teleportToExact(...v.p as [number,number,number]);controls.setDirection(v.look[0]-v.p[0],v.look[1]-v.p[1],v.look[2]-v.p[2]);}
+ const views={outside:{p:[17,10,23],look:[0,8,0]},hall:{p:[1.5,4.6,3.75],look:[-2,4.5,-4]},upstairs:{p:[2.75,9.6,4.5],look:[-3,9,-3]},balcony:{p:[.5,9.6,7],look:[-5,9,4]},bar:{p:[1,5.125,-.5],look:[-1.5,4.5,-3.5]},facade:{p:[-.25,5.75,12],look:[0,6.5,5]}};
+ function view(name:keyof typeof views){const v=views[name];controls.body.gravityMultiplier=['outside','facade','bar'].includes(name)?0:1;controls.teleportToExact(...v.p as [number,number,number]);controls.setDirection(v.look[0]-v.p[0],v.look[1]-v.p[1],v.look[2]-v.p[2]);}
  document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view as keyof typeof views));
  document.querySelector('#enter')!.addEventListener('click',()=>{controls.body.gravityMultiplier=1;controls.teleportToExact(0,4.6,10);controls.setDirection(0,0,-1);controls.lock();});
  document.querySelector('#night')!.addEventListener('click',()=>{world.time=world.time<12000?18000:6000;world.background=new T.Color(world.time<12000?'#8dabb9':'#172532');});

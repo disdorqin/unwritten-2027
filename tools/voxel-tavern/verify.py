@@ -1,5 +1,5 @@
 """Use the owner's existing isolated Playwright MCP; no personal browser profile."""
-import asyncio, json, pathlib, subprocess, os
+import asyncio, json, pathlib, subprocess, os, sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -30,13 +30,14 @@ async def main():
                   if (!await page.evaluate(() => !!window.tavernProbe)) return {initial};
                   await page.waitForTimeout(4000);
                   const results={initial, views:[]};
-                  for (const name of ['outside','hall','upstairs','balcony']) {
+                  for (const name of VIEWS) {
                     await page.locator(`[data-view="${name}"]`).click();
                     await page.waitForTimeout(1500);
                     const filename=ARTIFACTS+'/'+name+'.png';
                     await page.screenshot({path:filename});
                     results.views.push({name, filename, diagnostics:await page.evaluate(()=>({position:window.tavernProbe.controls.object.position.toArray(),drawCalls:window.tavernProbe.renderer.info.render.calls,triangles:window.tavernProbe.renderer.info.render.triangles,stats:window.tavernProbe.stats}))});
                   }
+                  if (FULL) {
                   await page.locator('[data-view="outside"]').click();
                   await page.locator('#night').click();await page.waitForTimeout(750);
                   await page.screenshot({path:ARTIFACTS+'/night.png'});
@@ -55,9 +56,10 @@ async def main():
                     }
                     return {route:out,passed:out.length===path.length&&out.every(p=>p.reached)&&out[out.length-1].position[1]>9};
                   });
+                  }
                   results.mode='authored offline construction; new building multiplayer not retested';
                   return results;
-                }'''.replace('ARTIFACTS',json.dumps(str(artifacts).replace('\\','/')))
+                }'''.replace('ARTIFACTS',json.dumps(str(artifacts).replace('\\','/'))).replace('VIEWS',json.dumps(sys.argv[1:] or ['outside','hall','upstairs','balcony','facade','bar'])).replace('FULL','false' if sys.argv[1:] else 'true')
                 code_tool=next(t.name for t in available.tools if t.name in ('browser_run_code','browser_run_code_unsafe'))
                 await call(code_tool,{'code':code})
                 await call('browser_console_messages',{'level':'error'})
