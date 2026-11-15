@@ -1,0 +1,7 @@
+/node_modules/
+/target/
+/dist/
+/tavern.json
+/artifacts/
+/snapshot.json.gz
+/.playwright-mcp/

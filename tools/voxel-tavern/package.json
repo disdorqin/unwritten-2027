@@ -1,0 +1,8 @@
+{
+  "name": "unwritten-voxel-tavern-probe",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "vite build", "dev": "vite --host 0.0.0.0"},
+  "dependencies": {"@voxelize/core": "3.0.0", "three": "0.183.2", "postprocessing": "6.39.6"},
+  "devDependencies": {"vite": "6.4.1", "typescript": "~5.9.3"}
+}
