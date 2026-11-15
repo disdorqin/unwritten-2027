@@ -28,6 +28,8 @@ snow = material('Snow caps', (.86, .92, .97))
 red = material('Vermilion postbox', (.46, .055, .025))
 gold = material('Brass trim', (.65, .42, .14))
 pane = material('Warm panes', (.65, .36, .10))
+paper = material('Letter paper', (.84, .76, .57))
+ink = material('Ink and slot shadows', (.035, .025, .02))
 
 # Blender X,Y,Z maps to glTF X,Z,-Y. Front of building faces positive game Z.
 def box(name, p, size, mat, bevel=.025):
@@ -56,6 +58,49 @@ box('Door lintel', (0, 3.2, 3.5), (2, .8, .2), wood)
 box('Ceiling', (0, 3.7, 0), (8.5, .2, 7.5), wood)
 box('Writing desk', (0, .65, -1), (3, 1.3, 1.1), wood)
 box('Desk top', (0, 1.31, -1), (3.1, .08, 1.2), trim)
+for x in [-.99, 0, .99]:
+    box('Drawer panel', (x, .97, -.43), (.88, .37, .06), trim)
+    box('Drawer handle', (x, 1.01, -.37), (.20, .045, .055), gold, .012)
+box('Writing blotter', (-.38, 1.365, -.95), (1.15, .018, .72), red, .008)
+for n in range(4):
+    sheet = box('Writing paper', (-.38+n*.005, 1.382+n*.006, -.95), (.62, .006, .45), paper, 0)
+    sheet.rotation_euler.z = .07
+box('Ink bottle', (.5, 1.46, -1.16), (.12, .18, .12), ink)
+pen = box('Brush pen', (.63, 1.41, -.87), (.035, .035, .50), wood, .008)
+pen.rotation_euler.z = -.35
+for n in range(5):
+    box('Stacked envelopes', (1.1, 1.39+n*.018, -1.15), (.36, .015, .23), paper, .004)
+
+# Decorative interior stays against walls and out of the entry/desk approach.
+for n in range(20):
+    x = -3.8+n*.40
+    box('Floorboard', (x, .112, 0), (.385, .018, 6.8), trim if n%4 else wood, .005)
+for x in [-3.1, -1.6, 1.6, 3.1]:
+    box('Ceiling joist', (x, 3.42, 0), (.13, .18, 6.8), wood)
+box('Sorting cabinet back', (2.2, 1.1, -3.28), (2, 2.2, .12), wood)
+for y in [.12, .62, 1.12, 1.62, 2.12]:
+    box('Letter sorting shelf', (2.2, y, -3.05), (2.05, .065, .48), trim)
+for x in [1.2, 1.86, 2.53, 3.2]:
+    box('Letter sorting divider', (x, 1.12, -3.05), (.065, 2.1, .48), wood)
+for row in range(4):
+    for col in range(3):
+        if (row+col)%3 == 0:
+            continue
+        for n in range(3):
+            box('Sorted mail', (1.52+col*.67, .19+row*.5+n*.026, -2.99), (.37, .021, .25), paper, .003)
+for x, h in [(-3.2, .38), (-2.55, .5)]:
+    box('Postal parcel', (x, h/2+.12, -3), (.55, h, .48), paper)
+    box('Parcel ribbon', (x, h+.125, -3), (.055, .012, .49), red, .002)
+box('Noticeboard frame', (-2.5, 2.05, -3.34), (1.8, 1.2, .12), wood)
+box('Noticeboard cork', (-2.5, 2.05, -3.26), (1.62, 1.02, .04), trim)
+for x, y in [(-2.9, 2.2), (-2.35, 2.1), (-2.6, 1.8)]:
+    box('Pinned notice', (x, y, -3.225), (.35, .32, .012), paper, .004)
+    box('Notice pin', (x, y+.13, -3.21), (.035, .035, .02), red, .009)
+for x in [-2.8, 2.8]:
+    box('Pendant stem', (x, 3.15, -.5), (.055, .5, .055), wood)
+    box('Pendant warm shade', (x, 2.86, -.5), (.43, .38, .43), pane, .06)
+    for dx in [-.23, .23]:
+        box('Pendant frame', (x+dx, 2.86, -.5), (.04, .44, .47), wood, .008)
 for x in [-3.85, -1.12, 1.12, 3.85]:
     box('Front column', (x, 1.8, 3.53), (.18, 3.6, .20), wood)
 for x in [-3.85, 3.85]:
@@ -137,4 +182,14 @@ if '--render' in sys.argv:
     scene.render.resolution_y = 850
     scene.render.resolution_percentage = 100
     scene.render.filepath = str(ROOT/'artifacts/post-office-render.png')
+    bpy.ops.render.render(write_still=True)
+    cam.location = (3.0, -2.5, 2.7)
+    cam.rotation_euler = (Vector((-.25, 1.5, 1.4))-cam.location).to_track_quat('-Z', 'Y').to_euler()
+    cam.data.type = 'PERSP'
+    cam.data.lens = 22
+    bpy.ops.object.light_add(type='AREA', location=(0, -.8, 3.15))
+    bpy.context.object.data.energy = 100
+    bpy.context.object.data.color = (1, .7, .4)
+    bpy.context.object.data.size = 3
+    scene.render.filepath = str(ROOT/'artifacts/post-office-interior-render.png')
     bpy.ops.render.render(write_still=True)

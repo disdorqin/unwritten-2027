@@ -40,10 +40,6 @@ export class SnowTown {
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.065; this.root.add(ring);
     this.box([0, 0.025, 19], [4, 0.05, 16], "#9aa6af");
     // Post office shell is shared with physics; these are its roof and furnishings.
-    this.box([17, 1.325, -4.9], [0.5, 0.025, 0.34], "#f2e5c9");
-    this.box([18, 1.42, -5], [0.2, 0.18, 0.22], "#a6402e");
-    this.box([19.2, 1.1, -7.3], [2, 2.2, 0.35], "#805438");
-    for (let i = 0; i < 4; i++) this.box([19.2, 0.4 + i * 0.5, -7.05], [1.85, 0.07, 0.4], "#bd9e70");
     const deskLamp = new THREE.PointLight("#ffd7a2", 26, 9, 2);
     deskLamp.position.set(17, 2.8, -4); this.root.add(deskLamp);
     const signCanvas = document.createElement("canvas"); signCanvas.width = 512; signCanvas.height = 128;
