@@ -30,6 +30,8 @@ export class SnowTown {
     // Hide the simplified clocktower collider; its GLB supplies the visible shell.
     for (const b of TOWN_LAYOUT.level) {
       if (b.kind === "collision") continue;
+      // The postal GLB replaces its visible shell; shared boxes still own collision.
+      if (b.p[0] >= 13 && b.p[0] <= 21 && b.p[2] < 0) continue;
       this.box(b.p, b.s, b.color);
     }
     const plaza = new THREE.Mesh(new THREE.CylinderGeometry(13.5, 13.5, 0.035, 64), this.material("#9aa6af"));
@@ -38,13 +40,6 @@ export class SnowTown {
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.065; this.root.add(ring);
     this.box([0, 0.025, 19], [4, 0.05, 16], "#9aa6af");
     // Post office shell is shared with physics; these are its roof and furnishings.
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.3, 1.8, 4), this.material("#52616c"));
-    roof.rotation.y = Math.PI / 4; roof.scale.z = 0.88; roof.position.set(17, 4.5, -4);
-    roof.castShadow = true; this.root.add(roof);
-    const roofSnow = new THREE.Mesh(new THREE.ConeGeometry(6.2, 1.7, 4), this.material("#e2ebf2"));
-    roofSnow.rotation.copy(roof.rotation); roofSnow.scale.copy(roof.scale); roofSnow.position.set(17, 4.61, -4); this.root.add(roofSnow);
-    for (const x of [13.15, 20.85]) for (const z of [-7.35, -0.35]) this.box([x, 1.8, z], [0.2, 3.6, 0.2], "#795033");
-    for (const z of [-7.32, -0.32]) this.box([17, 3.45, z], [7.9, 0.2, 0.2], "#795033");
     this.box([17, 1.325, -4.9], [0.5, 0.025, 0.34], "#f2e5c9");
     this.box([18, 1.42, -5], [0.2, 0.18, 0.22], "#a6402e");
     this.box([19.2, 1.1, -7.3], [2, 2.2, 0.35], "#805438");
@@ -115,7 +110,13 @@ export class SnowTown {
     }
     const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     this.root.add(new THREE.Points(geometry, new THREE.PointsMaterial({ color: "#dbe9f9", size: 0.055, transparent: true, opacity: 0.7 })));
-    this.loaded = new GLTFLoader().loadAsync(new URL("models/clocktower.glb", document.baseURI).href).then(g => {
+    const loader = new GLTFLoader();
+    const postalLoaded = loader.loadAsync(new URL("models/post-office.glb", document.baseURI).href).then(g => {
+      g.scene.name = "PostOffice"; g.scene.position.set(17, 0, -4);
+      g.scene.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } });
+      this.root.add(g.scene);
+    });
+    const towerLoaded = loader.loadAsync(new URL("models/clocktower.glb", document.baseURI).href).then(g => {
       g.scene.name = "Clocktower"; g.scene.position.set(...TOWN.tower);
       g.scene.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } });
       this.hour = g.scene.getObjectByName("Clock_HourHand");
@@ -123,6 +124,7 @@ export class SnowTown {
       this.hourRest = this.hour?.quaternion.clone(); this.minuteRest = this.minute?.quaternion.clone();
       this.root.add(g.scene); this.update();
     });
+    this.loaded = Promise.all([postalLoaded, towerLoaded]).then(() => {});
   }
   private material(color: string) {
     if (!this.materials.has(color)) this.materials.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.9 }));

@@ -27,6 +27,7 @@ const level: Box[] = [
   { p: [17, 3.2, -0.5], s: [2, 0.8, 0.2], color: "#785439" },
   { p: [17, 3.7, -4], s: [8.5, 0.2, 7.5], color: "#70533e" },
   { p: [17, 0.65, -5], s: [3, 1.3, 1.1], color: "#805438" },
+  { p: [20, 0.85, 0], s: [0.65, 1.35, 0.65], color: "#a6402e", kind: "collision" },
   // Exact tower origin shared with rendering. Interior remains closed in this slice.
   { p: [0, 3, -7], s: [4, 6, 4], color: "#665345", kind: "collision" },
   ...[0, 1, 2].map((n): Box => ({
