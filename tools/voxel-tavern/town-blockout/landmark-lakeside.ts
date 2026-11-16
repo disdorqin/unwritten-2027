@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, Group,
-  Matrix4, Mesh, MeshLambertMaterial, Quaternion, Vector3, DoubleSide, FrontSide,
+  AdditiveBlending, BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, Group,
+  Matrix4, Mesh, MeshLambertMaterial, Quaternion, ShaderMaterial, Vector3, DoubleSide, FrontSide,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Box, TownPlot } from './landmark-kit';
@@ -185,17 +185,65 @@ function lighthouse() {
   cylinder(0, 15.74, 0, .8, 1.95, .47, 'deepRed');
   cylinder(0, 16.17, 0, .07, .82, .48, 'red');
   cylinder(0, 16.63, 0, .09, .09, .49, 'yellow', 8);
-  return finish();
+  const group = finish();
+  const beaconPivot = new Group();
+  beaconPivot.name = 'lighthouse-beacon';
+  beaconPivot.position.y = 13.42;
+  beaconPivot.rotation.y = -Math.PI * .43;
+  const beamLength = 57;
+  const beamGeometry = new CylinderGeometry(4.5, .38, beamLength, 20, 1, true);
+  beamGeometry.rotateX(Math.PI / 2);
+  const beamMaterial = new ShaderMaterial({
+    uniforms: { beamColor: { value: new Color('#9ac8ff') } },
+    vertexShader: `
+      varying vec2 beamUv;
+      varying vec3 beamNormal;
+      varying vec3 beamView;
+      void main() {
+        beamUv = uv;
+        beamNormal = normalMatrix * normal;
+        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        beamView = -viewPosition.xyz;
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 beamColor;
+      varying vec2 beamUv;
+      varying vec3 beamNormal;
+      varying vec3 beamView;
+      void main() {
+        float rim = abs(dot(normalize(beamNormal), normalize(beamView)));
+        float glow = (1.0 - smoothstep(0.01, 1.0, beamUv.y)) * smoothstep(0.0, 0.8, rim) * 0.16;
+        gl_FragColor = vec4(beamColor, glow);
+        #include <colorspace_fragment>
+      }
+    `,
+    blending: AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+    forceSinglePass: true,
+    toneMapped: false,
+  });
+  const lightBeam = new Mesh(beamGeometry, beamMaterial);
+  lightBeam.position.z = beamLength / 2 + 1.87;
+  lightBeam.rotation.x = -.03;
+  beaconPivot.add(lightBeam);
+  group.add(beaconPivot);
+  group.userData.beaconPivot = beaconPivot;
+  return group;
 }
 
 // A radial platform, striped crown, and the old six wooden horses carry over
 // from build-festival and festival-scene, with the B24 brass gallery lights.
 function carousel() {
   const { box, cylinder, panel, beam, solid, floor, finish } = model();
+  const rotating = model();
   cylinder(0, .14, 0, 6.76, 6.76, .28, 'stone', 32);
-  cylinder(0, .39, 0, 6.14, 6.37, .28, 'deepRed', 32);
-  cylinder(0, .56, 0, 6.04, 6.14, .13, 'yellow', 32);
-  cylinder(0, .63, 0, 5.93, 5.93, .15, 'oak', 32);
+  rotating.cylinder(0, .39, 0, 6.14, 6.37, .28, 'deepRed', 32);
+  rotating.cylinder(0, .56, 0, 6.04, 6.14, .13, 'yellow', 32);
+  rotating.cylinder(0, .63, 0, 5.93, 5.93, .15, 'oak', 32);
   cylinder(0, 3.55, 0, 1.03, 1.03, 5.85, 'deepRed', 12);
   cylinder(0, 2.15, 0, 1.09, 1.09, .16, 'yellow', 12);
   cylinder(0, 3.71, 0, 1.09, 1.09, .16, 'yellow', 12);
@@ -221,14 +269,24 @@ function carousel() {
   }
   cylinder(0, 8.69, 0, .56, .67, .23, 'yellow');
   cylinder(0, 9.02, 0, .14, .33, .43, 'amber', 8);
+  const rideSeat = new Group();
+  rideSeat.name = 'carousel-seat-view';
   for (let i = 0; i < 6; i++) {
     const a = i * Math.PI / 3 + Math.PI / 6;
     const r = 4.24;
     const [x, , z] = radial(a, 0, r);
-    cylinder(x, 3.12, z, .066, .066, 4.98, 'yellow', 8);
+    rotating.cylinder(x, 3.12, z, .066, .066, 4.98, 'yellow', 8);
+    if (i === 0) {
+      rideSeat.position.set(x - Math.sin(a) * .24, 3.96, z - Math.cos(a) * .24);
+      rideSeat.rotation.y = a + Math.PI / 3;
+    }
+    for (const angle of [a - .21, a, a + .21]) {
+      const [lightX, , lightZ] = radial(angle, 0, 6.26);
+      rotating.box(lightX, .4, lightZ, .15, .097, .12, 'amber', angle);
+    }
     const coat = i % 3 !== 1 ? 'white' : 'oak';
     const piece = (dx: number, y: number, dz: number, w: number, h: number, d: number, paint: Paint) =>
-      box(x + Math.cos(a) * dx + Math.sin(a) * dz, y, z - Math.sin(a) * dx + Math.cos(a) * dz, w, h, d, paint, a);
+      rotating.box(x + Math.cos(a) * dx + Math.sin(a) * dz, y, z - Math.sin(a) * dx + Math.cos(a) * dz, w, h, d, paint, a);
     piece(0, 2.03, 0, .68, .61, 1.32, coat);
     piece(0, 2.31, .48, .45, .84, .49, coat);
     piece(0, 2.75, .65, .48, .39, .71, coat);
@@ -261,7 +319,14 @@ function carousel() {
     beam(radial(a, 1.69, 5.85), radial(b, 1.69, 5.85), .1, 'yellow');
     solid((x + ex) / 2, 1.76, (z + ez) / 2, Math.abs(ex - x) + .15, Math.abs(ez - z) + .15, 1.2);
   }
-  return finish();
+  const group = finish();
+  const ridePivot = rotating.finish();
+  ridePivot.name = 'carousel-rotating-stage';
+  ridePivot.add(rideSeat);
+  group.add(ridePivot);
+  group.userData.ridePivot = ridePivot;
+  group.userData.rideSeat = rideSeat;
+  return group;
 }
 
 // B24 barrel-vault glasshouse, open west entrance and a potted-palm aisle.

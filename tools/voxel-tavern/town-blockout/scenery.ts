@@ -1,6 +1,6 @@
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color,
-  ConeGeometry, CylinderGeometry, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight, Points, PointsMaterial, Vector3,
+  AdditiveBlending, BoxGeometry, CanvasTexture, Color,
+  Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight, Vector3,
   Sprite, SpriteMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
 } from 'three';
 import { canEnter, layout } from './terrain';
@@ -54,9 +54,6 @@ export function addScenery(group: Group, grid: Ground) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const foliage: Instance[] = [];
-  const branches: Instance[] = [];
-  const trunks: Instance[] = [];
   const pillars: Instance[] = [];
   const lights: Instance[] = [];
   const caps: Instance[] = [];
@@ -104,7 +101,6 @@ export function addScenery(group: Group, grid: Ground) {
   }
 
   for (const road of layout.roads) {
-    if (road.id.endsWith('-loop')) continue;
     let nextLamp = 15;
     let side = 1;
     for (let i = 1; i < road.points.length; i++) {
@@ -130,47 +126,11 @@ export function addScenery(group: Group, grid: Ground) {
     }
   }
 
-  const forests = [
-    { x: 73, n: 321, rx: 57, rn: 56 },
-    { x: 149, n: 342, rx: 54, rn: 30 },
-    { x: 368, n: 353, rx: 57, rn: 33 },
-    { x: 426, n: 246, rx: 17, rn: 82 },
-    { x: 54, n: 152, rx: 25, rn: 81 },
-    { x: 407, n: 44, rx: 25, rn: 25 },
-  ];
-  for (const patch of forests) {
-    for (let i = 0; i < 64; i++) {
-      const angle = random() * 2 * Math.PI;
-      const radius = Math.sqrt(random());
-      const x = patch.x + Math.cos(angle) * radius * patch.rx;
-      const north = patch.n + Math.sin(angle) * radius * patch.rn;
-      const cell = Math.round(north) * grid.gridWidth + Math.round(x);
-      if (!canEnter(x, north) || grid.surfaces[cell] !== 0 || nearEntrance(x, north, 2.2)) continue;
-      if (layout.plots.some(({ origin, footprint }) =>
-        Math.abs(x - origin[0]) < footprint[0] / 2 + 4 && Math.abs(north - origin[1]) < footprint[1] / 2 + 4)) continue;
-      if (blockers.some(b => Math.hypot(x - b.x, north - b.n) < 3.7)) continue;
-      const y = grid.heightAt(x, north);
-      const size = 4 + random() * 5;
-      const z = -north;
-      trunks.push({ at: [x, y + size * .23, z], scale: [size * .13, size * .46, size * .13] });
-      for (let tier = 0; tier < 3; tier++) {
-        const spread = size * (.72 - tier * .16);
-        const base = y + size * (.34 + tier * .22);
-        branches.push({ at: [x, base, z], scale: [spread, size * .47, spread], tint: tier % 2 ? '#355568' : '#274658' });
-        foliage.push({ at: [x, base + size * .076, z], scale: [spread * .87, size * .41, spread * .87], tint: '#bbd0e7' });
-      }
-      blockers.push({ x, n: north, radius: size * .07 });
-    }
-  }
-
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
-  const pine = new ConeGeometry(.5, 1, 5);
   instances(group, box, neutral, pavers);
   instances(group, box, neutral, [...pillars, ...caps]);
   instances(group, box, new MeshBasicMaterial({ color: '#ffb969' }), lights);
-  instances(group, new CylinderGeometry(.5, .65, 1, 5), new MeshLambertMaterial({ color: '#514653' }), trunks);
-  instances(group, pine, neutral, [...branches, ...foliage]);
   const glow = makeGlows(group, glowPositions);
   const lampLightPool = Array.from({ length: 3 }, () => new PointLight('#ffb469', 0, 13, 2));
   const lampLocations = glowPositions.map(at => new Vector3(...at));
@@ -178,20 +138,6 @@ export function addScenery(group: Group, grid: Ground) {
   let night = true;
   let nextLightUpdate = 0;
 
-  const particles = new BufferGeometry();
-  const positions = new Float32Array(750 * 3);
-  for (let i = 0; i < positions.length; i += 3) {
-    positions[i] = random() * 62 - 31;
-    positions[i + 1] = random() * 26 - 5;
-    positions[i + 2] = random() * 62 - 31;
-  }
-  const vertices = new BufferAttribute(positions, 3);
-  particles.setAttribute('position', vertices);
-  const snow = new Points(particles, new PointsMaterial({
-    color: '#e9f4ff', size: .095, transparent: true, opacity: .65, depthWrite: false,
-  }));
-  snow.frustumCulled = false;
-  group.add(snow);
   return {
     blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {
@@ -213,16 +159,6 @@ export function addScenery(group: Group, grid: Ground) {
         });
         nextLightUpdate = .22;
       }
-      snow.visible = walking;
-      if (!walking) return;
-      snow.position.set(x, y, z);
-      for (let i = 0; i < positions.length; i += 3) {
-        positions[i] += dt * .34;
-        if (positions[i] > 31) positions[i] -= 62;
-        positions[i + 1] -= dt * 1.75;
-        if (positions[i + 1] < -5) positions[i + 1] += 26;
-      }
-      vertices.needsUpdate = true;
     },
   };
 }

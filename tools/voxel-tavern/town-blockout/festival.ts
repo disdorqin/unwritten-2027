@@ -1,0 +1,208 @@
+import {
+  AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial, type Scene,
+} from 'three';
+import { playTowerChime } from '../tower-chime';
+
+type Burst = {
+  time: number;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  shape: 'peony' | 'ring' | 'willow';
+  outer: Color;
+  inner: Color;
+};
+
+const countdown = 3;
+const duration = 15;
+const sparkCount = 96;
+const trailCount = 3;
+const lifetime = 2.65;
+const flight = .8;
+const gold = new Color('#ffc26b');
+const cream = new Color('#fff1c7');
+const red = new Color('#ff5767');
+const pink = new Color('#f599df');
+const blue = new Color('#7ad9ff');
+const jade = new Color('#76f6db');
+
+// World-space choreography above the plaza, with alternating silhouettes and a three-burst finale.
+const bursts: Burst[] = [
+  { time: .85, x: 207, y: 43, z: -202, radius: 14, shape: 'peony', outer: red, inner: cream },
+  { time: 1.4, x: 240, y: 49, z: -193, radius: 17, shape: 'peony', outer: gold, inner: cream },
+  { time: 2.5, x: 222, y: 57, z: -198, radius: 15, shape: 'ring', outer: jade, inner: cream },
+  { time: 4.2, x: 202, y: 48, z: -198, radius: 14, shape: 'ring', outer: blue, inner: pink },
+  { time: 5.05, x: 246, y: 51, z: -203, radius: 17, shape: 'willow', outer: gold, inner: cream },
+  { time: 6.45, x: 222, y: 59, z: -196, radius: 18, shape: 'peony', outer: pink, inner: cream },
+  { time: 8.1, x: 203, y: 50, z: -194, radius: 15, shape: 'willow', outer: red, inner: gold },
+  { time: 8.48, x: 246, y: 54, z: -200, radius: 16, shape: 'peony', outer: blue, inner: cream },
+  { time: 8.76, x: 224, y: 67, z: -197, radius: 20, shape: 'peony', outer: gold, inner: cream },
+];
+
+export function createFestival(scene: Scene, setMessage: (message: string) => void = () => {}) {
+  const capacity = bursts.length * sparkCount * trailCount;
+  const positions = new Float32Array(capacity * 3);
+  const colors = new Float32Array(capacity * 3);
+  const strengths = new Float32Array(capacity);
+  const radii = new Float32Array(capacity);
+  const geometry = new BufferGeometry();
+  const positionBuffer = new BufferAttribute(positions, 3).setUsage(DynamicDrawUsage);
+  const colorBuffer = new BufferAttribute(colors, 3).setUsage(DynamicDrawUsage);
+  const strengthBuffer = new BufferAttribute(strengths, 1).setUsage(DynamicDrawUsage);
+  const radiusBuffer = new BufferAttribute(radii, 1).setUsage(DynamicDrawUsage);
+  geometry.setAttribute('position', positionBuffer);
+  geometry.setAttribute('sparkColor', colorBuffer);
+  geometry.setAttribute('strength', strengthBuffer);
+  geometry.setAttribute('radius', radiusBuffer);
+  geometry.setDrawRange(0, 0);
+  const material = new ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: AdditiveBlending,
+    vertexShader: `
+      attribute vec3 sparkColor;
+      attribute float strength;
+      attribute float radius;
+      varying vec3 vColor;
+      varying float vStrength;
+      void main() {
+        vec4 view = modelViewMatrix * vec4(position, 1.0);
+        vColor = sparkColor;
+        vStrength = strength;
+        gl_Position = projectionMatrix * view;
+        gl_PointSize = clamp(radius * sqrt(105.0 / max(14.0, -view.z)), 1.8, 15.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vStrength;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float halo = 1.0 - smoothstep(0.2, 1.0, d);
+        float core = 1.0 - smoothstep(0.08, 0.43, d);
+        gl_FragColor = vec4(mix(vColor, vec3(1.0, 0.96, 0.84), core * 0.58),
+          vStrength * (halo * 0.41 + core * 0.59));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const sparks = new Points(geometry, material);
+  sparks.name = '广场烟花';
+  sparks.frustumCulled = false;
+  sparks.visible = false;
+  scene.add(sparks);
+
+  let elapsed = -1;
+  let used = 0;
+  let message = '';
+  let audio: AudioContext | undefined;
+  const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function announce(next: string) {
+    if (next === message) return;
+    message = next;
+    setMessage(next);
+  }
+
+  function tryEnableAudio() {
+    try {
+      audio ??= new AudioContext();
+      if (audio.state !== 'running') void audio.resume().catch(() => {});
+    } catch {
+      // Browser permission and Web Audio availability do not affect the show.
+    }
+  }
+
+  function emit(x: number, y: number, z: number, color: Color, strength: number, radius: number) {
+    const offset = used * 3;
+    positions[offset] = x;
+    positions[offset + 1] = y;
+    positions[offset + 2] = z;
+    colors[offset] = color.r;
+    colors[offset + 1] = color.g;
+    colors[offset + 2] = color.b;
+    strengths[used] = strength;
+    radii[used] = radius;
+    used++;
+  }
+
+  function drawRocket(burst: Burst, t: number) {
+    const launchX = Math.max(211, Math.min(235, burst.x));
+    for (let i = 0; i < 6; i++) {
+      const progress = Math.max(0, (t + flight - i * .025) / flight);
+      emit(launchX + (burst.x - launchX) * progress * progress, 15 + (burst.y - 15) * progress,
+        burst.z + 5 * (1 - progress), cream, (6 - i) / 6, 8 - i * .65);
+    }
+  }
+
+  function drawBurst(burst: Burst, t: number) {
+    const particleCount = reducedMotion ? 32 : sparkCount;
+    const echoes = reducedMotion ? 1 : trailCount;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = i * 2.399963 + burst.x;
+      const height = 1 - 2 * (i + .5) / particleCount;
+      const circle = Math.sqrt(1 - height * height);
+      const ring = burst.shape === 'ring';
+      const willow = burst.shape === 'willow';
+      const dx = Math.cos(angle) * (ring ? 1 : circle);
+      const dy = ring ? Math.sin(angle) : height;
+      const dz = ring ? Math.sin(angle) * .25 : Math.sin(angle) * circle;
+      const speed = (.76 + ((i * 17) % 31) / 86) * burst.radius;
+      const tint = i % 5 === 0 ? burst.inner : burst.outer;
+      for (let trail = 0; trail < echoes; trail++) {
+        const age = t - trail * (willow ? .105 : .055);
+        if (age < 0 || age > lifetime) continue;
+        const spread = speed * (1 - Math.exp(-age * 1.52));
+        const gravity = age * age * (willow ? 2.1 : 1.15);
+        const intensity = Math.pow(1 - age / lifetime, 1.28) * (1 - trail * .23);
+        const flicker = age < .35 || i % 4 !== 0 || Math.sin(i * 8 + age * 24) > -.43 ? 1 : .3;
+        emit(burst.x + dx * spread, burst.y + dy * spread - gravity, burst.z + dz * spread,
+          tint, intensity * flicker, trail ? 4.7 : 7.8);
+      }
+    }
+  }
+
+  return {
+    start() {
+      if (elapsed >= 0) return false;
+      elapsed = 0;
+      tryEnableAudio();
+      announce('3');
+      return true;
+    },
+    active() { return elapsed >= 0; },
+    update(dt: number) {
+      if (elapsed < 0) return;
+      const previous = elapsed;
+      elapsed += Math.max(0, dt);
+      if (elapsed < countdown) {
+        announce(String(Math.ceil(countdown - elapsed)));
+        return;
+      }
+      if (previous < countdown && audio) playTowerChime(audio, 0, 3);
+      const time = elapsed - countdown;
+      announce(time < 3.8 ? '新年快乐！' : '');
+      if (time >= duration) {
+        elapsed = -1;
+        sparks.visible = false;
+        return;
+      }
+      used = 0;
+      for (const burst of bursts) {
+        const age = time - burst.time;
+        if (age < -flight || age > lifetime + .22) continue;
+        if (age < 0) drawRocket(burst, age);
+        else drawBurst(burst, age);
+      }
+      sparks.visible = used > 0;
+      geometry.setDrawRange(0, used);
+      if (!sparks.visible) return;
+      positionBuffer.needsUpdate = true;
+      colorBuffer.needsUpdate = true;
+      strengthBuffer.needsUpdate = true;
+      radiusBuffer.needsUpdate = true;
+    },
+  };
+}

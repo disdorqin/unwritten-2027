@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  Line, LineBasicMaterial, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -14,6 +14,11 @@ import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark } from './landmark-village';
 import { canEnter, createTerrainGrid, gridStep, layout, riverX, waterHeight } from './terrain';
+import { addDistrictHousing } from './district-layout';
+import { addForestDensity } from './forest-density';
+import { addStreetscape } from './streetscape';
+import { createSnowfall } from './snowfall';
+import { createFestival } from './festival';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -22,7 +27,7 @@ scene.background = new Color('#adc2dd');
 scene.fog = new Fog('#adc2dd', 360, 1300);
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
 const renderer = new WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 element('scene').append(renderer.domElement);
 renderer.domElement.setAttribute('aria-label', '雪镇建模预览');
@@ -35,8 +40,19 @@ scene.add(sun);
 const landscape = new Group();
 scene.add(landscape);
 const scenery = addScenery(landscape, grid);
+const districts = addDistrictHousing(landscape, grid, scenery.blocked);
+const streetscape = addStreetscape(landscape, grid, districts.keepClear);
+const forest = addForestDensity(landscape, grid, (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius));
+const snowfall = createSnowfall(scene);
+const snowButton = element<HTMLButtonElement>('snow');
+snowButton.onclick = () => {
+  snowfall.setEnabled(!snowfall.enabled());
+  snowButton.setAttribute('aria-pressed', String(snowfall.enabled()));
+};
 const timeOfDay = element<HTMLButtonElement>('lighting');
+let nightMode = true;
 function setNight(night: boolean) {
+  nightMode = night;
   const sky = night ? '#182642' : '#acc2dd';
   (scene.background as Color).set(sky);
   scene.fog!.color.set(sky);
@@ -137,6 +153,10 @@ const builders: Record<string, Builder> = {
 type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps?: Ramp[] };
 const architecture = new Map<string, Group>();
 const status = element('load-status');
+const festivalText = element('festival-status');
+const rehearse = element<HTMLButtonElement>('rehearse');
+const festival = createFestival(scene, message => { festivalText.textContent = message; });
+const actionButton = element<HTMLButtonElement>('world-action');
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 function validBox({ min, max }: Box) {
   return [min, max].every(v => v.length === 3 && v.every(Number.isFinite)) && min.every((v, i) => v <= max[i]);
@@ -157,7 +177,7 @@ function geometry() {
   return [...architecture.values(), slide].map(readWalkGeometry);
 }
 let walkGeometry = geometry();
-status.textContent = `${architecture.size} 处建筑与设施已入场`;
+status.textContent = `${architecture.size + districts.count} 处建筑与设施 · ${forest.count} 株树`;
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
@@ -192,6 +212,8 @@ const points = new Map<string, number[]>([
   ['东北纪念馆', layout.roads[1].points.at(-1)!],
   ['西南年集', layout.roads[2].points.at(-1)!],
   ['东南游乐区', layout.roads[3].points.at(-1)!],
+  ['西南河畔街巷', [161.5, 165.5]],
+  ['东北坡地街巷', [319, 221]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
 layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect));
@@ -205,21 +227,83 @@ let n = 0;
 let yaw = 0;
 let pitch = 0;
 let ground = 0;
+let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
+let rideSpeed = 0;
+const lookAhead = new Vector3();
+const placeCard = element<HTMLDialogElement>('place-card');
+const letterForm = element<HTMLFormElement>('letter-form');
+const letterBody = element<HTMLTextAreaElement>('letter-body');
+const letterReceipt = element('letter-receipt');
+const letterKey = 'unwritten:snow-town-letter';
+
+function openPlace(title: string, description: string, writing = false) {
+  keys.clear();
+  element('place-title').textContent = title;
+  element('place-text').textContent = description;
+  letterForm.hidden = !writing;
+  if (writing) {
+    letterReceipt.textContent = '';
+    try { letterBody.value = localStorage.getItem(letterKey) ?? ''; }
+    catch { letterBody.value = ''; }
+  }
+  placeCard.showModal();
+}
+letterForm.onsubmit = event => {
+  event.preventDefault();
+  const value = letterBody.value.trim();
+  if (!value) return;
+  try {
+    localStorage.setItem(letterKey, value);
+    letterReceipt.textContent = '已寄存在这台设备上';
+  } catch {
+    letterReceipt.textContent = '浏览器未允许本地保存';
+  }
+};
+placeCard.addEventListener('close', () => renderer.domElement.focus());
+
+function leaveRide() {
+  if (!boardingGround) return;
+  ({ x, n, ground, yaw } = boardingGround);
+  boardingGround = undefined;
+  pitch = 0;
+}
+const tour = [
+  { x: 341, n: 106.3, radius: 4.25, maxHeight: 14, label: '坐上旋转木马', run() {
+    if (architecture.get('carousel')?.userData.rideSeat) boardingGround = { x, n, ground, yaw };
+  } },
+  { x: 262.1, n: 205.6, radius: 2.9, maxHeight: 15.6, label: '给 2027 写封信', run() {
+    openPlace('写给 2027', '给未来的自己留一封信。寄存后可以在同一浏览器里回来读。', true);
+  } },
+  { x: 343, n: 263.5, radius: 3.85, maxHeight: 29, label: '查看纪念馆导览', run() {
+    openPlace('2026 纪念馆', '沿中轴进馆，经过门廊和长毯来到主展厅。北面的坡道通往长殿，回程可以沿河边的北桥走回镇上。');
+  } },
+];
+function currentAction() {
+  if (!walking || placeCard.open) return undefined;
+  if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
+  return tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
+}
+function interact() {
+  currentAction()?.run();
+  if (!placeCard.open) renderer.domElement.focus();
+}
+actionButton.onclick = interact;
 function jump() {
   [x, n] = points.get(selector.value)!;
   const target = layout.plots[plotLabels.indexOf(selector.value)];
-  const [east, north] = target?.door ?? [226, 223];
+  const [east, north] = target?.door ?? (selector.value === '西南河畔街巷' ? [131, 141] : [226, 223]);
   yaw = Math.atan2(east - x, north - n);
   ground = grid.heightAt(x, n);
   pitch = 0;
 }
 function mode(next: boolean) {
+  leaveRide();
   walking = next;
   keys.clear();
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
-  element('help').textContent = next ? 'WASD / 方向键移动，拖动场景转向' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。';
+  element('help').textContent = next ? 'WASD / 方向键移动，拖动转向。靠近互动点后按 E。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。';
   if (next) jump();
   else {
     camera.position.set(465, 305, 122);
@@ -230,15 +314,28 @@ function mode(next: boolean) {
 overview.onclick = () => mode(false);
 element('view-valley').onclick = () => {
   mode(false);
-  camera.position.set(393, 144, -12);
-  controls.target.set(229, 26, -206);
+  camera.position.set(386, 177, 15);
+  controls.target.set(215, 24, -198);
+  controls.update();
+};
+rehearse.onclick = () => {
+  if (!festival.start()) return;
+  mode(false);
+  setNight(true);
+  camera.position.set(283, 33, -108);
+  controls.target.set(225, 54, -207);
   controls.update();
 };
 walk.onclick = () => mode(true);
 selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 addEventListener('keydown', e => {
-  if (walking && moveKeys.has(e.code) && !(e.target instanceof HTMLSelectElement)) {
+  if (placeCard.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
+  if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
+    e.preventDefault();
+    interact();
+  }
+  if (walking && !boardingGround && moveKeys.has(e.code)) {
     keys.add(e.code);
     e.preventDefault();
   }
@@ -267,7 +364,8 @@ addEventListener('resize', () => {
 mode(false);
 let previous = performance.now();
 function nextGround(nextX: number, nextN: number) {
-  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN)) return null;
+  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN) || districts.blocked(nextX, nextN)
+    || forest.blocked(nextX, nextN) || streetscape.blocked(nextX, nextN)) return null;
   const z = -nextN;
   const contains = ({ min, max }: Box) => nextX >= min[0] && nextX <= max[0] && z >= min[2] && z <= max[2];
   const terrain = grid.heightAt(nextX, nextN);
@@ -300,10 +398,26 @@ function tryMove(nextX: number, nextN: number) {
 renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, Math.max(0, now - previous) / 1000);
   previous = now;
-  if (walking) {
+  const carousel = architecture.get('carousel');
+  const pivot = carousel?.userData.ridePivot as Object3D | undefined;
+  const seat = carousel?.userData.rideSeat as Object3D | undefined;
+  const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
+  if (boardingGround && !seat) leaveRide();
+  rideSpeed += Math.min(1, dt * 1.8) * ((boardingGround ? .51 : 0) - rideSpeed);
+  if (pivot) pivot.rotation.y = (pivot.rotation.y + rideSpeed * dt) % (Math.PI * 2);
+  if (beacon) {
+    beacon.visible = nightMode;
+    if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
+  }
+  if (walking && boardingGround && seat) {
+    seat.getWorldPosition(camera.position);
+    seat.getWorldDirection(lookAhead);
+    camera.lookAt(lookAhead.negate().add(camera.position));
+    element('position').textContent = '旋转木马 · 乘坐中';
+  } else if (walking) {
     const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown'));
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
-    if (forward || right) {
+    if (!placeCard.open && (forward || right)) {
       const steps = Math.max(1, Math.ceil(dt / .025));
       const stride = 7.5 * dt / (steps * Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
@@ -323,5 +437,12 @@ renderer.setAnimationLoop(now => {
     element('position').textContent = '';
   }
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
+  snowfall.update(camera, dt, walking);
+  festival.update(dt);
+  rehearse.disabled = festival.active();
+  const action = currentAction();
+  actionButton.hidden = !action;
+  const label = action ? `E · ${action.label}` : '';
+  if (label !== actionButton.textContent) actionButton.textContent = label;
   renderer.render(scene, camera);
 });

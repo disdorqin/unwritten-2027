@@ -3,25 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>UNWRITTEN 2027 · 雪镇初搭</title>
+  <title>UNWRITTEN 2027 · 雪夜小镇</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <script type="module" src="./town-blockout/viewer.ts"></script>
 </head>
 <body>
   <main id="scene" aria-label="雪镇三维场景"></main>
-  <aside class="panel">
+  <aside class="panel" aria-label="小镇控制">
     <h1>UNWRITTEN 2027</h1>
     <nav aria-label="查看方式">
       <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
       <button id="walk" type="button" aria-pressed="false">第一人称</button>
       <button id="lighting" type="button" aria-pressed="true" aria-label="切换白昼和雪夜">雪夜</button>
+      <button id="snow" type="button" aria-pressed="true">降雪</button>
     </nav>
     <label>前往 <select id="jump"></select></label>
     <button id="view-valley" type="button">雪谷取景</button>
     <p id="help"></p>
     <output id="position"></output>
+    <button id="rehearse" class="festival-button" type="button">跨年预演</button>
   </aside>
-  <p class="legend">浅褐 · 步道　金色边线 · 建筑地块</p>
+  <button id="world-action" type="button" hidden></button>
+  <output id="festival-status" aria-live="polite"></output>
   <p id="load-status" role="status"></p>
+  <dialog id="place-card" aria-labelledby="place-title">
+    <form method="dialog"><button class="close-card" aria-label="关闭">×</button></form>
+    <h2 id="place-title"></h2>
+    <p id="place-text"></p>
+    <form id="letter-form" hidden>
+      <label for="letter-body">信件内容</label>
+      <textarea id="letter-body" maxlength="2000" rows="6" placeholder="亲爱的 2027 年的我……" required></textarea>
+      <button type="submit">寄存到本机</button>
+      <output id="letter-receipt" aria-live="polite"></output>
+    </form>
+  </dialog>
 </body>
 </html>
