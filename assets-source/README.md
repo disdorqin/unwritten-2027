@@ -44,3 +44,7 @@ are used. `audio/movement.ts` times steps by grounded travel distance, with
 quieter crouch steps and a separate jump cue. Clicking the world starts game
 audio without requesting microphone access. Other players' movement sounds
 use the same spatial emitter and reverb as voice.
+
+## 雪镇建模参考
+
+全镇、地形动线、街区、建筑和道具的 48 张概念图见[编号索引](concept-art/README.md)。
