@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>UNWRITTEN 2027 · 雪镇初搭</title>
+  <link rel="stylesheet" href="./town-blockout/style.css">
+  <script type="module" src="./town-blockout/viewer.ts"></script>
+</head>
+<body>
+  <main id="scene" aria-label="雪镇三维场景"></main>
+  <aside class="panel">
+    <h1>UNWRITTEN 2027</h1>
+    <nav aria-label="查看方式">
+      <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
+      <button id="walk" type="button" aria-pressed="false">第一人称</button>
+    </nav>
+    <label>前往 <select id="jump"></select></label>
+    <p id="help"></p>
+    <output id="position"></output>
+  </aside>
+  <p class="legend">蓝灰 · 雪地　浅褐 · 步道　金色边线 · 建筑地块</p>
+  <p id="load-status" role="status"></p>
+</body>
+</html>

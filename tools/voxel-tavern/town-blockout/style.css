@@ -1,0 +1,16 @@
+:root { color-scheme: dark; font-family: "Instrument Sans", "Microsoft YaHei", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #121e35; color: #f3f3f6; }
+#scene, canvas { width: 100vw; height: 100dvh; overflow: hidden; display: block; touch-action: none; }
+.panel, .legend, #load-status { position: fixed; background: #101a2bed; border: 1px solid #788eaa; border-radius: 12px; }
+.panel { top: 16px; left: 16px; padding: 15px; width: min(280px, calc(100vw - 32px)); }
+.panel h1 { margin: 0 0 14px; font-size: 17px; letter-spacing: .11em; }
+nav { display: flex; gap: 6px; margin-bottom: 12px; }
+button, select { font: inherit; font-size: 13px; padding: 7px 9px; background: #243650; border: 1px solid #6d819d; border-radius: 5px; color: inherit; }
+button { cursor: pointer; }
+button[aria-pressed="true"] { background: #edc48a; color: #17202e; border-color: #edc48a; }
+label, output, #help, .legend, #load-status { font-size: 12px; }
+#help { margin: 10px 0 6px; color: #c6d3e5; }
+.legend { bottom: 16px; left: 16px; padding: 8px 10px; margin: 0; pointer-events: none; }
+#load-status { bottom: 16px; right: 16px; margin: 0; padding: 8px 10px; }
+#load-status:empty { display: none; }

@@ -22,6 +22,21 @@
 - 建筑目录交付 `index.json`，格式如 `[{"id":"tavern","file":"tavern.glb","colliders":[{"min":[-10,0,8.5],"max":[-1,3,9]}]}]`。ID 对应坐标表。文件名用小写 ASCII，与清单同目录。碰撞是局部轴对齐盒，包含实体墙和阻挡物，门洞保持开放。建筑内多层地面或台阶由新助手在同一目录 README 记清尺寸与路线，由主助手集成实际地面碰撞。
 - 暂无模型的地块保留地坪与边线。广场的礼台、树、灯具与建筑装饰均落在净空外。施工预览只用于灰盒对齐。
 
+## 地形施工预览
+
+地形施工分支为 `town-blockout-ground`。在仓库根目录运行：
+
+```sh
+npm ci --prefix tools/voxel-tavern
+npm --prefix tools/voxel-tavern run build
+cd tools/voxel-tavern
+node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5192
+```
+
+打开 `http://127.0.0.1:5192/town-blockout.html`。默认俯瞰，选择地块可进入第一人称。WASD 或方向键移动，拖动转向。西北、东北、西南、东南的短路分别约 105、136、109、145 米。各区和 12 个建筑地块都有独立入口定位。
+
+模型清单可放到 `tools/voxel-tavern/public/town-blockout/buildings/index.json`，重新构建后预览自动读取。提交建筑时保留资产文件及清单。西南至东南的短路绕开木马地块西侧，之后从南侧短接线进入。地块位置和入口维持共享坐标。
+
 ## 验收顺序
 
 1. 俯视核对广场、桥、冰湖、上坡地块和首轮每栋建筑朝向。
