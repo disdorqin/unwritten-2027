@@ -1,9 +1,10 @@
 import {
-  AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog,
+  AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
   Line, LineBasicMaterial, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { addScenery } from './scenery';
 import { canEnter, createTerrainGrid, gridStep, layout, riverX, waterHeight } from './terrain';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
@@ -18,10 +19,29 @@ renderer.setSize(innerWidth, innerHeight);
 element('scene').append(renderer.domElement);
 renderer.domElement.setAttribute('aria-label', '雪镇建模预览');
 renderer.domElement.tabIndex = 0;
-scene.add(new AmbientLight('#e4edff', 1.5));
-const sun = new DirectionalLight('#ffe6c5', 1.75);
+const ambient = new AmbientLight('#8aaee5', 1.02);
+scene.add(ambient);
+const sun = new DirectionalLight('#a9bde9', 1.45);
 sun.position.set(-90, 150, 60);
 scene.add(sun);
+const landscape = new Group();
+scene.add(landscape);
+const scenery = addScenery(landscape, grid);
+const timeOfDay = element<HTMLButtonElement>('lighting');
+function setNight(night: boolean) {
+  const sky = night ? '#182642' : '#acc2dd';
+  (scene.background as Color).set(sky);
+  scene.fog!.color.set(sky);
+  ambient.color.set(night ? '#83a9e7' : '#e4edff');
+  ambient.intensity = night ? .96 : 1.35;
+  sun.color.set(night ? '#a6c0fd' : '#ffe6c5');
+  sun.intensity = night ? 1.23 : 1.7;
+  timeOfDay.textContent = night ? '雪夜' : '白昼';
+  timeOfDay.setAttribute('aria-pressed', String(night));
+  scenery.setNight(night);
+}
+setNight(true);
+timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
 
 const color = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 const length = (grid.gridWidth - 1) * (grid.gridDepth - 1) * 18;
@@ -58,7 +78,7 @@ scene.add(new Mesh(mesh, new MeshLambertMaterial({ vertexColors: true })));
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });
-const water = new MeshBasicMaterial({ color: '#4886ae' });
+const water = new MeshBasicMaterial({ color: '#315975' });
 function box(x: number, y: number, n: number, w: number, h: number, d: number, mat: MeshLambertMaterial) {
   const item = new Mesh(new BoxGeometry(w, h, d), mat);
   item.position.set(x, y, -n);
@@ -87,7 +107,10 @@ scene.add(inlet);
 for (const bridge of layout.bridges) {
   const center = (bridge.west + bridge.east) / 2;
   const length = bridge.east - bridge.west;
-  box(center, bridge.height - .3, bridge.north, length, .6, 8, timber);
+  box(center, bridge.height - .39, bridge.north, length, .64, 8, stone);
+  for (let x = bridge.west + .25; x < bridge.east; x += .5) {
+    box(x, bridge.height - .07, bridge.north, .48, .14, 7.7, timber);
+  }
   for (const n of [bridge.north - 3.8, bridge.north + 3.8]) {
     box(center, bridge.height + 1.06, n, length, .18, .23, timber);
     for (let x = bridge.west; x <= bridge.east; x += 2) box(x, bridge.height + .55, n, .25, 1.1, .25, stone);
@@ -110,6 +133,7 @@ type Collider = { min: number[]; max: number[] };
 type Model = { id: string; file: string; colliders: Collider[] };
 const colliders: Collider[] = [];
 const status = element('load-status');
+status.textContent = '建筑待接入';
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
@@ -133,7 +157,8 @@ async function loadBuildings() {
     }
   }));
   const failed = results.filter(result => result.status === 'rejected').length;
-  if (failed) status.textContent = `${failed} 个建筑加载失败`;
+  status.textContent = failed ? `${models.length - failed} 栋已接入 · ${failed} 栋加载失败`
+    : models.length ? `${models.length} 栋已接入` : '建筑待接入';
 }
 loadBuildings().catch(() => { status.textContent = '建筑清单读取失败'; });
 
@@ -215,7 +240,7 @@ addEventListener('resize', () => {
 mode(false);
 let previous = performance.now();
 function canMove(nextX: number, nextN: number) {
-  if (!canEnter(nextX, nextN)) return false;
+  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN)) return false;
   const ground = grid.heightAt(nextX, nextN);
   if (Math.abs(ground - grid.heightAt(x, n)) > .42) return false;
   return !colliders.some(({ min, max }) => nextX + .27 >= min[0] && nextX - .27 <= max[0]
@@ -241,5 +266,6 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 });
