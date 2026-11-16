@@ -313,7 +313,7 @@ export function addMuseumShell(m: MuseumBuilder) {
   }
   for (const side of [-1, 1]) box(timber, side * 9.03, 13.6, -.35, .4, 2.20, 20.1);
   roof(0, -.35, 21.4, 23.9, 14.75, 3.48);
-  roof(0, 15.7, 18.45, 6.2, 9.05, 1.3);
+  roof(0, 16.1, 18.45, 5.3, 9.05, 1.3);
   for (const side of [-1, 1]) {
     const x = side * 9.05;
     for (const z of [13.14, 18.46]) {
