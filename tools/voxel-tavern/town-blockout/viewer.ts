@@ -5,6 +5,14 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
+import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
+import { buildTowerLandmark } from './landmark-tower';
+import { buildTavernLandmark } from './landmark-tavern';
+import { buildPostLandmark } from './landmark-post';
+import { buildCultureLandmark } from './landmark-culture';
+import { buildMarketLandmark } from './landmark-market';
+import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
+import { buildVillageLandmark } from './landmark-village';
 import { canEnter, createTerrainGrid, gridStep, layout, riverX, waterHeight } from './terrain';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
@@ -118,23 +126,38 @@ for (const bridge of layout.bridges) {
   for (const x of [center - 5, center + 5]) box(x, (bridge.height + 3.5) / 2, bridge.north, 1.5, bridge.height - 3.5, 6.75, stone);
 }
 
-const outline = new LineBasicMaterial({ color: '#ae733e' });
-for (const plot of layout.plots) {
-  const [x, n, y] = plot.origin;
-  const [w, d] = plot.footprint;
-  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]];
-  const points = corners.map(([dx, dn]) => new Vector3(x + dx * w / 2, y + .075, -(n + dn * d / 2)));
-  const border = new Line(new BufferGeometry().setFromPoints(points), outline);
-  scene.add(border);
-  box(plot.door[0], y + .45, plot.door[1], .35, .9, .35, timber);
-}
-
-type Collider = { min: number[]; max: number[] };
-type Model = { id: string; file: string; colliders: Collider[] };
-const colliders: Collider[] = [];
+type Builder = (plot: TownPlot) => Group;
+const builders: Record<string, Builder> = {
+  clocktower: buildTowerLandmark, tavern: buildTavernLandmark, 'post-office': buildPostLandmark,
+  memorial: buildCultureLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
+  'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
+  carousel: buildLakesideLandmark, glasshouse: buildLakesideLandmark,
+  lighthouse: buildLakesideLandmark, stage: buildVillageLandmark,
+};
+type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps?: Ramp[] };
+const architecture = new Map<string, Group>();
 const status = element('load-status');
-status.textContent = '建筑待接入';
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
+function validBox({ min, max }: Box) {
+  return [min, max].every(v => v.length === 3 && v.every(Number.isFinite)) && min.every((v, i) => v <= max[i]);
+}
+function place(plot: TownPlot, group: Group) {
+  const [x, n, y] = plot.origin;
+  group.position.set(x, y, -n);
+  group.name = plot.id;
+  architecture.get(plot.id)?.removeFromParent();
+  architecture.set(plot.id, group);
+  scene.add(group);
+}
+for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+const slide = buildIcePlayProps();
+scene.add(slide);
+
+function geometry() {
+  return [...architecture.values(), slide].map(readWalkGeometry);
+}
+let walkGeometry = geometry();
+status.textContent = `${architecture.size} 处建筑与设施已入场`;
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
@@ -143,24 +166,18 @@ async function loadBuildings() {
   const results = await Promise.allSettled(models.map(async model => {
     const plot = layout.plots.find(item => item.id === model.id);
     if (!plot || !/^[a-z0-9-]+\.glb$/.test(model.file)) throw new Error('无效地块或文件名');
-    const [x, n, y] = plot.origin;
+    if (![...model.colliders, ...(model.floors ?? []), ...(model.ramps ?? [])].every(validBox)) throw new Error('无效碰撞范围');
     const { scene: modelScene } = await loader.loadAsync(new URL(model.file, assetBase).href);
-    const offset = [x, y, -n];
-    for (const box of model.colliders) {
-      if (![box.min, box.max].every(a => a.length === 3 && a.every(Number.isFinite))
-        || box.min.some((min, i) => min > box.max[i])) throw new Error('无效碰撞范围');
-    }
-    modelScene.position.set(x, y, -n);
-    scene.add(modelScene);
-    for (const box of model.colliders) {
-      colliders.push({ min: box.min.map((v, i) => v + offset[i]), max: box.max.map((v, i) => v + offset[i]) });
-    }
+    const group = new Group();
+    group.add(modelScene);
+    group.userData = model;
+    place(plot, group);
   }));
+  walkGeometry = geometry();
   const failed = results.filter(result => result.status === 'rejected').length;
-  status.textContent = failed ? `${models.length - failed} 栋已接入 · ${failed} 栋加载失败`
-    : models.length ? `${models.length} 栋已接入` : '建筑待接入';
+  if (failed) status.textContent = `${failed} 栋替换模型加载失败`;
 }
-loadBuildings().catch(() => { status.textContent = '建筑清单读取失败'; });
+if (location.protocol !== 'file:') loadBuildings().catch(() => { status.textContent = '建筑清单读取失败'; });
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -177,7 +194,7 @@ const points = new Map<string, number[]>([
   ['东南游乐区', layout.roads[3].points.at(-1)!],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
-layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.connect));
+layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect));
 for (const key of points.keys()) selector.add(new Option(key, key));
 
 const eye = 1.65;
@@ -187,9 +204,13 @@ let x = 0;
 let n = 0;
 let yaw = 0;
 let pitch = 0;
+let ground = 0;
 function jump() {
   [x, n] = points.get(selector.value)!;
-  yaw = Math.atan2(226 - x, 223 - n);
+  const target = layout.plots[plotLabels.indexOf(selector.value)];
+  const [east, north] = target?.door ?? [226, 223];
+  yaw = Math.atan2(east - x, north - n);
+  ground = grid.heightAt(x, n);
   pitch = 0;
 }
 function mode(next: boolean) {
@@ -198,7 +219,7 @@ function mode(next: boolean) {
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
-  element('help').textContent = next ? 'WASD / 方向键移动，拖动场景转向' : '拖动旋转，滚轮缩放。可从下拉菜单进入指定地块。';
+  element('help').textContent = next ? 'WASD / 方向键移动，拖动场景转向' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。';
   if (next) jump();
   else {
     camera.position.set(465, 305, 122);
@@ -207,6 +228,12 @@ function mode(next: boolean) {
   }
 }
 overview.onclick = () => mode(false);
+element('view-valley').onclick = () => {
+  mode(false);
+  camera.position.set(393, 144, -12);
+  controls.target.set(229, 26, -206);
+  controls.update();
+};
 walk.onclick = () => mode(true);
 selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
@@ -239,26 +266,55 @@ addEventListener('resize', () => {
 });
 mode(false);
 let previous = performance.now();
-function canMove(nextX: number, nextN: number) {
-  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN)) return false;
-  const ground = grid.heightAt(nextX, nextN);
-  if (Math.abs(ground - grid.heightAt(x, n)) > .42) return false;
-  return !colliders.some(({ min, max }) => nextX + .27 >= min[0] && nextX - .27 <= max[0]
-    && -nextN + .27 >= min[2] && -nextN - .27 <= max[2] && ground + .25 < max[1] && ground + 1.8 > min[1]);
+function nextGround(nextX: number, nextN: number) {
+  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN)) return null;
+  const z = -nextN;
+  const contains = ({ min, max }: Box) => nextX >= min[0] && nextX <= max[0] && z >= min[2] && z <= max[2];
+  const terrain = grid.heightAt(nextX, nextN);
+  let height = terrain;
+  for (const { floors, ramps } of walkGeometry) {
+    for (const floor of floors) {
+      if (contains(floor) && floor.max[1] <= ground + .43) height = Math.max(height, floor.max[1]);
+    }
+    for (const ramp of ramps) {
+      if (!contains(ramp)) continue;
+      const axis = ramp.axis === 'x' ? 0 : 2;
+      const fraction = ((axis === 0 ? nextX : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
+      const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? fraction : 1 - fraction);
+      if (top <= ground + .43) height = Math.max(height, top);
+    }
+  }
+  if (Math.abs(height - ground) > .43) return null;
+  for (const { colliders } of walkGeometry) {
+    if (colliders.some(({ min, max }) => nextX + .27 >= min[0] && nextX - .27 <= max[0]
+      && z + .27 >= min[2] && z - .27 <= max[2] && height + .14 < max[1] && height + 1.8 > min[1])) return null;
+  }
+  return height;
+}
+function tryMove(nextX: number, nextN: number) {
+  const height = nextGround(nextX, nextN);
+  if (height === null) return false;
+  [x, n, ground] = [nextX, nextN, height];
+  return true;
 }
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(.05, Math.max(0, now - previous) / 1000);
+  const dt = Math.min(.25, Math.max(0, now - previous) / 1000);
   previous = now;
   if (walking) {
     const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown'));
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
-    const stride = 7.5 * dt / Math.max(1, Math.hypot(forward, right));
-    const nx = x + (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
-    const nn = n + (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
-    if (canMove(nx, nn)) { x = nx; n = nn; }
-    else if (canMove(nx, n)) x = nx;
-    else if (canMove(x, nn)) n = nn;
-    const y = grid.heightAt(x, n) + eye;
+    if (forward || right) {
+      const steps = Math.max(1, Math.ceil(dt / .025));
+      const stride = 7.5 * dt / (steps * Math.hypot(forward, right));
+      const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
+      const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
+      for (let i = 0; i < steps; i++) {
+        const nx = x + east;
+        const nn = n + north;
+        if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
+      }
+    }
+    const y = ground + eye;
     camera.position.set(x, y, -n);
     camera.lookAt(x + Math.sin(yaw) * Math.cos(pitch), y + Math.sin(pitch), -n - Math.cos(yaw) * Math.cos(pitch));
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 地面 ${(y - eye).toFixed(1)} m`;

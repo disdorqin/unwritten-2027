@@ -64,7 +64,16 @@ export function addScenery(group: Group, grid: Ground) {
   const glowPositions: Position[] = [];
   const blockers: Blocker[] = [];
   const [w, s, e, n] = layout.plaza.bounds;
+  function nearEntrance(x: number, north: number, margin: number) {
+    return layout.plots.some(({ connect: [ax, an], door: [bx, bn] }) => {
+      const dx = bx - ax;
+      const dn = bn - an;
+      const t = Math.min(1, Math.max(0, ((x - ax) * dx + (north - an) * dn) / (dx * dx + dn * dn)));
+      return Math.hypot(x - ax - t * dx, north - an - t * dn) < margin;
+    });
+  }
   const lamp = (x: number, y: number, north: number) => {
+    if (nearEntrance(x, north, 1.35)) return;
     const z = -north;
     pillars.push({ at: [x, y + 1.3, z], scale: [.21, 2.6, .21], tint: '#453f48' });
     pillars.push({ at: [x, y + .21, z], scale: [.48, .42, .48], tint: '#78869b' });
@@ -136,7 +145,7 @@ export function addScenery(group: Group, grid: Ground) {
       const x = patch.x + Math.cos(angle) * radius * patch.rx;
       const north = patch.n + Math.sin(angle) * radius * patch.rn;
       const cell = Math.round(north) * grid.gridWidth + Math.round(x);
-      if (!canEnter(x, north) || grid.surfaces[cell] !== 0) continue;
+      if (!canEnter(x, north) || grid.surfaces[cell] !== 0 || nearEntrance(x, north, 2.2)) continue;
       if (layout.plots.some(({ origin, footprint }) =>
         Math.abs(x - origin[0]) < footprint[0] / 2 + 4 && Math.abs(north - origin[1]) < footprint[1] / 2 + 4)) continue;
       if (blockers.some(b => Math.hypot(x - b.x, north - b.n) < 3.7)) continue;
