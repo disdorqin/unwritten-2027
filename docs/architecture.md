@@ -1,5 +1,11 @@
 # Architecture and wire format
 
+> Scope (2026-11-16): this file describes the existing Friendslop-derived
+> Node/Rapier runtime in `src/`. The Voxelize tavern in `tools/voxel-tavern/`
+> is an isolated offline construction sample. Its new multiplayer backend
+> has not replaced this runtime. See [PLAN.md](PLAN.md) for current status,
+> the proposed migration gates, and the distinction between both protocols.
+
 ## Runtime boundaries
 
 The authority is `createHost()` in `src/host/index.ts`. It speaks only the

@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { SnowTown } from "./town";
+import { TOWN_LAYOUT } from "../../shared/town";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { CHARACTER_PALETTE, DOORS, LEVEL, PALETTE, PROPS, type PropKind, type Vec3 } from "../../shared/level";
@@ -120,7 +122,9 @@ export class GameScene {
   private cameraBoom = new THREE.Vector3();
   /** Distant outdoor scenery is not part of the landing-page dollhouse composition. */
   private horizon = new THREE.Group();
-  constructor(container: HTMLElement) {
+  private town?: SnowTown;
+  private focus = FOCUS.clone();
+  constructor(container: HTMLElement, world: "base" | "town" = "base") {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -132,6 +136,10 @@ export class GameScene {
     this.labels = document.createElement("div");
     this.labels.className = "world-labels";
     container.append(this.labels);
+    if (world === "town") {
+      this.town = new SnowTown(this.scene);
+      this.focus.set(0, 4, -5);
+    } else {
     this.scene.fog = new THREE.Fog(LOBBY_SKY, 25, 65);
     this.scene.add(new THREE.HemisphereLight("#f6eedb", "#728078", 2.3));
     const sun = new THREE.DirectionalLight("#fff1c8", 3.2);
@@ -276,7 +284,8 @@ export class GameScene {
       this.doors.set(def.id, leaf);
       this.scene.add(leaf);
     }
-    this.loaded = new GLTFLoader()
+    }
+    const characterLoaded = new GLTFLoader()
       .loadAsync(new URL("models/common-worker.glb", document.baseURI).href)
       .then((asset) => {
         this.asset = asset;
@@ -287,7 +296,9 @@ export class GameScene {
         ] as const;
         for (const [i, performer] of cast.entries()) {
           const a = this.avatar(60000 + i, "", performer.color);
-          const home = new THREE.Vector3(...performer.p);
+          const home = world === "town"
+            ? new THREE.Vector3((i - 1) * 2, 0, 5)
+            : new THREE.Vector3(...performer.p);
           a.root.position.copy(home);
           a.label.style.display = "none";
           this.preview.push(a.root);
@@ -295,6 +306,7 @@ export class GameScene {
         }
         this.animatePreview(0);
       });
+    this.loaded = Promise.all([characterLoaded, this.town?.loaded]).then(() => {});
     addEventListener("resize", () => this.resize());
     this.resize();
     this.overview(0);
@@ -913,6 +925,7 @@ export class GameScene {
     for (const m of this.front) m.visible = playing;
     for (const p of this.preview) p.visible = !playing;
     this.horizon.visible = playing;
+    if (this.town) return;
     const sky = playing ? GAME_SKY : LOBBY_SKY;
     this.renderer.setClearColor(sky);
     if (this.scene.fog instanceof THREE.Fog) {
@@ -934,7 +947,7 @@ export class GameScene {
   }
   /** Keep the lobby trio turned toward one another while their idle chatter plays. */
   private animatePreview(dt: number) {
-    const center = FOCUS.clone().setY(0);
+    const center = this.focus.clone().setY(0);
     for (const performer of this.previewCast) {
       const { avatar: a, home, phase } = performer;
       a.root.position.copy(home);
@@ -1031,14 +1044,14 @@ export class GameScene {
       SWING.pitch[0],
       SWING.pitch[1],
     );
-    const dist = (OVERVIEW.dist + this.swung.dist) * (1 + (1 - landed) * 0.14);
+    const dist = ((this.town ? 36 : OVERVIEW.dist) + this.swung.dist) * (1 + (1 - landed) * 0.14);
     const flat = Math.cos(pitch) * dist;
     this.camera.position.set(
-      FOCUS.x + Math.sin(yaw) * flat,
-      FOCUS.y + Math.sin(pitch) * dist,
-      FOCUS.z + Math.cos(yaw) * flat,
+      this.focus.x + Math.sin(yaw) * flat,
+      this.focus.y + Math.sin(pitch) * dist,
+      this.focus.z + Math.cos(yaw) * flat,
     );
-    this.camera.lookAt(FOCUS);
+    this.camera.lookAt(this.focus);
     for (const m of this.front) m.visible = false;
   }
   updatePlayer(
@@ -1113,7 +1126,7 @@ export class GameScene {
           Math.max(0.4, hit.distanceTo(focus) - 0.08),
         );
     };
-    for (const box of LEVEL) test(box.p, box.s);
+    for (const box of this.town ? TOWN_LAYOUT.level : LEVEL) test(box.p, box.s);
     for (const door of DOORS) {
       const leaf = this.doors.get(door.id);
       if (leaf) test(leaf.position.toArray(), door.s);
@@ -1169,6 +1182,7 @@ export class GameScene {
   }
   render(dt: number) {
     this.clock += dt;
+    this.town?.update();
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const e = this.effects[i];
       e.life += dt;

@@ -16,3 +16,4 @@ demo-content/
 *.pfx
 
 /artifacts/
+/data/

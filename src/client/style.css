@@ -1003,3 +1003,41 @@ body.turning * {
 #world canvas:focus {
   outline: none;
 }
+.ready #town-chat {
+  position: fixed; left: 20px; bottom: 26px; width: min(330px, calc(100vw - 40px));
+  padding: 10px; border-radius: 12px; background: #17283ed9; color: #edf2f6; pointer-events: auto;
+}
+#chat-messages { max-height: 140px; overflow-y: auto; font-size: 13px; }
+#chat-messages p { margin: 4px 0; overflow-wrap: anywhere; }
+#chat-form { display: flex; gap: 6px; margin-top: 8px; }
+#chat-text { width: 0; flex: 1; min-height: 36px; border: 1px solid #7c889755; border-radius: 6px; padding: 6px; background: #edf2f6; color: #182637; }
+#chat-form button { padding: 6px 10px; border-radius: 6px; background: #b64834; color: white; }
+#town-move, #town-jump { display: none; }
+@media (pointer: coarse) {
+  .ready #town-chat { left: 12px; bottom: 160px; width: min(285px, calc(100vw - 24px)); }
+  #chat-messages { max-height: 76px; }
+  #town-move { position: fixed; display: grid; bottom: max(20px, env(safe-area-inset-bottom)); left: 16px; grid-template-columns: repeat(3, 44px); gap: 5px; pointer-events: auto; }
+  #town-move button { padding: 10px 0; background: #253b50db; color: white; border-radius: 9px; touch-action: none; }
+  #town-move button:first-child { grid-column: 2; }
+  #town-move button:nth-child(2) { grid-column: 1; }
+  #town-jump { display: block; position: fixed; bottom: 35px; right: 22px; background: #b64834; color: white; padding: 12px; border-radius: 10px; pointer-events: auto; touch-action: none; }
+}
+#post-open { position: fixed; right: 20px; top: 110px; padding: 12px 18px; border-radius: 10px; background: #b64834; color: #fff2da; pointer-events: auto; }
+#post-open[hidden] { display: none; }
+#post-panel { position: fixed; z-index: 20; width: min(460px, calc(100vw - 24px)); max-height: calc(100dvh - 30px); overflow-y: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; border: 1px solid #b9a180; border-radius: 18px; padding: 26px; background: #f6ecd9; color: #3a3027; box-shadow: 0 20px 90px #0008; }
+#post-close { position: absolute; top: 10px; right: 13px; font-size: 26px; background: transparent; }
+#post-panel h2 { margin: 10px 0; }
+#post-text { display: block; width: 100%; margin: 8px 0; padding: 12px; border: 1px solid #bbaa91; border-radius: 9px; background: #fffaf1; color: #3a3027; font: inherit; resize: vertical; }
+#post-panel .post-note { font-size: 12px; color: #796751; line-height: 1.7; }
+#post-save { width: 100%; padding: 12px; border-radius: 9px; background: #b64834; color: white; }
+#post-status { line-height: 1.7; }
+
+#museum-read { position: fixed; right: 16px; top: 110px; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 10px; background: #785739; color: #fff2da; pointer-events: auto; }
+#museum-read[hidden] { display: none; }
+#museum-panel { width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid #b9a180; border-radius: 16px; padding: 26px; background: #f6ecd9; color: #3a3027; }
+#museum-panel::backdrop { background: #101c2dbb; }
+#museum-panel h2 { margin: 12px 0; font-size: 25px; }
+#museum-text { white-space: pre-line; line-height: 1.85; margin-bottom: 22px; }
+#museum-panel button { padding: 12px 18px; border-radius: 8px; background: #785739; color: #fff2da; }
+
+#post-panel::backdrop { background: #101c2dbb; }

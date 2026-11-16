@@ -1,42 +1,58 @@
 # UNWRITTEN 2027
 
-第一人称多人跨年雪镇：公共2026纪念馆、旋转木马、舞台、邮局、烟花、合照和钟声。
+朋友通过网页链接进入的第一人称多人跨年雪镇：纪念馆、邮局、酒馆、集市、湖岸游览和跨年仪式。目标在 2026-12-31 开放，之后可扩展春节内容。
 
-当前完成技术基座初始化，画面仍为上游样例。首个视觉交付是精致的中式童话雪镇广场。
+## 当前状态
 
-## 运行
+**酒馆的方块风格和基础结构已获用户认可，正在以完整酒馆为样板精修；尚未迁移全镇。**
 
-Node.js 22.20+。
+| 入口 | 已有内容 | 当前边界 |
+| --- | --- | --- |
+| 旧多人主入口 `src/` | 昵称、位置、文字聊天、邮局/纪念馆及部分三维建筑；Node/WebSocket 服务 | 保留可运行基线，尚未改成新体素小镇 |
+| 体素酒馆 `tools/voxel-tavern/` | Voxelize + Three.js，逐块建筑、像素材质和细构件；外观、完整室内、楼梯、阳台 | 当前为离线建筑样板；新联机、手机性能和最终美术尚未验收 |
+
+酒馆已通过前端类型检查、生产构建和 Windows Chrome 实机检查。门外 → 大堂 → 楼梯 → 二楼 → 阳台的连续碰撞行走通过，途中没有传送。旧版双客户端同步检查不能当作新版联机或全镇容量结论。
+
+## 第三版酒馆实机画面
+
+![门面、窗格与字牌](assets-source/voxel-tavern-v3-facade.jpg)
+![吧台、悬杯架与茶具](assets-source/voxel-tavern-v3-bar.jpg)
+![二楼室内](assets-source/voxel-tavern-v3-upstairs.jpg)
+
+## 技术与制作
+
+酒馆客户端采用 Voxelize 3.0.0、Three.js 0.183.2、TypeScript 和 Vite。JavaScript 脚本逐块搭建墙体、半砖屋顶与家具，细部对齐到 1/16 米；同一份构件尺寸用于生成表面和碰撞盒，配合原创 16 像素材质，由引擎在浏览器中生成分块网格。
+
+新联机后端首选 Voxelize/Rust，须先重新编译和验证当前酒馆。旧主入口仍采用 Three.js/Rapier + Node.js/ws，两套协议尚未合并。
+
+## 查看已有工程
+
+旧多人主入口需要 Node.js 22.20+：
 
 ```sh
 npm ci
 node tools/run.mjs dev
 ```
 
-本地地址：http://localhost:3000 。
+体素酒馆样板：
 
 ```sh
-node tools/run.mjs build
-node tools/run.mjs start
+cd tools/voxel-tavern
+npm ci --ignore-scripts
+node build-tavern.mjs
+node node_modules/vite/bin/vite.js build
+node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5179
 ```
 
-## 技术与目录
+在运行这套命令的电脑打开 `http://127.0.0.1:5179/?snapshot=1`。使用生产预览验收；当前发布包在开发预打包模式存在 Worker 路径问题。该地址是本机查看地址，不是已经部署的公网游戏链接。
 
-TypeScript + Three.js + Rapier + Vite；Node.js/WebSocket单服务；GLB/glTF模型，Blender编辑素材。
+## 文档与后续计划
 
-| 目录 | 内容 |
-| --- | --- |
-| src/ | 客户端、共享玩法、联机服务 |
-| public/ | 游戏模型、音乐、字体、图片 |
-| assets-source/ | 可编辑美术源文件 |
-| tools/ | 运行、构建、模型处理脚本 |
-| tests/ | 沿用的必要检查 |
-| docs/ | 需求、技术说明、素材署名 |
+- [当前技术总结、制作流程和分阶段计划](docs/PLAN.md)
+- [当前美术要求及历史参考](docs/ART.md)
+- [酒馆样板的运行方式与验收边界](tools/voxel-tavern/README.md)
+- [旧 Node 运行时和协议](docs/architecture.md)
 
-[完整计划](docs/PLAN.md)。首版采用固定舒缓的新年纯音乐，暂不做点歌、语音与个人展区。
+2026-11-16 本轮仅整理方案并推送已有成果；后续精修、手机适配、新联机、全镇迁移与部署均按计划待执行。
 
-不设20人业务门槛。当前协议人数编码的技术边界是255，实际场景与服务器容量还要实测；已通过24人同房连接检查。手机触控、文字聊天、存档及正式同镇入口尚未制作。
-
-## 来源
-
-基于MIT许可的 [Friendslop Base](https://github.com/larshurrelb/friendslop-base)，保留上游Git历史及 [LICENSE](LICENSE)。复用第一人称移动、碰撞、角色、预测与多人同步。上游样例中的射击道具、P2P、语音不作为首版功能目标。第三方材料见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
+目录继续使用 `src/`、`public/`、`assets-source/`、`tools/`、`tests/`、`docs/`。保留 MIT [Friendslop Base](https://github.com/larshurrelb/friendslop-base) 和 [Voxelize](https://github.com/voxelize/voxelize) 的许可与署名。旧 Blender/GLB 资产仍服务于旧主入口，当前不删除。

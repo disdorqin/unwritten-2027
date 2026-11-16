@@ -1,0 +1,4 @@
+town.disdorqin.cn {
+    encode zstd gzip
+    reverse_proxy town:3000
+}

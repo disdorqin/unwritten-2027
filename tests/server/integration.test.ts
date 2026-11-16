@@ -16,7 +16,7 @@ let server: http.Server,
 const openSockets: WebSocket[] = [];
 before(async () => {
   server = http.createServer();
-  app = await attachApplication(server);
+  app = await attachApplication(server, { world: "base" });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   url = `ws://127.0.0.1:${(server.address() as any).port}`;
 });

@@ -1,5 +1,43 @@
 # Deploying
 
+## UNWRITTEN 2027：当前服务器方案
+
+博客仓库 `disdorqin/disdorqin.github.io` 的 `astro.config.mjs` 配置了
+`https://disdorqin.cn`。游戏拟使用 `town.disdorqin.cn`，复用该域名的子域名。
+以下是准备好的配置，尚未部署到服务器，也未创建 DNS 记录。
+
+| 配置 | 值 |
+| --- | --- |
+| DNS 类型 | A |
+| 主机记录 | town |
+| 目标 IPv4 | 49.234.39.194 |
+| 公网入站 | TCP 80、443 |
+| 游戏内部监听 | 3000，仅容器网络可达 |
+
+在已安装 Docker Engine 与 Compose 插件的服务器上，把本仓库放到
+`/opt/unwritten-2027`，确认 DNS 已指向服务器、80/443 未被其他服务占用后运行：
+
+```sh
+cd /opt/unwritten-2027
+docker compose -p unwritten -f tools/compose.yaml up -d --build
+docker compose -p unwritten -f tools/compose.yaml ps
+curl --fail https://town.disdorqin.cn/healthz
+```
+
+Caddy 自动申请和续期 HTTPS 证书，并转发 WebSocket；游戏运行一个 Node 进程。
+更新代码后重复 `up -d --build`。信件写入独立的 `letters` 数据卷，重建容器仍保留；
+不要运行 `down -v`，该参数会删除数据卷。构建上下文已排除运行时信件。
+服务重启后房间会重建，信件保留；请在无人游玩时更新。
+
+双人验收：两台设备打开 HTTPS 地址，用不同昵称加入同一邀请码，检查互见、移动、
+聊天和刷新重连；进入邮局写信，确认成功回执，再重启 `town` 检查数据卷仍在。
+手机另检查竖屏和横屏的按钮、滑动转向及阅读/写信窗口。
+
+当前尚缺服务器登录通道和 DNS 管理权限。截图显示实例到期时间为
+2026-12-12，早于跨年开放日；上线前需要确认续期安排。
+
+以下保留上游部署说明；本项目当前采用上面的 Node 方案。
+
 There are two shapes. The same client bundle serves both and picks one at
 runtime, so there is no separate build.
 

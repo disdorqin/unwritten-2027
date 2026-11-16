@@ -8,7 +8,13 @@ const vite = await createServer({
   appType: "spa",
 });
 const { healthConfig } = await vite.ssrLoadModule("/src/server/config.ts");
-const port = Number(process.env.PORT ?? 3000);
+// Respect the same host/port arguments as Vite (including hosted previews).
+const option = (name: string) => {
+  const index = process.argv.indexOf(name);
+  return index < 0 ? undefined : process.argv[index + 1];
+};
+const port = Number(option("--port") ?? process.env.PORT ?? 3000);
+const host = option("--host") ?? "0.0.0.0";
 const brokerPort = Number(process.env.BROKER_PORT ?? 3010);
 // The signalling broker is a separate service in production too, so run it as
 // one here rather than mounting it on this port: peerjs-server attaches a
@@ -58,8 +64,8 @@ const watcher = watch("src", { recursive: true }, (_event, file) => {
       .catch(console.error);
   }, 150);
 });
-server.listen(Number(process.env.PORT ?? 3000), "0.0.0.0", () =>
-  console.log(`Friendslop → http://localhost:${process.env.PORT ?? 3000}`),
+server.listen(port, host, () =>
+  console.log(`UNWRITTEN → http://${host}:${port}`),
 );
 for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.on(sig, async () => {

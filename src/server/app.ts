@@ -2,8 +2,14 @@ import type { Server } from "node:http";
 import { WebSocketServer } from "ws";
 import { createHost } from "../host/index.js";
 import { nodeChannel } from "../net/ws-node.js";
-export async function attachApplication(server: Server) {
-  const host = await createHost({ maxRooms: Number(process.env.MAX_ROOMS ?? 16) });
+import { resolve } from "node:path";
+import { LetterStore } from "./letters.js";
+export async function attachApplication(server: Server, options: { world?: "base" | "town"; dataDirectory?: string } = {}) {
+  const letters = new LetterStore(resolve(options.dataDirectory ?? process.env.DATA_DIR ?? "data", "letters.jsonl"));
+  const host = await createHost({
+    maxRooms: Number(process.env.MAX_ROOMS ?? 16), world: options.world ?? "town",
+    onLetter: draft => letters.save(draft),
+  });
   const game = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024, perMessageDeflate: false });
   const voice = new WebSocketServer({ noServer: true, maxPayload: 2048, perMessageDeflate: false });
   const upgrades = (req: any, socket: any, head: any) => {
