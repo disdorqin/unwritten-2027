@@ -92,13 +92,15 @@ export function createSnowfall(scene: Scene) {
     material.uniforms.pixelRatio.value = renderer.getPixelRatio();
   };
   scene.add(particles);
+  let active = true;
 
   return {
-    update(_camera: PerspectiveCamera, dt: number, walking: boolean) {
+    update(_camera: PerspectiveCamera, dt: number, walking: boolean, sheltered = false) {
+      particles.visible = active && !sheltered;
       material.uniforms.elevationMode.value = walking ? 0 : 1;
-      if (particles.visible) material.uniforms.time.value += dt;
+      if (active) material.uniforms.time.value += dt;
     },
-    setEnabled(enabled: boolean) { particles.visible = enabled; },
-    enabled() { return particles.visible; },
+    setEnabled(enabled: boolean) { active = enabled; },
+    enabled() { return active; },
   };
 }

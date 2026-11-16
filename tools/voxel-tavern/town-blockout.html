@@ -22,6 +22,7 @@
     <p id="help"></p>
     <output id="position"></output>
     <button id="rehearse" class="festival-button" type="button">跨年预演</button>
+    <button id="view-museum" type="button">纪念馆取景</button>
   </aside>
   <button id="world-action" type="button" hidden></button>
   <output id="festival-status" aria-live="polite"></output>
@@ -36,6 +37,12 @@
       <button type="submit">寄存到本机</button>
       <output id="letter-receipt" aria-live="polite"></output>
     </form>
+  </dialog>
+  <dialog id="museum-card" aria-labelledby="museum-title">
+    <form method="dialog"><button class="close-card" aria-label="关闭展陈">×</button></form>
+    <p id="museum-subtitle"></p>
+    <h2 id="museum-title"></h2>
+    <div id="museum-content"></div>
   </dialog>
 </body>
 </html>

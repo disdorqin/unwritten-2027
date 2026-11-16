@@ -13,7 +13,9 @@ button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2p
 button[aria-pressed="true"] { background: #edc48a; color: #17202e; border-color: #edc48a; }
 label, output, #help, #load-status { font-size: 12px; }
 #help { margin: 10px 0 6px; color: #c6d3e5; }
-.festival-button { display: block; margin-top: 11px; background: #592e3c; border-color: #ad7376; }
+#position:not(:empty) { display: block; }
+.festival-button, #view-museum { margin-top: 11px; }
+.festival-button { background: #592e3c; border-color: #ad7376; }
 #load-status { bottom: 16px; right: 16px; margin: 0; padding: 8px 10px; }
 #load-status:empty { display: none; }
 #world-action { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); white-space: nowrap; padding: 11px 17px; background: #f2cf94; border-color: #f2cf94; color: #17202e; }
@@ -26,3 +28,28 @@ label, output, #help, #load-status { font-size: 12px; }
 #letter-form label { display: block; margin-bottom: 6px; }
 #letter-body { display: block; width: 100%; max-height: 43vh; margin: 0 0 12px; padding: 10px; border: 1px solid #6d819d; border-radius: 5px; resize: vertical; background: #101a2b; color: inherit; font: inherit; }
 #letter-receipt { margin-left: 8px; color: #ffda9d; }
+#museum-card { color-scheme: light; width: min(560px,calc(100vw - 26px)); border: 1px solid #aa8860; border-radius: 10px; color: #392824; background: #f6eedc; padding: 25px 26px; box-shadow: 0 16px 45px #090f20a8; }
+#museum-card::backdrop { background: #0a101fab; }
+#museum-card button { background: #633e32; border-color: #633e32; color: #fff2d9; }
+#museum-card button:disabled { cursor: default; }
+#museum-title { margin: 0 35px 16px 0; font-size: clamp(21px,4vw,29px); }
+#museum-subtitle { margin: 1px 35px 6px 0; color: #815744; font-size: 12px; }
+#museum-content { max-height: min(58vh,540px); overflow-y: auto; padding: 0 3px 3px; }
+#museum-content article { border-top: 1px solid #d8c5a9; padding: 12px 0 15px; }
+#museum-content article h3 { margin: 4px 0; font-size: 17px; }
+#museum-content p { line-height: 1.55; margin: 8px 0 13px; }
+#museum-content small, #museum-content a, .museum-note { color: #774b36; }
+#museum-content figure { margin: 8px 0 11px; }
+#museum-content img { display: block; max-width: 100%; max-height: 200px; width: auto; border-radius: 4px; }
+#museum-content figcaption { color: #774b36; font-size: 11px; line-height: 1.45; margin-top: 4px; }
+.museum-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.museum-slide { padding: 35px 14px; color: #ffdf97; background: #382c30; font: 600 17px system-ui; text-align: center; }
+.museum-stamp { color: #922f23; outline: 3px double #922f23; width: fit-content; padding: 5px 10px; }
+.museum-rocket-stage { height: 132px; background: linear-gradient(#202647,#3c475b); overflow: hidden; display: grid; place-items: end center; border-radius: 5px; }
+.museum-rocket { display: grid; justify-items: center; margin-bottom: 6px; }
+.museum-rocket span { display: block; height: 33px; width: 31px; background: #ebeadc; border: solid #d89c72; border-width: 0px 2px 5px; }
+.museum-rocket span[data-part="1"] { width: 24px; }
+.museum-rocket span[data-part="2"] { height: 25px; width: 24px; border: 0; border-radius: 60% 60% 0 0; background: #ba553f; }
+.museum-rocket.launched { animation: museum-liftoff .8s .12s ease-in both; }
+@keyframes museum-liftoff { to { transform: translateY(-155px); } }
+@media (prefers-reduced-motion: reduce) { .museum-rocket.launched { animation-duration: .01s; } }

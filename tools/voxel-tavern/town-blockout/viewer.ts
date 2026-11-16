@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -19,6 +19,10 @@ import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { createSnowfall } from './snowfall';
 import { createFestival } from './festival';
+import { buildMuseumLandmark } from './landmark-museum';
+import type { MuseumLight } from './museum-kit';
+import { createMuseumVisit } from './museum-visit';
+import { terraceStop } from './museum-terrace';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -145,7 +149,7 @@ for (const bridge of layout.bridges) {
 type Builder = (plot: TownPlot) => Group;
 const builders: Record<string, Builder> = {
   clocktower: buildTowerLandmark, tavern: buildTavernLandmark, 'post-office': buildPostLandmark,
-  memorial: buildCultureLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
+  memorial: buildMuseumLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
   'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
   carousel: buildLakesideLandmark, glasshouse: buildLakesideLandmark,
   lighthouse: buildLakesideLandmark, stage: buildVillageLandmark,
@@ -170,6 +174,30 @@ function place(plot: TownPlot, group: Group) {
   scene.add(group);
 }
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
+const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
+const museumLights = Array.from({ length: 3 }, () => new PointLight('#ffba76', 0, 16, 2));
+scene.add(...museumLights);
+let museumLightClock = 0;
+function updateMuseumLights(dt: number, eyePosition: Vector3) {
+  museumLightClock -= dt;
+  if (museumLightClock > 0) return;
+  museumLightClock = .15;
+  const lights = architecture.get('memorial')?.userData.lights as MuseumLight[] | undefined;
+  const nearby = (lights ?? []).map(light => ({ light, distance: Math.hypot(
+    museumEast + light.position[0] - eyePosition.x,
+    2.25 * (museumHeight + light.position[1] - eyePosition.y),
+    -museumNorth + light.position[2] - eyePosition.z,
+  ) })).filter(entry => entry.distance < 37).sort((a, b) => a.distance - b.distance);
+  museumLights.forEach((light, index) => {
+    const next = nearby[index]?.light;
+    light.intensity = next?.power ?? 0;
+    if (!next) return;
+    light.position.set(museumEast + next.position[0], museumHeight + next.position[1], -museumNorth + next.position[2]);
+    light.color.set(next.color);
+    light.distance = next.distance;
+  });
+}
 const slide = buildIcePlayProps();
 scene.add(slide);
 
@@ -235,6 +263,16 @@ const letterForm = element<HTMLFormElement>('letter-form');
 const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
+let captureTerrace = false;
+const museumVisit = createMuseumVisit(() => keys.clear(), () => {
+  x = museumEast + terraceStop.x;
+  n = museumNorth - terraceStop.z;
+  ground = museumHeight + 5.65;
+  yaw = Math.atan2(226 - x, 223 - n);
+  pitch = .22;
+  captureTerrace = true;
+});
+museumVisit.dialog.addEventListener('close', () => renderer.domElement.focus());
 
 function openPlace(title: string, description: string, writing = false) {
   keys.clear();
@@ -274,18 +312,17 @@ const tour = [
   { x: 262.1, n: 205.6, radius: 2.9, maxHeight: 15.6, label: '给 2027 写封信', run() {
     openPlace('写给 2027', '给未来的自己留一封信。寄存后可以在同一浏览器里回来读。', true);
   } },
-  { x: 343, n: 263.5, radius: 3.85, maxHeight: 29, label: '查看纪念馆导览', run() {
-    openPlace('2026 纪念馆', '沿中轴进馆，经过门廊和长毯来到主展厅。北面的坡道通往长殿，回程可以沿河边的北桥走回镇上。');
-  } },
 ];
 function currentAction() {
-  if (!walking || placeCard.open) return undefined;
+  if (!walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
+  const museumStop = museumVisit.near(x - museumEast, ground - museumHeight, museumNorth - n);
+  if (museumStop) return museumStop;
   return tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
 }
 function interact() {
   currentAction()?.run();
-  if (!placeCard.open) renderer.domElement.focus();
+  if (!placeCard.open && !museumVisit.dialog.open) renderer.domElement.focus();
 }
 actionButton.onclick = interact;
 function jump() {
@@ -318,6 +355,12 @@ element('view-valley').onclick = () => {
   controls.target.set(215, 24, -198);
   controls.update();
 };
+element('view-museum').onclick = () => {
+  mode(false);
+  camera.position.set(museumEast - 41, museumHeight + 29, -museumNorth + 62);
+  controls.target.set(museumEast, museumHeight + 7.0, -museumNorth + 1);
+  controls.update();
+};
 rehearse.onclick = () => {
   if (!festival.start()) return;
   mode(false);
@@ -330,7 +373,7 @@ walk.onclick = () => mode(true);
 selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 addEventListener('keydown', e => {
-  if (placeCard.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
+  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
@@ -417,7 +460,7 @@ renderer.setAnimationLoop(now => {
   } else if (walking) {
     const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown'));
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
-    if (!placeCard.open && (forward || right)) {
+    if (!placeCard.open && !museumVisit.dialog.open && (forward || right)) {
       const steps = Math.max(1, Math.ceil(dt / .025));
       const stride = 7.5 * dt / (steps * Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
@@ -437,7 +480,9 @@ renderer.setAnimationLoop(now => {
     element('position').textContent = '';
   }
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
-  snowfall.update(camera, dt, walking);
+  updateMuseumLights(dt, camera.position);
+  const sheltered = walking && Math.abs(x - museumEast) < 19.55 && museumNorth - n > -13.7 && museumNorth - n < 12.85;
+  snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
   rehearse.disabled = festival.active();
   const action = currentAction();
@@ -445,4 +490,18 @@ renderer.setAnimationLoop(now => {
   const label = action ? `E · ${action.label}` : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
   renderer.render(scene, camera);
+  if (captureTerrace) {
+    captureTerrace = false;
+    renderer.domElement.toBlob(blob => {
+      if (!blob) return;
+      const photo = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      photo.href = url;
+      photo.download = 'UNWRITTEN-2027-museum-terrace.png';
+      document.body.append(photo);
+      photo.click();
+      photo.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+  }
 });
