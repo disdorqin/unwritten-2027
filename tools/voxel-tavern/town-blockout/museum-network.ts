@@ -547,6 +547,93 @@ export function addMuseumNetwork(m: MuseumBuilder) {
     label(title, -19.466, floor + 2.05, z, .71, .23, Math.PI / 2, { background: color.paper, color: color.shadow, border: false });
   }
 
+  // Leave the west terrace crossing at z = -4 and the central aisle open.
+  // The work station and cabinets sit in the bays between those routes.
+  const bindingX = -5.75, bindingZ = .35, bindingSurface = floor + .99;
+  m.collider(bindingX, floor + .52, bindingZ, 3.44, 1.04, 1.48);
+  box(color.walnut, bindingX, bindingSurface - .09, bindingZ, 3.44, .18, 1.48);
+  box(color.upperWood, bindingX, bindingSurface + .012, bindingZ, 3.41, .03, 1.47);
+  box(color.brass, bindingX, bindingSurface - .1, bindingZ + .75, 3.18, .035, .027);
+  for (const side of [-1, 1]) {
+    const xx = bindingX + side * 1.47;
+    for (const end of [-1, 1]) {
+      box(color.wood, xx, floor + .44, bindingZ + end * .57, .15, .89, .14);
+      box(color.shadow, xx, floor + .08, bindingZ + end * .57, .19, .13, .17);
+    }
+    box(color.upperWood, xx, floor + .29, bindingZ, .13, .14, 1.13);
+  }
+  box(color.walnut, bindingX, floor + .29, bindingZ, 2.88, .13, .20);
+  insetFront(bindingX, bindingSurface - .18, bindingZ + .716, 1.36, .18);
+  label('档案装订', bindingX, bindingSurface - .14, bindingZ + .79, .91, .17, 0, goldOnWood);
+  box(color.jade, bindingX + .2, bindingSurface + .036, bindingZ + .14, 1.55, .023, .77);
+  book(bindingX + .18, bindingSurface + .062, bindingZ + .11, 1.04, true, color.garnet);
+  for (let i = 0; i < 3; i++) {
+    book(bindingX - 1.04, bindingSurface + .023 + i * .090, bindingZ + .12, .65 - i * .053, false, bookColors[i]);
+  }
+  readingPacket(detailFrame(bindingX + .87, bindingSurface + .055, bindingZ + .42), color.garnet);
+  lamp(bindingX + 1.37, bindingSurface + .027, bindingZ - .40, .60);
+  m.light(bindingX + 1.10, floor + 1.82, bindingZ - .07, '#ffd5a2', 17, 5.6);
+
+  const filesX = 5.22, filesZ = 1.94, filesW = 2.56;
+  drawerBank(filesX, filesZ, filesW, .92, .73);
+  m.collider(filesX, floor + 1.45, filesZ, filesW + .15, 1.48, .93);
+  box(color.shadow, filesX, floor + 1.46, filesZ - .38, filesW, 1.47, .13);
+  for (const side of [-1, 1]) {
+    box(color.wood, filesX + side * 1.28, floor + 1.46, filesZ, .13, 1.46, .94);
+    box(color.brass, filesX + side * 1.28, floor + 1.69, filesZ + .48, .05, .75, .025);
+  }
+  for (let row = 0; row < 2; row++) {
+    const y = floor + .78 + row * .65;
+    box(color.upperWood, filesX, y, filesZ, filesW, .071, .89);
+    m.detailBox(color.brass, filesX, y + .022, filesZ + .45, filesW - .07, .021, .023);
+    for (let slot = 0; slot < 8; slot++) {
+      if ((row + slot) % 7 === 3) continue;
+      const x = filesX - .97 + slot * .277;
+      const h = .32 + ((slot * 3 + row) % 4) * .045;
+      const paint = bookColors[(slot + row * 3) % bookColors.length];
+      m.detailBox(paint, x, y + .043 + h / 2, filesZ + .13, .210, h, .46);
+      m.detailBox(color.parchment, x, y + .11, filesZ + .369, .125, .061, .018);
+      m.detailBox(color.brass, x, y + .22, filesZ + .374, .11, .014, .014);
+    }
+  }
+  box(color.walnut, filesX, floor + 2.20, filesZ, filesW + .15, .18, 1.04);
+  box(color.brass, filesX, floor + 2.20, filesZ + .524, 1.08, .17, .034);
+  label('年度剪报', filesX, floor + 2.20, filesZ + .545, .95, .14, 0, goldOnWood);
+  lamp(filesX - .92, floor + 2.29, filesZ, .55);
+
+  const mediaX = 7.35, mediaZ = -7.03;
+  drawerBank(mediaX, mediaZ, 2.36, 1.10, .81);
+  box(color.jade, mediaX, floor + .88, mediaZ, 2.06, .042, .91);
+  const viewerPart = detailFrame(mediaX + .23, floor + .905, mediaZ - .11);
+  viewerPart(color.shadow, -29, 0, -20, 58, 4, 37);
+  viewerPart(color.walnut, -27, 4, -14, 54, 16, 28);
+  viewerPart(color.upperWood, -24, 6, 14, 48, 11, 2);
+  viewerPart(color.brass, 11, 8, 16, 15, 11, 2);
+  reel(viewerPart, -14, 29, -6, 10, graphite, color.stoneCap);
+  reel(viewerPart, 8, 28, -6, 9, graphite, color.brass);
+  viewerPart(color.jade, -19, 8, 17, 10, 6, 1);
+  viewerPart('#fee09e', -11, 9, 18, 2, 4, 1, true);
+  viewerPart(color.brass, 24, 6, 14, 5, 9, 2);
+  book(mediaX - .79, floor + .905, mediaZ + .13, .45, false, color.garnet);
+  label('双盘放映机', mediaX, floor + .841, mediaZ + .628, 1.13, .17, 0, goldOnWood);
+  for (const side of [-1, 1]) {
+    const x = mediaX + side * 1.10;
+    for (const end of [-1, 1]) {
+      box(color.glassEdge, x, floor + 1.27, mediaZ + end * .455, .034, .71, .034);
+    }
+    box(color.glassEdge, mediaX, floor + 1.62, mediaZ + side * .455, 2.18, .037, .043);
+    caseGlass(x, floor + 1.27, mediaZ, .015, .70, .90);
+  }
+  caseGlass(mediaX, floor + 1.62, mediaZ, 2.18, .014, .91);
+  caseGlass(mediaX, floor + 1.27, mediaZ + .455, 2.18, .69, .014);
+
+  const foliosX = -7.4, foliosZ = -7.0;
+  drawerBank(foliosX, foliosZ, 2.30, .94, .82);
+  book(foliosX - .38, floor + .88, foliosZ + .05, .88, true, color.jade);
+  for (let i = 0; i < 3; i++) book(foliosX + .62, floor + .88 + i * .087, foliosZ, .54 - i * .043, false, bookColors[i + 1]);
+  label('公开资料选页', foliosX, floor + .828, foliosZ + .537, 1.22, .17, 0, goldOnWood);
+  lamp(foliosX - .88, floor + .88, foliosZ - .28, .47);
+
   m.light(-7.3, floor + 3.82, 7.6, '#ffd4a1', 91, 14);
   m.light(5.2, floor + 3.92, -8.7, '#f7c69c', 86, 15);
 }

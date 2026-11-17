@@ -1,3 +1,8 @@
+const forwardEntry = .72;
+const forwardExit = .45;
+const firstPushLimit = 320;
+const secondPushWindow = 440;
+
 export function createTouchWalk(pad: HTMLElement) {
   const nub = pad.firstElementChild as HTMLElement;
   const coarse = matchMedia('(pointer: coarse)');
@@ -6,14 +11,36 @@ export function createTouchWalk(pad: HTMLElement) {
   let pointer: number | undefined;
   let originX = 0;
   let originY = 0;
+  let forwardSince: number | undefined;
+  let lastShortPush: number | undefined;
+  let sprinting = false;
   const axes = { right: 0, forward: 0 };
 
-  function reset() {
+  function clearPointer() {
     const previous = pointer;
     pointer = undefined;
     axes.right = axes.forward = 0;
     nub.style.transform = '';
     if (previous !== undefined && pad.hasPointerCapture(previous)) pad.releasePointerCapture(previous);
+  }
+  function reset() {
+    forwardSince = undefined;
+    lastShortPush = undefined;
+    sprinting = false;
+    clearPointer();
+  }
+  function endForward(now: number) {
+    if (forwardSince === undefined) return;
+    lastShortPush = !sprinting && now - forwardSince <= firstPushLimit ? now : undefined;
+    forwardSince = undefined;
+    sprinting = false;
+  }
+  function updateSprint(now: number) {
+    if (axes.forward < forwardExit) endForward(now);
+    if (axes.forward < forwardEntry || forwardSince !== undefined) return;
+    sprinting = lastShortPush !== undefined && now - lastShortPush <= secondPushWindow;
+    forwardSince = now;
+    lastShortPush = undefined;
   }
   function updateVisibility() {
     const touch = coarse.matches || touchSeen;
@@ -48,15 +75,21 @@ export function createTouchWalk(pad: HTMLElement) {
     const scale = distance > 0 ? magnitude / distance : 0;
     axes.right = dx * scale;
     axes.forward = -dy * scale;
+    updateSprint(event.timeStamp);
     nub.style.transform = `translate(${axes.right * radius}px, ${-axes.forward * radius}px)`;
   });
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  pad.addEventListener('pointerup', event => {
+    if (event.pointerId !== pointer) return;
+    endForward(event.timeStamp);
+    clearPointer();
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) {
     pad.addEventListener(type, event => {
       if ((event as PointerEvent).pointerId === pointer) reset();
     });
   }
   updateVisibility();
-  return { axes, reset, active: () => coarse.matches || touchSeen, setAllowed(value: boolean) {
+  return { axes, reset, get sprinting() { return sprinting; }, active: () => coarse.matches || touchSeen, setAllowed(value: boolean) {
     if (allowed === value) return;
     allowed = value;
     updateVisibility();

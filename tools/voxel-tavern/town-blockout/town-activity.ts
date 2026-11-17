@@ -7,6 +7,7 @@ export type TownActivitySpot = {
   ground: number;
   range: number;
   label: string;
+  available?(): boolean;
   run(): void;
 };
 export type TownActivity = {
@@ -28,7 +29,7 @@ export function nearestTownActivity(
   let nearest: TownActivitySpot | undefined;
   let bestDistance = Infinity;
   for (const spot of spots) {
-    if (Math.abs(ground - spot.ground) > .55) continue;
+    if (Math.abs(ground - spot.ground) > .55 || spot.available?.() === false) continue;
     const distance = Math.hypot(x - spot.x, n - spot.n);
     if (distance <= spot.range && distance < bestDistance) {
       nearest = spot;

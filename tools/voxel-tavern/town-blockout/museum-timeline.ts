@@ -42,12 +42,174 @@ export const monthModels = [
 ] as const;
 
 const museumCaseCenter = 12.19;
+export const museumReadingSeat = { x: -4.66, z: -4.82 } as const;
 
 export function addMonthExhibit(m: MuseumBuilder, { month, x, z }: typeof monthStops[number]) {
   const side = Math.sign(x);
   const build = month <= 6 ? buildWestDetail : buildEastDetail;
   build(month, (lateral, heightBase, along, width, height, depth, paint, emit = false) =>
     m.detailBox(paint, side * (museumCaseCenter - lateral), heightBase, z + along, width, height, depth, 0, emit));
+}
+
+function addGalleryFurnishings(m: MuseumBuilder, floor: number) {
+  const fine = 1 / 64;
+  const aubergine = '#4b3442';
+  const brick = '#7c3b3c';
+  const parchment = '#eee0b6';
+  const indigo = '#40566b';
+  const agedGold = '#c69662';
+  function cluster(x: number, z: number, yaw = 0) {
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    return (color: string, dx: number, height: number, dz: number, w: number, h: number, d: number, angle = 0, lit = false) => {
+      m.detailBox(color, x + dx * cos + dz * sin, floor + height, z - dx * sin + dz * cos, w, h, d, yaw + angle, lit);
+    };
+  }
+
+  // The aisle runner sits below the guide lights and does not change the walk surface.
+  const rug = cluster(0, .55);
+  rug(aubergine, 0, fine, 0, 2.89, fine, 15.55);
+  rug(brick, 0, fine * 1.75, 0, 2.55, fine * .6, 15.17);
+  for (const side of [-1, 1]) {
+    for (const inset of [1.33, 1.39]) rug(agedGold, side * inset, fine * 2, 0, fine, fine, 15.37);
+    for (const end of [7.59, 7.67]) rug(agedGold, 0, fine * 2, side * end, 2.79, fine, fine);
+    for (let index = 0; index < 30; index++) {
+      rug('#a4715c', side * 1.22, fine * 2.75, -7.06 + index * .485, .075, fine, .075, Math.PI / 4);
+    }
+  }
+  for (let index = -4; index <= 4; index++) {
+    const z = index * 1.56;
+    rug(aubergine, 0, fine * 2.75, z, .44, fine, .44, Math.PI / 4);
+    rug(agedGold, 0, fine * 3.65, z, .218, fine, .218, Math.PI / 4);
+    rug(brick, 0, fine * 4.55, z, .119, fine, .119, Math.PI / 4);
+  }
+
+  const archiveX = -4.32, archiveZ = 1.87;
+  const archive = cluster(archiveX, archiveZ);
+  archive(timber, 0, .93, 0, 2.65, .16, 1.19);
+  archive(maple, 0, 1.04, 0, 2.69, .075, 1.22);
+  for (const dx of [-1.14, 1.14]) for (const dz of [-.45, .45]) {
+    archive(timber, dx, .48, dz, .15, .97, .145);
+    archive(brass, dx, .11, dz, .16, .12, .155);
+  }
+  archive(timber, 0, .47, -.40, 2.26, .073, .116);
+  archive(indigo, 0, .84, .572, 1.8, .12, fine);
+  m.label('档案整理台', archiveX, floor + .85, archiveZ + .592, 1.35, .12, 0,
+    { background: indigo, color: '#f4dfaf', border: false });
+  m.collider(archiveX, floor + .54, archiveZ, 2.69, 1.08, 1.22);
+  // Paper, film boxes and a hand reader are sculpted separately on the archive desk.
+  for (const [i, tint] of [archival, indigo, brick].entries()) {
+    archive(tint, -.83 + i * .055, 1.106 + i * .054, -.06 - i * .022, .51, .047, .58, .10 - i * .06);
+    archive(parchment, -.815 + i * .055, 1.103 + i * .054, .233 - i * .022, .451, .026, fine, .10 - i * .06);
+  }
+  archive(timber, -.04, 1.096, .19, .62, .032, .48, -.09);
+  for (const side of [-1, 1]) {
+    archive(parchment, -.04 + side * .15, 1.119, .19, .282, .02, .452, -.09);
+    for (let index = 0; index < 5; index++) {
+      archive('#9d7655', -.04 + side * .147, 1.138, .072 + index * .054, .197 - (index === 4 ? .052 : 0), fine, fine, -.09);
+    }
+  }
+  archive(indigo, .90, 1.113, -.24, .56, .072, .438);
+  archive('#333441', .90, 1.311, -.26, .29, .331, .286);
+  archive('#83664b', .90, 1.386, -.13, .31, .21, .12);
+  archive('#333441', .90, 1.386, -.046, .24, .18, .092);
+  archive('#7ba3a4', .90, 1.386, .007, .164, .12, fine);
+  archive('#bddcce', .92, 1.416, .021, .046, .035, fine);
+  archive(agedGold, .99, 1.495, -.25, .073, .027, .072);
+  for (const offset of [.56, .81, 1.03]) {
+    archive('#705745', offset, 1.10, .323, .16, .044, .17);
+    archive(parchment, offset, 1.128, .323, .105, fine, .087);
+  }
+
+  const dioramaX = 4.68, dioramaZ = 1.75;
+  const street = cluster(dioramaX, dioramaZ);
+  street(timber, 0, .36, 0, 2.68, .72, 1.49);
+  street(maple, 0, .075, 0, 2.75, .15, 1.55);
+  street(brass, 0, .744, 0, 2.72, .075, 1.53);
+  street(indigo, 0, .82, 0, 2.54, .079, 1.32);
+  m.label('雪镇旧街 · 模型', dioramaX, floor + .472, dioramaZ + .755, 1.77, .25, 0,
+    { background: timber, color: '#ffdfa8', accent: brass });
+  m.collider(dioramaX, floor + .38, dioramaZ, 2.75, .76, 1.55);
+  street('#95a7ad', 0, .89, -.032, 2.32, .086, 1.14);
+  street('#627486', 0, .934, -.038, 2.31, fine, .22);
+  street('#57778a', -.72, .941, .274, .813, fine, .303);
+  for (let i = 0; i < 8; i++) street('#966b4e', -.90 + i * .049, .994, .259, .046, .04, .394);
+  for (const [x, z, height, tint] of [[-.70, -.366, .34, brick], [.245, -.348, .46, wall], [.820, .238, .30, indigo]] as const) {
+    street(tint, x, .941 + height / 2, z, .42, height, .34);
+    street('#362b32', x, .961 + height, z, .51, .047, .417);
+    for (let layer = 0; layer < 5; layer++) {
+      street(layer === 4 ? '#dce5df' : '#516272', x, .993 + height + layer * .047, z, .49, .055, .422 - layer * .075);
+    }
+    for (const dx of [-.12, .12]) {
+      street(brass, x + dx, 1.087, z + .173, .078, .093, fine);
+      street(lamp, x + dx, 1.090, z + .188, .051, .067, fine, 0, true);
+    }
+  }
+  for (const [x, z, height] of [[-1.04, -.21, .34], [-.19, -.37, .26], [.97, -.365, .39], [.17, .32, .25]]) {
+    street(timber, x, 1.016, z, .04, .14, .04);
+    for (let layer = 0; layer < 5; layer++) {
+      const spread = height * (.53 - layer * .076);
+      street(layer % 2 ? '#91a9a6' : '#466760', x, 1.09 + height * .13 * layer, z, spread, height * .15, spread, Math.PI / 4);
+    }
+  }
+  for (const x of [-.2, .59]) {
+    street(timber, x, 1.035, .128, .028, .197, .028);
+    street(lamp, x, 1.148, .128, .059, .062, .059, 0, true);
+    street(indigo, x, 1.19, .128, .077, .035, .077);
+  }
+
+  const { x: benchX, z: benchZ } = museumReadingSeat;
+  const bench = cluster(benchX, benchZ);
+  for (const x of [-.95, .95]) for (const z of [-.247, .233]) {
+    bench(timber, x, .233, z, .132, .466, .13);
+    bench(brass, x, .052, z, .143, .066, .141);
+  }
+  bench(maple, 0, .451, 0, 2.21, .095, .66);
+  bench(timber, 0, .544, -.295, 2.255, .12, .13);
+  bench(brick, 0, .527, .012, 1.99, .095, .557);
+  bench(aubergine, 0, .942, -.284, 2.11, .32, .09);
+  bench(maple, 0, 1.133, -.301, 2.23, .077, .12);
+  for (const side of [-1, 1]) {
+    bench(timber, side * 1.02, .78, -.284, .113, .71, .115);
+    bench(maple, side * 1.02, .781, -.023, .104, .075, .50);
+    for (let index = 0; index < 6; index++) {
+      bench(agedGold, side * (.115 + index * .145), .584, .273, .041, fine, .029);
+    }
+  }
+  m.collider(benchX, floor + .568, benchZ, 2.27, 1.136, .69);
+
+  const lecternX = 4.75, lecternZ = -4.77, yaw = -.32;
+  const lectern = cluster(lecternX, lecternZ, yaw);
+  for (const side of [-1, 1]) {
+    lectern(timber, side * .59, .466, 0, .101, .932, .116);
+    lectern(maple, side * .59, .074, 0, .22, .107, .66);
+  }
+  lectern(timber, 0, .402, 0, 1.18, .075, .117);
+  lectern(timber, 0, 1.192, 0, 1.625, .678, .123);
+  lectern(brass, 0, 1.192, .074, 1.555, .602, .047);
+  lectern(indigo, 0, 1.192, .106, 1.485, .542, .022);
+  m.label('展陈索引', lecternX + Math.sin(yaw) * .129, floor + 1.294, lecternZ + Math.cos(yaw) * .129, 1.32, .176, yaw,
+    { background: indigo, color: '#ffdfa8', border: false });
+  for (const [dx, tint] of [[-.44, '#8f7d89'], [0, '#758d8a'], [.44, '#b4886c']] as const) {
+    lectern(tint, dx, 1.082, .129, .288, .086, fine);
+  }
+  m.collider(lecternX, floor + .772, lecternZ, 1.76, 1.544, .88);
+
+  // Rear cabinets keep their shallow footprint clear of the rear cross aisle.
+  for (const side of [-1, 1]) {
+    const x = side * 3.98, z = -13.15;
+    const cabinet = cluster(x, z);
+    cabinet(timber, 0, .579, 0, 2.83, 1.09, .74);
+    cabinet(maple, 0, 1.15, 0, 2.91, .112, .803);
+    cabinet(timber, 0, .076, 0, 2.91, .13, .80);
+    for (const dx of [-.913, 0, .913]) {
+      cabinet(side < 0 ? '#765044' : '#60525c', dx, .52, .383, .842, .57, .06);
+      cabinet(agedGold, dx, .633, .427, .126, .038, .054);
+      const color = dx < 0 ? indigo : dx > 0 ? brick : jade;
+      cabinet(color, dx, 1.249, .027, .628, .085, .475);
+      cabinet(parchment, dx - .033, 1.299, .029, .35, fine, .255);
+    }
+    m.collider(x, floor + .602, z, 2.91, 1.204, .83);
+  }
 }
 
 export function addMuseumTimeline(m: MuseumBuilder) {
@@ -206,6 +368,8 @@ export function addMuseumTimeline(m: MuseumBuilder) {
       m.box('#aa514d', tip[0] - .064, tip[1] - .14, tip[2] - .038, .104, .12, .112);
     }
   }
+
+  addGalleryFurnishings(m, y);
 
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(glassPoints, 3));

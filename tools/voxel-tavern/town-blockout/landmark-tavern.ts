@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { gunzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import type { TownPlot } from './landmark-kit';
+import { addTownWindow } from './town-window';
 import source from './tavern-voxel-source';
 
 type Vec3 = [number, number, number];
@@ -96,6 +97,27 @@ function lantern(parts: Part[], cx: number, cy: number, cz: number, size: number
   add('gold', cx - .04, cy - size * .17, cz - .04, .08, size * .26, .08);
 }
 
+const tavernWindows = [4, 9].flatMap(floor => [
+  ...[-4, 4].flatMap(x => [
+    { at: [x, floor + 1, 5.59] as Vec3, yaw: 0, axis: 0, ground: floor - 1 },
+    { at: [x, floor + 1, -5.39] as Vec3, yaw: Math.PI, axis: 0, ground: floor - 1 },
+  ]),
+  ...[-2, 2].flatMap(z => [
+    { at: [6.46, floor + 1, z] as Vec3, yaw: Math.PI / 2, axis: 2, ground: floor - 1 },
+    { at: [-6.46, floor + 1, z] as Vec3, yaw: -Math.PI / 2, axis: 2, ground: floor - 1 },
+  ]),
+]).filter(({ at }) => !(at[0] === 4 && at[2] < -5)); // The fireplace flue backs these two decorative bays.
+
+function bakedSash(m: string, b: Box) {
+  if (m !== 'wood' && m !== 'dark' && m !== 'shutter' && m !== 'gold') return false;
+  return tavernWindows.some(({ at, axis }) => {
+    const cross = 2 - axis;
+    return b[axis] >= at[axis] - 1.008 && b[axis + 3] <= at[axis] + 1.008
+      && b[1] >= at[1] - 1.008 && b[4] <= at[1] + 1.008
+      && b[cross + 3] - b[cross] <= .34 && b[cross] >= at[cross] - .36 && b[cross + 3] <= at[cross] + .36;
+  });
+}
+
 function buildParts() {
   const zipped = Uint8Array.from(atob(source), char => char.charCodeAt(0));
   const data: TavernSource = JSON.parse(strFromU8(gunzipSync(zipped)));
@@ -104,6 +126,7 @@ function buildParts() {
   for (const [x, y, z, id] of data.voxels) {
     for (const { m, b } of data.catalogue[id - 2]) {
       const bounds: Box = [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]];
+      if (bakedSash(m, bounds)) continue;
       const roof = m === 'roof' ? 'blueRoof' : m === 'roofShadow' ? 'blueRoofDark' : m === 'roofGlaze' ? 'blueRoofLight' : m;
       parts.push({ m: roof, b: bounds });
       // B09 calls for red siding. Keep the original interior plaster and exposed timber.
@@ -123,14 +146,9 @@ function buildParts() {
   const add = (m: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
     parts.push({ m, b: [x, y, z, x + w, y + h, z + d] });
   };
-  // Recessed warm panes preserve the old mullion geometry. Snow traces the existing tiled roof.
-  for (const floor of [4, 9]) for (const windowX of [-5, 3]) {
-    for (const z of [-5.44, 5.51]) for (const pane of [0, 1]) {
-      add('amberGlass', windowX + pane + .06, floor + .075, z, .87, 1.84, .037);
-    }
-    for (const x of [-6.43, 6.43]) for (const windowZ of [-3, 1]) {
-      add('amberGlass', x, floor + .075, windowZ + .063, .037, 1.84, 1.87);
-    }
+  // Preserve light behind the two decorative openings that back onto the fireplace.
+  for (const floor of [4, 9]) for (const pane of [0, 1]) {
+    add('amberGlass', 3 + pane + .06, floor + .075, -5.44, .87, 1.84, .037);
   }
   for (const side of [-1, 1]) for (let column = 0; column < 16; column++) {
     const x = side === -1 ? -8 + column * .5 : 7.5 - column * .5;
@@ -169,6 +187,17 @@ export function buildTavernLandmark(plot: TownPlot) {
   const group = new Group();
   group.name = '未写酒馆';
   const transform = tavernModelToPlot(plot);
+  for (const { at, yaw, axis, ground } of tavernWindows) {
+    const [x, y, z] = transform(...at);
+    const stairLanding = at[0] === 6.46 && at[1] === 10 && at[2] === 2;
+    const inwardX = stairLanding ? 5 : at[0] - Math.sin(yaw) * 1.33;
+    const inwardZ = at[2] - Math.cos(yaw) * 1.54;
+    const stairHeight = 3.05 + (3.88 - inwardZ) / (3.88 + 3.63) * (8 - 3.05);
+    const [approachX, walkHeight, approachZ] = transform(inwardX, stairLanding ? stairHeight : ground, inwardZ);
+    const [edgeX, , edgeZ] = transform(at[0] + (axis === 0 ? 1.90 : 0), at[1], at[2] + (axis === 2 ? 1.90 : 0));
+    addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
+      height: 1.725, ground: walkHeight, approach: [approachX, approachZ], style: 'tavern' });
+  }
   const materialBuffers = new Map<string, { positions: number[]; normals: number[]; uv: number[]; lighting: number[] }>();
   for (const { m, b } of parts) {
     let buffers = materialBuffers.get(m);

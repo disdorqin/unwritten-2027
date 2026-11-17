@@ -3,6 +3,7 @@ import {
   Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
+import { addTownWindow } from './town-window';
 
 type Point = [number, number, number];
 type Solid = { min: Point; max: Point };
@@ -78,15 +79,26 @@ export function buildPostLandmark(_plot: TownPlot): Group {
       if (alongX) box(tint, a, b, face + outward * side, width, height, depth);
       else box(tint, face + outward * side, b, a, depth, height, width);
     };
-    block('dark', u, y, w + .13, h + .13, .14, .04);
-    block('glass', u, y, w - .17, h - .14, .055, .13);
-    for (const i of [-.5, -.17, .17, .5]) block('timber', u + i * w, y, .09, h + .08, .12, .18);
-    for (const j of [-.49, -.16, .16, .49]) block('timber', u, y + j * h, w + .05, .085, .12, .18);
-    for (const i of [-.29, 0, .29]) block('goldLight', u + i * (w - .21), y - .29 * h, .065, .2, .03, .16);
-    // Repeat the mullions on the inner face so the amber panes read from the hall.
-    block('glass', u, y, w + .34, h + .28, .06, -.24);
-    for (const i of [-.55, -.17, .17, .55]) block('timberWarm', u + i * w, y, .10, h + .28, .07, -.285);
-    for (const j of [-.56, -.16, .16, .56]) block('timberWarm', u, y + j * h, w + .35, .10, .07, -.285);
+    for (const edge of [-1, 1]) {
+      block('timberWarm', u + edge * (w / 2 + .027), y, .14, h + .19, .49, -.045);
+      block('timber', u, y + edge * (h / 2 + .033), w + .19, .133, .46, -.045);
+    }
+    let walkHeight = y < 4 ? ground : mezzanine;
+    let approach: [number, number] | undefined;
+    if (y > 4 && side === 1) {
+      const pull = alongX ? u + (u === 0 ? 0 : 1.03) : u;
+      walkHeight = alongX ? ground : ground + (mezzanine - ground) * 5 / 16;
+      approach = alongX ? [pull, front - 1.55] : [5.25, 2.59];
+      const bottom = walkHeight + 1.47;
+      const length = y - h / 2 - bottom;
+      block('timber', pull, bottom + length / 2, .032, length, .032, -.3);
+      block('brass', pull, bottom, .09, .14, .065, -.3);
+    }
+    addTownWindow(model, {
+      x: alongX ? u : face, y, z: alongX ? face : u,
+      yaw: alongX ? (side === 1 ? 0 : Math.PI) : side * Math.PI / 2,
+      width: w, height: h, ground: walkHeight, approach, style: 'post',
+    });
     block('stoneTrim', u, y + h / 2 + .1, w + .42, .19, .27, .16);
     block('stone', u, y - h / 2 - .11, w + .46, .24, .4, .2);
     block('snow', u, y - h / 2 + .018, w + .34, .05, .24, .23);
@@ -244,8 +256,8 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   }
   writeDesk(-4.34, ground, 3.58);
   writeDesk(-.65, mezzanine, -4.96);
-  sortingWall(0, ground + .65, -6.65, 12);
-  sortingWall(-2.14, mezzanine, -6.64, 11);
+  sortingWall(-.42, ground + .65, -6.65, 5);
+  sortingWall(-.42, mezzanine, -6.64, 5);
 
   // B14/15 service desk, archive mezzanine and the east stair remain traversable.
   box('timber', -.85, ground + .58, -1.40, 5.1, 1.16, .84);

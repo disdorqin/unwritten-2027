@@ -23,18 +23,22 @@ import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
+import { createTouchLook } from './touch-look';
+import { createDesktopLook } from './desktop-look';
 import { terraceStop } from './museum-terrace';
 import { createMuseumInspection } from './museum-inspection';
 import { createMuseumLaunch } from './museum-launch';
 import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
-import { nearestTownActivity, type TownActivityContext, type TownSeat } from './town-activity';
+import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
 import { createPostActivity } from './post-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
 import { createIceActivity } from './ice-activity';
 import { createWishActivity } from './wish-activity';
+import { createRestActivity } from './town-rest-activity';
+import { createWindowActivity } from './town-window';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -267,13 +271,20 @@ const eye = 1.65;
 const keys = new Set<string>();
 const touchWalk = createTouchWalk(element('touch-walk'));
 const museumMapButton = element<HTMLButtonElement>('museum-map-button');
-let looking: { id: number; x: number; y: number } | undefined;
-function resetMovement() {
+const crosshair = element('walk-crosshair');
+const touchJump = element<HTMLButtonElement>('touch-jump');
+let forwardPressedAt = -Infinity;
+let doubleForward = false;
+function stopTravel() {
   keys.clear();
+  forwardPressedAt = -Infinity;
+  doubleForward = false;
   touchWalk.reset();
-  const previous = looking;
-  looking = undefined;
-  if (previous && renderer.domElement.hasPointerCapture(previous.id)) renderer.domElement.releasePointerCapture(previous.id);
+}
+function resetMovement() {
+  stopTravel();
+  touchLook.reset();
+  desktopLook.release();
 }
 let walking = false;
 let x = 0;
@@ -281,6 +292,8 @@ let n = 0;
 let yaw = 0;
 let pitch = 0;
 let ground = 0;
+let airHeight: number | undefined;
+let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let seated: (TownSeat & { pitch: number }) | undefined;
 let rideSpeed = 0;
@@ -313,6 +326,8 @@ const museumVisit = createMuseumVisit(pauseForPanel, () => {
   x = viewX;
   n = -viewZ;
   ground = viewY;
+  airHeight = undefined;
+  riseSpeed = 0;
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
   captureTerrace = true;
@@ -365,23 +380,27 @@ function leaveRide() {
 function leaveSeat() {
   if (!seated) return;
   seated = undefined;
-  resetMovement();
+  stopTravel();
 }
 const activityContext: Omit<TownActivityContext, 'announce'> = {
   scene,
   open: openPlace,
   sit(seat) {
-    resetMovement();
+    stopTravel();
     seated = { ...seat, pitch: 0 };
   },
   face(east, north, height) {
-    resetMovement();
+    stopTravel();
     yaw = Math.atan2(east - x, north - n);
     const distance = Math.hypot(east - x, north - n);
     pitch = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42, Math.atan2(height - ground - eye, distance)));
   },
 };
-const activities = [createTavernActivity, createPostActivity, createStageActivity, createMarketActivity, createIceActivity, createWishActivity]
+const activities: TownActivity[] = [
+  createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
+  createIceActivity, createWishActivity, createRestActivity,
+  (context: TownActivityContext) => createWindowActivity(context, architecture),
+]
   .map(create => {
     const activity = create({
       ...activityContext,
@@ -398,14 +417,17 @@ const activities = [createTavernActivity, createPostActivity, createStageActivit
 const activitySpots = activities.flatMap(activity => activity.spots);
 const tour = [
   { x: 341, n: 106.3, radius: 4.25, maxHeight: 14, label: '坐上旋转木马', run() {
-    if (architecture.get('carousel')?.userData.rideSeat) boardingGround = { x, n, ground, yaw };
+    if (architecture.get('carousel')?.userData.rideSeat) {
+      resetMovement();
+      boardingGround = { x, n, ground, yaw };
+    }
   } },
   { x: 262.1, n: 205.6, radius: 2.9, maxHeight: 15.6, label: '给 2027 写封信', run() {
     openPlace('写给 2027', '给未来的自己留一封信。寄存后可以在同一浏览器里回来读。', true);
   } },
 ];
 function currentAction() {
-  if (!walking || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
   if (seated) return { label: '起身', run: leaveSeat };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
@@ -428,11 +450,14 @@ function jump() {
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
   ground = grid.heightAt(x, n);
+  airHeight = undefined;
+  riseSpeed = 0;
   pitch = 0;
 }
 function mode(next: boolean) {
   leaveRide();
   leaveSeat();
+  resetMovement();
   activityStatus.textContent = '';
   walking = next;
   museumInspection.close();
@@ -442,7 +467,7 @@ function mode(next: boolean) {
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
   element('help').textContent = next
-    ? (touchWalk.active() ? '左下摇杆移动，拖动画面转向。' : 'WASD / 方向键移动，拖动转向。靠近互动点后按 E。')
+    ? (touchWalk.active() ? '滑动转向，摇杆前推两次疾跑，点「跳跃」。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动。')
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (next) jump();
   else {
@@ -474,7 +499,33 @@ rehearse.onclick = () => {
 };
 walk.onclick = () => mode(true);
 selector.onchange = () => mode(true);
-const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
+const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
+function lookAllowed() {
+  return walking && !boardingGround && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+}
+function moveAllowed() { return lookAllowed() && !seated; }
+function turnView(horizontal: number, vertical: number) {
+  if (seated) {
+    seated.yaw += horizontal;
+    seated.pitch = Math.max(-1.42, Math.min(1.42, seated.pitch + vertical));
+  } else {
+    yaw += horizontal;
+    pitch = Math.max(-1.42, Math.min(1.42, pitch + vertical));
+  }
+}
+const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView);
+const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView, () => seated?.pitch ?? pitch);
+function requestJump() {
+  if (!moveAllowed() || airHeight !== undefined) return;
+  airHeight = ground;
+  riseSpeed = 5.4;
+}
+touchJump.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'touch') { event.preventDefault(); requestJump(); }
+});
+touchJump.addEventListener('click', requestJump);
 addEventListener('keydown', e => {
   if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
   if (museumOverlay()) {
@@ -491,43 +542,36 @@ addEventListener('keydown', e => {
     interact();
     return;
   }
+  if (e.code === 'Escape' && document.pointerLockElement === renderer.domElement) {
+    desktopLook.release();
+    return;
+  }
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
   }
-  if (walking && !boardingGround && !seated && moveKeys.has(e.code)) {
+  if (moveAllowed() && e.code === 'Space') {
+    if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      requestJump();
+    }
+    return;
+  }
+  if (moveAllowed() && moveKeys.has(e.code)) {
+    if (!e.repeat && forwardKey(e.code) && !forwardHeld()) {
+      const now = performance.now();
+      doubleForward = now - forwardPressedAt <= 330;
+      forwardPressedAt = now;
+    }
     keys.add(e.code);
     e.preventDefault();
   }
 });
-addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('keyup', e => {
+  keys.delete(e.code);
+  if (!forwardHeld()) doubleForward = false;
+});
 addEventListener('blur', resetMovement);
-renderer.domElement.addEventListener('pointerdown', e => {
-  if (!walking || looking || museumOverlay() || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
-  looking = { id: e.pointerId, x: e.clientX, y: e.clientY };
-  renderer.domElement.focus({ preventScroll: true });
-  renderer.domElement.setPointerCapture(e.pointerId);
-});
-renderer.domElement.addEventListener('pointermove', e => {
-  if (!walking || looking?.id !== e.pointerId) return;
-  const scale = e.pointerType === 'touch' ? .007 : .004;
-  const turn = (e.clientX - looking.x) * scale;
-  const tilt = (e.clientY - looking.y) * scale;
-  if (seated) {
-    seated.yaw += turn;
-    seated.pitch = Math.max(-1.42, Math.min(1.42, seated.pitch - tilt));
-  } else {
-    yaw += turn;
-    pitch = Math.max(-1.42, Math.min(1.42, pitch - tilt));
-  }
-  looking.x = e.clientX;
-  looking.y = e.clientY;
-});
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  renderer.domElement.addEventListener(type, event => {
-    if ((event as PointerEvent).pointerId === looking?.id) looking = undefined;
-  });
-}
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -539,37 +583,79 @@ const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchP
 if (startInMuseum) selector.value = '纪念馆入口';
 mode(startInMuseum);
 let previous = performance.now();
-function nextGround(nextX: number, nextN: number) {
-  if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN) || districts.blocked(nextX, nextN)
-    || forest.blocked(nextX, nextN) || streetscape.blocked(nextX, nextN)) return null;
-  const z = -nextN;
-  const contains = ({ min, max }: Box) => nextX >= min[0] && nextX <= max[0] && z >= min[2] && z <= max[2];
-  const terrain = grid.heightAt(nextX, nextN);
-  let height = terrain;
-  for (const { floors, ramps } of walkGeometry) {
+function walkable(x: number, n: number) {
+  return canEnter(x, n) && !scenery.blocked(x, n) && !districts.blocked(x, n)
+    && !forest.blocked(x, n) && !streetscape.blocked(x, n);
+}
+function overlapsBody(x: number, n: number, { min, max }: Box) {
+  return x + .27 >= min[0] && x - .27 <= max[0] && -n + .27 >= min[2] && -n - .27 <= max[2];
+}
+function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
+  const z = -north;
+  const contains = ({ min, max }: Box) => east >= min[0] && east <= max[0] && z >= min[2] && z <= max[2];
+  let height = grid.heightAt(east, north);
+  for (const { floors, ramps, colliders } of walkGeometry) {
     for (const floor of floors) {
-      if (contains(floor) && floor.max[1] <= ground + .43) height = Math.max(height, floor.max[1]);
+      if (contains(floor) && floor.max[1] <= limit) height = Math.max(height, floor.max[1]);
     }
     for (const ramp of ramps) {
       if (!contains(ramp)) continue;
       const axis = ramp.axis === 'x' ? 0 : 2;
-      const fraction = ((axis === 0 ? nextX : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
+      const fraction = ((axis === 0 ? east : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
       const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? fraction : 1 - fraction);
-      if (top <= ground + .43) height = Math.max(height, top);
+      if (top <= limit) height = Math.max(height, top);
     }
-  }
-  if (Math.abs(height - ground) > .43 || activities.some(activity => activity.blocked?.(nextX, nextN, height))) return null;
-  for (const { colliders } of walkGeometry) {
-    if (colliders.some(({ min, max }) => nextX + .27 >= min[0] && nextX - .27 <= max[0]
-      && z + .27 >= min[2] && z - .27 <= max[2] && height + .14 < max[1] && height + 1.8 > min[1])) return null;
+    if (solidLimit > -Infinity) {
+      for (const solid of colliders) {
+        if (solid.max[1] <= solidLimit && overlapsBody(east, north, solid)) height = Math.max(height, solid.max[1]);
+      }
+    }
   }
   return height;
 }
+function obstructed(east: number, north: number, feet: number, sole = .14) {
+  return activities.some(activity => activity.blocked?.(east, north, feet)) ||
+    walkGeometry.some(({ colliders }) => colliders.some(box =>
+      overlapsBody(east, north, box) && feet + sole < box.max[1] && feet + 1.8 > box.min[1]));
+}
 function tryMove(nextX: number, nextN: number) {
-  const height = nextGround(nextX, nextN);
-  if (height === null) return false;
-  [x, n, ground] = [nextX, nextN, height];
+  if (!walkable(nextX, nextN)) return false;
+  const feet = airHeight ?? ground;
+  const limit = feet + (airHeight === undefined ? .43 : .055);
+  const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit);
+  const nextHeight = airHeight === undefined ? floor : feet;
+  if (floor > limit || obstructed(nextX, nextN, nextHeight, airHeight === undefined ? .14 : .025)) return false;
+  [x, n] = [nextX, nextN];
+  if (airHeight === undefined) {
+    if (ground - nextHeight > .43) {
+      airHeight = ground;
+      riseSpeed = 0;
+    } else ground = nextHeight;
+  }
   return true;
+}
+function stepJump(dt: number) {
+  if (airHeight === undefined) return;
+  const feet = airHeight;
+  riseSpeed -= 16.5 * dt;
+  const next = feet + riseSpeed * dt;
+  if (riseSpeed > 0) {
+    const crossedCeiling = walkGeometry.some(({ floors }) => floors.some(box =>
+      overlapsBody(x, n, box) && feet + 1.8 <= box.min[1] && next + 1.8 > box.min[1]));
+    if (crossedCeiling || obstructed(x, n, next)) {
+      riseSpeed = 0;
+      return;
+    }
+  } else {
+    const landing = supportAt(x, n, feet + .06, feet + .06);
+    if (next <= landing) {
+      ground = landing;
+      airHeight = undefined;
+      riseSpeed = 0;
+      return;
+    }
+  }
+  airHeight = next;
 }
 function faceFrom(east: number, north: number, height: number, heading: number, tilt: number) {
   camera.position.set(east, height, -north);
@@ -599,23 +685,28 @@ renderer.setAnimationLoop(now => {
     element('position').textContent = '旋转木马 · 乘坐中';
   } else if (walking && seated) {
     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
-    element('position').textContent = '酒馆 · 已就座';
+    element('position').textContent = '已就座';
   } else if (walking) {
-    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
+    const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
-    if (!placeCard.open && !museumVisit.dialog.open && (forward || right)) {
-      const steps = Math.max(1, Math.ceil(dt / .025));
-      const stride = 7.5 * dt / (steps * Math.max(1, Math.hypot(forward, right)));
+    const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
+    const steps = Math.max(1, Math.ceil(dt / .018));
+    const stepTime = dt / steps;
+    if (moveAllowed()) {
+      const stride = (sprint ? 11.3 : 7.5) * stepTime / Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
       for (let i = 0; i < steps; i++) {
-        const nx = x + east;
-        const nn = n + north;
-        if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
+        if (forward || right) {
+          const nx = x + east;
+          const nn = n + north;
+          if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
+        }
+        stepJump(stepTime);
       }
     }
-    faceFrom(x, n, ground + eye, yaw, pitch);
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 地面 ${ground.toFixed(1)} m`;
+    faceFrom(x, n, (airHeight ?? ground) + eye, yaw, pitch);
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${airHeight !== undefined ? '腾空' : sprint ? '疾跑' : '行走'}`;
   } else {
     controls.update();
     element('position').textContent = '';
@@ -629,7 +720,10 @@ renderer.setAnimationLoop(now => {
   for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
-  touchWalk.setAllowed(canControl && !boardingGround && !seated && !museumOverlay());
+  touchWalk.setAllowed(moveAllowed());
+  crosshair.hidden = !lookAllowed() || touchWalk.active();
+  touchJump.hidden = !moveAllowed() || !touchWalk.active();
+  touchJump.disabled = airHeight !== undefined;
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
