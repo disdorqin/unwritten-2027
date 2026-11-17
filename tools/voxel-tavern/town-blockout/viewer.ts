@@ -31,7 +31,7 @@ import { createMuseumInspection } from './museum-inspection';
 import { createMuseumLaunch } from './museum-launch';
 import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
-import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownSeat } from './town-activity';
+import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownActivitySpot, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
 import { createPostActivity } from './post-activity';
 import { createStageActivity } from './stage-activity';
@@ -40,6 +40,9 @@ import { createIceActivity } from './ice-activity';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
 import { createWindowActivity } from './town-window';
+import { extensionPlots, extensionRoadClearance } from './town-extension';
+import { createTownRailway } from './town-railway';
+import { createTownNpcActivity } from './town-npc';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -60,10 +63,15 @@ sun.position.set(-90, 150, 60);
 scene.add(sun);
 const landscape = new Group();
 scene.add(landscape);
+const railway = createTownRailway(grid);
+scene.add(railway.group);
 const scenery = addScenery(landscape, grid);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked);
-const streetscape = addStreetscape(landscape, grid, districts.keepClear);
-const forest = addForestDensity(landscape, grid, (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius));
+const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
+  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
+const forest = addForestDensity(landscape, grid,
+  (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius),
+  (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius));
 const snowfall = createSnowfall(scene);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
@@ -113,6 +121,28 @@ inlet.position.set((inletX + lakeX) / 2, waterHeight, -(inletNorth + lakeNorth) 
 inlet.rotation.y = Math.atan2(lakeNorth - inletNorth, lakeX - inletX);
 scene.add(inlet);
 const bridgeGeometry = new BoxGeometry();
+const detailedBridges = new Group();
+scene.add(detailedBridges);
+let bridgePanorama: Group | undefined;
+const bridgeMatrices = new Map([[stone, [] as Matrix4[]], [timber, [] as Matrix4[]]]);
+function bridgeBatch(material: MeshLambertMaterial, transforms: Matrix4[], name: string) {
+  const batch = new InstancedMesh(bridgeGeometry, material, transforms.length);
+  batch.name = name;
+  transforms.forEach((matrix, index) => batch.setMatrixAt(index, matrix));
+  batch.computeBoundingSphere();
+  return batch;
+}
+function showWideBridges(wide: boolean) {
+  detailedBridges.visible = !wide;
+  if (!bridgePanorama && wide) {
+    bridgePanorama = new Group();
+    for (const [material, matrices] of bridgeMatrices) {
+      bridgePanorama.add(bridgeBatch(material, matrices, 'Bridge panorama'));
+    }
+    scene.add(bridgePanorama);
+  }
+  if (bridgePanorama) bridgePanorama.visible = wide;
+}
 for (const bridge of layout.bridges) {
   const parts = new Map([[stone, [] as Matrix4[]], [timber, [] as Matrix4[]]]);
   function box(x: number, y: number, n: number, w: number, h: number, d: number, material: MeshLambertMaterial) {
@@ -130,11 +160,8 @@ for (const bridge of layout.bridges) {
   }
   for (const x of [center - 5, center + 5]) box(x, (bridge.height + 3.5) / 2, bridge.north, 1.5, bridge.height - 3.5, 6.75, stone);
   for (const [material, transforms] of parts) {
-    const batch = new InstancedMesh(bridgeGeometry, material, transforms.length);
-    batch.name = `bridge-${bridge.id}-${material === stone ? 'stone' : 'timber'}`;
-    transforms.forEach((matrix, index) => batch.setMatrixAt(index, matrix));
-    batch.computeBoundingSphere();
-    scene.add(batch);
+    detailedBridges.add(bridgeBatch(material, transforms, `bridge-${bridge.id}-${material === stone ? 'stone' : 'timber'}`));
+    bridgeMatrices.get(material)!.push(...transforms);
   }
 }
 
@@ -143,7 +170,7 @@ const builders: Record<string, Builder> = {
   clocktower: buildTowerLandmark, tavern: buildTavernLandmark, 'post-office': buildPostLandmark,
   memorial: buildMuseumLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
   'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
-  carousel: buildLakesideLandmark, glasshouse: buildLakesideLandmark,
+  glasshouse: buildLakesideLandmark,
   lighthouse: buildLakesideLandmark, stage: buildVillageLandmark,
 };
 type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps?: Ramp[] };
@@ -157,7 +184,7 @@ const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 function validBox({ min, max }: Box) {
   return [min, max].every(v => v.length === 3 && v.every(Number.isFinite)) && min.every((v, i) => v <= max[i]);
 }
-function place(plot: TownPlot, group: Group) {
+function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   const [x, n, y] = plot.origin;
   group.position.set(x, y, -n);
   group.name = plot.id;
@@ -165,7 +192,9 @@ function place(plot: TownPlot, group: Group) {
   architecture.set(plot.id, group);
   scene.add(group);
 }
-for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+for (const plot of layout.plots) {
+  if (plot.id !== 'carousel') place(plot, builders[plot.id](plot));
+}
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
 function museumToWorld(localX: number, localY: number, localZ: number) {
@@ -196,11 +225,80 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
 const slide = buildIcePlayProps();
 scene.add(slide);
 
+const bodyRadius = .27;
+const collisionCellSize = 16;
+const collisionStride = 1 + Math.ceil(worldBounds.width / collisionCellSize);
+const cellAt = (east: number, north: number) => Math.floor(east / collisionCellSize) +
+  collisionStride * Math.floor(north / collisionCellSize);
+type WalkGeometry = ReturnType<typeof readWalkGeometry>;
+const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
+let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
+let streetsRequested = false;
+
 function geometry() {
-  return [...architecture.values(), slide].map(readWalkGeometry);
+  const cells = new Map<number, WalkGeometry>();
+  function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
+    for (const box of boxes) {
+      const x0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
+      const x1 = Math.floor((box.max[0] + bodyRadius) / collisionCellSize);
+      const n0 = Math.floor((-box.max[2] - bodyRadius) / collisionCellSize);
+      const n1 = Math.floor((-box.min[2] + bodyRadius) / collisionCellSize);
+      for (let n = n0; n <= n1; n++) {
+        for (let x = x0; x <= x1; x++) {
+          const id = n * collisionStride + x;
+          let cell = cells.get(id);
+          if (!cell) {
+            cell = { colliders: [], floors: [], ramps: [] };
+            cells.set(id, cell);
+          }
+          append(cell, box);
+        }
+      }
+    }
+  }
+  const groups = [...architecture.values(), slide, railway.group];
+  if (extensionStreets) groups.push(extensionStreets.group);
+  for (const group of groups) {
+    const { colliders, floors, ramps } = readWalkGeometry(group);
+    index(colliders, (cell, box) => cell.colliders.push(box));
+    index(floors, (cell, box) => cell.floors.push(box));
+    index(ramps, (cell, ramp) => cell.ramps.push(ramp));
+  }
+  return cells;
 }
 let walkGeometry = geometry();
-status.textContent = `${architecture.size + districts.count} 处建筑与设施 · ${forest.count} 株树`;
+function geometryAt(east: number, north: number) {
+  return walkGeometry.get(cellAt(east, north)) ?? emptyGeometry;
+}
+function describeTown() {
+  const newBuildings = extensionStreets?.counts.buildings ?? 0;
+  const newTrees = extensionStreets?.counts.trees ?? 0;
+  status.textContent = `${architecture.size + districts.count + newBuildings} 处建筑与设施 · ${forest.count + newTrees} 株树`;
+}
+describeTown();
+
+const extensionBuilders: Record<string, () => Promise<Group>> = {
+  'railway-station': () => import('./landmark-station').then(module => module.buildRailwayStation()),
+  'coaster-station': () => import('./landmark-station').then(module => module.buildCoasterStation()),
+  'hot-spring': () => import('./landmark-hot-spring').then(module => module.buildHotSpring()),
+  'ice-castle': () => import('./landmark-ice-castle').then(module => module.buildIceCastle()),
+};
+const requestedPlots = new Set<string>();
+function prepareLandmarks(east: number, north: number, overview: boolean) {
+  const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) &&
+    (overview || Math.hypot(east - origin[0], north - origin[1]) < 148));
+  if (!plot) return;
+  requestedPlots.add(plot.id);
+  extensionBuilders[plot.id]().then(group => {
+    place(plot, group);
+    registerLandmarkActivities(plot.id, group);
+    walkGeometry = geometry();
+    describeTown();
+  }).catch(error => {
+    status.textContent = '新区建筑读取失败';
+    console.error(`Loading ${plot.id}`, error);
+  });
+}
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
@@ -208,6 +306,7 @@ async function loadBuildings() {
   const loader = new GLTFLoader();
   const results = await Promise.allSettled(models.map(async model => {
     const plot = layout.plots.find(item => item.id === model.id);
+    if (plot?.id === 'carousel') return;
     if (!plot || !/^[a-z0-9-]+\.glb$/.test(model.file)) throw new Error('无效地块或文件名');
     if (![...model.colliders, ...(model.floors ?? []), ...(model.ramps ?? [])].every(validBox)) throw new Error('无效碰撞范围');
     const { scene: modelScene } = await loader.loadAsync(new URL(model.file, assetBase).href);
@@ -239,10 +338,16 @@ const points = new Map<string, number[]>([
   ['东北坡地街巷', [319, 221]],
   ['冰湖雪球场', [350, 92.5]],
   ['东侧扩建步道', [443, 221]],
-  ['北侧扩建步道', [93, 378]],
+  ['北侧森林街区', [93, 378]],
+  ['火车站', [526, 305]],
+  ['环镇列车站', [469, 224]],
+  ['温泉浴场', [520, 156]],
+  ['冰雪城堡', [454, 75]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
-layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect));
+layout.plots.forEach((plot, i) => {
+  if (plot.id !== 'carousel') points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect);
+});
 for (const key of points.keys()) selector.add(new Option(key, key));
 
 const eye = 1.65;
@@ -274,7 +379,8 @@ let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let seated: (TownSeat & { pitch: number }) | undefined;
-let rideSpeed = 0;
+let rideYawOffset = 0;
+let ridePitch = 0;
 const lookAhead = new Vector3();
 const placeCard = element<HTMLDialogElement>('place-card');
 const activityPanel = element('town-activity-content');
@@ -284,7 +390,7 @@ const letterForm = element<HTMLFormElement>('letter-form');
 const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
-let captureTerrace = false;
+let photoFilename: string | undefined;
 const museumInspection = createMuseumInspection(renderer, camera.aspect);
 const museumLaunch = createMuseumLaunch(renderer, camera.aspect);
 const museumGuide = createMuseumGuide(scene, museumToWorld);
@@ -308,7 +414,7 @@ const museumVisit = createMuseumVisit(pauseForPanel, () => {
   riseSpeed = 0;
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
-  captureTerrace = true;
+  photoFilename = 'UNWRITTEN-2027-museum-terrace.png';
 }, inspectExhibit, museumGuide.setActive, complete => {
   pauseForPanel();
   museumLaunch.open(complete);
@@ -351,6 +457,7 @@ placeCard.addEventListener('close', () => renderer.domElement.focus());
 
 function leaveRide() {
   if (!boardingGround) return;
+  railway.disembark();
   ({ x, n, ground, yaw } = boardingGround);
   boardingGround = undefined;
   pitch = 0;
@@ -377,6 +484,12 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 const activities: TownActivity[] = [
   createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
+  (context: TownActivityContext) => createTownNpcActivity(context, grid.heightAt, feature => {
+    if (feature === 'spring') return architecture.has('hot-spring');
+    if (feature === 'castle') return architecture.has('ice-castle');
+    if (feature === 'rail' || feature === 'bell') return true;
+    return feature !== 'mixing';
+  }),
   (context: TownActivityContext) => createWindowActivity(context, architecture),
 ]
   .map(create => {
@@ -385,34 +498,82 @@ const activities: TownActivity[] = [
       announce(message) {
         if (!walking || !activity.spots.some(spot =>
           Math.abs(ground - spot.ground) < 1 && Math.hypot(x - spot.x, n - spot.n) < spot.range + 5)) return;
-        activityStatus.textContent = message;
-        window.clearTimeout(activityMessageTimer);
-        activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
+        announceActivity(message);
       },
     });
     return activity;
   });
+function announceActivity(message: string) {
+  activityStatus.textContent = message;
+  window.clearTimeout(activityMessageTimer);
+  activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
+}
 const activitySpots = activities.flatMap(activity => activity.spots);
-const tour = [
-  { x: 341, n: 106.3, radius: 4.25, maxHeight: 14, label: '坐上旋转木马', run() {
-    if (architecture.get('carousel')?.userData.rideSeat) {
-      resetMovement();
-      boardingGround = { x, n, ground, yaw };
+
+function localSpot(group: Group, [east, height, z]: readonly number[], range: number, label: string,
+  run: (x: number, n: number, ground: number) => void): TownActivitySpot {
+  const x = group.position.x + east;
+  const n = -group.position.z - z;
+  const ground = group.position.y + height;
+  return { x, n, ground, range, label, run: () => run(x, n, ground) };
+}
+const tower = architecture.get('clocktower')!;
+const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', number[]>;
+activitySpots.push(
+  localSpot(tower, towerStops.dial, 1.75, '查看钟楼表盘', () => {
+    activityContext.face(226, 218.08, 77);
+    announceActivity('表盘层 · 黄铜指针与传动齿轮');
+  }),
+  localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
+    if (festival.ringBell()) announceActivity('钟声已响');
+  }),
+  localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
+    activityContext.face(223, 179, 40);
+    photoFilename = 'UNWRITTEN-2027-clocktower.png';
+  }),
+);
+
+function registerLandmarkActivities(id: string, group: Group) {
+  if (id === 'hot-spring') {
+    const seats = group.userData.seats as number[][];
+    for (const [east, height, z] of seats) {
+      activitySpots.push(localSpot(group, [east, .25, z - .85], 1.4, '在温泉馆就座', (x, n, ground) => {
+        activityContext.sit({ x, n: n - .85, eyeY: ground + height + .98 - .25, yaw: 0 });
+      }));
     }
-  } },
+  } else if (id === 'ice-castle') {
+    activitySpots.push(localSpot(group, [15.8, .12, -.36], 1.75, '保存冰晶大殿取景', () => {
+      activityContext.face(503.13, 76.92, 14.2);
+      photoFilename = 'UNWRITTEN-2027-ice-castle.png';
+    }));
+  }
+}
+const tour = [
   { x: 262.1, n: 205.6, radius: 2.9, maxHeight: 15.6, label: '给 2027 写封信', run() {
     openPlace('写给 2027', '给未来的自己留一封信。寄存后可以在同一浏览器里回来读。', true);
   } },
 ];
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
-  if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
+  if (boardingGround) return { label: railway.atPlatform ? '下车' : '结束乘坐并回到站台', run: leaveRide };
   if (seated) return { label: '起身', run: leaveSeat };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
   const local = museumPosition();
   const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
+  const platform = railway.boarding;
+  if (architecture.has('coaster-station') && railway.atPlatform &&
+    Math.abs(ground - platform.ground) < 1.4 && Math.hypot(x - platform.x, n - platform.n) < 3.4) {
+    return { label: '乘坐环镇列车', run() {
+      resetMovement();
+      const platformFloor = supportAt(platform.x, platform.n, platform.ground + stepHeight);
+      boardingGround = { x: platform.x, n: platform.n, ground: platformFloor, yaw };
+      rideYawOffset = 0;
+      ridePitch = 0;
+      railway.board();
+    } };
+  }
   return nearestTownActivity(activitySpots, x, n, ground)
     ?? tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
 }
@@ -426,7 +587,9 @@ function jump() {
   const target = layout.plots[plotLabels.indexOf(selector.value)];
   const destinations: Record<string, readonly [number, number]> = {
     '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
-    '东侧扩建步道': [456, 222], '北侧扩建步道': [93, 384],
+    '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
+    '火车站': [526, 312], '环镇列车站': [478, 224],
+    '温泉浴场': [524, 158], '冰雪城堡': [460, 72],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
@@ -452,8 +615,8 @@ function mode(next: boolean) {
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (next) jump();
   else {
-    camera.position.set(465, 305, 122);
-    controls.target.set(220, 8, -195);
+    camera.position.set(540, 494, 177);
+    controls.target.set(320, 20, -254);
     controls.update();
   }
 }
@@ -484,11 +647,14 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !boardingGround && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated; }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround; }
 function turnView(horizontal: number, vertical: number) {
-  if (seated) {
+  if (boardingGround) {
+    rideYawOffset += horizontal;
+    ridePitch = Math.max(-1.42, Math.min(1.42, ridePitch + vertical));
+  } else if (seated) {
     seated.yaw += horizontal;
     seated.pitch = Math.max(-1.42, Math.min(1.42, seated.pitch + vertical));
   } else {
@@ -497,7 +663,7 @@ function turnView(horizontal: number, vertical: number) {
   }
 }
 const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView);
-const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView, () => seated?.pitch ?? pitch);
+const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView, () => boardingGround ? ridePitch : seated?.pitch ?? pitch);
 function requestJump() {
   if (!moveAllowed() || airHeight !== undefined) return;
   airHeight = ground;
@@ -518,7 +684,7 @@ addEventListener('keydown', e => {
     }
     return;
   }
-  if (seated && e.code === 'Escape') {
+  if ((seated || boardingGround) && e.code === 'Escape') {
     e.preventDefault();
     interact();
     return;
@@ -564,11 +730,11 @@ const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchP
 if (startInMuseum) selector.value = '纪念馆入口';
 mode(startInMuseum);
 let previous = performance.now();
+let widePanorama = false;
 function walkable(x: number, n: number) {
   return canEnter(x, n) && !scenery.blocked(x, n) && !districts.blocked(x, n)
     && !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
-const bodyRadius = .27;
 const bodyHeight = 1.8;
 const stepHeight = .43;
 const surfaceEpsilon = .025;
@@ -583,21 +749,20 @@ function overlapsBody(east: number, north: number, { min, max }: Box) {
 function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
   const z = -north;
   let height = grid.heightAt(east, north);
-  for (const { floors, ramps, colliders } of walkGeometry) {
-    for (const floor of floors) {
-      if (floor.max[1] <= limit && overlapsBody(east, north, floor)) height = Math.max(height, floor.max[1]);
-    }
-    for (const ramp of ramps) {
-      if (east < ramp.min[0] || east > ramp.max[0] || z < ramp.min[2] || z > ramp.max[2]) continue;
-      const axis = ramp.axis === 'x' ? 0 : 2;
-      const fraction = ((axis === 0 ? east : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
-      const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? fraction : 1 - fraction);
-      if (top <= limit) height = Math.max(height, top);
-    }
-    if (solidLimit > -Infinity) {
-      for (const solid of colliders) {
-        if (solid.max[1] <= solidLimit && overlapsBody(east, north, solid)) height = Math.max(height, solid.max[1]);
-      }
+  const { floors, ramps, colliders } = geometryAt(east, north);
+  for (const floor of floors) {
+    if (floor.max[1] <= limit && overlapsBody(east, north, floor)) height = Math.max(height, floor.max[1]);
+  }
+  for (const ramp of ramps) {
+    if (east < ramp.min[0] || east > ramp.max[0] || z < ramp.min[2] || z > ramp.max[2]) continue;
+    const axis = ramp.axis === 'x' ? 0 : 2;
+    const fraction = ((axis === 0 ? east : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
+    const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? fraction : 1 - fraction);
+    if (top <= limit) height = Math.max(height, top);
+  }
+  if (solidLimit > -Infinity) {
+    for (const solid of colliders) {
+      if (solid.max[1] <= solidLimit && overlapsBody(east, north, solid)) height = Math.max(height, solid.max[1]);
     }
   }
   return height;
@@ -606,8 +771,9 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
 function obstructed(east: number, north: number, feet: number) {
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+  const { colliders, floors } = geometryAt(east, north);
   return activities.some(activity => activity.blocked?.(east, north, feet)) ||
-    walkGeometry.some(({ colliders, floors }) => colliders.some(intersects) || floors.some(intersects));
+    colliders.some(intersects) || floors.some(intersects);
 }
 
 function tryMove(nextX: number, nextN: number) {
@@ -640,10 +806,9 @@ function stepJump(dt: number) {
         ceiling = box.min[1];
       }
     }
-    for (const { floors, colliders } of walkGeometry) {
-      floors.forEach(checkCeiling);
-      colliders.forEach(checkCeiling);
-    }
+    const { floors, colliders } = geometryAt(x, n);
+    floors.forEach(checkCeiling);
+    colliders.forEach(checkCeiling);
     if (ceiling < next + bodyHeight) {
       airHeight = Math.max(feet, ceiling - bodyHeight);
       riseSpeed = 0;
@@ -672,24 +837,20 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
-  const carousel = architecture.get('carousel');
-  const pivot = carousel?.userData.ridePivot as Object3D | undefined;
-  const seat = carousel?.userData.rideSeat as Object3D | undefined;
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
-  if (boardingGround && !seat) leaveRide();
-  rideSpeed += Math.min(1, dt * 1.8) * ((boardingGround ? .51 : 0) - rideSpeed);
-  if (pivot) pivot.rotation.y = (pivot.rotation.y + rideSpeed * dt) % (Math.PI * 2);
+  railway.update(dt);
   if (beacon) {
     beacon.visible = nightMode;
     if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
   }
   if (museumOverlay()) {
     element('position').textContent = '';
-  } else if (walking && boardingGround && seat) {
-    seat.getWorldPosition(camera.position);
-    seat.getWorldDirection(lookAhead);
-    camera.lookAt(lookAhead.negate().add(camera.position));
-    element('position').textContent = '旋转木马 · 乘坐中';
+  } else if (walking && boardingGround) {
+    railway.view.getWorldPosition(camera.position);
+    railway.view.getWorldDirection(lookAhead);
+    const heading = Math.atan2(lookAhead.x, -lookAhead.z);
+    faceFrom(camera.position.x, -camera.position.z, camera.position.y, heading + rideYawOffset, ridePitch);
+    element('position').textContent = railway.atPlatform ? '环镇列车 · 已到站' : '环镇列车 · 乘坐中';
   } else if (walking && seated) {
     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
     element('position').textContent = '已就座';
@@ -718,8 +879,38 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
-  prepareTerrain(camera.position.x, -camera.position.z, !walking);
+  const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
+  widePanorama = wideView;
+  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView);
+  forest.setPanorama(wideView);
+  showWideBridges(wideView);
+  railway.setPanorama(wideView);
+  const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
+  if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+  prepareLandmarks(camera.position.x, -camera.position.z, !walking);
+  if (!streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
+    streetsRequested = true;
+    import('./extension-streets').then(({ buildExtensionStreets }) => {
+      extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
+      scene.add(extensionStreets.group);
+      walkGeometry = geometry();
+      describeTown();
+    }).catch(error => {
+      status.textContent = '新区街景读取失败';
+      console.error('Loading extension streets', error);
+    });
+  }
+  extensionStreets?.update(camera, wideView);
+  const baths = architecture.get('hot-spring');
+  if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
+  const museum = architecture.get('memorial');
+  const interior = museum?.userData.detailInterior as Group | undefined;
+  if (interior && museum) {
+    interior.visible = Math.abs(camera.position.x - museumEast) < 48 &&
+      Math.abs(camera.position.z + museumNorth) < 43 &&
+      camera.position.y - museumHeight < 16;
+  }
   updateMuseumLights(dt, camera.position);
   const local = museumPosition();
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
@@ -740,14 +931,15 @@ renderer.setAnimationLoop(now => {
   if (museumLaunch.active) { museumLaunch.update(frameSeconds); museumLaunch.render(); }
   else if (museumInspection.active) museumInspection.render();
   else renderer.render(scene, camera);
-  if (captureTerrace) {
-    captureTerrace = false;
+  if (photoFilename) {
+    const filename = photoFilename;
+    photoFilename = undefined;
     renderer.domElement.toBlob(blob => {
       if (!blob) return;
       const photo = document.createElement('a');
       const url = URL.createObjectURL(blob);
       photo.href = url;
-      photo.download = 'UNWRITTEN-2027-museum-terrace.png';
+      photo.download = filename;
       document.body.append(photo);
       photo.click();
       photo.remove();

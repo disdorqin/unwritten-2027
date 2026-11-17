@@ -98,6 +98,7 @@ export function createFestival(scene: Scene, setMessage: (message: string) => vo
   let used = 0;
   let message = '';
   let audio: AudioContext | undefined;
+  let nextManualBell = 0;
   const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function announce(next: string) {
@@ -109,7 +110,7 @@ export function createFestival(scene: Scene, setMessage: (message: string) => vo
   function tryEnableAudio() {
     try {
       audio ??= new AudioContext();
-      if (audio.state !== 'running') void audio.resume().catch(() => {});
+      return audio.state === 'running' ? Promise.resolve() : audio.resume().catch(() => {});
     } catch {
       // Browser permission and Web Audio availability do not affect the show.
     }
@@ -170,6 +171,14 @@ export function createFestival(scene: Scene, setMessage: (message: string) => vo
       elapsed = 0;
       tryEnableAudio();
       announce('3');
+      return true;
+    },
+    ringBell() {
+      if (elapsed >= 0) return false;
+      const now = performance.now();
+      if (now < nextManualBell) return false;
+      nextManualBell = now + 10500;
+      void tryEnableAudio()?.then(() => { if (audio && elapsed < 0) playTowerChime(audio, 0, 1); });
       return true;
     },
     active() { return elapsed >= 0; },

@@ -1,6 +1,6 @@
 import {
   BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, IcosahedronGeometry,
-  InstancedMesh, MeshLambertMaterial, Object3D, Quaternion, Vector3, type Group,
+  InstancedMesh, Group, MeshLambertMaterial, Object3D, Quaternion, Vector3,
 } from 'three';
 import { isWater, layout, riverX, type createTerrainGrid } from './terrain';
 
@@ -94,7 +94,7 @@ function batchByCell(parent: Group, geometry: BufferGeometry, material: MeshLamb
   }
 }
 
-export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepClear) {
+export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepClear, reserve?: KeepClear) {
   let seed = 47831;
   function random() {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -221,10 +221,15 @@ export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepCl
       const radius = h * (.20 + random() * .074);
       if (!isClear(x, n, radius) || nearby(x, n, 8, (distance, spacing) => distance < (radius + spacing) * .79)) continue;
       const y = grid.heightAt(x, n);
+      const layers = [trunks, crowns, snowCaps, buds];
+      const before = layers.map(layer => layer.length);
       if (random() < birchChance) placeBirch(x, y, -n, h * .79, density < .55 && random() < .23);
       else placePine(x, y, -n, h, radius);
-      occupy(x, n, radius, h * .040);
-      count++;
+      const reserved = reserve?.(x, n, radius);
+      // Consume the same seed and spacing even when a new corridor intersects an old tree.
+      if (reserved) layers.forEach((layer, index) => { layer.length = before[index]; });
+      occupy(x, n, radius, reserved ? 0 : h * .040);
+      if (!reserved) count++;
     }
   }
 
@@ -240,19 +245,40 @@ export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepCl
       if (!isClear(east, north, r) || nearby(east, north, 8, (distance, spacing) => distance < (r + spacing) * .74)) continue;
       const h = r * (.65 + random() * .52);
       const yaw = random() * Math.PI * 2;
-      rocks.push({ at: [east, y + h * .19, -north], scale: [r, h, r * .83], color: pick(granites), turn: yaw });
-      rockSnow.push({ at: [east, y + h * .62, -north], scale: [r * .94, h * .43, r * .81], color: pick(needles), turn: yaw });
-      if (r > 1.15) occupy(east, north, r, r * .64);
+      const rockTint = pick(granites);
+      const snowTint = pick(needles);
+      const reserved = reserve?.(east, north, r);
+      if (!reserved) {
+        rocks.push({ at: [east, y + h * .19, -north], scale: [r, h, r * .83], color: rockTint, turn: yaw });
+        rockSnow.push({ at: [east, y + h * .62, -north], scale: [r * .94, h * .43, r * .81], color: snowTint, turn: yaw });
+      }
+      if (r > 1.15) occupy(east, north, r, reserved ? 0 : r * .64);
     }
   }
 
   const material = new MeshLambertMaterial({ color: '#ffffff', flatShading: true });
-  batchByCell(parent, new CylinderGeometry(.28, .60, 1, 5), material, trunks, 'Forest trunks and branches');
-  batchByCell(parent, shape([[-.32, .14, .025], [-.27, .96, .065], [-.05, .80, .044], [.38, .15, .014], [.50, 0, 0]], 7), material, crowns, 'Snow forest pine crowns');
-  batchByCell(parent, shape([[-.17, .86, .067], [-.082, .86, .055], [.38, .173, .013], [.522, 0, 0]], 7), material, snowCaps, 'Pine bough snow');
-  batchByCell(parent, new IcosahedronGeometry(1, 0), material, [...rocks, ...rockSnow, ...buds], 'Forest stones, snow and flowers');
+  const detailed = new Group();
+  parent.add(detailed);
+  batchByCell(detailed, new CylinderGeometry(.28, .60, 1, 5), material, trunks, 'Forest trunks and branches');
+  batchByCell(detailed, shape([[-.32, .14, .025], [-.27, .96, .065], [-.05, .80, .044], [.38, .15, .014], [.50, 0, 0]], 7), material, crowns, 'Snow forest pine crowns');
+  batchByCell(detailed, shape([[-.17, .86, .067], [-.082, .86, .055], [.38, .173, .013], [.522, 0, 0]], 7), material, snowCaps, 'Pine bough snow');
+  batchByCell(detailed, new IcosahedronGeometry(1, 0), material, [...rocks, ...rockSnow, ...buds], 'Forest stones, snow and flowers');
+  let panorama: Group | undefined;
   return {
     count,
-    blocked: (x: number, north: number) => nearby(x, north, 4, (distance, _spacing, collision) => distance < collision + .24),
+    setPanorama(wide: boolean) {
+      detailed.visible = !wide;
+      if (!panorama && wide) {
+        panorama = new Group();
+        panorama.name = 'Snow forest panorama';
+        batch(panorama, new CylinderGeometry(.28, .60, 1, 4), material, trunks, 'Forest panorama trunks');
+        batch(panorama, shape([[-.32, .14, .02], [-.27, .96, .06], [.50, 0, 0]], 5), material, crowns, 'Forest panorama crowns');
+        batch(panorama, shape([[-.15, .87, .06], [.522, 0, 0]], 5), material, snowCaps, 'Forest panorama snow');
+        batch(panorama, new IcosahedronGeometry(1, 0), material, [...rocks, ...rockSnow, ...buds], 'Forest panorama stones');
+        parent.add(panorama);
+      }
+      if (panorama) panorama.visible = wide;
+    },
+    blocked: (x: number, north: number) => nearby(x, north, 4, (distance, _spacing, collision) => collision > 0 && distance < collision + .24),
   };
 }

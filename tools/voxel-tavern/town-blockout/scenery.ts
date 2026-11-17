@@ -1,7 +1,7 @@
 import {
-  AdditiveBlending, BoxGeometry, CanvasTexture, Color,
+  AdditiveBlending, BoxGeometry, BufferGeometry, CanvasTexture, Color, Float32BufferAttribute,
   Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight, Vector3,
-  Sprite, SpriteMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
+  Points, PointsMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
 } from 'three';
 import { canEnter, layout } from './terrain';
 
@@ -35,15 +35,15 @@ function makeGlows(group: Group, positions: Position[]) {
   ctx.fillRect(0, 0, 64, 64);
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
-  const material = new SpriteMaterial({
+  const material = new PointsMaterial({
     map: texture, blending: AdditiveBlending, transparent: true, depthWrite: false, opacity: .85,
+    size: 5 / Math.tan(58 * Math.PI / 360),
   });
-  for (const spot of positions) {
-    const glow = new Sprite(material);
-    glow.position.set(...spot);
-    glow.scale.set(5, 5, 1);
-    group.add(glow);
-  }
+  const buffer = new BufferGeometry();
+  buffer.setAttribute('position', new Float32BufferAttribute(positions.flat(), 3));
+  const glow = new Points(buffer, material);
+  glow.name = 'Street lamp glows';
+  group.add(glow);
   return material;
 }
 

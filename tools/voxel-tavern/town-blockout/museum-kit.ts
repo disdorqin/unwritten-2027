@@ -15,7 +15,16 @@ const up = new Vector3(0, 1, 0);
 export function createMuseumBuilder() {
   const group = new Group();
   group.scale.set(museumHorizontalScale, 1, museumHorizontalScale);
-  const chunks = [false, true].map(() => ({ matrices: [] as Matrix4[], colors: [] as Color[] }));
+  const interior = new Group();
+  interior.name = 'Museum interior exhibits';
+  let mounting = group;
+  const chunkPair = () => [false, true].map(() => ({ matrices: [] as Matrix4[], colors: [] as Color[] }));
+  const chunks = new Map([[group, chunkPair()], [interior, chunkPair()]]);
+  function detailInterior(build: () => void) {
+    mounting = interior;
+    try { build(); }
+    finally { mounting = group; }
+  }
   const panels = { positions: [] as number[], colors: [] as number[] };
   const transform = new Object3D();
   const rotation = new Quaternion();
@@ -30,7 +39,7 @@ export function createMuseumBuilder() {
     transform.quaternion.copy(orientation);
     transform.scale.set(w, h, d);
     transform.updateMatrix();
-    const target = chunks[Number(luminous)];
+    const target = chunks.get(mounting)![Number(luminous)];
     target.matrices.push(transform.matrix.clone());
     target.colors.push(new Color(paint));
   }
@@ -102,21 +111,27 @@ export function createMuseumBuilder() {
     const mesh = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture, transparent: background === 'transparent' }));
     mesh.position.set(x, y, z);
     mesh.rotation.y = ry;
-    group.add(mesh);
+    mounting.add(mesh);
   }
   function light(x: number, y: number, z: number, color: string, power: number, distance: number) {
     lights.push({ position: [x, y, z], color, power, distance });
   }
   function finish() {
     const geometry = new BoxGeometry();
-    chunks.forEach(({ matrices, colors }, index) => {
-      if (!matrices.length) return;
-      const material = index ? new MeshBasicMaterial() : new MeshLambertMaterial();
-      const mesh = new InstancedMesh(geometry, material, matrices.length);
-      matrices.forEach((matrix, i) => { mesh.setMatrixAt(i, matrix); mesh.setColorAt(i, colors[i]); });
-      mesh.computeBoundingSphere();
-      group.add(mesh);
-    });
+    for (const [section, pair] of chunks) {
+      pair.forEach(({ matrices, colors }, index) => {
+        if (!matrices.length) return;
+        const material = index ? new MeshBasicMaterial() : new MeshLambertMaterial();
+        const mesh = new InstancedMesh(geometry, material, matrices.length);
+        matrices.forEach((matrix, i) => { mesh.setMatrixAt(i, matrix); mesh.setColorAt(i, colors[i]); });
+        mesh.computeBoundingSphere();
+        section.add(mesh);
+      });
+    }
+    if (interior.children.length) {
+      group.add(interior);
+      group.userData.detailInterior = interior;
+    }
     if (panels.positions.length) {
       const surfaces = new BufferGeometry();
       surfaces.setAttribute('position', new Float32BufferAttribute(panels.positions, 3));
@@ -134,5 +149,5 @@ export function createMuseumBuilder() {
     });
     return group;
   }
-  return { group, box, detailBox, solid, collider, floor, beam, panel, label, light, ramps, finish };
+  return { group, box, detailBox, detailInterior, solid, collider, floor, beam, panel, label, light, ramps, finish };
 }

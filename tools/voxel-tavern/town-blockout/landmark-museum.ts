@@ -21,10 +21,12 @@ function addFloors(m: MuseumBuilder) {
       }
     }
   }
-  tiled(.28, -20, 20, -14, 13.2);
-  tiled(5.65, -20, 14.6, -14, 13.1);
-  tiled(5.65, 14.6, 20, -14, -8.8);
-  tiled(5.65, 14.6, 20, 8.8, 13.1);
+  m.detailInterior(() => {
+    tiled(.28, -20, 20, -14, 13.2);
+    tiled(5.65, -20, 14.6, -14, 13.1);
+    tiled(5.65, 14.6, 20, -14, -8.8);
+    tiled(5.65, 14.6, 20, 8.8, 13.1);
+  });
   tiled(.11, -9, 9, 13.2, 18.6);
   for (const x of [-2.05, 2.05]) {
     m.box(corridor, x, .288, 1.8, .055, .017, 23.2);
@@ -110,8 +112,10 @@ export function buildMuseumLandmark() {
   addFloors(m);
   addMuseumShell(m);
   addStairs(m);
-  addMuseumTimeline(m);
-  addMuseumNetwork(m);
+  m.detailInterior(() => {
+    addMuseumTimeline(m);
+    addMuseumNetwork(m);
+  });
   addMuseumTerrace(m);
   addMuseumTrim(m);
   addMuseumForecourt(m);

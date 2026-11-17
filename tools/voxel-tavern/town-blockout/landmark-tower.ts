@@ -23,7 +23,9 @@ const colors: Record<string, string> = {
 export function buildTowerLandmark(plot: TownPlot): Group {
   const tower = new Group();
   tower.name = 'Clocktower · 96 m';
-  const parts = new Map<string, Cuboid[]>();
+  const shellParts = new Map<string, Cuboid[]>();
+  const interiorParts = new Map<string, Cuboid[]>();
+  let parts = shellParts;
   const colliders: Bounds[] = [];
   const floors: Bounds[] = [];
   const unit = new BoxGeometry(1, 1, 1);
@@ -198,6 +200,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     shaftWalls(80.875 + course * .625, 81.5 + course * .625, outer - .3125, outer);
   }
 
+  parts = interiorParts;
   const unit32 = 1 / 32;
   const snap = (value: number) => Math.round(value / unit32) * unit32;
   function deck(x0: number, z0: number, x1: number, z1: number, y: number) {
@@ -448,6 +451,8 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     box('brass', snap(Math.sin(a) * 1.661), bellBase + .3125, snap(Math.cos(a) * 1.661), unit32, .09375, unit32);
   }
   box('iron', -.09375, bellBase - .1875, -.09375, .1875, 3.5, .1875);
+  box('oakEnd', .86375, bellY + 1.35, .625, .055, 3.65, .055);
+  box('brass', .80125, bellY + 1.2, .5625, .18, .20, .18);
   box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);
   box('oak', -2.1875, bellBase + 3.375, -.375, 4.375, .375, .75);
   box('wood', -.28125, bellBase + 3.3125, -2.1875, .5625, .46875, 4.375);
@@ -468,23 +473,43 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     tower.add(light);
   }
 
-  for (const [kind, cubes] of parts) {
-    const emissive = kind === 'glow' ? '#f59b28' : kind === 'gold' ? '#44250d' : '#000000';
-    const material = new MeshLambertMaterial({ emissive, emissiveIntensity: kind === 'glow' ? .85 : .18 });
-    const mesh = new InstancedMesh(unit, material, cubes.length);
-    const tint = new Color();
-    cubes.forEach(({ at, size, tone }, i) => {
-      matrix.compose(base.set(...at), rotation, sizing.set(...size));
-      mesh.setMatrixAt(i, matrix);
-      mesh.setColorAt(i, tint.set(colors[kind] ?? colors.limestone).multiplyScalar(tone));
-    });
-    mesh.name = kind;
-    tower.add(mesh);
+  function addBatches(target: Group, components: Map<string, Cuboid[]>) {
+    const meshes = new Map<string, [string, Cuboid[]][]>();
+    for (const [kind, cubes] of components) {
+      const light = kind === 'glow' || kind === 'gold' ? kind : 'opaque';
+      const grouped = meshes.get(light);
+      if (grouped) grouped.push([kind, cubes]);
+      else meshes.set(light, [[kind, cubes]]);
+    }
+    for (const [light, grouped] of meshes) {
+      const emissive = light === 'glow' ? '#f59b28' : light === 'gold' ? '#44250d' : '#000000';
+      const material = new MeshLambertMaterial({ emissive, emissiveIntensity: light === 'glow' ? .85 : .18 });
+      const mesh = new InstancedMesh(unit, material, grouped.reduce((total, [, cubes]) => total + cubes.length, 0));
+      const tint = new Color();
+      let index = 0;
+      for (const [kind, cubes] of grouped) {
+        for (const { at, size, tone } of cubes) {
+          mesh.setMatrixAt(index, matrix.compose(base.set(...at), rotation, sizing.set(...size)));
+          mesh.setColorAt(index, tint.set(colors[kind] ?? colors.limestone).multiplyScalar(tone));
+          index++;
+        }
+      }
+      mesh.computeBoundingSphere();
+      mesh.name = light;
+      target.add(mesh);
+    }
   }
+  addBatches(tower, shellParts);
+  const detailInterior = new Group();
+  detailInterior.name = 'Tower stairs and interiors';
+  addBatches(detailInterior, interiorParts);
+  tower.add(detailInterior);
+  tower.userData.detailInterior = detailInterior;
   const hallLight = new PointLight('#ffad63', 86, 14, 2);
   hallLight.position.set(0, 5, 2.75);
   tower.add(hallLight);
   tower.userData.colliders = colliders;
   tower.userData.floors = floors;
+  tower.userData.stops = { dial: [0, dialY, 1.25], bell: [.65, bellY, .65], lookout: [1, lookoutY, 1.3] };
   return tower;
 }

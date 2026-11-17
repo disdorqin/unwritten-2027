@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, CylinderGeometry, Group, IcosahedronGeometry, Mesh, MeshBasicMaterial,
+  BoxGeometry, CanvasTexture, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, PlaneGeometry, SRGBColorSpace, Vector3,
 } from 'three';
 import type { TownActivity, TownActivityContext } from './town-activity';
@@ -121,6 +121,28 @@ export function createIceActivity(context: TownActivityContext): TownActivity {
     }
     return { x, y, lamp };
   });
+  lane.updateMatrixWorld(true);
+  const toLocal = lane.matrixWorld.clone().invert();
+  const batches = new Map<string, Mesh[]>();
+  lane.traverse(object => {
+    if (!(object instanceof Mesh) || Array.isArray(object.material) ||
+      (object.geometry !== box && object.geometry !== disc && object.geometry !== pile)) return;
+    const key = `${object.geometry.id}/${object.material.id}`;
+    const items = batches.get(key);
+    if (items) items.push(object);
+    else batches.set(key, [object]);
+  });
+  const matrix = new Matrix4();
+  for (const pieces of batches.values()) {
+    if (pieces.length < 2) continue;
+    const batch = new InstancedMesh(pieces[0].geometry, pieces[0].material, pieces.length);
+    pieces.forEach((piece, index) => {
+      batch.setMatrixAt(index, matrix.multiplyMatrices(toLocal, piece.matrixWorld));
+      piece.removeFromParent();
+    });
+    batch.computeBoundingSphere();
+    lane.add(batch);
+  }
   const ball = new Mesh(new IcosahedronGeometry(.25, 1), snow);
   ball.name = 'snowball-projectile';
   ball.visible = false;

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Color, Mesh, MeshLambertMaterial, type Object3D } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshLambertMaterial, type Object3D } from 'three';
 import { gridStep, layout, type createTerrainGrid } from './terrain';
 
 const terrainChunkCells = 64 / gridStep;
@@ -11,11 +11,13 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
   const material = new MeshLambertMaterial({ vertexColors: true });
 
   const pending: { east: number; north: number }[] = [];
+  const detailed = new Group();
+  detailed.name = 'Walkable terrain';
+  parent.add(detailed);
+  let wideTerrain: Mesh | undefined;
 
-  function addChunk(east: number, north: number) {
-    const northEnd = Math.min(north + terrainChunkCells, cellDepth);
-    const eastEnd = Math.min(east + terrainChunkCells, cellWidth);
-    const length = (eastEnd - east) * (northEnd - north) * 18;
+  function createChunk(east: number, north: number, eastEnd: number, northEnd: number, stride = 1) {
+    const length = Math.ceil((eastEnd - east) / stride) * Math.ceil((northEnd - north) / stride) * 18;
     const position = new Float32Array(length);
     const colors = new Float32Array(length);
     let offset = 0;
@@ -40,12 +42,12 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       vertex(c, color, shade);
     }
 
-    for (let j = north; j < northEnd; j++) {
-      for (let i = east; i < eastEnd; i++) {
+    for (let j = north; j < northEnd; j += stride) {
+      for (let i = east; i < eastEnd; i += stride) {
         const a = j * gridWidth + i;
-        const b = a + 1;
-        const c = a + gridWidth;
-        const d = c + 1;
+        const b = a + Math.min(stride, eastEnd - i);
+        const c = a + Math.min(stride, northEnd - j) * gridWidth;
+        const d = c + (b - a);
         const variation = Math.sin(i * 83.01 + j * 39.17) + 1;
         // Same split as heightAt and same world-space shade on both sides of each chunk seam.
         triangle(a, b, c, variation);
@@ -60,7 +62,11 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     geometry.computeBoundingSphere();
     const mesh = new Mesh(geometry, material);
     mesh.name = `Terrain ${east * gridStep},${north * gridStep}`;
-    parent.add(mesh);
+    return mesh;
+  }
+
+  function addChunk(east: number, north: number) {
+    detailed.add(createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth)));
   }
 
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
@@ -70,7 +76,18 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
   }
 
-  return function prepareTerrain(x: number, n: number, overview: boolean) {
+  return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean) {
+    detailed.visible = !wide;
+    if (wide) {
+      if (!wideTerrain) {
+        wideTerrain = createChunk(0, 0, cellWidth, cellDepth, 3);
+        wideTerrain.name = 'Terrain panorama';
+        parent.add(wideTerrain);
+      }
+      wideTerrain.visible = true;
+      return;
+    }
+    if (wideTerrain) wideTerrain.visible = false;
     for (let count = 0; count < (overview ? 3 : 1); count++) {
       let nearest = -1;
       let distance = overview ? Infinity : 128;

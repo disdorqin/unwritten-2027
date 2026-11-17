@@ -9,7 +9,8 @@ type Road = { id: string; width: number; points: Point[] };
 type Plot = { id: string; origin: Point; footprint: [width: number, depth: number] };
 
 export const extensionRoads: Road[] = [
-  { id: 'coaster-approach', width: 6, points: [[382, 220, 20], [411, 220, 20], [445, 221, 19], [456, 222, 19], [464, 224, 19]] },
+  // Curve south around the existing house at (410, 219), keeping a full-width walking lane.
+  { id: 'coaster-approach', width: 6, points: [[382, 220, 20], [398, 207, 17.43], [410, 207, 16.26], [427, 214, 15.52], [445, 221, 15.92], [456, 222, 19], [464, 224, 19]] },
   { id: 'station-approach', width: 7, points: [[456, 222, 19], [453, 254, 21], [473, 276, 22], [506, 286, 24], [526, 312, 26]] },
   { id: 'hot-spring-approach', width: 6, points: [[374, 129, 11], [402, 132, 11], [445, 136, 12], [479, 139, 13], [504, 150, 15], [524, 158, 15]] },
   { id: 'ice-castle-approach', width: 6, points: [[445, 136, 12], [446, 107, 12], [447, 80, 12], [460, 72, 12]] },
@@ -30,6 +31,14 @@ const roadSegments = extensionRoads.flatMap(({ points, width }) => points.slice(
 }));
 
 const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
+
+export function extensionRoadClearance(x: number, north: number, margin: number) {
+  return roadSegments.some(({ ax, an, dx, dn, lengthSquared, halfWidth }) => {
+    const px = x - ax, pn = north - an;
+    const t = clampUnit((px * dx + pn * dn) / lengthSquared);
+    return Math.hypot(px - t * dx, pn - t * dn) < halfWidth + margin;
+  });
+}
 function smooth(value: number) {
   const t = clampUnit(value);
   return t * t * (3 - 2 * t);
@@ -57,7 +66,8 @@ export function sampleExtension(x: number, north: number, elevation: number) {
   for (const { origin: [cx, cn, height], footprint: [width, depth] } of extensionPlots) {
     const outside = Math.hypot(Math.max(0, Math.abs(x - cx) - width / 2), Math.max(0, Math.abs(north - cn) - depth / 2));
     const transitionWidth = Math.min(24, Math.max(cx - width / 2 - layout.width, cn - depth / 2 - layout.depth));
-    elevation += (height - elevation) * smooth(distanceOutside / transitionWidth) * (1 - smooth(outside / 6));
+    // Give pedestrians a broad snow shoulder before each flat landmark apron.
+    elevation += (height - elevation) * smooth(distanceOutside / transitionWidth) * (1 - smooth(outside / 14));
     plot ||= outside === 0;
   }
   if (!plot) elevation += (roadHeight - elevation) * blend * (1 - smooth(roadEdge / 5));
