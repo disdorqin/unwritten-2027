@@ -26,6 +26,13 @@ import { createTouchWalk } from './touch-walk';
 import { terraceStop } from './museum-terrace';
 import { createMuseumInspection } from './museum-inspection';
 import { museumHorizontalScale } from './museum-scale';
+import { nearestTownActivity, type TownActivityContext, type TownSeat } from './town-activity';
+import { createTavernActivity } from './tavern-activity';
+import { createPostActivity } from './post-activity';
+import { createStageActivity } from './stage-activity';
+import { createMarketActivity } from './market-activity';
+import { createIceActivity } from './ice-activity';
+import { createWishActivity } from './wish-activity';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -248,6 +255,7 @@ const points = new Map<string, number[]>([
   ['东南游乐区', layout.roads[3].points.at(-1)!],
   ['西南河畔街巷', [161.5, 165.5]],
   ['东北坡地街巷', [319, 221]],
+  ['冰湖雪球场', [350, 92.5]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
 layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect));
@@ -272,9 +280,13 @@ let yaw = 0;
 let pitch = 0;
 let ground = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
+let seated: (TownSeat & { pitch: number }) | undefined;
 let rideSpeed = 0;
 const lookAhead = new Vector3();
 const placeCard = element<HTMLDialogElement>('place-card');
+const activityPanel = element('town-activity-content');
+const activityStatus = element('town-activity-status');
+let activityMessageTimer: number | undefined;
 const letterForm = element<HTMLFormElement>('letter-form');
 const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
@@ -311,12 +323,15 @@ function openPlace(title: string, description: string, writing = false) {
   element('place-title').textContent = title;
   element('place-text').textContent = description;
   letterForm.hidden = !writing;
+  activityPanel.hidden = writing;
+  activityPanel.replaceChildren();
   if (writing) {
     letterReceipt.textContent = '';
     try { letterBody.value = localStorage.getItem(letterKey) ?? ''; }
     catch { letterBody.value = ''; }
   }
-  placeCard.showModal();
+  if (!placeCard.open) placeCard.showModal();
+  return activityPanel;
 }
 letterForm.onsubmit = event => {
   event.preventDefault();
@@ -337,6 +352,40 @@ function leaveRide() {
   boardingGround = undefined;
   pitch = 0;
 }
+function leaveSeat() {
+  if (!seated) return;
+  seated = undefined;
+  resetMovement();
+}
+const activityContext: Omit<TownActivityContext, 'announce'> = {
+  scene,
+  open: openPlace,
+  sit(seat) {
+    resetMovement();
+    seated = { ...seat, pitch: 0 };
+  },
+  face(east, north, height) {
+    resetMovement();
+    yaw = Math.atan2(east - x, north - n);
+    const distance = Math.hypot(east - x, north - n);
+    pitch = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42, Math.atan2(height - ground - eye, distance)));
+  },
+};
+const activities = [createTavernActivity, createPostActivity, createStageActivity, createMarketActivity, createIceActivity, createWishActivity]
+  .map(create => {
+    const activity = create({
+      ...activityContext,
+      announce(message) {
+        if (!walking || !activity.spots.some(spot =>
+          Math.abs(ground - spot.ground) < 1 && Math.hypot(x - spot.x, n - spot.n) < spot.range + 5)) return;
+        activityStatus.textContent = message;
+        window.clearTimeout(activityMessageTimer);
+        activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
+      },
+    });
+    return activity;
+  });
+const activitySpots = activities.flatMap(activity => activity.spots);
 const tour = [
   { x: 341, n: 106.3, radius: 4.25, maxHeight: 14, label: '坐上旋转木马', run() {
     if (architecture.get('carousel')?.userData.rideSeat) boardingGround = { x, n, ground, yaw };
@@ -348,11 +397,13 @@ const tour = [
 function currentAction() {
   if (!walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
+  if (seated) return { label: '起身', run: leaveSeat };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   const local = museumPosition();
   const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
-  return tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
+  return nearestTownActivity(activitySpots, x, n, ground)
+    ?? tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
 }
 function interact() {
   currentAction()?.run();
@@ -362,13 +413,16 @@ actionButton.onclick = interact;
 function jump() {
   [x, n] = points.get(selector.value)!;
   const target = layout.plots[plotLabels.indexOf(selector.value)];
-  const [east, north] = target?.door ?? (selector.value === '西南河畔街巷' ? [131, 141] : [226, 223]);
+  const destinations: Record<string, readonly [number, number]> = { '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79] };
+  const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
   ground = grid.heightAt(x, n);
   pitch = 0;
 }
 function mode(next: boolean) {
   leaveRide();
+  leaveSeat();
+  activityStatus.textContent = '';
   walking = next;
   museumInspection.close();
   controls.enabled = !next;
@@ -419,11 +473,16 @@ addEventListener('keydown', e => {
     }
     return;
   }
+  if (seated && e.code === 'Escape') {
+    e.preventDefault();
+    interact();
+    return;
+  }
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
   }
-  if (walking && !boardingGround && moveKeys.has(e.code)) {
+  if (walking && !boardingGround && !seated && moveKeys.has(e.code)) {
     keys.add(e.code);
     e.preventDefault();
   }
@@ -439,8 +498,15 @@ renderer.domElement.addEventListener('pointerdown', e => {
 renderer.domElement.addEventListener('pointermove', e => {
   if (!walking || looking?.id !== e.pointerId) return;
   const scale = e.pointerType === 'touch' ? .007 : .004;
-  yaw += (e.clientX - looking.x) * scale;
-  pitch = Math.max(-1.42, Math.min(1.42, pitch - (e.clientY - looking.y) * scale));
+  const turn = (e.clientX - looking.x) * scale;
+  const tilt = (e.clientY - looking.y) * scale;
+  if (seated) {
+    seated.yaw += turn;
+    seated.pitch = Math.max(-1.42, Math.min(1.42, seated.pitch - tilt));
+  } else {
+    yaw += turn;
+    pitch = Math.max(-1.42, Math.min(1.42, pitch - tilt));
+  }
   looking.x = e.clientX;
   looking.y = e.clientY;
 });
@@ -476,7 +542,7 @@ function nextGround(nextX: number, nextN: number) {
       if (top <= ground + .43) height = Math.max(height, top);
     }
   }
-  if (Math.abs(height - ground) > .43) return null;
+  if (Math.abs(height - ground) > .43 || activities.some(activity => activity.blocked?.(nextX, nextN, height))) return null;
   for (const { colliders } of walkGeometry) {
     if (colliders.some(({ min, max }) => nextX + .27 >= min[0] && nextX - .27 <= max[0]
       && z + .27 >= min[2] && z - .27 <= max[2] && height + .14 < max[1] && height + 1.8 > min[1])) return null;
@@ -489,8 +555,13 @@ function tryMove(nextX: number, nextN: number) {
   [x, n, ground] = [nextX, nextN, height];
   return true;
 }
+function faceFrom(east: number, north: number, height: number, heading: number, tilt: number) {
+  camera.position.set(east, height, -north);
+  camera.lookAt(east + Math.sin(heading) * Math.cos(tilt), height + Math.sin(tilt), -north - Math.cos(heading) * Math.cos(tilt));
+}
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(.25, Math.max(0, now - previous) / 1000);
+  const frameSeconds = Math.max(0, now - previous) / 1000;
+  const dt = Math.min(.25, frameSeconds);
   previous = now;
   const carousel = architecture.get('carousel');
   const pivot = carousel?.userData.ridePivot as Object3D | undefined;
@@ -510,6 +581,9 @@ renderer.setAnimationLoop(now => {
     seat.getWorldDirection(lookAhead);
     camera.lookAt(lookAhead.negate().add(camera.position));
     element('position').textContent = '旋转木马 · 乘坐中';
+  } else if (walking && seated) {
+    faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
+    element('position').textContent = '酒馆 · 已就座';
   } else if (walking) {
     const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
@@ -524,10 +598,8 @@ renderer.setAnimationLoop(now => {
         if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
       }
     }
-    const y = ground + eye;
-    camera.position.set(x, y, -n);
-    camera.lookAt(x + Math.sin(yaw) * Math.cos(pitch), y + Math.sin(pitch), -n - Math.cos(yaw) * Math.cos(pitch));
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 地面 ${(y - eye).toFixed(1)} m`;
+    faceFrom(x, n, ground + eye, yaw, pitch);
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 地面 ${ground.toFixed(1)} m`;
   } else {
     controls.update();
     element('position').textContent = '';
@@ -538,9 +610,10 @@ renderer.setAnimationLoop(now => {
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
+  for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
-  touchWalk.setAllowed(canControl && !boardingGround && !museumInspection.active);
+  touchWalk.setAllowed(canControl && !boardingGround && !seated && !museumInspection.active);
   museumMapButton.hidden = !canControl || museumInspection.active || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;

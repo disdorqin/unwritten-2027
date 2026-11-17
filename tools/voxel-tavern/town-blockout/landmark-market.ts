@@ -114,7 +114,7 @@ function snowRoof({ put }: Workshop, x: number, z: number, width: number, depth:
   }
 }
 
-function makeSign(text: string, width: number, height: number, x: number, y: number, z: number) {
+export function makeSign(text: string, width: number, height: number, x: number, y: number, z: number) {
   const canvas = document.createElement('canvas');
   canvas.width = 384;
   canvas.height = 112;

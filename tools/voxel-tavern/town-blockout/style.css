@@ -21,6 +21,36 @@ label, output, #help, #load-status { font-size: 12px; }
 #world-action { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); white-space: nowrap; padding: 11px 17px; background: #f2cf94; border-color: #f2cf94; color: #17202e; }
 #festival-status { position: fixed; top: 15%; left: 50%; transform: translateX(-50%); font-size: clamp(28px, 4.5vw, 63px); color: #ffe1aa; text-shadow: 0 2px 25px #412406; white-space: nowrap; pointer-events: none; }
 #place-card { width: min(460px, calc(100vw - 28px)); border: 1px solid #899ab2; border-radius: 12px; background: #162238; color: inherit; padding: 25px; box-shadow: 0 12px 40px #080d1c90; }
+#town-activity-status {
+  position: fixed;
+  left: 50%;
+  bottom: max(112px, calc(env(safe-area-inset-bottom) + 106px));
+  width: max-content;
+  max-width: min(420px, calc(100vw - 28px));
+  transform: translateX(-50%);
+  padding: 9px 13px;
+  border: 1px solid #a68a67;
+  border-radius: 7px;
+  background: #142035ee;
+  color: #ffebcb;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+#town-activity-status:empty, .museum-inspecting #town-activity-status { display: none; }
+#town-activity-content { display: grid; gap: 10px; min-width: 0; }
+#town-activity-content[hidden] { display: none; }
+#town-activity-content p { margin: 0; }
+#town-activity-content button { min-height: 40px; }
+#town-activity-content textarea {
+  display: block; width: 100%; padding: 9px;
+  border: 1px solid #7589a5; border-radius: 5px;
+  background: #101a2b; color: inherit; font: inherit;
+}
+#town-activity-content img, #town-activity-content canvas {
+  display: block; max-width: 100%; width: auto; height: auto; border-radius: 5px;
+}
 #place-card::backdrop { background: #070d19ac; }
 #place-card h2 { margin: 0 28px 14px 0; font-size: 24px; }
 #place-card p { color: #cfdaeb; line-height: 1.6; }

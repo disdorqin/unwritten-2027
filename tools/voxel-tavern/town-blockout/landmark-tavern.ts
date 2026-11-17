@@ -149,6 +149,8 @@ function buildParts() {
   add('runner', -1.28, 3.035, 2.64, 2.56, .027, 2.38);
   for (const x of [-1.3, 1.226]) add('runnerEdge', x, 3.041, 2.59, .072, .027, 2.48);
   for (const z of [2.57, 4.99]) add('runnerEdge', -1.3, 3.04, z, 2.6, .027, .07);
+  add('cloth', .375, 3.625, 1.875, .75, .0625, .625);
+  add('gold', .4375, 3.625, 1.8125, .625, .0625, .0625);
   return { parts, colors };
 }
 
@@ -156,14 +158,17 @@ function isInside(x: number, y: number, z: number) {
   return Math.abs(x) < 6.125 && z > -5.1 && z < 5.18 && y > 2.99 && y < 12.1;
 }
 
+export function tavernModelToPlot(plot: TownPlot) {
+  const sx = plot.footprint[0] / 17.7;
+  const sz = plot.footprint[1] / 18;
+  return (x: number, y: number, z: number): Vec3 => [x * sx, (y - 2) * .9, (z - 1) * sz];
+}
+
 export function buildTavernLandmark(plot: TownPlot) {
   const { parts, colors } = buildParts();
   const group = new Group();
   group.name = '未写酒馆';
-  const sx = plot.footprint[0] / 17.7;
-  const sy = .9;
-  const sz = plot.footprint[1] / 18;
-  const transform = (x: number, y: number, z: number): Vec3 => [x * sx, (y - 2) * sy, (z - 1) * sz];
+  const transform = tavernModelToPlot(plot);
   const materialBuffers = new Map<string, { positions: number[]; normals: number[]; uv: number[]; lighting: number[] }>();
   for (const { m, b } of parts) {
     let buffers = materialBuffers.get(m);
@@ -212,6 +217,8 @@ export function buildTavernLandmark(plot: TownPlot) {
     [3, 3, -5, 5, 12, -3.65], [-5.92, 3, 2.48, -3.57, 4.8, 4],
     [-4.73, 3, -.24, -3, 4.02, .84], [-.49, 3, .49, 1.25, 4.02, 1.61],
     [-4.24, 3, 3.51, -2.51, 4.02, 4.61],
+    [.3125, 3, 1.8125, 1.1875, 4.3125, 2.6875],
+    [-5.875, 8, -.25, -4.75, 9.375, 1.75],
     [3.875, 8, -1.99, 4.04, 9.07, 4.96],
     [-5.88, 8, -4.8, -.88, 11, -4.22],
   ];

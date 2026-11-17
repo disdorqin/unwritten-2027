@@ -34,6 +34,7 @@
   <button id="museum-map-button" type="button" hidden>馆内地图</button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
+  <output id="town-activity-status" aria-live="polite"></output>
   <output id="festival-status" aria-live="polite"></output>
   <p id="load-status" role="status"></p>
   <dialog id="place-card" aria-labelledby="place-title">
@@ -46,6 +47,7 @@
       <button type="submit">寄存到本机</button>
       <output id="letter-receipt" aria-live="polite"></output>
     </form>
+    <div id="town-activity-content" hidden></div>
   </dialog>
   <dialog id="museum-card" aria-labelledby="museum-title">
     <form method="dialog"><button class="close-card" aria-label="关闭展陈">×</button></form>

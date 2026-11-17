@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, PointLight,
-  Object3D, type Material,
+  BoxGeometry, CanvasTexture, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
 
@@ -251,6 +251,43 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   box('timber', -.85, ground + .58, -1.40, 5.1, 1.16, .84);
   box('timberWarm', -.85, ground + 1.20, -1.40, 5.45, .13, 1.12);
   envelope(-.85, ground + .67, -.91, .72, .39);
+
+  // A card rack and date stamp mark the souvenir counter inside the hall.
+  const countertop = ground + 1.265;
+  box('timber', .46, countertop + .23, -1.31, 1.07, .46, .13);
+  box('brass', .46, countertop + .04, -1.31, 1.19, .08, .24);
+  box('dark', .98, countertop + .035, -1.65, .23, .07, .21);
+  box('redDark', .98, countertop + .075, -1.65, .19, .035, .16);
+  box('brass', .87, countertop + .04, -1.08, .20, .08, .16);
+  box('timberWarm', .87, countertop + .13, -1.08, .05, .13, .05);
+  box('red', .87, countertop + .204, -1.08, .138, .055, .11);
+  for (let layer = 0; layer < 6; layer++) {
+    box(layer % 3 === 0 ? 'slateLight' : 'paper', -.35 + layer * .01,
+      countertop + .018 + layer * .018, -1.20, .48, .016, .29);
+  }
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#522c29';
+      ctx.fillRect(0, 0, 320, 128);
+      ctx.strokeStyle = '#dfa86d';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(8, 8, 304, 112);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 45px "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = '#ffe4b6';
+      ctx.fillText('纪念戳台', 160, 66);
+      const texture = new CanvasTexture(canvas);
+      texture.colorSpace = SRGBColorSpace;
+      const plaque = new Mesh(new PlaneGeometry(1.02, .408), new MeshBasicMaterial({ map: texture }));
+      plaque.position.set(.46, countertop + .244, -1.243);
+      model.add(plaque);
+    }
+  }
   colliders.push(bounds([-.85, ground + .59, -1.4], [5.45, 1.25, 1.12]));
   box('timber', -.65, mezzanine - .15, -5.26, 12.65, .3, 3.46);
   floors.push(bounds([-.65, mezzanine - .15, -5.26], [12.65, .3, 3.46]));
