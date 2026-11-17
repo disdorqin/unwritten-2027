@@ -204,7 +204,52 @@ export function addMuseumTrim(m: MuseumBuilder) {
     }
   }
 
+  function gallerySign(side: number, y: number) {
+    const x = side * 2.57;
+    const z = 5.22;
+    const center = y + 2.91;
+    const dark = side < 0 ? '#294757' : '#643a36';
+    const months = side < 0 ? '一月至六月' : '七月至十二月';
+
+    box(finish.beamShadow, x, center, z, 3.36, .69, .15);
+    for (const edge of [-1, 1]) {
+      detail(finish.bronze, x, center + edge * .31, z, 3.26, tick, .18);
+      detail(finish.bronze, x + edge * 1.64, center, z, tick, .62, .18);
+      box(finish.mold, x + edge * 1.23, y + 3.98, z, .07, 1.61, .07);
+      box(finish.bronze, x + edge * 1.23, y + 4.716, z, .23, .09, .19);
+      box(finish.bronze, x + edge * 1.23, y + 3.26, z, .18, .095, .16);
+      for (const face of [-1, 1]) {
+        detail(finish.bright, x + edge * 1.59, center + .255, z + face * .083, .055, .055, tick);
+        detail(finish.bright, x + edge * 1.59, center - .255, z + face * .083, .055, .055, tick);
+      }
+    }
+    for (const face of [-1, 1]) {
+      const text = side * face < 0 ? `← ${months}` : `${months} →`;
+      m.label(text, x, center, z + face * .083, 3.08, .49, face > 0 ? 0 : Math.PI,
+        { background: dark, color: '#fff0cd', accent: '#d0a36b' });
+    }
+  }
+
+  function galleryTaskLight(x: number, y: number, z: number) {
+    box(finish.beamShadow, x, y + 4.09, z, .075, 1.36, .075);
+    box(finish.mold, x, y + 4.79, z, .22, .11, .22);
+    box(finish.beamShadow, x, y + 3.465, z, .42, .14, .34);
+    box(finish.bronze, x, y + 3.415, z, .45, .066, .37);
+    box('#fff1cd', x, y + 3.373, z, .32, .032, .245, 0, true);
+    for (const edge of [-1, 1]) {
+      detail(finish.patina, x + edge * .174, y + 3.354, z, .044, tick, .302);
+      detail(finish.bright, x + edge * .178, y + 3.435, z + .186, .049, .045, tick);
+    }
+    m.light(x, y + 3.30, z, '#ffe2b0', 31, 10.5);
+  }
+
   for (const [level, y] of [.28, 5.65].entries()) {
+    if (level === 0) {
+      for (const side of [-1, 1]) {
+        gallerySign(side, y);
+        for (const z of [6.15, -.9, -7.92]) galleryTaskLight(side * 10.72, y, z);
+      }
+    }
     for (const x of [-7, 7]) {
       for (const z of [9, 1, -7]) column(x, y, z);
       rearPanel(x, y);

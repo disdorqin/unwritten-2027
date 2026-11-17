@@ -1,4 +1,6 @@
 import type { MuseumBuilder } from './museum-kit';
+import { museumHorizontalScale } from './museum-scale';
+import layout from './layout.json';
 
 type Point = [number, number, number];
 
@@ -13,7 +15,9 @@ const palette = {
   blossom: '#bb344c', paleBlossom: '#ff9c9f', stem: '#653940', brass: '#9b6836',
   ceramic: '#3f6679', fabric: '#cf9b64', paper: '#eadabc',
 };
-const floorTones = ['#8b8183', '#918684', '#968987', '#857e83', '#908284', '#9c8b81'];
+const floorTones = ['#85828a', '#8f8890', '#969097', '#7b7d8a', '#89828d', '#938994'];
+const shelteredStone = ['#998780', '#9d8d83', '#9b8881', '#92827e', '#9d8a82', '#a39286'];
+const verandaLanterns = [-9.15, -2.44, 3.6, 8.54];
 
 export function addMuseumTerrace(m: MuseumBuilder) {
   const { box, beam, panel, floor, collider, label, light, detailBox } = m;
@@ -55,9 +59,13 @@ export function addMuseumTerrace(m: MuseumBuilder) {
   box(p.lightStone, -23.92, floorY - .18, -1, 8.15, .16, 22);
   box(p.darkJoint, -23.92, floorY - .065, -1, 8.07, .13, 21.97);
   for (let row = 0; row < 22; row++) {
+    const z = -11.5 + row;
     for (let col = 0; col < 8; col++) {
-      const tone = floorTones[(row * 11 + col * 7 + (row % 3) * col) % floorTones.length];
-      box(tone, -27.46 + (col + .5) * .935, floorY - .018, -11.5 + row, .916, .041, .973);
+      const x = -27.46 + (col + .5) * .935;
+      const underLantern = col >= 2 && col <= 4 && verandaLanterns.some(lanternZ => Math.abs(z - lanternZ) < 1.25);
+      const tones = underLantern ? shelteredStone : floorTones;
+      const tone = tones[(row * 11 + col * 7 + (row % 3) * col) % tones.length];
+      box(tone, x, floorY - .018, z, .916, .041, .973);
     }
   }
   for (const x of [-27.72, -20.12]) {
@@ -89,6 +97,12 @@ export function addMuseumTerrace(m: MuseumBuilder) {
     box(p.deepStone, x, floorY + .63, z, length, .15, .29, angle);
     box(p.lightStone, x, floorY + .79, z, length, .17, .45, angle);
     box(p.crust, x, floorY + .887, z, length, .064, .375, angle);
+    for (let i = 1; i < Math.ceil(length / .44); i++) {
+      const t = i * .44 / length;
+      const end = i % 5;
+      detailBox(end < 2 ? p.snow : p.crust, ax + (bx - ax) * t, floorY + .923 + (end < 2 ? tick / 2 : 0),
+        az + (bz - az) * t, alongX ? (.28 + end * .027) : .29, tick, alongX ? .29 : (.28 + end * .027));
+    }
     collider(x, floorY + .50, z, alongX ? length : .50, 1.0, alongX ? .50 : length);
     for (let i = 0; i <= posts; i++) {
       const t = i / posts;
@@ -194,7 +208,7 @@ export function addMuseumTerrace(m: MuseumBuilder) {
       box(p.red, x, y - .81 * size, z, .085 * size, .38 * size, .085 * size);
     }
   }
-  for (const z of [-9.15, -2.44, 3.6, 8.54]) lantern(-25.04, 8.78, z, .70, true);
+  for (const z of verandaLanterns) lantern(-25.04, 8.78, z, .70, true);
   for (const z of [-9.05, -3.68, 1.72, 7.05]) lantern(-27.74, floorY + 1.23, z, .63);
   light(-24.65, 8.15, -2.1, p.warmGlass, 85, 15);
 
@@ -220,6 +234,21 @@ export function addMuseumTerrace(m: MuseumBuilder) {
     box(p.walnut, x, floorY + .29, z, .72, .17, 2.26);
     box(p.beam, x, floorY + .52, z, .72, .17, 2.31);
     box(p.fabric, x - .035, floorY + .647, z, .65, .1, 2.24);
+    for (const end of [-1, 1]) {
+      for (const [inset, pigment] of [[0, p.paper], [2, p.brass], [4, p.paper]] as const) {
+        detailBox(pigment, x - .035, floorY + .699, z + end * (1 - inset * tick), .60, tick, tick);
+      }
+    }
+    const folded = z + .69;
+    detailBox(p.red, x - .059, floorY + .724, folded, 27 * tick, 4 * tick, 25 * tick);
+    detailBox('#a75147', x - .065, floorY + .756, folded, 25 * tick, 2 * tick, 23 * tick);
+    for (const offset of [-7, -5, 5, 7]) {
+      detailBox(offset % 7 === 0 ? p.paper : p.trim, x - .065, floorY + .78,
+        folded + offset * tick, 24 * tick, tick, tick);
+    }
+    for (let fringe = -9; fringe <= 9; fringe += 3) {
+      detailBox(p.paper, x - 17 * tick, floorY + .738, folded + fringe * tick, 3 * tick, tick, tick);
+    }
     for (const dz of [-1.0, 1.0]) {
       box(p.trim, x, floorY + .27, z + dz, .69, .37, .16);
       box(p.trim, x, floorY + .83, z + dz, .72, .11, .105);
@@ -330,13 +359,36 @@ export function addMuseumTerrace(m: MuseumBuilder) {
   chair(tableX + .99, tableZ, -Math.PI / 2);
   collider(tableX, floorY + .49, tableZ, 1.4, 1.0, 1.39);
 
+  // The standing mark follows the actual tower bearing from the camera stop.
+  const [galleryEast, galleryNorth] = layout.plots.find(plot => plot.id === 'memorial')!.origin;
+  const [towerEast, towerNorth] = layout.plots.find(plot => plot.id === 'clocktower')!.origin;
+  const bearing = Math.atan2(towerEast - galleryEast - terraceStop.x * museumHorizontalScale,
+    galleryNorth - towerNorth - terraceStop.z * museumHorizontalScale);
+  function inlay(paint: string, across: number, ahead: number, w: number, length: number) {
+    detailBox(paint, terraceStop.x + Math.cos(bearing) * across + Math.sin(bearing) * ahead,
+      floorY + tick, terraceStop.z - Math.sin(bearing) * across + Math.cos(bearing) * ahead,
+      w, tick, length, bearing);
+  }
+  for (const side of [-1, 1]) {
+    inlay(p.brass, side * .40, 0, tick, .80);
+    inlay(p.brass, 0, side * .40, .80, tick);
+    for (const end of [-1, 1]) inlay(paleBronze, .39 * side, .39 * end, 4 * tick, 4 * tick);
+  }
+  inlay(copper, 0, -.085, 5 * tick, 23 * tick);
+  for (let step = 0; step < 6; step++) {
+    inlay(paleBronze, 0, .08 + step * 2 * tick, (15 - 2 * step) * tick, 2 * tick);
+  }
+
   const plaqueX = -27.25;
   const plaqueZ = 4.25;
   box(p.deepStone, plaqueX, floorY + .14, plaqueZ, .72, .29, .77);
   box(p.beam, plaqueX, floorY + .54, plaqueZ, .28, .86, .39);
   box(p.trim, plaqueX, floorY + 1.03, plaqueZ, .20, .47, 1.18);
   box(p.walnut, plaqueX + .118, floorY + 1.03, plaqueZ, .049, .384, 1.09);
-  label('钟楼观景台', plaqueX + .147, floorY + 1.033, plaqueZ, 1.035, .30, Math.PI / 2);
+  label('钟楼观景台', plaqueX + .147, floorY + 1.098, plaqueZ, 1.035, .193, Math.PI / 2,
+    { background: 'transparent', border: false });
+  label('西南 · 中央广场', plaqueX + .147, floorY + .945, plaqueZ, .965, .113, Math.PI / 2,
+    { background: 'transparent', color: '#e8b882', border: false });
   for (const edge of [-1, 1]) {
     detailBox(copper, plaqueX + .153, floorY + 1.03 + edge * 11 * tick, plaqueZ, tick, tick, 68 * tick);
     for (const corner of [-1, 1]) {

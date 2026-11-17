@@ -416,7 +416,61 @@ export function addMuseumNetwork(m: MuseumBuilder) {
       { background: color.shadow, color: '#edd3a0', border: false });
   }
   const goldOnWood = { background: '#3e2728', color: '#f5d5ab', accent: '#966746' };
-  label('网络记忆选集', caseX, floor + .70, caseZ + .836, 1.50, .24, 0, goldOnWood);
+
+  function stationSign(title: string, x: number, y: number, z: number, width: number, depth: number, angle: number, accent: string) {
+    const dx = Math.sin(angle), dz = Math.cos(angle);
+    m.detailBox(accent, x, y, z, width + .13, .49, depth, angle);
+    m.detailBox(color.shadow, x + dx * (depth / 2 + .016), y, z + dz * (depth / 2 + .016), width, .385, .037, angle);
+    label(title, x + dx * (depth / 2 + .046), y, z + dz * (depth / 2 + .046), width - .08, .335, angle,
+      { ...goldOnWood, accent });
+  }
+
+  // Keep the direction key at the stair landing and pair each line with a
+  // matching badge at its station. Supports are above the walking envelope.
+  const directoryX = 12.56, directoryZ = -12.04, directoryY = floor + 2.53;
+  for (const dx of [-1.34, 1.34]) {
+    beam(color.walnut, [directoryX + dx, directoryY + .55, directoryZ],
+      [directoryX + dx, floor + 4.63, -11.3], .064);
+    m.detailBox(color.brass, directoryX + dx, directoryY + .54, directoryZ + .11, .12, .18, .045);
+  }
+  m.detailBox(color.walnut, directoryX, directoryY, directoryZ, 4.11, 1.19, .16);
+  m.detailBox(color.brass, directoryX, directoryY + .55, directoryZ + .088, 4.09, .031, .031);
+  m.detailBox(color.brass, directoryX, directoryY - .55, directoryZ + .088, 4.09, .031, .031);
+  const directoryLines = [
+    ['01  西侧 · 记忆检索台', color.jade],
+    ['02  北侧 · 影像放映台', color.brass],
+    ['03  东侧 · 网络记忆展柜', color.garnet],
+  ] as const;
+  directoryLines.forEach(([title, accent], i) => {
+    const y = directoryY + .33 - i * .33;
+    m.detailBox(accent, directoryX - 1.85, y, directoryZ + .088, .19, .24, .032);
+    label(title, directoryX + .022, y, directoryZ + .104, 3.49, .285, 0, { ...goldOnWood, accent });
+  });
+
+  for (const dx of [-1.05, 1.05]) {
+    m.detailBox(color.walnut, caseX + dx, floor + 3.63, caseZ - .58, .064, 1.75, .064);
+    beam(color.walnut, [caseX + dx, floor + 4.50, caseZ - .58], [9.8, floor + 4.72, caseZ - .58], .062);
+  }
+  stationSign('03  网络记忆展柜', caseX, floor + 2.71, caseZ - .58, 2.66, .13, 0, color.garnet);
+  for (const offset of [-1.09, 0, 1.09]) {
+    m.detailBox(color.shade, caseX + offset, caseTop + .55, caseZ + .718, .63, .018, .035, 0, true);
+  }
+
+  function readingPacket(part: MicroBox, accent: string) {
+    part(accent, -12, 0, -16, 24, 2, 32);
+    part(color.parchment, -10, 2, -14, 20, 1, 28);
+    part(color.paper, -9, 3, -13, 18, 1, 26);
+    part(color.brass, -4, 4, -13, 8, 2, 4);
+    part(color.ink, -6, 4, -6, 11, 1, 1);
+    for (let row = 0; row < 4; row++) part(color.parchment, -6, 4, -2 + row * 3, 12 - row % 2 * 3, 1, 1);
+    part(color.brass, 15, 0, -11, 2, 2, 20);
+    part(color.ink, 15, 1, 9, 2, 1, 2);
+    part(color.garnet, 15, 1, -13, 2, 1, 2);
+  }
+  for (const side of [-1, 1]) {
+    readingPacket(detailFrame(side * 3.9 + 1.32, floor + 1.01, 7.91),
+      side < 0 ? color.jade : color.garnet);
+  }
 
   const terminalX = -13.25;
   const terminalZ = 5.0;
@@ -426,9 +480,16 @@ export function addMuseumNetwork(m: MuseumBuilder) {
   for (const [variant, z] of [terminalZ - .65, terminalZ + .66].entries()) {
     terminalComputer(detailFrame(terminalX - .36, floor + 1.06, z, true), variant);
   }
-  box(color.garnet, terminalX - .15, floor + 2.50, terminalZ, .18, .37, 2.88);
-  box(color.brass, terminalX -.043, floor + 2.70, terminalZ, .04, .032, 2.91);
-  label('记忆检索台', terminalX -.039, floor + 2.50, terminalZ, 2.24, .29, Math.PI / 2, goldOnWood);
+  stationSign('01  记忆检索台', terminalX - .15, floor + 2.50, terminalZ, 2.82, .18, Math.PI / 2, color.jade);
+  const indexTray = detailFrame(terminalX + .42, floor + 1.06, terminalZ + 1.39, true);
+  indexTray(color.walnut, -13, 0, -10, 26, 2, 19);
+  indexTray(color.brass, -12, 2, 7, 24, 1, 2);
+  for (let i = 0; i < 3; i++) {
+    const u = -10 + i * 6;
+    indexTray(color.parchment, u, 2, -7 + i, 10, 1, 12);
+    indexTray(i === 1 ? color.paper : color.parchment, u + 1, 3, -7 + i, 8, 1, 11);
+    indexTray(color.gold, u + 3, 4, 1 + i, 3, 1, 1);
+  }
 
   const screenZ = -12.80;
   solid(color.walnut, 0, floor + 2.17, screenZ, 8.08, 3.85, .33);
@@ -439,6 +500,7 @@ export function addMuseumNetwork(m: MuseumBuilder) {
     box(color.brass, side * 4.19, floor + 3.86, screenZ, .46, .14, .70);
   }
   screeningPanel(m, screenZ + .285);
+  stationSign('02  影像放映台', 0, floor + 4.35, screenZ + .15, 3.00, .13, 0, color.brass);
   drawerBank(-4.89, -9.42, 1.26, 1.1, .74);
   box(color.shadow, -4.89, floor + 1.02, -9.43, .87, .45, .55);
   box(color.brass, -4.89, floor + 1.02, -9.735, .34, .26, .16);

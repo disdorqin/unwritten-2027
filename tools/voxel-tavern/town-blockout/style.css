@@ -84,6 +84,16 @@ label, output, #help, #load-status { font-size: 12px; }
 #museum-guide:not([hidden]) { display: flex; }
 .museum-inspecting #museum-guide { display: none; }
 .museum-exhibit-actions { margin-bottom: 12px; }
+.museum-memory-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+#museum-card .museum-memory-entry button { background: #e8d9bc; border-color: #bc9d75; color: #543829; }
+.museum-memory-heading { padding: 10px 13px; border-left: 3px solid #ae774e; background: #eee2c8; }
+.museum-memory-heading h3 { margin: 4px 0 0; font-size: 19px; }
+.museum-memory-field { display: block; margin-top: 13px; font-size: 15px; }
+.museum-memory-field textarea {
+  display: block; width: 100%; margin-top: 6px; resize: vertical; padding: 8px;
+  font: inherit; color: #382922; background: #fff9ed; border: 1px solid #bba17d;
+  border-radius: 4px; line-height: 1.45;
+}
 #museum-launch { position: fixed; inset: 0; pointer-events: none; }
 #museum-launch header {
   position: absolute;

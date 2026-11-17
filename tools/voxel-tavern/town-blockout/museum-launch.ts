@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, PerspectiveCamera, PointLight, Scene, type WebGLRenderer,
+  MeshLambertMaterial, PerspectiveCamera, PointLight, RingGeometry, Scene, type WebGLRenderer,
 } from 'three';
 
 const parts = ['第一级', '第二级', '整流罩'] as const;
@@ -29,6 +29,9 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
   const mark = new MeshBasicMaterial({ color: '#88bed0' });
   const warm = new MeshBasicMaterial({ color: '#ffe1a1' });
   const flame = new MeshBasicMaterial({ color: '#ffc37a' });
+  const inactive = new MeshLambertMaterial({ color: '#405164' });
+  const activeLamp = new MeshBasicMaterial({ color: '#ded198' });
+  const fittedLamp = new MeshBasicMaterial({ color: '#94cfbc' });
   const box = new BoxGeometry();
   function block(parent: Group, paint: MeshLambertMaterial | MeshBasicMaterial,
     x: number, y: number, z: number, w: number, h: number, d: number) {
@@ -59,6 +62,19 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
       block(pad, warm, side * 1.36, .067, z, .066, .042, .066);
     }
   }
+  // Assembly and countdown share the same three lamps on the front edge of the display.
+  const stageLamps = [-.46, 0, .46].map(x => {
+    block(pad, copper, x, .018, .99, .34, .027, .14);
+    block(pad, midnight, x, .032, .99, .29, .019, .10);
+    return block(pad, inactive, x, .049, .99, .22, .024, .054);
+  });
+  const woodInset = new MeshLambertMaterial({ color: '#573e39' });
+  block(pad, woodInset, 0, -.224, 1.279, 2.70, .10, .011);
+  block(pad, woodInset, 1.595, -.224, 0, .011, .10, 2.12);
+  for (const x of [-1.25, 1.25]) {
+    block(pad, copper, x, -.224, 1.288, .064, .047, .014);
+    block(pad, copper, 1.601, -.224, x * .74, .015, .047, .064);
+  }
   ring(pad, copper, .09, .69, .76, .18);
   ring(pad, steel, .20, .55, .65, .075);
   for (let i = 0; i < 12; i++) {
@@ -68,11 +84,12 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
 
   const rocket = new Group();
   scene.add(rocket);
-  const [first, second, nose] = parts.map(() => {
+  const segments = parts.map(() => {
     const group = new Group();
     rocket.add(group);
     return group;
   });
+  const [first, second, nose] = segments;
   ring(first, steel, .321, .30, .155, .18);
   ring(first, ivory, .803, .292, .324, .81);
   ring(first, red, 1.073, .301, .307, .105);
@@ -96,6 +113,20 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
     block(second, steel, Math.sin(turn) * .25, 1.45, Math.cos(turn) * .25, .042, .08, .042);
   }
   const exhaust = ring(rocket, flame, .12, .13, .025, .39);
+  const sweepMaterial = new MeshBasicMaterial({
+    color: '#ffe2a7', transparent: true, opacity: 0, depthWrite: false,
+  });
+  const sweep = new Mesh(new RingGeometry(.92, 1, 36), sweepMaterial);
+  sweep.rotation.x = -Math.PI / 2;
+  sweep.position.y = .044;
+  pad.add(sweep);
+  const completionSeal = new Group();
+  completionSeal.position.y = .252;
+  pad.add(completionSeal);
+  ring(completionSeal, copper, .038, .27, .28, .073);
+  ring(completionSeal, midnight, .080, .229, .238, .022);
+  const sealMark = block(completionSeal, fittedLamp, 0, .095, 0, .18, .016, .18);
+  sealMark.rotation.y = Math.PI / 4;
   const glow = new PointLight('#ffb773', 0, 5, 2);
   glow.position.set(0, .29, .48);
   scene.add(glow);
@@ -107,6 +138,25 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
   let elapsed = 0;
   let lastCount = 0;
   let onComplete: (() => void) | undefined;
+  const arrivalDuration = .34;
+  const arrivals = [0, 0, 0];
+
+  function setStageLamps() {
+    stageLamps.forEach((lamp, index) => {
+      if (phase === 'countdown') lamp.material = index < lastCount ? activeLamp : inactive;
+      else if (phase === 'flight') lamp.material = activeLamp;
+      else if (index < fitted) lamp.material = fittedLamp;
+      else lamp.material = index === fitted ? activeLamp : inactive;
+    });
+  }
+  function updateAssembly(dt: number) {
+    segments.forEach((segment, index) => {
+      arrivals[index] = Math.max(0, arrivals[index] - dt);
+      const lift = reducedMotion.matches ? 0 : (arrivals[index] / arrivalDuration) ** 2;
+      segment.position.set(.10 * lift, .32 * lift, 0);
+      segment.rotation.z = -.12 * lift;
+    });
+  }
 
   function say(text: string) {
     status.textContent = text;
@@ -116,10 +166,11 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
       button.disabled = phase !== 'assembly' || index < fitted;
       button.dataset.fitted = String(index < fitted);
       button.textContent = index < fitted ? `${parts[index]} · 已装` : parts[index];
-      rocket.children[index].visible = index < fitted;
+      segments[index].visible = index < fitted;
     });
     launch.disabled = phase !== 'ready' && phase !== 'complete';
     launch.textContent = phase === 'complete' ? '重玩' : '点火发射';
+    setStageLamps();
   }
   function reset() {
     phase = 'assembly';
@@ -129,7 +180,11 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
     rocket.position.y = 0;
     rocket.visible = true;
     exhaust.visible = false;
+    sweep.visible = false;
+    completionSeal.visible = false;
     glow.intensity = 0;
+    arrivals.fill(0);
+    updateAssembly(0);
     updateControls();
     say('先装第一级，再接第二级和整流罩。');
   }
@@ -140,6 +195,8 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
         say(`请先装${parts[fitted]}。`);
         return;
       }
+      arrivals[index] = reducedMotion.matches ? 0 : arrivalDuration;
+      updateAssembly(0);
       fitted++;
       if (fitted === parts.length) phase = 'ready';
       updateControls();
@@ -160,33 +217,45 @@ export function createMuseumLaunch(renderer: WebGLRenderer, aspect: number) {
     }
   };
   function update(dt: number) {
+    if (!active) return;
+    if (arrivals.some(time => time > 0)) updateAssembly(dt);
     if (phase === 'countdown') {
       elapsed += dt;
       const count = Math.max(0, Math.ceil(3 - elapsed));
-      if (count !== lastCount && count > 0) say(`模拟点火倒计时 ${count}`);
-      lastCount = count;
-      if (elapsed >= 3) {
-        elapsed = 0;
-        phase = 'flight';
-        exhaust.visible = !reducedMotion.matches;
-        say('模拟点火，模型升空。');
+      if (count !== lastCount) {
+        lastCount = count;
+        if (count > 0) say(`模拟点火倒计时 ${count}`);
+        setStageLamps();
       }
+      if (elapsed < 3) return;
+      elapsed -= 3;
+      phase = 'flight';
+      setStageLamps();
+      say('模拟点火，模型升空。');
     } else if (phase === 'flight') {
       elapsed += dt;
-      if (!reducedMotion.matches) {
-        rocket.position.y = elapsed * (.7 + elapsed * 2.1);
-        exhaust.scale.y = 1.4 + Math.sin(elapsed * 39) * .34;
-        glow.intensity = 5 * Math.max(0, 1 - elapsed);
-      }
-      if (elapsed >= 1.45) {
-        phase = 'complete';
-        rocket.visible = false;
-        exhaust.visible = false;
-        glow.intensity = 0;
-        updateControls();
-        say('模拟任务完成，已记入参观护照。');
-        onComplete?.();
-      }
+    }
+    if (phase !== 'flight') return;
+    const moving = !reducedMotion.matches;
+    exhaust.visible = moving;
+    sweep.visible = moving && elapsed < .72;
+    if (moving) {
+      rocket.position.y = elapsed * (.7 + elapsed * 2.1);
+      exhaust.scale.y = 1.4 + Math.sin(elapsed * 39) * .34;
+      glow.intensity = 5 * Math.max(0, 1 - elapsed);
+      sweep.scale.set(1 + elapsed * .5, 1 + elapsed * .5, 1);
+      sweepMaterial.opacity = .58 * Math.max(0, 1 - elapsed / .72);
+    }
+    if (elapsed >= 1.45) {
+      phase = 'complete';
+      rocket.visible = false;
+      exhaust.visible = false;
+      sweep.visible = false;
+      completionSeal.visible = true;
+      glow.intensity = 0;
+      updateControls();
+      say('模拟任务完成，已记入参观护照。');
+      onComplete?.();
     }
   }
   function resize(nextAspect: number) {

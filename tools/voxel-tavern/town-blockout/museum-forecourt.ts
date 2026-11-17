@@ -1,4 +1,5 @@
 import type { MuseumBuilder } from './museum-kit';
+import { museumDetailStep as fine } from './museum-scale';
 
 type Point = [number, number, number];
 const rock = ['#6a7382', '#7b889a', '#8894a4', '#98a2ac'];
@@ -7,7 +8,9 @@ const petals = ['#8d323c', '#a5424d', '#bd5662', '#cf6b76', '#d98790'];
 const bark = ['#513935', '#654638', '#795641'];
 
 export function addMuseumForecourt(m: MuseumBuilder) {
-  const { box, beam, solid, label } = m;
+  const { box, beam, solid, label, detailBox, light } = m;
+  const metal = '#bc8c59';
+  const warm = '#ffd38f';
 
   function stoneGeometry(x: number, z: number, scale: number, turn = 0) {
     for (let row = 0; row < 5; row++) {
@@ -97,16 +100,45 @@ export function addMuseumForecourt(m: MuseumBuilder) {
     m.collider(x, .55 * size, z, .84 * size, 1.14 * size, .84 * size);
   }
 
-  function marker(x: number, z: number, title: string, detail: string, rotation: number) {
+  function marker(x: number, z: number, direction: string) {
     solid(rock[0], x, .15, z, 2.11, .32, .91);
     box(rock[2], x, .35, z, 1.88, .14, .77);
-    box('#5a4243', x, .94, z, 1.71, 1.14, .59);
-    box('#906648', x, 1.50, z, 1.99, .16, .74);
-    box(snow[1], x, 1.61, z, 1.66, .078, .57);
-    const sign = { background: '#593e36', accent: '#c69a6c', color: '#ffe5bb' };
-    label(title, x, 1.07, z + .311, 1.58, .54, rotation, sign);
-    label(detail, x, .61, z + .313, 1.48, .30, rotation, { ...sign, border: false });
+    box('#5a4243', x, 1.075, z, 1.71, 1.41, .59);
+    box('#906648', x, 1.80, z, 1.99, .16, .74);
+    box(snow[1], x, 1.91, z, 1.66, .078, .57);
+    const sign = { background: '#432e2d', accent: metal, color: '#ffe5bb', border: false };
+    label('2026 纪念馆', x, 1.460, z + .316, 1.54, .42, 0, sign);
+    label(direction, x, 1.081, z + .316, 1.54, .32, 0, sign);
+    for (const side of [-1, 1]) {
+      detailBox(metal, x + side * .784, 1.285, z + .329, fine * 2, .80, fine);
+      for (const y of [.907, 1.668]) detailBox(warm, x + side * .752, y, z + .347, fine * 2, fine * 2, fine);
+    }
+    for (const y of [.883, 1.684]) detailBox(metal, x, y, z + .329, 1.58, fine, fine);
+    detailBox(warm, x, 1.726, z + .335, 1.52, fine * 2, fine, 0, true);
     m.collider(x, .81, z, 1.69, 1.1, .64);
+  }
+
+  function addThreshold() {
+    for (const side of [-1, 1]) {
+      const pier = side * 3.28;
+      // The light and plaque sit on the south faces of the existing piers.
+      detailBox('#4a3230', pier, 2.31, 13.273, .60, .78, .098);
+      detailBox(metal, pier, 2.31, 13.332, .54, .70, .05);
+      label('入馆', pier, 2.31, 13.367, .49, .58, 0,
+        { background: '#613935', accent: '#cfa268', color: '#fff0cb' });
+      detailBox('#573831', pier, 2.94, 13.282, .31, .39, .16);
+      detailBox(warm, pier, 2.94, 13.378, .21, .25, .047, 0, true);
+      for (const y of [2.785, 3.10]) detailBox(metal, pier, y, 13.376, .37, .061, .16);
+      for (const u of [-.112, .112]) detailBox(metal, pier + u, 2.94, 13.409, fine, .235, fine);
+
+      // The inlaid brass lines follow the existing apron, below step height.
+      detailBox('#ac8a62', side * 2.12, .127, 15.55, .038, fine, 4.60);
+      for (const z of [14.32, 15.84, 17.36]) {
+        detailBox('#d1ad7c', side * 2.12, .130, z, .12, fine, .12, Math.PI / 4);
+      }
+    }
+    detailBox('#bb9669', 0, .127, 13.343, 4.27, fine, .074);
+    light(0, 2.82, 14.89, '#ffc387', 32, 7.5);
   }
 
   function visitBoard(x: number, z: number) {
@@ -151,7 +183,12 @@ export function addMuseumForecourt(m: MuseumBuilder) {
     }
     box(wood, x, 1.24, z - .284, 2.49, .20, .103);
     box(edge, x, 1.11, z - .254, 2.4, .043, .045);
-    for (const side of [-1, 1]) box(snow[0], x + side * 1.12, 1.352, z - .28, .20, .03, .078);
+    for (const side of [-1, 1]) {
+      box(snow[0], x + side * 1.12, 1.352, z - .28, .20, .03, .078);
+      detailBox('#743b38', x + side * .79, .813, z - .012, .64, .073, .48);
+      detailBox('#9b5b4e', x + side * .79, .852, z - .012, .59, fine, .44);
+      detailBox('#bd875b', x + side * .79, .823, z + .231, .58, fine, fine);
+    }
     m.collider(x, .71, z, 2.52, 1.12, .70);
   }
 
@@ -207,8 +244,9 @@ export function addMuseumForecourt(m: MuseumBuilder) {
   pathLamp(22.9, 16.4, .91, true);
   pathLamp(23.4, -.9, .75, false);
   pathLamp(-27.1, 7.3, .79, false);
-  marker(7.06, 15.6, '参观路线', '一楼 年度展', 0);
-  marker(-7.11, 15.6, '参观路线', '二楼 网络记忆', 0);
+  marker(7.06, 15.6, '← 主入口');
+  marker(-7.11, 15.6, '主入口 →');
+  addThreshold();
   for (const [x, z, size, turn] of [[26.8, 12.2, 1.57, .5], [24.95, 13.5, 1.12, .2], [25.1, -.7, 1.24, .6],
     [25.8, -10.4, 1.76, 2.3], [-26.5, -.7, 1.08, 1.3], [-25.2, -8.1, 1.16, 1.6], [-27.1, 14.6, 1.038, 0.3]]) {
     stoneGeometry(x, z, size, turn);

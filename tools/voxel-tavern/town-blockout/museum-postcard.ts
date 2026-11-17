@@ -5,7 +5,9 @@ const height = 709;
 const serif = '"Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif';
 const sans = '"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 
-function paintPostcard(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+export type MuseumMemory = { month: number; date: string; title: string; note: string };
+
+function paintPostcard(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, memory?: MuseumMemory) {
   ctx.scale(canvas.width / width, canvas.height / height);
 
   function polygon(points: Point[], color: string) {
@@ -153,6 +155,38 @@ function paintPostcard(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D)
   spaced('2026  →  2027', 70, 639, '#e4c58f');
   ink('跨年雪镇', 515, 639, '600 15px ' + sans, '#e8ddc9');
 
+  if (memory) {
+    function wrap(value: string, y: number, font: string, tone: string, leading: number, limit: number) {
+      ctx.font = font;
+      let count = 0;
+      for (const paragraph of value.split(/\r?\n/)) {
+        let text = '';
+        for (const glyph of paragraph) {
+          if (text && ctx.measureText(text + glyph).width > 226) {
+            if (count >= limit) return;
+            ink(text, 689, y + leading * count++, font, tone);
+            text = glyph;
+          } else {
+            text += glyph;
+          }
+        }
+        if (count >= limit) return;
+        ink(text, 689, y + leading * count++, font, tone);
+      }
+    }
+    spaced('UNWRITTEN 2027', 689, 95, '#71543b');
+    ink('展品回忆卡', 686, 153, 'bold 35px ' + serif, '#392b25');
+    line([[688, 179], [923, 179]], '#bda580');
+    ink(memory.date + ' · ' + memory.month + '月展', 689, 223, '600 17px ' + sans, '#895d46');
+    wrap(memory.title, 258, 'bold 24px ' + serif, '#392b25', 29, 4);
+    line([[688, 367], [923, 367]], '#bda580');
+    ink('那天的我', 689, 394, '600 18px ' + serif, '#895d46');
+    wrap(memory.note || '留给未来的自己。', 426, '400 18px ' + sans, '#4b382e', 21, 9);
+    line([[688, 626], [923, 626]], '#bda580');
+    ink('2026 纪念馆 · 雪镇来信', 689, 647, '600 13px ' + sans, '#895d46');
+    return;
+  }
+
   spaced('POSTCARD', 689, 104, '#71543b');
   ink('参观明信片', 687, 165, 'bold 35px ' + serif, '#392b25');
   line([[688, 181], [923, 181]], '#bda580', 1);
@@ -178,22 +212,30 @@ function paintPostcard(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D)
   ctx.restore();
 }
 
-export function downloadMuseumPostcard(): void {
+function downloadCard(filename: string, memory?: MuseumMemory) {
   const canvas = document.createElement('canvas');
   canvas.width = 1748;
   canvas.height = 1240;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  paintPostcard(canvas, ctx);
+  paintPostcard(canvas, ctx, memory);
   canvas.toBlob(blob => {
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'UNWRITTEN-2027-museum-postcard.png';
+    anchor.download = filename;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, 'image/png');
+}
+
+export function downloadMuseumPostcard(): void {
+  downloadCard('UNWRITTEN-2027-museum-postcard.png');
+}
+
+export function downloadMuseumMemoryCard(memory: MuseumMemory): void {
+  downloadCard('UNWRITTEN-2027-museum-memory.png', memory);
 }

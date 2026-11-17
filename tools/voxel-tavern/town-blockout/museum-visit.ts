@@ -1,13 +1,26 @@
-import { museumMonths } from './museum-catalog';
+import { museumMonths, type MuseumExhibit } from './museum-catalog';
 import { monthStops } from './museum-timeline';
 import { currentMuseumSlide, networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
 import { museumMap, type MuseumPosition } from './museum-map';
-import { downloadMuseumPostcard } from './museum-postcard';
+import { downloadMuseumMemoryCard, downloadMuseumPostcard, type MuseumMemory } from './museum-postcard';
 import { aprilMonth } from './museum-guide';
 
 type Progress = { months: number[]; launch: boolean; archive: boolean; terrace: boolean; stamp: boolean };
 const key = 'unwritten:2026-museum-passport';
+const memoryKey = 'unwritten:2026-museum-memory';
+const memoryLimit = 80;
+const memoryLine = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+function readMemory(): MuseumMemory | undefined {
+  try {
+    const data = JSON.parse(localStorage.getItem(memoryKey) ?? 'null') as Partial<MuseumMemory> | null;
+    if (!data || typeof data.note !== 'string' || data.note.length > memoryLimit || !Number.isInteger(data.month)) return;
+    const exhibit = museumMonths.find(month => month.month === data.month)?.items
+      .find(item => item.date === data.date && item.title === data.title);
+    if (exhibit) return { month: data.month!, date: exhibit.date, title: exhibit.title, note: memoryLine(data.note) };
+  } catch { /* A saved memory is optional. */ }
+}
 const monthNames = ['一','二','三','四','五','六','七','八','九','十','十一','十二'];
 const initial: Progress = { months: [], launch: false, archive: false, terrace: false, stamp: false };
 
@@ -31,6 +44,8 @@ export function createMuseumVisit(
   const subtitle = dialog.querySelector<HTMLElement>('#museum-subtitle')!;
   const content = dialog.querySelector<HTMLElement>('#museum-content')!;
   let progress = readProgress();
+  let memory = readMemory();
+  let memoryPersisted = Boolean(memory);
 
   function record(next: Partial<Progress>) {
     progress = { ...progress, ...next };
@@ -109,15 +124,79 @@ export function createMuseumVisit(
         figure.append(photo, credit);
         exhibit.append(figure);
       }
-      exhibit.append(source);
+      const links = document.createElement('div');
+      links.className = 'museum-memory-entry';
+      links.append(source);
+      button(matchesMemory(month, item) ? '查看这张回忆卡' : '留张回忆卡',
+        () => memoryCard(month, item, () => monthCard(month, atCabinet), '返回月展'), links);
+      exhibit.append(links);
       content.append(exhibit);
     }
     if (!progress.months.includes(month)) record({ months: [...progress.months, month] });
+  }
+  function matchesMemory(month: number, item: Pick<MuseumExhibit, 'date' | 'title'>) {
+    return memory?.month === month && memory.date === item.date && memory.title === item.title;
+  }
+  function memoryCard(month: number, item: Pick<MuseumExhibit, 'date' | 'title'>, back: () => void, backLabel: string) {
+    const saved = matchesMemory(month, item);
+    frame('留一张回忆卡', '2026 纪念馆 · ' + monthNames[month - 1] + '月');
+    const exhibit = document.createElement('header');
+    exhibit.className = 'museum-memory-heading';
+    const date = document.createElement('small');
+    date.textContent = item.date;
+    const name = document.createElement('h3');
+    name.textContent = item.title;
+    exhibit.append(date, name);
+    content.append(exhibit);
+    const field = document.createElement('label');
+    field.className = 'museum-memory-field';
+    field.textContent = '那天你在做什么？';
+    const note = document.createElement('textarea');
+    note.rows = 3;
+    note.maxLength = memoryLimit;
+    note.placeholder = '留给未来的自己，最多 80 字（可不填）';
+    note.value = saved ? memory!.note : '';
+    field.append(note);
+    content.append(field);
+    const status = line('', 'museum-note');
+    status.setAttribute('role', 'status');
+    const actions = document.createElement('div');
+    actions.className = 'museum-options';
+    content.append(actions);
+    const save = button(memory && !saved ? '换成这张卡' : '保存这张卡', () => {
+      const next = { month, date: item.date, title: item.title, note: memoryLine(note.value) };
+      memory = next;
+      memoryPersisted = false;
+      try {
+        localStorage.setItem(memoryKey, JSON.stringify(next));
+        memoryPersisted = true;
+      } catch { /* Export remains available for this visit. */ }
+      note.value = next.note;
+      save.textContent = '保存这张卡';
+      refresh();
+    }, actions);
+    const download = button('下载回忆卡 PNG', () => {
+      if (matchesMemory(month, item)) downloadMuseumMemoryCard(memory!);
+    }, actions);
+    button(backLabel, back, actions);
+    function refresh() {
+      const unchanged = matchesMemory(month, item) && memoryLine(note.value) === memory!.note;
+      download.disabled = !unchanged;
+      status.textContent = unchanged
+        ? (memoryPersisted ? '已保存在当前浏览器。' : '已留在本次页面，下载即可带走。')
+        : (memory && !matchesMemory(month, item) ? '保存后会把护照里的回忆卡换成这一张。' : '写好的文字随回忆卡一起保存在当前浏览器。');
+    }
+    note.addEventListener('input', refresh);
+    refresh();
   }
   function passport() {
     frame('纪念馆参观护照', '一楼 · 服务台');
     line('读三个有内容的月份，再操作航天展台或完成网络档案检索，即可加盖年度纪念章。');
     line(`已读 ${progress.months.length} 个月 · ${progress.launch ? '已完成火箭装配' : progress.archive ? '已完成档案检索' : '还需完成一项互动'}`, 'museum-note');
+    if (memory) {
+      const savedCard = memory;
+      button('查看我的回忆卡', () => memoryCard(savedCard.month, savedCard, passport, '返回护照'));
+    }
     if (progress.stamp) {
       line('2026 年度纪念章 · 已加盖', 'museum-stamp');
       button('下载 2026 纪念票', downloadMuseumPostcard);
