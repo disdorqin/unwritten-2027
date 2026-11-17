@@ -4,6 +4,7 @@ import { currentMuseumSlide, networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
 import { museumMap, type MuseumPosition } from './museum-map';
 import { downloadMuseumPostcard } from './museum-postcard';
+import { aprilMonth } from './museum-guide';
 
 type Progress = { months: number[]; launch: boolean; archive: boolean; terrace: boolean; stamp: boolean };
 const key = 'unwritten:2026-museum-passport';
@@ -21,7 +22,10 @@ function readProgress(): Progress {
   return { ...initial, months: [] };
 }
 
-export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => void, inspectModel: (month: number) => void) {
+export function createMuseumVisit(
+  prepareOpen: () => void, cameraPhoto: () => void, inspectModel: (month: number) => void,
+  guideApril: (active: boolean) => void, openLaunch: (complete: () => void) => void,
+) {
   const dialog = document.querySelector<HTMLDialogElement>('#museum-card')!;
   const title = dialog.querySelector<HTMLElement>('#museum-title')!;
   const subtitle = dialog.querySelector<HTMLElement>('#museum-subtitle')!;
@@ -55,9 +59,19 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
     if (!dialog.open) { prepareOpen(); dialog.showModal(); }
   }
   function monthCard(month: number, atCabinet = false) {
+    if (atCabinet && month === aprilMonth) guideApril(false);
     const data = museumMonths.find(entry => entry.month === month);
     frame(`${monthNames[month - 1]}月`, '一楼 · 2026 公共年度展');
-    if (atCabinet) button('近看展品模型', () => { dialog.close(); inspectModel(month); });
+    if (atCabinet) {
+      const options = document.createElement('div');
+      options.className = 'museum-options museum-exhibit-actions';
+      content.append(options);
+      button('近看展品模型', () => { dialog.close(); inspectModel(month); }, options);
+      if (month === aprilMonth) button('操作航天展台', () => {
+        dialog.close();
+        openLaunch(() => record({ launch: true }));
+      }, options);
+    }
     if (!data?.items.length) {
       line('本月展位已预留，待内容发布并核对来源后上架。');
       return;
@@ -99,44 +113,6 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
       content.append(exhibit);
     }
     if (!progress.months.includes(month)) record({ months: [...progress.months, month] });
-    if (month === 4) button('操作航天展台', showLaunch);
-  }
-  function showLaunch() {
-    frame('给模型接上三段火箭', '一楼 · 四月航天展互动模型');
-    line('把展台上的模型从下往上装好，再按发射。');
-    const stage = document.createElement('div');
-    stage.className = 'museum-rocket-stage';
-    const rocket = document.createElement('div');
-    rocket.className = 'museum-rocket';
-    rocket.setAttribute('aria-hidden', 'true');
-    stage.append(rocket);
-    content.append(stage);
-    const message = line('先装第一级。', 'museum-note');
-    message.setAttribute('role', 'status');
-    const controls = document.createElement('div');
-    controls.className = 'museum-options';
-    content.append(controls);
-    const pieces = ['第一级', '第二级', '整流罩'];
-    let count = 0;
-    for (const part of [2, 0, 1]) {
-      const choice = button(pieces[part], () => {
-        if (part !== count) { message.textContent = `下一件是${pieces[count]}。`; return; }
-        const shape = document.createElement('span');
-        shape.dataset.part = String(part);
-        rocket.prepend(shape);
-        count++;
-        choice.disabled = true;
-        launch.disabled = count !== 3;
-        message.textContent = count === 3 ? '装配完成，可以发射了。' : `现在装${pieces[count]}。`;
-      }, controls);
-    }
-    const launch = button('点火发射', () => {
-      record({ launch: true });
-      rocket.classList.add('launched');
-      launch.disabled = true;
-      message.textContent = '模型发射成功，已记录航天展台体验。';
-    }, controls);
-    launch.disabled = true;
   }
   function passport() {
     frame('纪念馆参观护照', '一楼 · 服务台');
@@ -154,7 +130,11 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
     frame('2026 纪念馆', '一楼 · 入馆导览');
     line('从西侧读一月至六月，转到东侧读七月至十二月。从东侧楼梯上二楼，参观网络记忆展，再由西门到露台看钟楼。');
     line('年度展当前是公开事件候选展陈。标注来源的条目可打开原文。', 'museum-note');
-    button('查看参观护照', passport);
+    const options = document.createElement('div');
+    options.className = 'museum-options';
+    content.append(options);
+    button('跟随灯标去四月航天展', () => { dialog.close(); guideApril(true); }, options);
+    button('查看参观护照', passport, options);
   }
   function network(id: string) {
     if (id === 'terminal') {

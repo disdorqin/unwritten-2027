@@ -31,6 +31,25 @@
     </header>
     <p id="exhibit-help">拖动旋转 · 滚轮或双指缩放</p>
   </section>
+  <section id="museum-guide" aria-label="馆内导览" hidden>
+    <span>沿地面灯标前往四月航天展</span>
+    <button type="button">取消导览</button>
+  </section>
+  <section id="museum-launch" aria-labelledby="rocket-title" hidden>
+    <header>
+      <p>2026 纪念馆 · 四月航天展</p>
+      <h2 id="rocket-title">发射模型展台</h2>
+    </header>
+    <div class="rocket-console">
+      <output aria-live="polite"></output>
+      <div class="rocket-controls">
+        <button type="button" data-rocket-part="0">第一级</button>
+        <button type="button" data-rocket-part="1">第二级</button>
+        <button type="button" data-rocket-part="2">整流罩</button>
+        <button type="button" id="rocket-launch" disabled>点火发射</button>
+      </div>
+    </div>
+  </section>
   <button id="museum-map-button" type="button" hidden>馆内地图</button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>

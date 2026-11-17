@@ -25,6 +25,8 @@ import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { terraceStop } from './museum-terrace';
 import { createMuseumInspection } from './museum-inspection';
+import { createMuseumLaunch } from './museum-launch';
+import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
 import { nearestTownActivity, type TownActivityContext, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
@@ -293,6 +295,9 @@ const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
 let captureTerrace = false;
 const museumInspection = createMuseumInspection(renderer, camera.aspect);
+const museumLaunch = createMuseumLaunch(renderer, camera.aspect);
+const museumGuide = createMuseumGuide(scene, museumToWorld);
+const museumOverlay = () => museumInspection.active || museumLaunch.active;
 function inspectExhibit(month: number) {
   resetMovement();
   touchWalk.setAllowed(false);
@@ -311,8 +316,13 @@ const museumVisit = createMuseumVisit(pauseForPanel, () => {
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
   captureTerrace = true;
-}, inspectExhibit);
-museumVisit.dialog.addEventListener('close', () => renderer.domElement.focus());
+}, inspectExhibit, museumGuide.setActive, complete => {
+  pauseForPanel();
+  museumLaunch.open(complete);
+});
+museumVisit.dialog.addEventListener('close', () => {
+  if (!museumLaunch.active) renderer.domElement.focus();
+});
 function museumPosition() {
   return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
 }
@@ -399,6 +409,7 @@ function currentAction() {
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
   if (seated) return { label: '起身', run: leaveSeat };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
+  if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
   const local = museumPosition();
   const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
@@ -425,6 +436,8 @@ function mode(next: boolean) {
   activityStatus.textContent = '';
   walking = next;
   museumInspection.close();
+  museumLaunch.close();
+  museumGuide.setActive(false);
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
@@ -464,7 +477,7 @@ selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 addEventListener('keydown', e => {
   if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
-  if (museumInspection.active) {
+  if (museumOverlay()) {
     if (e.code === 'Escape' || (e.code === 'KeyE' && !e.repeat)) {
       e.preventDefault();
       interact();
@@ -490,7 +503,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', resetMovement);
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (!walking || looking || museumInspection.active || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
+  if (!walking || looking || museumOverlay() || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
   looking = { id: e.pointerId, x: e.clientX, y: e.clientY };
   renderer.domElement.focus({ preventScroll: true });
   renderer.domElement.setPointerCapture(e.pointerId);
@@ -519,9 +532,12 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   museumInspection.resize(camera.aspect);
+  museumLaunch.resize(camera.aspect);
   renderer.setSize(innerWidth, innerHeight);
 });
-mode(false);
+const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchParams(location.search).get('visit') === 'museum';
+if (startInMuseum) selector.value = '纪念馆入口';
+mode(startInMuseum);
 let previous = performance.now();
 function nextGround(nextX: number, nextN: number) {
   if (!canEnter(nextX, nextN) || scenery.blocked(nextX, nextN) || districts.blocked(nextX, nextN)
@@ -574,7 +590,7 @@ renderer.setAnimationLoop(now => {
     beacon.visible = nightMode;
     if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
   }
-  if (museumInspection.active) {
+  if (museumOverlay()) {
     element('position').textContent = '';
   } else if (walking && boardingGround && seat) {
     seat.getWorldPosition(camera.position);
@@ -613,13 +629,14 @@ renderer.setAnimationLoop(now => {
   for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
-  touchWalk.setAllowed(canControl && !boardingGround && !seated && !museumInspection.active);
-  museumMapButton.hidden = !canControl || museumInspection.active || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+  touchWalk.setAllowed(canControl && !boardingGround && !seated && !museumOverlay());
+  museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
   const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
-  if (museumInspection.active) museumInspection.render();
+  if (museumLaunch.active) { museumLaunch.update(frameSeconds); museumLaunch.render(); }
+  else if (museumInspection.active) museumInspection.render();
   else renderer.render(scene, camera);
   if (captureTerrace) {
     captureTerrace = false;
