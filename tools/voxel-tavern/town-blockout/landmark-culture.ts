@@ -2,6 +2,7 @@ import {
   BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshBasicMaterial, MeshLambertMaterial,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
+import { addTownWindow, type TownWindow } from './town-window';
 
 type Position = [number, number, number];
 type Bounds = { min: Position; max: Position };
@@ -72,12 +73,26 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
   const ridge = deck + wallH;
   const wall = ceremonial ? palette.timber : palette.plaster;
   const trim = ceremonial ? palette.red : palette.cedar;
+  const openingY = deck + 2.25;
+  const openingH = 1.72;
+  const openingW = 1.42;
+  const sideWindows = [centerZ - 3.8, centerZ, centerZ + 3.8];
+  const facadeBays = ceremonial ? 4 : 3;
+  const bay = (flankW - 1.2) / facadeBays;
+  const facadeY = deck + 2.18;
+  const facadeWidth = Math.min(1.21, bay * .71);
+  const facadeHeight = 1.78;
+  const facadeWindows = Array.from({ length: facadeBays }, (_, i) => doorW / 2 + .65 + bay * (i + .5));
+  const sashWindows: TownWindow[] = [];
 
   // The old valley hall used blue-stone platforms, red columns and a triple tiled roof.
   // B05 adds a portico and lateral museum wings below the ceremonial hall on the upper terrace.
   box(palette.stone, 0, deck / 2, centerZ, shellW + .9, deck, shellD + .7);
   box(palette.ash, 0, deck - .11, centerZ, shellW + 1.2, .22, shellD + 1);
-  floors.push(bounds(0, deck - .14, centerZ, shellW + 1.2, .28, shellD + 1));
+  floors.push(
+    bounds(0, deck / 2, centerZ, shellW + .9, deck, shellD + .7),
+    bounds(0, deck - .11, centerZ, shellW + 1.2, .22, shellD + 1),
+  );
   for (let course = 0; course < 3; course++) {
     const y = .16 + course * .265;
     for (let x = -halfShell - .2; x < halfShell; x += .78) {
@@ -93,17 +108,45 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
   ramps.push({ min: [-doorW / 2 - .85, 0, rampStart], max: [doorW / 2 + .85, deck, outsideZ], axis: 'z', ascending: -1 });
   for (const direction of [-1, 1]) {
     const x = direction * (doorW / 2 + 1.18);
-    box(palette.stone, x, deck * .56, (rampStart + outsideZ) / 2, .42, deck * 1.1, run - .12);
+    solid(palette.stone, x, deck * .56, (rampStart + outsideZ) / 2, .42, deck * 1.1, run - .12);
     for (const z of [rampStart + .12, outsideZ - .53]) {
-      box(palette.ash, x, deck + .37, z, .55, 1.04, .55);
+      solid(palette.ash, x, deck + .37, z, .55, 1.04, .55);
       box(palette.lime, x, deck + .92, z, .7, .12, .68);
     }
   }
   const faceY = deck + wallH / 2;
   solid(wall, 0, faceY, rear, shellW, wallH, .56);
   for (const dir of [-1, 1]) {
-    solid(wall, dir * halfShell, faceY, centerZ, .5, wallH, shellD);
-    solid(wall, dir * (doorW / 2 + flankW / 2), faceY, front, flankW, wallH, .54);
+    const x = dir * halfShell;
+    const low = openingY - openingH / 2;
+    const high = openingY + openingH / 2;
+    solid(wall, x, (deck + low) / 2, centerZ, .5, low - deck, shellD);
+    solid(wall, x, (high + ridge) / 2, centerZ, .5, ridge - high, shellD);
+    let from = rear;
+    for (const z of sideWindows) {
+      const to = z - openingW / 2;
+      solid(wall, x, openingY, (from + to) / 2, .5, openingH, to - from);
+      sashWindows.push({
+        x, y: openingY, z, width: openingW, height: openingH, yaw: dir * Math.PI / 2, ground: deck, style: 'tavern',
+      });
+      from = z + openingW / 2;
+    }
+    solid(wall, x, openingY, (from + front) / 2, .5, openingH, front - from);
+    const facadeLow = facadeY - facadeHeight / 2;
+    const facadeHigh = facadeY + facadeHeight / 2;
+    const flankX = dir * (doorW / 2 + flankW / 2);
+    solid(wall, flankX, (deck + facadeLow) / 2, front, flankW, facadeLow - deck, .54);
+    solid(wall, flankX, (facadeHigh + ridge) / 2, front, flankW, ridge - facadeHigh, .54);
+    let left = doorW / 2;
+    for (const x of facadeWindows) {
+      const right = x - facadeWidth / 2;
+      solid(wall, dir * (left + right) / 2, facadeY, front, right - left, facadeHeight, .54);
+      sashWindows.push({
+        x: dir * x, y: facadeY, z: front, width: facadeWidth, height: facadeHeight, yaw: 0, ground: deck, style: 'tavern',
+      });
+      left = x + facadeWidth / 2;
+    }
+    solid(wall, dir * (left + halfShell) / 2, facadeY, front, halfShell - left, facadeHeight, .54);
   }
   solid(trim, 0, ridge - .77, front, doorW, 1.53, .59);
   box(palette.dark, 0, ridge - 1.56, front + .21, doorW + .75, .31, .53);
@@ -121,15 +164,22 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
     box(palette.dark, dir * (halfShell + .25), ridge - .17, centerZ, .26, .36, shellD + .35);
   }
 
-  function window(x: number, y: number, z: number, width: number, height: number, side = 0) {
+  function window(x: number, y: number, z: number, width: number, height: number, side = 0, swing = false) {
     const plane = (color: string, u: number, v: number, layer: number, wide: number, tall: number, thick: number, light = false) => {
       if (side) box(color, x + layer * side, y + v, z + u, thick, tall, wide, light);
       else box(color, x + u, y + v, z + layer, wide, tall, thick, light);
     };
-    plane(palette.dark, 0, 0, .075, width + .32, height + .35, .2);
-    plane(palette.glow, 0, 0, .205, width, height, .115, true);
-    for (const p of [-.33, 0, .33]) plane(palette.cedar, width * p, 0, .278, .085, height, .045);
-    for (const p of [-.33, 0, .33]) plane(palette.cedar, 0, height * p, .281, width, .075, .052);
+    if (swing) {
+      for (const end of [-1, 1]) {
+        plane(palette.dark, end * (width / 2 + .078), 0, .075, .14, height + .30, .19);
+        plane(palette.cedar, 0, end * (height / 2 + .073), .075, width + .30, .13, .19);
+      }
+    } else {
+      plane(palette.dark, 0, 0, .075, width + .32, height + .35, .2);
+      plane(palette.glow, 0, 0, .205, width, height, .115, true);
+      for (const p of [-.33, 0, .33]) plane(palette.cedar, width * p, 0, .278, .085, height, .045);
+      for (const p of [-.33, 0, .33]) plane(palette.cedar, 0, height * p, .281, width, .075, .052);
+    }
     plane(palette.brass, 0, -height / 2 - .13, .29, width + .49, .095, .28);
   }
 
@@ -142,13 +192,8 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
     box(palette.red, x, y - .54, z, .1, .25, .1);
   }
 
-  const facadeBays = ceremonial ? 4 : 3;
-  const bay = (flankW - 1.2) / facadeBays;
   for (const dir of [-1, 1]) {
-    for (let i = 0; i < facadeBays; i++) {
-      const x = dir * (doorW / 2 + .65 + bay * (i + .5));
-      window(x, deck + 2.18, front + .24, Math.min(1.21, bay * .71), 1.78);
-    }
+    for (const x of facadeWindows) window(dir * x, facadeY, front + .24, facadeWidth, facadeHeight, 0, true);
     for (let i = 0; i <= facadeBays; i++) {
       const x = dir * (doorW / 2 + .37 + bay * i);
       box(palette.stone, x, deck + .2, front + .29, .7, .4, .68);
@@ -156,10 +201,10 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
       box(palette.brass, x, ridge - .61, front + .35, .535, .09, .47);
       box(palette.dark, x, ridge - .36, front + .38, .65, .22, .53);
     }
-    for (const z of [centerZ - 3.8, centerZ, centerZ + 3.8]) window(dir * (halfShell + .23), deck + 2.25, z, 1.42, 1.72, dir);
+    for (const z of sideWindows) window(dir * (halfShell + .23), openingY, z, openingW, openingH, dir, true);
     const porticoX = dir * (doorW / 2 + 1.2);
-    box(palette.stone, porticoX, deck + .3, front + 1.65, .63, .6, .67);
-    box(trim, porticoX, deck + 2.55, front + 1.65, .43, 4.2, .43);
+    solid(palette.stone, porticoX, deck + .3, front + 1.65, .63, .6, .67);
+    solid(trim, porticoX, deck + 2.55, front + 1.65, .43, 4.2, .43);
     lantern(porticoX, deck + 3.5, front + 1.99);
     box(palette.red, porticoX, deck + 1.85, front + 1.89, .32, 1.42, .063);
     box(palette.brass, porticoX, deck + 1.24, front + 1.927, .225, .1, .028);
@@ -254,7 +299,33 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
       }
     }
   }
-  return finish();
+  if (ceremonial) {
+    // Keep the runner axis open between the threshold and the rear table.
+    for (let x = -halfShell + .32, i = 0; x < halfShell - .3; x += .62, i++) {
+      box(i % 3 ? '#865540' : '#724637', x, deck + .008, centerZ, .6, .016, shellD - .64);
+    }
+    for (const side of [-1, 1]) {
+      const x = side * (halfShell - 5.4);
+      const z = rear + 1.65;
+      solid(palette.dark, x, deck + .42, z, 3.45, .84, 1.12);
+      box(palette.cedar, x, deck + .87, z, 3.59, .14, 1.25);
+      box(palette.runner, x, deck + .95, z, 2.65, .025, .75);
+      for (const offset of [-.95, 0, .95]) {
+        box(palette.brass, x + offset, deck + 1.04, z, .23, .17, .23);
+        box(palette.bright, x + offset, deck + 1.19, z, .12, .14, .12, true);
+      }
+      for (const z of [front - 1.26, rear + 3.1]) {
+        const postX = side * (halfShell - .74);
+        box(palette.cedar, postX, deck + 1.74, z, .16, .11, .65);
+        box(palette.dark, postX, deck + 1.96, z + .24, .14, .53, .17);
+        lantern(postX, deck + 1.8, z - .32);
+      }
+    }
+  }
+
+  const group = finish();
+  for (const sash of sashWindows) addTownWindow(group, sash);
+  return group;
 }
 
 export function buildCultureLandmark(plot: TownPlot) {

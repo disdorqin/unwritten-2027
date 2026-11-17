@@ -31,7 +31,7 @@
     { "id": "lantern-workshop", "origin": [126, 115, 10], "footprint": [17, 24], "door": [117.5, 115], "connect": [108, 114, 9] },
     { "id": "market-stalls", "origin": [154, 105, 10], "footprint": [36, 20], "door": [154, 95], "connect": [154, 79.62, 9] },
     { "id": "carousel", "origin": [341, 115, 11], "footprint": [14, 14], "door": [341, 108], "connect": [341, 100, 9.84] },
-    { "id": "glasshouse", "origin": [372, 96, 11], "footprint": [13, 20], "door": [362, 96], "connect": [350, 100, 10] },
+    { "id": "glasshouse", "origin": [372, 96, 11], "footprint": [13, 20], "door": [365.76, 96], "connect": [350, 100, 10] },
     { "id": "lighthouse", "origin": [408, 78, 12], "footprint": [12, 12], "door": [408, 84], "connect": [374, 129, 11] },
     { "id": "stage", "origin": [238, 157, 12], "footprint": [18, 14], "door": [238, 164], "connect": [238, 169, 12] }
   ]

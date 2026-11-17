@@ -6,6 +6,11 @@ type Point = { x: number; north: number; height: number };
 type Segment = { a: Point; dx: number; dn: number; dh: number; lengthSquared: number; halfWidth: number };
 
 const [west, south, east, north] = layout.plaza.bounds;
+const memorial = layout.plots.find(plot => plot.id === 'memorial')!;
+const [memorialEast, memorialNorth, memorialLevel] = memorial.origin;
+// Extend the paved apron datum below a full terrain grid cell at the south lip.
+const memorialApron = [memorialEast - 11, memorialNorth - memorial.footprint[1] / 2 - 1,
+  memorialEast + 11, memorial.door[1] + 1];
 const clamp = (x: number, min: number, max: number) => Math.min(Math.max(x, min), max);
 const fade = (t: number) => {
   const s = clamp(t, 0, 1);
@@ -110,6 +115,8 @@ function sample(x: number, n: number) {
     plotSurface ||= dist === 0;
   }
   elevation = mix(elevation, road.height, 1 - fade(road.edge / 5));
+  const apronDistance = boxDistance(x, n, memorialApron);
+  elevation = mix(elevation, memorialLevel, 1 - fade(apronDistance / 5));
   if (plazaDistance === 0) elevation = layout.plaza.height;
   if (isWater(x, n)) elevation = Math.min(elevation, 3.4);
   return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };

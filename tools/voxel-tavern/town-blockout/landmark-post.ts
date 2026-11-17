@@ -56,7 +56,20 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   const eave = 7.86;
   box('stone', 0, .13, .05, 14.4, .26, 14.8);
   box('timber', 0, .27, 0, 13.8, .06, 14.2);
-  floors.push(bounds([0, .27, .05], [14, .06, 14.5]));
+  floors.push(bounds([0, .27, 0], [13.8, .06, 14.2]));
+  for (let row = 0; row < 28; row++) {
+    const z = -6.75 + row * .5;
+    const stagger = row % 2 ? 1.18 : 0;
+    for (let board = -1; board < 6; board++) {
+      const left = Math.max(-6.89, -6.9 + 2.3 * board + stagger);
+      const right = Math.min(6.89, -6.9 + 2.3 * (board + 1) + stagger);
+      if (right <= left) continue;
+      box((row + board * 3) % 7 ? 'timberWarm' : 'timber', (left + right) / 2,
+        ground + .003, z, right - left - .025, .012, .474);
+    }
+  }
+  // The stone facing carries the threshold from the second step to the timber floor.
+  floors.push(bounds([0, .13, 7.275], [3.35, .26, .45]));
   for (let i = 0; i < 2; i++) {
     box('stoneTrim', 0, .075 * (i + 1), 7.89 - i * .32, 3.35, .15 * (i + 1), .32);
     floors.push(bounds([0, .075 * (i + 1), 7.89 - i * .32], [3.35, .15 * (i + 1), .34]));
@@ -85,7 +98,7 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     }
     let walkHeight = y < 4 ? ground : mezzanine;
     let approach: [number, number] | undefined;
-    if (y > 4 && side === 1) {
+    if (y > 4 && side === 1 && (alongX || u > 0)) {
       const pull = alongX ? u + (u === 0 ? 0 : 1.03) : u;
       walkHeight = alongX ? ground : ground + (mezzanine - ground) * 5 / 16;
       approach = alongX ? [pull, front - 1.55] : [5.25, 2.59];
@@ -93,6 +106,8 @@ export function buildPostLandmark(_plot: TownPlot): Group {
       const length = y - h / 2 - bottom;
       block('timber', pull, bottom + length / 2, .032, length, .032, -.3);
       block('brass', pull, bottom, .09, .14, .065, -.3);
+    } else if (y > 4 && !alongX && side === 1) {
+      approach = [5.60, -4.23];
     }
     addTownWindow(model, {
       x: alongX ? u : face, y, z: alongX ? face : u,
@@ -142,6 +157,7 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   for (const side of [-1, 1]) {
     colliders.push(bounds([side * 4.16, 3.8, front], [5.82, 7.6, .43]));
   }
+  colliders.push(bounds([0, 5.44, front], [doorWidth, 4.28, .43]));
 
   for (const z of [-front, front]) {
     for (const x of [-6.94, 6.94]) {
@@ -195,6 +211,29 @@ export function buildPostLandmark(_plot: TownPlot): Group {
       box('timber', x + dx, y, z + dz, .048, .57, .048);
     }
   }
+  function plaque(text: string, x: number, y: number, z: number, width: number) {
+    if (typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#522c29';
+    ctx.fillRect(0, 0, 320, 128);
+    ctx.strokeStyle = '#dfa86d';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(8, 8, 304, 112);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 55px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#ffe4b6';
+    ctx.fillText(text, 160, 66);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    const sign = new Mesh(new PlaneGeometry(width, width * .4), new MeshBasicMaterial({ map: texture }));
+    sign.position.set(x, y, z);
+    model.add(sign);
+  }
   function envelope(x: number, y: number, z: number, w: number, h: number) {
     box('brass', x, y, z, w + .14, h + .14, .12);
     box('paper', x, y, z + .071, w, h, .036);
@@ -210,6 +249,8 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   box('timberWarm', 0, 3.27, front + .15, 3.24, .31, .31);
   box('timber', 0, 3.93, 7.61, 4.18, .24, .71);
   box('snow', 0, 4.065, 7.60, 4.2, .11, .73);
+  box('timber', 0, 3.56, 7.5, 1.48, .6, .13);
+  plaque('新年邮局', 0, 3.56, 7.57, 1.42);
   envelope(0, 8.56, front + .30, 1.57, .91);
 
   // Reuse the legacy Blender post office's postbox, writing desk and sorting wall,
@@ -255,7 +296,7 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     colliders.push(bounds([x, y + 1.1, z], [width, 2.2, .56]));
   }
   writeDesk(-4.34, ground, 3.58);
-  writeDesk(-.65, mezzanine, -4.96);
+  writeDesk(-.65, mezzanine, -5.57);
   sortingWall(-.42, ground + .65, -6.65, 5);
   sortingWall(-.42, mezzanine, -6.64, 5);
 
@@ -277,35 +318,13 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     box(layer % 3 === 0 ? 'slateLight' : 'paper', -.35 + layer * .01,
       countertop + .018 + layer * .018, -1.20, .48, .016, .29);
   }
-  if (typeof document !== 'undefined') {
-    const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#522c29';
-      ctx.fillRect(0, 0, 320, 128);
-      ctx.strokeStyle = '#dfa86d';
-      ctx.lineWidth = 5;
-      ctx.strokeRect(8, 8, 304, 112);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '700 45px "Microsoft YaHei", sans-serif';
-      ctx.fillStyle = '#ffe4b6';
-      ctx.fillText('纪念戳台', 160, 66);
-      const texture = new CanvasTexture(canvas);
-      texture.colorSpace = SRGBColorSpace;
-      const plaque = new Mesh(new PlaneGeometry(1.02, .408), new MeshBasicMaterial({ map: texture }));
-      plaque.position.set(.46, countertop + .244, -1.243);
-      model.add(plaque);
-    }
-  }
+  plaque('纪念戳台', .46, countertop + .244, -1.243, 1.02);
   colliders.push(bounds([-.85, ground + .59, -1.4], [5.45, 1.25, 1.12]));
-  box('timber', -.65, mezzanine - .15, -5.26, 12.65, .3, 3.46);
-  floors.push(bounds([-.65, mezzanine - .15, -5.26], [12.65, .3, 3.46]));
+  box('timber', 0, mezzanine - .15, -5.26, 13.8, .3, 3.46);
+  floors.push(bounds([0, mezzanine - .15, -5.26], [13.8, .3, 3.46]));
   box('timber', -5.54, mezzanine - .15, -.35, 2.65, .30, 6.4);
   floors.push(bounds([-5.54, mezzanine - .15, -.35], [2.65, .30, 6.4]));
-  for (let plank = -13; plank <= 10; plank++) {
+  for (let plank = -13; plank <= 13; plank++) {
     box(plank % 4 ? 'timberWarm' : 'timber', plank * .502, mezzanine - .011, -5.24, .484, .026, 3.4);
   }
   const stepDepth = .49;
@@ -320,8 +339,10 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     box('brass', stairX, y - .018, z + .235, 2.13, .035, .035);
     floors.push(bounds([stairX, y - rise / 2, z], [2.12, rise, stepDepth + .005]));
     for (const side of [-1, 1]) {
-      if (step % 3 === 0) box('timber', stairX + side * 1.03, y + .51, z, .11, 1.02, .12);
-      box('timber', stairX + side * 1.03, y + .98, z, .12, .13, stepDepth + .035);
+      const x = stairX + side * 1.03;
+      if (step % 3 === 0 || step === steps - 1) box('timber', x, y + .51, z, .11, 1.02, .12);
+      box('timber', x, y + .98, z, .12, .13, stepDepth + .035);
+      colliders.push(bounds([x, y + .49, z], [.12, 1.11, stepDepth + .005]));
     }
   }
   box('timber', stairX, mezzanine - .15, -3.40, 2.12, .3, .72);
@@ -333,10 +354,13 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     for (let along = -.5 * length; along <= length * .5; along += .45) {
       box('timber', x + (alongX ? along : 0), mezzanine + .51, z + (alongX ? 0 : along), .1, 1.02, .1);
     }
-    colliders.push(bounds([x, mezzanine + .46, z], [w, .92, d]));
+    colliders.push(bounds([x, mezzanine + .52, z], [w, 1.04, d]));
   }
-  rail(-.89, -3.57, 6.67, true);
+  rail(-.025, -3.57, 8.43, true);
+  rail(6.54, -3.57, .50, true);
   rail(-4.24, -.35, 6.39, false);
+  rail(-5.56, 2.85, 2.64, true);
+  rail(6.28, -3.40, .72, false);
 
   function parcel(x: number, y: number, z: number, size: number) {
     box('parcel', x, y + size * .36, z, size, size * .72, size * .8);
@@ -359,7 +383,18 @@ export function buildPostLandmark(_plot: TownPlot): Group {
       lantern(x, 5.02, z);
     }
   }
-  for (const z of [-5.7, -2.05, 2.15, 6.7]) box('timberWarm', 0, 7.24, z, 13.4, .29, .22);
+  for (const z of [-5.7, -2.05, 2.15, 6.7]) {
+    box('timberWarm', 0, 7.24, z, 13.4, .29, .22);
+    for (const side of [-1, 1]) {
+      const x = side * 6.65;
+      box('timber', x, 3.75, z, .26, 6.92, .28);
+      for (const y of [ground + .12, mezzanine - .06, 6.68]) {
+        box('timberWarm', x, y, z, .34, .20, .37);
+      }
+      box('timberWarm', side * 6.25, 6.83, z, .96, .19, .24, side * -.70);
+      colliders.push(bounds([x, 3.75, z], [.26, 6.92, .28]));
+    }
+  }
 
   const hallLight = new PointLight('#ffc18a', 118, 15, 2);
   hallLight.position.set(0, 3.78, 1.9);

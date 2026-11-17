@@ -1,5 +1,5 @@
 import { museumMonths, type MuseumExhibit } from './museum-catalog';
-import { monthStops } from './museum-timeline';
+import { monthStops, museumIndexStop } from './museum-timeline';
 import { currentMuseumSlide, networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
 import { museumMap, type MuseumPosition } from './museum-map';
@@ -215,6 +215,19 @@ export function createMuseumVisit(
     button('跟随灯标去四月航天展', () => { dialog.close(); guideApril(true); }, options);
     button('查看参观护照', passport, options);
   }
+  function exhibitIndex() {
+    frame('年度展陈索引', '一楼 · 年度长廊');
+    line('沿西侧长廊参观一月至六月，沿东侧长廊参观七月至十二月。');
+    for (const { month, items } of museumMonths) {
+      const entry = document.createElement('article');
+      const heading = document.createElement('h3');
+      heading.textContent = `${monthNames[month - 1]}月${progress.months.includes(month) ? ' · 已读' : ''}`;
+      const titles = document.createElement('p');
+      titles.textContent = items.map(item => item.title).join('、') || '岁末预留展位';
+      entry.append(heading, titles);
+      content.append(entry);
+    }
+  }
   function network(id: string) {
     if (id === 'terminal') {
       frame('网络记忆检索台', '二楼 · 网络档案');
@@ -255,11 +268,27 @@ export function createMuseumVisit(
       button('下一张档案', () => renderSlide(true));
     } else {
       frame('网络记忆阅览桌', '二楼 · 纸本与数字档案');
-      line('这里收录公开档案。二月的节目与十一月的网络展陈可在一楼月展中回查。');
+      line('展柜里的三件器物是从声音、载体到数字存档的体素示意。');
+      for (const [name, description] of [
+        ['便携电台', '转动调谐旋钮，沿刻度寻找广播信号。'],
+        ['双轮磁带', '两卷带轮之间的窄带承载录音，重听时按顺序走带。'],
+        ['档案电路板', '数字文件保存后，可以用目录按发布者、日期和载体重新定位。'],
+      ]) {
+        const entry = document.createElement('article');
+        const heading = document.createElement('h3');
+        heading.textContent = name;
+        const text = document.createElement('p');
+        text.textContent = description;
+        entry.append(heading, text);
+        content.append(entry);
+      }
+      line('到一楼月展还能打开这些公开档案的出处。', 'museum-note');
       const actions = document.createElement('div');
       actions.className = 'museum-options';
       content.append(actions);
+      button('打开一月档案', () => monthCard(1), actions);
       button('打开二月档案', () => monthCard(2), actions);
+      button('打开七月档案', () => monthCard(7), actions);
       button('打开十一月档案', () => monthCard(11), actions);
     }
   }
@@ -273,6 +302,7 @@ export function createMuseumVisit(
   const stops = [
     { x: 0, z: 10.3, y: .28, range: 2.6, label: '查看入馆导览', run: directory },
     { x: 4.5, z: 10.4, y: .28, range: 1.9, label: '查看参观护照', run: passport },
+    { ...museumIndexStop, y: .28, range: 1.55, label: '查看年度展陈索引', run: exhibitIndex },
     ...monthStops.map(({ month, x, z }) => ({ x, z, y: .28, range: 2.05, label: `查看${monthNames[month - 1]}月展`, run: () => monthCard(month, true) })),
     ...networkStops.map(({ id, x, z, label }) => ({ x, z, y: 5.65, range: 2.35, label, run: () => network(id) })),
     { ...terraceStop, y: 5.65, range: 2.8, label: '使用露台观景台', run: terrace },

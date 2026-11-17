@@ -28,6 +28,14 @@ const screeningSlides = [
     label: '011 · 网络与城市', topic: '乌镇“互联网之光”', caption: '把线下展览与新闻报道对照，辨认同一事件的不同记录。',
     date: '2026-11-02', month: 11, accent: '#cbc2eb',
   },
+  {
+    label: '001 · 志愿者口述', topic: '维基百科二十五周年', caption: '维基媒体基金会在周年项目中采访多地的志愿编辑。',
+    date: '2026-01-15', month: 1, accent: '#cae0ad',
+  },
+  {
+    label: '007 · 城市科技展览', topic: '上海世界人工智能大会', caption: '报道记录了世博、张江和西岸三地的展览与活动。',
+    date: '2026-07-17', month: 7, accent: '#e1b5a3',
+  },
 ] as const;
 let screeningIndex = 0;
 
@@ -633,6 +641,28 @@ export function addMuseumNetwork(m: MuseumBuilder) {
   for (let i = 0; i < 3; i++) book(foliosX + .62, floor + .88 + i * .087, foliosZ, .54 - i * .043, false, bookColors[i + 1]);
   label('公开资料选页', foliosX, floor + .828, foliosZ + .537, 1.22, .17, 0, goldOnWood);
   lamp(foliosX - .88, floor + .88, foliosZ - .28, .47);
+
+  // Keep the south windows clear and mount the archive signs above the east stair rail.
+  for (const [panelZ, accent, heading, lines] of [
+    [-5.67, color.garnet, '声音怎样留下来', ['播出节目单', '录制与重听', '公开回放出处']],
+    [5.67, color.jade, '网页怎样留下来', ['发布机构', '页面日期', '档案回查']],
+  ] as const) {
+    const panelY = floor + 2.25, panelX = 14.51, yaw = -Math.PI / 2;
+    box(color.walnut, panelX, panelY, panelZ, 4.98, 2.34, .20, yaw);
+    m.collider(panelX, panelY, panelZ, .24, 2.34, 4.98);
+    box(color.paper, panelX - .116, panelY, panelZ, 4.71, 2.12, .055, yaw);
+    box(accent, panelX - .150, panelY + .71, panelZ, 4.47, .47, .040, yaw);
+    label(heading, panelX - .175, panelY + .71, panelZ, 4.33, .41, yaw,
+      { background: accent, color: '#fbe6c0', border: false });
+    for (const [index, name] of lines.entries()) {
+      const lineY = panelY + .19 - .43 * index;
+      box(accent, panelX - .153, lineY, panelZ - 1.73, .21, .215, .035, yaw);
+      label(name, panelX - .172, lineY, panelZ + .16, 3.28, .31, yaw,
+        { background: color.paper, color: color.shadow, border: false });
+      m.detailBox(color.brass, panelX - .163, lineY - .21, panelZ, 4.29, 1 / 64, 1 / 64, yaw);
+    }
+    m.detailBox(color.shade, panelX - .16, panelY + 1.22, panelZ, 4.71, 1 / 64, .074, yaw, true);
+  }
 
   m.light(-7.3, floor + 3.82, 7.6, '#ffd4a1', 91, 14);
   m.light(5.2, floor + 3.92, -8.7, '#f7c69c', 86, 15);

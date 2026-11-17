@@ -587,19 +587,27 @@ function walkable(x: number, n: number) {
   return canEnter(x, n) && !scenery.blocked(x, n) && !districts.blocked(x, n)
     && !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
-function overlapsBody(x: number, n: number, { min, max }: Box) {
-  return x + .27 >= min[0] && x - .27 <= max[0] && -n + .27 >= min[2] && -n - .27 <= max[2];
+const bodyRadius = .27;
+const bodyHeight = 1.8;
+const stepHeight = .43;
+const surfaceEpsilon = .025;
+
+function overlapsBody(east: number, north: number, { min, max }: Box) {
+  const z = -north;
+  const dx = Math.max(min[0] - east, east - max[0], 0);
+  const dz = Math.max(min[2] - z, z - max[2], 0);
+  return dx * dx + dz * dz < bodyRadius * bodyRadius;
 }
+
 function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
   const z = -north;
-  const contains = ({ min, max }: Box) => east >= min[0] && east <= max[0] && z >= min[2] && z <= max[2];
   let height = grid.heightAt(east, north);
   for (const { floors, ramps, colliders } of walkGeometry) {
     for (const floor of floors) {
-      if (contains(floor) && floor.max[1] <= limit) height = Math.max(height, floor.max[1]);
+      if (floor.max[1] <= limit && overlapsBody(east, north, floor)) height = Math.max(height, floor.max[1]);
     }
     for (const ramp of ramps) {
-      if (!contains(ramp)) continue;
+      if (east < ramp.min[0] || east > ramp.max[0] || z < ramp.min[2] || z > ramp.max[2]) continue;
       const axis = ramp.axis === 'x' ? 0 : 2;
       const fraction = ((axis === 0 ? east : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
       const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? fraction : 1 - fraction);
@@ -613,41 +621,59 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
   }
   return height;
 }
-function obstructed(east: number, north: number, feet: number, sole = .14) {
+
+function obstructed(east: number, north: number, feet: number) {
+  const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+    feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
   return activities.some(activity => activity.blocked?.(east, north, feet)) ||
-    walkGeometry.some(({ colliders }) => colliders.some(box =>
-      overlapsBody(east, north, box) && feet + sole < box.max[1] && feet + 1.8 > box.min[1]));
+    walkGeometry.some(({ colliders, floors }) => colliders.some(intersects) || floors.some(intersects));
 }
+
 function tryMove(nextX: number, nextN: number) {
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
-  const limit = feet + (airHeight === undefined ? .43 : .055);
+  const limit = feet + (airHeight === undefined ? stepHeight : surfaceEpsilon);
   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit);
   const nextHeight = airHeight === undefined ? floor : feet;
-  if (floor > limit || obstructed(nextX, nextN, nextHeight, airHeight === undefined ? .14 : .025)) return false;
+  if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
-    if (ground - nextHeight > .43) {
+    if (ground - nextHeight > stepHeight) {
       airHeight = ground;
       riseSpeed = 0;
     } else ground = nextHeight;
   }
   return true;
 }
+
 function stepJump(dt: number) {
   if (airHeight === undefined) return;
   const feet = airHeight;
   riseSpeed -= 16.5 * dt;
   const next = feet + riseSpeed * dt;
   if (riseSpeed > 0) {
-    const crossedCeiling = walkGeometry.some(({ floors }) => floors.some(box =>
-      overlapsBody(x, n, box) && feet + 1.8 <= box.min[1] && next + 1.8 > box.min[1]));
-    if (crossedCeiling || obstructed(x, n, next)) {
+    const head = feet + bodyHeight;
+    let ceiling = next + bodyHeight;
+    function checkCeiling(box: Box) {
+      if (box.min[1] >= head - surfaceEpsilon && box.min[1] < ceiling && overlapsBody(x, n, box)) {
+        ceiling = box.min[1];
+      }
+    }
+    for (const { floors, colliders } of walkGeometry) {
+      floors.forEach(checkCeiling);
+      colliders.forEach(checkCeiling);
+    }
+    if (ceiling < next + bodyHeight) {
+      airHeight = Math.max(feet, ceiling - bodyHeight);
+      riseSpeed = 0;
+      return;
+    }
+    if (obstructed(x, n, next)) {
       riseSpeed = 0;
       return;
     }
   } else {
-    const landing = supportAt(x, n, feet + .06, feet + .06);
+    const landing = supportAt(x, n, feet + surfaceEpsilon, feet + surfaceEpsilon);
     if (next <= landing) {
       ground = landing;
       airHeight = undefined;

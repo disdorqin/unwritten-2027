@@ -169,6 +169,15 @@ function buildParts() {
   for (const z of [2.57, 4.99]) add('runnerEdge', -1.3, 3.04, z, 2.6, .027, .07);
   add('cloth', .375, 3.625, 1.875, .75, .0625, .625);
   add('gold', .4375, 3.625, 1.8125, .625, .0625, .0625);
+  // The upper east sash above the stairwell is operated from the gallery.
+  add('gold', 3.3125, 9.5, 1.96875, .0625, 2.25, .0625);
+  add('timberTrim', 3.25, 9.375, 1.90625, .1875, .1875, .1875);
+  for (let step = 0; step < 17; step++) {
+    const y = 3.25 + step * .25;
+    const z = 3.5 - step * .375;
+    if (step % 2 === 0) add('wood', 5.6875, y, z, .125, 1, .125);
+    add('wood', 5.6875, y + .875, z, .125, .125, .375);
+  }
   return { parts, colors };
 }
 
@@ -187,13 +196,25 @@ export function buildTavernLandmark(plot: TownPlot) {
   const group = new Group();
   group.name = '未写酒馆';
   const transform = tavernModelToPlot(plot);
+  const stairs: Box[] = Array.from({ length: 20 }, (_, step) => {
+    const y = 3 + step * .25;
+    const z = 3.5 - step * .375;
+    return [4.25, y, z, 5.75, y + .25, z + .375];
+  });
+  const porchSteps: Box[] = Array.from({ length: 4 }, (_, step) => {
+    const y = 2.5 - step * .25;
+    const z = 8 + step * .5;
+    return [-2, y, z, 2, y + .25, z + .5];
+  });
   for (const { at, yaw, axis, ground } of tavernWindows) {
     const [x, y, z] = transform(...at);
-    const stairLanding = at[0] === 6.46 && at[1] === 10 && at[2] === 2;
-    const inwardX = stairLanding ? 5 : at[0] - Math.sin(yaw) * 1.33;
+    const eastWall = at[0] === 6.46;
+    const galleryPull = eastWall && ground === 8 && at[2] === 2;
+    const inwardX = galleryPull ? 3.35 : at[0] - Math.sin(yaw) * 1.33;
     const inwardZ = at[2] - Math.cos(yaw) * 1.54;
-    const stairHeight = 3.05 + (3.88 - inwardZ) / (3.88 + 3.63) * (8 - 3.05);
-    const [approachX, walkHeight, approachZ] = transform(inwardX, stairLanding ? stairHeight : ground, inwardZ);
+    const tread = eastWall && !galleryPull && (ground === 8 || at[2] === 2)
+      ? stairs.find(([, , near, , , far]) => inwardZ >= near && inwardZ <= far) : undefined;
+    const [approachX, walkHeight, approachZ] = transform(inwardX, tread?.[4] ?? ground, inwardZ);
     const [edgeX, , edgeZ] = transform(at[0] + (axis === 0 ? 1.90 : 0), at[1], at[2] + (axis === 2 ? 1.90 : 0));
     addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
       height: 1.725, ground: walkHeight, approach: [approachX, approachZ], style: 'tavern' });
@@ -240,26 +261,32 @@ export function buildTavernLandmark(plot: TownPlot) {
   const toBox = ([x0, y0, z0, x1, y1, z1]: Box) => ({ min: transform(x0, y0, z0), max: transform(x1, y1, z1) });
   const wallBoxes: Box[] = [
     [-7, 3, -6, -6, 12, 6], [6, 3, -6, 7, 12, 6], [-6, 3, -6, 6, 12, -5],
-    [-6, 3, 5, -1, 7, 6], [1, 3, 5, 6, 7, 6], [-6, 8, 5, -1, 12, 6], [1, 8, 5, 6, 12, 6],
+    [-6, 3, 5, -1, 7, 6], [1, 3, 5, 6, 7, 6], [-1, 6, 5, 1, 7, 6],
+    [-6, 8, 5, -1, 12, 6], [1, 8, 5, 6, 12, 6], [-1, 11, 5, 1, 12, 6],
     [-7, 8, 7.87, 7, 9.2, 8], [-7, 8, 6, -6.87, 9.2, 8], [6.87, 8, 6, 7, 9.2, 8],
     [-5, 3, -3.07, 2.9, 4.18, -1.78], [2, 3, -5, 3, 4.18, -2],
     [3, 3, -5, 5, 12, -3.65], [-5.92, 3, 2.48, -3.57, 4.8, 4],
     [-4.73, 3, -.24, -3, 4.02, .84], [-.49, 3, .49, 1.25, 4.02, 1.61],
     [-4.24, 3, 3.51, -2.51, 4.02, 4.61],
+    [-.4375, 3, -.5625, .4375, 4.3125, .3125],
     [.3125, 3, 1.8125, 1.1875, 4.3125, 2.6875],
     [-5.875, 8, -.25, -4.75, 9.375, 1.75],
-    [3.875, 8, -1.99, 4.04, 9.07, 4.96],
+    [3.875, 8, -2, 4, 9.125, 5],
     [-5.88, 8, -4.8, -.88, 11, -4.22],
+    [-4.75, 8, -2.5, -3, 9, -1.375], [-4.6875, 8, -3.5625, -3.8125, 9.3125, -2.6875],
+    [-3.9375, 8, -1.1875, -3.0625, 9.3125, -.3125],
+    [-.25, 8, 1.5, 1.5, 9, 2.625], [-.1875, 8, .4375, .6875, 9.3125, 1.3125],
+    [.5625, 8, 2.8125, 1.4375, 9.3125, 3.6875],
   ];
   const floorBoxes: Box[] = [
     [-7, 2, -6, 7, 3, 8], [-7, 7, -6, 4, 8, 6], [4, 7, -6, 7, 8, -3],
     [4, 7, 5, 7, 8, 6], [-7, 7.75, 6, 7, 8, 8],
   ];
-  group.userData.colliders = wallBoxes.map(toBox);
-  group.userData.floors = floorBoxes.map(toBox);
-  group.userData.ramps = [
-    { ...toBox([-2, 2, 8, 2, 2.75, 10]), axis: 'z', ascending: -1 },
-    { ...toBox([4.25, 3.05, -3.63, 5.75, 8, 3.88]), axis: 'z', ascending: -1 },
-  ];
+  const stairRails = stairs.slice(0, 17).flatMap(([, , z, , tread, back]): Box[] => [
+    [4.0625, tread, z, 4.1875, tread + 1, back],
+    [5.6875, tread, z, 5.8125, tread + 1, back],
+  ]);
+  group.userData.colliders = [...wallBoxes, ...stairRails].map(toBox);
+  group.userData.floors = [...floorBoxes, ...porchSteps, ...stairs].map(toBox);
   return group;
 }

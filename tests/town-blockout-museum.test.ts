@@ -7,7 +7,7 @@ import { buildMuseumLandmark } from '../tools/voxel-tavern/town-blockout/landmar
 import { museumDetailAxis, museumDetailStep, museumHorizontalScale } from '../tools/voxel-tavern/town-blockout/museum-scale.ts';
 import { networkStops } from '../tools/voxel-tavern/town-blockout/museum-network.ts';
 import { terraceStop } from '../tools/voxel-tavern/town-blockout/museum-terrace.ts';
-import { monthStops } from '../tools/voxel-tavern/town-blockout/museum-timeline.ts';
+import { monthStops, museumIndexStop } from '../tools/voxel-tavern/town-blockout/museum-timeline.ts';
 import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
 import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 
@@ -109,6 +109,7 @@ test('museum entrance and both rows of month exhibits are walkable', () => {
     ...monthStops.slice(6).map(({ x, z }) => [x, z] as const),
   ];
   assert.ok(Math.abs(walk(yearlyRoute) - .28) < .001);
+  assert.ok(Math.abs(walk([...byDoor, [0, -3.26], [museumIndexStop.x, museumIndexStop.z]]) - .28) < .001);
 });
 
 test('museum east staircase reaches the upper gallery and its three stations', () => {
@@ -124,4 +125,13 @@ test('museum west terrace connects to the gallery and descends to the courtyard'
   assert.ok(Math.abs(walk(terraceRoute) - 5.65) < .001);
   const returned = walk([...terraceRoute, [-24.0, 4.35], [-24.0, 10.16], [-24.0, 18.62], [-24, 18.92]]);
   assert.ok(Math.abs(returned) < .25, `court level: ${returned}`);
+  const reentered = walk([...terraceRoute, [-24, 4.35], [-24, 10.16], [-24, 19.3],
+    [0, 19.3], doorway, [0, 10.1]]);
+  assert.ok(Math.abs(reentered - .28) < .001, `main doorway after terrace loop: ${reentered}`);
+});
+
+test('museum east staircase can return from the upper gallery to the street', () => {
+  const reversedStairs: Waypoint[] = [...upperApproach, [16.98, -10.15], [16.98, 10.2], [0, 10.2], doorway, entrance];
+  const street = townPoint(entrance);
+  assert.ok(Math.abs(walk(reversedStairs) - (terrain.heightAt(street.x, street.north) - originY)) < .001);
 });

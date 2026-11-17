@@ -4,6 +4,7 @@ import {
   Vector3, Quaternion,
 } from 'three';
 import type { Box, TownPlot } from './landmark-kit';
+import { addTownWindow } from './town-window';
 
 type Vector = [number, number, number];
 type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean };
@@ -156,28 +157,44 @@ function buildGuild() {
   const rear = -6.45;
   const front = 5.15;
   const ceiling = 5.3;
+  const facadeWindows = [-6.92, -3.8, 3.8, 6.92];
+  const frames = [-8.55, -5.27, -2.12, 2.12, 5.27, 8.55];
+  const sashY = 2.83;
+  const sashWidth = 2.57;
+  const sashHeight = 1.61;
+  const sill = sashY - sashHeight / 2;
+  const head = sashY + sashHeight / 2;
   knitBoxwork(s, 0, -.5, width + .4, houseDepth + .45, 3.8);
   // The porch and central gate of the old guild remain, turned west onto the planned lane.
   for (let i = -10; i <= 10; i++) {
     const x = i * .83;
     put(wood[(i + 44) % 4], x, .075, .85, .81, .15, 14.88);
     put(darkRed, x, 2.65, rear, .83, 4.41, .38);
-    if (Math.abs(x) > 2.15) put(i % 4 ? wood[0] : red, x, .99, front, .83, 1.42, .34);
-    if (Math.abs(x) > 2.15) put(wood[2], x, 4.55, front, .83, .8, .34);
+    if (Math.abs(x) > 2.15) {
+      put(i % 4 ? wood[0] : red, x, (.28 + sill) / 2, front, .83, sill - .28, .34);
+      put(wood[2], x, (head + 4.95) / 2, front, .83, 4.95 - head, .34);
+    }
   }
   for (const x of [-8.78, 8.78]) {
     for (let i = 0; i < 16; i++) put(wood[i % 4], x, 2.65, -6.25 + i * .72, .35, 4.39, .73);
     put(trim, x, 4.85, -.54, .48, .32, 12);
   }
-  for (const x of [-8.55, -5.27, -2.12, 2.12, 5.27, 8.55]) {
+  for (const x of frames) {
     post(s, x, front, 5.18, .41);
     post(s, x, 7.33, 4.56, .38);
     put(wood[2], x, 4.49, 6.12, .34, .29, 3.15);
     put(trim, x, 5.09, rear, .48, .68, .64);
     if (Math.abs(x) !== 2.12) lantern(s, x, 3.88, 7.48, Math.abs(x) < 6 ? .78 : .62);
   }
-  for (const x of [-6.92, -3.8, 3.8, 6.92]) {
-    window(s, x, front + .21, 2.83, 2.57, .21, 1.61);
+  const windowMullions = [[-8.63, -6.92 - sashWidth / 2], [-6.92 + sashWidth / 2, -3.8 - sashWidth / 2], [-3.8 + sashWidth / 2, -2.25]];
+  for (const [a, b] of windowMullions) for (const side of [-1, 1]) {
+    put(wood[0], side * (a + b) / 2, sashY, front, b - a, sashHeight, .34);
+  }
+  for (const x of facadeWindows) {
+    for (const edge of [-1, 1]) {
+      put(trim, x + edge * (sashWidth / 2 + .067), sashY, front + .21, .14, sashHeight + .2, .22);
+      put(wood[0], x, sashY + edge * (sashHeight / 2 + .07), front + .23, sashWidth + .27, .14, .32);
+    }
     window(s, x, rear - .21, 2.83, 2.49, .21, 1.62);
     furnishBench(s, x, -2.4, x > 0 ? 1 : -1);
     furnishBench(s, x, 1.6, x > 0 ? -1 : 1);
@@ -214,12 +231,31 @@ function buildGuild() {
   const walls = [
     collision(0, 0, rear, width, 5, .38),
     ...[-8.78, 8.78].map(x => collision(x, 0, -.7, .35, 5, 11.56)),
-    ...[-5.44, 5.44].map(x => collision(x, 0, front, 6.38, 4.95, .38)),
-    ...[-6.92, -3.8, 3.8, 6.92].flatMap(x =>
-      [-2.4, 1.6].map(z => collision(x, 0, z, 2.47, 1.33, 1.12))),
+    ...frames.flatMap(x => [
+      collision(x, 0, front, .41, 5.18, .41),
+      collision(x, 0, 7.33, .38, 4.56, .38),
+      collision(x, 0, front, .70, .39, .70),
+      collision(x, 0, 7.33, .65, .39, .65),
+    ]),
+    ...[-1, 1].flatMap(side => windowMullions.map(([a, b]) =>
+      collision(side * (a + b) / 2, sill, front, b - a, sashHeight, .34))),
+    ...[-5.44, 5.44].flatMap(x => [
+      collision(x, 0, front, 6.38, sill, .38),
+      collision(x, head, front, 6.38, 4.95 - head, .38),
+    ]),
+    ...facadeWindows.flatMap(x => [-2.4, 1.6].map(z => collision(x, 0, z, 2.47, 1.33, 1.12))),
   ];
+  for (const x of facadeWindows) {
+    addTownWindow(building, {
+      x, y: sashY, z: front + .065, width: sashWidth, height: sashHeight, yaw: 0, ground: .15, style: 'tavern',
+    });
+  }
   building.userData.colliders = walls.map(rotateWest);
-  building.userData.floors = [rotateWest(collision(0, 0, .85, 17.43, .15, 14.88))];
+  building.userData.floors = [
+    collision(0, 0, .85, 17.43, .15, 14.88),
+    collision(0, 0, 7.89, 4.45, .14, 1.07),
+    collision(0, .07, 7.40, 4.24, .14, .73),
+  ].map(rotateWest);
   return building;
 }
 
@@ -295,6 +331,10 @@ function buildStalls() {
     ...set.flatMap(([x, z, width]) => [
       collision(x, 0, z - 2.4, width, 3.6, .22),
       collision(x, 0, z + 1.4, width, 1.51, 1.12),
+      ...[-1, 1].flatMap(side => [
+        collision(x + side * (width / 2 + .25), 0, z + 1.8, .81, 1.09, .81),
+        ...[-2.15, 2.15].map(end => collision(x + side * (width / 2 - .2), 0, z + end, .28, 3.95, .28)),
+      ]),
     ]),
     ...[-16, -7.8, 8.5, 16].map(x => collision(x, 0, 3.42, .44, 5.38, .44)),
     ...[-2.76, 2.76].map(x => collision(x, 0, 6.67, .46, 4.64, .46)),

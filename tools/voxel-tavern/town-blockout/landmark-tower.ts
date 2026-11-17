@@ -3,6 +3,7 @@ import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
 // @ts-expect-error The original JavaScript builder has no declaration file.
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
 import type { TownPlot } from './landmark-kit';
+import { addTownWindow } from './town-window';
 
 type Vec3 = [number, number, number];
 type Bounds = { min: Vec3; max: Vec3 };
@@ -15,6 +16,7 @@ const colors: Record<string, string> = {
   brass: '#b68d4a', bronze: '#ac753c', gold: '#eead49', glow: '#ffc370',
   wood: '#684633', plank: '#8f6646', dark: '#302b34', iron: '#47444c',
   runner: '#8a3737', cloth: '#a92c35', oxblood: '#903341', garnet: '#b42b3b',
+  oak: '#a77653', oakEnd: '#bd8960', copper: '#c07743', copperDark: '#80472e',
   wineTile: '#703d4f', teal: '#547783', roofShadow: '#263c60', roofGlaze: '#4b7195', roof: '#365477',
 };
 
@@ -53,9 +55,32 @@ export function buildTowerLandmark(plot: TownPlot): Group {
 
   // Rotate the original north entrance to face the new plaza. The old shaft,
   // clock faces, belfry, spire and bell hall are retained at their original scale.
-  const oldBox: Box = (kind, x, y, z, w = 1, h = 1, d = 1) => box(kind, -3 - x - w, y - 2, 37.5 - z - d, w, h, d);
+  const windowSill = 1.375;
+  const windowLintel = 3.625;
+  const windowHalf = .875;
+  const oldBox: Box = (kind, x, y, z, w = 1, h = 1, d = 1) => {
+    x = -3 - x - w;
+    y -= 2;
+    z = 37.5 - z - d;
+    const oldSlab = w >= 10 && d >= 10 && [10.25, 53, 71, 79.8125].includes(y);
+    const oldFurniture = y >= .3125 && y < 5.6 && x >= -4.99 && x + w <= 4.99 && z >= -5 && z + d <= 5;
+    const oldBells = y >= 73.125 && y < 79 && Math.max(Math.abs(x), Math.abs(x + w), Math.abs(z), Math.abs(z + d)) < 4.625;
+    if (oldSlab || oldFurniture || oldBells) return;
+    if (kind === 'limestone' && x === -5.625 && y === .5 && h === 9.75 && d === 11.5) {
+      box(kind, x, y, z, w, h, -windowHalf - z);
+      box(kind, x, y, windowHalf, w, h, z + d - windowHalf);
+      box(kind, x, y, -windowHalf, w, windowSill - y, 2 * windowHalf);
+      box(kind, x, windowLintel, -windowHalf, w, y + h - windowLintel, 2 * windowHalf);
+    } else if (y >= 87.75 && y < 90.25 && z >= 1.9375 && z < 3.125 && d <= .3125 && x < .75 && x + w > -.75) {
+      // The four upper slate courses frame a real lookout slit on the plaza side.
+      box(kind, x, y, z, Math.min(w, -.75 - x), h, d);
+      box(kind, Math.max(x, .75), y, z, x + w - Math.max(x, .75), h, d);
+    } else {
+      box(kind, x, y, z, w, h, d);
+    }
+  };
   buildGrandClocktower({ box: oldBox, beam: oldBox, lantern: (x: number, y: number, z: number) => {
-    lamp(box, -3 - x, y - 2, 37.5 - z);
+    if (y < 7.5 && z < 41) lamp(box, -3 - x, y - 2, 37.5 - z);
   } });
 
   // Side wings and entrance surround from B01. The lowest bands are aligned to
@@ -141,12 +166,307 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   }
   floor(-6.5, 0, -6.5, 13, .3125, 13);
   floor(-1.875, .3125, 5.25, 3.75, .1875, .4375);
-  solid(-5.75, .25, -5.63, 11.5, 10, .7);
-  solid(-5.63, .25, -5.75, .7, 10, 11.5);
-  solid(4.93, .25, -5.75, .7, 10, 11.5);
-  solid(-5.75, .25, 4.99, 3.875, 10, .7);
-  solid(1.875, .25, 4.99, 3.875, 10, .7);
-  solid(-2.25, .25, -5, 4.5, 3.75, 1.75);
+  solid(-5.75, .25, -5.625, 11.5, 10, .625);
+  solid(5, .25, -5.75, .625, 10, 11.5);
+  solid(-5.75, .25, 5, 3.875, 10, .625);
+  solid(1.875, .25, 5, 3.875, 10, .625);
+  solid(-5.625, .25, -5.75, .625, 10, 5.75 - windowHalf);
+  solid(-5.625, .25, windowHalf, .625, 10, 5.75 - windowHalf);
+  solid(-5.625, .25, -windowHalf, .625, windowSill - .25, 2 * windowHalf);
+  solid(-5.625, windowLintel, -windowHalf, .625, 10.25 - windowLintel, 2 * windowHalf);
+  addTownWindow(tower, {
+    x: -5.3125, y: 2.5, z: 0, yaw: -Math.PI / 2, width: 1.75, height: 2.25,
+    ground: .3125, approach: [-4, 0], style: 'tavern',
+  });
+  for (const zz of [-.96875, .875]) box('oak', -5.66, windowSill, zz, .75, 2.25, .09375);
+  for (const yy of [windowSill - .09375, windowLintel]) box('oakEnd', -5.71875, yy, -.96875, .8125, .09375, 1.9375);
+
+  function shaftWalls(bottom: number, top: number, inner: number, outer: number) {
+    const depth = outer - inner;
+    for (const edge of [-outer, inner]) {
+      solid(edge, bottom, -outer, depth, top - bottom, outer * 2);
+      solid(-inner, bottom, edge, inner * 2, top - bottom, depth);
+    }
+  }
+  shaftWalls(10.25, 53.5, 4.5, 5.375);
+  shaftWalls(53.5, 71.625, 5, 5.5);
+  // The belfry has open arches. Its perimeter guard is aligned with the old iron grilles.
+  shaftWalls(71.625, 72.875, 4.875, 5.375);
+  // Match the stepped slate shell. Keep the high slot protected by the lookout rail.
+  for (let course = 0; course <= 15; course++) {
+    const outer = 5.75 - .25 * course;
+    shaftWalls(80.875 + course * .625, 81.5 + course * .625, outer - .3125, outer);
+  }
+
+  const unit32 = 1 / 32;
+  const snap = (value: number) => Math.round(value / unit32) * unit32;
+  function deck(x0: number, z0: number, x1: number, z1: number, y: number) {
+    box('wood', x0, y - .25, z0, x1 - x0, .21875, z1 - z0);
+    const rows = Math.ceil((x1 - x0) / .375);
+    for (let i = 0; i < rows; i++) {
+      const a = x0 + .375 * i;
+      const b = Math.min(x1, a + .375);
+      box(i % 3 === 0 ? 'oakEnd' : 'oak', a, y - unit32, z0, b - a - unit32, unit32, z1 - z0);
+    }
+    floor(x0, y - .25, z0, x1 - x0, .25, z1 - z0);
+  }
+
+  function guard(x0: number, z0: number, x1: number, z1: number, y: number, endY = y) {
+    const alongX = z0 === z1;
+    const x = Math.min(x0, x1);
+    const z = Math.min(z0, z1);
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const w = alongX ? length : .09375;
+    const d = alongX ? .09375 : length;
+    const offsetX = alongX ? 0 : -.046875;
+    const offsetZ = alongX ? -.046875 : 0;
+    const yy = Math.min(y, endY);
+    const dy = Math.abs(endY - y);
+    solid(x + offsetX, yy, z + offsetZ, w, 1.15625 + dy, d);
+    const intervals = Math.ceil(length / .34);
+    for (let i = 0; i < intervals; i++) {
+      const t = (i + .5) / intervals;
+      const a = snap(x0 + (x1 - x0) * t);
+      const b = snap(z0 + (z1 - z0) * t);
+      const height = snap(y + (endY - y) * t);
+      const span = snap(length / intervals + .0625);
+      box('iron', a - .03125, height + .0625, b - .03125, .0625, 1, .0625);
+      box(i % 3 === 0 ? 'oakEnd' : 'oak', a - (alongX ? span : .125) / 2,
+        height + 1.03125, b - (alongX ? .125 : span) / 2,
+        alongX ? span : .125, .125 + dy / intervals, alongX ? .125 : span);
+      box('brass', a - .046875, height + .09375, b - .046875, .09375, unit32, .09375);
+    }
+  }
+
+  function stairs(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, width: number, count: number) {
+    const alongX = z0 === z1;
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const half = width / 2;
+    const at = (i: number) => snap((alongX ? x0 : z0) + ((alongX ? x1 - x0 : z1 - z0) * i) / count);
+    for (let i = 0; i < count; i++) {
+      const lo = Math.min(at(i), at(i + 1));
+      const depth = Math.abs(at(i + 1) - at(i));
+      const tx = alongX ? lo : x0 - half;
+      const tz = alongX ? z0 - half : lo;
+      const w = alongX ? depth : width;
+      const d = alongX ? width : depth;
+      const yy = y + (i + 1) * rise;
+      box('oak', tx, yy - rise, tz, w, rise, d);
+      floor(tx, yy - rise, tz, w, rise, d);
+      const ascending = alongX ? x1 > x0 : z1 > z0;
+      const edge = ascending ? lo : lo + depth - unit32;
+      box('oakEnd', alongX ? edge : tx, yy - unit32, alongX ? tz : edge,
+        alongX ? unit32 : w, unit32, alongX ? d : unit32);
+      for (const edge of [-half + .09375, half - .09375]) {
+        box('wood', alongX ? tx : x0 + edge - .09375, yy - rise - .1875, alongX ? z0 + edge - .09375 : tz,
+          alongX ? w : .1875, .1875, alongX ? .1875 : d);
+      }
+    }
+    // Break the sloped rail into short solid spans so the feet can follow the treads.
+    const spans = Math.ceil(length / 1.15);
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < spans; i++) {
+        const a = (i + .035) / spans;
+        const b = (i + 1 - .035) / spans;
+        const x = alongX ? 0 : side * half;
+        const z = alongX ? side * half : 0;
+        guard(snap(x0 + (x1 - x0) * a) + x, snap(z0 + (z1 - z0) * a) + z,
+          snap(x0 + (x1 - x0) * b) + x, snap(z0 + (z1 - z0) * b) + z,
+          snap(y + count * rise * a), snap(y + count * rise * b));
+      }
+    }
+  }
+
+  const corner = 3.21875;
+  const lane = 2.0625;
+  const outer = corner + lane / 2;
+  const inner = corner - lane / 2;
+  const corners: [number, number][] = [[corner, corner], [corner, -corner], [-corner, -corner], [-corner, corner]];
+  const hallY = .3125;
+  const riser = .21875;
+  const flightRise = 12 * riser;
+  const heightAt = (index: number) => hallY + index * flightRise;
+  const dialStop = 24;
+  const bellStop = 27;
+  const spireStop = 31;
+  const branchWidth = 1.125;
+
+  for (let i = 0; i <= spireStop; i++) {
+    const [x, z] = corners[i % 4];
+    const y = heightAt(i);
+    if (i > 0) {
+      deck(x - lane / 2, z - lane / 2, x + lane / 2, z + lane / 2, y);
+      const ex = Math.sign(x) * outer;
+      const ez = Math.sign(z) * outer;
+      guard(ex, z - lane / 2, ex, z + lane / 2, y);
+      guard(x - lane / 2, ez, x + lane / 2, ez, y);
+      lamp(box, ex - Math.sign(x) * .25, y + 1.375, ez - Math.sign(z) * .25, .52);
+      box('wood', x - lane / 2, y - .4375, z - lane / 2, lane, .1875, .25);
+    }
+    if (i === spireStop) break;
+    const [nx, nz] = corners[(i + 1) % 4];
+    const dx = Math.sign(nx - x);
+    const dz = Math.sign(nz - z);
+    const branch = i === dialStop || i === bellStop ? branchWidth : 0;
+    stairs(x + dx * (lane / 2 + branch), z + dz * (lane / 2 + branch),
+      nx - dx * lane / 2, nz - dz * lane / 2, y, riser, lane, 12);
+  }
+
+  function viewingDeck(y: number, entry: 'east' | 'south') {
+    deck(-inner, -inner, inner, inner, y);
+    if (entry === 'east') {
+      deck(inner, inner - branchWidth, outer, inner, y);
+      guard(outer, inner - branchWidth, outer, inner, y);
+      guard(inner, -inner, inner, inner - branchWidth, y);
+      guard(-inner, inner, inner, inner, y);
+    } else {
+      deck(-inner, inner, -inner + branchWidth, outer, y);
+      guard(-inner, outer, -inner + branchWidth, outer, y);
+      guard(inner, -inner, inner, inner, y);
+      guard(-inner + branchWidth, inner, inner, inner, y);
+    }
+    guard(-inner, -inner, -inner, inner, y);
+    guard(-inner, -inner, inner, -inner, y);
+  }
+
+  const dialY = heightAt(dialStop);
+  const bellY = heightAt(bellStop);
+  viewingDeck(dialY, 'east');
+  viewingDeck(bellY, 'south');
+
+  // The upper flights turn inside the slate roof and end at the plaza-facing lookout.
+  const spireY = heightAt(spireStop);
+  const upperTurnY = spireY + 14 * riser;
+  const lookoutY = upperTurnY + 18 * .1875;
+  deck(-outer, 2.0625, -.625, outer, spireY);
+  guard(-inner, outer, -.625, outer, spireY);
+  guard(-.625, 2.0625, -.625, outer, spireY);
+  stairs(-1.4375, 2.0625, -1.4375, -2.15625, spireY, riser, 1.625, 14);
+  deck(-2.25, -3, 1.78125, -2.15625, upperTurnY);
+  guard(-2.25, -3, 1.78125, -3, upperTurnY);
+  guard(-2.25, -3, -2.25, -2.15625, upperTurnY);
+  guard(1.78125, -3, 1.78125, -2.15625, upperTurnY);
+  guard(-.625, -2.15625, .28125, -2.15625, upperTurnY);
+  stairs(1.03125, -2.15625, 1.03125, .8125, upperTurnY, .1875, 1.5, 18);
+  deck(-1.65625, .8125, 1.78125, 1.8125, lookoutY);
+  guard(-1.65625, 1.8125, 1.78125, 1.8125, lookoutY);
+  guard(-1.65625, .8125, -1.65625, 1.8125, lookoutY);
+  guard(1.78125, .8125, 1.78125, 1.8125, lookoutY);
+  guard(-1.65625, .8125, .28125, .8125, lookoutY);
+
+  // A brass nosing, carved wooden joinery and warm lamps follow the tavern palette.
+  box('runner', -1.1875, hallY, .75, 2.375, unit32, 4.5);
+  for (const x of [-1.15625, 1.125]) box('brass', x, hallY + unit32, .75, unit32, unit32, 4.5);
+  for (const z of [-2.6875, 2.6875]) {
+    box('wood', -4.25, hallY, z - .59375, .625, .40625, 1.1875);
+    box('oak', -4.3125, hallY + .40625, z - .6875, .75, .09375, 1.375);
+    box('runner', -4.1875, hallY + .5, z - .5625, .46875, unit32, 1.125);
+    solid(-4.3125, hallY, z - .6875, .75, .53125, 1.375);
+  }
+  for (const x of [-2.625, 2.625]) {
+    box('wood', x - .125, .3125, -4.875, .25, 7.75, .25);
+    for (let y = .5; y < 7.5; y += 1.25) box('brass', x - .15625, y, -4.90625, .3125, unit32, .3125);
+  }
+
+  function pixel(kind: string, x: number, y: number, z: number, width: number, depth: number) {
+    box(kind, snap(x - width / 2), snap(y - width / 2), z, width, width, depth);
+  }
+  function stroke(kind: string, x: number, y: number, z: number, angle: number, length: number, width: number) {
+    for (let r = 0; r <= length; r += .09375) {
+      pixel(kind, x + Math.sin(angle) * r, y + Math.cos(angle) * r, z, width, .0625);
+    }
+  }
+
+  // The south dial is double-sided. The inward face exposes its chapter ring and hands.
+  const faceY = 65;
+  for (let row = -19; row <= 19; row++) {
+    const ry = row * .125;
+    const span = snap(Math.sqrt(Math.max(0, 2.375 ** 2 - ry ** 2)));
+    if (span > 0) box('dark', -span, faceY + ry - .0625, 4.90625, span * 2, .125, .09375);
+  }
+  for (let tick = 0; tick < 120; tick++) {
+    const a = tick * Math.PI / 60;
+    pixel('brass', Math.sin(a) * 2.25, faceY + Math.cos(a) * 2.25, 4.875, .125, unit32);
+    if (tick % 2) continue;
+    const r = tick % 10 === 0 ? 1.96875 : 2.0625;
+    pixel('gold', Math.sin(a) * r, faceY + Math.cos(a) * r, 4.84375, tick % 10 ? unit32 : .125, unit32);
+  }
+  stroke('gold', 0, faceY, 4.8125, -Math.PI / 15, 1.84, .125);
+  stroke('copper', 0, faceY, 4.78125, -Math.PI / 3, 1.31, .1875);
+  pixel('brass', 0, faceY, 4.75, .21875, .09375);
+
+  function gear(x: number, y: number, z: number, radius: number, teeth: number) {
+    for (let tooth = 0; tooth < teeth * 3; tooth++) {
+      const a = tooth / (teeth * 3) * Math.PI * 2;
+      const outer = radius + (tooth % 3 === 0 ? .0625 : 0);
+      pixel(tooth % 3 === 0 ? 'gold' : 'copper', x + Math.sin(a) * outer,
+        y + Math.cos(a) * outer, z, .125, .15625);
+      if (tooth % 9 === 0) pixel('brass', x + Math.sin(a) * outer, y + Math.cos(a) * outer, z + .15625, unit32, unit32);
+    }
+    for (let i = 0; i < 6; i++) stroke('bronze', x, y, z + .03125, i * Math.PI / 3, radius, .15625);
+    pixel('iron', x, y, z - .15625, .3125, .4375);
+    for (const side of [-1, 1]) pixel('brass', x + side * .09375, y, z + .28125, unit32, unit32);
+  }
+  const gearZ = -.8125;
+  box('wood', -1.625, dialY, -1.125, 3.125, .4375, .75);
+  box('oakEnd', -1.6875, dialY + .4375, -1.1875, 3.25, .09375, .875);
+  for (const x of [-1.4375, 1.3125]) {
+    box('wood', x - .09375, dialY + .5, -1.03125, .1875, 2.75, .3125);
+    box('brass', x - .125, dialY + 2.40625, -.6875, .25, .25, unit32);
+  }
+  box('wood', -1.625, dialY + 3.125, -1.125, 3.125, .1875, .5);
+  gear(-.625, dialY + 1.375, gearZ, .90625, 28);
+  gear(.90625, dialY + 1.625, gearZ + .125, .625, 22);
+  gear(.4375, dialY + 2.5625, gearZ + .0625, .46875, 16);
+  solid(-1.6875, dialY, -1.1875, 3.25, 2.875, .875);
+
+  function copperRing(y: number, radius: number, height: number, thickness: number, color: string, centerX = 0, centerZ = 0) {
+    const slice = .125;
+    const hole = Math.max(0, radius - thickness);
+    for (let row = -radius; row < radius; row += slice) {
+      const distance = row + slice / 2;
+      const span = snap(Math.sqrt(Math.max(0, radius ** 2 - distance ** 2)));
+      const inner = snap(Math.sqrt(Math.max(0, hole ** 2 - distance ** 2)));
+      if (inner === 0) box(color, centerX - span, y, centerZ + row, span * 2, height, slice);
+      else for (const side of [-1, 1]) {
+        box(color, centerX + (side < 0 ? -span : inner), y, centerZ + row, span - inner, height, slice);
+      }
+    }
+  }
+  const bellBase = bellY + 2.53125;
+  const profile: [number, number, number, string][] = [
+    [0, 1.78125, .09375, 'copper'], [.09375, 1.78125, .125, 'bronze'], [.21875, 1.65625, .28125, 'copperDark'],
+    [.5, 1.53125, .3125, 'copper'], [.8125, 1.40625, .375, 'bronze'], [1.1875, 1.3125, .5, 'copper'],
+    [1.6875, 1.25, .5625, 'bronze'], [2.25, 1.125, .4375, 'copper'], [2.6875, .96875, .375, 'bronze'],
+    [3.0625, .78125, .25, 'copperDark'],
+  ];
+  for (const [dy, radius, height, color] of profile) copperRing(bellBase + dy, radius, height, dy >= 3 ? radius : .1875, color);
+  copperRing(bellBase + .0625, 1.8125, unit32, .1875, 'gold');
+  copperRing(bellBase + .21875, 1.6875, unit32, .1875, 'brass');
+  for (let i = 0; i < 40; i++) {
+    const a = i * Math.PI / 20;
+    box('brass', snap(Math.sin(a) * 1.661), bellBase + .3125, snap(Math.cos(a) * 1.661), unit32, .09375, unit32);
+  }
+  box('iron', -.09375, bellBase - .1875, -.09375, .1875, 3.5, .1875);
+  box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);
+  box('oak', -2.1875, bellBase + 3.375, -.375, 4.375, .375, .75);
+  box('wood', -.28125, bellBase + 3.3125, -2.1875, .5625, .46875, 4.375);
+  for (const x of [-1.875, -.25, .25, 1.875]) {
+    box('iron', x - .0625, bellBase + 3.25, -.40625, .125, .625, .8125);
+    box('gold', x - unit32, bellBase + 3.4375, .40625, .0625, .0625, unit32);
+  }
+  for (const z of [-2.125, 2.125]) {
+    for (const x of [-2.125, 2.125]) {
+      box('wood', x - .09375, bellY - .25, z - .09375, .1875, 5.75, .1875);
+      box('oakEnd', x - .15625, bellBase + 3.21875, z - .15625, .3125, .28125, .3125);
+    }
+  }
+  for (const [x, y, z, radius] of [[0, dialY + 3.55, 1.875, .75], [-1.875, bellY + 3.75, 1.875, .72], [0, lookoutY + 1.75, -.5, .48]]) {
+    lamp(box, x, y, z, radius);
+    const light = new PointLight('#ffb778', 68 * radius, 12, 2);
+    light.position.set(x, y + .15, z);
+    tower.add(light);
+  }
 
   for (const [kind, cubes] of parts) {
     const emissive = kind === 'glow' ? '#f59b28' : kind === 'gold' ? '#44250d' : '#000000';

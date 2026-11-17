@@ -1,4 +1,4 @@
-import { monthStops } from './museum-timeline';
+import { monthStops, museumIndexStop } from './museum-timeline';
 import { networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
 
@@ -44,6 +44,7 @@ export function museumMap(content: HTMLElement, position: MuseumPosition, readMo
     if (level === 1) {
       marker('正门', 0, 15.5, 'anchor');
       marker('导览', 0, 10.3, 'anchor');
+      marker('索引', museumIndexStop.x, museumIndexStop.z, 'anchor');
       for (const { month, x, z } of monthStops) {
         const read = readMonths.includes(month);
         marker(String(month), x, z, read ? 'month read' : 'month', `${month} 月${read ? ' · 已读' : ''}`);

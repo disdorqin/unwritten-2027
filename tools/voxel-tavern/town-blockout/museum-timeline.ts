@@ -1,5 +1,7 @@
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Mesh, MeshBasicMaterial } from 'three';
 import type { MuseumBuilder } from './museum-kit';
+import { museumMonths } from './museum-catalog';
+import { museumDetailStep } from './museum-scale';
 import { buildWestDetail } from './museum-detail-west';
 import { buildEastDetail } from './museum-detail-east';
 
@@ -43,6 +45,7 @@ export const monthModels = [
 
 const museumCaseCenter = 12.19;
 export const museumReadingSeat = { x: -4.66, z: -4.82 } as const;
+export const museumIndexStop = { x: 4.75, z: -3.26 } as const;
 
 export function addMonthExhibit(m: MuseumBuilder, { month, x, z }: typeof monthStops[number]) {
   const side = Math.sign(x);
@@ -177,7 +180,7 @@ function addGalleryFurnishings(m: MuseumBuilder, floor: number) {
   }
   m.collider(benchX, floor + .568, benchZ, 2.27, 1.136, .69);
 
-  const lecternX = 4.75, lecternZ = -4.77, yaw = -.32;
+  const lecternX = museumIndexStop.x, lecternZ = -4.77, yaw = -.32;
   const lectern = cluster(lecternX, lecternZ, yaw);
   for (const side of [-1, 1]) {
     lectern(timber, side * .59, .466, 0, .101, .932, .116);
@@ -285,6 +288,30 @@ export function addMuseumTimeline(m: MuseumBuilder) {
     addMonthExhibit(m, { month, x, z });
   }
   monthStops.forEach(display);
+
+  const highlights = [1, 4, 7, 11];
+  for (const [index, month] of highlights.entries()) {
+    const event = museumMonths.find(entry => entry.month === month)?.items[0];
+    if (!event) continue;
+    const side = index < 2 ? -1 : 1;
+    const x = side * 6.64;
+    const z = index % 2 ? -7 : 1;
+    const yaw = -side * Math.PI / 2;
+    const highlight = monthTheme[month - 1][1];
+    const caption = { background: timber, color: '#f9dfa9', border: false };
+    const face = x - side * .131;
+    m.box(timber, x, 2.73, z, 2.94, 2.35, .23, yaw);
+    m.collider(x, 2.73, z, .27, 2.35, 2.94);
+    m.box(highlight, face, 2.75, z, 2.73, 2.05, .043, yaw);
+    for (const edge of [-1, 1]) {
+      m.detailBox(brass, face - side * .03, 2.73 + edge * 1.01, z, 2.79, .057, museumDetailStep, yaw);
+      m.detailBox(brass, face - side * .03, 2.73, z + edge * 1.38, .052, 2.02, museumDetailStep, yaw);
+    }
+    m.label(`${String(month).padStart(2, '0')} 月`, face - side * .039, 3.29, z, 2.47, .52, yaw, caption);
+    m.label(event.title, face - side * .039, 2.67, z, 2.53, .42, yaw, caption);
+    m.label(event.date, face - side * .039, 2.10, z, 2.19, .28, yaw, caption);
+    m.detailBox(lamp, face - side * .075, 3.83, z, 2.53, museumDetailStep, .075, yaw, true);
+  }
 
   for (const side of [-1, 1]) {
     m.box(brass, side * 9.26, y + .009, -1.16, .067, .019, 21.26);

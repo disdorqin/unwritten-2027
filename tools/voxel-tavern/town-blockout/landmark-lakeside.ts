@@ -87,6 +87,28 @@ function model() {
 // B24 changes the tower silhouette to tapered masonry and faces the lane north.
 function lighthouse() {
   const { box, cylinder, beam, solid, floor, finish } = model();
+  const rotatedSolid = (x: number, top: number, z: number, width: number, depth: number, height: number, yaw: number) => {
+    const tangent = Math.cos(yaw);
+    const cross = -Math.sin(yaw);
+    const segmentWidth = width / 3;
+    const boxWidth = segmentWidth * Math.abs(tangent) + depth * Math.abs(cross);
+    const boxDepth = segmentWidth * Math.abs(cross) + depth * Math.abs(tangent);
+    for (const segment of [-1, 0, 1]) {
+      const offset = segment * segmentWidth;
+      solid(x + tangent * offset, top, z + cross * offset, boxWidth, boxDepth, height);
+    }
+  };
+  const balustrade = (from: [number, number], to: [number, number]) => {
+    const [[x, z], [endX, endZ]] = [from, to];
+    const midX = (x + endX) / 2;
+    const midZ = (z + endZ) / 2;
+    box(x, 12.52, z, .15, .92, .15, 'oak');
+    box(midX, 12.48, midZ, .11, .84, .11, 'wood');
+    beam([x, 12.43, z], [endX, 12.43, endZ], .11, 'oak');
+    beam([x, 12.92, z], [endX, 12.92, endZ], .17, 'wood');
+    rotatedSolid(midX, 13.005, midZ, Math.hypot(endX - x, endZ - z) + .06, .17, .945,
+      Math.atan2(z - endZ, endX - x));
+  };
   cylinder(0, .19, 0, 5.34, 5.55, .38, 'slate');
   cylinder(0, .39, 0, 5.23, 5.32, .14, 'stone');
   for (let i = 0; i < 16; i++) {
@@ -104,8 +126,12 @@ function lighthouse() {
       const slit = row % 6 === 4 && (i % 4 === 0);
       const x = Math.sin(angle) * radius;
       const z = -Math.cos(angle) * radius;
-      if (!door) box(x, y + .29, z, Math.PI * radius / 8 + .03, .579, slit ? .25 : .47,
-        slit ? 'amber' : paint, -angle);
+      if (door) continue;
+      const width = Math.PI * radius / 8 + .03;
+      const depth = slit ? .25 : .47;
+      box(x, y + .29, z, width, .579, depth, slit ? 'amber' : paint, -angle);
+      // Split the rotated brick lengthwise so the inner corners stay walkable.
+      rotatedSolid(x, y + .58, z, width, depth, .58, -angle);
     }
   }
   for (const y of [1.65, 6.23, 9.15, 11.5]) {
@@ -116,39 +142,41 @@ function lighthouse() {
       box(Math.sin(angle) * r, y, -Math.cos(angle) * r, Math.PI * r / 8 + .07, .13, .26, 'stone', -angle);
     }
   }
-  for (let i = 1; i < 16; i++) {
-    const a = i * Math.PI / 8;
-    const r = 4.52;
-    const w = 1.71 * Math.abs(Math.cos(a)) + .5 * Math.abs(Math.sin(a));
-    const d = 1.71 * Math.abs(Math.sin(a)) + .5 * Math.abs(Math.cos(a));
-    solid(Math.sin(a) * r, 10.8, -Math.cos(a) * r, w, d, 10.8);
-  }
   box(0, .11, -5.65, 3.05, .22, .67, 'stone');
   floor(0, .22, -5.65, 3.05, .67, .22);
   box(0, .23, -5.15, 3, .46, .77, 'stone');
   floor(0, .46, -5.15, 3, .77, .46);
-  floor(0, .46, 0, 6.1, 9.75, .14);
-  floor(0, .46, 0, 8.75, 5.78, .14);
+  // Chords cover the round stone plinth, including the corners of the hall.
+  for (let x = -4.875; x <= 4.875; x += .25) {
+    const length = 2 * Math.sqrt(5.21 ** 2 - (Math.abs(x) + .125) ** 2);
+    floor(x, .46, 0, .25, length, .46);
+  }
   for (const x of [-1.46, 1.46]) {
     box(x, 1.61, -4.46, .32, 2.81, .63, 'oak');
+    solid(x, 3.015, -4.46, .32, .63, 2.81);
     box(x * 1.2, 2.33, -4.61, .38, .42, .37, 'amber');
   }
   box(0, 3.01, -4.46, 3.25, .24, .65, 'oak');
-  for (const [x, z, startY, dx, dz] of [
-    [-2.58, -2.56, .46, 1, 0], [2.36, -1.77, 3.30, 0, 1],
-    [1.64, 2.33, 6.14, -1, 0], [-2.24, 1.63, 8.98, 0, -1],
+  solid(0, 3.13, -4.46, 3.25, .65, .24);
+  for (const [x, z, startY, dx, dz, run] of [
+    [-2.45, -2.4, .46, 1, 0, .38], [2.02, -1.92, 3.30, 0, 1, .38],
+    [1.34, 1.87, 6.14, -1, 0, .31], [-2.02, 1.35, 8.98, 0, -1, .352],
   ]) {
     for (let step = 1; step <= 11; step++) {
-      const xx = x + dx * (step - 1) * .38;
-      const zz = z + dz * (step - 1) * .38;
+      const xx = x + dx * (step - 1) * run;
+      const zz = z + dz * (step - 1) * run;
       const level = startY + step * (2.84 / 11);
       box(xx, level - .13, zz, dx ? .4 : 1.28, .26, dz ? .4 : 1.28, step % 3 ? 'oak' : 'wood');
       floor(xx, level, zz, dx ? .4 : 1.28, dz ? .4 : 1.28, .26);
     }
   }
-  for (const [x, y, z] of [[1.82, 3.3, -2.48], [2.32, 6.14, 2.21], [-2.19, 8.98, 2.28]]) {
-    box(x, y - .125, z, 1.55, .25, 1.55, 'oak');
-    floor(x, y, z, 1.55, 1.55, .25);
+  for (const [x, y, z, width, depth] of [
+    [2.17, 3.3, -2.45, 1.35, 1.29],
+    [2.065, 6.14, 2.1, 1.09, .8],
+    [-2.11, 8.98, 1.965, 1.06, .97],
+  ]) {
+    box(x, y - .125, z, width, .25, depth, 'oak');
+    floor(x, y, z, width, depth, .25);
   }
   // The lookout stays open above the last flight. Square stone tiles avoid
   // blocking the stairs, while preserving the previous wrap-around railing.
@@ -156,7 +184,7 @@ function lighthouse() {
   for (let x = -4; x <= 4; x += .5) {
     for (let z = -4; z <= 4; z += .5) {
       if (Math.hypot(x, z) > 4.34) continue;
-      if (x >= -3 && x <= -1.5 && z >= -2.1 && z <= .25) continue;
+      if (x >= -3 && x <= -1.5 && z >= -2 && z <= .5) continue;
       const outer = Math.hypot(x, z) > 3.9;
       box(x, 11.94, z, .5, .24, .5, outer ? 'snow' : 'stone');
       floor(x, 12.06, z, .5, .5, .24);
@@ -165,20 +193,22 @@ function lighthouse() {
   for (let i = 0; i < 16; i++) {
     const a = i * Math.PI / 8;
     const b = (i + 1) * Math.PI / 8;
-    const x = Math.sin(a) * rail;
-    const z = Math.cos(a) * rail;
-    const ex = Math.sin(b) * rail;
-    const ez = Math.cos(b) * rail;
-    box(x, 12.52, z, .14, .91, .14, 'oak');
-    beam([x, 12.92, z], [ex, 12.92, ez], .17, 'wood');
-    solid((x + ex) / 2, 13, (z + ez) / 2, Math.abs(x - ex) + .12, Math.abs(z - ez) + .12, .94);
+    balustrade([Math.sin(a) * rail, Math.cos(a) * rail], [Math.sin(b) * rail, Math.cos(b) * rail]);
   }
-  cylinder(0, 12.22, 0, 2.25, 2.36, .28, 'deepRed');
-  solid(0, 14.9, 0, 2.85, 2.85, 2.84);
-  cylinder(0, 13.42, 0, 1.86, 1.86, 2.43, 'amber', 12);
+  balustrade([-3.2, -1.9], [-3.2, -.6]);
+  balustrade([-3.2, -.6], [-3.2, .72]);
+  balustrade([-3.2, .72], [-1.3, .72]);
+  balustrade([-1.3, .72], [-1.3, -.6]);
+  balustrade([-1.3, -.6], [-1.3, -1.9]);
+  cylinder(0, 12.22, 0, 1.46, 1.49, .28, 'deepRed');
+  for (let x = -1.26; x <= 1.27; x += .36) {
+    const length = 2 * Math.sqrt(1.48 ** 2 - (Math.abs(x) + .18) ** 2);
+    solid(x, 14.9, 0, .36, length, 2.84);
+  }
+  cylinder(0, 13.42, 0, 1.25, 1.25, 2.43, 'amber', 12);
   for (let i = 0; i < 12; i++) {
     const a = i * Math.PI / 6;
-    box(Math.sin(a) * 1.93, 13.48, Math.cos(a) * 1.93, .15, 2.72, .18, 'wood', a);
+    box(Math.sin(a) * 1.38, 13.48, Math.cos(a) * 1.38, .15, 2.72, .18, 'wood', a);
   }
   cylinder(0, 14.82, 0, 2.52, 2.52, .29, 'yellow');
   cylinder(0, 15.25, 0, 1.95, 2.43, .57, 'red');
@@ -227,7 +257,7 @@ function lighthouse() {
     toneMapped: false,
   });
   const lightBeam = new Mesh(beamGeometry, beamMaterial);
-  lightBeam.position.z = beamLength / 2 + 1.87;
+  lightBeam.position.z = beamLength / 2 + 1.35;
   lightBeam.rotation.x = -.03;
   beaconPivot.add(lightBeam);
   group.add(beaconPivot);

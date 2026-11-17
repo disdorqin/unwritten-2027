@@ -7,7 +7,7 @@ git fetch origin
 git switch -c muse/a4-town-polish origin/town-blockout-integration
 ```
 
-如果已按本任务开了分支，从现有分支继续即可。旧 `town-blockout-main` 含 A3 灰盒和旧 A4 验收记录。使用 A4 记录作为对照即可，试玩代码以集成分支为准。
+如果已按本任务开了分支，请先同步最新集成分支。旧 `town-blockout-main` 含 A3 灰盒和旧 A4 验收记录。本轮的四桥与地标路线、暖房门槛、灯塔楼梯和钟楼施工已在集成分支推进，复验位置和遗留事项见 [小镇步行复验](TOWN-BLOCKOUT.md#2026-11-17-步行复验)。如有并行工作分支，按最新集成版复跑涉及路线再提交 PR。
 
 ## 第一包 · 路线复验与地图收尾
 
