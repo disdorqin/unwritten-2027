@@ -33,6 +33,7 @@ import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
 import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownActivitySpot, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
+import './tavern-mix-panel.css';
 import { createPostActivity } from './post-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
@@ -531,12 +532,13 @@ lightsButton.onclick = townLights.openBook;
 const npcActivity = createTownNpcActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, feature => {
   if (feature === 'spring') return architecture.has('hot-spring');
   if (feature === 'castle') return architecture.has('ice-castle');
-  if (feature === 'rail' || feature === 'bell') return true;
-  return feature !== 'mixing';
+  if (feature === 'mixing') return architecture.has('tavern');
+  return true;
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
+const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity });
 const activities: TownActivity[] = [
-  createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
+  createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
   (context: TownActivityContext) => createWindowActivity(context, architecture),
 ]
@@ -560,6 +562,7 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
+activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget);
 const activitySpots = activities.flatMap(activity => activity.spots);
 const snowballControls = element('snowball-controls');
@@ -847,7 +850,7 @@ const stampSites = [
   { id: 'bath', label: '温泉浴场', hint: '在温泉浴场西门内侧。', x: 526, n: 159 },
   { id: 'castle', label: '冰雪城堡', hint: '在冰雪城堡西门内侧。', x: 462, n: 71 },
 ];
-const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites);
+const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds);
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
   const { collected, total } = passport.getProgress();
@@ -983,7 +986,8 @@ function currentAction() {
     } };
   }
   return nearestTownActivity(activitySpots, x, n, ground)
-    ?? tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
+    ?? tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius)
+    ?? tavernActivity.carryAction();
 }
 function interact() {
   currentAction()?.run();

@@ -1,4 +1,5 @@
 import type { TownActivityContext } from './town-activity';
+import { tavernRecipes } from './tavern-mix-book';
 
 export type PassportStamp<Id extends string = string> = { id: Id; label: string; hint: string };
 
@@ -65,6 +66,7 @@ function renderSouvenir(stamps: readonly PassportStamp[], status: HTMLElement) {
 export function createTownPassport<Id extends string>(
   context: Pick<TownActivityContext, 'open' | 'announce'>,
   stamps: readonly PassportStamp<Id>[],
+  drinkCollection?: () => readonly string[],
 ) {
   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
   const collected = new Set<Id>();
@@ -151,6 +153,31 @@ export function createTownPassport<Id extends string>(
       status.setAttribute('role', 'status');
       download.onclick = () => renderSouvenir([...byId.values()], status);
       panel.append(download, status);
+    }
+
+    if (drinkCollection) {
+      const drinks = new Set(drinkCollection());
+      const count = tavernRecipes.filter(({ id }) => drinks.has(id)).length;
+      const section = document.createElement('section');
+      section.className = 'passport-drinks';
+      const heading = document.createElement('h3');
+      heading.textContent = `酒馆特调 ${count} / ${tavernRecipes.length}`;
+      heading.style.margin = '0 0 4px';
+      heading.style.fontSize = '1rem';
+      const hint = document.createElement('p');
+      hint.textContent = '到未写酒馆一楼吧台调制特调。';
+      const recipes = document.createElement('ul');
+      recipes.style.marginBlock = '6px 0';
+      for (const { id, name } of tavernRecipes) {
+        const row = document.createElement('li');
+        const discovered = drinks.has(id);
+        row.dataset.recipeId = id;
+        row.dataset.collected = String(discovered);
+        row.textContent = `${name} · ${discovered ? '已收集' : '待调制'}`;
+        recipes.append(row);
+      }
+      section.append(heading, hint, recipes);
+      panel.append(section);
     }
   }
 
