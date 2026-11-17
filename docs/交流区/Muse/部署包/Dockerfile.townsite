@@ -1,0 +1,27 @@
+# Dockerfile.townsite — 构建并托管新小镇静态站（tools/voxel-tavern 的 town-blockout）
+#
+# 与仓库既有预备的关系：
+# - 仓库根 Dockerfile 构建的是根 Node 应用（src/ 旧运行时），不包含新小镇；
+# 本文件是为本次"单人预览上线"新增的，差异与理由见../部署盘点与就绪清单.md。
+# - 构建上下文必须是：town-blockout/town-railway.ts 以相对路径
+#../../../docs/p0-layout-draft.json 引用仓库根 docs/ 的数据文件，
+# 只打包 tools/voxel-tavern 子树会构建失败（A4 F 路实测）。
+# - 仓库根.dockerignore 已排除 node_modules / dist /.git，符合本构建需要。
+
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+# 先只拷依赖清单，利用层缓存
+COPY tools/voxel-tavern/package.json tools/voxel-tavern/package-lock.json./tools/voxel-tavern/
+WORKDIR /app/tools/voxel-tavern
+RUN npm ci --ignore-scripts
+# 再拷源码与构建必需的仓库根数据文件
+WORKDIR /app
+COPY docs/p0-layout-draft.json./docs/p0-layout-draft.json
+COPY tools/voxel-tavern/./tools/voxel-tavern/
+WORKDIR /app/tools/voxel-tavern
+# build-tavern.mjs 生成 tavern.json / snapshot.ts（酒馆样板入口需要），随后 vite 生产构建
+RUN node build-tavern.mjs && npm run build
+
+FROM caddy:2-alpine
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/tools/voxel-tavern/dist /srv/site

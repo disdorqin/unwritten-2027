@@ -1,0 +1,29 @@
+# docker-compose.yaml — 新小镇静态站（本次预览上线用）
+#
+# 与仓库既有 tools/compose.yaml 的差异（既有版原文保存在同目录 docker-compose.nodeapp.yaml）：
+# - 既有版：town(Node 应用, 构建仓库根 Dockerfile) + web(Caddy 反代 town:3000)，含 letters 数据卷；
+# - 本版：只有一个 web 服务，镜像由 Dockerfile.townsite 构建（内含 Caddy + 新小镇 dist），
+#   无 Node 进程、无 letters 卷（静态预览无服务端信件，属已知边界，见盘点清单）；
+# - 保留与既有版相同的 certificates / caddy_config 卷命名与日志上限，方便日后切换回 Node 方案时证书不丢。
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.townsite
+    image: unwritten-townsite:current
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certificates:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  certificates:
+  caddy_config:

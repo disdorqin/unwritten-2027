@@ -1,0 +1,21 @@
+# Caddyfile — town.disdorqin.cn（域名为占位，待 Thomas 最终确认；确认后只改第一行）
+#
+# 与仓库既有 tools/Caddyfile 的差异：既有版是 reverse_proxy town:3000（旧 Node 应用）。
+# 本版改为静态托管新小镇 dist：根路径直达 town-blockout.html（新镇入口），
+# 旧 Node 应用的反代配置保存在同目录 Caddyfile.nodeapp，日后联机切换时对照恢复。
+town.disdorqin.cn {
+	encode zstd gzip
+
+	root * /srv/site
+
+	# 访客打开根路径直接进新小镇，而不是酒馆样板 index.html
+	rewrite / /town-blockout.html
+
+	# 带哈希的静态资源长缓存；HTML 不缓存，保证更新即时生效
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path /town-blockout.html /index.html
+	header @html Cache-Control "no-cache"
+
+	file_server
+}
