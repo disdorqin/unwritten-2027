@@ -39,7 +39,10 @@ const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][
   { styles: ['shop', 'courtyard', 'machiya'], points: [[177,226],[180,196],[169,203],[181,166],[217,153],[200,151],[255,161],[262,180],[264,228],[251,219],[253,243],[221,251],[202,247],[190,251],[179,248],[213,233],[247,234],[266,258],[249,264],[199,262],[218,268],[238,265]] },
 ];
 
-export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean) {
+export function addDistrictHousing(
+  parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean,
+  railwayKeepClear: KeepClear = () => false,
+) {
   const sites: Site[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
@@ -103,6 +106,27 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
     return [-1, 0, 1].flatMap(i => [-1, 0, 1].map(j => [x + i * (w / 2 + 1), n + j * (d / 2 + 1)]));
   }
 
+  function conflictsWithRail({ x, n, w, d }: Site) {
+    // Reserve the roof, entrance steps, and wall fittings beyond the structural footprint.
+    const halfWidth = w / 2 + 1.25;
+    const halfDepth = d / 2 + 1.25;
+    if (!railwayKeepClear(x, n, Math.hypot(halfWidth, halfDepth))) return false;
+    // Cover the rectangle with small circular probes to avoid discarding clear diagonals.
+    const columns = Math.ceil(halfWidth);
+    const rows = Math.ceil(halfDepth);
+    const width = 2 * halfWidth / columns;
+    const depth = 2 * halfDepth / rows;
+    const radius = Math.hypot(width, depth) / 2;
+    for (let column = 0; column < columns; column++) {
+      const east = x - halfWidth + (column + .5) * width;
+      for (let row = 0; row < rows; row++) {
+        const north = n - halfDepth + (row + .5) * depth;
+        if (railwayKeepClear(east, north, radius)) return true;
+      }
+    }
+    return false;
+  }
+
   for (const { theme, styles, points } of neighborhoods) {
     for (const [i, [x, n]] of points.entries()) {
       const style = styles[i % styles.length];
@@ -115,6 +139,7 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
       });
       const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(x) };
       const footprint = footprints(site);
+      if (conflictsWithRail(footprint)) continue;
       const samples = edges(site);
       const heights = samples.map(([px, pn]) => grid.heightAt(px, pn));
       if (Math.max(...heights) - Math.min(...heights) > 5.3) continue;

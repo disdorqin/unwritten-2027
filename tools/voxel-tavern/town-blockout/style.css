@@ -201,8 +201,8 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
   color: #ffe5a3; font-weight: 700; text-shadow: 0 1px 3px #0b1a28;
 }
 #snowball-frost {
-  position: fixed; inset: 0; pointer-events: none; opacity: 0;
-  box-shadow: inset 0 0 60px 18px #d8f6ff;
+  position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; contain: strict;
+  background-position: center; background-size: 100% 100%; background-repeat: no-repeat;
 }
 @media (max-height: 480px) and (pointer: coarse) {
   .touch-play #snowball-controls { bottom: max(102px, calc(env(safe-area-inset-bottom) + 90px)); right: max(76px, calc(env(safe-area-inset-right) + 72px)); }

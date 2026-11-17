@@ -13,6 +13,7 @@ type World = {
 };
 
 const chestRadiusBonus = .08;
+const headHeightRatio = .78;
 
 function segmentCapsule(
   from: Vector3, to: Vector3, target: TownSnowballTarget, bottom: number, top: number, reach: number,
@@ -146,7 +147,8 @@ export function createSnowballSweep(world: World) {
     }
     if (!Number.isFinite(closest)) return undefined;
     contact.lerpVectors(from, to, closest);
-    return hit ? { at: contact, kind: 'target', targetId: hit.id, score: world.scoreAt?.(hit) } :
-      { at: contact, kind: 'world' };
+    if (!hit) return { at: contact, kind: 'world' };
+    const zone = hit.shape === 'box' ? undefined : contact.y >= hit.y + hit.height * headHeightRatio ? 'head' : 'torso';
+    return { at: contact, kind: 'target', targetId: hit.id, score: world.scoreAt?.(hit), zone };
   };
 }

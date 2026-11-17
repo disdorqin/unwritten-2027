@@ -1,10 +1,11 @@
 import {
-  BoxGeometry, CatmullRomCurve3, Color, Group, InstancedMesh, Matrix4,
+  Box3, BoxGeometry, CatmullRomCurve3, Color, Group, InstancedMesh, Matrix4,
   MeshBasicMaterial, MeshLambertMaterial, Object3D, Quaternion, Vector3, type Material,
 } from 'three';
 import expansion from '../../../docs/p0-layout-draft.json';
 import type { createTerrainGrid } from './terrain';
 import type { Box } from './landmark-kit';
+import { extensionRoads } from './town-extension';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
 type XYZ = [number, number, number];
@@ -18,12 +19,26 @@ const stationHalfLength = 24;
 const chunkSize = expansion.chunkSize;
 const gauge = 1.66;
 const clearanceCell = 16;
+const stationRoad = extensionRoads.find(road => road.id === 'station-approach')!;
+const bathRoad = extensionRoads.find(road => road.id === 'hot-spring-approach')!;
 const up = new Vector3(0, 1, 0);
 const limit = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 const smooth = (value: number) => {
   const t = limit(value, 0, 1);
   return t * t * (3 - 2 * t);
 };
+
+function distanceToRoad(x: number, north: number, road: typeof stationRoad) {
+  let distance = Infinity;
+  for (let i = 1; i < road.points.length; i++) {
+    const [east, n] = road.points[i - 1];
+    const dx = road.points[i][0] - east;
+    const dn = road.points[i][1] - n;
+    const t = limit(((x - east) * dx + (north - n) * dn) / (dx * dx + dn * dn), 0, 1);
+    distance = Math.min(distance, Math.hypot(x - east - dx * t, north - n - dn * t));
+  }
+  return distance;
+}
 
 export function buildTownRailRoute(grid: Terrain) {
   // The last approved coordinate repeats the first. The closed spline supplies that seam.
@@ -45,7 +60,13 @@ export function buildTownRailRoute(grid: Terrain) {
   });
   const minHeights = grounds.map((ground, i) => {
     const approach = Math.max(0, platformDistance(i) - stationHalfLength);
-    return ground + .62 + 5.7 * smooth(approach / 35);
+    const terrainEnvelope = ground + .62 + 5.7 * smooth(approach / 35);
+    const point = points[i];
+    // Reserve walking headroom through the overpass, including the sloping girder ends.
+    if (distanceToRoad(point.x, -point.z, stationRoad) <= stationRoad.width / 2 + 1) {
+      return Math.max(terrainEnvelope, ground + 3.05);
+    }
+    return terrainEnvelope;
   });
   const grades = minHeights.slice();
   const maxGrade = .225;
@@ -62,7 +83,9 @@ export function buildTownRailRoute(grid: Terrain) {
     for (let offset = -5; offset <= 5; offset++) {
       smoothed += grades[(i + offset + count) % count] * (6 - Math.abs(offset)) / 36;
     }
-    const allowedChange = maxGrade * (approach - (1 - Math.exp(-approach / 7)) * 7);
+    // Climb sooner on the side with the station road underpass, keeping the dock level.
+    const easeLength = -points[i].z > stationNorth ? 1.75 : 7;
+    const allowedChange = maxGrade * (approach - (1 - Math.exp(-approach / easeLength)) * easeLength);
     // The station is level. Its approach eases into the terrain-clearance envelope.
     points[i].y = approach === 0 ? stationRailY : Math.max(grounds[i] + .62,
       limit(smoothed + .35, stationRailY - allowedChange, stationRailY + allowedChange));
@@ -130,6 +153,46 @@ function buildTrack(
   const orientation = new Matrix4();
   const delta = new Vector3();
   const platformLimit = stationHalfLength + 1;
+  const trackBox = new Box3();
+  const trackMatrix = new Matrix4();
+  const trackScale = new Vector3(1, 1, 1);
+  const bathCrossing = points.map((point, i) => ({ point, i })).filter(({ point }) =>
+    distanceToRoad(point.x, -point.z, bathRoad) <= bathRoad.width / 2);
+  function surfaceAt(x: number, north: number) {
+    return grid.surfaces[Math.round(north) * grid.gridWidth + Math.round(x)];
+  }
+  function pierDetails(center: Vector3, a: Vector3, b: Vector3) {
+    if (surfaceAt(center.x, -center.z) !== 0) return;
+    const rise = center.y - grid.heightAt(center.x, -center.z);
+    if (rise < 1.5) return;
+    const width = rise >= 13 ? .93 : .63;
+    const pad = (width + .55) / 2;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const normalScale = 1.33 / Math.hypot(dx, dz);
+    const footings = [-1, 1].map(side => ({
+      x: center.x + dz * normalScale * side,
+      z: center.z - dx * normalScale * side,
+    }));
+    const margin = pad * Math.SQRT2 + .30;
+    if (footings.some(({ x, z }) =>
+      distanceToRoad(x, -z, bathRoad) < bathRoad.width / 2 + margin ||
+      distanceToRoad(x, -z, stationRoad) < stationRoad.width / 2 + margin)) return;
+    return { rise, width, pad, footings };
+  }
+  const extraSupports = new Set<number>();
+  if (bathCrossing.length) {
+    // Add the first viable footing pair on each bank of the unsupported bath-road span.
+    const endPoints = [[bathCrossing[0].i, -1], [bathCrossing.at(-1)!.i, 1]];
+    for (const [index, direction] of endPoints) for (let offset = 0; offset <= 5; offset++) {
+      const i = index + direction * offset;
+      const a = points[i], b = points[(i + 1) % points.length];
+      if (!pierDetails(new Vector3().lerpVectors(a, b, .5), a, b)) continue;
+      extraSupports.add(i);
+      break;
+    }
+  }
+  const supportIndices: number[] = [];
   for (let i = 0; i < points.length; i++) {
     const a = points[i], b = points[(i + 1) % points.length];
     const center = new Vector3().lerpVectors(a, b, .5);
@@ -139,6 +202,13 @@ function buildTrack(
     const key = `${Math.floor(center.x / chunkSize)},${Math.floor(-center.z / chunkSize)}`;
     const parts = chunks.get(key) ?? [];
     chunks.set(key, parts);
+    function solidTrack(width: number, bottom: number, top: number, depth: number) {
+      trackBox.min.set(-width / 2, bottom, -depth / 2);
+      trackBox.max.set(width / 2, top, depth / 2);
+      trackMatrix.compose(center, turn, trackScale);
+      trackBox.applyMatrix4(trackMatrix);
+      colliders.push({ min: trackBox.min.toArray(), max: trackBox.max.toArray() });
+    }
     function local(x: number, y: number, z: number, w: number, h: number, d: number, tint: string, closeDetail = false) {
       const p = new Vector3(x, y, z).applyQuaternion(turn).add(center);
       parts.push({ position: [p.x, p.y, p.z], size: [w, h, d], tint, rotation: turn, closeDetail });
@@ -155,28 +225,25 @@ function buildTrack(
       local(1.2, -.4, -.15, .21, .08, length * .58, '#d3deea', true);
     }
 
-    if (atPlatform || i % 8 !== 4) continue;
-    const north = -center.z;
-    const surface = grid.surfaces[Math.round(north) * grid.gridWidth + Math.round(center.x)];
-    // Walking roads pass under the continuous girders and stay free of footing blocks.
-    if (surface !== 0) continue;
-    const footingCenter = grid.heightAt(center.x, north);
-    if (center.y - footingCenter < 1.5) continue;
-    const offset = new Vector3(1.33, 0, 0).applyQuaternion(turn);
-    const width = center.y - footingCenter >= 13 ? .93 : .63;
-    for (const side of [-1, 1]) {
-      const x = center.x + offset.x * side;
-      const z = center.z + offset.z * side;
+    if (atPlatform) continue;
+    solidTrack(2.45, -.65, 0, length + .06);
+
+    if (i % 8 !== 4 && !extraSupports.has(i)) continue;
+    const piers = pierDetails(center, a, b);
+    if (!piers) continue;
+    const { rise, width, pad, footings } = piers;
+    supportIndices.push(i);
+    for (const { x, z } of footings) {
       const base = grid.heightAt(x, -z) - .2;
       const top = center.y - .6;
       parts.push({ position: [x, base + .15, z], size: [width + .55, .62, width + .5], tint: '#596879' });
       parts.push({ position: [x, (base + top) / 2, z], size: [width, top - base, width], tint: '#685057' });
       parts.push({ position: [x, top - .3, z], size: [width + .18, .38, width + .17], tint: '#9e7472' });
-      const pad = (width + .55) / 2;
       colliders.push({ min: [x - pad, base - .16, z - pad], max: [x + pad, top, z + pad] });
     }
     local(0, -.78, 0, 3.47, .32, .55, '#6a4a48');
-    if (center.y - footingCenter > 4) {
+    solidTrack(3.47, -.94, -.62, .55);
+    if (rise > 4) {
       const bank = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), .51);
       const tangential = new Quaternion().setFromRotationMatrix(orientation.lookAt(
         new Vector3(b.x, 0, b.z), new Vector3(a.x, 0, a.z), up,
@@ -202,7 +269,7 @@ function buildTrack(
     }
     if (panorama) panorama.visible = wide;
   }
-  return { colliders, setPanorama };
+  return { colliders, setPanorama, supportIndices };
 }
 
 function buildVehicle(engine: boolean, accent: string, geometry: BoxGeometry, opaque: Material, glow: Material) {
@@ -337,6 +404,28 @@ export function createTownRailway(grid: Terrain) {
   const front = new Vector3(), rear = new Vector3();
   const frame = new Matrix4();
   const facing = new Quaternion();
+  const vehicleOffset = new Vector3();
+  const vehicleWorldUp = new Vector3();
+  const inverseVehicleRotation = new Quaternion();
+
+  function vehicleBlocks(east: number, north: number, feet: number, height: number, radius: number) {
+    const middle = feet + height / 2;
+    for (const { model } of vehicles) {
+      const dx = east - model.position.x;
+      const dz = -north - model.position.z;
+      if (dx * dx + dz * dz > (3.7 + radius) ** 2) continue;
+      inverseVehicleRotation.copy(model.quaternion).invert();
+      vehicleOffset.set(dx, middle - model.position.y, dz).applyQuaternion(inverseVehicleRotation);
+      vehicleWorldUp.copy(up).applyQuaternion(inverseVehicleRotation);
+      const extent = (vertical: number) => height / 2 * Math.abs(vertical) +
+        radius * Math.sqrt(Math.max(0, 1 - vertical ** 2));
+      const y = extent(vehicleWorldUp.y);
+      if (Math.abs(vehicleOffset.x) < 1.22 + extent(vehicleWorldUp.x) &&
+          vehicleOffset.y + y > .055 && vehicleOffset.y - y < 3.33 &&
+          Math.abs(vehicleOffset.z) < 3.23 + extent(vehicleWorldUp.z)) return true;
+    }
+    return false;
+  }
 
   function updatePoses(delta: number) {
     for (const { model, offset } of vehicles) {
@@ -364,7 +453,7 @@ export function createTownRailway(grid: Terrain) {
   }
   park();
   return {
-    group, boarding, view, route,
+    group, boarding, view, route, vehicleBlocks, supportIndices: track.supportIndices,
     keepClear: route.keepClear,
     setPanorama: track.setPanorama,
     get riding() { return riding; },

@@ -30,7 +30,7 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
       if (blocked !== undefined && (target === undefined || blocked < target)) {
         return { at: from.clone().lerp(to, blocked), kind: 'world' };
       }
-      if (target !== undefined) return { at: from.clone().lerp(to, target), kind: 'target', targetId: 'snowman' };
+      if (target !== undefined) return { at: from.clone().lerp(to, target), kind: 'target', targetId: 'snowman', zone: 'head' };
     },
   });
   const step = (n: number) => { for (let i = 0; i < n; i++) game.update(1 / 60); };
@@ -54,6 +54,7 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
   assert.equal(impact.thrower, 'guest');
   assert.equal(impact.time, 1760000000000);
   assert.equal(impact.targetId, 'snowman');
+  assert.equal(impact.zone, 'head');
   assert.equal(launch.from, 'guest');
   assert.equal(launch.t, 1760000000000);
   assert.equal(launch.dir.x, 1);
@@ -119,6 +120,7 @@ test('fixed-power aim ring marks the same wall, terrain and person contacts as t
     assert.equal(throwEvent.velocity.length(), 26);
     assert.ok(impact?.type === 'impact');
     assert.equal(impact.kind, situation === 'person' ? 'target' : 'world');
+    assert.equal(impact.zone, situation === 'person' ? 'torso' : undefined);
     assert.ok(predicted.distanceTo(impact.at) <= .5);
     game.dispose();
   }

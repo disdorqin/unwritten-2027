@@ -2,8 +2,8 @@ import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMateria
 import type { TownActivity, TownActivityContext, TownActivitySpot } from './town-activity';
 import type { TownSnowballTarget } from './town-snow-target';
 import { snowballGravity, snowballSpeed } from './town-snowball';
-import { answerNpcQuestion, npcExpansion, npcQuestions, npcScript,
-  type NpcName, type NpcPeriod, type TownNpcGuide } from './town-npc-dialogue';
+import { answerNpcQuestion, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions, npcScript,
+  type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 
 type Point = readonly [east: number, north: number];
 type Size = readonly [x: number, y: number, z: number];
@@ -45,23 +45,15 @@ const snowHat = [
   [[.035, 2.166, .008], [.235, .09, .23], '#f6fbff'],
 ] as const;
 
-// All six costumes share these silhouettes and one box geometry. The instance palette
-// varies the apron, satchel, lamp, tool pouch, sash and station insignia by character.
+// Replace shared cargo, apron and chest pixels with six readable silhouettes in the same batch.
 const parts: readonly Part[] = [
   [[0, 1.12, 0], [.58, .66, .36], 2],
   [[0, .74, 0], [.56, .11, .365], 4],
-  [[0, .82, .189], [.32, .13, .026], 3],
-  [[0, 1.06, .19], [.37, .39, .032], 3],
-  [[-.10, 1.24, .211], [.043, .20, .02], 5],
-  [[.12, 1.18, .211], [.09, .076, .02], 6],
   [[0, 1.39, 0], [.44, .12, .4], 5],
-  [[.14, 1.23, .202], [.14, .30, .02], 5],
   [[0, 1.64, 0], [.43, .44, .41], 0],
   [[0, 1.83, 0], [.474, .16, .45], 1],
   [[0, 1.79, -.204], [.449, .28, .052], 1],
   [[0, 1.88, .13], [.49, .087, .334], 1],
-  [[0, 1.875, .297], [.468, .024, .019], 5],
-  [[0, 1.90, .248], [.08, .065, .033], 6],
   [[-.095, 1.661, .21], [.061, .046, .02], 1],
   [[.095, 1.661, .21], [.061, .046, .02], 1],
   [[0, 1.532, .211], [.078, .026, .02], 7],
@@ -77,46 +69,124 @@ const parts: readonly Part[] = [
   [[.394, .898, 0], [.182, .155, .20], 3, -1],
   [[-.394, .816, 0], [.167, .136, .18], 0, 1],
   [[.394, .816, 0], [.167, .136, .18], 0, -1],
-  [[.346, .79, .204], [.27, .285, .18], 7],
-  [[.346, .843, .264], [.285, .089, .063], 5],
-  [[.346, .771, .3], [.11, .10, .018], 6],
-  [[.29, .86, .166], [.026, .32, .023], 7],
 ];
 
-// Chest designs share nine color slots: mug, envelope, beacon, paper lantern, opera mask, railway insignia.
-const chestPatterns = ['066060060', '060606666', '060666060', '060666666', '606666060', '666060606'];
+const costumes: Readonly<Record<NpcName, readonly Part[]>> = {
+  // Innkeeper: long cloth apron, a folded towel and a chunky tankard with a square handle.
+  罗大江: [
+    [[0, .98, .197], [.40, .47, .055], 3],
+    [[0, .705, .191], [.52, .35, .06], 3],
+    [[0, .87, .227], [.53, .060, .032], 7],
+    [[-.135, 1.252, .211], [.054, .145, .026], 3],
+    [[.135, 1.252, .211], [.054, .145, .026], 3],
+    [[.135, .78, .239], [.135, .224, .035], 6],
+    [[-.427, .764, .282], [.185, .227, .184], 7],
+    [[-.427, .872, .282], [.203, .048, .204], 6],
+    [[-.555, .781, .282], [.049, .145, .066], 5],
+    [[-.514, .832, .282], [.058, .045, .066], 5],
+    [[-.514, .730, .282], [.058, .045, .066], 5],
+  ],
+  // Postal courier: a wide messenger bag, stepped shoulder strap and visible envelopes.
+  苏小满: [
+    [[.175, 1.307, .20], [.103, .14, .07], 3],
+    [[.12, 1.194, .210], [.107, .115, .057], 3],
+    [[.048, 1.109, .217], [.115, .099, .046], 3],
+    [[-.039, 1.021, .218], [.118, .100, .042], 3],
+    [[-.135, .922, .225], [.117, .116, .045], 3],
+    [[-.335, .779, .226], [.309, .245, .163], 7],
+    [[-.335, .888, .266], [.326, .082, .116], 5],
+    [[-.33, .833, .324], [.087, .069, .028], 6],
+    [[-.39, .957, .212], [.125, .101, .026], 6],
+    [[-.254, .936, .218], [.126, .068, .026], 6],
+    [[.0, 1.876, .310], [.19, .036, .025], 5],
+    [[.0, 1.916, .241], [.12, .051, .028], 6],
+  ],
+  // Lighthouse keeper: thick coat and a narrow glass storm lantern in a metal cage.
+  顾长明: [
+    [[0, 1.13, .182], [.51, .50, .069], 2],
+    [[-.092, 1.137, .226], [.058, .46, .026], 3],
+    [[-.165, 1.379, .164], [.156, .10, .163], 3],
+    [[.151, 1.379, .164], [.156, .10, .163], 3],
+    [[.083, 1.231, .229], [.039, .049, .035], 5],
+    [[.083, 1.026, .229], [.039, .049, .035], 5],
+    [[-.416, .692, .247], [.184, .19, .176], 6],
+    [[-.416, .579, .247], [.23, .068, .215], 1],
+    [[-.416, .800, .247], [.21, .063, .198], 1],
+    [[-.497, .690, .333], [.029, .172, .025], 5],
+    [[-.335, .690, .333], [.029, .172, .025], 5],
+    [[-.416, .854, .247], [.049, .051, .050], 5],
+  ],
+  // Lantern maker: a split workshop apron, tools and a warm paper lantern with stepped ribs.
+  乔麦: [
+    [[0, 1.036, .213], [.43, .406, .061], 7],
+    [[-.109, .756, .216], [.191, .226, .063], 7],
+    [[.109, .756, .216], [.191, .226, .063], 7],
+    [[.112, .91, .259], [.19, .131, .046], 3],
+    [[.089, 1.02, .272], [.031, .146, .028], 6],
+    [[.152, 1.026, .272], [.027, .156, .027], 1],
+    [[-.423, .792, .233], [.238, .204, .216], 5],
+    [[-.423, .909, .233], [.178, .05, .163], 3],
+    [[-.423, .677, .233], [.178, .048, .163], 3],
+    [[-.423, .779, .349], [.212, .026, .029], 6],
+    [[-.423, .855, .349], [.211, .024, .029], 6],
+    [[-.423, .624, .233], [.063, .061, .061], 6],
+  ],
+  // Troupe leader: gold-trimmed long robe, headpiece and folding fan with distinct steps.
+  柳三弦: [
+    [[0, .588, 0], [.52, .331, .381], 2],
+    [[0, .431, .013], [.53, .045, .387], 3],
+    [[0, .86, .212], [.53, .090, .052], 5],
+    [[-.13, 1.23, .22], [.075, .236, .042], 3],
+    [[-.035, 1.116, .22], [.074, .241, .041], 3],
+    [[.051, 1.011, .22], [.074, .195, .041], 3],
+    [[-.178, 1.943, .156], [.079, .132, .070], 5],
+    [[.178, 1.943, .156], [.079, .132, .070], 5],
+    [[0, 1.914, .272], [.205, .054, .04], 6],
+    [[-.432, .786, .255], [.108, .147, .071], 7],
+    [[-.433, .878, .255], [.238, .101, .071], 3],
+    [[-.433, .967, .255], [.326, .088, .075], 6],
+    [[-.431, 1.017, .255], [.267, .03, .075], 5],
+  ],
+  // Stationmaster: deep peaked cap, uniform lapels, gold buttons and a signal whistle.
+  钟铁生: [
+    [[0, 1.846, .262], [.464, .053, .269], 1],
+    [[0, 1.912, .032], [.503, .092, .44], 2],
+    [[0, 1.885, .255], [.466, .034, .037], 3],
+    [[0, 1.911, .277], [.093, .065, .025], 5],
+    [[-.163, 1.329, .182], [.188, .052, .15], 5],
+    [[.163, 1.329, .182], [.188, .052, .15], 5],
+    [[-.117, 1.183, .213], [.071, .266, .037], 3],
+    [[.117, 1.183, .213], [.071, .266, .037], 3],
+    [[.0, 1.103, .235], [.042, .043, .025], 5],
+    [[.0, .969, .235], [.042, .043, .025], 5],
+    [[.204, 1.079, .221], [.035, .201, .026], 6],
+    [[.204, .981, .245], [.113, .052, .056], 5],
+  ],
+};
 const guideDefaults = new Set<TownNpcGuide>(['seating', 'stage', 'postcard', 'wishes', 'ice', 'lantern']);
 const savedVisitKey = 'unwritten:town-npc-visits';
-const shanghaiClock = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Asia/Shanghai', hourCycle: 'h23', hour: '2-digit',
-  month: '2-digit', day: '2-digit',
-});
 
-function townPeriod(now: Date): NpcPeriod {
-  const pieces = shanghaiClock.formatToParts(now);
-  const hour = Number(pieces.find(piece => piece.type === 'hour')?.value);
-  const month = pieces.find(piece => piece.type === 'month')?.value;
-  const day = pieces.find(piece => piece.type === 'day')?.value;
-  if ((month === '12' && day === '31' && hour >= 18) || (month === '01' && day === '01' && hour < 2)) return '跨年夜';
-  return hour >= 20 || hour < 6 ? '夜里' : '傍晚';
-}
 
 export function createTownNpcActivity(
   context: TownActivityContext,
   heightAt: (east: number, north: number) => number,
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
+  isDaytime?: () => boolean,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
 } {
-  const skinParts: readonly Part[] = [
-    ...parts,
-    ...Array.from({ length: 9 }, (_, i): Part => [
-      [((i % 3) - 1) * .047, 1.055 + (1 - Math.floor(i / 3)) * .047, .214], [.046, .046, .016], 3,
-    ]),
-  ];
+  const actorParts = roles.map(({ name }) => [...parts, ...costumes[name]]);
+  let costumeCount = 0;
+  const actorStarts = actorParts.map(kit => {
+    const start = costumeCount;
+    costumeCount += kit.length;
+    return start;
+  });
+  const hatStart = costumeCount;
+  const heldStart = hatStart + roles.length * snowHat.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    roles.length * (skinParts.length + snowHat.length + 1));
+    heldStart + roles.length);
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -275,16 +345,14 @@ export function createTownNpcActivity(
     const dialogue = npcScript[name];
     const stories = npcExpansion[name];
     const turns = talkTurns[index];
-    const period = townPeriod(new Date());
+    const period = npcPeriod(new Date(), isDaytime?.());
     const visitsBefore = visits[name] ?? 0;
     visits[name] = visitsBefore + 1;
     try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
     catch { /* The in-memory count still works. */ }
-    const familiar = stories.familiar[visitsBefore === 0 ? '初见' : visitsBefore < 4 ? '再访' : '常客'];
-    const greetings = period === '跨年夜' || visitsBefore % 2 === 1 ? dialogue.greetings[period] : familiar;
     const speech = document.createElement('p');
     speech.setAttribute('role', 'status');
-    speech.textContent = greetings[Math.floor(visitsBefore / 2) % greetings.length];
+    speech.textContent = npcGreeting(name, period, visitsBefore);
 
     const controls = document.createElement('div');
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:12px 0';
@@ -331,7 +399,7 @@ export function createTownNpcActivity(
     });
     action('道别', () => {
       panel.closest('dialog')?.close();
-      context.announce(dialogue.farewells[period]);
+      context.announce(npcFarewell(name, period));
     });
     panel.append(speech, selector, controls);
   }
@@ -342,8 +410,10 @@ export function createTownNpcActivity(
     const cosine = Math.cos(yaw), sine = Math.sin(yaw);
     const flinch = flinches[index];
     const recoil = Math.sin(Math.PI * flinch.remaining / reboundTime) * .14;
-    for (let offset = 0; offset < skinParts.length; offset++) {
-      const [[x, y, z], size, , swing] = skinParts[offset];
+    const kit = actorParts[index];
+    const first = actorStarts[index];
+    for (let offset = 0; offset < kit.length; offset++) {
+      const [[x, y, z], size, , swing] = kit[offset];
       const step = swing ? gait * swing : 0;
       const throwGesture = battlePlayer && swing && x > .32 && y > .75
         ? Math.sin(Math.PI * (fighters[index]?.gesture ?? 0) / .28) : 0;
@@ -357,8 +427,7 @@ export function createTownNpcActivity(
       if (recoil > 0) transform.rotateOnWorldAxis(flinch.axis, recoil);
       transform.scale.set(...size);
       transform.updateMatrix();
-      const instance = index * skinParts.length + offset;
-      villagers.setMatrixAt(instance, transform.matrix);
+      villagers.setMatrixAt(first + offset, transform.matrix);
     }
     for (let layer = 0; layer < snowHat.length; layer++) {
       const [[x, y, z], [width, height, depth]] = snowHat[layer];
@@ -370,7 +439,7 @@ export function createTownNpcActivity(
       if (recoil > 0) transform.rotateOnWorldAxis(flinch.axis, recoil);
       transform.scale.set(width * visible, height * visible, depth * visible);
       transform.updateMatrix();
-      villagers.setMatrixAt(roles.length * skinParts.length + index * snowHat.length + layer, transform.matrix);
+      villagers.setMatrixAt(hatStart + index * snowHat.length + layer, transform.matrix);
     }
     const fighter = fighters[index];
     const holding = Boolean(battlePlayer && fighter?.stock);
@@ -380,20 +449,19 @@ export function createTownNpcActivity(
     transform.rotation.set(.40, yaw + .3, .27);
     transform.scale.setScalar(heldSize);
     transform.updateMatrix();
-    villagers.setMatrixAt(roles.length * (skinParts.length + snowHat.length) + index, transform.matrix);
+    villagers.setMatrixAt(heldStart + index, transform.matrix);
   }
 
   roles.forEach(({ palette }, index) => {
     pose(index, 0);
-    skinParts.forEach(([, , tint], offset) => {
-      const pattern = chestPatterns[index][offset - parts.length];
-      // Treat zero as base cloth so the picture stays flush with the rest of the costume.
-      villagers.setColorAt(index * skinParts.length + offset, color.set(palette[Number(pattern) || tint]));
+    const first = actorStarts[index];
+    actorParts[index].forEach(([, , tint], offset) => {
+      villagers.setColorAt(first + offset, color.set(palette[tint]));
     });
     snowHat.forEach(([, , tint], layer) => {
-      villagers.setColorAt(roles.length * skinParts.length + index * snowHat.length + layer, color.set(tint));
+      villagers.setColorAt(hatStart + index * snowHat.length + layer, color.set(tint));
     });
-    villagers.setColorAt(roles.length * (skinParts.length + snowHat.length) + index, color.set('#f5fbff'));
+    villagers.setColorAt(heldStart + index, color.set('#f5fbff'));
   });
   villagers.instanceMatrix.needsUpdate = true;
   if (villagers.instanceColor) villagers.instanceColor.needsUpdate = true;

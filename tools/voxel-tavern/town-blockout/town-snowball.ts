@@ -5,7 +5,14 @@ import {
 } from 'three';
 
 export type SnowballState = { ammo: number; hits: number; combo: number };
-export type SnowballContact = { at: Vector3; kind: 'world' | 'target'; targetId?: string; score?: boolean };
+export type SnowballHitZone = 'head' | 'torso';
+export type SnowballContact = {
+  at: Vector3;
+  kind: 'world' | 'target';
+  targetId?: string;
+  score?: boolean;
+  zone?: SnowballHitZone;
+};
 type ShotBy = 'player' | 'npc';
 type EventBase = {
   id: number; thrower: string; time: number; velocity: Vector3; shotBy: ShotBy; scoreable: boolean;

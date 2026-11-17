@@ -1,0 +1,4 @@
+/* Soft snow splats and ice crystals are baked into one transparent texture. */
+#snowball-frost {
+  background-image: url('./snowball-impact-frost.png');
+}

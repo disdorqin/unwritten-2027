@@ -27,11 +27,22 @@ test('sweep finds the nearest capsule, skips the thrower and reports score eligi
   assert.equal(hit?.kind, 'target');
   assert.equal(hit.targetId, 'near');
   assert.equal(hit.score, false);
+  assert.equal(hit.zone, 'torso');
   assert.ok(Math.abs(hit.at.x - 3.6) < 1e-9);
 
   const top = sweep(new Vector3(4, 3, 0), new Vector3(4, .4, 0), .1);
   assert.equal(top?.targetId, 'near');
+  assert.equal(top.zone, 'head');
   assert.ok(Math.abs(top.at.y - 1.9) < 1e-9);
+});
+
+test('hit zone follows a character above ground and excludes practice props', () => {
+  const elevated = { ...capsule('elevated', 4), y: 3 };
+  const hitAt = (target: TownSnowballTarget, y: number) =>
+    sweepAgainst([target])(new Vector3(0, y, 0), new Vector3(8, y, 0), .1);
+  assert.equal(hitAt(elevated, 4.65)?.zone, 'head');
+  assert.equal(hitAt(elevated, 4.11)?.zone, 'torso');
+  assert.equal(hitAt({ ...elevated, shape: 'box' }, 4.65)?.zone, undefined);
 });
 
 test('sweep stops at a thin wall before a capsule and avoids false box-corner hits', () => {
@@ -39,6 +50,7 @@ test('sweep stops at a thin wall before a capsule and avoids false box-corner hi
   const sweep = sweepAgainst([target], [{ min: [3, 0, -.6], max: [3.01, 2, .6] }]);
   const hit = sweep(new Vector3(0, 1.1, 0), new Vector3(8, 1.1, 0), .1);
   assert.equal(hit?.kind, 'world');
+  assert.equal(hit.zone, undefined);
   assert.ok(Math.abs(hit.at.x - 2.9) < 1e-9);
 
   const unobstructed = sweepAgainst([target]);

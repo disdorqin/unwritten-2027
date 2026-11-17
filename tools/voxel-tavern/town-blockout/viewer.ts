@@ -42,6 +42,7 @@ import { createRestActivity } from './town-rest-activity';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance } from './town-extension';
 import { createTownRailway } from './town-railway';
+import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPassport } from './town-passport';
 import { createTownLights } from './town-lights';
@@ -53,6 +54,8 @@ import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
 import { createTownSnowballBoard } from './town-snowball-board';
 import { addTownSnowBoard } from './town-snow-board';
+import { createSnowballHitFeedback } from './snowball-hit-feedback';
+import './snowball-impact-texture.css';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -77,8 +80,9 @@ const landscape = new Group();
 scene.add(landscape);
 const railway = createTownRailway(grid);
 scene.add(railway.group);
+addTownRailWayfinding(scene, grid.heightAt);
 const scenery = addScenery(landscape, grid);
-const districts = addDistrictHousing(landscape, grid, scenery.blocked);
+const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
 const forest = addForestDensity(landscape, grid,
@@ -403,6 +407,7 @@ function resetMovement() {
   stopTravel();
   touchLook.reset();
   desktopLook.release();
+  hitFeedback.clear();
 }
 let walking = false;
 let x = 0;
@@ -528,7 +533,7 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'castle') return architecture.has('ice-castle');
   if (feature === 'rail' || feature === 'bell') return true;
   return feature !== 'mixing';
-});
+}, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 const activities: TownActivity[] = [
   createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
@@ -561,9 +566,12 @@ const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
 const snowballRing = element('snowball-action-ring');
-const snowballFrost = element('snowball-frost');
 const snowballHitMark = element('snowball-hit-mark');
 const reduceSnowEffects = matchMedia('(prefers-reduced-motion: reduce)');
+const previewOptions = new URLSearchParams(location.search);
+const hitFeedback = createSnowballHitFeedback(
+  element('snowball-frost'), previewOptions.get('hitFeedback') !== 'off', reduceSnowEffects,
+);
 const tossOrigin = new Vector3();
 const tossDirection = new Vector3();
 const gatherSeconds = .8;
@@ -581,7 +589,7 @@ let snowHatTime = 0;
 let snowStaggerTime = 0;
 let snowballWalkFactor = 1;
 let snowballPhysicsMs = 0;
-const profileTown = new URLSearchParams(location.search).has('profile');
+const profileTown = previewOptions.has('profile');
 
 const playerTarget: TownSnowballTarget = {
   id: 'local', label: '你', radius: .27, height: 1.78, shape: 'capsule', x: 0, y: -10000, z: 0,
@@ -593,10 +601,6 @@ const playerTarget: TownSnowballTarget = {
     snowStaggerTime = .18;
     snowballWalkFactor = .45;
     announceActivity('雪球打中你了 · 连跳三下抖掉头上的雪');
-    if (!reduceSnowEffects.matches) {
-      snowballFrost.getAnimations().forEach(animation => animation.cancel());
-      snowballFrost.animate([{ opacity: .72 }, { opacity: 0 }], { duration: 440, easing: 'ease-out' });
-    }
   },
 };
 const snowballTargets = [playerTarget, ...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
@@ -676,8 +680,9 @@ const snowballs = createTownSnowballFight({
       if (event.scoreable) snowballBoard.recordMiss(event.thrower);
     } else {
       const target = event.targetId ? targetById.get(event.targetId) : undefined;
-      if (event.scored) target?.onHit(event.velocity.x, event.velocity.z);
       if (event.scored) {
+        target?.onHit(event.velocity.x, event.velocity.z);
+        if (target === playerTarget && moveAllowed()) hitFeedback.hit(event.zone);
         const recipient = target?.shape === 'box' ? undefined : target?.id;
         const streak = snowballBoard.recordHit(event.thrower, recipient, {
           announce: formalSnowFight,
@@ -919,7 +924,25 @@ activitySpots.push(
 );
 
 function registerLandmarkActivities(id: string, group: Group) {
-  if (id === 'hot-spring') {
+  if (id === 'coaster-station') {
+    const hallNorth = 313.3;
+    activitySpots.push({
+      x: 526, n: hallNorth, ground: grid.heightAt(526, hallNorth), range: 1.7, label: '查看环镇列车乘车路线',
+      run() {
+        const panel = activityContext.open('环镇列车乘车路线',
+          '乘车站台在站厅西南方，步行约 147 米。出站厅沿站前路走，穿过高架后按沿途乘车标记前往站台。');
+        const direct = document.createElement('button');
+        direct.type = 'button';
+        direct.textContent = '直接前往乘车站台';
+        direct.onclick = () => {
+          placeCard.close();
+          selector.value = '环镇列车站';
+          mode(true);
+        };
+        panel.append(direct);
+      },
+    });
+  } else if (id === 'hot-spring') {
     const seats = group.userData.seats as number[][];
     for (const [east, height, z] of seats) {
       activitySpots.push(localSpot(group, [east, .25, z - .85], 1.4, '在温泉馆就座', (x, n, ground) => {
@@ -1179,7 +1202,8 @@ function obstructed(east: number, north: number, feet: number) {
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
   const { colliders, floors } = geometryAt(east, north);
-  return activities.some(activity => activity.blocked?.(east, north, feet)) ||
+  return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+    activities.some(activity => activity.blocked?.(east, north, feet)) ||
     colliders.some(intersects) || floors.some(intersects);
 }
 
@@ -1365,9 +1389,13 @@ renderer.setAnimationLoop(now => {
   if (museumLaunch.active) { museumLaunch.update(frameSeconds); museumLaunch.render(); }
   else if (museumInspection.active) museumInspection.render();
   else {
+    const startedFeedback = profileTown ? performance.now() : 0;
+    if (moveAllowed()) hitFeedback.apply(camera);
+    const feedbackMs = profileTown ? performance.now() - startedFeedback : 0;
     renderer.render(scene, camera);
     if (profileTown) {
       renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
+        frameMs: frameSeconds * 1000, feedbackMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
       } }));
