@@ -177,6 +177,22 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
 #touch-walk span { border-radius: 50%; width: 40px; height: 40px; background: #efca91dc; box-shadow: 0 0 0 1px #fff5; pointer-events: none; }
 .touch-play #world-action { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(45px, env(safe-area-inset-bottom)); transform: none; min-height: 44px; max-width: calc(100vw - 150px); white-space: normal; }
 .touch-play #load-status { display: none; }
+#snowball-controls:not([hidden]) {
+  position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 66px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px;
+  padding: 7px; border: 1px solid #6d819d; border-radius: 10px; background: #101a2beb;
+}
+#snowball-score { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; white-space: nowrap; }
+#snowball-controls button { min-height: 38px; touch-action: none; }
+#snowball-controls button:disabled { cursor: default; }
+.touch-play #snowball-controls { bottom: max(217px, calc(env(safe-area-inset-bottom) + 205px)); }
+#snowball-frost {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0;
+  box-shadow: inset 0 0 60px 18px #d8f6ff;
+}
+@media (max-height: 480px) and (pointer: coarse) {
+  .touch-play #snowball-controls { bottom: max(102px, calc(env(safe-area-inset-bottom) + 90px)); right: max(76px, calc(env(safe-area-inset-right) + 72px)); }
+}
 @media (max-width: 580px) and (pointer: coarse) {
   .panel { top: 11px; left: 11px; padding: 10px; width: min(304px, calc(100vw - 22px)); }
   .panel h1 { margin-bottom: 9px; }

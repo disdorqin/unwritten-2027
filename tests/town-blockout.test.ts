@@ -66,7 +66,7 @@ test('town expansion keeps original landmark origins and increases the playable 
   });
 });
 
-test('expanded streets cross the legacy seams on foot and the northern river remains impassable', () => {
+test('expanded streets cross the legacy seams and the northern river stays outside dry navigation', () => {
   for (const { id, points } of extensionRoads) {
     for (let i = 1; i < points.length; i++) {
       const [ax, an] = points[i - 1], [bx, bn] = points[i];

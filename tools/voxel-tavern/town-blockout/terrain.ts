@@ -137,9 +137,7 @@ export function createTerrainGrid() {
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }
-  function heightAt(x: number, north: number) {
-    const bridge = bridgeAt(x, north);
-    if (bridge) return bridge.height;
+  function groundHeightAt(x: number, north: number) {
     const gx = clamp(x / gridStep, 0, gridWidth - 1);
     const gn = clamp(north / gridStep, 0, gridDepth - 1);
     const i = Math.min(Math.floor(gx), gridWidth - 2);
@@ -153,7 +151,10 @@ export function createTerrainGrid() {
     return u + v <= 1 ? a + (b - a) * u + (c - a) * v
       : d + (c - d) * (1 - u) + (b - d) * (1 - v);
   }
-  return { elevation, surfaces, gridWidth, gridDepth, heightAt };
+  function heightAt(x: number, north: number) {
+    return bridgeAt(x, north)?.height ?? groundHeightAt(x, north);
+  }
+  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt };
 }
 
 export function canEnter(x: number, n: number) {

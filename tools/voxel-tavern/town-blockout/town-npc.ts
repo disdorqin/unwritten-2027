@@ -1,5 +1,6 @@
-import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, Vector3 } from 'three';
 import type { TownActivity, TownActivityContext, TownActivitySpot } from './town-activity';
+import type { TownSnowballTarget } from './town-snow-target';
 import { answerNpcQuestion, npcExpansion, npcQuestions, npcScript,
   type NpcName, type NpcPeriod, type TownNpcGuide } from './town-npc-dialogue';
 
@@ -88,7 +89,7 @@ export function createTownNpcActivity(
   context: TownActivityContext,
   heightAt: (east: number, north: number) => number,
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
-): TownActivity {
+): TownActivity & { snowballTargets: readonly TownSnowballTarget[] } {
   const skinParts: readonly Part[] = [
     ...parts,
     ...Array.from({ length: 9 }, (_, i): Part => [
@@ -105,12 +106,32 @@ export function createTownNpcActivity(
   const transform = new Object3D();
   const color = new Color();
   const strollClocks = roles.map((_, index) => index * 2.35);
+  const reboundTime = .32;
+  const flinches = roles.map(() => ({ remaining: 0, x: 0, z: 0, axis: new Vector3(1, 0, 0) }));
   let active: { role: NpcName; panel: HTMLElement } | undefined;
 
   const spots: TownActivitySpot[] = roles.map(({ name, home }, index) => ({
     x: home[0], n: home[1], ground: heightAt(...home), range: 2.15,
     label: `和${name}聊天`,
     run: () => openConversation(index),
+  }));
+  const snowballTargets: TownSnowballTarget[] = roles.map(({ name }, index) => ({
+    id: `npc:${name}`,
+    label: name,
+    x: spots[index].x,
+    y: spots[index].ground,
+    z: -spots[index].n,
+    radius: .50,
+    height: 1.95,
+    onHit(x, z) {
+      const flinch = flinches[index];
+      const length = Math.hypot(x, z);
+      const directed = Number.isFinite(length) && length > 0;
+      flinch.x = directed ? x / length : 0;
+      flinch.z = directed ? z / length : 1;
+      flinch.axis.set(flinch.z, 0, -flinch.x);
+      flinch.remaining = reboundTime;
+    },
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
   const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0 }));
@@ -199,13 +220,18 @@ export function createTownNpcActivity(
     const spot = spots[index];
     const yaw = facing[index];
     const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+    const flinch = flinches[index];
+    const recoil = Math.sin(Math.PI * flinch.remaining / reboundTime) * .14;
     for (let offset = 0; offset < skinParts.length; offset++) {
       const [[x, y, z], size, , swing] = skinParts[offset];
       const step = swing ? gait * swing : 0;
       const forward = z + step * .105;
-      transform.position.set(spot.x + x * cosine + forward * sine,
-        spot.ground + y + Math.abs(step) * .065, -spot.n - x * sine + forward * cosine);
+      const lean = y * recoil;
+      transform.position.set(spot.x + x * cosine + forward * sine + flinch.x * lean,
+        spot.ground + y - lean * .32 + Math.abs(step) * .065,
+        -spot.n - x * sine + forward * cosine + flinch.z * lean);
       transform.rotation.set(-step * .25, yaw, 0, 'YXZ');
+      if (recoil > 0) transform.rotateOnWorldAxis(flinch.axis, recoil);
       transform.scale.set(...size);
       transform.updateMatrix();
       const instance = index * skinParts.length + offset;
@@ -226,27 +252,41 @@ export function createTownNpcActivity(
 
   return {
     spots,
+    snowballTargets,
     update(dt) {
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = false;
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll } = roles[i];
-        if (active?.role === name) continue;
+        const flinch = flinches[i];
+        const reacting = flinch.remaining > 0;
+        if (reacting) flinch.remaining = Math.max(0, flinch.remaining - dt);
+        if (active?.role === name) {
+          if (reacting) { pose(i, 0); changed = true; }
+          continue;
+        }
         const spot = spots[i];
         // Stagger pauses and keep routes near the role's accessible street entrance.
         const period = 27 + i * 1.7;
-        strollClocks[i] = (strollClocks[i] + dt) % period;
+        if (!reacting) strollClocks[i] = (strollClocks[i] + dt) % period;
         const phase = strollClocks[i];
         const outward = phase < 14;
         const progress = outward ? Math.min(1, Math.max(0, (phase - 9) / 4))
           : 1 - Math.min(1, (phase - 14) / 4);
         const x = home[0] + (stroll[0] - home[0]) * progress;
         const n = home[1] + (stroll[1] - home[1]) * progress;
-        if (x === spot.x && n === spot.n) continue;
-        spot.x = x;
-        spot.n = n;
-        spot.ground = heightAt(x, n);
-        facing[i] = Math.atan2(stroll[0] - home[0], home[1] - stroll[1]) + (outward ? 0 : Math.PI);
+        const moving = x !== spot.x || n !== spot.n;
+        if (!moving && !reacting) continue;
+        if (moving) {
+          spot.x = x;
+          spot.n = n;
+          spot.ground = heightAt(x, n);
+          const target = snowballTargets[i];
+          target.x = x;
+          target.y = spot.ground;
+          target.z = -n;
+          facing[i] = Math.atan2(stroll[0] - home[0], home[1] - stroll[1]) + (outward ? 0 : Math.PI);
+        }
         const gait = progress > 0 && progress < 1 ? Math.sin(phase * 7) : 0;
         pose(i, gait);
         changed = true;

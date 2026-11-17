@@ -13,7 +13,7 @@ import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark } from './landmark-village';
-import { canEnter, createTerrainGrid, layout, riverX, waterHeight, worldBounds } from './terrain';
+import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { addDistrictHousing } from './district-layout';
 import { addForestDensity } from './forest-density';
@@ -45,9 +45,16 @@ import { createTownRailway } from './town-railway';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPassport } from './town-passport';
 import { createTownLights } from './town-lights';
+import { createTownWater } from './town-water';
+import { createTownSnowCover } from './town-snow-cover';
+import { createTownSnowballFight, type SnowballState } from './town-snowball';
+import { createSnowballSweep } from './town-snowball-world';
+import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget } from './town-snow-target';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
+const townWater = createTownWater(grid);
+const snowCover = createTownSnowCover(grid);
 const scene = new Scene();
 scene.background = new Color('#adc2dd');
 scene.fog = new Fog('#adc2dd', 360, 1300);
@@ -116,13 +123,16 @@ function waterStrip(points: { n: number; left: number; right: number }[]) {
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3));
   scene.add(new Mesh(geometry, water));
 }
-waterStrip(Array.from({ length: worldBounds.depth + 1 }, (_, n) => ({ n, left: riverX(n) - 8.05, right: riverX(n) + 8.05 })));
+waterStrip(townWater.sections);
 const [[inletX, inletNorth], [lakeX, lakeNorth]] = layout.lake.inlet;
 const inlet = new Mesh(new BoxGeometry(Math.hypot(lakeX - inletX, lakeNorth - inletNorth), .08, 7.9), water);
 inlet.position.set((inletX + lakeX) / 2, waterHeight, -(inletNorth + lakeNorth) / 2);
 inlet.rotation.y = Math.atan2(lakeNorth - inletNorth, lakeX - inletX);
 scene.add(inlet);
 const bridgeGeometry = new BoxGeometry();
+const bridgeCollision = new Group();
+const rails: Box[] = [];
+bridgeCollision.userData.colliders = rails;
 const detailedBridges = new Group();
 scene.add(detailedBridges);
 let bridgePanorama: Group | undefined;
@@ -157,6 +167,10 @@ for (const bridge of layout.bridges) {
     box(x, bridge.height - .07, bridge.north, .48, .14, 7.7, timber);
   }
   for (const n of [bridge.north - 3.8, bridge.north + 3.8]) {
+    rails.push({
+      min: [bridge.west - .125, bridge.height, -n - .125],
+      max: [bridge.east + .125, bridge.height + 1.15, -n + .125],
+    });
     box(center, bridge.height + 1.06, n, length, .18, .23, timber);
     for (let x = bridge.west; x <= bridge.east; x += 2) box(x, bridge.height + .55, n, .25, 1.1, .25, stone);
   }
@@ -258,7 +272,7 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -345,6 +359,9 @@ const points = new Map<string, number[]>([
   ['环镇列车站', [469, 224]],
   ['温泉浴场', [520, 156]],
   ['冰雪城堡', [454, 75]],
+  ['雪团练习场', [...snowPracticeStand]],
+  ['南河岸', [266, 120]],
+  ['北河岸', [212, 400]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
 layout.plots.forEach((plot, i) => {
@@ -490,15 +507,16 @@ function showLightCount({ lit, total }: { lit: number; total: number }) {
 const townLights = createTownLights({ ...activityContext, announce: announceActivity }, grid, showLightCount);
 showLightCount(townLights.getProgress());
 lightsButton.onclick = townLights.openBook;
+const npcActivity = createTownNpcActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, feature => {
+  if (feature === 'spring') return architecture.has('hot-spring');
+  if (feature === 'castle') return architecture.has('ice-castle');
+  if (feature === 'rail' || feature === 'bell') return true;
+  return feature !== 'mixing';
+});
+const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 const activities: TownActivity[] = [
   createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
-  (context: TownActivityContext) => createTownNpcActivity(context, grid.heightAt, feature => {
-    if (feature === 'spring') return architecture.has('hot-spring');
-    if (feature === 'castle') return architecture.has('ice-castle');
-    if (feature === 'rail' || feature === 'bell') return true;
-    return feature !== 'mixing';
-  }),
   (context: TownActivityContext) => createWindowActivity(context, architecture),
 ]
   .map(create => {
@@ -517,8 +535,85 @@ function announceActivity(message: string) {
   window.clearTimeout(activityMessageTimer);
   activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
 }
-activities.push(townLights);
+activities.push(townLights, npcActivity, practiceTarget);
 const activitySpots = activities.flatMap(activity => activity.spots);
+const snowballControls = element('snowball-controls');
+const snowballScore = element('snowball-score');
+const gatherButton = element<HTMLButtonElement>('gather-snowball');
+const throwButton = element<HTMLButtonElement>('throw-snowball');
+const snowballFrost = element('snowball-frost');
+const snowballTargets = [...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
+const targetById = new Map(snowballTargets.map(target => [target.id, target]));
+const tossOrigin = new Vector3();
+const tossDirection = new Vector3();
+
+function showSnowballScore({ ammo, hits, combo }: SnowballState) {
+  snowballScore.textContent = `雪球 ${ammo}/10 · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}`;
+  gatherButton.disabled = ammo >= 10;
+  throwButton.disabled = ammo === 0;
+}
+const snowballs = createTownSnowballFight({
+  scene,
+  sweep: createSnowballSweep({
+    geometryAt,
+    surfaceHeight(east, north) {
+      const height = grid.heightAt(east, north);
+      return (townWater.at(east, north) || isWater(east, north)) ? Math.max(height, waterHeight) : height;
+    },
+    occupiedAt(east, north, height) {
+      if (east < 1 || north < 1 || east > worldBounds.width - 1 || north > worldBounds.depth - 1) return true;
+      const relative = height - grid.heightAt(east, north);
+      return (relative <= 7 && districts.blocked(east, north)) ||
+        (relative <= 8 && forest.blocked(east, north)) ||
+        (relative <= 3 && (scenery.blocked(east, north) || streetscape.blocked(east, north)));
+    },
+    targets: snowballTargets,
+  }),
+  onChange: showSnowballScore,
+  onEvent(event) {
+    if (event.type === 'impact' && event.targetId) {
+      const target = targetById.get(event.targetId);
+      target?.onHit(event.velocity.x, event.velocity.z);
+      if (walking && event.thrower === 'local') {
+        const label = target?.label ?? '目标';
+        announceActivity(event.combo > 1 ? `连中 ${event.combo} 次 · ${label}` : `击中${label}`);
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          snowballFrost.getAnimations().forEach(animation => animation.cancel());
+          snowballFrost.animate([{ opacity: .36 }, { opacity: 0 }], { duration: 380, easing: 'ease-out' });
+        }
+      }
+    }
+    renderer.domElement.dispatchEvent(new CustomEvent('town-snowball', { detail: event }));
+  },
+});
+
+function gatherSnowball() {
+  if (!moveAllowed()) return;
+  const roofed = geometryAt(x, n).floors.some(floor => floor.min[1] >= ground + .9 && overlapsBody(x, n, floor));
+  if (airHeight !== undefined || waterAtFeet() || roofed || !snowCover.canGather(x, n, ground)) {
+    announceActivity('到户外积雪处攒雪球');
+    return;
+  }
+  if (!snowballs.gather()) announceActivity('雪球已经攒满');
+}
+function throwSnowball() {
+  if (!moveAllowed()) return;
+  if (waterAtFeet()?.mode === 'swim') {
+    announceActivity('先游到岸边再投雪球');
+    return;
+  }
+  if (!snowballs.getState().ammo) {
+    announceActivity('先在积雪处攒一个雪球');
+    return;
+  }
+  const flat = Math.cos(pitch);
+  tossDirection.set(Math.sin(yaw) * flat, Math.sin(pitch), -Math.cos(yaw) * flat);
+  tossOrigin.set(x, (airHeight ?? ground) + eye - .08, -n).addScaledVector(tossDirection, .06);
+  snowballs.throwBall(tossOrigin, tossDirection);
+}
+gatherButton.onclick = gatherSnowball;
+throwButton.onclick = throwSnowball;
+
 const stampSites = [
   { id: 'plaza', label: '钟楼广场', hint: '从「广场南侧」沿广场向北几步。', x: 223, n: 184 },
   { id: 'tavern', label: '未写酒馆', hint: '在酒馆门外，找门口的盖戳牌。', x: 159, n: 221 },
@@ -661,10 +756,11 @@ function jump() {
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
     '温泉浴场': [524, 158], '冰雪城堡': [460, 72],
+    '雪团练习场': snowPracticeTarget, '南河岸': [303, 120], '北河岸': [246, 400],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
-  ground = grid.heightAt(x, n);
+  ground = surfaceAt(x, n);
   airHeight = undefined;
   riseSpeed = 0;
   pitch = 0;
@@ -682,7 +778,7 @@ function mode(next: boolean) {
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
   element('help').textContent = next
-    ? (touchWalk.active() ? '滑动转向，摇杆前推两次疾跑，点「跳跃」。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动。')
+    ? (touchWalk.active() ? '滑动转向，摇杆前推两次疾跑，点「跳跃」。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，Q 攒雪球，R 投掷。')
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (next) jump();
   else {
@@ -736,9 +832,9 @@ function turnView(horizontal: number, vertical: number) {
 const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView);
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView, () => boardingGround ? ridePitch : seated?.pitch ?? pitch);
 function requestJump() {
-  if (!moveAllowed() || airHeight !== undefined) return;
+  if (!moveAllowed() || airHeight !== undefined || waterAtFeet()?.mode === 'swim') return;
   airHeight = ground;
-  riseSpeed = 5.4;
+  riseSpeed = 7.45;
 }
 touchJump.addEventListener('pointerdown', event => {
   if (event.pointerType === 'touch') { event.preventDefault(); requestJump(); }
@@ -767,6 +863,14 @@ addEventListener('keydown', e => {
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
+  }
+  if (moveAllowed() && (e.code === 'KeyQ' || e.code === 'KeyR')) {
+    e.preventDefault();
+    if (!e.repeat) {
+      if (e.code === 'KeyQ') gatherSnowball();
+      else throwSnowball();
+    }
+    return;
   }
   if (moveAllowed() && e.code === 'Space') {
     if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
@@ -803,12 +907,21 @@ mode(startInMuseum);
 let previous = performance.now();
 let widePanorama = false;
 function walkable(x: number, n: number) {
-  return canEnter(x, n) && !scenery.blocked(x, n) && !districts.blocked(x, n)
-    && !forest.blocked(x, n) && !streetscape.blocked(x, n);
+  const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
+  return terrainPassable && !scenery.blocked(x, n) && !districts.blocked(x, n) &&
+    !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
 const bodyHeight = 1.8;
 const stepHeight = .43;
 const surfaceEpsilon = .025;
+function surfaceAt(east: number, north: number) {
+  return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+}
+function waterAtFeet() {
+  if (airHeight !== undefined) return undefined;
+  const water = townWater.at(x, n);
+  return water && Math.abs(ground - water.ground) < .25 ? water : undefined;
+}
 
 function overlapsBody(east: number, north: number, { min, max }: Box) {
   const z = -north;
@@ -819,7 +932,7 @@ function overlapsBody(east: number, north: number, { min, max }: Box) {
 
 function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
   const z = -north;
-  let height = grid.heightAt(east, north);
+  let height = surfaceAt(east, north);
   const { floors, ramps, colliders } = geometryAt(east, north);
   for (const floor of floors) {
     if (floor.max[1] <= limit && overlapsBody(east, north, floor)) height = Math.max(height, floor.max[1]);
@@ -867,7 +980,7 @@ function tryMove(nextX: number, nextN: number) {
 function stepJump(dt: number) {
   if (airHeight === undefined) return;
   const feet = airHeight;
-  riseSpeed -= 16.5 * dt;
+  riseSpeed -= 18 * dt;
   const next = feet + riseSpeed * dt;
   if (riseSpeed > 0) {
     const head = feet + bodyHeight;
@@ -937,22 +1050,28 @@ renderer.setAnimationLoop(now => {
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
       for (let i = 0; i < steps; i++) {
         if (forward || right) {
-          const nx = x + east;
-          const nn = n + north;
+          const water = waterAtFeet();
+          const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : 1;
+          const nx = x + east * moveScale;
+          const nn = n + north * moveScale;
           if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
         }
         stepJump(stepTime);
       }
     }
-    faceFrom(x, n, (airHeight ?? ground) + eye, yaw, pitch);
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${airHeight !== undefined ? '腾空' : sprint ? '疾跑' : '行走'}`;
+    const water = waterAtFeet();
+    faceFrom(x, n, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), yaw, pitch);
+    const movement = water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
+      airHeight !== undefined ? '腾空' : sprint ? '疾跑' : '行走';
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
   } else {
     controls.update();
     element('position').textContent = '';
   }
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
-  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView);
+  snowCover.update(dt, nightMode && snowfall.enabled());
+  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount());
   forest.setPanorama(wideView);
   districts.setPanorama(wideView);
   showWideBridges(wideView);
@@ -994,12 +1113,14 @@ renderer.setAnimationLoop(now => {
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
+  snowballs.update(dt);
+  snowballControls.hidden = !moveAllowed();
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
   touchWalk.setAllowed(moveAllowed());
-  crosshair.hidden = !lookAllowed() || touchWalk.active();
+  crosshair.hidden = !lookAllowed() || (touchWalk.active() && (!moveAllowed() || throwButton.disabled));
   touchJump.hidden = !moveAllowed() || !touchWalk.active();
-  touchJump.disabled = airHeight !== undefined;
+  touchJump.disabled = airHeight !== undefined || waterAtFeet()?.mode === 'swim';
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;

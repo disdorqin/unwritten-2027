@@ -59,6 +59,12 @@
   <button id="touch-jump" type="button" hidden>跳跃</button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
+  <aside id="snowball-controls" aria-label="打雪仗" hidden>
+    <output id="snowball-score" aria-live="polite">雪球 0/10 · 命中 0</output>
+    <button id="gather-snowball" type="button" title="Q">攒雪球</button>
+    <button id="throw-snowball" type="button" title="R" disabled>投雪球</button>
+  </aside>
+  <div id="snowball-frost" aria-hidden="true"></div>
   <output id="town-activity-status" aria-live="polite"></output>
   <output id="festival-status" aria-live="polite"></output>
   <p id="load-status" role="status"></p>
