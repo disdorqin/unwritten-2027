@@ -1,42 +1,44 @@
 # Deploying
 
-## UNWRITTEN 2027：当前服务器方案
+## UNWRITTEN 2027 单人预览上线
 
-博客仓库 `disdorqin/disdorqin.github.io` 的 `astro.config.mjs` 配置了
-`https://disdorqin.cn`。游戏拟使用 `town.disdorqin.cn`，复用该域名的子域名。
-以下是准备好的配置，尚未部署到服务器，也未创建 DNS 记录。
+`town.disdorqin.cn` 的根路径由 Caddy 提供小镇单人预览
+`tools/voxel-tavern/town-blockout.html`。本次上线使用仓库中的
+`tools/compose.town-preview.yaml`，由它从仓库根目录构建并打包小镇。
 
-| 配置 | 值 |
-| --- | --- |
-| DNS 类型 | A |
-| 主机记录 | town |
-| 目标 IPv4 | 49.234.39.194 |
-| 公网入站 | TCP 80、443 |
-| 游戏内部监听 | 3000，仅容器网络可达 |
+腾讯云 Ubuntu 的统一部署目录为 `/opt/apps/unwritten-2027`。
+上线前确认服务器可供授权操作，已安装 Docker Engine 和 Compose 插件，且已取得通过验收的提交。
+域名 A 记录指向 `49.234.39.194`，安全组和系统防火墙放行 TCP 80、443，
+并确认两个端口均可由本服务绑定。
 
-在已安装 Docker Engine 与 Compose 插件的服务器上，把本仓库放到
-`/opt/unwritten-2027`，确认 DNS 已指向服务器、80/443 未被其他服务占用后运行：
+将验收通过的确切提交检出到该目录后执行以下命令。每条命令成功后再执行下一条。
 
 ```sh
-cd /opt/unwritten-2027
-docker compose -p unwritten -f tools/compose.yaml up -d --build
-docker compose -p unwritten -f tools/compose.yaml ps
-curl --fail https://town.disdorqin.cn/healthz
+cd /opt/apps/unwritten-2027
+export TOWN_RELEASE="$(git rev-parse HEAD)"
+docker compose -p unwritten-preview -f tools/compose.town-preview.yaml config --quiet
+docker compose -p unwritten-preview -f tools/compose.town-preview.yaml build web
+docker compose -p unwritten-preview -f tools/compose.town-preview.yaml up -d --no-build --pull never
+docker compose -p unwritten-preview -f tools/compose.town-preview.yaml ps
+curl --fail --show-error --silent --retry 10 --retry-all-errors --retry-delay 2 https://town.disdorqin.cn/healthz
+curl --fail --show-error --silent --output /dev/null https://town.disdorqin.cn/
 ```
 
-Caddy 自动申请和续期 HTTPS 证书，并转发 WebSocket；游戏运行一个 Node 进程。
-更新代码后重复 `up -d --build`。信件写入独立的 `letters` 数据卷，重建容器仍保留；
-不要运行 `down -v`，该参数会删除数据卷。构建上下文已排除运行时信件。
-服务重启后房间会重建，信件保留；请在无人游玩时更新。
+HTTPS 健康检查应返回 `town-preview <完整提交 SHA>`，其中 SHA 必须与
+`TOWN_RELEASE` 一致。再从公网用桌面和手机浏览器打开域名，确认加载、第一人称和游玩。
+Caddy 自动签发和续期证书，证书数据保存在 `unwritten-preview` 项目的独立卷中。
 
-双人验收：两台设备打开 HTTPS 地址，用不同昵称加入同一邀请码，检查互见、移动、
-聊天和刷新重连；进入邮局写信，确认成功回执，再重启 `town` 检查数据卷仍在。
-手机另检查竖屏和横屏的按钮、滑动转向及阅读/写信窗口。
+更新时从新的验收提交重新构建。保留上一个已上线的镜像，回滚时将
+`TOWN_RELEASE` 设为上一个已部署的完整 SHA，再执行同一条 `up -d --no-build --pull never` 命令
+并核对健康检查。保留 Compose 的证书卷。
 
-当前尚缺服务器登录通道和 DNS 管理权限。截图显示实例到期时间为
-2026-12-12，早于跨年开放日；上线前需要确认续期安排。
+Muse 的部署盘点、备选包和公网验收清单留在 `docs/交流区/Muse`。
+交接记录中的服务器到期日为 2026-12-12，跨年开放前需确认续期。
 
-以下保留上游部署说明；本项目当前采用上面的 Node 方案。
+## 上游多人部署参考
+
+`tools/compose.yaml` 与 `tools/Caddyfile` 属于仓库根目录的 Node 多人应用。
+下方保留其上游部署参考。
 
 There are two shapes. The same client bundle serves both and picks one at
 runtime, so there is no separate build.

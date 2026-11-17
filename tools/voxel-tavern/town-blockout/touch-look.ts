@@ -7,13 +7,16 @@ export function createTouchLook(
   allowed: () => boolean,
   turn: (yawDelta: number, pitchDelta: number) => void,
   viewPitch: () => number = () => 0,
+  hold?: { delay: number; start(): void; finish(milliseconds: number): boolean; cancel(): void },
 ) {
   let gesture: {
     pointer: number; startX: number; startY: number; x: number; y: number; started: number; dragged: boolean;
+    holdCancelled: boolean;
   } | undefined;
 
   function reset() {
     const previous = gesture?.pointer;
+    if (previous !== undefined) hold?.cancel();
     gesture = undefined;
     if (previous !== undefined && canvas.hasPointerCapture(previous)) canvas.releasePointerCapture(previous);
   }
@@ -36,6 +39,11 @@ export function createTouchLook(
     if (!gesture) return;
     const { clientX: x, clientY: y } = event;
     if (!gesture.dragged && Math.hypot(x - gesture.startX, y - gesture.startY) < lookThreshold) return;
+    // A quick swipe is look-only. Once a deliberate hold starts, the same finger can aim.
+    if (!gesture.dragged && hold && event.timeStamp - gesture.started < hold.delay) {
+      gesture.holdCancelled = true;
+      hold.cancel();
+    }
     gesture.dragged = true;
     const { height } = canvas.getBoundingClientRect();
     const focal = Math.max(1, height) / (2 * Math.tan(verticalFov / 2));
@@ -50,9 +58,10 @@ export function createTouchLook(
     if (event.pointerType !== 'touch' || gesture || !allowed()) return;
     gesture = {
       pointer: event.pointerId, startX: event.clientX, startY: event.clientY,
-      x: event.clientX, y: event.clientY, started: event.timeStamp, dragged: false,
+      x: event.clientX, y: event.clientY, started: event.timeStamp, dragged: false, holdCancelled: false,
     };
     canvas.setPointerCapture(event.pointerId);
+    hold?.start();
     event.preventDefault();
   });
   canvas.addEventListener('pointermove', event => {
@@ -64,7 +73,9 @@ export function createTouchLook(
     if (!gesture || event.pointerId !== gesture.pointer) return;
     if (allowed()) {
       drag(event);
-      if (!gesture.dragged && event.timeStamp - gesture.started <= tapLimit) {
+      const heldFor = event.timeStamp - gesture.started;
+      const usedHold = !gesture.holdCancelled && hold?.finish(heldFor);
+      if (!gesture.dragged && !usedHold && heldFor <= tapLimit) {
         const { yaw, pitch } = pointAngles(event.clientX, event.clientY);
         if (yaw || pitch) turn(yaw, pitch);
       }

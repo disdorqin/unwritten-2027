@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bridgeAt, createTerrainGrid, layout, riverX, waterHeight, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain.ts';
-import { createTownWater } from '../tools/voxel-tavern/town-blockout/town-water.ts';
+import { createTownWater, shoreJumpDepth } from '../tools/voxel-tavern/town-blockout/town-water.ts';
+import { createTownPhysicsClock, townPhysicsDelta } from '../tools/voxel-tavern/town-blockout/town-physics-clock.ts';
 
 const grid = createTerrainGrid();
 const water = createTownWater(grid);
@@ -27,7 +28,9 @@ test('river crossings transition through shallow water and swimming without an u
       if (wet) {
         assert.ok(wet.ground >= grid.groundHeightAt(x, north));
         assert.ok(wet.ground < waterHeight);
-        assert.ok(wet.speed > 0 && wet.speed < 1);
+        assert.equal(wet.mode, wet.depth < .6 ? 'wade' : 'swim');
+        assert.equal(wet.speed, wet.mode === 'wade' ? .55 : .45);
+        assert.equal(wet.ground, Math.max(grid.groundHeightAt(x, north), waterHeight - shoreJumpDepth));
       }
       const mode = wet?.mode ?? 'dry';
       if (transitions.at(-1) !== mode) transitions.push(mode);
@@ -49,4 +52,24 @@ test('bridge decks and the ice lake keep dry support despite nearby river water'
   assert.equal(grid.heightAt(iceX, iceNorth), layout.lake.height);
   assert.equal(water.at(riverX(0), 0), undefined);
   assert.equal(water.at(riverX(worldBounds.depth), worldBounds.depth), undefined);
+});
+
+test('the 60 Hz town physics clock preserves fractional interpolation and drops excess steps', () => {
+  const clock = createTownPhysicsClock();
+  let physicsSteps = 0;
+  const step = () => physicsSteps++;
+
+  assert.equal(clock.advance(townPhysicsDelta / 2, step), .5);
+  assert.equal(physicsSteps, 0);
+  assert.equal(clock.advance(townPhysicsDelta / 2, step), 0);
+  assert.equal(physicsSteps, 1);
+
+  assert.ok(Math.abs(clock.advance(townPhysicsDelta * 10.25, step) - .25) < 1e-8);
+  assert.equal(physicsSteps, 3);
+  assert.equal(clock.advance(0, step).toFixed(2), '0.25');
+  assert.equal(physicsSteps, 3);
+
+  clock.reset();
+  assert.equal(clock.advance(0, step), 0);
+  assert.equal(physicsSteps, 3);
 });

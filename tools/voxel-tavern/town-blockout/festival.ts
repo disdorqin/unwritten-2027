@@ -40,7 +40,11 @@ const bursts: Burst[] = [
   { time: 8.76, x: 224, y: 67, z: -197, radius: 20, shape: 'peony', outer: gold, inner: cream },
 ];
 
-export function createFestival(scene: Scene, setMessage: (message: string) => void = () => {}) {
+export function createFestival(
+  scene: Scene,
+  setMessage: (message: string) => void = () => {},
+  complete?: () => void,
+) {
   const capacity = bursts.length * sparkCount * trailCount;
   const positions = new Float32Array(capacity * 3);
   const colors = new Float32Array(capacity * 3);
@@ -196,6 +200,7 @@ export function createFestival(scene: Scene, setMessage: (message: string) => vo
       if (time >= duration) {
         elapsed = -1;
         sparks.visible = false;
+        complete?.();
         return;
       }
       used = 0;

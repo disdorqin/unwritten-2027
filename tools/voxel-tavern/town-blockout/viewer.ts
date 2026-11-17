@@ -45,11 +45,14 @@ import { createTownRailway } from './town-railway';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPassport } from './town-passport';
 import { createTownLights } from './town-lights';
-import { createTownWater } from './town-water';
+import { createTownWater, shoreJumpDepth } from './town-water';
+import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { createTownSnowCover } from './town-snow-cover';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
-import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget } from './town-snow-target';
+import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
+import { createTownSnowballBoard } from './town-snowball-board';
+import { addTownSnowBoard } from './town-snow-board';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -194,7 +197,7 @@ const architecture = new Map<string, Group>();
 const status = element('load-status');
 const festivalText = element('festival-status');
 const rehearse = element<HTMLButtonElement>('rehearse');
-const festival = createFestival(scene, message => { festivalText.textContent = message; });
+const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles);
 const actionButton = element<HTMLButtonElement>('world-action');
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 function validBox({ min, max }: Box) {
@@ -242,31 +245,36 @@ const slide = buildIcePlayProps();
 scene.add(slide);
 
 const bodyRadius = .27;
-const collisionCellSize = 16;
-const collisionStride = 1 + Math.ceil(worldBounds.width / collisionCellSize);
-const cellAt = (east: number, north: number) => Math.floor(east / collisionCellSize) +
-  collisionStride * Math.floor(north / collisionCellSize);
+const collisionChunkSize = 64;
+const collisionSubcells = 4;
+const collisionCellSize = collisionChunkSize / collisionSubcells;
+const collisionStride = Math.ceil(worldBounds.width / collisionChunkSize) + 3;
+const chunkAtCell = (east: number, north: number) => Math.floor(east / collisionSubcells) +
+  collisionStride * Math.floor(north / collisionSubcells);
+const subcellMask = collisionSubcells - 1;
+const subcellAt = (east: number, north: number) => (east & subcellMask) +
+  collisionSubcells * (north & subcellMask);
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
 
 function geometry() {
-  const cells = new Map<number, WalkGeometry>();
+  const chunks = new Map<number, (WalkGeometry | undefined)[]>();
   function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
     for (const box of boxes) {
+      // An expanded box is registered on both sides of any cell boundary it overlaps.
       const x0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
       const x1 = Math.floor((box.max[0] + bodyRadius) / collisionCellSize);
       const n0 = Math.floor((-box.max[2] - bodyRadius) / collisionCellSize);
       const n1 = Math.floor((-box.min[2] + bodyRadius) / collisionCellSize);
       for (let n = n0; n <= n1; n++) {
         for (let x = x0; x <= x1; x++) {
-          const id = n * collisionStride + x;
-          let cell = cells.get(id);
-          if (!cell) {
-            cell = { colliders: [], floors: [], ramps: [] };
-            cells.set(id, cell);
-          }
+          const id = chunkAtCell(x, n);
+          const chunk = chunks.get(id) ?? [];
+          if (!chunks.has(id)) chunks.set(id, chunk);
+          const subcell = subcellAt(x, n);
+          const cell = chunk[subcell] ?? (chunk[subcell] = { colliders: [], floors: [], ramps: [] });
           append(cell, box);
         }
       }
@@ -280,11 +288,13 @@ function geometry() {
     index(floors, (cell, box) => cell.floors.push(box));
     index(ramps, (cell, ramp) => cell.ramps.push(ramp));
   }
-  return cells;
+  return chunks;
 }
 let walkGeometry = geometry();
 function geometryAt(east: number, north: number) {
-  return walkGeometry.get(cellAt(east, north)) ?? emptyGeometry;
+  const cellEast = Math.floor(east / collisionCellSize);
+  const cellNorth = Math.floor(north / collisionCellSize);
+  return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
 }
 function describeTown() {
   const newBuildings = extensionStreets?.counts.buildings ?? 0;
@@ -375,6 +385,11 @@ const touchWalk = createTouchWalk(element('touch-walk'));
 const museumMapButton = element<HTMLButtonElement>('museum-map-button');
 const crosshair = element('walk-crosshair');
 const touchJump = element<HTMLButtonElement>('touch-jump');
+const walkClock = createTownPhysicsClock();
+const walkPrevious = new Vector3();
+const walkCurrent = new Vector3();
+const walkRender = new Vector3();
+let movementStepMs = 0;
 let forwardPressedAt = -Infinity;
 let doubleForward = false;
 function stopTravel() {
@@ -382,6 +397,7 @@ function stopTravel() {
   forwardPressedAt = -Infinity;
   doubleForward = false;
   touchWalk.reset();
+  walkClock.reset();
 }
 function resetMovement() {
   stopTravel();
@@ -530,89 +546,292 @@ const activities: TownActivity[] = [
     });
     return activity;
   });
-function announceActivity(message: string) {
+function announceActivity(message: string, gold = false) {
   activityStatus.textContent = message;
+  activityStatus.toggleAttribute('data-gold', gold);
   window.clearTimeout(activityMessageTimer);
-  activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
+  activityMessageTimer = window.setTimeout(() => {
+    activityStatus.textContent = '';
+    activityStatus.removeAttribute('data-gold');
+  }, 4200);
 }
 activities.push(townLights, npcActivity, practiceTarget);
 const activitySpots = activities.flatMap(activity => activity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
-const gatherButton = element<HTMLButtonElement>('gather-snowball');
-const throwButton = element<HTMLButtonElement>('throw-snowball');
+const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
+const snowballRing = element('snowball-action-ring');
 const snowballFrost = element('snowball-frost');
-const snowballTargets = [...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
-const targetById = new Map(snowballTargets.map(target => [target.id, target]));
+const snowballHitMark = element('snowball-hit-mark');
+const reduceSnowEffects = matchMedia('(prefers-reduced-motion: reduce)');
 const tossOrigin = new Vector3();
 const tossDirection = new Vector3();
+const gatherSeconds = .8;
+const touchHoldMilliseconds = 150;
+let snowHold: { source: 'mouse' | 'touch'; started: number } | undefined;
+let snowAction: 'gather' | 'aim' | undefined;
+let gatherTime = 0;
+const gatherRayEnd = new Vector3();
+const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false };
+let formalSnowFight = false;
+let enteredSnowFight = false;
+let snowOnHead = 0;
+let jumpsToShakeSnow = 0;
+let snowHatTime = 0;
+let snowStaggerTime = 0;
+let snowballWalkFactor = 1;
+let snowballPhysicsMs = 0;
+const profileTown = new URLSearchParams(location.search).has('profile');
 
-function showSnowballScore({ ammo, hits, combo }: SnowballState) {
-  snowballScore.textContent = `雪球 ${ammo}/10 · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}`;
-  gatherButton.disabled = ammo >= 10;
-  throwButton.disabled = ammo === 0;
+const playerTarget: TownSnowballTarget = {
+  id: 'local', label: '你', radius: .27, height: 1.78, shape: 'capsule', x: 0, y: -10000, z: 0,
+  onHit() {
+    if (!moveAllowed()) return;
+    snowOnHead = Math.min(3, snowOnHead + 1);
+    jumpsToShakeSnow = 3;
+    snowHatTime = 10;
+    snowStaggerTime = .18;
+    snowballWalkFactor = .45;
+    announceActivity('雪球打中你了 · 连跳三下抖掉头上的雪');
+    if (!reduceSnowEffects.matches) {
+      snowballFrost.getAnimations().forEach(animation => animation.cancel());
+      snowballFrost.animate([{ opacity: .72 }, { opacity: 0 }], { duration: 440, easing: 'ease-out' });
+    }
+  },
+};
+const snowballTargets = [playerTarget, ...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
+const targetById = new Map(snowballTargets.map(target => [target.id, target]));
+const snowballBoard = createTownSnowballBoard({
+  open: activityContext.open,
+  announce: message => announceActivity(message, true),
+  label: id => targetById.get(id)?.label ?? id,
+});
+function announceSnowballTitles() {
+  const { snowballKing, sharpshooter, popularityKing } = snowballBoard.getTitles();
+  const winners = [
+    snowballKing && `雪球王 ${snowballKing.label}`,
+    sharpshooter && `百发百中 ${sharpshooter.label}`,
+    popularityKing && `人气王 ${popularityKing.label}`,
+  ].filter(Boolean);
+  if (winners.length) announceActivity(`雪仗结算 · ${winners.join(' · ')}`, true);
 }
+element<HTMLButtonElement>('snowball-board').onclick = snowballBoard.open;
+addTownSnowBoard(scene, grid.heightAt);
+activitySpots.push({
+  x: 220, n: 172, ground: grid.heightAt(220, 172), range: 2.4, label: '查看雪仗榜', run: snowballBoard.open,
+});
+
+function roofed(east: number, north: number, feet: number) {
+  const { floors, colliders } = geometryAt(east, north);
+  const above = (box: Box) => box.min[1] >= feet + .9 && overlapsBody(east, north, box);
+  return floors.some(above) || colliders.some(above);
+}
+function outdoorLaunch(origin: Vector3, by: string) {
+  if (by !== 'local') {
+    const actor = targetById.get(by);
+    if (actor) return !roofed(actor.x, -actor.z, actor.y);
+  }
+  return !roofed(origin.x, -origin.z, origin.y - eye + .08);
+}
+function showSnowballScore({ ammo, hits, combo }: SnowballState) {
+  const depth = snowCover.depth();
+  const text = `雪球 ${ammo}/10 · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
+  if (snowballScore.textContent !== text) snowballScore.textContent = text;
+  const aiming = snowAction === 'aim' && ammo > 0;
+  const progress = aiming ? 1 : gatherTime / gatherSeconds;
+  snowballMeter.hidden = !aiming && (snowAction !== 'gather' || ammo >= 10);
+  snowballRing.hidden = snowballMeter.hidden || !moveAllowed();
+  if (!snowballMeter.hidden) {
+    snowballMeter.value = progress;
+    const label = aiming ? '瞄准雪球' : '攒雪球进度';
+    if (snowballMeter.getAttribute('aria-label') !== label) snowballMeter.setAttribute('aria-label', label);
+    snowballRing.style.setProperty('--snowball-progress', `${100 * progress}%`);
+  }
+}
+const sweepSnowball = createSnowballSweep({
+  geometryAt,
+  surfaceHeight(east, north) {
+    const height = grid.heightAt(east, north);
+    if (height >= waterHeight) return height;
+    return townWater.at(east, north) || isWater(east, north) ? waterHeight : height;
+  },
+  occupiedAt(east, north, height) {
+    if (east < 1 || north < 1 || east > worldBounds.width - 1 || north > worldBounds.depth - 1) return true;
+    const relative = height - grid.heightAt(east, north);
+    return (relative <= 7 && districts.blocked(east, north)) ||
+      (relative <= 8 && forest.blocked(east, north)) ||
+      (relative <= 3 && (scenery.blocked(east, north) || streetscape.blocked(east, north)));
+  },
+  targets: snowballTargets,
+  scoreAt: target => !roofed(target.x, -target.z, target.y),
+});
 const snowballs = createTownSnowballFight({
-  scene,
-  sweep: createSnowballSweep({
-    geometryAt,
-    surfaceHeight(east, north) {
-      const height = grid.heightAt(east, north);
-      return (townWater.at(east, north) || isWater(east, north)) ? Math.max(height, waterHeight) : height;
-    },
-    occupiedAt(east, north, height) {
-      if (east < 1 || north < 1 || east > worldBounds.width - 1 || north > worldBounds.depth - 1) return true;
-      const relative = height - grid.heightAt(east, north);
-      return (relative <= 7 && districts.blocked(east, north)) ||
-        (relative <= 8 && forest.blocked(east, north)) ||
-        (relative <= 3 && (scenery.blocked(east, north) || streetscape.blocked(east, north)));
-    },
-    targets: snowballTargets,
-  }),
+  scene, sweep: sweepSnowball,
+  canScoreAtLaunch: outdoorLaunch,
   onChange: showSnowballScore,
   onEvent(event) {
-    if (event.type === 'impact' && event.targetId) {
-      const target = targetById.get(event.targetId);
-      target?.onHit(event.velocity.x, event.velocity.z);
-      if (walking && event.thrower === 'local') {
-        const label = target?.label ?? '目标';
-        announceActivity(event.combo > 1 ? `连中 ${event.combo} 次 · ${label}` : `击中${label}`);
-        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          snowballFrost.getAnimations().forEach(animation => animation.cancel());
-          snowballFrost.animate([{ opacity: .36 }, { opacity: 0 }], { duration: 380, easing: 'ease-out' });
+    if (event.type === 'throw') {
+      if (event.scoreable) snowballBoard.recordThrow(event.thrower);
+    } else if (event.type === 'miss') {
+      if (event.scoreable) snowballBoard.recordMiss(event.thrower);
+    } else {
+      const target = event.targetId ? targetById.get(event.targetId) : undefined;
+      if (event.scored) target?.onHit(event.velocity.x, event.velocity.z);
+      if (event.scored) {
+        const recipient = target?.shape === 'box' ? undefined : target?.id;
+        const streak = snowballBoard.recordHit(event.thrower, recipient, {
+          announce: formalSnowFight,
+        });
+        if (walking && event.thrower === 'local') {
+          if (!formalSnowFight || ![3, 5, 8].includes(streak)) {
+            announceActivity(streak > 1 ? `连中 ${streak} 次 · ${target?.label ?? '目标'}` : `击中${target?.label ?? '目标'}`);
+          }
+          snowballHitMark.textContent = streak > 1 ? `+${streak} 连中` : '啪！';
+          snowballHitMark.getAnimations().forEach(animation => animation.cancel());
+          if (!reduceSnowEffects.matches) {
+            snowballHitMark.animate([{ opacity: 1, transform: 'translate(-50%, 0)' },
+              { opacity: 0, transform: 'translate(-50%, -28px)' }], { duration: 520, easing: 'ease-out' });
+          }
         }
+      } else if (event.scoreable) {
+        snowballBoard.recordMiss(event.thrower);
       }
     }
     renderer.domElement.dispatchEvent(new CustomEvent('town-snowball', { detail: event }));
   },
 });
 
-function gatherSnowball() {
-  if (!moveAllowed()) return;
-  const roofed = geometryAt(x, n).floors.some(floor => floor.min[1] >= ground + .9 && overlapsBody(x, n, floor));
-  if (airHeight !== undefined || waterAtFeet() || roofed || !snowCover.canGather(x, n, ground)) {
-    announceActivity('到户外积雪处攒雪球');
-    return;
+function aimsAtNearbySnow() {
+  if (!moveAllowed() || airHeight !== undefined || waterAtFeet() || pitch >= 0) return false;
+  if (x === gatherCheck.x && n === gatherCheck.n && ground === gatherCheck.ground &&
+      yaw === gatherCheck.yaw && pitch === gatherCheck.pitch) return gatherCheck.snow;
+  aimSnowball();
+  gatherRayEnd.copy(tossOrigin).addScaledVector(tossDirection, 2.44);
+  const hit = sweepSnowball(tossOrigin, gatherRayEnd, 0, 'local');
+  const at = hit?.at;
+  let snow = false;
+  if (at && hit.kind === 'world') {
+    const north = -at.z;
+    const height = grid.heightAt(at.x, north);
+    snow = Math.abs(height - at.y) < .18 && !roofed(x, n, ground) &&
+      !townWater.at(at.x, north) && !roofed(at.x, north, height) && snowCover.canGather(at.x, north, height);
   }
-  if (!snowballs.gather()) announceActivity('雪球已经攒满');
+  Object.assign(gatherCheck, { x, n, ground, yaw, pitch, snow });
+  return snow;
 }
-function throwSnowball() {
-  if (!moveAllowed()) return;
-  if (waterAtFeet()?.mode === 'swim') {
-    announceActivity('先游到岸边再投雪球');
-    return;
-  }
-  if (!snowballs.getState().ammo) {
-    announceActivity('先在积雪处攒一个雪球');
-    return;
-  }
+function aimSnowball() {
   const flat = Math.cos(pitch);
   tossDirection.set(Math.sin(yaw) * flat, Math.sin(pitch), -Math.cos(yaw) * flat);
   tossOrigin.set(x, (airHeight ?? ground) + eye - .08, -n).addScaledVector(tossDirection, .06);
-  snowballs.throwBall(tossOrigin, tossDirection);
 }
-gatherButton.onclick = gatherSnowball;
-throwButton.onclick = throwSnowball;
+function cancelSnowAction(source?: 'mouse' | 'touch') {
+  if (source && snowHold?.source !== source) return;
+  snowHold = undefined;
+  snowAction = undefined;
+  gatherTime = 0;
+  snowballs.hideAim();
+}
+function beginSnowAction(source: 'mouse' | 'touch') {
+  if (!moveAllowed() || snowHold || waterAtFeet()?.mode === 'swim') return;
+  snowHold = { source, started: performance.now() };
+  gatherCheck.x = NaN;
+  if (source === 'mouse') updateHeldSnowAction(0);
+}
+function finishSnowAction(source: 'mouse' | 'touch') {
+  if (!snowHold || snowHold.source !== source) return;
+  const fire = moveAllowed() && !aimsAtNearbySnow() && waterAtFeet()?.mode !== 'swim';
+  cancelSnowAction(source);
+  if (!fire) return;
+  if (snowballs.getState().ammo === 0) {
+    announceActivity(source === 'touch' ? '对准近处雪地长按收雪' : '对准近处雪地，长按左键收雪');
+    return;
+  }
+  aimSnowball();
+  snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
+}
+function updateHeldSnowAction(dt: number) {
+  if (!snowHold) return;
+  if (!moveAllowed() || waterAtFeet()?.mode === 'swim') {
+    cancelSnowAction();
+    return;
+  }
+  if (snowHold.source === 'touch' && performance.now() - snowHold.started < touchHoldMilliseconds) return;
+  if (aimsAtNearbySnow()) {
+    snowAction = 'gather';
+    snowballs.hideAim();
+    if (snowballs.getState().ammo >= 10) {
+      gatherTime = 0;
+      return;
+    }
+    gatherTime += dt;
+    if (gatherTime >= gatherSeconds) {
+      gatherTime -= gatherSeconds;
+      snowballs.gather(snowCover.depth().servings);
+    }
+  } else {
+    snowAction = 'aim';
+    gatherTime = 0;
+    if (snowballs.getState().ammo > 0) {
+      aimSnowball();
+      snowballs.showAim(tossOrigin, tossDirection, 1);
+    }
+  }
+}
+const touchSnowball = {
+  delay: touchHoldMilliseconds,
+  start: () => beginSnowAction('touch'),
+  finish(milliseconds: number) {
+    if (!snowHold || snowHold.source !== 'touch') return false;
+    if (milliseconds < touchHoldMilliseconds) {
+      cancelSnowAction('touch');
+      return false;
+    }
+    finishSnowAction('touch');
+    return true;
+  },
+  cancel: () => cancelSnowAction('touch'),
+};
+function snowballJumped() {
+  if (snowOnHead > 0 && --jumpsToShakeSnow <= 0) {
+    snowOnHead = 0;
+    announceActivity('头上的雪抖掉了');
+  }
+}
+function updateSnowFight(dt: number) {
+  const inPlaza = Math.abs(x - 223) < 30 && Math.abs(n - 186) < 24;
+  const active = moveAllowed();
+  const outdoor = active && !roofed(x, n, airHeight ?? ground);
+  const formal = nightMode && snowCover.depth().level >= 1;
+  formalSnowFight = formal && walking;
+  if (formalSnowFight && inPlaza && outdoor && !enteredSnowFight) {
+    announceActivity('今晚雪够厚，来钟楼广场打雪仗！');
+    enteredSnowFight = true;
+  }
+  if (!formal) enteredSnowFight = false;
+
+  playerTarget.x = x;
+  playerTarget.y = active ? airHeight ?? ground : -10000;
+  playerTarget.z = -n;
+  npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
+  updateHeldSnowAction(dt);
+  if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
+  if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
+  snowballPhysicsMs = snowballs.update(dt);
+  showSnowballScore(snowballs.getState());
+  snowballControls.hidden = !active;
+}
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'mouse' || event.button !== 0 ||
+      document.pointerLockElement !== renderer.domElement) return;
+  beginSnowAction('mouse');
+});
+document.addEventListener('pointerup', event => {
+  if (event.pointerType === 'mouse' && event.button === 0) finishSnowAction('mouse');
+});
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement !== renderer.domElement) cancelSnowAction('mouse');
+});
+addEventListener('blur', () => cancelSnowAction());
 
 const stampSites = [
   { id: 'plaza', label: '钟楼广场', hint: '从「广场南侧」沿广场向北几步。', x: 223, n: 184 },
@@ -763,7 +982,7 @@ function jump() {
   ground = surfaceAt(x, n);
   airHeight = undefined;
   riseSpeed = 0;
-  pitch = 0;
+  pitch = selector.value === '雪团练习场' ? .09 : 0;
 }
 function mode(next: boolean) {
   leaveRide();
@@ -778,7 +997,7 @@ function mode(next: boolean) {
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
   element('help').textContent = next
-    ? (touchWalk.active() ? '滑动转向，摇杆前推两次疾跑，点「跳跃」。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，Q 攒雪球，R 投掷。')
+    ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。')
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (next) jump();
   else {
@@ -830,11 +1049,16 @@ function turnView(horizontal: number, vertical: number) {
   }
 }
 const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView);
-const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView, () => boardingGround ? ridePitch : seated?.pitch ?? pitch);
+const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
+  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball);
+function canJump() {
+  return moveAllowed() && airHeight === undefined && (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
+}
 function requestJump() {
-  if (!moveAllowed() || airHeight !== undefined || waterAtFeet()?.mode === 'swim') return;
+  if (!canJump()) return;
   airHeight = ground;
-  riseSpeed = 7.45;
+  riseSpeed = jumpVelocity;
+  snowballJumped();
 }
 touchJump.addEventListener('pointerdown', event => {
   if (event.pointerType === 'touch') { event.preventDefault(); requestJump(); }
@@ -863,14 +1087,6 @@ addEventListener('keydown', e => {
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
-  }
-  if (moveAllowed() && (e.code === 'KeyQ' || e.code === 'KeyR')) {
-    e.preventDefault();
-    if (!e.repeat) {
-      if (e.code === 'KeyQ') gatherSnowball();
-      else throwSnowball();
-    }
-    return;
   }
   if (moveAllowed() && e.code === 'Space') {
     if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
@@ -914,6 +1130,8 @@ function walkable(x: number, n: number) {
 const bodyHeight = 1.8;
 const stepHeight = .43;
 const surfaceEpsilon = .025;
+const gravity = 22;
+const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
@@ -921,6 +1139,11 @@ function waterAtFeet() {
   if (airHeight !== undefined) return undefined;
   const water = townWater.at(x, n);
   return water && Math.abs(ground - water.ground) < .25 ? water : undefined;
+}
+
+function storeWalkView(position: Vector3) {
+  const water = waterAtFeet();
+  position.set(x, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), -n);
 }
 
 function overlapsBody(east: number, north: number, { min, max }: Box) {
@@ -980,9 +1203,9 @@ function tryMove(nextX: number, nextN: number) {
 function stepJump(dt: number) {
   if (airHeight === undefined) return;
   const feet = airHeight;
-  riseSpeed -= 18 * dt;
-  const next = feet + riseSpeed * dt;
-  if (riseSpeed > 0) {
+  const next = feet + riseSpeed * dt - .5 * gravity * dt * dt;
+  riseSpeed -= gravity * dt;
+  if (next > feet) {
     const head = feet + bodyHeight;
     let ceiling = next + bodyHeight;
     function checkCeiling(box: Box) {
@@ -1021,6 +1244,7 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
+  movementStepMs = 0;
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
   if (beacon) {
@@ -1042,25 +1266,38 @@ renderer.setAnimationLoop(now => {
     const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
     const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
     const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
-    const steps = Math.max(1, Math.ceil(dt / .018));
-    const stepTime = dt / steps;
+    const movementStartedAt = performance.now();
+    storeWalkView(walkRender);
+    if (!walkRender.equals(walkCurrent)) {
+      // Snap after teleports and seating changes instead of interpolating across town.
+      walkClock.reset();
+      walkPrevious.copy(walkRender);
+      walkCurrent.copy(walkRender);
+    }
+    let interpolation = 1;
     if (moveAllowed()) {
-      const stride = (sprint ? 11.3 : 7.5) * stepTime / Math.max(1, Math.hypot(forward, right));
+      const stride = (sprint ? 11.3 : 7.5) * snowballWalkFactor * townPhysicsDelta / Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
-      for (let i = 0; i < steps; i++) {
+      interpolation = walkClock.advance(frameSeconds, () => {
+        walkPrevious.copy(walkCurrent);
         if (forward || right) {
           const water = waterAtFeet();
-          const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : 1;
+          const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : airHeight === undefined ? 1 : .8;
           const nx = x + east * moveScale;
           const nn = n + north * moveScale;
           if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
         }
-        stepJump(stepTime);
-      }
+        stepJump(townPhysicsDelta);
+        storeWalkView(walkCurrent);
+      });
+    } else {
+      walkPrevious.copy(walkCurrent);
     }
+    movementStepMs = performance.now() - movementStartedAt;
+    walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
     const water = waterAtFeet();
-    faceFrom(x, n, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), yaw, pitch);
+    faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
     const movement = water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
       airHeight !== undefined ? '腾空' : sprint ? '疾跑' : '行走';
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
@@ -1112,15 +1349,14 @@ renderer.setAnimationLoop(now => {
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
+  updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
-  snowballs.update(dt);
-  snowballControls.hidden = !moveAllowed();
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
   touchWalk.setAllowed(moveAllowed());
-  crosshair.hidden = !lookAllowed() || (touchWalk.active() && (!moveAllowed() || throwButton.disabled));
+  crosshair.hidden = !lookAllowed();
   touchJump.hidden = !moveAllowed() || !touchWalk.active();
-  touchJump.disabled = airHeight !== undefined || waterAtFeet()?.mode === 'swim';
+  touchJump.disabled = !canJump();
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
@@ -1128,7 +1364,15 @@ renderer.setAnimationLoop(now => {
   if (label !== actionButton.textContent) actionButton.textContent = label;
   if (museumLaunch.active) { museumLaunch.update(frameSeconds); museumLaunch.render(); }
   else if (museumInspection.active) museumInspection.render();
-  else renderer.render(scene, camera);
+  else {
+    renderer.render(scene, camera);
+    if (profileTown) {
+      renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
+        movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
+        calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+      } }));
+    }
+  }
   if (photoFilename) {
     const filename = photoFilename;
     photoFilename = undefined;

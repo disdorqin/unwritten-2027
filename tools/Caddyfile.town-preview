@@ -1,0 +1,10 @@
+{$TOWN_PREVIEW_SITE:town.disdorqin.cn} {
+    encode zstd gzip
+    root * /srv
+    respond /healthz "town-preview {$TOWN_RELEASE:local}" 200
+    @entry path / /town-blockout.html
+    header @entry Cache-Control "no-cache"
+    rewrite / /town-blockout.html
+    header /assets/* Cache-Control "public, max-age=31536000, immutable"
+    file_server
+}

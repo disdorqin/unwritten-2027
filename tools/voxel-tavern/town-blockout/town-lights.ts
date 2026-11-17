@@ -5,7 +5,7 @@ import type { TownActivity, TownActivityContext } from './town-activity';
 const stations = [
   { id: 'plaza', label: '钟楼广场迎宾灯', stand: [223, 180], fixture: [221.05, 181.05] },
   { id: 'forest', label: '西北木屋路灯', stand: [103, 255], fixture: [101.02, 254.72] },
-  { id: 'workshop', label: '西南灯坊街灯', stand: [108, 114], fixture: [106.2, 115.2] },
+  { id: 'workshop', label: '西南灯坊街灯', stand: [108, 114], fixture: [106.7, 112.25] },
   { id: 'bridge', label: '中央木桥桥灯', stand: [291, 192], fixture: [291, 194.65] },
   { id: 'memorial', label: '纪念馆前街灯', stand: [350, 249], fixture: [352.05, 248.55] },
   { id: 'lighthouse', label: '湖岸灯塔引路灯', stand: [411, 87.7], fixture: [412.7, 88.4] },

@@ -3,15 +3,17 @@ import { bridgeAt, riverX, waterHeight, worldBounds, type createTerrainGrid } fr
 export type TownWater = {
   mode: 'wade' | 'swim';
   ground: number;
+  depth: number;
   speed: number;
 };
 
 type RiverSection = { n: number; left: number; right: number };
 
 const maxRiverReach = 28;
-const swimFootDepth = 1.08;
-const wadeSpeed = .6;
-const swimSpeed = .46;
+const swimDepth = .6;
+export const shoreJumpDepth = 1.08;
+const wadeSpeed = .55;
+const swimSpeed = .45;
 
 export function createTownWater(grid: Pick<ReturnType<typeof createTerrainGrid>, 'groundHeightAt'>) {
   // Build the shoreline once from the same piecewise terrain used for movement.
@@ -49,8 +51,13 @@ export function createTownWater(grid: Pick<ReturnType<typeof createTerrainGrid>,
     const bed = grid.groundHeightAt(x, north);
     const depth = waterHeight - bed;
     if (depth <= 0) return;
-    const swim = depth > swimFootDepth;
-    return { mode: swim ? 'swim' : 'wade', ground: Math.max(bed, waterHeight - swimFootDepth), speed: swim ? swimSpeed : wadeSpeed };
+    const swim = depth >= swimDepth;
+    return {
+      mode: swim ? 'swim' : 'wade',
+      ground: Math.max(bed, waterHeight - shoreJumpDepth),
+      depth,
+      speed: swim ? swimSpeed : wadeSpeed,
+    };
   }
 
   return { at, sections };

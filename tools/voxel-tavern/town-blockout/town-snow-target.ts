@@ -9,10 +9,11 @@ export type TownSnowballTarget = {
   z: number;
   radius: number;
   height: number;
+  shape?: 'capsule' | 'box';
   onHit(incomingX: number, incomingZ: number): void;
 };
 
-export const snowPracticeStand = [223, 166] as const;
+export const snowPracticeStand = [223, 163] as const;
 export const snowPracticeTarget = [223, 173] as const;
 
 export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number, north: number) => number):
@@ -83,6 +84,7 @@ export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number, 
     z: -north,
     radius: .58,
     height: 2.35,
+    shape: 'box',
     onHit(x, z) {
       const length = Math.hypot(x, z);
       const directed = Number.isFinite(length) && length > 0;

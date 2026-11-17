@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, Vector3 } from 'three';
 import type { TownActivity, TownActivityContext, TownActivitySpot } from './town-activity';
 import type { TownSnowballTarget } from './town-snow-target';
+import { snowballGravity, snowballSpeed } from './town-snowball';
 import { answerNpcQuestion, npcExpansion, npcQuestions, npcScript,
   type NpcName, type NpcPeriod, type TownNpcGuide } from './town-npc-dialogue';
 
@@ -28,6 +29,21 @@ const roles: ReadonlyArray<{
   { name: '钟铁生', job: '火车站站长', home: [526, 309], stroll: [522.8, 309],
     palette: ['#d9a377', '#233147', '#36536b', '#b55a43', '#2e3748', '#e0b558', '#efd3a0', '#6e4939'] },
 ];
+
+type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
+
+const battleRoles: Partial<Record<NpcName, { at: Point; start: string; hit: string }>> = {
+  罗大江: { at: [211, 191], start: '下雪天不打雪仗，那还是冬天吗？接招！', hit: '哎哟！好小子，砸得准！看我的！' },
+  苏小满: { at: [233, 194], start: '送信我最快，砸人我也不差哦！', hit: '信差点掉雪里啦——这发我记下了！' },
+  乔麦: { at: [214, 179], start: '做灯的手稳，砸雪球更稳。', hit: '砸得好！我这团回敬你，接稳了。' },
+  柳三弦: { at: [233, 177], start: '台上唱戏，台下打仗，今儿都齐了！', hit: '好一发！这身段都给我砸出来了。' },
+};
+
+const snowHat = [
+  [[0, 1.96, .015], [.49, .12, .44], '#edf7ff'],
+  [[-.046, 2.07, -.022], [.37, .12, .35], '#e4f3ff'],
+  [[.035, 2.166, .008], [.235, .09, .23], '#f6fbff'],
+] as const;
 
 // All six costumes share these silhouettes and one box geometry. The instance palette
 // varies the apron, satchel, lamp, tool pouch, sash and station insignia by character.
@@ -89,7 +105,10 @@ export function createTownNpcActivity(
   context: TownActivityContext,
   heightAt: (east: number, north: number) => number,
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
-): TownActivity & { snowballTargets: readonly TownSnowballTarget[] } {
+): TownActivity & {
+  snowballTargets: readonly TownSnowballTarget[];
+  updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
+} {
   const skinParts: readonly Part[] = [
     ...parts,
     ...Array.from({ length: 9 }, (_, i): Part => [
@@ -97,7 +116,7 @@ export function createTownNpcActivity(
     ]),
   ];
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    roles.length * skinParts.length);
+    roles.length * (skinParts.length + snowHat.length + 1));
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -108,6 +127,16 @@ export function createTownNpcActivity(
   const strollClocks = roles.map((_, index) => index * 2.35);
   const reboundTime = .32;
   const flinches = roles.map(() => ({ remaining: 0, x: 0, z: 0, axis: new Vector3(1, 0, 0) }));
+  const hats = roles.map(() => ({ layers: 0, remaining: 0 }));
+  const fighters = roles.map(({ name }) => {
+    const role = battleRoles[name];
+    return role && { role, nextThrow: 0, stock: 0, gesture: 0, introduced: false };
+  });
+  const throwOrigin = new Vector3();
+  const throwDirection = new Vector3();
+  let battlePlayer: TownSnowballTarget | undefined;
+  let battleTime = 0;
+  let nextBattleLine = 0;
   let active: { role: NpcName; panel: HTMLElement } | undefined;
 
   const spots: TownActivitySpot[] = roles.map(({ name, home }, index) => ({
@@ -123,6 +152,7 @@ export function createTownNpcActivity(
     z: -spots[index].n,
     radius: .50,
     height: 1.95,
+    shape: 'capsule',
     onHit(x, z) {
       const flinch = flinches[index];
       const length = Math.hypot(x, z);
@@ -131,6 +161,10 @@ export function createTownNpcActivity(
       flinch.z = directed ? z / length : 1;
       flinch.axis.set(flinch.z, 0, -flinch.x);
       flinch.remaining = reboundTime;
+      hats[index].layers = Math.min(snowHat.length, hats[index].layers + 1);
+      hats[index].remaining = 10;
+      const fighter = fighters[index];
+      if (battlePlayer && fighter) sayBattleLine(index, fighter.role.hit);
     },
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
@@ -145,6 +179,92 @@ export function createTownNpcActivity(
       }
     }
   } catch { /* Private browsers keep the visit counts for this session. */ }
+
+  function moveNpc(index: number, x: number, n: number) {
+    const spot = spots[index];
+    const target = snowballTargets[index];
+    spot.x = target.x = x;
+    spot.n = n;
+    target.z = -n;
+    spot.ground = target.y = heightAt(x, n);
+  }
+
+  function sayBattleLine(index: number, line: string) {
+    if (!battlePlayer || active || battleTime < nextBattleLine) return false;
+    const target = snowballTargets[index];
+    if (Math.hypot(battlePlayer.x - target.x, battlePlayer.z - target.z) > 21) return false;
+    context.announce(`${roles[index].name}：${line}`);
+    nextBattleLine = battleTime + 1.4;
+    return true;
+  }
+
+  function updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow) {
+    // The square and its approaches share the original town map coordinates.
+    const inside = enabled && player && player.x >= 185 && player.x <= 257 && player.z >= -218 && player.z <= -161;
+    if (!inside || !player) {
+      battlePlayer = undefined;
+      return;
+    }
+    if (!battlePlayer) {
+      battleTime = 0;
+      nextBattleLine = 0;
+      for (let i = 0; i < fighters.length; i++) {
+        const fighter = fighters[i];
+        if (!fighter) continue;
+        fighter.nextThrow = 2.5 + i * .24;
+        fighter.stock = 0;
+        fighter.gesture = 0;
+        fighter.introduced = false;
+        if (active?.role !== roles[i].name) moveNpc(i, ...fighter.role.at);
+      }
+    }
+    battlePlayer = player;
+    battleTime += dt;
+    for (let i = 0; i < fighters.length; i++) {
+      const fighter = fighters[i];
+      if (!fighter || active?.role === roles[i].name) continue;
+      fighter.gesture = Math.max(0, fighter.gesture - dt);
+      const actor = snowballTargets[i];
+      let opponent: TownSnowballTarget | undefined;
+      let distance = 26;
+      function consider(target: TownSnowballTarget) {
+        const range = Math.hypot(target.x - actor.x, target.z - actor.z);
+        if (range >= 1.4 && range < distance) {
+          opponent = target;
+          distance = range;
+        }
+      }
+      consider(player);
+      for (let j = 0; j < fighters.length; j++) {
+        if (j !== i && fighters[j] && active?.role !== roles[j].name) consider(snowballTargets[j]);
+      }
+      if (!opponent) continue;
+      const yaw = Math.atan2(opponent.x - actor.x, opponent.z - actor.z);
+      facing[i] = yaw;
+      if (fighter.stock === 0 && battleTime >= fighter.nextThrow - .5) fighter.stock++;
+      if (fighter.stock === 0 || battleTime < fighter.nextThrow) continue;
+      const chance = .45 - .30 * Math.max(0, Math.min(1, (distance - 3) / 20));
+      const reach = distance - .64;
+      const missAngle = Math.asin(Math.min(.94, .82 / reach)) + .12 + Math.random() * .14;
+      const error = Math.random() < chance ? 0 : (Math.random() < .5 ? -1 : 1) * missAngle;
+      const aim = yaw + error;
+      throwOrigin.set(actor.x + Math.sin(yaw) * .64, actor.y + 1.3, actor.z + Math.cos(yaw) * .64);
+      const power = Math.min(.95, .28 + .019 * distance);
+      const speedSquared = snowballSpeed(power) ** 2;
+      const rise = opponent.y + opponent.height * .66 - throwOrigin.y;
+      const discriminant = speedSquared ** 2 - snowballGravity * (snowballGravity * reach ** 2 + 2 * rise * speedSquared);
+      const pitch = discriminant >= 0
+        ? Math.atan((speedSquared - Math.sqrt(discriminant)) / (snowballGravity * reach))
+        : Math.PI / 4;
+      throwDirection.set(Math.sin(aim) * Math.cos(pitch), Math.sin(pitch), Math.cos(aim) * Math.cos(pitch));
+      if (throwSnowball(throwOrigin, throwDirection, actor.id, power)) {
+        fighter.stock--;
+        fighter.gesture = .28;
+        fighter.nextThrow = battleTime + 2.5 + Math.random() * 1.5;
+        if (!fighter.introduced) fighter.introduced = sayBattleLine(i, fighter.role.start);
+      }
+    }
+  }
 
   function openConversation(index: number) {
     const { name, job } = roles[index];
@@ -225,18 +345,42 @@ export function createTownNpcActivity(
     for (let offset = 0; offset < skinParts.length; offset++) {
       const [[x, y, z], size, , swing] = skinParts[offset];
       const step = swing ? gait * swing : 0;
-      const forward = z + step * .105;
+      const throwGesture = battlePlayer && swing && x > .32 && y > .75
+        ? Math.sin(Math.PI * (fighters[index]?.gesture ?? 0) / .28) : 0;
+      const reach = (1.44 - y) * throwGesture;
+      const forward = z + step * .105 + reach * .82;
       const lean = y * recoil;
       transform.position.set(spot.x + x * cosine + forward * sine + flinch.x * lean,
-        spot.ground + y - lean * .32 + Math.abs(step) * .065,
+        spot.ground + y - lean * .32 + Math.abs(step) * .065 + reach * .62,
         -spot.n - x * sine + forward * cosine + flinch.z * lean);
-      transform.rotation.set(-step * .25, yaw, 0, 'YXZ');
+      transform.rotation.set(-step * .25 - throwGesture, yaw, 0, 'YXZ');
       if (recoil > 0) transform.rotateOnWorldAxis(flinch.axis, recoil);
       transform.scale.set(...size);
       transform.updateMatrix();
       const instance = index * skinParts.length + offset;
       villagers.setMatrixAt(instance, transform.matrix);
     }
+    for (let layer = 0; layer < snowHat.length; layer++) {
+      const [[x, y, z], [width, height, depth]] = snowHat[layer];
+      const visible = hats[index].layers > layer ? 1 : 0;
+      const lean = y * recoil;
+      transform.position.set(spot.x + x * cosine + z * sine + flinch.x * lean,
+        spot.ground + y - lean * .32, -spot.n - x * sine + z * cosine + flinch.z * lean);
+      transform.rotation.set(0, yaw, 0);
+      if (recoil > 0) transform.rotateOnWorldAxis(flinch.axis, recoil);
+      transform.scale.set(width * visible, height * visible, depth * visible);
+      transform.updateMatrix();
+      villagers.setMatrixAt(roles.length * skinParts.length + index * snowHat.length + layer, transform.matrix);
+    }
+    const fighter = fighters[index];
+    const holding = Boolean(battlePlayer && fighter?.stock);
+    const heldSize = holding ? .22 : 0;
+    transform.position.set(spot.x + .40 * cosine + .34 * sine, spot.ground + 1.15,
+      -spot.n - .40 * sine + .34 * cosine);
+    transform.rotation.set(.40, yaw + .3, .27);
+    transform.scale.setScalar(heldSize);
+    transform.updateMatrix();
+    villagers.setMatrixAt(roles.length * (skinParts.length + snowHat.length) + index, transform.matrix);
   }
 
   roles.forEach(({ palette }, index) => {
@@ -246,6 +390,10 @@ export function createTownNpcActivity(
       // Treat zero as base cloth so the picture stays flush with the rest of the costume.
       villagers.setColorAt(index * skinParts.length + offset, color.set(palette[Number(pattern) || tint]));
     });
+    snowHat.forEach(([, , tint], layer) => {
+      villagers.setColorAt(roles.length * skinParts.length + index * snowHat.length + layer, color.set(tint));
+    });
+    villagers.setColorAt(roles.length * (skinParts.length + snowHat.length) + index, color.set('#f5fbff'));
   });
   villagers.instanceMatrix.needsUpdate = true;
   if (villagers.instanceColor) villagers.instanceColor.needsUpdate = true;
@@ -253,6 +401,7 @@ export function createTownNpcActivity(
   return {
     spots,
     snowballTargets,
+    updateSnowFight,
     update(dt) {
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = false;
@@ -261,8 +410,24 @@ export function createTownNpcActivity(
         const flinch = flinches[i];
         const reacting = flinch.remaining > 0;
         if (reacting) flinch.remaining = Math.max(0, flinch.remaining - dt);
+        const hat = hats[i];
+        const wasWearingSnow = hat.layers > 0;
+        if (wasWearingSnow) {
+          hat.remaining = Math.max(0, hat.remaining - dt);
+          if (!hat.remaining) hat.layers = 0;
+        }
+        const snowMelted = wasWearingSnow && !hat.layers;
         if (active?.role === name) {
-          if (reacting) { pose(i, 0); changed = true; }
+          if (reacting || snowMelted) { pose(i, 0); changed = true; }
+          continue;
+        }
+        const fighter = fighters[i];
+        if (battlePlayer && fighter) {
+          const [east, north] = fighter.role.at;
+          const phase = battleTime * .9 + i;
+          moveNpc(i, east + .65 * Math.sin(phase), north + .5 * Math.cos(phase));
+          pose(i, .32 * Math.sin(battleTime * 5 + i));
+          changed = true;
           continue;
         }
         const spot = spots[i];
@@ -276,15 +441,9 @@ export function createTownNpcActivity(
         const x = home[0] + (stroll[0] - home[0]) * progress;
         const n = home[1] + (stroll[1] - home[1]) * progress;
         const moving = x !== spot.x || n !== spot.n;
-        if (!moving && !reacting) continue;
+        if (!moving && !reacting && !snowMelted) continue;
         if (moving) {
-          spot.x = x;
-          spot.n = n;
-          spot.ground = heightAt(x, n);
-          const target = snowballTargets[i];
-          target.x = x;
-          target.y = spot.ground;
-          target.z = -n;
+          moveNpc(i, x, n);
           facing[i] = Math.atan2(stroll[0] - home[0], home[1] - stroll[1]) + (outward ? 0 : Math.PI);
         }
         const gait = progress > 0 && progress < 1 ? Math.sin(phase * 7) : 0;

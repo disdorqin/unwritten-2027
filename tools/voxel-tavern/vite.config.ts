@@ -1,7 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+const townBlockout = fileURLToPath(new URL('./town-blockout.html', import.meta.url));
+const tavern = fileURLToPath(new URL('./index.html', import.meta.url));
+
+export default defineConfig(({ mode }) => ({
   server: {
     host: '0.0.0.0',
     proxy: {
@@ -12,10 +15,7 @@ export default defineConfig({
   build: {
     target: 'esnext',
     rollupOptions: {
-      input: {
-        tavern: fileURLToPath(new URL('./index.html', import.meta.url)),
-        townBlockout: fileURLToPath(new URL('./town-blockout.html', import.meta.url)),
-      },
+      input: mode === 'town-preview' ? { townBlockout } : { tavern, townBlockout },
     },
   },
-});
+}));
