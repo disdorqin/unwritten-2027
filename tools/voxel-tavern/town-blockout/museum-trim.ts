@@ -10,6 +10,17 @@ const finish = {
 
 export function addMuseumTrim(m: MuseumBuilder) {
   const box = m.box.bind(m);
+  const detail = m.detailBox.bind(m);
+  const tick = 1 / 64;
+  const leaf = '#bd8f5c';
+  const aged = '#665061';
+  const cinnabar = '#b46a46';
+
+  // Offset strips sit on the wooden face instead of being painted into a texture.
+  function faceStrip(paint: string, x: number, y: number, z: number, u: number, w: number, h: number, depth: number, turn: number) {
+    const sin = Math.sin(turn), cos = Math.cos(turn);
+    detail(paint, x + cos * u + sin * depth, y, z - sin * u + cos * depth, w, h, tick, turn);
+  }
 
   function column(x: number, y: number, z: number) {
     // Layered footings separate the joinery from the granite walking surface.
@@ -31,9 +42,29 @@ export function addMuseumTrim(m: MuseumBuilder) {
         box(finish.bronze, x + dx * .105, y + 2.25 + dz * .49, z + .407, .08, .065, .023);
       }
     }
-    for (let row = 0; row < 4; row++) {
-      const h = y + 1.96 + row * .19;
-      box(finish.bronze, x, h, z + .411, .047, .047, .025, Math.PI / 4);
+    // Exposed pegs, stone joints, and a stepped brass flower inset on each south-facing plaque.
+    for (const direction of [-1, 1]) {
+      for (const zDirection of [-1, 1]) {
+        for (const h of [.455, .565]) {
+          detail('#8b8c93', x + direction * .313, y + h, z + zDirection * .508, .30, tick, tick);
+          detail('#aaa6a0', x + direction * .508, y + h, z + zDirection * .313, tick, tick, .30);
+        }
+        detail(finish.patina, x + direction * .252, y + 3.46, z + zDirection * .35, .0625, .0625, tick);
+        detail(finish.bright, x + direction * .252, y + 3.46, z + zDirection * .36, .044, .044, tick);
+      }
+      for (const v of [-.39, .39]) {
+        detail(finish.bronze, x + direction * .073, y + 2.25 + v, z + .411, .047, tick, tick);
+      }
+      detail(finish.patina, x + direction * .092, y + 2.25, z + .408, tick, .88, tick);
+      detail(finish.bright, x + direction * .122, y + 2.25, z + .407, tick, 1.03, tick);
+    }
+    for (const v of [-.27, 0, .27]) {
+      for (const dir of [-1, 1]) {
+        detail(finish.bronze, x + dir * .03125, y + 2.25 + v, z + .423, tick, .047, tick);
+        detail(finish.bronze, x, y + 2.25 + v + dir * .03125, z + .423, .047, tick, tick);
+      }
+      detail(cinnabar, x, y + 2.25 + v, z + .422, .047, .047, tick);
+      detail(finish.bright, x, y + 2.25 + v, z + .438, tick, tick, tick);
     }
 
     // All four arms step towards the beam with gold end-grain and a shadow reveal.
@@ -46,6 +77,12 @@ export function addMuseumTrim(m: MuseumBuilder) {
         box(finish.beamEdge, x, h, z + offset * direction, .32, .17, .53);
         box(finish.bronze, x + (offset + .26) * direction, h - .02, z, .035, .10, .21);
         box(finish.bronze, x, h - .02, z + (offset + .26) * direction, .21, .10, .035);
+        for (const accent of [-1, 1]) {
+          detail(finish.beamShadow, x + (offset + .281) * direction, h - .02, z + accent * .065, tick, .061, tick);
+          detail(finish.beamShadow, x + accent * .065, h - .02, z + (offset + .281) * direction, tick, .061, tick);
+        }
+        detail(finish.bright, x + (offset + .281) * direction, h - .013, z, tick, tick, .118);
+        detail(finish.bright, x, h - .013, z + (offset + .281) * direction, .118, tick, tick);
       }
     }
     box(finish.mold, x, y + 4.39, z, 1.11, .16, 1.11);
@@ -73,10 +110,36 @@ export function addMuseumTrim(m: MuseumBuilder) {
         box(finish.beamShadow, x + direction * face, y, z + corner * face, metal, body, metal);
       }
     }
+    // Four faces share an open lattice of stepped cloud corners. The 1/64 m
+    // brass strips stay narrow enough that the warm central panel remains visible.
+    for (let side = 0; side < 4; side++) {
+      const angle = side * Math.PI / 2;
+      const outer = face + .028;
+      for (const corner of [-1, 1]) {
+        const edge = corner * foot * .365;
+        for (const level of [-1, 1]) {
+          const top = y + level * body * .326;
+          faceStrip(leaf, x, top, z, edge, foot * .19, tick, outer, angle);
+          faceStrip(leaf, x, top - level * body * .067, z, edge + corner * foot * .064, tick, body * .148, outer, angle);
+          faceStrip(finish.bronze, x, top - level * body * .13, z, edge + corner * foot * .004, foot * .12, tick, outer, angle);
+          faceStrip(leaf, x, top - level * body * .095, z, edge - corner * foot * .043, tick, body * .080, outer, angle);
+        }
+      }
+      for (const v of [-1, 1]) {
+        faceStrip(finish.bright, x, y + v * (body * .52 + .114), z, 0, foot * 1.13, tick, foot * .604, angle);
+        for (const u of [-1, 1]) {
+          faceStrip(finish.bright, x, y + v * (body * .52 + .114), z, u * foot * .45, tick, .049, foot * .611, angle);
+        }
+      }
+    }
     box(finish.bronze, x, y - body * .52, z, foot * 1.14, .11, foot * 1.14);
     box(finish.mold, x, y - body * .52 - .08, z, foot * .75, .10, foot * .75);
     box(finish.red, x, y - body * .52 - .21, z, .085, .24, .085);
     box(finish.bronze, x, y - body * .52 - .34, z, .11, .09, .11);
+    for (const [index, u] of [-2, -1, 0, 1, 2].entries()) {
+      const drop = (4 - Math.abs(u)) * tick;
+      detail(index % 2 ? cinnabar : finish.darkRed, x + u * tick, y - body * .52 - .384 - drop / 2, z, tick, drop, .034);
+    }
   }
 
   function coffer(x: number, y: number, z: number, w: number, d: number, carved: boolean) {
@@ -101,6 +164,16 @@ export function addMuseumTrim(m: MuseumBuilder) {
       box(finish.bronze, x, y - .216, z + direction * .18, .19, .028, .19, Math.PI / 4);
     }
     box(finish.bright, x, y - .229, z, .19, .035, .19, Math.PI / 4);
+    // The underside relief reads from below, using stepped oak and brass rather than a decal.
+    for (const side of [-1, 1]) {
+      detail(finish.bronze, x + side * .42, y - .132, z, tick, tick, .43);
+      detail(finish.bronze, x, y - .132, z + side * .42, .43, tick, tick);
+      for (const corner of [-1, 1]) {
+        detail(finish.mold, x + side * .31, y - .142, z + corner * .42, .23, tick, .047);
+        detail(finish.mold, x + side * .42, y - .142, z + corner * .31, .047, tick, .23);
+        detail(finish.bright, x + side * .39, y - .15, z + corner * .39, .047, tick, .047);
+      }
+    }
   }
 
   function rearPanel(x: number, y: number) {
@@ -116,6 +189,15 @@ export function addMuseumTrim(m: MuseumBuilder) {
     }
     box(finish.bronze, x, y + 3.35, z + .27, .31, .31, .025, Math.PI / 4);
     box(finish.red, x, y + 3.35, z + .29, .18, .18, .025, Math.PI / 4);
+    for (const edge of [-1, 1]) {
+      detail(finish.bright, x + edge * .872, y + 2.52, z + .254, tick, 2.23, tick);
+      for (const v of [-1, 1]) {
+        detail(aged, x + edge * .748, y + 2.52 + v * 1.005, z + .259, .21, tick, tick);
+        detail(aged, x + edge * .834, y + 2.52 + v * .96, z + .259, tick, .093, tick);
+        detail(finish.bronze, x + edge * .918, y + 2.52 + v * 1.155, z + .245, .073, .073, tick);
+        detail(finish.bright, x + edge * .918, y + 2.52 + v * 1.155, z + .27, tick, tick, tick);
+      }
+    }
     for (const side of [-1, 1]) {
       box(finish.bronze, x + side * 1.08, y + 2.51, z + .105, .073, 2.53, .082);
       box(finish.mold, x + side * 1.13, y + 3.88, z + .10, .20, .154, .24);

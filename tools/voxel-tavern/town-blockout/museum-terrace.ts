@@ -16,8 +16,34 @@ const palette = {
 const floorTones = ['#8b8183', '#918684', '#968987', '#857e83', '#908284', '#9c8b81'];
 
 export function addMuseumTerrace(m: MuseumBuilder) {
-  const { box, beam, panel, floor, collider, label, light } = m;
+  const { box, beam, panel, floor, collider, label, light, detailBox } = m;
   const p = palette;
+  const tick = 1 / 64;
+  const umber = '#583b2c';
+  const copper = '#be8959';
+  const paleBronze = '#e5b986';
+  const blueGlaze = '#5f9eab';
+
+  // The plane belongs to the face looking in toward the veranda. Its inlay
+  // follows the same warm metal, stone and timber palette as the exhibits.
+  function fret(x: number, y: number, z: number, face: 'east' | 'north' | 'south') {
+    function inset(u: number, v: number, w: number, h: number, paint: string, layer = 0) {
+      if (face === 'east') detailBox(paint, x + layer * tick, y + v * tick, z + u * tick, tick, h * tick, w * tick);
+      else detailBox(paint, x + u * tick, y + v * tick, z + (face === 'south' ? layer : -layer) * tick, w * tick, h * tick, tick);
+    }
+    inset(0, 0, 20, 20, p.deepStone);
+    inset(0, 0, 18, 18, p.lightStone, 1);
+    inset(0, 0, 16, 16, umber, 2);
+    for (const sign of [-1, 1]) {
+      inset(0, 7 * sign, 16, 1, copper, 3);
+      inset(7 * sign, 0, 1, 16, copper, 3);
+      inset(2 * sign, 4 * sign, 7, 1, paleBronze, 3);
+      inset(5 * sign, 2 * sign, 1, 5, paleBronze, 3);
+      inset(2 * sign, 2 * sign, 5, 1, copper, 3);
+    }
+    inset(0, 0, 3, 3, paleBronze, 3);
+    inset(0, 0, 1, 1, p.litGlass, 4);
+  }
   function eaveTop(x: number) {
     const t = (x + 28) / 8.25;
     return 9.54 + 1.83 * t + 1.24 * (1 - t) ** 5;
@@ -71,6 +97,9 @@ export function addMuseumTerrace(m: MuseumBuilder) {
       box(p.stone, px, floorY + .412, pz, .51, .81, .51);
       box(p.lightStone, px, floorY + .84, pz, .61, .17, .60);
       box(p.snow, px, floorY + .943, pz, .59, .064, .56);
+      const coldEdge = alongX ? (az < 0 ? 1 : -1) : 0;
+      fret(px + (alongX ? 0 : .256), floorY + .51, pz + coldEdge * .256,
+        alongX ? (coldEdge > 0 ? 'south' : 'north') : 'east');
       if (i < posts) {
         const span = length / posts;
         for (let k = 1; k <= 4; k++) {
@@ -80,6 +109,10 @@ export function addMuseumTerrace(m: MuseumBuilder) {
           box(p.lightStone, px + dx, floorY + .49, pz + dz, .165, .45, .178);
           box(p.stone, px + dx, floorY + .55, pz + dz, .233, .12, .232, Math.PI / 4);
           box(p.deepStone, px + dx, floorY + .37, pz + dz, .246, .078, .234);
+          for (const y of [floorY + .445, floorY + .608]) {
+            detailBox(umber, px + dx, y, pz + dz, 13 * tick, 3 * tick, 14 * tick);
+            detailBox(copper, px + dx, y, pz + dz, 14 * tick, tick, 15 * tick);
+          }
         }
       }
     }
@@ -140,6 +173,19 @@ export function addMuseumTerrace(m: MuseumBuilder) {
     box(p.litGlass, x, y, z, size * .79, size * .67, size * .63, 0, true);
     for (const dx of [-.393, .393]) for (const dz of [-.393, .393]) {
       box(p.trim, x + dx * size, y, z + dz * size, .095 * size, 1.08 * size, .095 * size);
+      if (size > .4) for (const dy of [-.42, .43]) {
+        detailBox(copper, x + dx * size, y + dy * size, z + dz * size, 6 * tick, 2 * tick, 6 * tick);
+      }
+    }
+    if (size > .4) {
+      for (const dy of [-.31, .30]) {
+        detailBox(umber, x, y + dy * size, z + size * .382, size * .76, tick, tick);
+        detailBox(umber, x + size * .382, y + dy * size, z, tick, tick, size * .76);
+      }
+      for (const offset of [-.23, 0, .23]) {
+        detailBox(p.trim, x + offset * size, y, z + size * .382, tick, size * .57, tick);
+        detailBox(p.trim, x + size * .382, y, z + offset * size, tick, size * .57, tick);
+      }
     }
     box(p.walnut, x, y + .56 * size, z, size, .15 * size, size);
     box(p.gold, x, y + .67 * size, z, .715 * size, .095 * size, .715 * size);
@@ -222,10 +268,63 @@ export function addMuseumTerrace(m: MuseumBuilder) {
   box(p.red, tableX, floorY + 1.019, tableZ + .13, 1.38, .019, .43);
   flowerVase(tableX + .39, floorY + 1.01, tableZ - .33, .48, 5);
   lantern(tableX - .41, floorY + 1.21, tableZ - .37, .28);
-  for (const offset of [-.36, .08, .40]) {
-    box(p.ceramic, tableX + offset, floorY + 1.07, tableZ + .31, .127, .106, .122);
-    box(p.gold, tableX + offset, floorY + 1.127, tableZ + .31, .138, .025, .132);
+  const tabletop = floorY + 65 * tick;
+  const trayX = tableX + 19 * tick;
+  const trayZ = tableZ + 12 * tick;
+  detailBox(p.walnut, trayX, tabletop + tick, trayZ, 36 * tick, 3 * tick, 26 * tick);
+  for (const side of [-1, 1]) {
+    detailBox(p.trim, trayX, tabletop + 3 * tick, trayZ + side * 12 * tick, 36 * tick, 2 * tick, tick);
+    detailBox(p.trim, trayX + side * 17 * tick, tabletop + 3 * tick, trayZ, tick, 2 * tick, 25 * tick);
+    detailBox(copper, trayX + side * 19 * tick, tabletop + 4 * tick, trayZ, 4 * tick, tick, 9 * tick);
   }
+  const potX = trayX + tick;
+  const potZ = trayZ - 5 * tick;
+  for (const [rise, width] of [[4, 8], [6, 10], [8, 10], [10, 8], [12, 6]] as const) {
+    detailBox(rise % 4 ? p.ceramic : blueGlaze, potX, tabletop + rise * tick, potZ, width * tick, 2 * tick, (width - 2) * tick);
+  }
+  detailBox(umber, potX, tabletop + 14 * tick, potZ, 2 * tick, 2 * tick, 2 * tick);
+  for (const [dx, dy, w] of [[5, 7, 3], [7, 9, 2], [8, 11, 3]] as const) {
+    detailBox(blueGlaze, potX + dx * tick, tabletop + dy * tick, potZ, w * tick, 3 * tick, 3 * tick);
+  }
+  for (const [dx, dy] of [[-5, 6], [-7, 8], [-5, 11]] as const) {
+    detailBox(umber, potX + dx * tick, tabletop + dy * tick, potZ, 3 * tick, 2 * tick, 2 * tick);
+  }
+  for (const dx of [-12, 0, 12]) {
+    const cupX = trayX + dx * tick;
+    const cupZ = trayZ + 7 * tick;
+    detailBox(p.ceramic, cupX, tabletop + 4 * tick, cupZ, 6 * tick, 4 * tick, 6 * tick);
+    detailBox(blueGlaze, cupX, tabletop + 6 * tick, cupZ, 7 * tick, tick, 7 * tick);
+    detailBox(p.paper, cupX, tabletop + 7 * tick, cupZ, 6 * tick, tick, 6 * tick);
+    detailBox(umber, cupX, tabletop + 8 * tick, cupZ, 4 * tick, tick, 4 * tick);
+  }
+
+  // Open field notebook. Measures and roof outlines are drawn in relief.
+  const notesX = tableX - 27 * tick;
+  const notesZ = tableZ + 17 * tick;
+  detailBox(p.red, notesX, tabletop + tick, notesZ, 29 * tick, 2 * tick, 23 * tick);
+  for (const side of [-1, 1]) {
+    const pageX = notesX + side * 7 * tick;
+    for (let page = 0; page < 3; page++) {
+      detailBox(page % 2 ? p.paper : '#c3ad8c', pageX, tabletop + (2 + page) * tick, notesZ, 13 * tick, tick, 21 * tick);
+    }
+  }
+  detailBox(umber, notesX, tabletop + 5 * tick, notesZ, tick, tick, 21 * tick);
+  for (let row = -7; row <= 8; row += 3) {
+    detailBox(row === -7 ? p.brass : '#9a7760', notesX + 7 * tick, tabletop + 5 * tick, notesZ + row * tick,
+      (9 - Math.abs(row % 3)) * tick, tick, tick);
+  }
+  for (const [dx, dz, w, depth, paint] of [[-7, 3, 7, 2, p.trim], [-7, 0, 5, 4, umber],
+    [-7, -3, 11, 2, copper], [-7, -5, 7, 2, p.brass], [-7, -7, 3, 2, umber]] as const) {
+    detailBox(paint, notesX + dx * tick, tabletop + 5 * tick, notesZ + dz * tick, w * tick, tick, depth * tick);
+  }
+  const compassX = tableX - 19 * tick;
+  const compassZ = tableZ - 2 * tick;
+  detailBox(umber, compassX, tabletop + 2 * tick, compassZ, 12 * tick, 4 * tick, 12 * tick);
+  detailBox(paleBronze, compassX, tabletop + 5 * tick, compassZ, 11 * tick, tick, 11 * tick);
+  detailBox(p.walnut, compassX, tabletop + 6 * tick, compassZ, 9 * tick, tick, 9 * tick);
+  detailBox(p.paper, compassX, tabletop + 7 * tick, compassZ, 7 * tick, tick, 7 * tick);
+  detailBox(p.red, compassX, tabletop + 8 * tick, compassZ - 2 * tick, tick, tick, 5 * tick);
+  detailBox(blueGlaze, compassX, tabletop + 8 * tick, compassZ + 2 * tick, tick, tick, 3 * tick);
   chair(tableX, tableZ - .99, 0);
   chair(tableX, tableZ + .98, Math.PI);
   chair(tableX + .99, tableZ, -Math.PI / 2);
@@ -238,5 +337,11 @@ export function addMuseumTerrace(m: MuseumBuilder) {
   box(p.trim, plaqueX, floorY + 1.03, plaqueZ, .20, .47, 1.18);
   box(p.walnut, plaqueX + .118, floorY + 1.03, plaqueZ, .049, .384, 1.09);
   label('钟楼观景台', plaqueX + .147, floorY + 1.033, plaqueZ, 1.035, .30, Math.PI / 2);
+  for (const edge of [-1, 1]) {
+    detailBox(copper, plaqueX + .153, floorY + 1.03 + edge * 11 * tick, plaqueZ, tick, tick, 68 * tick);
+    for (const corner of [-1, 1]) {
+      detailBox(paleBronze, plaqueX + .17, floorY + 1.03 + edge * 10 * tick, plaqueZ + corner * 33 * tick, tick, 3 * tick, 3 * tick);
+    }
+  }
   collider(plaqueX, floorY + .65, plaqueZ, .72, 1.3, 1.18);
 }

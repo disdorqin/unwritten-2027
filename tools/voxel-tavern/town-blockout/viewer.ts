@@ -24,6 +24,8 @@ import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { terraceStop } from './museum-terrace';
+import { monthStops, museumCaseCenter } from './museum-timeline';
+import { museumHorizontalScale } from './museum-scale';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -177,6 +179,9 @@ function place(plot: TownPlot, group: Group) {
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
+function museumToWorld(localX: number, localY: number, localZ: number) {
+  return [museumEast + localX * museumHorizontalScale, museumHeight + localY, -museumNorth + localZ * museumHorizontalScale] as const;
+}
 const museumLights = Array.from({ length: 3 }, () => new PointLight('#ffba76', 0, 16, 2));
 scene.add(...museumLights);
 let museumLightClock = 0;
@@ -275,20 +280,35 @@ const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
 let captureTerrace = false;
+let inspectedMonth: number | undefined;
+function setInspection(month?: number) {
+  resetMovement();
+  inspectedMonth = month;
+  camera.zoom = month ? Math.min(1.4, Math.max(.72, camera.aspect * 1.14)) : 1;
+  camera.updateProjectionMatrix();
+  if (month) {
+    touchWalk.setAllowed(false);
+    renderer.domElement.focus({ preventScroll: true });
+  }
+}
 function pauseForPanel() {
   resetMovement();
   touchWalk.setAllowed(false);
 }
 const museumVisit = createMuseumVisit(pauseForPanel, () => {
-  x = museumEast + terraceStop.x;
-  n = museumNorth - terraceStop.z;
-  ground = museumHeight + 5.65;
+  const [viewX, viewY, viewZ] = museumToWorld(terraceStop.x, 5.65, terraceStop.z);
+  x = viewX;
+  n = -viewZ;
+  ground = viewY;
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
   captureTerrace = true;
-});
+}, setInspection);
 museumVisit.dialog.addEventListener('close', () => renderer.domElement.focus());
-museumMapButton.onclick = () => museumVisit.openMap({ x: x - museumEast, y: ground - museumHeight, z: museumNorth - n });
+function museumPosition() {
+  return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
+}
+museumMapButton.onclick = () => museumVisit.openMap(museumPosition());
 
 function openPlace(title: string, description: string, writing = false) {
   pauseForPanel();
@@ -332,7 +352,9 @@ const tour = [
 function currentAction() {
   if (!walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
-  const museumStop = museumVisit.near(x - museumEast, ground - museumHeight, museumNorth - n);
+  if (inspectedMonth) return { label: '返回展柜', run: () => setInspection() };
+  const local = museumPosition();
+  const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
   return tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius);
 }
@@ -352,7 +374,7 @@ function jump() {
 function mode(next: boolean) {
   leaveRide();
   walking = next;
-  resetMovement();
+  setInspection();
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
@@ -392,11 +414,15 @@ selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 addEventListener('keydown', e => {
   if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
+  if (inspectedMonth && e.code === 'Escape') {
+    setInspection();
+    return;
+  }
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
   }
-  if (walking && !boardingGround && moveKeys.has(e.code)) {
+  if (walking && !boardingGround && !inspectedMonth && moveKeys.has(e.code)) {
     keys.add(e.code);
     e.preventDefault();
   }
@@ -404,7 +430,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', resetMovement);
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (!walking || looking || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
+  if (!walking || looking || inspectedMonth || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
   looking = { id: e.pointerId, x: e.clientX, y: e.clientY };
   renderer.domElement.focus({ preventScroll: true });
   renderer.domElement.setPointerCapture(e.pointerId);
@@ -424,6 +450,7 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 }
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
+  if (inspectedMonth) camera.zoom = Math.min(1.4, Math.max(.72, camera.aspect * 1.14));
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
@@ -475,7 +502,13 @@ renderer.setAnimationLoop(now => {
     beacon.visible = nightMode;
     if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
   }
-  if (walking && boardingGround && seat) {
+  if (inspectedMonth) {
+    const { x: stop, z } = monthStops[inspectedMonth - 1];
+    const side = Math.sign(stop);
+    camera.position.set(...museumToWorld(side * (museumCaseCenter - 2.25), 2.1, z - .55));
+    camera.lookAt(...museumToWorld(side * museumCaseCenter, 1.55, z));
+    element('position').textContent = '';
+  } else if (walking && boardingGround && seat) {
     seat.getWorldPosition(camera.position);
     seat.getWorldDirection(lookAhead);
     camera.lookAt(lookAhead.negate().add(camera.position));
@@ -504,13 +537,14 @@ renderer.setAnimationLoop(now => {
   }
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   updateMuseumLights(dt, camera.position);
-  const sheltered = walking && Math.abs(x - museumEast) < 19.55 && museumNorth - n > -13.7 && museumNorth - n < 12.85;
+  const local = museumPosition();
+  const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
-  touchWalk.setAllowed(canControl && !boardingGround);
-  museumMapButton.hidden = !canControl || Math.abs(x - museumEast) > 29 || Math.abs(n - museumNorth) > 19;
+  touchWalk.setAllowed(canControl && !boardingGround && !inspectedMonth);
+  museumMapButton.hidden = !canControl || Boolean(inspectedMonth) || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
   const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';

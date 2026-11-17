@@ -4,6 +4,7 @@ import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district
 import { addForestDensity } from '../tools/voxel-tavern/town-blockout/forest-density.ts';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import { buildMuseumLandmark } from '../tools/voxel-tavern/town-blockout/landmark-museum.ts';
+import { museumDetailAxis, museumDetailStep, museumHorizontalScale } from '../tools/voxel-tavern/town-blockout/museum-scale.ts';
 import { networkStops } from '../tools/voxel-tavern/town-blockout/museum-network.ts';
 import { terraceStop } from '../tools/voxel-tavern/town-blockout/museum-terrace.ts';
 import { monthStops } from '../tools/voxel-tavern/town-blockout/museum-timeline.ts';
@@ -26,11 +27,11 @@ const forest = addForestDensity(museum, terrain, (x, n, radius) =>
   district.keepClear(x, n, radius) || street.occupied(x, n, radius));
 
 function townPoint([x, z]: Waypoint) {
-  return { x: originX + x, north: originNorth - z };
+  return { x: originX + x * museumHorizontalScale, north: originNorth - z * museumHorizontalScale };
 }
 
-const entrance: Waypoint = [plot.connect[0] - originX, originNorth - plot.connect[1]];
-const doorway: Waypoint = [plot.door[0] - originX, originNorth - plot.door[1]];
+const entrance: Waypoint = [(plot.connect[0] - originX) / museumHorizontalScale, (originNorth - plot.connect[1]) / museumHorizontalScale];
+const doorway: Waypoint = [(plot.door[0] - originX) / museumHorizontalScale, (originNorth - plot.door[1]) / museumHorizontalScale];
 const byDoor: Waypoint[] = [entrance, doorway, [0, 10.1]];
 const stairApproach: Waypoint[] = [...byDoor, [0, 10.2], [16.98, 10.2], [16.98, 8.45]];
 const upperApproach: Waypoint[] = [...stairApproach, [16.98, -10.15], [13.05, -10.15]];
@@ -84,6 +85,19 @@ function walk(route: Waypoint[]) {
   }
   return current.ground - originY;
 }
+
+test('museum is wider while fine exhibit geometry stays on the 1/64 metre world grid', () => {
+  assert.deepEqual(museum.scale.toArray(), [museumHorizontalScale, 1, museumHorizontalScale]);
+  assert.deepEqual(plot.footprint, [63, 42.75]);
+  for (const scale of [1, museumHorizontalScale]) {
+    const { center, size } = museumDetailAxis(.247, .005, scale);
+    assert.ok(Math.abs(size * scale - museumDetailStep) < 1e-10);
+    for (const edge of [center - size / 2, center + size / 2]) {
+      const ticks = edge * scale / museumDetailStep;
+      assert.ok(Math.abs(ticks - Math.round(ticks)) < 1e-10);
+    }
+  }
+});
 
 test('museum entrance and both rows of month exhibits are walkable', () => {
   assert.equal(monthStops.length, 12);

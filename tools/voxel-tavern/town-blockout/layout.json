@@ -25,7 +25,7 @@
     { "id": "clocktower", "origin": [226, 223, 12], "footprint": [34, 14], "door": [226, 216], "connect": [226, 212, 12] },
     { "id": "tavern", "origin": [159, 230, 16], "footprint": [22, 18], "door": [159, 221], "connect": [151, 215, 15] },
     { "id": "post-office", "origin": [264, 210, 13], "footprint": [16, 16], "door": [264, 202], "connect": [264, 192, 12] },
-    { "id": "memorial", "origin": [337, 277, 25], "footprint": [56, 38], "door": [337, 264], "connect": [350, 249, 23] },
+    { "id": "memorial", "origin": [337, 277, 25], "footprint": [63, 42.75], "door": [337, 262.375], "connect": [350, 249, 23] },
     { "id": "long-hall", "origin": [378, 316, 35], "footprint": [34, 20], "door": [378, 306], "connect": [378, 301, 34] },
     { "id": "cabins", "origin": [91, 271, 23], "footprint": [30, 20], "door": [101, 261], "connect": [103, 255, 21] },
     { "id": "lantern-workshop", "origin": [126, 115, 10], "footprint": [17, 24], "door": [117.5, 115], "connect": [108, 114, 9] },

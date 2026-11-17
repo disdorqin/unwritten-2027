@@ -4,6 +4,7 @@ import {
   Quaternion, SRGBColorSpace, Vector3,
 } from 'three';
 import type { Box, Ramp } from './landmark-kit';
+import { museumDetailAxis, museumHorizontalScale } from './museum-scale';
 
 type Point = readonly [number, number, number];
 type LabelOptions = { background?: string; color?: string; accent?: string; border?: boolean };
@@ -13,6 +14,7 @@ const up = new Vector3(0, 1, 0);
 
 export function createMuseumBuilder() {
   const group = new Group();
+  group.scale.set(museumHorizontalScale, 1, museumHorizontalScale);
   const chunks = [false, true].map(() => ({ matrices: [] as Matrix4[], colors: [] as Color[] }));
   const panels = { positions: [] as number[], colors: [] as number[] };
   const transform = new Object3D();
@@ -34,6 +36,13 @@ export function createMuseumBuilder() {
   }
   function box(paint: string, x: number, y: number, z: number, w: number, h: number, d: number, ry = 0, emissive = false) {
     add(paint, x, y, z, w, h, d, rotation.setFromAxisAngle(up, ry), emissive);
+  }
+  function detailBox(paint: string, x: number, y: number, z: number, w: number, h: number, d: number, ry = 0, emissive = false) {
+    if (w <= 0 || h <= 0 || d <= 0) return;
+    const east = museumDetailAxis(x, w, museumHorizontalScale);
+    const vertical = museumDetailAxis(y, h, 1);
+    const south = museumDetailAxis(z, d, museumHorizontalScale);
+    box(paint, east.center, vertical.center, south.center, east.size, vertical.size, south.size, ry, emissive);
   }
   function collider(x: number, y: number, z: number, w: number, h: number, d: number) {
     colliders.push(bounds(x, y, z, w, h, d));
@@ -115,8 +124,15 @@ export function createMuseumBuilder() {
       surfaces.computeVertexNormals();
       group.add(new Mesh(surfaces, new MeshLambertMaterial({ vertexColors: true, side: DoubleSide })));
     }
-    Object.assign(group.userData, { colliders, floors, ramps, lights });
+    function scaleBounds<T extends Box>(shape: T): T {
+      const scale = ([x, y, z]: number[]) => [x * museumHorizontalScale, y, z * museumHorizontalScale];
+      return { ...shape, min: scale(shape.min), max: scale(shape.max) };
+    }
+    Object.assign(group.userData, {
+      colliders: colliders.map(scaleBounds), floors: floors.map(scaleBounds), ramps: ramps.map(scaleBounds),
+      lights: lights.map(light => ({ ...light, position: [light.position[0] * museumHorizontalScale, light.position[1], light.position[2] * museumHorizontalScale] })),
+    });
     return group;
   }
-  return { group, box, solid, collider, floor, beam, panel, label, light, ramps, finish };
+  return { group, box, detailBox, solid, collider, floor, beam, panel, label, light, ramps, finish };
 }

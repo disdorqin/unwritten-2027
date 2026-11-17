@@ -21,7 +21,7 @@ function readProgress(): Progress {
   return { ...initial, months: [] };
 }
 
-export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => void) {
+export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => void, inspectModel: (month: number) => void) {
   const dialog = document.querySelector<HTMLDialogElement>('#museum-card')!;
   const title = dialog.querySelector<HTMLElement>('#museum-title')!;
   const subtitle = dialog.querySelector<HTMLElement>('#museum-subtitle')!;
@@ -54,9 +54,10 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
     content.scrollTop = 0;
     if (!dialog.open) { prepareOpen(); dialog.showModal(); }
   }
-  function monthCard(month: number) {
+  function monthCard(month: number, atCabinet = false) {
     const data = museumMonths.find(entry => entry.month === month);
     frame(`${monthNames[month - 1]}月`, '一楼 · 2026 公共年度展');
+    if (atCabinet) button('近看展品模型', () => { dialog.close(); inspectModel(month); });
     if (!data?.items.length) {
       line('本月展位已预留，待内容发布并核对来源后上架。');
       return;
@@ -213,7 +214,7 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
   const stops = [
     { x: 0, z: 10.3, y: .28, range: 2.6, label: '查看入馆导览', run: directory },
     { x: 4.5, z: 10.4, y: .28, range: 1.9, label: '查看参观护照', run: passport },
-    ...monthStops.map(({ month, x, z }) => ({ x, z, y: .28, range: 2.05, label: `查看${monthNames[month - 1]}月展`, run: () => monthCard(month) })),
+    ...monthStops.map(({ month, x, z }) => ({ x, z, y: .28, range: 2.05, label: `查看${monthNames[month - 1]}月展`, run: () => monthCard(month, true) })),
     ...networkStops.map(({ id, x, z, label }) => ({ x, z, y: 5.65, range: 2.35, label, run: () => network(id) })),
     { ...terraceStop, y: 5.65, range: 2.8, label: '使用露台观景台', run: terrace },
   ];

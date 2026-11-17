@@ -15,7 +15,11 @@ const snowColors = ['#d8e4f4', '#cfddf0', '#dfeaf4'];
 const goldGlow = '#ffba6c';
 
 export function addMuseumShell(m: MuseumBuilder) {
-  const { box, beam, solid, label, light } = m;
+  const { box, beam, solid, label, light, detailBox } = m;
+  const grain = '#502f2b';
+  const gilding = '#dbab70';
+  const tileLip = '#8294aa';
+  const fine = 1 / 64;
   const front = 13;
   const back = -14;
   const halfWidth = 20;
@@ -73,6 +77,28 @@ export function addMuseumShell(m: MuseumBuilder) {
     }
     part(stone, 0, -height / 2 - .17, .08, width + .52, .16, .54);
     part(bronze, 0, height / 2 + .16, .12, width + .39, .07, .31);
+    if (width < 1) return;
+
+    // Recessed beads cap the crossing rails; gilt studs leave the window grid visible.
+    const inlay = (paint: string, u: number, v: number, layer: number, w: number, h: number, d: number) =>
+      detailBox(paint, x + u * cos + layer * sin, y + v, z - u * sin + layer * cos, w, h, d, yaw);
+    for (const side of [-1, 1]) {
+      for (const edge of [-1, 1]) {
+        inlay(gilding, edge * (width / 2 + .086), 0, .192 * side, fine, height + .12, fine);
+        inlay(grain, edge * (width / 2 + .111), 0, .195 * side, fine, height + .14, fine);
+      }
+      for (const v of [-1, 1]) {
+        inlay(gilding, 0, v * (height / 2 + .07), .189 * side, width + .20, fine, fine);
+        for (const u of [-1, 1]) {
+          inlay(bronze, u * (width / 2 + .082), v * (height / 2 + .067), .206 * side, .094, .094, fine * 2);
+          inlay(gold, u * (width / 2 + .082), v * (height / 2 + .067), .226 * side, .046, .046, fine);
+        }
+      }
+      for (const u of [-2, 0, 2]) {
+        inlay(grain, (u + .5) * paneW, 0, .123 * side, .084, .083, fine * 2);
+        inlay(gilding, (u + .5) * paneW, 0, .143 * side, fine * 2, fine * 2, fine);
+      }
+    }
   }
 
   const buildBand = (x: number, z: number, width: number, yaw: number, windows: number, split: boolean) => {
@@ -195,7 +221,16 @@ export function addMuseumShell(m: MuseumBuilder) {
       const u = k * .19 * scale;
       const lift = k * .185 * scale;
       box(k % 2 === 0 ? dark : redwood, x, y + lift, z + u * side, (.32 + k * .24) * scale, .19 * scale, (.51 + k * .16) * scale);
-      box(bronze, x - .01, y + lift - .07 * scale, z + side * (u + (.27 + k * .08) * scale), (.14 + k * .055) * scale, .064 * scale, .078);
+      const face = z + side * (u + (.27 + k * .08) * scale);
+      box(bronze, x - .01, y + lift - .07 * scale, face, (.14 + k * .055) * scale, .064 * scale, .078);
+      const wing = (.32 + k * .24) * scale;
+      const edgeY = y + lift - .032 * scale;
+      detailBox(grain, x, edgeY, face + side * .043, wing * .76, fine * 2, fine * 2);
+      detailBox(gilding, x, edgeY + fine * 2, face + side * .045, wing * .58, fine, fine);
+      for (const sign of [-1, 1]) {
+        detailBox(bronze, x + sign * wing * .29, edgeY, face + side * .054, .074, .093, fine * 2);
+        detailBox(gilding, x + sign * wing * .29, edgeY, face + side * .066, .043, .043, fine);
+      }
     }
   }
   for (let i = -4; i <= 4; i++) {
@@ -245,8 +280,50 @@ export function addMuseumShell(m: MuseumBuilder) {
   box(gold, 0, 7.84, 16.34, 7.81, 1.63, .2);
   box(dark, 0, 7.84, 16.48, 7.65, 1.47, .24);
   label('2026 纪念馆', 0, 7.86, 16.624, 7.51, 1.22);
+  for (const row of [7.14, 8.56]) {
+    detailBox(grain, 0, row, 16.626, 7.46, fine * 4, fine * 2);
+    detailBox(gilding, 0, row, 16.650, 7.34, fine, fine);
+    for (let i = -18; i <= 18; i++) {
+      const x = i * .19;
+      detailBox(bronze, x, row, 16.656, .067, fine * 2, fine);
+    }
+  }
   for (const side of [-1, 1]) {
-    for (const y of [7.26, 8.44]) box(bronze, side * 3.64, y, 16.65, .13, .13, .048);
+    const x = side * 3.70;
+    detailBox(grain, x, 7.85, 16.627, fine * 4, 1.42, fine * 2);
+    detailBox(gilding, x, 7.85, 16.650, fine, 1.38, fine);
+    for (const y of [7.26, 8.44]) {
+      box(bronze, side * 3.64, y, 16.65, .13, .13, .048);
+      detailBox(gold, side * 3.64, y, 16.679, .060, .060, fine);
+    }
+  }
+
+  // Carved cloud-and-water limestone panels mark the two flanking bays.
+  // The straight stone plinth remains the containing silhouette and collider.
+  for (const side of [-1, 1]) {
+    const cx = side * 8.09;
+    const panelY = .89;
+    const faceZ = front + .34;
+    box(stone, cx, panelY, faceZ, 2.13, .89, .22);
+    detailBox('#5a6678', cx, panelY, faceZ + .115, 1.98, .75, fine * 2);
+    for (const frameSide of [-1, 1]) {
+      detailBox('#a8b3bd', cx, panelY + frameSide * .375, faceZ + .146, 2.04, fine * 2, fine * 2);
+      detailBox('#a8b3bd', cx + frameSide * 1.005, panelY, faceZ + .146, fine * 2, .74, fine * 2);
+    }
+    for (let petal = -3; petal <= 3; petal++) {
+      const px = cx + petal * .25;
+      const py = panelY + .034 * (3 - Math.abs(petal));
+      for (let step = 0; step < 4; step++) {
+        const w = .0625 + step * fine * 2;
+        detailBox(step === 2 ? '#b8bec6' : '#8c9bad', px, py + step * .047, faceZ + .163 + fine * step, w, fine * 2, fine * 2);
+      }
+    }
+    for (const row of [-.24, -.17, -.10]) {
+      for (let i = -8; i <= 8; i++) {
+        const wave = ((i + 24) % 5 - 2) * fine;
+        detailBox(i % 2 ? '#acbac7' : '#7c8d9e', cx + i * .105, panelY + row + wave, faceZ + .162, .082, fine, fine);
+      }
+    }
   }
 
   function roof(cx: number, cz: number, width: number, depth: number, y: number, rise: number) {
@@ -277,8 +354,14 @@ export function addMuseumShell(m: MuseumBuilder) {
               z, cell - .035, thickness, step - .035);
           }
           if (r === 0) {
+            const lip = z + side * .32;
             box(blueTile[2], x, roofY + tip - .106, z + side * .2, .14, .12, .23);
-            if (i % 5 === 2) box(snowColors[2], x, roofY + tip - .21, z + side * .255, .042, .22, .044);
+            detailBox(tileLip, x, roofY + tip - .098, lip, .10, .059, fine * 2);
+            detailBox(blueTile[0], x, roofY + tip - .093, lip + side * fine, .047, .031, fine * 2);
+            if (i % 5 === 2) {
+              box(snowColors[2], x, roofY + tip - .21, z + side * .255, .042, .22, .044);
+              detailBox(snowColors[0], x, roofY + tip - .30, z + side * .267, fine, .12, fine);
+            }
           }
         }
         if (r >= 3) for (let i = 0; i < slots; i += 3) {
@@ -292,12 +375,24 @@ export function addMuseumShell(m: MuseumBuilder) {
     const ridge = width - Math.min(width * .15, 3.1);
     box(dark, cx, y + rise + .22, cz, ridge, .49, .54);
     box(snowColors[0], cx, y + rise + .47, cz, ridge - .27, .125, .38);
+    for (let rub = .39; rub < ridge - .39; rub += .54) {
+      const x = cx - ridge / 2 + rub;
+      for (const side of [-1, 1]) {
+        detailBox(tileLip, x, y + rise + .26, cz + side * .277, .21, .12, fine * 2);
+        detailBox(dark, x, y + rise + .262, cz + side * .295, .10, .06, fine);
+      }
+    }
     for (const side of [-1, 1]) {
       const x = cx + side * (ridge / 2 - .13);
       box(bronze, x, y + rise + .41, cz, .31, .63, .51);
       box(gold, x + .23 * side, y + rise + .72, cz, .35, .22, .39);
       box(dark, x + .41 * side, y + rise + .82, cz, .22, .27, .34);
       box(snowColors[2], x + .41 * side, y + rise + .98, cz, .21, .067, .34);
+      for (let step = 0; step < 5; step++) {
+        detailBox(step % 2 ? bronze : gilding,
+          x + side * (.085 * step - .29), y + rise + .55 + fine * step * 3,
+          cz, .12, .043, .305 - .03 * step);
+      }
     }
   }
   // The wings read as separate galleries and the raised center as a double-eaved pavilion.

@@ -247,6 +247,139 @@ export function addMuseumNetwork(m: MuseumBuilder) {
     }
   }
 
+  // Each model uses integer ticks at its mounting surface. Adjacent ticks
+  // share edges, so reel teeth and keycaps are real geometry at 1/64 m.
+  function detailFrame(x: number, y: number, z: number, faceEast = false) {
+    const gx = Math.round(x * 64) / 64;
+    const gy = Math.ceil(y * 64) / 64;
+    const gz = Math.round(z * 64) / 64;
+    return (paint: string, left: number, base: number, back: number,
+      width: number, height: number, depth: number, glow = false) => {
+      const [u, v, w] = [(left + width / 2) / 64, (base + height / 2) / 64, (back + depth / 2) / 64];
+      if (faceEast) m.detailBox(paint, gx + w, gy + v, gz - u, depth / 64, height / 64, width / 64, 0, glow);
+      else m.detailBox(paint, gx + u, gy + v, gz + w, width / 64, height / 64, depth / 64, 0, glow);
+    };
+  }
+  type MicroBox = ReturnType<typeof detailFrame>;
+  const enamel = '#bfc4b5';
+  const cream = '#eeddb4';
+  const graphite = '#29363e';
+  const teal = '#38716f';
+  const copper = '#dcaa67';
+  const paleGreen = '#c1f2c2';
+
+  function reel(part: MicroBox, x: number, y: number, z: number, radius: number, edge: string, center: string) {
+    for (let v = -radius; v <= radius; v++) {
+      const u = Math.floor(Math.sqrt(radius * radius - v * v));
+      part(edge, x - u, y + v, z, u * 2 + 1, 1, 3);
+      const hub = radius - 3;
+      if (Math.abs(v) > hub) continue;
+      const span = Math.floor(Math.sqrt(hub * hub - v * v));
+      part(center, x - span, y + v, z + 3, span * 2 + 1, 1, 2);
+    }
+    part(cream, x - 1, y - 2, z + 5, 3, 5, 1);
+    part(cream, x - 2, y - 1, z + 5, 5, 3, 1);
+  }
+
+  function portableRadio(part: MicroBox) {
+    for (const x of [-25, 18]) part(graphite, x, 0, -9, 7, 2, 18);
+    part(color.walnut, -27, 2, -13, 54, 25, 26);
+    part(color.upperWood, -25, 4, -14, 50, 21, 2);
+    part(color.upperWood, -25, 26, -11, 50, 2, 23);
+    part(enamel, -25, 5, 13, 50, 18, 2);
+    part(graphite, -22, 9, 15, 18, 11, 1);
+    part(teal, -19, 12, 16, 12, 5, 1);
+    for (const x of [-18, -15, -12, -9]) part(cream, x, 13, 17, 1, 2, 1, true);
+    for (let row = 0; row < 6; row++) {
+      const n = row === 0 || row === 5 ? 6 : 8;
+      for (let col = 0; col < n; col++) part(graphite, 5 + 2 * col + (n === 6 ? 2 : 0), 9 + row * 2, 15, 1, 1, 1);
+    }
+    reel(part, 22, 12, 15, 3, color.shadow, color.brass);
+    for (let i = 0; i < 4; i++) part(i === 0 ? color.garnet : cream, -16 + 6 * i, 27, 4, 4, 2, 6);
+    part(color.brass, 25, 28, -7, 1, 4, 1);
+  }
+
+  function magneticTape(part: MicroBox) {
+    part(color.walnut, -29, 0, -11, 58, 3, 23);
+    part(graphite, -26, 3, -4, 52, 29, 12);
+    part(color.stoneCap, -24, 6, 8, 48, 24, 2);
+    part(color.shadow, -22, 12, 10, 44, 17, 1);
+    part(color.upperWood, -20, 11, 11, 40, 2, 1);
+    part(copper, -14, 26, 11, 28, 1, 2);
+    for (const x of [-13, 13]) {
+      reel(part, x, 20, 11, 7, cream, color.stone);
+      part(color.shadow, x - 1, 19, 17, 3, 3, 1);
+    }
+    for (const x of [-23, 22]) for (const y of [7, 28]) part(copper, x, y, 11, 1, 1, 1);
+    part(color.garnet, -17, 7, 11, 34, 3, 1);
+    for (const x of [-13, -8, 8, 13]) part(cream, x, 8, 12, 2, 1, 1);
+  }
+
+  function archiveBoard(part: MicroBox) {
+    part('#876448', -29, 0, -12, 58, 3, 23);
+    part(graphite, -24, 3, -8, 2, 29, 17);
+    part(graphite, 22, 3, -8, 2, 29, 17);
+    part(teal, -23, 4, -1, 46, 28, 4);
+    part('#204f54', -19, 6, 3, 38, 25, 1);
+    for (const [x, y, w, h] of [[-8, 15, 15, 10], [9, 23, 10, 6], [-18, 7, 7, 9]]) {
+      part(graphite, x, y, 4, w, h, 3);
+      part(enamel, x + 2, y + h - 3, 7, w - 4, 1, 1);
+      for (let pin = 1; pin < w; pin += 2) {
+        part(copper, x + pin, y - 2, 4, 1, 2, 1);
+        part(copper, x + pin, y + h, 4, 1, 2, 1);
+      }
+    }
+    for (let trace = 0; trace < 6; trace++) {
+      const x = 9 + trace * 2;
+      const y = 7 + trace * 2;
+      part(copper, 2, y, 4, x - 1, 1, 1);
+      part(copper, x, Math.min(y, 16), 4, 1, Math.abs(16 - y) + 1, 1);
+      part(copper, x, 6, 4, 1, 1, 2);
+    }
+    for (let pin = 0; pin < 12; pin++) part(copper, -19 + pin * 3, 4, 3, 1, 2, 1);
+    for (const x of [-21, 21]) for (const y of [6, 29]) part(cream, x, y, 4, 1, 1, 1);
+    for (const [x,y] of [[-13,24],[-17,22],[18,13]]) {
+      part(color.stoneCap, x, y, 4, 3, 3, 2);
+      part('#9fd2b2', x + 1, y + 1, 6, 1, 1, 1, true);
+    }
+  }
+
+  function terminalComputer(part: MicroBox, variant: number) {
+    part(graphite, -21, 0, -18, 42, 4, 39);
+    part(enamel, -17, 4, -14, 34, 7, 31);
+    part(enamel, -35, 11, -25, 70, 49, 45);
+    part(cream, -32, 13, 20, 64, 45, 4);
+    part(graphite, -27, 19, 24, 54, 33, 2);
+    part('#1a4240', -24, 22, 26, 48, 27, 1, true);
+    part(teal, -22, 25, 27, 44, 21, 1);
+    const indexed = variant % 2 === 0;
+    for (let row = 0; row < 5; row++) {
+      part(indexed ? paleGreen : '#e7dcb2', -19, 43 - row * 4, 28, 9 + (row * 5 + variant) % 20, 1, 1, true);
+      part('#82cabb', 14, 43 - row * 4, 28, 4 + row % 3, 1, 1, true);
+    }
+    part(color.stone, -24, 15, 24, 32, 1, 1);
+    part(color.garnet, 20, 14, 24, 4, 3, 1);
+    part('#9fd2b2', 27, 15, 24, 1, 1, 1, true);
+    for (let slot = 0; slot < 10; slot++) part(graphite, -27 + slot * 5, 59, -18, 1, 1, 16);
+    for (let slot = 0; slot < 6; slot++) {
+      part(color.stone, -35, 39 + slot * 3, -14, 1, 1, 23);
+      part(color.stone, 34, 39 + slot * 3, -14, 1, 1, 23);
+    }
+
+    part(graphite, -28, 0, 35, 56, 4, 30);
+    part(enamel, -27, 4, 35, 54, 3, 28);
+    const rowTones = [cream, '#d6c7a6', cream, '#d4c6a3'];
+    for (let row = 0; row < 4; row++) {
+      for (let key = 0; key < 10; key++) {
+        const left = -24 + key * 5 + (row % 2);
+        const front = 38 + row * 5;
+        part(rowTones[row], left, 7, front, 4, 2, 4);
+        part(color.stone, left + 1, 9, front + 1, 1, 1, 1);
+      }
+    }
+    part(cream, -13, 7, 58, 26, 2, 4);
+  }
+
   const caseX = 9.45;
   const caseZ = 1.10;
   const caseTop = floor + .98;
@@ -272,15 +405,15 @@ export function addMuseumNetwork(m: MuseumBuilder) {
   caseGlass(caseX, caseTop + .58, caseZ, 3.41, .012, 1.51);
   beam('#688991', [caseX - 1.69, caseTop + .19, caseZ + .77], [caseX - 1.16, caseTop + .56, caseZ + .77], .017);
   beam('#688991', [caseX - 1.46, caseTop + .14, caseZ + .77], [caseX - .94, caseTop + .51, caseZ + .77], .012);
-  vessel(caseX - 1.01, caseTop + .07, caseZ -.16, color.ceramic, .65);
-  book(caseX - .25, caseTop + .12, caseZ -.02, .62, true, color.garnet);
-  box(color.wood, caseX + .77, caseTop + .20, caseZ, .73, .31, .47);
-  box(color.brass, caseX + .77, caseTop + .37, caseZ, .76, .055, .49);
-  box(color.shadow, caseX + .77, caseTop + .23, caseZ + .241, .56, .238, .025);
-  box(color.jade, caseX + .91, caseTop + .25, caseZ + .256, .155, .14, .019);
-  for (let i = 0; i < 5; i++) {
-    box(color.brass, caseX + .55 + i * .038, caseTop + .24, caseZ + .254, .015, .14, .011);
-    box(color.brass, caseX + .55 + i * .065, caseTop + .409, caseZ + .15, .032, .025, .06);
+  const objectBase = caseTop + .065;
+  portableRadio(detailFrame(caseX - 1.09, objectBase, caseZ - .22));
+  magneticTape(detailFrame(caseX, objectBase, caseZ - .22));
+  archiveBoard(detailFrame(caseX + 1.09, objectBase, caseZ - .28));
+  for (const [offset, title] of [[-1.09, '便携电台'], [0, '双轮磁带'], [1.09, '档案电路板']] as const) {
+    const x = caseX + offset;
+    box(color.shadow, x, caseTop + .041, caseZ + .42, .87, .078, .16);
+    label(title, x, caseTop + .043, caseZ + .505, .79, .062, 0,
+      { background: color.shadow, color: '#edd3a0', border: false });
   }
   const goldOnWood = { background: '#3e2728', color: '#f5d5ab', accent: '#966746' };
   label('网络记忆选集', caseX, floor + .70, caseZ + .836, 1.50, .24, 0, goldOnWood);
@@ -290,18 +423,8 @@ export function addMuseumNetwork(m: MuseumBuilder) {
   solid(color.walnut, terminalX, floor + .47, terminalZ, 1.6, .94, 3.48);
   box(color.upperWood, terminalX, floor + .99, terminalZ, 1.74, .14, 3.65);
   box(color.brass, terminalX + .883, floor + .93, terminalZ, .024, .031, 3.56);
-  for (const z of [terminalZ - .65, terminalZ + .66]) {
-    box(color.wood, terminalX -.44, floor + 1.21, z, .51, .17, .77);
-    box(color.shadow, terminalX -.56, floor + 1.67, z, .30, .81, 1.12);
-    box(color.screen, terminalX -.394, floor + 1.68, z, .038, .60, .89);
-    for (let line = 0; line < 4; line++) {
-      box(line === 0 ? color.parchment : color.screenLight, terminalX -.369, floor + 1.84 - line * .12, z - .04,
-        .013, line === 0 ? .05 : .025, .66 - (line % 2) * .14, 0, true);
-    }
-    box(color.shadow, terminalX + .42, floor + 1.09, z, .4, .070, .68);
-    for (let i = 0; i < 5; i++) for (let row = 0; row < 3; row++) {
-      box(color.paper, terminalX + .29 + row * .092, floor + 1.137, z - .26 + i * .113, .069, .019, .08);
-    }
+  for (const [variant, z] of [terminalZ - .65, terminalZ + .66].entries()) {
+    terminalComputer(detailFrame(terminalX - .36, floor + 1.06, z, true), variant);
   }
   box(color.garnet, terminalX - .15, floor + 2.50, terminalZ, .18, .37, 2.88);
   box(color.brass, terminalX -.043, floor + 2.70, terminalZ, .04, .032, 2.91);
