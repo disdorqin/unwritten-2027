@@ -54,7 +54,8 @@ export function addMuseumShell(m: MuseumBuilder) {
     box(snowColors[2], x, 1.105, z, .72, .077, .75);
   }
 
-  function frameWindow(x: number, y: number, z: number, width: number, height: number, yaw: number, variant: number, ground?: number) {
+  function frameWindow(x: number, y: number, z: number, width: number, height: number, yaw: number, variant: number,
+    ground?: number, approach?: readonly [number, number]) {
     const cos = Math.cos(yaw);
     const sin = Math.sin(yaw);
     const part = (paint: string, u: number, v: number, layer: number, w: number, h: number, d: number, emit = false) =>
@@ -70,7 +71,7 @@ export function addMuseumShell(m: MuseumBuilder) {
       const eastStair = ground === 5.65 && yaw === Math.PI / 2 && z > -8.8 && z < 8.55;
       const stairHeight = .28 + (8.55 - z) / 17.35 * 5.37;
       addTownWindow(m.group, { x, y, z, width, height, yaw, style: 'museum',
-        ground: eastStair ? stairHeight : ground, approach: eastStair ? [17.55, z] : undefined });
+        ground: eastStair ? stairHeight : ground, approach: eastStair ? [17.55, z] : approach });
       if (eastStair) {
         const bottom = stairHeight + 1.45;
         const top = y - height / 2;
@@ -141,7 +142,11 @@ export function addMuseumShell(m: MuseumBuilder) {
           part(floor ? plaster : timber, u + side * (gap + edge) / 2, windowY, 0, edge + .018, windowHeight, .31);
           part(dark, u + side * (gap / 2 + .07), windowY, .16, .11, windowHeight + .17, .11);
         }
-        frameWindow(x + u * cos, windowY, z - u * sin, gap - .15, windowHeight - .15, yaw, i * 17 + floor + Math.round(x), bottom);
+        // The last two rear bays share an aisle with the second-floor exhibits.
+        const rearApproaches = [[-13.2, -12.74], [-17.94, -12.66]] as const;
+        const approach = z === back && floor === 1 ? rearApproaches[i - 7] : undefined;
+        frameWindow(x + u * cos, windowY, z - u * sin, gap - .15, windowHeight - .15,
+          yaw, i * 17 + floor + Math.round(x), bottom, approach);
         const pier = u - bay / 2;
         part(redwood, pier, bottom + 2.66, .21, .29, 5.2, .29);
         part(bronze, pier, bottom + 4.96, .25, .36, .1, .33);
@@ -181,7 +186,8 @@ export function addMuseumShell(m: MuseumBuilder) {
       const gap = Math.min(2.9, bay - .8);
       box(plaster, -halfWidth, 6.24, pos, .3, 1.18, bay + .02);
       box(redwood, -halfWidth, 10.48, pos, .34, 1.28, bay + .02);
-      frameWindow(-halfWidth, 8.21, pos, gap - .09, 2.70, -Math.PI / 2, i + 7, 5.65);
+      const approach = north === -2.2 && i === 0 ? [-19.06, pos] as const : undefined;
+      frameWindow(-halfWidth, 8.21, pos, gap - .09, 2.70, -Math.PI / 2, i + 7, 5.65, approach);
       const pier = (bay - gap) / 2;
       for (const side of [-1, 1]) box(plaster, -halfWidth, 8.32, pos + side * (gap + pier) / 2, .32, 3.53, pier + .03);
       box(redwood, -halfWidth - .22, 8.35, pos - bay / 2, .39, 5.4, .27);

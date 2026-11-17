@@ -5,6 +5,7 @@ import {
 } from 'three';
 import type { Box, Ramp } from './landmark-kit';
 import { museumDetailAxis, museumHorizontalScale } from './museum-scale';
+import { addOpaqueMuseumLabels, type OpaqueMuseumLabel } from './museum-label-atlas';
 
 type Point = readonly [number, number, number];
 type LabelOptions = { background?: string; color?: string; accent?: string; border?: boolean };
@@ -76,15 +77,17 @@ export function createMuseumBuilder() {
       panels.colors.push(tint.r, tint.g, tint.b);
     }
   }
-  const labels = new Map<string, CanvasTexture>();
+  const labelCanvases = new Map<string, HTMLCanvasElement>();
+  const transparentTextures = new Map<HTMLCanvasElement, CanvasTexture>();
+  const opaqueLabels: OpaqueMuseumLabel[] = [];
   const smallLabels: Mesh[] = [];
   function label(text: string, x: number, y: number, z: number, w: number, h: number, ry = 0, options: LabelOptions = {}) {
     if (typeof document === 'undefined') return;
     const { background = '#341d18', color = '#ffe4a0', accent = '#a4783d', border = true } = options;
     const key = JSON.stringify([text, w / h, background, color, accent, border]);
-    let texture = labels.get(key);
-    if (!texture) {
-      const canvas = document.createElement('canvas');
+    let canvas = labelCanvases.get(key);
+    if (!canvas) {
+      canvas = document.createElement('canvas');
       canvas.width = 512;
       canvas.height = Math.max(96, Math.min(400, Math.round(512 * h / w)));
       const ctx = canvas.getContext('2d')!;
@@ -105,11 +108,20 @@ export function createMuseumBuilder() {
       ctx.textBaseline = 'middle';
       ctx.font = `700 ${Math.round(Math.min(94, full * .61 / lines.length))}px "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif`;
       lines.forEach((line, index) => ctx.fillText(line, 256, full / 2 + (index - (lines.length - 1) / 2) * full * .7 / lines.length, 454));
+      labelCanvases.set(key, canvas);
+    }
+    if (background !== 'transparent') {
+      opaqueLabels.push({ source: canvas, parent: mounting, x, y, z, width: w, height: h, yaw: ry });
+      return;
+    }
+    // Leave translucent signs individually sorted by Three.js.
+    let texture = transparentTextures.get(canvas);
+    if (!texture) {
       texture = new CanvasTexture(canvas);
       texture.colorSpace = SRGBColorSpace;
-      labels.set(key, texture);
+      transparentTextures.set(canvas, texture);
     }
-    const mesh = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture, transparent: background === 'transparent' }));
+    const mesh = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture, transparent: true }));
     mesh.position.set(x, y, z);
     mesh.rotation.y = ry;
     mounting.add(mesh);
@@ -130,6 +142,7 @@ export function createMuseumBuilder() {
         section.add(mesh);
       });
     }
+    addOpaqueMuseumLabels(opaqueLabels, smallLabels);
     if (interior.children.length) {
       group.add(interior);
       group.userData.detailInterior = interior;

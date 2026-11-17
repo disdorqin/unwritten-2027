@@ -133,7 +133,6 @@ export function buildVillageLandmark(plot: TownPlot) {
     add(gold, 0, .52, -5.66, 16.7, .045, .09);
     floors.push(
       { min: [-3.5, .05, -7], max: [3.5, .28, -5.4] },
-      { min: [-8.75, 0, -5.75], max: [8.75, .40, 5.75] },
       { min: [-8.55, .34, -5.55], max: [8.55, .52, 5.55] },
     );
     for (const x of [-7.5, 7.5]) {

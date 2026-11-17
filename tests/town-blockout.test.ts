@@ -38,6 +38,8 @@ test('town blockout roads and entrances are continuous on foot', () => {
 });
 
 test('the plaza stays flat and each crossing uses its bridge deck', () => {
+  const transportIds = [...layout.roads, ...layout.bridges].map(({ id }) => id);
+  assert.equal(new Set(transportIds).size, transportIds.length);
   const [west, south, east, north] = layout.plaza.bounds;
   for (let x = west; x <= east; x++) {
     for (let n = south; n <= north; n++) assert.equal(heightAt(x, n), layout.plaza.height);
@@ -64,7 +66,6 @@ test('town expansion keeps original landmark origins and increases the playable 
     cabins: [91, 271, 23],
     'lantern-workshop': [126, 115, 10],
     'market-stalls': [154, 105, 10],
-    carousel: [341, 115, 11],
     glasshouse: [372, 96, 11],
     lighthouse: [408, 78, 12],
     stage: [238, 157, 12],

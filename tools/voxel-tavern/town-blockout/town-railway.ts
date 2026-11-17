@@ -21,6 +21,7 @@ const gauge = 1.66;
 const clearanceCell = 16;
 const stationRoad = extensionRoads.find(road => road.id === 'station-approach')!;
 const bathRoad = extensionRoads.find(road => road.id === 'hot-spring-approach')!;
+const forestRoad = extensionRoads.find(road => road.id === 'north-forest-approach')!;
 const up = new Vector3(0, 1, 0);
 const limit = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 const smooth = (value: number) => {
@@ -233,9 +234,15 @@ function buildTrack(
     if (!piers) continue;
     const { rise, width, pad, footings } = piers;
     supportIndices.push(i);
-    for (const { x, z } of footings) {
+    for (const { x: anchor, z } of footings) {
+      const forestEdge = forestRoad.width / 2 + pad * Math.SQRT2;
+      // Keep the existing overhead crossing and move the encroaching footing to its east shoulder.
+      const x = distanceToRoad(anchor, -z, forestRoad) < forestEdge ? anchor + 2.15 : anchor;
       const base = grid.heightAt(x, -z) - .2;
       const top = center.y - .6;
+      if (x !== anchor) {
+        parts.push({ position: [(x + anchor) / 2, top - .2, z], size: [x - anchor + width, .34, width], tint: '#6a4a48' });
+      }
       parts.push({ position: [x, base + .15, z], size: [width + .55, .62, width + .5], tint: '#596879' });
       parts.push({ position: [x, (base + top) / 2, z], size: [width, top - base, width], tint: '#685057' });
       parts.push({ position: [x, top - .3, z], size: [width + .18, .38, width + .17], tint: '#9e7472' });

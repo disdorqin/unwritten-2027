@@ -230,7 +230,9 @@ export function addMuseumForecourt(m: MuseumBuilder) {
       }
     }
     pathLamp(6.2 * direction, 17.85, .80, true);
-    pathLamp(18.65 * direction, 17.85, .79, false);
+    // The east lamp clears the diagonal hall road; the west lamp keeps its original position.
+    if (direction < 0) pathLamp(-18.65, 17.85, .79, false);
+    else pathLamp(16.53, 16.4, .79, false);
     for (const drift of [[8.7, 15.86, 1.03, .4], [11.72, 17.1, 1.57, 1.4], [15.35, 17.53, 1.05, 3.21], [17.1, 15.2, 1.30, 0]]) {
       const [x, z, scale, rotation] = drift;
       stoneGeometry(x * direction, z, scale, rotation * direction);
@@ -241,7 +243,7 @@ export function addMuseumForecourt(m: MuseumBuilder) {
   winterTree(24.30, 6.74, 1.47, 3.54);
   winterTree(-24.9, -12.7, 1.30, 2.71);
   winterTree(24.4, -12.45, 1.27, 0.88);
-  pathLamp(22.9, 16.4, .91, true);
+  pathLamp(24.75, 18.67, .91, true);
   pathLamp(23.4, -.9, .75, false);
   pathLamp(-27.1, 7.3, .79, false);
   marker(7.06, 15.6, '← 主入口');

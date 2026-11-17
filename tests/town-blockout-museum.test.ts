@@ -99,6 +99,26 @@ test('museum is wider while fine exhibit geometry stays on the 1/64 metre world 
   }
 });
 
+test('east forecourt lamps leave the full hall-road walking corridor clear', () => {
+  const [start, end] = layout.roads.find(({ id }) => id === 'hall')!.points;
+  const dx = end[0] - start[0], dn = end[1] - start[1];
+  const length = Math.hypot(dx, dn);
+  const lampColliders = colliders.filter(({ min, max }) =>
+    max[0] - min[0] > .74 && max[0] - min[0] < .87 &&
+    max[1] - min[1] > .9 && max[1] - min[1] < 1.05);
+  const east = lampColliders.filter(({ min, max }) => min[0] > 352 && min[2] > -260 && max[2] < -254);
+  assert.equal(east.length, 2);
+  for (const { min, max } of east) {
+    const x = (min[0] + max[0]) / 2, n = -(min[2] + max[2]) / 2;
+    const centerDistance = Math.abs((n - start[1]) * dx - (x - start[0]) * dn) / length;
+    const footprint = ((max[0] - min[0]) * Math.abs(dn) + (max[2] - min[2]) * Math.abs(dx)) / (2 * length);
+    assert.ok(centerDistance - footprint - .27 >= 3, `forecourt lamp at ${x}, ${n}`);
+  }
+  const west = townPoint([-18.65, 17.85]);
+  assert.ok(lampColliders.some(({ min, max }) =>
+    Math.abs((min[0] + max[0]) / 2 - west.x) < 1e-9 && Math.abs(-(min[2] + max[2]) / 2 - west.north) < 1e-9));
+});
+
 test('museum entrance and both rows of month exhibits are walkable', () => {
   assert.equal(monthStops.length, 12);
   assert.deepEqual(monthStops.map(({ month }) => month), Array.from({ length: 12 }, (_, i) => i + 1));

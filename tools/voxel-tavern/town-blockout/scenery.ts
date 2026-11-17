@@ -4,6 +4,7 @@ import {
   Points, PointsMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
 } from 'three';
 import { canEnter, layout } from './terrain';
+import { roadCorridorKeepClear } from './road-clearance';
 
 type Position = [x: number, y: number, z: number];
 type Instance = { at: Position; scale: Position; tint?: string };
@@ -110,12 +111,18 @@ export function addScenery(group: Group, grid: Ground) {
       const length = Math.hypot(dx, dn);
       while (nextLamp <= length) {
         const offset = (road.width / 2 + 1) * side;
-        const x = a[0] + (dx * nextLamp - dn * offset) / length;
-        const north = a[1] + (dn * nextLamp + dx * offset) / length;
+        let x = a[0] + (dx * nextLamp - dn * offset) / length;
+        let north = a[1] + (dn * nextLamp + dx * offset) / length;
+        if (roadCorridorKeepClear(x, north, .75)) {
+          // Try the shoulder before dropping a lamp at a junction or bridge approach.
+          x -= dn * side / length;
+          north += dx * side / length;
+        }
         const cell = Math.round(north) * grid.gridWidth + Math.round(x);
         const inPlot = layout.plots.some(({ origin, footprint }) =>
           Math.abs(x - origin[0]) <= footprint[0] / 2 + .7 && Math.abs(north - origin[1]) <= footprint[1] / 2 + .7);
         if (grid.surfaces[cell] === 0 && canEnter(x, north) && !inPlot
+          && !roadCorridorKeepClear(x, north, .75)
           && blockers.every(b => Math.hypot(x - b.x, north - b.n) > 4)) {
           lamp(x, grid.heightAt(x, north), north);
         }

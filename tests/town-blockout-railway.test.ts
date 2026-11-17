@@ -7,7 +7,7 @@ import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 
 const grid = createTerrainGrid();
 
-function roadHeadroom(id: 'station-approach' | 'hot-spring-approach', colliders: Box[]) {
+function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-forest-approach', colliders: Box[]) {
   const road = extensionRoads.find(road => road.id === id)!;
   let minimum = Infinity;
   for (const [i, [ax, an]] of road.points.slice(0, -1).entries()) {
@@ -73,6 +73,8 @@ test('raised railway leaves walking headroom and supports both banks of the bath
   const railSolids = train.group.userData.colliders as Box[];
   const stationRoadClearance = roadHeadroom('station-approach', railSolids);
   const bathRoadClearance = roadHeadroom('hot-spring-approach', railSolids);
+  const forestRoadClearance = roadHeadroom('north-forest-approach', railSolids);
+  assert.ok(forestRoadClearance >= 1.95, `north forest approach headroom ${forestRoadClearance}`);
   assert.ok(stationRoadClearance >= 1.95 && stationRoadClearance < 3, `station road headroom ${stationRoadClearance}`);
   assert.ok(bathRoadClearance >= 5 && bathRoadClearance < 7, `bath road headroom ${bathRoadClearance}`);
 

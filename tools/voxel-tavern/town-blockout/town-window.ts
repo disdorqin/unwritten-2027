@@ -27,6 +27,8 @@ const frameMaterial = new MeshLambertMaterial();
 const glassMaterial = new MeshBasicMaterial();
 const windowGeometry = new BoxGeometry();
 const halfOpen = Math.PI * .39;
+const standStep = .15;
+const standAttempts = 6;
 const calm = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 type Part = { slot: number; transform: Matrix4; glass: boolean; tint: Color };
@@ -130,7 +132,11 @@ function buildWindows(root: Group, definitions: TownWindow[]) {
   };
 }
 
-export function createWindowActivity(context: TownActivityContext, architecture: ReadonlyMap<string, Group>): TownActivity {
+export function createWindowActivity(
+  context: TownActivityContext,
+  architecture: ReadonlyMap<string, Group>,
+  isObstructed: (east: number, north: number, feet: number) => boolean,
+): TownActivity {
   const spots: TownActivity['spots'] = [];
   const updates: ((dt: number) => void)[] = [];
   for (const [id, root] of architecture) {
@@ -141,7 +147,18 @@ export function createWindowActivity(context: TownActivityContext, architecture:
     definitions.forEach((definition, index) => {
       const { x, y, z, yaw, ground, approach } = definition;
       const [approachX, approachZ] = approach ?? [x - 1.4 * Math.sin(yaw), z - 1.4 * Math.cos(yaw)];
-      const stand = root.localToWorld(new Vector3(approachX, ground, approachZ));
+      const first = root.localToWorld(new Vector3(approachX, ground, approachZ));
+      // Continue from the window toward the player side, in world metres even for scaled landmarks.
+      const inward = new Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)).transformDirection(root.matrixWorld);
+      const stand = first.clone();
+      for (let step = 1; isObstructed(stand.x, -stand.z, stand.y); step++) {
+        if (step > standAttempts) {
+          console.warn(`[town-window] Skipped blocked interaction for ${id} window ${index + 1}`,
+            [first.x, -first.z, first.y]);
+          return;
+        }
+        stand.copy(first).addScaledVector(inward, step * standStep);
+      }
       const face = root.localToWorld(new Vector3(x, y, z));
       spots.push({
         x: stand.x, n: -stand.z, ground: stand.y, range: 1.34,

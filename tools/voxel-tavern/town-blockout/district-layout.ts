@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { buildDistrictHousing, type DistrictTheme } from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
+import { bridgeMouthKeepClear } from './road-clearance';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Style = Parameters<typeof buildDistrictHousing>[0];
@@ -94,7 +95,7 @@ export function addDistrictHousing(
 
   function openSpace(x: number, n: number, radius: number) {
     const cx = Math.round(x), cn = Math.round(n);
-    return !outside(x, n, radius) && grid.surfaces[cn * grid.gridWidth + cx] !== 4
+    return !outside(x, n, radius) && !bridgeMouthKeepClear(x, n, radius) && grid.surfaces[cn * grid.gridWidth + cx] !== 4
       && !(x > west - radius && x < east + radius && n > south - radius && n < north + radius)
       && !bounds.some(plot => within(x, n, plot, radius + 1.1))
       && !waterfront.some(plot => within(x, n, plot, radius));

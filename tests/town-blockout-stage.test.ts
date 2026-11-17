@@ -3,6 +3,27 @@ import { test } from 'node:test';
 import type { TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { createStageActivity } from '../tools/voxel-tavern/town-blockout/stage-activity.ts';
 import { sampleStagePose, stageClock, stageProgram, stageProgramDuration } from '../tools/voxel-tavern/town-blockout/stage-choreography.ts';
+import { buildVillageLandmark } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
+import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
+import { layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+
+test('the stage front tread gives a direct route onto a single deck', () => {
+  const plot = layout.plots.find(({ id }) => id === 'stage')!;
+  const [east, north, elevation] = plot.origin;
+  const stage = buildVillageLandmark(plot);
+  stage.position.set(east, elevation, -north);
+  const { floors } = readWalkGeometry(stage);
+  assert.equal(floors.length, 2);
+
+  const centerlineFloors = new Set<number>();
+  for (let northAt = plot.connect[1]; northAt >= north; northAt -= .1) {
+    const height = Math.max(elevation, ...floors
+      .filter(({ min, max }) => east >= min[0] && east <= max[0] && -northAt >= min[2] && -northAt <= max[2])
+      .map(({ max }) => max[1]));
+    centerlineFloors.add(height - elevation);
+  }
+  assert.deepEqual([...centerlineFloors].map(height => Math.round(height * 100)), [0, 28, 52]);
+});
 
 test('five-minute stage repeat uses continuous formations, closing bow and two prop intervals', () => {
   assert.deepEqual(stageProgram.map(({ id }) => id), ['opening', 'duet', 'solo', 'props', 'finale']);

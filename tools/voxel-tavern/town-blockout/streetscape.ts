@@ -4,6 +4,7 @@ import {
   type Material,
 } from 'three';
 import { bridgeAt, isWater, layout, riverX, waterHeight, type createTerrainGrid } from './terrain';
+import { roadCorridorKeepClear } from './road-clearance';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Dimensions = [width: number, height: number, depth: number];
@@ -48,9 +49,13 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     part('box', x, y, n, size, color, yaw);
   }
 
+  function protectedArea(x: number, n: number, radius: number) {
+    return keepClear(x, n, radius) || roadCorridorKeepClear(x, n, radius);
+  }
+
   function reserve(x: number, n: number, radius: number, colliderRadius = 0) {
     if (!Number.isFinite(x + n) || x < 2 + radius || x > layout.width - 2 - radius
-      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || keepClear(x, n, radius)
+      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || protectedArea(x, n, radius)
       || grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 4
       || footprints.some(other => Math.hypot(x - other.x, n - other.n) < radius + other.radius)) return false;
     footprints.push({ x, n, radius });
@@ -229,7 +234,7 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     const ay = grid.heightAt(ax, an), by = grid.heightAt(bx, bn);
     if (Math.abs(ay - by) > 2.8 || [0, .25, .5, .75, 1].some(t => {
       const [east, north] = at(t);
-      return keepClear(east, north, .5) || isWater(east, north);
+      return protectedArea(east, north, .5) || isWater(east, north);
     })) return;
     if (!reserve(ax, an, .65) || !reserve(bx, bn, .65)) return;
     for (const [xx, nn, yy] of [[ax, an, ay], [bx, bn, by]]) {

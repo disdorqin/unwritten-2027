@@ -265,100 +265,6 @@ function lighthouse() {
   return group;
 }
 
-// A radial platform, striped crown, and the old six wooden horses carry over
-// from build-festival and festival-scene, with the B24 brass gallery lights.
-function carousel() {
-  const { box, cylinder, panel, beam, solid, floor, finish } = model();
-  const rotating = model();
-  cylinder(0, .14, 0, 6.76, 6.76, .28, 'stone', 32);
-  rotating.cylinder(0, .39, 0, 6.14, 6.37, .28, 'deepRed', 32);
-  rotating.cylinder(0, .56, 0, 6.04, 6.14, .13, 'yellow', 32);
-  rotating.cylinder(0, .63, 0, 5.93, 5.93, .15, 'oak', 32);
-  cylinder(0, 3.55, 0, 1.03, 1.03, 5.85, 'deepRed', 12);
-  cylinder(0, 2.15, 0, 1.09, 1.09, .16, 'yellow', 12);
-  cylinder(0, 3.71, 0, 1.09, 1.09, .16, 'yellow', 12);
-  cylinder(0, 5.15, 0, 1.09, 1.09, .16, 'yellow', 12);
-  const radial = (angle: number, y: number, r: number): Point => [Math.sin(angle) * r, y, Math.cos(angle) * r];
-  const slices = 16;
-  for (let i = 0; i < slices; i++) {
-    const a = i * Math.PI * 2 / slices;
-    const b = (i + 1) * Math.PI * 2 / slices;
-    const paint = i % 2 ? 'red' : 'white';
-    panel([radial(a, 8.62, .55), radial(b, 8.62, .55), radial(b, 7.13, 3.55), radial(a, 7.13, 3.55)], paint);
-    panel([radial(a, 7.13, 3.55), radial(b, 7.13, 3.55), radial(b, 6.18, 6.3), radial(a, 6.18, 6.3)], paint);
-    panel([radial(a, 6.18, 6.3), radial(b, 6.18, 6.3), radial(b, 5.59, 6.29), radial(a, 5.59, 6.29)], 'red');
-    beam(radial(a, 6.19, 6.31), radial(b, 6.19, 6.31), .1, 'yellow');
-    beam(radial(a, 5.59, 6.31), radial(b, 5.59, 6.31), .11, 'yellow');
-    for (let light = 0; light < 5; light++) {
-      const angle = a + (b - a) * (light + .1) / 5;
-      const [x, , z] = radial(angle, 0, 6.31);
-      box(x, 5.74 + Math.sin(light * Math.PI / 4) * .11, z, .12, .17, .12, 'amber', angle);
-    }
-    const [x, , z] = radial((a + b) / 2, 0, 6.32);
-    box(x, 5.98, z, .22, .2, .17, 'amber', (a + b) / 2);
-  }
-  cylinder(0, 8.69, 0, .56, .67, .23, 'yellow');
-  cylinder(0, 9.02, 0, .14, .33, .43, 'amber', 8);
-  const rideSeat = new Group();
-  rideSeat.name = 'carousel-seat-view';
-  for (let i = 0; i < 6; i++) {
-    const a = i * Math.PI / 3 + Math.PI / 6;
-    const r = 4.24;
-    const [x, , z] = radial(a, 0, r);
-    rotating.cylinder(x, 3.12, z, .066, .066, 4.98, 'yellow', 8);
-    if (i === 0) {
-      rideSeat.position.set(x - Math.sin(a) * .24, 3.96, z - Math.cos(a) * .24);
-      rideSeat.rotation.y = a + Math.PI / 3;
-    }
-    for (const angle of [a - .21, a, a + .21]) {
-      const [lightX, , lightZ] = radial(angle, 0, 6.26);
-      rotating.box(lightX, .4, lightZ, .15, .097, .12, 'amber', angle);
-    }
-    const coat = i % 3 !== 1 ? 'white' : 'oak';
-    const piece = (dx: number, y: number, dz: number, w: number, h: number, d: number, paint: Paint) =>
-      rotating.box(x + Math.cos(a) * dx + Math.sin(a) * dz, y, z - Math.sin(a) * dx + Math.cos(a) * dz, w, h, d, paint, a);
-    piece(0, 2.03, 0, .68, .61, 1.32, coat);
-    piece(0, 2.31, .48, .45, .84, .49, coat);
-    piece(0, 2.75, .65, .48, .39, .71, coat);
-    piece(0, 2.41, -.09, .72, .16, .62, i % 2 ? 'red' : 'iron');
-    piece(0, 2.52, -.1, .44, .09, .44, 'yellow');
-    piece(0, 1.96, -.69, .28, .39, .38, 'wood');
-    for (const foot of [-.23, .23]) {
-      piece(foot, 2.96, .54, .1, .19, .13, 'wood');
-      for (const dz of [-.42, .5]) {
-        piece(foot, 1.65, dz, .16, .34, .16, coat);
-        piece(foot, 1.42, dz + .05, .19, .12, .27, 'wood');
-      }
-    }
-  }
-  // Removable south entry tread and open gap in the balustrade.
-  box(0, .14, 6.47, 2.16, .28, .97, 'oak');
-  floor(0, .28, 6.47, 2.16, .97, .28);
-  box(0, .35, 6.2, 2.16, .22, .74, 'oak');
-  floor(0, .46, 6.2, 2.16, .74, .22);
-  floor(0, .705, 0, 2.6, 11.86, .15);
-  floor(0, .705, 0, 8.36, 8.36, .15);
-  floor(0, .705, 0, 11, 4.2, .15);
-  solid(0, 6.48, 0, 1.94, 1.94, 5.85);
-  for (let i = 2; i <= 30; i++) {
-    const a = i * Math.PI / 16;
-    const b = (i + 1) * Math.PI / 16;
-    const [x, , z] = radial(a, 0, 5.85);
-    box(x, 1.21, z, .13, .98, .13, 'wood');
-    const [ex, , ez] = radial(b, 0, 5.85);
-    beam(radial(a, 1.69, 5.85), radial(b, 1.69, 5.85), .1, 'yellow');
-    solid((x + ex) / 2, 1.76, (z + ez) / 2, Math.abs(ex - x) + .15, Math.abs(ez - z) + .15, 1.2);
-  }
-  const group = finish();
-  const ridePivot = rotating.finish();
-  ridePivot.name = 'carousel-rotating-stage';
-  ridePivot.add(rideSeat);
-  group.add(ridePivot);
-  group.userData.ridePivot = ridePivot;
-  group.userData.rideSeat = rideSeat;
-  return group;
-}
-
 // B24 barrel-vault glasshouse, open west entrance and a potted-palm aisle.
 function glasshouse() {
   const { box, cylinder, panel, beam, solid, floor, finish } = model();
@@ -453,7 +359,6 @@ function glasshouse() {
 
 export function buildLakesideLandmark(plot: TownPlot): Group {
   if (plot.id === 'lighthouse') return lighthouse();
-  if (plot.id === 'carousel') return carousel();
   return glasshouse();
 }
 

@@ -53,6 +53,7 @@ import { createTownPassport } from './town-passport';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
+import { findNearestLegalSpawn } from './town-spawn';
 import { createTownSnowCover } from './town-snow-cover';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
@@ -220,9 +221,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   architecture.set(plot.id, group);
   scene.add(group);
 }
-for (const plot of layout.plots) {
-  if (plot.id !== 'carousel') place(plot, builders[plot.id](plot));
-}
+for (const plot of layout.plots) place(plot, builders[plot.id](plot));
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
 function museumToWorld(localX: number, localY: number, localZ: number) {
@@ -384,9 +383,9 @@ const points = new Map<string, number[]>([
   ['南河岸', [266, 120]],
   ['北河岸', [212, 400]],
 ]);
-const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
+const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台'];
 layout.plots.forEach((plot, i) => {
-  if (plot.id !== 'carousel') points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect);
+  points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect);
 });
 for (const key of points.keys()) selector.add(new Option(key, key));
 
@@ -456,11 +455,10 @@ function pauseForPanel() {
 }
 const museumVisit = createMuseumVisit(pauseForPanel, () => {
   const [viewX, viewY, viewZ] = museumToWorld(terraceStop.x, 5.65, terraceStop.z);
-  x = viewX;
-  n = -viewZ;
-  ground = viewY;
-  airHeight = undefined;
-  riseSpeed = 0;
+  if (!settleTownLanding(viewX, -viewZ, viewY)) {
+    announceActivity('露台落点被挡住了');
+    return;
+  }
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
   photoFilename = 'UNWRITTEN-2027-museum-terrace.png';
@@ -507,8 +505,10 @@ placeCard.addEventListener('close', () => renderer.domElement.focus());
 function leaveRide() {
   if (!boardingGround) return;
   railway.disembark();
-  ({ x, n, ground, yaw } = boardingGround);
+  const platform = boardingGround;
   boardingGround = undefined;
+  if (!settleTownLanding(platform.x, platform.n, platform.ground)) settleTownLanding(platform.x, platform.n);
+  yaw = platform.yaw;
   pitch = 0;
 }
 function leaveSeat() {
@@ -550,7 +550,6 @@ const iceFishing = createIceFishingActivity({ ...activityContext, announce: anno
 const activities: TownActivity[] = [
   createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
-  (context: TownActivityContext) => createWindowActivity(context, architecture),
 ]
   .map(create => {
     const activity = create({
@@ -928,9 +927,10 @@ activitySpots.push(
   localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
     const [, deck, opening] = towerStops.lookout;
     const center = tower.localToWorld(new Vector3(0, deck, opening));
-    x = center.x;
-    n = -center.z;
-    ground = center.y;
+    if (!settleTownLanding(center.x, -center.z, center.y)) {
+      announceActivity('瞭望台落点被挡住了');
+      return;
+    }
     activityContext.face(223, 179, 75);
     photoFilename = 'UNWRITTEN-2027-clocktower.png';
   }),
@@ -1029,6 +1029,10 @@ function mode(next: boolean) {
   leaveSeat();
   resetMovement();
   activityStatus.textContent = '';
+  if (next) {
+    jump();
+    next = settleTownLanding();
+  }
   walking = next;
   museumInspection.close();
   museumLaunch.close();
@@ -1039,8 +1043,7 @@ function mode(next: boolean) {
   element('help').textContent = next
     ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。')
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
-  if (next) jump();
-  else {
+  if (!next) {
     camera.position.set(540, 494, 177);
     controls.target.set(320, 20, -254);
     controls.update();
@@ -1163,7 +1166,6 @@ addEventListener('resize', () => {
 });
 const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchParams(location.search).get('visit') === 'museum';
 if (startInMuseum) selector.value = '纪念馆入口';
-mode(startInMuseum);
 let previous = performance.now();
 let widePanorama = false;
 function walkable(x: number, n: number) {
@@ -1228,6 +1230,26 @@ function obstructed(east: number, north: number, feet: number) {
     colliders.some(intersects) || floors.some(intersects);
 }
 
+function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number) {
+  function dryGround(east: number, north: number) {
+    if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
+      north > worldBounds.depth - bodyRadius || !walkable(east, north)) return undefined;
+    if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
+    const base = heightHint ?? surfaceAt(east, north);
+    const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+    if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet)) return undefined;
+    return Number.isFinite(feet) ? feet : undefined;
+  }
+  const [plazaEast, plazaNorth] = layout.plaza.spawn;
+  const landing = findNearestLegalSpawn({ x: targetEast, n: targetNorth }, dryGround)
+    ?? (heightHint === undefined ? findNearestLegalSpawn({ x: plazaEast, n: plazaNorth }, dryGround) : undefined);
+  if (!landing) return false;
+  ({ x, n, ground } = landing);
+  airHeight = undefined;
+  riseSpeed = 0;
+  return true;
+}
+
 function tryMove(nextX: number, nextN: number) {
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
@@ -1285,6 +1307,13 @@ function faceFrom(east: number, north: number, height: number, heading: number, 
   camera.position.set(east, height, -north);
   camera.lookAt(east + Math.sin(heading) * Math.cos(tilt), height + Math.sin(tilt), -north - Math.cos(heading) * Math.cos(tilt));
 }
+const windowActivity = createWindowActivity(
+  { ...activityContext, announce: announceActivity }, architecture,
+  (east, north, feet) => !walkable(east, north) || obstructed(east, north, feet),
+);
+activities.push(windowActivity);
+activitySpots.push(...windowActivity.spots);
+mode(startInMuseum);
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);

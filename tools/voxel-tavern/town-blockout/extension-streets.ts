@@ -89,6 +89,19 @@ function plate(x: number, n: number, y: number, w: number, h: number, d: number)
   return { min: [x - w / 2, y, -n - d / 2], max: [x + w / 2, y + h, -n + d / 2] };
 }
 
+function courtyardFootprint(variant: number) {
+  const bench = variant % 3 === 0;
+  // The centered bench envelope includes the rear backrest at local n + .41 m.
+  return bench ? { bench, width: 2.42, depth: .82 }
+    : { bench, width: (variant % 2 ? 1.44 : 2.48) + .15, depth: 1.23 };
+}
+
+export function courtyardCollisionSize(variant: number, yaw: number) {
+  const { width, depth } = courtyardFootprint(variant);
+  const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+  return { width: width * c + depth * s + .1, depth: width * s + depth * c + .1 };
+}
+
 function batch(group: Group, items: Piece[], shape: Shape) {
   if (!items.length) return;
   const geometry = shape === 'pine' ? pineGeometry : boxGeometry;
@@ -438,23 +451,25 @@ export function buildExtensionStreets(
     const cell = cellAt(x, n);
     const ground = districtTints[district].foundation;
     const wood = district === 'forest' ? '#9a7657' : '#805d4d';
-    if (variant % 3 === 0) {
-      add(cell, x, y + .43, n, 2.42, .21, .79, wood, yaw);
+    const footprint = courtyardFootprint(variant);
+    if (footprint.bench) {
+      add(cell, x, y + .43, n, footprint.width, .21, .79, wood, yaw);
       add(cell, x, y + .56, n, 2.41, .06, .72, blueSnow, yaw, true);
       for (const side of [-1, 1]) {
         add(cell, x + Math.cos(yaw) * side * .91, y + .18, n + Math.sin(yaw) * side * .91, .23, .38, .76, ground, yaw);
       }
       add(cell, x - Math.sin(yaw) * .34, y + .88, n + Math.cos(yaw) * .34, 2.38, .21, .14, wood, yaw);
     } else {
-      const w = variant % 2 ? 1.44 : 2.48;
+      const w = footprint.width - .15;
       add(cell, x, y + .28, n, w, .56, 1.09, ground, yaw);
-      add(cell, x, y + .58, n, w + .15, .17, 1.23, '#687d87', yaw);
+      add(cell, x, y + .58, n, footprint.width, .17, footprint.depth, '#687d87', yaw);
       for (let i = 0; i < 3; i++) {
         add(cell, x + Math.cos(yaw) * (i - 1) * w * .27, y + .82, n + Math.sin(yaw) * (i - 1) * w * .27,
           .43 + .1 * i, .58, .57, canopy[i], yaw, true, 'pine');
       }
     }
-    colliders.push(plate(x, n, y, Math.abs(Math.cos(yaw)) * 2.18 + .42, .79, Math.abs(Math.sin(yaw)) * 2.18 + .42));
+    const collision = courtyardCollisionSize(variant, yaw);
+    colliders.push(plate(x, n, y, collision.width, .79, collision.depth));
     props.push([x, n]);
   }
 

@@ -210,10 +210,16 @@ export function buildTavernLandmark(plot: TownPlot) {
     const [x, y, z] = transform(...at);
     const eastWall = at[0] === 6.46;
     const galleryPull = eastWall && ground === 8 && at[2] === 2;
-    const inwardX = galleryPull ? 3.35 : at[0] - Math.sin(yaw) * 1.33;
-    const inwardZ = at[2] - Math.cos(yaw) * 1.54;
+    let inwardX = galleryPull ? 3.35 : at[0] - Math.sin(yaw) * 1.33;
+    let inwardZ = at[2] - Math.cos(yaw) * 1.54;
+    // Keep the stand on the aisle beside the chairs and the upper gallery rail.
+    if (yaw === 0 && ground === 3) [inwardX, inwardZ] = at[0] < 0 ? [-4.55, 4.38] : [3.95, 4.24];
+    if (yaw === 0 && ground === 8 && at[0] > 0) inwardX = 3.52;
+    if (yaw === -Math.PI / 2 && ground === 3 && at[2] === -2) inwardX = -5.32;
+    // The footprint meets the uphill tread before its centre crosses the riser.
+    const stairProbeZ = inwardZ - .25;
     const tread = eastWall && !galleryPull && (ground === 8 || at[2] === 2)
-      ? stairs.find(([, , near, , , far]) => inwardZ >= near && inwardZ <= far) : undefined;
+      ? stairs.find(([, , near, , , far]) => stairProbeZ >= near && stairProbeZ <= far) : undefined;
     const [approachX, walkHeight, approachZ] = transform(inwardX, tread?.[4] ?? ground, inwardZ);
     const [edgeX, , edgeZ] = transform(at[0] + (axis === 0 ? 1.90 : 0), at[1], at[2] + (axis === 2 ? 1.90 : 0));
     addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
