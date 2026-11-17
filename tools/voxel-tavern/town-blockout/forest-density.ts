@@ -77,6 +77,23 @@ function batch(parent: Group, geometry: BufferGeometry, material: MeshLambertMat
   parent.add(mesh);
 }
 
+const forestRenderCell = 96;
+
+function batchByCell(parent: Group, geometry: BufferGeometry, material: MeshLambertMaterial, items: Instance[], name: string) {
+  const cells = new Map<string, Instance[]>();
+  for (const item of items) {
+    const east = Math.floor(item.at[0] / forestRenderCell);
+    const north = Math.floor(-item.at[2] / forestRenderCell);
+    const key = `${east},${north}`;
+    const cell = cells.get(key);
+    if (cell) cell.push(item);
+    else cells.set(key, [item]);
+  }
+  for (const [key, cell] of cells) {
+    batch(parent, geometry, material, cell, `${name} [${key}]`);
+  }
+}
+
 export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepClear) {
   let seed = 47831;
   function random() {
@@ -230,13 +247,10 @@ export function addForestDensity(parent: Group, grid: Terrain, keepClear: KeepCl
   }
 
   const material = new MeshLambertMaterial({ color: '#ffffff', flatShading: true });
-  batch(parent, new CylinderGeometry(.28, .60, 1, 5), material, trunks, 'Forest trunks and branches');
-  batch(parent, shape([[-.32, .14, .025], [-.27, .96, .065], [-.05, .80, .044], [.38, .15, .014], [.50, 0, 0]], 7), material, crowns, 'Snow forest pine crowns');
-  batch(parent, shape([[-.17, .86, .067], [-.082, .86, .055], [.38, .173, .013], [.522, 0, 0]], 7), material, snowCaps, 'Pine bough snow');
-  const angularStone = new IcosahedronGeometry(1, 0);
-  batch(parent, angularStone, material, rocks, 'Granite in the snow');
-  batch(parent, angularStone, material, rockSnow, 'Snow on granite');
-  batch(parent, angularStone, material, buds, 'Flowering winter branches');
+  batchByCell(parent, new CylinderGeometry(.28, .60, 1, 5), material, trunks, 'Forest trunks and branches');
+  batchByCell(parent, shape([[-.32, .14, .025], [-.27, .96, .065], [-.05, .80, .044], [.38, .15, .014], [.50, 0, 0]], 7), material, crowns, 'Snow forest pine crowns');
+  batchByCell(parent, shape([[-.17, .86, .067], [-.082, .86, .055], [.38, .173, .013], [.522, 0, 0]], 7), material, snowCaps, 'Pine bough snow');
+  batchByCell(parent, new IcosahedronGeometry(1, 0), material, [...rocks, ...rockSnow, ...buds], 'Forest stones, snow and flowers');
   return {
     count,
     blocked: (x: number, north: number) => nearby(x, north, 4, (distance, _spacing, collision) => distance < collision + .24),

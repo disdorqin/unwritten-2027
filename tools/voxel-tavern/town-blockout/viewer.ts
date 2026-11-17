@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -13,7 +13,8 @@ import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark } from './landmark-village';
-import { canEnter, createTerrainGrid, gridStep, layout, riverX, waterHeight } from './terrain';
+import { canEnter, createTerrainGrid, layout, riverX, waterHeight, worldBounds } from './terrain';
+import { addTerrainMeshes } from './terrain-mesh';
 import { addDistrictHousing } from './district-layout';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
@@ -87,48 +88,11 @@ function setNight(night: boolean) {
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
 
-const color = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
-const length = (grid.gridWidth - 1) * (grid.gridDepth - 1) * 18;
-const position = new Float32Array(length);
-const terrainColors = new Float32Array(length);
-let offset = 0;
-for (let j = 0; j < grid.gridDepth - 1; j++) {
-  for (let i = 0; i < grid.gridWidth - 1; i++) {
-    const a = j * grid.gridWidth + i;
-    const b = a + 1;
-    const c = a + grid.gridWidth;
-    const d = c + 1;
-    for (const tri of [[a, b, c], [b, d, c]]) {
-      const [s0, s1, s2] = tri.map(vertex => grid.surfaces[vertex]);
-      const material = s0 === s1 || s0 === s2 ? s0 : s1 === s2 ? s1 : 0;
-      const shade = 1 - (Math.sin(i * 83.01 + j * 39.17) + 1) * (material === 0 ? .027 : .018);
-      for (const index of tri) {
-        position[offset] = index % grid.gridWidth * gridStep;
-        position[offset + 1] = grid.elevation[index];
-        position[offset + 2] = -Math.floor(index / grid.gridWidth) * gridStep;
-        terrainColors[offset] = color[material].r * shade;
-        terrainColors[offset + 1] = color[material].g * shade;
-        terrainColors[offset + 2] = color[material].b * shade;
-        offset += 3;
-      }
-    }
-  }
-}
-const mesh = new BufferGeometry();
-mesh.setAttribute('position', new BufferAttribute(position, 3));
-mesh.setAttribute('color', new BufferAttribute(terrainColors, 3));
-mesh.computeVertexNormals();
-scene.add(new Mesh(mesh, new MeshLambertMaterial({ vertexColors: true })));
+const prepareTerrain = addTerrainMeshes(scene, grid);
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });
 const water = new MeshBasicMaterial({ color: '#315975' });
-function box(x: number, y: number, n: number, w: number, h: number, d: number, mat: MeshLambertMaterial) {
-  const item = new Mesh(new BoxGeometry(w, h, d), mat);
-  item.position.set(x, y, -n);
-  scene.add(item);
-  return item;
-}
 
 function waterStrip(points: { n: number; left: number; right: number }[]) {
   const vertices: number[] = [];
@@ -142,13 +106,18 @@ function waterStrip(points: { n: number; left: number; right: number }[]) {
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(vertices), 3));
   scene.add(new Mesh(geometry, water));
 }
-waterStrip(Array.from({ length: layout.depth + 1 }, (_, n) => ({ n, left: riverX(n) - 8.05, right: riverX(n) + 8.05 })));
+waterStrip(Array.from({ length: worldBounds.depth + 1 }, (_, n) => ({ n, left: riverX(n) - 8.05, right: riverX(n) + 8.05 })));
 const [[inletX, inletNorth], [lakeX, lakeNorth]] = layout.lake.inlet;
 const inlet = new Mesh(new BoxGeometry(Math.hypot(lakeX - inletX, lakeNorth - inletNorth), .08, 7.9), water);
 inlet.position.set((inletX + lakeX) / 2, waterHeight, -(inletNorth + lakeNorth) / 2);
 inlet.rotation.y = Math.atan2(lakeNorth - inletNorth, lakeX - inletX);
 scene.add(inlet);
+const bridgeGeometry = new BoxGeometry();
 for (const bridge of layout.bridges) {
+  const parts = new Map([[stone, [] as Matrix4[]], [timber, [] as Matrix4[]]]);
+  function box(x: number, y: number, n: number, w: number, h: number, d: number, material: MeshLambertMaterial) {
+    parts.get(material)!.push(new Matrix4().makeScale(w, h, d).setPosition(x, y, -n));
+  }
   const center = (bridge.west + bridge.east) / 2;
   const length = bridge.east - bridge.west;
   box(center, bridge.height - .39, bridge.north, length, .64, 8, stone);
@@ -160,6 +129,13 @@ for (const bridge of layout.bridges) {
     for (let x = bridge.west; x <= bridge.east; x += 2) box(x, bridge.height + .55, n, .25, 1.1, .25, stone);
   }
   for (const x of [center - 5, center + 5]) box(x, (bridge.height + 3.5) / 2, bridge.north, 1.5, bridge.height - 3.5, 6.75, stone);
+  for (const [material, transforms] of parts) {
+    const batch = new InstancedMesh(bridgeGeometry, material, transforms.length);
+    batch.name = `bridge-${bridge.id}-${material === stone ? 'stone' : 'timber'}`;
+    transforms.forEach((matrix, index) => batch.setMatrixAt(index, matrix));
+    batch.computeBoundingSphere();
+    scene.add(batch);
+  }
 }
 
 type Builder = (plot: TownPlot) => Group;
@@ -262,6 +238,8 @@ const points = new Map<string, number[]>([
   ['西南河畔街巷', [161.5, 165.5]],
   ['东北坡地街巷', [319, 221]],
   ['冰湖雪球场', [350, 92.5]],
+  ['东侧扩建步道', [443, 221]],
+  ['北侧扩建步道', [93, 378]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '旋转木马', '暖房', '灯塔', '舞台'];
 layout.plots.forEach((plot, i) => points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect));
@@ -446,7 +424,10 @@ actionButton.onclick = interact;
 function jump() {
   [x, n] = points.get(selector.value)!;
   const target = layout.plots[plotLabels.indexOf(selector.value)];
-  const destinations: Record<string, readonly [number, number]> = { '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79] };
+  const destinations: Record<string, readonly [number, number]> = {
+    '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
+    '东侧扩建步道': [456, 222], '北侧扩建步道': [93, 384],
+  };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
   ground = grid.heightAt(x, n);
@@ -737,6 +718,7 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  prepareTerrain(camera.position.x, -camera.position.z, !walking);
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   updateMuseumLights(dt, camera.position);
   const local = museumPosition();

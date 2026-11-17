@@ -1,6 +1,7 @@
 import layout from './layout.json';
+import { northernRiver, sampleExtension, worldBounds } from './town-extension';
 
-export { layout };
+export { layout, worldBounds };
 
 type Point = { x: number; north: number; height: number };
 type Segment = { a: Point; dx: number; dn: number; dh: number; lengthSquared: number; halfWidth: number };
@@ -51,7 +52,7 @@ function nearestRoad(x: number, north: number) {
 }
 
 export function riverX(north: number) {
-  const points = layout.river;
+  const points = north > layout.depth ? northernRiver : layout.river;
   for (let i = 1; i < points.length; i++) {
     const [x0, n0] = points[i - 1];
     const [x1, n1] = points[i];
@@ -90,8 +91,8 @@ function raisedHill(x: number, north: number, cx: number, cn: number, rx: number
 }
 
 export const gridStep = 1;
-const gridWidth = layout.width / gridStep + 1;
-const gridDepth = layout.depth / gridStep + 1;
+const gridWidth = worldBounds.width / gridStep + 1;
+const gridDepth = worldBounds.depth / gridStep + 1;
 
 function sample(x: number, n: number) {
   const r = Math.abs(x - riverX(n));
@@ -127,10 +128,13 @@ export function createTerrainGrid() {
   const surfaces = new Uint8Array(elevation.length);
   for (let j = 0; j < gridDepth; j++) {
     for (let i = 0; i < gridWidth; i++) {
-      const cell = sample(i * gridStep, j * gridStep);
+      const east = i * gridStep, north = j * gridStep;
+      const cell = sample(east, north);
+      const outsideLegacy = east > layout.width || north > layout.depth;
+      const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      elevation[index] = cell.elevation;
-      surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : cell.road ? 1 : cell.plot ? 3 : 0;
+      elevation[index] = extension.elevation;
+      surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }
   function heightAt(x: number, north: number) {
@@ -153,7 +157,7 @@ export function createTerrainGrid() {
 }
 
 export function canEnter(x: number, n: number) {
-  if (x < 1 || x > layout.width - 1 || n < 1 || n > layout.depth - 1) return false;
+  if (x < 1 || x > worldBounds.width - 1 || n < 1 || n > worldBounds.depth - 1) return false;
   const bridge = bridgeAt(x, n);
   if (bridge && Math.abs(n - bridge.north) > 3.55) return false;
   return !!bridge || !isWater(x, n);

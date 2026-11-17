@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
 
 export type HousingStyle = 'alpine' | 'courtyard' | 'machiya' | 'shop';
+export type DistrictTheme = 'forest' | 'memorial' | 'market' | 'lakeside';
 
 type Block = {
   color: string;
@@ -31,23 +32,34 @@ const styles = {
   ],
 } as const;
 
+// Wall, frame, trim, roof and accent colors for the four neighborhoods at their original sites.
+const districtPalettes = {
+  forest: ['#875841', '#4b3128', '#ba916c', '#43494e', '#86513f'],
+  memorial: ['#c0cbd3', '#3b4b5a', '#d0dae0', '#4b5b69', '#4b7185'],
+  market: ['#a75141', '#654135', '#d8b58c', '#714f4b', '#953d36'],
+  lakeside: ['#b8a88b', '#485b64', '#e0d2b8', '#4b616f', '#47778a'],
+} as const satisfies Record<DistrictTheme, readonly [string, string, string, string, string]>;
+
 const geometry = new BoxGeometry();
 const blockMaterial = new MeshLambertMaterial();
 const glowMaterial = new MeshLambertMaterial({ emissive: '#ec9344', emissiveIntensity: .38 });
 const snow = '#e1ecf8';
 const shadedSnow = '#cfdfed';
 
-export function buildDistrictHousing(style: HousingStyle, width: number, depth: number, variant: number): Group {
+export function buildDistrictHousing(style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme): Group {
   const group = new Group();
   const pieces: Block[] = [];
   const windows: Block[] = [];
-  const [wall, beam, trim, tile, accent] = styles[style][Math.abs(Math.trunc(variant)) % 3];
+  const basePalette = styles[style][Math.abs(Math.trunc(variant)) % 3];
+  const [wall, beam, trim, tile, accent] = theme
+    ? districtPalettes[theme].map((color, i) => '#' + new Color(basePalette[i]).lerp(new Color(color), .82).getHexString())
+    : basePalette;
   const w = width;
   const d = depth;
   const front = d / 2;
   const back = -front;
   const glow = ['#ffc181', '#ffd3a1', '#ffbc76'][Math.abs(Math.trunc(variant)) % 3];
-  const masonry = style === 'courtyard' ? '#8a919d' : '#66717e';
+  const masonry = theme === 'lakeside' ? '#758892' : style === 'courtyard' ? '#8a919d' : '#66717e';
 
   function add(color: string, x: number, y: number, z: number, a: number, h: number, b: number, lit = false) {
     (lit ? windows : pieces).push({ color, center: [x, y, z], size: [a, h, b] });

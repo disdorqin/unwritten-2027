@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canEnter, createTerrainGrid, layout, riverX } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { canEnter, createTerrainGrid, layout, riverX, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { extensionRoads } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 
-const { heightAt } = createTerrainGrid();
+const { gridWidth, gridDepth, heightAt } = createTerrainGrid();
 
 test('town blockout roads and entrances are continuous on foot', () => {
   const approaches = layout.plots.map(plot => ({
@@ -42,4 +43,51 @@ test('the plaza stays flat and each crossing uses its bridge deck', () => {
     assert.equal(heightAt(riverX(north), north), height);
     assert.ok(!canEnter(riverX(north + 6), north + 6), bridge.id);
   }
+});
+
+test('town expansion keeps original landmark origins and increases the playable grid', () => {
+  assert.deepEqual(worldBounds, { width: 640, depth: 512 });
+  assert.deepEqual([gridWidth, gridDepth], [641, 513]);
+  assert.deepEqual([layout.width, layout.depth], [448, 384]);
+  assert.deepEqual(layout.plaza.spawn, [223, 180]);
+  assert.deepEqual(Object.fromEntries(layout.plots.map(({ id, origin }) => [id, origin])), {
+    clocktower: [226, 223, 12],
+    tavern: [159, 230, 16],
+    'post-office': [264, 210, 13],
+    memorial: [337, 277, 25],
+    'long-hall': [378, 316, 35],
+    cabins: [91, 271, 23],
+    'lantern-workshop': [126, 115, 10],
+    'market-stalls': [154, 105, 10],
+    carousel: [341, 115, 11],
+    glasshouse: [372, 96, 11],
+    lighthouse: [408, 78, 12],
+    stage: [238, 157, 12],
+  });
+});
+
+test('expanded streets cross the legacy seams on foot and the northern river remains impassable', () => {
+  for (const { id, points } of extensionRoads) {
+    for (let i = 1; i < points.length; i++) {
+      const [ax, an] = points[i - 1], [bx, bn] = points[i];
+      const count = Math.ceil(Math.hypot(bx - ax, bn - an) / .125);
+      let last = heightAt(ax, an);
+      for (let step = 1; step <= count; step++) {
+        const x = ax + (bx - ax) * step / count;
+        const n = an + (bn - an) * step / count;
+        const height = heightAt(x, n);
+        assert.ok(canEnter(x, n), `${id} has an impassable approach at ${x},${n}`);
+        if (x > layout.width || n > layout.depth) {
+          assert.ok(Math.abs(height - last) < .18, `${id} has a height break at ${x},${n}`);
+        }
+        last = height;
+      }
+    }
+  }
+  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231]]) {
+    assert.equal(riverX(n), x);
+    assert.ok(!canEnter(x, n));
+  }
+  assert.ok(!canEnter(640, 224));
+  assert.ok(!canEnter(93, 512));
 });

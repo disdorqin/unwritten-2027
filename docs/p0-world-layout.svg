@@ -1,148 +1,165 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="887" viewBox="0 0 1220 887" role="img" aria-label="UNWRITTEN 2027 P0 分区与路线草案">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850" role="img" aria-label="UNWRITTEN 2027 P0 原镇向东向北扩展导览">
+<defs><clipPath id="map"><rect x="52" y="112" width="748.80" height="599.04"/></clipPath></defs>
 <g font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif">
-<rect x="0.00" y="0.00" width="1220.00" height="887.00" rx="0" fill="#eef3f6" stroke="none" stroke-width="1"/>
-<text x="58.0" y="43.0" fill="#557580" font-size="14" font-weight="700" text-anchor="start">UNWRITTEN 2027  /  P0</text>
-<text x="58.0" y="81.0" fill="#233346" font-size="27" font-weight="700" text-anchor="start">雪夜小镇 · 分区与环线草案</text>
-<text x="1156.0" y="50.0" fill="#233346" font-size="22" font-weight="700" text-anchor="end">640 × 512 m</text>
-<text x="1156.0" y="77.0" fill="#557580" font-size="13" font-weight="400" text-anchor="end">原点在西南 · 64 m × 64 m 网格</text>
-<rect x="60.00" y="113.00" width="870.40" height="696.32" rx="5" fill="#f6f8f9" stroke="#bfccd7" stroke-width="1.3"/>
-<rect x="92.64" y="145.64" width="304.64" height="250.24" rx="3" fill="#e1ecd5" stroke="#a5b799" stroke-width="1.2"/>
-<rect x="92.64" y="417.64" width="299.20" height="304.64" rx="3" fill="#f4e0d7" stroke="#cda293" stroke-width="1.2"/>
-<rect x="614.88" y="145.64" width="282.88" height="255.68" rx="3" fill="#e5e6f1" stroke="#b0b4d0" stroke-width="1.2"/>
-<rect x="604.00" y="406.76" width="304.64" height="359.04" rx="3" fill="#dbedf1" stroke="#9cbecb" stroke-width="1.2"/>
-<path d="M60.00 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="60.0" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">0</text>
-<path d="M147.04 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="147.0" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">64</text>
-<path d="M234.08 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="234.1" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">128</text>
-<path d="M321.12 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="321.1" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">192</text>
-<path d="M408.16 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="408.2" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">256</text>
-<path d="M495.20 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="495.2" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">320</text>
-<path d="M582.24 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="582.2" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">384</text>
-<path d="M669.28 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="669.3" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">448</text>
-<path d="M756.32 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="756.3" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">512</text>
-<path d="M843.36 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="843.4" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">576</text>
-<path d="M930.40 113v696.32" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="930.4" y="830.3" fill="#557580" font-size="10" font-weight="400" text-anchor="middle">640</text>
-<path d="M60 809.32h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="813.3" fill="#557580" font-size="10" font-weight="400" text-anchor="end">0</text>
-<path d="M60 722.28h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="726.3" fill="#557580" font-size="10" font-weight="400" text-anchor="end">64</text>
-<path d="M60 635.24h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="639.2" fill="#557580" font-size="10" font-weight="400" text-anchor="end">128</text>
-<path d="M60 548.20h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="552.2" fill="#557580" font-size="10" font-weight="400" text-anchor="end">192</text>
-<path d="M60 461.16h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="465.2" fill="#557580" font-size="10" font-weight="400" text-anchor="end">256</text>
-<path d="M60 374.12h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="378.1" fill="#557580" font-size="10" font-weight="400" text-anchor="end">320</text>
-<path d="M60 287.08h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="291.1" fill="#557580" font-size="10" font-weight="400" text-anchor="end">384</text>
-<path d="M60 200.04h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="204.0" fill="#557580" font-size="10" font-weight="400" text-anchor="end">448</text>
-<path d="M60 113.00h870.40" stroke="#91a5b2" stroke-width=".45" opacity=".55"/>
-<text x="50.0" y="117.0" fill="#557580" font-size="10" font-weight="400" text-anchor="end">512</text>
-<polyline points="571.36,809.32 584.96,667.88 574.08,526.44 580.88,450.28 580.88,300.68 561.84,170.12 567.28,113.00" fill="none" stroke="#b2d5e5" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="571.36,809.32 584.96,667.88 574.08,526.44 580.88,450.28 580.88,300.68 561.84,170.12 567.28,113.00" fill="none" stroke="#8bbcd4" stroke-width="29" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="583.60,646.12 635.28,633.88" fill="none" stroke="#b2d5e5" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="583.60,646.12 635.28,633.88" fill="none" stroke="#8bbcd4" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-<ellipse cx="741.4" cy="633.9" rx="111.5" ry="74.8" fill="#b9dce9" stroke="#8cbfd7" stroke-width="3"/>
-<rect x="397.28" y="401.32" width="141.44" height="114.24" rx="3" fill="#f0e6ca" stroke="#be9f60" stroke-width="2"/>
-<rect x="429.92" y="365.96" width="73.44" height="29.92" rx="3" fill="#c8ad70" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="431.28" y="518.28" width="74.80" height="21.76" rx="3" fill="#c8ad70" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="213.68" y="572.68" width="78.88" height="46.24" rx="3" fill="#53738f" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="788.96" y="423.08" width="65.28" height="43.52" rx="3" fill="#53738f" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="741.36" y="500.60" width="78.88" height="51.68" rx="3" fill="#53738f" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="704.64" y="219.08" width="108.80" height="70.72" rx="3" fill="#53738f" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="873.28" y="639.32" width="13.60" height="13.60" rx="3" fill="#53738f" stroke="#f6f9fb" stroke-width="1.3"/>
-<rect x="657.04" y="459.80" width="32.64" height="65.28" rx="3" fill="#db98a5" stroke="#f6f9fb" stroke-width="1.3"/>
-<polyline points="546.88,300.68 410.88,297.96 372.80,246.28 223.20,249.00 175.60,319.72 174.24,435.32 182.40,568.60 217.76,669.24 397.28,678.76 553.68,667.88 621.68,667.88 655.68,693.72 706.00,726.36 821.60,726.36 877.36,688.28 897.76,662.44 897.76,625.72 878.72,519.64 862.40,461.16 866.48,329.24 813.44,306.12 710.08,319.72 614.88,300.68 546.88,300.68" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="546.88,300.68 410.88,297.96 372.80,246.28 223.20,249.00 175.60,319.72 174.24,435.32 182.40,568.60 217.76,669.24 397.28,678.76 553.68,667.88 621.68,667.88 655.68,693.72 706.00,726.36 821.60,726.36 877.36,688.28 897.76,662.44 897.76,625.72 878.72,519.64 862.40,461.16 866.48,329.24 813.44,306.12 710.08,319.72 614.88,300.68 546.88,300.68" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="253.12,560.44 291.20,542.76 352.40,518.28 397.28,488.36 438.08,472.04" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="253.12,560.44 291.20,542.76 352.40,518.28 397.28,488.36 438.08,472.04" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="515.60,450.28 546.88,450.28 614.88,450.28 631.20,421.72 662.48,367.32 759.04,306.12 759.04,289.80" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="515.60,450.28 546.88,450.28 614.88,450.28 631.20,421.72 662.48,367.32 759.04,306.12 759.04,289.80" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="515.60,495.16 526.48,516.92 537.36,526.44 606.72,526.44 644.80,538.68 673.36,530.52" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="515.60,495.16 526.48,516.92 537.36,526.44 606.72,526.44 644.80,538.68 673.36,530.52" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="644.80,538.68 712.80,535.96 727.76,526.44 741.36,526.44" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="644.80,538.68 712.80,535.96 727.76,526.44 741.36,526.44" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="862.40,461.16 862.40,432.60 861.04,414.92 775.36,416.28 775.36,444.84 788.96,444.84" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="862.40,461.16 862.40,432.60 861.04,414.92 775.36,416.28 775.36,444.84 788.96,444.84" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="897.76,625.72 895.04,644.76 886.88,644.76" fill="none" stroke="#f6fafb" stroke-width="7.0" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="897.76,625.72 895.04,644.76 886.88,644.76" fill="none" stroke="#41645f" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="546.88,300.68 614.88,300.68" fill="none" stroke="#654d3e" stroke-width="11.2" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="546.88,300.68 614.88,300.68" fill="none" stroke="#d9ae7a" stroke-width="7.8" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="546.88,450.28 614.88,450.28" fill="none" stroke="#654d3e" stroke-width="11.2" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="546.88,450.28 614.88,450.28" fill="none" stroke="#d9ae7a" stroke-width="7.8" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="537.36,526.44 606.72,526.44" fill="none" stroke="#654d3e" stroke-width="11.2" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="537.36,526.44 606.72,526.44" fill="none" stroke="#d9ae7a" stroke-width="7.8" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="553.68,667.88 621.68,667.88" fill="none" stroke="#654d3e" stroke-width="11.2" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="553.68,667.88 621.68,667.88" fill="none" stroke="#d9ae7a" stroke-width="7.8" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="673.36,491.08 673.36,409.48 629.84,338.76 579.52,333.32 443.52,321.08 356.48,401.32 356.48,467.96 332.00,576.76 285.76,657.00 155.20,614.84 129.36,465.24 160.64,304.76 220.48,231.32 478.88,176.92 612.16,160.60 726.40,144.28 863.76,137.48 903.20,170.12 914.08,231.32 903.20,360.52 896.40,448.92 903.20,529.16 910.00,606.68 910.00,667.88 801.20,742.68 726.40,742.68 627.12,666.52 620.32,625.72 632.56,595.80 657.04,574.04 672.00,546.84 673.36,525.08 673.36,491.08" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-<polyline points="673.36,491.08 673.36,409.48 629.84,338.76 579.52,333.32 443.52,321.08 356.48,401.32 356.48,467.96 332.00,576.76 285.76,657.00 155.20,614.84 129.36,465.24 160.64,304.76 220.48,231.32 478.88,176.92 612.16,160.60 726.40,144.28 863.76,137.48 903.20,170.12 914.08,231.32 903.20,360.52 896.40,448.92 903.20,529.16 910.00,606.68 910.00,667.88 801.20,742.68 726.40,742.68 627.12,666.52 620.32,625.72 632.56,595.80 657.04,574.04 672.00,546.84 673.36,525.08 673.36,491.08" fill="none" stroke="#a8254e" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 6"/>
-<circle cx="673.4" cy="409.5" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="443.5" cy="321.1" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="332.0" cy="576.8" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="160.6" cy="304.8" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="612.2" cy="160.6" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="903.2" cy="529.2" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="801.2" cy="742.7" r="4" fill="#a8254e" stroke="#f7f9fa" stroke-width="1.5"/>
-<circle cx="253.1" cy="560.4" r="6" fill="#d28d37" stroke="#f7f9fa" stroke-width="1.5"/>
-<text x="110.3" y="174.2" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="19" font-weight="600" text-anchor="start">森林区 · 原木</text>
-<text x="111.7" y="443.5" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="19" font-weight="600" text-anchor="start">集市区 · 砖拱廊</text>
-<text x="629.8" y="171.5" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="19" font-weight="600" text-anchor="start">纪念馆区 · 现代</text>
-<text x="715.5" y="719.6" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="18" font-weight="600" text-anchor="start">湖岸区 · 北欧石玻璃</text>
-<text x="466.6" y="462.5" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="17" font-weight="600" text-anchor="middle">跨年广场</text>
-<text x="466.6" y="355.0" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="middle">放大钟楼</text>
-<text x="469.4" y="560.0" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="middle">舞台</text>
-<text x="253.1" y="638.2" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="middle">火车站</text>
-<text x="239.1" y="552.4" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="11" font-weight="600" text-anchor="end">候选迎客入口</text>
-<text x="759.0" y="236.8" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="14" font-weight="600" text-anchor="middle">纪念馆</text>
-<text x="742.0" y="506.6" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="start">冰雪城堡</text>
-<text x="846.0" y="423.0" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="end">温泉浴场</text>
-<text x="745.4" y="642.0" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="18" font-weight="600" text-anchor="middle">冰湖</text>
-<text x="867.1" y="674.5" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="end">灯塔</text>
-<text x="695.4" y="490.2" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="13" font-weight="600" text-anchor="start">过山车站</text>
-<text x="580.9" y="320.7" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="11" font-weight="600" text-anchor="middle">北桥</text>
-<text x="580.9" y="470.3" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="11" font-weight="600" text-anchor="middle">中央桥</text>
-<text x="580.9" y="546.4" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="11" font-weight="600" text-anchor="middle">东南桥</text>
-<text x="580.9" y="687.9" fill="#253145" stroke="#f6f9fb" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke fill" font-size="11" font-weight="600" text-anchor="middle">年集桥</text>
-<rect x="959.00" y="113.00" width="219.00" height="417.00" rx="12" fill="#e3ecf0" stroke="#c9d8df" stroke-width="1"/>
-<text x="977.0" y="148.0" fill="#26354b" font-size="18" font-weight="700" text-anchor="start">动线与标记</text>
-<rect x="978.00" y="175.00" width="19.00" height="6.00" rx="3" fill="#a8254e" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="183.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">高架环线</text>
-<text x="978.0" y="201.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">原游乐区站起讫，单线闭环</text>
-<rect x="978.00" y="231.00" width="19.00" height="6.00" rx="3" fill="#41645f" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="239.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">步行路</text>
-<text x="978.0" y="257.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">外环和横向捷径</text>
-<rect x="978.00" y="287.00" width="19.00" height="6.00" rx="3" fill="#d9ae7a" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="295.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">步行桥</text>
-<text x="978.0" y="313.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">北 / 中央 / 东南 / 年集</text>
-<rect x="978.00" y="343.00" width="19.00" height="6.00" rx="3" fill="#53738f" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="351.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">建筑占地</text>
-<text x="978.0" y="369.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">新地标和纪念馆</text>
-<rect x="978.00" y="399.00" width="19.00" height="6.00" rx="3" fill="#c8ad70" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="407.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">仪式核心</text>
-<text x="978.0" y="425.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">塔基、广场、舞台</text>
-<rect x="978.00" y="455.00" width="19.00" height="6.00" rx="3" fill="#d28d37" stroke="none" stroke-width="1"/>
-<text x="1011.0" y="463.0" fill="#26354b" font-size="14" font-weight="700" text-anchor="start">候选出生点</text>
-<text x="978.0" y="481.0" fill="#557280" font-size="11" font-weight="400" text-anchor="start">站房北门外的集散地</text>
-<rect x="959.00" y="548.00" width="219.00" height="188.00" rx="12" fill="#f7f9fb" stroke="#c9d8df" stroke-width="1"/>
-<text x="977.0" y="583.0" fill="#26354b" font-size="18" font-weight="700" text-anchor="start">优先留给步行</text>
-<text x="977.0" y="615.0" fill="#557280" font-size="12" font-weight="400" text-anchor="start">钟楼南门直通广场北缘</text>
-<text x="977.0" y="642.0" fill="#557280" font-size="12" font-weight="400" text-anchor="start">广场净空 104 × 84 m</text>
-<text x="977.0" y="669.0" fill="#557280" font-size="12" font-weight="400" text-anchor="start">过山车两次跨河，均错开四桥</text>
-<text x="977.0" y="696.0" fill="#557280" font-size="12" font-weight="400" text-anchor="start">各街区从道路入口提前加载</text>
-<text x="1017.0" y="783.0" fill="#26354b" font-size="16" font-weight="700" text-anchor="start">N  ↑</text>
-<path d="M1076 780h87.0" stroke="#28394d" stroke-width="3"/>
-<text x="1119.5" y="800.0" fill="#557580" font-size="11" font-weight="400" text-anchor="middle">64 m</text>
-<text x="60.0" y="861.0" fill="#557580" font-size="13" font-weight="400" text-anchor="start">轨道为提案中心折线，P3 拟合高程和曲率后复核净空。建筑落位由对应占地矩形定义。</text>
+<rect x="0.00" y="0.00" width="1200.00" height="850.00" rx="0" fill="#eef3f6" stroke="none" stroke-width="1"/>
+<text x="52.0" y="41.0" font-size="14" fill="#577782" text-anchor="start" font-weight="700">UNWRITTEN 2027  /  P0 修订</text>
+<text x="52.0" y="81.0" font-size="30" fill="#223247" text-anchor="start" font-weight="700">沿原镇向东、向北扩展</text>
+<text x="1148.0" y="51.0" font-size="24" fill="#223247" text-anchor="end" font-weight="700">640 × 512 m</text>
+<text x="1148.0" y="79.0" font-size="13" fill="#577782" text-anchor="end" font-weight="400">坐标原点与现图重合</text>
+<rect x="52.00" y="112.00" width="748.80" height="599.04" rx="2" fill="#e4edf1" stroke="#b0c6cd" stroke-width="1"/>
+<rect x="52.00" y="261.76" width="524.16" height="449.28" rx="2" fill="#f5f7f8" stroke="#6d8a98" stroke-width="1.8"/>
+<path d="M52.00 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="52.0" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">0</text>
+<path d="M126.88 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="126.9" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">64</text>
+<path d="M201.76 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="201.8" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">128</text>
+<path d="M276.64 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="276.6" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">192</text>
+<path d="M351.52 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="351.5" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">256</text>
+<path d="M426.40 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="426.4" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">320</text>
+<path d="M501.28 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="501.3" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">384</text>
+<path d="M576.16 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="576.2" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">448</text>
+<path d="M651.04 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="651.0" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">512</text>
+<path d="M725.92 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="725.9" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">576</text>
+<path d="M800.80 112v599.04" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="800.8" y="731.0" font-size="11" fill="#557280" text-anchor="middle" font-weight="400">640</text>
+<path d="M52 711.04h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="715.0" font-size="10" fill="#557280" text-anchor="end" font-weight="400">0</text>
+<path d="M52 636.16h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="640.2" font-size="10" fill="#557280" text-anchor="end" font-weight="400">64</text>
+<path d="M52 561.28h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="565.3" font-size="10" fill="#557280" text-anchor="end" font-weight="400">128</text>
+<path d="M52 486.40h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="490.4" font-size="10" fill="#557280" text-anchor="end" font-weight="400">192</text>
+<path d="M52 411.52h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="415.5" font-size="10" fill="#557280" text-anchor="end" font-weight="400">256</text>
+<path d="M52 336.64h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="340.6" font-size="10" fill="#557280" text-anchor="end" font-weight="400">320</text>
+<path d="M52 261.76h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="265.8" font-size="10" fill="#557280" text-anchor="end" font-weight="400">384</text>
+<path d="M52 186.88h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="190.9" font-size="10" fill="#557280" text-anchor="end" font-weight="400">448</text>
+<path d="M52 112.00h748.80" stroke="#a5b9c2" stroke-width=".5"/>
+<text x="43.0" y="116.0" font-size="10" fill="#557280" text-anchor="end" font-weight="400">512</text>
+<g clip-path="url(#map)">
+<polyline points="322.27,261.76 323.44,310.90 363.22,362.38 391.30,403.33 405.34,441.94 392.47,486.40 390.13,536.71 381.94,594.04 387.79,622.12 372.58,666.58 359.71,711.04" fill="none" stroke="#acd1e0" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="322.27,261.76 323.44,310.90 363.22,362.38 391.30,403.33 405.34,441.94 392.47,486.40 390.13,536.71 381.94,594.04 387.79,622.12 372.58,666.58 359.71,711.04" fill="none" stroke="#8bbbd3" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="322.27,261.76 315.25,209.11 331.63,161.14 322.27,112.00" fill="none" stroke="#acd1e0" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="322.27,261.76 315.25,209.11 331.63,161.14 322.27,112.00" fill="none" stroke="#8bbbd3" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="387.79,622.12 408.85,632.65" fill="none" stroke="#8bbbd3" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="454.48" cy="633.82" rx="57.33" ry="36.27" fill="#b5dce8" stroke="#8cbdd3" stroke-width="2"/>
+</g>
+<rect x="275.47" y="463.00" width="70.20" height="50.31" rx="2" fill="#e9d7a5" stroke="#b49a58" stroke-width="1.5"/>
+<rect x="296.53" y="441.94" width="39.78" height="16.38" rx="2" fill="#ad9462" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="225.16" y="431.41" width="25.74" height="21.06" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="351.52" y="455.98" width="18.72" height="18.72" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="409.44" y="361.94" width="73.71" height="50.02" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="474.37" y="329.62" width="39.78" height="23.40" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="140.92" y="382.27" width="35.10" height="23.40" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="189.47" y="562.45" width="19.89" height="28.08" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="211.12" y="576.49" width="42.12" height="23.40" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="442.78" y="568.30" width="16.38" height="16.38" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="479.63" y="587.02" width="15.21" height="23.40" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="522.34" y="612.76" width="14.04" height="14.04" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="319.93" y="519.16" width="21.06" height="16.38" rx="2" fill="#608197" stroke="#f6f9fb" stroke-width="1.2"/>
+<rect x="633.49" y="306.22" width="67.86" height="39.78" rx="2" fill="#4f7d6b" stroke="#f6f9fb" stroke-width="1.6"/>
+<rect x="665.08" y="507.46" width="56.16" height="37.44" rx="2" fill="#4f7d6b" stroke="#f6f9fb" stroke-width="1.6"/>
+<rect x="590.20" y="604.57" width="56.16" height="44.46" rx="2" fill="#4f7d6b" stroke="#f6f9fb" stroke-width="1.6"/>
+<rect x="594.88" y="420.88" width="32.76" height="56.16" rx="2" fill="#ce879c" stroke="#f6f9fb" stroke-width="1.6"/>
+<polyline points="275.47,474.70 257.92,471.19 228.67,459.49 205.27,436.09 172.51,412.69" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="275.47,474.70 257.92,471.19 228.67,459.49 205.27,436.09 172.51,412.69" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="345.67,486.40 377.26,486.40 407.68,486.40 420.55,478.21 425.23,441.94 440.44,424.39 461.50,419.71" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="345.67,486.40 377.26,486.40 407.68,486.40 420.55,478.21 425.23,441.94 440.44,424.39 461.50,419.71" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="275.47,499.27 253.24,506.29 228.67,528.52 200.59,547.24 178.36,577.66" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="275.47,499.27 253.24,506.29 228.67,528.52 200.59,547.24 178.36,577.66" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="338.65,513.31 356.20,529.69 374.92,536.71 405.34,536.71 425.23,550.75 431.08,590.53 461.50,594.04" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="338.65,513.31 356.20,529.69 374.92,536.71 405.34,536.71 425.23,550.75 431.08,590.53 461.50,594.04" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="172.51,412.69 193.57,376.42 242.71,350.68 296.53,360.04 348.01,362.38 378.43,362.38 421.72,355.36 459.16,350.68 488.41,364.72 486.07,399.82 461.50,419.71" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="172.51,412.69 193.57,376.42 242.71,350.68 296.53,360.04 348.01,362.38 378.43,362.38 421.72,355.36 459.16,350.68 488.41,364.72 486.07,399.82 461.50,419.71" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="172.51,412.69 154.96,459.49 142.09,519.16 151.45,557.77 178.36,577.66" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="172.51,412.69 154.96,459.49 142.09,519.16 151.45,557.77 178.36,577.66" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="178.36,577.66 202.93,610.42 257.92,624.46 307.06,611.59 366.73,594.04 397.15,594.04 461.50,594.04" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="178.36,577.66 202.93,610.42 257.92,624.46 307.06,611.59 366.73,594.04 397.15,594.04 461.50,594.04" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="461.50,419.71 498.94,453.64 515.32,489.91 509.47,527.35 489.58,560.11 461.50,594.04" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="461.50,419.71 498.94,453.64 515.32,489.91 509.47,527.35 489.58,560.11 461.50,594.04" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="461.50,419.71 486.07,399.82 502.45,383.44 494.26,358.87" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="461.50,419.71 486.07,399.82 502.45,383.44 494.26,358.87" fill="none" stroke="#59716f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="348.01,362.38 378.43,362.38" fill="none" stroke="#775d48" stroke-width="9.2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="348.01,362.38 378.43,362.38" fill="none" stroke="#d6ad83" stroke-width="6.8" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="377.26,486.40 407.68,486.40" fill="none" stroke="#775d48" stroke-width="9.2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="377.26,486.40 407.68,486.40" fill="none" stroke="#d6ad83" stroke-width="6.8" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="374.92,536.71 405.34,536.71" fill="none" stroke="#775d48" stroke-width="9.2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="374.92,536.71 405.34,536.71" fill="none" stroke="#d6ad83" stroke-width="6.8" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="366.73,594.04 397.15,594.04" fill="none" stroke="#775d48" stroke-width="9.2" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="366.73,594.04 397.15,594.04" fill="none" stroke="#d6ad83" stroke-width="6.8" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="498.94,453.64 532.87,453.64 572.65,452.47 585.52,451.30 594.88,448.96" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="498.94,453.64 532.87,453.64 572.65,452.47 585.52,451.30 594.88,448.96" fill="none" stroke="#56957a" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="585.52,451.30 582.01,413.86 605.41,388.12 644.02,376.42 667.42,346.00" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="585.52,451.30 582.01,413.86 605.41,388.12 644.02,376.42 667.42,346.00" fill="none" stroke="#56957a" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="489.58,560.11 522.34,556.60 572.65,551.92 612.43,548.41 641.68,535.54 665.08,526.18" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="489.58,560.11 522.34,556.60 572.65,551.92 612.43,548.41 641.68,535.54 665.08,526.18" fill="none" stroke="#56957a" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="572.65,551.92 573.82,585.85 574.99,617.44 590.20,626.80" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="572.65,551.92 573.82,585.85 574.99,617.44 590.20,626.80" fill="none" stroke="#56957a" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="193.57,376.42 176.02,344.83 159.64,307.39 160.81,261.76 173.68,225.49" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="193.57,376.42 176.02,344.83 159.64,307.39 160.81,261.76 173.68,225.49" fill="none" stroke="#56957a" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="611.26,448.96 611.26,412.69 610.09,336.64 598.39,282.82 556.27,231.34 479.05,202.09 403.00,185.71 335.14,186.88 256.75,193.90 183.04,223.15 124.54,269.95 103.48,338.98 103.48,425.56 118.69,501.61 132.73,564.79 146.77,625.63 192.40,664.24 263.77,675.94 331.63,681.79 400.66,680.62 480.22,681.79 555.10,681.79 632.32,687.64 689.65,678.28 722.41,653.71 738.79,624.46 731.77,584.68 697.84,582.34 639.34,542.56 625.30,519.16 611.26,488.74 611.26,474.70 611.26,448.96" fill="none" stroke="#fff" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="611.26,448.96 611.26,412.69 610.09,336.64 598.39,282.82 556.27,231.34 479.05,202.09 403.00,185.71 335.14,186.88 256.75,193.90 183.04,223.15 124.54,269.95 103.48,338.98 103.48,425.56 118.69,501.61 132.73,564.79 146.77,625.63 192.40,664.24 263.77,675.94 331.63,681.79 400.66,680.62 480.22,681.79 555.10,681.79 632.32,687.64 689.65,678.28 722.41,653.71 738.79,624.46 731.77,584.68 697.84,582.34 639.34,542.56 625.30,519.16 611.26,488.74 611.26,474.70 611.26,448.96" fill="none" stroke="#a33060" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 5"/>
+<text x="64.9" y="291.0" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">现镇 448 × 384 米</text>
+<text x="64.9" y="152.9" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">北向 +128 m</text>
+<text x="782.1" y="158.8" font-size="13" font-weight="700" text-anchor="end" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">东向 +192 m</text>
+<text x="294.4" y="450.0" font-size="13" font-weight="700" text-anchor="end" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">钟楼</text>
+<text x="307.9" y="498.1" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">广场</text>
+<text x="224.0" y="434.9" font-size="13" font-weight="700" text-anchor="end" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">酒馆</text>
+<text x="372.9" y="457.3" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">邮局</text>
+<text x="458.3" y="386.9" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">纪念馆</text>
+<text x="504.3" y="334.3" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">长殿</text>
+<text x="152.5" y="406.0" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">木屋</text>
+<text x="330.5" y="544.5" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">舞台</text>
+<text x="186.4" y="563.5" font-size="13" font-weight="700" text-anchor="end" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">灯坊</text>
+<text x="247.2" y="588.2" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">集市</text>
+<text x="454.5" y="633.8" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">冰湖</text>
+<text x="494.2" y="588.7" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">暖房</text>
+<text x="539.4" y="627.8" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">灯塔</text>
+<text x="451.0" y="568.5" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">旧游乐区</text>
+<text x="667.4" y="328.1" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">火车站 T</text>
+<text x="693.2" y="528.2" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">温泉 H</text>
+<text x="618.3" y="628.8" font-size="13" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">冰雪城堡 I</text>
+<text x="635.3" y="449.0" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">过山车站 K</text>
+<text x="178.4" y="226.7" font-size="13" font-weight="700" text-anchor="start" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">北侧林带</text>
+<text x="367.2" y="377.4" font-size="11" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">北桥</text>
+<text x="396.5" y="501.4" font-size="11" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">中央桥</text>
+<text x="394.1" y="551.7" font-size="11" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">东南桥</text>
+<text x="385.9" y="609.0" font-size="11" font-weight="700" text-anchor="middle" fill="#25384d" stroke="#f6fafc" stroke-width="3.3" paint-order="stroke fill" stroke-linejoin="round">年集桥</text>
+<rect x="827.00" y="112.00" width="321.00" height="302.00" rx="10" fill="#e3ecf0" stroke="#cddde4" stroke-width="1"/>
+<text x="844.0" y="145.0" font-size="21" fill="#26374d" text-anchor="start" font-weight="700">现镇与外围增量</text>
+<rect x="846.00" y="170.00" width="21.00" height="7.00" rx="2" fill="#608197" stroke="none" stroke-width="1"/>
+<text x="882.0" y="179.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">原镇地标 · 12 处原址</text>
+<rect x="846.00" y="209.00" width="21.00" height="7.00" rx="2" fill="#4f7d6b" stroke="none" stroke-width="1"/>
+<text x="882.0" y="218.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">新增地标 · 东侧增量</text>
+<rect x="846.00" y="248.00" width="21.00" height="7.00" rx="2" fill="#59716f" stroke="none" stroke-width="1"/>
+<text x="882.0" y="257.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">现有步道 · 9 条原线</text>
+<rect x="846.00" y="287.00" width="21.00" height="7.00" rx="2" fill="#56957a" stroke="none" stroke-width="1"/>
+<text x="882.0" y="296.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">新增步道 · 接现有节点</text>
+<rect x="846.00" y="326.00" width="21.00" height="7.00" rx="2" fill="#d6ad83" stroke="none" stroke-width="1"/>
+<text x="882.0" y="335.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">原有步行桥 · 4 座</text>
+<rect x="846.00" y="365.00" width="21.00" height="7.00" rx="2" fill="#a33060" stroke="none" stroke-width="1"/>
+<text x="882.0" y="374.0" font-size="15" fill="#293d55" text-anchor="start" font-weight="400">过山车中心折线 · 约 1.66 km</text>
+<rect x="827.00" y="433.00" width="321.00" height="244.00" rx="10" fill="#f7f9fa" stroke="#cddde4" stroke-width="1"/>
+<text x="844.0" y="467.0" font-size="20" fill="#26374d" text-anchor="start" font-weight="700">四区风格按原址实施</text>
+<text x="845.0" y="504.0" font-size="14" fill="#293d55" text-anchor="start" font-weight="400">F 森林原木 · 原木屋与北林带</text>
+<text x="845.0" y="535.0" font-size="14" fill="#293d55" text-anchor="start" font-weight="400">L 湖岸北欧石玻璃 · 冰湖、暖房、灯塔</text>
+<text x="845.0" y="566.0" font-size="14" fill="#293d55" text-anchor="start" font-weight="400">M 集市砖拱廊 · 集市、灯坊、酒馆</text>
+<text x="845.0" y="597.0" font-size="14" fill="#293d55" text-anchor="start" font-weight="400">R 现代纪念馆 · 纪念馆与长殿</text>
+<text x="845.0" y="628.0" font-size="14" fill="#293d55" text-anchor="start" font-weight="400">C 钟楼 · 原塔基扩建，广场仍在原址</text>
+<text x="863.0" y="742.0" font-size="17" fill="#27374f" text-anchor="start" font-weight="700">N ↑</text>
+<path d="M965 736h74.88" stroke="#26374d" stroke-width="3"/>
+<text x="1002.4" y="757.0" font-size="12" fill="#557280" text-anchor="middle" font-weight="400">64 m</text>
+<text x="52.0" y="813.0" font-size="14" fill="#576f7e" text-anchor="start" font-weight="400">新地标标高与轨道曲率在实施时验证。现图边缘、河湖、四桥、地块与路线坐标以原版为准。</text>
 </g></svg>

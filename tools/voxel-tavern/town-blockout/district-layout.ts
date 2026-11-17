@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, Object3D,
 } from 'three';
-import { buildDistrictHousing } from './district-housing';
+import { buildDistrictHousing, type DistrictTheme } from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
@@ -28,11 +28,11 @@ const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
 const within = (x: number, n: number, { x: cx, n: cn, w, d }: Pick<Site, 'x' | 'n' | 'w' | 'd'>, margin: number) =>
   Math.abs(x - cx) < w / 2 + margin && Math.abs(n - cn) < d / 2 + margin;
 
-const neighborhoods: { styles: Style[]; points: number[][] }[] = [
-  { styles: ['alpine', 'alpine', 'courtyard'], points: [[110,277],[133,266],[149,281],[172,282],[191,282],[216,280],[128,247],[131,218],[117,202],[101,184],[105,152],[96,239],[70,229],[63,194],[85,287],[111,307],[147,320],[172,323],[191,325]] },
-  { styles: ['courtyard', 'machiya', 'courtyard'], points: [[318,267],[312,243],[338,232],[358,228],[364,207],[375,242],[391,234],[410,219],[414,190],[406,165],[333,317],[353,321],[398,297],[393,272],[380,282],[310,318],[373,335]] },
-  { styles: ['shop', 'machiya', 'courtyard'], points: [[137,168],[158,184],[179,155],[173,135],[156,141],[137,129],[123,144],[103,134],[94,100],[115,87],[137,70],[161,68],[188,65],[202,70],[217,66],[234,74],[245,80],[186,104],[206,110],[228,110],[246,114],[246,135],[220,138],[197,132],[186,116],[145,85],[181,89],[102,158]] },
-  { styles: ['alpine', 'shop', 'machiya'], points: [[331,172],[349,184],[375,177],[378,155],[351,144],[337,130],[311,117],[325,87],[387,109],[410,119],[422,101],[423,73],[405,51],[397,41],[390,32],[320,105],[303,133],[329,155],[358,163],[361,122]] },
+const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][] }[] = [
+  { theme: 'forest', styles: ['alpine', 'alpine', 'courtyard'], points: [[110,277],[133,266],[149,281],[172,282],[191,282],[216,280],[128,247],[131,218],[117,202],[101,184],[105,152],[96,239],[70,229],[63,194],[85,287],[111,307],[147,320],[172,323],[191,325]] },
+  { theme: 'memorial', styles: ['courtyard', 'machiya', 'courtyard'], points: [[318,267],[312,243],[338,232],[358,228],[364,207],[375,242],[391,234],[410,219],[414,190],[406,165],[333,317],[353,321],[398,297],[393,272],[380,282],[310,318],[373,335]] },
+  { theme: 'market', styles: ['shop', 'machiya', 'courtyard'], points: [[137,168],[158,184],[179,155],[173,135],[156,141],[137,129],[123,144],[103,134],[94,100],[115,87],[137,70],[161,68],[188,65],[202,70],[217,66],[234,74],[245,80],[186,104],[206,110],[228,110],[246,114],[246,135],[220,138],[197,132],[186,116],[145,85],[181,89],[102,158]] },
+  { theme: 'lakeside', styles: ['alpine', 'shop', 'machiya'], points: [[331,172],[349,184],[375,177],[378,155],[351,144],[337,130],[311,117],[325,87],[387,109],[410,119],[422,101],[423,73],[405,51],[397,41],[390,32],[320,105],[303,133],[329,155],[358,163],[361,122]] },
   { styles: ['shop', 'courtyard', 'machiya'], points: [[177,226],[180,196],[169,203],[181,166],[217,153],[200,151],[255,161],[262,180],[264,228],[251,219],[253,243],[221,251],[202,247],[190,251],[179,248],[213,233],[247,234],[266,258],[249,264],[199,262],[218,268],[238,265]] },
 ];
 
@@ -89,7 +89,7 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
     return [-1, 0, 1].flatMap(i => [-1, 0, 1].map(j => [x + i * (w / 2 + 1), n + j * (d / 2 + 1)]));
   }
 
-  for (const { styles, points } of neighborhoods) {
+  for (const { theme, styles, points } of neighborhoods) {
     for (const [i, [x, n]] of points.entries()) {
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
@@ -112,7 +112,7 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
       })) continue;
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
-      const model = buildDistrictHousing(style, w, d, site.variant);
+      const model = buildDistrictHousing(style, w, d, site.variant, theme);
       model.position.set(x, level, -n);
       model.rotation.y = angle;
       const plinth = new Mesh(foundation, stone);
