@@ -43,6 +43,8 @@ import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance } from './town-extension';
 import { createTownRailway } from './town-railway';
 import { createTownNpcActivity } from './town-npc';
+import { createTownPassport } from './town-passport';
+import { createTownLights } from './town-lights';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const grid = createTerrainGrid();
@@ -481,6 +483,13 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
     pitch = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42, Math.atan2(height - ground - eye, distance)));
   },
 };
+const lightsButton = element<HTMLButtonElement>('town-lights-button');
+function showLightCount({ lit, total }: { lit: number; total: number }) {
+  lightsButton.textContent = `点亮小镇 ${lit}/${total}`;
+}
+const townLights = createTownLights({ ...activityContext, announce: announceActivity }, grid, showLightCount);
+showLightCount(townLights.getProgress());
+lightsButton.onclick = townLights.openBook;
 const activities: TownActivity[] = [
   createTavernActivity, createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
@@ -508,7 +517,62 @@ function announceActivity(message: string) {
   window.clearTimeout(activityMessageTimer);
   activityMessageTimer = window.setTimeout(() => { activityStatus.textContent = ''; }, 4200);
 }
+activities.push(townLights);
 const activitySpots = activities.flatMap(activity => activity.spots);
+const stampSites = [
+  { id: 'plaza', label: '钟楼广场', hint: '从「广场南侧」沿广场向北几步。', x: 223, n: 184 },
+  { id: 'tavern', label: '未写酒馆', hint: '在酒馆门外，找门口的盖戳牌。', x: 159, n: 221 },
+  { id: 'post', label: '新年邮局', hint: '在邮局通往中央桥的路口南侧。', x: 263.5, n: 190 },
+  { id: 'museum', label: '2026 纪念馆', hint: '从纪念馆入口的路口走向门厅。', x: 343, n: 255 },
+  { id: 'station', label: '火车站', hint: '走进火车站正门，在站厅入口处盖章。', x: 526, n: 315.5 },
+  { id: 'bath', label: '温泉浴场', hint: '在温泉浴场西门内侧。', x: 526, n: 159 },
+  { id: 'castle', label: '冰雪城堡', hint: '在冰雪城堡西门内侧。', x: 462, n: 71 },
+];
+const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites);
+const passportButton = element<HTMLButtonElement>('town-passport-button');
+function showStampCount() {
+  const { collected, total } = passport.getProgress();
+  passportButton.textContent = `纪念戳册 ${collected}/${total}`;
+}
+showStampCount();
+passportButton.onclick = () => {
+  passport.open();
+  showStampCount();
+};
+
+const stampGeometry = new BoxGeometry();
+const stampMarkers = new InstancedMesh(stampGeometry, new MeshLambertMaterial(), stampSites.length * 2);
+stampMarkers.name = '小镇盖戳牌';
+stampMarkers.visible = false;
+const stampTransform = new Matrix4();
+const stampPaint = new Color();
+function paintStamp(index: number, stamped: boolean) {
+  stampMarkers.setColorAt(index * 2 + 1, stampPaint.set(stamped ? '#728eaa' : '#efba67'));
+  stampMarkers.instanceColor!.needsUpdate = true;
+}
+stampSites.forEach((stamp, index) => {
+  const { x, n } = stamp;
+  const ground = grid.heightAt(x, n);
+  const signX = x + .64;
+  const signZ = -n;
+  const signY = grid.heightAt(signX, n);
+  stampMarkers.setMatrixAt(index * 2, stampTransform.makeScale(.19, .9, .2).setPosition(signX, signY + .44, signZ));
+  stampMarkers.setColorAt(index * 2, stampPaint.set('#725045'));
+  stampMarkers.setMatrixAt(index * 2 + 1, stampTransform.makeScale(.42, .31, .19).setPosition(signX, signY + .91, signZ));
+  paintStamp(index, passport.has(stamp.id));
+  activitySpots.push({
+    x, n, ground, range: 1.4, label: `领取${stamp.label}印章`,
+    available: () => !passport.has(stamp.id),
+    run() {
+      if (passport.collect(stamp.id)) {
+        paintStamp(index, true);
+        showStampCount();
+      }
+    },
+  });
+});
+stampMarkers.computeBoundingSphere();
+scene.add(stampMarkers);
 
 function localSpot(group: Group, [east, height, z]: readonly number[], range: number, label: string,
   run: (x: number, n: number, ground: number) => void): TownActivitySpot {
@@ -521,14 +585,21 @@ const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', number[]>;
 activitySpots.push(
   localSpot(tower, towerStops.dial, 1.75, '查看钟楼表盘', () => {
-    activityContext.face(226, 218.08, 77);
+    const dialFocus = tower.userData.dialFocus as [number, number, number];
+    const focus = tower.localToWorld(new Vector3(...dialFocus));
+    activityContext.face(focus.x, -focus.z, focus.y);
     announceActivity('表盘层 · 黄铜指针与传动齿轮');
   }),
   localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
     if (festival.ringBell()) announceActivity('钟声已响');
   }),
   localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
-    activityContext.face(223, 179, 40);
+    const [, deck, opening] = towerStops.lookout;
+    const center = tower.localToWorld(new Vector3(0, deck, opening));
+    x = center.x;
+    n = -center.z;
+    ground = center.y;
+    activityContext.face(223, 179, 75);
     photoFilename = 'UNWRITTEN-2027-clocktower.png';
   }),
 );
@@ -883,10 +954,14 @@ renderer.setAnimationLoop(now => {
   widePanorama = wideView;
   prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView);
   forest.setPanorama(wideView);
+  districts.setPanorama(wideView);
   showWideBridges(wideView);
   railway.setPanorama(wideView);
+  stampMarkers.visible = !wideView && stampSites.some(site =>
+    Math.abs(camera.position.x - site.x) < 34 && Math.abs(camera.position.z + site.n) < 34 &&
+    Math.abs(camera.position.y - grid.heightAt(site.x, site.n)) < 18);
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
-  if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+  if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   prepareLandmarks(camera.position.x, -camera.position.z, !walking);
   if (!streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
     streetsRequested = true;
@@ -905,6 +980,8 @@ renderer.setAnimationLoop(now => {
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   const museum = architecture.get('memorial');
+  const smallLabels = museum?.userData.smallLabels as Mesh[] | undefined;
+  if (smallLabels) for (const label of smallLabels) label.visible = !wideView;
   const interior = museum?.userData.detailInterior as Group | undefined;
   if (interior && museum) {
     interior.visible = Math.abs(camera.position.x - museumEast) < 48 &&

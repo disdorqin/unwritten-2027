@@ -2,13 +2,26 @@ import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
 // The district builder calls this same geometry source for its Voxelize snapshot.
 // @ts-expect-error The original JavaScript builder has no declaration file.
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
-import type { TownPlot } from './landmark-kit';
+import type { Ramp, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 
 type Vec3 = [number, number, number];
 type Bounds = { min: Vec3; max: Vec3 };
 type Cuboid = { at: Vec3; size: Vec3; tone: number };
 type Box = (kind: string, x: number, y: number, z: number, w?: number, h?: number, d?: number) => void;
+
+const unit32 = 1 / 32;
+const hallCeiling = 10.25;
+const dialBandStart = 53.5;
+const dialBandEnd = 71.625;
+
+/** The entrance and ground floor are anchored. The round dials move as a band. */
+export function clocktowerHeight(y: number) {
+  const shaft = Math.max(0, Math.min(y, dialBandStart) - hallCeiling);
+  const belfryAndSpire = Math.max(0, y - dialBandEnd);
+  const lift = (shaft + belfryAndSpire) * 5 / 16;
+  return y + Math.round(lift / unit32) * unit32;
+}
 
 const colors: Record<string, string> = {
   limestone: '#ac9b87', blueStone: '#526276', ivory: '#d1c3a4', stone: '#766a62',
@@ -22,12 +35,13 @@ const colors: Record<string, string> = {
 
 export function buildTowerLandmark(plot: TownPlot): Group {
   const tower = new Group();
-  tower.name = 'Clocktower · 96 m';
+  let towerHeight = 0;
   const shellParts = new Map<string, Cuboid[]>();
   const interiorParts = new Map<string, Cuboid[]>();
   let parts = shellParts;
   const colliders: Bounds[] = [];
   const floors: Bounds[] = [];
+  const ramps: Ramp[] = [];
   const unit = new BoxGeometry(1, 1, 1);
   const matrix = new Matrix4();
   const rotation = new Quaternion();
@@ -38,14 +52,21 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     if (Math.min(w, h, d) <= 0) return;
     const cubes = parts.get(kind) ?? [];
     const tone = .9 + .16 * Math.abs(Math.sin(x * 14.2 + y * 8.3 + z * 95.7));
-    cubes.push({ at: [x + w / 2, y + h / 2, z + d / 2], size: [w, h, d], tone });
+    const bottom = clocktowerHeight(y);
+    const top = clocktowerHeight(y + h);
+    towerHeight = Math.max(towerHeight, top);
+    cubes.push({ at: [x + w / 2, (bottom + top) / 2, z + d / 2], size: [w, top - bottom, d], tone });
     parts.set(kind, cubes);
   };
+  const bounds = (x: number, y: number, z: number, w: number, h: number, d: number): Bounds => ({
+    min: [x, clocktowerHeight(y), z],
+    max: [x + w, clocktowerHeight(y + h), z + d],
+  });
   const solid = (x: number, y: number, z: number, w: number, h: number, d: number) => {
-    colliders.push({ min: [x, y, z], max: [x + w, y + h, z + d] });
+    colliders.push(bounds(x, y, z, w, h, d));
   };
   const floor = (x: number, y: number, z: number, w: number, h: number, d: number) => {
-    floors.push({ min: [x, y, z], max: [x + w, y + h, z + d] });
+    floors.push(bounds(x, y, z, w, h, d));
   };
   function lamp(b: Box, x: number, y: number, z: number, s = 1) {
     b('glow', x - .23 * s, y, z - .23 * s, .46 * s, .61 * s, .46 * s);
@@ -55,8 +76,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     }
   }
 
-  // Rotate the original north entrance to face the new plaza. The old shaft,
-  // clock faces, belfry, spire and bell hall are retained at their original scale.
+  // The original north entrance faces the plaza; the procedural detail feeds the taller shell.
   const windowSill = 1.375;
   const windowLintel = 3.625;
   const windowHalf = .875;
@@ -190,8 +210,8 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       solid(-inner, bottom, edge, inner * 2, top - bottom, depth);
     }
   }
-  shaftWalls(10.25, 53.5, 4.5, 5.375);
-  shaftWalls(53.5, 71.625, 5, 5.5);
+  shaftWalls(hallCeiling, dialBandStart, 4.5, 5.375);
+  shaftWalls(dialBandStart, dialBandEnd, 5, 5.5);
   // The belfry has open arches. Its perimeter guard is aligned with the old iron grilles.
   shaftWalls(71.625, 72.875, 4.875, 5.375);
   // Match the stepped slate shell. Keep the high slot protected by the lookout rail.
@@ -201,9 +221,8 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   }
 
   parts = interiorParts;
-  const unit32 = 1 / 32;
   const snap = (value: number) => Math.round(value / unit32) * unit32;
-  function deck(x0: number, z0: number, x1: number, z1: number, y: number) {
+  function deck(x0: number, z0: number, x1: number, z1: number, y: number, supportZ = z0) {
     box('wood', x0, y - .25, z0, x1 - x0, .21875, z1 - z0);
     const rows = Math.ceil((x1 - x0) / .375);
     for (let i = 0; i < rows; i++) {
@@ -211,7 +230,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       const b = Math.min(x1, a + .375);
       box(i % 3 === 0 ? 'oakEnd' : 'oak', a, y - unit32, z0, b - a - unit32, unit32, z1 - z0);
     }
-    floor(x0, y - .25, z0, x1 - x0, .25, z1 - z0);
+    floor(x0, y - .25, supportZ, x1 - x0, .25, z1 - supportZ);
   }
 
   function guard(x0: number, z0: number, x1: number, z1: number, y: number, endY = y) {
@@ -241,11 +260,20 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     }
   }
 
-  function stairs(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, width: number, count: number) {
+  function stairs(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, width: number, count: number, walkRamp = false) {
     const alongX = z0 === z1;
     const length = Math.hypot(x1 - x0, z1 - z0);
     const half = width / 2;
     const at = (i: number) => snap((alongX ? x0 : z0) + ((alongX ? x1 - x0 : z1 - z0) * i) / count);
+    const ascending = alongX ? x1 > x0 : z1 > z0;
+    if (walkRamp) {
+      const volume = bounds(
+        alongX ? Math.min(x0, x1) : x0 - half, y,
+        alongX ? z0 - half : Math.min(z0, z1),
+        alongX ? length : width, count * rise, alongX ? width : length,
+      );
+      ramps.push({ ...volume, axis: alongX ? 'x' : 'z', ascending: ascending ? 1 : -1 });
+    }
     for (let i = 0; i < count; i++) {
       const lo = Math.min(at(i), at(i + 1));
       const depth = Math.abs(at(i + 1) - at(i));
@@ -255,8 +283,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       const d = alongX ? width : depth;
       const yy = y + (i + 1) * rise;
       box('oak', tx, yy - rise, tz, w, rise, d);
-      floor(tx, yy - rise, tz, w, rise, d);
-      const ascending = alongX ? x1 > x0 : z1 > z0;
+      if (!walkRamp) floor(tx, yy - rise, tz, w, rise, d);
       const edge = ascending ? lo : lo + depth - unit32;
       box('oakEnd', alongX ? edge : tx, yy - unit32, alongX ? tz : edge,
         alongX ? unit32 : w, unit32, alongX ? d : unit32);
@@ -350,8 +377,11 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   guard(-2.25, -3, -2.25, -2.15625, upperTurnY);
   guard(1.78125, -3, 1.78125, -2.15625, upperTurnY);
   guard(-.625, -2.15625, .28125, -2.15625, upperTurnY);
-  stairs(1.03125, -2.15625, 1.03125, .8125, upperTurnY, .1875, 1.5, 18);
-  deck(-1.65625, .8125, 1.78125, 1.8125, lookoutY);
+  // The shallow treads at the roof overlap the player's foot radius. A single
+  // support slope lets the taller stair retain all eighteen visible treads.
+  stairs(1.03125, -2.15625, 1.03125, .8125, upperTurnY, .1875, 1.5, 18, true);
+  // Start platform support slightly behind the visual edge, near the ramp crest.
+  deck(-1.65625, .8125, 1.78125, 1.8125, lookoutY, 1.03125);
   guard(-1.65625, 1.8125, 1.78125, 1.8125, lookoutY);
   guard(-1.65625, .8125, -1.65625, 1.8125, lookoutY);
   guard(1.78125, .8125, 1.78125, 1.8125, lookoutY);
@@ -469,7 +499,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   for (const [x, y, z, radius] of [[0, dialY + 3.55, 1.875, .75], [-1.875, bellY + 3.75, 1.875, .72], [0, lookoutY + 1.75, -.5, .48]]) {
     lamp(box, x, y, z, radius);
     const light = new PointLight('#ffb778', 68 * radius, 12, 2);
-    light.position.set(x, y + .15, z);
+    light.position.set(x, clocktowerHeight(y + .15), z);
     tower.add(light);
   }
 
@@ -510,6 +540,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   tower.add(hallLight);
   tower.userData.colliders = colliders;
   tower.userData.floors = floors;
-  tower.userData.stops = { dial: [0, dialY, 1.25], bell: [.65, bellY, .65], lookout: [1, lookoutY, 1.3] };
+  tower.userData.ramps = ramps;
+  tower.name = `Clocktower · ${Math.round(towerHeight)} m`;
+  tower.userData.stops = {
+    dial: [0, clocktowerHeight(dialY), 1.25],
+    bell: [.65, clocktowerHeight(bellY), .65],
+    lookout: [1, clocktowerHeight(lookoutY), 1.3],
+  };
+  tower.userData.dialFocus = [0, clocktowerHeight(faceY), 4.90625] as Vec3;
   return tower;
 }

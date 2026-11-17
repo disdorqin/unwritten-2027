@@ -16,6 +16,9 @@ label, output, #help, #load-status { font-size: 12px; }
 #position:not(:empty) { display: block; }
 .festival-button, #view-museum { margin-top: 11px; }
 .festival-button { background: #592e3c; border-color: #ad7376; }
+.panel .town-progress { margin: 8px 0 0; padding-top: 7px; border-top: 1px solid #475572; }
+.town-progress button { color: #ffdfad; }
+#place-card { max-height: calc(100dvh - 28px); }
 #load-status { bottom: 16px; right: 16px; margin: 0; padding: 8px 10px; }
 #load-status:empty { display: none; }
 #world-action { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); white-space: nowrap; padding: 11px 17px; background: #f2cf94; border-color: #f2cf94; color: #17202e; }

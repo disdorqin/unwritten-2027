@@ -9,6 +9,9 @@ type Ground = ReturnType<typeof createTerrainGrid>;
 type Style = Parameters<typeof buildDistrictHousing>[0];
 type Site = { x: number; n: number; w: number; d: number; angle: number; style: Style; variant: number };
 type KeepClear = (x: number, n: number, radius: number) => boolean;
+type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
+type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
+const housingCellSize = 96;
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
   const dx = b[0] - a[0];
@@ -42,13 +45,24 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
   const courtyardSnow = new MeshLambertMaterial({ color: '#b5c3d6' });
   const stonePath = new MeshLambertMaterial({ color: '#9b9294', side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
-  const walkTriangles: number[] = [];
-  const batches = new Map<string, { source: Mesh; matrices: Matrix4[]; colors: Color[] }>();
-  const solid = new Group();
-  solid.name = 'district-infill';
-  parent.add(solid);
+  const cells = new Map<string, HousingCell>();
+  const detailed = new Group();
+  detailed.name = 'district-infill';
+  detailed.matrixAutoUpdate = false;
+  parent.add(detailed);
+  let panorama: Group | undefined;
 
-  function addModel(model: Object3D) {
+  function cellAt(x: number, n: number) {
+    const key = `${Math.floor(x / housingCellSize)},${Math.floor(n / housingCellSize)}`;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { batches: new Map(), walks: [] };
+      cells.set(key, cell);
+    }
+    return cell;
+  }
+
+  function addModel(model: Object3D, { batches }: HousingCell) {
     model.updateMatrixWorld(true);
     model.traverse(item => {
       if (!(item instanceof Mesh) || Array.isArray(item.material)) return;
@@ -123,7 +137,8 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
       cap.scale.set(w + .35, .14, d + .35);
       cap.position.y = -.09;
       model.add(cap);
-      addModel(model);
+      const cell = cellAt(x, n);
+      addModel(model, cell);
       sites.push(site);
 
       const dx = Math.sin(angle), dn = -Math.cos(angle);
@@ -135,24 +150,58 @@ export function addDistrictHousing(parent: Group, grid: Ground, lampBlocked: (x:
           return [px, grid.heightAt(px, pn) + .045, -pn];
         });
         if (corners.some(([px, , pz]) => !openSpace(px, -pz, .32))) break;
-        for (const index of [0, 1, 2, 1, 3, 2]) walkTriangles.push(...corners[index]);
+        for (const index of [0, 1, 2, 1, 3, 2]) cell.walks.push(...corners[index]);
       }
     }
   }
 
-  for (const { source, matrices, colors } of batches.values()) {
-    const batch = new InstancedMesh(source.geometry, source.material, matrices.length);
-    matrices.forEach((matrix, i) => batch.setMatrixAt(i, matrix));
-    colors.forEach((color, i) => batch.setColorAt(i, color));
-    solid.add(batch);
+  function renderBatches(target: Group, { batches, walks: triangles }: HousingCell, name: string) {
+    for (const { source, matrices, colors } of batches.values()) {
+      const batch = new InstancedMesh(source.geometry, source.material, matrices.length);
+      matrices.forEach((matrix, i) => batch.setMatrixAt(i, matrix));
+      colors.forEach((color, i) => batch.setColorAt(i, color));
+      batch.matrixAutoUpdate = false;
+      batch.computeBoundingSphere();
+      batch.name = name;
+      target.add(batch);
+    }
+    if (triangles.length) {
+      const walks = new BufferGeometry();
+      walks.setAttribute('position', new BufferAttribute(new Float32Array(triangles), 3));
+      walks.computeVertexNormals();
+      walks.computeBoundingSphere();
+      const path = new Mesh(walks, stonePath);
+      path.matrixAutoUpdate = false;
+      path.name = name + ' paths';
+      target.add(path);
+    }
   }
-  const walks = new BufferGeometry();
-  walks.setAttribute('position', new BufferAttribute(new Float32Array(walkTriangles), 3));
-  walks.computeVertexNormals();
-  solid.add(new Mesh(walks, stonePath));
+
+  for (const [key, cell] of cells) renderBatches(detailed, cell, 'Old town housing ' + key);
+  function setPanorama(wide: boolean) {
+    detailed.visible = !wide;
+    if (wide && !panorama) {
+      const overview: HousingCell = { batches: new Map(), walks: [] };
+      for (const { batches, walks } of cells.values()) {
+        for (const [key, { source, matrices, colors }] of batches) {
+          let entry = overview.batches.get(key);
+          if (!entry) overview.batches.set(key, entry = { source, matrices: [], colors: [] });
+          entry.matrices.push(...matrices);
+          entry.colors.push(...colors);
+        }
+        overview.walks.push(...walks);
+      }
+      panorama = new Group();
+      panorama.name = 'Old town housing panorama';
+      panorama.matrixAutoUpdate = false;
+      renderBatches(panorama, overview, 'Old town housing overview');
+      parent.add(panorama);
+    }
+    if (panorama) panorama.visible = wide;
+  }
   const completed = sites.map(footprints);
   const keepClear: KeepClear = (x, n, radius) => !openSpace(x, n, radius) || lampBlocked(x, n)
     || paths.some(({ start, end, radius: size }) => lineDistance(x, n, start, end) < radius + size + .6)
     || completed.some(site => within(x, n, site, radius + 2));
-  return { count: sites.length, sites, keepClear, blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
+  return { count: sites.length, sites, keepClear, setPanorama, blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }

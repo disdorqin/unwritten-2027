@@ -77,6 +77,7 @@ export function createMuseumBuilder() {
     }
   }
   const labels = new Map<string, CanvasTexture>();
+  const smallLabels: Mesh[] = [];
   function label(text: string, x: number, y: number, z: number, w: number, h: number, ry = 0, options: LabelOptions = {}) {
     if (typeof document === 'undefined') return;
     const { background = '#341d18', color = '#ffe4a0', accent = '#a4783d', border = true } = options;
@@ -112,6 +113,7 @@ export function createMuseumBuilder() {
     mesh.position.set(x, y, z);
     mesh.rotation.y = ry;
     mounting.add(mesh);
+    if (h <= 1.2) smallLabels.push(mesh);
   }
   function light(x: number, y: number, z: number, color: string, power: number, distance: number) {
     lights.push({ position: [x, y, z], color, power, distance });
@@ -145,6 +147,7 @@ export function createMuseumBuilder() {
     }
     Object.assign(group.userData, {
       colliders: colliders.map(scaleBounds), floors: floors.map(scaleBounds), ramps: ramps.map(scaleBounds),
+      smallLabels,
       lights: lights.map(light => ({ ...light, position: [light.position[0] * museumHorizontalScale, light.position[1], light.position[2] * museumHorizontalScale] })),
     });
     return group;
