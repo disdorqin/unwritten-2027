@@ -505,7 +505,7 @@ renderer.setAnimationLoop(now => {
   if (inspectedMonth) {
     const { x: stop, z } = monthStops[inspectedMonth - 1];
     const side = Math.sign(stop);
-    camera.position.set(...museumToWorld(side * (museumCaseCenter - 2.25), 2.1, z - .55));
+    camera.position.set(...museumToWorld(side * (museumCaseCenter - 2.25), 1.83, z - .55));
     camera.lookAt(...museumToWorld(side * museumCaseCenter, 1.55, z));
     element('position').textContent = '';
   } else if (walking && boardingGround && seat) {
