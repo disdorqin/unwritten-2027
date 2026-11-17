@@ -1,4 +1,4 @@
-import { BoxGeometry, DoubleSide, Mesh, MeshBasicMaterial } from 'three';
+import { BoxGeometry, CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace } from 'three';
 import type { MuseumBuilder } from './museum-kit';
 
 const floor = 5.65;
@@ -14,6 +14,73 @@ export const networkStops = [
   { id: 'screening', x: 0, z: -9.4, label: '打开影像放映台' },
   { id: 'collection', x: 9.45, z: 3.7, label: '翻阅网络记忆展柜' },
 ] as const;
+
+const screeningSlides = [
+  {
+    label: '002 · 节目公开视频', topic: '马年春晚《武BOT》', caption: '节目影像可对照首发节目单，核对题名与播出时间。',
+    date: '2026-02-16', month: 2, accent: '#efbd83',
+  },
+  {
+    label: '004 · 公共活动通告', topic: '中国航天日科普展', caption: '从主管机构的原文核对活动地点、展品和开放安排。',
+    date: '2026-04-24', month: 4, accent: '#94d3d8',
+  },
+  {
+    label: '011 · 网络与城市', topic: '乌镇“互联网之光”', caption: '把线下展览与新闻报道对照，辨认同一事件的不同记录。',
+    date: '2026-11-02', month: 11, accent: '#cbc2eb',
+  },
+] as const;
+let screeningIndex = 0;
+
+export function currentMuseumSlide(advance = false) {
+  if (advance) screeningIndex = (screeningIndex + 1) % screeningSlides.length;
+  return screeningSlides[screeningIndex];
+}
+
+function screeningPanel(m: MuseumBuilder, z: number) {
+  if (typeof document === 'undefined') return;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 416;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  const panel = new Mesh(new PlaneGeometry(7.39, 3), new MeshBasicMaterial({ map: texture }));
+  panel.name = '网络记忆放映屏';
+  panel.position.set(0, floor + 2.27, z);
+  m.group.add(panel);
+
+  let rendered: ReturnType<typeof currentMuseumSlide> | undefined;
+  const refresh = () => {
+    const slide = currentMuseumSlide();
+    if (rendered === slide) return;
+    rendered = slide;
+    ctx.fillStyle = '#162a39';
+    ctx.fillRect(0, 0, 1024, 416);
+    ctx.strokeStyle = slide.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(26, 26, 972, 364);
+    ctx.fillStyle = slide.accent;
+    ctx.fillRect(26, 26, 5, 364);
+    ctx.fillRect(58, 300, 908, 1);
+    ctx.font = '600 27px "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+    ctx.fillText('2026 纪念馆 · ' + slide.label, 61, 89, 900);
+    ctx.fillStyle = '#f6ecdc';
+    ctx.font = '700 66px "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+    ctx.fillText(slide.topic, 58, 212, 908);
+    ctx.font = '500 29px "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
+    ctx.fillText(slide.caption, 61, 262, 900);
+    ctx.fillStyle = slide.accent;
+    ctx.font = '500 24px system-ui, sans-serif';
+    ctx.fillText(slide.date, 61, 350);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${screeningIndex + 1} / ${screeningSlides.length}`, 964, 350);
+    ctx.textAlign = 'left';
+    texture.needsUpdate = true;
+  };
+  refresh();
+  panel.onBeforeRender = refresh;
+}
 
 export function addMuseumNetwork(m: MuseumBuilder) {
   const { box, solid, beam, label } = m;
@@ -247,16 +314,8 @@ export function addMuseumNetwork(m: MuseumBuilder) {
   for (const side of [-1, 1]) {
     box(color.wood, side * 4.19, floor + 2.05, screenZ, .33, 3.62, .52);
     box(color.brass, side * 4.19, floor + 3.86, screenZ, .46, .14, .70);
-    for (let i = 0; i < 11; i++) {
-      const height = .11 + Math.abs(Math.sin(i * .84 + side)) * .61;
-      const x = side * (1.51 + i * .168);
-      box(i % 3 ? color.jade : color.brass, x, floor + 1.44 + height * .5, screenZ + .30, .084, height, .022);
-    }
   }
-  const projection = { background: color.screenDark, color: '#eed7ae', accent: '#688991', border: false };
-  label('网络记忆放映室', 0, floor + 2.64, screenZ + .30, 5.6, .73, 0, projection);
-  box(color.brass, 0, floor + 1.32, screenZ + .303, 6.72, .024, .021);
-  label('2026 · MEMORY ARCHIVE', 0, floor + 1.07, screenZ + .31, 4.45, .24, 0, projection);
+  screeningPanel(m, screenZ + .285);
   drawerBank(-4.89, -9.42, 1.26, 1.1, .74);
   box(color.shadow, -4.89, floor + 1.02, -9.43, .87, .45, .55);
   box(color.brass, -4.89, floor + 1.02, -9.735, .34, .26, .16);

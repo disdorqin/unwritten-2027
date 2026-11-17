@@ -1,8 +1,9 @@
 import { museumMonths } from './museum-catalog';
 import { monthStops } from './museum-timeline';
-import { networkStops } from './museum-network';
+import { currentMuseumSlide, networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
 import { museumMap, type MuseumPosition } from './museum-map';
+import { downloadMuseumPostcard } from './museum-postcard';
 
 type Progress = { months: number[]; launch: boolean; archive: boolean; terrace: boolean; stamp: boolean };
 const key = 'unwritten:2026-museum-passport';
@@ -140,7 +141,11 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
     frame('纪念馆参观护照', '一楼 · 服务台');
     line('读三个有内容的月份，再操作航天展台或完成网络档案检索，即可加盖年度纪念章。');
     line(`已读 ${progress.months.length} 个月 · ${progress.launch ? '已完成火箭装配' : progress.archive ? '已完成档案检索' : '还需完成一项互动'}`, 'museum-note');
-    if (progress.stamp) { line('2026 年度纪念章 · 已加盖', 'museum-stamp'); return; }
+    if (progress.stamp) {
+      line('2026 年度纪念章 · 已加盖', 'museum-stamp');
+      button('下载 2026 纪念票', downloadMuseumPostcard);
+      return;
+    }
     const stamp = button('加盖 2026 纪念章', () => { record({ stamp: true }); passport(); });
     stamp.disabled = progress.months.length < 3 || !(progress.launch || progress.archive);
   }
@@ -167,15 +172,27 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
       }
     } else if (id === 'screening') {
       frame('数字放映室', '二楼 · 网络记忆展');
-      const slides = [
-        ['002 · 节目公开视频', '节目画面是原始影像的一部分。找到首发页面，再读出处和日期。'],
-        ['004 · 公共活动通告', '当截图和原文说法不同时，可以沿发布机构和日期找到原始通告。'],
-        ['011 · 网络与城市', '线下展览、网上转发和新闻记录，是同一件事留下的不同材料。'],
-      ];
-      const label = line(slides[0][0], 'museum-slide');
-      const caption = line(slides[0][1]);
-      let offset = 0;
-      button('下一张档案', () => { offset = (offset + 1) % slides.length; [label.textContent, caption.textContent] = slides[offset]; });
+      const label = line('', 'museum-slide');
+      label.setAttribute('aria-live', 'polite');
+      const caption = line('');
+      const sourceLink = document.createElement('a');
+      sourceLink.target = '_blank';
+      sourceLink.rel = 'noopener noreferrer';
+      const credit = line('', 'museum-note');
+      credit.append(sourceLink);
+      function renderSlide(advance = false) {
+        const slide = currentMuseumSlide(advance);
+        const exhibit = museumMonths.find(entry => entry.month === slide.month)?.items.find(item => item.date === slide.date);
+        label.textContent = slide.label;
+        caption.textContent = `${slide.topic}。 ${slide.caption}`;
+        credit.hidden = !exhibit;
+        if (exhibit) {
+          sourceLink.href = exhibit.url;
+          sourceLink.textContent = `查看来源 · ${exhibit.source}`;
+        }
+      }
+      renderSlide();
+      button('下一张档案', () => renderSlide(true));
     } else {
       frame('网络记忆阅览桌', '二楼 · 纸本与数字档案');
       line('这里收录公开档案。二月的节目与十一月的网络展陈可在一楼月展中回查。');

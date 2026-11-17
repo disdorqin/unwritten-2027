@@ -37,20 +37,48 @@ const monthTheme = [
 
 type ArtBox = (lateral: number, y: number, along: number, width: number, height: number, depth: number, paint: string, emit?: boolean) => void;
 
+const modelLabels: Record<number, string> = {
+  1: '哈尔滨冰灯 · 示意模型',
+  4: '探月飞行 · 示意模型',
+  8: '贵州村超 · 球场模型',
+};
+
 function buildObject(month: number, box: ArtBox) {
   const y = 1.18;
   switch (month) {
-    case 1:
-      box(0, y + .12, -.48, .4, .24, .55, timber);
-      box(0, y + .46, -.48, .43, .45, .6, red, true);
-      box(0, y + .70, -.48, .55, .08, .68, brass);
-      box(0, y + .77, -.48, .12, .12, .14, brassBright);
-      box(.04, y + .19, .38, .37, .38, .51, paper);
-      box(.245, y + .24, .38, .026, .087, .46, red);
-      for (let offset = -.14; offset <= .15; offset += .12) {
-        box(.26, y + .13, .38 + offset, .02, .08, .066, '#645342');
+    case 1: {
+      const ice = '#89cddc';
+      const frost = '#c9f3fa';
+      const iceShadow = '#377a9d';
+      box(0, y + .048, 0, .98, .096, 1.76, iceShadow);
+      box(.013, y + .103, 0, .90, .026, 1.66, frost);
+      // Steps meet the gate without intersecting the glass wall of the case.
+      for (let step = 0; step < 3; step++) {
+        box(.36 - step * .068, y + .122 + step * .025, 0, .09, .035 + step * .05, .34, ice);
+      }
+      for (const wing of [-1, 1]) {
+        box(-.16, y + .234, wing * .25, .43, .26, .24, ice);
+        box(.061, y + .245, wing * .248, .026, .12, .082, '#a4caff', true);
+        box(-.17, y + .377, wing * .27, .47, .044, .30, frost);
+        box(-.16, y + .297, wing * .58, .40, .37, .299, ice);
+        box(.046, y + .305, wing * .58, .026, .13, .076, '#f9b7e2', true);
+        for (let tier = 0; tier < 3; tier++) {
+          box(-.16, y + .502 + tier * .055, wing * .58,
+            .43 - tier * .11, .055, .34 - tier * .086, tier % 2 ? ice : frost);
+        }
+      }
+      box(-.18, y + .41, 0, .44, .12, .59, ice);
+      for (let tier = 0; tier < 4; tier++) {
+        box(-.18, y + .49 + tier * .061, 0, .48 - tier * .09, .061,
+          .60 - tier * .123, tier % 2 ? ice : frost);
+      }
+      box(-.18, y + .73, 0, .08, .074, .08, '#c1d7ff', true);
+      for (const edge of [-.61, -.38, .38, .61]) {
+        box(.35, y + .166, edge, .095, .098, .092, ice);
+        box(.35, y + .23, edge, .071, .038, .071, '#bff3ff', true);
       }
       break;
+    }
     case 2:
       box(0, y + .08, 0, .66, .16, 1.54, blue);
       for (const along of [-.5, .47]) {
@@ -70,15 +98,38 @@ function buildObject(month: number, box: ArtBox) {
       box(-.02, y + .11, .47, .38, .22, .27, '#563934');
       box(.05, y + .24, .48, .26, .11, .19, '#b15d49');
       break;
-    case 4:
-      box(0, y + .10, 0, .67, .20, 1.25, blue);
-      box(-.025, y + .31, 0, .38, .37, .35, brassBright);
-      box(-.025, y + .53, 0, .50, .13, .72, brass);
-      box(-.025, y + .55, -.39, .42, .06, .32, blue, true);
-      box(-.025, y + .55, .39, .42, .06, .32, blue, true);
-      box(-.025, y + .66, 0, .23, .18, .22, '#d8ccb6');
-      box(-.025, y + .77, 0, .059, .12, .08, brassBright);
+    case 4: {
+      const hull = '#e3e6da';
+      const navy = '#20304a';
+      const moon = '#a8aaa3';
+      box(0, y + .043, 0, 1.00, .086, 1.75, navy);
+      box(-.04, y + .20, -.43, .06, .24, .06, brass);
+      box(-.04, y + .39, -.43, .29, .23, .31, hull);
+      box(.105, y + .40, -.43, .052, .164, .232, '#dfaa6e');
+      box(.15, y + .405, -.43, .043, .13, .178, '#596b81');
+      box(-.216, y + .39, -.43, .069, .163, .213, '#777871');
+      for (const wing of [-1, 1]) {
+        for (let section = 0; section < 3; section++) {
+          const along = -.43 + wing * (.187 + section * .070);
+          box(-.021, y + .393, along, .21, .037, .064, '#335689');
+          box(.073, y + .415, along, .014, .009, .045, '#85aae8', true);
+        }
+      }
+      box(-.107, y + .541, -.49, .053, .11, .048, brassBright);
+      box(-.095, y + .619, -.49, .14, .049, .145, hull);
+
+      // Stepped courses give the Moon a hand-built profile. The recesses are stylized craters.
+      box(-.02, y + .164, .438, .38, .11, .38, moon);
+      box(-.02, y + .258, .438, .52, .11, .51, moon);
+      box(-.02, y + .368, .438, .62, .116, .62, '#c6c5b9');
+      box(-.02, y + .477, .438, .52, .11, .53, moon);
+      box(-.02, y + .558, .438, .37, .06, .38, '#d5d2be');
+      for (const [lateral, height, along, crater] of [[.298, .36, .26, .126], [.292, .383, .54, .16], [.233, .472, .54, .079], [.22, .264, .42, .075]]) {
+        box(lateral, y + height, along, .014, crater * .81, crater, '#777a7d');
+        box(lateral + .009, y + height - .028, along, .016, .016, crater * .64, '#dad8c6');
+      }
       break;
+    }
     case 5:
       box(0, y + .07, 0, .71, .14, 1.55, '#506252');
       for (const a of [-.26, .26]) {
@@ -115,15 +166,34 @@ function buildObject(month: number, box: ArtBox) {
       box(.16, y + .28, .25, .14, .15, .14, blue);
       box(.16, y + .38, .25, .105, .10, .10, brass);
       break;
-    case 8:
-      box(0, y + .13, -.2, .58, .26, .49, timber);
-      for (let i = 0; i < 7; i++) {
-        const height = .15 + .065 * Math.min(i, 6 - i);
-        box(-.09, y + .29 + height, -.57 + i * .133, .125, height * 1.7, .14, i % 2 ? '#8ac3b6' : '#afc6a4');
+    case 8: {
+      const grass = '#668b45';
+      const darkGrass = '#52703f';
+      const line = '#e6efd5';
+      box(0, y + .041, 0, 1.08, .082, 1.77, '#58594a');
+      for (let strip = 0; strip < 6; strip++) {
+        box(.058, y + .096, -.67 + strip * .266, .88, .048, .265, strip % 2 ? grass : darkGrass);
       }
-      box(.14, y + .13, .49, .34, .24, .30, '#5c8b8e');
-      box(.14, y + .25, .49, .39, .055, .34, paper);
+      for (const border of [-.315, .429]) box(border, y + .125, 0, .018, .008, 1.44, line);
+      for (const border of [-.72, 0, .72]) box(.057, y + .126, border, .754, .009, .018, line);
+      for (const [sx, sz] of [[.115, .048], [.078, .097], [.03, .125]]) {
+        for (const side of [-1, 1]) box(.057 + sx * side, y + .128, sz, .024, .01, .028, line);
+        for (const side of [-1, 1]) box(.057 + sx * side, y + .128, -sz, .024, .01, .028, line);
+      }
+      for (const end of [-.737, .737]) {
+        for (const post of [-.096, .21]) box(post, y + .16, end, .023, .076, .022, line);
+        box(.057, y + .203, end, .32, .024, .022, line);
+      }
+      for (let tier = 0; tier < 3; tier++) {
+        box(-.413 - tier * .035, y + .144 + tier * .064, -.12, .066, .072, 1.14, '#ac9767');
+        for (let seat = 0; seat < 8; seat++) {
+          box(-.413 - tier * .034, y + .181 + tier * .064, -.61 + seat * .139,
+            .048, .022, .079, (seat + tier) % 3 ? red : '#efc778');
+        }
+      }
+      box(.069, y + .148, 0, .033, .033, .033, '#fcf9ed');
       break;
+    }
     case 9:
       for (let i = 0; i < 5; i++) {
         box(.03 + i * .026, y + .041 + i * .075, -.39 + .035 * i, .52, .067, .62,
@@ -195,6 +265,11 @@ export function addMuseumTimeline(m: MuseumBuilder) {
     m.box(wall, across(.726), y + .39, z, .048, .46, 2.08);
     m.box(brass, across(.77), y + .39, z, .02, .35, 1.99);
     m.box(timber, across(.788), y + .39, z, .017, .28, 1.9);
+    const modelLabel = modelLabels[month];
+    if (modelLabel) {
+      m.label(modelLabel, across(.802), y + .39, z, 1.86, .25, yaw,
+        { background: timber, color: '#ffe1a0', accent: brass });
+    }
     m.box(brass, cabinet, y + .79, z, 1.60, .095, 2.42);
     m.box(timber, cabinet, y + .868, z, 1.34, .083, 2.21);
     m.box(paper, across(-.03), y + .918, z, 1.09, .021, 1.91);
