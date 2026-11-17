@@ -22,6 +22,7 @@ import { createFestival } from './festival';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
+import { createTouchWalk } from './touch-walk';
 import { terraceStop } from './museum-terrace';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
@@ -249,6 +250,16 @@ for (const key of points.keys()) selector.add(new Option(key, key));
 
 const eye = 1.65;
 const keys = new Set<string>();
+const touchWalk = createTouchWalk(element('touch-walk'));
+const museumMapButton = element<HTMLButtonElement>('museum-map-button');
+let looking: { id: number; x: number; y: number } | undefined;
+function resetMovement() {
+  keys.clear();
+  touchWalk.reset();
+  const previous = looking;
+  looking = undefined;
+  if (previous && renderer.domElement.hasPointerCapture(previous.id)) renderer.domElement.releasePointerCapture(previous.id);
+}
 let walking = false;
 let x = 0;
 let n = 0;
@@ -264,7 +275,11 @@ const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
 let captureTerrace = false;
-const museumVisit = createMuseumVisit(() => keys.clear(), () => {
+function pauseForPanel() {
+  resetMovement();
+  touchWalk.setAllowed(false);
+}
+const museumVisit = createMuseumVisit(pauseForPanel, () => {
   x = museumEast + terraceStop.x;
   n = museumNorth - terraceStop.z;
   ground = museumHeight + 5.65;
@@ -273,9 +288,10 @@ const museumVisit = createMuseumVisit(() => keys.clear(), () => {
   captureTerrace = true;
 });
 museumVisit.dialog.addEventListener('close', () => renderer.domElement.focus());
+museumMapButton.onclick = () => museumVisit.openMap({ x: x - museumEast, y: ground - museumHeight, z: museumNorth - n });
 
 function openPlace(title: string, description: string, writing = false) {
-  keys.clear();
+  pauseForPanel();
   element('place-title').textContent = title;
   element('place-text').textContent = description;
   letterForm.hidden = !writing;
@@ -336,11 +352,13 @@ function jump() {
 function mode(next: boolean) {
   leaveRide();
   walking = next;
-  keys.clear();
+  resetMovement();
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
-  element('help').textContent = next ? 'WASD / 方向键移动，拖动转向。靠近互动点后按 E。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。';
+  element('help').textContent = next
+    ? (touchWalk.active() ? '左下摇杆移动，拖动画面转向。' : 'WASD / 方向键移动，拖动转向。靠近互动点后按 E。')
+    : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (next) jump();
   else {
     camera.position.set(465, 305, 122);
@@ -384,21 +402,26 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => keys.delete(e.code));
-addEventListener('blur', () => keys.clear());
-let pointer: number | undefined;
+addEventListener('blur', resetMovement);
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (!walking) return;
-  pointer = e.pointerId;
-  renderer.domElement.focus();
-  renderer.domElement.setPointerCapture(pointer);
+  if (!walking || looking || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
+  looking = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  renderer.domElement.focus({ preventScroll: true });
+  renderer.domElement.setPointerCapture(e.pointerId);
 });
 renderer.domElement.addEventListener('pointermove', e => {
-  if (walking && pointer === e.pointerId) {
-    yaw += e.movementX * .004;
-    pitch = Math.max(-1.42, Math.min(1.42, pitch - e.movementY * .004));
-  }
+  if (!walking || looking?.id !== e.pointerId) return;
+  const scale = e.pointerType === 'touch' ? .007 : .004;
+  yaw += (e.clientX - looking.x) * scale;
+  pitch = Math.max(-1.42, Math.min(1.42, pitch - (e.clientY - looking.y) * scale));
+  looking.x = e.clientX;
+  looking.y = e.clientY;
 });
-renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  renderer.domElement.addEventListener(type, event => {
+    if ((event as PointerEvent).pointerId === looking?.id) looking = undefined;
+  });
+}
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -458,11 +481,11 @@ renderer.setAnimationLoop(now => {
     camera.lookAt(lookAhead.negate().add(camera.position));
     element('position').textContent = '旋转木马 · 乘坐中';
   } else if (walking) {
-    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown'));
-    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
+    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
+    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
     if (!placeCard.open && !museumVisit.dialog.open && (forward || right)) {
       const steps = Math.max(1, Math.ceil(dt / .025));
-      const stride = 7.5 * dt / (steps * Math.hypot(forward, right));
+      const stride = 7.5 * dt / (steps * Math.max(1, Math.hypot(forward, right)));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
       for (let i = 0; i < steps; i++) {
@@ -485,9 +508,12 @@ renderer.setAnimationLoop(now => {
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
   rehearse.disabled = festival.active();
+  const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
+  touchWalk.setAllowed(canControl && !boardingGround);
+  museumMapButton.hidden = !canControl || Math.abs(x - museumEast) > 29 || Math.abs(n - museumNorth) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
-  const label = action ? `E · ${action.label}` : '';
+  const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
   renderer.render(scene, camera);
   if (captureTerrace) {

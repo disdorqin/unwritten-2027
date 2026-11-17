@@ -2,6 +2,7 @@ import { museumMonths } from './museum-catalog';
 import { monthStops } from './museum-timeline';
 import { networkStops } from './museum-network';
 import { terraceStop } from './museum-terrace';
+import { museumMap, type MuseumPosition } from './museum-map';
 
 type Progress = { months: number[]; launch: boolean; archive: boolean; terrace: boolean; stamp: boolean };
 const key = 'unwritten:2026-museum-passport';
@@ -199,7 +200,10 @@ export function createMuseumVisit(prepareOpen: () => void, cameraPhoto: () => vo
     ...networkStops.map(({ id, x, z, label }) => ({ x, z, y: 5.65, range: 2.35, label, run: () => network(id) })),
     { ...terraceStop, y: 5.65, range: 2.8, label: '使用露台观景台', run: terrace },
   ];
-  return { dialog, near(x: number, y: number, z: number) {
+  return { dialog, openMap(position: MuseumPosition) {
+    frame('馆内地图', '2026 纪念馆');
+    museumMap(content, position, progress.months);
+  }, near(x: number, y: number, z: number) {
     let distance = Infinity;
     let nearest: (typeof stops)[number] | undefined;
     for (const stop of stops) {
