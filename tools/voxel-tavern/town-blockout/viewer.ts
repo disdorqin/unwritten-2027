@@ -38,6 +38,10 @@ import { createPostActivity } from './post-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
 import { createIceActivity } from './ice-activity';
+import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
+import { createLakeSkatingActivity } from './lake-skating-activity';
+import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-course';
+import { createLakeSkateMotion } from './lake-skate-motion';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
 import { createWindowActivity } from './town-window';
@@ -368,6 +372,8 @@ const points = new Map<string, number[]>([
   ['西南河畔街巷', [161.5, 165.5]],
   ['东北坡地街巷', [319, 221]],
   ['冰湖雪球场', [350, 92.5]],
+  ['冰湖滑冰', [lakeSkateStation.x, lakeSkateStation.n]],
+  ['冰湖冰钓', [iceFishingStation.x, iceFishingStation.n]],
   ['东侧扩建步道', [443, 221]],
   ['北侧森林街区', [93, 378]],
   ['火车站', [526, 305]],
@@ -391,6 +397,7 @@ const museumMapButton = element<HTMLButtonElement>('museum-map-button');
 const crosshair = element('walk-crosshair');
 const touchJump = element<HTMLButtonElement>('touch-jump');
 const walkClock = createTownPhysicsClock();
+const lakeSkateMotion = createLakeSkateMotion();
 const walkPrevious = new Vector3();
 const walkCurrent = new Vector3();
 const walkRender = new Vector3();
@@ -403,6 +410,7 @@ function stopTravel() {
   doubleForward = false;
   touchWalk.reset();
   walkClock.reset();
+  lakeSkateMotion.reset();
 }
 function resetMovement() {
   stopTravel();
@@ -537,6 +545,8 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity });
+const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const activities: TownActivity[] = [
   createPostActivity, createStageActivity, createMarketActivity,
   createIceActivity, createWishActivity, createRestActivity,
@@ -563,7 +573,7 @@ function announceActivity(message: string, gold = false) {
   }, 4200);
 }
 activities.unshift(tavernActivity);
-activities.push(townLights, npcActivity, practiceTarget);
+activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
 const activitySpots = activities.flatMap(activity => activity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
@@ -999,6 +1009,8 @@ function jump() {
   const target = layout.plots[plotLabels.indexOf(selector.value)];
   const destinations: Record<string, readonly [number, number]> = {
     '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
+    '冰湖滑冰': [lakeSkateGates[0].x, lakeSkateGates[0].n],
+    '冰湖冰钓': [iceFishingStation.x - 1.5, iceFishingStation.n - 1.5],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
     '温泉浴场': [524, 158], '冰雪城堡': [460, 72],
@@ -1012,6 +1024,7 @@ function jump() {
   pitch = selector.value === '雪团练习场' ? .09 : 0;
 }
 function mode(next: boolean) {
+  lakeSkating.stop();
   leaveRide();
   leaveSeat();
   resetMovement();
@@ -1063,6 +1076,10 @@ function lookAllowed() {
   return walking && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround; }
+function skatesOnIce() {
+  return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
+    Math.abs(ground - grid.heightAt(x, n)) <= .16;
+}
 function turnView(horizontal: number, vertical: number) {
   if (boardingGround) {
     rideYawOffset += horizontal;
@@ -1304,19 +1321,27 @@ renderer.setAnimationLoop(now => {
     }
     let interpolation = 1;
     if (moveAllowed()) {
-      const stride = (sprint ? 11.3 : 7.5) * snowballWalkFactor * townPhysicsDelta / Math.max(1, Math.hypot(forward, right));
-      const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * stride;
-      const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * stride;
+      const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor / Math.max(1, Math.hypot(forward, right));
+      const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
+      const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
-        if (forward || right) {
-          const water = waterAtFeet();
-          const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : airHeight === undefined ? 1 : .8;
-          const nx = x + east * moveScale;
-          const nn = n + north * moveScale;
-          if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
+        if (skatesOnIce()) {
+          const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
+          if ((glide.east || glide.north) &&
+            !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
+        } else {
+          lakeSkateMotion.reset();
+          if (forward || right) {
+            const water = waterAtFeet();
+            const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : airHeight === undefined ? 1 : .8;
+            const nx = x + east * moveScale * townPhysicsDelta;
+            const nn = n + north * moveScale * townPhysicsDelta;
+            if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
+          }
         }
         stepJump(townPhysicsDelta);
+        if (lakeSkating.enabled()) lakeSkating.onPosition(x, n, townPhysicsDelta, isLakeSkateIce(x, n));
         storeWalkView(walkCurrent);
       });
     } else {
@@ -1327,7 +1352,7 @@ renderer.setAnimationLoop(now => {
     const water = waterAtFeet();
     faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
     const movement = water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
-      airHeight !== undefined ? '腾空' : sprint ? '疾跑' : '行走';
+      airHeight !== undefined ? '腾空' : skatesOnIce() ? '滑冰' : sprint ? '疾跑' : '行走';
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
   } else {
     controls.update();
