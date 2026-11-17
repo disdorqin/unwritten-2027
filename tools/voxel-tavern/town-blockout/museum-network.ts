@@ -427,7 +427,7 @@ export function addMuseumNetwork(m: MuseumBuilder) {
 
   // Keep the direction key at the stair landing and pair each line with a
   // matching badge at its station. Supports are above the walking envelope.
-  const directoryX = 12.56, directoryZ = -12.04, directoryY = floor + 2.53;
+  const directoryX = 15.65, directoryZ = -12.90, directoryY = floor + 2.53;
   for (const dx of [-1.34, 1.34]) {
     beam(color.walnut, [directoryX + dx, directoryY + .55, directoryZ],
       [directoryX + dx, floor + 4.63, -11.3], .064);
