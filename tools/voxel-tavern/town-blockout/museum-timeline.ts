@@ -35,13 +35,20 @@ const monthTheme = [
   ['岁末回望', '#77433e', '#d9ae82'],
 ] as const;
 
-const monthModels = [
+export const monthModels = [
   '哈尔滨冰灯宫', '冬奥冰场与人形机器人', '崇明春植', '探月飞船与月面',
   '天舟货运舱', '国际足球揭幕球场', '世界人工智能大会', '贵州村超球场',
   '网络安全工作台', '秋日水乡', '乌镇互联网展亭', '岁末空白台历',
 ] as const;
 
-export const museumCaseCenter = 12.19;
+const museumCaseCenter = 12.19;
+
+export function addMonthExhibit(m: MuseumBuilder, { month, x, z }: typeof monthStops[number]) {
+  const side = Math.sign(x);
+  const build = month <= 6 ? buildWestDetail : buildEastDetail;
+  build(month, (lateral, heightBase, along, width, height, depth, paint, emit = false) =>
+    m.detailBox(paint, side * (museumCaseCenter - lateral), heightBase, z + along, width, height, depth, 0, emit));
+}
 
 export function addMuseumTimeline(m: MuseumBuilder) {
   const y = .28;
@@ -113,9 +120,7 @@ export function addMuseumTimeline(m: MuseumBuilder) {
     }
     m.box(timber, backdrop - side * .22, y + 3.66, z, .49, .16, 2.68);
     m.box(lamp, backdrop - side * .34, y + 3.55, z, .105, .027, 2.22, 0, true);
-    const build = month <= 6 ? buildWestDetail : buildEastDetail;
-    build(month, (lateral, heightBase, along, width, height, depth, paint, emit = false) =>
-      m.detailBox(paint, across(lateral), heightBase, z + along, width, height, depth, 0, emit));
+    addMonthExhibit(m, { month, x, z });
   }
   monthStops.forEach(display);
 

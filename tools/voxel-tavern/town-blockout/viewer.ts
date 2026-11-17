@@ -24,7 +24,7 @@ import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { terraceStop } from './museum-terrace';
-import { monthStops, museumCaseCenter } from './museum-timeline';
+import { createMuseumInspection } from './museum-inspection';
 import { museumHorizontalScale } from './museum-scale';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
@@ -280,16 +280,12 @@ const letterBody = element<HTMLTextAreaElement>('letter-body');
 const letterReceipt = element('letter-receipt');
 const letterKey = 'unwritten:snow-town-letter';
 let captureTerrace = false;
-let inspectedMonth: number | undefined;
-function setInspection(month?: number) {
+const museumInspection = createMuseumInspection(renderer, camera.aspect);
+function inspectExhibit(month: number) {
   resetMovement();
-  inspectedMonth = month;
-  camera.zoom = month ? Math.min(1.4, Math.max(.72, camera.aspect * 1.14)) : 1;
-  camera.updateProjectionMatrix();
-  if (month) {
-    touchWalk.setAllowed(false);
-    renderer.domElement.focus({ preventScroll: true });
-  }
+  touchWalk.setAllowed(false);
+  museumInspection.open(month);
+  renderer.domElement.focus({ preventScroll: true });
 }
 function pauseForPanel() {
   resetMovement();
@@ -303,7 +299,7 @@ const museumVisit = createMuseumVisit(pauseForPanel, () => {
   yaw = Math.atan2(226 - x, 223 - n);
   pitch = .22;
   captureTerrace = true;
-}, setInspection);
+}, inspectExhibit);
 museumVisit.dialog.addEventListener('close', () => renderer.domElement.focus());
 function museumPosition() {
   return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
@@ -352,7 +348,7 @@ const tour = [
 function currentAction() {
   if (!walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: '离开旋转木马', run: leaveRide };
-  if (inspectedMonth) return { label: '返回展柜', run: () => setInspection() };
+  if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   const local = museumPosition();
   const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
@@ -374,7 +370,7 @@ function jump() {
 function mode(next: boolean) {
   leaveRide();
   walking = next;
-  setInspection();
+  museumInspection.close();
   controls.enabled = !next;
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
@@ -414,15 +410,20 @@ selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 addEventListener('keydown', e => {
   if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
-  if (inspectedMonth && e.code === 'Escape') {
-    setInspection();
+  if (museumInspection.active) {
+    if (e.code === 'Escape' || (e.code === 'KeyE' && !e.repeat)) {
+      e.preventDefault();
+      interact();
+    } else {
+      museumInspection.handleKey(e);
+    }
     return;
   }
   if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
     e.preventDefault();
     interact();
   }
-  if (walking && !boardingGround && !inspectedMonth && moveKeys.has(e.code)) {
+  if (walking && !boardingGround && moveKeys.has(e.code)) {
     keys.add(e.code);
     e.preventDefault();
   }
@@ -430,7 +431,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', resetMovement);
 renderer.domElement.addEventListener('pointerdown', e => {
-  if (!walking || looking || inspectedMonth || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
+  if (!walking || looking || museumInspection.active || placeCard.open || museumVisit.dialog.open || e.button !== 0) return;
   looking = { id: e.pointerId, x: e.clientX, y: e.clientY };
   renderer.domElement.focus({ preventScroll: true });
   renderer.domElement.setPointerCapture(e.pointerId);
@@ -450,8 +451,8 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 }
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
-  if (inspectedMonth) camera.zoom = Math.min(1.4, Math.max(.72, camera.aspect * 1.14));
   camera.updateProjectionMatrix();
+  museumInspection.resize(camera.aspect);
   renderer.setSize(innerWidth, innerHeight);
 });
 mode(false);
@@ -502,11 +503,7 @@ renderer.setAnimationLoop(now => {
     beacon.visible = nightMode;
     if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
   }
-  if (inspectedMonth) {
-    const { x: stop, z } = monthStops[inspectedMonth - 1];
-    const side = Math.sign(stop);
-    camera.position.set(...museumToWorld(side * (museumCaseCenter - 2.25), 1.83, z - .55));
-    camera.lookAt(...museumToWorld(side * museumCaseCenter, 1.55, z));
+  if (museumInspection.active) {
     element('position').textContent = '';
   } else if (walking && boardingGround && seat) {
     seat.getWorldPosition(camera.position);
@@ -543,13 +540,14 @@ renderer.setAnimationLoop(now => {
   festival.update(dt);
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
-  touchWalk.setAllowed(canControl && !boardingGround && !inspectedMonth);
-  museumMapButton.hidden = !canControl || Boolean(inspectedMonth) || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+  touchWalk.setAllowed(canControl && !boardingGround && !museumInspection.active);
+  museumMapButton.hidden = !canControl || museumInspection.active || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;
   const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
-  renderer.render(scene, camera);
+  if (museumInspection.active) museumInspection.render();
+  else renderer.render(scene, camera);
   if (captureTerrace) {
     captureTerrace = false;
     renderer.domElement.toBlob(blob => {

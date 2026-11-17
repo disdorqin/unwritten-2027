@@ -54,6 +54,24 @@ label, output, #help, #load-status { font-size: 12px; }
 @keyframes museum-liftoff { to { transform: translateY(-155px); } }
 @media (prefers-reduced-motion: reduce) { .museum-rocket.launched { animation-duration: .01s; } }
 
+body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: none; }
+#museum-inspection { position: fixed; inset: 0; pointer-events: none; }
+#museum-inspection header {
+  position: absolute;
+  inset: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) auto max(18px, env(safe-area-inset-left));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+#exhibit-month { margin: 0 0 5px; color: #e2b781; font-size: 13px; }
+#exhibit-title { margin: 0; color: #fff0d7; font-size: clamp(20px, 4vw, 31px); }
+#exhibit-reset { pointer-events: auto; flex-shrink: 0; min-height: 44px; }
+#exhibit-help { position: absolute; inset: auto 12px max(78px, calc(env(safe-area-inset-bottom) + 74px)); margin: 0; text-align: center; color: #d1dbea; font-size: 13px; }
+.museum-inspecting #world-action {
+  left: 50%; right: auto; bottom: max(22px, calc(env(safe-area-inset-bottom) + 12px));
+  transform: translateX(-50%); min-height: 44px;
+}
 #museum-map-button { position: fixed; right: max(12px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); }
 .museum-map-tabs { margin: 0 0 11px; }
 #museum-card .museum-map-tabs button[aria-pressed="true"] { background: #f0d4a0; color: #432c26; }
