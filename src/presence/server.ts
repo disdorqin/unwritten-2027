@@ -1,11 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import {
-  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
+  BASE_TIER, CELL_METRES, MASCOT_ACTOR_ID, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
 import {
@@ -31,6 +31,8 @@ type Options = {
   tiers?: readonly PresenceTier[];
   now?: () => number;
   testFireworks?: boolean;
+  ownerKey?: string;
+  onMascotClaimRejected?: (total: number) => void;
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
 };
@@ -60,6 +62,9 @@ type Peer = {
   joinedAt?: number;
   ceremonyWarned?: boolean;
   ceremonyArrival?: CeremonyArrival;
+  ownerChallenge?: { nonce: string; expiresAt: number };
+  ownerFailures?: number;
+  ownerRetryAt?: number;
 };
 
 type TokenBucket = { tokens: number; at: number };
@@ -116,6 +121,12 @@ export async function createPresenceServer(options: Options = {}) {
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
   const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
+  let owner: Peer | undefined;
+  let mascot: { id: number; record: PresenceRecord; version: number; pose: number } | undefined;
+  let mascotUntil = 0;
+  let nextMascotSample = 0;
+  let mascotVersion = 0;
+  let rejectedMascotClaims = 0;
   let fireworksOccupiedUntil = 0;
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
   let photoId = 0;
@@ -245,9 +256,31 @@ export async function createPresenceServer(options: Options = {}) {
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) send(recipient, relay);
   }
 
+  function issueOwnerChallenge(peer: Peer) {
+    const time = now();
+    if (!options.ownerKey || peer === owner || time < (peer.ownerRetryAt ?? 0)) return;
+    if (peer.ownerRetryAt !== undefined) {
+      peer.ownerRetryAt = undefined;
+      peer.ownerFailures = 0;
+    }
+    const nonce = randomBytes(24).toString('hex');
+    peer.ownerChallenge = { nonce, expiresAt: time + 120_000 };
+    send(peer, JSON.stringify({ type: 'owner-challenge', nonce }));
+  }
+
+  function releaseMascot() {
+    if (!mascot) return;
+    mascot = undefined;
+    broadcast(JSON.stringify({ type: 'leave', id: MASCOT_ACTOR_ID }));
+  }
+
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
     ceremonyWaiting.delete(peer);
+    if (peer === owner) {
+      owner = undefined;
+      releaseMascot();
+    }
     clearTimeout(peer.joinTimer);
     if (!peer.name) return;
     online--;
@@ -346,6 +379,37 @@ export async function createPresenceServer(options: Options = {}) {
       }
       return;
     }
+    if (message.type === 'owner-challenge-request' && peer.name) {
+      if (allowEvent(peer, now())) issueOwnerChallenge(peer);
+      return;
+    }
+    if (message.type === 'owner-mascot-stop' && peer.name) {
+      if (peer === owner) releaseMascot();
+      return;
+    }
+    if (message.type === 'owner-proof' && peer.name) {
+      if (!allowEvent(peer, now())) return;
+      const challenge = peer.ownerChallenge;
+      peer.ownerChallenge = undefined;
+      const proof = 'proof' in message ? message.proof : undefined;
+      const key = options.ownerKey;
+      let accepted = false;
+      if (key && challenge && now() < challenge.expiresAt && typeof proof === 'string' && /^[0-9a-f]{64}$/.test(proof)) {
+        const expected = createHash('sha256').update(key).update(challenge.nonce).digest();
+        accepted = timingSafeEqual(expected, Buffer.from(proof, 'hex')) && (!owner || owner === peer);
+        if (accepted) {
+          owner = peer;
+          nextMascotSample = 0;
+        }
+      }
+      if (!accepted && challenge) {
+        peer.ownerFailures = (peer.ownerFailures ?? 0) + 1;
+        if (peer.ownerFailures >= 5) peer.ownerRetryAt = now() + 600_000;
+      }
+      send(peer, JSON.stringify({ type: 'owner-result', accepted }));
+      if (!accepted) issueOwnerChallenge(peer);
+      return;
+    }
     if (message.type === 'leave' && peer.name) {
       peer.socket.close();
       return;
@@ -395,6 +459,7 @@ export async function createPresenceServer(options: Options = {}) {
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
+    issueOwnerChallenge(peer);
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
     updateFireworks(now());
     updateCeremony(joinedAt);
@@ -404,6 +469,23 @@ export async function createPresenceServer(options: Options = {}) {
     const record = readRecord(bytes);
     if (!peer.name || !record) { peer.socket.close(1008); return; }
     const time = now();
+    if (record.id === MASCOT_ACTOR_ID) {
+      if (peer !== owner) {
+        rejectedMascotClaims++;
+        if (rejectedMascotClaims === 1 || rejectedMascotClaims % 100 === 0)
+          options.onMascotClaimRejected?.(rejectedMascotClaims);
+        return;
+      }
+      if (time < nextMascotSample || !peer.record || mascot?.record.seq === record.seq) return;
+      if (record.east > eastLimit || record.north > northLimit || record.height > heightLimit ||
+          // Follow permits a 30 m gap with room for one position sample in flight.
+          horizontalDistanceSquared(peer.record, record) > 3_200 ** 2 ||
+          Math.abs(peer.record.height - record.height) > 500) return;
+      nextMascotSample = time + 1000 / BASE_TIER.hz;
+      mascotUntil = time + 2250;
+      mascot = { id: MASCOT_ACTOR_ID, record, version: ++mascotVersion, pose: 0 };
+      return;
+    }
     peer.tokens = Math.min(rateBurst, peer.tokens + (time - peer.tokenAt) * BASE_TIER.hz / 1000);
     peer.tokenAt = time;
     if (peer.tokens < 1) return;
@@ -450,12 +532,19 @@ export async function createPresenceServer(options: Options = {}) {
         }
       }
       nearby.sort((a, b) => a.distance - b.distance || a.peer.id - b.peer.id);
-      const visible = nearby.slice(0, eventVisibleLimits[tierIndex]).map(entry => entry.peer).sort((a, b) => a.id - b.id);
+      const visible: { id: number; record?: PresenceRecord; version: number; pose: number }[] =
+        nearby.slice(0, eventVisibleLimits[tierIndex]).map(entry => entry.peer);
+      if (mascot && horizontalDistanceSquared(state, mascot.record) <= radiusSquared &&
+          Math.abs(state.height - mascot.record.height) <= 1000) {
+        if (visible.length === eventVisibleLimits[tierIndex]) visible.pop();
+        visible.push(mascot);
+      }
+      visible.sort((a, b) => a.id - b.id);
       if (visible.length === peer.visible.length &&
           visible.every((other, i) => other.id === peer.visible[i].id && other.version === peer.visible[i].version)) continue;
       if (send(peer, writeSnapshot(visible.map(other => other.record!)))) {
         // The returning peer may have cached another pose before it moved beyond interest.
-        for (const other of visible) if (!peer.visible.some(previous => previous.id === other.id)) {
+        for (const other of visible) if (other.id !== MASCOT_ACTOR_ID && !peer.visible.some(previous => previous.id === other.id)) {
           send(peer, JSON.stringify({ type: 'pose', id: other.id, pose: other.pose }));
         }
         peer.visible = visible.map(other => ({ id: other.id, version: other.version }));
@@ -477,7 +566,7 @@ export async function createPresenceServer(options: Options = {}) {
     }
     if (closing || peers.size >= MAX_SESSIONS) { refuse(socket, '503 Service Unavailable'); return; }
     wss.handleUpgrade(req, socket, head, ws => {
-      while (peers.has(nextId)) nextId = nextId % 65535 + 1;
+      while (nextId === MASCOT_ACTOR_ID || peers.has(nextId)) nextId = nextId % 65535 + 1;
       const id = nextId;
       nextId = nextId % 65535 + 1;
       const t = now();
@@ -515,6 +604,7 @@ export async function createPresenceServer(options: Options = {}) {
     const wallNow = Date.now();
     updateCeremony(wallNow);
     if (photo) updatePhoto(wallNow);
+    if (mascot && time >= mascotUntil) releaseMascot();
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;
     let nextTier = 0;

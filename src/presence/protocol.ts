@@ -2,6 +2,7 @@ export const PRESENCE_PATH = '/presence';
 export const MAX_SESSIONS = 64;
 export const MAX_VISIBLE = 48;
 export const RECORD_BYTES = 12;
+export const MASCOT_ACTOR_ID = 0xfffe;
 export const CELL_METRES = 32;
 export const TOWN_BOUNDS = { width: 640, depth: 512, height: 655.35 } as const;
 

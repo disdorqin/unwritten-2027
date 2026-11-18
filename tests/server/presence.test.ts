@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
+import { createHash } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { MASCOT_ACTOR_ID } from "../../src/presence/protocol.js";
 import { createRehearsalClockEndpoint } from "../../src/presence/rehearsal-clock.js";
 import { ceremonyLandingAnnouncement } from "../../src/presence/ceremony-arrival.js";
 import {
@@ -41,6 +43,8 @@ type Control = {
   edge?: boolean;
   captureAt?: number;
   people?: PlazaPhotoPerson[];
+  nonce?: string;
+  accepted?: boolean;
 };
 
 function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T, accept = (_frame: Buffer) => true) {
@@ -102,9 +106,8 @@ function decodeSnapshot(frame: Buffer): Record[] {
   });
 }
 
-function encodePose({ east, north, height, yaw, sequence }: Pose) {
+function encodePose({ east, north, height, yaw, sequence }: Pose, clientId = 999) {
   const bytes = Buffer.alloc(recordBytes);
-  const clientId = 65_534;
   [clientId, east, north, height, yaw, sequence].forEach((value, index) => {
     bytes.writeUInt16LE(value, index * 2);
   });
@@ -112,6 +115,51 @@ function encodePose({ east, north, height, yaw, sequence }: Pose) {
 }
 
 type Config = Omit<NonNullable<Parameters<typeof createPresenceServer>[0]>, "host" | "port">;
+
+test("mascot actor requires a socket proof and is withdrawn on owner disconnect", async t => {
+  const ownerKey = "local-test-key";
+  const rejects: number[] = [];
+  const town = await fixture(t, { ownerKey, onMascotClaimRejected: count => rejects.push(count) });
+  const owner = await town.join("同名游客");
+  const guest = await town.join("同名游客");
+  const challenge = await owner.text.next(message => message.type === "owner-challenge");
+  const guestChallenge = await guest.text.next(message => message.type === "owner-challenge");
+  assert.notEqual(challenge.nonce, guestChallenge.nonce);
+
+  const position = { east: 10_000, north: 10_000, height: 1800, yaw: 0, sequence: 1 };
+  owner.socket.send(encodePose(position));
+  guest.socket.send(encodePose(position));
+  await owner.snapshot.next(records => records.some(record => record.id === guest.id));
+
+  const proof = createHash("sha256").update(ownerKey + challenge.nonce).digest("hex");
+  guest.socket.send(JSON.stringify({ type: "owner-proof", proof }));
+  assert.equal((await guest.text.next(message => message.type === "owner-result")).accepted, false);
+  guest.socket.send(encodePose(position, MASCOT_ACTOR_ID));
+
+  owner.socket.send(JSON.stringify({ type: "owner-proof", proof }));
+  assert.equal((await owner.text.next(message => message.type === "owner-result")).accepted, true);
+  owner.socket.send(encodePose({ ...position, east: 10_160, sequence: 2 }, MASCOT_ACTOR_ID));
+  const following = await guest.snapshot.next(records => records.some(record => record.id === MASCOT_ACTOR_ID));
+  assert.equal(following.find(record => record.id === MASCOT_ACTOR_ID)?.east, 10_160);
+  assert.deepEqual(rejects, [1]);
+
+  // An authenticated actor can run to catch up from the design's >8 m gap.
+  await new Promise(resolve => setTimeout(resolve, 115));
+  owner.socket.send(encodePose({ ...position, east: 11_400, sequence: 3 }, MASCOT_ACTOR_ID));
+  const catchingUp = await guest.snapshot.next(records => records.some(record => record.east === 11_400));
+  assert.equal(catchingUp.find(record => record.id === MASCOT_ACTOR_ID)?.east, 11_400);
+  await new Promise(resolve => setTimeout(resolve, 115));
+  owner.socket.send(encodePose({ ...position, east: 13_250, sequence: 4 }, MASCOT_ACTOR_ID));
+  // A later valid packet still succeeds, demonstrating the out-of-range request was not used as the new baseline.
+  owner.socket.send(encodePose({ ...position, east: 11_700, sequence: 5 }, MASCOT_ACTOR_ID));
+  const withinLimit = await guest.snapshot.next(records => records.some(record => record.east === 11_700));
+  assert.equal(withinLimit.find(record => record.id === MASCOT_ACTOR_ID)?.east, 11_700);
+
+  owner.socket.close();
+  await guest.text.next(message => message.type === "leave" && message.id === MASCOT_ACTOR_ID);
+  await guest.snapshot.next(records => !records.some(record => record.id === MASCOT_ACTOR_ID));
+  assert.equal(town.server.stats().online, 1);
+});
 
 async function fixture(context: TestContext, config: Config = {}) {
   const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ...config });
