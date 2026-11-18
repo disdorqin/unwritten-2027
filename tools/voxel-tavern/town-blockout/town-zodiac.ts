@@ -21,8 +21,7 @@ export const zodiacStorageKey = 'unwritten.zodiac.v1';
 export const sealedGoldenGoatClue = '金羊未醒——先集齐其余十一件。';
 export const postMousePosition = [3.10, .3, -6.64] as const;
 
-export function createZodiacProgress(available: readonly TestPickupId[], storage?: StoragePort) {
-  const mounted = new Set<CharmId>(available);
+export function readCollectedZodiac(storage?: Pick<Storage, 'getItem'>): Collected {
   const collected: Collected = {};
   try {
     const saved: { collected?: Collected } = JSON.parse(storage?.getItem(zodiacStorageKey) ?? '{}');
@@ -31,6 +30,12 @@ export function createZodiacProgress(available: readonly TestPickupId[], storage
       if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) collected[id] = date;
     }
   } catch { /* A damaged or unavailable save starts empty. */ }
+  return collected;
+}
+
+export function createZodiacProgress(available: readonly TestPickupId[], storage?: StoragePort) {
+  const mounted = new Set<CharmId>(available);
+  const collected = readCollectedZodiac(storage);
 
   const count = () => charms.filter(([id]) => collected[id]).length;
   const canCollect = (id: CharmId) => mounted.has(id) && !collected[id];
