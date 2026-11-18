@@ -13,9 +13,10 @@ const roles: ReadonlyArray<{
   job: string;
   home: Point;
   stroll: Point;
+  indoorFloor?: number;
   palette: readonly string[];
 }> = [
-  { name: '罗大江', job: '酒馆老板', home: [158.5, 218], stroll: [155.5, 217],
+  { name: '罗大江', job: '酒馆老板', home: [157.75, 230.46], stroll: [157.8, 230.5], indoorFloor: 16.9,
     palette: ['#e3ad7b', '#5a3431', '#913b38', '#e0c6a4', '#503c42', '#db7943', '#f1c774', '#8e5837'] },
   { name: '苏小满', job: '邮局邮差', home: [264, 198], stroll: [264, 194.8],
     palette: ['#edbd94', '#3b4658', '#3f7180', '#e4d29b', '#374654', '#bf5850', '#f2dec4', '#a86c41'] },
@@ -183,8 +184,8 @@ export function createTownNpcActivity(
   let nextBattleLine = 0;
   let active: { role: NpcName; panel: HTMLElement } | undefined;
 
-  const spots: TownActivitySpot[] = roles.map(({ name, home }, index) => ({
-    x: home[0], n: home[1], ground: heightAt(...home), range: 2.15,
+  const spots: TownActivitySpot[] = roles.map(({ name, home, indoorFloor }, index) => ({
+    x: home[0], n: home[1], ground: indoorFloor ?? heightAt(...home), range: 2.15,
     label: `和${name}聊天`,
     run: () => openConversation(index),
   }));
@@ -224,13 +225,13 @@ export function createTownNpcActivity(
     }
   } catch { /* Private browsers keep the visit counts for this session. */ }
 
-  function moveNpc(index: number, x: number, n: number) {
+  function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
     const target = snowballTargets[index];
     spot.x = target.x = x;
     spot.n = n;
     target.z = -n;
-    spot.ground = target.y = heightAt(x, n);
+    spot.ground = target.y = indoorFloor ?? heightAt(x, n);
   }
 
   function sayBattleLine(index: number, line: string) {
@@ -448,7 +449,7 @@ export function createTownNpcActivity(
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = false;
       for (let i = 0; i < roles.length; i++) {
-        const { name, home, stroll } = roles[i];
+        const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];
         const reacting = flinch.remaining > 0;
         if (reacting) flinch.remaining = Math.max(0, flinch.remaining - dt);
@@ -485,7 +486,7 @@ export function createTownNpcActivity(
         const moving = x !== spot.x || n !== spot.n;
         if (!moving && !reacting && !snowMelted) continue;
         if (moving) {
-          moveNpc(i, x, n);
+          moveNpc(i, x, n, indoorFloor);
           facing[i] = Math.atan2(stroll[0] - home[0], home[1] - stroll[1]) + (outward ? 0 : Math.PI);
         }
         const gait = progress > 0 && progress < 1 ? Math.sin(phase * 7) : 0;

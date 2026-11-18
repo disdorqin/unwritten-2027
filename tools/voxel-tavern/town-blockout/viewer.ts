@@ -36,7 +36,10 @@ import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
 import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownActivitySpot, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
+import { createTavernDrinkEffects } from './tavern-drink-effects';
+import { createTavernSeatSpots } from './tavern-seats';
 import './tavern-mix-panel.css';
+import './tavern-drink-effects.css';
 import { createPostActivity } from './post-activity';
 import { createTownMailActivity } from './town-mail-activity';
 import { createRiddleActivity } from './town-riddle-activity';
@@ -439,7 +442,7 @@ let ground = 0;
 let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
-let seated: (TownSeat & { pitch: number }) | undefined;
+let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
 const lookAhead = new Vector3();
@@ -518,12 +521,18 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
   },
   face(east, north, height) {
     stopTravel();
-    yaw = Math.atan2(east - x, north - n);
-    const distance = Math.hypot(east - x, north - n);
-    pitch = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42, Math.atan2(height - ground - eye, distance)));
+    const dx = east - (seated?.x ?? x), dn = north - (seated?.n ?? n);
+    const heading = Math.atan2(dx, dn);
+    const tilt = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42,
+      Math.atan2(height - (seated?.eyeY ?? ground + eye), Math.hypot(dx, dn)),
+    ));
+    if (seated) { seated.yaw = heading; seated.pitch = tilt; }
+    else { yaw = heading; pitch = tilt; }
   },
 };
-const hotSpringSoak = createHotSpringSoak({ sit: activityContext.sit, announce: announceActivity });
+const tavernDrinkEffects = createTavernDrinkEffects();
+tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+const hotSpringSoak = createHotSpringSoak({ sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking);
 const lightsButton = element<HTMLButtonElement>('town-lights-button');
 function showLightCount({ lit, total }: { lit: number; total: number }) {
   lightsButton.textContent = `点亮小镇 ${lit}/${total}`;
@@ -538,7 +547,7 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   return true;
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
-const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity });
+const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects);
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const activities: TownActivity[] = [
@@ -986,10 +995,30 @@ function registerLandmarkActivities(id: string, group: Group) {
     }));
   }
 }
+function seatedTavernNpc() {
+  if (seated?.tavern) return nearestTownActivity(npcActivity.spots, seated.x, seated.n, ground);
+}
+function openTavernSeatActions() {
+  const drink = tavernActivity.carryAction();
+  const talk = seatedTavernNpc();
+  const panel = openPlace('酒馆座位', '');
+  for (const action of [drink, talk, { label: '起身', run: leaveSeat }]) {
+    if (!action) continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = action.label;
+    button.onclick = () => { placeCard.close(); action.run(); };
+    panel.append(button);
+  }
+}
+const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: railway.atPlatform ? '下车' : '结束乘坐并回到站台', run: leaveRide };
-  if (seated) return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
+  if (seated) {
+    if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
+    return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
+  }
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
   const local = museumPosition();
@@ -1134,7 +1163,8 @@ addEventListener('keydown', e => {
   }
   if ((seated || boardingGround) && e.code === 'Escape') {
     e.preventDefault();
-    interact();
+    if (seated) leaveSeat();
+    else leaveRide();
     return;
   }
   if (e.code === 'Escape' && document.pointerLockElement === renderer.domElement) {
@@ -1323,11 +1353,19 @@ const windowActivity = createWindowActivity(
 );
 activities.push(windowActivity);
 activitySpots.push(...windowActivity.spots);
+const tavernPlot = layout.plots.find(({ id }) => id === 'tavern');
+if (tavernPlot) activitySpots.push(...createTavernSeatSpots(tavernPlot, {
+  sit(seat) {
+    activityContext.sit(seat);
+    if (seated) seated.tavern = true;
+  },
+}, canStandAtActivity));
 mode(startInMuseum);
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
+  const startEast = x, startNorth = n;
   movementStepMs = 0;
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
@@ -1485,10 +1523,18 @@ renderer.setAnimationLoop(now => {
     viewBatches.update(cullAerial, camera, staticViewRoots);
     viewFaces.update(cullAerial, camera.position, architecture.values());
     const detailMs = profileTown ? terrainMs + performance.now() - batchesStartedAt : 0;
-    renderer.render(scene, camera);
+    const drinkStartedAt = profileTown ? performance.now() : 0;
+    tavernDrinkEffects.apply(camera, now, walking && (x !== startEast || n !== startNorth), walking);
+    let drinkEffectsMs = profileTown ? performance.now() - drinkStartedAt : 0;
+    try { renderer.render(scene, camera); }
+    finally {
+      const restoreStartedAt = profileTown ? performance.now() : 0;
+      tavernDrinkEffects.restore(camera);
+      if (profileTown) drinkEffectsMs += performance.now() - restoreStartedAt;
+    }
     if (profileTown) {
       renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
-        frameMs: frameSeconds * 1000, feedbackMs,
+        frameMs: frameSeconds * 1000, feedbackMs, drinkEffectsMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
       } }));

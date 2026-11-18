@@ -6,6 +6,9 @@ import { gunzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import type { TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 import source from './tavern-voxel-source';
+import { relocateTavernFurniture, tavernFurnitureColliders, tavernModelToPlot } from './tavern-seats';
+
+export { tavernModelToPlot };
 
 type Vec3 = [number, number, number];
 type Box = [number, number, number, number, number, number];
@@ -125,7 +128,7 @@ function buildParts() {
   const colors: Record<string, string> = { ...data.palette, ...panels, snow: '#c3d2e1' };
   for (const [x, y, z, id] of data.voxels) {
     for (const { m, b } of data.catalogue[id - 2]) {
-      const bounds: Box = [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]];
+      const bounds = relocateTavernFurniture(m, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
       if (bakedSash(m, bounds)) continue;
       const roof = m === 'roof' ? 'blueRoof' : m === 'roofShadow' ? 'blueRoofDark' : m === 'roofGlaze' ? 'blueRoofLight' : m;
       parts.push({ m: roof, b: bounds });
@@ -185,12 +188,6 @@ function isInside(x: number, y: number, z: number) {
   return Math.abs(x) < 6.125 && z > -5.1 && z < 5.18 && y > 2.99 && y < 12.1;
 }
 
-export function tavernModelToPlot(plot: TownPlot) {
-  const sx = plot.footprint[0] / 17.7;
-  const sz = plot.footprint[1] / 18;
-  return (x: number, y: number, z: number): Vec3 => [x * sx, (y - 2) * .9, (z - 1) * sz];
-}
-
 export function buildTavernLandmark(plot: TownPlot) {
   const { parts, colors } = buildParts();
   const group = new Group();
@@ -213,14 +210,15 @@ export function buildTavernLandmark(plot: TownPlot) {
     let inwardX = galleryPull ? 3.35 : at[0] - Math.sin(yaw) * 1.33;
     let inwardZ = at[2] - Math.cos(yaw) * 1.54;
     // Keep the stand on the aisle beside the chairs and the upper gallery rail.
-    if (yaw === 0 && ground === 3) [inwardX, inwardZ] = at[0] < 0 ? [-4.55, 4.38] : [3.95, 4.24];
+    const pianoWindow = yaw === 0 && ground === 3 && at[0] < 0;
+    if (yaw === 0 && ground === 3) [inwardX, inwardZ] = pianoWindow ? [-3.52, 4.65] : [3.95, 4.24];
     if (yaw === 0 && ground === 8 && at[0] > 0) inwardX = 3.52;
     if (yaw === -Math.PI / 2 && ground === 3 && at[2] === -2) inwardX = -5.32;
     // The footprint meets the uphill tread before its centre crosses the riser.
     const stairProbeZ = inwardZ - .25;
     const tread = eastWall && !galleryPull && (ground === 8 || at[2] === 2)
       ? stairs.find(([, , near, , , far]) => stairProbeZ >= near && stairProbeZ <= far) : undefined;
-    const [approachX, walkHeight, approachZ] = transform(inwardX, tread?.[4] ?? ground, inwardZ);
+    const [approachX, walkHeight, approachZ] = transform(inwardX, tread?.[4] ?? (pianoWindow ? 3.25 : ground), inwardZ);
     const [edgeX, , edgeZ] = transform(at[0] + (axis === 0 ? 1.90 : 0), at[1], at[2] + (axis === 2 ? 1.90 : 0));
     addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
       height: 1.725, ground: walkHeight, approach: [approachX, approachZ], style: 'tavern' });
@@ -271,22 +269,17 @@ export function buildTavernLandmark(plot: TownPlot) {
     [-6, 8, 5, -1, 12, 6], [1, 8, 5, 6, 12, 6], [-1, 11, 5, 1, 12, 6],
     [-7, 8, 7.87, 7, 9.2, 8], [-7, 8, 6, -6.87, 9.2, 8], [6.87, 8, 6, 7, 9.2, 8],
     [-5, 3, -3.07, 2.9, 4.18, -1.78], [2, 3, -5, 3, 4.18, -2],
-    [3, 3, -5, 5, 12, -3.65], [-5.92, 3, 2.48, -3.57, 4.8, 4],
-    [-4.73, 3, -.24, -3, 4.02, .84], [-.49, 3, .49, 1.25, 4.02, 1.61],
-    [-4.24, 3, 3.51, -2.51, 4.02, 4.61],
-    [-.4375, 3, -.5625, .4375, 4.3125, .3125],
-    [.3125, 3, 1.8125, 1.1875, 4.3125, 2.6875],
+    [3, 3, -5, 5, 12, -3.65], [-5.875, 3.25, 2.9375, -3.875, 4.875, 3.9375],
+    [-.5, 3, .5, 1.25, 4.02, 1.625],
     [-5.875, 8, -.25, -4.75, 9.375, 1.75],
     [3.875, 8, -2, 4, 9.125, 5],
     [-5.88, 8, -4.8, -.88, 11, -4.22],
-    [-4.75, 8, -2.5, -3, 9, -1.375], [-4.6875, 8, -3.5625, -3.8125, 9.3125, -2.6875],
-    [-3.9375, 8, -1.1875, -3.0625, 9.3125, -.3125],
-    [-.25, 8, 1.5, 1.5, 9, 2.625], [-.1875, 8, .4375, .6875, 9.3125, 1.3125],
-    [.5625, 8, 2.8125, 1.4375, 9.3125, 3.6875],
+    [-4.75, 8, -2.5, -3, 9, -1.375], [-.25, 8, 1.5, 1.5, 9, 2.625],
+    ...tavernFurnitureColliders,
   ];
   const floorBoxes: Box[] = [
     [-7, 2, -6, 7, 3, 8], [-7, 7, -6, 4, 8, 6], [4, 7, -6, 7, 8, -3],
-    [4, 7, 5, 7, 8, 6], [-7, 7.75, 6, 7, 8, 8],
+    [4, 7, 5, 7, 8, 6], [-7, 7.75, 6, 7, 8, 8], [-6, 3, 2.5, -3.5, 3.25, 5],
   ];
   const stairRails = stairs.slice(0, 17).flatMap(([, , z, , tread, back]): Box[] => [
     [4.0625, tread, z, 4.1875, tread + 1, back],

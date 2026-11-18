@@ -20,7 +20,7 @@ const seatedEyeHeight = .82;
 
 type SoakContext = Pick<TownActivityContext, 'sit' | 'announce'>;
 
-export function createHotSpringSoak(context: SoakContext) {
+export function createHotSpringSoak(context: SoakContext, onSoakChange?: (active: boolean) => void) {
   let feedback: HTMLDivElement | undefined;
   let enteredAt: number | undefined;
 
@@ -28,6 +28,7 @@ export function createHotSpringSoak(context: SoakContext) {
     if (enteredAt === undefined) return;
     const duration = Math.floor((performance.now() - enteredAt) / 1000);
     enteredAt = undefined;
+    onSoakChange?.(false);
     feedback?.remove();
     feedback = undefined;
     context.announce(duration > 0 ? `泡汤 ${duration} 秒 · 带着暖意起身上岸` : '水波轻响，你起身上岸');
@@ -47,6 +48,7 @@ export function createHotSpringSoak(context: SoakContext) {
         run() {
           if (enteredAt !== undefined) return;
           enteredAt = performance.now();
+          onSoakChange?.(true);
           context.sit({ x: inside.x, n: -inside.z, eyeY: inside.y, yaw: 0 });
           feedback = document.createElement('div');
           feedback.className = 'hot-spring-soak';

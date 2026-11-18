@@ -1,0 +1,48 @@
+.tavern-drink-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 54%, #130d1638 72%, #130d16e0 100%);
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+.tavern-drink-vignette[data-level="1"][data-still="true"] { opacity: .22; }
+.tavern-drink-vignette[data-level="2"] { opacity: .55; }
+.tavern-drink-vignette[data-level="3"] { opacity: .85; }
+
+.tavern-drink-cup {
+  position: fixed;
+  width: 54px;
+  height: 45px;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  left: calc(50% + min(93px, 18vw));
+  pointer-events: none;
+  border: 3px solid #ead7bc;
+  border-radius: 7px 7px 13px 13px;
+  background: linear-gradient(0deg, var(--drink-color) 0 60%, transparent 60%), #483347e0;
+  box-shadow: inset 0 2px #ffffe660;
+  transform-origin: 61% 71%;
+  animation: tavern-raise-cup 480ms ease-in-out;
+}
+.tavern-drink-cup::after {
+  content: '';
+  position: absolute;
+  right: -16px;
+  top: 7px;
+  width: 15px;
+  height: 23px;
+  border: 3px solid #ead7bc;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+}
+.tavern-drink-cup[data-empty="true"] { background: #483347e0; }
+.tavern-drink-cup[data-still="true"] { animation: none; }
+@keyframes tavern-raise-cup {
+  0% { transform: translateY(12px) rotate(0); }
+  52% { transform: translate(-25px, -14vh) rotate(-24deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tavern-drink-vignette { transition: none; }
+  .tavern-drink-cup { animation: none; }
+}

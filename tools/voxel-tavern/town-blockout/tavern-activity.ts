@@ -4,8 +4,10 @@ import type { TownActivity, TownActivityContext } from './town-activity';
 import { createTavernMixBook, getTavernRecipe, type TavernRecipe } from './tavern-mix-book';
 import { renderTavernMixPanel } from './tavern-mix-panel';
 import { createTavernMixProps } from './tavern-mix-props';
+import type { TavernDrinkFeedback } from './tavern-drink-effects';
 
 const mixSeconds = 2.2;
+const drinkStages = ['', '微醺', '上头', '酒意已满'] as const;
 type MixSession = {
   generation: number;
   panel: HTMLElement;
@@ -15,7 +17,7 @@ type MixSession = {
   served?: TavernRecipe;
 };
 
-export function createTavernActivity(context: TownActivityContext) {
+export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback) {
   const plot = layout.plots.find(({ id }) => id === 'tavern')!;
   const [east, north, altitude] = plot.origin;
   const modelToPlot = tavernModelToPlot(plot);
@@ -23,16 +25,8 @@ export function createTavernActivity(context: TownActivityContext) {
     const [x, y, z] = modelToPlot(...point);
     return { x: east + x, n: north - z, y: altitude + y };
   };
-  const seats = [
-    { label: '坐在一楼餐桌旁', approach: [1.56, 3, 2.53], eye: [.75, 4.4, 2.23], yaw: -.24 },
-    { label: '坐在二楼阅览长凳', approach: [-3.87, 8, 1.36], eye: [-5.25, 9.48, 1.36], yaw: Math.PI / 2 },
-  ] as const;
-  const spots: TownActivity['spots'] = seats.map(({ label, approach, eye, yaw }) => {
-    const { x, n, y: ground } = worldPoint(approach);
-    const seat = worldPoint(eye);
-    return { x, n, ground, range: 1.05, label, run: () => context.sit({ x: seat.x, n: seat.n, eyeY: seat.y, yaw }) };
-  });
-  const counterApproach = worldPoint([-1.85, 3, -.78]);
+  const spots: TownActivity['spots'] = [];
+  const counterApproach = worldPoint([-1.6875, 3, -.22]);
   const counterTop = worldPoint([-1.85, 4.13, -2.43]);
   const book = createTavernMixBook();
   let props: ReturnType<typeof createTavernMixProps> | undefined;
@@ -97,7 +91,7 @@ export function createTavernActivity(context: TownActivityContext) {
           held = current.served;
           current.served = undefined;
           props?.hide();
-          context.announce(`端起了「${held.name}」，离开吧台后可以喝一口。`);
+          context.announce(`端起了「${held.name}」，找个地方可以喝一口。`);
           // Attribute the queued 'close' event to this session's generation
           // before closing, so the shared-dialog handler can tell it apart
           // from a genuine close of any newer session.
@@ -126,12 +120,20 @@ export function createTavernActivity(context: TownActivityContext) {
     spots,
     getMixIds: book.ids,
     carryAction() {
-      if (!held) return undefined;
+      const drink = held;
+      if (!drink || drinkFeedback?.isDrinking()) return undefined;
       return {
-        label: `喝一口「${held.name}」`,
+        label: `喝一口「${drink.name}」`,
         run() {
-          if (!held) return;
-          context.announce(`喝了一口「${held.name}」`);
+          if (held !== drink) return;
+          if (drinkFeedback) {
+            const started = drinkFeedback.sip(drink.color, level =>
+              context.announce(`喝了一口「${drink.name}」 · 空杯 · ${drinkStages[level]}`));
+            if (!started) return;
+            context.announce(`举杯喝「${drink.name}」`);
+          } else {
+            context.announce(`喝了一口「${drink.name}」`);
+          }
           held = undefined;
         },
       };
