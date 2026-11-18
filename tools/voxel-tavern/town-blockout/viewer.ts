@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector3, WebGLRenderer,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -435,7 +435,9 @@ function geometry() {
 }
 let walkGeometry = geometry();
 function geometryAt(east: number, north: number) {
-  if (homeReturn) return sharedHomeGeometry ?? emptyGeometry;
+  return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
+}
+function outdoorGeometryAt(east: number, north: number) {
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -677,6 +679,9 @@ function showLightCount({ lit, total }: { lit: number; total: number }) {
 const townLights = createTownLights({ ...activityContext, announce: announceActivity }, grid, showLightCount);
 showLightCount(townLights.getProgress());
 lightsButton.onclick = townLights.openBook;
+const mascotFrustum = new Frustum();
+const mascotViewProjection = new Matrix4();
+const mascotBounds = new Sphere(new Vector3(), .54);
 const npcActivity = createTownNpcActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, feature => {
   if (feature === 'spring') return architecture.has('hot-spring');
   if (feature === 'castle') return architecture.has('ice-castle');
@@ -691,7 +696,18 @@ panel => openTavernDice(panel, () => {
   if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
   if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
   return '这局你输了，罚酒一杯。';
-}));
+}), {
+  now: presence.serverNow,
+  groundAt: mascotOutdoorGround,
+  visible(east, north, feet) {
+    if (homeReturn) return false;
+    mascotBounds.center.set(east, feet + .32, -north);
+    if (camera.position.distanceToSquared(mascotBounds.center) > 65 ** 2) return false;
+    camera.updateMatrixWorld();
+    mascotFrustum.setFromProjectionMatrix(mascotViewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    return mascotFrustum.intersectsSphere(mascotBounds);
+  },
+});
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 let drinkingPoseUntil = 0;
 let warmDrinkUntil = 0;
@@ -1704,7 +1720,9 @@ let snowMoveScale = 1;
 let chillMoveScale = 1;
 let widePanorama = false;
 function walkable(x: number, n: number) {
-  if (homeReturn) return sharedHomeWalkable(x, n);
+  return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
+}
+function outdoorWalkable(x: number, n: number) {
   const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
   return terrainPassable && !scenery.blocked(x, n) && !districts.blocked(x, n) &&
     !forest.blocked(x, n) && !streetscape.blocked(x, n);
@@ -1732,11 +1750,22 @@ function storeWalkView(position: Vector3) {
   position.set(x, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), -n);
 }
 
-function overlapsBody(east: number, north: number, { min, max }: Box) {
+function overlapsBody(east: number, north: number, { min, max }: Box, radius = bodyRadius) {
   const z = -north;
   const dx = Math.max(min[0] - east, east - max[0], 0);
   const dz = Math.max(min[2] - z, z - max[2], 0);
-  return dx * dx + dz * dz < bodyRadius * bodyRadius;
+  return dx * dx + dz * dz < radius * radius;
+}
+
+function mascotOutdoorGround(east: number, north: number) {
+  if (isWater(east, north) || townWater.at(east, north) || !outdoorWalkable(east, north)) return undefined;
+  const feet = grid.heightAt(east, north);
+  const { colliders, floors } = outdoorGeometryAt(east, north);
+  const blocked = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+    feet + .65 - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box, .18);
+  if (colliders.some(blocked) || floors.some(blocked) ||
+    activities.some(activity => activity.blocked?.(east, north, feet))) return undefined;
+  return feet;
 }
 
 function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
