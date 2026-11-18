@@ -24,6 +24,8 @@ import { addDistrictHousing } from './district-layout';
 import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable } from './landmark-shared-home';
 import { type TownHousePortal } from './town-house-portals';
+import { createHouseDoorBook, findHouseDoorLanding, houseDoorBookCopy, recordHouseDoorVisit, renderHouseDoorBook } from './town-house-door-book';
+import './town-house-door-book.css';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
@@ -65,7 +67,7 @@ import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
-import { createMarketFairActivity } from './market-fair';
+import { createMarketFairActivity, marketStalls } from './market-fair';
 import { createIceActivity } from './ice-activity';
 import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
@@ -80,7 +82,7 @@ import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from
 import { createTownRailway, type TownRailStopId } from './town-railway';
 import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
-import { createTownNpcActivity } from './town-npc';
+import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
@@ -402,8 +404,12 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
-let streetsRequested = false;
+let extensionStreetsLoad: Promise<void> | undefined;
 let homeReturn: TownHousePortal | undefined;
+let houseDoorTravel = false;
+let houseDoorLandingCheck: { entry: TownHousePortal; target: TownHousePortal } | undefined;
+const homeDoors = new Map<string, TownHousePortal>();
+const blockedHouseDoors = new Set<string>();
 let sharedHome: ReturnType<typeof buildSharedHome> | undefined;
 let sharedHomeGeometry: WalkGeometry | undefined;
 
@@ -782,6 +788,8 @@ activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
+    if (homeDoors.has(door.id)) continue;
+    homeDoors.set(door.id, door);
     activitySpots.push({
       x: door.x, n: door.n, ground: door.ground, range: 1.6, label: '进入屋舍空间',
       available: () => !homeReturn,
@@ -798,11 +806,13 @@ function enterSharedHome(door: TownHousePortal) {
     scene.add(sharedHome);
     activitySpots.push(...createSharedHomeSpots({ ...activityContext, announce: announceActivity }, leaveSharedHome, filename => {
       photoFilename = filename;
-    }, sharedHome));
+    }, sharedHome, openHouseDoorBook));
   }
   lakeSkating.stop();
   resetMovement();
   homeReturn = door;
+  recordHouseDoorVisit(door.id);
+  void prepareExtensionStreets();
   sharedHome.visible = true;
   camera.layers.set(sharedHomeLayer);
   ({ x, n, ground, yaw } = sharedHomeSpawn);
@@ -812,6 +822,127 @@ function enterSharedHome(door: TownHousePortal) {
   fadeHousePortal();
   announceActivity('屋舍空间 · 从原门口返回');
 }
+function prepareExtensionStreets() {
+  return extensionStreetsLoad ??= import('./extension-streets').then(({ buildExtensionStreets }) => {
+    extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
+    scene.add(extensionStreets.group);
+    walkGeometry = geometry();
+    activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
+    registerHomeDoors(extensionStreets.housePortals);
+  }).catch(error => {
+    extensionStreetsLoad = undefined;
+    console.error('Loading extension streets', error);
+  });
+}
+
+async function openHouseDoorBook() {
+  const entry = homeReturn;
+  if (!entry || houseDoorTravel) return;
+  const panel = openPlace(houseDoorBookCopy.title, houseDoorBookCopy.introduction);
+  const loading = document.createElement('p');
+  loading.textContent = '正在登记各区屋门…';
+  panel.append(loading);
+  await prepareExtensionStreets();
+  if (homeReturn !== entry || !placeCard.open || !loading.isConnected) return;
+  if (!extensionStreets) {
+    loading.textContent = '屋门清单暂未登记齐，请关册后重试。';
+    return;
+  }
+  const anchors = [
+    ...layout.plots.map(({ door: [x, n] }, i) => ({ label: plotLabels[i], x, n })),
+    ...marketStalls.map(({ kind, east, north }) => ({ label: kind + '摊', x: east, n: north })),
+    ...townNpcDoorAnchors,
+  ];
+  renderHouseDoorBook(panel, createHouseDoorBook([...homeDoors.values()], anchors), entry, blockedHouseDoors,
+    target => void exitThroughHouseDoor(target));
+}
+
+function houseDoorOccupied(east: number, north: number, feet: number) {
+  return presence.getSnowballPeers().some(peer => Math.abs(peer.height - feet) < bodyHeight &&
+    Math.hypot(east - peer.east, north - peer.north) < bodyRadius * 2);
+}
+
+function availableHouseDoorGround(east: number, north: number) {
+  const feet = dryTownLandingHeight(east, north);
+  return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+}
+
+function leaveToRecordedDoor(entry: TownHousePortal, target: TownHousePortal) {
+  blockedHouseDoors.add(target.id);
+  announceActivity(houseDoorBookCopy.blocked);
+  const landing = findNearestLegalSpawn(entry, (east, north) => {
+    const feet = dryTownLandingHeight(east, north, entry.ground);
+    return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+  });
+  if (!landing) {
+    homeReturn = entry;
+    ({ x, n, ground, yaw } = sharedHomeSpawn);
+    camera.layers.set(sharedHomeLayer);
+    if (sharedHome) sharedHome.visible = true;
+    return;
+  }
+  ({ x, n, ground } = landing);
+  yaw = entry.exitYaw;
+}
+
+async function exitThroughHouseDoor(target: TownHousePortal) {
+  const entry = homeReturn;
+  if (!entry || houseDoorTravel) return;
+  houseDoorTravel = true;
+  resetMovement();
+  placeCard.close();
+  const fade = reduceSnowEffects.matches ? undefined : document.createElement('div');
+  try {
+    if (fade) {
+      fade.className = 'house-door-fade';
+      document.body.append(fade);
+      const conceal = fade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+      await conceal.finished.catch(() => {});
+    }
+    // A timed ceremony can move a visitor out of the shared room while the DOM fades.
+    if (homeReturn !== entry) return;
+    homeReturn = undefined;
+    const landing = findHouseDoorLanding(target, availableHouseDoorGround);
+    if (landing) {
+      ({ x, n, ground } = landing);
+      yaw = target.exitYaw;
+      blockedHouseDoors.delete(target.id);
+      houseDoorLandingCheck = { entry, target };
+    } else {
+      leaveToRecordedDoor(entry, target);
+    }
+    if (!homeReturn) {
+      camera.layers.set(0);
+      if (sharedHome) sharedHome.visible = false;
+    }
+    pitch = 0;
+    airHeight = undefined;
+    riseSpeed = 0;
+    if (fade) {
+      const reveal = fade.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
+      await reveal.finished.catch(() => {});
+    } else if (landing) {
+      await new Promise<void>(resolve => window.setTimeout(resolve, 200));
+    }
+  } finally {
+    fade?.remove();
+    houseDoorLandingCheck = undefined;
+    houseDoorTravel = false;
+  }
+}
+
+function checkHouseDoorLanding() {
+  const check = houseDoorLandingCheck;
+  if (!check || !houseDoorOccupied(x, n, ground)) return;
+  // The already established AOI only delivers exterior peers as the player re-enters the town.
+  const landing = findHouseDoorLanding(check.target, availableHouseDoorGround);
+  if (landing) ({ x, n, ground } = landing);
+  else {
+    leaveToRecordedDoor(check.entry, check.target);
+    houseDoorLandingCheck = undefined;
+  }
+}
+
 function fadeHousePortal() {
   if (!reduceSnowEffects.matches) renderer.domElement.animate(
     [{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' },
@@ -1487,7 +1618,7 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
-  if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -1562,6 +1693,7 @@ function refreshLockHint() {
   else help.textContent = walkDragHelp;
 }
 function mode(next: boolean) {
+  if (houseDoorTravel) return false;
   if (homeReturn) {
     leaveSeat();
     leaveSharedHome();
@@ -1625,7 +1757,7 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
 function skatesOnIce() {
@@ -2159,6 +2291,7 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  checkHouseDoorLanding();
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
@@ -2192,18 +2325,8 @@ renderer.setAnimationLoop(now => {
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
   if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z, !walking);
-  if (!homeReturn && !streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
-    streetsRequested = true;
-    import('./extension-streets').then(({ buildExtensionStreets }) => {
-      extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
-      scene.add(extensionStreets.group);
-      walkGeometry = geometry();
-      activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
-      registerHomeDoors(extensionStreets.housePortals);
-    }).catch(error => {
-      streetsRequested = false;
-      console.error('Loading extension streets', error);
-    });
+  if (!homeReturn && !extensionStreetsLoad && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
+    void prepareExtensionStreets();
   }
   extensionStreets?.update(camera, wideView);
   const baths = architecture.get('hot-spring');

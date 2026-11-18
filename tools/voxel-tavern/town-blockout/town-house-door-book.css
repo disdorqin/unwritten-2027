@@ -1,0 +1,7 @@
+.house-door-book { display: grid; gap: 10px; }
+.house-door-book input { width: 100%; padding: 9px; color: inherit; background: #101a2b; border: 1px solid #899ab2; border-radius: 5px; font: inherit; }
+.house-door-book-zones { display: flex; flex-wrap: wrap; gap: 5px; }
+.house-door-book-list { max-height: min(38dvh, 300px); overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.house-door-book-list button { width: 100%; text-align: left; white-space: normal; }
+.house-door-book-list small { display: block; margin-top: 3px; color: #cfdaeb; }
+.house-door-fade { position: fixed; inset: 0; z-index: 1000; background: #f3f7ff; pointer-events: none; }
