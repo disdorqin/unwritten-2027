@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DynamicDrawUsage, Euler, Group, InstancedMesh, Matrix4, MeshLambertMaterial, Points, PointsMaterial, Quaternion, Vector3 } from 'three';
 import type { Box, Ramp } from './landmark-kit';
+import { hotSpringOuterStep, hotSpringPoolFloor, hotSpringPools } from './hot-spring-soak';
 
 const palette = {
   snow: '#c3d6e3',
@@ -153,7 +154,7 @@ export function buildHotSpring(): Group {
     const back = z - depth / 2;
     const left = x - width / 2;
     const right = x + width / 2;
-    floor(x, .46, z, width - .12, depth - .1, .23, 'slate');
+    floor(x, hotSpringPoolFloor, z, width - .12, depth - .1, .23, 'slate');
     box(x, .51, z, width - .43, .045, depth - .45, water);
     for (const [atX, atZ, w, d] of [
       [left, z, edge, depth],
@@ -165,8 +166,8 @@ export function buildHotSpring(): Group {
       masonry(atX, atZ, w, d, .86);
       box(atX, .9, atZ, w + .10, .09, d + .10, 'lightStone');
     }
-    floor(x, .31, front + .71, 1.9, .8, .14, 'granite');
-    floor(x, .46, front + .13, 1.9, .84, .20, 'lightStone');
+    floor(x, hotSpringOuterStep, front + .71, 1.9, .8, .14, 'granite');
+    floor(x, hotSpringPoolFloor, front + .13, 1.9, .84, .20, 'lightStone');
     for (const offset of [-1.18, 1.18]) {
       solid(x + offset, front + .78, .12, .82, .12, 'frame', .18);
       box(x + offset, 1.0, front + .36, .12, .10, .92, 'trim');
@@ -177,8 +178,7 @@ export function buildHotSpring(): Group {
     }
   }
 
-  bath(-.65, -9.1, 7.05, 4.15, 'water');
-  bath(12.08, -8.85, 7.7, 4.6, 'deepWater');
+  for (const { x, z, width, depth, water } of hotSpringPools) bath(x, z, width, depth, water);
   for (const x of [-4.4, 3.1, 7.9, 16.3]) bollard(x, -11.78);
   bench(4.62, -8.55);
   bench(18.6, -9.4);

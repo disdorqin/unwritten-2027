@@ -47,6 +47,7 @@ import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-c
 import { createLakeSkateMotion } from './lake-skate-motion';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
+import { createHotSpringSoak } from './hot-spring-soak';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway } from './town-railway';
@@ -523,6 +524,7 @@ function leaveSeat() {
   if (!seated) return;
   seated = undefined;
   stopTravel();
+  hotSpringSoak.leave();
 }
 const activityContext: Omit<TownActivityContext, 'announce'> = {
   scene,
@@ -538,6 +540,7 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
     pitch = height === undefined ? 0 : Math.max(-1.42, Math.min(1.42, Math.atan2(height - ground - eye, distance)));
   },
 };
+const hotSpringSoak = createHotSpringSoak({ sit: activityContext.sit, announce: announceActivity });
 const lightsButton = element<HTMLButtonElement>('town-lights-button');
 function showLightCount({ lit, total }: { lit: number; total: number }) {
   lightsButton.textContent = `点亮小镇 ${lit}/${total}`;
@@ -966,6 +969,7 @@ function registerLandmarkActivities(id: string, group: Group) {
       },
     });
   } else if (id === 'hot-spring') {
+    activitySpots.push(...hotSpringSoak.spots(group));
     const seats = group.userData.seats as number[][];
     for (const [east, height, z] of seats) {
       activitySpots.push(localSpot(group, [east, .25, z - .85], 1.4, '在温泉馆就座', (x, n, ground) => {
@@ -987,7 +991,7 @@ const tour = [
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: railway.atPlatform ? '下车' : '结束乘坐并回到站台', run: leaveRide };
-  if (seated) return { label: '起身', run: leaveSeat };
+  if (seated) return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
   const local = museumPosition();
