@@ -49,6 +49,7 @@ function createBannerCanvas([title, subtitle]: readonly [string, string]) {
 
 export function addMarketStallBanners(
   parent: Group, stalls: readonly MarketStallLayout[], entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
+  additionalLabels: readonly OpaqueMuseumLabel[] = [],
 ) {
   const previousMap = entrance.material.map;
   const source = previousMap?.image as HTMLCanvasElement | undefined;
@@ -58,7 +59,7 @@ export function addMarketStallBanners(
   }
 
   const tiles = new Map<StallKind, HTMLCanvasElement>();
-  const labels: OpaqueMuseumLabel[] = [];
+  const labels: OpaqueMuseumLabel[] = [...additionalLabels];
   for (const [x, z, width, , kind] of stalls) {
     const labelKind = kind === '吃食' ? '吃食（烤肠/炸串）' : kind === '热饮' ? '热饮（姜茶/热汤）' : kind;
     if (labelKind === undefined || !Object.hasOwn(marketBannerCopy, labelKind)) continue;

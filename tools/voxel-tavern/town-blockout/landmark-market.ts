@@ -7,6 +7,9 @@ import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 import { addMarketStallBanners } from './market-stall-banners';
 import { marketStallLayouts } from './market-stall-layout';
+import { marketFirecrackerCounter } from './personal-firework-stall';
+import { personalFireworkCopy } from './personal-fireworks';
+import { createMuseumLabelCanvas } from './museum-label-canvas';
 
 type Vector = [number, number, number];
 type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
@@ -341,9 +344,21 @@ function buildStalls() {
     post(s, x, 6.67, 4.64, .27);
     lantern(s, x, 3.8, 6.86, .5);
   }
+  const cartX = marketFirecrackerCounter.x - 154;
+  const cartZ = 105 - marketFirecrackerCounter.n;
+  s.put(wood[0], cartX, .41, cartZ, 1.42, .76, .78);
+  s.put(red, cartX, .90, cartZ, 1.48, .24, .78);
+  for (const dx of [-.44, 0, .44]) {
+    s.put(wood[2], cartX + dx, 1.02, cartZ, .39, .14, .47);
+    s.put('#a74241', cartX + dx, 1.13, cartZ + .04, .26, .17, .29);
+    s.put(gold, cartX + dx, 1.14, cartZ + .2, .105, .12, .02);
+  }
   const root = batchParts(s.parts);
-  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
+  const sign = { source: createMuseumLabelCanvas(personalFireworkCopy.sign, 1.42, .27),
+    parent: root, x: cartX, y: .89, z: cartZ + .406, width: 1.42, height: .27, yaw: 0 };
+  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71), [sign]);
   root.userData.colliders = [
+    collision(cartX, 0, cartZ, 1.48, 1.06, .78),
     ...marketStallLayouts.flatMap(([x, z, width]) => [
       collision(x, 0, z - 2.4, width, 3.6, .22),
       collision(x, 0, z + 1.4, width, 1.51, 1.12),
