@@ -5,6 +5,11 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Box, Ramp } from './landmark-kit';
 import { addLandmarkNameplate, useLandmarkEmissionMask } from './landmark-label';
+import {
+  addIceCastleCarvings, addIceCastleChandelier, addIceCastleDeer, createIceCastleRefinementRuntime, iceCastleExhibits,
+} from './ice-castle-refinement';
+import { addOpaqueMuseumLabels } from './museum-label-atlas';
+import { createMuseumLabelCanvas } from './museum-label-canvas';
 
 const palette = {
   foundation: '#31546f',
@@ -20,6 +25,7 @@ const palette = {
   lantern: '#ffd29e',
 } as const;
 type Finish = keyof typeof palette;
+type IceDetail = 'frame' | 'crown' | 'core';
 
 export const iceThrone = {
   stand: [17.98, .57, -4.92],
@@ -28,18 +34,25 @@ export const iceThrone = {
   hallDoor: [7.2, 2.15, 0],
 } as const;
 
-function useCastleEmissionColor(material: MeshLambertMaterial, masked = false) {
+function useCastleEmissionColor(material: MeshLambertMaterial, crownGlow: { value: number }, masked = false) {
   if (masked) useLandmarkEmissionMask(material);
   const applyMask = masked ? material.onBeforeCompile : undefined;
+  const varying = 'varying float vCastleCrown;';
   material.onBeforeCompile = (shader, renderer) => {
     applyMask?.call(material, shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
-      '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vColor.rgb;');
+    shader.uniforms.castleCrownGlow = crownGlow;
+    shader.vertexShader = 'attribute float castleCrown;\n' + varying + '\n'
+      + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvCastleCrown = castleCrown;');
+    shader.fragmentShader = 'uniform float castleCrownGlow;\n' + varying + '\n'
+      + shader.fragmentShader.replace('#include <emissivemap_fragment>', `
+        #include <emissivemap_fragment>
+        totalEmissiveRadiance *= vColor.rgb * mix(1.0, castleCrownGlow, vCastleCrown);
+      `);
   };
-  material.customProgramCacheKey = () => masked ? 'castle-emission-color-mask' : 'castle-emission-color';
+  material.customProgramCacheKey = () => masked ? 'castle-crown-emission-mask' : 'castle-crown-emission';
 }
 
-function useCastleIceFresnel(material: MeshLambertMaterial, variant: 'masonry' | 'emission-mask') {
+function useCastleIceFresnel(material: MeshLambertMaterial, variant: 'masonry' | 'emission' | 'emission-mask') {
   const compile = material.onBeforeCompile;
   const pale = new Color(palette.paleIce).toArray().map(value => value.toFixed(6)).join(', ');
   const varying = 'varying float vCastleIce;';
@@ -66,15 +79,22 @@ function castleModel() {
   const ramps: Ramp[] = [];
   const opaque: BufferGeometry[] = [];
   const luminous: BufferGeometry[] = [];
+  const cores: BufferGeometry[] = [];
+  const crownGlow = { value: 1 };
+  const coreMaterial = new MeshLambertMaterial({
+    vertexColors: true, transparent: true, opacity: .78, depthWrite: false,
+    emissive: '#a9d8e9', emissiveIntensity: .07,
+  });
   const colors = new Map(Object.entries(palette).map(([key, rgb]) => [key, new Color(rgb)]));
   const mason = new MeshLambertMaterial({ vertexColors: true });
   useCastleIceFresnel(mason, 'masonry');
   const lanterns = new MeshLambertMaterial({
     vertexColors: true, emissive: '#ffffff', emissiveIntensity: .4,
   });
-  useCastleEmissionColor(lanterns);
+  useCastleEmissionColor(lanterns, crownGlow);
+  useCastleIceFresnel(lanterns, 'emission');
 
-  function add(shape: BufferGeometry, x: number, y: number, z: number, finish: Finish, yaw: number) {
+  function add(shape: BufferGeometry, x: number, y: number, z: number, finish: Finish, yaw: number, detail?: IceDetail) {
     const geometry = shape.index ? shape.toNonIndexed() : shape;
     if (geometry !== shape) shape.dispose();
     geometry.rotateY(yaw);
@@ -87,17 +107,24 @@ function castleModel() {
     const isIce = finish === 'deepIce' || finish === 'blueIce' || finish === 'ice' || finish === 'paleIce';
     const iceMask = new Uint8Array(geometry.getAttribute('position').count).fill(isIce ? 1 : 0);
     geometry.setAttribute('castleIce', new BufferAttribute(iceMask, 1));
-    (finish === 'lantern' || finish === 'glint' ? luminous : opaque).push(geometry);
+    if (detail === 'core') {
+      cores.push(geometry);
+      return;
+    }
+    const crownMask = new Uint8Array(geometry.getAttribute('position').count).fill(detail === 'crown' ? 1 : 0);
+    geometry.setAttribute('castleCrown', new BufferAttribute(crownMask, 1));
+    (finish === 'lantern' || finish === 'glint' || detail === 'frame' || detail === 'crown' ? luminous : opaque).push(geometry);
   }
 
   function block(x: number, y: number, z: number, w: number, h: number, d: number, finish: Finish, yaw = 0) {
     add(new BoxGeometry(w, h, d), x, y, z, finish, yaw);
   }
 
-  function crystal(x: number, y: number, z: number, w: number, h: number, d: number, finish: Finish, yaw = 0) {
+  function crystal(x: number, y: number, z: number, w: number, h: number, d: number, finish: Finish,
+    yaw = 0, detail?: IceDetail) {
     const shape = new OctahedronGeometry(1);
     shape.scale(w / 2, h / 2, d / 2);
-    add(shape, x, y, z, finish, yaw);
+    add(shape, x, y, z, finish, yaw, detail);
   }
 
   function bounds(x: number, bottom: number, z: number, w: number, h: number, d: number): Box {
@@ -124,7 +151,7 @@ function castleModel() {
       }
       const geometry = mergeGeometries(pieces)!;
       const material = lanterns.clone();
-      useCastleEmissionColor(material, true);
+      useCastleEmissionColor(material, crownGlow, true);
       useCastleIceFresnel(material, 'emission-mask');
       const mesh = new Mesh(geometry, material);
       mesh.name = wing;
@@ -146,7 +173,11 @@ function castleModel() {
 
   function finish() {
     group.name = 'I01 · 冰雪城堡';
-    group.userData = { colliders, floors, ramps };
+    const coresMesh = new Mesh(mergeGeometries(cores)!, coreMaterial);
+    coresMesh.name = '庭院与王座晶簇内芯';
+    group.add(coresMesh);
+    for (const piece of cores) piece.dispose();
+    group.userData = { colliders, floors, ramps, iceRefinement: createIceCastleRefinementRuntime(crownGlow) };
     return group;
   }
 
@@ -154,17 +185,18 @@ function castleModel() {
 }
 
 export function buildIceCastle() {
-  const { block, crystal, solid, floor, flush, finish, add, bounds, colliders } = castleModel();
+  const parts = castleModel();
+  const { block, crystal, solid, floor, flush, finish, add, bounds, colliders } = parts;
 
   // Wall-local coordinates simplify the same leaded glass pattern on all four faces.
   function lancet(x: number, base: number, z: number, width: number, height: number, yaw: number) {
-    function pane(offset: number, y: number, projection: number, w: number, h: number, finish: Finish) {
+    function pane(offset: number, y: number, projection: number, w: number, h: number, finish: Finish, detail?: IceDetail) {
       const depth = projection + .04;
       const px = x + Math.cos(yaw) * offset + Math.sin(yaw) * depth;
       const pz = z - Math.sin(yaw) * offset + Math.cos(yaw) * depth;
-      add(new PlaneGeometry(w, h), px, base + y, pz, finish, yaw);
+      add(new PlaneGeometry(w, h), px, base + y, pz, finish, yaw, detail);
     }
-    pane(0, height * .37, .01, width + .26, height * .74 + .24, 'paleIce');
+    pane(0, height * .37, .01, width + .26, height * .74 + .24, 'paleIce', 'frame');
     pane(0, height * .38, .06, width, height * .76, 'recess');
     pane(0, height * .43, .11, width * .79, height * .64, 'pane');
     pane(0, height * .74, .06, width * .8, height * .14, 'paleIce');
@@ -176,9 +208,15 @@ export function buildIceCastle() {
     pane(0, .03, .17, width + .42, .18, 'snow');
   }
 
-  function lamp(x: number, base: number, z: number) {
-    solid(x, base, z, .64, .37, .64, 'foundation');
-    solid(x, base + .37, z, .18, 1.1, .18, 'deepIce');
+  function lamp(x: number, base: number, z: number, wallMounted = false) {
+    if (wallMounted) {
+      block(x + .17, base, z, .70, .16, .72, 'blueIce');
+      block(x, base + .185, z, .64, .37, .64, 'foundation');
+      block(x, base + .92, z, .18, 1.1, .18, 'deepIce');
+    } else {
+      solid(x, base, z, .64, .37, .64, 'foundation');
+      solid(x, base + .37, z, .18, 1.1, .18, 'deepIce');
+    }
     block(x, base + 1.5, z, .56, .18, .56, 'brass');
     block(x, base + 1.72, z, .34, .3, .34, 'lantern');
     block(x, base + 1.9, z, .48, .15, .48, 'snow');
@@ -214,8 +252,9 @@ export function buildIceCastle() {
       lancet(x, shoulder * .44, z + sign * (size / 2 + .02), 1.03, shoulder * .37, outward);
     }
 
-    for (const fraction of [.3, .46, .81, .94]) {
-      block(x, shoulder * fraction, z, size + .28, .2, size + .28, 'ice');
+    for (const [fraction, finish] of [[.23, 'paleIce'], [.3, 'ice'], [.46, 'ice'], [.57, 'paleIce'],
+      [.71, 'ice'], [.81, 'paleIce'], [.94, 'ice']] as const) {
+      block(x, shoulder * fraction, z, size + .28, .18, size + .28, finish);
     }
     block(x, shoulder, z, size + .68, .41, size + .68, 'snow');
     const facade = size / 2 + .22;
@@ -231,7 +270,17 @@ export function buildIceCastle() {
       const width = (size + .4) * (1 - level);
       block(x, shoulder + level * crown, z, width + .12, .15, width + .12, 'ice');
     }
-    crystal(x, shoulder + crown + .41, z, .61, 1.05, .61, 'paleIce');
+    const tip = shoulder + crown;
+    const spikeCount = size > 6 ? 5 : 4;
+    const ringRadius = size > 6 ? .57 : .44;
+    block(x, tip + .05, z, ringRadius * 2.1, .14, ringRadius * 2.1, 'blueIce', Math.PI / 4);
+    for (let spike = 0; spike < spikeCount; spike++) {
+      const angle = 2 * Math.PI * spike / spikeCount;
+      const height = (size > 6 ? .53 : .40) + .071 * (spike % 3);
+      crystal(x + ringRadius * Math.cos(angle), tip + height / 2, z + ringRadius * Math.sin(angle),
+        .31, height, .31, spike % 2 ? 'ice' : 'paleIce', angle);
+    }
+    crystal(x, tip + .41, z, .61, 1.05, .61, 'glint', 0, 'crown');
   }
 
   // The public entrance matches the existing path at the exact west edge of the pad.
@@ -257,9 +306,19 @@ export function buildIceCastle() {
     block(-22.08, 10.98, z, .86, .88, 1.23, 'ice');
     block(-22.08, 11.43, z, 1, .18, 1.36, 'snow');
   }
-  crystal(-22.28, 7.64, 0, .56, 2.5, 2.5, 'paleIce');
-  crystal(-22.61, 7.64, 0, .47, 1.56, 1.56, 'pane');
-  crystal(-22.88, 7.64, 0, .21, .78, .78, 'glint');
+  crystal(-22.28, 8.72, 0, .56, 2.32, 2.5, 'paleIce');
+  crystal(-22.61, 8.72, 0, .47, 1.48, 1.56, 'pane');
+  crystal(-22.88, 8.72, 0, .21, .78, .78, 'glint', 0, 'crown');
+  block(-22.28, 7.15, 0, .19, 1.53, 1.97, 'deepIce');
+  const snowflake = [
+    '.....#.....', '.#..###..#.', '..#..#..#..', '...#.#.#...', '....#+#....',
+    '...#.#.#...', '..#..#..#..', '.#..###..#.', '.....#.....',
+  ];
+  snowflake.forEach((row, v) => [...row].forEach((pixel, u) => {
+    if (pixel === '.') return;
+    block(-22.407, 7.15 + (4 - v) * .158, (u - 5) * .170, .125, .164, .18,
+      pixel === '+' ? 'glint' : 'paleIce');
+  }));
   block(-22.28, 5.91, 0, .26, .87, 3.24, 'deepIce');
   flush('西门与双塔', true);
 
@@ -292,7 +351,8 @@ export function buildIceCastle() {
     const shards = [[-.94, -.19, 1.35], [-.2, .3, 2.24], [.64, -.37, 1.62], [1.14, .32, .92]];
     for (const [dx, dz, height] of shards) {
       crystal(-5.8 + dx, .68 + height / 2, courtZ + dz, .77, height, .65, 'ice', dx);
-      crystal(-5.74 + dx, .82 + height / 2, courtZ + dz, .41, height * .71, .47, 'paleIce', dx);
+      crystal(-6.03 + dx, .82 + height / 2, courtZ + dz - side * .10,
+        .41, height * .71, .47, 'paleIce', dx, 'core');
     }
     colliders.push(bounds(-5.8, .73, courtZ, 3.1, 1.7, 1.65));
   }
@@ -304,6 +364,22 @@ export function buildIceCastle() {
   solid(20.78, .12, 0, 1, 11.48, 19.5, 'blueIce');
   for (const side of [-1, 1]) {
     solid(13.95, .12, side * 9.3, 14.65, 11.48, .88, 'blueIce');
+    block(13.95, 11.11, side * 9.75, 14.75, .20, .43, 'paleIce');
+    block(13.95, 10.85, side * 9.75, 14.75, .13, .31, 'ice');
+    block(13.95, 9.62, side * 9.73, 14.70, .16, .15, 'paleIce');
+    block(13.95, 3.96, side * 9.73, 14.70, .14, .14, 'ice');
+    for (const x of [9.92, 15.12, 20.05]) {
+      // The two east braces flatten into pilasters along the passage beside the corner tower.
+      const projection = x > 14.9 ? .34 : 1;
+      solid(x, .12, side * (9.64 + .35 * projection), .96, .58, .89 * projection, 'deepIce');
+      for (const [level, width, depth, color] of [[.7, .70, 1.01, 'blueIce'], [2.18, .62, .86, 'blueIce'],
+        [3.66, .51, .71, 'ice'], [5.14, .40, .58, 'ice']] as const) {
+        block(x, level + .76, side * (9.62 + depth * .21 * projection), width * projection,
+          1.55, depth * projection, color, Math.PI / 4);
+      }
+      block(x, 6.67, side * (9.64 + .10 * projection), .60, .18, .57 * projection, 'snow');
+      block(x, .73, side * (9.64 + .40 * projection), .96, .13, .81 * projection, 'ice');
+    }
     solid(7.2, .12, side * 6.1, .86, 11.48, 6.82, 'blueIce');
     block(7.2, 2, side * 2.52, 1.27, 3.92, .56, 'paleIce');
     lancet(6.74, 4.8, side * 5.95, 1.8, 4.95, -Math.PI / 2);
@@ -362,12 +438,22 @@ export function buildIceCastle() {
   solid(balconyX, balconyHeight, 7.4, balconyWidth, 1.02, .17, 'ice');
   block(balconyStart, balconyHeight + 1.01, 1.93, .26, .13, 5.98, 'snow');
   block(balconyX, balconyHeight + 1.01, -1.03, balconyWidth, .13, .26, 'snow');
+  icicleRow(balconyStart - .14, -.94, balconyStart - .14, 4.79, balconyHeight + .99, 3);
+  icicleRow(balconyStart + .16, -1.16, 20.17, -1.16, balconyHeight + .99, 5);
   for (const z of [0, 1.5, 3, 4.5, 6]) {
     block(balconyStart - .14, balconyHeight + .53, z, .27, 1.24, .22, 'paleIce');
   }
   for (const x of [10, 14.45, 19.35]) lamp(x, .12, -7.55);
-  for (const x of [10.4, 12.64, 14.88, 17.12, 19.36]) {
-    block(x, .164, 0, 1.57, .024, 1.57, 'paleIce', Math.PI / 4);
+  // The inlaid path turns from the hall door towards the seat while staying flush to the floor.
+  for (let tile = 0; tile <= 16; tile++) {
+    const t = tile / 16;
+    const x = 8 + 8.4 * t;
+    const z = -4.92 * t * t * (3 - 2 * t);
+    block(x, .159, z, .85, .018, .85, 'deepIce', Math.PI / 4);
+    block(x, .169, z, .63, .012, .63, tile % 4 === 0 ? 'paleIce' : 'ice', Math.PI / 4);
+  }
+  for (const [x, y, width] of [[17.15, .357, 1.16], [18.08, .577, .57]]) {
+    block(x, y, -4.92, width, .012, 1.08, 'paleIce');
   }
   floor(18.25, .35, -4.92, 3.36, 4.4, .24, 'deepIce');
   floor(18.85, .57, -4.92, 2.15, 3.25, .24, 'paleIce');
@@ -380,15 +466,41 @@ export function buildIceCastle() {
   }
   block(seatX, seatTop - .10, seatZ, 1.08, .20, 1.23, 'ice');
   block(seatX - .025, seatTop - .016, seatZ, 1.08, .032, 1.12, 'snow');
-  block(seatX + .45, 1.57, seatZ, .24, 1.28, 1.27, 'paleIce');
-  block(seatX + .445, 2.24, seatZ, .34, .14, 1.37, 'ice');
+  block(seatX + .45, 1.95, seatZ, .24, 2.14, 1.27, 'paleIce');
+  block(seatX + .445, 3.05, seatZ, .34, .18, 1.37, 'ice');
   colliders.push(bounds(seatX + .05, .57, seatZ, 1.25, 1.75, 1.52));
-  crystal(19.95, 2.72, seatZ, .55, 2.3, 1.1, 'paleIce');
-  crystal(19.68, 2.79, seatZ, .27, 1.4, .77, 'glint');
+  solid(seatX + .82, .57, seatZ, .61, 2.66, 2.28, 'blueIce');
+  for (const [height, span] of [[3.2, 1.98], [3.38, 1.62], [3.56, 1.18], [3.74, .80]]) {
+    block(seatX + .77, height, seatZ, .45, .20, span, height > 3.5 ? 'ice' : 'paleIce');
+  }
+  for (const side of [-1, 1]) {
+    block(seatX + .61, 2.04, seatZ + side * .94, .28, 2.45, .27, 'paleIce');
+    crystal(seatX + .53, 3.38, seatZ + side * .95, .32, .66, .35, 'ice', .35);
+  }
+  crystal(seatX + .67, 4.00, seatZ, .48, .86, .65, 'paleIce');
+  crystal(seatX + .47, 3.64, seatZ, .27, 1.19, .77, 'glint', 0, 'core');
+  for (const [x, z] of [[18.75, -2.15], [18.05, -7.61]]) {
+    addIceCastleDeer(parts, x, .15, z);
+    colliders.push(bounds(x - .12, .15, z, 1.77, 1.62, .76));
+  }
+  lamp(20.02, 2.17, -2.17, true);
+  lamp(20.02, 2.17, -7.67, true);
+  addIceCastleCarvings(parts);
+  addIceCastleChandelier(parts);
   flush('大殿内装与观景层');
   const group = finish();
   group.userData.throne = iceThrone;
-  addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2,
-    { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' });
+  const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
+  addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2, plaqueStyle);
+  if (typeof document !== 'undefined') {
+    const width = 1.66;
+    const height = .44;
+    const labels = iceCastleExhibits.map(({ title, subtitle, anchor: [x, y, z], yaw, id }) => {
+      const source = createMuseumLabelCanvas(title + '\n' + subtitle, width, height, plaqueStyle);
+      return { source, parent: group, width, height, x, y: id === 'sailboat' ? y - .24 : y - .44,
+        z: Math.sign(z) * 8.82, yaw };
+    });
+    addOpaqueMuseumLabels(labels, [], { mergeSizes: true });
+  }
   return group;
 }

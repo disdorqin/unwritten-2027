@@ -8,6 +8,7 @@ import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
 import { buildTowerLandmark } from './landmark-tower';
 import { buildTavernLandmark } from './landmark-tavern';
+import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import { buildPostLandmark } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
@@ -245,7 +246,38 @@ function museumToWorld(localX: number, localY: number, localZ: number) {
 const museumLights = Array.from({ length: 3 }, () => new PointLight('#ffba76', 0, 16, 2));
 scene.add(...museumLights);
 let museumLightClock = 0;
+const castleEye = new Vector3();
+const castleLightPosition = new Vector3();
+let nearbyIceExhibit: string | undefined;
+
 function updateMuseumLights(dt: number, eyePosition: Vector3) {
+  const castle = architecture.get('ice-castle');
+  const refinement = castle?.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
+  if (castle && refinement && eyePosition.distanceToSquared(castle.position) < 90 ** 2) {
+    castle.worldToLocal(castleEye.copy(eyePosition));
+    refinement.update(dt, castleEye, nightMode);
+    museumLightClock = 0;
+    museumLights.forEach((light, index) => {
+      const source = refinement.lights[index];
+      light.intensity = source?.power ?? 0;
+      if (!source || source.power <= 0) return;
+      castle.localToWorld(castleLightPosition.set(...source.position));
+      light.position.copy(castleLightPosition);
+      light.color.set(source.color);
+      light.distance = source.distance;
+    });
+    const exhibit = walking && !seated && !boardingGround && airHeight === undefined
+      ? refinement.exhibits.find(({ stand: [x, y, z] }) =>
+        Math.abs(castleEye.y - eye - y) < .55 && (castleEye.x - x) ** 2 + (castleEye.z - z) ** 2 < .9 ** 2)
+      : undefined;
+    if (!exhibit) nearbyIceExhibit = undefined;
+    else if (nearbyIceExhibit !== exhibit.id && !placeCard.open && !museumVisit.dialog.open) {
+      nearbyIceExhibit = exhibit.id;
+      activityContext.open(exhibit.title, exhibit.description);
+    }
+    return;
+  }
+  nearbyIceExhibit = undefined;
   museumLightClock -= dt;
   if (museumLightClock > 0) return;
   museumLightClock = .15;
