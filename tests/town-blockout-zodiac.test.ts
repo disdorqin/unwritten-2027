@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { PerspectiveCamera, Raycaster, Vector3, type Group } from 'three';
-import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain';
+import { canEnter, createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain';
 import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower';
 import { buildLakesideLandmark } from '../tools/voxel-tavern/town-blockout/landmark-lakeside';
 import { buildMarketLandmark, workshopMonkeySteps } from '../tools/voxel-tavern/town-blockout/landmark-market';
@@ -14,9 +14,52 @@ import {
   createTownZodiacSites, greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues, towerDragonSite,
   workshopMonkeyClues,
 } from '../tools/voxel-tavern/town-blockout/town-zodiac-sites';
+import { createTownWater } from '../tools/voxel-tavern/town-blockout/town-water';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway';
 import { createRailHorseCharm } from '../tools/voxel-tavern/town-blockout/town-zodiac-rail';
-import { createZodiacProgress, sealedGoldenGoatClue, zodiacStorageKey } from '../tools/voxel-tavern/town-blockout/town-zodiac';
+import { createZodiacProgress, lighthouseSnakeSite, sealedGoldenGoatClue, zodiacStorageKey } from '../tools/voxel-tavern/town-blockout/town-zodiac';
+
+test('the central bridge provides no dry underdeck route and the Snake fallback has dry lighthouse access', () => {
+  const grid = createTerrainGrid();
+  const water = createTownWater(grid);
+  for (const north of [187.75, 192, 196.25]) {
+    const cut = Array.from({ length: 121 }, (_, i) => {
+      const x = 276 + i / 4;
+      return { bed: grid.groundHeightAt(x, north), surface: grid.heightAt(x, north), water: water.at(x, north) };
+    });
+    assert.ok(Math.abs(Math.min(...cut.map(sample => sample.bed)) - 3.4) < .001);
+    if (north === 192) {
+      assert.equal(cut[64].surface, 12);
+      assert.equal(cut[64].water, undefined);
+    } else {
+      assert.equal(cut.filter(sample => sample.water?.mode === 'swim').length, 61);
+      assert.equal(cut.some(sample => sample.water?.mode === 'wade'), false);
+      assert.ok(cut.some(({ water: swim }, i) => swim && [cut[i - 1], cut[i + 1]].some(
+        neighbor => neighbor && !neighbor.water && Math.abs(swim.ground - neighbor.surface) > 1.255)));
+    }
+  }
+  const plot = layout.plots.find(({ id }) => id === 'lighthouse')!;
+  const lighthouse = buildLakesideLandmark(plot);
+  lighthouse.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
+  const { colliders } = readWalkGeometry(lighthouse);
+  const [east, height, z] = lighthouse.localToWorld(new Vector3(...lighthouseSnakeSite.stand)).toArray();
+  assert.equal(grid.heightAt(east, -z), height);
+  const waypoints = [[408, 84.35], [401.9, 84.35], [401.9, -z], [east, -z]];
+  for (let leg = 1; leg < waypoints.length; leg++) {
+    const [ax, an] = waypoints[leg - 1], [bx, bn] = waypoints[leg];
+    const count = Math.ceil(Math.hypot(bx - ax, bn - an) / .25);
+    let last = grid.heightAt(ax, an);
+    for (let index = 0; index <= count; index++) {
+      const x = ax + (bx - ax) * index / count, north = an + (bn - an) * index / count;
+      const feet = grid.heightAt(x, north);
+      assert.ok(!isWater(x, north) && !water.at(x, north));
+      assert.ok(Math.abs(last - feet) <= .43);
+      assert.ok(!colliders.some(({ min, max }) => x + .27 > min[0] && x - .27 < max[0] &&
+        -north + .27 > min[2] && -north - .27 < max[2] && feet + 1.8 > min[1] && feet + .025 < max[1]));
+      last = feet;
+    }
+  }
+});
 
 test('the first zodiac pickup is personal, persistent and not repeatable', () => {
   const data = new Map<string, string>();
