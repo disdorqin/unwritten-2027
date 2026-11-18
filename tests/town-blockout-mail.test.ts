@@ -43,7 +43,7 @@ test('the local 19:59 to 20:00 boundary keeps envelopes private until opening', 
   assert.equal(reloaded.readLetter(id).letter?.authorName, '一位镇民');
   assert.deepEqual(events[1], { type: 'timebox.open', actor: 'player:local', target: 'postoffice.timebox',
     payload: { letterId: id }, t: unlock });
-  assert.equal(events.length, 2);
+  assert.equal(events.filter(event => event.type !== 'timebox.open' || !event.payload.letterId.startsWith('npc-')).length, 2);
   assert.equal(JSON.parse(data.get(townMailKeys.timebox)!).items[0].openedAt, unlock);
   time.value = unlock - 1;
   assert.equal(create().timeboxStatus().opened, true);
@@ -78,7 +78,7 @@ test('only town letters become public when the main box is opened', () => {
   assert.deepEqual(mail.publicLetters(), []);
   assert.equal(mail.openTimebox().ok, true);
   assert.deepEqual(create().publicLetters().map(letter => letter.body), ['公开的贺年话']);
-  assert.equal(events.filter(event => event.type === 'timebox.open').length, 2);
+  assert.equal(events.filter(event => event.type === 'timebox.open' && !event.payload.letterId.startsWith('npc-')).length, 2);
   const entries = JSON.parse(data.get(townMailKeys.timebox)!).items;
   assert.equal(entries[0].openedAt, unlock);
   assert.equal(entries[1].openedAt, unlock);
@@ -86,6 +86,47 @@ test('only town letters become public when the main box is opened', () => {
   time.value += townMailLimits.cooldown;
   assert.equal(create().sealLetter({ ...self('分箱补投的公开信'), recipientType: 'town' }).ok, true);
   assert.equal(mail.publicLetters().length, 2);
+});
+
+test('the main box shows nine locked NPC envelopes and never stores their content or uses a player slot', () => {
+  const { mail, data, time, events, create } = fixture();
+  const roster = ['罗大江', '苏小满', '顾长明', '乔麦', '柳三弦', '钟铁生', '钱满仓', '丁小豆', '陶二娘'];
+  const main = mail.timeboxStatus(true);
+  assert.equal(main.count, 0);
+  assert.deepEqual(main.envelopes.map(envelope => 'authorName' in envelope ? envelope.authorName : null), roster);
+  assert.ok(main.envelopes.every(envelope => envelope.id.startsWith('npc-') &&
+    Object.keys(envelope).sort().join() === 'authorName,fromNpc,id'));
+  assert.equal(mail.timeboxStatus().envelopes.length, 0);
+  const id = main.envelopes[0].id;
+  time.value = unlock - 1;
+  assert.deepEqual(mail.readLetter(id), { reason: 'locked' });
+  assert.deepEqual(mail.retractLetter(id), { ok: false, reason: 'missing' });
+
+  time.value = unlock;
+  assert.equal(mail.timeboxStatus(true).ready, true);
+  assert.equal(mail.openTimebox().ok, true);
+  assert.equal(mail.timeboxStatus(true).opened, true);
+  assert.equal(data.has(townMailKeys.timebox), false);
+  const opened = mail.timeboxStatus(true);
+  assert.ok(opened.envelopes.every(envelope => 'title' in envelope && envelope.title));
+  const first = mail.readLetter(id).letter;
+  assert.ok(first && 'title' in first);
+  assert.equal(first.fromNpc, true);
+  assert.equal(first.title, '炉子给你留着火');
+  assert.match(first.body, /我是酒馆的罗大江/);
+  assert.equal(events.filter(event => event.type === 'timebox.open').length, 9);
+
+  for (let i = 0; i < townMailLimits.sealed; i++) {
+    assert.equal(mail.sealLetter(self('玩家自己的信 ' + i)).ok, true);
+    time.value += townMailLimits.cooldown;
+  }
+  assert.equal(mail.timeboxStatus(true).envelopes.length, 14);
+  assert.deepEqual(create().sealLetter(self('第六封信')), { ok: false, reason: 'capacity' });
+  const saved = JSON.parse(data.get(townMailKeys.timebox)!);
+  assert.equal(saved.items.length, 5);
+  assert.ok(saved.items.every((letter: { fromNpc: boolean; id: string }) =>
+    letter.fromNpc === false && !letter.id.startsWith('npc-')));
+  assert.equal(create().readLetter(id).letter?.body, first.body);
 });
 
 test('field widths, local term and contact rules, duplicates and the three-second throttle are shared', () => {

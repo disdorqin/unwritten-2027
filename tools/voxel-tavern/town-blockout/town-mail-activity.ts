@@ -26,6 +26,7 @@ const errors = {
   storage: storageMessage, capacity: '已达本地保存上限。',
 };
 const localDate = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+const plazaRoute = '出邮局沿灯路走到主街，向西前往钟楼广场。';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) {
   const element = document.createElement(tag);
@@ -179,6 +180,7 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
     const status = feedback();
     root.append(controls, status, content);
     let timer: number | undefined;
+    let announcedPlazaRoute = false;
     function clearTimer() {
       if (timer !== undefined) window.clearTimeout(timer);
       timer = undefined;
@@ -216,10 +218,18 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
       }
       const envelopes = node('ul');
       envelopes.className = 'town-mail-list';
-      for (const { id, recipientName, sealedAt } of state.envelopes) {
+      for (const envelope of state.envelopes) {
+        const { id } = envelope;
         const row = node('li');
-        row.append(node('span', recipientName + ' · ' + localDate.format(sealedAt)));
-        if (!state.ready) action(row, '撤回', () => {
+        if ('fromNpc' in envelope) {
+          const text = envelope.title
+            ? envelope.title + ' · ' + envelope.authorName + ' · ' + envelope.recipientName
+            : envelope.authorName + ' · 封存中';
+          row.append(node('span', text));
+        } else {
+          row.append(node('span', envelope.recipientName + ' · ' + localDate.format(envelope.sealedAt)));
+        }
+        if (!state.ready && !('fromNpc' in envelope)) action(row, '撤回', () => {
           const result = mail.retractLetter(id);
           showStatus(result.ok ? '已撤回，可重新写信。' : errors[result.reason]);
         });
@@ -229,7 +239,16 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
           content.replaceChildren();
           const letterBody = node('p', letter.body);
           letterBody.className = 'town-mail-letter';
-          content.append(node('h3', letter.recipientName), letterBody, node('p', letter.authorName));
+          if ('title' in letter) {
+            content.append(node('h3', letter.title), node('p', letter.recipientName));
+          } else {
+            content.append(node('h3', letter.recipientName));
+          }
+          content.append(letterBody, node('p', letter.authorName), node('p', plazaRoute));
+          if (!announcedPlazaRoute) {
+            announcedPlazaRoute = true;
+            context.announce(plazaRoute);
+          }
           action(content, '返回信封列表', () => showStatus());
         });
         envelopes.append(row);
