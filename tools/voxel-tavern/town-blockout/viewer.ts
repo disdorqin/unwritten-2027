@@ -67,6 +67,9 @@ import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose } from './town-presence-pose';
+import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
+import { createPlazaGroupPhoto } from './plaza-group-photo';
+import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -109,6 +112,9 @@ const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
 const railway = createTownRailway(grid);
+const plazaCamera = new PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far);
+plazaCamera.position.set(plazaCameraPosition[0], grid.heightAt(...plazaCameraPosition) + 3, -plazaCameraPosition[1]);
+plazaCamera.lookAt(224, 24, -193);
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -547,7 +553,7 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-panel-controls'));
-const townBgm = createTownBgm();
+const townBgm = createTownBgm(festival.getAudioContext);
 townBgm.mountControls(element('town-panel-controls'));
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(
@@ -608,6 +614,12 @@ const presence = createTownPresence(scene, camera, announceActivity, resetMoveme
 presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed), {
   ageSeconds, clockMs: () => performance.now(),
 }));
+const plazaPhoto = createPlazaGroupPhoto({
+  now: presence.serverNow, ownId: presence.photoPlayerId, request: presence.requestPlazaPhoto,
+  leave: presence.leavePlazaPhoto, nearby: presence.nearbyPhotoPeople, announce: announceActivity, open: activityContext.open,
+});
+presence.onPlazaPhoto(plazaPhoto.receive);
+const plazaPhotoAction = { label: '合影倒计时', run: plazaPhoto.request };
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
 const activitySpots = activities.flatMap(activity => activity.spots);
@@ -1258,7 +1270,10 @@ function currentAction() {
       railway.board();
     } };
   }
-  return nearestTownActivity(activitySpots, x, n, ground) ?? tavernActivity.carryAction();
+  const nearest = nearestTownActivity(activitySpots, x, n, ground);
+  if (nearest) return nearest;
+  if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoArc(x, n, ground)) return plazaPhotoAction;
+  return tavernActivity.carryAction();
 }
 function interact() {
   currentAction()?.run();
@@ -1347,7 +1362,7 @@ const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
   return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround; }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -1752,6 +1767,10 @@ renderer.setAnimationLoop(now => {
   actionButton.hidden = !action;
   const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
+  const groupPhotoFrame = plazaPhoto.update({
+    east: x, north: n, height: ground,
+    active: canControl && !homeReturn && !boardingGround && airHeight === undefined && !museumOverlay(),
+  });
   if (museumLaunch.active) { museumLaunch.update(frameSeconds); museumLaunch.render(); }
   else if (museumInspection.active) museumInspection.render();
   else {
@@ -1771,7 +1790,17 @@ renderer.setAnimationLoop(now => {
     const drinkStartedAt = profileTown ? performance.now() : 0;
     tavernDrinkEffects.apply(camera, now, walking && (x !== startEast || n !== startNorth), walking);
     let drinkEffectsMs = profileTown ? performance.now() - drinkStartedAt : 0;
-    try { renderer.render(scene, camera); }
+    try {
+      if (groupPhotoFrame) {
+        if (plazaCamera.aspect !== camera.aspect) {
+          plazaCamera.aspect = camera.aspect;
+          plazaCamera.updateProjectionMatrix();
+        }
+        presence.renderPlazaPhoto(groupPhotoFrame.people, plazaCamera, groupPhotoFrame.showNames);
+        renderer.render(scene, plazaCamera);
+        if (groupPhotoFrame.shutter) plazaPhoto.capture(renderer.domElement, plazaCamera, groupPhotoFrame);
+      } else renderer.render(scene, camera);
+    }
     finally {
       const restoreStartedAt = profileTown ? performance.now() : 0;
       tavernDrinkEffects.restore(camera);
@@ -1788,16 +1817,6 @@ renderer.setAnimationLoop(now => {
   if (photoFilename) {
     const filename = photoFilename;
     photoFilename = undefined;
-    renderer.domElement.toBlob(blob => {
-      if (!blob) return;
-      const photo = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      photo.href = url;
-      photo.download = filename;
-      document.body.append(photo);
-      photo.click();
-      photo.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }, 'image/png');
+    downloadTownCanvas(renderer.domElement, filename);
   }
 });

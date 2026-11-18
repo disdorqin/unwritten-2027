@@ -6,6 +6,8 @@ import {
 import { createPresenceAvatars } from './town-presence-avatars';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
+import { createTownPresenceClock } from './town-presence-clock';
+import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
@@ -64,6 +66,11 @@ export function createTownPresence(
   const chat = createTownChat(sendChat, onChatFocus);
   const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
+  const clock = createTownPresenceClock();
+  let photoSupported = false;
+  let clockRequest: number | undefined;
+  let nextClockSample = Infinity;
+  let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
   const roster = new Map<number, string>();
@@ -149,6 +156,9 @@ export function createTownPresence(
     notices.length = 0;
     chatEvents.length = 0;
     chat.setConnected(false);
+    photoSupported = false;
+    clockRequest = undefined;
+    nextClockSample = Infinity;
     roster.clear();
     actors.clear();
     renderList.length = 0;
@@ -169,10 +179,26 @@ export function createTownPresence(
     if (typeof data === 'string') {
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
-        kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown;
+        kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'plaza-photo-invite' || message.kind === 'plaza-photo-lineup')) {
+        const notice = haveId && readPlazaPhotoNotice(message);
+        if (notice) showPhoto?.(notice);
+        return;
+      }
+      if (message.type === 'plaza-photo-rejected' && haveId) {
+        announce(message.reason === 'busy' ? '广场已有一场合影正在进行' : '请走上广场合影站位后再试');
+        return;
+      }
+      if (message.type === 'clock') {
+        if (haveId && clockRequest !== undefined && message.sentAt === clockRequest && typeof message.epochMs === 'number') {
+          clock.accept(message.epochMs, clockRequest);
+          clockRequest = undefined;
+        }
+        return;
+      }
       if (haveId && message.type === 'chat') {
         if (chatEvents.length < 24) {
           const event = parseTownChat(message);
@@ -196,10 +222,13 @@ export function createTownPresence(
         if (message.self) {
           haveId = true;
           joinedId = id;
+          photoSupported = message.plazaPhoto === true;
           joinedName = message.name;
           chat.setConnected(true);
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
+            clock.accept(message.epochMs);
+            if (photoSupported) nextClockSample = 0;
           }
           resetRetry();
           if (timeout !== undefined) window.clearTimeout(timeout);
@@ -306,6 +335,14 @@ export function createTownPresence(
     catch { connectionLost(); return false; }
   }
 
+  function samplePhotoClock() {
+    if (!photoSupported || !haveId) return;
+    const sentAt = performance.now();
+    if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
+    clockRequest = sentAt;
+    nextClockSample = sentAt + 60_000;
+  }
+
   function syncActivityPoses() {
     if (haveId && sentActivityPose !== activityPose && sendEvent(JSON.stringify({ type: 'pose', pose: activityPose }))) {
       sentActivityPose = activityPose;
@@ -351,6 +388,22 @@ export function createTownPresence(
   });
 
   return {
+    serverNow: clock.now,
+    photoPlayerId: () => joinedId ?? 1,
+    onPlazaPhoto(handler: (notice: PlazaPhotoNotice) => void) { showPhoto = handler; },
+    requestPlazaPhoto() {
+      return photoSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-request' }));
+    },
+    leavePlazaPhoto(id: number) {
+      if (photoSupported) sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id }));
+    },
+    nearbyPhotoPeople() {
+      return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
+    },
+    renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
+      avatars ??= createPresenceAvatars(scene, camera);
+      avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
+    },
     selfId: () => joinedId,
     playerName: () => joinedName ?? getName(),
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
@@ -392,6 +445,7 @@ export function createTownPresence(
     update(dt: number) {
       if (!socket) return;
       sendPose(dt);
+      samplePhotoClock();
       syncActivityPoses();
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }

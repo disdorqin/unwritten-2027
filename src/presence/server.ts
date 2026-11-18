@@ -11,6 +11,10 @@ import {
 import { createPresenceEgress } from './egress.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
+import {
+  inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
+  type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
+} from './plaza-photo.js';
 
 type Options = {
   host?: string;
@@ -41,6 +45,8 @@ type Peer = {
   floodAt: number;
   floodCount: number;
   pendingThrows: Map<number, PendingThrow>;
+  nextClockSample: number;
+  nextPhotoRequest: number;
 };
 
 type TokenBucket = { tokens: number; at: number };
@@ -93,6 +99,8 @@ export async function createPresenceServer(options: Options = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
   const http = createServer((_req, res) => { res.writeHead(404).end(); });
   const peers = new Map<number, Peer>();
+  let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
+  let photoId = 0;
   let nextId = 1;
   let online = 0;
   let tier = tiers[0];
@@ -209,6 +217,57 @@ export async function createPresenceServer(options: Options = {}) {
     updateFireworks(now());
   }
 
+  function photoPerson(peer: Peer): PlazaPhotoPerson | undefined {
+    const { name, record } = peer;
+    if (!name || !record) return;
+    return { id: peer.id, name, east: record.east / 100, north: record.north / 100, height: record.height / 100 };
+  }
+
+  function publishPhoto(notice: PlazaPhotoNotice) {
+    const data = JSON.stringify(notice);
+    for (const peer of peers.values()) if (peer.name) send(peer, data);
+  }
+
+  function updatePhoto(now: number) {
+    if (!photo) return;
+    if (now > photo.invite.captureAt + 1_000) {
+      photo = undefined;
+      return;
+    }
+    if (photo.ended || now < photo.invite.captureAt - plazaPhotoLockMs) return;
+    photo.ended = true;
+    const people: PlazaPhotoPerson[] = [];
+    for (const peer of peers.values()) {
+      if (photo.optedOut.has(peer.id)) continue;
+      const person = photoPerson(peer);
+      if (person) people.push(person);
+    }
+    publishPhoto({ ...photo.invite, kind: 'plaza-photo-lineup', people: plazaPhotoLineup(people) });
+  }
+
+  function requestPhoto(peer: Peer) {
+    const throttleNow = performance.now();
+    if (throttleNow < peer.nextPhotoRequest) return;
+    peer.nextPhotoRequest = throttleNow + 500;
+    const now = Date.now();
+    updatePhoto(now);
+    if (photo) {
+      send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'busy' }));
+      return;
+    }
+    const person = photoPerson(peer);
+    if (!person || !inPlazaPhotoArc(person.east, person.north, person.height)) {
+      send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'position' }));
+      return;
+    }
+    const invite: PlazaPhotoInvite = {
+      type: 'event', kind: 'plaza-photo-invite', id: ++photoId,
+      captureAt: now + plazaPhotoGatherMs + plazaPhotoCountdownMs,
+    };
+    photo = { invite, ended: false, optedOut: new Set() };
+    publishPhoto(invite);
+  }
+
   function receiveText(peer: Peer, bytes: Uint8Array) {
     let message: unknown;
     try { message = JSON.parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')); }
@@ -227,6 +286,24 @@ export async function createPresenceServer(options: Options = {}) {
       }
       return;
     }
+    if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'plaza-photo-request') {
+        if (allowEvent(peer, now())) requestPhoto(peer);
+        return;
+      }
+      if (message.kind === 'plaza-photo-opt-out') {
+        if (photo && !photo.ended && 'id' in message && message.id === photo.invite.id) photo.optedOut.add(peer.id);
+        return;
+      }
+    }
+    if (message.type === 'clock' && peer.name && 'sentAt' in message &&
+        typeof message.sentAt === 'number' && Number.isFinite(message.sentAt) && message.sentAt >= 0) {
+      const now = performance.now();
+      if (now < peer.nextClockSample) return;
+      peer.nextClockSample = now + 750;
+      send(peer, JSON.stringify({ type: 'clock', sentAt: message.sentAt, epochMs: Date.now() }));
+      return;
+    }
     if (message.type === 'pose' && peer.name) {
       if (allowEvent(peer, now())) receivePose(peer, 'pose' in message ? message.pose : undefined);
       return;
@@ -240,7 +317,8 @@ export async function createPresenceServer(options: Options = {}) {
     clearTimeout(peer.joinTimer);
     peer.name = name;
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), tier: tierIndex }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), tier: tierIndex, plazaPhoto: true }));
+    if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
@@ -334,6 +412,7 @@ export async function createPresenceServer(options: Options = {}) {
         tokenAt: t, joinTimer: setTimeout(() => ws.close(1008), 5000),
         throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
         floodAt: t, floodCount: 0, pendingThrows: new Map(),
+        nextClockSample: 0, nextPhotoRequest: 0,
       };
       peers.set(id, peer);
       ws.on('error', () => { remove(peer); ws.terminate(); });
@@ -359,6 +438,7 @@ export async function createPresenceServer(options: Options = {}) {
   const tick = setInterval(() => {
     const time = now();
     updateFireworks(time);
+    if (photo) updatePhoto(Date.now());
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;
     let nextTier = 0;
