@@ -51,7 +51,7 @@ import { createTavernSeatSpots } from './tavern-seats';
 import './tavern-mix-panel.css';
 import './tavern-drink-effects.css';
 import { createPostActivity } from './post-activity';
-import { createTownMailActivity } from './town-mail-activity';
+import { createTownMailActivity, playPostChime } from './town-mail-activity';
 import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
@@ -74,6 +74,7 @@ import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
 import { createTownPassport } from './town-passport';
+import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
@@ -1123,9 +1124,12 @@ const stampSites = [
   { id: 'bath', label: '温泉浴场', hint: '在温泉浴场西门内侧。', x: 526, n: 159 },
   { id: 'castle', label: '冰雪城堡', hint: '在冰雪城堡西门内侧。', x: 462, n: 71 },
 ];
+let zodiacStorage: Storage | undefined;
+try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
+const zodiac = createZodiacProgress(['mouse'], zodiacStorage);
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp], riddleActivity.getProgress,
+  [stationTicketStamp], riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
@@ -1179,6 +1183,33 @@ function localSpot(group: Group, [east, height, z]: readonly number[], range: nu
   const ground = group.position.y + height;
   return { x, n, ground, range, label, run: () => run(x, n, ground) };
 }
+const zodiacPostOffice = architecture.get('post-office')!;
+const [mouseX, mouseFloor, mouseZ] = postMousePosition;
+const mouseCharm = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), 6);
+mouseCharm.name = '生肖寻宝 · 鼠挂牌';
+const mouseParts = [
+  [0, .14, 0, .25, .20, .065, '#ddbe90'],
+  [-.11, .23, 0, .079, .079, .062, '#b6a589'],
+  [.11, .23, 0, .079, .079, .062, '#b6a589'],
+  [0, .13, .037, .16, .096, .014, '#959b91'],
+  [0, .10, .046, .048, .031, .013, '#654955'],
+  [0, .275, 0, .038, .051, .028, '#c89362'],
+] as const;
+mouseParts.forEach(([dx, y, dz, width, height, depth, color], index) => {
+  mouseCharm.setMatrixAt(index, new Matrix4().makeScale(width, height, depth).setPosition(mouseX + dx, mouseFloor + y, mouseZ + dz));
+  mouseCharm.setColorAt(index, new Color(color));
+});
+mouseCharm.visible = zodiac.canCollect('mouse');
+zodiacPostOffice.add(mouseCharm);
+activitySpots.push({
+  ...localSpot(zodiacPostOffice, postMousePosition, .73, '拾取生肖挂件 · 鼠', () => {
+    if (!zodiac.collect('mouse')) return;
+    mouseCharm.visible = false;
+    announceActivity(`鼠 · 已收集 ${zodiac.count()}/12`);
+    playPostChime(true);
+  }),
+  available: () => zodiac.canCollect('mouse'),
+});
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 const [bellX, bellDeck, bellZ] = towerStops.bell;
