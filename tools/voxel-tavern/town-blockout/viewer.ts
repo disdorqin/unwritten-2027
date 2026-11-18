@@ -95,6 +95,7 @@ import { createTownWater, shoreJumpDepth } from './town-water';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale, createTownSnowCover } from './town-snow-cover';
+import { townSnowWeatherForFrame } from './town-weather';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
@@ -109,7 +110,8 @@ const townWater = createTownWater(grid);
 const snowCover = createTownSnowCover(grid);
 const scene = new Scene();
 scene.background = new Color('#adc2dd');
-scene.fog = new Fog('#adc2dd', 360, 1300);
+const weatherFog = new Fog('#adc2dd', 360, 1300);
+scene.fog = weatherFog;
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -847,15 +849,9 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
-let effectiveSnowIntensity = 1;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
-  onSnowIntensity(intensity) {
-    effectiveSnowIntensity = intensity;
-    snowfall.setIntensity(intensity);
-    snowCover.setIntensity(intensity);
-  },
   onDim(level) {
     ceremonyDim = level;
     applyCeremonyLighting();
@@ -2109,7 +2105,6 @@ renderer.setAnimationLoop(now => {
   const cullCamera = cullStationView ? stationViewCamera() : cullAerial ? camera : undefined;
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
-  snowCover.update(dt, nightMode);
   if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
@@ -2155,7 +2150,6 @@ renderer.setAnimationLoop(now => {
   const shedNorth = seated?.n ?? n;
   const shedFeet = airHeight ?? ground;
   const shedSheltered = walking && !homeReturn && inTavernWarmShed(tavernPlot, shedEast, shedNorth, shedFeet);
-  snowfall.update(camera, dt, walking, sheltered || shedSheltered || Boolean(homeReturn));
   if (now >= nextBgmRoomCheck) {
     nextBgmRoomCheck = now + 180;
     townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
@@ -2163,12 +2157,29 @@ renderer.setAnimationLoop(now => {
   }
   festival.update(dt);
   const ceremonyState = ceremony.update();
+  const weatherStartedAt = profileTown ? performance.now() : 0;
+  const weather = townSnowWeatherForFrame(ceremonyState);
+  const effectiveSnowIntensity = weather.intensity;
+  const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
+    roofed(shedEast, shedNorth, shedFeet);
+  snowfall.setIntensity(effectiveSnowIntensity);
+  snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
+  weatherFog.near = weather.fogNear;
+  weatherFog.far = weather.fogFar;
+  if (ceremonyState.phase === 'ordinary') {
+    snowCover.updateWeather(dt, weather);
+  } else {
+    // The annual show keeps its continuous intensity and existing accumulation curve.
+    snowCover.setIntensity(effectiveSnowIntensity);
+    snowCover.update(dt, nightMode);
+  }
+  const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
   const railNotice = railOvernightBroadcast(ceremonyState.now, atRailwayPlatform);
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
-  ceremonyFrost.setWarmth('interior', sheltered || Boolean(homeReturn));
+  ceremonyFrost.setWarmth('interior', sheltered || roofSheltered || Boolean(homeReturn));
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
     ? sharedHomeHearthWarmth(shedEast, shedNorth, shedFeet)
@@ -2180,7 +2191,8 @@ renderer.setAnimationLoop(now => {
   const coldEast = boardingGround ? camera.position.x : seated?.x ?? x;
   const coldNorth = boardingGround ? -camera.position.z : seated?.n ?? n;
   const coldGround = boardingGround ? camera.position.y - eye : airHeight ?? ground;
-  const coldExposed = walking && !homeReturn && !sheltered && !shedSheltered && !isLakeSkateIce(coldEast, coldNorth);
+  const coldExposed = walking && !homeReturn && !sheltered && !shedSheltered && !roofSheltered &&
+    !isLakeSkateIce(coldEast, coldNorth);
   const coldDepth = coldExposed && effectiveSnowIntensity >= 2
     ? snowCover.depthAt(coldEast, coldNorth, coldGround, snowCleared) : 0;
   ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldExposed, hasFrostCeremonyRelief(ceremonyState));
@@ -2271,6 +2283,8 @@ renderer.setAnimationLoop(now => {
         frameMs: frameSeconds * 1000, feedbackMs, drinkEffectsMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
+        weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: snowCover.amount(),
+        fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
       } }));
     }
   }
