@@ -31,10 +31,12 @@ export function createSledRide(world: SledWorld) {
   }
 
   function makeParked(factor: number) {
-    parked = {
+    const released = {
       ...spot, y: world.height(spot.x, spot.n), east: motion.state.east * factor,
       north: motion.state.north * factor, speed: motion.state.speed * factor,
     };
+    parked = released;
+    return released;
   }
 
   function leave() {
@@ -48,9 +50,14 @@ export function createSledRide(world: SledWorld) {
     return true;
   }
 
-  function crash(speed: number) {
+  function crash(speed: number, reboundEast = false, reboundNorth = false) {
     const tumble = sledCrashKind(speed) === 'tumble';
-    makeParked(tumble ? .80 : 0);
+    const released = makeParked(tumble ? .80 : 0);
+    if (tumble) {
+      if (reboundEast) released.east *= -1;
+      if (reboundNorth) released.north *= -1;
+      if (reboundEast || reboundNorth) released.yaw = Math.atan2(released.east, released.north);
+    }
     world.snow(spot.x, spot.n, spot.y, spot.yaw, tumble ? 34 : 15);
     active = false;
     recovery = recoveryDuration = tumble ? 1.25 : .65;
@@ -94,7 +101,10 @@ export function createSledRide(world: SledWorld) {
     }
     const nextY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
     if (world.blocked(x, n, nextY)) {
-      crash(next.speed);
+      const eastBlocked = world.blocked(x, spot.n, nextY);
+      const northBlocked = world.blocked(spot.x, n, nextY);
+      // A diagonal corner with both individual steps clear rebounds on both axes.
+      crash(next.speed, eastBlocked || !northBlocked, northBlocked || !eastBlocked);
       return;
     }
     spot.x = x;
@@ -123,7 +133,10 @@ export function createSledRide(world: SledWorld) {
     const display = parked;
     if (!display) return;
     if (Math.hypot(display.x - playerX, display.n - playerN) > 25) { parked = undefined; return; }
-    if (display.speed < .05) return;
+    if (display.speed < .05) {
+      display.speed = 0;
+      return;
+    }
     const x = display.x + display.east * dt;
     const n = display.n + display.north * dt;
     const y = world.height(x, n);
