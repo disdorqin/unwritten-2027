@@ -51,14 +51,17 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
   const pieces: Block[] = [];
   const windows: Block[] = [];
   const basePalette = styles[style][Math.abs(Math.trunc(variant)) % 3];
-  const [wall, beam, trim, tile, accent] = theme
-    ? districtPalettes[theme].map((color, i) => '#' + new Color(basePalette[i]).lerp(new Color(color), .82).getHexString())
-    : basePalette;
+  const facingTheme = theme ?? (style === 'shop' ? 'market' : style === 'courtyard' ? 'memorial' : 'forest');
+  // The central infill keeps its original silhouettes and only takes a light palette blend.
+  const [wall, beam, trim, tile, accent] = districtPalettes[facingTheme].map((color, i) =>
+    '#' + new Color(basePalette[i]).lerp(new Color(color), theme ? .82 : .23).getHexString());
   const w = width;
   const d = depth;
   const front = d / 2;
   const back = -front;
-  const glow = ['#ffc181', '#ffd3a1', '#ffbc76'][Math.abs(Math.trunc(variant)) % 3];
+  const glassPalette = theme === 'lakeside' ? ['#b9dbec', '#d1e6ed', '#a7cfe4']
+    : theme === 'memorial' ? ['#e0e3d5', '#d1e2ea', '#c6d1da'] : ['#ffc181', '#ffd3a1', '#ffbc76'];
+  const glow = glassPalette[Math.abs(Math.trunc(variant)) % 3];
   const masonry = theme === 'lakeside' ? '#758892' : style === 'courtyard' ? '#8a919d' : '#66717e';
 
   function add(color: string, x: number, y: number, z: number, a: number, h: number, b: number, lit = false) {
@@ -80,6 +83,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     }
     local(beam, 0, -.04, .219, size, .083, .05);
     local(trim, 0, -tall / 2 - .12, .19, size + .36, .14, .34);
+    if (theme) local(shadedSnow, 0, -tall / 2 - .042, .19, size + .30, .045, .29);
   }
 
   function door(x: number, z: number, size: number, y = .28) {
@@ -180,7 +184,130 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     for (const x of [-width * .27, width * .27]) windowAt(x, y, back, Math.min(1.55, width * .24), tall, 2);
   }
 
-  if (style === 'alpine') {
+  // The four expansion elevations are rebuilt within the original lot envelope.
+  // Every piece enters the existing opaque or emissive instance batch.
+  function themedFacing(district: DistrictTheme) {
+    const split = Math.abs(variant % 3);
+    const eave = district === 'forest' ? 4.55 + split * .56
+      : district === 'lakeside' ? 4.5 + split * .52
+      : district === 'memorial' ? 4.62 + split * .68 : 5.5 + split * .4;
+    const entry = Math.min(1.65, w * .22);
+    plinth(0, 0, w, d);
+    add(wall, 0, (eave + .38) / 2, 0, w, eave - .38, d);
+    door(0, front, entry);
+    stoop(0, front, entry + .16);
+
+    for (const facing of [1, 3] as const) {
+      const x = (facing === 1 ? 1 : -1) * w / 2;
+      for (const z of [-d * .25, d * .24]) {
+        windowAt(x, 2, z, Math.min(1.62, d * .22), 1.38, facing);
+      }
+    }
+    for (const sign of [-1, 1]) {
+      windowAt(sign * w * .27, 2, back, Math.min(1.7, w * .24), 1.36, 2);
+      lantern(sign * (entry / 2 + .58), 2.51, front + .4, .31);
+    }
+
+    if (district === 'forest') {
+      // Horizontal timber courses wrap every side. Pale end-grain separates the lap joints.
+      for (let y = .57, row = 0; y < eave - .18; y += .41, row++) {
+        const log = row % 3 === 0 ? beam : trim;
+        for (const sign of [-1, 1]) {
+          add(log, 0, y, sign * (front + .028), w + .22, .21, .22);
+          add(log, sign * (w / 2 + .026), y, 0, .22, .20, d + .18);
+          if (row % 2 === 0) add(trim, sign * (w / 2 + .075), y, front + .148, .27, .17, .07);
+        }
+      }
+      const porchWidth = Math.min(4.92, w * .64);
+      slopedCanopy(0, front, porchWidth, 3.16, 1.05);
+      for (const sign of [-1, 1]) {
+        add(beam, sign * (porchWidth / 2 - .21), 1.64, front + .89, .24, 3.04, .24);
+        windowAt(sign * w * .288, 1.88, front, Math.min(1.9, w * .23), 1.4, 0);
+      }
+      const rise = Math.min(4.8, w * .41);
+      gable(0, 0, w, d, eave, rise, 'z', .72, trim);
+      windowAt(0, eave + rise * .29, front + .75, 1.27, .87, 0);
+      chimney(-w * .23, eave + rise * .52, back * .42, 1.72);
+    } else if (district === 'memorial') {
+      // Concrete frames, a glazed cantilever, and an offset clerestory define the modern row.
+      add(tile, 0, eave + .16, 0, w + .66, .34, d + .58);
+      add(snow, 0, eave + .39, 0, w + .56, .13, d + .49);
+      const towerX = (split === 1 ? 1 : -1) * w * .24;
+      add(beam, towerX, eave + .83, -.12 * d, w * .38, .88, d * .58);
+      add(trim, towerX, eave + 1.34, -.12 * d, w * .40, .15, d * .60);
+      add(snow, towerX, eave + 1.46, -.12 * d, w * .37, .095, d * .56);
+      windowAt(towerX, eave + .83, d * .17, w * .25, .44, 0, 4);
+      const canopyWidth = w * .88;
+      add(beam, 0, 3.31, front + .54, canopyWidth, .17, 1.15);
+      add('#9fbaca', 0, 3.405, front + .53, canopyWidth - .17, .076, 1.00);
+      add(shadedSnow, 0, 3.454, front + .23, canopyWidth - .28, .04, .39);
+      const glassWidth = Math.min(2.65, w * .28);
+      for (const sign of [-1, 1]) {
+        const x = sign * w * .269;
+        add(trim, sign * (w / 2 - .16), eave / 2, front + .10, .29, eave, .26);
+        windowAt(x, 1.84, front, glassWidth, 2.11, 0, 3);
+        windowAt(x, (eave + 3.44) / 2, front, glassWidth * .94, Math.min(1.38, eave - 3.5), 0, 4);
+      }
+      add(beam, 0, eave - .14, front + .1, w + .07, .18, .23);
+    } else if (district === 'market') {
+      // Three brick arches read at street distance, with front joints tying them into the brickwork.
+      for (let y = .55; y < eave - .16; y += .34) {
+        for (const sign of [-1, 1]) add(beam, 0, y, sign * (front + .023), w, .032, .056);
+      }
+      for (const x of [-w * .31, 0, w * .31]) {
+        const radius = x === 0 ? entry / 2 + .29 : Math.min(w * .104, 1.35);
+        const spring = x === 0 ? 2.67 : 2.30;
+        for (const sign of [-1, 1]) {
+          add(trim, x + sign * radius, (spring + .38) / 2, front + .145, .20, spring - .38, .28);
+          for (let i = 0; i < 4; i++) {
+            const angle = (i + .45) * Math.PI / 8;
+            add(trim, x + sign * radius * Math.cos(angle), spring + radius * .66 * Math.sin(angle),
+              front + .175, .27, .25, .32);
+          }
+        }
+        add(shadedSnow, x, spring + radius * .68, front + .186, .30, .25, .35);
+        if (x) windowAt(x, 1.57, front, radius * 1.51, 1.22, 0, 3);
+        windowAt(x, eave - 1.23, front, Math.min(1.61, w * .18), 1.30, 0, 3);
+      }
+      add(tile, 0, eave + .11, 0, w + .61, .28, d + .59);
+      add(snow, 0, eave + .30, 0, w + .53, .11, d + .50);
+      for (let row = 0; row < 3; row++) {
+        const span = w * (.99 - row * .21);
+        add(wall, 0, eave + .41 + row * .35, front - .06, span, .44, .51);
+        add(trim, 0, eave + .65 + row * .35, front - .04, span + .14, .13, .61);
+        add(shadedSnow, 0, eave + .75 + row * .35, front - .04, span + .09, .07, .54);
+      }
+      chimney(w * .28, eave + .18, back * .49, 1.44);
+    } else {
+      // Staggered lake-stone courses sit below tall blue glass and a light, lower roof.
+      for (let row = 0; row < 4; row++) {
+        const count = 7;
+        const span = w / count;
+        const offset = row % 2 * span / 2;
+        for (let i = 0; i <= count; i++) {
+          const start = Math.max(-w / 2, -w / 2 + (i - 1) * span + offset);
+          const end = Math.min(w / 2, -w / 2 + i * span + offset);
+          if (end - start < .1) continue;
+          const tint = ['#8d9597', '#a5a09a', '#bab0a0'][(row + i + split) % 3];
+          add(tint, (start + end) / 2, .57 + row * .30, front + .05, end - start - .052, .25, .14);
+        }
+        for (const sign of [-1, 1]) {
+          add(masonry, sign * w / 2, .57 + row * .30, 0, .21, .247, d + .11);
+        }
+      }
+      for (const sign of [-1, 1]) {
+        windowAt(sign * w * .272, 2.07, front, Math.min(2.64, w * .27), 2.43, 0, 3);
+        add(trim, sign * w * .34, eave - .15, front + .11, w * .25, .16, .20);
+      }
+      const rise = Math.min(3.5, w * .285);
+      gable(0, 0, w, d, eave, rise, 'z', .48, wall);
+      windowAt(0, eave + rise * .28, front + .515, Math.min(2.38, w * .29), 1.05, 0, 3);
+      chimney(-w * .24, eave + rise * .50, back * .44, 1.42);
+    }
+  }
+
+  if (theme) themedFacing(theme);
+  else if (style === 'alpine') {
     const eave = variant % 2 === 0 ? 5.48 : 4.35;
     const rise = Math.min(5.1, w * .48);
     plinth(0, 0, w, d);
@@ -213,9 +340,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     for (const z of [front, back]) add(beam, 0, eave + rise * .64, z + Math.sign(z) * .82, .18, rise * .54, .13);
     chimney(-w * .24, eave + rise * .42, back * .43, rise * .44 + .88);
     lantern(-w * .22, 2.72, front + .59);
-  }
-
-  if (style === 'courtyard') {
+  } else if (style === 'courtyard') {
     const wingWidth = w * .25;
     const wingDepth = d * .82;
     const wing = w * .373;
@@ -255,9 +380,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       lantern(side * (middleWidth * .34), 2.83, recessed + .48, .43);
     }
     windowAt(0, 4.13, recessed, Math.min(middleWidth * .58, 2.06), 1.21, 0, 4);
-  }
-
-  if (style === 'machiya') {
+  } else if (style === 'machiya') {
     plinth(0, 0, w, d);
     const eave = variant % 2 === 0 ? 5.82 : 5.24;
     const rise = Math.min(2.35, d * .25);
@@ -289,9 +412,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       add(beam, x, .78, front + .80, .25, 1.56, .26);
       add(trim, x, .16, front + .8, .34, .32, .35);
     }
-  }
-
-  if (style === 'shop') {
+  } else if (style === 'shop') {
     const eave = variant % 2 === 0 ? 6.05 : 5.28;
     plinth(0, 0, w, d);
     add(wall, 0, eave / 2 + .16, 0, w, eave - .21, d);
