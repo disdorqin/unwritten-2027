@@ -5,7 +5,6 @@ import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
 import { voxelPersonParts } from './town-voxel-person';
 import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import './town-presence-avatars.css';
-import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
 export type PresenceAvatarActor = {
   id: number;

@@ -33,6 +33,8 @@
   "include": [
     "src",
     "tools/*.ts",
+    "tools/voxel-tavern/town-blockout/viewer.ts",
+    "tools/voxel-tavern/vite.config.ts",
     "tests",
     "vite.config.ts",
     "playwright.config.ts"

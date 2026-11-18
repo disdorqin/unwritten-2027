@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 
 const townBlockout = fileURLToPath(new URL('./town-blockout.html', import.meta.url));
 const tavern = fileURLToPath(new URL('./index.html', import.meta.url));
+const townEntry: Record<string, string> = { townBlockout };
+const fullEntry: Record<string, string> = { tavern, townBlockout };
 
 export default defineConfig(({ mode }) => ({
   server: {
@@ -15,7 +17,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'esnext',
     rollupOptions: {
-      input: mode === 'town-preview' || mode === 'town-rehearsal' ? { townBlockout } : { tavern, townBlockout },
+      input: mode === 'town-preview' || mode === 'town-rehearsal' ? townEntry : fullEntry,
     },
   },
 }));
