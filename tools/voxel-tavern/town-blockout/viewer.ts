@@ -12,7 +12,7 @@ import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { IcePalaceRace } from './ice-palace-race';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
-import { buildMarketLandmark } from './landmark-market';
+import { buildMarketLandmark, marketOxSite } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
@@ -93,6 +93,12 @@ import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createLighthouseSnakeCharm } from './town-zodiac-snake';
+import { createTownZodiacSites } from './town-zodiac-atlas';
+import { createZodiacDogPostcard } from './town-zodiac-dog';
+import { buildTigerZodiacAnchor, tigerZodiacSite } from './town-zodiac-tiger-anchor';
+import {
+  greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues, towerDragonSite, workshopMonkeyClues,
+} from './town-zodiac-sites';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -408,6 +414,8 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
+const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
+scene.add(tigerPine);
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
 let homeReturn: TownHousePortal | undefined;
@@ -435,7 +443,7 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -712,9 +720,13 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'mixing') return architecture.has('tavern');
   return true;
 }, () => !nightMode, name => {
-  if (name === '钟铁生' && zodiac.canCollect('horse')) return railHorseClues;
+  if (name === '钟铁生') return [
+    ...(zodiac.canCollect('dragon') ? towerDragonClues : []),
+    ...(zodiac.canCollect('horse') ? railHorseClues : []),
+  ];
   if (name === '纪守信' && zodiac.canCollect('horse')) return npcAuthoredDialogue.纪守信.clues.slice(1);
   if (name === '罗大江' && zodiac.canCollect('rooster')) return tavernRoosterClues;
+  if (name === '乔麦' && zodiac.canCollect('monkey')) return workshopMonkeyClues;
 },
 panel => openTavernDice(panel, () => {
   if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
@@ -1315,6 +1327,11 @@ const stampSites = [
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
 const zodiac = createZodiacProgress(['mouse', 'snake', 'horse', 'rooster'], zodiacStorage);
+const zodiacSites = createTownZodiacSites(zodiac, label => {
+  announceActivity(`${label} · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+});
+scene.add(zodiacSites.mesh);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1408,6 +1425,13 @@ activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, z
 }));
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
+activitySpots.push(
+  zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
+  zodiacSites.mount(tigerPine, tigerZodiacSite),
+  zodiacSites.mount(architecture.get('glasshouse')!, greenhouseRabbitSite),
+  zodiacSites.mount(tower, towerDragonSite(towerStops.lookout)),
+  zodiacSites.mount(architecture.get('lantern-workshop')!, lanternWorkshopMonkeySite),
+);
 const [bellX, bellDeck, bellZ] = towerStops.bell;
 const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
 const bellMotion = tower.userData.bellMotion as TowerBellMotion;
@@ -1461,7 +1485,7 @@ function registerLandmarkActivities(id: string, group: Group) {
       group, activityContext, railway, passport, canStandAtActivity, ceremonyClock.now, showLiveRailSchedule,
     ));
   } else if (id === 'hot-spring') {
-    activitySpots.push(...hotSpringSoak.spots(group));
+    activitySpots.push(...hotSpringSoak.spots(group), zodiacSites.mount(group, hotSpringPigSite));
     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
       const now = performance.now();
       if (now < nextBathTeaAt) return;
@@ -2245,12 +2269,18 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       registerHomeDoors(extensionStreets.housePortals);
+      const dogMailbox = extensionStreets.dogMailbox;
+      if (dogMailbox) {
+        activitySpots.push(zodiacSites.mount(extensionStreets.group, dogMailbox.charm),
+          createZodiacDogPostcard(dogMailbox, activityContext));
+      }
     }).catch(error => {
       streetsRequested = false;
       console.error('Loading extension streets', error);
     });
   }
   extensionStreets?.update(camera, wideView);
+  zodiacSites.update(camera.position, !homeReturn && !wideView);
   const baths = architecture.get('hot-spring');
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);

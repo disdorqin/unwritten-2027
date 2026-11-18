@@ -99,7 +99,7 @@ export function createTownZodiacSites(zodiac: ZodiacProgress, celebrate: (label:
     const stand = parent.localToWorld(new Vector3(...site.stand));
     const label = faces[id][0];
     charmById.set(id, { id, position, yaw: parent.rotation.y + site.yaw, tile: tiles.indexOf(id) });
-    if (id === 'ox' || id === 'tiger' || id === 'dog') zodiac.registerPickup(id);
+    zodiac.registerPickup(id);
     renderedMask = -1;
     return {
       x: stand.x, n: -stand.z, ground: stand.y, range: site.range,
