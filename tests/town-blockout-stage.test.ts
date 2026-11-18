@@ -12,7 +12,7 @@ test('the stage front tread gives a direct route onto a single deck', () => {
   const [east, north, elevation] = plot.origin;
   const stage = buildVillageLandmark(plot);
   stage.position.set(east, elevation, -north);
-  const { floors } = readWalkGeometry(stage);
+  const floors = readWalkGeometry(stage).floors.filter(floor => floor.min[2] >= -north - 7);
   assert.equal(floors.length, 2);
 
   const centerlineFloors = new Set<number>();
@@ -23,6 +23,21 @@ test('the stage front tread gives a direct route onto a single deck', () => {
     centerlineFloors.add(height - elevation);
   }
   assert.deepEqual([...centerlineFloors].map(height => Math.round(height * 100)), [0, 28, 52]);
+});
+
+test('the south theater joins four walkable photo tiers to its western ramp', () => {
+  const current = layout.plots.find(({ id }) => id === 'stage')!;
+  const stage = buildVillageLandmark({ ...current, origin: [238, 140, 12] });
+  stage.position.set(238, 12, -140);
+  const { floors, ramps } = readWalkGeometry(stage);
+  const tiers = floors.filter(floor => floor.min[0] === 216 && floor.max[0] === 232);
+  assert.deepEqual(tiers.map(floor => Math.round((floor.max[1] - 12) * 100)), [35, 70, 105, 140]);
+  assert.equal(tiers[0].max[2], -162);
+  assert.equal(tiers.at(-1)!.min[2], -165.5);
+  tiers.slice(1).forEach((floor, i) => assert.equal(floor.max[2], tiers[i].min[2]));
+  assert.equal(ramps.length, 1);
+  assert.deepEqual(ramps[0], { min: [204.8, 12, -165.5], max: [216, 13.4, -164.1], axis: 'x', ascending: 1 });
+  assert.ok(floors.some(floor => floor.max[0] === 216 && floor.max[1] === 13.4));
 });
 
 test('five-minute stage repeat uses continuous formations, closing bow and two prop intervals', () => {
