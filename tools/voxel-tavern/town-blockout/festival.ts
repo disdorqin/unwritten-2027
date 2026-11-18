@@ -7,6 +7,9 @@ import {
   fireworksShowMs, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from '../../../src/presence/firework-sites';
 import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
+import {
+  personalFireworkParticleLimit, personalFireworkVisibleLimit, type PersonalFireworkKind, type PersonalFireworkParticle,
+} from './personal-fireworks';
 
 type Burst = {
   time: number;
@@ -189,7 +192,8 @@ export function createFestival(
   // One rehearsal or player show, or the three concurrent acts of the same ceremony.
   const ceremonyPeak = Object.values(ceremonyPrograms).reduce((total, program) => total + maxLiveBursts(program), 0);
   const maxShowBursts = Math.max(playerBeatTimes.length, ceremonyPeak, maxLiveBursts(previewProgram));
-  const capacity = maxShowBursts * sparkCount * trailCount + workshopSparkCount * trailCount;
+  const personalCapacity = personalFireworkVisibleLimit * personalFireworkParticleLimit;
+  const capacity = maxShowBursts * sparkCount * trailCount + workshopSparkCount * trailCount + personalCapacity;
   const positions = new Float32Array(capacity * 3);
   const colors = new Float32Array(capacity * 3);
   const strengths = new Float32Array(capacity);
@@ -248,6 +252,9 @@ export function createFestival(
   let playerProgram: FireworksProgram | undefined;
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
+  let personalFrame: readonly PersonalFireworkParticle[] = [];
+  let drewPersonal = false;
+  const personalTint = new Color();
   let message = '';
   let audio: AudioContext | undefined;
   let nextManualBell = 0;
@@ -414,9 +421,30 @@ export function createFestival(
       };
       return true;
     },
+    setPersonalFireworkFrame(particles: readonly PersonalFireworkParticle[]) { personalFrame = particles; },
+    playPersonalFirework(kind: PersonalFireworkKind, distance: number, ceremony = false) {
+      if (!audio || audio.state !== 'running' || !Number.isFinite(distance) || distance < 0) return;
+      const hits = kind === 'string' ? 10 : 1;
+      const wait = kind === 'string' ? 2 : kind === 'rocket' ? 1.2 : 0;
+      const gain = (.13 / (1 + (distance / 16) ** 2)) * (ceremony ? .35 : 1);
+      for (let i = 0; i < hits; i++) {
+        const pop = audio.createOscillator();
+        const volume = audio.createGain();
+        const time = audio.currentTime + wait + .30 * i;
+        pop.type = 'triangle';
+        const pitch = kind === 'sparkler' ? 920 : kind === 'rocket' ? 132 : 330 + (i % 3) * 52;
+        pop.frequency.setValueAtTime(pitch, time);
+        pop.frequency.exponentialRampToValueAtTime(pitch * .38, time + .11);
+        volume.gain.setValueAtTime(gain, time);
+        volume.gain.exponentialRampToValueAtTime(.0001, time + .12);
+        pop.connect(volume).connect(audio.destination);
+        pop.start(time);
+        pop.stop(time + .13);
+      }
+    },
     active() { return elapsed >= 0; },
     update(dt: number) {
-      if (elapsed < 0 && !workshop && !tracks.size) return;
+      if (elapsed < 0 && !workshop && !tracks.size && !personalFrame.length && !drewPersonal) return;
       const delta = Math.max(0, dt);
       used = 0;
       if (elapsed >= 0) {
@@ -450,6 +478,11 @@ export function createFestival(
         workshop.elapsed += delta;
         if (workshop.elapsed > burstTail) workshop = undefined;
         else drawBurst(workshop.burst, workshop.elapsed, workshopSparkCount);
+      }
+      drewPersonal = personalFrame.length > 0;
+      for (let i = 0; i < Math.min(personalFrame.length, personalCapacity); i++) {
+        const particle = personalFrame[i];
+        emit(particle.x, particle.y, particle.z, personalTint.setHex(particle.tint), particle.opacity, particle.radius);
       }
       sparks.visible = used > 0;
       geometry.setDrawRange(0, used);
