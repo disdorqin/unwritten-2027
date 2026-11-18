@@ -2,6 +2,7 @@ import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
 import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
 import { railHallGuide, railOvernightCopy } from './town-rail-copy';
+import { createChronicleFace, stationChronicleStone } from './town-chronicle-landmarks';
 
 type Point = readonly [number, number, number];
 
@@ -40,6 +41,8 @@ function stationBuilder() {
       builder.panel(paint, local(a), local(b), local(c), local(d)),
     sign: (title: string, x: number, y: number, z: number, w: number, h: number, angle = 0, background = '#292f32') =>
       builder.label(title, x * u, y, z * u, w * u, h, angle, { background, color: '#fff', accent: '#d6ae6a' }),
+    chronicleFace: (x: number, y: number, z: number, w: number, h: number) =>
+      builder.chronicleFace(createChronicleFace('station'), x * u, y, z * u, w * u, h),
     finish: builder.finish,
   };
 }
@@ -210,6 +213,11 @@ export function buildRailwayStation() {
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
   b.box(dark, 12.8, 3.8, -6.7, 8.7, 1.68, .18);
   b.sign(stationSignCopy.timetable, 12.8, 3.8, -6.59, 8.3, 1.36);
+  const mirror = stationChronicleStone;
+  b.solid(stone, mirror.x, .35, mirror.z, 4.13, .42, .62);
+  b.solid(iron, mirror.x, 1.64, mirror.z, 3.85, 2.23, .28);
+  b.box(brass, mirror.x, 2.795, mirror.z, 3.98, .09, .34);
+  b.chronicleFace(mirror.x, 1.83, mirror.z + .152, 3.62, 1.26);
   b.box(dark, -21.62, 3.42, 2.1, .21, 2.88, 5.96);
   b.sign(railHallGuide.title, -21.5, 4.47, 2.1, 5.6, .56, Math.PI / 2);
   b.sign(railHallGuide.board, -21.5, 3.1, 2.1, 5.6, 2.02, Math.PI / 2);
