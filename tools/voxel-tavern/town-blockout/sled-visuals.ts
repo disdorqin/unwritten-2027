@@ -2,6 +2,12 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, InstancedMesh,
   Matrix4, MeshLambertMaterial, Object3D, Points, PointsMaterial, type Scene,
 } from 'three';
+import type { SledAnimationFrame } from './sled-animation';
+import { createSledRiderMatrices, writeSledRiderPart } from './sled-rider-pose';
+import { voxelPersonParts } from './town-voxel-person';
+
+const firstPersonParts = voxelPersonParts.slice(10);
+const firstPersonPalette = ['#e6b18c', '#423541', '#a54345', '#e0caaf', '#4c4357', '#ddae5f'];
 
 type SledPart = readonly [readonly [number, number, number], readonly [number, number, number], string];
 export const sledParts: readonly SledPart[] = [
@@ -23,7 +29,10 @@ type Rack = { x: number; n: number; y: number; yaw: number };
 export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial();
-  const sled = new InstancedMesh(geometry, material, sledParts.length);
+  const sled = new InstancedMesh(geometry, material, sledParts.length + firstPersonParts.length);
+  sled.count = sledParts.length;
+  sled.frustumCulled = false;
+  sled.instanceMatrix.setUsage(DynamicDrawUsage);
   const rackMesh = new InstancedMesh(geometry, material, racks.length * (4 + 2 * sledParts.length));
   sled.name = 'town-local-sled';
   rackMesh.name = 'town-sled-racks';
@@ -43,6 +52,9 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
     mesh.setColorAt(index, color.set(tint));
   }
   sledParts.forEach((definition, index) => placePart(sled, index, definition));
+  firstPersonParts.forEach(([, , palette], index) => {
+    sled.setColorAt(sledParts.length + index, color.set(firstPersonPalette[palette]));
+  });
   const poles: readonly SledPart[] = [
     [[-.78, .385, -.36], [.12, .77, .14], '#7f5032'],
     [[.78, .385, -.36], [.12, .77, .14], '#7f5032'],
@@ -78,7 +90,7 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   scene.add(mist);
   let head = 0;
   let active = 0;
-  function puff(x: number, n: number, y: number, heading: number, amount: number) {
+  function puff(x: number, n: number, y: number, heading: number, amount: number, effect?: 'brake' | 'land') {
     for (let i = 0; i < amount; i++) {
       const id = head++ % count;
       const offset = id * 3;
@@ -87,9 +99,12 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
       positions[offset] = x + (Math.random() - .5) * .5 - Math.sin(heading) * .65;
       positions[offset + 1] = y + .09;
       positions[offset + 2] = -n + (Math.random() - .5) * .5 + Math.cos(heading) * .65;
-      velocities[offset] = (Math.random() - .5) * 1.8;
-      velocities[offset + 1] = .5 + Math.random() * 1.2;
-      velocities[offset + 2] = (Math.random() - .5) * 1.8;
+      const angle = effect === 'land' ? i / amount * Math.PI * 2 :
+        Math.PI + heading + (Math.random() - .5) * (effect === 'brake' ? 1.9 : 1.1);
+      const speed = (effect === 'brake' ? 2.45 : effect === 'land' ? 1.9 : 1.15) * (.5 + .6 * Math.random());
+      velocities[offset] = Math.sin(angle) * speed;
+      velocities[offset + 1] = .45 + Math.random() * 1.1;
+      velocities[offset + 2] = -Math.cos(angle) * speed;
     }
   }
   function update(dt: number) {
@@ -115,9 +130,18 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
     }
   }
   return {
-    setPose(x: number, n: number, y: number, heading: number, roll = 0) {
+    setPose(x: number, n: number, y: number, heading: number, roll = 0, pitch = 0, rider?: SledAnimationFrame) {
       sled.position.set(x, y, -n);
-      sled.rotation.set(0, Math.PI - heading, roll, 'YXZ');
+      sled.rotation.set(pitch, Math.PI - heading, roll, 'YXZ');
+      sled.count = sledParts.length;
+      if (rider) {
+        createSledRiderMatrices(0, 0, 0, Math.PI, { ...rider, shellPitch: 0, shellRoll: 0 });
+        const output = sled.instanceMatrix.array as Float32Array;
+        for (const bodyPart of firstPersonParts) writeSledRiderPart(output, sled.count++ * 16, bodyPart, rider);
+        sled.instanceMatrix.clearUpdateRanges();
+        sled.instanceMatrix.addUpdateRange(sledParts.length * 16, firstPersonParts.length * 16);
+        sled.instanceMatrix.needsUpdate = true;
+      }
       sled.visible = true;
     },
     hide() { sled.visible = false; },

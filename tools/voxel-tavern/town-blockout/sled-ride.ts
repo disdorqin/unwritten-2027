@@ -1,10 +1,11 @@
 import { createSledMotion, sledCrashKind } from './sled-motion';
+import { sledSnowAmount, sledYawDelta } from './sled-animation';
 
 type SledWorld = {
   height(x: number, n: number): number;
   surface(x: number, n: number, y: number): { surface: number; deepSnow: boolean };
   blocked(x: number, n: number, y: number): boolean;
-  snow(x: number, n: number, y: number, yaw: number, count: number): void;
+  snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
   stopped(): void;
 };
 type Spot = { x: number; n: number; y: number; yaw: number };
@@ -18,6 +19,7 @@ export function createSledRide(world: SledWorld) {
   let recovery = 0, recoveryDuration = 0, rollTurns = 0;
   let snowTime = 0, curbCooldown = 0, wasStalled = false;
   let landingCompression = 0;
+  let braking = false, turnRate = 0, deepSnow = false;
 
   function mount(x: number, n: number, y: number, yaw: number) {
     if (active || recovery > 0 || world.blocked(x, n, y)) return false;
@@ -25,7 +27,8 @@ export function createSledRide(world: SledWorld) {
     motion.reset(yaw);
     active = true;
     parked = undefined;
-    snowTime = curbCooldown = 0;
+    snowTime = curbCooldown = turnRate = 0;
+    braking = deepSnow = false;
     wasStalled = false;
     return true;
   }
@@ -66,7 +69,7 @@ export function createSledRide(world: SledWorld) {
   }
 
   function step(dt: number, controls: SledControls) {
-    if (!active) return;
+    if (!active || dt <= 0) return;
     const state = motion.state;
     const from = world.height(spot.x, spot.n);
     const momentum = state.speed > .15;
@@ -80,7 +83,10 @@ export function createSledRide(world: SledWorld) {
       const recent = world.height(spot.x - de * .6, spot.n - dn * .6);
       motion.takeOff((from - recent) * state.speed / .6);
     }
+    braking = controls.forward < -.1;
+    deepSnow = surface.deepSnow;
     const next = motion.step(dt, controls, { ...surface, grade });
+    turnRate = sledYawDelta(spot.yaw, next.heading) / dt;
     spot.yaw = next.heading;
     if (next.uphillStalled && !wasStalled) world.stopped();
     wasStalled = next.uphillStalled;
@@ -113,17 +119,18 @@ export function createSledRide(world: SledWorld) {
     if (next.airborne && next.vertical <= 0 && nextY === floor) {
       const impact = Math.abs(next.vertical);
       const landing = motion.land(grade);
-      world.snow(x, n, floor, spot.yaw, landing === 'smooth' ? 8 : landing === 'hard' ? 16 : 24);
+      world.snow(x, n, floor, spot.yaw, landing === 'smooth' ? 8 : landing === 'hard' ? 16 : 24, 'land');
       if (landing === 'spill') { crash(0); return; }
       if (landing === 'hard') landingCompression = Math.min(.17, impact * .012);
     }
-    if (!next.airborne && next.speed > 4) {
-      snowTime += dt;
-      if (snowTime >= .05) {
-        const mist = Math.abs(next.lateral) > 2 ? Math.min(12, 2 + Math.floor(Math.abs(next.lateral))) : 1;
-        world.snow(x, n, floor, spot.yaw, mist);
-        snowTime = 0;
-      }
+    const mist = next.airborne ? 0 : sledSnowAmount(next.speed, braking, Math.abs(curbRise));
+    snowTime = mist ? snowTime + dt : 0;
+    if (mist && snowTime >= .05) {
+      const side = turnRate > .05 ? 1 : -1;
+      world.snow(x + (braking ? Math.cos(spot.yaw) * side * .42 : 0),
+        n - (braking ? Math.sin(spot.yaw) * side * .42 : 0),
+        floor, spot.yaw, mist, braking ? 'brake' : undefined);
+      snowTime = 0;
     }
   }
 
@@ -154,11 +161,15 @@ export function createSledRide(world: SledWorld) {
       if (active) leave();
       recovery = recoveryDuration = rollTurns = landingCompression = 0;
     },
+    braking: () => active && braking,
+    turnRate: () => active ? turnRate : 0,
+    deepSnow: () => deepSnow,
     active: () => active,
     parked: () => parked,
     recovering: () => recovery > 0,
     speed: () => motion.state.speed,
     airborne: () => motion.state.airborne,
+    faceDown: () => recovery > 0 && recoveryDuration >= .65 && !rollTurns ? Math.sin(Math.PI * recovery / recoveryDuration) : 0,
     roll() { return recovery > 0 && rollTurns ? 2 * Math.PI * rollTurns * (1 - recovery / recoveryDuration) : 0; },
     compression() { return recovery > 0 && !rollTurns ? .4 * Math.min(1, recovery * 4) : landingCompression; },
     jump(speed: number) { if (active && !motion.state.airborne) motion.takeOff(speed); },
