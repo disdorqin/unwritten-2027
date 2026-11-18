@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh } from 'three';
-import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
+import { Box3, Mesh, Ray, Vector3 } from 'three';
+import { buildMarketLandmark, marketOxSite } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import {
   HawkingBoard, MARKET_BUBBLE_LIMIT, MARKET_HAWK_RADIUS, TASTING_DAILY_LIMIT,
@@ -9,7 +9,7 @@ import {
   type TastingStorage,
 } from '../tools/voxel-tavern/town-blockout/market-fair.ts';
 import { nearestTownActivity, type TownActivitySpot } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
-import { createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { canEnter, createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 
 // 台词溯源集：以下 18 条逐字抄自《集市重点建设方案-v1》§4.3、9 条逐字抄自《集市试吃打烊句-v1》。
 // 本测试断言切片用到的每一句都落在这两个来源集内（不得自创）。
@@ -105,7 +105,7 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
   assert.deepEqual(bannerTitles, ['冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶']);
   group.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
   const { colliders } = readWalkGeometry(group);
-  assert.equal(colliders.length, 38);
+  assert.equal(colliders.length, 39);
   const bodyRadius = .27;
   const spots: TownActivitySpot[] = marketStalls.map(stall => ({
     x: stall.spot.x, n: stall.spot.n, ground: stall.spot.ground, range: stall.spot.range,
@@ -125,6 +125,42 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
     // 站在站位上时，活动框架选中的正是本摊。
     assert.equal(nearestTownActivity(spots, spot.x, spot.n, spot.ground), spot);
   });
+
+  assert.equal(group.userData.zodiacOx, marketOxSite);
+  const stand = group.localToWorld(new Vector3(...marketOxSite.stand));
+  const object = group.localToWorld(new Vector3(...marketOxSite.object));
+  function clearGround(x: number, n: number) {
+    assert.ok(canEnter(x, n) && !isWater(x, n));
+    assert.equal(terrain.heightAt(x, n), stand.y);
+    assert.ok(!colliders.some(({ min, max }) =>
+      max[1] > stand.y + .025 && min[1] < stand.y + 1.775 &&
+      Math.hypot(Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0)) < bodyRadius,
+    ), `hay annex approach blocked at E${x}/N${n}`);
+  }
+  const route = [[153.86, 98.5], [153.86, -stand.z], [stand.x, -stand.z]];
+  for (let step = 1; step < route.length; step++) {
+    const [x, n] = route[step - 1], [endX, endN] = route[step];
+    const count = Math.ceil(Math.hypot(endX - x, endN - n) / .05);
+    for (let i = 0; i <= count; i++) clearGround(x + (endX - x) * i / count, n + (endN - n) * i / count);
+  }
+  for (const radius of [0, .10, .20, .30, marketOxSite.range]) {
+    for (let arc = 0; arc < 32; arc++) {
+      const angle = Math.PI * arc / 16;
+      const x = stand.x + Math.cos(angle) * radius, n = -stand.z + Math.sin(angle) * radius;
+      clearGround(x, n);
+      assert.ok(spots.every(spot => Math.hypot(spot.x - x, spot.n - n) - spot.range >= 1.5));
+    }
+  }
+  const sightIsClear = (eye: Vector3) => {
+    const ray = new Ray(eye, object.clone().sub(eye).normalize());
+    const reach = eye.distanceTo(object);
+    return !colliders.some(({ min, max }) => {
+      const hit = ray.intersectBox(new Box3(new Vector3(...min), new Vector3(...max)), new Vector3());
+      return hit && eye.distanceTo(hit) < reach;
+    });
+  };
+  assert.ok(sightIsClear(stand.clone().add(new Vector3(0, 1.62, 0))));
+  assert.ok(!sightIsClear(new Vector3(stand.x, stand.y + 1.62, -107)));
 });
 
 test('hawking board rotates lines, caps bubbles at two, and resets out of range', () => {

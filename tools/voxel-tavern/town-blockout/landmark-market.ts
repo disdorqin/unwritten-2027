@@ -43,6 +43,14 @@ function createWorkshop() {
 
 type Workshop = ReturnType<typeof createWorkshop>;
 
+export const marketOxSite = {
+  id: 'ox',
+  stand: [1.80, 0, -9.25],
+  object: [1.80, .24, -8.86],
+  yaw: Math.PI,
+  range: .40,
+} as const;
+
 function knitBoxwork({ put }: Workshop, x: number, z: number, width: number, depth: number, doorWidth: number, y = 0) {
   for (let i = Math.floor(-width / 1.1 / 2); i <= width / 1.1 / 2; i++) {
     const px = x + i * 1.05;
@@ -332,9 +340,38 @@ function makeStall(s: Workshop, x: number, z: number, width: number, color: stri
   }
 }
 
+function makeHayAnnex({ put }: Workshop) {
+  const [x, , objectZ] = marketOxSite.object;
+  const z = objectZ + .82;
+  for (const offset of [-.76, .76]) put(wood[2], x + offset, .035, z, .16, .07, .98);
+  for (let index = 0; index < 7; index++) {
+    put(wood[index % 3], x - .87 + index * .29, .105, z, .26, .07, 1.04);
+  }
+  const bales = [
+    { x: x - .48, z: z + .01, bottom: .14, width: .92, height: .43, depth: .91 },
+    { x: x + .49, z: z + .08, bottom: .14, width: .90, height: .40, depth: .79 },
+    { x: x + .02, z: z + .055, bottom: .57, width: 1.06, height: .34, depth: .78 },
+  ];
+  for (const bale of bales) {
+    const { x, z, bottom, width, height, depth } = bale;
+    put('#b78443', x, bottom + height / 2, z, width, height, depth);
+    for (let index = 0; index < 3; index++) {
+      const y = bottom + height * ((index + .65) / 3.35);
+      put(index % 2 ? '#c99851' : '#e0b86c', x + (index - 1) * .027, y, z - depth / 2,
+        width - .06 - index * .05, .045, .024);
+    }
+    for (const offset of [-.27, .27]) {
+      put('#705437', x + offset * width, bottom + height / 2, z - depth / 2 - .016, .030, height, .019);
+      put('#705437', x + offset * width, bottom + height + .008, z, .030, .016, depth);
+    }
+  }
+  return collision(x, 0, z, 2.04, .93, 1.04);
+}
+
 function buildStalls() {
   const s = createWorkshop();
   marketStallLayouts.forEach(([x, z, width, color], i) => makeStall(s, x, z, width, color, i));
+  const hayAnnex = makeHayAnnex(s);
   for (const x of [-16, -7.8, 8.5, 16]) post(s, x, 3.42, 5.38, .26);
   for (const [x0, x1] of [[-16, -7.8], [-7.8, 8.5], [8.5, 16]]) hangFestoon(s, x0, x1, 3.42, 5.17);
   for (const x of [-2.76, 2.76]) {
@@ -354,7 +391,9 @@ function buildStalls() {
     ]),
     ...[-16, -7.8, 8.5, 16].map(x => collision(x, 0, 3.42, .44, 5.38, .44)),
     ...[-2.76, 2.76].map(x => collision(x, 0, 6.67, .46, 4.64, .46)),
+    hayAnnex,
   ];
+  root.userData.zodiacOx = marketOxSite;
   return root;
 }
 
