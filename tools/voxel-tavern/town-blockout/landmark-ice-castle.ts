@@ -7,10 +7,16 @@ import type { Box, Ramp } from './landmark-kit';
 import { addLandmarkNameplate, useLandmarkEmissionMask } from './landmark-label';
 import {
   addIceCastleCarvings, addIceCastleChandelier, addIceCastleDeer, createIceCastleRefinementRuntime, iceCastleExhibits,
+  iceChandelierPosition, type IceCastlePoint,
 } from './ice-castle-refinement';
 import { addOpaqueMuseumLabels } from './museum-label-atlas';
 import { createMuseumLabelCanvas } from './museum-label-canvas';
 import { createIcePalaceRace, icePalaceBalconyRace } from './ice-palace-race';
+import {
+  addIcePalaceChambers, addIcePalaceDoorPanels, addIcePalaceHallExpansion, addIcePalaceMainTower,
+  addIcePalaceWings, icePalaceBanquetDrinkStand, icePalaceBanquetSeats, icePalaceDoorBounds, icePalaceInteriorAnchors,
+} from './ice-palace-expansion';
+import { mountIcePalaceForecourt } from './ice-palace-forecourt';
 
 const palette = {
   foundation: '#31546f',
@@ -34,6 +40,18 @@ export const iceThrone = {
   photo: [17.46, .35, -6.15],
   hallDoor: [7.2, 2.15, 0],
 } as const;
+
+const galleryExhibitEast = [-8.5, -4.5, -.6, 3.9];
+const galleryExhibits = iceCastleExhibits.map((exhibit, index) => {
+  const x = galleryExhibitEast[index];
+  const anchor: IceCastlePoint = [x, .57, -16.37];
+  const stand: IceCastlePoint = [x, .12, -15.20];
+  return { ...exhibit, anchor, stand, yaw: 0 };
+});
+const chandelierLift = 1.95;
+const palaceChandelier: IceCastlePoint = [
+  iceChandelierPosition[0], iceChandelierPosition[1] + chandelierLift, iceChandelierPosition[2],
+];
 
 function useCastleEmissionColor(material: MeshLambertMaterial, crownGlow: { value: number }, masked = false) {
   if (masked) useLandmarkEmissionMask(material);
@@ -178,7 +196,9 @@ function castleModel() {
     coresMesh.name = '庭院与王座晶簇内芯';
     group.add(coresMesh);
     for (const piece of cores) piece.dispose();
-    group.userData = { colliders, floors, ramps, iceRefinement: createIceCastleRefinementRuntime(crownGlow) };
+    group.userData = {
+      colliders, floors, ramps, iceRefinement: createIceCastleRefinementRuntime(crownGlow, galleryExhibits, palaceChandelier),
+    };
     return group;
   }
 
@@ -344,8 +364,17 @@ export function buildIceCastle() {
   for (const side of [-1, 1]) {
     block(-3.4, .13, side * 2.37, 23.8, .024, .15, 'paleIce');
     const z = side * 17.35;
-    solid(.2, .12, z, 36.5, 4.9, .87, 'blueIce');
-    block(.25, .72, z, 36.55, .35, 1.12, 'deepIce');
+    if (side < 0) {
+      solid(.2, .12, z, 36.5, 4.9, .87, 'blueIce');
+      block(.25, .72, z, 36.55, .35, 1.12, 'deepIce');
+    } else {
+      for (const [first, last] of [[-18.05, .43], [3.57, 18.45]]) {
+        const x = (first + last) / 2, width = last - first;
+        solid(x, .12, z, width, 4.90, .87, 'blueIce');
+        block(x, .72, z, width, .35, 1.12, 'deepIce');
+      }
+      solid(2, 3.73, z, 3.14, 1.29, .87, 'blueIce');
+    }
     block(.25, 4.97, z, 36.8, .29, 1.24, 'snow');
     const phase = side < 0 ? 0 : 2;
     icicleRow(-13.7, z + side * .51, 15.6, z + side * .51, 4.86, phase);
@@ -353,6 +382,7 @@ export function buildIceCastle() {
     for (let x = -13.5; x < 18; x += 2.4) {
       block(x, 5.36, z, 1.37, .63, .95, 'ice');
       block(x, 5.72, z, 1.53, .18, 1.1, 'snow');
+      if (side > 0 && Math.abs(x - 2) <= 2.1) continue;
       block(x - .36, 2.63, z - side * .48, .54, 4.84, .32, 'paleIce');
       if (x < 7) lancet(x + .63, 1.14, z - side * .47, .65, 2.83, side > 0 ? Math.PI : 0);
     }
@@ -371,18 +401,34 @@ export function buildIceCastle() {
     }
     colliders.push(bounds(-5.8, .73, courtZ, 3.1, 1.7, 1.65));
   }
-  flush('庭院与围墙');
+  addIcePalaceWings(parts);
+  for (const { anchor: [x, , z] } of galleryExhibits) solid(x, .12, z, 1.43, .46, .95, 'deepIce');
+  addIceCastleCarvings(parts, galleryExhibits);
+  flush('庭院、围墙与双翼');
 
   // A clear central portal continues into the hall below its stepped roof.
   floor(13.75, .15, 0, 14.9, 19.4, .04, 'ice');
   floor(6.65, .17, 0, 2.3, 5.5, .06, 'paleIce');
-  solid(20.78, .12, 0, 1, 11.48, 19.5, 'blueIce');
+  const hallHeight = 14;
+  solid(20.78, .12, -8.6, 1, 2.53, 2.30, 'blueIce');
+  solid(20.78, .12, 1.90, 1, 2.53, 15.70, 'blueIce');
+  solid(20.78, 2.65, 0, 1, hallHeight - 2.53, 19.5, 'blueIce');
   for (const side of [-1, 1]) {
-    solid(13.95, .12, side * 9.3, 14.65, 11.48, .88, 'blueIce');
-    block(13.95, 11.11, side * 9.75, 14.75, .20, .43, 'paleIce');
-    block(13.95, 10.85, side * 9.75, 14.75, .13, .31, 'ice');
+    if (side > 0) {
+      solid(13.95, .12, 9.3, 14.65, hallHeight, .88, 'blueIce');
+    } else {
+      const z = -9.3;
+      for (const [left, right] of [[6.625, 7.85], [9.45, 12.20], [13.96, 21.275]]) {
+        solid((left + right) / 2, .12, z, right - left, hallHeight, .88, 'blueIce');
+      }
+      solid(8.65, 2.58, z, 1.60, 11.54, .88, 'blueIce');
+      solid(13.08, .12, z, 1.76, 2.90, .88, 'blueIce');
+      solid(13.08, 5.55, z, 1.76, 8.57, .88, 'blueIce');
+    }
+    block(13.95, 13.52, side * 9.75, 14.75, .20, .43, 'paleIce');
+    block(13.95, 13.26, side * 9.75, 14.75, .13, .31, 'ice');
     block(13.95, 9.62, side * 9.73, 14.70, .16, .15, 'paleIce');
-    block(13.95, 3.96, side * 9.73, 14.70, .14, .14, 'ice');
+    if (side > 0) block(13.95, 3.96, 9.73, 14.70, .14, .14, 'ice');
     for (const x of [9.92, 15.12, 20.05]) {
       // The two east braces flatten into pilasters along the passage beside the corner tower.
       const projection = x > 14.9 ? .34 : 1;
@@ -395,11 +441,14 @@ export function buildIceCastle() {
       block(x, 6.67, side * (9.64 + .10 * projection), .60, .18, .57 * projection, 'snow');
       block(x, .73, side * (9.64 + .40 * projection), .96, .13, .81 * projection, 'ice');
     }
-    solid(7.2, .12, side * 6.1, .86, 11.48, 6.82, 'blueIce');
+    solid(7.2, .12, side * 6.1, .86, hallHeight, 6.82, 'blueIce');
     block(7.2, 2, side * 2.52, 1.27, 3.92, .56, 'paleIce');
     lancet(6.74, 4.8, side * 5.95, 1.8, 4.95, -Math.PI / 2);
     for (const x of [8.9, 12.4, 15.9, 19.4]) {
-      block(x - 1.46, 5.9, side * 9.7, .38, 11.55, .27, 'paleIce');
+      if (side > 0 || Math.abs(x - 14.54) > .18) {
+        block(x - 1.46, 7.12, side * 9.7, .38, 13.98, .27, 'paleIce');
+      }
+      lancet(x, 10.37, side * 9.79, .95, 2.55, side * Math.PI / 2 - Math.PI / 2);
       lancet(x, 4.83, side * 9.78, 1.74, 4.22, side * Math.PI / 2 - Math.PI / 2);
       block(x, 8.76, side * 9.92, 2.21, .19, .56, 'snow');
       icicleRow(x - 1.02, side * 10.09, x + 1.02, side * 10.09, 8.7, side < 0 ? 4 : 2);
@@ -411,22 +460,23 @@ export function buildIceCastle() {
     solid(22.07, .12, side * 12.7, .86, 4.32, 7.9, 'blueIce');
     block(22.07, 4.4, side * 12.7, 1.1, .24, 8.06, 'snow');
   }
-  solid(7.2, 4.18, 0, .86, 7.42, 5.4, 'blueIce');
+  solid(7.2, 4.18, 0, .86, 9.94, 5.4, 'blueIce');
   block(7.2, 4.21, 0, 1.25, .28, 5.67, 'snow');
   icicleRow(6.65, -2.65, 6.65, 2.65, 4.12, 1);
   crystal(6.37, 7.42, 0, .56, 2.54, 2.54, 'paleIce');
   crystal(6.07, 7.42, 0, .28, 1.51, 1.51, 'pane');
   for (let tier = 0; tier < 13; tier++) {
     const width = 19.8 - tier * 1.43;
-    const y = 11.58 + tier * .43;
+    const y = 14.10 + tier * .43;
     block(14, y, 0, 15.7 - tier * .22, .44, width, tier % 4 === 0 ? 'snow' : 'deepIce');
     for (const x of [6.13 + tier * .11, 21.87 - tier * .11]) {
       block(x, y + .17, 0, .28, .16, width + .16, 'paleIce');
     }
   }
-  block(14, 17, 0, 12.58, .38, 1.72, 'snow');
-  for (const x of [8.3, 14, 19.7]) crystal(x, 17.65, 0, .9, 1.45, .9, 'ice');
-  flush('大殿与东塔');
+  block(14, 19.52, 0, 12.58, .38, 1.72, 'snow');
+  for (const x of [8.3, 14, 19.7]) crystal(x, 20.17, 0, .9, 1.45, .9, 'ice');
+  addIcePalaceMainTower(parts);
+  flush('大殿、东塔与八角主塔');
 
   // The balcony is reached by ordinary walking instead of a jump or teleport.
   const treadCount = 11;
@@ -448,13 +498,17 @@ export function buildIceCastle() {
   const balconyWidth = 20.31 - balconyStart;
   const balconyX = balconyStart + balconyWidth / 2;
   floor(balconyX, balconyHeight, 3.17, balconyWidth, 8.47, .31, 'paleIce');
-  solid(balconyX, balconyHeight, -1.03, balconyWidth, 1.02, .17, 'ice');
+  for (const [a, b] of [[balconyStart, 17.74], [19.32, 20.31]]) {
+    const x = (a + b) / 2;
+    solid(x, balconyHeight, -1.03, b - a, 1.02, .17, 'ice');
+    block(x, balconyHeight + 1.01, -1.03, b - a, .13, .26, 'snow');
+  }
   solid(balconyStart, balconyHeight, 1.93, .17, 1.02, 5.94, 'ice');
   solid(balconyX, balconyHeight, 7.4, balconyWidth, 1.02, .17, 'ice');
   block(balconyStart, balconyHeight + 1.01, 1.93, .26, .13, 5.98, 'snow');
-  block(balconyX, balconyHeight + 1.01, -1.03, balconyWidth, .13, .26, 'snow');
+
   icicleRow(balconyStart - .14, -.94, balconyStart - .14, 4.79, balconyHeight + .99, 3);
-  icicleRow(balconyStart + .16, -1.16, 20.17, -1.16, balconyHeight + .99, 5);
+  icicleRow(19.45, -1.16, 20.17, -1.16, balconyHeight + .99, 5);
   for (const z of [0, 1.5, 3, 4.5, 6]) {
     block(balconyStart - .14, balconyHeight + .53, z, .27, 1.24, .22, 'paleIce');
   }
@@ -500,8 +554,10 @@ export function buildIceCastle() {
   }
   lamp(20.02, 2.17, -2.17, true);
   lamp(20.02, 2.17, -7.67, true);
-  addIceCastleCarvings(parts);
-  addIceCastleChandelier(parts);
+  addIceCastleChandelier(parts, chandelierLift);
+  block(14.35, 13.82, -2.45, .145, 1.06, .145, 'paleIce', Math.PI / 4);
+  addIcePalaceHallExpansion(parts);
+  addIcePalaceChambers(parts);
   // These inlays guide racers to the south stair while preserving the existing floor supports.
   raceArrow(9.74, .15, 1.45, -Math.PI / 2, .73);
   raceArrow(9.74, .15, 4.10, -Math.PI / 2, .73);
@@ -516,15 +572,20 @@ export function buildIceCastle() {
   const group = finish();
   group.userData.throne = iceThrone;
   group.userData.palaceRace = createIcePalaceRace();
+  group.userData.palaceInteriorAnchors = icePalaceInteriorAnchors;
+  group.userData.palaceDoorBounds = icePalaceDoorBounds;
+  group.userData.palaceDoorPanels = addIcePalaceDoorPanels(group);
+  group.userData.palaceBanquetSeats = icePalaceBanquetSeats;
+  group.userData.palaceBanquetDrinkStand = icePalaceBanquetDrinkStand;
+  group.userData.palaceForecourt = mountIcePalaceForecourt(group);
   const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
   addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2, plaqueStyle);
   if (typeof document !== 'undefined') {
     const width = 1.66;
     const height = .44;
-    const labels = iceCastleExhibits.map(({ title, subtitle, anchor: [x, y, z], yaw, id }) => {
+    const labels = galleryExhibits.map(({ title, subtitle, anchor: [x, , z], yaw }) => {
       const source = createMuseumLabelCanvas(title + '\n' + subtitle, width, height, plaqueStyle);
-      return { source, parent: group, width, height, x, y: id === 'sailboat' ? y - .24 : y - .44,
-        z: Math.sign(z) * 8.82, yaw };
+      return { source, parent: group, width, height, x, y: .79, z: z + .56, yaw };
     });
     addOpaqueMuseumLabels(labels, [], { mergeSizes: true });
   }

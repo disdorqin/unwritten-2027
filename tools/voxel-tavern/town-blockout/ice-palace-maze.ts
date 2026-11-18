@@ -25,7 +25,7 @@ const branches: readonly (readonly Cell[])[] = [
   [[7, 3], [7, 4], [7, 5], [7, 6]],
   [[9, 2], [10, 2], [11, 2]],
   [[5, 1], [5, 2]],
-  [[8, 0], [8, 1], [8, 2]],
+  [[3, 1], [3, 2], [2, 2]],
   [[14, 3], [15, 3], [15, 4]],
   [[4, 3], [4, 4], [5, 4], [6, 4], [6, 3]],
   [[12, 0], [12, 1], [13, 1], [14, 1]],
@@ -63,16 +63,54 @@ export const icePalaceMazeWalls: readonly MazeWall[] = (() => {
   return [...edges.values()];
 })();
 
-export function buildIcePalaceMaze() {
+function cellCentre([column, row]: Cell) {
+  return [(column + .5) * cellSize, (row + .5) * cellSize] as const;
+}
+
+export const icePalaceMazeBlockGrooves = [
+  { home: cellCentre([15, 3]), target: cellCentre([15, 4]) },
+  { home: cellCentre([1, 4]), target: cellCentre([1, 5]) },
+  { home: cellCentre([7, 5]), target: cellCentre([7, 6]) },
+] as const;
+
+const blockClearance = .63;
+const grooveClearances = icePalaceMazeBlockGrooves.map(({ home, target }) => ({
+  west: Math.min(home[0], target[0]) - blockClearance,
+  east: Math.max(home[0], target[0]) + blockClearance,
+  north: Math.min(home[1], target[1]) - blockClearance,
+  south: Math.max(home[1], target[1]) + blockClearance,
+}));
+
+function fitBlockGrooves(wall: MazeWall): MazeWall {
+  let west = wall.x - wall.w / 2;
+  let east = wall.x + wall.w / 2;
+  let north = wall.z - wall.d / 2;
+  let south = wall.z + wall.d / 2;
+  for (const groove of grooveClearances) {
+    if (west >= groove.east || east <= groove.west || north >= groove.south || south <= groove.north) continue;
+    // Recess only the face bordering the block's swept volume. Each wall still seals its original grid edge.
+    if (wall.w < wall.d) {
+      if (wall.x < (groove.west + groove.east) / 2) east = Math.min(east, groove.west);
+      else west = Math.max(west, groove.east);
+    } else if (wall.z < (groove.north + groove.south) / 2) {
+      south = Math.min(south, groove.north);
+    } else {
+      north = Math.max(north, groove.south);
+    }
+  }
+  return { x: (west + east) / 2, z: (north + south) / 2, w: east - west, d: south - north };
+}
+
+export function buildIcePalaceMaze({ snowBlockGrooves = false } = {}) {
   // Origin at the northwest corner of the new forecourt grid (E484/N53).
   const group = new Group();
   const geometry = new BoxGeometry();
-  const walls = new InstancedMesh(geometry, new MeshLambertMaterial(), icePalaceMazeWalls.length * 3);
+  const layout = snowBlockGrooves ? icePalaceMazeWalls.map(fitBlockGrooves) : icePalaceMazeWalls;
+  const walls = new InstancedMesh(geometry, new MeshLambertMaterial(), layout.length * 3);
   const pose = new Object3D();
   const color = new Color();
   const colliders: Box[] = [];
-  for (let i = 0; i < icePalaceMazeWalls.length; i++) {
-    const { x, z, w, d } = icePalaceMazeWalls[i];
+  for (const [i, { x, z, w, d }] of layout.entries()) {
     const colors = ['#5e97b3', i % 3 ? '#7eb5d1' : '#70aac7', '#acd5e6'];
     const layers = [[.44, .88], [1.42, 1.08], [2.08, .24]];
     layers.forEach(([y, h], layer) => {
