@@ -38,6 +38,7 @@ type Sash = { pivot: Matrix4; leaves: Leaf[]; angle: number; open: boolean };
 export function addTownWindow(root: Group, definition: TownWindow) {
   const windows = (root.userData[windowKey] ??= []) as TownWindow[];
   windows.push(definition);
+  return definition;
 }
 
 function buildWindows(root: Group, definitions: TownWindow[]) {
@@ -136,8 +137,9 @@ export function createWindowActivity(
   context: TownActivityContext,
   architecture: ReadonlyMap<string, Group>,
   isObstructed: (east: number, north: number, feet: number) => boolean,
-): TownActivity {
+) {
   const spots: TownActivity['spots'] = [];
+  const windowStates = new WeakMap<TownWindow, () => boolean>();
   const updates: ((dt: number) => void)[] = [];
   for (const [id, root] of architecture) {
     const definitions = root.userData[windowKey] as TownWindow[] | undefined;
@@ -160,6 +162,7 @@ export function createWindowActivity(
         stand.copy(first).addScaledVector(inward, step * standStep);
       }
       const face = root.localToWorld(new Vector3(x, y, z));
+      windowStates.set(definition, () => architecture.get(id) === root && controls.isOpen(index));
       spots.push({
         x: stand.x, n: -stand.z, ground: stand.y, range: 1.34,
         available: () => architecture.get(id) === root,
@@ -173,5 +176,9 @@ export function createWindowActivity(
       });
     });
   }
-  return { spots, update(dt) { updates.forEach(update => update(dt)); } };
+  return {
+    spots,
+    isOpen(window: TownWindow) { return windowStates.get(window)?.() ?? false; },
+    update(dt: number) { updates.forEach(update => update(dt)); },
+  };
 }

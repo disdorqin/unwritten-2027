@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Scene } from 'three';
+import { Group, Raycaster, Scene, Vector3 } from 'three';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import { buildMuseumLandmark } from '../tools/voxel-tavern/town-blockout/landmark-museum.ts';
 import { buildTavernLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tavern.ts';
 import { createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { nearestTownActivity, type TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { addTownWindow, createWindowActivity } from '../tools/voxel-tavern/town-blockout/town-window.ts';
+import { createZodiacProgress } from '../tools/voxel-tavern/town-blockout/town-zodiac.ts';
+import { createTavernRoosterCharm } from '../tools/voxel-tavern/town-blockout/town-zodiac-rooster.ts';
 
 const terrain = createTerrainGrid();
 // The app and the voxel preview have independent Three.js versions.
@@ -67,7 +69,8 @@ test('each audited tavern and memorial window has an unobstructed stand on a wal
     // Match the player cylinder and vertical clearance used by obstructed().
     const blocked = (x: number, n: number, feet: number) => obstacles.some(box =>
       feet + .025 < box.max[1] && feet + 1.8 - .025 > box.min[1] && overlapsBody(x, n, box));
-    const { spots } = createWindowActivity(context, new Map([[plot.id, root]]), blocked);
+    const windows = createWindowActivity(context, new Map([[plot.id, root]]), blocked);
+    const { spots } = windows;
     assert.equal(spots.length, count, `${plot.id} retained all window interactions`);
     for (const window of audited) {
       const spot = spots[window - 1];
@@ -79,5 +82,36 @@ test('each audited tavern and memorial window has an unobstructed stand on a wal
       assert.ok(Math.abs(floor - spot.ground) <= .025, `${label} is on floor ${floor}`);
       assert.equal(nearestTownActivity(spots, spot.x, spot.n, floor), spot, label);
     }
+    if (plot.id !== 'tavern') continue;
+    const zodiac = createZodiacProgress(['rooster']);
+    let celebrations = 0;
+    const rooster = createTavernRoosterCharm(root, windows, zodiac,
+      (x, n, ground) => !blocked(x, n, ground), () => celebrations++);
+    assert.ok(rooster);
+    assert.ok(floors.some(box => box.max[1] === rooster.ground && overlapsBody(rooster.x, rooster.n, box)));
+    const window = spots.find(spot => spot.x === rooster.x && spot.ground === rooster.ground &&
+      spot.n > rooster.n && spot.n - rooster.n < .60);
+    assert.ok(window);
+    assert.equal(nearestTownActivity([...spots, rooster], rooster.x, rooster.n, rooster.ground), window);
+    rooster.run();
+    assert.equal(zodiac.count(), 0);
+    context.scene.add(root);
+    window.run();
+    windows.update(1);
+    assert.equal(nearestTownActivity([...spots, rooster], rooster.x, rooster.n, rooster.ground), rooster);
+    const charm = root.getObjectByName('生肖寻宝 · 鸡挂牌')!;
+    root.updateWorldMatrix(true, true);
+    const eye = new Vector3(rooster.x, rooster.ground + 1.65, -rooster.n);
+    const target = new Vector3(charm.position.x + .04, charm.position.y + .13, charm.position.z)
+      .add(root.position as unknown as Vector3);
+    const look = new Raycaster(eye, target.sub(eye).normalize());
+    assert.equal(look.intersectObject(root as unknown as Group)[0]?.object, charm, 'existing open window reveals the outer sill');
+    assert.equal(blocked(rooster.x, rooster.n - .5, rooster.ground), true, 'wall stops a step outside');
+    rooster.run();
+    assert.equal(celebrations, 1);
+    assert.equal(charm.visible, false);
+    assert.equal(nearestTownActivity([...spots, rooster], window.x, window.n, window.ground), window);
+    window.run();
+    assert.equal(window.label, '打开窗户');
   }
 });

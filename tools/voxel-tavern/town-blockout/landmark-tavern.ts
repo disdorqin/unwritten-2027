@@ -4,13 +4,14 @@ import {
 } from 'three';
 import { gunzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import type { TownPlot } from './landmark-kit';
-import { addTownWindow } from './town-window';
+import { addTownWindow, type TownWindow } from './town-window';
 import source from './tavern-voxel-source';
 import { relocateTavernFurniture, tavernFurnitureColliders, tavernModelToPlot } from './tavern-seats';
 
 export { tavernModelToPlot };
 
 type Vec3 = [number, number, number];
+export type TavernRoosterSill = { window: TownWindow; sill: Vec3; approach: Vec3 };
 type Box = [number, number, number, number, number, number];
 type Part = { m: string; b: Box };
 type TavernSource = {
@@ -220,8 +221,14 @@ export function buildTavernLandmark(plot: TownPlot) {
       ? stairs.find(([, , near, , , far]) => stairProbeZ >= near && stairProbeZ <= far) : undefined;
     const [approachX, walkHeight, approachZ] = transform(inwardX, tread?.[4] ?? (pianoWindow ? 3.25 : ground), inwardZ);
     const [edgeX, , edgeZ] = transform(at[0] + (axis === 0 ? 1.90 : 0), at[1], at[2] + (axis === 2 ? 1.90 : 0));
-    addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
+    const window = addTownWindow(group, { x, y, z, yaw, width: Math.hypot(edgeX - x, edgeZ - z),
       height: 1.725, ground: walkHeight, approach: [approachX, approachZ], style: 'tavern' });
+    if (ground === 8 && yaw === 0 && at[0] === -4) {
+      // The original sill begins at z 6.0625, just in front of its flower box.
+      group.userData.roosterSill = {
+        window, sill: transform(-4, 9, 6.095), approach: transform(-4, 8, 4.56),
+      } satisfies TavernRoosterSill;
+    }
   }
   const materialBuffers = new Map<string, { positions: number[]; normals: number[]; uv: number[]; lighting: number[] }>();
   for (const { m, b } of parts) {

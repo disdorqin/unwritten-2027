@@ -82,6 +82,7 @@ import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
+import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
@@ -683,7 +684,10 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'castle') return architecture.has('ice-castle');
   if (feature === 'mixing') return architecture.has('tavern');
   return true;
-}, () => !nightMode, name => name === '钟铁生' && zodiac.canCollect('horse') ? railHorseClues : undefined,
+}, () => !nightMode, name => {
+  if (name === '钟铁生' && zodiac.canCollect('horse')) return railHorseClues;
+  if (name === '罗大江' && zodiac.canCollect('rooster')) return tavernRoosterClues;
+},
 panel => openTavernDice(panel, () => {
   if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
   if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
@@ -1173,7 +1177,7 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse', 'horse'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'horse', 'rooster'], zodiacStorage);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1766,6 +1770,12 @@ const windowActivity = createWindowActivity(
 );
 activities.push(windowActivity);
 activitySpots.push(...windowActivity.spots);
+const tavern = architecture.get('tavern')!;
+const rooster = createTavernRoosterCharm(tavern, windowActivity, zodiac, canStandAtActivity, () => {
+  announceActivity(`鸡 · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+});
+if (rooster) activitySpots.push(rooster);
 const tavernPlot = layout.plots.find(({ id }) => id === 'tavern');
 if (tavernPlot) {
   activitySpots.push(...createTavernSeatSpots(tavernPlot, {
