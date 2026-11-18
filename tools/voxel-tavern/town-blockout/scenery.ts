@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
+import { addLandmarkNameplate } from './landmark-label';
 import { campfirePartsPerSite, maxCampfireSites, type CampfirePiece } from './town-campfires';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
@@ -155,6 +156,20 @@ export function addScenery(group: Group, grid: Ground) {
     const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
       lights.push({ at: [x, plazaHeight + y, -north], scale });
     };
+    const gateEast = 161, gateNorth = 190;
+    for (const north of [187.85, 192.15]) {
+      plazaBox(gateEast, north, .18, [.66, .36, .66], '#8b8b94');
+      plazaBox(gateEast, north, 1.94, [.41, 3.32, .41], '#7e423e');
+      plazaBox(gateEast, north, 3.48, [.56, .19, .58], '#c59b55');
+      plazaGlow(gateEast, north, 3.06, [.28, .39, .28]);
+      blockers.push({ x: gateEast, n: north, radius: .35 });
+    }
+    plazaBox(gateEast, gateNorth, 3.66, [.57, .31, 5.16], '#5f3f3b');
+    plazaBox(gateEast, gateNorth, 3.91, [.67, .19, 5.42], '#414b61');
+    plazaBox(gateEast, gateNorth, 4.04, [.49, .14, 4.73], '#cfddeb');
+    addLandmarkNameplate(group, '迎未', gateEast - .31, plazaHeight + 3.62, -gateNorth,
+      1.54, .34, -Math.PI / 2, { background: '#603c38' });
+
     const yearTreeEast = 208, yearTreeNorth = 198;
     for (let index = 0; index < 24; index++) {
       const angle = index * Math.PI / 12;
