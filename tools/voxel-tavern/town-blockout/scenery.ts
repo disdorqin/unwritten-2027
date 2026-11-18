@@ -8,14 +8,15 @@ import { roadCorridorKeepClear } from './road-clearance';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
-type Instance = { at: Position; scale: Position; tint?: string };
+type Instance = { at: Position; scale: Position; tint?: string; turn?: number };
 type Ground = ReturnType<typeof import('./terrain').createTerrainGrid>;
 
 function instances(group: Group, geometry: Geometry, material: Material, items: Instance[]) {
   const mesh = new InstancedMesh(geometry, material, items.length);
   const dummy = new Object3D();
-  items.forEach(({ at, scale, tint }, index) => {
+  items.forEach(({ at, scale, tint, turn = 0 }, index) => {
     dummy.position.set(...at);
+    dummy.rotation.y = turn;
     dummy.scale.set(...scale);
     dummy.updateMatrix();
     mesh.setMatrixAt(index, dummy.matrix);
@@ -83,11 +84,132 @@ export function addScenery(group: Group, grid: Ground) {
     blockers.push({ x, n: north, radius: .25 });
   };
 
-  for (let x = w + 1; x < e; x += 2) {
-    for (let north = s + 1; north < n; north += 1.5) {
-      const edge = x < w + 4 || x > e - 4 || north < s + 3 || north > n - 3;
-      const tint = edge ? '#6f7887' : ['#a08b82', '#a79997', '#a5958a', '#968782'][Math.floor(random() * 4)];
-      pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
+  if (w === 161 && s === 152 && e === 251 && n === 212) {
+    const plazaHeight = layout.plaza.height;
+    function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
+      pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
+    }
+    for (const [west, east] of [[w, 219], [219, 229], [229, e]]) {
+      for (let x = west; x < east; x += 4) {
+        for (let north = s; north < n; north += 4) {
+          const width = Math.min(4, east - x), depth = Math.min(4, n - north);
+          const seam = x === west || north === s || north + depth === n;
+          const tint = west === 219
+            ? ['#a8988a', '#b3a295'][Math.floor(random() * 2)]
+            : seam ? '#6f7887' : ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'][Math.floor(random() * 4)];
+          pavers.push({ at: [x + width / 2, plazaHeight - .025, -north - depth / 2],
+            scale: [width - .035, .085, depth - .035], tint });
+          if (west !== 219 && (north - s) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
+        }
+      }
+    }
+    const centreEast = 224, centreNorth = 188;
+    for (const radius of [4, 7, 10]) {
+      const pieces = radius * 8;
+      for (let i = 0; i < pieces; i++) {
+        const angle = i * 2 * Math.PI / pieces;
+        inlay(centreEast + Math.cos(angle) * radius, centreNorth + Math.sin(angle) * radius,
+          2 * Math.PI * radius / pieces + .05, radius === 4 ? .18 : .12,
+          radius === 4 ? '#c6e2ed' : '#8fa7bb', angle + Math.PI / 2);
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      const angle = i * Math.PI / 3;
+      inlay(centreEast + Math.cos(angle) * 1.9, centreNorth + Math.sin(angle) * 1.9, 3.4, .18, '#d5e8f4', angle);
+      for (const side of [-1, 1]) {
+        const fork = angle + side * Math.PI / 3;
+        inlay(centreEast + Math.cos(angle) * 2.5 + Math.cos(fork) * .46,
+          centreNorth + Math.sin(angle) * 2.5 + Math.sin(fork) * .46,
+          1.03, .14, '#d5e8f4', fork);
+      }
+    }
+    // Keep the non-colliding edge lights in the existing emissive batch.
+    for (const north of [s + 2, n - 2]) {
+      lights.push({ at: [(w + e) / 2, plazaHeight + .023, -north], scale: [e - w - 4, .01, .095] });
+    }
+    for (const east of [w + 2, e - 2]) {
+      lights.push({ at: [east, plazaHeight + .023, -(s + n) / 2], scale: [.095, .01, n - s - 4] });
+    }
+    for (const east of [216.5, 231.5]) {
+      for (let north = 157; north <= n; north += 11) {
+        pillars.push({ at: [east, plazaHeight + .36, -north], scale: [.21, .72, .21], tint: '#453f48' });
+        pillars.push({ at: [east, plazaHeight + .10, -north], scale: [.42, .20, .42], tint: '#78869b' });
+        lights.push({ at: [east, plazaHeight + .87, -north], scale: [.36, .30, .36] });
+        caps.push({ at: [east, plazaHeight + 1.05, -north], scale: [.49, .11, .49], tint: '#602b32' });
+        caps.push({ at: [east, plazaHeight + 1.15, -north], scale: [.32, .08, .32], tint: '#c3d8ec' });
+        glowPositions.push([east, plazaHeight + .87, -north]);
+        blockers.push({ x: east, n: north, radius: .25 });
+        for (const sign of [-1, 1]) {
+          pillars.push({ at: [east + sign * .063, plazaHeight + .51, -north + .112],
+            scale: [.09, .035, .032], tint: '#d2a56c', turn: sign * Math.PI / 4 });
+          pillars.push({ at: [east + sign * .089, plazaHeight + .57, -north + .114],
+            scale: [.032, .102, .033], tint: '#d2a56c' });
+        }
+      }
+    }
+    const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string, turn = 0) => {
+      caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
+    };
+    const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
+      lights.push({ at: [x, plazaHeight + y, -north], scale });
+    };
+    const yearTreeEast = 208, yearTreeNorth = 198;
+    for (let index = 0; index < 24; index++) {
+      const angle = index * Math.PI / 12;
+      const x = yearTreeEast + 7 * Math.cos(angle);
+      const north = yearTreeNorth + 7 * Math.sin(angle);
+      inlay(x, north, 1.86, .5, '#b9a881', angle + Math.PI / 2);
+      if (index % 3 === 0) {
+        plazaBox(x, north, .28, [1.36, .22, .54], '#835c44', angle + Math.PI / 2);
+        plazaBox(x, north, .11, [.42, .22, .42], '#5b4741');
+      }
+      if (index % 4 === 2) plazaGlow(x, north, .04, [.22, .04, .22]);
+    }
+    for (const [x, north] of [[199.7, 209.7], [203.1, 209.7]]) {
+      plazaBox(x, north, .36, [.18, .72, .18], '#62463a');
+      plazaGlow(x, north, .82, [.3, .26, .3]);
+      plazaBox(x, north, 1.01, [.42, .12, .42], '#8c3f39');
+    }
+    // The west-facing resting nook leaves the wishing-tree interaction approach open.
+    const nookEast = 198.3, nookNorth = 208.6;
+    plazaBox(nookEast, nookNorth, .045, [1.30, .09, .78], '#b18a52');
+    for (const north of [208.05, 209.15]) {
+      plazaBox(nookEast - .70, north, .25, [.13, .50, .13], '#805c4a');
+      plazaBox(nookEast - .70, north, .23, [.09, .10, .90], '#805c4a');
+    }
+    plazaBox(nookEast + .70, nookNorth, .12, [.32, .24, .42], '#765140');
+    const boardEast = 234, boardNorth = 208;
+    for (const x of [boardEast - 1.4, boardEast + 1.4]) {
+      plazaBox(x, boardNorth, .44, [.18, .88, .25], '#5e4035');
+    }
+    plazaBox(boardEast, boardNorth, .84, [3.15, .63, .14], '#653e37');
+    plazaBox(boardEast, boardNorth, 1.16, [3.26, .08, .28], '#97453b');
+    for (let index = 0; index < 4; index++) {
+      plazaBox(boardEast + (index - 1.5) * .74, boardNorth - .083, .84, [.66, .45, .012], '#d2b58b');
+    }
+    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55 });
+
+    for (const [x, north] of [[238, 205], [240, 173]]) {
+      plazaBox(x, north, .20, [.77, .40, .77], '#655252');
+      plazaBox(x, north, .42, [1.02, .18, 1.02], '#453c43');
+      plazaGlow(x, north, .54, [.59, .12, .59]);
+      blockers.push({ x, n: north, radius: .50 });
+      for (const angle of [Math.PI * .17, Math.PI / 2, Math.PI * .83]) {
+        const seatX = x + 1.62 * Math.cos(angle);
+        const seatNorth = north + 1.62 * Math.sin(angle);
+        plazaBox(seatX, seatNorth, .28, [.95, .18, .45], '#78544a', angle + Math.PI / 2);
+        plazaBox(seatX, seatNorth, .10, [.48, .20, .40], '#53545d');
+      }
+    }
+    for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
+    inlay(242, 203, .64, .46, '#b58b5d');
+  } else {
+    for (let x = w + 1; x < e; x += 2) {
+      for (let north = s + 1; north < n; north += 1.5) {
+        const edge = x < w + 4 || x > e - 4 || north < s + 3 || north > n - 3;
+        const tint = edge ? '#6f7887' : ['#a08b82', '#a79997', '#a5958a', '#968782'][Math.floor(random() * 4)];
+        pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
+      }
     }
   }
   for (const x of [w - 1.1, e + 1.1]) {
