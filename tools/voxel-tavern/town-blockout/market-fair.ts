@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import type { Camera } from 'three';
 import { layout } from './terrain';
+import { marketStallLayouts, type ExistingMarketStallKind } from './market-stall-layout';
 import type { TownActivity, TownActivityContext } from './town-activity';
 
 /**
@@ -8,9 +9,7 @@ import type { TownActivity, TownActivityContext } from './town-activity';
  *
  * 台词纪律：吆喝与试吃反馈逐字取自方案 §4.3 词库（按摊种），试吃超限回应逐字取自
  * 《集市试吃打烊句-v1》（按摊种），本文件不自创任何句子（§4.3 原文外裹的「」为排版引号，
- * 入库时去掉）。摊种绑定：现行建模代码（landmark-market.ts 的 buildStalls）只登记了
- * 棚顶色与位置、没有摊种字段，故按棚顶色绑定并在此登记，待内容口确认后可改此表：
- *   红棚 #a1342d → 糖葫芦；棕棚 #92562e → 干果炒货；暗红棚 #8a312d → 吃食；青棚 #2e6a67 → 热饮。
+ * 入库时去掉）。摊种、棚顶色与位置由几何和试吃共用的 marketStallLayouts 提供。
  *
  * 性能：气泡与试吃图标均为 DOM 覆盖层（参照 #snowball-frost 先例），新增 WebGL draw calls = 0；
  * 气泡池固定 2 个节点复用，每帧只更新已激活气泡的投影；玩家不在集市 12 m 内时零工作量。
@@ -41,48 +40,45 @@ export type MarketStall = {
   icon: string;
 };
 
-// 本地坐标与棚顶色逐项对应 landmark-market.ts buildStalls() 的 set 表（只读镜像，不改原文件）。
-const stallBlueprints = [
-  {
-    localX: -12.5, localZ: -4.8, canopy: '#a1342d', kind: '糖葫芦', icon: '🍡',
+const stallCopy = {
+  糖葫芦: {
+    icon: '🍡',
     hawking: ['冰糖葫芦——酸酸甜甜，山楂裹糖稀！', '糖葫芦嘞，小孩吃了乐，大人吃了甜！'],
     closing: '今儿这锅糖稀熬完啦，想吃明儿请早，最亮的那串给你留着！',
   },
-  {
-    localX: -4.38, localZ: -4.4, canopy: '#92562e', kind: '干果炒货', icon: '🥜',
+  干果炒货: {
+    icon: '🥜',
     hawking: ['现炒的瓜子花生，嗑着看烟花，美！', '糖炒栗子，热乎着呢，剥一个尝尝不要钱！'],
     closing: '尝鲜的小碟空啦——明儿新炒一锅，头把瓜子给你抓！',
   },
-  {
-    localX: 4.25, localZ: -4.95, canopy: '#8a312d', kind: '吃食', icon: '🌭',
+  吃食: {
+    icon: '🌭',
     hawking: ['热乎的烤肠哎——刚出炉，趁热吃！', '炸串炸串，十串管饱，路过别错过！'],
     closing: '锅都见底啦——明儿赶早，头一串留给你！',
   },
-  {
-    localX: 12.4, localZ: -4.6, canopy: '#2e6a67', kind: '热饮', icon: '🍵',
+  热饮: {
+    icon: '🍵',
     hawking: ['热姜茶，喝一碗，雪夜里不冷手！', '羊汤滚烫，加个饼，暖到心里头！'],
     closing: '汤锅都刷干净咯——明儿头一碗，先紧着你盛！',
   },
-] as const;
+} as const satisfies Record<ExistingMarketStallKind, { icon: string; hawking: readonly string[]; closing: string }>;
 
 export const marketStalls: readonly MarketStall[] = (() => {
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
   const [originEast, originNorth, base] = plot.origin;
-  return stallBlueprints.map((blueprint, index) => {
-    const east = originEast + blueprint.localX;
-    const north = originNorth - blueprint.localZ;
+  return marketStallLayouts.map(([localX, localZ, , canopy, kind], index) => {
+    const east = originEast + localX;
+    const north = originNorth - localZ;
     return {
       id: `market-stall-${index}`,
-      kind: blueprint.kind,
-      canopy: blueprint.canopy,
+      kind,
+      canopy,
       east,
       north,
       anchorY: base + 6.1,
       // 柜台碰撞面前缘在本地 z +1.96；站位取本地 z +2.6，距柜台 0.64 m，身体不与柜台相交。
-      spot: { x: east, n: originNorth - (blueprint.localZ + 2.6), ground: base, range: 2.4 },
-      hawking: blueprint.hawking,
-      closing: blueprint.closing,
-      icon: blueprint.icon,
+      spot: { x: east, n: originNorth - (localZ + 2.6), ground: base, range: 2.4 },
+      ...stallCopy[kind],
     };
   });
 })();

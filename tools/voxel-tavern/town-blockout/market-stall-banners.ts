@@ -60,8 +60,9 @@ export function addMarketStallBanners(
   const tiles = new Map<StallKind, HTMLCanvasElement>();
   const labels: OpaqueMuseumLabel[] = [];
   for (const [x, z, width, , kind] of stalls) {
-    if (kind === undefined || !Object.hasOwn(marketBannerCopy, kind)) continue;
-    const key = kind as StallKind;
+    const labelKind = kind === '吃食' ? '吃食（烤肠/炸串）' : kind === '热饮' ? '热饮（姜茶/热汤）' : kind;
+    if (labelKind === undefined || !Object.hasOwn(marketBannerCopy, labelKind)) continue;
+    const key = labelKind as StallKind;
     let tile = tiles.get(key);
     if (!tile) {
       tile = createBannerCanvas(marketBannerCopy[key]);

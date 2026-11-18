@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Mesh } from 'three';
 import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import {
@@ -44,19 +45,21 @@ function fakeStorage(): TastingStorage & { map: Map<string, string> } {
   };
 }
 
-test('market stalls mirror buildStalls geometry and carry only sourced lines', () => {
-  // 期望值逐项来自 landmark-market.ts buildStalls() 的 set 表与 layout.json 的 market-stalls 地块。
+test('market stalls keep published coordinates, stable tasting IDs, and sourced lines', () => {
+  // 第五轮联审裁决登记的四个摊位。
   const expected = [
-    { localX: -12.5, localZ: -4.8, canopy: '#a1342d' },
-    { localX: -4.38, localZ: -4.4, canopy: '#92562e' },
-    { localX: 4.25, localZ: -4.95, canopy: '#8a312d' },
-    { localX: 12.4, localZ: -4.6, canopy: '#2e6a67' },
+    { localX: -12.5, localZ: -4.8, canopy: '#a1342d', kind: '糖葫芦' },
+    { localX: -4.38, localZ: -4.4, canopy: '#92562e', kind: '干果炒货' },
+    { localX: 4.25, localZ: -4.95, canopy: '#8a312d', kind: '吃食' },
+    { localX: 12.4, localZ: -4.6, canopy: '#2e6a67', kind: '热饮' },
   ];
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
   assert.equal(marketStalls.length, 4);
   marketStalls.forEach((stall, index) => {
     const want = expected[index];
+    assert.equal(stall.id, `market-stall-${index}`);
     assert.equal(stall.canopy, want.canopy);
+    assert.equal(stall.kind, want.kind);
     assert.ok(Math.abs(stall.east - (plot.origin[0] + want.localX)) < 1e-9);
     assert.ok(Math.abs(stall.north - (plot.origin[1] - want.localZ)) < 1e-9);
     assert.equal(stall.hawking.length, 2);
@@ -65,13 +68,27 @@ test('market stalls mirror buildStalls geometry and carry only sourced lines', (
   });
 });
 
-test('tasting spots are standable and selectable in front of each counter', t => {
-  // buildMarketLandmark 的 makeSign 需要 canvas；沿用 town-blockout-window.test.ts 的 document 桩。
+test('four live banners share the entrance atlas and tasting spots stay usable', t => {
+  const bannerTitles: string[] = [];
+  let bannerTitle = '';
+  // 记录幌子 atlas 入图前写入的竖排文字。
   const previousDocument = globalThis.document;
   globalThis.document = {
     createElement: () => ({
       width: 0, height: 0,
-      getContext: () => ({ fillRect() {}, strokeRect() {}, fillText() {} }),
+      getContext: () => ({
+        fillRect() {}, strokeRect() {}, drawImage() {},
+        createLinearGradient: () => ({ addColorStop() {} }),
+        fillText(value: string) {
+          if (value.length === 1) {
+            bannerTitle += value;
+            if (bannerTitle.length === 4) {
+              bannerTitles.push(bannerTitle);
+              bannerTitle = '';
+            }
+          }
+        },
+      }),
     }),
   } as unknown as Document;
   t.after(() => {
@@ -81,8 +98,14 @@ test('tasting spots are standable and selectable in front of each counter', t =>
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
   const terrain = createTerrainGrid();
   const group = buildMarketLandmark(plot);
+  const batches = group.children.filter((child): child is Mesh =>
+    child instanceof Mesh && child.name === 'Museum sign atlas');
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].geometry.index?.count, 30);
+  assert.deepEqual(bannerTitles, ['冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶']);
   group.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
   const { colliders } = readWalkGeometry(group);
+  assert.equal(colliders.length, 38);
   const bodyRadius = .27;
   const spots: TownActivitySpot[] = marketStalls.map(stall => ({
     x: stall.spot.x, n: stall.spot.n, ground: stall.spot.ground, range: stall.spot.range,

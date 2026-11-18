@@ -5,7 +5,8 @@ import {
 } from 'three';
 import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
-import { addMarketStallBanners, type MarketStallLayout } from './market-stall-banners';
+import { addMarketStallBanners } from './market-stall-banners';
+import { marketStallLayouts } from './market-stall-layout';
 
 type Vector = [number, number, number];
 type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
@@ -333,13 +334,7 @@ function makeStall(s: Workshop, x: number, z: number, width: number, color: stri
 
 function buildStalls() {
   const s = createWorkshop();
-  const set: readonly MarketStallLayout[] = [
-    [-12.5, -4.8, 6.8, red],
-    [-4.38, -4.4, 6.4, '#92562e'],
-    [4.25, -4.95, 6.7, '#8a312d'],
-    [12.4, -4.6, 6.55, '#2e6a67'],
-  ] as const;
-  set.forEach(([x, z, width, color], i) => makeStall(s, x, z, width, color, i));
+  marketStallLayouts.forEach(([x, z, width, color], i) => makeStall(s, x, z, width, color, i));
   for (const x of [-16, -7.8, 8.5, 16]) post(s, x, 3.42, 5.38, .26);
   for (const [x0, x1] of [[-16, -7.8], [-7.8, 8.5], [8.5, 16]]) hangFestoon(s, x0, x1, 3.42, 5.17);
   for (const x of [-2.76, 2.76]) {
@@ -347,9 +342,9 @@ function buildStalls() {
     lantern(s, x, 3.8, 6.86, .5);
   }
   const root = batchParts(s.parts);
-  addMarketStallBanners(root, set, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
+  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
   root.userData.colliders = [
-    ...set.flatMap(([x, z, width]) => [
+    ...marketStallLayouts.flatMap(([x, z, width]) => [
       collision(x, 0, z - 2.4, width, 3.6, .22),
       collision(x, 0, z + 1.4, width, 1.51, 1.12),
       ...[-1, 1].flatMap(side => [

@@ -40,7 +40,7 @@ test('untyped stalls leave the entrance sign in place and nine typed banners sha
   Object.defineProperty(globalThis, 'document', { configurable: true, value: fixtureDocument });
   try {
     function entranceSign() {
-      const map = new CanvasTexture(new FixtureCanvas());
+      const map = new CanvasTexture(new FixtureCanvas() as unknown as HTMLCanvasElement);
       const material = new MeshStandardMaterial({ map, emissiveMap: map, emissiveIntensity: .4 });
       const sign = new Mesh(new PlaneGeometry(3.4, .74), material);
       sign.position.set(0, 4.35, 6.71);
