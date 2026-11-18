@@ -1,13 +1,12 @@
 import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, Vector3 } from 'three';
 import type { TownActivity, TownActivityContext, TownActivitySpot } from './town-activity';
 import type { TownSnowballTarget } from './town-snow-target';
+import { voxelPersonParts as parts, type VoxelPersonPart as Part } from './town-voxel-person';
 import { snowballGravity, snowballSpeed } from './town-snowball';
 import { answerNpcQuestion, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions, npcScript,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 
 type Point = readonly [east: number, north: number];
-type Size = readonly [x: number, y: number, z: number];
-type Part = readonly [center: Size, size: Size, material: number, swing?: number];
 
 const roles: ReadonlyArray<{
   name: NpcName;
@@ -46,31 +45,6 @@ const snowHat = [
 ] as const;
 
 // Replace shared cargo, apron and chest pixels with six readable silhouettes in the same batch.
-const parts: readonly Part[] = [
-  [[0, 1.12, 0], [.58, .66, .36], 2],
-  [[0, .74, 0], [.56, .11, .365], 4],
-  [[0, 1.39, 0], [.44, .12, .4], 5],
-  [[0, 1.64, 0], [.43, .44, .41], 0],
-  [[0, 1.83, 0], [.474, .16, .45], 1],
-  [[0, 1.79, -.204], [.449, .28, .052], 1],
-  [[0, 1.88, .13], [.49, .087, .334], 1],
-  [[-.095, 1.661, .21], [.061, .046, .02], 1],
-  [[.095, 1.661, .21], [.061, .046, .02], 1],
-  [[0, 1.532, .211], [.078, .026, .02], 7],
-  [[-.139, .411, 0], [.246, .66, .27], 4, -1],
-  [[.139, .411, 0], [.246, .66, .27], 4, 1],
-  [[-.139, .112, .045], [.252, .22, .36], 1, -1],
-  [[.139, .112, .045], [.252, .22, .36], 1, 1],
-  [[-.139, .214, .118], [.248, .045, .239], 5, -1],
-  [[.139, .214, .118], [.248, .045, .239], 5, 1],
-  [[-.394, 1.168, 0], [.199, .55, .29], 2, 1],
-  [[.394, 1.168, 0], [.199, .55, .29], 2, -1],
-  [[-.394, .898, 0], [.182, .155, .20], 3, 1],
-  [[.394, .898, 0], [.182, .155, .20], 3, -1],
-  [[-.394, .816, 0], [.167, .136, .18], 0, 1],
-  [[.394, .816, 0], [.167, .136, .18], 0, -1],
-];
-
 const costumes: Readonly<Record<NpcName, readonly Part[]>> = {
   // Innkeeper: long cloth apron, a folded towel and a chunky tankard with a square handle.
   罗大江: [

@@ -55,6 +55,7 @@ import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from
 import { createTownRailway } from './town-railway';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
+import { createTownPresence } from './town-presence';
 import { createTownPassport } from './town-passport';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
@@ -564,6 +565,7 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
+const presence = createTownPresence(scene, camera, announceActivity);
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
 const activitySpots = activities.flatMap(activity => activity.spots);
@@ -1395,6 +1397,14 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  presence.sample(walking,
+    boardingGround ? camera.position.x : seated?.x ?? x,
+    boardingGround ? -camera.position.z : seated?.n ?? n,
+    boardingGround ? camera.position.y - eye : airHeight ?? ground,
+    boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? yaw,
+    walking && !museumOverlay(),
+  );
+  presence.update(dt);
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
