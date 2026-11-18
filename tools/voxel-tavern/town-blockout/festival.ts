@@ -7,6 +7,9 @@ import {
   fireworksShowMs, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from '../../../src/presence/firework-sites';
 import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
+import { createCeremonyFireworksDispatch } from './ceremony-fireworks-clock';
+
+const renderableFireworksShapes = ['peony', 'ring', 'willow'] as const;
 
 type Burst = {
   time: number;
@@ -14,7 +17,7 @@ type Burst = {
   y: number;
   z: number;
   radius: number;
-  shape: 'peony' | 'ring' | 'willow';
+  shape: (typeof renderableFireworksShapes)[number];
   outer: Color;
   inner: Color;
   launch?: readonly [x: number, y: number, z: number];
@@ -104,7 +107,6 @@ const testLaunchPoints = [
   { id: 'plaza', x: 223, y: 15, z: -195 },
   { id: 'lake', x: 344, y: 7, z: -66 },
 ] as const;
-const testShapes = ['peony', 'ring', 'willow'] as const;
 const testColors = [
   ['#ff5767', '#fff1c7'], ['#ffc26b', '#fff1c7'], ['#7ad9ff', '#d5fbff'],
   ['#76f6db', '#fff1c7'], ['#f599df', '#ffc26b'],
@@ -126,7 +128,7 @@ export function makeTestFireworksTable(seed: number): FireworksTable {
     return {
       time: time + index * .24, x: x + random() * 28 - 14,
       y: 44 + random() * 17, z: z + random() * 15 - 10,
-      radius: 12 + random() * 5, shape: testShapes[Math.floor(random() * testShapes.length)],
+      radius: 12 + random() * 5, shape: renderableFireworksShapes[Math.floor(random() * renderableFireworksShapes.length)],
       outer, inner, launchId: id,
     };
   }));
@@ -159,7 +161,8 @@ function compileShow(table: FireworksTable): FireworksProgram | undefined {
   let end = 0;
   for (const { launchId, outer, inner, ...burst } of table.bursts) {
     const launch = launchId === undefined ? undefined : launchPoints.get(launchId);
-    if ((launchId !== undefined && !launch) || burst.time < 0 || burst.radius <= 0 ||
+    if (!renderableFireworksShapes.includes(burst.shape) || (launchId !== undefined && !launch) ||
+        burst.time < 0 || burst.radius <= 0 ||
         ![burst.time, burst.x, burst.y, burst.z, burst.radius].every(Number.isFinite) ||
         (launch && !launch.every(Number.isFinite))) return undefined;
     bursts.push({ ...burst, outer: new Color(outer), inner: new Color(inner), launch });
@@ -333,9 +336,10 @@ export function createFestival(
     }
   }
 
-  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number) {
+  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number, startAt?: number) {
     if (tracks.has(program) || !Number.isFinite(ageSeconds) || ageSeconds >= program.duration) return false;
-    tracks.set(program, { age: ageSeconds, clockMs, startedAt: clockMs ? clockMs() - ageSeconds * 1000 : 0 });
+    const startedAt = clockMs ? (startAt ?? clockMs() - ageSeconds * 1000) : 0;
+    tracks.set(program, { age: ageSeconds, clockMs, startedAt });
     return true;
   }
 
@@ -345,17 +349,28 @@ export function createFestival(
     announce('');
   }
 
-  function startShow(table: FireworksTable, opts: { ageSeconds?: number; interruptPreview?: boolean; clockMs?: () => number } = {}) {
+  function startShow(table: FireworksTable, opts: {
+    ageSeconds?: number;
+    interruptPreview?: boolean;
+    clockMs?: () => number;
+    startAt?: number;
+  } = {}) {
     if (tracks.size || (elapsed >= 0 && !opts.interruptPreview && !opts.clockMs)) return false;
     const program = compileShow(table);
-    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0, opts.clockMs)) return false;
+    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0, opts.clockMs, opts.startAt)) return false;
     stopPreview();
     playerProgram = program;
     return true;
   }
 
+  const dispatchCeremonyScore = createCeremonyFireworksDispatch(flight);
   return {
     startShow,
+    startCeremonyScore(table: FireworksTable, startAt: number, observedFrom: number, clockMs: () => number) {
+      if (table.bursts.some(({ shape }) => !renderableFireworksShapes.includes(shape))) return false;
+      return dispatchCeremonyScore(table, startAt, observedFrom, clockMs,
+        (remaining, playback) => startShow(remaining, { ...playback, interruptPreview: true }));
+    },
     showActive() { return elapsed >= 0 || tracks.size > 0; },
     getAudioContext,
     enableAudio() { void tryEnableAudio(); },
