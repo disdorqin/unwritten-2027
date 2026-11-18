@@ -27,7 +27,7 @@ const railDestinationGuide = {
     route: '沿北向接驳道前行，顺着灯路走到城堡西门。',
   },
   'hot-spring': {
-    activity: '室外双池泡汤',
+    activity: '室外四池泡汤',
     route: '向东下台阶，沿铺石转向北，到浴场西门。',
   },
 } satisfies Record<TownRailStopId, { activity: string; route: string }>;

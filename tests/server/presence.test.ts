@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { EventEmitter, once } from "node:events";
 import { test, type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
@@ -11,6 +13,7 @@ type Record = Pose & { id: number };
 type Control = {
   type: string; id?: number; name?: string; self?: boolean; epochMs?: number; sentAt?: number;
   kind?: string; from?: number; seed?: number; theme?: string; startAt?: number; reason?: string; waitMs?: number;
+  captureAt?: number; people?: PlazaPhotoPerson[];
 };
 
 function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T) {
@@ -145,6 +148,112 @@ test("public fireworks publish one identical timed event and reject an early or 
   launch(distant);
   assert.equal((await distant.text.next(message => message.type === "fireworks-rejected")).reason, "position");
 });
+
+function sendPhotoRequest(socket: WebSocket) {
+  socket.send(JSON.stringify({ type: "event", kind: "plaza-photo-request" }));
+}
+
+function sendPhotoOptOut(socket: WebSocket, id: number) {
+  socket.send(JSON.stringify({ type: "event", kind: "plaza-photo-opt-out", id }));
+}
+
+function sendPhotoPose(socket: WebSocket, east: number, sequence = 1) {
+  socket.send(encodePose({ ...pose, east: east * 100, north: 18_300, height: 1_200, sequence }));
+}
+
+const photoInvite = (message: Control) => message.type === "event" && message.kind === "plaza-photo-invite";
+const photoLineup = (message: Control) => message.type === "event" && message.kind === "plaza-photo-lineup";
+const photoRejection = (message: Control) => message.type === "plaza-photo-rejected";
+const clockReply = (message: Control) => message.type === "clock" && message.sentAt === 1;
+
+test("plaza photo relay rejects an invalid position and an overlapping round, with per-peer request throttling",
+  { timeout: 7000 }, async context => {
+    const { join } = await fixture(context);
+    const host = await join("合影发起人");
+    const near = await join("站位参与者");
+    const far = await join("远处旁观者");
+    sendPhotoPose(far.socket, 250);
+    sendPhotoRequest(far.socket);
+    assert.equal((await far.text.next(photoRejection)).reason, "position");
+
+    sendPhotoPose(host.socket, 224);
+    const before = Date.now();
+    sendPhotoRequest(host.socket);
+    const invitations = await Promise.all([host, near, far].map(client => client.text.next(photoInvite)));
+    assert.deepEqual(invitations[0], invitations[1]);
+    assert.deepEqual(invitations[0], invitations[2]);
+    const leadTime = plazaPhotoGatherMs + plazaPhotoCountdownMs;
+    const captureAt = invitations[0].captureAt!;
+    assert.ok(captureAt >= before + leadTime && captureAt <= Date.now() + leadTime);
+
+    sendPhotoPose(near.socket, 225);
+    sendPhotoRequest(near.socket);
+    sendPhotoRequest(near.socket);
+    near.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    assert.equal((await near.text.next(photoRejection)).reason, "busy");
+    // A clock echo after the two requests gives the relay a concrete ordering barrier.
+    assert.equal((await near.text.next(message => photoRejection(message) || clockReply(message))).type, "clock");
+    await delay(510);
+    sendPhotoRequest(near.socket);
+    assert.equal((await near.text.next(photoRejection)).reason, "busy");
+  });
+
+test("plaza photo relay freezes one shared roster, honours a matching opt-out and omits departed peers",
+  { timeout: 8000 }, async context => {
+    let wallTime = Date.now();
+    context.mock.method(Date, "now", () => wallTime);
+    const { join } = await fixture(context);
+    const host = await join("合影发起人");
+    const staying = await join("保留站位");
+    const optingOut = await join("退出这一场");
+    const leaving = await join("提前离场");
+    sendPhotoPose(host.socket, 224);
+    sendPhotoRequest(host.socket);
+    const invite = await host.text.next(photoInvite);
+    assert.ok(Number.isSafeInteger(invite.id) && Number.isSafeInteger(invite.captureAt));
+    assert.equal(invite.captureAt, wallTime + plazaPhotoGatherMs + plazaPhotoCountdownMs);
+
+    sendPhotoPose(staying.socket, 225);
+    sendPhotoOptOut(staying.socket, invite.id! + 1);
+    sendPhotoPose(optingOut.socket, 223);
+    sendPhotoOptOut(optingOut.socket, invite.id!);
+    for (const client of [staying, optingOut]) client.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    await Promise.all([staying, optingOut].map(client => client.text.next(clockReply)));
+
+    sendPhotoPose(leaving.socket, 222);
+    leaving.socket.send(JSON.stringify({ type: "leave" }));
+    await host.text.next(message => message.type === "leave" && message.id === leaving.id);
+
+    const lockAt = invite.captureAt! - plazaPhotoLockMs;
+    wallTime = lockAt - 1;
+    await delay(25);
+    host.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    assert.equal((await host.text.next(message => photoLineup(message) || clockReply(message))).type, "clock");
+
+    wallTime = lockAt;
+    const lineups = await Promise.all([host, staying, optingOut].map(client => client.text.next(photoLineup)));
+    assert.deepEqual(lineups[0], lineups[1]);
+    assert.deepEqual(lineups[0], lineups[2]);
+    assert.equal(lineups[0].id, invite.id);
+    assert.equal(lineups[0].captureAt, invite.captureAt);
+    assert.deepEqual(lineups[0].people, [
+      { id: host.id, name: host.name, east: 224, north: 183, height: 12 },
+      { id: staying.id, name: staying.name, east: 225, north: 183, height: 12 },
+    ]);
+
+    const late = await join("锁定后进镇");
+    sendPhotoPose(late.socket, 226);
+    sendPhotoOptOut(host.socket, invite.id!);
+    late.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    assert.equal((await late.text.next(message => photoInvite(message) || photoLineup(message) || clockReply(message))).type, "clock");
+
+    // The first hold expires after the shutter, and all valid players can enter another frame.
+    wallTime = invite.captureAt! + 1001;
+    sendPhotoRequest(late.socket);
+    const next = await host.text.next(message => photoInvite(message) || photoLineup(message));
+    assert.ok(photoInvite(next));
+    assert.notEqual(next.id, invite.id);
+  });
 
 test("presence returns a common server epoch to separately connected train riders", { timeout: 7000 }, async context => {
   const { join } = await fixture(context);
