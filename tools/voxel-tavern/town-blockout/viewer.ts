@@ -74,7 +74,7 @@ import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
-import { createTownSnowCover } from './town-snow-cover';
+import { approachTownSnowScale, createTownSnowCover } from './town-snow-cover';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
@@ -724,7 +724,10 @@ let hourlyBellsRemaining = 0;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
-  onSnowIntensity: snowfall.setIntensity,
+  onSnowIntensity(intensity) {
+    snowfall.setIntensity(intensity);
+    snowCover.setIntensity(intensity);
+  },
   onDim(level) {
     ceremonyDim = level;
     applyCeremonyLighting();
@@ -1404,6 +1407,7 @@ addEventListener('resize', () => {
 const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchParams(location.search).get('visit') === 'museum';
 if (startInMuseum) selector.value = '纪念馆入口';
 let previous = performance.now();
+let snowMoveScale = 1;
 let widePanorama = false;
 function walkable(x: number, n: number) {
   if (homeReturn) return sharedHomeWalkable(x, n);
@@ -1419,6 +1423,9 @@ const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
   if (homeReturn) return sharedHomeSpawn.ground;
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+}
+function snowCleared(east: number, north: number, feet: number) {
+  return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
 }
 function waterAtFeet() {
   if (homeReturn || airHeight !== undefined) return undefined;
@@ -1595,6 +1602,7 @@ renderer.setAnimationLoop(now => {
     if (!walkRender.equals(walkCurrent)) {
       // Snap after teleports and seating changes instead of interpolating across town.
       walkClock.reset();
+      snowMoveScale = 1;
       walkPrevious.copy(walkRender);
       walkCurrent.copy(walkRender);
     }
@@ -1606,6 +1614,7 @@ renderer.setAnimationLoop(now => {
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
         if (skatesOnIce()) {
+          snowMoveScale = 1;
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
           if ((glide.east || glide.north) &&
             !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
@@ -1613,7 +1622,15 @@ renderer.setAnimationLoop(now => {
           lakeSkateMotion.reset();
           if (forward || right) {
             const water = waterAtFeet();
-            const moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : airHeight === undefined ? 1 : .8;
+            let moveScale = 1;
+            if (water || airHeight !== undefined) {
+              snowMoveScale = 1;
+              moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : .8;
+            } else {
+              const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
+              snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
+              moveScale = snowMoveScale;
+            }
             const nx = x + east * moveScale * townPhysicsDelta;
             const nn = n + north * moveScale * townPhysicsDelta;
             if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
@@ -1650,7 +1667,7 @@ renderer.setAnimationLoop(now => {
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
-  snowCover.update(dt, nightMode && snowfall.enabled());
+  snowCover.update(dt, nightMode);
   if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullAerial ? camera : undefined);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);

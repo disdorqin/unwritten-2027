@@ -47,6 +47,7 @@ export function addDistrictHousing(
 ) {
   const sites: Site[] = [];
   const housePortals: TownHousePortal[] = [];
+  const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
   const courtyardSnow = new MeshLambertMaterial({ color: '#b5c3d6' });
@@ -178,6 +179,7 @@ export function addDistrictHousing(
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
+      let sweptEnd = start;
       for (let distance = start; distance < reach; distance += .8) {
         const corners = [[distance, -1.08], [distance, 1.08], [distance + .8, -1.08], [distance + .8, 1.08]].map(([s, side]) => {
           const px = x + dx * s + dn * side, pn = n + dn * s - dx * side;
@@ -185,7 +187,9 @@ export function addDistrictHousing(
         });
         if (corners.some(([px, , pz]) => !openSpace(px, -pz, .32))) break;
         for (const index of [0, 1, 2, 1, 3, 2]) cell.walks.push(...corners[index]);
+        sweptEnd = distance + .8;
       }
+      if (sweptEnd > start) sweptPaths.push({ x, n, dx, dn, start, end: sweptEnd });
     }
   }
 
@@ -237,6 +241,13 @@ export function addDistrictHousing(
   const keepClear: KeepClear = (x, n, radius) => !openSpace(x, n, radius) || lampBlocked(x, n)
     || paths.some(({ start, end, radius: size }) => lineDistance(x, n, start, end) < radius + size + .6)
     || completed.some(site => within(x, n, site, radius + 2));
-  return { count: sites.length, sites, housePortals, keepClear, setPanorama,
+  function sweptAt(east: number, north: number) {
+    return sweptPaths.some(({ x, n, dx, dn, start, end }) => {
+      const offsetX = east - x, offsetN = north - n;
+      const along = offsetX * dx + offsetN * dn;
+      return along >= start && along <= end && Math.abs(offsetX * dn - offsetN * dx) <= 1.08;
+    });
+  }
+  return { count: sites.length, sites, housePortals, keepClear, setPanorama, sweptAt,
     blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }
