@@ -90,6 +90,10 @@ import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
+import {
+  createTownZodiacSites, greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues,
+  towerDragonSite, workshopMonkeyClues,
+} from './town-zodiac-sites';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -697,9 +701,13 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'mixing') return architecture.has('tavern');
   return true;
 }, () => !nightMode, name => {
-  if (name === '钟铁生' && zodiac.canCollect('horse')) return railHorseClues;
+  if (name === '钟铁生') return [
+    ...(zodiac.canCollect('dragon') ? towerDragonClues : []),
+    ...(zodiac.canCollect('horse') ? railHorseClues : []),
+  ];
   if (name === '纪守信' && zodiac.canCollect('horse')) return npcAuthoredDialogue.纪守信.clues.slice(1);
   if (name === '罗大江' && zodiac.canCollect('rooster')) return tavernRoosterClues;
+  if (name === '乔麦' && zodiac.canCollect('monkey')) return workshopMonkeyClues;
 },
 panel => openTavernDice(panel, () => {
   if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
@@ -1297,7 +1305,12 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse', 'horse', 'rooster'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'rabbit', 'dragon', 'horse', 'monkey', 'rooster', 'pig'], zodiacStorage);
+const zodiacSites = createTownZodiacSites(zodiac, label => {
+  announceActivity(`${label} · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+});
+scene.add(zodiacSites.mesh);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1387,6 +1400,11 @@ activitySpots.push({
 });
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
+activitySpots.push(
+  zodiacSites.mount(architecture.get('glasshouse')!, greenhouseRabbitSite),
+  zodiacSites.mount(tower, towerDragonSite(towerStops.lookout)),
+  zodiacSites.mount(architecture.get('lantern-workshop')!, lanternWorkshopMonkeySite),
+);
 const [bellX, bellDeck, bellZ] = towerStops.bell;
 const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
 const bellMotion = tower.userData.bellMotion as TowerBellMotion;
@@ -1440,7 +1458,7 @@ function registerLandmarkActivities(id: string, group: Group) {
       group, activityContext, railway, passport, canStandAtActivity, ceremonyClock.now, showLiveRailSchedule,
     ));
   } else if (id === 'hot-spring') {
-    activitySpots.push(...hotSpringSoak.spots(group));
+    activitySpots.push(...hotSpringSoak.spots(group), zodiacSites.mount(group, hotSpringPigSite));
     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
       const now = performance.now();
       if (now < nextBathTeaAt) return;
@@ -2159,6 +2177,7 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  zodiacSites.update(camera.position, walking && !homeReturn);
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
