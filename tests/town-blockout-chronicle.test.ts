@@ -17,6 +17,7 @@ function fixture() {
 
 test('timebox records the same 20:00 boundary once and stores the two aggregate counts only', () => {
   const { data, storage } = fixture();
+  const unlockedEntries = () => readPublishedTownChronicle(storage).filter(entry => entry.vol === 2);
   const unlockAt = new Date(UNLOCK_AT).getTime();
   let time = unlockAt - 6_000;
   const mail = createTownMailStore(storage, () => time);
@@ -41,7 +42,7 @@ test('timebox records the same 20:00 boundary once and stores the two aggregate 
     assert.ok(!raw.includes(privateText));
   }
   assert.equal(JSON.parse(data.get(townMailKeys.timebox)!).items.length, 2);
-  assert.deepEqual(readPublishedTownChronicle(storage).map(({ id, vol, era, date, source, actor }) =>
+  assert.deepEqual(unlockedEntries().map(({ id, vol, era, date, source, actor }) =>
     ({ id, vol, era, date, source, actor })), [{
     id: 'chr-timebox-unlock-2026-12-31', vol: 2, era: '开镇纪元年', date: '2026-12-31', source: 'auto', actor: null,
   }]);
@@ -51,7 +52,11 @@ test('plaza photo uses the one published local store and keeps distinct members 
   const { storage } = fixture();
   const at = new Date('2026-11-18T17:00:00').getTime();
   const photo = { id: 'plaza-photo-123-4', at, names: ['初雪', '初雪', '晚归🐑'], occasion: '日常合影' };
-  assert.deepEqual(readPublishedTownChronicle(storage), []);
+  const [preset] = readPublishedTownChronicle(storage);
+  assert.equal(preset.title, '百门通');
+  assert.equal(preset.vol, 4);
+  assert.equal(preset.source, 'official');
+  assert.equal(preset.body, '未写镇屋舍相通，一室而百门。镇民串门不走街，走屋——推门进去，挑门出来，落脚已是另一条巷子。外乡人初至多不惯，住久了都说好。');
   assert.equal(recordTownChroniclePlazaPhoto({ ...photo, names: [] }, storage), false);
   assert.equal(recordTownChroniclePlazaPhoto({ ...photo, names: ['\u0000'] }, storage), false);
   assert.equal(recordTownChroniclePlazaPhoto(photo, storage), true);
@@ -60,7 +65,7 @@ test('plaza photo uses the one published local store and keeps distinct members 
     id: 'chr-plaza-photo-123-4', vol: 5, era: '建镇纪', date: '2026-11-18', title: '广场合影 · 日常合影',
     body: '本机所见，3 位镇民留影。名单为 初雪、初雪、晚归🐑。',
     source: 'auto', actor: null, status: 'published', pinned: false,
-  }]);
+  }, preset]);
 });
 
 test('public consumers exclude drafts and old corrupt text is recovered without blocking writes', () => {
@@ -70,12 +75,12 @@ test('public consumers exclude drafts and old corrupt text is recovered without 
   const photo = { id: 'plaza-photo-234-5', at, names: ['归人'], occasion: '开镇首夜' };
   assert.equal(recordTownChroniclePlazaPhoto(photo, storage), true);
   assert.equal(storage.getItem(townChronicleKey + '.bak'), '{old broken text');
-  const [photoEntry] = readPublishedTownChronicle(storage);
+  const [photoEntry, preset] = readPublishedTownChronicle(storage);
   assert.equal(photoEntry.era, '开镇纪二年');
   data.set(townChronicleKey, JSON.stringify({
     version: 1, items: [photoEntry, { ...photoEntry, id: 'chr-draft', status: 'draft', body: '尚待审阅' }],
   }));
-  assert.deepEqual(readPublishedTownChronicle(storage), [photoEntry]);
+  assert.deepEqual(readPublishedTownChronicle(storage), [photoEntry, preset]);
   assert.equal(recordTownChroniclePlazaPhoto(photo, { ...storage, setItem() { throw new Error('denied'); } }), true);
   assert.equal(recordTownChroniclePlazaPhoto({ ...photo, id: 'plaza-photo-try-again' },
     { ...storage, setItem() { throw new Error('denied'); } }), false);
