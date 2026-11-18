@@ -36,6 +36,7 @@ services:
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
       TEST_FIREWORKS: "${TEST_FIREWORKS:-off}"
       TOWN_REHEARSAL_AT: "${TOWN_REHEARSAL_AT:-}"
+      OWNER_KEY: "${OWNER_KEY:-}"
     expose:
       - "8090"
     logging:

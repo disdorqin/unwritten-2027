@@ -1,6 +1,7 @@
 import { Color, Matrix4, Object3D, type InstancedMesh } from 'three';
 import { layout } from './terrain';
 import type { MascotFollowPoint } from './mascot-follow';
+import { isSharedHomePosition, sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
 type Point = readonly [east: number, north: number];
 type Part = {
@@ -189,7 +190,10 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
     const follow = options.follow?.();
     const point = follow ?? sampleMascotLocation(tick, patrol);
     const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
-    if (ground === undefined || !options.visible(point.x, point.n, ground)) {
+    const visible = ground !== undefined && options.visible(point.x, point.n, ground);
+    if (visible && follow && isSharedHomePosition(follow.x, follow.n, follow.ground)) batch.layers.enable(sharedHomeLayer);
+    else batch.layers.disable(sharedHomeLayer);
+    if (ground === undefined || !visible) {
       if (shown) { batch.count = start; shown = false; }
       return false;
     }
