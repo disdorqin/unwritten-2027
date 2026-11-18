@@ -291,3 +291,42 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
   #ceremony-dim, #ceremony-banner.show { animation: none; transition: none; }
   #ceremony-frost .frost-edges { opacity: .25 !important; } #ceremony-frost .frost-breath { display: none !important; }
 }
+/* 河畔年集：吆喝气泡池与试吃图标（DOM 覆盖层，零 WebGL 绘制；market-fair.ts 专用）。 */
+.market-bubbles { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 3; }
+.market-bubble {
+  position: fixed; left: 0; top: 0; width: max-content; max-width: 240px;
+  padding: 7px 11px; background: #fffdf6; color: #2b2118;
+  border: 2px solid #40251d; border-radius: 12px;
+  font-size: 14px; line-height: 1.35; box-shadow: 0 2px 8px rgba(10, 12, 24, .35);
+}
+.market-bubble::after {
+  content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px;
+  background: inherit; border-right: 2px solid #40251d; border-bottom: 2px solid #40251d;
+  transform: translateX(-50%) rotate(45deg);
+}
+.market-taste-icon {
+  position: fixed; left: 50%; bottom: 108px; z-index: 4; pointer-events: none;
+  font-size: 44px; line-height: 1; transform: translateX(-50%);
+  filter: drop-shadow(0 3px 6px rgba(10, 12, 24, .45));
+}
+.market-taste-icon-show { animation: market-taste-pop 1.2s ease-out; }
+@keyframes market-taste-pop {
+  0% { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.6); }
+  18% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.08); }
+  30% { transform: translateX(-50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
+/* 视角锁定兜底（desktop-look.ts）：锁定失败/未锁定时的一键重试按钮与环境横幅，纯 DOM，零 WebGL 绘制。 */
+#lock-look {
+  position: fixed; top: calc(50% + 26px); left: 50%; z-index: 5;
+  transform: translateX(-50%); white-space: nowrap;
+  padding: 10px 16px; background: #f2cf94; border-color: #f2cf94; color: #17202e;
+}
+#lock-look[hidden] { display: none; }
+#env-banner {
+  margin: 0 0 12px; padding: 8px 10px; border: 1px solid #ad7376; border-radius: 7px;
+  background: #592e3c; color: #ffd9d2; font-size: 12px; line-height: 1.5;
+}
+#env-banner[hidden] { display: none; }

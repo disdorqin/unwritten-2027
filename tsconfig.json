@@ -6,10 +6,29 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "vite/client"],
-    "noEmit": true
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "vite/client"
+    ],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "three": [
+        "./tools/voxel-tavern/node_modules/@types/three",
+        "./node_modules/@types/three"
+      ],
+      "three/addons/*": [
+        "./tools/voxel-tavern/node_modules/@types/three/examples/jsm/*",
+        "./node_modules/@types/three/examples/jsm/*"
+      ]
+    }
   },
   "include": [
     "src",
