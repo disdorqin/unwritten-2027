@@ -1,7 +1,7 @@
 import {
   AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial, type Scene,
 } from 'three';
-import { playTowerChime } from '../tower-chime';
+import { playTowerBell, playTowerChime } from '../tower-chime';
 
 type Burst = {
   time: number;
@@ -12,6 +12,7 @@ type Burst = {
   shape: 'peony' | 'ring' | 'willow';
   outer: Color;
   inner: Color;
+  launch?: readonly [x: number, y: number, z: number];
 };
 
 const countdown = 3;
@@ -28,7 +29,7 @@ const blue = new Color('#7ad9ff');
 const jade = new Color('#76f6db');
 
 // World-space choreography above the plaza, with alternating silhouettes and a three-burst finale.
-const bursts: Burst[] = [
+const previewBursts: readonly Burst[] = [
   { time: .85, x: 207, y: 43, z: -202, radius: 14, shape: 'peony', outer: red, inner: cream },
   { time: 1.4, x: 240, y: 49, z: -193, radius: 17, shape: 'peony', outer: gold, inner: cream },
   { time: 2.5, x: 222, y: 57, z: -198, radius: 15, shape: 'ring', outer: jade, inner: cream },
@@ -40,12 +41,49 @@ const bursts: Burst[] = [
   { time: 8.76, x: 224, y: 67, z: -197, radius: 20, shape: 'peony', outer: gold, inner: cream },
 ];
 
+export type CeremonyFireworksCue = 'fireworks-main' | 'fireworks-far' | 'fireworks-finale';
+
+const lakeLaunch = [344, 7, -66] as const;
+const memorialLaunch = [373, 28, -264] as const;
+const ceremonyBursts: Record<CeremonyFireworksCue, readonly Burst[]> = {
+  'fireworks-main': previewBursts,
+  'fireworks-far': [
+    { time: .85, x: 326, y: 60, z: -70, radius: 16, shape: 'ring', outer: blue, inner: cream, launch: lakeLaunch },
+    { time: .85, x: 355, y: 79, z: -271, radius: 19, shape: 'peony', outer: gold, inner: cream, launch: memorialLaunch },
+    { time: 1.35, x: 363, y: 70, z: -58, radius: 19, shape: 'willow', outer: jade, inner: cream, launch: lakeLaunch },
+    { time: 1.5, x: 388, y: 73, z: -273, radius: 18, shape: 'ring', outer: pink, inner: blue, launch: memorialLaunch },
+    { time: 2.3, x: 345, y: 77, z: -71, radius: 21, shape: 'peony', outer: gold, inner: cream, launch: lakeLaunch },
+    { time: 2.45, x: 376, y: 86, z: -292, radius: 21, shape: 'willow', outer: red, inner: gold, launch: memorialLaunch },
+  ],
+  'fireworks-finale': [
+    { time: .85, x: 204, y: 61, z: -202, radius: 21, shape: 'willow', outer: red, inner: gold },
+    { time: 1.12, x: 244, y: 63, z: -199, radius: 21, shape: 'peony', outer: blue, inner: cream },
+    { time: 1.39, x: 224, y: 73, z: -199, radius: 24, shape: 'peony', outer: gold, inner: cream },
+    { time: 4.6, x: 215, y: 57, z: -200, radius: 13, shape: 'willow', outer: gold, inner: cream },
+    { time: 7.5, x: 238, y: 55, z: -197, radius: 12, shape: 'ring', outer: jade, inner: cream },
+  ],
+};
+
+const burstTail = lifetime + .22;
+const workshopSparkCount = 36;
+
+function maxLiveBursts(sequence: readonly Burst[]) {
+  return Math.max(...sequence.map(({ time }) => {
+    const start = time - flight;
+    return sequence.filter(burst => start >= burst.time - flight && start <= burst.time + burstTail).length;
+  }));
+}
+
+// Even an overlapping rehearsal, formal cues and workshop reward share one preallocated buffer.
+const capacity = (maxLiveBursts(previewBursts)
+  + Object.values(ceremonyBursts).reduce((total, sequence) => total + maxLiveBursts(sequence), 0))
+  * sparkCount * trailCount + workshopSparkCount * trailCount;
+
 export function createFestival(
   scene: Scene,
   setMessage: (message: string) => void = () => {},
   complete?: () => void,
 ) {
-  const capacity = bursts.length * sparkCount * trailCount;
   const positions = new Float32Array(capacity * 3);
   const colors = new Float32Array(capacity * 3);
   const strengths = new Float32Array(capacity);
@@ -99,6 +137,7 @@ export function createFestival(
   scene.add(sparks);
 
   let elapsed = -1;
+  const ceremonyTracks = new Map<CeremonyFireworksCue, number>();
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
   let message = '';
@@ -136,11 +175,13 @@ export function createFestival(
   }
 
   function drawRocket(burst: Burst, t: number) {
-    const launchX = Math.max(211, Math.min(235, burst.x));
+    const launchX = burst.launch?.[0] ?? Math.max(211, Math.min(235, burst.x));
+    const launchY = burst.launch?.[1] ?? 15;
+    const launchZ = burst.launch?.[2] ?? burst.z + 5;
     for (let i = 0; i < 6; i++) {
       const progress = Math.max(0, (t + flight - i * .025) / flight);
-      emit(launchX + (burst.x - launchX) * progress * progress, 15 + (burst.y - 15) * progress,
-        burst.z + 5 * (1 - progress), cream, (6 - i) / 6, 8 - i * .65);
+      emit(launchX + (burst.x - launchX) * progress * progress, launchY + (burst.y - launchY) * progress,
+        launchZ + (burst.z - launchZ) * progress, cream, (6 - i) / 6, 8 - i * .65);
     }
   }
 
@@ -171,7 +212,26 @@ export function createFestival(
     }
   }
 
+  function drawSequence(sequence: readonly Burst[], time: number) {
+    for (const burst of sequence) {
+      const age = time - burst.time;
+      if (age < -flight || age > burstTail) continue;
+      if (age < 0) drawRocket(burst, age);
+      else drawBurst(burst, age);
+    }
+  }
+
   return {
+    enableAudio() { void tryEnableAudio(); },
+    playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
+      if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
+    },
+    launchCeremony(cue: CeremonyFireworksCue, ageSeconds = 0) {
+      const sequence = ceremonyBursts[cue];
+      if (ceremonyTracks.has(cue) || !Number.isFinite(ageSeconds) || ageSeconds >= sequence.at(-1)!.time + burstTail) return false;
+      ceremonyTracks.set(cue, Math.max(0, ageSeconds));
+      return true;
+    },
     start() {
       if (elapsed >= 0) return false;
       elapsed = 0;
@@ -179,12 +239,12 @@ export function createFestival(
       announce('3');
       return true;
     },
-    ringBell() {
+    ringBell(distance = 0) {
       if (elapsed >= 0) return false;
       const now = performance.now();
       if (now < nextManualBell) return false;
       nextManualBell = now + 10500;
-      void tryEnableAudio()?.then(() => { if (audio && elapsed < 0) playTowerChime(audio, 0, 1); });
+      void tryEnableAudio()?.then(() => { if (audio && elapsed < 0) playTowerBell(audio, 'small', distance); });
       return true;
     },
     playRiddleChime() {
@@ -213,7 +273,7 @@ export function createFestival(
     },
     active() { return elapsed >= 0; },
     update(dt: number) {
-      if (elapsed < 0 && !workshop) return;
+      if (elapsed < 0 && !workshop && !ceremonyTracks.size) return;
       const delta = Math.max(0, dt);
       used = 0;
       if (elapsed >= 0) {
@@ -229,19 +289,23 @@ export function createFestival(
             elapsed = -1;
             complete?.();
           } else {
-            for (const burst of bursts) {
-              const age = time - burst.time;
-              if (age < -flight || age > lifetime + .22) continue;
-              if (age < 0) drawRocket(burst, age);
-              else drawBurst(burst, age);
-            }
+            drawSequence(previewBursts, time);
           }
+        }
+      }
+      for (const [cue, age] of ceremonyTracks) {
+        const sequence = ceremonyBursts[cue];
+        const time = age + delta;
+        if (time >= sequence.at(-1)!.time + burstTail) ceremonyTracks.delete(cue);
+        else {
+          ceremonyTracks.set(cue, time);
+          drawSequence(sequence, time);
         }
       }
       if (workshop) {
         workshop.elapsed += delta;
-        if (workshop.elapsed > lifetime + .22) workshop = undefined;
-        else drawBurst(workshop.burst, workshop.elapsed, 36);
+        if (workshop.elapsed > burstTail) workshop = undefined;
+        else drawBurst(workshop.burst, workshop.elapsed, workshopSparkCount);
       }
       sparks.visible = used > 0;
       geometry.setDrawRange(0, used);

@@ -17,7 +17,7 @@ type MixSession = {
   served?: TavernRecipe;
 };
 
-export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback) {
+export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback, onDrink?: () => void) {
   const plot = layout.plots.find(({ id }) => id === 'tavern')!;
   const [east, north, altitude] = plot.origin;
   const modelToPlot = tavernModelToPlot(plot);
@@ -127,11 +127,14 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
         run() {
           if (held !== drink) return;
           if (drinkFeedback) {
-            const started = drinkFeedback.sip(drink.color, level =>
-              context.announce(`喝了一口「${drink.name}」 · 空杯 · ${drinkStages[level]}`));
+            const started = drinkFeedback.sip(drink.color, level => {
+              onDrink?.();
+              context.announce(`喝了一口「${drink.name}」 · 空杯 · ${drinkStages[level]}`);
+            });
             if (!started) return;
             context.announce(`举杯喝「${drink.name}」`);
           } else {
+            onDrink?.();
             context.announce(`喝了一口「${drink.name}」`);
           }
           held = undefined;

@@ -40,8 +40,13 @@ export function createTownLights(
   litIds(): TownLightId[];
   activate(id: TownLightId): boolean;
   openBook(): void;
+  setCeremonyBand(band: number): void;
+  setCeremonyDim(level: number): void;
 } {
   const lit = new Set<TownLightId>(savedLights());
+  let ceremonyBand = -1;
+  let ceremonyDim = 1;
+  const dimmedColor = new Color();
   const partsPerLight = 15;
   const fixtures = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), stations.length * partsPerLight);
   fixtures.name = 'Town light trail';
@@ -72,17 +77,20 @@ export function createTownLights(
     cube(0, 2.074, 0, .49, .104, .49, colors.clean);
     cube(0, 2.14, 0, .392, .048, .392, colors.snow);
     cube(0, 2.23, 0, .091, .147, .091, colors.copper);
-    return { id, pane, wick, cross };
+    const distance = Math.hypot(x - 223, n - 188);
+    const band = distance < 36 ? 0 : distance < 110 ? 1 : distance < 200 ? 2 : 3;
+    return { id, pane, wick, cross, band };
   });
   fixtures.computeBoundingSphere();
   fixtures.instanceColor!.setUsage(DynamicDrawUsage);
   context.scene.add(fixtures);
 
-  function paint({ id, pane, wick, cross }: typeof pieces[number]) {
-    const glowing = lit.has(id);
-    fixtures.setColorAt(pane, glowing ? colors.lamp : colors.glass);
-    fixtures.setColorAt(wick, glowing ? colors.filament : colors.shade);
-    fixtures.setColorAt(cross, glowing ? colors.filament : colors.shade);
+  function paint({ id, pane, wick, cross, band }: typeof pieces[number]) {
+    const glowing = lit.has(id) || band <= ceremonyBand;
+    fixtures.setColorAt(pane, dimmedColor.copy(glowing ? colors.lamp : colors.glass).multiplyScalar(ceremonyDim));
+    dimmedColor.copy(glowing ? colors.filament : colors.shade).multiplyScalar(ceremonyDim);
+    fixtures.setColorAt(wick, dimmedColor);
+    fixtures.setColorAt(cross, dimmedColor);
     fixtures.instanceColor!.needsUpdate = true;
   }
   pieces.forEach(paint);
@@ -145,6 +153,18 @@ export function createTownLights(
     litIds,
     activate,
     openBook,
+    setCeremonyBand(band) {
+      if (!Number.isInteger(band) || band < -1 || band > 3 || ceremonyBand === band) return;
+      ceremonyBand = band;
+      pieces.forEach(paint);
+    },
+    setCeremonyDim(level) {
+      if (!Number.isFinite(level)) return;
+      const dim = Math.max(0, Math.min(1, level));
+      if (dim === ceremonyDim) return;
+      ceremonyDim = dim;
+      pieces.forEach(paint);
+    },
     blocked(x, n) {
       return stations.some(({ fixture: [east, north] }) => Math.hypot(x - east, n - north) < .55);
     },

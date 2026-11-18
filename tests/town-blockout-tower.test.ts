@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Matrix4, type Group, type InstancedMesh } from 'three';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
-import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
+import { buildTowerLandmark, type TowerBellMotion } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
 import { nearestTownActivity, type TownActivitySpot } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 
@@ -97,4 +98,45 @@ test('enlarged clocktower can be climbed and descended through all three activit
     assert.deepEqual(picked, ['dial', 'bell', 'lookout', 'bell', 'dial']);
     assert.equal(ground, streetHeight);
   }
+});
+
+test('clocktower bell swings, lags and returns the single movable batch to rest', () => {
+  const tower = buildTowerLandmark(layout.plots.find(({ id }) => id === 'clocktower')!);
+  const detail = tower.userData.detailInterior as Group;
+  const motion = tower.userData.bellMotion as TowerBellMotion;
+  const moving = tower.getObjectByName('Clocktower moving bell') as InstancedMesh;
+  const axle = moving.parent!;
+  assert.equal(axle.children.length, 1);
+  assert.equal(axle.parent, detail);
+
+  function pose() {
+    const clapper = new Matrix4(), rope = new Matrix4(), body = new Matrix4();
+    moving.getMatrixAt(0, body);
+    moving.getMatrixAt(moving.count - 4, clapper);
+    moving.getMatrixAt(moving.count - 1, rope);
+    return { angle: axle.rotation.x, body: body.elements, clapper: clapper.elements, rope: rope.elements };
+  }
+  const rest = pose();
+  const initialVersion = moving.instanceMatrix.version;
+  motion.update(1.25);
+  assert.equal(moving.instanceMatrix.version, initialVersion);
+
+  motion.strike();
+  motion.update(.25);
+  const swing = pose();
+  assert.ok(swing.angle > 0 && swing.angle <= Math.PI / 30);
+  assert.deepEqual(swing.body, rest.body);
+  assert.notDeepEqual(swing.clapper, rest.clapper);
+  assert.notDeepEqual(swing.rope, rest.rope);
+  motion.update(3.75);
+  assert.deepEqual(pose(), rest);
+  const restedVersion = moving.instanceMatrix.version;
+  motion.update(1.25);
+  assert.equal(moving.instanceMatrix.version, restedVersion);
+
+  detail.visible = false;
+  motion.strike();
+  motion.update(.25);
+  assert.equal(moving.instanceMatrix.version, restedVersion);
+  assert.deepEqual(pose(), rest);
 });

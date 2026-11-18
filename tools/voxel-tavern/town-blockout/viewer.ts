@@ -1,15 +1,15 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
-import { buildTowerLandmark } from './landmark-tower';
+import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
 import { buildTavernLandmark } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
-import { buildPostLandmark } from './landmark-post';
+import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
@@ -24,7 +24,9 @@ import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival } from './festival';
-import { createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock } from './town-ceremony';
+import {
+  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
+} from './town-ceremony';
 import { createCeremonyFrost } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
@@ -45,6 +47,7 @@ import './tavern-mix-panel.css';
 import './tavern-drink-effects.css';
 import { createPostActivity } from './post-activity';
 import { createTownMailActivity } from './town-mail-activity';
+import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
@@ -119,15 +122,19 @@ snowButton.onclick = () => {
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
+let ceremonyDim = 1;
+function applyCeremonyLighting() {
+  ambient.intensity = (nightMode ? .96 : 1.35) * ceremonyDim;
+  sun.intensity = (nightMode ? 1.23 : 1.7) * ceremonyDim;
+}
 function setNight(night: boolean) {
   nightMode = night;
   const sky = night ? '#182642' : '#acc2dd';
   (scene.background as Color).set(sky);
   scene.fog!.color.set(sky);
   ambient.color.set(night ? '#83a9e7' : '#e4edff');
-  ambient.intensity = night ? .96 : 1.35;
   sun.color.set(night ? '#a6c0fd' : '#ffe6c5');
-  sun.intensity = night ? 1.23 : 1.7;
+  applyCeremonyLighting();
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
@@ -581,24 +588,29 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   return true;
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
-const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects);
+let warmDrinkUntil = 0;
+const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects, () => {
+  warmDrinkUntil = performance.now() + 45_000;
+  ceremonyFrost.setWarmth('hot-drink', true);
+});
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
-const activities: TownActivity[] = [
-  createPostActivity, createStageActivity, createMarketActivity,
-  createIceActivity, createWishActivity, createRestActivity,
-]
-  .map(create => {
-    const activity = create({
-      ...activityContext,
-      announce(message) {
-        if (!walking || !activity.spots.some(spot =>
-          Math.abs(ground - spot.ground) < 1 && Math.hypot(x - spot.x, n - spot.n) < spot.range + 5)) return;
-        announceActivity(message);
-      },
-    });
-    return activity;
+function nearbyActivity<T extends TownActivity>(create: (context: TownActivityContext) => T): T {
+  const activity = create({
+    ...activityContext,
+    announce(message) {
+      if (!walking || !activity.spots.some(spot =>
+        Math.abs(ground - spot.ground) < 1 && Math.hypot(x - spot.x, n - spot.n) < spot.range + 5)) return;
+      announceActivity(message);
+    },
   });
+  return activity;
+}
+const stageActivity = nearbyActivity(createStageActivity);
+const activities: TownActivity[] = [
+  nearbyActivity(createPostActivity), stageActivity, nearbyActivity(createMarketActivity),
+  nearbyActivity(createIceActivity), nearbyActivity(createWishActivity), nearbyActivity(createRestActivity),
+];
 function announceActivity(message: string, gold = false) {
   activityStatus.textContent = message;
   activityStatus.toggleAttribute('data-gold', gold);
@@ -634,14 +646,69 @@ const ceremonyOverlay = createCeremonyOverlay({
   dim: element('ceremony-dim'),
   countdown: element('ceremony-countdown'),
   banner: element('ceremony-banner'),
-}, { reducedMotion: reduceSnowEffects });
+}, { reducedMotion: reduceSnowEffects, dimOverlay: false });
 const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   enabled: previewOptions.get('ceremonyFrost') !== 'off',
   reducedMotion: reduceSnowEffects,
 });
-const ceremony = createCeremonyDirector(createLocalCeremonyClock(), {
-  onCue: ceremonyOverlay.cue, onFrostBaseline: ceremonyFrost.setBaseline,
+ceremonyFrost.mountSettings(element('town-panel-controls'));
+const ceremonyClock = createLocalCeremonyClock();
+const postUnlockTime = new Date(UNLOCK_AT).getTime();
+setPostOpeningReady(architecture.get('post-office'), ceremonyClock.now() >= postUnlockTime);
+const cameraBeforeBellShake = new Quaternion();
+let bellShakeStartedAt = -Infinity;
+let nextHourlyBell = Infinity;
+let hourlyBellsRemaining = 0;
+const ceremony = createCeremonyDirector(ceremonyClock, {
+  onCue: handleCeremonyCue,
+  onFrostBaseline: ceremonyFrost.setBaseline,
+  onSnowIntensity: snowfall.setIntensity,
+  onDim(level) {
+    ceremonyDim = level;
+    applyCeremonyLighting();
+    townLights.setCeremonyDim(level);
+  },
 });
+window.addEventListener('pointerdown', festival.enableAudio, { once: true });
+window.addEventListener('keydown', festival.enableAudio, { once: true });
+
+function bellDistance() {
+  return camera.position.distanceTo(towerBellPosition);
+}
+
+function handleCeremonyCue(cue: CeremonyCue) {
+  ceremonyOverlay.cue(cue);
+  switch (cue.type) {
+    case 'mailbox-open':
+      if (cue.at === postUnlockTime) {
+        setPostOpeningReady(architecture.get('post-office'), true);
+        announceActivity('苏小满 · 时光信箱已开启，循红绸到邮局主箱读信。', true);
+      }
+      break;
+    case 'hourly-chime':
+      festival.playCeremonyBell('hourly', bellDistance());
+      bellMotion.strike(.65);
+      nextHourlyBell = cue.at + 2020;
+      hourlyBellsRemaining = cue.strikes - 1;
+      break;
+    case 'countdown-tick':
+      festival.playCeremonyBell('tick', bellDistance());
+      bellMotion.strike(.28);
+      break;
+    case 'grand-strike':
+      festival.playCeremonyBell('grand', bellDistance());
+      bellMotion.strike();
+      break;
+    case 'bloom-band':
+      townLights.setCeremonyBand(cue.band);
+      break;
+    case 'fireworks-main':
+    case 'fireworks-far':
+    case 'fireworks-finale':
+      festival.launchCeremony(cue.type, (ceremonyClock.now() - cue.at) / 1000);
+      break;
+  }
+}
 const tossOrigin = new Vector3();
 const tossDirection = new Vector3();
 const gatherSeconds = .8;
@@ -976,7 +1043,22 @@ function localSpot(group: Group, [east, height, z]: readonly number[], range: nu
   return { x, n, ground, range, label, run: () => run(x, n, ground) };
 }
 const tower = architecture.get('clocktower')!;
-const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', number[]>;
+const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
+const [bellX, bellDeck, bellZ] = towerStops.bell;
+const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
+const bellMotion = tower.userData.bellMotion as TowerBellMotion;
+let bellReservedForCeremony = false;
+const towerBellSpot = localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
+  if (bellReservedForCeremony) {
+    announceActivity('仪式将启，静候钟声');
+    return;
+  }
+  if (festival.ringBell(bellDistance())) {
+    bellMotion.strike(.65);
+    bellShakeStartedAt = performance.now();
+    announceActivity('钟声已响');
+  }
+});
 activitySpots.push(
   localSpot(tower, towerStops.dial, 1.75, '查看钟楼表盘', () => {
     const dialFocus = tower.userData.dialFocus as [number, number, number];
@@ -984,9 +1066,7 @@ activitySpots.push(
     activityContext.face(focus.x, -focus.z, focus.y);
     announceActivity('表盘层 · 黄铜指针与传动齿轮');
   }),
-  localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
-    if (festival.ringBell()) announceActivity('钟声已响');
-  }),
+  towerBellSpot,
   localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
     const [, deck, opening] = towerStops.lookout;
     const center = tower.localToWorld(new Vector3(0, deck, opening));
@@ -1539,10 +1619,34 @@ renderer.setAnimationLoop(now => {
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
-  ceremonyOverlay.apply(ceremony.update());
+  const ceremonyState = ceremony.update();
+  ceremonyOverlay.apply(ceremonyState);
   ceremonyFrost.setWarmth('interior', sheltered);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
+  if (warmDrinkUntil && now >= warmDrinkUntil) {
+    warmDrinkUntil = 0;
+    ceremonyFrost.setWarmth('hot-drink', false);
+  }
   ceremonyFrost.update(dt);
+  stageActivity.syncCeremony(ceremonyState.now, walking ? x : Infinity, n);
+  if (hourlyBellsRemaining && ceremonyState.now >= nextHourlyBell) {
+    if (ceremonyState.now - nextHourlyBell < 800) bellMotion.strike(.65);
+    hourlyBellsRemaining--;
+    nextHourlyBell += 2020;
+  }
+  bellMotion.update(dt);
+  const reserveBell = ceremonyState.phase === 'climax' ||
+    (ceremonyState.secondsToMidnight !== null && ceremonyState.secondsToMidnight <= 300);
+  if (reserveBell !== bellReservedForCeremony) {
+    bellReservedForCeremony = reserveBell;
+    towerBellSpot.label = reserveBell ? '仪式将启，静候钟声' : '拉绳敲钟';
+  }
+  if (ceremonyState.phase === 'climax') {
+    const elapsed = ceremonyState.now - ceremonyMidnight(ceremonyEveYear(ceremonyState.now));
+    townLights.setCeremonyBand(Math.min(3, Math.floor(elapsed / 600)));
+  } else {
+    townLights.setCeremonyBand(ceremonyState.phase === 'afterglow' ? 3 : -1);
+  }
   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
@@ -1573,6 +1677,12 @@ renderer.setAnimationLoop(now => {
     viewBatches.update(cullAerial, camera, staticViewRoots);
     viewFaces.update(cullAerial, camera.position, architecture.values());
     const detailMs = profileTown ? terrainMs + performance.now() - batchesStartedAt : 0;
+    const shakeAge = now - bellShakeStartedAt;
+    const shakeBell = walking && shakeAge >= 0 && shakeAge < 320 && !reduceSnowEffects.matches;
+    if (shakeBell) {
+      cameraBeforeBellShake.copy(camera.quaternion);
+      camera.rotateZ(.0022 * Math.sin(shakeAge * .036) * (1 - shakeAge / 320));
+    }
     const drinkStartedAt = profileTown ? performance.now() : 0;
     tavernDrinkEffects.apply(camera, now, walking && (x !== startEast || n !== startNorth), walking);
     let drinkEffectsMs = profileTown ? performance.now() - drinkStartedAt : 0;
@@ -1580,6 +1690,7 @@ renderer.setAnimationLoop(now => {
     finally {
       const restoreStartedAt = profileTown ? performance.now() : 0;
       tavernDrinkEffects.restore(camera);
+      if (shakeBell) camera.quaternion.copy(cameraBeforeBellShake);
       if (profileTown) drinkEffectsMs += performance.now() - restoreStartedAt;
     }
     if (profileTown) {

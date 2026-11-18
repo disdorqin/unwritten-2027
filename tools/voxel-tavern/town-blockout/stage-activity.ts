@@ -2,7 +2,7 @@ import {
   BoxGeometry, CanvasTexture, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Mesh,
   MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry, Sphere, SRGBColorSpace, Vector3,
 } from 'three';
-import { sampleStagePose, stageClock, stageProgram } from './stage-choreography';
+import { sampleStagePose, stageClock, stageProgram, stageProgramDuration } from './stage-choreography';
 import { layout } from './terrain';
 import type { TownActivity, TownActivityContext } from './town-activity';
 
@@ -18,6 +18,14 @@ type Costume = {
 type CostumedPiece = { joint: Object3D; offset: Matrix4; color: Color };
 
 const [stageX, stageNorth, stageY] = layout.plots.find(plot => plot.id === 'stage')!.origin;
+const stageActivationRadius = 72;
+
+function stageWarmupStart(now: number) {
+  const local = new Date(now);
+  if (local.getMonth() !== 11 || local.getDate() !== 31 || local.getHours() < 20) return;
+  const offset = (local.getMinutes() * 60 + local.getSeconds()) * 1000 + local.getMilliseconds();
+  return offset < stageProgramDuration * 1000 ? now - offset : undefined;
+}
 const cast: readonly Costume[] = [
   { name: '柳三弦', role: 'host', base: '#923846', trim: '#f4c47b', accent: '#523044', skin: '#ecad86' },
   { name: '梅枝', role: 'flower', base: '#c85471', trim: '#ffe9d6', accent: '#e37f9f', skin: '#ffe2c9' },
@@ -174,6 +182,7 @@ function costumeActor(costume: Costume) {
 
 export function createStageActivity(context: TownActivityContext): TownActivity & {
   start(): boolean;
+  syncCeremony(now: number, east: number, north: number): void;
   getShowState(): { time: number; act: typeof stageProgram[number]['id']; playing: boolean; joined: boolean };
 } {
   const rig = new Group();
@@ -209,11 +218,28 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
   let guestBlend = 0;
   let clapRemaining = 0;
   let announcedAct = -1;
-  let renderedTick = -1;
+  let renderedTick = 0;
+  let nearStage = true;
+  let warmupStart: number | undefined;
+  let warmupTime: number | undefined;
+
+  const showTime = () => warmupTime ?? stageClock(elapsed);
+  const showPlaying = () => playing || warmupTime !== undefined;
 
   function getShowState() {
-    const time = stageClock(elapsed);
-    return { time, act: stageProgram.find(act => time < act.end)!.id, playing, joined };
+    const time = showTime();
+    return { time, act: stageProgram.find(act => time < act.end)!.id, playing: showPlaying(), joined };
+  }
+
+  function syncCeremony(now: number, east: number, north: number) {
+    nearStage = (east - stageX) ** 2 + (north - stageNorth) ** 2 <= stageActivationRadius ** 2;
+    const start = nearStage ? stageWarmupStart(now) : undefined;
+    warmupTime = start === undefined ? undefined : (now - start) / 1000;
+    if (start === warmupStart) return;
+    warmupStart = start;
+    renderedTick = -1;
+    announcedAct = stageProgram.findIndex(act => showTime() < act.end);
+    if (warmupTime !== undefined && warmupTime < 1) context.announce('柳三弦报幕 · 鼓灯迎新');
   }
 
   function writeActors(t: number, actIndex: number) {
@@ -291,10 +317,11 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
   }
 
   function start() {
-    if (playing) return false;
+    if (showPlaying()) return false;
     playing = true;
     elapsed = 0;
     announcedAct = 0;
+    renderedTick = -1;
     context.announce('柳三弦报幕 · 鼓灯迎新');
     return true;
   }
@@ -307,7 +334,7 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
   }
 
   function applaud() {
-    if (!playing) {
+    if (!showPlaying()) {
       context.announce('到舞台正中启幕，演出开始后可在这里鼓掌。');
       return;
     }
@@ -324,9 +351,20 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
   }
 
   function update(dt: number) {
-    if (!playing || !Number.isFinite(dt) || dt <= 0) return;
-    elapsed += dt;
-    const t = stageClock(elapsed);
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    if (playing && warmupTime === undefined) elapsed += dt;
+    if (!nearStage) return;
+    if (!showPlaying()) {
+      if (renderedTick < 0) {
+        joined = false;
+        guestBlend = 0;
+        clapRemaining = 0;
+        writeActors(0, 0);
+        renderedTick = 0;
+      }
+      return;
+    }
+    const t = showTime();
     const actIndex = stageProgram.findIndex(act => t < act.end);
     if (actIndex !== announcedAct) {
       announcedAct = actIndex;
@@ -336,7 +374,7 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
     const difference = wantGuest - guestBlend;
     guestBlend += Math.sign(difference) * Math.min(Math.abs(difference), dt * .85);
     clapRemaining = Math.max(0, clapRemaining - dt);
-    const tick = Math.floor(elapsed * 30);
+    const tick = Math.floor((warmupTime ?? elapsed) * 30);
     if (tick !== renderedTick) {
       renderedTick = tick;
       writeActors(t, actIndex);
@@ -347,14 +385,15 @@ export function createStageActivity(context: TownActivityContext): TownActivity 
   return {
     spots: [
       { x: stageX, n: stageNorth + 11, ground: stageY, range: 2.05,
-        get label() { return playing ? '观看雪灯演出' : '开启雪灯演出'; }, run: begin },
+        get label() { return showPlaying() ? '观看雪灯演出' : '开启雪灯演出'; }, run: begin },
       { x: stageX - 4, n: stageNorth + 11, ground: stageY, range: 1.9, label: '为舞台鼓掌', run: applaud },
       { x: stageX + 4, n: stageNorth + 11, ground: stageY, range: 1.9,
         get label() { return joined ? '退出舞台共演' : '加入舞台共演'; },
-        available: () => playing && (joined || Boolean(stageProgram.find(act => act.id === getShowState().act)?.guest)), run: updateJoin },
+        available: () => showPlaying() && (joined || Boolean(stageProgram.find(act => act.id === getShowState().act)?.guest)), run: updateJoin },
     ],
     update,
     start,
+    syncCeremony,
     getShowState,
   };
 }

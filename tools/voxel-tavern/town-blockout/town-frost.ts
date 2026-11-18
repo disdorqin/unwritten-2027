@@ -141,7 +141,27 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
 
   render();
 
+  function mountSettings(parent: HTMLElement) {
+    const key = 'unwritten.town-ceremony.frost.v1';
+    try {
+      if (localStorage.getItem(key) === 'off') enabled = false;
+    } catch { /* The session control still works without storage. */ }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = '仪式冻纹';
+    toggle.setAttribute('aria-pressed', String(enabled));
+    toggle.addEventListener('click', () => {
+      enabled = !enabled;
+      toggle.setAttribute('aria-pressed', String(enabled));
+      render();
+      try { localStorage.setItem(key, enabled ? 'on' : 'off'); } catch { /* Keep the session setting. */ }
+    });
+    render();
+    parent.append(toggle);
+  }
+
   return {
+    mountSettings,
     setBaseline: (level: FrostLevel) => tracker.setBaseline(level),
     setWarmth: (source: WarmthSource, active: boolean) => tracker.setWarmth(source, active),
     setEnabled(next: boolean) { enabled = next; render(); },

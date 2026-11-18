@@ -133,3 +133,71 @@ test('stage retains the viewer activity contract and guest toggles leave the clo
   assert.deepEqual(show.getShowState(), { time: 3, act: 'opening', playing: true, joined: true });
   assert.ok(announcements.some(line => line.includes('第五幕')));
 });
+
+test('New Year Eve slots reuse the manual show and stop near-stage-only animation on departure', () => {
+  type StageNode = TownActivityContext['scene']['children'][number];
+  type InstanceBatch = StageNode & { count: number; instanceMatrix: { array: Float32Array; version: number } };
+  const makeStage = () => {
+    const roots: StageNode[] = [];
+    const batches: InstanceBatch[] = [];
+    const announcements: string[] = [];
+    const scene = { add(root: StageNode) { roots.push(root); } } as TownActivityContext['scene'];
+    const activity = createStageActivity({
+      scene, announce(message) { announcements.push(message); },
+      open() { throw new Error('scheduled playback does not require a modal'); },
+      sit() {}, face() { throw new Error('scheduled playback must not move the camera'); },
+    });
+    for (const root of roots) root.traverse(node => {
+      if ('isInstancedMesh' in node && node.isInstancedMesh) batches.push(node as InstanceBatch);
+    });
+    return { activity, batches, announcements };
+  };
+  const [east, north] = layout.plots.find(({ id }) => id === 'stage')!.origin;
+  const { activity, batches, announcements } = makeStage();
+  const near = (now: number) => activity.syncCeremony(now, east, north);
+
+  near(new Date(2026, 11, 30, 20).getTime());
+  assert.equal(activity.getShowState().playing, false);
+  for (const hour of [20, 21, 22, 23]) {
+    const slot = new Date(2026, 11, 31, hour).getTime();
+    near(slot - 1);
+    assert.equal(activity.getShowState().playing, false);
+    near(slot);
+    assert.deepEqual(activity.getShowState(), { time: 0, act: 'opening', playing: true, joined: false });
+    near(slot + 300_000);
+    activity.update!(1 / 60);
+    assert.equal(activity.getShowState().playing, false);
+  }
+  near(new Date(2027, 0, 1).getTime());
+  assert.equal(activity.getShowState().playing, false);
+  assert.equal(announcements.length, 4);
+
+  const slot = new Date(2026, 11, 31, 21).getTime();
+  near(slot + 140_000);
+  activity.update!(1 / 60);
+  assert.deepEqual(activity.getShowState(), { time: 140, act: 'solo', playing: true, joined: false });
+  assert.equal(announcements.length, 4);
+  assert.equal(activity.start(), false);
+
+  const manual = makeStage();
+  manual.activity.start();
+  manual.activity.update!(140);
+  assert.equal(batches.length, 2);
+  assert.deepEqual(batches.map(batch => batch.count), manual.batches.map(batch => batch.count));
+  for (const [index, batch] of batches.entries()) {
+    assert.deepEqual(batch.instanceMatrix.array, manual.batches[index].instanceMatrix.array);
+  }
+
+  const poseVersions = batches.map(batch => batch.instanceMatrix.version);
+  activity.syncCeremony(slot + 145_000, east + 73, north);
+  activity.update!(1);
+  assert.equal(activity.getShowState().playing, false);
+  assert.deepEqual(batches.map(batch => batch.instanceMatrix.version), poseVersions);
+
+  manual.activity.syncCeremony(slot + 145_000, east, north);
+  manual.activity.update!(1);
+  assert.equal(manual.activity.getShowState().time, 145);
+  manual.activity.syncCeremony(slot + 300_000, east, north);
+  manual.activity.update!(1);
+  assert.equal(manual.activity.getShowState().time, 141);
+});

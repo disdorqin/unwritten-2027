@@ -2,35 +2,43 @@ import { BufferAttribute, BufferGeometry, PerspectiveCamera, Points, Scene, Shad
 
 const count = 1_580;
 const foregroundCount = 530;
+const stormCount = count;
+const stormFade = .11;
 
 export function createSnowfall(scene: Scene) {
-  const seeds = new Float32Array(count * 3);
-  const flakes = new Float32Array(count * 3);
+  const seeds = new Float32Array((count + stormCount) * 3);
+  const flakes = new Float32Array((count + stormCount) * 4);
   let seed = 352811;
   function random() {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   }
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count + stormCount; i++) {
+    const additional = i >= count;
+    const foreground = additional ? (i - count) % 3 === 0 : i < foregroundCount;
+    const threshold = additional ? (i - count) / stormCount * (1 - stormFade) : -stormFade;
     seeds.set([random(), random(), random()], i * 3);
-    flakes.set([i < foregroundCount ? 0 : 1, random(), random()], i * 3);
+    flakes.set([foreground ? 0 : 1, random(), random(), threshold], i * 4);
   }
 
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(seeds, 3));
-  geometry.setAttribute('flake', new BufferAttribute(flakes, 3));
+  geometry.setAttribute('flake', new BufferAttribute(flakes, 4));
+  geometry.setDrawRange(0, count);
   const material = new ShaderMaterial({
     transparent: true,
     depthWrite: false,
     uniforms: {
       time: { value: 0 },
+      storm: { value: 0 },
       elevationMode: { value: 0 },
       viewportHeight: { value: 640 },
       pixelRatio: { value: 1 },
     },
     vertexShader: /* glsl */ `
-      attribute vec3 flake;
+      attribute vec4 flake;
       uniform float time;
+      uniform float storm;
       uniform float elevationMode;
       uniform float viewportHeight;
       uniform float pixelRatio;
@@ -54,10 +62,11 @@ export function createSnowfall(scene: Scene) {
         vec3 fadePosition = abs(local) / (volume * .5);
         float boundary = 1. - smoothstep(.72, 1., max(fadePosition.x, max(fadePosition.y, fadePosition.z)));
         float nearFade = smoothstep(.85, 2.6, distanceFromEye);
-        opacity = mix(.9, .63, background) * boundary * nearFade * mix(.69, 1., flake.y);
+        float visible = smoothstep(flake.w, flake.w + ${stormFade}, storm);
+        opacity = mix(.9, .63, background) * boundary * nearFade * mix(.69, 1., flake.y) * visible;
         tilt = .36 + .23 * sin(flutter * 1.42);
         float diameter = mix(.062, .144, flake.z) * mix(1., 3.05, elevationMode);
-        diameter *= mix(1., 1.65, background);
+        diameter *= mix(1., 1.65, background) * mix(1., 1.12, storm);
         float pixels = .5 * diameter * projectionMatrix[1][1] * viewportHeight / max(.1, -viewPosition.z);
         float minPixels = mix(mix(3.2, 2.1, background), mix(3.65, 2.55, background), elevationMode);
         gl_PointSize = clamp(pixels, minPixels * pixelRatio, mix(12., 7., background) * pixelRatio);
@@ -98,7 +107,15 @@ export function createSnowfall(scene: Scene) {
     update(_camera: PerspectiveCamera, dt: number, walking: boolean, sheltered = false) {
       particles.visible = active && !sheltered;
       material.uniforms.elevationMode.value = walking ? 0 : 1;
-      if (active) material.uniforms.time.value += dt;
+      // Integrate speed into time so changing the weather never teleports existing snow.
+      if (active) material.uniforms.time.value += dt * (1 + material.uniforms.storm.value * .42);
+    },
+    setIntensity(intensity: number) {
+      if (!Number.isFinite(intensity)) return;
+      const storm = Math.max(0, Math.min(1, (intensity - 1) / 3));
+      if (storm === material.uniforms.storm.value) return;
+      material.uniforms.storm.value = storm;
+      geometry.setDrawRange(0, count + Math.min(stormCount, Math.ceil(storm / (1 - stormFade) * stormCount)));
     },
     setEnabled(enabled: boolean) { active = enabled; },
     enabled() { return active; },

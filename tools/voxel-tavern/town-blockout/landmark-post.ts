@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  BoxGeometry, CanvasTexture, Color, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
   Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
@@ -32,6 +32,14 @@ const palette: Record<string, Material> = {
   goldLight: new MeshBasicMaterial({ color: '#ffe9bb' }),
 };
 
+const postOpeningRibbons = new WeakMap<Group, (ready: boolean) => void>();
+const mutedOpeningTrim = new Color('#8b7160');
+const brightOpeningTrim = new Color('#fff5d9');
+
+export function setPostOpeningReady(group: Group | undefined, ready: boolean) {
+  if (group) postOpeningRibbons.get(group)?.(ready);
+}
+
 function bounds([x, y, z]: Point, [w, h, d]: Point): Solid {
   return { min: [x - w / 2, y - h / 2, z - d / 2], max: [x + w / 2, y + h / 2, z + d / 2] };
 }
@@ -42,10 +50,15 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   const batches = new Map<string, Block[]>();
   const colliders: Solid[] = [];
   const floors: Solid[] = [];
+  const openingTrimIndices: number[] = [];
   function box(tint: string, x: number, y: number, z: number, w: number, h: number, d: number, roll = 0) {
     const items = batches.get(tint) ?? [];
     items.push({ position: [x, y, z], size: [w, h, d], roll });
     batches.set(tint, items);
+  }
+  function openingTrim(x: number, y: number, z: number, w: number, h: number, roll = 0) {
+    openingTrimIndices.push(batches.get('goldLight')?.length ?? 0);
+    box('goldLight', x, y, z, w, h, .022, roll);
   }
 
   // B13's stone plinth, brick wall bays and window grid. Leave a real 2.5 m door opening.
@@ -276,6 +289,23 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   box('brass', mailboxX, .88, mailboxZ + .34, .30, .22, .035);
   colliders.push(bounds([mailboxX, .85, mailboxZ], [.65, 1.35, .65]));
 
+  // The door jambs frame the entrance while the plaque points toward the main timebox.
+  // All new pieces are wall/box-mounted, above the existing stair and approach surfaces.
+  for (const side of [-1, 1]) {
+    const x = side * 1.61;
+    box('red', x, 2.04, front + .293, .178, .51, .036);
+    box('redDark', x + side * .035, 1.785, front + .297, .105, .24, .042, side * .17);
+    box('brass', x, 2.28, front + .32, .214, .059, .041);
+    openingTrim(x, 2.28, front + .348, .162, .020);
+    openingTrim(mailboxX + side * .266, 1.35, mailboxZ + .346, .053, .137);
+  }
+  box('timber', 2.32, 1.63, front + .177, 1.03, .34, .07);
+  box('redDark', 2.32, 1.63, front + .222, .925, .254, .024);
+  openingTrim(2.29, 1.63, front + .246, .51, .035);
+  for (const side of [-1, 1]) {
+    openingTrim(2.50, 1.63 + side * .056, front + .248, .196, .035, -side * Math.PI / 4);
+  }
+
   function writeDesk(x: number, y: number, z: number) {
     box('timber', x, y + .65, z, 3, 1.3, 1.1);
     box('timberWarm', x, y + 1.31, z, 3.1, .08, 1.2);
@@ -431,6 +461,18 @@ export function buildPostLandmark(_plot: TownPlot): Group {
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
     });
+    if (tint === 'goldLight') {
+      let openingReady: boolean | undefined;
+      const setReady = (ready: boolean) => {
+        if (openingReady === ready) return;
+        openingReady = ready;
+        const color = ready ? brightOpeningTrim : mutedOpeningTrim;
+        for (const index of openingTrimIndices) mesh.setColorAt(index, color);
+        mesh.instanceColor!.needsUpdate = true;
+      };
+      setReady(false);
+      postOpeningRibbons.set(model, setReady);
+    }
     model.add(mesh);
   }
   model.userData.colliders = colliders;

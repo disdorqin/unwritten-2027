@@ -1,4 +1,4 @@
-import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshLambertMaterial, PointLight, Quaternion, Vector3 } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, MeshLambertMaterial, PointLight, Quaternion, Vector3 } from 'three';
 // The district builder calls this same geometry source for its Voxelize snapshot.
 // @ts-expect-error The original JavaScript builder has no declaration file.
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
@@ -9,6 +9,8 @@ type Vec3 = [number, number, number];
 type Bounds = { min: Vec3; max: Vec3 };
 type Cuboid = { at: Vec3; size: Vec3; tone: number };
 type Box = (kind: string, x: number, y: number, z: number, w?: number, h?: number, d?: number) => void;
+
+export type TowerBellMotion = { strike(strength?: number): void; update(dt: number): void };
 
 const unit32 = 1 / 32;
 const hallCeiling = 10.25;
@@ -467,6 +469,10 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     }
   }
   const bellBase = bellY + 2.53125;
+  const bellParts = new Map<string, Cuboid[]>();
+  const clapperParts = new Map<string, Cuboid[]>();
+  const ropeParts = new Map<string, Cuboid[]>();
+  parts = bellParts;
   const profile: [number, number, number, string][] = [
     [0, 1.78125, .09375, 'copper'], [.09375, 1.78125, .125, 'bronze'], [.21875, 1.65625, .28125, 'copperDark'],
     [.5, 1.53125, .3125, 'copper'], [.8125, 1.40625, .375, 'bronze'], [1.1875, 1.3125, .5, 'copper'],
@@ -480,10 +486,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     const a = i * Math.PI / 20;
     box('brass', snap(Math.sin(a) * 1.661), bellBase + .3125, snap(Math.cos(a) * 1.661), unit32, .09375, unit32);
   }
+  parts = clapperParts;
   box('iron', -.09375, bellBase - .1875, -.09375, .1875, 3.5, .1875);
+  box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);
+  parts = ropeParts;
   box('oakEnd', .86375, bellY + 1.35, .625, .055, 3.65, .055);
   box('brass', .80125, bellY + 1.2, .5625, .18, .20, .18);
-  box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);
+  parts = interiorParts;
   box('oak', -2.1875, bellBase + 3.375, -.375, 4.375, .375, .75);
   box('wood', -.28125, bellBase + 3.3125, -2.1875, .5625, .46875, 4.375);
   for (const x of [-1.875, -.25, .25, 1.875]) {
@@ -496,6 +505,22 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       box('oakEnd', x - .15625, bellBase + 3.21875, z - .15625, .3125, .28125, .3125);
     }
   }
+  // The rail separates the wall-mounted tool board from the walking strip.
+  const toolBoard = bellY + 1.5625;
+  box('wood', -.90625, toolBoard, -2.28125, 1.8125, 1.09375, .125);
+  for (const y of [toolBoard, toolBoard + 1]) box('oakEnd', -.96875, y, -2.21875, 1.9375, .09375, .15625);
+  for (const x of [-.671875, -.21875, .21875, .671875]) {
+    box('brass', x - .03125, toolBoard + .75, -2.15625, .0625, .0625, .09375);
+    box('oak', x - .046875, toolBoard + .1875, -2.125, .09375, .53125, .09375);
+  }
+  box('iron', -.859375, toolBoard + .65625, -2.09375, .375, .1875, .15625);
+  box('bronze', -.4375, toolBoard + .65625, -2.09375, .4375, .0625, .15625);
+  box('iron', .125, toolBoard + .125, -2.09375, .1875, .15625, .15625);
+  box('iron', .578125, toolBoard + .625, -2.09375, .1875, .21875, .15625);
+  box('oakEnd', -2.15625, bellY + 5.28125, 1.6875, .5625, .125, .375);
+  box('iron', -1.90625, bellY + 4.1875, 1.84375, .0625, 1.09375, .0625);
+  box('brass', -1.96875, bellY + 4.21875, 1.78125, .1875, .09375, .1875);
+
   for (const [x, y, z, radius] of [[0, dialY + 3.55, 1.875, .75], [-1.875, bellY + 3.75, 1.875, .72], [0, lookoutY + 1.75, -.5, .48]]) {
     lamp(box, x, y, z, radius);
     const light = new PointLight('#ffb778', 68 * radius, 12, 2);
@@ -511,28 +536,87 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       if (grouped) grouped.push([kind, cubes]);
       else meshes.set(light, [[kind, cubes]]);
     }
-    for (const [light, grouped] of meshes) {
-      const emissive = light === 'glow' ? '#f59b28' : light === 'gold' ? '#44250d' : '#000000';
-      const material = new MeshLambertMaterial({ emissive, emissiveIntensity: light === 'glow' ? .85 : .18 });
-      const mesh = new InstancedMesh(unit, material, grouped.reduce((total, [, cubes]) => total + cubes.length, 0));
-      const tint = new Color();
-      let index = 0;
-      for (const [kind, cubes] of grouped) {
-        for (const { at, size, tone } of cubes) {
-          mesh.setMatrixAt(index, matrix.compose(base.set(...at), rotation, sizing.set(...size)));
-          mesh.setColorAt(index, tint.set(colors[kind] ?? colors.limestone).multiplyScalar(tone));
-          index++;
-        }
+    for (const [light, grouped] of meshes) target.add(createBatch(grouped, light));
+  }
+
+  function createBatch(grouped: readonly [string, Cuboid[]][], light: string, origin = new Vector3()) {
+    const emissive = light === 'glow' ? '#f59b28' : light === 'gold' ? '#44250d' : '#000000';
+    const material = new MeshLambertMaterial({ emissive, emissiveIntensity: light === 'glow' ? .85 : .18 });
+    const mesh = new InstancedMesh(unit, material, grouped.reduce((total, [, cubes]) => total + cubes.length, 0));
+    const tint = new Color();
+    let index = 0;
+    for (const [kind, cubes] of grouped) {
+      for (const { at, size, tone } of cubes) {
+        mesh.setMatrixAt(index, matrix.compose(base.set(...at).sub(origin), rotation, sizing.set(...size)));
+        mesh.setColorAt(index, tint.set(colors[kind] ?? colors.limestone).multiplyScalar(tone));
+        index++;
       }
-      mesh.computeBoundingSphere();
-      mesh.name = light;
-      target.add(mesh);
     }
+    mesh.computeBoundingSphere();
+    mesh.name = light;
+    return mesh;
+  }
+
+  function attachBell(target: Group): TowerBellMotion {
+    const pivot = new Group();
+    pivot.name = 'Clocktower bell axle';
+    pivot.position.set(0, clocktowerHeight(bellBase + 3.375), 0);
+    const moving = createBatch([...bellParts, ...clapperParts, ...ropeParts], 'Clocktower moving bell', pivot.position);
+    moving.instanceMatrix.setUsage(DynamicDrawUsage);
+    // Clapper and rope swing inside this padding while the shell rotates about the axle.
+    moving.boundingSphere!.radius += .4;
+    pivot.add(moving);
+    target.add(pivot);
+
+    const clapper = [new Matrix4(), new Matrix4()];
+    const rope = [new Matrix4(), new Matrix4()];
+    const clapperStart = moving.count - clapper.length - rope.length;
+    const ropeStart = moving.count - rope.length;
+    clapper.forEach((rest, i) => moving.getMatrixAt(clapperStart + i, rest));
+    rope.forEach((rest, i) => moving.getMatrixAt(ropeStart + i, rest));
+    const clapperPin = new Vector3(0, clocktowerHeight(bellBase + 3.3125), 0).sub(pivot.position);
+    const ropePin = new Vector3(.89125, clocktowerHeight(bellY + 5), .6525).sub(pivot.position);
+    const hinge = new Matrix4(), swung = new Matrix4(), offset = new Vector3();
+    const duration = 4;
+    const omega = 2 * Math.PI / 1.02;
+    const maxSwing = Math.PI / 30;
+    let elapsed = duration, impulse = 0, startAngle = 0;
+
+    function sway(rest: Matrix4[], start: number, pin: Vector3, angle: number) {
+      hinge.makeRotationX(angle);
+      hinge.setPosition(offset.copy(pin).applyMatrix4(hinge).negate().add(pin));
+      for (let i = 0; i < rest.length; i++) moving.setMatrixAt(start + i, swung.multiplyMatrices(hinge, rest[i]));
+      moving.instanceMatrix.addUpdateRange(start * 16, rest.length * 16);
+    }
+
+    return {
+      strike(strength = 1) {
+        startAngle = pivot.rotation.x;
+        impulse = maxSwing * Math.max(0, Math.min(strength, 1));
+        elapsed = 0;
+      },
+      update(dt) {
+        if (elapsed >= duration) return;
+        elapsed = Math.min(duration, elapsed + dt);
+        const resting = elapsed >= duration;
+        if (!resting && !target.visible) return;
+        const decay = (1 - elapsed / duration) ** 2;
+        const phase = omega * elapsed;
+        const body = decay * (startAngle * Math.cos(phase) + impulse * Math.sin(phase));
+        pivot.rotation.x = resting ? 0 : Math.max(-maxSwing, Math.min(maxSwing, body));
+        const delayed = resting ? 0 : decay * impulse * Math.sin(omega * Math.max(0, elapsed - .115));
+        moving.instanceMatrix.clearUpdateRanges();
+        sway(clapper, clapperStart, clapperPin, delayed * .86 - pivot.rotation.x * .72);
+        sway(rope, ropeStart, ropePin, -pivot.rotation.x * .65 + delayed * .13);
+        moving.instanceMatrix.needsUpdate = true;
+      },
+    };
   }
   addBatches(tower, shellParts);
   const detailInterior = new Group();
   detailInterior.name = 'Tower stairs and interiors';
   addBatches(detailInterior, interiorParts);
+  tower.userData.bellMotion = attachBell(detailInterior);
   tower.add(detailInterior);
   tower.userData.detailInterior = detailInterior;
   const hallLight = new PointLight('#ffad63', 86, 14, 2);
