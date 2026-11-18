@@ -2,7 +2,8 @@ import { getTavernRecipe, tavernAddIns, tavernBases, tavernRecipes, type TavernR
 
 type MixPanelOptions = {
   ids(): readonly string[];
-  mix(base: string, addIn: string): boolean;
+  remaining(): number;
+  mix(base: string, addIn: string, quantity: number): boolean;
   take(recipeId: string): boolean;
 };
 
@@ -42,7 +43,12 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
   choices.className = 'tavern-mix-choices';
   const { field: baseField, select: base } = picker('基底', 'tavern-base', tavernBases);
   const { field: addInField, select: addIn } = picker('风味', 'tavern-add-in', tavernAddIns);
-  choices.append(baseField, addInField);
+  const quantityField = document.createElement('label');
+  const quantity = document.createElement('select');
+  quantity.name = 'tavern-quantity';
+  quantity.setAttribute('aria-label', '杯数');
+  quantityField.append(textNode('span', '杯数'), quantity);
+  choices.append(baseField, addInField, quantityField);
 
   const formStatus = document.createElement('p');
   formStatus.className = 'tavern-mix-form-status';
@@ -95,10 +101,10 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     for (const { recipe, button } of recipeCards) {
       button.setAttribute('aria-pressed', String(recipe.id === selected?.id));
     }
-    formStatus.textContent = base.value && addIn.value && !selected
-      ? '请按酒单上的配方搭配。'
-      : '';
-    mixButton.disabled = !selected;
+    const available = options.remaining();
+    formStatus.textContent = !available ? '随身酒杯已满，喝一杯后再调。'
+      : base.value && addIn.value && !selected ? '请按酒单上的配方搭配。' : '';
+    mixButton.disabled = !selected || !available;
   }
 
   const recipeCards = tavernRecipes.map(recipe => {
@@ -148,7 +154,7 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     if (phaseStatus.textContent !== phase) phaseStatus.textContent = phase;
   }
 
-  function finish(recipe: TavernRecipe, discovered: boolean) {
+  function finish(recipe: TavernRecipe, discovered: boolean, count: number) {
     if (mixing.hidden) return;
     finished = recipe;
     mixing.hidden = true;
@@ -156,6 +162,7 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     resultHeading.textContent = recipe.name;
     resultHeading.style.setProperty('--recipe-color', recipe.color);
     resultStatus.textContent = discovered ? '调制完成，已收录进酒单。' : '调制完成，这杯特调已在酒单里。';
+    takeButton.textContent = count === 1 ? '端起这杯' : `端起这 ${count} 杯`;
     takeButton.disabled = false;
     updateBook();
     resultHeading.focus({ preventScroll: true });
@@ -166,6 +173,7 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     result.hidden = true;
     mixing.hidden = true;
     form.hidden = false;
+    populateQuantity();
     updateBook();
     updateChoices();
   }
@@ -178,7 +186,7 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     mixing.hidden = false;
     liquid.style.setProperty('--recipe-color', recipe.color);
     setProgress(0);
-    if (options.mix(base.value, addIn.value)) {
+    if (options.mix(base.value, addIn.value, Number(quantity.value))) {
       if (!mixing.hidden) phaseStatus.focus({ preventScroll: true });
     } else {
       cancel();
@@ -201,6 +209,14 @@ export function renderTavernMixPanel(panel: HTMLElement, options: MixPanelOption
     base.focus({ preventScroll: true });
   };
 
+  function populateQuantity() {
+    const available = options.remaining();
+    quantity.replaceChildren(...Array.from({ length: available }, (_, index) =>
+      new Option(`${index + 1} 杯`, String(index + 1))));
+    quantity.disabled = !available;
+  }
+
+  populateQuantity();
   updateBook();
   updateChoices();
   return { setProgress, finish, cancel };

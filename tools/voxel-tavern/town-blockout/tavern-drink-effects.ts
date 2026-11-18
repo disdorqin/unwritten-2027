@@ -9,7 +9,7 @@ const breathCycle = 11_000;
 const breathMillis = 300;
 const radians = Math.PI / 180;
 
-type DrinkLevel = 0 | 1 | 2 | 3;
+export type DrinkLevel = 0 | 1 | 2 | 3 | 4;
 
 export type TavernDrinkFeedback = {
   sip(color: string, onFinish: (level: DrinkLevel) => void): boolean;
@@ -88,10 +88,10 @@ export function createTavernDrinkEffects() {
   }
 
   function selectLevel(now: number) {
-    const next = Math.min(3, units) as DrinkLevel;
+    const next = Math.min(4, units) as DrinkLevel;
     if (level === next) return;
     if (!level && next) swayStartedAt = now;
-    if (level < 3 && next === 3) breathStartedAt = now;
+    if (level < 4 && next === 4) breathStartedAt = now;
     level = next;
     updateAppearance();
   }
@@ -122,6 +122,18 @@ export function createTavernDrinkEffects() {
     settle(performance.now());
     soaking = next;
     scheduleDecay();
+  }
+
+  function drinkHot() {
+    const now = performance.now();
+    settle(now);
+    if (!level) return false;
+    // Clear any units above the visual cap so hot tea always drops one visible level.
+    units = level - 1;
+    if (!units) credit = 0;
+    selectLevel(now);
+    scheduleDecay();
+    return true;
   }
 
   function sip(color: string, onFinish: (level: DrinkLevel) => void) {
@@ -170,11 +182,11 @@ export function createTavernDrinkEffects() {
       camera.rotateZ(.4 * radians * Math.sin(wave));
       return;
     }
-    const walkScale = level === 2 && moving ? 1.5 : 1;
-    const roll = level === 2 ? .9 : 1.3;
+    const walkScale = level < 4 && moving ? 1.5 : 1;
+    const roll = level < 4 ? .9 : 1.3;
     camera.rotateY(.20 * radians * walkScale * Math.sin(wave * .62 + .6));
     camera.rotateZ(roll * radians * walkScale * Math.sin(wave));
-    if (level !== 3) return;
+    if (level !== 4) return;
     const sinceFull = now - breathStartedAt;
     const breath = sinceFull % breathCycle;
     if (sinceFull >= breathCycle && breath < breathMillis) {
@@ -196,6 +208,6 @@ export function createTavernDrinkEffects() {
     tiltedCamera = undefined;
   }
 
-  return { sip, isDrinking: () => sipping, apply, restore, setSoaking, mountSettings,
+  return { sip, isDrinking: () => sipping, drinkHot, apply, restore, setSoaking, mountSettings,
     getLevel: () => level, setMotionEnabled };
 }
