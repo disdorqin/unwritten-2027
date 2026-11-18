@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'esnext',
     rollupOptions: {
-      input: mode === 'town-preview' ? { townBlockout } : { tavern, townBlockout },
+      input: mode === 'town-preview' || mode === 'town-rehearsal' ? { townBlockout } : { tavern, townBlockout },
     },
   },
 }));

@@ -35,6 +35,25 @@ test('ceremony clocks: local provider and reserved server provider offset', () =
   assert.equal(serverClock.now(), local - 2_000);
 });
 
+test('the shared rehearsal calendar plays the countdown and midnight in UTC+08:00', () => {
+  const chinaMidnight = Date.parse('2027-01-01T00:00:00+08:00');
+  let simulation = chinaMidnight - 10_001;
+  const cues: CeremonyCue[] = [];
+  const director = createCeremonyDirector({ now: () => simulation, utcOffsetMinutes: 480 }, {
+    onCue: cue => cues.push(cue),
+  });
+  assert.equal(ceremonyMidnight(2026, 480), chinaMidnight);
+  assert.equal(director.update().phase, 'approach');
+  simulation++;
+  assert.equal(director.update().phase, 'countdown');
+  assert.equal(director.state().secondsToMidnight, 10);
+  simulation += 10_000;
+  assert.equal(director.update().phase, 'climax');
+  assert.deepEqual(cues.flatMap(cue => cue.type === 'countdown-tick' ? [cue.secondsLeft] : []),
+    [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+  assert.ok(cues.some(cue => cue.type === 'new-year' && cue.at === chinaMidnight));
+});
+
 test('ceremony eve year resolves the right cycle around midnight', () => {
   assert.equal(ceremonyMidnight(2026), midnight);
   assert.equal(ceremonyEveYear(at(31, 12)), 2026);

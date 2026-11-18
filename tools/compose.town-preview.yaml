@@ -6,6 +6,7 @@ services:
       dockerfile: tools/Dockerfile.town-preview
       args:
         TOWN_RELEASE: ${TOWN_RELEASE:-local}
+        TOWN_REHEARSAL_BUILD: ${TOWN_REHEARSAL_BUILD:-off}
     restart: unless-stopped
     environment:
       TOWN_PREVIEW_SITE: ${TOWN_PREVIEW_SITE:-town.disdorqin.cn}
@@ -27,12 +28,14 @@ services:
       dockerfile: tools/Dockerfile.town-presence
       args:
         TOWN_RELEASE: ${TOWN_RELEASE:-local}
+        TOWN_REHEARSAL_BUILD: ${TOWN_REHEARSAL_BUILD:-off}
     restart: unless-stopped
     environment:
       PRESENCE_HOST: "0.0.0.0"
       PRESENCE_PORT: "8090"
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
       TEST_FIREWORKS: "${TEST_FIREWORKS:-off}"
+      TOWN_REHEARSAL_AT: "${TOWN_REHEARSAL_AT:-}"
     expose:
       - "8090"
     logging:

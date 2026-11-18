@@ -4,6 +4,7 @@ import { test, type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { createRehearsalClockEndpoint } from "../../src/presence/rehearsal-clock.js";
 import {
   decodeSnowballClientEvent, decodeSnowballEvents, encodeSnowballHit, encodeSnowballRelay, encodeSnowballThrow,
   type SnowballRelayEvent,
@@ -146,6 +147,35 @@ async function fixture(context: TestContext, config: Config = {}) {
 
   return { connect, connectRaw, join, server };
 }
+
+test("rehearsal clock is shared and read-only while presence keeps its real epoch", { timeout: 5000 }, async context => {
+  let wallNow = Date.parse("2026-11-18T12:00:00Z");
+  const target = "2026-12-31T23:59:50+08:00";
+  const requestListener = createRehearsalClockEndpoint(target, () => wallNow);
+  const { server, join } = await fixture(context, { requestListener });
+  const url = "http://127.0.0.1:" + server.address().port + "/presence/rehearsal-clock";
+  const samples = await Promise.all([fetch(url), fetch(url)]);
+  for (const response of samples) {
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.deepEqual(await response.json(), { ceremonyEpochMs: Date.parse(target) });
+  }
+  wallNow += 10_000;
+  assert.deepEqual(await (await fetch(url)).json(), { ceremonyEpochMs: Date.parse(target) + 10_000 });
+  assert.equal((await fetch(url, { method: "POST" })).status, 405);
+  const beforeJoin = Date.now();
+  const clients = await Promise.all([join("彩排观众甲"), join("彩排观众乙")]);
+  assert.ok(clients.every(({ epochMs }) => epochMs! >= beforeJoin && epochMs! <= Date.now()));
+});
+
+test("formal/default presence does not serve the rehearsal clock", { timeout: 5000 }, async context => {
+  assert.equal(createRehearsalClockEndpoint(undefined), undefined);
+  assert.throws(() => createRehearsalClockEndpoint("2026-12-31T23:59:50"), /explicit timezone/);
+  assert.throws(() => createRehearsalClockEndpoint("2026-02-30T23:59:50+08:00"), /explicit timezone/);
+  const { server } = await fixture(context);
+  const response = await fetch("http://127.0.0.1:" + server.address().port + "/presence/rehearsal-clock");
+  assert.equal(response.status, 404);
+});
 
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };
 

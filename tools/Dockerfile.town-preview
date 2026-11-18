@@ -6,7 +6,9 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY docs/p0-layout-draft.json /app/docs/p0-layout-draft.json
 COPY tools/voxel-tavern/ ./
 COPY src/presence/ /app/src/presence/
-RUN npm run build -- --mode town-preview
+ARG TOWN_REHEARSAL_BUILD=off
+RUN if [ "$TOWN_REHEARSAL_BUILD" = on ]; then npm run build -- --mode town-rehearsal; \
+    else npm run build -- --mode town-preview; fi
 
 FROM caddy:2-alpine
 ARG TOWN_RELEASE=local

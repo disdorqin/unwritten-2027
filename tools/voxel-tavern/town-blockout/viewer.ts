@@ -33,6 +33,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
 } from './town-ceremony';
+import { loadRehearsalClock } from './town-rehearsal-clock';
 import { createCeremonyFrost, hasFrostCeremonyRelief } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
@@ -836,9 +837,9 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   reducedMotion: reduceSnowEffects,
 });
 ceremonyFrost.mountSettings(element('town-panel-controls'));
-const ceremonyClock = createLocalCeremonyClock();
+const ceremonyClock = import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : createLocalCeremonyClock();
 const postUnlockTime = new Date(UNLOCK_AT).getTime();
-setPostOpeningReady(architecture.get('post-office'), ceremonyClock.now() >= postUnlockTime);
+setPostOpeningReady(architecture.get('post-office'), Date.now() >= postUnlockTime);
 const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
@@ -869,7 +870,7 @@ function handleCeremonyCue(cue: CeremonyCue) {
   ceremonyOverlay.cue(cue);
   switch (cue.type) {
     case 'mailbox-open':
-      if (cue.at === postUnlockTime) {
+      if (cue.at === postUnlockTime && Date.now() >= postUnlockTime) {
         setPostOpeningReady(architecture.get('post-office'), true);
         announceActivity('苏小满 · 时光信箱已开启，循红绸到邮局主箱读信。', true);
       }
@@ -2124,7 +2125,8 @@ renderer.setAnimationLoop(now => {
     towerBellSpot.label = reserveBell ? '仪式将启，静候钟声' : '拉绳敲钟';
   }
   if (ceremonyState.phase === 'climax') {
-    const elapsed = ceremonyState.now - ceremonyMidnight(ceremonyEveYear(ceremonyState.now));
+    const offset = ceremonyClock.utcOffsetMinutes;
+    const elapsed = ceremonyState.now - ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
     townLights.setCeremonyBand(Math.min(3, Math.floor(elapsed / 600)));
   } else {
     townLights.setCeremonyBand(ceremonyState.phase === 'afterglow' ? 3 : -1);
