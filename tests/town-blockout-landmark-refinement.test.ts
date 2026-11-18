@@ -9,6 +9,7 @@ import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { createTownPassport } from '../tools/voxel-tavern/town-blockout/town-passport.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
+import { RAILWAY_STATION_NAMES } from '../tools/voxel-tavern/town-blockout/town-rail-stops.ts';
 
 function canStandAt(group: ReturnType<typeof buildIceCastle>) {
   const { position, userData } = group;
@@ -60,16 +61,19 @@ test('station interaction spots stay aligned with the scaled model and the timet
   let now = Date.UTC(2026, 0, 1);
   const railway = createTownRailway(createTerrainGrid(), () => now);
   let stamp = '';
+  let title = '';
   let description = '';
   const spots = createRailwayStationSpots(station, {
-    open(_title, value) { description = value; return open(); },
+    open(heading, value) { title = heading; description = value; return open(); },
   }, railway, {
     hasExtension(id) { return stamp === id; },
     collectExtension(id) { stamp = id; return true; },
   }, canStandAt(station));
-  assert.equal(spots.length, 2);
+  assert.equal(spots.length, 3);
   assert.equal(spots[0].x, 513.3);
   assert.equal(spots[1].x, 538.8);
+  assert.equal(spots[2].x, 507.4);
+  assert.equal(spots[2].n, 326.9);
   spots[0].run();
   assert.equal(stamp, stationTicketStamp.id);
   assert.equal(spots[0].available?.(), false);
@@ -87,6 +91,12 @@ test('station interaction spots stay aligned with the scaled model and the timet
   railway.update(.06);
   spots[1].run();
   assert.match(description, /火车站前站：列车停靠中 · 请抓紧上下车/);
+  spots[2].run();
+  assert.equal(title, '全图玩法总台');
+  assert.deepEqual(description.split('\n\n').map(section => section.split(' · ')[0]), RAILWAY_STATION_NAMES);
+  assert.match(description, /滑冰、冰钓/);
+  assert.match(description, /城堡西门/);
+  assert.match(description, /室外双池泡汤/);
 });
 
 test('the railway ticket survives reload separately from the core passport reward', () => {

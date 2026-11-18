@@ -1,6 +1,7 @@
 import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
 import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
+import { railHallGuide } from './town-rail-copy';
 
 type Point = readonly [number, number, number];
 
@@ -19,6 +20,7 @@ const stationLocalPoint = ([x, y, z]: Point): Point => [x / museumHorizontalScal
 export const railwayStationStops = {
   ticketCounter: stationLocalPoint([-12.7, .14, -.14]),
   timetable: stationLocalPoint([12.8, .14, -4.7]),
+  guide: stationLocalPoint([-18.6, .14, 2.1]),
 };
 
 function stationBuilder() {
@@ -208,6 +210,9 @@ export function buildRailwayStation() {
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
   b.box(dark, 12.8, 3.8, -6.7, 8.7, 1.68, .18);
   b.sign(stationSignCopy.timetable, 12.8, 3.8, -6.59, 8.3, 1.36);
+  b.box(dark, -21.62, 3.42, 2.1, .21, 2.88, 5.96);
+  b.sign(railHallGuide.title, -21.5, 4.47, 2.1, 5.6, .56, Math.PI / 2);
+  b.sign(railHallGuide.board, -21.5, 3.1, 2.1, 5.6, 2.02, Math.PI / 2);
   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
   for (const x of [-15.5, -12.7, -9.9]) {

@@ -98,6 +98,7 @@ label, output, #help, #load-status { font-size: 12px; }
 #place-card::backdrop { background: #070d19ac; }
 #place-card h2 { margin: 0 28px 14px 0; font-size: 24px; }
 #place-card p { color: #cfdaeb; line-height: 1.6; }
+#place-text { white-space: pre-line; }
 .close-card { float: right; }
 #museum-card { color-scheme: light; width: min(560px,calc(100vw - 26px)); border: 1px solid #aa8860; border-radius: 10px; color: #392824; background: #f6eedc; padding: 25px 26px; box-shadow: 0 16px 45px #090f20a8; }
 #museum-card::backdrop { background: #0a101fab; }

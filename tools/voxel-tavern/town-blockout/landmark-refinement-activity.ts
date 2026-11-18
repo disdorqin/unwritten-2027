@@ -4,7 +4,7 @@ import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { iceThrone } from './landmark-ice-castle';
 import type { railwayStationStops } from './landmark-station';
 import { stationSignCopy } from './station-sign-copy';
-import { railHallCopy } from './town-rail-copy';
+import { railHallCopy, railHallGuide } from './town-rail-copy';
 import type { PassportStamp } from './town-passport';
 import type { createTownRailway } from './town-railway';
 import type { TownActivityContext, TownActivitySpot } from './town-activity';
@@ -32,6 +32,7 @@ export function createRailwayStationSpots(
   const stops = group.userData.stops as typeof railwayStationStops;
   const ticket = worldPoint(group, stops.ticketCounter);
   const board = worldPoint(group, stops.timetable);
+  const guide = worldPoint(group, stops.guide);
   const spots: TownActivitySpot[] = [
     {
       x: ticket.x, n: -ticket.z, ground: ticket.y, range: 1.35, label: '车票盖章',
@@ -45,6 +46,10 @@ export function createRailwayStationSpots(
         if (liveSchedule) liveSchedule(stationSignCopy.timetable, read);
         else context.open(stationSignCopy.timetable, read());
       },
+    },
+    {
+      x: guide.x, n: -guide.z, ground: guide.y, range: 1.35, label: `查看${railHallGuide.title}`,
+      run: () => { context.open(railHallGuide.title, railHallGuide.description); },
     },
   ];
   return spots.filter(({ x, n, ground }) => canStand(x, n, ground));

@@ -1,9 +1,44 @@
 import type { createTownRailway } from './town-railway';
-import { railSecondsText } from './town-rail-stops';
+import { railPlatforms, railSecondsText, type TownRailStopId } from './town-rail-stops';
 import { TOWN_STATION_NAME } from './station-sign-copy';
 
 type Railway = ReturnType<typeof createTownRailway>;
 type Stop = Railway['stops'][number];
+
+const railDestinationGuide = {
+  'coaster-station': {
+    activity: '候车、环镇观景',
+    route: '在站台时刻牌查看下一班。去站厅可搭一站，在火车站前站下车。',
+  },
+  'railway-station': {
+    activity: '车票盖章、查班次',
+    route: '从站台往东下楼，沿灯走到站厅。售票窗在西侧，时刻表在东侧。',
+  },
+  'forest-station': {
+    activity: '林间木屋、雪路散步',
+    route: '从木阶下站，沿有灯的林间小道进入木屋区。',
+  },
+  'lake-station': {
+    activity: '滑冰、冰钓',
+    route: '从北侧台阶离开站台，向冰湖南口走，从南岸下到冰面。',
+  },
+  'ice-castle': {
+    activity: '王座就座、取景',
+    route: '沿北向接驳道前行，顺着灯路走到城堡西门。',
+  },
+  'hot-spring': {
+    activity: '室外双池泡汤',
+    route: '向东下台阶，沿铺石转向北，到浴场西门。',
+  },
+} satisfies Record<TownRailStopId, { activity: string; route: string }>;
+
+const guideStops = railPlatforms.map(({ id, label }) => ({ label, ...railDestinationGuide[id] }));
+
+export const railHallGuide = {
+  title: '全图玩法总台',
+  board: guideStops.map(({ label, activity }) => `${label} · ${activity}`).join('\n'),
+  description: guideStops.map(({ label, activity, route }) => `${label} · ${activity}\n${route}`).join('\n\n'),
+};
 
 function rule(railway: Railway) {
   return `本线一圈约 ${railSecondsText(railway.cycleSeconds)} · 每站每圈停靠一次 · 停靠 ${railway.dwellSeconds} 秒`;
