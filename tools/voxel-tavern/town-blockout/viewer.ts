@@ -91,9 +91,12 @@ import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, lighthouseSnakeSite, postMousePosition } from './town-zodiac';
 import {
-  createTownZodiacSites, greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues,
-  towerDragonSite, workshopMonkeyClues,
+  greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues, towerDragonSite, workshopMonkeyClues,
 } from './town-zodiac-sites';
+import { createTownZodiacSites } from './town-zodiac-atlas';
+import { createZodiacDogPostcard } from './town-zodiac-dog';
+import { buildTigerZodiacAnchor, tigerZodiacSite } from './town-zodiac-tiger-anchor';
+import { marketOxSite } from './landmark-market';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -408,6 +411,8 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
+const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
+scene.add(tigerPine);
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
 let homeReturn: TownHousePortal | undefined;
@@ -435,7 +440,7 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -1401,6 +1406,8 @@ const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [
 activitySpots.push(
   zodiacSites.mount(architecture.get('glasshouse')!, greenhouseRabbitSite),
   zodiacSites.mount(architecture.get('lighthouse')!, lighthouseSnakeSite),
+  zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
+  zodiacSites.mount(tigerPine, tigerZodiacSite),
   zodiacSites.mount(tower, towerDragonSite(towerStops.lookout)),
   zodiacSites.mount(architecture.get('lantern-workshop')!, lanternWorkshopMonkeySite),
 );
@@ -2218,6 +2225,11 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       registerHomeDoors(extensionStreets.housePortals);
+      const dogMailbox = extensionStreets.dogMailbox;
+      if (dogMailbox) {
+        activitySpots.push(zodiacSites.mount(extensionStreets.group, dogMailbox.charm),
+          createZodiacDogPostcard(dogMailbox, activityContext));
+      }
     }).catch(error => {
       streetsRequested = false;
       console.error('Loading extension streets', error);
