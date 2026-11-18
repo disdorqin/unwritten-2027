@@ -1,7 +1,11 @@
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial, type Scene,
+  AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial,
+  type ColorRepresentation, type Scene,
 } from 'three';
 import { playTowerBell, playTowerChime } from '../tower-chime';
+import {
+  fireworksShowMs, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
+} from '../../../src/presence/firework-sites';
 
 type Burst = {
   time: number;
@@ -15,8 +19,19 @@ type Burst = {
   launch?: readonly [x: number, y: number, z: number];
 };
 
+type FireworksProgram = { duration: number; bursts: readonly Burst[] };
+
+export type FireworksTable = {
+  duration?: number;
+  bursts: readonly (Omit<Burst, 'outer' | 'inner' | 'launch'> & {
+    outer: ColorRepresentation;
+    inner: ColorRepresentation;
+    launchId?: string;
+  })[];
+  launchPoints: readonly { id: string; x: number; y?: number; z: number }[];
+};
+
 const countdown = 3;
-const duration = 15;
 const sparkCount = 96;
 const trailCount = 3;
 const lifetime = 2.65;
@@ -66,24 +81,85 @@ const ceremonyBursts: Record<CeremonyFireworksCue, readonly Burst[]> = {
 
 const burstTail = lifetime + .22;
 const workshopSparkCount = 36;
+const patterns = [
+  ['peony', 'ring', 'willow', 'peony', 'ring', 'peony', 'willow', 'ring', 'peony', 'willow', 'ring', 'willow', 'peony', 'ring', 'peony'],
+  ['ring', 'willow', 'peony', 'ring', 'willow', 'peony', 'ring', 'peony', 'willow', 'peony', 'willow', 'ring', 'willow', 'ring', 'peony'],
+  ['willow', 'peony', 'ring', 'willow', 'ring', 'willow', 'peony', 'peony', 'ring', 'willow', 'peony', 'ring', 'peony', 'willow', 'ring'],
+] as const;
+const playerBeatTimes = [.85, 2.05, 3.15, 4.30, 5.55, 6.50, 7.85, 8.95, 10.2, 11.25, 12.5, 13.65, 14.8, 15.85, 16.95];
+const themeColors = {
+  'gold-red': [
+    ['#ffb443', '#fff1c7'], ['#ff4f58', '#ffca62'], ['#ff7944', '#ffe4a1'],
+  ],
+  'ice-blue': [
+    ['#7ad9ff', '#d5fbff'], ['#30bbf4', '#b5f8ff'], ['#88efe9', '#e1fdff'],
+  ],
+  'pink-glow': [
+    ['#f599df', '#fff3f2'], ['#f780ae', '#ffd5e4'], ['#df8ffd', '#ffe8fb'],
+  ],
+} as const;
 
-function maxLiveBursts(sequence: readonly Burst[]) {
-  return Math.max(...sequence.map(({ time }) => {
-    const start = time - flight;
-    return sequence.filter(burst => start >= burst.time - flight && start <= burst.time + burstTail).length;
-  }));
+export function makePlayerFireworksTable(seed: number, theme: FireworksTheme): FireworksTable {
+  const shapePattern = patterns[seed % patterns.length];
+  const palette = themeColors[theme];
+  let rng = seed >>> 0;
+  function random() {
+    rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
+    return rng / 0x100000000;
+  }
+  const [x, y, z] = publicFireworksStand.launch;
+  return {
+    duration: fireworksShowMs / 1_000,
+    launchPoints: [{ id: 'plaza-stand', x, y, z }],
+    bursts: playerBeatTimes.map((time, index) => {
+      const [outer, inner] = palette[Math.floor(random() * palette.length)];
+      const offset = (index % 2 === 0 ? -1 : 1) * (3 + random() * 9);
+      return {
+        time: time + (index === 0 ? 0 : random() * .14 - .07), x: x + offset,
+        y: 38 + random() * 17, z: z - 10 + random() * 9, radius: 10 + random() * 5,
+        shape: shapePattern[index], outer, inner, launchId: 'plaza-stand',
+      };
+    }),
+  };
 }
 
-// Even an overlapping rehearsal, formal cues and workshop reward share one preallocated buffer.
-const capacity = (maxLiveBursts(previewBursts)
-  + Object.values(ceremonyBursts).reduce((total, sequence) => total + maxLiveBursts(sequence), 0))
-  * sparkCount * trailCount + workshopSparkCount * trailCount;
+function compileShow(table: FireworksTable): FireworksProgram | undefined {
+  const launchPoints = new Map(table.launchPoints.map(({ id, x, y = 15, z }) => [id, [x, y, z] as const]));
+  const bursts: Burst[] = [];
+  let end = 0;
+  for (const { launchId, outer, inner, ...burst } of table.bursts) {
+    const launch = launchId === undefined ? undefined : launchPoints.get(launchId);
+    if ((launchId !== undefined && !launch) || burst.time < 0 || burst.radius <= 0 ||
+        ![burst.time, burst.x, burst.y, burst.z, burst.radius].every(Number.isFinite) ||
+        (launch && !launch.every(Number.isFinite))) return undefined;
+    bursts.push({ ...burst, outer: new Color(outer), inner: new Color(inner), launch });
+    end = Math.max(end, burst.time + burstTail);
+  }
+  const duration = table.duration ?? end;
+  return bursts.length && Number.isFinite(duration) && duration > 0 ? { duration, bursts } : undefined;
+}
+
+const previewProgram: FireworksProgram = { duration: 15, bursts: previewBursts };
+const ceremonyPrograms = Object.fromEntries(Object.entries(ceremonyBursts).map(([cue, bursts]) =>
+  [cue, { duration: bursts.at(-1)!.time + burstTail, bursts }])) as Record<CeremonyFireworksCue, FireworksProgram>;
+
+function maxLiveBursts(program: FireworksProgram) {
+  return Math.max(0, ...program.bursts.map(({ time }) => {
+    const start = Math.max(0, time - flight);
+    return start >= program.duration ? 0 : program.bursts.filter(burst =>
+      start >= burst.time - flight && start <= burst.time + burstTail).length;
+  }));
+}
 
 export function createFestival(
   scene: Scene,
   setMessage: (message: string) => void = () => {},
   complete?: () => void,
 ) {
+  // One rehearsal or player show, or the three concurrent acts of the same ceremony.
+  const ceremonyPeak = Object.values(ceremonyPrograms).reduce((total, program) => total + maxLiveBursts(program), 0);
+  const maxShowBursts = Math.max(playerBeatTimes.length, ceremonyPeak, maxLiveBursts(previewProgram));
+  const capacity = maxShowBursts * sparkCount * trailCount + workshopSparkCount * trailCount;
   const positions = new Float32Array(capacity * 3);
   const colors = new Float32Array(capacity * 3);
   const strengths = new Float32Array(capacity);
@@ -98,6 +174,7 @@ export function createFestival(
   geometry.setAttribute('strength', strengthBuffer);
   geometry.setAttribute('radius', radiusBuffer);
   geometry.setDrawRange(0, 0);
+  const buffers = [positionBuffer, colorBuffer, strengthBuffer, radiusBuffer];
   const material = new ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -137,7 +214,8 @@ export function createFestival(
   scene.add(sparks);
 
   let elapsed = -1;
-  const ceremonyTracks = new Map<CeremonyFireworksCue, number>();
+  const tracks = new Map<FireworksProgram, number>();
+  let playerProgram: FireworksProgram | undefined;
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
   let message = '';
@@ -221,19 +299,49 @@ export function createFestival(
     }
   }
 
+  function launch(program: FireworksProgram, ageSeconds: number) {
+    if (tracks.has(program) || !Number.isFinite(ageSeconds) || ageSeconds >= program.duration) return false;
+    tracks.set(program, ageSeconds);
+    return true;
+  }
+
+  function stopPreview() {
+    if (elapsed < 0) return;
+    elapsed = -1;
+    announce('');
+  }
+
+  function startShow(table: FireworksTable, opts: { ageSeconds?: number; interruptPreview?: boolean } = {}) {
+    if (tracks.size || (elapsed >= 0 && !opts.interruptPreview)) return false;
+    const program = compileShow(table);
+    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0)) return false;
+    stopPreview();
+    playerProgram = program;
+    return true;
+  }
+
   return {
+    startShow,
+    showActive() { return elapsed >= 0 || tracks.size > 0; },
     enableAudio() { void tryEnableAudio(); },
     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
     },
     launchCeremony(cue: CeremonyFireworksCue, ageSeconds = 0) {
-      const sequence = ceremonyBursts[cue];
-      if (ceremonyTracks.has(cue) || !Number.isFinite(ageSeconds) || ageSeconds >= sequence.at(-1)!.time + burstTail) return false;
-      ceremonyTracks.set(cue, Math.max(0, ageSeconds));
+      if (!launch(ceremonyPrograms[cue], ageSeconds)) return false;
+      stopPreview();
+      if (playerProgram) {
+        tracks.delete(playerProgram);
+        playerProgram = undefined;
+      }
       return true;
     },
+    launchPublicFireworks(seed: number, theme: FireworksTheme, ageSeconds = 0) {
+      if (!isFireworksSeed(seed) || !isFireworksTheme(theme)) return false;
+      return startShow(makePlayerFireworksTable(seed, theme), { ageSeconds, interruptPreview: true });
+    },
     start() {
-      if (elapsed >= 0) return false;
+      if (elapsed >= 0 || tracks.size) return false;
       elapsed = 0;
       tryEnableAudio();
       announce('3');
@@ -273,7 +381,7 @@ export function createFestival(
     },
     active() { return elapsed >= 0; },
     update(dt: number) {
-      if (elapsed < 0 && !workshop && !ceremonyTracks.size) return;
+      if (elapsed < 0 && !workshop && !tracks.size) return;
       const delta = Math.max(0, dt);
       used = 0;
       if (elapsed >= 0) {
@@ -285,21 +393,22 @@ export function createFestival(
           if (previous < countdown && audio) playTowerChime(audio, 0, 3);
           const time = elapsed - countdown;
           announce(time < 3.8 ? '新年快乐！' : '');
-          if (time >= duration) {
+          if (time >= previewProgram.duration) {
             elapsed = -1;
             complete?.();
           } else {
-            drawSequence(previewBursts, time);
+            drawSequence(previewProgram.bursts, time);
           }
         }
       }
-      for (const [cue, age] of ceremonyTracks) {
-        const sequence = ceremonyBursts[cue];
+      for (const [program, age] of tracks) {
         const time = age + delta;
-        if (time >= sequence.at(-1)!.time + burstTail) ceremonyTracks.delete(cue);
-        else {
-          ceremonyTracks.set(cue, time);
-          drawSequence(sequence, time);
+        if (time >= program.duration) {
+          tracks.delete(program);
+          if (program === playerProgram) playerProgram = undefined;
+        } else {
+          tracks.set(program, time);
+          if (time >= 0) drawSequence(program.bursts, time);
         }
       }
       if (workshop) {
@@ -310,10 +419,11 @@ export function createFestival(
       sparks.visible = used > 0;
       geometry.setDrawRange(0, used);
       if (!sparks.visible) return;
-      positionBuffer.needsUpdate = true;
-      colorBuffer.needsUpdate = true;
-      strengthBuffer.needsUpdate = true;
-      radiusBuffer.needsUpdate = true;
+      for (const buffer of buffers) {
+        buffer.clearUpdateRanges();
+        buffer.addUpdateRange(0, used * buffer.itemSize);
+        buffer.needsUpdate = true;
+      }
     },
   };
 }

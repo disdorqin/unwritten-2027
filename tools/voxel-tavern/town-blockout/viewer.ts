@@ -27,6 +27,7 @@ import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival } from './festival';
+import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
 } from './town-ceremony';
@@ -630,8 +631,15 @@ function announceActivity(message: string, gold = false) {
   }, 4200);
 }
 const presence = createTownPresence(scene, camera, announceActivity);
+const fireworks = createTownFireworksActivity({ open: activityContext.open, announce: announceActivity }, grid, (seed, theme) => {
+  if (!presence.requestFireworks(seed, theme) && festival.launchPublicFireworks(seed, theme)) fireworks.markStarted();
+}, festival.showActive);
+presence.onFireworks((seed, theme, ageMs, own) => {
+  if (own) fireworks.markStarted(ageMs);
+  festival.launchPublicFireworks(seed, theme, ageMs / 1000);
+});
 activities.unshift(tavernActivity);
-activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
+activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 const activitySpots = activities.flatMap(activity => activity.spots);
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {

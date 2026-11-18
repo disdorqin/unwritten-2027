@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
+import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
 type Instance = { at: Position; scale: Position; tint?: string };
@@ -133,6 +134,28 @@ export function addScenery(group: Group, grid: Ground) {
       nextLamp -= length;
     }
   }
+
+  const { east: fireworkX, fixtureNorth: fireworkNorth } = publicFireworksStand;
+  const fireworkGround = grid.heightAt(fireworkX, fireworkNorth);
+  const standPiece = (dx: number, dy: number, dz: number, scale: Position, tint: string) => {
+    caps.push({ at: [fireworkX + dx, fireworkGround + dy, -fireworkNorth + dz], scale, tint });
+  };
+  standPiece(0, .09, 0, [1.66, .18, 1.10], '#596679');
+  standPiece(0, .20, 0, [1.56, .08, 1.02], '#8791a2');
+  standPiece(0, .36, 0, [1.30, .25, .92], '#455166');
+  for (const dx of [-.60, .60]) for (const dz of [-.37, .37]) {
+    standPiece(dx, .36, dz, [.13, .25, .13], '#98704e');
+  }
+  standPiece(0, .51, 0, [1.42, .08, .98], '#8f969f');
+  standPiece(0, .562, -.42, [1.3, .032, .09], '#c39556');
+  standPiece(-.50, .73, -.16, [.08, .36, .09], '#6e4d3e');
+  standPiece(-.50, .91, -.16, [.20, .13, .15], '#bd8e55');
+  for (const dx of [-.36, 0, .36]) {
+    standPiece(dx, .69, .13, [.22, .24, .22], '#7f4a43');
+    standPiece(dx, .83, .13, [.26, .07, .26], '#a87549');
+    standPiece(dx, .865, .13, [.147, .021, .147], '#362631');
+  }
+  blockers.push({ x: fireworkX, n: fireworkNorth, radius: 1.0 });
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();

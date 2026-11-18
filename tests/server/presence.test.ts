@@ -8,7 +8,10 @@ const recordBytes = 12;
 const messageTimeout = 3500;
 type Pose = { east: number; north: number; height: number; yaw: number; sequence: number };
 type Record = Pose & { id: number };
-type Control = { type: string; id?: number; name?: string; self?: boolean };
+type Control = {
+  type: string; id?: number; name?: string; self?: boolean; epochMs?: number; sentAt?: number;
+  kind?: string; from?: number; seed?: number; theme?: string; startAt?: number; reason?: string; waitMs?: number;
+};
 
 function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T) {
   const ready = new EventEmitter();
@@ -117,6 +120,47 @@ async function fixture(context: TestContext, config: Config = {}) {
 }
 
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };
+
+test("public fireworks publish one identical timed event and reject an early or distant start", { timeout: 7000 }, async context => {
+  const { join } = await fixture(context);
+  const first = await join("广场玩家");
+  const second = await join("广场观众");
+  const distant = await join("湖岸游客");
+  const launch = (client: Awaited<ReturnType<typeof join>>) => client.socket.send(JSON.stringify({ type: "event", kind: "fireworks", seed: 35083, theme: "ice-blue" }));
+  for (const client of [first, second]) client.socket.send(encodePose({ ...pose, east: 20400, north: 17400 }));
+  distant.socket.send(encodePose({ ...pose, east: 35000, north: 10000 }));
+  launch(first);
+  const events = await Promise.all([first, second, distant].map(client =>
+    client.text.next(message => message.type === "event" && message.kind === "fireworks")));
+  assert.deepEqual(events[0], events[1]);
+  assert.deepEqual(events[1], events[2]);
+  assert.equal(events[0].from, first.id);
+  assert.equal(events[0].seed, 35083);
+  assert.equal(events[0].theme, "ice-blue");
+  assert.ok(Number.isSafeInteger(events[0].startAt));
+  launch(second);
+  const cooldown = await second.text.next(message => message.type === "fireworks-rejected");
+  assert.equal(cooldown.reason, "cooldown");
+  assert.ok(cooldown.waitMs! > 0 && cooldown.waitMs! <= 20_250);
+  launch(distant);
+  assert.equal((await distant.text.next(message => message.type === "fireworks-rejected")).reason, "position");
+});
+
+test("presence returns a common server epoch to separately connected train riders", { timeout: 7000 }, async context => {
+  const { join } = await fixture(context);
+  const first = await join("未写镇站");
+  const second = await join("温泉站");
+  const before = Date.now();
+  first.socket.send(JSON.stringify({ type: "clock", sentAt: 100 }));
+  second.socket.send(JSON.stringify({ type: "clock", sentAt: 100_100 }));
+  const [one, two] = await Promise.all([
+    first.text.next(message => message.type === "clock"),
+    second.text.next(message => message.type === "clock"),
+  ]);
+  assert.deepEqual([one.sentAt, two.sentAt], [100, 100_100]);
+  for (const sample of [one, two]) assert.ok(sample.epochMs! >= before && sample.epochMs! <= Date.now());
+  assert.ok(Math.abs(one.epochMs! - two.epochMs!) < 100);
+});
 
 test("presence limits a movement burst and accepts updates after the allowance refills", { timeout: 7000 }, async context => {
   const { join } = await fixture(context);

@@ -7,6 +7,9 @@ import {
   BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
+import {
+  fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
+} from './firework-sites.js';
 
 type Options = {
   host?: string;
@@ -28,6 +31,9 @@ type Peer = {
   alive: boolean;
   tokens: number;
   tokenAt: number;
+  nextClockSample: number;
+  nextFireworksRequest: number;
+  nextPersonalFireworks: number;
 };
 
 const centimetresPerCell = CELL_METRES * 100;
@@ -56,6 +62,7 @@ export async function createPresenceServer(options: Options = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
   const http = createServer((_req, res) => { res.writeHead(404).end(); });
   const peers = new Map<number, Peer>();
+  let fireworksOccupiedUntil = 0;
   let nextId = 1;
   let online = 0;
   let tier = tiers[0];
@@ -81,12 +88,52 @@ export async function createPresenceServer(options: Options = {}) {
     broadcast(JSON.stringify({ type: 'leave', id: peer.id }), peer);
   }
 
+  function requestFireworks(peer: Peer, seed: number, theme: FireworksTheme) {
+    const now = performance.now();
+    if (now < peer.nextFireworksRequest) return;
+    peer.nextFireworksRequest = now + 500;
+    const position = peer.record;
+    const { east, north } = publicFireworksStand;
+    // Allow one sample of walking between the advertised stand and the latest pose.
+    if (!position ||
+        (position.east / 100 - east) ** 2 + (position.north / 100 - north) ** 2 > (fireworksSiteRangeMetres + .7) ** 2) {
+      send(peer, JSON.stringify({ type: 'fireworks-rejected', reason: 'position' }));
+      return;
+    }
+    const waitMs = Math.max(fireworksOccupiedUntil, peer.nextPersonalFireworks) - now;
+    if (waitMs > 0) {
+      send(peer, JSON.stringify({ type: 'fireworks-rejected', reason: 'cooldown', waitMs: Math.ceil(waitMs) }));
+      return;
+    }
+    const startDelayMs = 250;
+    fireworksOccupiedUntil = now + startDelayMs + fireworksShowMs;
+    peer.nextPersonalFireworks = now + startDelayMs + fireworksCooldownMs;
+    const event = JSON.stringify({
+      type: 'event', kind: 'fireworks', from: peer.id, seed, theme, startAt: Date.now() + startDelayMs,
+    });
+    for (const recipient of peers.values()) if (recipient.name) send(recipient, event);
+  }
+
   function receiveText(peer: Peer, bytes: Uint8Array) {
     let message: unknown;
     try { message = JSON.parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')); }
     catch { peer.socket.close(1008); return; }
     if (!message || typeof message !== 'object' || !('type' in message)) {
       peer.socket.close(1008);
+      return;
+    }
+    if (message.type === 'event' && 'kind' in message && message.kind === 'fireworks' && peer.name) {
+      if ('seed' in message && isFireworksSeed(message.seed) && 'theme' in message && isFireworksTheme(message.theme)) {
+        requestFireworks(peer, message.seed, message.theme);
+      }
+      return;
+    }
+    if (message.type === 'clock' && peer.name && 'sentAt' in message &&
+        typeof message.sentAt === 'number' && Number.isFinite(message.sentAt) && message.sentAt >= 0) {
+      const now = performance.now();
+      if (now < peer.nextClockSample) return;
+      peer.nextClockSample = now + 750;
+      send(peer, JSON.stringify({ type: 'clock', sentAt: message.sentAt, epochMs: Date.now() }));
       return;
     }
     if (message.type === 'leave' && peer.name) {
@@ -102,7 +149,7 @@ export async function createPresenceServer(options: Options = {}) {
     clearTimeout(peer.joinTimer);
     peer.name = name;
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), fireworks: true }));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name }));
     }
@@ -187,7 +234,7 @@ export async function createPresenceServer(options: Options = {}) {
       nextId = nextId % 65535 + 1;
       const peer: Peer = {
         socket: ws, id, visible: [], version: 0, alive: true, tokens: rateBurst,
-        tokenAt: performance.now(), joinTimer: setTimeout(() => ws.close(1008), 5000),
+        tokenAt: performance.now(), nextClockSample: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0, joinTimer: setTimeout(() => ws.close(1008), 5000),
       };
       peers.set(id, peer);
       ws.on('error', () => { remove(peer); ws.terminate(); });

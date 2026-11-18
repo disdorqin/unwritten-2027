@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Color, PerspectiveCamera, Scene, type InstancedMesh, type Points, type ShaderMaterial } from 'three';
-import { createFestival } from '../tools/voxel-tavern/town-blockout/festival.ts';
+import { createFestival, makePlayerFireworksTable } from '../tools/voxel-tavern/town-blockout/festival.ts';
 import { createSnowfall } from '../tools/voxel-tavern/town-blockout/snowfall.ts';
 import { createTownLights } from '../tools/voxel-tavern/town-blockout/town-lights.ts';
+import { createTownFireworksActivity } from '../tools/voxel-tavern/town-blockout/town-fireworks-activity.ts';
+import { canEnter, createTerrainGrid, isWater } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand } from '../src/presence/firework-sites.ts';
 
 test('the workshop reward uses the plaza particles without starting or interrupting the main show', () => {
   const scene = new Scene();
@@ -143,4 +146,91 @@ test('ceremony glow waves and dimming leave the collecting progress and storage 
     if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor);
     else Reflect.deleteProperty(globalThis, 'localStorage');
   }
+});
+
+test('three themed player shows reproduce 15 seeded bursts at the same shared stage', () => {
+  assert.equal(isFireworksTheme('toString'), false);
+  assert.equal(isFireworksTheme('ice-blue'), true);
+  assert.equal(isFireworksSeed(0x100000000), false);
+  assert.equal(isFireworksSeed(0xffffffff), true);
+
+  const seed = 0x83745fa7;
+  const gold = makePlayerFireworksTable(seed, 'gold-red');
+  for (const theme of ['gold-red', 'ice-blue', 'pink-glow'] as const) {
+    const table = makePlayerFireworksTable(seed, theme);
+    assert.deepEqual(table, makePlayerFireworksTable(seed, theme));
+    assert.notDeepEqual(table, makePlayerFireworksTable(seed + 1, theme));
+    assert.equal(table.duration, fireworksShowMs / 1_000);
+    assert.equal(table.bursts.length, 15);
+    assert.ok(table.bursts.every(burst => burst.y >= 38 && burst.y <= 55 && burst.radius >= 10 && burst.radius <= 15));
+    assert.deepEqual(table.bursts.map(({ time, shape }) => [time, shape]), gold.bursts.map(({ time, shape }) => [time, shape]));
+    if (theme !== 'gold-red') assert.notEqual(table.bursts[0].outer, gold.bursts[0].outer);
+  }
+  const scene = new Scene();
+  const festival = createFestival(scene);
+  const particles = scene.children[0] as Points;
+  assert.equal(festival.launchPublicFireworks(seed, 'gold-red', 20), false);
+  assert.equal(festival.launchPublicFireworks(seed, 'gold-red', -.25), true);
+  assert.equal(festival.launchPublicFireworks(seed + 1, 'ice-blue'), false);
+  assert.equal(festival.start(), false);
+  assert.equal(festival.active(), false);
+  assert.equal(festival.showActive(), true);
+  festival.update(.2);
+  assert.equal(particles.visible, false);
+  festival.update(.2);
+  assert.equal(particles.visible, true);
+  assert.equal(scene.children.length, 1);
+  festival.update(20);
+  assert.equal(festival.showActive(), false);
+  assert.equal(particles.visible, false);
+});
+
+test('startShow honors authored launch points, burst count, duration and color', () => {
+  const scene = new Scene();
+  const festival = createFestival(scene);
+  const sparks = scene.children[0] as Points;
+  assert.equal(festival.startShow({
+    duration: 1.4,
+    launchPoints: [{ id: 'left', x: 110, z: -200 }, { id: 'right', x: 330, z: -390 }],
+    bursts: [
+      { time: .85, x: 117, y: 40, z: -200, radius: 9, shape: 'ring', outer: '#00ff00', inner: '#0000ff', launchId: 'left' },
+      { time: .85, x: 340, y: 40, z: -392, radius: 9, shape: 'ring', outer: '#ffff00', inner: '#ff00ff', launchId: 'right' },
+    ],
+  }), true);
+  festival.update(.25);
+  const positions = sparks.geometry.getAttribute('position');
+  assert.equal(sparks.geometry.drawRange.count, 12);
+  assert.ok(positions.getX(0) < 117 && positions.getX(6) > 330);
+  festival.update(.7);
+  const colors = sparks.geometry.getAttribute('sparkColor');
+  assert.deepEqual([colors.getX(0), colors.getY(0), colors.getZ(0)], [0, 0, 1]);
+  assert.deepEqual([colors.getX(3), colors.getY(3), colors.getZ(3)], [0, 1, 0]);
+  festival.update(.5);
+  assert.equal(sparks.geometry.drawRange.count, 0);
+});
+
+test('the southern plaza has one public spot and its accepted request starts the personal cooldown', () => {
+  const grid = createTerrainGrid();
+  let time = 100;
+  const notices: string[] = [];
+  let busy = true;
+  const fireworks = createTownFireworksActivity({
+    announce: notice => notices.push(notice),
+    open() { throw new Error('The cooldown or lock must prevent opening the theme menu'); },
+  }, grid, () => assert.fail('The locked platform must not request a show'), () => busy, () => time);
+  assert.equal(fireworks.spots.length, 1);
+  const [spot] = fireworks.spots;
+  assert.equal(canEnter(spot.x, spot.n), true);
+  assert.equal(isWater(spot.x, spot.n), false);
+  assert.deepEqual([spot.x, spot.n, spot.range], [publicFireworksStand.east, publicFireworksStand.north, fireworksSiteRangeMetres]);
+  assert.equal(spot.label, '点放一场烟花');
+  spot.run();
+  assert.match(notices.at(-1) ?? '', /已有一场/);
+  busy = false;
+  fireworks.markStarted(500);
+  spot.run();
+  assert.match(notices.at(-1) ?? '', /烟花师傅在装填.*90 秒/);
+  time += fireworksCooldownMs - 2000;
+  spot.run();
+  assert.match(notices.at(-1) ?? '', /烟花师傅在装填.*2 秒/);
 });

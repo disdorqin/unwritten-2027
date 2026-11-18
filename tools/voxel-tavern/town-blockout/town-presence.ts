@@ -1,6 +1,8 @@
 import type { PerspectiveCamera, Scene } from 'three';
 import { createPresenceAvatars } from './town-presence-avatars';
+import { createTownPresenceClock } from './town-presence-clock';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
+import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
@@ -21,6 +23,13 @@ function guestName() {
 }
 
 export function createTownPresence(scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void) {
+  const clock = createTownPresenceClock();
+  let fireworksSupported = false;
+  let ownId = 0;
+  let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
+  let clockSamples = false;
+  let clockRequest: number | undefined;
+  let nextClockSample = Infinity;
   const label = guestName();
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
@@ -47,6 +56,10 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     const active = socket;
     socket = undefined;
     haveId = false;
+    fireworksSupported = false;
+    clockSamples = false;
+    clockRequest = undefined;
+    nextClockSample = Infinity;
     roster.clear();
     actors.clear();
     renderList.length = 0;
@@ -61,13 +74,46 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
 
   function receive(data: unknown) {
     if (typeof data === 'string') {
-      let message: { type?: string; id?: number; name?: string; self?: boolean };
+      let message: {
+        type?: string; id?: number; name?: string; self?: boolean; epochMs?: number; sentAt?: number;
+        fireworks?: boolean; kind?: string; seed?: number; theme?: FireworksTheme; startAt?: number;
+        from?: number; reason?: string; waitMs?: number;
+      };
       try { message = JSON.parse(data); } catch { return; }
-      if (!message || !Number.isInteger(message.id) || message.id! < 1 || message.id! > 65535) return;
+      if (!message) return;
+      if (message.type === 'event' && message.kind === 'fireworks') {
+        if (haveId && isFireworksSeed(message.seed) && isFireworksTheme(message.theme) &&
+            Number.isSafeInteger(message.startAt)) {
+          playFireworks?.(message.seed, message.theme, clock.now() - message.startAt!, message.from === ownId);
+        }
+        return;
+      }
+      if (message.type === 'fireworks-rejected') {
+        if (!haveId) return;
+        if (message.reason === 'cooldown' && Number.isFinite(message.waitMs)) {
+          announce(`烟花师傅在装填 · ${Math.ceil(message.waitMs! / 1000)} 秒`);
+        } else if (message.reason === 'position') announce('请靠近烟花燃放点再试');
+        return;
+      }
+      if (message.type === 'clock') {
+        if (haveId && clockRequest !== undefined && message.sentAt === clockRequest && typeof message.epochMs === 'number') {
+          clock.accept(message.epochMs, clockRequest);
+          clockRequest = undefined;
+        }
+        return;
+      }
+      if (!Number.isInteger(message.id) || message.id! < 1 || message.id! > 65535) return;
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
           haveId = true;
+          ownId = id;
+          fireworksSupported = message.fireworks === true;
+          if (typeof message.epochMs === 'number') {
+            clock.accept(message.epochMs);
+            clockSamples = true;
+            nextClockSample = 0;
+          }
           if (timeout !== undefined) window.clearTimeout(timeout);
           timeout = undefined;
           lastPosition = lastHeightYaw = -1;
@@ -120,6 +166,17 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     } catch { disconnect(false); }
   }
 
+  function sampleClock() {
+    const active = socket;
+    if (!clockSamples || active?.readyState !== WebSocket.OPEN) return;
+    const now = performance.now();
+    if (now < nextClockSample || active.bufferedAmount > maximumBufferedBytes) return;
+    nextClockSample = now + 60_000;
+    clockRequest = now;
+    try { active.send(JSON.stringify({ type: 'clock', sentAt: now })); }
+    catch { disconnect(false); }
+  }
+
   function sendPose(dt: number) {
     const active = socket;
     if (!haveId || active?.readyState !== WebSocket.OPEN) return;
@@ -146,6 +203,16 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   });
 
   return {
+    serverNow: clock.now,
+    onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
+      playFireworks = handler;
+    },
+    requestFireworks(seed: number, theme: FireworksTheme) {
+      if (!fireworksSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return false;
+      try { socket.send(JSON.stringify({ type: 'event', kind: 'fireworks', seed, theme })); }
+      catch { disconnect(false); return false; }
+      return true;
+    },
     sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
       show = visible;
       if (active) {
@@ -170,6 +237,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     update(dt: number) {
       if (!socket) return;
       sendPose(dt);
+      sampleClock();
       if (!show || !actors.size) { avatars?.clear(); return; }
       avatars ??= createPresenceAvatars(scene, camera);
       const now = performance.now();
