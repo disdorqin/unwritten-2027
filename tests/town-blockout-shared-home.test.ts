@@ -1,5 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { townResidentPostcards } from '../tools/voxel-tavern/town-blockout/town-resident-postcards.ts';
+
+test('the shared home includes the twelve manuscript postcards verbatim', () => {
+  const manuscript = readFileSync(new URL('../docs/交流区/Muse/NPC补供稿-小二明信片生肖线索-v1.md', import.meta.url), 'utf8');
+  const cards = [...manuscript.matchAll(/^\|\s*\d+\s*\|\s*(.*?)\s*·\s*(.*?)\s*\|\s*(.*?)（\d+）\s*\|/gm)]
+    .map(([, author, place, body]) => ({ author, place, body }));
+  assert.equal(cards.length, 12);
+  assert.deepEqual(townResidentPostcards, cards);
+  assert.ok(cards.every(({ body }) => [...body].length <= 40));
+});
 import {
   buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable,
 } from '../tools/voxel-tavern/town-blockout/landmark-shared-home.ts';

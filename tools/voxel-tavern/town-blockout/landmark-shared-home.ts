@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D } from 'three';
 import { sharedHomeLayer, sharedHomeOrigin } from '../../../src/presence/shared-home-space';
 import type { Box } from './landmark-kit';
+import { townResidentPostcards } from './town-resident-postcards';
 import type { TownActivityContext, TownActivitySpot } from './town-activity';
 
 const halfWidth = 7;
@@ -74,6 +75,21 @@ function readPostcards() {
 function openPostcardWall(context: Pick<TownActivityContext, 'open'>) {
   readPostcards();
   const panel = context.open('屋舍明信片墙', '把想留在小镇的一句话写成明信片。贴在这面墙上的文字会保存在本机。');
+  const residentTitle = document.createElement('h3');
+  residentTitle.textContent = '镇民明信片';
+  const residents = document.createElement('ol');
+  residents.className = 'town-mail-list';
+  for (const { author, place, body } of townResidentPostcards) {
+    const card = document.createElement('li');
+    const byline = document.createElement('strong');
+    byline.textContent = `${author} · ${place}`;
+    const message = document.createElement('div');
+    message.textContent = body;
+    card.append(byline, message);
+    residents.append(card);
+  }
+  const playerTitle = document.createElement('h3');
+  playerTitle.textContent = '我留下的明信片';
   const list = document.createElement('ol');
   list.className = 'town-mail-list';
   const form = document.createElement('form');
@@ -110,7 +126,7 @@ function openPostcardWall(context: Pick<TownActivityContext, 'open'>) {
     view();
   });
   form.append(field, submit, status);
-  panel.append(list, form);
+  panel.append(residentTitle, residents, playerTitle, list, form);
   view();
 }
 
