@@ -7,6 +7,7 @@ import { createTavernMixProps } from './tavern-mix-props';
 
 const mixSeconds = 2.2;
 type MixSession = {
+  generation: number;
   panel: HTMLElement;
   dialog: HTMLDialogElement | null;
   view: ReturnType<typeof renderTavernMixPanel>;
@@ -37,13 +38,35 @@ export function createTavernActivity(context: TownActivityContext) {
   let props: ReturnType<typeof createTavernMixProps> | undefined;
   let session: MixSession | undefined;
   let held: TavernRecipe | undefined;
+  // Session generation guard (R3-D2): every openMixer() bumps the generation.
+  // Delayed cleanup paths (the shared dialog's 'close' event, which the
+  // browser dispatches asynchronously, and the frame-loop guard) must only
+  // ever tear down the session they belong to. The dialog is the viewer's
+  // single shared #place-card element, so a 'close' event queued by an older
+  // session's take() can be dispatched after a new session has already opened
+  // on the same element; attributing each programmatic close to the
+  // generation that requested it keeps that stale event from killing the new
+  // session (whose mix() would then refuse every submission).
+  let sessionGeneration = 0;
+  let closingGeneration: number | undefined;
+  let wiredDialog: HTMLDialogElement | null = null;
 
-  function closeMixer() {
+  function closeMixer(generation?: number) {
     if (!session) return;
+    if (generation !== undefined && session.generation !== generation) return;
     session.view.cancel();
     session.dialog?.classList.remove('tavern-mix-card');
     session = undefined;
     props?.hide();
+  }
+
+  function onDialogClose() {
+    const closing = closingGeneration;
+    closingGeneration = undefined;
+    // A close initiated by an older session (take() -> dialog.close()) says
+    // nothing about a newer session now using the same dialog: skip it.
+    if (closing !== undefined && session && session.generation !== closing) return;
+    closeMixer();
   }
 
   function openMixer() {
@@ -55,6 +78,7 @@ export function createTavernActivity(context: TownActivityContext) {
     const dialog = panel.closest('dialog');
     dialog?.classList.add('tavern-mix-card');
     const current: MixSession = {
+      generation: ++sessionGeneration,
       panel, dialog,
       view: renderTavernMixPanel(panel, {
         ids: book.ids,
@@ -74,13 +98,23 @@ export function createTavernActivity(context: TownActivityContext) {
           current.served = undefined;
           props?.hide();
           context.announce(`端起了「${held.name}」，离开吧台后可以喝一口。`);
+          // Attribute the queued 'close' event to this session's generation
+          // before closing, so the shared-dialog handler can tell it apart
+          // from a genuine close of any newer session.
+          closingGeneration = current.generation;
           dialog?.close();
           return true;
         },
       }),
     };
     session = current;
-    dialog?.addEventListener('close', () => { if (session === current) closeMixer(); }, { once: true });
+    // One permanent close handler per dialog element (the viewer reuses a
+    // single shared dialog); per-session { once: true } listeners would also
+    // fire for a previous session's still-queued close event.
+    if (dialog && dialog !== wiredDialog) {
+      wiredDialog = dialog;
+      dialog.addEventListener('close', onDialogClose);
+    }
   }
 
   spots.push({
@@ -106,7 +140,7 @@ export function createTavernActivity(context: TownActivityContext) {
       const current = session;
       if (!current) return;
       if (!current.panel.isConnected || current.dialog?.open === false) {
-        closeMixer();
+        closeMixer(current.generation);
         return;
       }
       const mix = current.active;

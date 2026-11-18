@@ -96,8 +96,9 @@ export function addScenery(group: Group, grid: Ground) {
     }
   }
   for (const bridge of layout.bridges) {
-    for (const x of [bridge.west + 1, bridge.east - 1]) {
-      for (const north of [bridge.north - 3.7, bridge.north + 3.7]) lamp(x, bridge.height, north);
+    // Off the deck: on-deck lamps block the +-3.5 m edge lanes at the heads.
+    for (const x of [bridge.west - 1.2, bridge.east + 1.2]) {
+      for (const north of [bridge.north - 3.7, bridge.north + 3.7]) lamp(x, grid.heightAt(x, north), north);
     }
   }
 

@@ -98,10 +98,23 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     }
     let walkHeight = y < 4 ? ground : mezzanine;
     let approach: [number, number] | undefined;
+    if (y < 4 && !alongX && side === 1 && u > 0) {
+      // East ground-floor window beside the stair run: the default stand
+      // point (1.4 m inside the face) lands inside the staircase volume,
+      // so operate this window from the hall floor south of the stairs.
+      approach = [5.25, 5.95];
+    }
     if (y > 4 && side === 1 && (alongX || u > 0)) {
       const pull = alongX ? u + (u === 0 ? 0 : 1.03) : u;
       walkHeight = alongX ? ground : ground + (mezzanine - ground) * 5 / 16;
-      approach = alongX ? [pull, front - 1.55] : [5.25, 2.59];
+      // East upper window (u > 0): stand on the 5th stair tread, whose top is
+      // exactly walkHeight (ground + 5 x 0.24 rise). The tread centre
+      // (z = 2.59) still fails: the body radius (0.27 m) reaches the 6th
+      // tread's box (its south edge is at z = 2.3475, only 0.2425 m away), so
+      // the stand point reads as obstructed / supported at that tread's top.
+      // Moving 0.14 m along the run to z = 2.73 keeps the body clear of the
+      // 6th tread (0.3825 m) while the support stays the 5th tread's top.
+      approach = alongX ? [pull, front - 1.55] : [5.25, 2.73];
       const bottom = walkHeight + 1.47;
       const length = y - h / 2 - bottom;
       block('timber', pull, bottom + length / 2, .032, length, .032, -.3);

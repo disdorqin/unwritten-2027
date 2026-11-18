@@ -45,7 +45,7 @@ import { createLakeSkateMotion } from './lake-skate-motion';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
 import { createWindowActivity } from './town-window';
-import { extensionPlots, extensionRoadClearance } from './town-extension';
+import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway } from './town-railway';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
@@ -93,7 +93,7 @@ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
 const forest = addForestDensity(landscape, grid,
   (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius),
-  (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius));
+  (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
@@ -329,6 +329,7 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
     walkGeometry = geometry();
     describeTown();
   }).catch(error => {
+    requestedPlots.delete(plot.id);
     status.textContent = '新区建筑读取失败';
     console.error(`Loading ${plot.id}`, error);
   });
@@ -1409,6 +1410,7 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       describeTown();
     }).catch(error => {
+      streetsRequested = false;
       status.textContent = '新区街景读取失败';
       console.error('Loading extension streets', error);
     });

@@ -3,7 +3,7 @@ import {
   Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, type Camera,
 } from 'three';
 import { canEnter, isWater, layout, riverX, type createTerrainGrid } from './terrain';
-import { extensionPlots, extensionRoads } from './town-extension';
+import { districtParcels, districtStreets, extensionPlots, extensionRoads } from './town-extension';
 import type { Box } from './landmark-kit';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
@@ -24,34 +24,10 @@ type Cell = {
 };
 type BuildingSite = { x: number; n: number; w: number; d: number; yaw: number; district: District };
 
-const streets: Street[] = [
-  { district: 'forest', width: 4.6, points: [[104,415],[111,433],[134,449],[165,453],[182,467],[202,486]] },
-  { district: 'forest', width: 3.2, points: [[111,433],[98,442],[91,457],[110,480],[128,485],[153,481],[173,475],[182,467]] },
-  { district: 'memorial', width: 4.8, points: [[373,296],[393,309],[410,323],[427,344],[446,357],[461,368],[493,383],[523,400],[546,427]] },
-  { district: 'memorial', width: 3.6, points: [[461,368],[467,392],[485,417],[507,427],[546,427]] },
-  { district: 'market', width: 5.5, points: [[506,286],[534,282],[562,292],[581,311],[588,337],[573,359],[551,365],[532,373],[506,378],[493,383]] },
-  { district: 'market', width: 3.6, points: [[555,304],[562,310],[581,311]] },
-  { district: 'lakeside', width: 4, points: [[446,99],[472,97],[496,97],[521,97],[535,104],[553,128],[550,138]] },
-  { district: 'lakeside', width: 4.2, points: [[521,156],[507,174],[526,191],[549,202],[579,190],[601,176],[604,155]] },
-  { district: 'lakeside', width: 3.6, points: [[574,165],[587,158],[604,155],[609,136],[598,123],[574,118],[553,128]] },
-];
+const streets: Street[] = districtStreets;
 const approachDistricts: District[] = ['memorial', 'market', 'lakeside', 'lakeside', 'forest'];
 
-const parcels: Record<District, Parcel[]> = {
-  forest: [[80,416,9,9],[94,431,10,9],[76,449,11,10],[104,458,10,10],[92,477,12,10],
-    [125,470,13,11],[134,436,10,9],[145,467,10,9],[151,493,11,10],[163,441,13,10],
-    [168,489,10,9],[187,485,10,9],[194,453,12,11],[211,491,11,9]],
-  memorial: [[410,343,11,10],[421,363,15,11],[441,381,14,12],[462,420,13,10],[479,398,16,12],
-    [489,438,11,10],[502,400,11,10],[522,418,14,12],[549,413,13,11],[555,438,13,11],
-    [503,451,13,10],[532,448,13,11]],
-  market: [[516,273,11,10],[535,267,12,10],[554,272,13,11],[572,280,13,10],
-    [589,295,13,11],[566,322,11,12],[603,314,15,12],[603,338,12,10],[590,362,13,12],
-    [571,376,11,10],[548,352,11,8],[551,385,12,11],[526,358,13,10],[513,366,10,9]],
-  lakeside: [[428,94,11,9],[431,115,12,10],[521,82,12,10],[539,85,13,11],[551,65,10,9],
-    [560,85,13,10],[570,133,13,11],[586,136,11,10],[607,117,12,10],[619,146,12,11],
-    [601,163,10,9],[620,175,12,10],[596,192,12,10],[576,207,11,10],[552,216,13,10],
-    [528,207,12,11],[519,178,10,9],[510,103,11,9]],
-};
+const parcels: Record<District, Parcel[]> = districtParcels;
 
 const districtTints = {
   forest: { body: ['#976747','#8d5e42','#a37855'], dark: '#47382f', trim: '#bc956b', roof: '#4d5056', foundation: '#7a818d', paving: '#a49585' },

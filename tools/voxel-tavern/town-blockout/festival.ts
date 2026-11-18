@@ -121,6 +121,7 @@ export function createFestival(
   }
 
   function emit(x: number, y: number, z: number, color: Color, strength: number, radius: number) {
+    if (used >= capacity) return;
     const offset = used * 3;
     positions[offset] = x;
     positions[offset + 1] = y;

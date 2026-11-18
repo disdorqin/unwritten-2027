@@ -160,6 +160,6 @@ export function createTerrainGrid() {
 export function canEnter(x: number, n: number) {
   if (x < 1 || x > worldBounds.width - 1 || n < 1 || n > worldBounds.depth - 1) return false;
   const bridge = bridgeAt(x, n);
-  if (bridge && Math.abs(n - bridge.north) > 3.55) return false;
+  if (bridge && Math.abs(n - bridge.north) > 3.55 + 1e-9) return false;
   return !!bridge || !isWater(x, n);
 }
