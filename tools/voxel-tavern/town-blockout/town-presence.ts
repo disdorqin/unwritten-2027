@@ -16,6 +16,7 @@ import {
 } from './town-presence-motion';
 
 import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+import { createPresenceLinkStatus } from './town-presence-status';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -68,6 +69,7 @@ export function createTownPresence(
   const chat = createTownChat(sendChat, onChatFocus);
   const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
+  const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
   let photoSupported = false;
   let clockRequest: number | undefined;
@@ -113,7 +115,8 @@ export function createTownPresence(
 
   function updateStatus() {
     if (!status) return;
-    const text = haveId ? `同镇 ${roster.size + 1} 人` : socket ? '连接中…' : '单人模式';
+    link.setPeople(roster.size + (haveId ? 1 : 0));
+    const text = link.text();
     if (status.textContent !== text) status.textContent = text;
   }
 
@@ -144,6 +147,7 @@ export function createTownPresence(
 
   function connectionLost() {
     disconnect(false);
+    link.failed();
     if (!inTown) return;
     retryAt = performance.now() + retryDelays[retryIndex];
     retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
@@ -275,6 +279,7 @@ export function createTownPresence(
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
           haveId = true;
+          link.joined(roster.size + 1);
           joinedId = id;
           fireworksSupported = message.fireworks === true;
           photoSupported = message.plazaPhoto === true;
@@ -322,6 +327,7 @@ export function createTownPresence(
       }
       return;
     }
+    link.firstFrame();
     const stamp = ++epoch;
     const time = performance.now();
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
@@ -344,11 +350,13 @@ export function createTownPresence(
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${protocol}//${location.host}/presence`);
       socket = ws;
+      link.attemptStarted();
       ws.binaryType = 'arraybuffer';
       updateStatus();
       timeout = window.setTimeout(() => { if (socket === ws) connectionLost(); }, 3000);
       ws.onopen = () => {
         if (socket === ws) {
+          link.socketOpened();
           try { ws.send(JSON.stringify({ type: 'join', name: getName() })); }
           catch { connectionLost(); }
         }
@@ -504,8 +512,11 @@ export function createTownPresence(
       }
       if (inTown === active) return;
       inTown = active;
-      if (active) scheduleConnection();
-      else {
+      if (active) {
+        link.enterTown();
+        scheduleConnection();
+      } else {
+        link.leaveTown();
         resetRetry();
         disconnect(true);
       }

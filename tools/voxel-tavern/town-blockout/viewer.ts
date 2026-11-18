@@ -44,6 +44,7 @@ import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { createTouchLook } from './touch-look';
+import { setTouchLookSensitivity, touchLookSensitivity } from './touch-look-curve';
 import { createDesktopLook, type DesktopLookLockFailure } from './desktop-look';
 import { createTownBgm } from './town-bgm';
 import { terraceStop } from './museum-terrace';
@@ -531,7 +532,8 @@ for (const key of points.keys()) selector.add(new Option(key, key));
 
 const eye = 1.65;
 const keys = new Set<string>();
-const touchWalk = createTouchWalk(element('touch-walk'));
+const touchSprintButton = element<HTMLButtonElement>('touch-sprint');
+const touchWalk = createTouchWalk(element('touch-walk'), touchSprintButton);
 const museumMapButton = element<HTMLButtonElement>('museum-map-button');
 const crosshair = element('walk-crosshair');
 const lockLookButton = element<HTMLButtonElement>('lock-look');
@@ -1672,7 +1674,10 @@ lockLookButton.onclick = () => {
 if (typeof renderer.domElement.requestPointerLock !== 'function' ||
     /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
-  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball);
+  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball, touchLookSensitivity);
+const lookSensitivityInput = element<HTMLInputElement>('touch-look-sensitivity');
+lookSensitivityInput.value = String(touchLookSensitivity());
+lookSensitivityInput.addEventListener('input', () => setTouchLookSensitivity(Number(lookSensitivityInput.value)));
 function canJump() {
   return moveAllowed() && landingFeedback.pose() === 'none' && airHeight === undefined &&
     (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
@@ -2120,7 +2125,7 @@ renderer.setAnimationLoop(now => {
             let moveScale = 1;
             if (water || airHeight !== undefined) {
               snowMoveScale = chillMoveScale = 1;
-              moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : .8;
+              moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : (sprint ? 1 : .8);
             } else {
               const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
               snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
@@ -2318,6 +2323,7 @@ renderer.setAnimationLoop(now => {
   crosshair.hidden = !lookAllowed();
   touchJump.hidden = !moveAllowed() || !touchWalk.active();
   touchJump.disabled = !canJump();
+  touchSprintButton.hidden = !moveAllowed() || !touchWalk.active();
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();
   actionButton.hidden = !action;

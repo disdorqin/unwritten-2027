@@ -339,7 +339,7 @@ test('frost exposure follows the snow curve, full depth pressure and calm-weathe
 
   tracker.setExposure(3, .6, true, false);
   assert.equal(tracker.update(90), 3);
-  assert.equal(tracker.walkingScale(), .8);
+  assert.equal(tracker.walkingScale(), .65);
 });
 
 test('fastest warmth source lowers exposure while the old ceremony baseline keeps its rate', () => {
@@ -390,20 +390,20 @@ test('ceremony relief halves pressure and caps L3 walking drag without changing 
   assert.equal(tracker.walkingScale(), .9);
 
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.walkingScale(), .8);
+  assert.equal(tracker.walkingScale(), .65);
   assert.equal(tracker.walkingScale(false), 1);
   assert.equal(tracker.displayLevel(), 3);
-  assert.ok(Math.abs(.62 * tracker.walkingScale() - .496) < 1e-10);
+  assert.ok(Math.abs(.62 * tracker.walkingScale() - .403) < 1e-10);
 });
 
 test('frost level styles match the design bands', () => {
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].opacity),
-    [0, .25, .5, .75],
+    [0, .35, .65, .90],
   );
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].band),
-    [0, .06, .12, .22],
+    [0, .10, .20, .34],
   );
   assert.equal(frostLevelStyles[3].breath, true);
   assert.equal(frostLevelStyles[2].breath, false);

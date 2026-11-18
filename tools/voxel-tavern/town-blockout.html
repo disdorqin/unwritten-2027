@@ -32,6 +32,7 @@
         <button id="snow" type="button" aria-pressed="true">降雪</button>
       </nav>
       <label>前往 <select id="jump"></select></label>
+      <label>触屏转向灵敏度 <input id="touch-look-sensitivity" type="range" min="0.5" max="2.5" step="0.1" value="1.4"></label>
       <button id="view-valley" type="button">雪谷取景</button>
       <p id="help"></p>
       <output id="position"></output>
@@ -83,6 +84,7 @@
   <span id="walk-crosshair" aria-hidden="true" hidden></span>
   <button id="lock-look" type="button" hidden>点击锁定鼠标视角</button>
   <button id="touch-jump" type="button" hidden>跳跃</button>
+  <button id="touch-sprint" type="button" hidden aria-pressed="false">疾跑</button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
   <aside id="snowball-controls" aria-label="打雪仗" hidden>

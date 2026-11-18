@@ -25,16 +25,18 @@ export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
 export type FrostExposure = 'none' | 'dark-snow' | 'lamp' | 'water';
 const naturalThawRate = 1 / 120;
 const exposureRate = 1 / 270;
-const maskClear = [100, 83, 73, 62] as const;
-const blurByLevel = [0, 0, 1.15, 3.2] as const;
+// 3.0 H1 表现加强（任务书 §2 H1）：三档逐档加深——maskClear 更小 = 霜爬得更靠屏心，
+// blur 更大 = 冻花更糊。触发与回暖口径不变，只改表现与速度下限。
+const maskClear = [100, 74, 58, 40] as const;
+const blurByLevel = [0, 0, 2, 4.8] as const;
 export const wetColdMultiplier = 2;
 
-/** 每级的表现参数（设计 §4.1）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
+/** 每级的表现参数（设计 §4.1，数值经 3.0 H1 加强）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
 export const frostLevelStyles: Record<FrostLevel, { opacity: number; band: number; tint: number; breath: boolean }> = {
   0: { opacity: 0, band: 0, tint: 0, breath: false },
-  1: { opacity: .25, band: .06, tint: 0, breath: false },
-  2: { opacity: .5, band: .12, tint: .08, breath: false },
-  3: { opacity: .75, band: .22, tint: .14, breath: true },
+  1: { opacity: .35, band: .10, tint: .04, breath: false },
+  2: { opacity: .65, band: .20, tint: .13, breath: false },
+  3: { opacity: .90, band: .34, tint: .22, breath: true },
 };
 
 /** 回暖速率：1 级 / 20 秒（设计 §4.2）。 */
@@ -77,7 +79,7 @@ export interface FrostTracker {
   baseline(): FrostLevel;
   setWarmth(source: WarmthSource, active: boolean): void;
   drinkHot(): void;
-  setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number): void;
+  setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number, sledding?: boolean): void;
   exposure(): number;
   walkingScale(enabled?: boolean): number;
   warming(): boolean;
@@ -93,6 +95,7 @@ export function createFrostTracker(): FrostTracker {
   let baselinePersonal = 0;
   let exposure = 0;
   let exposureGrowth = 0;
+  let sledding = false;
   let naturallyThaws = true;
   let warmRate = 0;
   let relief = false;
@@ -117,21 +120,26 @@ export function createFrostTracker(): FrostTracker {
       exposure = Math.max(0, exposure - 1);
       setWarmth('hot-drink', true);
     },
-    setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1) {
+    setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1, sleddingActive = false) {
       const surface = input === true ? 'dark-snow' : input === false ? 'none' : input;
       const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
       relief = ceremonyRelief;
+      // 3.0 H1 雪橇豁免：乘坐雪橇时寒意不涨反退——累积入口按姿态门控，
+      // 雪面与水面压力一律清零，update() 侧再按自然消退速率回落（见下）。
+      sledding = sleddingActive === true;
       naturallyThaws = surface === 'lamp' || (surface !== 'water' && snowIntensity < 2);
       const snowPressure = surface === 'dark-snow' && snowIntensity >= 2 ? (snowIntensity - 1) * (depth >= .6 ? 1.5 : 1) : 0;
       const wetPressure = surface === 'water' ? Math.max(1, snowIntensity - 1) * wetColdMultiplier : 0;
       exposureGrowth = (snowPressure + wetPressure) * exposureRate * (relief ? .5 : 1) *
         (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1);
+      if (sledding) exposureGrowth = 0;
     },
     exposure: () => exposure,
     walkingScale(enabled = true) {
       if (!enabled) return 1;
       const level = displayLevel();
-      return level === 3 && !relief ? .80 : level >= 2 ? .90 : 1;
+      // 3.0 H1：L3 速度下限 ×0.80 → ×0.65（仪式豁免时仍封顶 ×0.90）。
+      return level === 3 && !relief ? .65 : level >= 2 ? .90 : 1;
     },
     warming: () => warmth.size > 0,
     update(dtSeconds: number) {
@@ -145,7 +153,8 @@ export function createFrostTracker(): FrostTracker {
         if (baselinePersonal < goal) baselinePersonal = Math.min(goal, baselinePersonal + step);
         else if (baselinePersonal > goal) baselinePersonal = Math.max(goal, baselinePersonal - step);
       }
-      const rate = warmRate > 0 ? -warmRate : naturallyThaws ? -naturalThawRate : exposureGrowth;
+      // 雪橇豁免的「反退」：无回暖源时也按自然消退速率回落（与灯下消退同速）。
+      const rate = warmRate > 0 ? -warmRate : (naturallyThaws || sledding) ? -naturalThawRate : exposureGrowth;
       exposure = clampLevel(exposure + rate * dt);
       return personal();
     },

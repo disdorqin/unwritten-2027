@@ -207,7 +207,15 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status) { display: none
 #touch-jump {
   position: fixed; right: max(14px, env(safe-area-inset-right));
   bottom: max(156px, calc(env(safe-area-inset-bottom) + 144px));
+  width: 64px; min-height: 56px; touch-action: none; user-select: none;
+}
+#touch-sprint {
+  position: fixed; right: max(14px, env(safe-area-inset-right));
+  bottom: max(100px, calc(env(safe-area-inset-bottom) + 88px));
   width: 54px; min-height: 44px; touch-action: none; user-select: none;
+}
+#touch-sprint.sprint-locked, #touch-sprint.sprint-held {
+  background: #efca91; color: #101a2b; border-color: #fff5;
 }
 #touch-jump:disabled { cursor: default; }
 .touch-play #museum-guide:not([hidden]) ~ #touch-jump { bottom: max(225px, calc(env(safe-area-inset-bottom) + 213px)); }

@@ -2,8 +2,12 @@ const forwardEntry = .72;
 const forwardExit = .45;
 const firstPushLimit = 320;
 const secondPushWindow = 440;
+// A locked or held sprint button counts as sprinting once the stick is
+// pushed at least this far forward, so jump taps cannot drop the sprint.
+const buttonSprintForward = .3;
+const sprintHoldDelay = 300;
 
-export function createTouchWalk(pad: HTMLElement) {
+export function createTouchWalk(pad: HTMLElement, sprintButton?: HTMLButtonElement) {
   const nub = pad.firstElementChild as HTMLElement;
   const coarse = matchMedia('(pointer: coarse)');
   let touchSeen = false;
@@ -14,7 +18,51 @@ export function createTouchWalk(pad: HTMLElement) {
   let forwardSince: number | undefined;
   let lastShortPush: number | undefined;
   let sprinting = false;
+  let sprintLock = false;
+  let sprintPressing = false;
+  let sprintHeld = false;
+  let sprintTimer: ReturnType<typeof setTimeout> | undefined;
   const axes = { right: 0, forward: 0 };
+
+  function syncSprintButton() {
+    if (!sprintButton) return;
+    sprintButton.setAttribute('aria-pressed', String(sprintLock));
+    sprintButton.classList.toggle('sprint-locked', sprintLock);
+    sprintButton.classList.toggle('sprint-held', sprintHeld);
+  }
+  function clearSprintPress() {
+    sprintPressing = false;
+    sprintHeld = false;
+    if (sprintTimer !== undefined) clearTimeout(sprintTimer);
+    sprintTimer = undefined;
+  }
+  if (sprintButton) {
+    sprintButton.addEventListener('pointerdown', event => {
+      if (!allowed || sprintPressing) return;
+      sprintPressing = true;
+      sprintButton.setPointerCapture(event.pointerId);
+      sprintTimer = setTimeout(() => {
+        if (!sprintPressing) return;
+        sprintHeld = true;
+        syncSprintButton();
+      }, sprintHoldDelay);
+      event.preventDefault();
+    });
+    sprintButton.addEventListener('pointerup', event => {
+      if (!sprintPressing) return;
+      const wasHeld = sprintHeld;
+      clearSprintPress();
+      // A short tap toggles the lock; a long press was momentary and never toggles.
+      if (!wasHeld) sprintLock = !sprintLock;
+      syncSprintButton();
+      event.preventDefault();
+    });
+    sprintButton.addEventListener('pointercancel', () => {
+      clearSprintPress();
+      syncSprintButton();
+    });
+    syncSprintButton();
+  }
 
   function clearPointer() {
     const previous = pointer;
@@ -27,6 +75,9 @@ export function createTouchWalk(pad: HTMLElement) {
     forwardSince = undefined;
     lastShortPush = undefined;
     sprinting = false;
+    sprintLock = false;
+    clearSprintPress();
+    syncSprintButton();
     clearPointer();
   }
   function endForward(now: number) {
@@ -89,7 +140,9 @@ export function createTouchWalk(pad: HTMLElement) {
     });
   }
   updateVisibility();
-  return { axes, reset, get sprinting() { return sprinting; }, active: () => coarse.matches || touchSeen, setAllowed(value: boolean) {
+  return { axes, reset, get sprinting() {
+    return sprinting || ((sprintLock || sprintHeld) && axes.forward > buttonSprintForward);
+  }, get sprintLocked() { return sprintLock; }, active: () => coarse.matches || touchSeen, setAllowed(value: boolean) {
     if (allowed === value) return;
     allowed = value;
     updateVisibility();

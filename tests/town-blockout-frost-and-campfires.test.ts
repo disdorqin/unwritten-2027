@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BufferGeometry, Points, Scene } from 'three';
-import { createCeremonyFrost, createFrostTracker, isExposedSnowAt, sampleFrostStyle, wetColdMultiplier } from '../tools/voxel-tavern/town-blockout/town-frost';
+import { createCeremonyFrost, createFrostTracker, frostLevelStyles, isExposedSnowAt, sampleFrostStyle, wetColdMultiplier } from '../tools/voxel-tavern/town-blockout/town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires, fireWarmthRadius, nearCampfire } from '../tools/voxel-tavern/town-blockout/town-campfires';
 import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
 import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance';
@@ -17,7 +17,7 @@ test('river contact is twice exposed dry-snow pressure; ordinary light stops and
     assert.equal(dry.update(135), level);
     assert.equal(wet.update(secondsPerWetLevel), level);
   }
-  assert.equal(dry.walkingScale(), .80);
+  assert.equal(dry.walkingScale(), .65);
   dry.setExposure(3, 0, 'lamp', false);
   assert.equal(dry.update(120), 2);
   assert.equal(dry.walkingScale(), .90);
@@ -63,21 +63,21 @@ test('frost feather, scene-only blur and melt-film interpolate while the shared 
   assert.equal(scene.style.filter, '');
   frost.update(90);
   assert.equal(root.dataset.level, '2');
-  assert.match(scene.style.filter, /^blur\(1\.2px\)$/);
+  assert.match(scene.style.filter, /^blur\(2px\)$/);
   const middleMask = styles.get('--frost-clear');
   frost.update(90);
   assert.equal(root.dataset.level, '3');
-  assert.equal(scene.style.filter, 'blur(3.2px)');
+  assert.equal(scene.style.filter, 'blur(4.8px)');
   assert.ok(parseFloat(styles.get('--frost-clear')!) < parseFloat(middleMask!));
-  assert.equal(frost.walkingScale(), .80);
-  assert.equal(sampleFrostStyle(2.1).clearPercent, 71.9);
+  assert.equal(frost.walkingScale(), .65);
+  assert.ok(Math.abs(sampleFrostStyle(2.1).clearPercent - 56.2) < 1e-9);
 
   frost.setWarmth('fire-source', true);
   frost.update(5);
   assert.equal(frost.walkingScale(), .90);
   assert.ok(parseFloat(parts.get('.frost-melt')!.style.opacity) > 0);
-  assert.notEqual(styles.get('--frost-clear'), '62%');
-  assert.notEqual(scene.style.filter, 'blur(3.2px)');
+  assert.notEqual(styles.get('--frost-clear'), '40%');
+  assert.notEqual(scene.style.filter, 'blur(4.8px)');
   frost.update(10);
   assert.equal(scene.style.filter, '');
   assert.equal(frost.walkingScale(), 1);
@@ -116,4 +116,53 @@ test('outdoor fire geometry is never created at a rejected site and shares a bou
     assert.equal(campfires.blocked?.(seat.x, seat.n, seat.ground), true);
     assert.equal(campfires.blocked?.(seat.approach.x, seat.approach.n, seat.approach.ground), false);
   }
+});
+
+test('H1 frost tiers deepen monotonically past the B5 presentation values', () => {
+  const levels = [1, 2, 3] as const;
+  const sampled = levels.map(level => sampleFrostStyle(level));
+  // 覆盖更深：屏心透亮比例逐档收窄（B5 旧值 83 / 73 / 62）。
+  assert.deepEqual(sampled.map(style => style.clearPercent), [74, 58, 40]);
+  // 模糊更强：逐档严格增加（B5 旧值 0 / 1.15 / 3.2）。
+  assert.deepEqual(sampled.map(style => style.blur), [0, 2, 4.8]);
+  // 霜纹不透明度、霜带、冷色片逐档加重（B5 旧值 .25/.5/.75、.06/.12/.22、0/.08/.14）。
+  assert.deepEqual(levels.map(level => frostLevelStyles[level].opacity), [.35, .65, .90]);
+  assert.deepEqual(levels.map(level => frostLevelStyles[level].band), [.10, .20, .34]);
+  assert.deepEqual(levels.map(level => frostLevelStyles[level].tint), [.04, .13, .22]);
+  for (let index = 1; index < sampled.length; index++) {
+    assert.ok(sampled[index].opacity > sampled[index - 1].opacity);
+    assert.ok(sampled[index].band > sampled[index - 1].band);
+  }
+});
+
+test('H1 level-3 walking floor is ×0.65 and the deep-snow stack bottoms at ×0.403', () => {
+  const tracker = createFrostTracker();
+  tracker.setExposure(3, .6, 'dark-snow', false);
+  assert.equal(tracker.update(270), 3);
+  assert.equal(tracker.walkingScale(), .65);
+  // 与深雪共用 moveScale 槽位：最坏叠加 = 深雪 ×0.62 × 寒意 ×0.65。
+  assert.ok(Math.abs(.62 * tracker.walkingScale() - .403) < 1e-10);
+  // 仪式豁免仍把 L3 拖速封顶在 ×0.90，L2 不变。
+  tracker.setExposure(4, 0, 'dark-snow', true);
+  assert.equal(tracker.walkingScale(), .90);
+});
+
+test('H1 sledding exemption: exposure never rises on snow or water and recedes while sledding', () => {
+  const sled = createFrostTracker();
+  sled.setExposure(4, .6, 'dark-snow', false, 1, true);
+  assert.equal(sled.update(270), 0);
+  sled.setExposure(3, 0, 'water', false, 1, true);
+  assert.equal(sled.update(135), 0);
+
+  const rider = createFrostTracker();
+  rider.setExposure(3, 0, 'dark-snow', false);
+  assert.equal(rider.update(270), 2);
+  rider.setExposure(3, 0, 'dark-snow', false, 1, true);
+  // 乘橇反退：按自然消退速率 1/120 回落，120 秒退 1 级。
+  assert.ok(Math.abs(rider.update(120) - 1) < 1e-9);
+  assert.equal(rider.walkingScale(), 1);
+  // 下橇后同一入口恢复正常累积。
+  rider.setExposure(3, 0, 'dark-snow', false);
+  assert.ok(Math.abs(rider.update(135) - 2) < 1e-9);
+  assert.equal(rider.walkingScale(), .90);
 });
