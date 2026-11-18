@@ -242,6 +242,46 @@ test("public fireworks publish one identical timed event and reject an early or 
   assert.equal((await distant.text.next(message => message.type === "fireworks-rejected")).reason, "position");
 });
 
+test("nearby personal firecrackers relay beside the author, reject indoors and rate limit", { timeout: 7000 }, async context => {
+  const { join, server } = await fixture(context);
+  const players = await Promise.all(Array.from({ length: 10 }, (_, i) => join("爆竹测试" + i)));
+  const distant = await join("远处测试");
+  const indoors = await join("酒馆测试");
+  const author = players[0];
+  const observer = players[1];
+  const setPose = (client: typeof author, east: number, north: number) =>
+    client.socket.send(encodePose({ ...pose, east: east * 100, north: north * 100, height: 1500 }));
+  for (const [i, player] of players.entries()) setPose(player, 154 + i, 97);
+  setPose(distant, 514, 351);
+  setPose(indoors, 159, 230);
+  await observer.snapshot.next(frame => players.filter(player => player !== observer).every(player =>
+    frame.some(record => record.id === player.id)));
+  const sendFirecracker = (client: typeof author, seed: number, east = 154, north = 97) => client.socket.send(JSON.stringify({
+    type: "event", kind: "personal-firework", item: "string", seed, east, north, height: 15, yaw: 0,
+  }));
+  sendFirecracker(indoors, 20, 159, 230);
+  assert.equal((await indoors.text.next(message => message.type === "personal-firework-rejected")).reason, "position");
+  sendFirecracker(author, 21, 160, 107);
+  assert.equal((await author.text.next(message => message.seed === 21)).reason, "position");
+  for (const [i, player] of players.entries()) sendFirecracker(player, i, 154 + i);
+  const observeBurst = async (client: typeof author) => {
+    const events = [];
+    for (let i = 0; i < players.length; i++) events.push(await client.text.next(message => message.kind === "personal-firework"));
+    assert.equal(new Set(events.map(event => event.from)).size, 10);
+    return events.sort((a, b) => a.seed! - b.seed!);
+  };
+  const [receivedByAuthor, receivedByObserver] = await Promise.all([observeBurst(author), observeBurst(observer)]);
+  assert.deepEqual(receivedByAuthor, receivedByObserver);
+  assert.ok(receivedByObserver.every(event => Number.isSafeInteger(event.startAt)));
+  sendFirecracker(author, 22);
+  assert.equal((await author.text.next(message => message.seed === 22)).reason, "cooldown");
+  await delay(1050);
+  assert.ok(!distant.text.pending().some(message => message.kind === "personal-firework"));
+  assert.ok(server.stats().egressBytesPerSecond > 0);
+  assert.ok(server.stats().egressBytesPerSecond <= 350_000);
+  context.diagnostic(`10 simultaneous firecrackers with 12 peers: ${server.stats().egressBytesPerSecond} bytes/s`);
+});
+
 function sendPhotoRequest(socket: WebSocket) {
   socket.send(JSON.stringify({ type: "event", kind: "plaza-photo-request" }));
 }

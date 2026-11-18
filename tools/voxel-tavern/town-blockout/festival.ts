@@ -422,15 +422,18 @@ export function createFestival(
       return true;
     },
     setPersonalFireworkFrame(particles: readonly PersonalFireworkParticle[]) { personalFrame = particles; },
-    playPersonalFirework(kind: PersonalFireworkKind, distance: number, ceremony = false) {
+    playPersonalFirework(kind: PersonalFireworkKind, distance: number, ceremony = false, delaySeconds = 0) {
       if (!audio || audio.state !== 'running' || !Number.isFinite(distance) || distance < 0) return;
       const hits = kind === 'string' ? 10 : 1;
       const wait = kind === 'string' ? 2 : kind === 'rocket' ? 1.2 : 0;
       const gain = (.13 / (1 + (distance / 16) ** 2)) * (ceremony ? .35 : 1);
+      const audioNow = audio.currentTime;
       for (let i = 0; i < hits; i++) {
+        const offset = delaySeconds + wait + .30 * i;
+        if (offset < -.2) continue;
+        const time = audioNow + Math.max(0, offset);
         const pop = audio.createOscillator();
         const volume = audio.createGain();
-        const time = audio.currentTime + wait + .30 * i;
         pop.type = 'triangle';
         const pitch = kind === 'sparkler' ? 920 : kind === 'rocket' ? 132 : 330 + (i % 3) * 52;
         pop.frequency.setValueAtTime(pitch, time);

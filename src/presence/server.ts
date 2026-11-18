@@ -13,6 +13,7 @@ import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
+import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
   SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, buildHalfAllows, classifyWallSite,
@@ -81,6 +82,7 @@ type Peer = {
   nextBellRequest: number;
   nextFireworksRequest: number;
   nextPersonalFireworks: number;
+  nextFirecracker: number;
   nextPhotoRequest: number;
   joinedAt?: number;
   ceremonyWarned?: boolean;
@@ -163,6 +165,7 @@ export async function createPresenceServer(options: Options = {}) {
   const bellNames = new Map<number, string>();
   let bellSyncAt = 0;
   let fireworksOccupiedUntil = 0;
+  const personalFireworkBudget = { tokens: 10, at: now() };
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
   let photoId = 0;
   let nextId = 1;
@@ -230,7 +233,7 @@ export async function createPresenceServer(options: Options = {}) {
       throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t },
       snowPlace: { tokens: 6, at: t }, nextSnowfightRequest: 0, pose: 0,
       floodAt: t, floodCount: 0, pendingThrows: new Map(),
-      nextClockSample: 0, nextBellRequest: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
+      nextClockSample: 0, nextBellRequest: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0, nextFirecracker: 0,
     };
     peers.set(id, peer);
     return peer;
@@ -693,6 +696,33 @@ export async function createPresenceServer(options: Options = {}) {
     for (const recipient of peers.values()) if (recipient.name) send(recipient, event);
   }
 
+  function requestPersonalFirework(peer: Peer, message: unknown) {
+    const event = readPersonalFirework(message);
+    if (!event) return;
+    const time = now();
+    if (!allowEvent(peer, time)) return;
+    const position = peer.record;
+    if (!position ||
+        Math.hypot(event.east - position.east / 100, event.north - position.north / 100) > 2.4 ||
+        Math.abs(event.height - position.height / 100) > 2.2 ||
+        personalFireworkRestricted(position.east / 100, position.north / 100, position.height / 100) ||
+        personalFireworkRestricted(event.east, event.north, event.height)) {
+      send(peer, JSON.stringify({ type: 'personal-firework-rejected', seed: event.seed, reason: 'position' }));
+      return;
+    }
+    const startAt = Date.now();
+    const festival = startAt >= ceremonyStartAt - 10_000 && startAt < ceremonyEndAt;
+    if (time < peer.nextFirecracker || !consume(personalFireworkBudget, time, 16, 10)) {
+      send(peer, JSON.stringify({ type: 'personal-firework-rejected', seed: event.seed, reason: 'cooldown' }));
+      return;
+    }
+    peer.nextFirecracker = time + personalFireworkCooldownMs * (festival ? 2 : 1);
+    const data = JSON.stringify({ ...event, type: 'event', kind: 'personal-firework', from: peer.id, startAt: startAt + 120 });
+    send(peer, data);
+    const recipients = Math.min(eventVisibleLimits[tierIndex], egressBytesPerSecond > 300_000 ? 16 : MAX_VISIBLE);
+    for (const recipient of relevantPeers(peer, tier.radius, recipients)) send(recipient, data);
+  }
+
   function photoPerson(peer: Peer): PlazaPhotoPerson | undefined {
     const { name, record } = peer;
     if (!name || !record) return;
@@ -792,6 +822,10 @@ export async function createPresenceServer(options: Options = {}) {
         }
         return;
       }
+      if (message.kind === 'personal-firework') {
+        requestPersonalFirework(peer, message);
+        return;
+      }
       if (message.kind === 'plaza-photo-request') {
         if (allowEvent(peer, now())) requestPhoto(peer);
         return;
@@ -825,7 +859,7 @@ export async function createPresenceServer(options: Options = {}) {
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, firecrackers: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
