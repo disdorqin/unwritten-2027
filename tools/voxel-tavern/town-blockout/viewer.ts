@@ -1618,11 +1618,16 @@ rehearse.onclick = () => {
   controls.update();
 };
 walk.onclick = event => {
-  if (mode(true) && walking && event.isTrusted) townBgm.enter();
+  // Native keyboard activation of an already selected mode must not revisit the selected destination.
+  if ((!walking || event.detail !== 0) && (!mode(true) || !walking)) return;
+  renderer.domElement.focus({ preventScroll: true });
+  if (event.isTrusted) townBgm.enter();
   desktopLook.engage();
 };
 selector.onchange = event => {
-  if (mode(true) && walking && event.isTrusted) townBgm.enter();
+  if (!mode(true) || !walking) return;
+  renderer.domElement.focus({ preventScroll: true });
+  if (event.isTrusted) townBgm.enter();
 };
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
@@ -1659,7 +1664,11 @@ const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView
     refreshLockHint();
   },
 });
-lockLookButton.onclick = () => desktopLook.engage();
+lockLookButton.onclick = () => {
+  if (!lookAllowed()) return;
+  renderer.domElement.focus({ preventScroll: true });
+  desktopLook.engage();
+};
 if (typeof renderer.domElement.requestPointerLock !== 'function' ||
     /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
