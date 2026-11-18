@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>UNWRITTEN 2027 · 雪夜小镇单人预览</title>
+  <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
   <script type="module" src="./town-blockout/town-panel.ts"></script>
@@ -13,7 +13,8 @@
   <main id="scene" aria-label="雪镇三维场景"></main>
   <aside class="panel" aria-label="小镇控制">
     <div class="town-panel-heading">
-      <h1>UNWRITTEN 2027 <small>单人预览</small></h1>
+      <h1>UNWRITTEN 2027</h1>
+      <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
       <button id="town-panel-toggle" class="town-panel-toggle" type="button"
         aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
     </div>
