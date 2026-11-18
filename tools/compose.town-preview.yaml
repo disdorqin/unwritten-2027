@@ -32,6 +32,7 @@ services:
       PRESENCE_HOST: "0.0.0.0"
       PRESENCE_PORT: "8090"
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
+      TEST_FIREWORKS: "${TEST_FIREWORKS:-off}"
     expose:
       - "8090"
     logging:

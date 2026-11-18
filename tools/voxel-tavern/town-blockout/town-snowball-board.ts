@@ -22,6 +22,7 @@ type BoardOptions = {
 
 const streakLabels = new Map([[3, '三'], [5, '五'], [8, '八']]);
 const scoreKey = 'unwritten:snowbattle:scores:v1';
+const isRemotePlayer = (id: string) => id.startsWith('p:');
 const emptyScore = () => ({ throws: 0, hits: 0, bestStreak: 0, received: 0 });
 const byStanding = (a: SnowballBoardRow, b: SnowballBoardRow) =>
   b.hits - a.hits || b.bestStreak - a.bestStreak || a.received - b.received || a.id.localeCompare(b.id);
@@ -66,7 +67,7 @@ export function createTownSnowballBoard({
     if (Array.isArray(saved)) for (const raw of saved) {
       if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id) continue;
       const id = canonicalId(raw.id);
-      if (results.has(id)) continue;
+      if (isRemotePlayer(id) || results.has(id)) continue;
       const hits = asCount(raw.hits);
       results.set(id, {
         throws: Math.max(asCount(raw.throws), hits), hits,
@@ -100,7 +101,9 @@ export function createTownSnowballBoard({
     if (!dirty) return;
     dirty = false;
     try {
-      storage?.setItem(storageKey, JSON.stringify([...results].map(([id, score]) => ({ id, ...score }))));
+      // Numeric presence IDs are session-scoped. Never associate them with persisted scores.
+      const localRows = [...results].filter(([id]) => !isRemotePlayer(id)).map(([id, score]) => ({ id, ...score }));
+      storage?.setItem(storageKey, JSON.stringify(localRows));
     } catch { /* Keep the session scores if storing them fails. */ }
     paint();
   }
@@ -144,6 +147,16 @@ export function createTownSnowballBoard({
     return count;
   }
 
+  function clearRemoteScores() {
+    let changed = false;
+    for (const id of results.keys()) if (isRemotePlayer(id)) {
+      results.delete(id);
+      streaks.delete(id);
+      changed = true;
+    }
+    if (changed) paint();
+  }
+
   function paint() {
     if (!tableBody?.isConnected || !titleList) return;
     const rows = getRows();
@@ -182,7 +195,7 @@ export function createTownSnowballBoard({
   }
 
   function open() {
-    const panel = openPlace('雪仗榜', '在这台设备上累计的雪仗战绩。');
+    const panel = openPlace('雪仗榜', '本机战绩与本次同镇玩家的雪仗战绩。');
     const table = document.createElement('table');
     table.setAttribute('aria-label', '雪仗战绩');
     table.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;color:#eef5ff';
@@ -207,7 +220,7 @@ export function createTownSnowballBoard({
   }
 
   return {
-    open, recordThrow, recordHit, recordMiss,
+    open, recordThrow, recordHit, recordMiss, clearRemoteScores,
     resetStreaks: () => streaks.clear(), getRows, getTitles, flush,
   };
 }

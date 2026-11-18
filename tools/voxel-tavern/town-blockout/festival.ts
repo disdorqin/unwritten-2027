@@ -1,7 +1,9 @@
 import {
-  AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial, type Scene,
+  AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Points, ShaderMaterial,
+  type ColorRepresentation, type Scene,
 } from 'three';
 import { playTowerChime } from '../tower-chime';
+import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
 
 type Burst = {
   time: number;
@@ -12,6 +14,17 @@ type Burst = {
   shape: 'peony' | 'ring' | 'willow';
   outer: Color;
   inner: Color;
+  launch?: readonly [x: number, y: number, z: number];
+};
+
+export type FireworksTable = {
+  duration: number;
+  bursts: readonly (Omit<Burst, 'outer' | 'inner' | 'launch'> & {
+    outer: ColorRepresentation;
+    inner: ColorRepresentation;
+    launchId?: string;
+  })[];
+  launchPoints: readonly { id: string; x: number; y?: number; z: number }[];
 };
 
 const countdown = 3;
@@ -39,6 +52,50 @@ const bursts: Burst[] = [
   { time: 8.48, x: 246, y: 54, z: -200, radius: 16, shape: 'peony', outer: blue, inner: cream },
   { time: 8.76, x: 224, y: 67, z: -197, radius: 20, shape: 'peony', outer: gold, inner: cream },
 ];
+
+const workshopSparkCount = 36;
+const burstTail = lifetime + .22;
+const testLaunchPoints = [
+  { id: 'plaza', x: 223, y: 15, z: -195 },
+  { id: 'lake', x: 344, y: 7, z: -66 },
+] as const;
+const testShapes = ['peony', 'ring', 'willow'] as const;
+const testColors = [
+  ['#ff5767', '#fff1c7'], ['#ffc26b', '#fff1c7'], ['#7ad9ff', '#d5fbff'],
+  ['#76f6db', '#fff1c7'], ['#f599df', '#ffc26b'],
+] as const;
+
+export function makeTestFireworksTable(seed: number): FireworksTable {
+  let rng = seed >>> 0;
+  function random() {
+    rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
+    return rng / 0x100000000;
+  }
+  const beats = [.85, 4.1, 7.35, 10.6, 13.9, 17.15, 20.4, 23.65, 26.9, 30.05, 32.45];
+  const bursts = beats.flatMap(time => testLaunchPoints.map(({ id, x, z }, index) => {
+    const [outer, inner] = testColors[Math.floor(random() * testColors.length)];
+    return {
+      time: time + index * .24, x: x + random() * 28 - 14,
+      y: 44 + random() * 17, z: z + random() * 15 - 10,
+      radius: 12 + random() * 5, shape: testShapes[Math.floor(random() * testShapes.length)],
+      outer, inner, launchId: id,
+    };
+  }));
+  return { duration: testFireworksShowMs / 1000, launchPoints: testLaunchPoints, bursts };
+}
+
+function compileShow(table: FireworksTable) {
+  const launchPoints = new Map(table.launchPoints.map(({ id, x, y = 15, z }) => [id, [x, y, z] as const]));
+  const sequence: Burst[] = [];
+  for (const { launchId, outer, inner, ...burst } of table.bursts) {
+    const launch = launchId === undefined ? undefined : launchPoints.get(launchId);
+    if ((launchId !== undefined && !launch) || burst.time < 0 || burst.radius <= 0 ||
+        ![burst.time, burst.x, burst.y, burst.z, burst.radius].every(Number.isFinite) ||
+        (launch && !launch.every(Number.isFinite))) return undefined;
+    sequence.push({ ...burst, outer: new Color(outer), inner: new Color(inner), launch });
+  }
+  return sequence;
+}
 
 export function createFestival(
   scene: Scene,
@@ -99,6 +156,7 @@ export function createFestival(
   scene.add(sparks);
 
   let elapsed = -1;
+  let sharedShow: { elapsed: number; duration: number; sequence: Burst[]; clockMs?: () => number; startedAt: number } | undefined;
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
   let message = '';
@@ -136,11 +194,14 @@ export function createFestival(
   }
 
   function drawRocket(burst: Burst, t: number) {
-    const launchX = Math.max(211, Math.min(235, burst.x));
+    const launchX = burst.launch?.[0] ?? Math.max(211, Math.min(235, burst.x));
+    const launchY = burst.launch?.[1] ?? 15;
+    const launchZ = burst.launch?.[2];
     for (let i = 0; i < 6; i++) {
       const progress = Math.max(0, (t + flight - i * .025) / flight);
-      emit(launchX + (burst.x - launchX) * progress * progress, 15 + (burst.y - 15) * progress,
-        burst.z + 5 * (1 - progress), cream, (6 - i) / 6, 8 - i * .65);
+      const z = launchZ === undefined ? burst.z + 5 * (1 - progress) : launchZ + (burst.z - launchZ) * progress;
+      emit(launchX + (burst.x - launchX) * progress * progress, launchY + (burst.y - launchY) * progress,
+        z, cream, (6 - i) / 6, 8 - i * .65);
     }
   }
 
@@ -171,9 +232,38 @@ export function createFestival(
     }
   }
 
+  function drawSequence(sequence: readonly Burst[], time: number) {
+    for (const burst of sequence) {
+      const age = time - burst.time;
+      if (age < -flight || age > burstTail) continue;
+      if (age < 0) drawRocket(burst, age);
+      else drawBurst(burst, age);
+    }
+  }
+
   return {
+    startShow(table: FireworksTable, { ageSeconds = 0, clockMs }: { ageSeconds?: number; clockMs?: () => number } = {}) {
+      if (sharedShow || !Number.isFinite(table.duration) || table.duration <= 0 ||
+          !Number.isFinite(ageSeconds) || ageSeconds >= table.duration) return false;
+      const sequence = compileShow(table);
+      if (!sequence?.length) return false;
+      const peak = Math.max(...sequence.map(({ time }) => {
+        const start = Math.max(0, time - flight);
+        return sequence.filter(burst => start >= burst.time - flight && start <= burst.time + burstTail).length;
+      }));
+      if (peak * sparkCount * trailCount + workshopSparkCount * trailCount > capacity) return false;
+      if (elapsed >= 0) {
+        elapsed = -1;
+        announce('');
+      }
+      sharedShow = {
+        elapsed: ageSeconds, duration: table.duration, sequence, clockMs,
+        startedAt: (clockMs?.() ?? 0) - ageSeconds * 1000,
+      };
+      return true;
+    },
     start() {
-      if (elapsed >= 0) return false;
+      if (elapsed >= 0 || sharedShow) return false;
       elapsed = 0;
       tryEnableAudio();
       announce('3');
@@ -211,9 +301,9 @@ export function createFestival(
       };
       return true;
     },
-    active() { return elapsed >= 0; },
+    active() { return elapsed >= 0 || sharedShow !== undefined; },
     update(dt: number) {
-      if (elapsed < 0 && !workshop) return;
+      if (elapsed < 0 && !workshop && !sharedShow) return;
       const delta = Math.max(0, dt);
       used = 0;
       if (elapsed >= 0) {
@@ -229,19 +319,23 @@ export function createFestival(
             elapsed = -1;
             complete?.();
           } else {
-            for (const burst of bursts) {
-              const age = time - burst.time;
-              if (age < -flight || age > lifetime + .22) continue;
-              if (age < 0) drawRocket(burst, age);
-              else drawBurst(burst, age);
-            }
+            drawSequence(bursts, time);
           }
+        }
+      }
+      if (sharedShow) {
+        const { clockMs, startedAt, sequence } = sharedShow;
+        const time = clockMs ? (clockMs() - startedAt) / 1000 : sharedShow.elapsed + delta;
+        if (time >= sharedShow.duration) sharedShow = undefined;
+        else {
+          sharedShow.elapsed = time;
+          if (time >= 0) drawSequence(sequence, time);
         }
       }
       if (workshop) {
         workshop.elapsed += delta;
-        if (workshop.elapsed > lifetime + .22) workshop = undefined;
-        else drawBurst(workshop.burst, workshop.elapsed, 36);
+        if (workshop.elapsed > burstTail) workshop = undefined;
+        else drawBurst(workshop.burst, workshop.elapsed, workshopSparkCount);
       }
       sparks.visible = used > 0;
       geometry.setDrawRange(0, used);

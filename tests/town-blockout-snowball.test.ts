@@ -8,6 +8,71 @@ import { createSnowballSweep } from '../tools/voxel-tavern/town-blockout/town-sn
 
 const { Scene, Vector3 } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as typeof import('three');
 
+test('remote replay uses the victim capsule and does not score on local simulation', () => {
+  const scene = new Scene();
+  const origin = new Vector3(0, 1.65, 0);
+  const direction = new Vector3(1, 0, 0);
+  const local = { id: 'local', label: '你', x: 4, y: 0, z: 0, radius: .27, height: 1.78, onHit() {} };
+  const remote = { ...local, id: 'p:9', label: '小镇邻居', z: 2 };
+  const cell = { colliders: [], floors: [] };
+  const sweep = createSnowballSweep({
+    geometryAt: () => cell, surfaceHeight: () => 0, occupiedAt: () => false, targets: [local],
+  });
+  const events: SnowballEvent[] = [];
+  const outgoing: number[] = [];
+  const game = createTownSnowballFight({
+    scene,
+    sweep: (from, to, radius, thrower, source) => sweep(from, to, radius, thrower, source === 'player' ? [remote] : []),
+    relayPlayerThrow(ballId) { outgoing.push(ballId); return true; },
+    onEvent: event => events.push(event),
+  });
+  assert.ok(game.throwRemote(origin, direction, 'p:9', 48));
+  assert.equal(game.throwRemote(origin, direction, 'p:9', 48), false);
+  for (let i = 0; i < 25; i++) game.update(1 / 60);
+  const received = events.find(event => event.type === 'impact');
+  assert.ok(received?.type === 'impact');
+  assert.equal(received.targetId, 'local');
+  assert.equal(received.zone, 'head');
+  assert.equal(received.ballId, 48);
+  assert.equal(received.scored, false);
+  assert.deepEqual(game.getState(), { ammo: 0, hits: 0, combo: 0 });
+
+  assert.ok(game.gather());
+  origin.z = 2;
+  assert.ok(game.throwBall(origin, direction, 'local', 1));
+  for (let i = 0; i < 25; i++) game.update(1 / 60);
+  const predicted = events.at(-1);
+  assert.ok(predicted?.type === 'impact');
+  assert.equal(predicted.targetId, 'p:9');
+  assert.equal(predicted.relayed, true);
+  assert.equal(predicted.scored, false);
+  assert.deepEqual(outgoing, [predicted.ballId]);
+  assert.equal(game.getState().hits, 0);
+  game.confirmPlayerHit();
+  assert.deepEqual(game.getState(), { ammo: 0, hits: 1, combo: 1 });
+  game.dispose();
+});
+
+test('remote replay caps eight balls per shooter, shares the pool, and clears on session loss', () => {
+  const scene = new Scene();
+  const origin = new Vector3(3, 2, 3);
+  const direction = new Vector3(1, 0, 0);
+  const game = createTownSnowballFight({ scene, sweep() {} });
+  for (let id = 0; id < 8; id++) assert.ok(game.throwRemote(origin, direction, 'p:10', id));
+  assert.equal(game.throwRemote(origin, direction, 'p:10', 8), false);
+  assert.ok(game.gather());
+  assert.ok(game.throwBall(origin, direction, 'local', 1));
+  assert.ok(game.throwRemote(origin, direction, 'p:11', 8));
+  const projectiles = scene.getObjectByName('Town snowball projectiles') as import('three').InstancedMesh;
+  game.update(1 / 60);
+  assert.equal(projectiles.count, 10);
+  game.clearRemote();
+  game.update(1 / 60);
+  assert.equal(projectiles.count, 1);
+  assert.ok(game.throwRemote(origin, direction, 'p:10', 0));
+  game.dispose();
+});
+
 test('snowball sweep intersects thin geometry and misses outside expanded bounds', () => {
   const from = new Vector3(0, 1, 0);
   const to = new Vector3(6, 1, 0);

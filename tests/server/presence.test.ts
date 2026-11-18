@@ -3,24 +3,45 @@ import { EventEmitter, once } from "node:events";
 import { test, type TestContext } from "node:test";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import {
+  decodeSnowballClientEvent, decodeSnowballEvents, encodeSnowballHit, encodeSnowballRelay, encodeSnowballThrow,
+  type SnowballRelayEvent,
+} from "../../src/presence/snowball-events.js";
+import { testFireworksAnnouncement, testFireworksDwellMs, testFireworksLeadMs, testFireworksNoticeMs } from "../../src/presence/test-fireworks.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
 type Pose = { east: number; north: number; height: number; yaw: number; sequence: number };
 type Record = Pose & { id: number };
-type Control = { type: string; id?: number; name?: string; self?: boolean };
+type Control = {
+  type: string;
+  id?: number;
+  name?: string;
+  self?: boolean;
+  epochMs?: number;
+  kind?: string;
+  message?: string;
+  seed?: number;
+  startAt?: number;
+  tier?: number;
+  egressBytesPerSecond?: number;
+  scope?: string;
+  text?: string;
+  pose?: number;
+};
 
-function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T) {
+function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T, accept = (_frame: Buffer) => true) {
   const ready = new EventEmitter();
   const frames: Buffer[] = [];
   socket.on("message", (raw, isBinary) => {
     if (isBinary !== binary) return;
-    if (Buffer.isBuffer(raw)) frames.push(raw);
-    else if (Array.isArray(raw)) frames.push(Buffer.concat(raw));
-    else frames.push(Buffer.from(raw));
+    const frame = Buffer.isBuffer(raw) ? raw : Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw);
+    if (!accept(frame)) return;
+    frames.push(frame);
     ready.emit("message");
   });
   return {
+    pending: () => frames.map(decode),
     next(predicate: (frame: T) => boolean): Promise<T> {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -93,9 +114,10 @@ async function fixture(context: TestContext, config: Config = {}) {
     socket.on("error", () => undefined);
     sockets.push(socket);
     const text = inbox(socket, false, raw => JSON.parse(raw.toString()) as Control);
-    const snapshot = inbox(socket, true, decodeSnapshot);
+    const snapshot = inbox(socket, true, decodeSnapshot, frame => frame[0] !== 0xff);
+    const events = inbox(socket, true, frame => decodeSnowballEvents(frame)!, frame => frame[0] === 0xff);
     const closed = new Promise<number>(resolve => socket.once("close", resolve));
-    return { socket, text, snapshot, closed };
+    return { socket, text, snapshot, events, closed };
   }
 
   async function connect() {
@@ -110,10 +132,10 @@ async function fixture(context: TestContext, config: Config = {}) {
     client.socket.send(JSON.stringify({ type: "join", name }));
     const self = await joined;
     assert.equal(typeof self.id, "number");
-    return { ...client, id: self.id!, name: self.name };
+    return { ...client, id: self.id!, name: self.name, epochMs: self.epochMs };
   }
 
-  return { connect, connectRaw, join };
+  return { connect, connectRaw, join, server };
 }
 
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };
@@ -293,4 +315,229 @@ test("presence caps snapshots at 48 records and counts unjoined sockets toward t
   await freed.closed;
   const replacement = await join("填补空位");
   assert.equal(replacement.name, "填补空位");
+});
+
+const throwBall = {
+  ballId: 0x1234, east: 20, north: 20, height: 6.5, dirX: 1, dirY: 0, dirZ: 0,
+};
+
+function pause(ms = 45) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
+async function until(predicate: () => boolean) {
+  const end = Date.now() + 2500;
+  while (!predicate()) {
+    assert.ok(Date.now() < end, "Timed out waiting for server state");
+    await pause(10);
+  }
+}
+
+test("P2b wire preserves frame layouts and decodes aggregated throw and hit messages", () => {
+  const shot = encodeSnowballThrow(throwBall);
+  assert.equal(Buffer.from(shot).toString("hex"), "ff013412d007d0078a02ff7f00000000");
+  assert.deepEqual(decodeSnowballClientEvent(shot), { kind: "throw", ...throwBall });
+  const hit = { ballId: throwBall.ballId, throwerId: 258, zone: "head" } as const;
+  assert.equal(Buffer.from(encodeSnowballHit(hit)).toString("hex"), "ff02341202010100");
+  const thrown = { kind: "throw", throwerId: 258, ...throwBall } as const;
+  const accepted = { kind: "hit", confirmerId: 513, ...hit } as const;
+  const thrownWire = encodeSnowballRelay(thrown);
+  const acceptedWire = encodeSnowballRelay(accepted);
+  assert.equal(Buffer.from(thrownWire).toString("hex"), "ff0134120201d007d0078a02ff7f00000000");
+  assert.equal(Buffer.from(acceptedWire).toString("hex"), "ff023412020101020100");
+  const combined = Buffer.concat([Buffer.from(thrownWire), Buffer.from(acceptedWire)]);
+  assert.deepEqual(decodeSnowballEvents(combined), [thrown, accepted]);
+  assert.equal(decodeSnowballEvents(combined.subarray(0, -1)), null);
+  assert.equal(decodeSnowballEvents(Buffer.concat([combined, Buffer.of(0x01)])), null);
+  assert.equal(decodeSnowballClientEvent(encodeSnowballThrow({ ...throwBall, dirX: 0 })), undefined);
+});
+
+test("P2b relays only nearby throws and credits the first delivered victim claim exactly once", { timeout: 8000 }, async context => {
+  const { join } = await fixture(context, { width: 180 });
+  const [shooter, victim, watcher, distant] = await Promise.all([
+    join("投手"), join("接球者"), join("观众"), join("远方路人"),
+  ]);
+  shooter.socket.send(encodePose(pose));
+  victim.socket.send(encodePose({ ...pose, east: 2200 }));
+  watcher.socket.send(encodePose({ ...pose, east: 2700 }));
+  distant.socket.send(encodePose({ ...pose, east: 14_000 }));
+  await victim.snapshot.next(records => records.some(record => record.id === shooter.id) &&
+    records.some(record => record.id === watcher.id));
+
+  shooter.socket.send(encodeSnowballThrow({ ...throwBall, east: 25 }));
+  shooter.socket.send(encodeSnowballThrow(throwBall));
+  shooter.socket.send(encodeSnowballThrow(throwBall));
+  const expectedThrow: SnowballRelayEvent = { kind: "throw", throwerId: shooter.id, ...throwBall };
+  for (const receiver of [victim, watcher]) {
+    assert.deepEqual(await receiver.events.next(events => events[0]?.kind === "throw"), [expectedThrow]);
+  }
+  const check = { ballId: throwBall.ballId, throwerId: shooter.id, zone: "head" } as const;
+  distant.socket.send(encodeSnowballHit(check));
+  shooter.socket.send(encodeSnowballHit(check));
+  victim.socket.send(encodeSnowballHit({ ...check, ballId: check.ballId + 1 }));
+  await pause();
+  assert.deepEqual(shooter.events.pending(), []);
+  assert.deepEqual(victim.events.pending(), []);
+  assert.deepEqual(distant.events.pending(), []);
+
+  victim.socket.send(encodeSnowballHit(check));
+  const confirmed = { kind: "hit", confirmerId: victim.id, ...check };
+  for (const receiver of [shooter, victim, watcher]) {
+    assert.deepEqual(await receiver.events.next(events => events[0]?.kind === "hit"), [confirmed]);
+  }
+  victim.socket.send(encodeSnowballHit(check));
+  watcher.socket.send(encodeSnowballHit(check));
+  await pause();
+  for (const receiver of [shooter, victim, watcher, distant]) assert.deepEqual(receiver.events.pending(), []);
+});
+
+test("P2b clamps legal hand origins to bounds and refills a 6-burst, 4/s throw bucket", { timeout: 7000 }, async context => {
+  let time = 0;
+  const { join } = await fixture(context, { now: () => time, width: 20 });
+  const [shooter, receiver] = await Promise.all([join("边界投手"), join("观察")]);
+  shooter.socket.send(encodePose(pose));
+  receiver.socket.send(encodePose(pose));
+  await pause();
+  time = 100;
+  await receiver.snapshot.next(records => records.some(record => record.id === shooter.id));
+
+  for (let ballId = 1; ballId <= 7; ballId++) {
+    shooter.socket.send(encodeSnowballThrow({ ...throwBall, ballId, east: 50 }));
+  }
+  for (let ballId = 1; ballId <= 6; ballId++) {
+    assert.deepEqual(await receiver.events.next(events => events[0]?.ballId === ballId),
+      [{ kind: "throw", throwerId: shooter.id, ...throwBall, ballId }]);
+  }
+  await pause();
+  assert.deepEqual(receiver.events.pending(), []);
+
+  time = 350;
+  shooter.socket.send(encodeSnowballThrow({ ...throwBall, ballId: 8 }));
+  const refill = await receiver.events.next(events => events[0]?.ballId === 8);
+  assert.equal(refill[0].kind, "throw");
+  time = 3350;
+  receiver.socket.send(encodeSnowballHit({ ballId: 8, throwerId: shooter.id, zone: "torso" }));
+  await pause();
+  assert.deepEqual(shooter.events.pending(), []);
+});
+
+test("P2b event egress forces tier 2 from tier 1, then recovers after 30 s below 200 KB/s", { timeout: 12000 }, async context => {
+  let time = 0;
+  const { join, server } = await fixture(context, {
+    now: () => time,
+    tiers: [{ minOnline: 0, radius: 80, hz: 10 }, { minOnline: 25, radius: 64, hz: 5 }, { minOnline: 49, radius: 48, hz: 2.5 }],
+  });
+  const clients = await Promise.all(Array.from({ length: 48 }, (_, i) => join("负载" + i)));
+  const observer = clients[0];
+  await until(() => server.stats().online === 48 && server.stats().tier === 1);
+  time = 5100;
+  for (const client of clients) client.socket.send(encodePose(pose));
+  await pause();
+  time += 200;
+  await observer.snapshot.next(records => records.length === 40);
+  assert.ok(server.stats().egressBytesPerSecond < 200_000);
+
+  function burst(firstId: number) {
+    for (const shooter of clients) {
+      for (let ballId = firstId; ballId < firstId + 6; ballId++) {
+        shooter.socket.send(encodeSnowballThrow({ ...throwBall, ballId }));
+      }
+    }
+  }
+
+  burst(1);
+  await until(() => server.stats().egressBytesPerSecond >= 210_000);
+  assert.equal(server.stats().tier, 1);
+  time += 1500;
+  burst(7);
+  await until(() => server.stats().tier === 2);
+  const down = await observer.text.next(message => message.type === "tier" && message.tier === 2);
+  assert.ok(down.egressBytesPerSecond! > 350_000);
+  context.diagnostic("48 clients; tier 2 at " + down.egressBytesPerSecond + " estimated B/s");
+  time += 400;
+  await observer.snapshot.next(records => records.length === 32);
+
+  time += 5_100;
+  await until(() => server.stats().egressBytesPerSecond < 200_000);
+  time += 29_999;
+  await pause();
+  assert.equal(server.stats().tier, 2);
+  time++;
+  await until(() => server.stats().tier === 1);
+});
+
+test("P2b chat relay validates scope and rate, while changed poses replay in a new join roster", { timeout: 8000 }, async context => {
+  const { join } = await fixture(context, { width: 180 });
+  const [speaker, listener, high, far] = await Promise.all([
+    join("发言"), join("近邻"), join("楼上"), join("远方"),
+  ]);
+  speaker.socket.send(encodePose(pose));
+  listener.socket.send(encodePose({ ...pose, east: 2100 }));
+  high.socket.send(encodePose({ ...pose, height: 1600 }));
+  far.socket.send(encodePose({ ...pose, east: 12_000 }));
+  await listener.snapshot.next(records => records.some(record => record.id === high.id));
+
+  speaker.socket.send(JSON.stringify({ type: "chat", scope: "unknown", text: "  雪" + String.fromCharCode(0) + "镇  " }));
+  const nearby = await listener.text.next(message => message.type === "chat");
+  assert.deepEqual(nearby, { type: "chat", scope: "near", id: speaker.id, name: "发言", text: "雪镇" });
+  speaker.socket.send(JSON.stringify({ type: "chat", scope: "town", text: "雪".repeat(101) }));
+  speaker.socket.send(JSON.stringify({ type: "chat", scope: "town", text: "全镇广播" }));
+  speaker.socket.send(JSON.stringify({ type: "chat", scope: "town", text: "超额" }));
+  for (const receiver of [listener, high, far]) {
+    assert.equal((await receiver.text.next(message => message.type === "chat")).text, "全镇广播");
+  }
+  for (const receiver of [speaker, listener, high, far]) {
+    assert.equal(receiver.text.pending().some(message => message.type === "chat"), false);
+  }
+
+  speaker.socket.send(JSON.stringify({ type: "pose", pose: 4 }));
+  const seated = await listener.text.next(message => message.type === "pose");
+  assert.deepEqual(seated, { type: "pose", id: speaker.id, pose: 4 });
+  speaker.socket.send(JSON.stringify({ type: "pose", pose: 4 }));
+  speaker.socket.send(JSON.stringify({ type: "pose", pose: 255 }));
+  await pause();
+  assert.equal(listener.text.pending().some(message => message.type === "pose"), false);
+  assert.equal(far.text.pending().some(message => message.type === "pose"), false);
+
+  const newcomer = await join("花名册");
+  const roster = await newcomer.text.next(message => message.type === "join" && message.id === speaker.id);
+  assert.equal(roster.pose, 4);
+});
+
+test("test fireworks joins five continuously then sends the same scheduled event to all joined sockets", { timeout: 8000 }, async context => {
+  let time = 0;
+  const { connect, join } = await fixture(context, { now: () => time, testFireworks: true });
+  const clients = await Promise.all(Array.from({ length: 4 }, (_, i) => join("看烟花" + i)));
+  const unjoined = await connect();
+  time = testFireworksDwellMs;
+  await pause();
+  assert.equal(clients[0].text.pending().some(message => message.type === "event"), false);
+  unjoined.socket.close();
+  clients.push(await join("第五个"));
+  assert.ok(clients.every(client => Number.isSafeInteger(client.epochMs)));
+
+  time = 2 * testFireworksDwellMs - 1;
+  await pause();
+  assert.equal(clients[0].text.pending().some(message => message.type === "event"), false);
+  time++;
+  const notice = await Promise.all(clients.map(client => client.text.next(message => message.kind === "announce")));
+  assert.ok(notice.every(message => message.message === testFireworksAnnouncement));
+
+  time += testFireworksNoticeMs - testFireworksLeadMs;
+  const shows = await Promise.all(clients.map(client => client.text.next(message => message.kind === "test-fireworks")));
+  assert.ok(Number.isInteger(shows[0].seed));
+  assert.ok(shows[0].startAt! >= clients[4].epochMs!);
+  for (const show of shows) assert.deepEqual(show, shows[0]);
+  const late = await join("迟到");
+  await pause();
+  assert.equal(late.text.pending().some(message => message.type === "event"), false);
+});
+
+test("test fireworks stays off by default even with five joined and an elapsed dwell", { timeout: 7000 }, async context => {
+  let time = 0;
+  const { join } = await fixture(context, { now: () => time });
+  const clients = await Promise.all(Array.from({ length: 5 }, (_, i) => join("默认关闭" + i)));
+  time = testFireworksDwellMs + testFireworksNoticeMs;
+  await pause();
+  assert.ok(clients.every(client => !client.text.pending().some(message => message.type === "event")));
 });

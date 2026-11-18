@@ -6,6 +6,28 @@ function unusedPanel(): never {
   throw new Error('The score model can run without a DOM');
 }
 
+test('remote scoreboard entries affect received and hit standings but never persist a recycled session ID', () => {
+  const saved = new Map<string, string>();
+  const options = {
+    open: unusedPanel,
+    label: (id: string) => id === 'p:7' ? '小镇邻居' : '你',
+    storage: {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, data: string) => { saved.set(key, data); },
+    },
+  };
+  const board = createTownSnowballBoard(options);
+  board.recordThrow('p:7');
+  board.recordHit('p:7', 'local');
+  assert.deepEqual(board.getRows().map(row => [row.id, row.label, row.hits, row.received]), [
+    ['p:7', '小镇邻居', 1, 0], ['local', '你', 0, 1],
+  ]);
+  board.flush();
+  assert.deepEqual(createTownSnowballBoard(options).getRows(), board.getRows().filter(row => row.id === 'local'));
+  board.clearRemoteScores();
+  assert.deepEqual(board.getRows().map(row => row.id), ['local']);
+});
+
 test('snowball board announces each formal streak milestone and resets local aliases when hit', () => {
   let now = 0;
   const alerts: string[] = [];

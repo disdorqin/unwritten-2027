@@ -1,11 +1,21 @@
 import type { PerspectiveCamera, Scene } from 'three';
+import {
+  decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, SNOWBALL_EVENT_PREFIX,
+  type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
+} from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
 } from './town-presence-motion';
 
-type Actor = PresencePose & { id: number; name: string; history: PresenceSample[]; seen: number };
+type Actor = PresencePose & { id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number };
+
+type TownNotice = { kind: 'announce'; message: string }
+  | { kind: 'test-fireworks'; seed: number; startAt: number };
+const queuedEventLimit = 128;
+const eventFrameLimit = 20;
+const eventFrameBudgetMs = 0.2;
 
 const sampleInterval = .1;
 const retryDelays = [1000, 2000, 5000, 10000, 30000] as const;
@@ -48,6 +58,13 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   const roster = new Map<number, string>();
   const actors = new Map<number, Actor>();
   const renderList: Actor[] = [];
+  const snowballEvents: SnowballRelayEvent[] = [];
+  const notices: TownNotice[] = [];
+  let onSnowballEvent: ((event: SnowballRelayEvent) => void) | undefined;
+  let onTestFireworks: ((seed: number, ageSeconds: number) => void) | undefined;
+  let joinedId: number | null = null;
+  let joinedName: string | undefined;
+  let serverEpochOffset: number | undefined;
   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
   let socket: WebSocket | undefined;
   let timeout: number | undefined;
@@ -109,6 +126,11 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     const active = socket;
     socket = undefined;
     haveId = false;
+    joinedId = null;
+    joinedName = undefined;
+    serverEpochOffset = undefined;
+    snowballEvents.length = 0;
+    notices.length = 0;
     roster.clear();
     actors.clear();
     renderList.length = 0;
@@ -124,13 +146,32 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
 
   function receive(data: unknown) {
     if (typeof data === 'string') {
-      let message: { type?: string; id?: number; name?: string; self?: boolean };
+      let message: {
+        type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
+        kind?: string; message?: string; seed?: number; startAt?: number;
+      };
       try { message = JSON.parse(data); } catch { return; }
-      if (!message || !Number.isInteger(message.id) || message.id! < 1 || message.id! > 65535) return;
+      if (!message) return;
+      if (haveId && message.type === 'event') {
+        if (notices.length >= 8) return;
+        if (message.kind === 'announce' && typeof message.message === 'string') {
+          notices.push({ kind: 'announce', message: message.message });
+        } else if (message.kind === 'test-fireworks' && Number.isInteger(message.seed) &&
+          typeof message.startAt === 'number' && Number.isFinite(message.startAt)) {
+          notices.push({ kind: 'test-fireworks', seed: message.seed!, startAt: message.startAt });
+        }
+        return;
+      }
+      if (!Number.isInteger(message.id) || message.id! < 1 || message.id! > 65535) return;
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
           haveId = true;
+          joinedId = id;
+          joinedName = message.name;
+          if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
+            serverEpochOffset = message.epochMs - performance.now();
+          }
           resetRetry();
           if (timeout !== undefined) window.clearTimeout(timeout);
           timeout = undefined;
@@ -151,6 +192,17 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       return;
     }
     if (!haveId || !(data instanceof ArrayBuffer)) return;
+    if (new Uint8Array(data, 0, Math.min(1, data.byteLength))[0] === SNOWBALL_EVENT_PREFIX) {
+      if (snowballEvents.length >= queuedEventLimit) return;
+      const events = decodeSnowballEvents(data);
+      if (events) {
+        for (const event of events) {
+          if (snowballEvents.length >= queuedEventLimit) break;
+          snowballEvents.push(event);
+        }
+      }
+      return;
+    }
     const stamp = ++epoch;
     const time = performance.now();
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
@@ -206,6 +258,29 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     lastHeightYaw = heightYaw;
   }
 
+  function sendEvent(bytes: Uint8Array) {
+    const active = socket;
+    if (!haveId || active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
+    try { active.send(bytes); return true; }
+    catch { connectionLost(); return false; }
+  }
+
+  function drainEvents() {
+    for (const notice of notices) {
+      if (notice.kind === 'announce') announce(notice.message);
+      else if (serverEpochOffset !== undefined) {
+        onTestFireworks?.(notice.seed, (performance.now() + serverEpochOffset - notice.startAt) / 1000);
+      }
+    }
+    notices.length = 0;
+    if (!snowballEvents.length) return;
+    const end = performance.now() + eventFrameBudgetMs;
+    for (let i = 0; i < eventFrameLimit && snowballEvents.length; i++) {
+      onSnowballEvent?.(snowballEvents.shift()!);
+      if (performance.now() >= end) break;
+    }
+  }
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') scheduleConnection();
     else cancelRetryTimer();
@@ -217,6 +292,17 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   });
 
   return {
+    selfId: () => joinedId,
+    snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
+    getSnowballPeers: (): readonly (PresencePose & { id: number; name: string })[] => renderList,
+    sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
+    sendSnowballHit: (event: SnowballHit) => sendEvent(encodeSnowballHit(event)),
+    animateSnowballThrow(id: number) {
+      const actor = actors.get(id);
+      if (actor) actor.throwGestureStarted = performance.now();
+    },
+    onSnowballEvent(handler: (event: SnowballRelayEvent) => void) { onSnowballEvent = handler; },
+    onTestFireworks(handler: (seed: number, ageSeconds: number) => void) { onTestFireworks = handler; },
     sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
       show = visible;
       if (active) {
@@ -236,7 +322,8 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     update(dt: number) {
       if (!socket) return;
       sendPose(dt);
-      if (!show || !actors.size) { avatars?.clear(); return; }
+      drainEvents();
+      if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
       avatars ??= createPresenceAvatars(scene, camera);
       const now = performance.now();
       renderList.length = 0;

@@ -1,4 +1,8 @@
 *
+!src/
+!src/presence/
+!src/presence/snowball-events.ts
+!src/presence/test-fireworks.ts
 !docs/
 !docs/p0-layout-draft.json
 !tools/

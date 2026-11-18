@@ -10,6 +10,7 @@ export type PresenceAvatarActor = {
   north: number;
   height: number;
   yaw: number;
+  throwGestureStarted?: number;
 };
 
 const capacity = 48;
@@ -32,7 +33,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   mesh.name = 'town-presence-avatars';
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   const matrices = mesh.instanceMatrix.array;
-  // Each matrix starts at identity. The middle column and bottom row stay fixed.
+  // Most axes retain their initial values. The throwing arm also writes its pitched axes.
   for (let instance = 0; instance < capacity * partCount; instance++) {
     matrices[instance * 16 + 5] = voxelPersonParts[instance % partCount][1][1];
   }
@@ -92,6 +93,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     let visible = 0;
     let shownNext = 0;
     let colorsChanged = false;
+    const elapsedMs = performance.now();
 
     for (const actor of actors) {
       const worldZ = -actor.north;
@@ -107,18 +109,38 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       const palette = coatColors[colorIndex];
       const recolor = colorIndex !== slotColors[visible];
       const firstInstance = visible * partCount;
+      const progress = (elapsedMs - (actor.throwGestureStarted ?? -Infinity)) / 350;
+      const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
+      const armCosine = Math.cos(armPitch);
+      const armSine = Math.sin(armPitch);
       for (let offset = 0; offset < partCount; offset++) {
-        const [[x, y, z], [width, , depth], tint] = voxelPersonParts[offset];
+        const [[x, y, z], [width, height, depth], tint] = voxelPersonParts[offset];
         const instance = firstInstance + offset;
         const matrix = instance * 16;
         // Three.js stores the scaled local X and Z axes as columns.
         matrices[matrix] = width * cosine;
         matrices[matrix + 2] = -width * sine;
-        matrices[matrix + 8] = depth * sine;
-        matrices[matrix + 10] = depth * cosine;
-        matrices[matrix + 12] = actor.east + x * cosine + z * sine;
-        matrices[matrix + 13] = actor.height + y;
-        matrices[matrix + 14] = worldZ - x * sine + z * cosine;
+        const rightArm = x > .32 && y > .75;
+        if (rightArm) {
+          const shoulder = 1.43;
+          const localY = y - shoulder;
+          const pitchedZ = localY * armSine + z * armCosine;
+          matrices[matrix + 4] = height * armSine * sine;
+          matrices[matrix + 5] = height * armCosine;
+          matrices[matrix + 6] = height * armSine * cosine;
+          matrices[matrix + 8] = depth * armCosine * sine;
+          matrices[matrix + 9] = -depth * armSine;
+          matrices[matrix + 10] = depth * armCosine * cosine;
+          matrices[matrix + 12] = actor.east + x * cosine + pitchedZ * sine;
+          matrices[matrix + 13] = actor.height + shoulder + localY * armCosine - z * armSine;
+          matrices[matrix + 14] = worldZ - x * sine + pitchedZ * cosine;
+        } else {
+          matrices[matrix + 8] = depth * sine;
+          matrices[matrix + 10] = depth * cosine;
+          matrices[matrix + 12] = actor.east + x * cosine + z * sine;
+          matrices[matrix + 13] = actor.height + y;
+          matrices[matrix + 14] = worldZ - x * sine + z * cosine;
+        }
         if (recolor) mesh.setColorAt(instance, palette[tint]);
       }
       if (recolor) {

@@ -1,12 +1,16 @@
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import {
-  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, TOWN_BOUNDS,
+  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
+import { createPresenceEgress } from './egress.js';
+import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
+import { createTestFireworksSchedule } from './test-fireworks.js';
 
 type Options = {
   host?: string;
@@ -15,6 +19,8 @@ type Options = {
   depth?: number;
   height?: number;
   tiers?: readonly PresenceTier[];
+  now?: () => number;
+  testFireworks?: boolean;
 };
 
 type Peer = {
@@ -28,11 +34,39 @@ type Peer = {
   alive: boolean;
   tokens: number;
   tokenAt: number;
+  throws: TokenBucket;
+  chat: TokenBucket;
+  poseRate: TokenBucket;
+  pose: number;
+  floodAt: number;
+  floodCount: number;
+  pendingThrows: Map<number, PendingThrow>;
 };
+
+type TokenBucket = { tokens: number; at: number };
+type PendingThrow = { expiresAt: number; recipients: Set<Peer>; confirmed: boolean };
 
 const centimetresPerCell = CELL_METRES * 100;
 const backlogLimit = 32 * 1024;
 const rateBurst = 2;
+const throwRate = 4;
+const throwBurst = 6;
+const throwWindowMs = 3000;
+const eventFloodPerSecond = 128;
+const eventVisibleLimits = [MAX_VISIBLE, 40, 32] as const;
+const fallbackLoadTier = { minOnline: 49, radius: 48, hz: 2.5 } as const;
+
+function consume(bucket: TokenBucket, now: number, rate: number, capacity: number) {
+  bucket.tokens = Math.min(capacity, bucket.tokens + (now - bucket.at) * rate / 1000);
+  bucket.at = now;
+  if (bucket.tokens < 1) return false;
+  bucket.tokens--;
+  return true;
+}
+
+function horizontalDistanceSquared(a: PresenceRecord, b: PresenceRecord) {
+  return (a.east - b.east) ** 2 + (a.north - b.north) ** 2;
+}
 
 function metresToLimit(value: number): number {
   if (!Number.isFinite(value) || value <= 0 || value > 655.35) throw new Error('Invalid presence coordinate limit.');
@@ -50,6 +84,9 @@ function bytesOf(data: RawData): Uint8Array {
 
 export async function createPresenceServer(options: Options = {}) {
   const tiers = checkTiers(options.tiers ?? [BASE_TIER]);
+  const now = options.now ?? (() => performance.now());
+  const egress = createPresenceEgress();
+  const fireworks = options.testFireworks ? createTestFireworksSchedule() : undefined;
   const eastLimit = metresToLimit(options.width ?? TOWN_BOUNDS.width);
   const northLimit = metresToLimit(options.depth ?? TOWN_BOUNDS.depth);
   const heightLimit = metresToLimit(options.height ?? TOWN_BOUNDS.height);
@@ -59,18 +96,108 @@ export async function createPresenceServer(options: Options = {}) {
   let nextId = 1;
   let online = 0;
   let tier = tiers[0];
-  let lastTick = performance.now();
+  let tierIndex = 0;
+  let egressBytesPerSecond = 0;
+  let lastTick = now();
   let closing = false;
   let stop: Promise<void> | undefined;
 
   function send(peer: Peer, data: string | Uint8Array) {
     if (peer.socket.readyState !== WebSocket.OPEN || peer.socket.bufferedAmount > backlogLimit) return false;
     peer.socket.send(data);
+    egress.record(now(), typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength);
     return true;
   }
 
-  function broadcast(data: string, exclude: Peer) {
+  function broadcast(data: string, exclude?: Peer) {
     for (const peer of peers.values()) if (peer !== exclude && peer.name) send(peer, data);
+  }
+
+  function updateFireworks(time: number) {
+    const event = fireworks?.update(online, time, Date.now(), () => randomBytes(4).readUInt32LE());
+    if (event) broadcast(JSON.stringify(event));
+  }
+
+  function relevantPeers(peer: Peer, radius: number, limit: number, heightGate = false) {
+    const state = peer.record;
+    if (!state) return [];
+    const radiusSquared = (radius * 100) ** 2;
+    const nearby: { peer: Peer; distance: number }[] = [];
+    for (const candidate of peers.values()) {
+      const candidateState = candidate.record;
+      if (candidate === peer || !candidateState) continue;
+      if (heightGate && Math.abs(state.height - candidateState.height) > 1000) continue;
+      const distance = horizontalDistanceSquared(state, candidateState);
+      if (distance <= radiusSquared) nearby.push({ peer: candidate, distance });
+    }
+    nearby.sort((a, b) => a.distance - b.distance || a.peer.id - b.peer.id);
+    return nearby.slice(0, limit).map(entry => entry.peer);
+  }
+
+  function allowEvent(peer: Peer, time: number) {
+    if (time - peer.floodAt >= 1000) {
+      peer.floodAt = time;
+      peer.floodCount = 0;
+    }
+    if (++peer.floodCount <= eventFloodPerSecond) return true;
+    peer.socket.close(1008);
+    return false;
+  }
+
+  function receiveSnowball(peer: Peer, bytes: Uint8Array) {
+    if (!peer.name) { peer.socket.close(1008); return; }
+    const time = now();
+    if (!allowEvent(peer, time)) return;
+    const event = decodeSnowballClientEvent(bytes);
+    if (!event || !peer.record) return;
+
+    if (event.kind === 'hit') {
+      const thrower = peers.get(event.throwerId);
+      const pending = thrower?.pendingThrows.get(event.ballId);
+      if (!thrower || !pending || pending.expiresAt <= time || pending.confirmed || !pending.recipients.has(peer)) return;
+      pending.confirmed = true;
+      const relay = encodeSnowballRelay({ ...event, confirmerId: peer.id });
+      send(thrower, relay);
+      for (const recipient of pending.recipients) send(recipient, relay);
+      return;
+    }
+
+    if (!consume(peer.throws, time, throwRate, throwBurst)) return;
+    const feet = peer.record;
+    event.east = Math.min(eastLimit / 100, event.east);
+    event.north = Math.min(northLimit / 100, event.north);
+    event.height = Math.min(heightLimit / 100, event.height);
+    const handDistanceSquared = (event.east - feet.east / 100) ** 2
+      + (event.north - feet.north / 100) ** 2 + (event.height - feet.height / 100 - 1.5) ** 2;
+    if (handDistanceSquared > 9) return;
+    for (const [ballId, pending] of peer.pendingThrows) {
+      if (pending.expiresAt <= time) peer.pendingThrows.delete(ballId);
+    }
+    if (peer.pendingThrows.has(event.ballId)) return;
+    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id });
+    const recipients = new Set<Peer>();
+    for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) {
+      if (send(recipient, relay)) recipients.add(recipient);
+    }
+    peer.pendingThrows.set(event.ballId, { expiresAt: time + throwWindowMs, recipients, confirmed: false });
+  }
+
+  function receiveChat(peer: Peer, text: unknown, requestedScope: unknown) {
+    if (typeof text !== 'string') return;
+    const clean = text.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').trim();
+    if (!clean || [...clean].length > 100 || !consume(peer.chat, now(), 1 / 1.5, 2)) return;
+    const scope = requestedScope === 'town' ? 'town' : 'near';
+    const relay = JSON.stringify({ type: 'chat', id: peer.id, name: peer.name, scope, text: clean });
+    if (scope === 'town') broadcast(relay, peer);
+    else for (const recipient of relevantPeers(peer, 40, MAX_SESSIONS, true)) send(recipient, relay);
+  }
+
+  function receivePose(peer: Peer, pose: unknown) {
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 5 ||
+        peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
+    peer.pose = pose;
+    const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });
+    for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) send(recipient, relay);
   }
 
   function remove(peer: Peer) {
@@ -79,6 +206,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (!peer.name) return;
     online--;
     broadcast(JSON.stringify({ type: 'leave', id: peer.id }), peer);
+    updateFireworks(now());
   }
 
   function receiveText(peer: Peer, bytes: Uint8Array) {
@@ -93,6 +221,16 @@ export async function createPresenceServer(options: Options = {}) {
       peer.socket.close();
       return;
     }
+    if (message.type === 'chat' && peer.name) {
+      if (allowEvent(peer, now())) {
+        receiveChat(peer, 'text' in message ? message.text : undefined, 'scope' in message ? message.scope : undefined);
+      }
+      return;
+    }
+    if (message.type === 'pose' && peer.name) {
+      if (allowEvent(peer, now())) receivePose(peer, 'pose' in message ? message.pose : undefined);
+      return;
+    }
     if (message.type !== 'join' || peer.name || !('name' in message)) {
       peer.socket.close(1008);
       return;
@@ -102,19 +240,20 @@ export async function createPresenceServer(options: Options = {}) {
     clearTimeout(peer.joinTimer);
     peer.name = name;
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), tier: tierIndex }));
     for (const other of peers.values()) {
-      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name }));
+      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
+    updateFireworks(now());
   }
 
   function receiveState(peer: Peer, bytes: Uint8Array) {
     const record = readRecord(bytes);
     if (!peer.name || !record) { peer.socket.close(1008); return; }
-    const now = performance.now();
-    peer.tokens = Math.min(rateBurst, peer.tokens + (now - peer.tokenAt) * BASE_TIER.hz / 1000);
-    peer.tokenAt = now;
+    const time = now();
+    peer.tokens = Math.min(rateBurst, peer.tokens + (time - peer.tokenAt) * BASE_TIER.hz / 1000);
+    peer.tokenAt = time;
     if (peer.tokens < 1) return;
     peer.tokens--;
     record.id = peer.id;
@@ -159,10 +298,13 @@ export async function createPresenceServer(options: Options = {}) {
         }
       }
       nearby.sort((a, b) => a.distance - b.distance || a.peer.id - b.peer.id);
-      const visible = nearby.slice(0, MAX_VISIBLE).map(entry => entry.peer).sort((a, b) => a.id - b.id);
+      const visible = nearby.slice(0, eventVisibleLimits[tierIndex]).map(entry => entry.peer).sort((a, b) => a.id - b.id);
       if (visible.length === peer.visible.length &&
           visible.every((other, i) => other.id === peer.visible[i].id && other.version === peer.visible[i].version)) continue;
       if (send(peer, writeSnapshot(visible.map(other => other.record!)))) {
+        for (const other of visible) if (other.pose && !peer.visible.some(previous => previous.id === other.id)) {
+          send(peer, JSON.stringify({ type: 'pose', id: other.id, pose: other.pose }));
+        }
         peer.visible = visible.map(other => ({ id: other.id, version: other.version }));
       }
     }
@@ -185,9 +327,12 @@ export async function createPresenceServer(options: Options = {}) {
       while (peers.has(nextId)) nextId = nextId % 65535 + 1;
       const id = nextId;
       nextId = nextId % 65535 + 1;
+      const t = now();
       const peer: Peer = {
         socket: ws, id, visible: [], version: 0, alive: true, tokens: rateBurst,
-        tokenAt: performance.now(), joinTimer: setTimeout(() => ws.close(1008), 5000),
+        tokenAt: t, joinTimer: setTimeout(() => ws.close(1008), 5000),
+        throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
+        floodAt: t, floodCount: 0, pendingThrows: new Map(),
       };
       peers.set(id, peer);
       ws.on('error', () => { remove(peer); ws.terminate(); });
@@ -195,8 +340,10 @@ export async function createPresenceServer(options: Options = {}) {
       ws.on('pong', () => { peer.alive = true; });
       ws.on('message', (data, binary) => {
         if (!peers.has(id)) return;
-        if (binary) receiveState(peer, bytesOf(data));
-        else receiveText(peer, bytesOf(data));
+        const bytes = bytesOf(data);
+        if (!binary) receiveText(peer, bytes);
+        else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
+        else receiveSnowball(peer, bytes);
       });
     });
   });
@@ -209,13 +356,21 @@ export async function createPresenceServer(options: Options = {}) {
     });
   });
   const tick = setInterval(() => {
-    if (!online) return;
-    const now = performance.now();
-    tier = tiers[0];
-    for (const candidate of tiers) if (online >= candidate.minOnline) tier = candidate;
-    if (now - lastTick < 1000 / tier.hz) return;
+    const time = now();
+    updateFireworks(time);
+    const pressure = egress.sample(time);
+    egressBytesPerSecond = pressure.bytesPerSecond;
+    let nextTier = 0;
+    for (let i = 1; i < tiers.length; i++) if (online >= tiers[i].minOnline) nextTier = i;
+    if (pressure.forced) nextTier = Math.max(nextTier, 2);
+    if (tierIndex !== nextTier) {
+      tierIndex = nextTier;
+      broadcast(JSON.stringify({ type: 'tier', tier: tierIndex, egressBytesPerSecond }));
+    }
+    tier = tiers[tierIndex] ?? fallbackLoadTier;
+    if (!online || time - lastTick < 1000 / tier.hz) return;
     lastTick += 1000 / tier.hz;
-    if (now - lastTick >= 1000 / tier.hz) lastTick = now;
+    if (time - lastTick >= 1000 / tier.hz) lastTick = time;
     sendSnapshots();
   }, 10);
   const heartbeat = setInterval(() => {
@@ -224,12 +379,14 @@ export async function createPresenceServer(options: Options = {}) {
       if (peer.socket.readyState === WebSocket.OPEN) {
         peer.alive = false;
         peer.socket.ping();
+        egress.record(now(), 0);
       }
     }
   }, 20_000);
 
   return {
     address: () => http.address() as AddressInfo,
+    stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
     close() {
       if (stop) return stop;
       closing = true;
