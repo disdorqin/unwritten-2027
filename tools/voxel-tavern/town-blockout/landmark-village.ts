@@ -220,6 +220,6 @@ export function villageHousePortals(group: Group, heightAt: (x: number, n: numbe
   return stands.map(([localX, localZ], index) => {
     const point = group.localToWorld(new Vector3(localX, 0, localZ));
     const x = point.x, n = -point.z;
-    return { id: `village:${index}`, x, n, ground: heightAt(x, n), exitYaw: Math.atan2(forward.x, -forward.z) };
+    return { id: `village:${index}`, zone: 'forest', x, n, ground: heightAt(x, n), exitYaw: Math.atan2(forward.x, -forward.z) };
   });
 }
