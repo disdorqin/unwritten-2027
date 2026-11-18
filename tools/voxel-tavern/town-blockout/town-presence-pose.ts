@@ -1,21 +1,23 @@
 import type { VoxelPersonPart } from './town-voxel-person';
 
-export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5;
+export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5 | 7;
 
 export function isTownAvatarPose(value: unknown): value is TownAvatarPose {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 5;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && (value <= 5 || value === 7);
 }
 
-export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, riding: boolean, seated: boolean, skateSpeed: number): TownAvatarPose {
+export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, riding: boolean, seated: boolean, skateSpeed: number, sledding = false): TownAvatarPose {
   if (drinking) return 4;
   if (soaking) return 2;
   if (riding) return 5;
+  if (sledding) return 7;
   if (seated) return 1;
   return skateSpeed > .5 ? 3 : 0;
 }
 
 export function avatarRootOffset(pose: TownAvatarPose) {
   if (pose === 2) return -.55;
+  if (pose === 7) return -.37;
   return pose === 1 || pose === 5 ? -.45 : 0;
 }
 
@@ -26,7 +28,7 @@ export function writeAvatarPart(
   const [[x, y, z], [width, tall, depth], , swing = 0] = part;
   const arm = Math.abs(x) > .32 && y > .75;
   const leg = y < .74 && swing !== 0;
-  const seated = pose === 1 || pose === 5;
+  const seated = pose === 1 || pose === 5 || pose === 7;
   let pitch = 0;
   let roll = 0;
   let pivotY = y;

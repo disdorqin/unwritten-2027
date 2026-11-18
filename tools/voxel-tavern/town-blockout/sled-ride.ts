@@ -137,6 +137,12 @@ export function createSledRide(world: SledWorld) {
 
   return {
     spot, mount, leave, step, finishFrame,
+    reset() {
+      active = false;
+      parked = undefined;
+      recovery = recoveryDuration = rollTurns = landingCompression = 0;
+      motion.reset(spot.yaw);
+    },
     active: () => active,
     parked: () => parked,
     recovering: () => recovery > 0,
