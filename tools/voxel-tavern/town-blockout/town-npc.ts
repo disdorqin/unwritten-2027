@@ -172,6 +172,7 @@ export function createTownNpcActivity(
   isDaytime?: () => boolean,
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
+  openChronicle?: () => void,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
@@ -432,6 +433,7 @@ export function createTownNpcActivity(
       button.textContent = label;
       controls.append(button);
     }
+    if (openChronicle) action('看看镇志', openChronicle);
     let guideIndex = 0;
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });

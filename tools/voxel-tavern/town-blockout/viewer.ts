@@ -86,6 +86,10 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
+import { openTownChronicleBook } from './town-chronicle-book';
+import { mainChronicleStone, museumChronicleStops, stationChronicleStone } from './town-chronicle-landmarks';
+import { townChronicleChanged, townChronicleKey } from './town-chronicle';
+import { chronicleEntryDate, readTownChronicleViews, type ChroniclePage } from './town-chronicle-views';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
@@ -693,7 +697,7 @@ panel => openTavernDice(panel, () => {
   if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
   if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
   return '这局你输了，罚酒一杯。';
-}));
+}), () => openTownChronicle());
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 let drinkingPoseUntil = 0;
 let warmDrinkUntil = 0;
@@ -1278,8 +1282,45 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp], riddleActivity.getProgress, zodiac, () => openTownChronicle(),
 );
+function openTownChronicle(entry?: string) {
+  openTownChronicleBook(activityContext.open, {
+    entry, onPassport: () => passport.open(), playerName: presence.playerName(),
+  });
+}
+function openChronicleExcerpt(title: string, entries: readonly ChroniclePage[]) {
+  const panel = activityContext.open(title, '');
+  const list = document.createElement('div');
+  list.className = 'town-mail-form';
+  for (const entry of entries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = entry.title + ' · ' + chronicleEntryDate(entry);
+    button.onclick = () => openTownChronicle(entry.id);
+    list.append(button);
+  }
+  panel.append(list);
+}
+function updateChronicleLandmarks() {
+  const data = readTownChronicleViews();
+  architecture.get('memorial')?.userData.refreshChronicle?.(data);
+  architecture.get('railway-station')?.userData.refreshChronicle?.(data);
+  extensionStreets?.group.userData.refreshChronicle?.(data);
+  activityPanel.querySelector('.town-chronicle-book')?.dispatchEvent(new Event(townChronicleChanged));
+}
+window.addEventListener(townChronicleChanged, updateChronicleLandmarks);
+window.addEventListener('storage', event => { if (event.key === townChronicleKey) updateChronicleLandmarks(); });
+for (const [key, point] of Object.entries(museumChronicleStops)) {
+  const [east, height, z] = museumToWorld(point[0], point[1], point[2]);
+  const title = key === 'book' ? '翻阅《镇志》' : key === 'founding' ? '镇史廊 · 建镇记' : '镇史廊 · 编年精选';
+  activitySpots.push({ x: east, n: -z, ground: height, range: 1.35, label: title,
+    run() {
+      if (key === 'excerpts') openChronicleExcerpt(title, readTownChronicleViews().featured);
+      else openTownChronicle();
+    },
+  });
+}
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
   const { collected, total } = passport.getProgress();
@@ -1411,6 +1452,9 @@ function registerLandmarkActivities(id: string, group: Group) {
       },
     });
     activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity, showLiveRailSchedule));
+    const mirror = stationChronicleStone;
+    activitySpots.push(localSpot(group, [mirror.x, mirror.height, mirror.z + 1.8], 1.45, mirror.name,
+      () => openChronicleExcerpt(mirror.name, readTownChronicleViews().latest)));
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group));
     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
@@ -2122,6 +2166,11 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       registerHomeDoors(extensionStreets.housePortals);
+      const { east, north, name } = mainChronicleStone;
+      const front = north - 1.25;
+      activitySpots.push({ x: east, n: front, ground: grid.heightAt(east, front), range: 1.5, label: name,
+        run: () => openChronicleExcerpt(name, readTownChronicleViews().plaque),
+      });
     }).catch(error => {
       streetsRequested = false;
       console.error('Loading extension streets', error);
