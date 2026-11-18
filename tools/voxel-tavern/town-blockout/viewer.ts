@@ -28,6 +28,7 @@ import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
+import { townSnowWeatherAt } from './town-weather';
 import { createFestival, makeTestFireworksTable } from './festival';
 import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
@@ -109,7 +110,8 @@ const townWater = createTownWater(grid);
 const snowCover = createTownSnowCover(grid);
 const scene = new Scene();
 scene.background = new Color('#adc2dd');
-scene.fog = new Fog('#adc2dd', 360, 1300);
+const townFog = new Fog('#adc2dd', 360, 1300);
+scene.fog = townFog;
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -867,11 +869,6 @@ let effectiveSnowIntensity = 1;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
-  onSnowIntensity(intensity) {
-    effectiveSnowIntensity = intensity;
-    snowfall.setIntensity(intensity);
-    snowCover.setIntensity(intensity);
-  },
   onDim(level) {
     ceremonyDim = level;
     applyCeremonyLighting();
@@ -2138,7 +2135,6 @@ renderer.setAnimationLoop(now => {
   const cullCamera = cullStationView ? stationViewCamera() : cullAerial ? camera : undefined;
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
-  snowCover.update(dt, nightMode);
   if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
@@ -2192,6 +2188,20 @@ renderer.setAnimationLoop(now => {
   }
   festival.update(dt);
   const ceremonyState = ceremony.update();
+  const ceremonySnow = ceremonyState.phase !== 'ordinary' && ceremonyState.phase !== 'standby';
+  const weather = townSnowWeatherAt(ceremonyState.now);
+  effectiveSnowIntensity = ceremonySnow ? ceremonyState.snowIntensity : weather.intensity;
+  snowfall.setIntensity(effectiveSnowIntensity);
+  snowCover.setIntensity(effectiveSnowIntensity);
+  if (ceremonySnow) {
+    snowCover.update(dt, nightMode);
+    townFog.near = 360;
+    townFog.far = 1300;
+  } else {
+    snowCover.updateWeather(dt, weather);
+    townFog.near = weather.fogNear;
+    townFog.far = weather.fogFar;
+  }
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
   const railNotice = railOvernightBroadcast(ceremonyState.now, atRailwayPlatform);
