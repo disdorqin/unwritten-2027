@@ -24,7 +24,7 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     configurable: true,
     value: { createElement: () => ({ getContext: () => ({
       createRadialGradient: () => ({ addColorStop() {} }),
-      fillRect() {},
+      fillRect() {}, strokeRect() {}, fillText() {}, drawImage() {},
     }) }) },
   });
   let scenery: ReturnType<typeof addScenery>;
