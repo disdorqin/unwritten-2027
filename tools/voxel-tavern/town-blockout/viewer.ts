@@ -328,7 +328,7 @@ const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
 let homeReturn: TownHousePortal | undefined;
-let sharedHome: Group | undefined;
+let sharedHome: ReturnType<typeof buildSharedHome> | undefined;
 let sharedHomeGeometry: WalkGeometry | undefined;
 
 function geometry() {
@@ -636,7 +636,7 @@ const activitySpots = activities.flatMap(activity => activity.spots);
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
     activitySpots.push({
-      x: door.x, n: door.n, ground: door.ground, range: 1.5, label: '进入屋舍空间',
+      x: door.x, n: door.n, ground: door.ground, range: 1.6, label: '进入屋舍空间',
       available: () => !homeReturn,
       run: () => enterSharedHome(door),
     });
@@ -651,7 +651,7 @@ function enterSharedHome(door: TownHousePortal) {
     scene.add(sharedHome);
     activitySpots.push(...createSharedHomeSpots({ ...activityContext, announce: announceActivity }, leaveSharedHome, filename => {
       photoFilename = filename;
-    }));
+    }, sharedHome));
   }
   lakeSkating.stop();
   resetMovement();
@@ -662,7 +662,13 @@ function enterSharedHome(door: TownHousePortal) {
   pitch = 0;
   airHeight = undefined;
   riseSpeed = 0;
+  fadeHousePortal();
   announceActivity('屋舍空间 · 从原门口返回');
+}
+function fadeHousePortal() {
+  if (!reduceSnowEffects.matches) renderer.domElement.animate(
+    [{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' },
+  );
 }
 function leaveSharedHome() {
   const door = homeReturn;
@@ -678,6 +684,7 @@ function leaveSharedHome() {
   pitch = 0;
   camera.layers.set(0);
   if (sharedHome) sharedHome.visible = false;
+  fadeHousePortal();
 }
 const townMail = createTownMailActivity({ open: activityContext.open, announce: announceActivity }, grid.heightAt);
 scene.add(townMail.group);
@@ -932,6 +939,10 @@ function cancelSnowAction(source?: 'mouse' | 'touch') {
 }
 function beginSnowAction(source: 'mouse' | 'touch') {
   if (!moveAllowed() || snowHold || waterAtFeet()?.mode === 'swim') return;
+  if (homeReturn) {
+    announceActivity('屋里不兴打雪仗');
+    return;
+  }
   snowHold = { source, started: performance.now() };
   gatherCheck.x = NaN;
   if (source === 'mouse') updateHeldSnowAction(0);
@@ -1245,8 +1256,9 @@ function jump() {
 }
 function mode(next: boolean) {
   if (homeReturn) {
-    announceActivity('请先从屋舍门口返回');
-    return false;
+    leaveSeat();
+    leaveSharedHome();
+    if (homeReturn) return false;
   }
   lakeSkating.stop();
   leaveRide();
@@ -1288,8 +1300,7 @@ element('view-museum').onclick = () => {
   controls.update();
 };
 rehearse.onclick = () => {
-  if (homeReturn || !festival.start()) return;
-  mode(false);
+  if (festival.active() || !mode(false) || !festival.start()) return;
   setNight(true);
   camera.position.set(283, 33, -108);
   controls.target.set(225, 54, -207);
@@ -1687,7 +1698,7 @@ renderer.setAnimationLoop(now => {
   festival.update(dt);
   const ceremonyState = ceremony.update();
   ceremonyOverlay.apply(ceremonyState);
-  ceremonyFrost.setWarmth('interior', sheltered);
+  ceremonyFrost.setWarmth('interior', sheltered || Boolean(homeReturn));
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', Boolean(homeReturn) &&
     sharedHomeHearthWarmth(seated?.x ?? x, seated?.n ?? n, airHeight ?? ground));

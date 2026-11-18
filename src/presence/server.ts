@@ -7,10 +7,6 @@ import {
   BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
-import { isSharedHomePosition } from './shared-home-space.js';
-
-const inSharedHome = (state: PresenceRecord) =>
-  isSharedHomePosition(state.east / 100, state.north / 100, state.height / 100);
 
 type Options = {
   host?: string;
@@ -148,7 +144,6 @@ export async function createPresenceServer(options: Options = {}) {
       const state = peer.record;
       if (!state) continue;
       const nearby: { peer: Peer; distance: number }[] = [];
-      const indoors = inSharedHome(state);
       const minX = Math.floor(Math.max(0, state.east - radius) / centimetresPerCell);
       const maxX = Math.floor(Math.min(eastLimit, state.east + radius) / centimetresPerCell);
       const minN = Math.floor(Math.max(0, state.north - radius) / centimetresPerCell);
@@ -158,7 +153,6 @@ export async function createPresenceServer(options: Options = {}) {
           for (const other of grid.get(east + north * cellStride) ?? []) {
             if (other === peer) continue;
             const position = other.record!;
-            if (inSharedHome(position) !== indoors) continue;
             const distance = (position.east - state.east) ** 2 + (position.north - state.north) ** 2;
             if (distance <= radiusSquared) nearby.push({ peer: other, distance });
           }
