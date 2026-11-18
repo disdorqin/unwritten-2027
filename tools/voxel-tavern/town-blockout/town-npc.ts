@@ -3,7 +3,7 @@ import type { TownActivity, TownActivityContext, TownActivitySpot } from './town
 import type { TownSnowballTarget } from './town-snow-target';
 import { voxelPersonParts as parts, type VoxelPersonPart as Part } from './town-voxel-person';
 import { snowballGravity, snowballSpeed } from './town-snowball';
-import { answerNpcQuestion, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions, npcScript,
+import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 
 type Point = readonly [east: number, north: number];
@@ -317,7 +317,7 @@ export function createTownNpcActivity(
     context.face(spot.x, spot.n, spot.ground + 1.61);
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
-    const dialogue = npcScript[name];
+    const dialogue = npcAuthoredDialogue[name];
     const stories = npcExpansion[name];
     const turns = talkTurns[index];
     const period = npcPeriod(new Date(), isDaytime?.());
