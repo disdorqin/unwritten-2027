@@ -90,6 +90,7 @@ import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
+import { createLighthouseSnakeCharm } from './town-zodiac-snake';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -1295,7 +1296,7 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse', 'horse', 'rooster'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'snake', 'horse', 'rooster'], zodiacStorage);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1383,6 +1384,10 @@ activitySpots.push({
   }),
   available: () => zodiac.canCollect('mouse'),
 });
+activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, zodiac, () => {
+  announceActivity(`蛇 · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+}));
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 const [bellX, bellDeck, bellZ] = towerStops.bell;

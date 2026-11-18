@@ -12,7 +12,11 @@ const names = ['贾明灯', '文墨生', '胡六环', '纪守信', '翁寒江', 
 
 test('all 150 added NPC lines and routing markers round-trip to the Muse manuscript', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC新增六人台词-v1.md', import.meta.url), 'utf8');
-  const expected = source.split(/\r?\n/).filter(line => /^- \[[^\]]+ · [^\]]+\] /.test(line));
+  const snakeUpdate = readFileSync(new URL('../docs/交流区/Muse/给GPT-蛇件新谜面与接线-2026-11-18.md', import.meta.url), 'utf8');
+  const revisedClue = snakeUpdate.match(/^> 「(.+)」$/m)?.[1];
+  assert.ok(revisedClue);
+  const expected = source.split(/\r?\n/).filter(line => /^- \[[^\]]+ · [^\]]+\] /.test(line))
+    .map(line => line.startsWith('- [翁寒江 · 线索] 远处还有一件') ? `- [翁寒江 · 线索] ${revisedClue}` : line);
   const actual = names.flatMap(name => {
     const role = npcAuthoredDialogue[name];
     const lineFor = (category: string, text: string) => `- [${name} · ${category}] ${text}`;
