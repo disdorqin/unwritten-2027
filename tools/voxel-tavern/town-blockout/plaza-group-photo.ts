@@ -5,12 +5,13 @@ import {
 } from '../../../src/presence/plaza-photo';
 import { downloadTownCanvas } from './town-photo-download';
 import { recordTownChroniclePlazaPhoto } from './town-chronicle';
-import './plaza-group-photo.css';
+
 
 type Round = { id: number; captureAt: number; shared: boolean; entered: boolean; optedOut: boolean; lineup?: PlazaPhotoPerson[] };
 type Placement = { east: number; north: number; height: number; active: boolean };
 type PhotoFrame = { round: Round; people: PlazaPhotoPerson[]; showNames: boolean; shutter: boolean };
 
+const lineupGraceMs = 500;
 
 export function createPlazaGroupPhoto(options: {
   now(): number;
@@ -23,7 +24,7 @@ export function createPlazaGroupPhoto(options: {
 }) {
   let round: Round | undefined;
   let eligible = false;
-  let locked = false;
+  let unlockTimer: ReturnType<typeof setTimeout> | undefined;
   let lastPanelText = '';
   let previewNames = true;
   let pendingUntil = 0;
@@ -47,7 +48,7 @@ export function createPlazaGroupPhoto(options: {
   leave.type = 'button';
   leave.textContent = '退出合影';
   leave.onclick = () => {
-    if (!round || locked) return;
+    if (!round || locked()) return;
     if (round.shared) options.leave(round.id);
     round.optedOut = true;
     round.entered = false;
@@ -62,9 +63,19 @@ export function createPlazaGroupPhoto(options: {
   panel.append(count, directions, guide, enter, leave, plateToggle);
   document.body.append(panel);
 
+  function locked() {
+    return unlockTimer !== undefined;
+  }
+
+  function unlock() {
+    clearTimeout(unlockTimer);
+    unlockTimer = undefined;
+    leave.disabled = false;
+  }
+
   function finish() {
     round = undefined;
-    locked = false;
+    unlock();
     panel.hidden = true;
   }
 
@@ -78,9 +89,10 @@ export function createPlazaGroupPhoto(options: {
   }
 
   function receive(notice: PlazaPhotoNotice) {
-    if (notice.captureAt <= options.now() - 500) return;
+    if (notice.captureAt <= options.now() - lineupGraceMs) return;
     if (notice.kind === 'plaza-photo-invite') {
       if (round?.shared && round.id === notice.id && round.captureAt === notice.captureAt) return;
+      unlock();
       round = { id: notice.id, captureAt: notice.captureAt, shared: true, entered: false, optedOut: false };
       options.announce('广场合影，30 秒内到站位集合');
     } else if (round?.shared && round.id === notice.id && round.captureAt === notice.captureAt) {
@@ -94,7 +106,7 @@ export function createPlazaGroupPhoto(options: {
     if (!current) return;
     const time = options.now();
     const remaining = current.captureAt - time;
-    if (remaining < -500 || (remaining <= 0 && (current.optedOut || !current.entered))) {
+    if (remaining < -lineupGraceMs || (remaining <= 0 && (current.optedOut || !current.entered))) {
       finish();
       return;
     }
@@ -112,8 +124,15 @@ export function createPlazaGroupPhoto(options: {
       enter.hidden = standing || current.entered || !eligible;
       plateToggle.hidden = standing;
     }
-    locked = current.entered && remaining <= plazaPhotoLockMs;
-    leave.disabled = locked;
+    if (current.entered && remaining <= plazaPhotoLockMs) {
+      if (!locked()) {
+        // Movement must unlock even when no lineup arrives and animation frames stop.
+        unlockTimer = setTimeout(finish, Math.max(0, remaining + lineupGraceMs));
+        leave.disabled = true;
+      }
+    } else if (locked()) {
+      unlock();
+    }
     if (!current.entered || standing) return;
     if (!current.shared && remaining <= plazaPhotoLockMs && !current.lineup) {
       current.lineup = options.nearby().filter(person => person.id === options.ownId());
@@ -220,5 +239,5 @@ export function createPlazaGroupPhoto(options: {
     body.append(wrapper);
   }
 
-  return { request, receive, update, capture, active: () => !!round, locked: () => locked };
+  return { request, receive, update, capture, active: () => !!round, locked };
 }

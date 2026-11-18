@@ -226,19 +226,27 @@ test("plaza photo relay freezes one shared roster, honours a matching opt-out an
 
     const lockAt = invite.captureAt! - plazaPhotoLockMs;
     wallTime = lockAt - 1;
+    const catchUp = await join("锁定前补进入");
+    assert.deepEqual(await catchUp.text.next(photoInvite), invite);
+    sendPhotoPose(catchUp.socket, 226);
+    catchUp.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    await catchUp.text.next(clockReply);
+
     await delay(25);
     host.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
     assert.equal((await host.text.next(message => photoLineup(message) || clockReply(message))).type, "clock");
 
     wallTime = lockAt;
-    const lineups = await Promise.all([host, staying, optingOut].map(client => client.text.next(photoLineup)));
+    const lineups = await Promise.all([host, staying, optingOut, catchUp].map(client => client.text.next(photoLineup)));
     assert.deepEqual(lineups[0], lineups[1]);
     assert.deepEqual(lineups[0], lineups[2]);
+    assert.deepEqual(lineups[0], lineups[3]);
     assert.equal(lineups[0].id, invite.id);
     assert.equal(lineups[0].captureAt, invite.captureAt);
     assert.deepEqual(lineups[0].people, [
       { id: host.id, name: host.name, east: 224, north: 183, height: 12 },
       { id: staying.id, name: staying.name, east: 225, north: 183, height: 12 },
+      { id: catchUp.id, name: catchUp.name, east: 226, north: 183, height: 12 },
     ]);
 
     const late = await join("锁定后进镇");
@@ -247,7 +255,7 @@ test("plaza photo relay freezes one shared roster, honours a matching opt-out an
     late.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
     assert.equal((await late.text.next(message => photoInvite(message) || photoLineup(message) || clockReply(message))).type, "clock");
 
-    // The first hold expires after the shutter, and all valid players can enter another frame.
+    // The first hold expires after the shutter.
     wallTime = invite.captureAt! + 1001;
     sendPhotoRequest(late.socket);
     const next = await host.text.next(message => photoInvite(message) || photoLineup(message));

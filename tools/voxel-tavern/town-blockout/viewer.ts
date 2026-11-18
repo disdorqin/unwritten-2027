@@ -79,6 +79,7 @@ import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
 import { createPlazaGroupPhoto } from './plaza-group-photo';
+import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
