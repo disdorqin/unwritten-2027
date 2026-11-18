@@ -5,11 +5,14 @@ import { voxelPersonParts as parts, type VoxelPersonPart as Part } from './town-
 import { snowballGravity, snowballSpeed } from './town-snowball';
 import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
+import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
+
+type ActorName = NpcName | typeof tavernWaiterName;
 
 type Point = readonly [east: number, north: number];
 
 const roles: ReadonlyArray<{
-  name: NpcName;
+  name: ActorName;
   job: string;
   home: Point;
   stroll: Point;
@@ -28,11 +31,13 @@ const roles: ReadonlyArray<{
     palette: ['#e8bd9c', '#322b42', '#804371', '#e1a760', '#48344e', '#b13e52', '#ffd58d', '#694066'] },
   { name: '钟铁生', job: '火车站站长', home: [526, 309], stroll: [522.8, 309],
     palette: ['#d9a377', '#233147', '#36536b', '#b55a43', '#2e3748', '#e0b558', '#efd3a0', '#6e4939'] },
+  { name: tavernWaiterName, job: '酒馆跑堂', home: tavernWaiterHome, stroll: tavernWaiterStroll, indoorFloor: tavernWaiterFloor,
+    palette: ['#eeb587', '#39282b', '#426d62', '#ead3a4', '#614b3b', '#bd5944', '#f5d68b', '#75462f'] },
 ];
 
 type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
 
-const battleRoles: Partial<Record<NpcName, { at: Point; start: string; hit: string }>> = {
+const battleRoles: Partial<Record<ActorName, { at: Point; start: string; hit: string }>> = {
   罗大江: { at: [211, 191], start: '下雪天不打雪仗，那还是冬天吗？接招！', hit: '哎哟！好小子，砸得准！看我的！' },
   苏小满: { at: [233, 194], start: '送信我最快，砸人我也不差哦！', hit: '信差点掉雪里啦——这发我记下了！' },
   乔麦: { at: [214, 179], start: '做灯的手稳，砸雪球更稳。', hit: '砸得好！我这团回敬你，接稳了。' },
@@ -45,8 +50,15 @@ const snowHat = [
   [[.035, 2.166, .008], [.235, .09, .23], '#f6fbff'],
 ] as const;
 
-// Replace shared cargo, apron and chest pixels with six readable silhouettes in the same batch.
-const costumes: Readonly<Record<NpcName, readonly Part[]>> = {
+// Distinct silhouettes reuse the common voxel person batch.
+const costumes: Readonly<Record<ActorName, readonly Part[]>> = {
+  [tavernWaiterName]: [
+    [[0, .96, .228], [.44, .54, .064], 3],
+    [[.14, .86, .265], [.148, .154, .045], 5],
+    [[.34, .98, .29], [.47, .073, .31], 7],
+    [[.28, 1.053, .291], [.126, .095, .129], 6],
+    [[.45, 1.044, .29], [.115, .08, .108], 6],
+  ],
   // Innkeeper: long cloth apron, a folded towel and a chunky tankard with a square handle.
   罗大江: [
     [[0, .98, .197], [.40, .47, .055], 3],
@@ -148,6 +160,7 @@ export function createTownNpcActivity(
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
   isDaytime?: () => boolean,
   zodiacHints?: (name: NpcName) => readonly string[] | undefined,
+  playTavernDice?: (panel: HTMLElement) => void,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
@@ -183,7 +196,7 @@ export function createTownNpcActivity(
   let battlePlayer: TownSnowballTarget | undefined;
   let battleTime = 0;
   let nextBattleLine = 0;
-  let active: { role: NpcName; panel: HTMLElement } | undefined;
+  let active: { role: ActorName; panel: HTMLElement } | undefined;
 
   const spots: TownActivitySpot[] = roles.map(({ name, home, indoorFloor }, index) => ({
     x: home[0], n: home[1], ground: indoorFloor ?? heightAt(...home), range: 2.15,
@@ -215,7 +228,7 @@ export function createTownNpcActivity(
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
   const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0, zodiac: 0 }));
-  let visits: Partial<Record<NpcName, number>> = {};
+  const visits: Partial<Record<ActorName, number>> = {};
   try {
     const previous: unknown = JSON.parse(localStorage.getItem(savedVisitKey) ?? 'null');
     if (previous && typeof previous === 'object') {
@@ -318,14 +331,18 @@ export function createTownNpcActivity(
     context.face(spot.x, spot.n, spot.ground + 1.61);
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
-    const dialogue = npcAuthoredDialogue[name];
-    const stories = npcExpansion[name];
-    const turns = talkTurns[index];
-    const period = npcPeriod(new Date(), isDaytime?.());
     const visitsBefore = visits[name] ?? 0;
     visits[name] = visitsBefore + 1;
     try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
     catch { /* The in-memory count still works. */ }
+    if (name === tavernWaiterName) {
+      openWaiterConversation(panel, visitsBefore);
+      return;
+    }
+    const dialogue = npcAuthoredDialogue[name];
+    const stories = npcExpansion[name];
+    const turns = talkTurns[index];
+    const period = npcPeriod(new Date(), isDaytime?.());
     const speech = document.createElement('p');
     speech.setAttribute('role', 'status');
     speech.textContent = npcGreeting(name, period, visitsBefore);
@@ -380,6 +397,35 @@ export function createTownNpcActivity(
       context.announce(npcFarewell(name, period));
     });
     panel.append(speech, selector, controls);
+  }
+
+  function openWaiterConversation(panel: HTMLElement, visitsBefore: number) {
+    const speech = document.createElement('p');
+    speech.setAttribute('role', 'status');
+    speech.textContent = tavernWaiterLines.迎客[visitsBefore % 3];
+    const controls = document.createElement('div');
+    controls.className = 'town-mail-form';
+    function action(label: string, play: () => void) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.onclick = play;
+      controls.append(button);
+    }
+    let pours = 0;
+    let rounds = 0;
+    if (playTavernDice) action('和田小勤摇骰子', () => playTavernDice(panel));
+    action('问问热饮', () => {
+      speech.textContent = tavernWaiterLines.上酒[pours++ % tavernWaiterLines.上酒.length];
+    });
+    action('招呼小二', () => { speech.textContent = tavernWaiterLines.巡堂[rounds++ % 2]; });
+    action('问镇长近况', () => { speech.textContent = tavernWaiterLines.迎客[3]; });
+    action('问你们怎么认识', () => { speech.textContent = tavernWaiterLines.巡堂[3]; });
+    action('道别', () => {
+      panel.closest('dialog')?.close();
+      context.announce(tavernWaiterLines.送客[visitsBefore % tavernWaiterLines.送客.length]);
+    });
+    panel.append(speech, controls);
   }
 
   function pose(index: number, gait: number) {
