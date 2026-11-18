@@ -145,11 +145,12 @@ export function buildVillageLandmark(plot: TownPlot) {
       { min: [-3.5, .05, -7], max: [3.5, .28, -5.4] },
       { min: [-8.55, .34, -5.55], max: [8.55, .52, 5.55] },
     );
-    for (const x of [-7.5, 7.5]) {
+    for (const side of [-1, 1]) {
       for (const z of [-4.7, 4.7]) {
+        const x = side * (expandedTheater && z < 0 ? 8.52 : 7.5);
         add(beam, x, 3.3, z, .75, 5.6, .72);
         add(red, x, 3.35, z, .89, 5, .85);
-        add(gold, x, 5.65, z, 1, .35, 1);
+        add(gold, x, 5.65, z, expandedTheater ? .92 : 1, .35, 1);
         add(window, x, 4.5, z - .55, .5, .55, .52);
         solids.push({ min: [x - .46, .5, z - .43], max: [x + .46, 5.9, z + .43] });
       }

@@ -14,7 +14,7 @@ test('eight bridge mouths reserve their full footprint and leave open approaches
       createElement: () => ({
         getContext: () => ({
           createRadialGradient: () => ({ addColorStop() {} }),
-          fillRect() {},
+          fillRect() {}, strokeRect() {}, fillText() {}, drawImage() {},
         }),
       }),
     },

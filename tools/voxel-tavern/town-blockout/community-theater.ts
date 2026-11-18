@@ -3,6 +3,17 @@ import type { Box, Ramp } from './landmark-kit';
 import { addOpaqueMuseumLabels } from './museum-label-atlas';
 import { createMuseumLabelCanvas } from './museum-label-canvas';
 
+const tierRun = .875;
+const tierRise = .35;
+const standSouth = 162;
+
+export const theaterPhotoPositions = Array.from({ length: 48 }, (_, index) => {
+  const row = Math.floor(index / 12);
+  const col = index % 12;
+  return { east: 224 + (col - 5.5) * 1.28,
+    north: standSouth + (row + .5) * tierRun, height: 12 + (row + 1) * tierRise };
+});
+
 type PieceAdder = (color: string, x: number, y: number, z: number, w: number, h: number, d: number) => void;
 
 export function addCommunityTheaterDetails(
@@ -12,7 +23,7 @@ export function addCommunityTheaterDetails(
   // Pleated curtains frame the open proscenium. Paired pairs narrow the curtain near the floor.
   for (const side of [-1, 1]) {
     for (let index = 0; index < 8; index++) {
-      const x = side * (7.15 + index * .135);
+      const x = side * (8.18 + index * .10);
       const drop = 3.04 - .095 * index;
       add(index % 2 ? red : fabric, x, 4.98 - drop / 2, -4.87 + (index % 2) * .08, .17, drop, .22);
     }
@@ -24,7 +35,7 @@ export function addCommunityTheaterDetails(
       add(red, x, y - .25, -6.22, .36, .11, .36);
     }
   }
-  add(red, 0, 5.09, -4.92, 15.9, .30, .31);
+  add(red, 0, 5.09, -4.92, 17.5, .30, .31);
   for (let x = -8; x <= 8; x += .4) {
     add(Math.round(x * 5) % 4 === 0 ? amber : fabric, x, .365, -5.748, .23, .24, .038);
   }
@@ -38,11 +49,9 @@ export function addCommunityTheaterDetails(
 
   const localEast = (east: number) => east - originEast;
   const localNorth = (north: number) => originNorth - north;
-  const tierRun = .875;
-  const rise = .35;
   for (let index = 0; index < 4; index++) {
-    const south = 162 + index * tierRun;
-    const height = (index + 1) * rise;
+    const south = standSouth + index * tierRun;
+    const height = (index + 1) * tierRise;
     const z = localNorth(south + tierRun / 2);
     add(stone, localEast(224), height / 2, z, 16, height, tierRun);
     add(deck, localEast(224), height - .045, z, 15.9, .09, tierRun - .04);
@@ -55,7 +64,7 @@ export function addCommunityTheaterDetails(
 
   const rampWest = 204.8, rampEast = 216;
   const rampNorth = 165.5, rampSouth = 164.1;
-  const riseTotal = 4 * rise;
+  const riseTotal = 4 * tierRise;
   const segments = 16;
   const run = (rampEast - rampWest) / segments;
   for (let i = 0; i < segments; i++) {
@@ -74,16 +83,18 @@ export function addCommunityTheaterDetails(
     min: [localEast(215.75), 0, localNorth(rampNorth)],
     max: [localEast(216), riseTotal, localNorth(rampLandingSouth)],
   });
-  for (const east of [219, 225, 230]) {
-    add(deck, localEast(east), .38, localNorth(155.5), 1.65, .18, .50);
-    for (const support of [-.58, .58]) add(stone, localEast(east + support), .15, localNorth(155.5), .18, .30, .42);
+  for (const east of [218.4, 229.6]) {
+    for (const north of [154.4, 156.1, 157.8]) {
+      add(deck, localEast(east), .38, localNorth(north), .74, .18, .50);
+      for (const support of [-.24, .24]) add(stone, localEast(east + support), .15, localNorth(north), .13, .30, .42);
+    }
   }
 
   if (typeof document !== 'undefined') {
     const signs = [
       { text: '有戏', x: 0, y: 5.42, width: 2.25, height: .65 },
-      { text: [...'满镇灯花迎未岁'].join('\n'), x: 7.95, y: 3.24, width: .42, height: 2.58 },
-      { text: [...'一台社戏唱丰年'].join('\n'), x: -7.95, y: 3.24, width: .42, height: 2.58 },
+      { text: [...'满镇灯花迎未岁'].join('\n'), x: 8.63, y: 3.24, width: .42, height: 2.58 },
+      { text: [...'一台社戏唱丰年'].join('\n'), x: -8.63, y: 3.24, width: .42, height: 2.58 },
     ];
     addOpaqueMuseumLabels(signs.map(({ text, x, y, width, height }) => ({
       source: createMuseumLabelCanvas(text, width, height), parent: group,
