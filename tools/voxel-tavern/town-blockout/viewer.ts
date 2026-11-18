@@ -31,9 +31,10 @@ import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
 import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
-  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
+  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
+import { ceremonyArrivalAt, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createCeremonyFrost, hasFrostCeremonyRelief } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
@@ -81,7 +82,7 @@ import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
-import { effectiveTownAvatarPose } from './town-presence-pose';
+import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
 import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
@@ -859,7 +860,8 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   reducedMotion: reduceSnowEffects,
 });
 ceremonyFrost.mountSettings(element('town-panel-controls'));
-const ceremonyClock = import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : createLocalCeremonyClock();
+const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
+  ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const postUnlockTime = new Date(UNLOCK_AT).getTime();
 setPostOpeningReady(architecture.get('post-office'), Date.now() >= postUnlockTime);
 const cameraBeforeBellShake = new Quaternion();
@@ -1849,16 +1851,18 @@ function obstructed(east: number, north: number, feet: number) {
     colliders.some(intersects) || floors.some(intersects);
 }
 
+function dryTownLandingHeight(east: number, north: number, heightHint?: number) {
+  if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
+    north > worldBounds.depth - bodyRadius || !walkable(east, north)) return undefined;
+  if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
+  const base = heightHint ?? surfaceAt(east, north);
+  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet)) return undefined;
+  return Number.isFinite(feet) ? feet : undefined;
+}
+
 function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number) {
-  function dryGround(east: number, north: number) {
-    if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
-      north > worldBounds.depth - bodyRadius || !walkable(east, north)) return undefined;
-    if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
-    const base = heightHint ?? surfaceAt(east, north);
-    const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
-    if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet)) return undefined;
-    return Number.isFinite(feet) ? feet : undefined;
-  }
+  const dryGround = (east: number, north: number) => dryTownLandingHeight(east, north, heightHint);
   const [plazaEast, plazaNorth] = layout.plaza.spawn;
   const landing = findNearestLegalSpawn({ x: targetEast, n: targetNorth }, dryGround)
     ?? (heightHint === undefined ? findNearestLegalSpawn({ x: plazaEast, n: plazaNorth }, dryGround) : undefined);
@@ -1980,6 +1984,63 @@ function showLiveRailSchedule(title: string, read: () => string) {
 mode(startInMuseum);
 let presenceSkateSpeed = 0;
 let previousPoseSession: number | null = null;
+let ceremonyArrivalPose: { value: TownAvatarPose; until: number } | undefined;
+
+function arriveAtCeremony(event: CeremonyArrival, now: number) {
+  const landing = ceremonyArrivalAt(event.slot, event.edge);
+  if (!landing) return;
+  const homeBeforeArrival = homeReturn;
+  homeReturn = undefined;
+  const feet = dryTownLandingHeight(landing.east, landing.north);
+  if (feet === undefined) {
+    homeReturn = homeBeforeArrival;
+    announceActivity('广场落脚点被挡住，请沿灯路前往广场。');
+    return;
+  }
+
+  ceremonyArrivalPose = {
+    value: effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
+      !!boardingGround, !!seated, presenceSkateSpeed),
+    until: now + 350,
+  };
+  if (sharedHome) sharedHome.visible = false;
+  camera.layers.set(0);
+  railway.cancelRide();
+  boardingGround = undefined;
+  lastRailStopShown = undefined;
+  leaveSeat();
+  lakeSkating.stop();
+  plazaPhoto.leaveForCeremony();
+  if (placeCard.open) placeCard.close();
+  if (museumVisit.dialog.open) museumVisit.dialog.close();
+  museumInspection.close();
+  museumLaunch.close();
+  museumGuide.setActive(false);
+  resetMovement();
+
+  x = landing.east;
+  n = landing.north;
+  ground = feet;
+  airHeight = undefined;
+  riseSpeed = 0;
+  const stage = layout.plots.find(({ id }) => id === 'stage')!;
+  const [faceEast, faceNorth, faceHeight] = landing.focus === 'tree'
+    ? [208, 198, 26]
+    : [stage.origin[0], stage.origin[1], stage.origin[2] + 15];
+  yaw = Math.atan2(faceEast - x, faceNorth - n);
+  pitch = Math.atan2(faceHeight - ground - eye, Math.hypot(faceEast - x, faceNorth - n));
+  faceFrom(x, n, ground + eye, yaw, pitch);
+  presence.sample(walking, x, n, ground, yaw);
+  if (!event.edge && !reduceSnowEffects.matches) {
+    const blackout = document.createElement('div');
+    blackout.style.cssText = 'position:fixed;inset:0;background:#000;z-index:1000;pointer-events:none';
+    document.body.append(blackout);
+    const fade = blackout.animate([{ opacity: 1 }, { opacity: 0 }], 350);
+    void fade.finished.then(() => blackout.remove(), () => blackout.remove());
+  }
+}
+
+presence.onCeremonyArrival(arrival => arriveAtCeremony(arrival, performance.now()));
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
@@ -2087,7 +2148,8 @@ renderer.setAnimationLoop(now => {
   const poseSession = presence.selfId();
   if (!walking || (previousPoseSession !== null && previousPoseSession !== poseSession)) drinkingPoseUntil = 0;
   previousPoseSession = poseSession;
-  presence.setActivityPose(effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
+  if (ceremonyArrivalPose && now >= ceremonyArrivalPose.until) ceremonyArrivalPose = undefined;
+  presence.setActivityPose(ceremonyArrivalPose?.value ?? effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
     !!boardingGround, !!seated, presenceSkateSpeed));
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,

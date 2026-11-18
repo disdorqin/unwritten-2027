@@ -1,7 +1,7 @@
 import { createPresenceServer } from './server.js';
 import type { RequestListener } from 'node:http';
 
-export async function startPresence(requestListener?: RequestListener) {
+export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
   const server = await createPresenceServer({
     host: process.env.PRESENCE_HOST ?? '0.0.0.0',
     port: Number(process.env.PRESENCE_PORT ?? 8090),
@@ -10,6 +10,7 @@ export async function startPresence(requestListener?: RequestListener) {
     ownerKey: process.env.OWNER_KEY,
     onMascotClaimRejected: total => console.info('Mascot actor rejected claims:', total),
     requestListener,
+    ceremonyStartAt,
   });
   console.log(`Town presence listening on ${server.address().port}`);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => {
