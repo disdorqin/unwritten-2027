@@ -227,6 +227,35 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     }
   }
 
+  function festiveLantern(x: number, y: number, n: number, size: number, step: number) {
+    const paper = ['#e63f36', '#d72f33', '#c5323a'][step % 3];
+    part('globe', x, y, n, [size * 1.18, size, size * 1.18], paper);
+    part('light', x, y, n, [size * 1.20, size * .28, size * 1.20], '#ef6347');
+    for (const edge of [-1, 1]) {
+      box(x, y + edge * size * .43, n, [size * .54, size * .10, size * .54], '#e1a54d');
+    }
+    box(x, y + size * .62, n, [.036, size * .33, .036], '#4c2932');
+    box(x, y - size * .59, n, [.052, size * .27, .052], '#e1a54d');
+    box(x, y - size * .76, n, [.079, size * .15, .079], '#ba2735');
+  }
+
+  function festivalString(ax: number, ay: number, an: number, bx: number, by: number, bn: number, sag: number, leaveCenter = false) {
+    let [px, py, pn] = [ax, ay, an];
+    const segments = 12;
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const xx = ax + (bx - ax) * t;
+      const yy = ay + (by - ay) * t - 4 * sag * t * (1 - t);
+      const nn = an + (bn - an) * t;
+      beam(px, py, pn, xx, yy, nn, .045, '#502a32');
+      if (i % 2 && (!leaveCenter || i < 5 || i > 7)) {
+        const size = .57 + (i % 4) * .04;
+        festiveLantern(xx, yy - size * .74, nn, size, (i - 1) / 2);
+      }
+      [px, py, pn] = [xx, yy, nn];
+    }
+  }
+
   function festivalLights(x: number, n: number, direction: number, length = 10) {
     const dx = Math.cos(direction), dn = Math.sin(direction);
     const at = (fraction: number) => [x + dx * length * (fraction - .5), n + dn * length * (fraction - .5)] as const;
@@ -243,17 +272,7 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
       box(xx, yy + 4.02, nn, [.36, .16, .35], snow);
       colliders.push({ x: xx, n: nn, radius: .27 });
     }
-    const height = (t: number) => ay + (by - ay) * t + 3.88 - 3.0 * t * (1 - t);
-    let [px, pn] = at(0);
-    let py = height(0);
-    for (let i = 1; i <= 12; i++) {
-      const t = i / 12;
-      const [xx, nn] = at(t);
-      const yy = height(t);
-      beam(px, py, pn, xx, yy, nn, .045, '#492e39');
-      if (i % 2) lantern(xx, yy - .28, nn, .47 + (i % 4) * .06);
-      [px, pn, py] = [xx, nn, yy];
-    }
+    festivalString(ax, ay + 3.88, an, bx, by + 3.88, bn, .75);
   }
 
   // Strings and benches follow the open edge of the square instead of crossing its paths.
@@ -263,6 +282,29 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     [149, 118, 0, 11], [175, 94, Math.PI / 2, 11], [321, 117, Math.PI / 2, 10],
     [370, 118, 0, 10], [355, 260, .6, 9], [118, 241, .5, 9],
   ]) festivalLights(x, n, direction, length);
+
+  // The two main-street façades carry their own lines. The brackets are elevated and share
+  // the same box/paper/glow batches with the existing poles around the plaza.
+  for (const [id, spread, wall, edge, height] of [
+    ['tavern', 7.45, 6.42, 7.01, 5.14],
+    ['post-office', 5.84, 7.28, 7.97, 6.95],
+  ] as const) {
+    const [x, n, y] = layout.plots.find(plot => plot.id === id)!.origin;
+    for (const side of [-1, 1]) {
+      const holder = x + side * spread;
+      box(holder, y + height + .07, n - wall + .035, [.16, .27, .12], '#8f623e');
+      beam(holder, y + height + .065, n - wall, holder, y + height, n - edge, .065, '#503238');
+    }
+    // Leave the existing tavern name readable below the center of the cable.
+    festivalString(x - spread, y + height, n - edge, x + spread, y + height, n - edge, .41, id === 'tavern');
+  }
+
+  const [towerX, towerNorth, towerY] = layout.plots.find(plot => plot.id === 'clocktower')!.origin;
+  // A raised timber plaque seats against the stone wall beyond the old brass entrance trim.
+  box(towerX, towerY + 7.42, towerNorth - 6.76, [4.20, 1.41, .18], '#664135');
+  for (const x of [towerX - 1.86, towerX + 1.86]) {
+    box(x, towerY + 7.08, towerNorth - 6.23, [.19, .20, 1.07], '#654339');
+  }
 
   for (const [x, n, d] of [
     [185, 198, Math.PI / 2], [185, 184, Math.PI / 2], [256, 185, Math.PI / 2], [256, 202, Math.PI / 2],

@@ -79,6 +79,10 @@ function renderPage(page: Page, smallLabels: Mesh[]) {
     parent.add(mesh);
     if (kind === 1) smallLabels.push(mesh);
   }
+  return (tile: Tile) => {
+    paintTile(ink, tile);
+    texture.needsUpdate = true;
+  };
 }
 
 export function addOpaqueMuseumLabels(labels: readonly OpaqueMuseumLabel[], smallLabels: Mesh[]) {
@@ -101,5 +105,9 @@ export function addOpaqueMuseumLabels(labels: readonly OpaqueMuseumLabel[], smal
     }
     place.page.labels.push({ label, tile: place.tile });
   }
-  for (const page of pages) renderPage(page, smallLabels);
+  const redraw = new Map(pages.map(page => [page, renderPage(page, smallLabels)]));
+  return (source: HTMLCanvasElement) => {
+    const place = placed.get(source);
+    if (place) redraw.get(place.page)!(place.tile);
+  };
 }

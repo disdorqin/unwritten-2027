@@ -20,6 +20,7 @@ import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
+import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival } from './festival';
 import { buildMuseumLandmark } from './landmark-museum';
@@ -227,6 +228,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   scene.add(group);
 }
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+addNewYearDecor(scene);
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
 function museumToWorld(localX: number, localY: number, localZ: number) {
