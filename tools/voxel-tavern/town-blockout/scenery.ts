@@ -90,6 +90,62 @@ export function addScenery(group: Group, grid: Ground) {
       pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
     }
   }
+  const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string) => {
+    caps.push({ at: [x, grid.heightAt(x, north) + y, -north], scale, tint });
+  };
+
+  const snowFamily = [[240.5, 200.5, .87], [244.8, 200.5, .65], [247.6, 204.8, .79], [247.6, 208.0, .52]];
+  for (const [x, north, size] of snowFamily) {
+    for (const [y, width] of [[.34, 1.02], [.82, .76], [1.22, .59]]) {
+      plazaBox(x, north, y * size, [width * size, width * .66 * size, width * size], '#e1eef9');
+      plazaBox(x, north, (y + width * .32) * size,
+        [width * .72 * size, width * .18 * size, width * .72 * size], '#f0f6ff');
+    }
+    plazaBox(x, north, 1.03 * size, [.62 * size, .11 * size, .64 * size], '#933e37');
+    plazaBox(x + .18 * size, north - .34 * size, .89 * size, [.16 * size, .24 * size, .075], '#b65043');
+    for (const side of [-1, 1]) {
+      plazaBox(x + side * .13 * size, north - .31 * size, 1.30 * size, [.07 * size, .07 * size, .05], '#354454');
+    }
+    plazaBox(x, north - .37 * size, 1.17 * size, [.08 * size, .075 * size, .18 * size], '#b97442');
+    plazaBox(x, north, 1.49 * size, [.67 * size, .09 * size, .67 * size], '#3f5268');
+    plazaBox(x, north, 1.60 * size, [.44 * size, .18 * size, .44 * size], '#3f5268');
+    blockers.push({ x, n: north, radius: .49 * size });
+  }
+
+  const horseEast = 242.5, horseNorth = 207.5;
+  const iceHorseBox = (x: number, z: number, y: number, scale: Position, tint: string) => {
+    plazaBox(horseEast + x, horseNorth - z, y, scale, tint);
+  };
+  iceHorseBox(0, 0, .13, [2.70, .26, 1.62], '#6f96b3');
+  iceHorseBox(0, 0, .34, [2.38, .16, 1.31], '#abcce0');
+  for (const side of [-1, 1]) {
+    const z = side * .31;
+    iceHorseBox(-.69, z, .75, [.24, .71, .24], '#87bbd8');
+    iceHorseBox(-.56, z, 1.15, [.32, .51, .26], '#a6d3eb');
+    iceHorseBox(.61, z, .78, [.20, .67, .23], '#8ebfdb');
+    iceHorseBox(.79, z, 1.08, [.32, .20, .23], '#afd8ed');
+    iceHorseBox(side * .72, z, .46, [.32, .12, .27], '#b9e3f1');
+    iceHorseBox(.83, z * .57, 2.37, [.13, .29, .13], '#cdebf3');
+  }
+  iceHorseBox(-.05, 0, 1.38, [1.53, .53, .81], '#93c8e1');
+  iceHorseBox(-.05, 0, 1.65, [1.31, .23, .66], '#c0e3f0');
+  iceHorseBox(.55, 0, 1.79, [.46, .69, .55], '#9fcde6');
+  iceHorseBox(.76, 0, 2.17, [.48, .32, .46], '#bbdfee');
+  iceHorseBox(1.05, 0, 2.02, [.38, .23, .41], '#a2cfe5');
+  iceHorseBox(.88, -.24, 2.22, [.07, .07, .04], '#527e9a');
+  iceHorseBox(-.86, 0, 1.5, [.23, .18, .26], '#b6dded');
+  iceHorseBox(-1.02, 0, 1.29, [.20, .30, .21], '#abd9ee');
+  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36 });
+
+  for (const [x, north] of [[218, 190], [246, 184], [246, 196]]) {
+    for (const [y, width, depth, height, tint] of [
+      [.08, .94, 1.38, .16, '#adbfd1'],
+      [.24, .77, 1.13, .25, '#cad9e6'],
+      [.41, .58, .82, .15, '#e0ecf6'],
+      [.51, .44, .51, .075, '#edf5fb'],
+    ] as const) plazaBox(x, north, y, [width, height, depth], tint);
+  }
+
   for (const x of [w - 1.1, e + 1.1]) {
     for (const north of [s + 2, s + 18, s + 32, n - 2]) {
       if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5))) continue;
