@@ -5,6 +5,7 @@ import {
 } from 'three';
 import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
+import { addMarketStallBanners, type MarketStallLayout } from './market-stall-banners';
 
 type Vector = [number, number, number];
 type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
@@ -332,7 +333,7 @@ function makeStall(s: Workshop, x: number, z: number, width: number, color: stri
 
 function buildStalls() {
   const s = createWorkshop();
-  const set = [
+  const set: readonly MarketStallLayout[] = [
     [-12.5, -4.8, 6.8, red],
     [-4.38, -4.4, 6.4, '#92562e'],
     [4.25, -4.95, 6.7, '#8a312d'],
@@ -346,7 +347,7 @@ function buildStalls() {
     lantern(s, x, 3.8, 6.86, .5);
   }
   const root = batchParts(s.parts);
-  root.add(makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
+  addMarketStallBanners(root, set, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
   root.userData.colliders = [
     ...set.flatMap(([x, z, width]) => [
       collision(x, 0, z - 2.4, width, 3.6, .22),
