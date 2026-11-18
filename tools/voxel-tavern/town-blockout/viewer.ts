@@ -37,7 +37,7 @@ import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { createTouchLook } from './touch-look';
-import { createDesktopLook } from './desktop-look';
+import { createDesktopLook, type DesktopLookLockFailure } from './desktop-look';
 import { terraceStop } from './museum-terrace';
 import { createMuseumInspection } from './museum-inspection';
 import { createMuseumLaunch } from './museum-launch';
@@ -55,6 +55,7 @@ import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
+import { createMarketFairActivity } from './market-fair';
 import { createIceActivity } from './ice-activity';
 import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
@@ -463,6 +464,8 @@ const keys = new Set<string>();
 const touchWalk = createTouchWalk(element('touch-walk'));
 const museumMapButton = element<HTMLButtonElement>('museum-map-button');
 const crosshair = element('walk-crosshair');
+const lockLookButton = element<HTMLButtonElement>('lock-look');
+const envBanner = element('env-banner');
 const touchJump = element<HTMLButtonElement>('touch-jump');
 const walkClock = createTownPhysicsClock();
 const lakeSkateMotion = createLakeSkateMotion();
@@ -619,6 +622,10 @@ const tavernActivity = createTavernActivity({ ...activityContext, announce: anno
 });
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const marketFair = createMarketFairActivity(
+  { ...activityContext, announce: announceActivity },
+  { camera, player: () => ({ x, n, walking }) },
+);
 function nearbyActivity<T extends TownActivity>(create: (context: TownActivityContext) => T): T {
   const activity = create({
     ...activityContext,
@@ -653,6 +660,7 @@ presence.onFireworks((seed, theme, ageMs, own) => {
 });
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
+activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
@@ -1282,6 +1290,22 @@ function jump() {
   riseSpeed = 0;
   pitch = selector.value === '雪团练习场' ? .09 : 0;
 }
+const walkMouseHelp = '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。';
+const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动；点准心下方按钮可锁定鼠标视角。';
+let lookLocked = false;
+let lockFailure: DesktopLookLockFailure | undefined;
+let lastUnlockAt = 0;
+function refreshLockHint() {
+  lockLookButton.hidden = !(walking && !lookLocked && !touchWalk.active());
+  if (!walking || touchWalk.active()) return;
+  const help = element('help');
+  if (lookLocked) help.textContent = walkMouseHelp;
+  else if (lockFailure === 'unsupported')
+    help.textContent = '当前浏览器不支持鼠标锁定视角：按住左键拖动转向，WASD 行走。建议改用电脑上的 Chrome 或 Edge 打开本页。';
+  else if (lockFailure && lastUnlockAt > 0 && Date.now() - lastUnlockAt < 1500)
+    help.textContent = '刚退出鼠标锁定，请稍等一秒再点画面；这段时间可按住左键拖动转向，WASD 行走。';
+  else help.textContent = walkDragHelp;
+}
 function mode(next: boolean) {
   if (homeReturn) {
     leaveSeat();
@@ -1305,13 +1329,14 @@ function mode(next: boolean) {
   overview.setAttribute('aria-pressed', String(!next));
   walk.setAttribute('aria-pressed', String(next));
   element('help').textContent = next
-    ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。')
+    ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : walkMouseHelp)
     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
   if (!next) {
     camera.position.set(540, 494, 177);
     controls.target.set(320, 20, -254);
     controls.update();
   }
+  refreshLockHint();
   return true;
 }
 overview.onclick = () => mode(false);
@@ -1334,7 +1359,10 @@ rehearse.onclick = () => {
   controls.target.set(225, 54, -207);
   controls.update();
 };
-walk.onclick = () => mode(true);
+walk.onclick = () => {
+  mode(true);
+  desktopLook.engage();
+};
 selector.onchange = () => mode(true);
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
@@ -1359,7 +1387,21 @@ function turnView(horizontal: number, vertical: number) {
     pitch = Math.max(-1.42, Math.min(1.42, pitch + vertical));
   }
 }
-const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView);
+const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView, {
+  onLockFailed(reason) {
+    lockFailure = reason;
+    refreshLockHint();
+  },
+  onLockChange(nowLocked) {
+    lookLocked = nowLocked;
+    if (nowLocked) lockFailure = undefined;
+    else lastUnlockAt = Date.now();
+    refreshLockHint();
+  },
+});
+lockLookButton.onclick = () => desktopLook.engage();
+if (typeof renderer.domElement.requestPointerLock !== 'function' ||
+    /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
   () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball);
 function canJump() {

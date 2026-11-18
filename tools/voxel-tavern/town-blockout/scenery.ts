@@ -98,8 +98,13 @@ export function addScenery(group: Group, grid: Ground) {
   }
   for (const bridge of layout.bridges) {
     // Off the deck: on-deck lamps block the +-3.5 m edge lanes at the heads.
+    // R4-D1 (2026-11-18, scheme (b) round 2): lamps moved 0.35 m further OUT
+    // LATERALLY (north +-4.05, longitudinal back to west-1.2 / east+1.2).
+    // dn=4.05 >= 3.75 clears bridgeMouthKeepClear outright, and the lateral
+    // gap to the +-3.5 m lane is 0.55 >= 0.52. (Round 1's +0.35 m longitudinal
+    // move failed both checks; see reports/r4d1-lamp-move.md §8.)
     for (const x of [bridge.west - 1.2, bridge.east + 1.2]) {
-      for (const north of [bridge.north - 3.7, bridge.north + 3.7]) lamp(x, grid.heightAt(x, north), north);
+      for (const north of [bridge.north - 4.05, bridge.north + 4.05]) lamp(x, grid.heightAt(x, north), north);
     }
   }
 
