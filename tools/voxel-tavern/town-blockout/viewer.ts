@@ -15,6 +15,8 @@ import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import { createTownViewBatches } from './town-view-batches';
+import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
@@ -83,9 +85,12 @@ const sun = new DirectionalLight('#a9bde9', 1.45);
 sun.position.set(-90, 150, 60);
 scene.add(sun);
 const landscape = new Group();
-scene.add(landscape);
+const viewBatches = createTownViewBatches();
+const viewFaces = createTownViewFaces();
+scene.add(landscape, viewBatches.group);
 const railway = createTownRailway(grid);
 scene.add(railway.group);
+const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
 const scenery = addScenery(landscape, grid);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
@@ -603,6 +608,8 @@ let snowStaggerTime = 0;
 let snowballWalkFactor = 1;
 let snowballPhysicsMs = 0;
 const profileTown = previewOptions.has('profile');
+const profileOriginalDraws = profileTown && previewOptions.get('viewBatches') === 'off';
+let aerialWarmFrames = 0;
 
 const playerTarget: TownSnowballTarget = {
   id: 'local', label: '你', radius: .27, height: 1.78, shape: 'capsule', x: 0, y: -10000, z: 0,
@@ -1390,8 +1397,12 @@ renderer.setAnimationLoop(now => {
   }
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
+  const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
+  const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
+  const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode && snowfall.enabled());
-  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount());
+  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullAerial ? camera : undefined);
+  const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
   districts.setPanorama(wideView);
   showWideBridges(wideView);
@@ -1452,12 +1463,22 @@ renderer.setAnimationLoop(now => {
     const startedFeedback = profileTown ? performance.now() : 0;
     if (moveAllowed()) hitFeedback.apply(camera);
     const feedbackMs = profileTown ? performance.now() - startedFeedback : 0;
+    const batchesStartedAt = profileTown ? performance.now() : 0;
+    const staticViewRoots = cullAerial || warmAerial ? [landscape, detailedBridges, ...(trackViewRoot ? [trackViewRoot] : []),
+      ...(extensionStreets ? [extensionStreets.group] : []), ...architecture.values()] : [];
+    if (warmAerial) {
+      viewBatches.warm(staticViewRoots);
+      viewFaces.warm(architecture.values());
+    }
+    viewBatches.update(cullAerial, camera, staticViewRoots);
+    viewFaces.update(cullAerial, camera.position, architecture.values());
+    const detailMs = profileTown ? terrainMs + performance.now() - batchesStartedAt : 0;
     renderer.render(scene, camera);
     if (profileTown) {
       renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
         frameMs: frameSeconds * 1000, feedbackMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
-        calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+        calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
       } }));
     }
   }
