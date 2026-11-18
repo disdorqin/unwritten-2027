@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>未写镇 · 日常音乐试听</title>
+<style>body{background:#192735;color:#f5e8d4;font:1rem/1.6 system-ui;margin:4rem auto;padding:0 20px;max-width:42rem}h1{line-height:1.2}button{border:1px solid #e7ba81;background:#b04148;color:white;border-radius:.5rem;padding:.6rem 1rem;font:inherit}audio{display:block;margin-top:1rem;max-width:100%}</style>
+</head>
+<body>
+<h1>未写镇 · 日常音乐</h1>
+<p>30 秒 · D 宫五声 · 笛子、扬琴、轻木鱼</p>
+<button type="button" id="play">试听 30 秒</button>
+<audio id="preview" controls></audio>
+<output id="status" role="status"></output>
+<script type="module">
+const storageKey = 'unwritten.town-bgm.v1';
+const defaultSettings = { muted: false, volume: 32 };
+const barSeconds = 4;
+const lookahead = .50;
+const plainsCutoff = 3900;
+const roomCutoff = 1150;
+
+const score = [
+  { low: [50, 57], lead: [69, 71, 74, 71], strings: [62, 69, 74] },
+  { low: [50, 57], lead: [69, 66, 64, 66], strings: [66, 69, 74] },
+  { low: [47, 54], lead: [69, 71, 74, 76], strings: [59, 66, 69, 74] },
+  { low: [47, 54], lead: [74, 71, 69], strings: [66, 69, 71] },
+  { low: [43, 50], lead: [66, 69, 71, 69], strings: [59, 62, 69] },
+  { low: [43, 50], lead: [66, 64, 62, 64], strings: [62, 66, 71] },
+  { low: [45, 52], lead: [66, 64, 62, 59], strings: [59, 64, 69, 71] },
+  { low: [45, 52], lead: [62], strings: [64, 69, 74] },
+]         ;
+
+const hz = (note        ) => 440 * 2 ** ((note - 69) / 12);
+
+
+
+
+
+
+
+
+
+
+
+function readSettings() {
+  try {
+    const data          = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
+    if (data && typeof data === 'object' && 'volume' in data && 'muted' in data &&
+        typeof data.volume === 'number' && Number.isFinite(data.volume) && typeof data.muted === 'boolean') {
+      return { muted: data.muted, volume: Math.max(0, Math.min(100, Math.round(data.volume))) };
+    }
+  } catch { /* Audio remains usable with storage disabled. */ }
+  return { ...defaultSettings };
+}
+
+function makeNoise(context                  ) {
+  const noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const samples = noise.getChannelData(0);
+  let seed = 4317;
+  for (let index = 0; index < samples.length; index++) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    samples[index] = seed / 2147483648 - 1;
+  }
+  return noise;
+}
+
+function makeGraph                            (context   , indoor         )                {
+  const bed = context.createGain();
+  const percussion = context.createGain();
+  percussion.gain.value = indoor ? 0 : 1;
+  percussion.connect(bed);
+  const room = context.createBiquadFilter();
+  room.type = 'lowpass';
+  room.frequency.value = indoor ? roomCutoff : plainsCutoff;
+  room.Q.value = .43;
+  const master = context.createGain();
+  master.gain.value = 0;
+  const limiter = context.createDynamicsCompressor();
+  limiter.threshold.value = -23;
+  limiter.knee.value = 16;
+  limiter.ratio.value = 4;
+  bed.connect(room).connect(limiter).connect(master).connect(context.destination);
+
+  const noise = makeNoise(context);
+  const wind = context.createBufferSource();
+  wind.buffer = noise;
+  wind.loop = true;
+  const color = context.createBiquadFilter();
+  color.type = 'bandpass';
+  color.frequency.value = 360;
+  color.Q.value = .38;
+  const windLevel = context.createGain();
+  windLevel.gain.value = .012;
+  wind.connect(color).connect(windLevel).connect(bed);
+  wind.start();
+
+  const padVoice = context.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, .12, .035]));
+  const fluteVoice = context.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, .22, .085]));
+  return { context, bed, room, master, percussion, noise, padVoice, fluteVoice };
+}
+
+function pad(graph            , at        , note        , index        ) {
+  const tone = graph.context.createOscillator();
+  tone.frequency.value = hz(note);
+  tone.setPeriodicWave(graph.padVoice);
+  const soften = graph.context.createBiquadFilter();
+  soften.type = 'lowpass';
+  soften.frequency.value = 600;
+  const envelope = graph.context.createGain();
+  envelope.gain.setValueAtTime(0, at);
+  envelope.gain.linearRampToValueAtTime(index === 0 ? .038 : .021, at + 1.5);
+  envelope.gain.setValueAtTime(index === 0 ? .038 : .021, at + barSeconds * 2 - .65);
+  envelope.gain.linearRampToValueAtTime(0, at + barSeconds * 2 + .75);
+  tone.connect(soften).connect(envelope).connect(graph.bed);
+  tone.start(at);
+  tone.stop(at + barSeconds * 2 + .77);
+}
+
+function yangqin(graph            , at        , note        , accent         ) {
+  const { context, bed } = graph;
+  const fundamental = hz(note);
+  const gain = accent ? 1 : .75;
+  for (const [ratio, level, decay] of [[1, .073, .87], [2, .026, .48], [3, .013, .31], [4.2, .009, .17]]) {
+    const partial = context.createOscillator();
+    const envelope = context.createGain();
+    partial.frequency.value = fundamental * ratio;
+    envelope.gain.setValueAtTime(.0001, at);
+    envelope.gain.exponentialRampToValueAtTime(level * gain, at + .008);
+    envelope.gain.exponentialRampToValueAtTime(.0001, at + decay);
+    partial.connect(envelope).connect(bed);
+    partial.start(at);
+    partial.stop(at + decay + .012);
+  }
+  const strike = context.createBufferSource();
+  strike.buffer = graph.noise;
+  const color = context.createBiquadFilter();
+  color.type = 'bandpass';
+  color.frequency.value = 2150;
+  const volume = context.createGain();
+  volume.gain.setValueAtTime(.016, at);
+  volume.gain.exponentialRampToValueAtTime(.0001, at + .012);
+  strike.connect(color).connect(volume).connect(bed);
+  strike.start(at, .037, .013);
+}
+
+function dizi(graph            , at        , note        , span        , emphasis        ) {
+  const { context, bed } = graph;
+  const frequency = hz(note);
+  const end = at + span;
+  const tone = context.createOscillator();
+  tone.frequency.value = frequency;
+  tone.setPeriodicWave(graph.fluteVoice);
+  const envelope = context.createGain();
+  const volume = .112 * emphasis;
+  envelope.gain.setValueAtTime(0, at);
+  envelope.gain.linearRampToValueAtTime(volume, at + .087);
+  envelope.gain.linearRampToValueAtTime(volume * .8, end - .11);
+  envelope.gain.linearRampToValueAtTime(0, end);
+  tone.connect(envelope).connect(bed);
+  const vibrato = context.createOscillator();
+  const depth = context.createGain();
+  vibrato.frequency.value = 5;
+  depth.gain.setValueAtTime(0, at);
+  depth.gain.setValueAtTime(0, at + .25);
+  depth.gain.linearRampToValueAtTime(10.4, at + .41);
+  vibrato.connect(depth).connect(tone.detune);
+  vibrato.start(at);
+  vibrato.stop(end);
+  tone.start(at);
+  tone.stop(end);
+
+  const air = context.createBufferSource();
+  air.buffer = graph.noise;
+  air.loop = true;
+  const color = context.createBiquadFilter();
+  color.type = 'bandpass';
+  color.frequency.value = frequency * 1.72;
+  color.Q.value = .65;
+  const airLevel = context.createGain();
+  airLevel.gain.value = .145;
+  air.connect(color).connect(airLevel).connect(envelope);
+  air.start(at);
+  air.stop(end);
+}
+
+function woodblock(graph            , at        ) {
+  const { context, percussion } = graph;
+  const hit = context.createOscillator();
+  hit.frequency.value = 1900;
+  const envelope = context.createGain();
+  envelope.gain.setValueAtTime(.0001, at);
+  envelope.gain.exponentialRampToValueAtTime(.010, at + .005);
+  envelope.gain.exponentialRampToValueAtTime(.0001, at + .064);
+  hit.connect(envelope).connect(percussion);
+  hit.start(at);
+  hit.stop(at + .075);
+}
+
+function playDailyBar(graph            , index        , at        ) {
+  const bar = score[index];
+  if (index % 2 === 0) bar.low.forEach((note, part) => pad(graph, at, note, part));
+  const starts = [.21, 1.11, 2.02, 2.89];
+  const stresses = [1, .79, .90, .83];
+  bar.lead.forEach((note, part) => {
+    const last = part === bar.lead.length - 1;
+    const duration = last ? (index === 7 ? 3.22 : index === 3 ? 1.62 : .68) : .73;
+    dizi(graph, at + starts[part], note, duration, stresses[part]);
+  });
+  const pluckTimes = [.02, 1.36, 2.55, 3.59];
+  bar.strings.forEach((note, part) => yangqin(graph, at + pluckTimes[part], note, part === 0));
+  if (index % 2 === 1) woodblock(graph, at + 3.77);
+}
+
+function renderDailyBgmPreview(context                     ) {
+  const graph = makeGraph(context, false);
+  graph.master.gain.setTargetAtTime(defaultSettings.volume / 100, 0, .075);
+  for (let at = .08, bar = 0; at < context.length / context.sampleRate; at += barSeconds, bar++) {
+    playDailyBar(graph, bar % score.length, at);
+  }
+  return context.startRendering();
+}
+
+
+const trigger = document.querySelector('#play');
+const player = document.querySelector('#preview');
+const status = document.querySelector('#status');
+trigger.onclick = async () => {
+  trigger.disabled = true;
+  try {
+    if (!player.src) {
+      const rate = 24000;
+      const samples = (await renderDailyBgmPreview(new OfflineAudioContext(1, 30 * rate, rate))).getChannelData(0);
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      function tag(offset, text) { for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i)); }
+      tag(0, 'RIFF'); view.setUint32(4, buffer.byteLength - 8, true); tag(8, 'WAVE'); tag(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true); tag(36, 'data');
+      view.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) view.setInt16(44 + i * 2, Math.max(-32767, Math.min(32767, samples[i] * 32767)), true);
+      player.src = URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+    }
+    player.currentTime = 0;
+    await player.play().catch(() => { status.textContent = '音频已生成，可点播放器的播放键。'; });
+  } catch (error) {
+    status.textContent = '此浏览器未能合成音频。' + error.message;
+  } finally { trigger.disabled = false; }
+};
+</script>
+</body>
