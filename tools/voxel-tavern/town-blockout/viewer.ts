@@ -76,6 +76,8 @@ import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway, type TownRailStopId } from './town-railway';
 import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
+import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
+import { createMascotFollower, type MascotFollowPoint } from './mascot-follow';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
@@ -684,6 +686,9 @@ lightsButton.onclick = townLights.openBook;
 const mascotFrustum = new Frustum();
 const mascotViewProjection = new Matrix4();
 const mascotBounds = new Sphere(new Vector3(), .54);
+const mascotFollower = createMascotFollower(mascotFollowGround);
+const mascotRailCenter = new Vector3(), mascotRailForward = new Vector3();
+let ownedMascot: MascotFollowPoint | undefined;
 const npcActivity = createTownNpcActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, feature => {
   if (feature === 'spring') return architecture.has('hot-spring');
   if (feature === 'castle') return architecture.has('ice-castle');
@@ -701,8 +706,9 @@ panel => openTavernDice(panel, () => {
 }), {
   now: presence.serverNow,
   groundAt: mascotOutdoorGround,
+  follow: () => presence.sampleRemoteMascot() ?? (presence.ownerFollowsMascot() ? ownedMascot : undefined),
   visible(east, north, feet) {
-    if (homeReturn) return false;
+    if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return false;
     mascotBounds.center.set(east, feet + .32, -north);
     if (camera.position.distanceToSquared(mascotBounds.center) > 65 ** 2) return false;
     camera.updateMatrixWorld();
@@ -1774,6 +1780,49 @@ function mascotOutdoorGround(east: number, north: number) {
   return feet;
 }
 
+function mascotFollowGround(east: number, north: number, around: number) {
+  if (!walkable(east, north)) return undefined;
+  if (!homeReturn && !isLakeSkateIce(east, north) && bridgeAt(east, north) === undefined &&
+      (isWater(east, north) || townWater.at(east, north))) return undefined;
+  const feet = supportAt(east, north, around + stepHeight, around + surfaceEpsilon);
+  if (!Number.isFinite(feet) || Math.abs(feet - around) > stepHeight) return undefined;
+  const { colliders, floors } = geometryAt(east, north);
+  const blocked = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+    feet + .65 - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box, .18);
+  if (colliders.some(blocked) || floors.some(blocked) ||
+      activities.some(activity => activity.blocked?.(east, north, feet)) ||
+      railway.vehicleBlocks(east, north, feet, .65, .18)) return undefined;
+  return feet;
+}
+
+function updateMascotFollower(dt: number, movementSpeed: number) {
+  if (!walking || !presence.ownerFollowsMascot()) {
+    if (ownedMascot) mascotFollower.reset();
+    ownedMascot = undefined;
+    return;
+  }
+  let mounted: Omit<MascotFollowPoint, 'speed'> | undefined;
+  if (boardingGround) {
+    railway.view.getWorldPosition(mascotRailCenter);
+    railway.view.getWorldDirection(mascotRailForward);
+    mounted = {
+      x: mascotRailCenter.x - mascotRailForward.x * 1.32 + mascotRailForward.z * .63,
+      n: -mascotRailCenter.z + mascotRailForward.z * 1.32 + mascotRailForward.x * .63,
+      ground: mascotRailCenter.y - eye,
+      yaw: Math.atan2(mascotRailForward.x, -mascotRailForward.z),
+    };
+  }
+  const wetGround = waterAtFeet();
+  ownedMascot = mascotFollower.update({
+    x: seated?.x ?? x, n: seated?.n ?? n, ground, yaw: seated?.yaw ?? yaw,
+    speed: movementSpeed, indoor: Boolean(homeReturn), wet: Boolean(wetGround),
+    skating: isLakeSkateIce(x, n), bathing: hotSpringSoak.active(),
+  }, dt, mounted);
+  if (ownedMascot) presence.sendMascot({
+    east: ownedMascot.x, north: ownedMascot.n, height: ownedMascot.ground, yaw: ownedMascot.yaw,
+  });
+}
+
 function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
   const z = -north;
   let height = surfaceAt(east, north);
@@ -2118,6 +2167,7 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  updateMascotFollower(dt, Math.hypot(x - startEast, n - startNorth) / Math.max(dt, .001));
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
