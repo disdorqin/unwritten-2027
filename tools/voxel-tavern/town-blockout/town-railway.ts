@@ -18,6 +18,8 @@ const stationRailY = stationGround + .68;
 const stationHalfLength = 24;
 const chunkSize = expansion.chunkSize;
 const gauge = 1.66;
+const trainAcceleration = 2.8;
+const trainTopSpeed = 13.2;
 const clearanceCell = 16;
 const stationRoad = extensionRoads.find(road => road.id === 'station-approach')!;
 const bathRoad = extensionRoads.find(road => road.id === 'hot-spring-approach')!;
@@ -465,6 +467,16 @@ export function createTownRailway(grid: Terrain) {
     setPanorama: track.setPanorama,
     get riding() { return riding; },
     get atPlatform() { return atPlatform; },
+    timetable() {
+      if (atPlatform) return { atPlatform, metres: 0, seconds: 0 };
+      const metres = route.length - distance;
+      const peak = Math.min(trainTopSpeed, Math.sqrt(trainAcceleration * metres + speed * speed / 2));
+      const accelerating = Math.max(0, (peak - speed) / trainAcceleration);
+      const accelerationDistance = (peak + speed) * accelerating / 2;
+      const brakingDistance = peak * peak / (2 * trainAcceleration);
+      const cruising = Math.max(0, metres - accelerationDistance - brakingDistance) / peak;
+      return { atPlatform, metres, seconds: accelerating + cruising + peak / trainAcceleration };
+    },
     board() {
       if (!atPlatform) return;
       riding = true;
@@ -478,8 +490,8 @@ export function createTownRailway(grid: Terrain) {
       if (!riding || atPlatform || dt <= 0 || !Number.isFinite(dt)) return;
       const elapsed = Math.min(dt, .12);
       const remaining = route.length - distance;
-      const brakingSpeed = Math.sqrt(2 * 2.8 * remaining);
-      speed = Math.min(13.2, speed + 2.8 * elapsed, brakingSpeed);
+      const brakingSpeed = Math.sqrt(2 * trainAcceleration * remaining);
+      speed = Math.min(trainTopSpeed, speed + trainAcceleration * elapsed, brakingSpeed);
       if (speed * elapsed >= remaining) park();
       else {
         distance += speed * elapsed;

@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Box, Ramp } from './landmark-kit';
+import { addLandmarkNameplate, useLandmarkEmissionMask } from './landmark-label';
 
 const palette = {
   foundation: '#31546f',
@@ -19,6 +20,13 @@ const palette = {
   lantern: '#ffd29e',
 } as const;
 type Finish = keyof typeof palette;
+
+export const iceThrone = {
+  stand: [17.98, .57, -4.92],
+  seat: [18.96, 1.07 + .98, -4.92],
+  photo: [17.46, .35, -6.15],
+  hallDoor: [7.2, 2.15, 0],
+} as const;
 
 // Detail is opaque and split into opaque masonry and luminous inlays per wing.
 // Only the walkable surfaces and walls carry collision.
@@ -72,7 +80,24 @@ function castleModel() {
     floors.push(bounds(x, top - depth, z, w, depth, d));
   }
 
-  function flush(wing: string) {
+  function flush(wing: string, combineEmission = false) {
+    if (combineEmission) {
+      const pieces = [...opaque, ...luminous];
+      for (const [index, piece] of pieces.entries()) {
+        const value = index < opaque.length ? 0 : 1;
+        piece.setAttribute('landmarkEmission',
+          new BufferAttribute(new Float32Array(piece.getAttribute('position').count).fill(value), 1));
+      }
+      const geometry = mergeGeometries(pieces)!;
+      const material = lanterns.clone();
+      useLandmarkEmissionMask(material);
+      const mesh = new Mesh(geometry, material);
+      mesh.name = wing;
+      group.add(mesh);
+      for (const item of pieces) item.dispose();
+      opaque.length = luminous.length = 0;
+      return;
+    }
     for (const [pieces, material] of [[opaque, mason], [luminous, lanterns]] as const) {
       if (!pieces.length) continue;
       const geometry = mergeGeometries(pieces)!;
@@ -179,7 +204,8 @@ export function buildIceCastle() {
   crystal(-22.28, 7.64, 0, .56, 2.5, 2.5, 'paleIce');
   crystal(-22.61, 7.64, 0, .47, 1.56, 1.56, 'pane');
   crystal(-22.88, 7.64, 0, .21, .78, .78, 'glint');
-  flush('西门与双塔');
+  block(-22.28, 5.91, 0, .26, .87, 3.24, 'deepIce');
+  flush('西门与双塔', true);
 
   floor(3.3, .12, 0, 35.8, 33.8, .22, 'foundation');
   for (let x = -13; x <= 5; x += 2.25) {
@@ -283,9 +309,24 @@ export function buildIceCastle() {
   }
   floor(18.25, .35, -4.92, 3.36, 4.4, .24, 'deepIce');
   floor(18.85, .57, -4.92, 2.15, 3.25, .24, 'paleIce');
-  solid(19.13, .57, -4.92, .97, .49, .83, 'ice');
-  crystal(19.13, 2.06, -4.92, 1.1, 2.3, 1.1, 'paleIce');
-  crystal(19.04, 2.1, -4.92, .61, 1.4, .77, 'glint');
+  const [seatX, eyeHeight, seatZ] = iceThrone.seat;
+  const seatTop = eyeHeight - .98;
+  for (const side of [-1, 1]) {
+    block(seatX - .22, .80, seatZ + side * .51, .36, .46, .25, 'ice');
+    block(seatX + .24, .80, seatZ + side * .51, .36, .46, .25, 'ice');
+    block(seatX, 1.32, seatZ + side * .64, 1.12, .18, .22, 'paleIce');
+  }
+  block(seatX, seatTop - .10, seatZ, 1.08, .20, 1.23, 'ice');
+  block(seatX - .025, seatTop - .016, seatZ, 1.08, .032, 1.12, 'snow');
+  block(seatX + .45, 1.57, seatZ, .24, 1.28, 1.27, 'paleIce');
+  block(seatX + .445, 2.24, seatZ, .34, .14, 1.37, 'ice');
+  colliders.push(bounds(seatX + .05, .57, seatZ, 1.25, 1.75, 1.52));
+  crystal(19.95, 2.72, seatZ, .55, 2.3, 1.1, 'paleIce');
+  crystal(19.68, 2.79, seatZ, .27, 1.4, .77, 'glint');
   flush('大殿内装与观景层');
-  return finish();
+  const group = finish();
+  group.userData.throne = iceThrone;
+  addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2,
+    { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' });
+  return group;
 }

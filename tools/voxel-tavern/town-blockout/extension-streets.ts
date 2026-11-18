@@ -3,8 +3,9 @@ import {
   Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, type Camera,
 } from 'three';
 import { canEnter, isWater, layout, riverX, type createTerrainGrid } from './terrain';
-import { districtParcels, districtStreets, extensionPlots, extensionRoads } from './town-extension';
+import { districtParcels, districtStreets, extensionPlots, extensionRoads, memorialInfill } from './town-extension';
 import type { Box } from './landmark-kit';
+import type { TownSeat } from './town-activity';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Point = readonly [east: number, north: number];
@@ -23,6 +24,7 @@ type Cell = {
   group?: Group; detail?: Group;
 };
 type BuildingSite = { x: number; n: number; w: number; d: number; yaw: number; district: District };
+type CourtyardSeat = { approaches: { x: number; n: number; ground: number }[]; seat: TownSeat };
 
 const streets: Street[] = districtStreets;
 const approachDistricts: District[] = ['memorial', 'market', 'lakeside', 'lakeside', 'forest'];
@@ -114,6 +116,9 @@ export function buildExtensionStreets(
   const cells = new Map<number, Cell>();
   const colliders: Box[] = [];
   const sites: BuildingSite[] = [];
+  const establishedSites: BuildingSite[] = [];
+  const infillSites: BuildingSite[] = [];
+  const seating: CourtyardSeat[] = [];
   const approachStreets = extensionRoads.map(({ points, width }, i) => ({
     district: approachDistricts[i], width, points: points.map(([x, n]): Point => [x, n]),
   }));
@@ -123,6 +128,7 @@ export function buildExtensionStreets(
   }));
   const largePlots = [...layout.plots, ...extensionPlots];
   const sparsePathSegments: Segment[] = [];
+  const infillPaths: Segment[] = [];
   let seed = 28649;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -304,7 +310,9 @@ export function buildExtensionStreets(
 
   for (const [name, positions] of Object.entries(parcels)) {
     const district = name as District;
-    positions.forEach(([x, n, w, d], variant) => {
+    positions.forEach((parcel, variant) => {
+      const [x, n, w, d] = parcel;
+      const infill = district === 'memorial' && memorialInfill.some(([east, north]) => east === x && north === n);
       const near = routeSegments.reduce((best, seg) => distanceTo(x, n, seg) < distanceTo(x, n, best) ? seg : best);
       const [px, pn] = project(x, n, near);
       const yaw = Math.abs(px - x) > Math.abs(pn - n) ? Math.sign(px - x) * Math.PI / 2 : pn > n ? Math.PI : 0;
@@ -323,7 +331,10 @@ export function buildExtensionStreets(
       const site = { x, n, w: ww, d: dd, yaw, district };
       const door = buildHouse(site, highest + .11, lowest - .33, variant);
       sites.push(site);
-      if (Math.hypot(px - door[0], pn - door[1]) > 1) sparsePathSegments.push({ district, a: door, b: [px, pn], width: 2.18 });
+      (infill ? infillSites : establishedSites).push(site);
+      if (Math.hypot(px - door[0], pn - door[1]) > 1) {
+        (infill ? infillPaths : sparsePathSegments).push({ district, a: door, b: [px, pn], width: 2.18 });
+      }
     });
   }
 
@@ -331,7 +342,8 @@ export function buildExtensionStreets(
   const color = new Color();
   const offsets = [[0, 0], [1, 0], [0, 1], [1, 1]] as const;
   const woven = new Set<number>();
-  for (const seg of [...routeSegments, ...sparsePathSegments]) {
+  for (const seg of [...routeSegments, ...sparsePathSegments, ...infillPaths]) {
+    const infill = infillPaths.includes(seg);
     const half = seg.width / 2;
     const x0 = Math.floor(Math.min(seg.a[0], seg.b[0]) - half);
     const n0 = Math.floor(Math.min(seg.a[1], seg.b[1]) - half);
@@ -345,7 +357,9 @@ export function buildExtensionStreets(
       woven.add(index);
       const cell = cellAt(x, n);
       color.set(districtTints[seg.district].paving);
-      color.multiplyScalar((distance > half - .85 ? .82 : 1) * (.89 + random() * .17));
+      // The added footpaths must not reseed the existing forests and street props.
+      const jitter = infill ? .5 + .5 * Math.sin(x * 9.43 + n * 5.33) : random();
+      color.multiplyScalar((distance > half - .85 ? .82 : 1) * (.89 + jitter * .17));
       for (const corner of [0, 1, 2, 1, 3, 2]) {
         const [dx, dn] = offsets[corner];
         cell.paving.push(x + dx, grid.heightAt(x + dx, n + dn) + .039, -n - dn);
@@ -357,7 +371,12 @@ export function buildExtensionStreets(
   function clearProp(x: number, n: number, margin: number) {
     return windowSite(x, n, margin) && !railKeepClear(x, n, margin + .7)
       && !sparsePathSegments.some(seg => distanceTo(x, n, seg) < margin + seg.width / 2)
-      && !sites.some(s => Math.abs(s.x - x) < s.w / 2 + margin && Math.abs(s.n - n) < s.d / 2 + margin);
+      && !establishedSites.some(s => Math.abs(s.x - x) < s.w / 2 + margin && Math.abs(s.n - n) < s.d / 2 + margin);
+  }
+
+  function clearInfill(x: number, n: number, margin: number) {
+    return !infillPaths.some(seg => distanceTo(x, n, seg) < margin + seg.width / 2)
+      && !infillSites.some(s => Math.abs(s.x - x) < s.w / 2 + margin && Math.abs(s.n - n) < s.d / 2 + margin);
   }
 
   const props: Point[] = [];
@@ -398,7 +417,13 @@ export function buildExtensionStreets(
     const radius = h * (.17 + random() * .03);
     if (random() > .035 + cover * .85 || Math.abs(a - riverX(b)) < 10 + radius
       || !clearProp(a, b, radius + .38)) continue;
-    plant(a, b, h, radius);
+    if (clearInfill(a, b, radius + .38)) plant(a, b, h, radius);
+    else {
+      // Preserve the old spacing and consume plant's turn/tint draws even when the site is newly reserved.
+      random();
+      random();
+      props.push([a, b]);
+    }
   }
 
   let lights = 0;
@@ -406,6 +431,8 @@ export function buildExtensionStreets(
 
   function placeFixture(x: number, n: number, yaw: number, district: District) {
     if (!clearProp(x, n, fixtureRadius) || props.some(([a, b]) => Math.hypot(a - x, b - n) < 3.2)) return;
+    props.push([x, n]);
+    if (!clearInfill(x, n, fixtureRadius)) return;
     const y = grid.heightAt(x, n);
     const cell = cellAt(x, n);
     const lanternBody = district === 'forest' ? '#654b3c' : '#4e4c52';
@@ -417,12 +444,13 @@ export function buildExtensionStreets(
     add(cell, x, y + 2.40, n, .54, .10, .54, lanternBody, yaw, true);
     for (const sign of [-1, 1]) add(cell, x + sign * .23, y + 2.66, n, .07, .53, .43, lanternBody, 0, true);
     colliders.push(plate(x, n, y, .55, 2.58, .55));
-    props.push([x, n]);
     lights++;
   }
 
   function courtyardPiece(x: number, n: number, yaw: number, district: District, variant: number) {
     if (!clearProp(x, n, 1.45) || props.some(([a, b]) => Math.hypot(a - x, b - n) < 3.2)) return;
+    props.push([x, n]);
+    if (!clearInfill(x, n, 1.45)) return;
     const y = grid.heightAt(x, n);
     const cell = cellAt(x, n);
     const ground = districtTints[district].foundation;
@@ -445,8 +473,22 @@ export function buildExtensionStreets(
       }
     }
     const collision = courtyardCollisionSize(variant, yaw);
+    if (footprint.bench) {
+      const east = Math.sin(yaw), north = -Math.cos(yaw);
+      // A standing player must clear the full rotated AABB, including body radius.
+      const clearance = .36;
+      const step = Math.min(
+        (collision.width / 2 + clearance) / Math.abs(east),
+        (collision.depth / 2 + clearance) / Math.abs(north),
+      );
+      const approaches = [0, -.52, .52, -.9, .9].map(offset => {
+        const standX = x + east * step + Math.cos(yaw) * offset;
+        const standN = n + north * step + Math.sin(yaw) * offset;
+        return { x: standX, n: standN, ground: grid.heightAt(standX, standN) };
+      });
+      seating.push({ approaches, seat: { x, n, eyeY: y + .59 + .98, yaw: Math.atan2(east, north) } });
+    }
     colliders.push(plate(x, n, y, collision.width, .79, collision.depth));
-    props.push([x, n]);
   }
 
   for (const seg of routeSegments) {
@@ -473,6 +515,7 @@ export function buildExtensionStreets(
     const y = grid.heightAt(a, b);
     const w = .66 + random() * 1.38;
     const yaw = random() * Math.PI;
+    if (!clearInfill(a, b, .96)) continue;
     add(cell, a, y + w * .13, b, w, w * .38, w * .82, '#6b788b', yaw, true, 'pine');
     add(cell, a, y + w * .25, b, w * .82, w * .22, w * .65, blueSnow, yaw, true, 'pine');
   }
@@ -546,5 +589,5 @@ export function buildExtensionStreets(
     }
   }
 
-  return { group, update, counts, sites };
+  return { group, update, counts, sites, seating };
 }

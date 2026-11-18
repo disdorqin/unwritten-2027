@@ -7,7 +7,8 @@ import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout
 import { nearestTownActivity, type TownSeat } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { extensionPlots } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 
-test('both hot-spring spots have reachable dry treads and restore the soak effect on exit', t => {
+test('both hot-spring spots have reachable dry treads and clear the soak effect on exit', t => {
+  const group = buildHotSpring();
   const effects = new Set<{ className: string }>();
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {
@@ -25,7 +26,6 @@ test('both hot-spring spots have reachable dry treads and restore the soak effec
     else Reflect.deleteProperty(globalThis, 'document');
   });
 
-  const group = buildHotSpring();
   const { origin: [east, north, base] } = extensionPlots.find(item => item.id === 'hot-spring')!;
   group.position.set(east, base, -north);
   const { colliders, floors } = readWalkGeometry(group);

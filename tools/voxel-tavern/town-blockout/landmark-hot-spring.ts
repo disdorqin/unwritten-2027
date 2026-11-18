@@ -1,5 +1,7 @@
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DynamicDrawUsage, Euler, Group, InstancedMesh, Matrix4, MeshLambertMaterial, Points, PointsMaterial, Quaternion, Vector3 } from 'three';
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DynamicDrawUsage, Euler, Group, InstancedBufferAttribute, InstancedMesh, Matrix4, MeshLambertMaterial, Points, PointsMaterial, Quaternion, Vector3 } from 'three';
 import type { Box, Ramp } from './landmark-kit';
+import { addHotSpringDetails } from './hot-spring-details';
+import { addLandmarkNameplate, useLandmarkEmissionMask } from './landmark-label';
 import { hotSpringOuterStep, hotSpringPoolFloor, hotSpringPools } from './hot-spring-soak';
 
 const palette = {
@@ -136,7 +138,6 @@ export function buildHotSpring(): Group {
   box(-22.05, 3.28, 0, .52, .32, 5.95, 'timber');
   box(-22.05, 3.49, 0, .68, .12, 6.3, 'snow');
   box(-22.36, 3.02, 0, .11, .49, 2.22, 'slate');
-  for (const z of [-.63, 0, .63]) box(-22.43, 3.02, z, .06, .14, .34, 'lantern');
 
   planter(-16.7, -4.6, 7.2, 2.35, 4);
   planter(-16.7, 5.55, 8.9, 2.45, 4);
@@ -317,35 +318,41 @@ export function buildHotSpring(): Group {
   box(-6.42, 3.53, 12.52, .28, 4.34, .28, 'frame');
   box(-6.42, 5.78, 12.52, .53, .15, .53, 'snow');
 
+  addHotSpringDetails({ box, solid, colliders });
+
   const geometry = new BoxGeometry();
-  const opaque = [...boxes.entries()].filter(([paint]) => paint !== 'lantern' && paint !== 'glass');
-  const base = new InstancedMesh(geometry, new MeshLambertMaterial(),
-    opaque.reduce((sum, [, transforms]) => sum + transforms.length, 0));
+  const opaque = [...boxes.entries()].filter(([paint]) => paint !== 'glass');
+  const instanceCount = opaque.reduce((sum, [, transforms]) => sum + transforms.length, 0);
+  const opaqueMaterial = new MeshLambertMaterial({ emissive: '#f48942', emissiveIntensity: 1.05 });
+  useLandmarkEmissionMask(opaqueMaterial);
+  const emission = new Float32Array(instanceCount);
+  geometry.setAttribute('landmarkEmission', new InstancedBufferAttribute(emission, 1));
+  const base = new InstancedMesh(geometry, opaqueMaterial, instanceCount);
   let index = 0;
   for (const [paint, transforms] of opaque) {
     const tint = new Color(palette[paint]);
     for (const transform of transforms) {
       base.setMatrixAt(index, transform);
-      base.setColorAt(index++, tint);
+      base.setColorAt(index, tint);
+      emission[index++] = Number(paint === 'lantern');
     }
   }
   base.name = 'hot-spring-opaque';
   base.computeBoundingSphere();
   group.add(base);
-  for (const paint of ['lantern', 'glass'] as const) {
-    const transforms = boxes.get(paint) ?? [];
-    const hasGlass = paint === 'glass';
-    const material = new MeshLambertMaterial({
-      color: palette[paint], emissive: hasGlass ? '#317889' : '#f48942',
-      emissiveIntensity: hasGlass ? .43 : 1.05, transparent: hasGlass,
-      opacity: hasGlass ? .52 : 1, depthWrite: !hasGlass,
-    });
-    const batch = new InstancedMesh(geometry, material, transforms.length);
-    transforms.forEach((transform, index) => batch.setMatrixAt(index, transform));
-    batch.computeBoundingSphere();
-    batch.name = `hot-spring-${paint}`;
-    group.add(batch);
-  }
+
+  const glass = boxes.get('glass') ?? [];
+  const glassMaterial = new MeshLambertMaterial({
+    color: palette.glass, emissive: '#317889', emissiveIntensity: .43,
+    transparent: true, opacity: .52, depthWrite: false,
+  });
+  const glaze = new InstancedMesh(geometry, glassMaterial, glass.length);
+  glass.forEach((transform, index) => glaze.setMatrixAt(index, transform));
+  glaze.computeBoundingSphere();
+  glaze.name = 'hot-spring-glass';
+  group.add(glaze);
+  addLandmarkNameplate(group, '温泉', -22.425, 3.02, 0, 2.08, .42, -Math.PI / 2,
+    { background: '#543924', color: '#fff2cf', accent: '#d69854' });
   group.userData.colliders = colliders;
   group.userData.floors = floors;
   group.userData.ramps = ramps;

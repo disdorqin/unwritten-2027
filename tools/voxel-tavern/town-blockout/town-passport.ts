@@ -67,8 +67,11 @@ export function createTownPassport<Id extends string>(
   context: Pick<TownActivityContext, 'open' | 'announce'>,
   stamps: readonly PassportStamp<Id>[],
   drinkCollection?: () => readonly string[],
+  extensionStamps: readonly PassportStamp[] = [],
 ) {
   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
+  const extensionById = new Map(extensionStamps.map(stamp => [stamp.id, stamp]));
+  const savedIds = new Set<string>();
   const collected = new Set<Id>();
 
   function restore() {
@@ -76,7 +79,9 @@ export function createTownPassport<Id extends string>(
       const saved: unknown = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
       if (!Array.isArray(saved)) return;
       for (const id of saved) {
-        if (typeof id === 'string' && byId.has(id as Id)) collected.add(id as Id);
+        if (typeof id !== 'string') continue;
+        savedIds.add(id);
+        if (byId.has(id as Id)) collected.add(id as Id);
       }
     } catch { /* Continue in memory when storage is unavailable. */ }
   }
@@ -86,14 +91,29 @@ export function createTownPassport<Id extends string>(
     return { collected: collected.size, total, complete: total > 0 && collected.size === total };
   }
 
+  function save(id: string) {
+    savedIds.add(id);
+    try { localStorage.setItem(storageKey, JSON.stringify([...savedIds])); }
+    catch { /* Keep stamps until the current page closes. */ }
+  }
+
+  function collectExtension(id: string) {
+    const stamp = extensionById.get(id);
+    if (!stamp) return false;
+    restore();
+    if (savedIds.has(id)) return false;
+    save(id);
+    context.announce(`已盖章 · ${stamp.label}`);
+    return true;
+  }
+
   function collect(id: Id) {
     const stamp = byId.get(id);
     if (!stamp) return false;
     restore();
     if (collected.has(id)) return false;
     collected.add(id);
-    try { localStorage.setItem(storageKey, JSON.stringify([...collected])); }
-    catch { /* Keep stamps until the current page closes. */ }
+    save(id);
     const progress = getProgress();
     context.announce(progress.complete
       ? '印章已集齐，打开戳册领取跨年纪念卡。'
@@ -155,6 +175,23 @@ export function createTownPassport<Id extends string>(
       panel.append(download, status);
     }
 
+    if (extensionById.size) {
+      const section = document.createElement('section');
+      section.className = 'passport-extensions';
+      const heading = document.createElement('h3');
+      heading.textContent = '扩展收集页';
+      const list = document.createElement('ul');
+      for (const { id, label, hint } of extensionById.values()) {
+        const row = document.createElement('li');
+        row.dataset.extensionId = id;
+        row.dataset.collected = String(savedIds.has(id));
+        row.textContent = `${label} · ${savedIds.has(id) ? '已盖章' : hint}`;
+        list.append(row);
+      }
+      section.append(heading, list);
+      panel.append(section);
+    }
+
     if (drinkCollection) {
       const drinks = new Set(drinkCollection());
       const count = tavernRecipes.filter(({ id }) => drinks.has(id)).length;
@@ -182,5 +219,8 @@ export function createTownPassport<Id extends string>(
   }
 
   restore();
-  return { collect, has: (id: Id) => collected.has(id), open, getProgress };
+  return {
+    collect, has: (id: Id) => collected.has(id), open, getProgress,
+    collectExtension, hasExtension: (id: string) => extensionById.has(id) && savedIds.has(id),
+  };
 }

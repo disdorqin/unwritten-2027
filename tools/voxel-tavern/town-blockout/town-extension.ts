@@ -92,12 +92,16 @@ export const districtStreets: { district: DistrictName; width: number; points: [
   { district: 'lakeside', width: 3.6, points: [[574,165],[587,158],[604,155],[609,136],[598,123],[574,118],[553,128]] },
 ];
 
-export const districtParcels: Record<DistrictName, [number, number, number, number][]> = {
+type DistrictParcel = [number, number, number, number];
+
+// Previously empty memorial parcels, moved just outside their adjacent road setbacks.
+export const memorialInfill: DistrictParcel[] = [[502,401,11,10],[520,417,14,12],[550,412,13,11]];
+export const districtParcels: Record<DistrictName, DistrictParcel[]> = {
   forest: [[80,416,9,9],[94,431,10,9],[76,449,11,10],[104,458,10,10],[92,477,12,10],
     [125,470,13,11],[134,436,10,9],[145,467,10,9],[151,493,11,10],[163,441,13,10],
     [168,489,10,9],[187,485,10,9],[194,453,12,11],[211,491,11,9]],
   memorial: [[410,343,11,10],[421,363,15,11],[441,381,14,12],[462,420,13,10],[479,398,16,12],
-    [489,438,11,10],[502,400,11,10],[522,418,14,12],[549,413,13,11],[555,438,13,11],
+    [489,438,11,10],...memorialInfill,[555,438,13,11],
     [503,451,13,10],[532,448,13,11]],
   market: [[516,273,11,10],[535,267,12,10],[554,272,13,11],[572,280,13,10],
     [589,295,13,11],[566,322,11,12],[603,314,15,12],[603,338,12,10],[590,362,13,12],

@@ -14,10 +14,16 @@ const brass = '#c19456';
 const snow = '#dce7f0';
 const glow = '#eaa852';
 
+const stationLocalPoint = ([x, y, z]: Point): Point => [x / museumHorizontalScale, y, z / museumHorizontalScale];
+export const railwayStationStops = {
+  ticketCounter: stationLocalPoint([-12.7, .14, -.14]),
+  timetable: stationLocalPoint([12.8, .14, -4.7]),
+};
+
 function stationBuilder() {
   const builder = createMuseumBuilder();
   const u = 1 / museumHorizontalScale;
-  const local = ([x, y, z]: Point): Point => [x * u, y, z * u];
+  const local = stationLocalPoint;
   return {
     box: (paint: string, x: number, y: number, z: number, w: number, h: number, d: number, emissive = false) =>
       builder.box(paint, x * u, y, z * u, w * u, h, d * u, 0, emissive),
@@ -191,6 +197,8 @@ export function buildRailwayStation() {
 
   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
+  b.box(dark, 12.8, 3.8, -6.7, 8.7, 1.68, .18);
+  b.sign('时刻表', 12.8, 3.8, -6.59, 8.3, 1.36);
   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
   for (const x of [-15.5, -12.7, -9.9]) {
@@ -209,7 +217,9 @@ export function buildRailwayStation() {
     b.box(stone, x, .28, 13.5, .57, .26, .57);
     lamp(b, x, 3.48, 13.5);
   }
-  return b.finish();
+  const station = b.finish(true);
+  station.userData.stops = railwayStationStops;
+  return station;
 }
 
 export function buildCoasterStation() {

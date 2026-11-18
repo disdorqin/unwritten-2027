@@ -6,6 +6,7 @@ import { gridStep, layout, waterHeight, type createTerrainGrid } from './terrain
 
 const terrainChunkCells = 64 / gridStep;
 const aerialTileCells = 4 / gridStep;
+const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
@@ -46,8 +47,6 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
   const frustum = new Frustum();
   const viewProjection = new Matrix4();
   const previousProjection = new Matrix4();
-  let visibleTiles: TerrainSpan[] = [];
-  let priorTiles: TerrainSpan[] = [];
   let processedVertices = -1;
 
   function createChunk(east: number, north: number, eastEnd: number, northEnd: number, stride = 1) {
@@ -165,15 +164,53 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     processedVertices = nextVertex;
     previousProjection.copy(viewProjection);
     frustum.setFromProjectionMatrix(viewProjection);
-    visibleTiles.length = 0;
-    for (const tile of aerialTiles) if (frustum.intersectsBox(tile.bounds)) visibleTiles.push(tile);
-    if (visibleTiles.length === priorTiles.length && visibleTiles.every((tile, index) => tile === priorTiles[index])) return;
-    [priorTiles, visibleTiles] = [visibleTiles, priorTiles];
     const index = aerialIndex.array;
+    const coords = positions.array;
+    const planes = frustum.planes;
     let offset = 0;
-    for (const tile of priorTiles) {
-      const end = tile.start + tile.count;
-      for (let vertex = tile.start; vertex < end; vertex++) index[offset++] = vertex;
+    // Keep the original triangles. A boundary triangle is outside only if
+    // one camera plane strictly excludes all three of its vertices.
+    for (const { bounds, start, count } of aerialTiles) {
+      let crossings = 0;
+      for (let side = 0; side < planes.length; side++) {
+        const { normal: { x, y, z }, constant } = planes[side];
+        const nearX = x < 0 ? bounds.max.x : bounds.min.x;
+        const nearY = y < 0 ? bounds.max.y : bounds.min.y;
+        const nearZ = z < 0 ? bounds.max.z : bounds.min.z;
+        const farX = x < 0 ? bounds.min.x : bounds.max.x;
+        const farY = y < 0 ? bounds.min.y : bounds.max.y;
+        const farZ = z < 0 ? bounds.min.z : bounds.max.z;
+        if (x * farX + y * farY + z * farZ + constant < -clipTolerance) {
+          crossings = -1;
+          break;
+        }
+        if (x * nearX + y * nearY + z * nearZ + constant < -clipTolerance) crossings |= 1 << side;
+      }
+      if (crossings < 0) continue;
+      const end = start + count;
+      if (!crossings) {
+        for (let vertex = start; vertex < end; vertex++) index[offset++] = vertex;
+        continue;
+      }
+      for (let vertex = start; vertex < end; vertex += 3) {
+        const at = vertex * 3;
+        let visible = true;
+        for (let bits = crossings; bits; bits &= bits - 1) {
+          const { normal: { x, y, z }, constant } = planes[31 - Math.clz32(bits & -bits)];
+          const cutoff = -constant - clipTolerance;
+          if (x * coords[at] + y * coords[at + 1] + z * coords[at + 2] < cutoff &&
+              x * coords[at + 3] + y * coords[at + 4] + z * coords[at + 5] < cutoff &&
+              x * coords[at + 6] + y * coords[at + 7] + z * coords[at + 8] < cutoff) {
+            visible = false;
+            break;
+          }
+        }
+        if (visible) {
+          index[offset++] = vertex;
+          index[offset++] = vertex + 1;
+          index[offset++] = vertex + 2;
+        }
+      }
     }
     aerialTerrain.geometry.setDrawRange(0, offset);
     aerialIndex.clearUpdateRanges();

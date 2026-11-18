@@ -1,14 +1,15 @@
 import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, DoubleSide, Float32BufferAttribute, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
+  InstancedBufferAttribute, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
   Quaternion, SRGBColorSpace, Vector3,
 } from 'three';
 import type { Box, Ramp } from './landmark-kit';
 import { museumDetailAxis, museumHorizontalScale } from './museum-scale';
 import { addOpaqueMuseumLabels, type OpaqueMuseumLabel } from './museum-label-atlas';
+import { createMuseumLabelCanvas, type MuseumLabelStyle } from './museum-label-canvas';
+import { useLandmarkEmissionMask } from './landmark-label';
 
 type Point = readonly [number, number, number];
-type LabelOptions = { background?: string; color?: string; accent?: string; border?: boolean };
 export type MuseumLight = { position: Point; color: string; power: number; distance: number };
 export type MuseumBuilder = ReturnType<typeof createMuseumBuilder>;
 const up = new Vector3(0, 1, 0);
@@ -81,33 +82,13 @@ export function createMuseumBuilder() {
   const transparentTextures = new Map<HTMLCanvasElement, CanvasTexture>();
   const opaqueLabels: OpaqueMuseumLabel[] = [];
   const smallLabels: Mesh[] = [];
-  function label(text: string, x: number, y: number, z: number, w: number, h: number, ry = 0, options: LabelOptions = {}) {
+  function label(text: string, x: number, y: number, z: number, w: number, h: number, ry = 0, options: MuseumLabelStyle = {}) {
     if (typeof document === 'undefined') return;
     const { background = '#341d18', color = '#ffe4a0', accent = '#a4783d', border = true } = options;
     const key = JSON.stringify([text, w / h, background, color, accent, border]);
     let canvas = labelCanvases.get(key);
     if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = Math.max(96, Math.min(400, Math.round(512 * h / w)));
-      const ctx = canvas.getContext('2d')!;
-      const full = canvas.height;
-      if (background !== 'transparent') {
-        ctx.fillStyle = background;
-        ctx.fillRect(0, 0, 512, full);
-      }
-      if (border) {
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(8, 8, 496, full - 16);
-        ctx.strokeRect(15, 15, 482, full - 30);
-      }
-      const lines = text.split('\n');
-      ctx.fillStyle = color;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `700 ${Math.round(Math.min(94, full * .61 / lines.length))}px "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif`;
-      lines.forEach((line, index) => ctx.fillText(line, 256, full / 2 + (index - (lines.length - 1) / 2) * full * .7 / lines.length, 454));
+      canvas = createMuseumLabelCanvas(text, w, h, { background, color, accent, border });
       labelCanvases.set(key, canvas);
     }
     if (background !== 'transparent') {
@@ -130,9 +111,26 @@ export function createMuseumBuilder() {
   function light(x: number, y: number, z: number, color: string, power: number, distance: number) {
     lights.push({ position: [x, y, z], color, power, distance });
   }
-  function finish() {
+  function finish(mergeUnlit = false) {
     const geometry = new BoxGeometry();
     for (const [section, pair] of chunks) {
+      const [lit, luminous] = pair;
+      if (mergeUnlit && lit.matrices.length && luminous.matrices.length) {
+        const sectionGeometry = geometry.clone();
+        const material = new MeshLambertMaterial();
+        useLandmarkEmissionMask(material, true);
+        const mesh = new InstancedMesh(sectionGeometry, material, lit.matrices.length + luminous.matrices.length);
+        const mask = new Float32Array(mesh.count);
+        mask.fill(1, lit.matrices.length);
+        sectionGeometry.setAttribute('landmarkEmission', new InstancedBufferAttribute(mask, 1));
+        [...lit.matrices, ...luminous.matrices].forEach((matrix, index) => {
+          mesh.setMatrixAt(index, matrix);
+          mesh.setColorAt(index, index < lit.colors.length ? lit.colors[index] : luminous.colors[index - lit.colors.length]);
+        });
+        mesh.computeBoundingSphere();
+        section.add(mesh);
+        continue;
+      }
       pair.forEach(({ matrices, colors }, index) => {
         if (!matrices.length) return;
         const material = index ? new MeshBasicMaterial() : new MeshLambertMaterial();

@@ -54,6 +54,7 @@ import { createTownRailway } from './town-railway';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPassport } from './town-passport';
+import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
@@ -333,8 +334,8 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
   requestedPlots.add(plot.id);
   extensionBuilders[plot.id]().then(group => {
     place(plot, group);
-    registerLandmarkActivities(plot.id, group);
     walkGeometry = geometry();
+    registerLandmarkActivities(plot.id, group);
     describeTown();
   }).catch(error => {
     requestedPlots.delete(plot.id);
@@ -872,7 +873,7 @@ const stampSites = [
   { id: 'bath', label: '温泉浴场', hint: '在温泉浴场西门内侧。', x: 526, n: 159 },
   { id: 'castle', label: '冰雪城堡', hint: '在冰雪城堡西门内侧。', x: 462, n: 71 },
 ];
-const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds);
+const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds, [stationTicketStamp]);
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
   const { collected, total } = passport.getProgress();
@@ -949,8 +950,12 @@ activitySpots.push(
   }),
 );
 
+function canStandAtActivity(east: number, north: number, feet: number) {
+  return walkable(east, north) && !obstructed(east, north, feet);
+}
+
 function registerLandmarkActivities(id: string, group: Group) {
-  if (id === 'coaster-station') {
+  if (id === 'railway-station') {
     const hallNorth = 313.3;
     activitySpots.push({
       x: 526, n: hallNorth, ground: grid.heightAt(526, hallNorth), range: 1.7, label: '查看环镇列车乘车路线',
@@ -968,6 +973,7 @@ function registerLandmarkActivities(id: string, group: Group) {
         panel.append(direct);
       },
     });
+    activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity));
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group));
     const seats = group.userData.seats as number[][];
@@ -980,6 +986,9 @@ function registerLandmarkActivities(id: string, group: Group) {
     activitySpots.push(localSpot(group, [15.8, .12, -.36], 1.75, '保存冰晶大殿取景', () => {
       activityContext.face(503.13, 76.92, 14.2);
       photoFilename = 'UNWRITTEN-2027-ice-castle.png';
+    }));
+    activitySpots.push(...createIceThroneSpots(group, activityContext, canStandAtActivity, filename => {
+      photoFilename = filename;
     }));
   }
 }
@@ -1425,6 +1434,7 @@ renderer.setAnimationLoop(now => {
       extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
       scene.add(extensionStreets.group);
       walkGeometry = geometry();
+      activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       describeTown();
     }).catch(error => {
       streetsRequested = false;
