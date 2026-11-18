@@ -17,7 +17,7 @@ type MixSession = {
   served?: TavernRecipe;
 };
 
-export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback) {
+export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback, onSip?: () => void) {
   const plot = layout.plots.find(({ id }) => id === 'tavern')!;
   const [east, north, altitude] = plot.origin;
   const modelToPlot = tavernModelToPlot(plot);
@@ -135,6 +135,7 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
             context.announce(`喝了一口「${drink.name}」`);
           }
           held = undefined;
+          onSip?.();
         },
       };
     },

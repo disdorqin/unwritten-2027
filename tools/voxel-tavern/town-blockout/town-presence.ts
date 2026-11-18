@@ -9,7 +9,12 @@ import {
   type PresencePose, type PresenceSample,
 } from './town-presence-motion';
 
-type Actor = PresencePose & { id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number };
+import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+
+type Actor = PresencePose & {
+  id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
+  pose: TownAvatarPose; stepPhase: number; stride: number;
+};
 
 type TownNotice = { kind: 'announce'; message: string }
   | { kind: 'test-fireworks'; seed: number; startAt: number };
@@ -58,6 +63,10 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   const roster = new Map<number, string>();
   const actors = new Map<number, Actor>();
   const renderList: Actor[] = [];
+  const remoteActivityPoses = new Map<number, TownAvatarPose>();
+  const pendingActivityPoses = new Map<number, TownAvatarPose>();
+  let activityPose: TownAvatarPose = 0;
+  let sentActivityPose: TownAvatarPose | undefined;
   const snowballEvents: SnowballRelayEvent[] = [];
   const notices: TownNotice[] = [];
   let onSnowballEvent: ((event: SnowballRelayEvent) => void) | undefined;
@@ -134,6 +143,9 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     roster.clear();
     actors.clear();
     renderList.length = 0;
+    sentActivityPose = undefined;
+    remoteActivityPoses.clear();
+    pendingActivityPoses.clear();
     avatars?.clear();
     updateStatus();
     if (active) {
@@ -148,7 +160,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     if (typeof data === 'string') {
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
-        kind?: string; message?: string; seed?: number; startAt?: number;
+        kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -180,10 +192,15 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
           remaining = 0;
         } else if (!roster.has(id) && roster.size < 64) {
           roster.set(id, message.name);
+          if (isTownAvatarPose(message.pose)) pendingActivityPoses.set(id, message.pose);
           announce(`${message.name} 进镇了`);
         }
+      } else if (message.type === 'pose' && roster.has(id) && isTownAvatarPose(message.pose)) {
+        pendingActivityPoses.set(id, message.pose);
       } else if (message.type === 'leave') {
         const name = roster.get(id);
+        pendingActivityPoses.delete(id);
+        remoteActivityPoses.delete(id);
         roster.delete(id);
         actors.delete(id);
         if (name) announce(`${name} 离镇了`);
@@ -210,7 +227,8 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       if (name === undefined) return;
       let actor = actors.get(id);
       if (!actor) {
-        actor = { id, name, east, north, height, yaw, history: [], seen: stamp };
+        actor = { id, name, east, north, height, yaw, history: [], seen: stamp,
+          pose: remoteActivityPoses.get(id) ?? 0, stepPhase: 0, stride: 0 };
         actors.set(id, actor);
       }
       actor.seen = stamp;
@@ -258,11 +276,23 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     lastHeightYaw = heightYaw;
   }
 
-  function sendEvent(bytes: Uint8Array) {
+  function sendEvent(bytes: string | Uint8Array) {
     const active = socket;
     if (!haveId || active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
     try { active.send(bytes); return true; }
     catch { connectionLost(); return false; }
+  }
+
+  function syncActivityPoses() {
+    if (haveId && sentActivityPose !== activityPose && sendEvent(JSON.stringify({ type: 'pose', pose: activityPose }))) {
+      sentActivityPose = activityPose;
+    }
+    for (const [id, pose] of pendingActivityPoses) {
+      remoteActivityPoses.set(id, pose);
+      const actor = actors.get(id);
+      if (actor) actor.pose = pose;
+    }
+    pendingActivityPoses.clear();
   }
 
   function drainEvents() {
@@ -293,6 +323,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
 
   return {
     selfId: () => joinedId,
+    setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
     snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
     getSnowballPeers: (): readonly (PresencePose & { id: number; name: string })[] => renderList,
     sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
@@ -322,13 +353,22 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     update(dt: number) {
       if (!socket) return;
       sendPose(dt);
+      syncActivityPoses();
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
       avatars ??= createPresenceAvatars(scene, camera);
       const now = performance.now();
       renderList.length = 0;
       for (const actor of actors.values()) {
+        const east = actor.east, north = actor.north;
         samplePresencePose(actor.history, now, actor);
+        if (actor.pose === 0 || actor.pose === 3) {
+          const distance = Math.hypot(actor.east - east, actor.north - north);
+          if (distance > .001 && distance < 2 && dt > 0) {
+            actor.stepPhase = (actor.stepPhase + distance * 4.4) % (2 * Math.PI);
+            actor.stride = Math.sin(actor.stepPhase) * Math.min(1, distance / (dt * 2.8));
+          } else actor.stride = 0;
+        } else actor.stride = 0;
         renderList.push(actor);
       }
       avatars.render(renderList);

@@ -302,7 +302,8 @@ export async function createPresenceServer(options: Options = {}) {
       if (visible.length === peer.visible.length &&
           visible.every((other, i) => other.id === peer.visible[i].id && other.version === peer.visible[i].version)) continue;
       if (send(peer, writeSnapshot(visible.map(other => other.record!)))) {
-        for (const other of visible) if (other.pose && !peer.visible.some(previous => previous.id === other.id)) {
+        // The returning peer may have cached another pose before it moved beyond interest.
+        for (const other of visible) if (!peer.visible.some(previous => previous.id === other.id)) {
           send(peer, JSON.stringify({ type: 'pose', id: other.id, pose: other.pose }));
         }
         peer.visible = visible.map(other => ({ id: other.id, version: other.version }));

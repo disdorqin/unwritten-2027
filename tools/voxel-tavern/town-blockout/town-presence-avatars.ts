@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, DynamicDrawUsage, Frustum, InstancedMesh, Matrix4, MeshLambertMaterial,
   Sphere, Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { voxelPersonParts } from './town-voxel-person';
+import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import './town-presence-avatars.css';
 
 export type PresenceAvatarActor = {
@@ -11,6 +12,8 @@ export type PresenceAvatarActor = {
   height: number;
   yaw: number;
   throwGestureStarted?: number;
+  pose?: TownAvatarPose;
+  stride?: number;
 };
 
 const capacity = 48;
@@ -32,11 +35,10 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
   mesh.name = 'town-presence-avatars';
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-  const matrices = mesh.instanceMatrix.array;
-  // Most axes retain their initial values. The throwing arm also writes its pitched axes.
-  for (let instance = 0; instance < capacity * partCount; instance++) {
-    matrices[instance * 16 + 5] = voxelPersonParts[instance % partCount][1][1];
-  }
+  const matrices = mesh.instanceMatrix.array as Float32Array;
+  const matrixSlots = Array.from({ length: capacity }, () => ({
+    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0,
+  }));
   // The mesh spans the town. Test individual body bounds before packing the instance buffer.
   mesh.frustumCulled = false;
   mesh.visible = false;
@@ -94,10 +96,15 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     let shownNext = 0;
     let colorsChanged = false;
     const elapsedMs = performance.now();
+    let updateStart = -1;
+    let updateEnd = -1;
+    mesh.instanceMatrix.clearUpdateRanges();
 
     for (const actor of actors) {
       const worldZ = -actor.north;
-      body.center.set(actor.east, actor.height + .96, worldZ);
+      const pose = actor.pose ?? 0;
+      const rootOffset = avatarRootOffset(pose);
+      body.center.set(actor.east, actor.height + rootOffset + .96, worldZ);
       if (!frustum.intersectsSphere(body)) continue;
       if (visible >= capacity) break;
 
@@ -108,40 +115,36 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       const colorIndex = actor.id % coatColors.length;
       const palette = coatColors[colorIndex];
       const recolor = colorIndex !== slotColors[visible];
-      const firstInstance = visible * partCount;
       const progress = (elapsedMs - (actor.throwGestureStarted ?? -Infinity)) / 350;
       const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
-      const armCosine = Math.cos(armPitch);
-      const armSine = Math.sin(armPitch);
-      for (let offset = 0; offset < partCount; offset++) {
-        const [[x, y, z], [width, height, depth], tint] = voxelPersonParts[offset];
-        const instance = firstInstance + offset;
-        const matrix = instance * 16;
-        // Three.js stores the scaled local X and Z axes as columns.
-        matrices[matrix] = width * cosine;
-        matrices[matrix + 2] = -width * sine;
-        const rightArm = x > .32 && y > .75;
-        if (rightArm) {
-          const shoulder = 1.43;
-          const localY = y - shoulder;
-          const pitchedZ = localY * armSine + z * armCosine;
-          matrices[matrix + 4] = height * armSine * sine;
-          matrices[matrix + 5] = height * armCosine;
-          matrices[matrix + 6] = height * armSine * cosine;
-          matrices[matrix + 8] = depth * armCosine * sine;
-          matrices[matrix + 9] = -depth * armSine;
-          matrices[matrix + 10] = depth * armCosine * cosine;
-          matrices[matrix + 12] = actor.east + x * cosine + pitchedZ * sine;
-          matrices[matrix + 13] = actor.height + shoulder + localY * armCosine - z * armSine;
-          matrices[matrix + 14] = worldZ - x * sine + pitchedZ * cosine;
-        } else {
-          matrices[matrix + 8] = depth * sine;
-          matrices[matrix + 10] = depth * cosine;
-          matrices[matrix + 12] = actor.east + x * cosine + z * sine;
-          matrices[matrix + 13] = actor.height + y;
-          matrices[matrix + 14] = worldZ - x * sine + z * cosine;
+      const stride = actor.stride ?? 0;
+      const slot = matrixSlots[visible];
+      const dirty = slot.id !== actor.id || slot.east !== actor.east || slot.north !== actor.north ||
+        slot.height !== actor.height || slot.yaw !== actor.yaw || slot.pose !== pose ||
+        slot.stride !== stride || slot.armPitch !== armPitch;
+      const firstInstance = visible * partCount;
+      if (dirty) {
+        for (let offset = 0; offset < partCount; offset++) {
+          writeAvatarPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], pose,
+            actor.east, actor.height + rootOffset, worldZ, cosine, sine, stride, armPitch);
         }
-        if (recolor) mesh.setColorAt(instance, palette[tint]);
+        slot.id = actor.id;
+        slot.east = actor.east;
+        slot.north = actor.north;
+        slot.height = actor.height;
+        slot.yaw = actor.yaw;
+        slot.pose = pose;
+        slot.stride = stride;
+        slot.armPitch = armPitch;
+        const firstMatrix = firstInstance * 16;
+        if (updateEnd !== firstMatrix) {
+          if (updateStart >= 0) mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
+          updateStart = firstMatrix;
+        }
+        updateEnd = firstMatrix + partCount * 16;
+      }
+      if (recolor) for (let offset = 0; offset < partCount; offset++) {
+        mesh.setColorAt(firstInstance + offset, palette[voxelPersonParts[offset][2]]);
       }
       if (recolor) {
         slotColors[visible] = colorIndex;
@@ -149,7 +152,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       }
       visible++;
 
-      head.set(actor.east, actor.height + headHeight, worldZ);
+      head.set(actor.east, actor.height + rootOffset + headHeight, worldZ);
       if (head.distanceToSquared(camera.position) > labelDistanceSquared) continue;
       const cameraZ = view[2] * head.x + view[6] * head.y + view[10] * head.z + view[14];
       if (cameraZ >= 0) continue;
@@ -173,9 +176,8 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
 
     mesh.count = visible * partCount;
     mesh.visible = visible > 0;
-    if (mesh.visible) {
-      mesh.instanceMatrix.clearUpdateRanges();
-      mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
+    if (updateStart >= 0) {
+      mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
       mesh.instanceMatrix.needsUpdate = true;
     }
     if (colorsChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;

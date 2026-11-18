@@ -59,6 +59,7 @@ import { createTownRailway } from './town-railway';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
+import { effectiveTownAvatarPose } from './town-presence-pose';
 import { createTownPassport } from './town-passport';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
@@ -547,7 +548,9 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   return true;
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
-const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects);
+let drinkingPoseUntil = 0;
+const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects,
+  () => { drinkingPoseUntil = performance.now() + 2500; });
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const activities: TownActivity[] = [
@@ -1451,6 +1454,8 @@ if (tavernPlot) activitySpots.push(...createTavernSeatSpots(tavernPlot, {
   },
 }, canStandAtActivity));
 mode(startInMuseum);
+let presenceSkateSpeed = 0;
+let previousPoseSession: number | null = null;
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
@@ -1495,8 +1500,10 @@ renderer.setAnimationLoop(now => {
         walkPrevious.copy(walkCurrent);
         if (skatesOnIce()) {
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
+          const glideEast = x, glideNorth = n;
           if ((glide.east || glide.north) &&
             !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
+          presenceSkateSpeed = Math.hypot(x - glideEast, n - glideNorth) / townPhysicsDelta;
         } else {
           lakeSkateMotion.reset();
           if (forward || right) {
@@ -1525,6 +1532,12 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  if (!walking || !moveAllowed() || !skatesOnIce()) presenceSkateSpeed = 0;
+  const poseSession = presence.selfId();
+  if (!walking || (previousPoseSession !== null && previousPoseSession !== poseSession)) drinkingPoseUntil = 0;
+  previousPoseSession = poseSession;
+  presence.setActivityPose(effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
+    !!boardingGround, !!seated, presenceSkateSpeed));
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
