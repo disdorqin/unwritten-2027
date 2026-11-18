@@ -175,7 +175,7 @@ export function addDistrictHousing(
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
-      housePortals.push({ id: `old-town:${x}:${n}`, x: doorX, n: doorN,
+      housePortals.push({ id: `old-town:${x}:${n}`, zone: theme ?? 'central', x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);

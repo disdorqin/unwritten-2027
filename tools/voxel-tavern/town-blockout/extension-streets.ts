@@ -311,7 +311,7 @@ export function buildExtensionStreets(
       put(mark.x, 1.18 + mark.y, front + .326 + mark.z, mark.w, mark.h, mark.d, mark.color, false);
     }
     const [doorX, doorN] = at(0, front + 1.42);
-    const portal: TownHousePortal = { id: `district:${x}:${n}`, x: doorX, n: doorN,
+    const portal: TownHousePortal = { id: `district:${x}:${n}`, zone: district, x: doorX, n: doorN,
       ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(s, -c) };
     housePortals.push(portal);
     if (portal.id === zodiacDogHouseId) {
