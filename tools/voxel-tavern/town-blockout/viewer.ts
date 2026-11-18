@@ -49,6 +49,7 @@ import { nearestTownActivity, type TownActivity, type TownActivityContext, type 
 import { createTavernActivity } from './tavern-activity';
 import { createTavernDrinkEffects } from './tavern-drink-effects';
 import { createTavernSeatSpots } from './tavern-seats';
+import { buildTavernWarmShed, createTavernWarmShedSpots, inTavernWarmShed, nearTavernWarmShedFire } from './tavern-warm-shed';
 import './tavern-mix-panel.css';
 import { openTavernDice } from './tavern-dice';
 import './tavern-drink-effects.css';
@@ -262,7 +263,14 @@ for (const bridge of layout.bridges) {
 
 type Builder = (plot: TownPlot) => Group;
 const builders: Record<string, Builder> = {
-  clocktower: buildTowerLandmark, tavern: buildTavernLandmark, 'post-office': buildPostLandmark,
+  tavern(plot) {
+    const tavern = buildTavernLandmark(plot);
+    const { group, colliders } = buildTavernWarmShed(plot, grid.heightAt);
+    tavern.add(group);
+    tavern.userData.colliders.push(...colliders);
+    return tavern;
+  },
+  clocktower: buildTowerLandmark, 'post-office': buildPostLandmark,
   memorial: buildMuseumLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
   'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
   glasshouse: buildLakesideLandmark,
@@ -1744,12 +1752,16 @@ const windowActivity = createWindowActivity(
 activities.push(windowActivity);
 activitySpots.push(...windowActivity.spots);
 const tavernPlot = layout.plots.find(({ id }) => id === 'tavern');
-if (tavernPlot) activitySpots.push(...createTavernSeatSpots(tavernPlot, {
-  sit(seat) {
-    activityContext.sit(seat);
-    if (seated) seated.tavern = true;
-  },
-}, canStandAtActivity));
+if (tavernPlot) {
+  activitySpots.push(...createTavernSeatSpots(tavernPlot, {
+    sit(seat) {
+      activityContext.sit(seat);
+      if (seated) seated.tavern = true;
+    },
+  }, canStandAtActivity));
+  activitySpots.push(...createTavernWarmShedSpots(tavernPlot, grid.heightAt,
+    { ...activityContext, announce: announceActivity }, warmFromDrink, canStandAtActivity));
+}
 registerHomeDoors(districts.housePortals);
 const cabins = architecture.get('cabins');
 if (cabins) registerHomeDoors(villageHousePortals(cabins, grid.heightAt));
@@ -1953,7 +1965,11 @@ renderer.setAnimationLoop(now => {
   updateMuseumLights(dt, camera.position);
   const local = museumPosition();
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
-  snowfall.update(camera, dt, walking, sheltered || Boolean(homeReturn));
+  const shedEast = seated?.x ?? x;
+  const shedNorth = seated?.n ?? n;
+  const shedFeet = airHeight ?? ground;
+  const shedSheltered = walking && !homeReturn && inTavernWarmShed(tavernPlot, shedEast, shedNorth, shedFeet);
+  snowfall.update(camera, dt, walking, sheltered || shedSheltered || Boolean(homeReturn));
   if (now >= nextBgmRoomCheck) {
     nextBgmRoomCheck = now + 180;
     townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
@@ -1964,8 +1980,9 @@ renderer.setAnimationLoop(now => {
   ceremonyOverlay.apply(ceremonyState);
   ceremonyFrost.setWarmth('interior', sheltered || Boolean(homeReturn));
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
-  ceremonyFrost.setWarmth('fire-source', Boolean(homeReturn) &&
-    sharedHomeHearthWarmth(seated?.x ?? x, seated?.n ?? n, airHeight ?? ground));
+  ceremonyFrost.setWarmth('fire-source', homeReturn
+    ? sharedHomeHearthWarmth(shedEast, shedNorth, shedFeet)
+    : shedSheltered && nearTavernWarmShedFire(tavernPlot, shedEast, shedNorth, shedFeet));
   if (warmDrinkUntil && now >= warmDrinkUntil) {
     warmDrinkUntil = 0;
     ceremonyFrost.setWarmth('hot-drink', false);
@@ -1973,7 +1990,7 @@ renderer.setAnimationLoop(now => {
   const coldEast = boardingGround ? camera.position.x : seated?.x ?? x;
   const coldNorth = boardingGround ? -camera.position.z : seated?.n ?? n;
   const coldGround = boardingGround ? camera.position.y - eye : airHeight ?? ground;
-  const coldExposed = walking && !homeReturn && !sheltered && !isLakeSkateIce(coldEast, coldNorth);
+  const coldExposed = walking && !homeReturn && !sheltered && !shedSheltered && !isLakeSkateIce(coldEast, coldNorth);
   const coldDepth = coldExposed && effectiveSnowIntensity >= 2
     ? snowCover.depthAt(coldEast, coldNorth, coldGround, snowCleared) : 0;
   ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldExposed, hasFrostCeremonyRelief(ceremonyState));
