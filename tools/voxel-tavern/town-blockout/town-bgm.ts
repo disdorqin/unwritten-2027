@@ -1,5 +1,5 @@
 const storageKey = 'unwritten.town-bgm.v1';
-const defaultSettings = { muted: false, volume: 32 };
+const defaultSettings = { muted: true, volume: 32 };
 const barSeconds = 4;
 const lookahead = .50;
 const plainsCutoff = 3900;

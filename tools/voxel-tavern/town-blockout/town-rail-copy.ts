@@ -1,3 +1,4 @@
+import { hotSpringPools } from './hot-spring-soak';
 import type { createTownRailway } from './town-railway';
 import { railPlatforms, railSecondsText, type TownRailStopId } from './town-rail-stops';
 import { TOWN_STATION_NAME } from './station-sign-copy';
@@ -27,7 +28,7 @@ const railDestinationGuide = {
     route: '沿北向接驳道前行，顺着灯路走到城堡西门。',
   },
   'hot-spring': {
-    activity: '室外双池泡汤',
+    activity: `室外四池泡汤\n${hotSpringPools.map(({ name }) => name).join('、')}`,
     route: '向东下台阶，沿铺石转向北，到浴场西门。',
   },
 } satisfies Record<TownRailStopId, { activity: string; route: string }>;

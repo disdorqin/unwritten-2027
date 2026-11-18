@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { Scene } from 'three';
+import { nearestTownActivity, type TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
+import { createTownNpcActivity, memorialClerkHome } from '../tools/voxel-tavern/town-blockout/town-npc.ts';
+import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { npcAuthoredDialogue, npcScript } from '../tools/voxel-tavern/town-blockout/town-npc-dialogue.ts';
 import { townMailNpcNames } from '../tools/voxel-tavern/town-blockout/town-mail-store.ts';
 
@@ -38,4 +42,26 @@ test('adding authored dialogue leaves the live dialogue and postal recipient lis
   for (const [name, role] of Object.entries(npcScript)) {
     assert.equal(npcAuthoredDialogue[name as keyof typeof npcScript], role);
   }
+});
+
+test('the memorial clerk and branch mailbox remain separately selectable', () => {
+  const grid = createTerrainGrid();
+  const scene = new Scene();
+  const residents = createTownNpcActivity({
+    scene: scene as unknown as TownActivityContext['scene'],
+    open: () => ({} as HTMLElement), announce() {}, sit() {}, face() {},
+  }, grid.heightAt);
+  const clerk = residents.spots.find(spot => spot.label === '和纪守信聊天');
+  assert.ok(clerk);
+  assert.deepEqual([clerk.x, clerk.n], [...memorialClerkHome]);
+  assert.equal(clerk.ground, grid.heightAt(...memorialClerkHome));
+  assert.ok(canEnter(clerk.x, clerk.n));
+  const mailbox = {
+    x: 417.7, n: 334.1, ground: grid.heightAt(417.7, 334.1), label: '纪念馆时光信箱', range: 1.25, run() {},
+  };
+  const spots = [...residents.spots, mailbox];
+  assert.equal(nearestTownActivity(spots, mailbox.x, mailbox.n, mailbox.ground), mailbox);
+  assert.equal(nearestTownActivity(spots, clerk.x, clerk.n, clerk.ground), clerk);
+  assert.equal(scene.children.length, 1);
+  assert.equal(scene.children[0].name, 'town-npc-shared-skins');
 });
