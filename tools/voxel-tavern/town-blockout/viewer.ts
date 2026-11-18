@@ -30,11 +30,13 @@ import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
 import { createTownFireworksActivity } from './town-fireworks-activity';
+import { createTownPersonalFireworks, firecrackerStand } from './personal-firework-activity';
+import { personalFireworkRestricted } from '../../../src/presence/personal-fireworks';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
-import { ceremonyArrivalAt, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
+import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createCeremonyFrost, hasFrostCeremonyRelief } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
@@ -506,6 +508,7 @@ const points = new Map<string, number[]>([
   ['冰湖雪球场', [350, 92.5]],
   ['冰湖滑冰', [lakeSkateStation.x, lakeSkateStation.n]],
   ['冰湖冰钓', [iceFishingStation.x, iceFishingStation.n]],
+  ['爆竹摊', [firecrackerStand.x, firecrackerStand.n - .85]],
   ['东侧扩建步道', [443, 221]],
   ['北侧森林街区', [93, 378]],
   ['火车站', [526, 305]],
@@ -769,10 +772,47 @@ presence.onFireworks((seed, theme, ageMs, own) => {
   if (own) fireworks.markStarted(ageMs);
   festival.launchPublicFireworks(seed, theme, ageMs / 1000);
 });
+const personalFirecrackers = createTownPersonalFireworks({
+  context: { ...activityContext, announce: announceActivity },
+  button: element<HTMLButtonElement>('town-firecracker-bag'),
+  player() {
+    const protectedSpace = !walking || seated || boardingGround || museumOverlay() || waterAtFeet() || homeReturn ||
+      roofed(x, n, ground) || personalFireworkRestricted(x, n, ground);
+    return { x, y: airHeight ?? ground, z: -n, yaw, area: protectedSpace ? 'house' : 'open' };
+  },
+  listener: () => camera.position,
+  hand(owner) {
+    const peer = presence.getSnowballPeers().find(actor => actor.id === owner);
+    if (!peer) return;
+    return {
+      x: peer.east + .32 * Math.cos(peer.yaw) + .44 * Math.sin(peer.yaw),
+      y: peer.height + 1.27,
+      z: -peer.north + .32 * Math.sin(peer.yaw) - .44 * Math.cos(peer.yaw),
+    };
+  },
+  ground: (east, z) => dryTownLandingHeight(east, -z) ?? NaN,
+  canSet(point, player) {
+    if (airHeight !== undefined) return false;
+    const north = -point.z;
+    const feet = dryTownLandingHeight(point.x, north, player.y);
+    return feet !== undefined && Math.abs(point.y - feet) <= 1.6 &&
+      !roofed(point.x, north, feet) && !personalFireworkRestricted(point.x, north, feet);
+  },
+  request: presence.requestFirecracker,
+  serverNow: presence.serverNow,
+  ceremony() {
+    const now = presence.serverNow();
+    return now >= townCeremonyMidnight - 10_000 && now < townCeremonyMidnight + ceremonyLateWindowMs;
+  },
+  paint: festival.setPersonalFireworkFrame,
+  sound: festival.playPersonalFirework,
+});
+presence.onFirecracker(personalFirecrackers.receive, personalFirecrackers.reject);
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
+activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
     activitySpots.push({
@@ -1102,6 +1142,7 @@ presence.onSnowballEvent(event => {
   updateSnowballSession(me);
   const thrower = event.throwerId === me ? 'local' : remoteSnowballKey(event.throwerId);
   if (event.kind === 'throw') {
+    if (event.throwerId !== me) personalFirecrackers.cancelSparkler(event.throwerId);
     if (event.throwerId === me || Math.abs(event.height - (airHeight ?? ground)) > 10) return;
     remoteSnowballOrigin.set(event.east, event.height, -event.north);
     remoteSnowballDirection.set(event.dirX, event.dirY, event.dirZ);
@@ -1178,6 +1219,7 @@ function finishSnowAction(source: 'mouse' | 'touch') {
     return;
   }
   aimSnowball();
+  personalFirecrackers.cancelSparkler();
   snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
 }
 function updateHeldSnowAction(dt: number) {
@@ -1524,6 +1566,7 @@ function jump() {
     '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
     '冰湖滑冰': [lakeSkateGates[0].x, lakeSkateGates[0].n],
     '冰湖冰钓': [iceFishingStation.x - 1.5, iceFishingStation.n - 1.5],
+    '爆竹摊': [firecrackerStand.x, firecrackerStand.n],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
     '温泉浴场': [524, 158], '冰雪城堡': [460, 72],
@@ -2190,6 +2233,7 @@ renderer.setAnimationLoop(now => {
     townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
       roofed(seated?.x ?? x, seated?.n ?? n, ground)));
   }
+  personalFirecrackers.update();
   festival.update(dt);
   const ceremonyState = ceremony.update();
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;

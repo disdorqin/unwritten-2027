@@ -9,6 +9,7 @@ import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
+import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
@@ -77,6 +78,9 @@ export function createTownPresence(
   let ceremonyArrivalTimer: number | undefined;
   let onCeremonyArrival: ((landing: CeremonyArrival) => void) | undefined;
   let fireworksSupported = false;
+  let firecrackersSupported = false;
+  let playFirecracker: ((event: PersonalFireworkRelay, own: boolean) => void) | undefined;
+  let rejectFirecracker: ((seed: number, position: boolean) => void) | undefined;
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
@@ -167,7 +171,7 @@ export function createTownPresence(
     ceremonyArrivalTimer = undefined;
     chat.setConnected(false);
     photoSupported = false;
-    fireworksSupported = false;
+    fireworksSupported = firecrackersSupported = false;
     clockRequest = undefined;
     nextClockSample = Infinity;
     roster.clear();
@@ -210,7 +214,7 @@ export function createTownPresence(
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
-        fireworks?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
+        fireworks?: boolean; firecrackers?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -228,6 +232,15 @@ export function createTownPresence(
             Number.isSafeInteger(message.startAt)) {
           playFireworks?.(message.seed, message.theme, clock.now() - message.startAt!, message.from === joinedId);
         }
+        return;
+      }
+      if (haveId && message.type === 'event' && message.kind === 'personal-firework') {
+        const event = readPersonalFireworkRelay(message);
+        if (event) playFirecracker?.(event, event.from === joinedId);
+        return;
+      }
+      if (haveId && message.type === 'personal-firework-rejected') {
+        if (isFireworksSeed(message.seed)) rejectFirecracker?.(message.seed, message.reason === 'position');
         return;
       }
       if (message.type === 'fireworks-rejected') {
@@ -277,6 +290,7 @@ export function createTownPresence(
           haveId = true;
           joinedId = id;
           fireworksSupported = message.fireworks === true;
+          firecrackersSupported = message.firecrackers === true;
           photoSupported = message.plazaPhoto === true;
           joinedName = message.name;
           chat.setConnected(true);
@@ -482,6 +496,15 @@ export function createTownPresence(
     riderSlot: () => (Math.max(1, joinedId ?? 1) - 1) % 12,
     onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
       playFireworks = handler;
+    },
+    onFirecracker(play: typeof playFirecracker, reject: typeof rejectFirecracker) {
+      playFirecracker = play;
+      rejectFirecracker = reject;
+    },
+    requestFirecracker(request: PersonalFireworkRequest): 'offline' | 'sent' | 'busy' {
+      if (!haveId) return 'offline';
+      if (!firecrackersSupported) return 'offline';
+      return sendEvent(JSON.stringify({ ...request, type: 'event', kind: 'personal-firework' })) ? 'sent' : 'busy';
     },
     requestFireworks(seed: number, theme: FireworksTheme) {
       return fireworksSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'fireworks', seed, theme }));

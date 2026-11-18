@@ -1,7 +1,10 @@
+import { personalFireworkCooldownMs, personalFireworkKinds } from '../../../src/presence/personal-fireworks';
+
 export const personalFireworkVisibleLimit = 8;
 export const personalFireworkParticleLimit = 16;
 const carryLimit = 10;
-const fireIntervalMs = 2_000;
+
+export const personalFireworkStorageKey = 'unwritten:personal-fireworks-v1';
 
 export const personalFireworkCopy = {
   sign: '爆竹声中一岁除',
@@ -22,27 +25,51 @@ export type PersonalFirework = Point & { kind: PersonalFireworkKind; yaw: number
 export type PersonalFireworkParticle = Point & { tint: number; opacity: number; radius: number };
 export type PersonalFireworkArea = 'open' | 'house' | 'tavern' | 'memorial' | 'pool' | 'train' | 'palace-room';
 
-export function createPersonalFireworkInventory() {
-  const stock: Record<PersonalFireworkKind, number> = { sparkler: 0, rocket: 0, string: 0 };
+type StoredStock = { stock: Record<PersonalFireworkKind, number>; lastFiredAt: number | null };
+
+export function createPersonalFireworkInventory(saved?: unknown, save?: (value: StoredStock) => void) {
+  const stock: StoredStock['stock'] = { sparkler: 0, rocket: 0, string: 0 };
   let lastFiredAt = -Infinity;
+  const total = () => stock.sparkler + stock.rocket + stock.string;
+  if (saved && typeof saved === 'object') {
+    const state = saved as Partial<StoredStock>;
+    const counts = state.stock;
+    if (counts && personalFireworkKinds.every(kind => Number.isInteger(counts[kind]) && counts[kind] >= 0) &&
+        personalFireworkKinds.reduce((sum, kind) => sum + counts[kind], 0) <= carryLimit) {
+      for (const kind of personalFireworkKinds) stock[kind] = counts[kind];
+    }
+    if (typeof state.lastFiredAt === 'number' && Number.isFinite(state.lastFiredAt) && state.lastFiredAt >= 0) {
+      lastFiredAt = Math.min(state.lastFiredAt, Date.now());
+    }
+  }
+
+  function persist() {
+    save?.({ stock: { ...stock }, lastFiredAt: Number.isFinite(lastFiredAt) ? lastFiredAt : null });
+  }
+
+  function check(kind: PersonalFireworkKind, area: PersonalFireworkArea, at: number, ceremony = false) {
+    if (area !== 'open') return 'indoors';
+    if (stock[kind] === 0) return 'empty';
+    const cooldown = personalFireworkCooldownMs * (ceremony ? 2 : 1);
+    return !Number.isFinite(at) || at - lastFiredAt < cooldown ? 'cooldown' : 'fired';
+  }
 
   return {
-    stock: () => ({ ...stock }),
+    stock: () => ({ ...stock }), total, check,
     claim(kind: PersonalFireworkKind, quantity: number) {
       if (!Number.isSafeInteger(quantity) || quantity <= 0) return 0;
-      const total = stock.sparkler + stock.rocket + stock.string;
-      const count = Math.min(quantity, carryLimit - total);
+      const count = Math.min(quantity, carryLimit - total());
       stock[kind] += count;
+      if (count) persist();
       return count;
     },
     use(kind: PersonalFireworkKind, area: PersonalFireworkArea, at: number, ceremony = false) {
-      if (area !== 'open') return 'indoors';
-      if (stock[kind] === 0) return 'empty';
-      const cooldown = fireIntervalMs * (ceremony ? 2 : 1);
-      if (!Number.isFinite(at) || at - lastFiredAt < cooldown) return 'cooldown';
+      const result = check(kind, area, at, ceremony);
+      if (result !== 'fired') return result;
       stock[kind]--;
       lastFiredAt = at;
-      return 'fired';
+      persist();
+      return result;
     },
   };
 }
