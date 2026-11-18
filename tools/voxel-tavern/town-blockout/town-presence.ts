@@ -1,5 +1,6 @@
 import type { PerspectiveCamera, Scene } from 'three';
 import { createPresenceAvatars } from './town-presence-avatars';
+import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
@@ -38,6 +39,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   let lastPosition = -1;
   let lastHeightYaw = -1;
   let moving = false;
+  let insideSharedHome = false;
 
   function disconnect(graceful: boolean) {
     if (timeout !== undefined) window.clearTimeout(timeout);
@@ -88,7 +90,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     const time = performance.now();
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
       const name = roster.get(id);
-      if (name === undefined) return;
+      if (name === undefined || isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       let actor = actors.get(id);
       if (!actor) {
         actor = { id, name, east, north, height, yaw, history: [], seen: stamp };
@@ -151,6 +153,14 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
         local.north = north;
         local.height = height;
         local.yaw = yaw;
+        const indoors = isSharedHomePosition(east, north, height);
+        if (insideSharedHome !== indoors) {
+          insideSharedHome = indoors;
+          actors.clear();
+          renderList.length = 0;
+          avatars?.clear();
+          remaining = 0;
+        }
       }
       if (inTown === active) return;
       inTown = active;

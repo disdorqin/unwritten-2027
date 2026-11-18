@@ -13,12 +13,15 @@ import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
-import { buildVillageLandmark } from './landmark-village';
+import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createTownViewBatches } from './town-view-batches';
 import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
+import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
+import { buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable } from './landmark-shared-home';
+import { type TownHousePortal } from './town-house-portals';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
@@ -97,6 +100,8 @@ renderer.domElement.tabIndex = 0;
 const ambient = new AmbientLight('#8aaee5', 1.02);
 scene.add(ambient);
 const sun = new DirectionalLight('#a9bde9', 1.45);
+ambient.layers.enable(sharedHomeLayer);
+sun.layers.enable(sharedHomeLayer);
 sun.position.set(-90, 150, 60);
 scene.add(sun);
 const landscape = new Group();
@@ -322,6 +327,9 @@ type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
+let homeReturn: TownHousePortal | undefined;
+let sharedHome: Group | undefined;
+let sharedHomeGeometry: WalkGeometry | undefined;
 
 function geometry() {
   const chunks = new Map<number, (WalkGeometry | undefined)[]>();
@@ -356,6 +364,7 @@ function geometry() {
 }
 let walkGeometry = geometry();
 function geometryAt(east: number, north: number) {
+  if (homeReturn) return sharedHomeGeometry ?? emptyGeometry;
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -624,6 +633,52 @@ const presence = createTownPresence(scene, camera, announceActivity);
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
 const activitySpots = activities.flatMap(activity => activity.spots);
+function registerHomeDoors(doors: readonly TownHousePortal[]) {
+  for (const door of doors) {
+    activitySpots.push({
+      x: door.x, n: door.n, ground: door.ground, range: 1.5, label: '进入屋舍空间',
+      available: () => !homeReturn,
+      run: () => enterSharedHome(door),
+    });
+  }
+}
+function enterSharedHome(door: TownHousePortal) {
+  if (homeReturn) return;
+  if (!sharedHome) {
+    sharedHome = buildSharedHome();
+    sharedHome.traverse(object => object.layers.set(sharedHomeLayer));
+    sharedHomeGeometry = readWalkGeometry(sharedHome);
+    scene.add(sharedHome);
+    activitySpots.push(...createSharedHomeSpots({ ...activityContext, announce: announceActivity }, leaveSharedHome, filename => {
+      photoFilename = filename;
+    }));
+  }
+  lakeSkating.stop();
+  resetMovement();
+  homeReturn = door;
+  sharedHome.visible = true;
+  camera.layers.set(sharedHomeLayer);
+  ({ x, n, ground, yaw } = sharedHomeSpawn);
+  pitch = 0;
+  airHeight = undefined;
+  riseSpeed = 0;
+  announceActivity('屋舍空间 · 从原门口返回');
+}
+function leaveSharedHome() {
+  const door = homeReturn;
+  if (!door) return;
+  homeReturn = undefined;
+  if (!settleTownLanding(door.x, door.n, door.ground)) {
+    homeReturn = door;
+    announceActivity('门外暂时无法落脚，请稍后再出来');
+    return;
+  }
+  resetMovement();
+  yaw = door.exitYaw;
+  pitch = 0;
+  camera.layers.set(0);
+  if (sharedHome) sharedHome.visible = false;
+}
 const townMail = createTownMailActivity({ open: activityContext.open, announce: announceActivity }, grid.heightAt);
 scene.add(townMail.group);
 activitySpots.push(...townMail.spots);
@@ -1189,6 +1244,10 @@ function jump() {
   pitch = selector.value === '雪团练习场' ? .09 : 0;
 }
 function mode(next: boolean) {
+  if (homeReturn) {
+    announceActivity('请先从屋舍门口返回');
+    return false;
+  }
   lakeSkating.stop();
   leaveRide();
   leaveSeat();
@@ -1213,22 +1272,23 @@ function mode(next: boolean) {
     controls.target.set(320, 20, -254);
     controls.update();
   }
+  return true;
 }
 overview.onclick = () => mode(false);
 element('view-valley').onclick = () => {
-  mode(false);
+  if (!mode(false)) return;
   camera.position.set(386, 177, 15);
   controls.target.set(215, 24, -198);
   controls.update();
 };
 element('view-museum').onclick = () => {
-  mode(false);
+  if (!mode(false)) return;
   camera.position.set(museumEast - 41, museumHeight + 29, -museumNorth + 62);
   controls.target.set(museumEast, museumHeight + 7.0, -museumNorth + 1);
   controls.update();
 };
 rehearse.onclick = () => {
-  if (!festival.start()) return;
+  if (homeReturn || !festival.start()) return;
   mode(false);
   setNight(true);
   camera.position.set(283, 33, -108);
@@ -1335,6 +1395,7 @@ if (startInMuseum) selector.value = '纪念馆入口';
 let previous = performance.now();
 let widePanorama = false;
 function walkable(x: number, n: number) {
+  if (homeReturn) return sharedHomeWalkable(x, n);
   const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
   return terrainPassable && !scenery.blocked(x, n) && !districts.blocked(x, n) &&
     !forest.blocked(x, n) && !streetscape.blocked(x, n);
@@ -1345,10 +1406,11 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
+  if (homeReturn) return sharedHomeSpawn.ground;
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function waterAtFeet() {
-  if (airHeight !== undefined) return undefined;
+  if (homeReturn || airHeight !== undefined) return undefined;
   const water = townWater.at(x, n);
   return water && Math.abs(ground - water.ground) < .25 ? water : undefined;
 }
@@ -1486,6 +1548,9 @@ if (tavernPlot) activitySpots.push(...createTavernSeatSpots(tavernPlot, {
     if (seated) seated.tavern = true;
   },
 }, canStandAtActivity));
+registerHomeDoors(districts.housePortals);
+const cabins = architecture.get('cabins');
+if (cabins) registerHomeDoors(villageHousePortals(cabins, grid.heightAt));
 mode(startInMuseum);
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
@@ -1575,7 +1640,7 @@ renderer.setAnimationLoop(now => {
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode && snowfall.enabled());
-  prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullAerial ? camera : undefined);
+  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullAerial ? camera : undefined);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
   districts.setPanorama(wideView);
@@ -1586,14 +1651,15 @@ renderer.setAnimationLoop(now => {
     Math.abs(camera.position.y - grid.heightAt(site.x, site.n)) < 18);
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
   if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
-  prepareLandmarks(camera.position.x, -camera.position.z, !walking);
-  if (!streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
+  if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z, !walking);
+  if (!homeReturn && !streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
     streetsRequested = true;
     import('./extension-streets').then(({ buildExtensionStreets }) => {
       extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
       scene.add(extensionStreets.group);
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
+      registerHomeDoors(extensionStreets.housePortals);
       describeTown();
     }).catch(error => {
       streetsRequested = false;
@@ -1617,12 +1683,14 @@ renderer.setAnimationLoop(now => {
   updateMuseumLights(dt, camera.position);
   const local = museumPosition();
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
-  snowfall.update(camera, dt, walking, sheltered);
+  snowfall.update(camera, dt, walking, sheltered || Boolean(homeReturn));
   festival.update(dt);
   const ceremonyState = ceremony.update();
   ceremonyOverlay.apply(ceremonyState);
   ceremonyFrost.setWarmth('interior', sheltered);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
+  ceremonyFrost.setWarmth('fire-source', Boolean(homeReturn) &&
+    sharedHomeHearthWarmth(seated?.x ?? x, seated?.n ?? n, airHeight ?? ground));
   if (warmDrinkUntil && now >= warmDrinkUntil) {
     warmDrinkUntil = 0;
     ceremonyFrost.setWarmth('hot-drink', false);

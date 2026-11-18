@@ -1,3 +1,4 @@
+import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { BoxGeometry, Color, DynamicDrawUsage, Frustum, InstancedMesh, Matrix4, MeshLambertMaterial,
   Sphere, Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { voxelPersonParts } from './town-voxel-person';
@@ -40,6 +41,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   mesh.frustumCulled = false;
   mesh.visible = false;
   mesh.count = 0;
+  mesh.layers.enable(sharedHomeLayer);
   scene.add(mesh);
 
   const overlay = document.createElement('div');

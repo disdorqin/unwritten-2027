@@ -118,6 +118,33 @@ async function fixture(context: TestContext, config: Config = {}) {
 
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };
 
+test("shared-home guests meet at one coordinate anchor and are kept separate from the street", { timeout: 7000 }, async context => {
+  const { join } = await fixture(context);
+  const first = await join("东门来客");
+  const second = await join("西门来客");
+  const street = await join("街道来客");
+  const room = { ...pose, east: 61300, north: 2400, height: 52000 };
+  const outside = { ...room, height: 1200 };
+
+  first.socket.send(encodePose(room));
+  second.socket.send(encodePose(room));
+  street.socket.send(encodePose(outside));
+  const [firstView, secondView] = await Promise.all([
+    first.snapshot.next(records => records.some(record => record.id === second.id)),
+    second.snapshot.next(records => records.some(record => record.id === first.id)),
+  ]);
+  assert.deepEqual(firstView.map(record => record.id), [second.id]);
+  assert.deepEqual(secondView.map(record => record.id), [first.id]);
+
+  first.socket.send(encodePose({ ...outside, sequence: 2 }));
+  const [streetView, emptyRoomView] = await Promise.all([
+    street.snapshot.next(records => records.some(record => record.id === first.id)),
+    second.snapshot.next(records => records.length === 0),
+  ]);
+  assert.deepEqual(streetView.map(record => record.id), [first.id]);
+  assert.deepEqual(emptyRoomView, []);
+});
+
 test("presence limits a movement burst and accepts updates after the allowance refills", { timeout: 7000 }, async context => {
   const { join } = await fixture(context);
   const observer = await join("限速观察");

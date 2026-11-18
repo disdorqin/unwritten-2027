@@ -6,6 +6,7 @@ import { canEnter, isWater, layout, riverX, type createTerrainGrid } from './ter
 import { districtParcels, districtStreets, extensionPlots, extensionRoads, memorialInfill } from './town-extension';
 import type { Box } from './landmark-kit';
 import type { TownSeat } from './town-activity';
+import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Point = readonly [east: number, north: number];
@@ -116,6 +117,7 @@ export function buildExtensionStreets(
   const cells = new Map<number, Cell>();
   const colliders: Box[] = [];
   const sites: BuildingSite[] = [];
+  const housePortals: TownHousePortal[] = [];
   const establishedSites: BuildingSite[] = [];
   const infillSites: BuildingSite[] = [];
   const seating: CourtyardSeat[] = [];
@@ -303,6 +305,12 @@ export function buildExtensionStreets(
     put(0, 1.70, front + .264, 1.13, .72, .038, hot, false, 'lit');
     put(0, .13, front + .59, 1.88, .26, 1.12, colors.foundation);
     put(.45, .97, front + .278, .092, .17, .12, trim);
+    for (const mark of housePortalPlaque) {
+      put(mark.x, 1.18 + mark.y, front + .326 + mark.z, mark.w, mark.h, mark.d, mark.color, false);
+    }
+    const [doorX, doorN] = at(0, front + 1.42);
+    housePortals.push({ id: `district:${x}:${n}`, x: doorX, n: doorN,
+      ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(s, -c) });
     const door = at(0, front + 1.14);
     colliders.push(plate(x, n, bottom, site.w, height + base - bottom, site.d));
     return door;
@@ -589,5 +597,5 @@ export function buildExtensionStreets(
     }
   }
 
-  return { group, update, counts, sites, seating };
+  return { group, update, counts, sites, seating, housePortals };
 }

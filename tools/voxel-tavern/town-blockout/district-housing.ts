@@ -1,4 +1,5 @@
 import { BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
+import { housePortalPlaque } from './town-house-portals';
 
 export type HousingStyle = 'alpine' | 'courtyard' | 'machiya' | 'shop';
 export type DistrictTheme = 'forest' | 'memorial' | 'market' | 'lakeside';
@@ -87,6 +88,10 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
   }
 
   function door(x: number, z: number, size: number, y = .28) {
+    group.userData.houseDoorEast = x;
+    for (const mark of housePortalPlaque) {
+      add(mark.color, x + mark.x, y + 1.05 + mark.y, z + .385 + mark.z, mark.w, mark.h, mark.d);
+    }
     add(beam, x, y + 1.18, z + .09, size + .35, 2.36, .23);
     add(accent, x, y + 1.08, z + .235, size, 2.16, .12);
     add(beam, x, y + 1.15, z + .305, .09, 2.14, .04);
