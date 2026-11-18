@@ -6,6 +6,7 @@ import { snowballGravity, snowballSpeed } from './town-snowball';
 import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
+import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
 
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
@@ -172,6 +173,7 @@ export function createTownNpcActivity(
   isDaytime?: () => boolean,
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
+  mascot?: TownMascotOptions,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
@@ -185,8 +187,10 @@ export function createTownNpcActivity(
   });
   const hatStart = costumeCount;
   const heldStart = hatStart + roles.length * snowHat.length;
+  const mascotStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    heldStart + roles.length);
+    mascotStart + (mascot ? townMascotParts.length : 0));
+  const updateMascot = mascot && addMascotToNpcBatch(villagers, mascotStart, mascot);
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -541,7 +545,7 @@ export function createTownNpcActivity(
     updateSnowFight,
     update(dt) {
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
-      let changed = false;
+      let changed = updateMascot?.() ?? false;
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];
