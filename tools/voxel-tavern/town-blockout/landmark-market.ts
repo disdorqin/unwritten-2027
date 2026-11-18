@@ -7,6 +7,7 @@ import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 import { addMarketStallBanners } from './market-stall-banners';
 import { marketStallLayouts } from './market-stall-layout';
+import { personalFireworkCopy } from './personal-fireworks';
 
 type Vector = [number, number, number];
 type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
@@ -144,7 +145,7 @@ export function makeSign(text: string, width: number, height: number, x: number,
   ctx.font = 'bold 56px "Noto Sans CJK SC", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 192, 59);
+  ctx.fillText(text, 192, 59, 342);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
   const material = new MeshStandardMaterial({ map, emissive: '#ab6c2e', emissiveMap: map, emissiveIntensity: .4, roughness: .8 });
@@ -408,7 +409,8 @@ function buildStalls() {
     lantern(s, x, 3.8, 6.86, .5);
   }
   const root = batchParts(s.parts);
-  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
+  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71),
+    makeSign(personalFireworkCopy.sign, 2.3, .48, 0, 3.74, 6.72));
   root.userData.colliders = [
     ...marketStallLayouts.flatMap(([x, z, width]) => [
       collision(x, 0, z - 2.4, width, 3.6, .22),
