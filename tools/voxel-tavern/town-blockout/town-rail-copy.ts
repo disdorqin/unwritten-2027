@@ -25,6 +25,25 @@ export function createRailOvernightBroadcast() {
   };
 }
 
+export function createRailApproachReminder() {
+  let lastStop: TownRailStopId | undefined;
+  let lastLine = '';
+  return {
+    update(stop: Pick<Stop, 'id' | 'label'> | undefined): string {
+      if (!stop || stop.id === lastStop) return '';
+      lastStop = stop.id;
+      lastLine = `列车即将到${stop.label}，预约下车的乘客请准备`;
+      return lastLine;
+    },
+    clear(): string {
+      const line = lastLine;
+      lastStop = undefined;
+      lastLine = '';
+      return line;
+    },
+  };
+}
+
 const railDestinationGuide = {
   'coaster-station': {
     activity: '候车、环镇观景',

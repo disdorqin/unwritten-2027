@@ -60,5 +60,10 @@ export function createRailTimetable<T extends Stop>(stops: readonly T[], routeLe
     return { metres: distance > 0 ? distance : distance + routeLength, seconds };
   }
 
-  return { legs, sample, arrival, cycleSeconds };
+  function approachingStop(phase: Phase) {
+    const leg = legs[phase.leg];
+    return !phase.stopped && phase.secondsLeft > 0 && phase.secondsLeft < leg.rampSeconds ? leg.to : undefined;
+  }
+
+  return { legs, sample, arrival, approachingStop, cycleSeconds };
 }

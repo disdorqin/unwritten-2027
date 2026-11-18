@@ -691,6 +691,7 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
     get atPlatform() { return phase.stopped; },
     get currentStop() { return currentStop(); },
     get nextStop() { return timetable.legs[phase.leg].to; },
+    get approachingStop() { return timetable.approachingStop(phase); },
     get lastStop() { return timetable.legs[phase.leg].from; },
     cycleSeconds: timetable.cycleSeconds,
     dwellSeconds: railDwellSeconds,

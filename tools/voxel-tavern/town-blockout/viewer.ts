@@ -75,7 +75,9 @@ import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway, type TownRailStopId } from './town-railway';
-import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
+import {
+  createRailApproachReminder, createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy,
+} from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
@@ -560,6 +562,7 @@ let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
+const railApproachReminder = createRailApproachReminder();
 let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
@@ -616,6 +619,11 @@ function openPlace(title: string, description: string) {
 }
 placeCard.addEventListener('close', () => renderer.domElement.focus());
 
+function clearRailApproach() {
+  const line = railApproachReminder.clear();
+  if (line && activityStatus.textContent === line) activityStatus.textContent = '';
+}
+
 function leaveRide() {
   if (!boardingGround) return true;
   const platform = railway.currentStop;
@@ -627,6 +635,7 @@ function leaveRide() {
   }
   boardingGround = undefined;
   lastRailStopShown = undefined;
+  clearRailApproach();
   resetMovement();
   if (platform) {
     if (!settleTownLanding(platform.x, platform.n, platform.ground)) settleTownLanding(platform.x, platform.n);
@@ -1938,6 +1947,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   railway.cancelRide();
   boardingGround = undefined;
   lastRailStopShown = undefined;
+  clearRailApproach();
   leaveSeat();
   lakeSkating.stop();
   plazaPhoto.leaveForCeremony();
@@ -1985,6 +1995,8 @@ renderer.setAnimationLoop(now => {
       lastRailStopShown = stopped.id;
       announceActivity(`${stopped.label}到了。${stopped.arrival}`);
     } else if (!stopped) lastRailStopShown = undefined;
+    const approachNotice = railApproachReminder.update(railway.approachingStop);
+    if (approachNotice) announceActivity(approachNotice);
   }
   if (beacon) {
     beacon.visible = nightMode;
