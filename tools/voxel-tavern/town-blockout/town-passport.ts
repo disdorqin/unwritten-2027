@@ -71,6 +71,7 @@ export function createTownPassport<Id extends string>(
   extensionStamps: readonly PassportStamp[] = [],
   riddleProgress?: () => { totalSolved: number; fullLightDays: readonly string[]; fullLightToday: boolean },
   zodiac?: ZodiacProgress,
+  openChronicle?: () => void,
 ) {
   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
   const extensionById = new Map(extensionStamps.map(stamp => [stamp.id, stamp]));
@@ -128,6 +129,13 @@ export function createTownPassport<Id extends string>(
     restore();
     const progress = getProgress();
     const panel = context.open('雪镇戳册', '在镇上收集纪念章。集齐后可下载跨年纪念卡。');
+    if (openChronicle) {
+      const chronicle = document.createElement('button');
+      chronicle.type = 'button';
+      chronicle.textContent = '镇志';
+      chronicle.onclick = openChronicle;
+      panel.append(chronicle);
+    }
     const summary = document.createElement('p');
     summary.className = 'passport-progress';
     summary.textContent = `已集 ${progress.collected} / ${progress.total} 枚`;

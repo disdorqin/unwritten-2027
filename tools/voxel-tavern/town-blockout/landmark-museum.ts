@@ -5,6 +5,7 @@ import { addMuseumNetwork } from './museum-network';
 import { addMuseumTerrace } from './museum-terrace';
 import { addMuseumTrim } from './museum-trim';
 import { addMuseumForecourt } from './museum-forecourt';
+import { addChronicleGallery } from './town-chronicle-landmarks';
 
 const tiles = ['#88807c', '#958478', '#7b7473', '#a18c7c', '#867971', '#958985'];
 const trim = '#674534';
@@ -115,6 +116,7 @@ export function buildMuseumLandmark() {
   m.detailInterior(() => {
     addMuseumTimeline(m);
     addMuseumNetwork(m);
+    addChronicleGallery(m);
   });
   addMuseumTerrace(m);
   addMuseumTrim(m);

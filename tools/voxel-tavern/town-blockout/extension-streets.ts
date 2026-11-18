@@ -7,6 +7,9 @@ import { districtParcels, districtStreets, extensionPlots, extensionRoads, memor
 import type { Box } from './landmark-kit';
 import type { TownSeat } from './town-activity';
 import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
+import { addOpaqueMuseumLabels } from './museum-label-atlas';
+import { createChronicleFace, mainChronicleStone } from './town-chronicle-landmarks';
+import type { TownChronicleViews } from './town-chronicle-views';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Point = readonly [east: number, north: number];
@@ -528,11 +531,35 @@ export function buildExtensionStreets(
     add(cell, a, y + w * .25, b, w * .82, w * .22, w * .65, blueSnow, yaw, true, 'pine');
   }
 
+  const { east: chronicleEast, north: chronicleNorth } = mainChronicleStone;
+  const chronicleHeight = grid.heightAt(chronicleEast, chronicleNorth);
+  const chronicleCell = cellAt(chronicleEast, chronicleNorth);
+  add(chronicleCell, chronicleEast, chronicleHeight + .13, chronicleNorth, 4.02, .38, .86, '#697180');
+  add(chronicleCell, chronicleEast, chronicleHeight + 1.39, chronicleNorth, 3.78, 2.28, .50, '#495463');
+  add(chronicleCell, chronicleEast, chronicleHeight + 2.57, chronicleNorth, 3.94, .14, .62, '#6f7984');
+  add(chronicleCell, chronicleEast, chronicleHeight + 2.74, chronicleNorth, .31, .20, .28, '#ffd599', 0, false, 'lit');
+  colliders.push(plate(chronicleEast, chronicleNorth, chronicleHeight - .06, 4.02, 2.64, .86));
+  const chronicleFace = createChronicleFace('main');
+  const chronicleSign = new Group();
+  chronicleSign.name = mainChronicleStone.name;
+  const redrawChronicle = chronicleFace && addOpaqueMuseumLabels([{
+    source: chronicleFace.source, parent: chronicleSign, x: chronicleEast, y: chronicleHeight + 1.51,
+    z: -chronicleNorth + .263, width: 3.58, height: 1.9, yaw: 0,
+  }], []);
+  if (chronicleFace) {
+    chronicleSign.visible = false;
+    group.add(chronicleSign);
+  }
+
   const counts = {
     buildings: sites.length, trees: treeCount, lights, pavingCells: woven.size, chunks: cells.size,
     districts: Object.fromEntries(Object.keys(parcels).map(k => [k, sites.filter(s => s.district === k).length])),
   };
-  group.userData = { colliders, floors: [], ramps: [], counts };
+  group.userData = { colliders, floors: [], ramps: [], counts,
+    refreshChronicle(data: TownChronicleViews) {
+      if (chronicleFace?.paint(data)) redrawChronicle?.(chronicleFace.source);
+    },
+  };
 
   function pave(parent: Group, positions: number[], colors: number[]) {
     if (!positions.length) return;
@@ -561,6 +588,8 @@ export function buildExtensionStreets(
 
   let overviewGroup: Group | undefined;
   function update(camera: Camera, overview: boolean) {
+    chronicleSign.visible = !overview && !!chronicleCell.group &&
+      Math.hypot(camera.position.x - chronicleEast, camera.position.z + chronicleNorth) < 32;
     if (overview) {
       if (overviewGroup?.visible) return;
       if (!overviewGroup) {

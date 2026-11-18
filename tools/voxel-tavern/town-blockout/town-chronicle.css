@@ -1,0 +1,72 @@
+#place-card:has(.town-chronicle-book) #place-text:empty { display: none; }
+#place-card:has(.town-chronicle-book) {
+  width: min(1040px, calc(100vw - 26px));
+  max-width: none;
+  max-height: calc(100dvh - 26px);
+}
+.town-chronicle-book {
+  --chronicle-border: #776550;
+  display: grid;
+  grid-template-columns: minmax(128px, 1fr) 4fr;
+  gap: 18px;
+  color: #f5e9ce;
+}
+.town-chronicle-book nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 14px;
+  border-right: 1px solid var(--chronicle-border);
+}
+.town-chronicle-book button,
+.town-chronicle-search input {
+  min-height: 36px;
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--chronicle-border);
+  border-radius: 5px;
+  background: #222c35;
+  padding: 5px 9px;
+}
+.town-chronicle-book button[aria-pressed="true"] {
+  color: #ffdc91;
+  border-color: #e6b877;
+  background: #41362d;
+}
+.town-chronicle-book button:disabled { opacity: .45; cursor: default; }
+.town-chronicle-book .town-chronicle-era { margin-left: 12px; }
+.town-chronicle-reading { min-width: 0; }
+.town-chronicle-search,
+.town-chronicle-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.town-chronicle-search input[type="search"] { flex: 1; min-width: 130px; }
+.town-chronicle-index {
+  display: flex;
+  gap: 6px;
+  overflow: auto;
+  margin: 10px 0;
+  padding-bottom: 6px;
+}
+.town-chronicle-index button { flex-shrink: 0; max-width: 100%; }
+.town-chronicle-book article {
+  min-height: 210px;
+  padding: clamp(12px, 3vw, 26px);
+  margin-bottom: 10px;
+  background: #f1e2c0;
+  color: #3b2b25;
+  border-radius: 5px;
+}
+.town-chronicle-book article h3 { margin-top: 0; }
+.town-chronicle-book article button { color: #f5e9ce; }
+#place-card .town-chronicle-meta { color: #705a45; font-size: .85rem; }
+#place-card .town-chronicle-copy { color: #3b2b25; line-height: 1.78; white-space: pre-wrap; overflow-wrap: anywhere; }
+.town-chronicle-pages { justify-content: space-between; }
+@media (max-width: 570px) {
+  .town-chronicle-book { grid-template-columns: 1fr; gap: 9px; }
+  .town-chronicle-book nav { flex-direction: row; overflow: auto; padding: 0 0 6px; border: 0; }
+  .town-chronicle-book nav button { flex-shrink: 0; }
+}

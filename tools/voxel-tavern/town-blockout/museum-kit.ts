@@ -8,6 +8,7 @@ import { museumDetailAxis, museumHorizontalScale } from './museum-scale';
 import { addOpaqueMuseumLabels, type OpaqueMuseumLabel } from './museum-label-atlas';
 import { createMuseumLabelCanvas, type MuseumLabelStyle } from './museum-label-canvas';
 import { useLandmarkEmissionMask } from './landmark-label';
+import type { TownChronicleViews } from './town-chronicle-views';
 
 type Point = readonly [number, number, number];
 export type MuseumLight = { position: Point; color: string; power: number; distance: number };
@@ -82,6 +83,12 @@ export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
   const transparentTextures = new Map<HTMLCanvasElement, CanvasTexture>();
   const opaqueLabels: OpaqueMuseumLabel[] = [];
   const smallLabels: Mesh[] = [];
+  const chronicleFaces: { source: HTMLCanvasElement; paint(data: TownChronicleViews): boolean }[] = [];
+  function chronicleFace(face: typeof chronicleFaces[number] | undefined, x: number, y: number, z: number, width: number, height: number) {
+    if (!face) return;
+    chronicleFaces.push(face);
+    opaqueLabels.push({ source: face.source, parent: mounting, x, y, z, width, height, yaw: 0 });
+  }
   function label(text: string, x: number, y: number, z: number, w: number, h: number, ry = 0, options: MuseumLabelStyle = {}) {
     if (typeof document === 'undefined') return;
     const { background = '#341d18', color = '#ffe4a0', accent = '#a4783d', border = true } = options;
@@ -140,7 +147,10 @@ export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
         section.add(mesh);
       });
     }
-    addOpaqueMuseumLabels(opaqueLabels, smallLabels, { mergeSizes: mergeLabelSizes });
+    const redraw = addOpaqueMuseumLabels(opaqueLabels, smallLabels, { mergeSizes: mergeLabelSizes });
+    if (chronicleFaces.length) group.userData.refreshChronicle = (data: TownChronicleViews) => {
+      for (const face of chronicleFaces) if (face.paint(data)) redraw(face.source);
+    };
     if (interior.children.length) {
       group.add(interior);
       group.userData.detailInterior = interior;
@@ -163,5 +173,5 @@ export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
     });
     return group;
   }
-  return { group, box, detailBox, detailInterior, solid, collider, floor, beam, panel, label, light, ramps, finish };
+  return { group, box, detailBox, detailInterior, solid, collider, floor, beam, panel, label, chronicleFace, light, ramps, finish };
 }

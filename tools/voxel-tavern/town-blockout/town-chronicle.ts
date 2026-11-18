@@ -3,6 +3,7 @@ import { browserTextStorage, isStoredRecord, readCollection, writeCollection, ty
 
 export const townChronicleKey = 'unwritten.chronicle.v1';
 export const townChronicleLocalScope = '本机所见';
+export const townChronicleChanged = 'town-chronicle-changed';
 
 export type TownChronicleEntry = {
   id: string;
@@ -34,10 +35,18 @@ export function readPublishedTownChronicle(storage = browserTextStorage()): Town
   return readCollection(storage, townChronicleKey, isChronicleEntry).filter(item => item.status === 'published');
 }
 
+export function createTownChronicleReviewHook(authorizeMayor: () => boolean, storage = browserTextStorage()) {
+  return () => authorizeMayor()
+    ? readCollection(storage, townChronicleKey, isChronicleEntry).filter(item => item.status === 'draft')
+    : [];
+}
+
 function append(entry: TownChronicleEntry, storage: StorageAccess | undefined) {
   const entries = readCollection(storage, townChronicleKey, isChronicleEntry);
   if (entries.some(item => item.id === entry.id)) return true;
-  return writeCollection(storage, townChronicleKey, [...entries, entry]);
+  const written = writeCollection(storage, townChronicleKey, [...entries, entry]);
+  if (written && typeof window !== 'undefined') window.dispatchEvent(new Event(townChronicleChanged));
+  return written;
 }
 
 function timestamp(at: number) {
