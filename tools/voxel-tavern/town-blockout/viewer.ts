@@ -16,7 +16,7 @@ import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
-import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
+import { bridgeAt, canEnter, createTerrainGrid, gridStep, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createTownViewBatches } from './town-view-batches';
 import { createTownViewFaces } from './town-view-faces';
@@ -71,6 +71,10 @@ import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activ
 import { createLakeSkatingActivity } from './lake-skating-activity';
 import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-course';
 import { createLakeSkateMotion } from './lake-skate-motion';
+import { createSledRide } from './sled-ride';
+import { sledRadius } from './sled-motion';
+import { longHallSledStart } from './sled-route';
+import { createTownSledVisuals } from './sled-visuals';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
 import { createHotSpringSoak } from './hot-spring-soak';
@@ -508,6 +512,7 @@ const points = new Map<string, number[]>([
   ['东北坡地街巷', [319, 221]],
   ['冰湖雪球场', [350, 92.5]],
   ['冰湖滑冰', [lakeSkateStation.x, lakeSkateStation.n]],
+  ['长厅雪橇出发台', [...longHallSledStart]],
   ['冰湖冰钓', [iceFishingStation.x, iceFishingStation.n]],
   ['东侧扩建步道', [443, 221]],
   ['北侧森林街区', [93, 378]],
@@ -730,6 +735,52 @@ const tavernActivity = createTavernActivity(
   () => { drinkingPoseUntil = performance.now() + 2500; },
 );
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const sledRacks = [
+  { x: 245, n: 178, yaw: -Math.PI / 2 },
+  { x: railway.stops[0].x + 1.8, n: railway.stops[0].n, yaw: 0 },
+  { x: longHallSledStart[0], n: longHallSledStart[1], yaw: Math.PI },
+].map(rack => ({ ...rack, y: grid.heightAt(rack.x, rack.n) }));
+const sledVisuals = createTownSledVisuals(scene, sledRacks.map((rack, index) => {
+  if (index !== 2) return rack;
+  const x = rack.x + 1.8;
+  return { ...rack, x, y: grid.heightAt(x, rack.n) };
+}));
+const sledRide = createSledRide({
+  height: grid.heightAt,
+  surface(x, n, y) {
+    const surface = bridgeAt(x, n) ? 1 : grid.surfaces[Math.round(n / gridStep) * grid.gridWidth + Math.round(x / gridStep)] ?? 0;
+    return { surface, deepSnow: surface === 0 && snowCover.depthAt(x, n, y, snowCleared) >= .6 };
+  },
+  blocked(x, n, y) {
+    return !canEnter(x, n) || !walkable(x, n) || (!bridgeAt(x, n) && townWater.at(x, n) !== undefined)
+      || roofed(x, n, y) || obstructed(x, n, y, sledRadius);
+  },
+  snow: sledVisuals.puff,
+  stopped: () => announceActivity('雪橇在上坡停稳了，按 E 下橇步行'),
+});
+let sledLookYaw = 0;
+function beginSled(sled: { x: number; n: number; y: number; yaw: number }) {
+  if (homeReturn || !sledRide.mount(sled.x, sled.n, sled.y, sled.yaw)) return;
+  lakeSkating.stop();
+  stopTravel();
+  sledLookYaw = 0;
+  refreshSledPosition();
+}
+function refreshSledPosition() {
+  const spot = sledRide.spot;
+  x = spot.x;
+  n = spot.n;
+  yaw = spot.yaw + sledLookYaw;
+  ground = grid.heightAt(x, n);
+  airHeight = spot.y - ground > surfaceEpsilon ? spot.y : undefined;
+}
+function leaveSled() {
+  if (!sledRide.leave()) return;
+  refreshSledPosition();
+  riseSpeed = 0;
+  stopTravel();
+}
+const leaveSledAction = { label: '下雪橇', run: leaveSled };
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
@@ -780,6 +831,12 @@ activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
+for (const rack of sledRacks) {
+  activitySpots.push({
+    x: rack.x, n: rack.n, ground: rack.y, range: 2.6, label: '上雪橇',
+    run: () => beginSled(rack),
+  });
+}
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
     activitySpots.push({
@@ -1487,7 +1544,9 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
-  if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (!walking || placeCard.open || museumVisit.dialog.open || sledRide.recovering()) return undefined;
+  if (sledRide.active()) return leaveSledAction;
+  if (airHeight !== undefined) return undefined;
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -1516,6 +1575,9 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const parked = sledRide.parked();
+  if (!homeReturn && parked && Math.abs(ground - parked.y) < .6 && Math.hypot(x - parked.x, n - parked.n) <= 3)
+    return { label: '重新上雪橇', run: () => beginSled(parked) };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   if (nearest) return nearest;
   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoArc(x, n, ground)) return plazaPhotoAction;
@@ -1532,6 +1594,7 @@ function jump() {
   const destinations: Record<string, readonly [number, number]> = {
     '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
     '冰湖滑冰': [lakeSkateGates[0].x, lakeSkateGates[0].n],
+    '长厅雪橇出发台': [378, 298],
     '冰湖冰钓': [iceFishingStation.x - 1.5, iceFishingStation.n - 1.5],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
@@ -1568,6 +1631,7 @@ function mode(next: boolean) {
     if (homeReturn) return false;
   }
   lakeSkating.stop();
+  leaveSled();
   if (!leaveRide()) return false;
   leaveSeat();
   resetMovement();
@@ -1633,7 +1697,10 @@ function skatesOnIce() {
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
 }
 function turnView(horizontal: number, vertical: number) {
-  if (boardingGround) {
+  if (sledRide.active()) {
+    sledLookYaw = Math.max(-1.5, Math.min(1.5, sledLookYaw + horizontal));
+    pitch = Math.max(-1.42, Math.min(1.42, pitch + vertical));
+  } else if (boardingGround) {
     rideYawOffset += horizontal;
     ridePitch = Math.max(-1.42, Math.min(1.42, ridePitch + vertical));
   } else if (seated) {
@@ -1662,11 +1729,13 @@ if (typeof renderer.domElement.requestPointerLock !== 'function' ||
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
   () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball);
 function canJump() {
-  return moveAllowed() && landingFeedback.pose() === 'none' && airHeight === undefined &&
-    (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
+  if (sledRide.active()) return moveAllowed() && !sledRide.airborne();
+  return moveAllowed() && !sledRide.recovering() && landingFeedback.pose() === 'none' &&
+    airHeight === undefined && (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
 }
 function requestJump() {
   if (!canJump()) return;
+  if (sledRide.active()) { sledRide.jump(jumpVelocity * .8); return; }
   landingFeedback.begin(ground);
   airHeight = ground;
   riseSpeed = jumpVelocity;
@@ -1687,9 +1756,10 @@ addEventListener('keydown', e => {
     }
     return;
   }
-  if ((seated || boardingGround) && e.code === 'Escape') {
+  if ((seated || boardingGround || sledRide.active()) && e.code === 'Escape') {
     e.preventDefault();
-    if (seated) leaveSeat();
+    if (sledRide.active()) leaveSled();
+    else if (seated) leaveSeat();
     else leaveRide();
     return;
   }
@@ -1764,7 +1834,8 @@ function waterAtFeet() {
 
 function storeWalkView(position: Vector3) {
   const water = waterAtFeet();
-  position.set(x, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), -n);
+  const cameraHeight = sledRide.active() ? 1.28 : water?.mode === 'swim' ? 1.52 : eye;
+  position.set(x, (airHeight ?? ground) + cameraHeight - sledRide.compression(), -n);
 }
 
 function overlapsBody(east: number, north: number, { min, max }: Box, radius = bodyRadius) {
@@ -1807,11 +1878,11 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
   return height;
 }
 
-function obstructed(east: number, north: number, feet: number) {
+function obstructed(east: number, north: number, feet: number, radius = bodyRadius) {
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
-    feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+    feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box, radius);
   const { colliders, floors } = geometryAt(east, north);
-  return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+  return railway.vehicleBlocks(east, north, feet, bodyHeight, radius) ||
     activities.some(activity => activity.blocked?.(east, north, feet)) ||
     colliders.some(intersects) || floors.some(intersects);
 }
@@ -2001,6 +2072,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   lastRailStopShown = undefined;
   leaveSeat();
   lakeSkating.stop();
+  sledRide.interrupt();
   plazaPhoto.leaveForCeremony();
   if (placeCard.open) placeCard.close();
   if (museumVisit.dialog.open) museumVisit.dialog.close();
@@ -2094,7 +2166,13 @@ renderer.setAnimationLoop(now => {
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
-        if (skatesOnIce() && landingFeedback.pose() === 'none') {
+        if (sledRide.active()) {
+          snowMoveScale = chillMoveScale = 1;
+          sledRide.step(townPhysicsDelta, { forward, turn: right });
+          refreshSledPosition();
+        } else if (sledRide.recovering()) {
+          snowMoveScale = chillMoveScale = 1;
+        } else if (skatesOnIce() && landingFeedback.pose() === 'none') {
           snowMoveScale = chillMoveScale = 1;
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
           const glideEast = x, glideNorth = n;
@@ -2120,7 +2198,7 @@ renderer.setAnimationLoop(now => {
             if (!tryMove(nx, nn) && !tryMove(nx, n)) tryMove(x, nn);
           }
         }
-        stepJump(townPhysicsDelta);
+        if (!sledRide.active()) stepJump(townPhysicsDelta);
         if (lakeSkating.enabled()) lakeSkating.onPosition(x, n, townPhysicsDelta, isLakeSkateIce(x, n));
         storeWalkView(walkCurrent);
       });
@@ -2134,7 +2212,9 @@ renderer.setAnimationLoop(now => {
     const dip = landingPose === 'prone' ? 1.21 : reduceSnowEffects.matches ? 0 : .22 * landingFeedback.compression();
     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
     faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
-    const movement = landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
+    if (sledRide.recovering()) camera.rotateZ(sledRide.roll());
+    const movement = sledRide.active() ? `乘橇 ${sledRide.speed().toFixed(1)} m/s` :
+      landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
       airHeight !== undefined ? '腾空' : skatesOnIce() ? '滑冰' : sprint ? '疾跑' : '行走';
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
@@ -2142,6 +2222,12 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  sledRide.finishFrame(dt, x, n);
+  const displayedSled = sledRide.active() ? sledRide.spot : sledRide.parked();
+  if (displayedSled && !homeReturn)
+    sledVisuals.setPose(displayedSled.x, displayedSled.n, displayedSled.y, displayedSled.yaw);
+  else sledVisuals.hide();
+  sledVisuals.update(dt);
   if (!walking || !moveAllowed() || !skatesOnIce()) presenceSkateSpeed = 0;
   const poseSession = presence.selfId();
   if (!walking || (previousPoseSession !== null && previousPoseSession !== poseSession)) drinkingPoseUntil = 0;
