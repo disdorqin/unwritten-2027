@@ -1,8 +1,33 @@
 // 原冻纹基线继续由仪式曲线驱动。寒意设计 v1 把个人暴露与基线取较高值，
 // 两条通道共用该等级。移动系数仅由 viewer 在着地步行分支消费。
 import type { CeremonyState, FrostLevel } from './town-ceremony';
+import { bridgeAt, gridStep, isWater, type createTerrainGrid } from './terrain';
+import { bridgeMouthKeepClear } from './road-clearance';
+import { extensionRoadClearance, extensionStreetClearance } from './town-extension';
+
+type FrostGround = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt' | 'gridWidth' | 'gridDepth' | 'surfaces'>;
+
+export function isExposedSnowAt(
+  grid: FrostGround, x: number, north: number, ground: number,
+  isCleared?: (x: number, north: number, ground: number) => boolean,
+) {
+  const col = Math.round(x / gridStep);
+  const row = Math.round(north / gridStep);
+  if (col < 0 || col >= grid.gridWidth || row < 0 || row >= grid.gridDepth) return false;
+  const surface = grid.surfaces[row * grid.gridWidth + col];
+  return (surface === 0 || surface === 3) &&
+    !bridgeAt(x, north) && !isWater(x, north) && Math.abs(ground - grid.heightAt(x, north)) <= .18 &&
+    !bridgeMouthKeepClear(x, north, 0) && !extensionRoadClearance(x, north, 0) &&
+    !extensionStreetClearance(x, north, 0) && !isCleared?.(x, north, ground);
+}
 
 export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
+export type FrostExposure = 'none' | 'dark-snow' | 'lamp' | 'water';
+const naturalThawRate = 1 / 120;
+const exposureRate = 1 / 270;
+const maskClear = [100, 83, 73, 62] as const;
+const blurByLevel = [0, 0, 1.15, 3.2] as const;
+export const wetColdMultiplier = 2;
 
 /** 每级的表现参数（设计 §4.1）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
 export const frostLevelStyles: Record<FrostLevel, { opacity: number; band: number; tint: number; breath: boolean }> = {
@@ -30,7 +55,7 @@ function clampLevel(value: number): number {
   return Math.min(3, Math.max(0, value));
 }
 
-function lerpStyle(personal: number) {
+export function sampleFrostStyle(personal: number) {
   const low = Math.floor(clampLevel(personal)) as FrostLevel;
   const high = Math.ceil(clampLevel(personal)) as FrostLevel;
   const mix = clampLevel(personal) - low;
@@ -40,6 +65,8 @@ function lerpStyle(personal: number) {
     opacity: a.opacity + (b.opacity - a.opacity) * mix,
     band: a.band + (b.band - a.band) * mix,
     tint: a.tint + (b.tint - a.tint) * mix,
+    clearPercent: maskClear[low] + (maskClear[high] - maskClear[low]) * mix,
+    blur: blurByLevel[low] + (blurByLevel[high] - blurByLevel[low]) * mix,
     breath: personal > 2.5,
     level: (Math.round(clampLevel(personal)) as FrostLevel),
   };
@@ -50,7 +77,7 @@ export interface FrostTracker {
   baseline(): FrostLevel;
   setWarmth(source: WarmthSource, active: boolean): void;
   drinkHot(): void;
-  setExposure(intensity: number, depth: number, exposed: boolean, ceremonyRelief: boolean, mobilityFactor?: number): void;
+  setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number): void;
   exposure(): number;
   walkingScale(enabled?: boolean): number;
   warming(): boolean;
@@ -65,8 +92,8 @@ export function createFrostTracker(): FrostTracker {
   let baseline: FrostLevel = 0;
   let baselinePersonal = 0;
   let exposure = 0;
-  let snowIntensity = 1;
   let exposureGrowth = 0;
+  let naturallyThaws = true;
   let warmRate = 0;
   let relief = false;
   let synced = false;
@@ -90,13 +117,15 @@ export function createFrostTracker(): FrostTracker {
       exposure = Math.max(0, exposure - 1);
       setWarmth('hot-drink', true);
     },
-    setExposure(intensity, depth, exposed, ceremonyRelief, mobilityFactor = 1) {
-      snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
+    setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1) {
+      const surface = input === true ? 'dark-snow' : input === false ? 'none' : input;
+      const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
       relief = ceremonyRelief;
-      exposureGrowth = exposed && snowIntensity >= 2
-        ? (snowIntensity - 1) / 270 * (depth >= .6 ? 1.5 : 1) * (relief ? .5 : 1) *
-          (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1)
-        : 0;
+      naturallyThaws = surface === 'lamp' || (surface !== 'water' && snowIntensity < 2);
+      const snowPressure = surface === 'dark-snow' && snowIntensity >= 2 ? (snowIntensity - 1) * (depth >= .6 ? 1.5 : 1) : 0;
+      const wetPressure = surface === 'water' ? Math.max(1, snowIntensity - 1) * wetColdMultiplier : 0;
+      exposureGrowth = (snowPressure + wetPressure) * exposureRate * (relief ? .5 : 1) *
+        (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1);
     },
     exposure: () => exposure,
     walkingScale(enabled = true) {
@@ -116,7 +145,7 @@ export function createFrostTracker(): FrostTracker {
         if (baselinePersonal < goal) baselinePersonal = Math.min(goal, baselinePersonal + step);
         else if (baselinePersonal > goal) baselinePersonal = Math.max(goal, baselinePersonal - step);
       }
-      const rate = warmRate > 0 ? -warmRate : snowIntensity < 2 ? -1 / 120 : exposureGrowth;
+      const rate = warmRate > 0 ? -warmRate : naturallyThaws ? -naturalThawRate : exposureGrowth;
       exposure = clampLevel(exposure + rate * dt);
       return personal();
     },
@@ -131,6 +160,8 @@ export interface CeremonyFrostOptions {
   /** 设置里的冻纹开关；false 时叠层整体隐藏（设计 §4.1 可关）。 */
   enabled?: boolean;
   reducedMotion?: { matches: boolean };
+  scene?: HTMLElement;
+  announce?: (text: string) => void;
 }
 
 /**
@@ -143,38 +174,44 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   const edges = root.querySelector<HTMLElement>('.frost-edges');
   const tint = root.querySelector<HTMLElement>('.frost-tint');
   const breath = root.querySelector<HTMLElement>('.frost-breath');
+  const melt = root.querySelector<HTMLElement>('.frost-melt');
   const tracker = createFrostTracker();
   let enabled = options.enabled !== false;
-  let lastOpacity = '';
-  let lastLevel: FrostLevel | undefined;
-  let lastPersonal = Number.NaN;
-  let lastEnabled: boolean | undefined;
-  let lastReduced: boolean | undefined;
+  let visibleLevel = 0;
+  let meltFilm = 0;
+  let fireRecovery = false;
+  let fireActive = false;
+  let lastPaint = '';
+  let lastReduced = false;
+
+  function paintOpacity(node: HTMLElement | null, value: number) {
+    if (!node) return;
+    const opacity = String(Math.round(value * 100) / 100);
+    if (node.style.opacity !== opacity) node.style.opacity = opacity;
+  }
 
   function render() {
-    const personal = tracker.personal();
     const reduced = options.reducedMotion?.matches === true;
-    if (personal === lastPersonal && enabled === lastEnabled && reduced === lastReduced) return;
-    lastPersonal = personal;
-    lastEnabled = enabled;
     lastReduced = reduced;
-    const style = lerpStyle(personal);
-    root.hidden = !enabled || (style.opacity <= 0 && style.tint <= 0);
+    const style = sampleFrostStyle(visibleLevel);
+    const blur = enabled ? Math.round(style.blur * 10) / 10 : 0;
+    const clear = Math.round(style.clearPercent * 2) / 2;
+    const film = enabled ? Math.round(meltFilm * 24) / 100 : 0;
+    const opacity = Math.round(style.opacity * 100);
+    const tintOpacity = Math.round(style.tint * 100);
+    const paint = `${enabled}:${style.level}:${opacity}:${tintOpacity}:${blur}:${clear}:${film}:${reduced}`;
+    if (paint === lastPaint) return;
+    lastPaint = paint;
+    root.hidden = !enabled || (opacity <= 0 && tintOpacity <= 0 && film <= 0);
+    const filter = blur > 0 ? `blur(${blur}px)` : '';
+    if (options.scene && options.scene.style.filter !== filter) options.scene.style.filter = filter;
     if (root.hidden) return;
-    const opacity = String(Math.round(style.opacity * 100) / 100);
-    if (edges && opacity !== lastOpacity) {
-      lastOpacity = opacity;
-      edges.style.opacity = opacity;
-    }
-    const tintOpacity = String(Math.round(style.tint * 100) / 100);
-    if (tint && tint.style.opacity !== tintOpacity) tint.style.opacity = tintOpacity;
-    if (style.level !== lastLevel) {
-      lastLevel = style.level;
-      root.dataset.level = String(style.level);
-    }
-    if (breath) {
-      breath.hidden = !(style.breath && !reduced);
-    }
+    paintOpacity(edges, style.opacity);
+    paintOpacity(tint, style.tint);
+    paintOpacity(melt, film);
+    root.style.setProperty('--frost-clear', `${clear}%`);
+    root.dataset.level = String(style.level);
+    if (breath) breath.hidden = !(style.breath && !reduced);
   }
 
   render();
@@ -201,15 +238,37 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   return {
     mountSettings,
     setBaseline: (level: FrostLevel) => tracker.setBaseline(level),
-    setWarmth: tracker.setWarmth,
+    setWarmth(source: WarmthSource, active: boolean) {
+      if (source === 'fire-source') {
+        if (!active) fireRecovery = false;
+        else if (tracker.exposure() > .5) fireRecovery = true;
+        fireActive = active;
+      }
+      tracker.setWarmth(source, active);
+    },
     setExposure: tracker.setExposure,
     drinkHot: tracker.drinkHot,
     walkingScale: () => tracker.walkingScale(enabled),
     setEnabled(next: boolean) { enabled = next; render(); },
     enabled: () => enabled,
     update(dtSeconds: number) {
-      tracker.update(dtSeconds);
-      render();
+      const previousLevel = tracker.displayLevel();
+      const target = tracker.update(dtSeconds);
+      const wasVisible = visibleLevel;
+      const previousFilm = meltFilm;
+      const dt = Number.isFinite(dtSeconds) ? Math.max(0, dtSeconds) : 0;
+      // Keep the immediate hot-drink effect in the tracker while visibly melting the view.
+      visibleLevel = target >= visibleLevel ? target : Math.max(target, visibleLevel - dt * 2.75);
+      meltFilm = visibleLevel < wasVisible ? Math.min(1, meltFilm + dt * 3)
+        : Math.max(0, meltFilm - dt * 1.2);
+      if (enabled && previousLevel < 3 && tracker.displayLevel() === 3) {
+        options.announce?.('冷得迈不开步了——找个火堆烤烤火。');
+      }
+      if (fireActive && fireRecovery && tracker.exposure() <= 1e-8) {
+        fireRecovery = false;
+        if (enabled) options.announce?.('身上暖和过来了。');
+      }
+      if (wasVisible !== visibleLevel || previousFilm !== meltFilm || lastReduced !== (options.reducedMotion?.matches === true)) render();
     },
     tracker,
   };

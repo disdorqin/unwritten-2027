@@ -35,7 +35,10 @@ import {
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
-import { createCeremonyFrost, hasFrostCeremonyRelief } from './town-frost';
+import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
+import { campfirePieces, createTownCampfires, findRegionalCampfires } from './town-campfires';
+import { createLandingFeedback } from './landing-feedback';
+import { createLandingSnow } from './landing-snow';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
@@ -531,6 +534,8 @@ const lockLookButton = element<HTMLButtonElement>('lock-look');
 const envBanner = element('env-banner');
 const touchJump = element<HTMLButtonElement>('touch-jump');
 const walkClock = createTownPhysicsClock();
+const landingFeedback = createLandingFeedback();
+const landingSnow = createLandingSnow(scene);
 const lakeSkateMotion = createLakeSkateMotion();
 const walkPrevious = new Vector3();
 const walkCurrent = new Vector3();
@@ -547,6 +552,7 @@ function stopTravel() {
   lakeSkateMotion.reset();
 }
 function resetMovement() {
+  landingFeedback.reset();
   stopTravel();
   touchLook.reset();
   desktopLook.release();
@@ -651,6 +657,7 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
   scene,
   open: openPlace,
   sit(seat) {
+    landingFeedback.reset();
     stopTravel();
     seated = { ...seat, pitch: 0 };
   },
@@ -726,7 +733,7 @@ const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: an
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
-  { camera, player: () => ({ x, n, walking }) },
+  { camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink },
 );
 function nearbyActivity<T extends TownActivity>(create: (context: TownActivityContext) => T): T {
   const activity = create({
@@ -852,6 +859,8 @@ const ceremonyOverlay = createCeremonyOverlay({
 const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   enabled: previewOptions.get('ceremonyFrost') !== 'off',
   reducedMotion: reduceSnowEffects,
+  scene: element('scene'),
+  announce: announceActivity,
 });
 ceremonyFrost.mountSettings(element('town-panel-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
@@ -1653,10 +1662,12 @@ if (typeof renderer.domElement.requestPointerLock !== 'function' ||
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
   () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball);
 function canJump() {
-  return moveAllowed() && airHeight === undefined && (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
+  return moveAllowed() && landingFeedback.pose() === 'none' && airHeight === undefined &&
+    (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
 }
 function requestJump() {
   if (!canJump()) return;
+  landingFeedback.begin(ground);
   airHeight = ground;
   riseSpeed = jumpVelocity;
   snowballJumped();
@@ -1821,6 +1832,7 @@ function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number)
   const landing = findNearestLegalSpawn({ x: targetEast, n: targetNorth }, dryGround)
     ?? (heightHint === undefined ? findNearestLegalSpawn({ x: plazaEast, n: plazaNorth }, dryGround) : undefined);
   if (!landing) return false;
+  landingFeedback.reset();
   ({ x, n, ground } = landing);
   airHeight = undefined;
   riseSpeed = 0;
@@ -1837,6 +1849,7 @@ function tryMove(nextX: number, nextN: number) {
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
+      landingFeedback.begin(ground);
       airHeight = ground;
       riseSpeed = 0;
     } else ground = nextHeight;
@@ -1875,6 +1888,10 @@ function stepJump(dt: number) {
       ground = landing;
       airHeight = undefined;
       riseSpeed = 0;
+      const reaction = landingFeedback.land(landing, snowCover.depthAt(x, n, landing, snowCleared) >= .6);
+      if (reaction !== 'none' && !reduceSnowEffects.matches && !waterAtFeet()) {
+        landingSnow.burst(x, landing + .06, -n);
+      }
       return;
     }
   }
@@ -1917,6 +1934,21 @@ for (const stop of railway.stops) {
     run: () => showLiveRailSchedule(`环镇线 · ${stop.label}`, () => railPlatformCopy(railway, stop, ceremonyClock.now())),
   });
 }
+
+const campfireSites = findRegionalCampfires((east, north, height) => {
+  if (bridgeAt(east, north) || isLakeSkateIce(east, north) || townWater.at(east, north)) return;
+  const base = height ?? grid.heightAt(east, north);
+  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  if (Math.abs(feet - base) > (height === undefined ? .30 : .14) ||
+      !canStandAtActivity(east, north, feet) || roofed(east, north, feet) ||
+      activitySpots.some(spot => Math.abs(spot.ground - feet) < .65 &&
+        (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
+  return feet;
+});
+const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites);
+scenery.setCampfirePieces(campfirePieces(campfireSites));
+activities.push(outdoorCampfires);
+activitySpots.push(...outdoorCampfires.spots);
 
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
@@ -2006,6 +2038,8 @@ renderer.setAnimationLoop(now => {
   previous = now;
   const startEast = x, startNorth = n;
   movementStepMs = 0;
+  landingFeedback.update(frameSeconds);
+  landingSnow.update(frameSeconds);
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
   if (boardingGround) {
@@ -2054,12 +2088,13 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) {
       const chillEnabled = ceremonyFrost.enabled();
       const chillTarget = ceremonyFrost.walkingScale();
-      const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor / Math.max(1, Math.hypot(forward, right));
+      const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor * landingFeedback.walkingScale() /
+        Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
-        if (skatesOnIce()) {
+        if (skatesOnIce() && landingFeedback.pose() === 'none') {
           snowMoveScale = chillMoveScale = 1;
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
           const glideEast = x, glideNorth = n;
@@ -2068,7 +2103,7 @@ renderer.setAnimationLoop(now => {
           presenceSkateSpeed = Math.hypot(x - glideEast, n - glideNorth) / townPhysicsDelta;
         } else {
           lakeSkateMotion.reset();
-          if (forward || right) {
+          if (speed > 0 && landingFeedback.pose() === 'none' && (forward || right)) {
             const water = waterAtFeet();
             let moveScale = 1;
             if (water || airHeight !== undefined) {
@@ -2095,8 +2130,12 @@ renderer.setAnimationLoop(now => {
     movementStepMs = performance.now() - movementStartedAt;
     walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
     const water = waterAtFeet();
-    faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
-    const movement = water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
+    const landingPose = landingFeedback.pose();
+    const dip = landingPose === 'prone' ? 1.21 : reduceSnowEffects.matches ? 0 : .22 * landingFeedback.compression();
+    const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
+    faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
+    const movement = landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
+      water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
       airHeight !== undefined ? '腾空' : skatesOnIce() ? '滑冰' : sprint ? '疾跑' : '行走';
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
   } else {
@@ -2108,8 +2147,10 @@ renderer.setAnimationLoop(now => {
   if (!walking || (previousPoseSession !== null && previousPoseSession !== poseSession)) drinkingPoseUntil = 0;
   previousPoseSession = poseSession;
   if (ceremonyArrivalPose && now >= ceremonyArrivalPose.until) ceremonyArrivalPose = undefined;
-  presence.setActivityPose(ceremonyArrivalPose?.value ?? effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
-    !!boardingGround, !!seated, presenceSkateSpeed));
+  const activityPose = walking && landingFeedback.pose() === 'prone'
+    ? effectiveTownAvatarPose(false, false, false, true, 0)
+    : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed);
+  presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
@@ -2168,6 +2209,7 @@ renderer.setAnimationLoop(now => {
   const baths = architecture.get('hot-spring');
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
+  outdoorCampfires.updateFlames(dt, camera.position.x, -camera.position.z, Boolean(homeReturn));
   const museum = architecture.get('memorial');
   const smallLabels = museum?.userData.smallLabels as Mesh[] | undefined;
   if (smallLabels) for (const label of smallLabels) label.visible = !wideView;
@@ -2197,22 +2239,30 @@ renderer.setAnimationLoop(now => {
   const railNotice = railOvernightBroadcast(ceremonyState.now, atRailwayPlatform);
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
-  ceremonyFrost.setWarmth('interior', sheltered || Boolean(homeReturn));
+  const indoors = sheltered || Boolean(homeReturn) || shedSheltered ||
+    (walking && !boardingGround && roofed(shedEast, shedNorth, shedFeet));
+  ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
     ? sharedHomeHearthWarmth(shedEast, shedNorth, shedFeet)
-    : shedSheltered && nearTavernWarmShedFire(tavernPlot, shedEast, shedNorth, shedFeet));
+    : walking && !boardingGround && ((shedSheltered && nearTavernWarmShedFire(tavernPlot, shedEast, shedNorth, shedFeet)) ||
+      (!indoors && outdoorCampfires.warmAt(shedEast, shedNorth, shedFeet))));
   if (warmDrinkUntil && now >= warmDrinkUntil) {
     warmDrinkUntil = 0;
     ceremonyFrost.setWarmth('hot-drink', false);
   }
-  const coldEast = boardingGround ? camera.position.x : seated?.x ?? x;
-  const coldNorth = boardingGround ? -camera.position.z : seated?.n ?? n;
-  const coldGround = boardingGround ? camera.position.y - eye : airHeight ?? ground;
-  const coldExposed = walking && !homeReturn && !sheltered && !shedSheltered && !isLakeSkateIce(coldEast, coldNorth);
-  const coldDepth = coldExposed && effectiveSnowIntensity >= 2
-    ? snowCover.depthAt(coldEast, coldNorth, coldGround, snowCleared) : 0;
-  ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldExposed, hasFrostCeremonyRelief(ceremonyState));
+  let coldSurface: FrostExposure = 'none';
+  let coldDepth = 0;
+  if (walking && !indoors && !boardingGround && airHeight === undefined && !isLakeSkateIce(shedEast, shedNorth)) {
+    if (!seated && waterAtFeet()) coldSurface = 'water';
+    else if (!nightMode || scenery.litAt(shedEast, shedNorth, shedFeet) || townLights.litAt(shedEast, shedNorth, shedFeet)) {
+      coldSurface = 'lamp';
+    } else if (effectiveSnowIntensity >= 2 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
+      coldSurface = 'dark-snow';
+      coldDepth = snowCover.depthAt(shedEast, shedNorth, shedFeet, districts.sweptAt);
+    }
+  }
+  ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldSurface, hasFrostCeremonyRelief(ceremonyState));
   ceremonyFrost.update(dt);
   stageActivity.syncCeremony(ceremonyState.now, walking ? x : Infinity, n);
   if (hourlyBellsRemaining && ceremonyState.now >= nextHourlyBell) {
