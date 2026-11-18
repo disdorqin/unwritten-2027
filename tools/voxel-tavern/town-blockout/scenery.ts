@@ -5,14 +5,16 @@ import {
 } from 'three';
 import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
+import { campfirePartsPerSite, maxCampfireSites, type CampfirePiece } from './town-campfires';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
 type Instance = { at: Position; scale: Position; tint?: string; turn?: number };
 type Ground = ReturnType<typeof import('./terrain').createTerrainGrid>;
 
-function instances(group: Group, geometry: Geometry, material: Material, items: Instance[]) {
-  const mesh = new InstancedMesh(geometry, material, items.length);
+function instances(group: Group, geometry: Geometry, material: Material, items: Instance[], reserve = 0) {
+  const mesh = new InstancedMesh(geometry, material, items.length + reserve);
+  mesh.count = items.length;
   const dummy = new Object3D();
   items.forEach(({ at, scale, tint, turn = 0 }, index) => {
     dummy.position.set(...at);
@@ -287,7 +289,8 @@ export function addScenery(group: Group, grid: Ground) {
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
   instances(group, box, neutral, pavers);
-  instances(group, box, neutral, [...pillars, ...caps]);
+  const sceneryPartCount = pillars.length + caps.length;
+  const sceneryParts = instances(group, box, neutral, [...pillars, ...caps], campfirePartsPerSite * maxCampfireSites);
   instances(group, box, new MeshBasicMaterial({ color: '#ffb969' }), lights);
   const glow = makeGlows(group, glowPositions);
   const lampLightPool = Array.from({ length: 3 }, () => new PointLight('#ffb469', 0, 13, 2));
@@ -297,6 +300,29 @@ export function addScenery(group: Group, grid: Ground) {
   let nextLightUpdate = 0;
 
   return {
+    setCampfirePieces(parts: readonly CampfirePiece[]) {
+      const count = sceneryPartCount + parts.length;
+      if (count > sceneryParts.instanceMatrix.count) throw new RangeError('Campfire scenery exceeds the world batch reserve');
+      const pose = new Object3D();
+      const tint = new Color();
+      sceneryParts.count = count;
+      parts.forEach(({ at, scale, tint: color, yaw = 0 }, index) => {
+        pose.position.set(...at);
+        pose.rotation.y = yaw;
+        pose.scale.set(...scale);
+        pose.updateMatrix();
+        sceneryParts.setMatrixAt(sceneryPartCount + index, pose.matrix);
+        sceneryParts.setColorAt(sceneryPartCount + index, tint.set(color));
+      });
+      sceneryParts.instanceMatrix.needsUpdate = true;
+      sceneryParts.instanceColor!.needsUpdate = true;
+      sceneryParts.computeBoundingSphere();
+    },
+    litAt(east: number, north: number, feet: number) {
+      const radius = 7;
+      return night && lampLocations.some(lamp => Math.abs(lamp.y - feet - 1.6) <= 3.6 &&
+        (lamp.x - east) ** 2 + (lamp.z + north) ** 2 <= radius ** 2);
+    },
     blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {
       night = enabled;

@@ -6,12 +6,13 @@ import {
 } from './town-mail-store';
 import { recordTownChronicleTimeboxUnlock } from './town-chronicle';
 import './town-mail.css';
+import { memorialTimeboxAnnex } from './town-mail-sites';
 
 type Mailbox = 'main' | 'branch';
 type XYZ = [number, number, number];
 type Part = { center: XYZ; size: XYZ; color: string };
 const [east, north, elevation] = layout.plots.find(plot => plot.id === 'post-office')!.origin;
-const annex = { x: 416.49, n: 335.08 };
+const annex = memorialTimeboxAnnex;
 export const townMailStands = {
   main: { x: east + 3.26, n: north - 8.9 },
   wall: { x: east - 2.4, n: north, ground: elevation + .3 },
