@@ -649,6 +649,38 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
     view.quaternion.rotateTowards(facing, delta * Math.PI * .16);
   }
 
+  function movingRailExit(at: number, canStand: (east: number, north: number, ground: number) => boolean) {
+    const centre = new Vector3(), before = new Vector3(), after = new Vector3();
+    // The first usable point is beside this coach, then beside the rail ahead or behind it.
+    function besideRail(along: number, offsets: readonly number[]) {
+      route.pointAt(along, centre);
+      route.pointAt(along - .75, before);
+      route.pointAt(along + .75, after);
+      const east = after.x - before.x, north = before.z - after.z;
+      const length = Math.hypot(east, north);
+      if (!length) return;
+      const nx = -north / length, nn = east / length;
+      for (const offset of offsets) for (const side of [1, -1]) {
+        const x = centre.x + nx * offset * side;
+        const n = -centre.z + nn * offset * side;
+        const ground = grid.heightAt(x, n);
+        if (canStand(x, n, ground)) return { id: undefined, x, n, ground, yaw: Math.atan2(nx * side, nn * side) };
+      }
+    }
+
+    for (const shift of [0, 1.5, -1.5]) {
+      const exit = besideRail(at + shift, [1.85]);
+      if (exit) return exit;
+    }
+    // Elevated crossings can have no dry ground directly beside the coach.
+    for (let shift = 0; shift <= 60; shift += 1.5) {
+      for (const signed of shift === 0 ? [0] : [shift, -shift]) {
+        const exit = besideRail(at + signed, shift <= 1.5 ? [2.25, 3.25] : [1.85, 2.25, 3.25]);
+        if (exit) return exit;
+      }
+    }
+  }
+
   const currentStop = () => phase.stopped ? timetable.legs[phase.leg].from : undefined;
   updatePoses(Infinity);
   return {
@@ -682,10 +714,11 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
       riding = true;
       return true;
     },
-    disembark() {
-      const stop = riding ? currentStop() : undefined;
-      if (stop) riding = false;
-      return stop;
+    disembark(canStand?: (east: number, north: number, ground: number) => boolean) {
+      if (!riding) return;
+      const exit = currentStop() ?? (canStand && movingRailExit(distance, canStand));
+      if (exit) riding = false;
+      return exit ?? undefined;
     },
     cancelRide() { riding = false; },
     update(dt: number) {

@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: #121e35; color: #f3f3f6; }
 #scene, canvas { width: 100vw; height: 100dvh; overflow: hidden; display: block; touch-action: none; }
-.panel, #load-status { position: fixed; background: #101a2bed; border: 1px solid #788eaa; border-radius: 12px; }
+.panel { position: fixed; background: #101a2bed; border: 1px solid #788eaa; border-radius: 12px; }
 .panel { top: 16px; left: 16px; padding: 15px; width: min(320px, calc(100vw - 32px)); }
 .panel h1 { margin: 0 0 14px; font-size: 17px; letter-spacing: .11em; }
 nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -11,7 +11,7 @@ button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
 button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #ffda9d; outline-offset: 2px; }
 button[aria-pressed="true"] { background: #edc48a; color: #17202e; border-color: #edc48a; }
-label, output, #help, #load-status { font-size: 12px; }
+label, output, #help { font-size: 12px; }
 #help { margin: 10px 0 6px; color: #c6d3e5; }
 #position:not(:empty) { display: block; }
 .festival-button, #view-museum { margin-top: 11px; }
@@ -19,8 +19,6 @@ label, output, #help, #load-status { font-size: 12px; }
 .panel .town-progress { margin: 8px 0 0; padding-top: 7px; border-top: 1px solid #475572; }
 .town-progress button { color: #ffdfad; }
 #place-card { max-height: calc(100dvh - 28px); }
-#load-status { bottom: 16px; right: 16px; margin: 0; padding: 8px 10px; }
-#load-status:empty { display: none; }
 #world-action { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); white-space: nowrap; padding: 11px 17px; background: #f2cf94; border-color: #f2cf94; color: #17202e; }
 #festival-status { position: fixed; top: 15%; left: 50%; transform: translateX(-50%); font-size: clamp(28px, 4.5vw, 63px); color: #ffe1aa; text-shadow: 0 2px 25px #412406; white-space: nowrap; pointer-events: none; }
 #place-card { width: min(460px, calc(100vw - 28px)); border: 1px solid #899ab2; border-radius: 12px; background: #162238; color: inherit; padding: 25px; box-shadow: 0 12px 40px #080d1c90; }
@@ -167,7 +165,7 @@ label, output, #help, #load-status { font-size: 12px; }
   #museum-guide { top: auto; bottom: max(166px, calc(env(safe-area-inset-bottom) + 154px)); }
 }
 
-body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: none; }
+body.museum-inspecting :is(.panel, #town-chat, #festival-status) { display: none; }
 #museum-inspection { position: fixed; inset: 0; pointer-events: none; }
 #museum-inspection header {
   position: absolute;
@@ -217,7 +215,6 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
 #touch-walk:not([hidden]) { display: grid; place-items: center; }
 #touch-walk span { border-radius: 50%; width: 40px; height: 40px; background: #efca91dc; box-shadow: 0 0 0 1px #fff5; pointer-events: none; }
 .touch-play #world-action { left: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(45px, env(safe-area-inset-bottom)); transform: none; min-height: 44px; max-width: calc(100vw - 150px); white-space: normal; }
-.touch-play #load-status { display: none; }
 #snowball-controls:not([hidden]) {
   position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 66px;
   display: grid; gap: 5px;

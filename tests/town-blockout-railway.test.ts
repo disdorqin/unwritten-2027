@@ -173,3 +173,36 @@ test('absolute train time is shared by newcomers, riders and spectators', () => 
   assert.ok(!rider.riding);
   assert.ok(spectator.view.position.distanceTo(rider.view.position) < .001);
 });
+
+test('moving exit lands beside the shared track without moving the other rider', t => {
+  let time = epoch;
+  const a = createTownRailway(grid, () => time);
+  const b = createTownRailway(grid, () => time);
+  const departure = a.currentStop!;
+  assert.ok(a.board(departure.id) && b.board(departure.id));
+  time += (a.dwellSeconds + 8) * 1000;
+  a.update(1 / 60);
+  b.update(1 / 60);
+  assert.equal(a.atPlatform, false);
+  assert.equal(a.disembark(() => false), undefined);
+  assert.ok(a.riding, 'an unsafe jump leaves the rider seated');
+  const coach = a.view.position.clone();
+  const exit = a.disembark((x, n, ground) => !isWater(x, n) && !a.vehicleBlocks(x, n, ground, 1.8, .27));
+  assert.ok(exit && exit.id === undefined);
+  const distance = Math.hypot(exit.x - coach.x, exit.n + coach.z);
+  assert.ok(distance <= 2, 'the sampled jump lands beside the coach');
+  assert.equal(exit.ground, grid.heightAt(exit.x, exit.n));
+  assert.equal(a.riding, false);
+  assert.equal(b.riding, true);
+  assert.ok(b.view.position.distanceTo(coach) < .001);
+  time += 250;
+  a.update(.25);
+  b.update(.25);
+  assert.ok(a.view.position.distanceTo(coach) > 0.1);
+  assert.ok(a.view.position.distanceTo(b.view.position) < .001);
+  const next = b.nextStop;
+  time += Math.ceil(b.timetable(next.id).seconds * 1000) + 100;
+  b.update(.25);
+  assert.equal(b.disembark(), next);
+  t.diagnostic(`moving exit landed ${distance.toFixed(2)} m from the coach`);
+});

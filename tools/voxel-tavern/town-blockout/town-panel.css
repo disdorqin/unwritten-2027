@@ -51,9 +51,19 @@
 .panel.town-panel-collapsed h1 { display: none; }
 
 #town-chat {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #475572;
+  position: fixed;
+  z-index: 4;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: min(320px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid #536e8d;
+  border-radius: 8px;
+  background: #101a2bed;
+  color: #e8f0fb;
+}
+.touch-play #town-chat {
+  bottom: max(145px, calc(env(safe-area-inset-bottom) + 122px));
 }
 #town-chat-log {
   max-height: min(130px, 20dvh);
