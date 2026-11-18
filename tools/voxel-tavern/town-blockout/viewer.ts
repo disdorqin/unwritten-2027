@@ -75,6 +75,7 @@ import { createTownRailway, type TownRailStopId } from './town-railway';
 import { railPlatformCopy } from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
+import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
 import { createPlazaGroupPhoto } from './plaza-group-photo';
@@ -686,6 +687,7 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   return true;
 }, () => !nightMode, name => {
   if (name === '钟铁生' && zodiac.canCollect('horse')) return railHorseClues;
+  if (name === '纪守信' && zodiac.canCollect('horse')) return npcAuthoredDialogue.纪守信.clues.slice(1);
   if (name === '罗大江' && zodiac.canCollect('rooster')) return tavernRoosterClues;
 },
 panel => openTavernDice(panel, () => {
