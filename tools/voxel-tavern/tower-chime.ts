@@ -33,6 +33,12 @@ export function playTowerChime(context: AudioContext, elapsedMs: number, strikes
   }
 }
 
+export function playIcePalaceBell(context: AudioContext, note: 'low' | 'mid' | 'high') {
+  if (context.state !== 'running') return;
+  const pitches = { low: 261.63, mid: 329.63, high: 392 };
+  playBellTone(context, context.destination, context.currentTime + .025, pitches[note], .19, .65);
+}
+
 export type TowerBellVoice = 'small' | 'tick' | 'grand';
 
 /** A single source at the tower; callers supply their current listener distance. */
