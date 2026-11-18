@@ -12,6 +12,7 @@ const stations = [
   { id: 'station', label: '火车站迎宾灯', stand: [526, 305], fixture: [524, 304.5] },
 ] as const;
 
+export const trailLampColdRadius = 5;
 export type TownLightId = (typeof stations)[number]['id'];
 type Progress = { lit: number; total: number };
 type Ground = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt'>;
@@ -38,6 +39,7 @@ export function createTownLights(
 ): TownActivity & {
   getProgress(): Progress;
   litIds(): TownLightId[];
+  litAt(east: number, north: number, feet: number): boolean;
   activate(id: TownLightId): boolean;
   openBook(): void;
   setCeremonyBand(band: number): void;
@@ -79,7 +81,7 @@ export function createTownLights(
     cube(0, 2.23, 0, .091, .147, .091, colors.copper);
     const distance = Math.hypot(x - 223, n - 188);
     const band = distance < 36 ? 0 : distance < 110 ? 1 : distance < 200 ? 2 : 3;
-    return { id, pane, wick, cross, band };
+    return { id, x, n, ground, pane, wick, cross, band };
   });
   fixtures.computeBoundingSphere();
   fixtures.instanceColor!.setUsage(DynamicDrawUsage);
@@ -151,6 +153,11 @@ export function createTownLights(
   return {
     getProgress,
     litIds,
+    litAt(east, north, feet) {
+      return pieces.some(({ id, x, n, ground, band }) =>
+        (lit.has(id) || band <= ceremonyBand) && Math.abs(ground - feet) <= 2.8 &&
+        (x - east) ** 2 + (n - north) ** 2 <= trailLampColdRadius ** 2);
+    },
     activate,
     openBook,
     setCeremonyBand(band) {
