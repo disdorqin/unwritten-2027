@@ -52,7 +52,62 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   const portals = [...district.housePortals, ...extensions.housePortals, ...cottagePortals];
   assert.equal(new Set(portals.map(({ id }) => id)).size, portals.length);
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
+  assert.equal(portals.length, 92, 'the plaza work preserves the 92-door registry');
+  const moved = [
+    ['158:184', 160, 130], ['179:155', 146.5, 129.5],
+    ['200:151', 147, 182.5], ['246:135', 146, 199],
+  ] as const;
+  for (const [address, east, north] of moved) {
+    const site = district.sites.find(site => site.x === east && site.n === north);
+    assert.ok(site && east >= 146 && east <= 160, `${address} inside the receiving strip`);
+    assert.ok(portals.some(portal => portal.id === 'old-town:' + address), `${address} stable door ID`);
+    const sideways = Math.abs(Math.sin(site.angle)) > .5;
+    const halfEast = (sideways ? site.d : site.w) / 2 + 1;
+    const halfNorth = (sideways ? site.w : site.d) / 2 + 1;
+    assert.ok(east + halfEast <= 161 || north + halfNorth <= 152, `${address} plaza edge clear`);
+    const paths = layout.roads.flatMap(({ points, width }) => points.slice(1).map((end, index) =>
+      ({ start: points[index], end, halfWidth: width / 2 })));
+    let minimum = Infinity;
+    for (let ix = -8; ix <= 8; ix++) for (let iz = -8; iz <= 8; iz++) {
+      const x = east + ix * halfEast / 8, n = north + iz * halfNorth / 8;
+      for (const { start, end, halfWidth } of paths) {
+        const dx = end[0] - start[0], dn = end[1] - start[1];
+        const along = Math.max(0, Math.min(1, ((x - start[0]) * dx + (n - start[1]) * dn) / (dx * dx + dn * dn)));
+        minimum = Math.min(minimum, Math.hypot(x - start[0] - along * dx, n - start[1] - along * dn) - halfWidth);
+      }
+    }
+    assert.ok(minimum >= 1.2, `${address} road gap ${minimum.toFixed(3)} m`);
+    t.diagnostic(`${address} road gap ${minimum.toFixed(3)} m`);
+  }
   const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
+  function clear(x: number, n: number) {
+    return canEnter(x, n) && !isWater(x, n) && !district.blocked(x, n) &&
+      !scenery.blocked(x, n) && !forest.blocked(x, n) && !streetscape.blocked(x, n);
+  }
+  for (const id of moved.map(([address]) => 'old-town:' + address)) {
+    const door = portals.find(portal => portal.id === id)!;
+    const offsets: [number, number][] = [[0, 0]];
+    const visited = new Set(['0:0']);
+    let roadReached = false;
+    for (const [dx, dn] of offsets) {
+      const x = door.x + dx / 2, n = door.n + dn / 2;
+      if (grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 1) {
+        roadReached = true;
+        break;
+      }
+      for (const [ix, iz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nextX = dx + ix, nextN = dn + iz;
+        const key = nextX + ':' + nextN;
+        if (Math.abs(nextX) + Math.abs(nextN) > 85 || visited.has(key)) continue;
+        const east = x + ix / 2, north = n + iz / 2;
+        if (!clear(east, north) || !clear(x + ix / 4, n + iz / 4) ||
+          Math.abs(grid.heightAt(east, north) - grid.heightAt(x, n)) > .4) continue;
+        visited.add(key);
+        offsets.push([nextX, nextN]);
+      }
+    }
+    assert.ok(roadReached, `${id} has a walkable route to an existing road`);
+  }
   for (const { id, x, n, ground, exitYaw } of portals) {
     assert.ok(canEnter(x, n) && !isWater(x, n), `${id} dry ground`);
     assert.equal(ground, grid.heightAt(x, n), `${id} ground height`);
