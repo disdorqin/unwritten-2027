@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTerrainGrid, isWater } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
+import { createRailTimetable } from '../tools/voxel-tavern/town-blockout/town-rail-timetable.ts';
 import { extensionRoads } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 
 const grid = createTerrainGrid();
+const epoch = Date.UTC(2026, 0, 1);
 
 function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-forest-approach', colliders: Box[]) {
   const road = extensionRoads.find(road => road.id === id)!;
@@ -36,7 +38,7 @@ function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-fo
 }
 
 test('tour railway encircles the original town, makes both river crossings and clears the snow', () => {
-  const train = createTownRailway(grid);
+  const train = createTownRailway(grid, () => epoch);
   const { route } = train;
   const xs = route.points.map(point => point.x);
   const norths = route.points.map(point => -point.z);
@@ -45,18 +47,19 @@ test('tour railway encircles the original town, makes both river crossings and c
   assert.ok(route.length > 1600);
   const overWater = route.points.map(point => isWater(point.x, -point.z));
   assert.equal(overWater.filter((water, i) => water && !overWater[i - 1]).length, 2);
-  assert.deepEqual(train.boarding, { x: 473.5, n: 224, ground: 19 });
-  assert.equal(grid.heightAt(train.boarding.x, train.boarding.n), train.boarding.ground);
+  assert.deepEqual(train.boarding, { x: 473.5, n: 224, ground: 19.18 });
+  assert.equal(grid.heightAt(train.boarding.x, train.boarding.n), 19);
   assert.ok(train.keepClear(478, 224));
   assert.ok(!train.keepClear(train.boarding.x, train.boarding.n));
   for (const [i, a] of route.points.entries()) {
     const b = route.points[(i + 1) % route.points.length];
-    const fromPlatform = Math.min(i, route.points.length - i) * route.step;
+    const station = route.stops.find(stop => {
+      const length = Math.abs(i * route.step - stop.distance);
+      return Math.min(length, route.length - length) < stop.halfLength + 4;
+    });
     assert.ok(Math.abs(b.y - a.y) / route.step < .23, `steep track at segment ${i}`);
     assert.ok(a.y >= grid.heightAt(a.x, -a.z) + .60, `track clips terrain at segment ${i}`);
-    if (fromPlatform <= 23) {
-      assert.ok(Math.abs(a.x - 478) < .001 && a.y === 19.68, 'straight level platform track');
-    } else if (fromPlatform > 28) {
+    if (!station) {
       const p = a.clone().lerp(b, .5);
       const { x: dx, z: dz } = b.clone().sub(a);
       const length = Math.hypot(dx, dz);
@@ -69,7 +72,7 @@ test('tour railway encircles the original town, makes both river crossings and c
 });
 
 test('raised railway leaves walking headroom and supports both banks of the bath road', () => {
-  const train = createTownRailway(grid);
+  const train = createTownRailway(grid, () => epoch);
   const railSolids = train.group.userData.colliders as Box[];
   const stationRoadClearance = roadHeadroom('station-approach', railSolids);
   const bathRoadClearance = roadHeadroom('hot-spring-approach', railSolids);
@@ -91,43 +94,82 @@ test('raised railway leaves walking headroom and supports both banks of the bath
 });
 
 test('a carriage blocks its physical body but leaves the boarding pad open', () => {
-  const train = createTownRailway(grid);
+  let time = epoch;
+  const train = createTownRailway(grid, () => time);
   const { x, n, ground } = train.boarding;
   assert.ok(train.vehicleBlocks(478, 224, ground, 1.8, .27));
   assert.ok(!train.vehicleBlocks(x, n, ground, 1.8, .27));
   assert.ok(!train.vehicleBlocks(478, 224, ground + 4.5, 1.8, .27));
-  train.board();
-  for (let step = 0; step < 650; step++) train.update(1 / 60);
+  assert.ok(train.board('coaster-station'));
+  time += 30_000;
+  train.update(1 / 60);
   assert.ok(!train.vehicleBlocks(478, 224, ground, 1.8, .27), 'carriage has moved away from the station');
   const { x: east, y, z } = train.view.position;
   assert.ok(train.vehicleBlocks(east, -z, y - 2.1, 1.8, .27), 'collision follows the carriage');
 });
 
-test('tour train returns to the same platform pose and supports repeat boardings', () => {
-  const train = createTownRailway(grid);
-  const parked = train.view.position.clone();
-  const heading = train.view.getWorldDirection(parked.clone());
-  const current = heading.clone();
-  const last = heading.clone();
+test('all six platforms board and receive riders only while stopped', () => {
+  let time = epoch;
+  const train = createTownRailway(grid, () => time);
+  const schedule = createRailTimetable(train.stops, train.route.length);
+  const floors = train.group.userData.floors as Box[];
+  assert.ok(floors.length > 5);
+  assert.deepEqual(train.stops.map(stop => stop.label), ['未写镇站', '火车站前站', '森林木屋站', '湖南岸站', '城堡南站', '温泉站']);
+  assert.ok(train.cycleSeconds >= 270 && train.cycleSeconds <= 290);
+  assert.equal(train.dwellSeconds, 12);
   assert.ok(train.atPlatform && !train.riding);
-  train.board();
-  assert.ok(train.riding && !train.atPlatform);
+  for (const { from, to, offset } of schedule.legs) {
+    time = epoch + Math.ceil(offset * 1000) + 100;
+    train.update(1 / 60);
+    assert.equal(train.currentStop?.id, from.id);
+    assert.equal(train.nextStop.id, to.id);
+    assert.equal(train.canBoard(from.x, from.n, from.ground)?.id, from.id);
+    assert.ok(!train.vehicleBlocks(from.x, from.n, from.ground, 1.8, .27));
+    assert.equal(train.timetable(from.id).seconds, 0);
+    assert.ok(train.timetable(from.id).departureSeconds! > 11);
+    assert.equal(train.board(to.id), false);
+    assert.ok(train.board(from.id));
+    const parked = train.view.position.clone();
+    assert.ok(Math.hypot(parked.x - from.east, parked.z + from.north) < 1);
+    assert.ok(Math.abs(parked.y - from.railY - 2.46) < .01);
+    time = epoch + Math.ceil(offset * 1000) + 15_000;
+    train.update(1 / 60);
+    assert.equal(train.currentStop, undefined);
+    assert.equal(train.disembark(), undefined);
+    assert.equal(train.canBoard(from.x, from.n, from.ground), undefined);
+    const arrival = train.timetable(to.id).seconds;
+    time += Math.ceil(arrival * 1000) + 100;
+    train.update(1 / 60);
+    assert.equal(train.disembark()?.id, to.id);
+    assert.ok(!train.riding);
+  }
+  assert.equal(train.currentStop?.id, train.stops[0].id);
+});
+
+test('absolute train time is shared by newcomers, riders and spectators', () => {
+  let time = epoch;
+  const rider = createTownRailway(grid, () => time);
+  const spectator = createTownRailway(grid, () => time);
+  const last = rider.view.getWorldDirection(rider.view.position.clone());
+  const current = last.clone();
+  assert.ok(rider.board('coaster-station'));
   const step = 1 / 60;
-  let frames = 0;
-  while (!train.atPlatform && frames < 9000) {
-    train.update(step);
-    train.view.getWorldDirection(current);
+  for (let frames = 0; frames < 3000; frames++) {
+    time = epoch + frames * step * 1000;
+    rider.update(step);
+    rider.view.getWorldDirection(current);
     assert.ok(last.angleTo(current) < Math.PI / 360, 'camera must turn at less than 30° per second');
     assert.ok(Math.abs(current.y) < .001, 'camera horizon must stay level');
     last.copy(current);
-    frames++;
   }
-  assert.ok(train.atPlatform && train.riding && frames * step > 100);
-  assert.ok(train.view.position.distanceTo(parked) < .001);
-  assert.ok(last.angleTo(heading) < .001);
-  train.disembark();
-  assert.ok(train.atPlatform && !train.riding);
-  train.board();
-  train.update(.1);
-  assert.ok(train.view.position.distanceTo(parked) > 0);
+  // One viewer experienced every frame while the other caught up in one tick.
+  spectator.update(.01);
+  assert.equal(spectator.currentStop?.id, rider.currentStop?.id);
+  assert.ok(spectator.view.position.distanceTo(rider.view.position) < .001);
+  assert.ok(!spectator.riding);
+  const newcomer = createTownRailway(grid, () => time);
+  assert.ok(newcomer.view.position.distanceTo(rider.view.position) < .001);
+  rider.cancelRide();
+  assert.ok(!rider.riding);
+  assert.ok(spectator.view.position.distanceTo(rider.view.position) < .001);
 });

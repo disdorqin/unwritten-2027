@@ -4,6 +4,7 @@ import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { iceThrone } from './landmark-ice-castle';
 import type { railwayStationStops } from './landmark-station';
 import { stationSignCopy } from './station-sign-copy';
+import { railHallCopy } from './town-rail-copy';
 import type { PassportStamp } from './town-passport';
 import type { createTownRailway } from './town-railway';
 import type { TownActivityContext, TownActivitySpot } from './town-activity';
@@ -23,9 +24,10 @@ export const stationTicketStamp = {
 
 export function createRailwayStationSpots(
   group: Group, context: Pick<TownActivityContext, 'open'>,
-  railway: Pick<ReturnType<typeof createTownRailway>, 'timetable'>,
+  railway: ReturnType<typeof createTownRailway>,
   passport: { hasExtension(id: string): boolean; collectExtension(id: string): boolean },
   canStand: TownStand,
+  liveSchedule?: (title: string, read: () => string) => void,
 ): TownActivitySpot[] {
   const stops = group.userData.stops as typeof railwayStationStops;
   const ticket = worldPoint(group, stops.ticketCounter);
@@ -39,9 +41,9 @@ export function createRailwayStationSpots(
     {
       x: board.x, n: -board.z, ground: board.y, range: 1.45, label: `查看${stationSignCopy.timetable}`,
       run() {
-        const { atPlatform, metres, seconds } = railway.timetable();
-        context.open(stationSignCopy.timetable, atPlatform ? '列车在站台候车。'
-          : `列车行驶中，距回站约 ${Math.round(metres)} 米，预计 ${Math.ceil(seconds)} 秒。`);
+        const read = () => railHallCopy(railway);
+        if (liveSchedule) liveSchedule(stationSignCopy.timetable, read);
+        else context.open(stationSignCopy.timetable, read());
       },
     },
   ];

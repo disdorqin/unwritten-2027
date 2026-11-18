@@ -57,7 +57,8 @@ test('a blocked bench front keeps the seat available from a clear side', () => {
 test('station interaction spots stay aligned with the scaled model and the timetable reads train motion', () => {
   const station = buildRailwayStation();
   station.position.set(526, 26, -329);
-  const railway = createTownRailway(createTerrainGrid());
+  let now = Date.UTC(2026, 0, 1);
+  const railway = createTownRailway(createTerrainGrid(), () => now);
   let stamp = '';
   let description = '';
   const spots = createRailwayStationSpots(station, {
@@ -73,14 +74,19 @@ test('station interaction spots stay aligned with the scaled model and the timet
   assert.equal(stamp, stationTicketStamp.id);
   assert.equal(spots[0].available?.(), false);
   spots[1].run();
-  assert.match(description, /在站台候车/);
-  railway.board();
+  assert.match(description, /列车现在：停靠未写镇站，即将开往火车站前站/);
+  assert.ok(railway.board('coaster-station'));
   const initial = railway.timetable();
-  for (let i = 0; i < 1000; i++) railway.update(.06);
+  now += 25_000;
+  railway.update(.06);
   const later = railway.timetable();
   assert.ok(later.metres < initial.metres && later.seconds < initial.seconds);
   spots[1].run();
-  assert.match(description, /[1-9]\d* 米，预计 [1-9]\d* 秒/);
+  assert.match(description, /列车现在：正开往火车站前站/);
+  now += Math.ceil(later.seconds * 1_000) + 1;
+  railway.update(.06);
+  spots[1].run();
+  assert.match(description, /火车站前站：列车停靠中 · 请抓紧上下车/);
 });
 
 test('the railway ticket survives reload separately from the core passport reward', () => {

@@ -65,7 +65,8 @@ import { createRestActivity } from './town-rest-activity';
 import { createHotSpringSoak } from './hot-spring-soak';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
-import { createTownRailway } from './town-railway';
+import { createTownRailway, type TownRailStopId } from './town-railway';
+import { railPlatformCopy } from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
@@ -109,7 +110,8 @@ const landscape = new Group();
 const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
-const railway = createTownRailway(grid);
+const presence = createTownPresence(scene, camera, announceActivity);
+const railway = createTownRailway(grid, presence.serverNow);
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -493,6 +495,8 @@ let ground = 0;
 let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
+let reservedRailStop: TownRailStopId | undefined;
+let lastRailStopShown: TownRailStopId | undefined;
 let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
@@ -548,14 +552,24 @@ function openPlace(title: string, description: string) {
 }
 placeCard.addEventListener('close', () => renderer.domElement.focus());
 
-function leaveRide() {
+function leaveRide(cancel = false) {
   if (!boardingGround) return;
-  railway.disembark();
-  const platform = boardingGround;
+  const arrival = railway.disembark();
+  if (!arrival && !cancel) {
+    announceActivity('列车行进中，到站后可下车');
+    return;
+  }
+  if (!arrival) railway.cancelRide();
+  const departure = boardingGround;
+  const platform = arrival ?? railway.lastStop ?? departure;
   boardingGround = undefined;
+  reservedRailStop = undefined;
+  lastRailStopShown = undefined;
+  resetMovement();
   if (!settleTownLanding(platform.x, platform.n, platform.ground)) settleTownLanding(platform.x, platform.n);
   yaw = platform.yaw;
   pitch = 0;
+  if (!arrival && cancel) announceActivity(`已为您在最近的车站停靠：${railway.lastStop?.label ?? '站台'}`);
 }
 function leaveSeat() {
   if (!seated) return;
@@ -630,7 +644,6 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
-const presence = createTownPresence(scene, camera, announceActivity);
 const fireworks = createTownFireworksActivity({ open: activityContext.open, announce: announceActivity }, grid, (seed, theme) => {
   if (!presence.requestFireworks(seed, theme) && festival.launchPublicFireworks(seed, theme)) fireworks.markStarted();
 }, festival.showActive);
@@ -1166,20 +1179,11 @@ function registerLandmarkActivities(id: string, group: Group) {
     activitySpots.push({
       x: 526, n: hallNorth, ground: grid.heightAt(526, hallNorth), range: 1.7, label: '查看环镇列车乘车路线',
       run() {
-        const panel = activityContext.open('环镇列车乘车路线',
-          '乘车站台在站厅西南方，步行约 147 米。出站厅沿站前路走，穿过高架后按沿途乘车标记前往站台。');
-        const direct = document.createElement('button');
-        direct.type = 'button';
-        direct.textContent = '直接前往乘车站台';
-        direct.onclick = () => {
-          placeCard.close();
-          selector.value = '环镇列车站';
-          mode(true);
-        };
-        panel.append(direct);
+        activityContext.open('环镇列车乘车路线',
+          '从站厅出门，沿站前路向西步行到火车站前站，在黄线外候车。列车停稳后可以上车。');
       },
     });
-    activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity));
+    activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity, showLiveRailSchedule));
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group));
     const seats = group.userData.seats as number[][];
@@ -1217,7 +1221,19 @@ function openTavernSeatActions() {
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
-  if (boardingGround) return { label: railway.atPlatform ? '下车' : '结束乘坐并回到站台', run: leaveRide };
+  if (boardingGround) {
+    const stop = railway.currentStop;
+    if (stop) return { label: `在${stop.label}下车`, run: () => leaveRide() };
+    const next = railway.nextStop;
+    return {
+      label: reservedRailStop === next.id ? `已预约${next.label}下车` : '预约下一站下车',
+      run() {
+        if (reservedRailStop === next.id) return;
+        reservedRailStop = next.id;
+        announceActivity(`下一站：${next.label} —— 已为您预约下车`);
+      },
+    };
+  }
   if (seated) {
     if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
@@ -1227,16 +1243,17 @@ function currentAction() {
   const local = museumPosition();
   const museumStop = museumVisit.near(local.x, local.y, local.z);
   if (museumStop) return museumStop;
-  const platform = railway.boarding;
-  if (architecture.has('coaster-station') && railway.atPlatform &&
-    Math.abs(ground - platform.ground) < 1.4 && Math.hypot(x - platform.x, n - platform.n) < 3.4) {
-    return { label: '乘坐环镇列车', run() {
+  const platform = railway.canBoard(x, n, ground);
+  if (!homeReturn && platform) {
+    return { label: `在${platform.label}上车`, run() {
+      if (!railway.board(platform.id)) {
+        announceActivity('列车已发车，请稍候下一班');
+        return;
+      }
       resetMovement();
-      const platformFloor = supportAt(platform.x, platform.n, platform.ground + stepHeight);
-      boardingGround = { x: platform.x, n: platform.n, ground: platformFloor, yaw };
+      boardingGround = { x: platform.x, n: platform.n, ground: platform.ground, yaw };
       rideYawOffset = 0;
       ridePitch = 0;
-      railway.board();
     } };
   }
   return nearestTownActivity(activitySpots, x, n, ground) ?? tavernActivity.carryAction();
@@ -1272,7 +1289,7 @@ function mode(next: boolean) {
     if (homeReturn) return false;
   }
   lakeSkating.stop();
-  leaveRide();
+  leaveRide(true);
   leaveSeat();
   resetMovement();
   activityStatus.textContent = '';
@@ -1372,7 +1389,7 @@ addEventListener('keydown', e => {
   if ((seated || boardingGround) && e.code === 'Escape') {
     e.preventDefault();
     if (seated) leaveSeat();
-    else leaveRide();
+    else leaveRide(true);
     return;
   }
   if (e.code === 'Escape' && document.pointerLockElement === renderer.domElement) {
@@ -1577,6 +1594,31 @@ if (tavernPlot) activitySpots.push(...createTavernSeatSpots(tavernPlot, {
 registerHomeDoors(districts.housePortals);
 const cabins = architecture.get('cabins');
 if (cabins) registerHomeDoors(villageHousePortals(cabins, grid.heightAt));
+for (const stop of railway.stops) {
+  activitySpots.push({
+    x: stop.x, n: stop.n, ground: stop.ground,
+    range: 2, label: `查看${stop.label}时刻表`,
+    run: () => showLiveRailSchedule(`环镇线 · ${stop.label}`, () => railPlatformCopy(railway, stop)),
+  });
+}
+
+function showLiveRailSchedule(title: string, read: () => string) {
+  openPlace(title, read());
+  const body = element('place-text');
+  body.style.whiteSpace = 'pre-line';
+  const timer = window.setInterval(() => {
+    if (!placeCard.open || element('place-title').textContent !== title) {
+      window.clearInterval(timer);
+      return;
+    }
+    const next = read();
+    if (body.textContent !== next) body.textContent = next;
+  }, 500);
+  placeCard.addEventListener('close', () => {
+    window.clearInterval(timer);
+    body.style.removeProperty('white-space');
+  }, { once: true });
+}
 mode(startInMuseum);
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
@@ -1586,6 +1628,14 @@ renderer.setAnimationLoop(now => {
   movementStepMs = 0;
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
+  if (boardingGround) {
+    const stopped = railway.currentStop;
+    if (stopped && stopped.id !== lastRailStopShown) {
+      lastRailStopShown = stopped.id;
+      announceActivity(`${stopped.label}到了。${stopped.arrival}`);
+      if (stopped.id === reservedRailStop) leaveRide();
+    } else if (!stopped) lastRailStopShown = undefined;
+  }
   if (beacon) {
     beacon.visible = nightMode;
     if (nightMode) beacon.rotation.y = (beacon.rotation.y + .28 * dt) % (Math.PI * 2);
@@ -1596,8 +1646,15 @@ renderer.setAnimationLoop(now => {
     railway.view.getWorldPosition(camera.position);
     railway.view.getWorldDirection(lookAhead);
     const heading = Math.atan2(lookAhead.x, -lookAhead.z);
-    faceFrom(camera.position.x, -camera.position.z, camera.position.y, heading + rideYawOffset, ridePitch);
-    element('position').textContent = railway.atPlatform ? '环镇列车 · 已到站' : '环镇列车 · 乘坐中';
+    const slot = presence.riderSlot();
+    const side = slot % 2 ? .50 : -.50;
+    const row = (Math.floor(slot / 2) - 2.5) * .62;
+    const seatX = camera.position.x + lookAhead.x * row - lookAhead.z * side;
+    const seatZ = camera.position.z + lookAhead.z * row + lookAhead.x * side;
+    faceFrom(seatX, -seatZ, camera.position.y, heading + rideYawOffset, ridePitch);
+    const stop = railway.currentStop;
+    element('position').textContent = stop ? `环镇列车 · 到达${stop.label}` :
+      `下一站：${railway.nextStop.label} · ${reservedRailStop ? '已预约下车' : '按动作键预约下一站下车'}`;
   } else if (walking && seated) {
     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
     element('position').textContent = '已就座';
