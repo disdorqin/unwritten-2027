@@ -91,6 +91,7 @@ import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
+import { createLighthouseSnakeCharm } from './town-zodiac-snake';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -99,6 +100,7 @@ import { createTownWater, shoreJumpDepth } from './town-water';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale, createTownSnowCover } from './town-snow-cover';
+import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
@@ -111,9 +113,11 @@ const element = <T extends HTMLElement = HTMLElement>(id: string) => document.ge
 const grid = createTerrainGrid();
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowCover(grid);
+let visualSnowCover = 0;
 const scene = new Scene();
 scene.background = new Color('#adc2dd');
-scene.fog = new Fog('#adc2dd', 360, 1300);
+const weatherFog = new Fog('#adc2dd', 360, 1300);
+scene.fog = weatherFog;
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -878,15 +882,10 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
-let effectiveSnowIntensity = 1;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
-  onSnowIntensity(intensity) {
-    effectiveSnowIntensity = intensity;
-    snowfall.setIntensity(intensity);
-    snowCover.setIntensity(intensity);
-  },
+  onSnowIntensity: snowCover.setIntensity,
   onDim(level) {
     ceremonyDim = level;
     applyCeremonyLighting();
@@ -1303,7 +1302,7 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse', 'horse', 'rooster'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'snake', 'horse', 'rooster'], zodiacStorage);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1391,6 +1390,10 @@ activitySpots.push({
   }),
   available: () => zodiac.canCollect('mouse'),
 });
+activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, zodiac, () => {
+  announceActivity(`蛇 · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+}));
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 const [bellX, bellDeck, bellZ] = towerStops.bell;
@@ -2201,7 +2204,7 @@ renderer.setAnimationLoop(now => {
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
-  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullCamera);
+  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, visualSnowCover, cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
   districts.setPanorama(wideView);
@@ -2247,7 +2250,6 @@ renderer.setAnimationLoop(now => {
   const shedNorth = seated?.n ?? n;
   const shedFeet = airHeight ?? ground;
   const shedSheltered = walking && !homeReturn && inTavernWarmShed(tavernPlot, shedEast, shedNorth, shedFeet);
-  snowfall.update(camera, dt, walking, sheltered || shedSheltered || Boolean(homeReturn));
   if (now >= nextBgmRoomCheck) {
     nextBgmRoomCheck = now + 180;
     townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
@@ -2255,13 +2257,27 @@ renderer.setAnimationLoop(now => {
   }
   festival.update(dt);
   const ceremonyState = ceremony.update();
+  const weatherStartedAt = profileTown ? performance.now() : 0;
+  const weather = townSnowWeatherForFrame(ceremonyState);
+  const effectiveSnowIntensity = weather.intensity;
+  const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
+    roofed(shedEast, shedNorth, shedFeet);
+  snowfall.setIntensity(effectiveSnowIntensity);
+  snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
+  weatherFog.near = weather.fogNear;
+  weatherFog.far = weather.fogFar;
+  // Weather changes the snow tint and cold exposure. The movement and gathering cover
+  // still follows the existing ceremony intensity and night mode.
+  visualSnowCover = ceremonyState.phase === 'ordinary'
+    ? advanceWeatherCover(visualSnowCover, dt, weather)
+    : snowCover.amount();
+  const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
   const railNotice = railOvernightBroadcast(ceremonyState.now, atRailwayPlatform);
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
-  const indoors = sheltered || Boolean(homeReturn) || shedSheltered ||
-    (walking && !boardingGround && roofed(shedEast, shedNorth, shedFeet));
+  const indoors = sheltered || Boolean(homeReturn) || shedSheltered || roofSheltered;
   ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
@@ -2372,6 +2388,8 @@ renderer.setAnimationLoop(now => {
         frameMs: frameSeconds * 1000, feedbackMs, drinkEffectsMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
+        weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
+        fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
       } }));
     }
   }

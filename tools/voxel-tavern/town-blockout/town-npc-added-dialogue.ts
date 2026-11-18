@@ -1,4 +1,6 @@
-// Verbatim authored lines from docs/交流区/Muse/NPC新增六人台词-v1.md.
+import { lighthouseSnakeClue } from './town-zodiac';
+
+// Verbatim authored lines from Muse, with the updated Snake clue from 给GPT-蛇件新谜面与接线-2026-11-18.
 // Each verdict is routing metadata, separate from the text shown to visitors.
 export const npcAddedDialogue = {
   "贾明灯": {
@@ -296,7 +298,7 @@ export const npcAddedDialogue = {
     ],
     "clues": [
       "你问挂件？湖区近处就有一件：玉兔躲进玻璃宫，花香深处睡正浓。温室就在岸上不远，花最香的地方，你探着身找。",
-      "远处还有一件，是探险的料：小龙卧在桥洞下，听水声声过寒冬。哪座桥我不说——你沿河走，听见水声的地方，胆子放正，别惊着它。"
+      lighthouseSnakeClue
     ],
     "newYear": [
       "今儿晚上，冰面上看烟花最清楚。三十一号了，鱼也过年，我收竿，陪你们看一回天。",
