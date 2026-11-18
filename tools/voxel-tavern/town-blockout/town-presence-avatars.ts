@@ -26,7 +26,7 @@ const coatColors = [
 ].map(palette => palette.map(hex => new Color(hex)));
 
 export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): {
-  render(actors: readonly PresenceAvatarActor[]): void;
+  render(actors: readonly PresenceAvatarActor[], view?: PerspectiveCamera, showNames?: boolean): void;
   clear(): void;
 } {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
@@ -79,16 +79,16 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     if (shown) finishLabels(0);
   }
 
-  function render(actors: readonly PresenceAvatarActor[]) {
+  function render(actors: readonly PresenceAvatarActor[], viewCamera = camera, showNames = true) {
     if (actors.length === 0) {
       clear();
       return;
     }
 
-    camera.updateMatrixWorld();
-    viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    frustum.setFromProjectionMatrix(viewProjection, camera.coordinateSystem, camera.reversedDepth);
-    const view = camera.matrixWorldInverse.elements;
+    viewCamera.updateMatrixWorld();
+    viewProjection.multiplyMatrices(viewCamera.projectionMatrix, viewCamera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(viewProjection, viewCamera.coordinateSystem, viewCamera.reversedDepth);
+    const view = viewCamera.matrixWorldInverse.elements;
     const halfWidth = window.innerWidth / 2;
     const halfHeight = window.innerHeight / 2;
     let visible = 0;
@@ -129,8 +129,9 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       }
       visible++;
 
+      if (!showNames) continue;
       head.set(actor.east, actor.height + headHeight, worldZ);
-      if (head.distanceToSquared(camera.position) > labelDistanceSquared) continue;
+      if (head.distanceToSquared(viewCamera.position) > labelDistanceSquared) continue;
       const cameraZ = view[2] * head.x + view[6] * head.y + view[10] * head.z + view[14];
       if (cameraZ >= 0) continue;
       head.applyMatrix4(viewProjection);

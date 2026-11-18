@@ -1,6 +1,9 @@
 *
 !docs/
 !docs/p0-layout-draft.json
+!src/
+!src/presence/
+!src/presence/*.ts
 !tools/
 !tools/Caddyfile.town-preview
 !tools/voxel-tavern/

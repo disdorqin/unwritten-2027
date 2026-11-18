@@ -10,6 +10,10 @@ import {
 import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
+import {
+  inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
+  type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
+} from './plaza-photo.js';
 
 type Options = {
   host?: string;
@@ -34,6 +38,7 @@ type Peer = {
   nextClockSample: number;
   nextFireworksRequest: number;
   nextPersonalFireworks: number;
+  nextPhotoRequest: number;
 };
 
 const centimetresPerCell = CELL_METRES * 100;
@@ -63,6 +68,8 @@ export async function createPresenceServer(options: Options = {}) {
   const http = createServer((_req, res) => { res.writeHead(404).end(); });
   const peers = new Map<number, Peer>();
   let fireworksOccupiedUntil = 0;
+  let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
+  let photoId = 0;
   let nextId = 1;
   let online = 0;
   let tier = tiers[0];
@@ -114,6 +121,57 @@ export async function createPresenceServer(options: Options = {}) {
     for (const recipient of peers.values()) if (recipient.name) send(recipient, event);
   }
 
+  function photoPerson(peer: Peer): PlazaPhotoPerson | undefined {
+    const { name, record } = peer;
+    if (!name || !record) return;
+    return { id: peer.id, name, east: record.east / 100, north: record.north / 100, height: record.height / 100 };
+  }
+
+  function publishPhoto(notice: PlazaPhotoNotice) {
+    const data = JSON.stringify(notice);
+    for (const peer of peers.values()) if (peer.name) send(peer, data);
+  }
+
+  function updatePhoto(now: number) {
+    if (!photo) return;
+    if (now > photo.invite.captureAt + 1_000) {
+      photo = undefined;
+      return;
+    }
+    if (photo.ended || now < photo.invite.captureAt - plazaPhotoLockMs) return;
+    photo.ended = true;
+    const people: PlazaPhotoPerson[] = [];
+    for (const peer of peers.values()) {
+      if (photo.optedOut.has(peer.id)) continue;
+      const person = photoPerson(peer);
+      if (person) people.push(person);
+    }
+    publishPhoto({ ...photo.invite, kind: 'plaza-photo-lineup', people: plazaPhotoLineup(people) });
+  }
+
+  function requestPhoto(peer: Peer) {
+    const throttleNow = performance.now();
+    if (throttleNow < peer.nextPhotoRequest) return;
+    peer.nextPhotoRequest = throttleNow + 500;
+    const now = Date.now();
+    updatePhoto(now);
+    if (photo) {
+      send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'busy' }));
+      return;
+    }
+    const person = photoPerson(peer);
+    if (!person || !inPlazaPhotoArc(person.east, person.north, person.height)) {
+      send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'position' }));
+      return;
+    }
+    const invite: PlazaPhotoInvite = {
+      type: 'event', kind: 'plaza-photo-invite', id: ++photoId,
+      captureAt: now + plazaPhotoGatherMs + plazaPhotoCountdownMs,
+    };
+    photo = { invite, ended: false, optedOut: new Set() };
+    publishPhoto(invite);
+  }
+
   function receiveText(peer: Peer, bytes: Uint8Array) {
     let message: unknown;
     try { message = JSON.parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')); }
@@ -127,6 +185,16 @@ export async function createPresenceServer(options: Options = {}) {
         requestFireworks(peer, message.seed, message.theme);
       }
       return;
+    }
+    if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'plaza-photo-request') {
+        requestPhoto(peer);
+        return;
+      }
+      if (message.kind === 'plaza-photo-opt-out') {
+        if (photo && !photo.ended && 'id' in message && message.id === photo.invite.id) photo.optedOut.add(peer.id);
+        return;
+      }
     }
     if (message.type === 'clock' && peer.name && 'sentAt' in message &&
         typeof message.sentAt === 'number' && Number.isFinite(message.sentAt) && message.sentAt >= 0) {
@@ -149,7 +217,8 @@ export async function createPresenceServer(options: Options = {}) {
     clearTimeout(peer.joinTimer);
     peer.name = name;
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), fireworks: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), fireworks: true, plazaPhoto: true }));
+    if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name }));
     }
@@ -234,7 +303,7 @@ export async function createPresenceServer(options: Options = {}) {
       nextId = nextId % 65535 + 1;
       const peer: Peer = {
         socket: ws, id, visible: [], version: 0, alive: true, tokens: rateBurst,
-        tokenAt: performance.now(), nextClockSample: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0, joinTimer: setTimeout(() => ws.close(1008), 5000),
+        tokenAt: performance.now(), nextClockSample: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0, nextPhotoRequest: 0, joinTimer: setTimeout(() => ws.close(1008), 5000),
       };
       peers.set(id, peer);
       ws.on('error', () => { remove(peer); ws.terminate(); });
@@ -256,6 +325,7 @@ export async function createPresenceServer(options: Options = {}) {
     });
   });
   const tick = setInterval(() => {
+    if (photo) updatePhoto(Date.now());
     if (!online) return;
     const now = performance.now();
     tier = tiers[0];

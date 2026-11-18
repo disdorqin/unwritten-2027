@@ -3,6 +3,7 @@ import { createPresenceAvatars } from './town-presence-avatars';
 import { createTownPresenceClock } from './town-presence-clock';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
+import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
@@ -25,6 +26,8 @@ function guestName() {
 export function createTownPresence(scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void) {
   const clock = createTownPresenceClock();
   let fireworksSupported = false;
+  let photoSupported = false;
+  let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
   let ownId = 0;
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   let clockSamples = false;
@@ -57,6 +60,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     socket = undefined;
     haveId = false;
     fireworksSupported = false;
+    photoSupported = false;
     clockSamples = false;
     clockRequest = undefined;
     nextClockSample = Infinity;
@@ -77,10 +81,19 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number; sentAt?: number;
         fireworks?: boolean; kind?: string; seed?: number; theme?: FireworksTheme; startAt?: number;
-        from?: number; reason?: string; waitMs?: number;
+        from?: number; reason?: string; waitMs?: number; plazaPhoto?: boolean;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'plaza-photo-invite' || message.kind === 'plaza-photo-lineup')) {
+        const notice = haveId && readPlazaPhotoNotice(message);
+        if (notice) showPhoto?.(notice);
+        return;
+      }
+      if (message.type === 'plaza-photo-rejected' && haveId) {
+        announce(message.reason === 'busy' ? '广场已有一场合影正在进行' : '请走上广场合影站位后再试');
+        return;
+      }
       if (message.type === 'event' && message.kind === 'fireworks') {
         if (haveId && isFireworksSeed(message.seed) && isFireworksTheme(message.theme) &&
             Number.isSafeInteger(message.startAt)) {
@@ -109,6 +122,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
           haveId = true;
           ownId = id;
           fireworksSupported = message.fireworks === true;
+          photoSupported = message.plazaPhoto === true;
           if (typeof message.epochMs === 'number') {
             clock.accept(message.epochMs);
             clockSamples = true;
@@ -205,6 +219,26 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   return {
     serverNow: clock.now,
     playerName: () => label,
+    photoPlayerId: () => ownId || 1,
+    onPlazaPhoto(handler: (notice: PlazaPhotoNotice) => void) { showPhoto = handler; },
+    requestPlazaPhoto() {
+      if (!photoSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return false;
+      try { socket.send(JSON.stringify({ type: 'event', kind: 'plaza-photo-request' })); }
+      catch { disconnect(false); return false; }
+      return true;
+    },
+    leavePlazaPhoto(id: number) {
+      if (!photoSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return;
+      try { socket.send(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id })); }
+      catch { disconnect(false); }
+    },
+    nearbyPhotoPeople() {
+      return plazaPhotoLineup([{ id: ownId || 1, name: label, east: local.east, north: local.north, height: local.height }, ...actors.values()]);
+    },
+    renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
+      avatars ??= createPresenceAvatars(scene, camera);
+      avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), view, showNames);
+    },
     riderSlot: () => (Math.max(1, ownId) - 1) % 12,
     onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
       playFireworks = handler;
