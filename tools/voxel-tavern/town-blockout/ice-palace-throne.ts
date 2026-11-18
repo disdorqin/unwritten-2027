@@ -20,8 +20,12 @@ export function createIceThrone(onChange: (owned: boolean) => void) {
   return {
     update(now: number, seated: boolean) {
       if (crownedAt !== undefined) {
-        leftAt = seated ? undefined : leftAt ?? now;
-        if (now - crownedAt >= termMs || (leftAt !== undefined && now - leftAt > awayMs)) abdicate(seated);
+        if (!seated) leftAt ??= now;
+        if (now - crownedAt >= termMs || (leftAt !== undefined && now - leftAt > awayMs)) {
+          abdicate(seated);
+        } else if (seated) {
+          leftAt = undefined;
+        }
         return;
       }
       if (!seated) {
