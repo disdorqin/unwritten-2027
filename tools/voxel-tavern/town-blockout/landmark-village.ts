@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D, Vector3 } from 'three';
-import type { Box, TownPlot } from './landmark-kit';
+import type { Box, Ramp, TownPlot } from './landmark-kit';
+import { addCommunityTheaterDetails } from './community-theater';
 import { addTownWindow } from './town-window';
 import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
 
@@ -10,6 +11,7 @@ export function buildVillageLandmark(plot: TownPlot) {
   const pieces: Piece[] = [];
   const solids: Box[] = [];
   const floors: Box[] = [];
+  const ramps: Ramp[] = [];
   const housePortalStands: [number, number][] = [];
   const add = (color: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
     pieces.push({color, center: [x, y, z], size: [w, h, d]});
@@ -130,6 +132,8 @@ export function buildVillageLandmark(plot: TownPlot) {
     cabin(1, -4, 7.5, 9, 3.7, '#785647');
     cabin(10, 2.2, 7.5, 8.5, 3.2, '#975745', true);
   } else {
+    const expandedTheater = plot.origin[0] === 238 && plot.origin[1] === 140;
+    const roofWidth = expandedTheater ? 18 : 18.7;
     add(brick, 0, .2, 0, 17.5, .4, 11.5);
     add(wood, 0, .43, 0, 17.1, .18, 11.1);
     for (let x = -8.25, i = 0; x < 8.55; x += .5, i++) {
@@ -153,8 +157,8 @@ export function buildVillageLandmark(plot: TownPlot) {
     for (let step = 0; step < 6; step++) {
       const y = 6.13 + .25 * step;
       const d = 12.7 - 1.6 * step;
-      add(roof, 0, y, 0, 18.7 - .35 * step, .31, d);
-      add(snow, 0, y + .15, 0, 18.55 - .35 * step, .13, d - .15);
+      add(roof, 0, y, 0, roofWidth - .35 * step, .31, d);
+      add(snow, 0, y + .15, 0, roofWidth - .15 - .35 * step, .13, d - .15);
     }
     // The north opening faces the plaza. The painted backdrop is on the south edge.
     for (const x of [-6.4, -3.2, 0, 3.2, 6.4]) {
@@ -189,6 +193,9 @@ export function buildVillageLandmark(plot: TownPlot) {
     }
     add(wood, 0, .14, -6.2, 7, .28, 1.6);
     add(gold, 0, .274, -6.93, 6.92, .045, .08);
+    if (expandedTheater) {
+      addCommunityTheaterDetails(group, add, floors, ramps, plot.origin[0], plot.origin[1]);
+    }
   }
 
   const geometry = new BoxGeometry();
@@ -209,6 +216,7 @@ export function buildVillageLandmark(plot: TownPlot) {
   }
   group.userData.colliders = solids;
   group.userData.floors = floors;
+  group.userData.ramps = ramps;
   group.userData.housePortalStands = housePortalStands;
   return group;
 }
