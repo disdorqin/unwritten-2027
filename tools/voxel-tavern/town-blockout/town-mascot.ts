@@ -1,5 +1,6 @@
 import { Color, Matrix4, Object3D, type InstancedMesh } from 'three';
 import { layout } from './terrain';
+import type { MascotFollowPoint } from './mascot-follow';
 
 type Point = readonly [east: number, north: number];
 type Part = {
@@ -161,6 +162,7 @@ export function sampleMascotLocation(now: number, patrol: MascotPatrol) {
 export type TownMascotOptions = {
   now: () => number;
   groundAt: GroundAt;
+  follow?: () => MascotFollowPoint | undefined;
   visible: (east: number, north: number, ground: number) => boolean;
 };
 
@@ -184,8 +186,9 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
     const now = options.now();
     // Share repeatable location and movement phase while limiting instance writes to 25 Hz.
     const tick = Math.floor(now / 40) * 40;
-    const point = sampleMascotLocation(tick, patrol);
-    const ground = options.groundAt(point.x, point.n);
+    const follow = options.follow?.();
+    const point = follow ?? sampleMascotLocation(tick, patrol);
+    const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
     if (ground === undefined || !options.visible(point.x, point.n, ground)) {
       if (shown) { batch.count = start; shown = false; }
       return false;

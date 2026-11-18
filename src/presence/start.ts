@@ -7,6 +7,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     port: Number(process.env.PRESENCE_PORT ?? 8090),
     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
     testFireworks: process.env.TEST_FIREWORKS === 'on',
+    ownerKey: process.env.OWNER_KEY,
+    onMascotClaimRejected: total => console.info('Mascot actor rejected claims:', total),
     requestListener,
     ceremonyStartAt,
   });
