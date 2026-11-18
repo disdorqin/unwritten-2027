@@ -156,6 +156,13 @@ function furnishBench(s: Workshop, x: number, z: number, direction = 1) {
   for (let i = 0; i < 4; i++) put('#a78655', x - .15 + i * .13, 1.35, z - .22, .051, .053, .53);
 }
 
+// Positions use the unrotated workshop frame; the building and all its stages face west together.
+export const workshopMonkeySteps = [
+  [6.92, .66, -3.66],
+  [6.92, 1.33, -2.4], // The existing eastern workbench.
+  [6.92, 2.03, -1.08],
+  [5.40, 2.72, -1.08],
+] as const;
 function buildGuild() {
   const s = createWorkshop();
   const { put } = s;
@@ -247,6 +254,27 @@ function buildGuild() {
     for (let index = firstPart; index < s.parts.length; index++) s.parts[index].riddleSlot = slot;
     stands.push([x, .15, -4.70]);
   }
+  const jumpFloors: Box[] = [];
+  for (const [index, [x, height, z]] of workshopMonkeySteps.entries()) {
+    if (index === 1) continue;
+    const platform = index === workshopMonkeySteps.length - 1;
+    const w = platform ? 1.38 : 1.12;
+    const d = platform ? 1.06 : .96;
+    const depth = platform ? .16 : height - .15;
+    const levels = platform ? 1 : Math.ceil(depth / .66);
+    for (let level = 0; level < levels; level++) {
+      const face = height - (level + .5) * depth / levels;
+      put(wood[platform ? 3 : level % 2], x, face, z, w, depth / levels - .009, d);
+    }
+    jumpFloors.push(collision(x, height - depth, z, w, depth, d));
+    for (const side of [-1, 1]) {
+      put(trim, x + side * (w / 2 - .065), height - depth + .055, z, .115, .11, d);
+      if (platform) {
+        put(wood[2], x + side * .47, height / 2 - .08, z, .12, height - .16, .12);
+        jumpFloors.push(collision(x + side * .47, 0, z, .12, height - .16, .12));
+      }
+    }
+  }
   const building = batchParts(s.parts, { stands, rearWallZ: rear });
   building.add(makeSign('春灯工坊', 3.7, .86, 0, 4.49, 7.76));
   building.rotation.y = -Math.PI / 2;
@@ -277,6 +305,7 @@ function buildGuild() {
     collision(0, 0, .85, 17.43, .15, 14.88),
     collision(0, 0, 7.89, 4.45, .14, 1.07),
     collision(0, .07, 7.40, 4.24, .14, .73),
+    ...jumpFloors,
   ].map(rotateWest);
   return building;
 }
