@@ -1,4 +1,6 @@
-export const icePalaceProgressKey = 'unwritten.ice-palace.v1';
+import { readIcePalaceProgress, writeIcePalaceProgress, type IcePalaceStorage } from './ice-palace-progress';
+
+export { icePalaceProgressKey } from './ice-palace-progress';
 export const palaceBlockPushScale = .8;
 const plateReleaseMs = 1_500;
 const stairDoorMs = 10 * 60_000;
@@ -17,31 +19,31 @@ type IcePalaceProgress = {
 const levers: readonly Lever[] = ['pine', 'sailboat', 'lighthouse'];
 const bells: readonly Bell[] = ['low', 'high', 'mid'];
 
-function loadProgress(raw: string | null): IcePalaceProgress {
-  let saved: Partial<IcePalaceProgress> | null = null;
-  try { saved = raw ? JSON.parse(raw) : null; } catch { /* An unreadable save can start fresh. */ }
+function loadProgress(storage: IcePalaceStorage | undefined): IcePalaceProgress {
+  const saved = readIcePalaceProgress(storage);
   return {
-    key: saved?.key === true,
-    throneRoom: saved?.throneRoom === true,
-    gallery: saved?.gallery === true,
-    mirrorCache: saved?.mirrorCache === true,
-    stairOpenUntil: typeof saved?.stairOpenUntil === 'number' && Number.isFinite(saved.stairOpenUntil)
+    key: saved.key === true,
+    throneRoom: saved.throneRoom === true,
+    gallery: saved.gallery === true,
+    mirrorCache: saved.mirrorCache === true,
+    stairOpenUntil: typeof saved.stairOpenUntil === 'number' && Number.isFinite(saved.stairOpenUntil)
       ? Math.max(0, saved.stairOpenUntil) : 0,
-    completed: saved?.completed === true,
+    completed: saved.completed === true,
   };
 }
 
-export function createIcePalacePuzzles(storage?: Pick<Storage, 'getItem' | 'setItem'>) {
-  const progress = loadProgress(storage?.getItem(icePalaceProgressKey) ?? null);
+export function createIcePalacePuzzles(storage?: IcePalaceStorage) {
+  const progress = loadProgress(storage);
   let leverIndex = 0;
   let bellInputs: Bell[] = [];
   const mirrors: [number, number] = progress.mirrorCache ? [2, 4] : [1, 1];
   let platePressed = false;
   let plateUntil = 0;
   let vaultUntil = 0;
+  let exitUntil = 0;
 
   function save() {
-    storage?.setItem(icePalaceProgressKey, JSON.stringify(progress));
+    writeIcePalaceProgress(storage, progress);
   }
 
   function setPlateContact(now: number, playerOnPlate: boolean, blockOnPlate: boolean) {
@@ -103,6 +105,7 @@ export function createIcePalacePuzzles(storage?: Pick<Storage, 'getItem' | 'setI
       return true;
     },
     vaultOpen(now: number) { return now < vaultUntil; },
+    openVaultExit(now: number) { exitUntil = now + vaultDoorMs; },
     finishVault(now: number) {
       if (!progress.key || progress.completed || now >= vaultUntil) return false;
       progress.completed = true;
@@ -111,7 +114,7 @@ export function createIcePalacePuzzles(storage?: Pick<Storage, 'getItem' | 'setI
     },
     state(now: number) {
       return { ...progress, leverIndex, mirrors: [...mirrors] as const,
-        stairOpen: now < progress.stairOpenUntil, vaultOpen: now < vaultUntil };
+        stairOpen: now < progress.stairOpenUntil, vaultOpen: now < vaultUntil, vaultExitOpen: now < exitUntil };
     },
   };
 }

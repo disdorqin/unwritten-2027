@@ -1,4 +1,5 @@
 import layout from './layout.json';
+import { icePalaceSite } from './ice-palace-site';
 
 export const worldBounds = { width: 640, depth: 512 };
 
@@ -63,7 +64,9 @@ export function sampleExtension(x: number, north: number, elevation: number) {
   }
 
   let plot = false;
-  for (const { origin: [cx, cn, height], footprint: [width, depth] } of extensionPlots) {
+  for (const entry of extensionPlots) {
+    const { origin: [cx, cn, height], footprint: [width, depth] } =
+      entry.id === 'ice-castle' ? icePalaceSite.terrain : entry;
     const outside = Math.hypot(Math.max(0, Math.abs(x - cx) - width / 2), Math.max(0, Math.abs(north - cn) - depth / 2));
     const transitionWidth = Math.min(24, Math.max(cx - width / 2 - layout.width, cn - depth / 2 - layout.depth));
     // Give pedestrians a broad snow shoulder before each flat landmark apron.

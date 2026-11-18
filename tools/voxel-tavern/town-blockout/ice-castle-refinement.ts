@@ -42,9 +42,11 @@ export const iceCastleExhibits: readonly IceCastleExhibit[] = [
 export const iceChandelierPosition = [14.35, 7.65, -2.45] as const;
 type IceCastleLight = { position: IceCastlePoint; color: string; distance: number; power: number };
 
-export function createIceCastleRefinementRuntime(crownGlow: { value: number }) {
+export function createIceCastleRefinementRuntime(
+  crownGlow: { value: number }, exhibits = iceCastleExhibits, chandelier = iceChandelierPosition as IceCastlePoint,
+) {
   const gateLight: IceCastleLight = { position: [-22.15, 3.2, 0], color: '#ffba76', distance: 13, power: 0 };
-  const hallLight: IceCastleLight = { position: iceChandelierPosition, color: '#ffba76', distance: 18, power: 0 };
+  const hallLight: IceCastleLight = { position: chandelier, color: '#ffba76', distance: 18, power: 0 };
   let phase = 0;
   let feedback = 3;
   const follow = (light: IceCastleLight, target: number, weight: number) => {
@@ -68,7 +70,7 @@ export function createIceCastleRefinementRuntime(crownGlow: { value: number }) {
 
   return {
     lights: [gateLight, hallLight] as const,
-    exhibits: iceCastleExhibits,
+    exhibits,
     update,
     enthrone() { feedback = 0; },
   };
@@ -109,8 +111,8 @@ export function addIceCastleDeer({ block, crystal }: IceCastleDetails, x: number
   crystal(x + .77, y + 1.05, z, .24, .20, .27, 'ice');
 }
 
-export function addIceCastleCarvings({ block, crystal }: IceCastleDetails) {
-  for (const { id, anchor, yaw } of iceCastleExhibits) {
+export function addIceCastleCarvings({ block, crystal }: IceCastleDetails, exhibits = iceCastleExhibits) {
+  for (const { id, anchor, yaw } of exhibits) {
     const [x, y, z] = anchor;
     const outwardSign = yaw === 0 ? 1 : -1;
     const piece = (dx: number, dy: number, dz: number, w: number, h: number, d: number,
@@ -204,7 +206,9 @@ export function addIceCastleCarvings({ block, crystal }: IceCastleDetails) {
   }
 }
 
-export function addIceCastleChandelier({ block, crystal }: IceCastleDetails) {
+export function addIceCastleChandelier(parts: IceCastleDetails, lift = 0) {
+  const block: IceCastleDetails['block'] = (x, y, z, ...args) => parts.block(x, y + lift, z, ...args);
+  const crystal: IceCastleDetails['crystal'] = (x, y, z, ...args) => parts.crystal(x, y + lift, z, ...args);
   const [x, y, z] = iceChandelierPosition;
   block(x, 11.37, z, 1.20, .22, 1.20, 'deepIce');
   block(x, 10.14, z, .145, 2.46, .145, 'paleIce', Math.PI / 4);

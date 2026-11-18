@@ -1,4 +1,6 @@
-export const icePalaceProgressKey = 'unwritten.ice-palace.v1';
+import { icePalaceRecord, readIcePalaceProgress, writeIcePalaceProgress, type IcePalaceStorage } from './ice-palace-progress';
+
+export { icePalaceProgressKey } from './ice-palace-progress';
 
 export const icePalaceBalconyRace = {
   start: [-22.9, .12, 1.4],
@@ -7,19 +9,8 @@ export const icePalaceBalconyRace = {
 } as const;
 
 type Point = readonly [x: number, feet: number, z: number];
-type RaceStorage = Pick<Storage, 'getItem' | 'setItem'>;
-
-function browserStorage(): RaceStorage | undefined {
+function browserStorage(): IcePalaceStorage | undefined {
   try { return globalThis.localStorage; } catch { return undefined; }
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown> : {};
-}
-
-function readProgress(storage: RaceStorage | undefined) {
-  try { return record(JSON.parse(storage?.getItem(icePalaceProgressKey) ?? '{}')); } catch { return {}; }
 }
 
 function bestTime(value: unknown) {
@@ -31,8 +22,19 @@ function seconds(ms: number) {
 }
 
 export function createIcePalaceRace(storage = browserStorage(), now = () => performance.now()) {
-  const { start, finish, radius } = icePalaceBalconyRace;
-  let best = bestTime(record(readProgress(storage).race).balconyBestMs);
+  return createRace(icePalaceBalconyRace.finish, 'balconyBestMs', '观景台', '经大殿南侧楼梯登台', storage, now);
+}
+
+export function createIcePalaceTowerRace(finish: Point, storage = browserStorage(), now = () => performance.now()) {
+  return createRace(finish, 'towerBestMs', '主塔', '经大殿二层进入主塔螺旋坡道', storage, now);
+}
+
+function createRace(
+  finish: Point, bestKey: 'balconyBestMs' | 'towerBestMs', title: string, route: string,
+  storage: IcePalaceStorage | undefined, now: () => number,
+) {
+  const { start, radius } = icePalaceBalconyRace;
+  let best = bestTime(icePalaceRecord(readIcePalaceProgress(storage).race)[bestKey]);
   let startedAt: number | undefined;
   let finishedAt: number | undefined;
   let onStart = false;
@@ -46,15 +48,12 @@ export function createIcePalaceRace(storage = browserStorage(), now = () => perf
   function finishRun(elapsed: number) {
     finishedAt = elapsed;
     startedAt = undefined;
-    const progress = readProgress(storage);
-    const race = record(progress.race);
-    const existing = bestTime(race.balconyBestMs);
+    const race = icePalaceRecord(readIcePalaceProgress(storage).race);
+    const existing = bestTime(race[bestKey]);
     const fastest = Math.min(elapsed, best ?? Infinity, existing ?? Infinity);
     best = fastest;
     if (existing === fastest) return;
-    try {
-      storage?.setItem(icePalaceProgressKey, JSON.stringify({ ...progress, race: { ...race, balconyBestMs: fastest } }));
-    } catch { /* The current session keeps the record when browser storage is disabled. */ }
+    writeIcePalaceProgress(storage, { race: { ...race, [bestKey]: fastest } });
   }
 
   function update(x: number, feet: number, z: number, grounded: boolean) {
@@ -77,11 +76,11 @@ export function createIcePalaceRace(storage = browserStorage(), now = () => perf
     }
 
     const result = best === undefined ? '' : ' · 个人最佳 ' + seconds(best);
-    if (startedAt !== undefined) return '观景台计时 ' + seconds(now() - startedAt) + ' · 经大殿南侧楼梯登台';
+    if (startedAt !== undefined) return title + '计时 ' + seconds(now() - startedAt) + ' · ' + route;
     if (isNear(finish, 1.8)) return finishedAt === undefined
-      ? '观景台终点 · 到西门踏上起点板开始' + result
-      : '抵达观景台 · 用时 ' + seconds(finishedAt) + result;
-    if (isNear(start, 2.1)) return '观景台计时 · 踏上箭头板开始' + result;
+      ? title + '终点 · 到西门踏上起点板开始' + result
+      : '抵达' + title + ' · 用时 ' + seconds(finishedAt) + result;
+    if (isNear(start, 2.1)) return title + '计时 · 踏上箭头板开始' + result;
     return '';
   }
 
