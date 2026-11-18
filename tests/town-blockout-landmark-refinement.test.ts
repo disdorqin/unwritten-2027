@@ -179,7 +179,7 @@ test('station interaction spots stay aligned with the scaled model and the timet
   assert.deepEqual(description.split('\n\n').map(section => section.split(' · ')[0]), RAILWAY_STATION_NAMES);
   assert.match(description, /滑冰、冰钓/);
   assert.match(description, /城堡西门/);
-  assert.match(description, /室外双池泡汤/);
+  assert.match(description, /室外四池泡汤/);
 });
 
 test('the railway ticket survives reload separately from the core passport reward', () => {
