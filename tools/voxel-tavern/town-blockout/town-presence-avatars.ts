@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, DynamicDrawUsage, Frustum, InstancedMesh, Matrix4, MeshLambertMaterial,
   Sphere, Vector3, type PerspectiveCamera, type Scene } from 'three';
+import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
 import { voxelPersonParts } from './town-voxel-person';
 import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import './town-presence-avatars.css';
@@ -28,8 +29,10 @@ const coatColors = [
   ['#cb987b', '#3e354d', '#855b83', '#dcc3ad', '#52445b', '#db9a62', '#f3c68c', '#815541'],
 ].map(palette => palette.map(hex => new Color(hex)));
 
+type ReadBubble = (id: number, now: number) => TownChatBubble | undefined;
+
 export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): {
-  render(actors: readonly PresenceAvatarActor[]): void;
+  render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble): void;
   clear(): void;
 } {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
@@ -54,8 +57,11 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     const label = document.createElement('span');
     label.className = 'town-presence-nameplate';
     label.hidden = true;
-    overlay.append(label);
-    return label;
+    const bubble = document.createElement('span');
+    bubble.className = 'town-presence-chat-bubble';
+    bubble.hidden = true;
+    overlay.append(label, bubble);
+    return { label, bubble, chat: undefined as TownChatBubble | undefined, fading: false };
   });
 
   const viewProjection = new Matrix4();
@@ -69,7 +75,11 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   let shown = 0;
 
   function finishLabels(count: number) {
-    for (let i = count; i < shown; i++) labels[i].hidden = true;
+    for (let i = count; i < shown; i++) {
+      labels[i].label.hidden = true;
+      labels[i].bubble.hidden = true;
+      labels[i].chat = undefined;
+    }
     if ((count === 0) !== (shown === 0)) overlay.hidden = count === 0;
     shown = count;
   }
@@ -80,7 +90,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     if (shown) finishLabels(0);
   }
 
-  function render(actors: readonly PresenceAvatarActor[]) {
+  function render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble) {
     if (actors.length === 0) {
       clear();
       return;
@@ -158,18 +168,33 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       if (cameraZ >= 0) continue;
       head.applyMatrix4(viewProjection);
       if (Math.abs(head.x) > 1 || Math.abs(head.y) > 1 || Math.abs(head.z) > 1) continue;
-      const label = labels[shownNext];
+      const nameplate = labels[shownNext];
+      const { label, bubble } = nameplate;
+      const message = readBubble?.(actor.id, elapsedMs);
+      const movedBubble = nameplate.chat !== message;
+      if (movedBubble) {
+        nameplate.chat = message;
+        bubble.hidden = !message;
+        if (message) bubble.textContent = message.text;
+      }
+      const fading = !!message && message.until - elapsedMs <= chatBubbleFadeMs;
+      if (nameplate.fading !== fading) {
+        nameplate.fading = fading;
+        bubble.classList.toggle('is-fading', fading);
+      }
       if (labelNames[shownNext] !== actor.name) {
         labelNames[shownNext] = actor.name;
         label.textContent = actor.name;
       }
       const px = Math.round((1 + head.x) * halfWidth);
       const py = Math.round((1 - head.y) * halfHeight);
-      if (px !== labelX[shownNext] || py !== labelY[shownNext]) {
+      const moved = px !== labelX[shownNext] || py !== labelY[shownNext];
+      if (moved) {
         labelX[shownNext] = px;
         labelY[shownNext] = py;
         label.style.transform = `translate3d(${px}px, ${py}px, 0)`;
       }
+      if (message && (moved || movedBubble)) bubble.style.transform = label.style.transform;
       if (shownNext >= shown) label.hidden = false;
       shownNext++;
     }

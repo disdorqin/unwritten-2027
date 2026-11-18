@@ -4,6 +4,7 @@ import {
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
+import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
@@ -55,8 +56,12 @@ function presenceName() {
   return () => name || guest;
 }
 
-export function createTownPresence(scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void) {
+export function createTownPresence(
+  scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void, onChatFocus: () => void = () => {},
+) {
   const getName = presenceName();
+  const chat = createTownChat(sendChat, onChatFocus);
+  const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
@@ -140,6 +145,8 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     serverEpochOffset = undefined;
     snowballEvents.length = 0;
     notices.length = 0;
+    chatEvents.length = 0;
+    chat.setConnected(false);
     roster.clear();
     actors.clear();
     renderList.length = 0;
@@ -164,6 +171,13 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (haveId && message.type === 'chat') {
+        if (chatEvents.length < 24) {
+          const event = parseTownChat(message);
+          if (event && roster.has(event.id)) chatEvents.push(event);
+        }
+        return;
+      }
       if (haveId && message.type === 'event') {
         if (notices.length >= 8) return;
         if (message.kind === 'announce' && typeof message.message === 'string') {
@@ -181,6 +195,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
           haveId = true;
           joinedId = id;
           joinedName = message.name;
+          chat.setConnected(true);
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
           }
@@ -203,6 +218,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
         remoteActivityPoses.delete(id);
         roster.delete(id);
         actors.delete(id);
+        chat.forget(id);
         if (name) announce(`${name} 离镇了`);
       }
       updateStatus();
@@ -276,6 +292,11 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     lastHeightYaw = heightYaw;
   }
 
+  function sendChat(scope: TownChatScope, text: string) {
+    if (joinedId === null || joinedName === undefined || !sendEvent(JSON.stringify({ type: 'chat', scope, text }))) return false;
+    chat.receive({ id: joinedId, name: joinedName, scope, text }, true);
+    return true;
+  }
   function sendEvent(bytes: string | Uint8Array) {
     const active = socket;
     if (!haveId || active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
@@ -303,10 +324,16 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       }
     }
     notices.length = 0;
-    if (!snowballEvents.length) return;
+    if (!snowballEvents.length && !chatEvents.length) return;
     const end = performance.now() + eventFrameBudgetMs;
-    for (let i = 0; i < eventFrameLimit && snowballEvents.length; i++) {
-      onSnowballEvent?.(snowballEvents.shift()!);
+    for (let i = 0; i < eventFrameLimit; i++) {
+      const snowball = snowballEvents.shift();
+      if (snowball) onSnowballEvent?.(snowball);
+      else {
+        const message = chatEvents.shift();
+        if (!message) break;
+        chat.receive(message);
+      }
       if (performance.now() >= end) break;
     }
   }
@@ -324,6 +351,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   return {
     selfId: () => joinedId,
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
+    chatFocused: chat.focused,
     snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
     getSnowballPeers: (): readonly (PresencePose & { id: number; name: string })[] => renderList,
     sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
@@ -371,7 +399,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
         } else actor.stride = 0;
         renderList.push(actor);
       }
-      avatars.render(renderList);
+      avatars.render(renderList, chat.bubble);
     },
   };
 }

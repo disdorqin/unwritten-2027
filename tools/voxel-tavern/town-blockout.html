@@ -40,8 +40,18 @@
         <button id="town-passport-button" type="button">纪念戳册</button>
         <button id="town-lights-button" type="button">点亮小镇</button>
       </nav>
+      <section id="town-chat" aria-label="小镇聊天" hidden>
+        <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
+        <form id="town-chat-form">
+          <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
+          <input id="town-chat-text" type="text" maxlength="200" autocomplete="off"
+            aria-label="聊天消息" placeholder="说点什么">
+          <button type="submit">发送</button>
+        </form>
+      </section>
     </div>
   </aside>
+  <span id="town-chat-self" aria-hidden="true" hidden></span>
   <section id="museum-inspection" aria-labelledby="exhibit-title" hidden>
     <header>
       <div><p id="exhibit-month"></p><h2 id="exhibit-title"></h2></div>

@@ -577,7 +577,7 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
-const presence = createTownPresence(scene, camera, announceActivity);
+const presence = createTownPresence(scene, camera, announceActivity, resetMovement);
 presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed), {
   ageSeconds, clockMs: () => performance.now(),
 }));
@@ -1208,7 +1208,7 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround; }
 function skatesOnIce() {
