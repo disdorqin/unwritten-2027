@@ -203,9 +203,11 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
     lastTick = tick;
     const seconds = tick / 1000;
     const idlePhase = seconds % 60;
-    const rest = !point.speed ? Math.max(0, Math.min(1, idlePhase - 41, 49 - idlePhase)) : 0;
+    const rest = 'seated' in point && point.seated ? 1
+      : !point.speed ? Math.max(0, Math.min(1, idlePhase - 41, 49 - idlePhase)) : 0;
     const grazing = !point.speed && !rest && seconds % 21 >= 18 && seconds % 21 < 19.2;
-    const step = point.speed ? Math.sin(seconds * point.speed * 2.2 * Math.PI * 2) : 0;
+    const slide = 'sliding' in point && point.sliding;
+    const step = point.speed ? Math.sin(seconds * point.speed * 2.2 * Math.PI * 2) * (slide ? .35 : 1) : 0;
     const bounce = point.speed ? Math.abs(step) * .012 : Math.sin(seconds * 2.8) * .004;
 
     // Hooves sit above the town's thin paving and turf dressing.

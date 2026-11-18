@@ -70,7 +70,7 @@ import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-c
 import { createLakeSkateMotion } from './lake-skate-motion';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
-import { createHotSpringSoak } from './hot-spring-soak';
+import { createHotSpringSoak, hotSpringPools } from './hot-spring-soak';
 import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
@@ -687,7 +687,7 @@ const mascotFrustum = new Frustum();
 const mascotViewProjection = new Matrix4();
 const mascotBounds = new Sphere(new Vector3(), .54);
 const mascotFollower = createMascotFollower(mascotFollowGround);
-const mascotRailCenter = new Vector3(), mascotRailForward = new Vector3();
+const mascotRailCenter = new Vector3(), mascotRailForward = new Vector3(), mascotPoolLocal = new Vector3();
 let ownedMascot: MascotFollowPoint | undefined;
 const npcActivity = createTownNpcActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, feature => {
   if (feature === 'spring') return architecture.has('hot-spring');
@@ -706,7 +706,7 @@ panel => openTavernDice(panel, () => {
 }), {
   now: presence.serverNow,
   groundAt: mascotOutdoorGround,
-  follow: () => presence.sampleRemoteMascot() ?? (presence.ownerFollowsMascot() ? ownedMascot : undefined),
+  follow: () => presence.ownerFollowsMascot() && walking ? ownedMascot : presence.sampleRemoteMascot(),
   visible(east, north, feet) {
     if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return false;
     mascotBounds.center.set(east, feet + .32, -north);
@@ -1777,12 +1777,20 @@ function mascotOutdoorGround(east: number, north: number) {
   return feet;
 }
 
+function mascotOnPoolWater(east: number, north: number, feet: number) {
+  const springs = architecture.get('hot-spring');
+  if (!springs || Math.hypot(east - springs.position.x, north + springs.position.z) > 35) return false;
+  springs.worldToLocal(mascotPoolLocal.set(east, feet, -north));
+  return hotSpringPools.some(pool => Math.abs(mascotPoolLocal.x - pool.x) < pool.width / 2 + .18 &&
+    Math.abs(mascotPoolLocal.z - pool.z) < pool.depth / 2 + .18);
+}
+
 function mascotFollowGround(east: number, north: number, around: number) {
   if (!walkable(east, north)) return undefined;
   if (!homeReturn && !isLakeSkateIce(east, north) && bridgeAt(east, north) === undefined &&
       (isWater(east, north) || townWater.at(east, north))) return undefined;
-  const feet = supportAt(east, north, around + stepHeight, around + surfaceEpsilon);
-  if (!Number.isFinite(feet) || Math.abs(feet - around) > stepHeight) return undefined;
+  const feet = supportAt(east, north, around + stepHeight, around + surfaceEpsilon, .18);
+  if (!Number.isFinite(feet) || Math.abs(feet - around) > stepHeight || mascotOnPoolWater(east, north, feet)) return undefined;
   const { colliders, floors } = geometryAt(east, north);
   const blocked = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + .65 - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box, .18);
@@ -1800,32 +1808,32 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
   }
   let mounted: Omit<MascotFollowPoint, 'speed'> | undefined;
   if (boardingGround) {
-    railway.view.getWorldPosition(mascotRailCenter);
-    railway.view.getWorldDirection(mascotRailForward);
+    railway.coachMascotAnchor.getWorldPosition(mascotRailCenter);
+    railway.coachMascotAnchor.getWorldDirection(mascotRailForward);
     mounted = {
-      x: mascotRailCenter.x - mascotRailForward.x * 1.32 + mascotRailForward.z * .63,
-      n: -mascotRailCenter.z + mascotRailForward.z * 1.32 + mascotRailForward.x * .63,
-      ground: mascotRailCenter.y - eye,
+      x: mascotRailCenter.x, n: -mascotRailCenter.z, ground: mascotRailCenter.y,
       yaw: Math.atan2(mascotRailForward.x, -mascotRailForward.z),
     };
   }
   const wetGround = waterAtFeet();
+  const edge = hotSpringSoak.dryEdge();
+  const bathEdge = edge && mascotFollowGround(edge.x, edge.n, edge.ground) !== undefined ? edge : undefined;
   ownedMascot = mascotFollower.update({
     x: seated?.x ?? x, n: seated?.n ?? n, ground, yaw: seated?.yaw ?? yaw,
     speed: movementSpeed, indoor: Boolean(homeReturn), wet: Boolean(wetGround),
-    skating: isLakeSkateIce(x, n), bathing: hotSpringSoak.active(),
-  }, dt, mounted);
+    skating: skatesOnIce(), bathing: hotSpringSoak.active(), sitting: Boolean(seated),
+  }, dt, mounted, bathEdge);
   if (ownedMascot) presence.sendMascot({
     east: ownedMascot.x, north: ownedMascot.n, height: ownedMascot.ground, yaw: ownedMascot.yaw,
   });
 }
 
-function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity) {
+function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity, radius = bodyRadius) {
   const z = -north;
   let height = surfaceAt(east, north);
   const { floors, ramps, colliders } = geometryAt(east, north);
   for (const floor of floors) {
-    if (floor.max[1] <= limit && overlapsBody(east, north, floor)) height = Math.max(height, floor.max[1]);
+    if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
   }
   for (const ramp of ramps) {
     if (east < ramp.min[0] || east > ramp.max[0] || z < ramp.min[2] || z > ramp.max[2]) continue;
@@ -1836,7 +1844,7 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
   }
   if (solidLimit > -Infinity) {
     for (const solid of colliders) {
-      if (solid.max[1] <= solidLimit && overlapsBody(east, north, solid)) height = Math.max(height, solid.max[1]);
+      if (solid.max[1] <= solidLimit && overlapsBody(east, north, solid, radius)) height = Math.max(height, solid.max[1]);
     }
   }
   return height;

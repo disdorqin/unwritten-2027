@@ -143,6 +143,18 @@ test("mascot actor requires a socket proof and is withdrawn on owner disconnect"
   assert.equal(following.find(record => record.id === MASCOT_ACTOR_ID)?.east, 10_160);
   assert.deepEqual(rejects, [1]);
 
+  // An authenticated actor can run to catch up from the design's >8 m gap.
+  await new Promise(resolve => setTimeout(resolve, 115));
+  owner.socket.send(encodePose({ ...position, east: 11_400, sequence: 3 }, MASCOT_ACTOR_ID));
+  const catchingUp = await guest.snapshot.next(records => records.some(record => record.east === 11_400));
+  assert.equal(catchingUp.find(record => record.id === MASCOT_ACTOR_ID)?.east, 11_400);
+  await new Promise(resolve => setTimeout(resolve, 115));
+  owner.socket.send(encodePose({ ...position, east: 13_250, sequence: 4 }, MASCOT_ACTOR_ID));
+  // A later valid packet still succeeds, demonstrating the out-of-range request was not used as the new baseline.
+  owner.socket.send(encodePose({ ...position, east: 11_700, sequence: 5 }, MASCOT_ACTOR_ID));
+  const withinLimit = await guest.snapshot.next(records => records.some(record => record.east === 11_700));
+  assert.equal(withinLimit.find(record => record.id === MASCOT_ACTOR_ID)?.east, 11_700);
+
   owner.socket.close();
   await guest.text.next(message => message.type === "leave" && message.id === MASCOT_ACTOR_ID);
   await guest.snapshot.next(records => !records.some(record => record.id === MASCOT_ACTOR_ID));

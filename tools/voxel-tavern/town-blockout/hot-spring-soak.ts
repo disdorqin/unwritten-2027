@@ -33,6 +33,7 @@ type SoakOptions = {
 };
 type SoakSession = {
   poolId: PoolId;
+  dryEdge: { x: number; n: number; ground: number };
   enteredAt: number;
   feedback: HTMLDivElement;
   progress: HTMLSpanElement;
@@ -99,6 +100,7 @@ export function createHotSpringSoak(context: SoakContext, onSoakChange?: (active
           document.body.append(feedback, progress);
           const current: SoakSession = {
             poolId: pool.id,
+            dryEdge: { x: approach.x, n: -approach.z, ground: approach.y },
             enteredAt: performance.now(),
             feedback, progress,
             valid: false,
@@ -115,5 +117,5 @@ export function createHotSpringSoak(context: SoakContext, onSoakChange?: (active
     });
   }
 
-  return { spots, leave, active: () => session !== undefined };
+  return { spots, leave, active: () => session !== undefined, dryEdge: () => session?.dryEdge };
 }

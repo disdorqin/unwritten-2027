@@ -475,7 +475,8 @@ export async function createPresenceServer(options: Options = {}) {
       }
       if (time < nextMascotSample || !peer.record || mascot?.record.seq === record.seq) return;
       if (record.east > eastLimit || record.north > northLimit || record.height > heightLimit ||
-          horizontalDistanceSquared(peer.record, record) > 650 ** 2 ||
+          // Follow permits a 30 m gap with room for one position sample in flight.
+          horizontalDistanceSquared(peer.record, record) > 3_200 ** 2 ||
           Math.abs(peer.record.height - record.height) > 500) return;
       nextMascotSample = time + 1000 / BASE_TIER.hz;
       mascotUntil = time + 2250;
