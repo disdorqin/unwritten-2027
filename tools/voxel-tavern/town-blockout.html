@@ -19,6 +19,11 @@
         aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
     </div>
     <div id="town-panel-controls">
+      <label class="town-presence-name">昵称
+        <input id="town-presence-name" type="text" maxlength="48" placeholder="留空使用游客名"
+          autocomplete="nickname" aria-describedby="town-presence-name-hint">
+      </label>
+      <small id="town-presence-name-hint">最多 24 字，下次连接时生效</small>
       <nav aria-label="查看方式">
         <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
         <button id="walk" type="button" aria-pressed="false">第一人称</button>

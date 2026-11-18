@@ -1151,7 +1151,7 @@ touchJump.addEventListener('pointerdown', event => {
 });
 touchJump.addEventListener('click', requestJump);
 addEventListener('keydown', e => {
-  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
+  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (museumOverlay()) {
     if (e.code === 'Escape' || (e.code === 'KeyE' && !e.repeat)) {
       e.preventDefault();

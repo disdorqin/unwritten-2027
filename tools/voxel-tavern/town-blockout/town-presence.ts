@@ -12,16 +12,36 @@ const retryDelays = [1000, 2000, 5000, 10000, 30000] as const;
 const maximumBufferedBytes = 1024;
 const guestNameKey = 'unwritten.presence.name.v1';
 
-function guestName() {
-  try {
-    const stored = localStorage.getItem(guestNameKey)?.trim();
-    if (stored && [...stored].length <= 24 && !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(stored)) return stored;
-  } catch { /* Private browsing can disable local storage. */ }
-  return `小镇游客${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+function presenceName() {
+  const input = document.querySelector<HTMLInputElement>('#town-presence-name');
+  const guest = `小镇游客${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+  const normalize = (value: string) => [...value.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').trim()].slice(0, 24).join('');
+  let name = '';
+  try { name = normalize(localStorage.getItem(guestNameKey) ?? ''); } catch { /* Storage is optional. */ }
+  if (input) {
+    input.value = name;
+    const save = () => {
+      const cleaned = input.value.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '');
+      const chars = [...cleaned];
+      if (chars.length > 24 || cleaned !== input.value) input.value = chars.slice(0, 24).join('');
+      name = normalize(input.value);
+      try {
+        if (name) localStorage.setItem(guestNameKey, name);
+        else localStorage.removeItem(guestNameKey);
+      } catch { /* Keep using the current page's name. */ }
+    };
+    input.addEventListener('input', event => { if (!(event as InputEvent).isComposing) save(); });
+    input.addEventListener('compositionend', save);
+    input.addEventListener('change', () => { save(); input.value = name; });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing) input.blur();
+    });
+  }
+  return () => name || guest;
 }
 
 export function createTownPresence(scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void) {
-  const label = guestName();
+  const getName = presenceName();
   const status = document.getElementById('town-presence-status');
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
@@ -157,7 +177,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       timeout = window.setTimeout(() => { if (socket === ws) connectionLost(); }, 3000);
       ws.onopen = () => {
         if (socket === ws) {
-          try { ws.send(JSON.stringify({ type: 'join', name: label })); }
+          try { ws.send(JSON.stringify({ type: 'join', name: getName() })); }
           catch { connectionLost(); }
         }
       };
