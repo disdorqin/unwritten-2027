@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#201923">
+<title>未写镇 · 年味试听 v3</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#211923;color:#fff1e1}*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#523040 0,transparent 65%),#211923}
+main{width:min(100%,36rem);padding:clamp(24px,7vw,56px);border:1px solid #805162;border-radius:24px;background:#2a202a}
+h1{font-size:clamp(26px,7vw,42px);margin:0 0 14px;line-height:1.18}
+p{color:#f0d0bb;line-height:1.6;margin:0 0 24px}
+audio{width:100%;display:block;margin:18px 0 10px}
+button,a{border-radius:8px;padding:11px 16px;min-height:44px;font:inherit}
+button{background:#ffcc8f;color:#39222b;border:0;font-weight:700;cursor:pointer}
+button:disabled{opacity:.65;cursor:wait}a{display:inline-flex;margin-top:12px;color:#ffd4a2}a[hidden],audio[hidden]{display:none}
+small{display:block;color:#e3bda8;margin-top:14px;min-height:1.3em}
+</style>
+</head>
+<body>
+<main>
+<h1>未写镇 · 年味试听 v3</h1>
+<p>30 秒 · 88 BPM · 笛子、扬琴、轻扫弦与疏点锣鼓</p>
+<button id="play" type="button">播放试听</button>
+<audio id="audio" controls hidden></audio>
+<a id="save" download="未写镇-年味-v3-试听30秒.wav" hidden>下载 WAV</a>
+<small id="status" role="status"></small>
+</main>
+<script id="score" type="application/json">
+{
+  "bpm": 88,
+  "previewBars": 11,
+  "graces": [{"bar":2,"note":3,"midi":64},{"bar":8,"note":3,"midi":64},{"bar":10,"note":4,"midi":69}],
+  "bars": [
+    [[62,1],[64,1],[66,1],[69,1]],
+    [[71,1.5],[69,0.5],[66,1],[69,1]],
+    [[66,1],[66,1],[71,1],[69,1]],
+    [[66,1],[64,0.5],[66,0.5],[69,2]],
+    [[69,1],[66,1],[69,1],[66,1]],
+    [[64,1],[66,1],[69,1],[66,1]],
+    [[64,1],[66,1],[64,1],[62,1]],
+    [[64,1.5],[66,0.5],[62,2]],
+    [[69,1],[71,1],[74,1],[71,1]],
+    [[74,1],[76,1],[74,1],[71,1]],
+    [[71,1],[69,1],[71,1],[74,1]],
+    [[74,1],[71,1],[69,2]],
+    [[66,1],[66,1],[71,1],[69,1]],
+    [[69,1],[66,1],[64,1],[66,1]],
+    [[64,1],[62,1],[59,1],[62,1]],
+    [[62,4]]
+  ]
+}
+</script>
+<script>
+const { bpm, previewBars, graces, bars } = JSON.parse(document.querySelector('#score').textContent);
+const secondsPerBeat = 60 / bpm;
+const start = .055;
+const hz = note => 440 * 2 ** ((note - 69) / 12);
+const notePlan = bars.slice(0, previewBars).flatMap((bar, index) => {
+  let beat = index * 4;
+  return bar.map(([midi, beats], noteIndex) => {
+    const at = beat * secondsPerBeat + start;
+    beat += beats;
+    const phraseEnd = (index === 3 || index === 7) && noteIndex === bar.length - 1;
+    const grace = graces.find(candidate => candidate.bar === index + 1 && candidate.note === noteIndex + 1);
+    return { midi, beats, at, phraseEnd, grace: grace?.midi };
+  });
+});
+
+function noiseBuffer(context, duration, seed, decay) {
+  const buffer = context.createBuffer(1, Math.ceil(duration * context.sampleRate), context.sampleRate);
+  const samples = buffer.getChannelData(0);
+  let state = seed;
+  for (let i = 0; i < samples.length; i++) {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    samples[i] = (state / 0x100000000 * 2 - 1) * (1 - i / samples.length) ** decay;
+  }
+  return buffer;
+}
+
+function dizi(context, out, breathNoise, { midi, beats, at, phraseEnd }, first, beforeGrace = false) {
+  const frequency = hz(midi);
+  const beatEnd = at + beats * secondsPerBeat - (beforeGrace ? .166 : 0);
+  const breath = phraseEnd ? (midi === 62 ? .27 : .24) : 0;
+  const fadeStart = phraseEnd ? beatEnd - breath - .13 : beatEnd + .035;
+  const fadeEnd = phraseEnd ? beatEnd - breath : beatEnd + .075;
+  const gain = context.createGain();
+  gain.gain.setValueAtTime(0, at);
+  gain.gain.linearRampToValueAtTime(.19, at + .065);
+  gain.gain.setValueAtTime(.177, fadeStart);
+  gain.gain.linearRampToValueAtTime(0, fadeEnd);
+  gain.connect(out);
+  let vibrato;
+  let depth;
+  if (beats >= 1) {
+    vibrato = context.createOscillator();
+    vibrato.frequency.value = 5;
+    depth = context.createGain();
+    depth.gain.setValueAtTime(0, at + .3);
+    depth.gain.linearRampToValueAtTime(10.36, at + .52);
+    vibrato.connect(depth);
+    vibrato.start(at + .3);
+    vibrato.stop(fadeEnd);
+  }
+  for (const [harmonic, amount] of [[1,.76],[2,.195],[3,.096],[4,.027]]) {
+    const oscillator = context.createOscillator();
+    const mix = context.createGain();
+    oscillator.frequency.value = frequency * harmonic;
+    mix.gain.value = amount;
+    if (depth) depth.connect(oscillator.detune);
+    oscillator.connect(mix).connect(gain);
+    oscillator.start(at);
+    oscillator.stop(fadeEnd + .005);
+  }
+  const air = context.createBufferSource();
+  const color = context.createBiquadFilter();
+  const level = context.createGain();
+  air.buffer = breathNoise;
+  air.loop = true;
+  color.type = 'bandpass';
+  color.frequency.value = frequency * 1.95;
+  color.Q.value = 1.08;
+  level.gain.value = first ? .12 : .085;
+  air.connect(color).connect(level).connect(gain);
+  air.start(at, (midi * .063) % breathNoise.duration);
+  air.stop(fadeEnd);
+}
+
+function yangqin(context, out, tick, at, note, weight) {
+  const fundamental = hz(note);
+  const body = context.createGain();
+  body.gain.setValueAtTime(.0001, at);
+  body.gain.exponentialRampToValueAtTime(.075 * weight, at + .007);
+  body.gain.exponentialRampToValueAtTime(.0001, at + .44);
+  body.connect(out);
+  for (const [harmonic, level] of [[1,.65],[2,.20],[3,.089],[4.2,.042]]) {
+    const partial = context.createOscillator();
+    const gain = context.createGain();
+    partial.frequency.value = fundamental * harmonic;
+    gain.gain.setValueAtTime(level, at);
+    gain.gain.exponentialRampToValueAtTime(.001, at + .37 / Math.sqrt(harmonic));
+    partial.connect(gain).connect(body);
+    partial.start(at);
+    partial.stop(at + .45);
+  }
+  const strike = context.createBufferSource();
+  const tickLevel = context.createGain();
+  strike.buffer = tick;
+  tickLevel.gain.value = .086;
+  strike.connect(tickLevel).connect(body);
+  strike.start(at);
+}
+
+function tonePad(context, destination, at, end, tones) {
+  for (const [i, note] of tones.entries()) {
+    const oscillator = context.createOscillator();
+    const level = context.createGain();
+    oscillator.type = i ? 'sine' : 'triangle';
+    oscillator.frequency.setValueAtTime(hz(note - (i ? 1 : 2)), at);
+    oscillator.frequency.exponentialRampToValueAtTime(hz(note), at + .3);
+    level.gain.setValueAtTime(0, at);
+    level.gain.linearRampToValueAtTime(i ? .027 : .032, at + Math.min(1.8, end - at - .2));
+    level.gain.setValueAtTime(i ? .027 : .032, Math.max(at + 1.8, end - 1.75));
+    level.gain.linearRampToValueAtTime(0, end);
+    oscillator.connect(level).connect(destination);
+    oscillator.start(at);
+    oscillator.stop(end + .005);
+  }
+}
+
+function strike(context, destination, at, partials, duration, value) {
+  for (const [frequency, gain, decay] of partials) {
+    const oscillator = context.createOscillator();
+    const envelope = context.createGain();
+    oscillator.frequency.value = frequency;
+    envelope.gain.setValueAtTime(.0001, at);
+    envelope.gain.exponentialRampToValueAtTime(gain * value, at + .004);
+    envelope.gain.exponentialRampToValueAtTime(.0001, at + decay);
+    oscillator.connect(envelope).connect(destination);
+    oscillator.start(at);
+    oscillator.stop(at + duration);
+  }
+}
+
+function diziGrace(context, out, at, note) {
+  const frequency = hz(note);
+  strike(context, out, at, [[frequency,.8,.082],[frequency*2,.18,.08]], .09, .13);
+}
+
+function sweepStrings(context, destination, at, chord, weight) {
+  for (const [index, note] of chord.entries()) {
+    const frequency = hz(note);
+    strike(context, destination, at + index * .016,
+      [[frequency,.68,.24],[frequency*2,.22,.13],[frequency*3,.08,.10]], .25, weight);
+  }
+}
+
+function percuss(context, destination, at, kind) {
+  if (kind === 'drum') {
+    strike(context, destination, at, [[205,.8,.095],[438,.22,.065],[872,.08,.037]], .10, .052);
+    return;
+  }
+  strike(context, destination, at, [[491,.43,.35],[763,.34,.29],[1118,.22,.21],[1742,.12,.10]], .36, .070);
+}
+
+async function render(leadOnly = false) {
+  const sampleRate = 24000;
+  const context = new OfflineAudioContext(1, 30 * sampleRate, sampleRate);
+  const master = context.createGain();
+  master.gain.value = .70;
+  master.connect(context.destination);
+  const lead = context.createBiquadFilter();
+  lead.type = 'lowpass';
+  lead.frequency.value = 10800;
+  lead.Q.value = .2;
+  lead.connect(master);
+  const breath = noiseBuffer(context, 2.5, 31879, .02);
+  notePlan.forEach((note, i) => {
+    if (note.grace !== undefined) diziGrace(context, lead, note.at - .091, note.grace);
+    dizi(context, lead, breath, note, i === 0 || i === 16 || i === 31, notePlan[i + 1]?.grace !== undefined);
+  });
+
+  if (!leadOnly) {
+    const strings = context.createGain();
+    strings.gain.value = .57;
+    strings.connect(master);
+    const reverb = context.createConvolver();
+    reverb.buffer = noiseBuffer(context, 1.42, 91813, 3.05);
+    const wet = context.createGain();
+    wet.gain.value = .13;
+    strings.connect(reverb);
+    lead.connect(reverb);
+    reverb.connect(wet).connect(master);
+    const pad = context.createBiquadFilter();
+    pad.type = 'lowpass';
+    pad.frequency.value = 680;
+    pad.Q.value = .1;
+    pad.connect(master);
+    const chords = [
+      { wave:[50, 57, 62, 69, 74, 69, 62, 57], bass:[38,45] },
+      { wave:[59, 66, 69, 74, 78, 74, 69, 66], bass:[35,42] },
+      { wave:[55, 62, 67, 71, 74, 69, 71, 62], bass:[43,50] },
+      { wave:[57, 64, 69, 71, 76, 71, 69, 64], bass:[45,52] },
+    ];
+    const pulses = [0, .5, .75];
+    const pulseWeights = [.83, .62, .51];
+    const tick = noiseBuffer(context, .008, 77163, 1.7);
+    for (let i = 0; i < previewBars; i++) {
+      const barAt = start + i * 4 * secondsPerBeat;
+      const chord = chords[Math.floor(i / 2) % chords.length];
+      if (i % 2 === 0) tonePad(context, pad, barAt, Math.min(29.89, barAt + 8 * secondsPerBeat + 1.3), chord.bass);
+      for (let beat = 0; beat < 4; beat++) {
+        const waveBase = beat * 2;
+        for (const [pulse, offset] of pulses.entries()) {
+          const pitchIndex = (waveBase + (pulse === 2 ? 2 : pulse)) % chord.wave.length;
+          yangqin(context, strings, tick, barAt + (beat + offset) * secondsPerBeat, chord.wave[pitchIndex], pulseWeights[pulse]);
+        }
+      }
+      const sweepChord = [chord.bass[0] + 12, chord.bass[1] + 12, chord.wave[4] - 12];
+      sweepStrings(context, strings, barAt + .75 * secondsPerBeat, sweepChord, .041);
+      sweepStrings(context, strings, barAt + 2 * secondsPerBeat, [...sweepChord].reverse(), .033);
+      if (i % 2 === 0) percuss(context, master, barAt, 'drum');
+      if (i === 3 || i === 7) percuss(context, master, barAt + 3.5 * secondsPerBeat, 'gong');
+      if (i === 10) percuss(context, master, barAt + 2 * secondsPerBeat, 'gong');
+    }
+  }
+  master.gain.setValueAtTime(.70, 29.38);
+  master.gain.linearRampToValueAtTime(0, 29.99);
+  return context.startRendering();
+}
+
+function wav(buffer) {
+  const waveform = buffer.getChannelData(0);
+  const data = new DataView(new ArrayBuffer(44 + waveform.length * 2));
+  const writeText = (offset, text) => [...text].forEach((char, i) => data.setUint8(offset + i, char.charCodeAt(0)));
+  writeText(0, 'RIFF');
+  data.setUint32(4, data.byteLength - 8, true);
+  writeText(8, 'WAVEfmt ');
+  data.setUint32(16, 16, true);
+  data.setUint16(20, 1, true);
+  data.setUint16(22, 1, true);
+  data.setUint32(24, buffer.sampleRate, true);
+  data.setUint32(28, buffer.sampleRate * 2, true);
+  data.setUint16(32, 2, true);
+  data.setUint16(34, 16, true);
+  writeText(36, 'data');
+  data.setUint32(40, waveform.length * 2, true);
+  waveform.forEach((sample, i) => {
+    data.setInt16(44 + i * 2, Math.round(Math.min(1, Math.max(-1, sample)) * 32767), true);
+  });
+  return new Blob([data], { type: 'audio/wav' });
+}
+
+const play = document.querySelector('#play');
+const status = document.querySelector('#status');
+const audio = document.querySelector('#audio');
+const save = document.querySelector('#save');
+play.onclick = async () => {
+  play.disabled = true;
+  status.textContent = '正在合成试听…';
+  try {
+    audio.src = save.href = URL.createObjectURL(wav(await render()));
+    audio.hidden = save.hidden = false;
+    play.hidden = true;
+    status.textContent = '';
+    try { await audio.play(); } catch { status.textContent = '请点播放器中的播放按钮。'; }
+  } catch {
+    play.disabled = false;
+    status.textContent = '此浏览器未能合成音频。请用 Chrome 或 Edge 打开。';
+  }
+};
+</script>
+</body>
+</html>
