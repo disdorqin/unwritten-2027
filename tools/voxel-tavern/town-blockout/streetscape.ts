@@ -53,9 +53,10 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     return keepClear(x, n, radius) || roadCorridorKeepClear(x, n, radius);
   }
 
-  function reserve(x: number, n: number, radius: number, colliderRadius = 0) {
+  function reserve(x: number, n: number, radius: number, colliderRadius = 0, plazaEdge = false) {
     if (!Number.isFinite(x + n) || x < 2 + radius || x > layout.width - 2 - radius
-      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || protectedArea(x, n, radius)
+      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n)
+      || (plazaEdge ? roadCorridorKeepClear(x, n, radius) : protectedArea(x, n, radius))
       || grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 4
       || footprints.some(other => Math.hypot(x - other.x, n - other.n) < radius + other.radius)) return false;
     footprints.push({ x, n, radius });
@@ -167,8 +168,8 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     }
   }
 
-  function snowman(x: number, n: number, direction: number) {
-    if (!reserve(x, n, 1.25, .7)) return;
+  function snowman(x: number, n: number, direction: number, plazaEdge = false) {
+    if (!reserve(x, n, 1.25, .7, plazaEdge)) return;
     const y = grid.heightAt(x, n);
     for (const [offset, size] of [[.59, 1.3], [1.35, .98], [2.0, .73]]) {
       part('globe', x, y + offset, n, [size, size, size], snow);
@@ -187,8 +188,8 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     part('rock', x + fx * .34, y + 1.97, n + fn * .34, [.16, .14, .16], '#f10');
   }
 
-  function bench(x: number, n: number, direction: number) {
-    if (!reserve(x, n, 1.7)) return;
+  function bench(x: number, n: number, direction: number, plazaEdge = false) {
+    if (!reserve(x, n, 1.7, 0, plazaEdge)) return;
     const y = grid.heightAt(x, n);
     const point = (u: number, v = 0) => [x + u * Math.cos(direction) - v * Math.sin(direction), n + u * Math.sin(direction) + v * Math.cos(direction)] as const;
     for (const u of [-.88, .88]) {
@@ -306,13 +307,17 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     box(x, towerY + 7.08, towerNorth - 6.23, [.19, .20, 1.07], '#654339');
   }
 
+  const westPlazaEdge = layout.plaza.bounds[0] + 2.5;
+  bench(westPlazaEdge, 196, Math.PI / 2, true);
+  bench(westPlazaEdge, 188, Math.PI / 2, true);
+  snowman(westPlazaEdge, 192, Math.PI / 2, true);
   for (const [x, n, d] of [
-    [185, 198, Math.PI / 2], [185, 184, Math.PI / 2], [256, 185, Math.PI / 2], [256, 202, Math.PI / 2],
+    [256, 185, Math.PI / 2], [256, 202, Math.PI / 2],
     [205, 163, 0], [221, 163, 0], [180, 96, .25], [137, 92, .2], [348, 106, 0], [363, 108, .25],
     [120, 251, .53], [352, 241, 0], [301, 201, Math.PI / 2], [266, 142, .5], [266, 107, 0],
   ]) bench(x, n, d);
   for (const [x, n, d] of [
-    [188, 195, -.4], [254, 209, .3], [201, 166, 1], [230, 164, -.2], [178, 218, -.4],
+    [254, 209, .3], [201, 166, 1], [230, 164, -.2], [178, 218, -.4],
     [145, 218, .3], [272, 197, -.4], [114, 250, .2], [155, 121, .8], [177, 108, .9],
     [333, 127, -.4], [354, 95, .3], [367, 118, .3], [342, 247, -.2], [366, 297, .1],
   ]) snowman(x, n, d);

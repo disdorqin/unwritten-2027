@@ -8,14 +8,15 @@ import { roadCorridorKeepClear } from './road-clearance';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
-type Instance = { at: Position; scale: Position; tint?: string };
+type Instance = { at: Position; scale: Position; tint?: string; turn?: number };
 type Ground = ReturnType<typeof import('./terrain').createTerrainGrid>;
 
 function instances(group: Group, geometry: Geometry, material: Material, items: Instance[]) {
   const mesh = new InstancedMesh(geometry, material, items.length);
   const dummy = new Object3D();
-  items.forEach(({ at, scale, tint }, index) => {
+  items.forEach(({ at, scale, tint, turn = 0 }, index) => {
     dummy.position.set(...at);
+    dummy.rotation.y = turn;
     dummy.scale.set(...scale);
     dummy.updateMatrix();
     mesh.setMatrixAt(index, dummy.matrix);
@@ -83,11 +84,60 @@ export function addScenery(group: Group, grid: Ground) {
     blockers.push({ x, n: north, radius: .25 });
   };
 
-  for (let x = w + 1; x < e; x += 2) {
-    for (let north = s + 1; north < n; north += 1.5) {
-      const edge = x < w + 4 || x > e - 4 || north < s + 3 || north > n - 3;
-      const tint = edge ? '#6f7887' : ['#a08b82', '#a79997', '#a5958a', '#968782'][Math.floor(random() * 4)];
-      pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
+  const plazaHeight = layout.plaza.height;
+  function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
+    pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
+  }
+  for (const [west, east] of [[w, 219], [219, 229], [229, e]]) {
+    for (let x = west; x < east; x += 4) {
+      for (let north = s; north < n; north += 4) {
+        const width = Math.min(4, east - x), depth = Math.min(4, n - north);
+        const seam = x === west || north === s || north + depth === n;
+        const tint = west === 219
+          ? ['#a8988a', '#b3a295'][Math.floor(random() * 2)]
+          : seam ? '#6f7887' : ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'][Math.floor(random() * 4)];
+        pavers.push({ at: [x + width / 2, plazaHeight - .025, -north - depth / 2],
+          scale: [width - .035, .085, depth - .035], tint });
+        if (west !== 219 && (north - s) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
+      }
+    }
+  }
+  const centreEast = 224, centreNorth = 188;
+  for (const radius of [4, 7, 10]) {
+    const pieces = radius * 8;
+    for (let i = 0; i < pieces; i++) {
+      const angle = i * 2 * Math.PI / pieces;
+      inlay(centreEast + Math.cos(angle) * radius, centreNorth + Math.sin(angle) * radius,
+        2 * Math.PI * radius / pieces + .05, radius === 4 ? .18 : .12,
+        radius === 4 ? '#c6e2ed' : '#8fa7bb', angle + Math.PI / 2);
+    }
+  }
+  for (let i = 0; i < 6; i++) {
+    const angle = i * Math.PI / 3;
+    inlay(centreEast + Math.cos(angle) * 1.9, centreNorth + Math.sin(angle) * 1.9, 3.4, .18, '#d5e8f4', angle);
+    for (const side of [-1, 1]) {
+      const fork = angle + side * Math.PI / 3;
+      inlay(centreEast + Math.cos(angle) * 2.5 + Math.cos(fork) * .46,
+        centreNorth + Math.sin(angle) * 2.5 + Math.sin(fork) * .46,
+        1.03, .14, '#d5e8f4', fork);
+    }
+  }
+  // Keep the non-colliding edge lights in the existing emissive batch.
+  for (const north of [s + 2, n - 2]) {
+    lights.push({ at: [(w + e) / 2, plazaHeight + .023, -north], scale: [e - w - 4, .01, .095] });
+  }
+  for (const east of [w + 2, e - 2]) {
+    lights.push({ at: [east, plazaHeight + .023, -(s + n) / 2], scale: [.095, .01, n - s - 4] });
+  }
+  for (const east of [216.5, 231.5]) {
+    for (let north = 157; north <= 212; north += 11) {
+      lamp(east, plazaHeight, north);
+      for (const sign of [-1, 1]) {
+        pillars.push({ at: [east + sign * .063, plazaHeight + 1.5, -north + .112],
+          scale: [.09, .035, .032], tint: '#d2a56c', turn: sign * Math.PI / 4 });
+        pillars.push({ at: [east + sign * .089, plazaHeight + 1.56, -north + .114],
+          scale: [.032, .102, .033], tint: '#d2a56c' });
+      }
     }
   }
   for (const x of [w - 1.1, e + 1.1]) {

@@ -50,7 +50,15 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   assert.equal(extensions.housePortals.length, extensions.counts.buildings);
   assert.equal(cottagePortals.length, 2, 'the furnished cabin keeps its existing physical door');
   const portals = [...district.housePortals, ...extensions.housePortals, ...cottagePortals];
+  assert.equal(portals.length, 92);
   assert.equal(new Set(portals.map(({ id }) => id)).size, portals.length);
+  for (const [sourceEast, sourceNorth, east, north] of [
+    [158, 184, 152, 192], [179, 155, 138, 184], [200, 151, 150, 128], [246, 135, 140, 206],
+  ]) {
+    assert.ok(district.sites.some(site => site.x === east && site.n === north), `relocated plot ${east},${north} is built`);
+    const portal = district.housePortals.find(({ id }) => id === `old-town:${sourceEast}:${sourceNorth}`);
+    assert.ok(portal && Math.hypot(portal.x - east, portal.n - north) < 10, 'the original door ID still points to its relocated building');
+  }
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
   for (const { id, x, n, ground, exitYaw } of portals) {
@@ -64,5 +72,16 @@ test('every built decorative house has a unique dry, clear portal on its real fr
       return Math.hypot(dx, dz) < .27 && ground + .025 < max[1] && ground + 1.8 > min[1];
     }), `${id} capsule hits geometry`);
     assert.ok(Math.abs(Math.sin(exitYaw)) < 1e-8 || Math.abs(Math.cos(exitYaw)) < 1e-8, `${id} outward facing`);
+  }
+
+  for (const north of [188, 192, 196]) assert.ok(streetscape.occupied(163.5, north, 0), 'west plaza edge prop');
+  const clear = (x: number, n: number) => !scenery.blocked(x, n) && !district.blocked(x, n) &&
+    !streetscape.blocked(x, n) && !forest.blocked(x, n);
+  for (let x = 219; x <= 229; x += .5) for (let n = 152; n <= 212; n += .5) {
+    assert.ok(clear(x, n), `central axis blockage at ${x},${n}`);
+  }
+  const [spawnEast, spawnNorth] = layout.plaza.spawn;
+  for (let dx = -6; dx <= 6; dx += .5) for (let dn = -6; dn <= 6; dn += .5) {
+    if (Math.hypot(dx, dn) <= 6) assert.ok(clear(spawnEast + dx, spawnNorth + dn), 'plaza scenery enters the spawn circle');
   }
 });

@@ -14,6 +14,12 @@ type KeepClear = (x: number, n: number, radius: number) => boolean;
 type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
 type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
 const housingCellSize = 96;
+const plazaHouseRelocations = new Map<string, readonly [east: number, north: number]>([
+  ['158:184', [152, 192]],
+  ['179:155', [138, 184]],
+  ['200:151', [150, 128]],
+  ['246:135', [140, 206]],
+]);
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
   const dx = b[0] - a[0];
@@ -132,7 +138,9 @@ export function addDistrictHousing(
   }
 
   for (const { theme, styles, points } of neighborhoods) {
-    for (const [i, [x, n]] of points.entries()) {
+    for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
+      const address = `${sourceEast}:${sourceNorth}`;
+      const [x, n] = plazaHouseRelocations.get(address) ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
       const d = 8.1 + (i % 4) * 1.25;
@@ -141,7 +149,7 @@ export function addDistrictHousing(
         const distance = (heading: number) => lineDistance(x + 6 * Math.sin(heading), n - 6 * Math.cos(heading), nearest.start, nearest.end);
         return distance(value) < distance(best) ? value : best;
       });
-      const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(x) };
+      const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(sourceEast) };
       const footprint = footprints(site);
       if (conflictsWithRail(footprint)) continue;
       const samples = edges(site);
@@ -175,7 +183,7 @@ export function addDistrictHousing(
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
-      housePortals.push({ id: `old-town:${x}:${n}`, x: doorX, n: doorN,
+      housePortals.push({ id: `old-town:${address}`, x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);

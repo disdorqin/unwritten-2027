@@ -40,6 +40,7 @@ test('town blockout roads and entrances are continuous on foot', () => {
 test('the plaza stays flat and each crossing uses its bridge deck', () => {
   const transportIds = [...layout.roads, ...layout.bridges].map(({ id }) => id);
   assert.equal(new Set(transportIds).size, transportIds.length);
+  assert.deepEqual(layout.plaza.bounds, [161, 152, 251, 212]);
   const [west, south, east, north] = layout.plaza.bounds;
   for (let x = west; x <= east; x++) {
     for (let n = south; n <= north; n++) assert.equal(heightAt(x, n), layout.plaza.height);
@@ -52,7 +53,7 @@ test('the plaza stays flat and each crossing uses its bridge deck', () => {
   }
 });
 
-test('town expansion keeps original landmark origins and increases the playable grid', () => {
+test('town expansion changes only the stage landmark origin and keeps the full playable grid', () => {
   assert.deepEqual(worldBounds, { width: 640, depth: 512 });
   assert.deepEqual([gridWidth, gridDepth], [641, 513]);
   assert.deepEqual([layout.width, layout.depth], [448, 384]);
@@ -68,7 +69,7 @@ test('town expansion keeps original landmark origins and increases the playable 
     'market-stalls': [154, 105, 10],
     glasshouse: [372, 96, 11],
     lighthouse: [408, 78, 12],
-    stage: [238, 157, 12],
+    stage: [238, 140, 12],
   });
 });
 
