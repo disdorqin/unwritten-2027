@@ -1,7 +1,7 @@
 import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
 import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
-import { railHallGuide } from './town-rail-copy';
+import { railHallGuide, railOvernightCopy } from './town-rail-copy';
 
 type Point = readonly [number, number, number];
 
@@ -232,6 +232,13 @@ export function buildRailwayStation() {
     lamp(b, x, 3.48, 13.5);
   }
   const station = b.finish(true);
+  const notice = stationBuilder();
+  notice.sign(railOvernightCopy, 12.8, 2.64, -6.58, 8.3, .55);
+  const overnightBoard = notice.finish();
+  overnightBoard.name = 'rail-overnight-board';
+  overnightBoard.visible = false;
+  station.add(overnightBoard);
+  station.userData.railOvernightBoard = overnightBoard;
   station.userData.stops = railwayStationStops;
   return station;
 }
