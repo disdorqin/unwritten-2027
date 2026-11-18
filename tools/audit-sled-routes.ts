@@ -2,9 +2,10 @@ import {
   bridgeAt, canEnter, createTerrainGrid, gridStep, isWater, layout,
 } from './voxel-tavern/town-blockout/terrain.ts';
 import { createTownWater } from './voxel-tavern/town-blockout/town-water.ts';
+import { longHallSledRoute } from './voxel-tavern/town-blockout/sled-route.ts';
 
 type MapPoint = readonly [east: number, north: number];
-type Route = { label: string; points: readonly MapPoint[] };
+type Route = { label: string; points: readonly MapPoint[]; bridgeDeck?: boolean };
 type Probe = { point: MapPoint; distance: number; grade: number | undefined; rise: number | undefined; wet: boolean };
 
 const saddle: MapPoint = [405, 320];
@@ -13,7 +14,8 @@ const saddleExit: MapPoint = [430, 180];
 // Design §3 waypoints. The second route has no named waypoint between the peaks and its
 // finish; use the proposed takeoff lip (405, 320) as the provisional turn in this survey.
 const routes: readonly Route[] = [
-  { label: '长厅大下坡', points: [[378, 316], [337, 277], [251, 212]] },
+  { label: '长厅大下坡（旧线）', points: [[378, 316], [337, 277], [251, 212]] },
+  { label: '长厅大下坡（S1 v1.1）', points: longHallSledRoute, bridgeDeck: true },
   { label: '双峰连滑', points: [[418, 369], saddle, saddleExit] },
   { label: '林间缓降', points: [[91, 271], [150, 190]] },
 ];
@@ -25,25 +27,25 @@ const grid = createTerrainGrid();
 const water = createTownWater(grid);
 const round = (value: number) => Number(value.toFixed(3));
 
-function ground(point: MapPoint) {
-  return grid.groundHeightAt(...point);
+function ground(point: MapPoint, bridgeDeck = false) {
+  return bridgeDeck ? grid.heightAt(...point) : grid.groundHeightAt(...point);
 }
 
-function mark(point: MapPoint) {
+function mark(point: MapPoint, bridgeDeck = false) {
   const [east, north] = point;
   const plot = layout.plots.find(({ origin: [x, n], footprint: [width, depth] }) =>
     Math.abs(east - x) <= width / 2 && Math.abs(north - n) <= depth / 2);
   return {
-    east: round(east), north: round(north), ground: round(ground(point)),
+    east: round(east), north: round(north), ground: round(ground(point, bridgeDeck)),
     plot: plot?.id ?? null, bridge: bridgeAt(...point)?.id ?? null,
   };
 }
 
-function markProbe(probe: Probe) {
-  return { distance: round(probe.distance), ...mark(probe.point) };
+function markProbe(probe: Probe, bridgeDeck: boolean) {
+  return { distance: round(probe.distance), ...mark(probe.point, bridgeDeck) };
 }
 
-function peak(probes: readonly Probe[], measure: (point: Probe) => number | undefined, direction: 1 | -1) {
+function peak(probes: readonly Probe[], measure: (point: Probe) => number | undefined, direction: 1 | -1, bridgeDeck: boolean) {
   let best: { probe: Probe; value: number } | undefined;
   for (const probe of probes) {
     const value = measure(probe);
@@ -51,10 +53,10 @@ function peak(probes: readonly Probe[], measure: (point: Probe) => number | unde
       best = { probe, value };
     }
   }
-  return best ? { ...markProbe(best.probe), value: round(best.value) } : null;
+  return best ? { ...markProbe(best.probe, bridgeDeck), value: round(best.value) } : null;
 }
 
-function runs(probes: readonly Probe[], matches: (probe: Probe) => boolean) {
+function runs(probes: readonly Probe[], bridgeDeck: boolean, matches: (probe: Probe) => boolean) {
   const spans: { from: ReturnType<typeof markProbe>; to: ReturnType<typeof markProbe> }[] = [];
   let first: Probe | undefined;
   for (let index = 0; index < probes.length; index++) {
@@ -66,21 +68,21 @@ function runs(probes: readonly Probe[], matches: (probe: Probe) => boolean) {
     }
     if (first) {
       const last = hit ? probe : probes[index - 1];
-      spans.push({ from: markProbe(first), to: markProbe(last) });
+      spans.push({ from: markProbe(first, bridgeDeck), to: markProbe(last, bridgeDeck) });
       first = undefined;
     }
   }
   return spans;
 }
 
-function transect(start: MapPoint, end: MapPoint, offset: number) {
+function transect(start: MapPoint, end: MapPoint, offset: number, bridgeDeck: boolean) {
   const [de, dn] = [end[0] - start[0], end[1] - start[1]];
   const length = Math.hypot(de, dn);
   const pointAt = (distance: number): MapPoint => [
     start[0] + de * distance / length, start[1] + dn * distance / length,
   ];
   const riseAt = (distance: number, lookahead: number) => distance + lookahead <= length + 1e-9
-    ? ground(pointAt(Math.min(length, distance + lookahead))) - ground(pointAt(distance))
+    ? ground(pointAt(Math.min(length, distance + lookahead)), bridgeDeck) - ground(pointAt(distance), bridgeDeck)
     : undefined;
 
   const count = Math.ceil(length / probeStep);
@@ -102,36 +104,36 @@ function transect(start: MapPoint, end: MapPoint, offset: number) {
       grade: round(100 * riseAt(distance, span)! / span) };
   });
   const bands = {
-    water: runs(probes, probe => probe.wet),
-    outsideDryPassage: runs(probes, probe => !canEnter(...probe.point)),
-    downhillOver55Percent: runs(probes, probe => probe.grade !== undefined && probe.grade < -55),
-    uphillOver55Percent: runs(probes, probe => probe.grade !== undefined && probe.grade > 55),
-    lowSpeedClimbOver8Percent: runs(probes, probe => probe.grade !== undefined && probe.grade > 8),
-    curbRiseOver90Cm: runs(probes, probe => probe.rise !== undefined && probe.rise > .9),
-    curbRiseOver25Cm: runs(probes, probe => probe.rise !== undefined && probe.rise > .25),
-    launchCandidateOver43Cm: runs(probes, probe => probe.grade !== undefined && probe.grade < -100 * .43 / slopeLookahead),
+    water: runs(probes, bridgeDeck, probe => probe.wet),
+    outsideDryPassage: runs(probes, bridgeDeck, probe => !canEnter(...probe.point)),
+    downhillOver55Percent: runs(probes, bridgeDeck, probe => probe.grade !== undefined && probe.grade < -55),
+    uphillOver55Percent: runs(probes, bridgeDeck, probe => probe.grade !== undefined && probe.grade > 55),
+    lowSpeedClimbOver8Percent: runs(probes, bridgeDeck, probe => probe.grade !== undefined && probe.grade > 8),
+    curbRiseOver90Cm: runs(probes, bridgeDeck, probe => probe.rise !== undefined && probe.rise > .9),
+    curbRiseOver25Cm: runs(probes, bridgeDeck, probe => probe.rise !== undefined && probe.rise > .25),
+    launchCandidateOver43Cm: runs(probes, bridgeDeck, probe => probe.grade !== undefined && probe.grade < -100 * .43 / slopeLookahead),
   };
   return {
     length, probeCount: probes.length,
-    start: mark(start), end: mark(end),
-    drop: round(ground(start) - ground(end)),
+    start: mark(start, bridgeDeck), end: mark(end, bridgeDeck),
+    drop: round(ground(start, bridgeDeck) - ground(end, bridgeDeck)),
     descent10m: Math.min(...grades10m.map(probe => probe.grade)),
     grades10m,
-    descent: peak(probes, probe => probe.grade, -1),
-    climb: peak(probes, probe => probe.grade, 1),
-    curbRise: peak(probes, probe => probe.rise, 1),
+    descent: peak(probes, probe => probe.grade, -1, bridgeDeck),
+    climb: peak(probes, probe => probe.grade, 1, bridgeDeck),
+    curbRise: peak(probes, probe => probe.rise, 1, bridgeDeck),
     bands,
   };
 }
 
-function survey({ label, points }: Route) {
+function survey({ label, points, bridgeDeck = false }: Route) {
   let distance = 0;
   const legs = points.slice(1).map((end, index) => {
-    const profile = transect(points[index], end, distance);
+    const profile = transect(points[index], end, distance, bridgeDeck);
     distance += profile.length;
     return { ...profile, length: round(profile.length) };
   });
-  const drop = ground(points[0]) - ground(points[points.length - 1]);
+  const drop = ground(points[0], bridgeDeck) - ground(points[points.length - 1], bridgeDeck);
   return {
     label, length: round(distance), drop: round(drop), averageGrade: round(-100 * drop / distance),
     legs,
@@ -154,8 +156,16 @@ const worksSurvey = [
   { label: '纪念馆布局北界内外各 5m', points: [[memorialEast, memorialNorthEdge + 5], [memorialEast, memorialNorthEdge - 5]] },
   { label: '鞍部起跳唇沿出鞍方向 2.5m', points: [saddle, lipEnd] },
 ] as const;
-console.log(JSON.stringify({
+const s1 = routesSurvey.find(({ label }) => label.includes('S1 v1.1'))!;
+const summary = {
+  length: s1.length, drop: s1.drop, averageGrade: s1.averageGrade,
+  probeCount: s1.legs.reduce((sum, leg) => sum + leg.probeCount, 0),
+  steepestGrade: Math.min(...s1.legs.map(leg => leg.descent?.value ?? 0)),
+  highestRise: Math.max(...s1.legs.map(leg => leg.curbRise?.value ?? 0)),
+  water: s1.legs.flatMap(leg => leg.bands.water),
+  blocked: s1.legs.flatMap(leg => leg.bands.outsideDryPassage),
+};
+console.log(JSON.stringify(process.argv.includes('--s1-summary') ? summary : {
   method: { gridStep, probeStep, slopeLookahead, curbLookahead, sign: 'downhill negative' },
-  routes: routesSurvey,
-  works: worksSurvey.map(survey),
+  s1: summary, routes: routesSurvey, works: worksSurvey.map(survey),
 }, null, process.argv.includes('--compact') ? 0 : 2));
