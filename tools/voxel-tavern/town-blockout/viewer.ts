@@ -2270,9 +2270,7 @@ renderer.setAnimationLoop(now => {
       coldSurface = 'lamp';
     } else if (effectiveSnowIntensity >= 2 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
       coldSurface = 'dark-snow';
-      coldDepth = ceremonyState.phase === 'ordinary'
-        ? visualSnowCover
-        : snowCover.depthAt(shedEast, shedNorth, shedFeet, districts.sweptAt);
+      coldDepth = snowCover.depthAt(shedEast, shedNorth, shedFeet, districts.sweptAt);
     }
   }
   ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldSurface, hasFrostCeremonyRelief(ceremonyState));

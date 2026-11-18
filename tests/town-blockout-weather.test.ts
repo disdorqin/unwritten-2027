@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createTownSnowCover } from '../tools/voxel-tavern/town-blockout/town-snow-cover.ts';
 import { ceremonyStateAt } from '../tools/voxel-tavern/town-blockout/town-ceremony.ts';
 import { createFrostTracker } from '../tools/voxel-tavern/town-blockout/town-frost.ts';
 import {
@@ -59,12 +60,28 @@ test('the shared ordinary clock drives weather while the annual show keeps each 
   assert.equal(townSnowWeatherForFrame(easing).intensity, 3);
 });
 
-test('the active frost tracker reads the same strength and accumulated depth as outdoor weather', () => {
+test('ordinary weather thickens visual snow without changing movement or snowball servings', () => {
+  const gameplay = createTownSnowCover({
+    gridWidth: 1, gridDepth: 1, surfaces: new Uint8Array(1), heightAt: () => 12,
+  });
+  const heavy = townSnowWeatherAt(townWeatherEpoch, 'heavy');
+  const visual = advanceWeatherCover(0, 180, heavy);
+  gameplay.update(180, true);
+  assert.equal(visual, 1);
+  assert.equal(gameplay.movementScale(0, 0, 12), 1);
+  assert.equal(gameplay.depth().servings, 3);
+
+  gameplay.setIntensity(heavy.intensity);
+  gameplay.update(180, true);
+  assert.equal(gameplay.movementScale(0, 0, 12), .62);
+  assert.equal(gameplay.depth().servings, 5);
+});
+
+test('the frost tracker receives shared snow strength without overriding depth', () => {
   const hit = (tier: 'light' | 'medium' | 'heavy', exposed = true) => {
     const weather = townSnowWeatherAt(townWeatherEpoch, tier);
-    const cover = advanceWeatherCover(0, 120, weather);
     const tracker = createFrostTracker();
-    tracker.setExposure(weather.intensity, cover, exposed ? 'dark-snow' : 'none', false);
+    tracker.setExposure(weather.intensity, 0, exposed ? 'dark-snow' : 'none', false);
     tracker.update(30);
     return tracker.exposure();
   };
