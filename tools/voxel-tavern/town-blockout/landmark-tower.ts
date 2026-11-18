@@ -455,6 +455,52 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   gear(.4375, dialY + 2.5625, gearZ + .0625, .46875, 16);
   solid(-1.6875, dialY, -1.1875, 3.25, 2.875, .875);
 
+  // The dial study is tucked against the west rail, opposite the approach to the deck.
+  const writingY = dialY + .84375;
+  box('wood', -2.0625, dialY + .125, -.15625, .65625, .65625, 1.375);
+  box('oakEnd', -2.125, dialY + .75, -.21875, .84375, .09375, 1.5);
+  box('oak', -2.125, dialY + .0625, -.21875, .84375, .09375, 1.5);
+  for (const z of [-.15625, 1.09375]) {
+    box('oak', -1.46875, dialY, z, .125, .75, .125);
+    box('brass', -1.40625, dialY + .62, z + .03125, unit32, .0625, .0625);
+  }
+  box('oak', -1.40625, dialY + .395, -.0625, .046875, .21875, 1.1875);
+  box('brass', -1.359375, dialY + .478, .409375, unit32, .045, .21875);
+  solid(-2.125, dialY, -.21875, .84375, .84375, 1.5);
+
+  // Folded charts, stitched covers and a brass divider give the study a purpose.
+  box('wineTile', -2.0125, writingY, -.08, .5, .05625, .48);
+  box('brass', -1.5425, writingY + .035, -.08, .026, .026, .48);
+  box('ivory', -2, writingY + .039, -.066, .414, .045, .452);
+  box('teal', -1.96, writingY, .52, .585, .042, .59);
+  for (const z of [.55, .825]) {
+    box('ivory', -1.936, writingY + .04, z, .49, .039, .25);
+    for (let i = 0; i < 4; i++) box(i === 0 ? 'copperDark' : 'stone', -1.908 + i * .091,
+      writingY + .079, z + .035, .018, unit32 / 4, i === 3 ? .118 : .172);
+  }
+  box('brass', -2.04, writingY + .083, .44, .22, unit32, .04);
+  box('bronze', -2.035, writingY + .083, .48, .189, unit32, .035);
+
+  // A rubbing on the wall records the shape of the dial rather than inventing an exhibit label.
+  const rubbingY = dialY + 1.59375;
+  const rubbingZ = .5;
+  box('wood', -2.164, rubbingY - .5975, -.1675, .125, 1.195, 1.335);
+  box('copper', -2.035, rubbingY - .5625, -.125, .0625, 1.125, 1.25);
+  box('ivory', -1.972, rubbingY - .495, -.05625, .025, .99, 1.1125);
+  for (let mark = 0; mark < 12; mark++) {
+    const angle = Math.PI * mark / 6;
+    const size = mark % 3 === 0 ? .082 : .041;
+    box('teal', -1.947, rubbingY + Math.cos(angle) * .36 - size / 2,
+      rubbingZ + Math.sin(angle) * .36 - size / 2, .0125, size, size);
+  }
+  for (const [angle, length, tone] of [[-.54, .31, 'dark'], [1.64, .22, 'copperDark']] as const) {
+    for (let distance = .02; distance < length; distance += .045) {
+      box(tone, -1.947, rubbingY + Math.cos(angle) * distance - .028,
+        rubbingZ + Math.sin(angle) * distance - .028, .015, .056, .056);
+    }
+  }
+  box('brass', -1.931, rubbingY - .043, rubbingZ - .043, .023, .086, .086);
+
   function copperRing(y: number, radius: number, height: number, thickness: number, color: string, centerX = 0, centerZ = 0) {
     const slice = .125;
     const hole = Math.max(0, radius - thickness);
@@ -615,7 +661,25 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   addBatches(tower, shellParts);
   const detailInterior = new Group();
   detailInterior.name = 'Tower stairs and interiors';
-  addBatches(detailInterior, interiorParts);
+  // Bounds per height band let the camera frustum reject stairs and rooms on other levels.
+  const cutoffs = [hallCeiling, 26, 43, 59, 68, 79.8125].map(clocktowerHeight);
+  const sections = Array.from({ length: cutoffs.length + 1 }, () => new Map<string, Cuboid[]>());
+  for (const [kind, cubes] of interiorParts) {
+    for (const cube of cubes) {
+      const index = cutoffs.findIndex(cutoff => cube.at[1] < cutoff);
+      const section = sections[index < 0 ? cutoffs.length : index];
+      const batch = section.get(kind);
+      if (batch) batch.push(cube);
+      else section.set(kind, [cube]);
+    }
+  }
+  for (const [index, section] of sections.entries()) {
+    if (!section.size) continue;
+    const layer = new Group();
+    layer.name = `Tower interior layer ${index + 1}`;
+    addBatches(layer, section);
+    detailInterior.add(layer);
+  }
   tower.userData.bellMotion = attachBell(detailInterior);
   tower.add(detailInterior);
   tower.userData.detailInterior = detailInterior;

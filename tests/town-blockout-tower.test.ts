@@ -38,7 +38,10 @@ test('enlarged clocktower can be climbed and descended through all three activit
   for (let flight = 1; flight <= 31; flight++) {
     const corner = corners[flight % 4];
     ascent.push({ target: corner });
-    if (flight === 24) visit('dial', [.75, .9], [[3.21875, 1.625], [1.25, 1.625]], corner);
+    if (flight === 24) {
+      visit('dial', [.75, .9], [[3.21875, 1.625], [1.25, 1.625]], corner);
+      visit('dial', [-.75, .65], [[3.21875, 1.625], [1.25, 1.625], [.6, .65]], corner);
+    }
     if (flight === 27) visit('bell', [-.5, .5], [[-1.625, 3.21875], [-1.625, .5]], corner);
   }
   visit('lookout', [0, 1.3], [[-1.4375, 2.8125], [-1.4375, -2.59375], [1.03125, -2.59375], [1.03125, 1.3]]);
@@ -95,7 +98,7 @@ test('enlarged clocktower can be climbed and descended through all three activit
         picked.push(stop);
       }
     }
-    assert.deepEqual(picked, ['dial', 'bell', 'lookout', 'bell', 'dial']);
+    assert.deepEqual(picked, ['dial', 'dial', 'bell', 'lookout', 'bell', 'dial', 'dial']);
     assert.equal(ground, streetHeight);
   }
 });
