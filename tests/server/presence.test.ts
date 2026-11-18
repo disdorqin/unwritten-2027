@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
 import { createRehearsalClockEndpoint } from "../../src/presence/rehearsal-clock.js";
+import { ceremonyLandingAnnouncement } from "../../src/presence/ceremony-arrival.js";
 import {
   decodeSnowballClientEvent, decodeSnowballEvents, encodeSnowballHit, encodeSnowballRelay, encodeSnowballThrow,
   type SnowballRelayEvent,
@@ -36,6 +37,8 @@ type Control = {
   theme?: string;
   reason?: string;
   waitMs?: number;
+  slot?: number;
+  edge?: boolean;
   captureAt?: number;
   people?: PlazaPhotoPerson[];
 };
@@ -175,6 +178,39 @@ test("formal/default presence does not serve the rehearsal clock", { timeout: 50
   const { server } = await fixture(context);
   const response = await fetch("http://127.0.0.1:" + server.address().port + "/presence/rehearsal-clock");
   assert.equal(response.status, 404);
+});
+
+test("ceremony preassigns the shared midnight and parks late arrivals once at the edge", { timeout: 7000 }, async context => {
+  const startAt = Date.now() + 1600;
+  const { join } = await fixture(context, { ceremonyStartAt: startAt });
+  const players = await Promise.all([join("广场观众甲"), join("广场观众乙")]);
+  const assigned = await Promise.all(players.map(async client => {
+    const warning = await client.text.next(message => message.type === "event" && message.kind === "announce");
+    assert.equal(warning.message, ceremonyLandingAnnouncement);
+    return client.text.next(message => message.kind === "ceremony-arrival");
+  }));
+  assert.ok(Date.now() < startAt);
+  assert.deepEqual(assigned.map(({ startAt: at, edge }) => [at, edge]), [[startAt, false], [startAt, false]]);
+  assert.equal(new Set(assigned.map(({ slot }) => slot)).size, 2);
+
+  await delay(Math.max(0, startAt - Date.now() + 20));
+  const late = await join("晚到旅客");
+  assert.deepEqual(await late.text.next(message => message.kind === "ceremony-arrival"), {
+    type: "event", kind: "ceremony-arrival", startAt, slot: 0, edge: true,
+  });
+  await delay(35);
+  for (const client of [...players, late]) {
+    assert.equal(client.socket.readyState, WebSocket.OPEN);
+    assert.ok(!client.text.pending().some(message => message.kind === "ceremony-arrival"));
+  }
+  assert.ok(!late.text.pending().some(message => message.message === ceremonyLandingAnnouncement));
+});
+
+test("presence joins beyond the first ten minutes without sending a ceremony arrival", { timeout: 5000 }, async context => {
+  const { join } = await fixture(context, { ceremonyStartAt: Date.now() - 600_001 });
+  const client = await join("日常旅客");
+  await delay(35);
+  assert.ok(!client.text.pending().some(message => message.kind === "ceremony-arrival"));
 });
 
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };

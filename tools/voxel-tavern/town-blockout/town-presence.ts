@@ -5,6 +5,7 @@ import {
 } from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
+import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
@@ -72,6 +73,9 @@ export function createTownPresence(
   let clockRequest: number | undefined;
   let nextClockSample = Infinity;
   let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
+  let ceremonyArrival: CeremonyArrival | undefined;
+  let ceremonyArrivalTimer: number | undefined;
+  let onCeremonyArrival: ((landing: CeremonyArrival) => void) | undefined;
   let fireworksSupported = false;
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
@@ -158,6 +162,9 @@ export function createTownPresence(
     snowballEvents.length = 0;
     notices.length = 0;
     chatEvents.length = 0;
+    ceremonyArrival = undefined;
+    window.clearTimeout(ceremonyArrivalTimer);
+    ceremonyArrivalTimer = undefined;
     chat.setConnected(false);
     photoSupported = false;
     fireworksSupported = false;
@@ -177,6 +184,25 @@ export function createTownPresence(
         active.close();
       } catch { /* A connection failure leaves the local viewer untouched. */ }
     }
+  }
+
+  function scheduleCeremonyArrival() {
+    window.clearTimeout(ceremonyArrivalTimer);
+    if (!ceremonyArrival || !onCeremonyArrival) return;
+    const wait = ceremonyArrival.edge ? 0 : Math.max(0, ceremonyArrival.startAt - clock.now());
+    ceremonyArrivalTimer = window.setTimeout(() => {
+      ceremonyArrivalTimer = undefined;
+      const landing = ceremonyArrival;
+      if (!landing) return;
+      if (!landing.edge && clock.now() < landing.startAt) {
+        scheduleCeremonyArrival();
+        return;
+      }
+      ceremonyArrival = undefined;
+      remaining = 0;
+      onCeremonyArrival?.(landing);
+      sendPose(0);
+    }, wait);
   }
 
   function receive(data: unknown) {
@@ -215,6 +241,7 @@ export function createTownPresence(
         if (haveId && clockRequest !== undefined && message.sentAt === clockRequest && typeof message.epochMs === 'number') {
           clock.accept(message.epochMs, clockRequest);
           clockRequest = undefined;
+          if (ceremonyArrival) scheduleCeremonyArrival();
         }
         return;
       }
@@ -226,6 +253,14 @@ export function createTownPresence(
         return;
       }
       if (haveId && message.type === 'event') {
+        if (message.kind === 'ceremony-arrival') {
+          const arrival = readCeremonyArrival(message);
+          if (arrival) {
+            ceremonyArrival = arrival;
+            scheduleCeremonyArrival();
+          }
+          return;
+        }
         if (notices.length >= 8) return;
         if (message.kind === 'announce' && typeof message.message === 'string') {
           notices.push({ kind: 'announce', message: message.message });
@@ -398,8 +433,10 @@ export function createTownPresence(
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') scheduleConnection();
-    else cancelRetryTimer();
+    if (document.visibilityState === 'visible') {
+      scheduleConnection();
+      if (ceremonyArrival) scheduleCeremonyArrival();
+    } else cancelRetryTimer();
   });
   window.addEventListener('pagehide', () => {
     inTown = false;
@@ -409,6 +446,10 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    onCeremonyArrival(handler: (landing: CeremonyArrival) => void) {
+      onCeremonyArrival = handler;
+      if (ceremonyArrival) scheduleCeremonyArrival();
+    },
     photoPlayerId: () => joinedId ?? 1,
     onPlazaPhoto(handler: (notice: PlazaPhotoNotice) => void) { showPhoto = handler; },
     requestPlazaPhoto() {

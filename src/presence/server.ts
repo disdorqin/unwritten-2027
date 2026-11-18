@@ -15,6 +15,9 @@ import { createPresenceEgress } from './egress.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import {
+  ceremonyLandingAnnouncement, ceremonyLandingLeadMs, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
+} from './ceremony-arrival.js';
+import {
   inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
   type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from './plaza-photo.js';
@@ -29,6 +32,7 @@ type Options = {
   now?: () => number;
   testFireworks?: boolean;
   requestListener?: RequestListener;
+  ceremonyStartAt?: number;
 };
 
 type Peer = {
@@ -53,6 +57,9 @@ type Peer = {
   nextFireworksRequest: number;
   nextPersonalFireworks: number;
   nextPhotoRequest: number;
+  joinedAt?: number;
+  ceremonyWarned?: boolean;
+  ceremonyArrival?: CeremonyArrival;
 };
 
 type TokenBucket = { tokens: number; at: number };
@@ -105,6 +112,10 @@ export async function createPresenceServer(options: Options = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
   const http = createServer(options.requestListener ?? ((_req, res) => { res.writeHead(404).end(); }));
   const peers = new Map<number, Peer>();
+  const ceremonyStartAt = options.ceremonyStartAt ?? townCeremonyMidnight;
+  const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
+  const ceremonyWaiting = new Set<Peer>();
+  const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
   let fireworksOccupiedUntil = 0;
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
   let photoId = 0;
@@ -131,6 +142,25 @@ export async function createPresenceServer(options: Options = {}) {
   function updateFireworks(time: number) {
     const event = fireworks?.update(online, time, Date.now(), () => randomBytes(4).readUInt32LE());
     if (event) broadcast(JSON.stringify(event));
+  }
+
+  function updateCeremony(time: number) {
+    if (time < ceremonyStartAt - ceremonyLandingLeadMs || time >= ceremonyEndAt || !ceremonyWaiting.size) return;
+    for (const peer of ceremonyWaiting) {
+      if (time < ceremonyStartAt && !peer.ceremonyWarned) {
+        if (!send(peer, ceremonyPreannouncement)) continue;
+        peer.ceremonyWarned = true;
+      }
+      if (!peer.ceremonyArrival) {
+        const edge = peer.joinedAt! >= ceremonyStartAt;
+        const occupied = new Set([...peers.values()].flatMap(other =>
+          other.ceremonyArrival?.edge === edge ? [other.ceremonyArrival.slot] : []));
+        let slot = 0;
+        while (occupied.has(slot)) slot++;
+        peer.ceremonyArrival = { type: 'event', kind: 'ceremony-arrival', startAt: ceremonyStartAt, slot, edge };
+      }
+      if (send(peer, JSON.stringify(peer.ceremonyArrival))) ceremonyWaiting.delete(peer);
+    }
   }
 
   function relevantPeers(peer: Peer, radius: number, limit: number, heightGate = false) {
@@ -217,6 +247,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    ceremonyWaiting.delete(peer);
     clearTimeout(peer.joinTimer);
     if (!peer.name) return;
     online--;
@@ -355,14 +386,18 @@ export async function createPresenceServer(options: Options = {}) {
     if (!name) { peer.socket.close(1008); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
+    const joinedAt = Date.now();
+    peer.joinedAt = joinedAt;
+    if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: Date.now(), tier: tierIndex, fireworks: true, plazaPhoto: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
     updateFireworks(now());
+    updateCeremony(joinedAt);
   }
 
   function receiveState(peer: Peer, bytes: Uint8Array) {
@@ -477,7 +512,9 @@ export async function createPresenceServer(options: Options = {}) {
   const tick = setInterval(() => {
     const time = now();
     updateFireworks(time);
-    if (photo) updatePhoto(Date.now());
+    const wallNow = Date.now();
+    updateCeremony(wallNow);
+    if (photo) updatePhoto(wallNow);
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;
     let nextTier = 0;
