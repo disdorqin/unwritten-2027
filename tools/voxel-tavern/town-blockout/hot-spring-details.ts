@@ -1,7 +1,10 @@
 import type { Box } from './landmark-kit';
 import { hotSpringPools } from './hot-spring-soak';
 
-type DecorPaint = 'snow' | 'slate' | 'granite' | 'lightStone' | 'timber' | 'pine' | 'frame' | 'water';
+type DecorPaint = 'snow' | 'slate' | 'granite' | 'lightStone' | 'timber' | 'pine' | 'frame' | 'water' | 'trim' | 'glass';
+
+export const hotSpringTeaStand = [16.4, .18, -3.74] as const;
+export const hotSpringPhotoStand = [19.5, 0, -12.3] as const;
 
 type HotSpringDecorBuilder = {
   box(x: number, y: number, z: number, w: number, h: number, d: number,
@@ -41,19 +44,63 @@ export function addHotSpringDetails({ box, solid, colliders }: HotSpringDecorBui
   bucket(-5.52, 8.42, .25, .36, .46, false);
   bucket(-13.64, 11.82, .25, .31, .39, true);
 
-  for (const { x, z, depth } of hotSpringPools) {
+  for (const { x, z, depth, width } of hotSpringPools) {
     const front = z + depth / 2;
-    bucket(x + 2.38, front, .945, .16, .26, true);
+    const alongRim = (offset: number) => x + (width < 6 ? 1 + .27 * offset : offset);
+    bucket(alongRim(2.38), front, .945, .16, .26, true);
     // Ladle and folded linen rest on the rim, beside the stair opening.
-    box(x + 2.42, 1.223, front - .04, .15, .05, .135, 'pine', 0, -.19);
-    box(x + 2.61, 1.22, front - .09, .32, .033, .048, 'timber', 0, -.30);
-    box(x + 1.61, .966, front, .35, .038, .24, 'snow');
-    box(x + 1.59, 1.007, front - .025, .31, .043, .21, 'snow');
-    box(x + 1.60, 1.013, front + .08, .305, .012, .022, 'lightStone');
+    box(alongRim(2.42), 1.223, front - .04, .15, .05, .135, 'pine', 0, -.19);
+    box(alongRim(2.61), 1.22, front - .09, .32, .033, .048, 'timber', 0, -.30);
+    box(alongRim(1.61), .966, front, .35, .038, .24, 'snow');
+    box(alongRim(1.59), 1.007, front - .025, .31, .043, .21, 'snow');
+    box(alongRim(1.60), 1.013, front + .08, .305, .012, .022, 'lightStone');
     for (const offset of [-.115, .115]) {
-      const at = x + 2.10 + offset;
+      const at = alongRim(2.10) + offset;
       box(at, .208, front + .56, .155, .045, .26, 'frame', 0, -.18);
       box(at - .012, .251, front + .60, .159, .058, .11, 'pine', 0, -.18);
     }
   }
+
+  // The rinse corner sits beside the rock-pool entrance, away from all four tread centerlines.
+  bucket(-10.5, -6.72, .18, .23, .38, true);
+  bucket(-9.74, -6.68, .18, .20, .33, false);
+  for (const dx of [-.21, .21]) solid(-9.03 + dx, -6.71, .12, .22, .32, 'timber', .18);
+  solid(-9.03, -6.71, .59, .10, .41, 'pine', .40);
+  box(-9.05, .55, -6.77, .40, .03, .04, 'frame');
+  box(-8.88, .55, -6.77, .14, .037, .13, 'pine');
+
+  for (const z of [8.5, 10.8]) {
+    solid(20.65, z, .10, 2.0, 1.45, 'timber', .26);
+    for (const side of [-1, 1]) {
+      const wallZ = z + side * .70;
+      solid(19.91, wallZ, 1.59, 2.0, .09, 'timber', .26);
+      for (const x of [19.21, 19.57, 19.93, 20.29, 20.65]) {
+        box(x, 1.30, wallZ + .05, .046, 1.99, .025, 'pine');
+      }
+    }
+    box(20.54, 1.66, z, .14, .12, .66, 'frame');
+    for (const dz of [-.21, 0, .21]) box(20.44, 1.69, z + dz, .12, .067, .05, 'trim');
+    box(20.46, .73, z, .30, .12, .65, 'pine');
+    box(20.45, .82, z, .27, .053, .35, 'snow');
+  }
+
+  for (const z of [6.56, 7.24]) solid(20.36, z, .20, 1.62, .09, 'frame', .26);
+  for (const [i, height] of [.79, 1.14, 1.48].entries()) {
+    box(20.28, height, 6.90, .08, .06, .76, 'timber');
+    box(20.21, height - .15, 6.88, .038, .30, .39, i % 2 ? 'pine' : 'snow');
+  }
+  box(20.78, 1.67, 6.17, .14, 1.18, .76, 'timber');
+  box(20.69, 1.67, 6.17, .042, 1.08, .66, 'glass');
+
+  solid(16.4, -4.8, 1.21, .60, .57, 'slate', .18);
+  box(16.4, .84, -4.8, 1.50, .13, .81, 'lightStone');
+  box(16.21, 1.06, -4.89, .32, .27, .26, 'slate');
+  box(16.02, 1.06, -4.89, .19, .068, .076, 'slate', .16);
+  box(16.21, 1.22, -4.89, .28, .07, .22, 'trim');
+  for (const x of [16.07, 16.38, 16.69]) {
+    box(x, .98, -4.55, .132, .14, .13, 'lightStone');
+    box(x, 1.055, -4.55, .086, .015, .082, 'water');
+  }
+  box(16.84, 1.023, -4.88, .37, .23, .24, 'pine');
+  box(16.84, 1.16, -4.88, .40, .06, .26, 'trim');
 }

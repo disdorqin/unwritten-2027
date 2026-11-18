@@ -65,6 +65,7 @@ import { createLakeSkateMotion } from './lake-skate-motion';
 import { createWishActivity } from './wish-activity';
 import { createRestActivity } from './town-rest-activity';
 import { createHotSpringSoak } from './hot-spring-soak';
+import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway, type TownRailStopId } from './town-railway';
@@ -631,7 +632,10 @@ tavernDrinkEffects.mountSettings(element('town-panel-controls'));
 const townBgm = createTownBgm();
 townBgm.mountControls(element('town-panel-controls'));
 let nextBgmRoomCheck = 0;
-const hotSpringSoak = createHotSpringSoak({ sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking);
+const hotSpringSoak = createHotSpringSoak(
+  { sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking,
+  { playerName: presence.playerName },
+);
 const lightsButton = element<HTMLButtonElement>('town-lights-button');
 function showLightCount({ lit, total }: { lit: number; total: number }) {
   lightsButton.textContent = `点亮小镇 ${lit}/${total}`;
@@ -647,10 +651,14 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
 }, () => !nightMode);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 let warmDrinkUntil = 0;
-const tavernActivity = createTavernActivity({ ...activityContext, announce: announceActivity }, tavernDrinkEffects, () => {
+let nextBathTeaAt = 0;
+function warmFromDrink() {
   warmDrinkUntil = performance.now() + 45_000;
   ceremonyFrost.setWarmth('hot-drink', true);
-});
+}
+const tavernActivity = createTavernActivity(
+  { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
+);
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const marketFair = createMarketFairActivity(
@@ -1225,6 +1233,18 @@ function registerLandmarkActivities(id: string, group: Group) {
     activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity, showLiveRailSchedule));
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group));
+    const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
+      const now = performance.now();
+      if (now < nextBathTeaAt) return;
+      nextBathTeaAt = now + 60_000;
+      warmFromDrink();
+      announceActivity('热茶和点心已备好 · 暖意入身');
+    });
+    tea.available = () => performance.now() >= nextBathTeaAt;
+    activitySpots.push(tea, localSpot(group, hotSpringPhotoStand, 1.2, '保存雪见温泉取景', () => {
+      activityContext.face(group.position.x + 12.08, -group.position.z + 8.85, group.position.y + .8);
+      photoFilename = 'UNWRITTEN-2027-hot-spring.png';
+    }));
     const seats = group.userData.seats as number[][];
     for (const [east, height, z] of seats) {
       activitySpots.push(localSpot(group, [east, .25, z - .85], 1.4, '在温泉馆就座', (x, n, ground) => {

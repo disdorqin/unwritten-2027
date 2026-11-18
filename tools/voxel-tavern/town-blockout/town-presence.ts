@@ -204,6 +204,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
 
   return {
     serverNow: clock.now,
+    playerName: () => label,
     riderSlot: () => (Math.max(1, ownId) - 1) % 12,
     onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
       playFireworks = handler;

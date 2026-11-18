@@ -69,6 +69,19 @@ label, output, #help, #load-status { font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .hot-spring-soak::after { animation: none; }
 }
+.hot-spring-progress {
+  position: fixed;
+  left: 50%;
+  bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px));
+  transform: translateX(-50%);
+  border: 1px solid #bc9671;
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: #142035ee;
+  color: #ffebcb;
+  font-size: 13px;
+  pointer-events: none;
+}
 
 #town-activity-content { display: grid; gap: 10px; min-width: 0; }
 #town-activity-content[hidden] { display: none; }

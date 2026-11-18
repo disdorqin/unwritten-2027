@@ -71,16 +71,18 @@ export function buildHotSpring(): Group {
     }
   }
 
-  function masonry(x: number, z: number, w: number, d: number, top: number) {
+  function masonry(x: number, z: number, w: number, d: number, top: number, rough = false) {
     solid(x, z, w, top, d, 'granite');
     const horizontal = w > d;
     const length = horizontal ? w : d;
     for (let row = 0; row * .32 + .16 < top - .05; row++) {
       for (let cursor = -length / 2 + .15 + (row % 2) * .37; cursor + .66 <= length / 2; cursor += .75) {
-        const tone = (Math.round(cursor * 2) + row) % 4 === 0 ? 'lightStone' : 'slate';
+        const pattern = rough ? Math.floor(cursor * 19 + row * 7 + x * 13 + z * 9) : Math.round(cursor * 2) + row;
+        const tone = Math.abs(pattern) % (rough ? 2 : 4) === 0 ? 'lightStone' : 'slate';
         const y = .16 + row * .32;
-        if (horizontal) box(x + cursor + .33, y, z, .66, .24, d + .03, tone);
-        else box(x, y, z + cursor + .33, w + .03, .24, .66, tone);
+        const stoneLip = rough ? .06 : .03;
+        if (horizontal) box(x + cursor + .33, y, z, .66, .24, d + stoneLip, tone);
+        else box(x, y, z + cursor + .33, w + stoneLip, .24, .66, tone);
       }
     }
   }
@@ -128,6 +130,8 @@ export function buildHotSpring(): Group {
   paving(9.9, 2.62, 3.4, 3.6);
   paving(-1, -8.15, 8.6, 9.4);
   paving(12.05, -7.6, 11.9, 9.45);
+  // Stop at the existing west walkway edge; together they form one deck without overlapping stone tiles.
+  paving(-15, -6.65, 9.9, 7.5);
 
   for (const z of [-2.45, 2.45]) {
     masonry(-22.05, z, .85, .79, 3.08);
@@ -139,14 +143,14 @@ export function buildHotSpring(): Group {
   box(-22.05, 3.49, 0, .68, .12, 6.3, 'snow');
   box(-22.36, 3.02, 0, .11, .49, 2.22, 'slate');
 
-  planter(-16.7, -4.6, 7.2, 2.35, 4);
+  planter(-16.7, -3.4, 7.2, 2.35, 4);
   planter(-16.7, 5.55, 8.9, 2.45, 4);
   planter(-10.5, -13.64, 8.6, 2.1, 4);
   planter(15.8, -13.56, 11.7, 1.85, 5);
   planter(21.95, 4.5, 2.2, 4.15, 1);
   for (const x of [-19.6, -13.2, -4.8, 1.3, 4.7, 15.05]) bollard(x, 2.57);
 
-  function bath(x: number, z: number, width: number, depth: number, water: 'water' | 'deepWater') {
+  function bath({ x, z, width, depth, water, rough }: (typeof hotSpringPools)[number]) {
     const edge = .42;
     const gap = 2.08;
     const wing = (width - gap) / 2;
@@ -164,7 +168,7 @@ export function buildHotSpring(): Group {
       [x - sideX, front, wing, edge],
       [x + sideX, front, wing, edge],
     ]) {
-      masonry(atX, atZ, w, d, .86);
+      masonry(atX, atZ, w, d, .86, rough);
       box(atX, .9, atZ, w + .10, .09, d + .10, 'lightStone');
     }
     floor(x, hotSpringOuterStep, front + .71, 1.9, .8, .14, 'granite');
@@ -173,16 +177,67 @@ export function buildHotSpring(): Group {
       solid(x + offset, front + .78, .12, .82, .12, 'frame', .18);
       box(x + offset, 1.0, front + .36, .12, .10, .92, 'trim');
     }
-    for (let streak = 0; streak < 6; streak++) {
+    const streaks = rough ? 3 : 6;
+    for (let streak = 0; streak < streaks; streak++) {
       const wave = (streak * 19 % 11) / 11 - .5;
-      box(x + width * wave * .57, .538, z + (streak - 2.5) * depth / 8, 1.02 + streak % 3 * .4, .013, .084, 'ice');
+      const waterline = z + (streak - (streaks - 1) / 2) * depth / (streaks + 2);
+      box(x + width * wave * .57, .538, waterline, 1.02 + streak % 3 * .4, .013, .084, 'ice');
     }
   }
 
-  for (const { x, z, width, depth, water } of hotSpringPools) bath(x, z, width, depth, water);
+  for (const pool of hotSpringPools) bath(pool);
   for (const x of [-4.4, 3.1, 7.9, 16.3]) bollard(x, -11.78);
   bench(4.62, -8.55);
-  bench(18.6, -9.4);
+  function stoneLight(x: number, z: number) {
+    solid(x, z, .42, .17, .42, 'granite', .16);
+    box(x, .56, z, .20, .46, .20, 'slate');
+    box(x, .82, z, .40, .11, .40, 'lightStone');
+    box(x, 1.03, z, .27, .31, .27, 'lantern');
+    for (const dx of [-.16, .16]) for (const dz of [-.16, .16]) {
+      box(x + dx, 1.02, z + dz, .05, .36, .05, 'slate');
+    }
+    box(x, 1.24, z, .52, .12, .52, 'lightStone');
+    box(x, 1.31, z, .45, .06, .45, 'snow');
+  }
+
+  function bambooFence(x: number, z: number, length: number, turned = false) {
+    const width = turned ? .11 : length;
+    const depth = turned ? length : .11;
+    solid(x, z, width, .09, depth, 'timber', .38);
+    box(x, 1.07, z, width, .09, depth, 'timber');
+    colliders.push(bounds(x, 1.25, z, width, depth, 1.25));
+    for (let slot = .12; slot < length; slot += .24) {
+      const offset = slot - length / 2;
+      const height = 1.29 + Math.sin(slot) * .11;
+      box(x + (turned ? 0 : offset), .12 + height / 2, z + (turned ? offset : 0),
+        .06, height, .06, 'pine');
+    }
+  }
+  bambooFence(-1.5, -13.9, 37);
+  bambooFence(-18.4, -8.5, 5, true);
+  for (const [x, z] of [[-17.85, -11.76], [-4.65, -11], [12.2, -11.77], [17.42, -9.75], [20.9, -13.58]]) {
+    stoneLight(x, z);
+  }
+  for (const [x, z] of [[17.65, -6.3], [22.41, -6.11], [22.32, -10.85], [21.92, -12.55], [18.1, -12.32], [19.3, -13.58]]) {
+    bollard(x, z);
+  }
+  const stones = [
+    [-10.15, -3.15], [-10.36, -4], [-10.55, -4.83], [-10.96, -5.65], [-11.78, -5.90], [-12.62, -5.98],
+    [22.95, -6.2], [23.15, -7.05], [23.22, -7.9], [23.25, -8.75], [23.24, -9.6], [23.12, -10.45],
+  ];
+  for (const [index, [x, z]] of stones.entries()) {
+    const yaw = .15 * Math.sin(index * 2.14);
+    const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+    box(x, .175, z, .9, .06, .7, 'slate', 0, yaw);
+    floors.push(bounds(x, .205, z, .9 * c + .7 * s, .9 * s + .7 * c, .06));
+  }
+
+  function stoneSeat(x: number, z: number) {
+    for (const offset of [-.42, .42]) box(x + offset, .32, z, .20, .32, .47, 'slate');
+    solid(x, z, 1.32, .17, .58, 'lightStone', .47);
+  }
+  stoneSeat(17.9, -7.05);
+  stoneSeat(21.64, -4.5);
 
   // Lodge, with a clear north-facing doorway and an interior without collision across the aisle.
   floor(11.15, .26, 8.72, 20.3, 11.44, .26, 'timber');
@@ -375,7 +430,8 @@ function addBathSteam(group: Group) {
   }
   const texture = new DataTexture(texels, size, size);
   texture.needsUpdate = true;
-  const positions = new Float32Array(18 * 3);
+  const particlesPerPool = 10;
+  const positions = new Float32Array(hotSpringPools.length * particlesPerPool * 3);
   const geometry = new BufferGeometry();
   const buffer = new BufferAttribute(positions, 3).setUsage(DynamicDrawUsage);
   geometry.setAttribute('position', buffer);
@@ -391,13 +447,17 @@ function addBathSteam(group: Group) {
     steam.visible = distance < 50;
     if (!steam.visible) return;
     elapsed += dt;
-    for (let i = 0; i < 18; i++) {
-      const age = (elapsed * .27 + i * .61803) % 1;
-      const angle = i * 2.39996;
-      positions[i * 3] = (i < 9 ? -.65 : 12.08) + 2.42 * Math.cos(angle) + age * .6;
-      positions[i * 3 + 1] = .62 + age * 2.45;
-      positions[i * 3 + 2] = -9 + 1.35 * Math.sin(angle + age * .8);
-    }
+    hotSpringPools.forEach(({ x, z, width, depth }, pool) => {
+      const radiusX = width * .32, radiusZ = depth * .29;
+      for (let particle = 0; particle < particlesPerPool; particle++) {
+        const i = pool * particlesPerPool + particle;
+        const age = (elapsed * .27 + i * .61803) % 1;
+        const angle = i * 2.39996;
+        positions[i * 3] = x + radiusX * Math.cos(angle) + age * .4;
+        positions[i * 3 + 1] = .62 + age * 2.45;
+        positions[i * 3 + 2] = z + radiusZ * Math.sin(angle + age * .8);
+      }
+    });
     buffer.needsUpdate = true;
   };
 }
