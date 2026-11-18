@@ -4,6 +4,7 @@ import { BufferGeometry, Points, Scene } from 'three';
 import { createCeremonyFrost, createFrostTracker, sampleFrostStyle, wetColdMultiplier } from '../tools/voxel-tavern/town-blockout/town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires, fireWarmthRadius, nearCampfire } from '../tools/voxel-tavern/town-blockout/town-campfires';
 import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
+import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance';
 import { createTownSnowCover } from '../tools/voxel-tavern/town-blockout/town-snow-cover';
 
 test('river contact is twice exposed dry-snow pressure; ordinary light stops and melts exposure slowly', () => {
@@ -93,7 +94,11 @@ test('outdoor fire geometry is never created at a rejected site and shares a bou
   assert.equal(nearCampfire(accept, site.x + fireWarmthRadius, site.n, site.ground), true);
   assert.equal(nearCampfire(accept, site.x + fireWarmthRadius + .01, site.n, site.ground), false);
   assert.equal(nearCampfire(accept, site.x, site.n, site.ground + 1.5), false);
-  assert.equal(site.seats.length, 4);
+  assert.ok(site.seats.length >= 2 && site.seats.length <= 4);
+  for (const fire of accept) {
+    assert.equal(roadCorridorKeepClear(fire.x, fire.n, fire.style === 'stone' ? 1 : .81), false);
+    for (const seat of fire.seats) assert.equal(roadCorridorKeepClear(seat.x, seat.n, .61), false);
+  }
   assert.ok(campfirePieces(accept).length * 12 < 2200);
 
   const scene = new Scene();
@@ -107,4 +112,8 @@ test('outdoor fire geometry is never created at a rejected site and shares a bou
   campfires.updateFlames(.1, 0, 0, true);
   assert.equal(flames.visible, false);
   assert.equal(campfires.blocked?.(site.x, site.n, site.ground), true);
+  for (const seat of accept.flatMap(fire => fire.seats)) {
+    assert.equal(campfires.blocked?.(seat.x, seat.n, seat.ground), true);
+    assert.equal(campfires.blocked?.(seat.approach.x, seat.approach.n, seat.approach.ground), false);
+  }
 });

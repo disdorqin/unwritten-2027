@@ -17,6 +17,7 @@ import {
   addIcePalaceWings, icePalaceBanquetDrinkStand, icePalaceBanquetSeats, icePalaceDoorBounds, icePalaceInteriorAnchors,
 } from './ice-palace-expansion';
 import { mountIcePalaceForecourt } from './ice-palace-forecourt';
+import { mountCastleIceSlide } from './ice-palace-slide';
 
 const palette = {
   foundation: '#31546f',
@@ -578,6 +579,7 @@ export function buildIceCastle() {
   group.userData.palaceBanquetSeats = icePalaceBanquetSeats;
   group.userData.palaceBanquetDrinkStand = icePalaceBanquetDrinkStand;
   group.userData.palaceForecourt = mountIcePalaceForecourt(group);
+  mountCastleIceSlide(group);
   const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
   addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2, plaqueStyle);
   if (typeof document !== 'undefined') {

@@ -1,13 +1,15 @@
 import {
   BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshBasicMaterial, MeshLambertMaterial,
 } from 'three';
+import { bindLongHallRelayLights, longHallRelayStart } from './long-hall-relay';
 import type { TownPlot } from './landmark-kit';
 import { addTownWindow, type TownWindow } from './town-window';
 
 type Position = [number, number, number];
 type Bounds = { min: Position; max: Position };
 type Ramp = Bounds & { axis: 'z'; ascending: -1 };
-type Piece = { at: Position; size: Position; color: string; light: boolean };
+type RelayLight = number | 'fill';
+type Piece = { at: Position; size: Position; color: string; light: boolean; relay?: RelayLight };
 
 const palette = {
   stone: '#576478', ash: '#8391a2', lime: '#d1bf9e',
@@ -24,8 +26,9 @@ function structure() {
   const colliders: Bounds[] = [];
   const floors: Bounds[] = [];
   const ramps: Ramp[] = [];
-  const box = (color: string, x: number, y: number, z: number, w: number, h: number, d: number, light = false) => {
-    pieces.push({ at: [x, y, z], size: [w, h, d], color, light });
+  const box = (color: string, x: number, y: number, z: number, w: number, h: number, d: number, light = false,
+    relay?: RelayLight) => {
+    pieces.push({ at: [x, y, z], size: [w, h, d], color, light, relay });
   };
   const bounds = (x: number, y: number, z: number, w: number, h: number, d: number): Bounds => ({
     min: [x - w / 2, y - h / 2, z - d / 2],
@@ -40,11 +43,16 @@ function structure() {
       const subset = pieces.filter(piece => piece.light === light);
       const batch = new InstancedMesh(new BoxGeometry(1, 1, 1), light ? new MeshBasicMaterial() : new MeshLambertMaterial(), subset.length);
       const transform = new Matrix4();
+      const relaySlots: number[] = [];
+      const relayFill: number[] = [];
       subset.forEach((piece, i) => {
         transform.makeScale(...piece.size).setPosition(...piece.at);
         batch.setMatrixAt(i, transform);
         batch.setColorAt(i, new Color(piece.color));
+        if (piece.relay === 'fill') relayFill.push(i);
+        else if (piece.relay !== undefined) relaySlots[piece.relay] = i;
       });
+      if (relaySlots.length) group.userData.longHallRelayLights = bindLongHallRelayLights(batch, relaySlots, relayFill);
       batch.instanceMatrix.needsUpdate = true;
       group.add(batch);
     }
@@ -183,10 +191,10 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
     plane(palette.brass, 0, -height / 2 - .13, .29, width + .49, .095, .28);
   }
 
-  function lantern(x: number, y: number, z: number) {
+  function lantern(x: number, y: number, z: number, relay?: RelayLight) {
     box(palette.red, x, y + .41, z, .64, .13, .65);
     box(palette.red, x, y - .39, z, .61, .12, .64);
-    box(palette.bright, x, y, z, .45, .66, .45, true);
+    box(palette.bright, x, y, z, .45, .66, .45, true, relay);
     for (const dx of [-.24, .24]) for (const dz of [-.24, .24]) box(palette.red, x + dx, y, z + dz, .067, .76, .067);
     box(palette.brass, x, y + .54, z, .065, .26, .065);
     box(palette.red, x, y - .54, z, .1, .25, .1);
@@ -272,12 +280,13 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
   // gold seams and suspended lanterns anchor the new walkable interior.
   box(palette.runner, 0, deck + .018, centerZ + .46, doorW - .62, .036, shellD - 1.13);
   for (const x of [-1, 1]) box(palette.brass, x * (doorW - .71) / 2, deck + .04, centerZ + .46, .09, .035, shellD - 1.13);
+  let relayLight = 0;
   for (const z of [front - 2.8, centerZ, rear + 2.6]) {
     box(palette.dark, 0, ridge - .55, z, shellW - .5, .4, .4);
     for (const dir of [-1, 1]) {
       const x = dir * (doorW / 2 + 1.51);
       solid(trim, x, deck + wallH / 2, z, .45, wallH, .43);
-      lantern(x, deck + 3.32, z + .32);
+      lantern(x, deck + 3.32, z + .32, ceremonial ? relayLight++ : undefined);
     }
   }
   for (const dir of [-1, 1]) {
@@ -300,6 +309,12 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
     }
   }
   if (ceremonial) {
+    const [startX, startY, startZ] = longHallRelayStart;
+    box(palette.runner, startX, startY + .032, startZ, .98, .035, .84);
+    for (const side of [-1, 1]) {
+      box(palette.brass, startX + side * .48, startY + .054, startZ, .045, .014, .85);
+      box(palette.brass, startX, startY + .054, startZ + side * .4, .98, .014, .045);
+    }
     // Keep the runner axis open between the threshold and the rear table.
     for (let x = -halfShell + .32, i = 0; x < halfShell - .3; x += .62, i++) {
       box(i % 3 ? '#865540' : '#724637', x, deck + .008, centerZ, .6, .016, shellD - .64);
@@ -312,13 +327,13 @@ function buildHeritageHall(plot: TownPlot, ceremonial: boolean) {
       box(palette.runner, x, deck + .95, z, 2.65, .025, .75);
       for (const offset of [-.95, 0, .95]) {
         box(palette.brass, x + offset, deck + 1.04, z, .23, .17, .23);
-        box(palette.bright, x + offset, deck + 1.19, z, .12, .14, .12, true);
+        box(palette.bright, x + offset, deck + 1.19, z, .12, .14, .12, true, 'fill');
       }
       for (const z of [front - 1.26, rear + 3.1]) {
         const postX = side * (halfShell - .74);
         box(palette.cedar, postX, deck + 1.74, z, .16, .11, .65);
         box(palette.dark, postX, deck + 1.96, z + .24, .14, .53, .17);
-        lantern(postX, deck + 1.8, z - .32);
+        lantern(postX, deck + 1.8, z - .32, 'fill');
       }
     }
   }

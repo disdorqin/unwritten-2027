@@ -6,12 +6,26 @@ import type { TownActivity, TownActivityContext } from './town-activity';
 import { railPlatforms } from './town-rail-stops';
 import { iceFishingStation } from './ice-fishing-activity';
 import { memorialTimeboxAnnex } from './town-mail-sites';
+import { roadCorridorKeepClear } from './road-clearance';
 
 export const fireWarmthRadius = 3;
 export const maxCampfireSites = 8;
 export const campfirePartsPerSite = 44;
 const fireParticles = 48;
+const smokeParticles = 8;
 const forestAngle = .12;
+
+export type CampfireForestOptions = {
+  level(): 0 | 1 | 2;
+  onForestSeat?(): void;
+  villageSmoke?: { x: number; n: number; height: number; scale(): number };
+};
+
+const forestFlames = [
+  { count: 24, size: .78, rise: .62, glow: .6 },
+  { count: 36, size: 1, rise: 1, glow: .88 },
+  { count: fireParticles, size: 1.28, rise: 1.35, glow: 1.14 },
+] as const;
 type Surface = { x: number; n: number; ground: number };
 type Style = 'stone' | 'bucket' | 'brazier';
 type Seed = { id: string; label: string; style: Style; origin: readonly [number, number]; facing: number; ground?: number };
@@ -34,12 +48,17 @@ const regionalSites: readonly Seed[] = [
   { id: 'market', label: '年集坐食区火炉', style: 'brazier', origin: [163, 90], facing: Math.PI },
 ];
 const siteOffsets = [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [1.2, 1.2], [-1.2, 1.2], [1.2, -1.2], [-1.2, -1.2]] as const;
+const regionalOffsets = [...siteOffsets, ...[2, 3.5, 5, 6.5, 8, 10, 12, 14, 16, 18, 20, 22].flatMap(radius =>
+  Array.from({ length: 16 }, (_, index) => {
+    const angle = index * Math.PI / 8;
+    return [Math.sin(angle) * radius, Math.cos(angle) * radius] as const;
+  }))];
 
 export type CampfireSite = Surface & {
   id: string;
   label: string;
   style: Style;
-  seats: readonly (Surface & { yaw: number })[];
+  seats: readonly (Surface & { yaw: number; approach: Surface })[];
 };
 
 export function findRegionalCampfires(groundAt: CheckGround): CampfireSite[] {
@@ -47,9 +66,11 @@ export function findRegionalCampfires(groundAt: CheckGround): CampfireSite[] {
   for (const seed of regionalSites) {
     const spread = seed.style === 'stone' ? 2.15 : 1.65;
     const ring = seed.style === 'stone' ? [-1.13, -.40, .40, 1.13] : [-.97, 0, .97];
-    for (const [dx, dn] of siteOffsets) {
+    const offsets = seed.id === 'forest' || seed.id === 'lakeside' ? regionalOffsets : siteOffsets;
+    for (const [dx, dn] of offsets) {
       const x = seed.origin[0] + dx;
       const n = seed.origin[1] + dn;
+      if (roadCorridorKeepClear(x, n, seed.style === 'stone' ? 1 : .81)) continue;
       const feet = groundAt(x, n, seed.ground);
       if (feet === undefined) continue;
       const footprint = seed.style === 'stone' ? .66 : .51;
@@ -58,14 +79,20 @@ export function findRegionalCampfires(groundAt: CheckGround): CampfireSite[] {
         return support === undefined || Math.abs(support - feet) > .20;
       })) continue;
 
-      const seats: (Surface & { yaw: number })[] = [];
+      const seats: (Surface & { yaw: number; approach: Surface })[] = [];
       for (const turn of ring) {
         const angle = seed.facing + turn;
         const east = x + Math.sin(angle) * spread;
         const north = n + Math.cos(angle) * spread;
+        if (roadCorridorKeepClear(east, north, .61)) continue;
         const height = groundAt(east, north, seed.ground);
-        if (height !== undefined && Math.abs(height - feet) <= .5) {
-          seats.push({ x: east, n: north, ground: height, yaw: angle + Math.PI });
+        const approachX = x + Math.sin(angle) * (spread - .68);
+        const approachN = n + Math.cos(angle) * (spread - .68);
+        const approachGround = groundAt(approachX, approachN, seed.ground);
+        if (height !== undefined && approachGround !== undefined &&
+            Math.abs(height - feet) <= .35 && Math.abs(height - approachGround) <= .32) {
+          seats.push({ x: east, n: north, ground: height, yaw: angle + Math.PI,
+            approach: { x: approachX, n: approachN, ground: approachGround } });
         }
       }
       if (seats.length < 2) continue;
@@ -123,8 +150,10 @@ export function createTownCampfires(
   scene: Scene,
   context: Pick<TownActivityContext, 'sit'>,
   sites: readonly CampfireSite[],
+  forest?: CampfireForestOptions,
 ): TownActivity & { warmAt: (east: number, north: number, feet: number) => boolean; updateFlames: (dt: number, east: number, north: number, indoors: boolean) => void } {
-  const capacity = sites.length * (fireParticles + 1);
+  const villageSmoke = forest?.villageSmoke;
+  const capacity = sites.length * (fireParticles + 1) + (villageSmoke ? smokeParticles : 0);
   const positions = new Float32Array(capacity * 3);
   const styles = new Float32Array(capacity * 3);
   const position = new BufferAttribute(positions, 3).setUsage(DynamicDrawUsage);
@@ -150,7 +179,8 @@ export function createTownCampfires(
         vec2 p = gl_PointCoord - .5;
         float r = length(p);
         float alpha = (1. - smoothstep(.05, .50, r)) * vFireStyle.y;
-        vec3 color = mix(vec3(1., .14, .026), vec3(1., .80, .36), vFireStyle.z);
+        vec3 color = vFireStyle.z < 0. ? vec3(.57, .65, .74)
+          : mix(vec3(1., .14, .026), vec3(1., .80, .36), vFireStyle.z);
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -164,17 +194,25 @@ export function createTownCampfires(
 
   return {
     spots: sites.flatMap(site => site.seats.map(seat => ({
-      x: seat.x, n: seat.n, ground: seat.ground, range: 1.25,
+      ...seat.approach, range: .47,
       label: `在${site.label}旁坐下`,
-      run: () => context.sit({ x: seat.x, n: seat.n, eyeY: seat.ground + 1.22, yaw: seat.yaw }),
+      run() {
+        context.sit({ x: seat.x, n: seat.n, eyeY: seat.ground + 1.475, yaw: seat.yaw });
+        if (site.id === 'forest') forest?.onForestSeat?.();
+      },
     }))),
     blocked(east, north, feet) {
-      return sites.some(site => Math.abs(site.ground - feet) < .8 &&
-        (east - site.x) ** 2 + (north - site.n) ** 2 < (site.style === 'stone' ? 1.0 : .81) ** 2);
+      return sites.some(site => {
+        if (Math.abs(site.ground - feet) >= .95) return false;
+        const distanceSquared = (east - site.x) ** 2 + (north - site.n) ** 2;
+        return distanceSquared < (site.style === 'stone' ? 1 : .81) ** 2 ||
+          (distanceSquared < 2.76 ** 2 && site.seats.some(seat => feet < seat.ground + .5 &&
+            feet + 1.8 > seat.ground && (east - seat.x) ** 2 + (north - seat.n) ** 2 < .61 ** 2));
+      });
     },
     warmAt: (east, north, feet) => nearCampfire(sites, east, north, feet),
     updateFlames(dt, east, north, indoors) {
-      flames.visible = !indoors && sites.length > 0;
+      flames.visible = !indoors && (sites.length > 0 || villageSmoke !== undefined);
       if (!flames.visible) return;
       elapsed += dt;
       if (elapsed < next) return;
@@ -192,15 +230,26 @@ export function createTownCampfires(
       for (const [index, site] of sites.entries()) {
         const isStone = site.style === 'stone';
         const y = site.ground + (isStone ? .31 : .59);
-        emit(site.x, y + .07, -site.n, isStone ? 1.88 : 1.35, .31, .26);
+        const profile = site.id === 'forest' && forest ? forestFlames[forest.level()] : undefined;
+        const glow = profile?.glow ?? 1;
+        emit(site.x, y + .07, -site.n, (isStone ? 1.88 : 1.35) * glow, .31 * glow, .26);
         if ((site.x - east) ** 2 + (site.n - north) ** 2 > 40 ** 2) continue;
-        for (let i = 0; i < fireParticles; i++) {
+        for (let i = 0; i < (profile?.count ?? fireParticles); i++) {
           const life = (elapsed * (.57 + i % 8 * .068) + i * .618034 + index * .26) % 1;
           const theta = i * 2.39996 + elapsed * .22;
           const spread = (1 - life * .67) * (isStone ? .32 : .19) * (.62 + .38 * Math.sin(i * 1.718));
-          const rise = life * (isStone ? .95 : .70);
+          const rise = life * (isStone ? .95 : .70) * (profile?.rise ?? 1);
           emit(site.x + Math.cos(theta) * spread, y + rise, -site.n + Math.sin(theta) * spread,
-            .145 * (1 - life * .74), .82 * (1 - life), (1 - life) ** 2);
+            .145 * (1 - life * .74) * (profile?.size ?? 1), .82 * (1 - life), (1 - life) ** 2);
+        }
+      }
+      if (villageSmoke && (villageSmoke.x - east) ** 2 + (villageSmoke.n - north) ** 2 <= 40 ** 2) {
+        const scale = villageSmoke.scale();
+        const until = scale > 1 ? smokeParticles : smokeParticles / 2;
+        for (let i = 0; i < until; i++) {
+          const life = (elapsed * .27 + i / until) % 1;
+          emit(villageSmoke.x + Math.sin(i * 2.4 + elapsed) * .24 * life, villageSmoke.height + life * 2.2 * scale,
+            -villageSmoke.n + .37 * life, (.20 + life * .49) * scale, .20 * (1 - life), -1);
         }
       }
       geometry.setDrawRange(0, point);
