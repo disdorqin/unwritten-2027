@@ -237,19 +237,29 @@ export interface CeremonyDirector {
 
 export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHooks = {}): CeremonyDirector {
   let lastNow: number | undefined;
-  let lastSnow = Number.NaN;
+  let scheduledYear: number | undefined;
+  let schedule: CeremonyCue[] = [];
+  let lastSnow: number | undefined;
   let lastFrost: FrostLevel | undefined;
-  let lastDim = Number.NaN;
+  let lastDim: number | undefined;
   let current = ceremonyStateAt(clock.now());
 
   function update(): CeremonyState {
     const now = clock.now();
+    const year = ceremonyEveYear(now);
+    if (scheduledYear !== year) {
+      scheduledYear = year;
+      schedule = cycleCues(year).sort((a, b) => a.at - b.at);
+    }
     if (lastNow !== undefined && now > lastNow) {
-      for (const cue of ceremonyCuesBetween(lastNow, now)) hooks.onCue?.(cue);
+      for (const cue of schedule) {
+        if (cue.at > now) break;
+        if (cue.at > lastNow) hooks.onCue?.(cue);
+      }
     }
     lastNow = now;
     current = ceremonyStateAt(now);
-    if (Math.abs(current.snowIntensity - lastSnow) > .001) {
+    if (lastSnow === undefined || Math.abs(current.snowIntensity - lastSnow) > .001) {
       lastSnow = current.snowIntensity;
       hooks.onSnowIntensity?.(current.snowIntensity);
     }
@@ -257,7 +267,7 @@ export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHook
       lastFrost = current.frostBaseline;
       hooks.onFrostBaseline?.(current.frostBaseline);
     }
-    if (Math.abs(current.dimLevel - lastDim) > .001) {
+    if (lastDim === undefined || Math.abs(current.dimLevel - lastDim) > .001) {
       lastDim = current.dimLevel;
       hooks.onDim?.(current.dimLevel);
     }

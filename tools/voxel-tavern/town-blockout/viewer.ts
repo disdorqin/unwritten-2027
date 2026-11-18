@@ -24,6 +24,8 @@ import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival } from './festival';
+import { createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock } from './town-ceremony';
+import { createCeremonyFrost } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
@@ -628,6 +630,18 @@ const previewOptions = new URLSearchParams(location.search);
 const hitFeedback = createSnowballHitFeedback(
   element('snowball-frost'), previewOptions.get('hitFeedback') !== 'off', reduceSnowEffects,
 );
+const ceremonyOverlay = createCeremonyOverlay({
+  dim: element('ceremony-dim'),
+  countdown: element('ceremony-countdown'),
+  banner: element('ceremony-banner'),
+}, { reducedMotion: reduceSnowEffects });
+const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
+  enabled: previewOptions.get('ceremonyFrost') !== 'off',
+  reducedMotion: reduceSnowEffects,
+});
+const ceremony = createCeremonyDirector(createLocalCeremonyClock(), {
+  onCue: ceremonyOverlay.cue, onFrostBaseline: ceremonyFrost.setBaseline,
+});
 const tossOrigin = new Vector3();
 const tossDirection = new Vector3();
 const gatherSeconds = .8;
@@ -1525,6 +1539,10 @@ renderer.setAnimationLoop(now => {
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
+  ceremonyOverlay.apply(ceremony.update());
+  ceremonyFrost.setWarmth('interior', sheltered);
+  ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
+  ceremonyFrost.update(dt);
   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);

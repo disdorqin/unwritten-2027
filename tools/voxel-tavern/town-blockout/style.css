@@ -242,3 +242,52 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
   .touch-play #museum-map-button { top: auto; bottom: max(103px, calc(env(safe-area-inset-bottom) + 55px)); min-height: 42px; }
   #museum-card { padding: 18px; }
 }
+/* Ceremony DOM overlays share no WebGL batches. */
+#ceremony-dim {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: #050914; opacity: 0; transition: opacity .45s ease;
+}
+#ceremony-frost {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  contain: strict;
+}
+#ceremony-frost > div { position: absolute; inset: 0; pointer-events: none; }
+#ceremony-frost .frost-edges {
+  opacity: 0;
+  background: url('./snowball-impact-frost.png') repeat center / min(480px, 55vw) auto;
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 83%, #000 104%);
+}
+#ceremony-frost[data-level="2"] .frost-edges {
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 73%, #000 103%);
+}
+#ceremony-frost[data-level="3"] .frost-edges {
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 62%, #000 104%);
+}
+#ceremony-frost .frost-tint { background: #86bbec; opacity: 0; }
+#ceremony-frost .frost-breath:not([hidden]) {
+  inset: auto 25% -13% 25%; height: 38%;
+  background: radial-gradient(ellipse, #d7ebff68, transparent 66%);
+  animation: ceremony-breath 4s ease-out infinite;
+}
+@keyframes ceremony-breath {
+  0%, 53%, 100% { opacity: 0; transform: translateY(10%); }
+  14% { opacity: .56; }
+  53% { transform: translateY(-24%); }
+}
+#ceremony-countdown {
+  position: fixed; z-index: 4; top: 23%; left: 50%; translate: -50% 0;
+  color: #ffedbc; font-size: clamp(40px, 9vw, 110px); font-weight: 800;
+  text-shadow: 0 4px 22px #03091c; font-variant-numeric: tabular-nums; pointer-events: none;
+}
+#ceremony-countdown.final { font-size: clamp(64px, 16vw, 170px); }
+#ceremony-banner {
+  position: fixed; z-index: 4; top: 18%; left: 50%; translate: -50% 0;
+  color: #ffda8d; font-size: clamp(34px, 9vw, 100px); font-weight: 800;
+  text-shadow: 0 5px 22px #201329; white-space: nowrap; pointer-events: none;
+}
+#ceremony-banner.show { animation: ceremony-banner-in .4s ease-out both; }
+@keyframes ceremony-banner-in { from { opacity: 0; transform: scale(.94); } }
+@media (prefers-reduced-motion: reduce) {
+  #ceremony-dim, #ceremony-banner.show { animation: none; transition: none; }
+  #ceremony-frost .frost-edges { opacity: .25 !important; } #ceremony-frost .frost-breath { display: none !important; }
+}

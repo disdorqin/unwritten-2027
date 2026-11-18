@@ -110,9 +110,18 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   let enabled = options.enabled !== false;
   let lastOpacity = '';
   let lastLevel: FrostLevel | undefined;
+  let lastPersonal = Number.NaN;
+  let lastEnabled: boolean | undefined;
+  let lastReduced: boolean | undefined;
 
   function render() {
-    const style = lerpStyle(tracker.personal());
+    const personal = tracker.personal();
+    const reduced = options.reducedMotion?.matches === true;
+    if (personal === lastPersonal && enabled === lastEnabled && reduced === lastReduced) return;
+    lastPersonal = personal;
+    lastEnabled = enabled;
+    lastReduced = reduced;
+    const style = lerpStyle(personal);
     root.hidden = !enabled || (style.opacity <= 0 && style.tint <= 0);
     if (root.hidden) return;
     const opacity = String(Math.round(style.opacity * 100) / 100);
@@ -126,7 +135,7 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
       root.dataset.level = String(style.level);
     }
     if (breath) {
-      breath.hidden = !(style.breath && !options.reducedMotion?.matches);
+      breath.hidden = !(style.breath && !reduced);
     }
   }
 

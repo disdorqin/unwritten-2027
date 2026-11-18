@@ -216,6 +216,24 @@ test('director reports frost baseline changes through the hook', () => {
   assert.deepEqual(seen, [0, 1, 2, 3, 0]);
 });
 
+test('director initializes weather and dimming hooks before emitting changes', () => {
+  let now = at(31, 19, 0);
+  const snow: number[] = [];
+  const dim: number[] = [];
+  const director = createCeremonyDirector({ now: () => now }, {
+    onSnowIntensity: level => snow.push(level),
+    onDim: level => dim.push(level),
+  });
+  director.update();
+  director.update();
+  assert.deepEqual(snow, [1]);
+  assert.deepEqual(dim, [1]);
+  now = at(31, 23, 51);
+  director.update();
+  assert.deepEqual(snow, [1, 4]);
+  assert.deepEqual(dim, [1, .6]);
+});
+
 test('frost tracker: instant sync on first update, then 1 level per 20 s both ways', () => {
   const tracker = createFrostTracker();
   tracker.setBaseline(3);
