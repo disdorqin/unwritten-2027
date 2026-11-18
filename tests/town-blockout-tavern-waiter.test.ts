@@ -30,7 +30,7 @@ test('the waiter joins the existing NPC batch and can stand at both tavern ancho
   const mesh = scene.children[0] as InstancedMesh;
   assert.equal(scene.children.length, 1);
   assert.equal(mesh.name, 'town-npc-shared-skins');
-  assert.equal(mesh.count, 259);
+  assert.equal(mesh.count, 289);
   const waiter = npc.spots.find(spot => spot.label === '和田小勤聊天');
   assert.deepEqual([waiter?.x, waiter?.n, waiter?.ground], [...tavernWaiterHome, tavernWaiterFloor]);
   const plot = layout.plots.find(({ id }) => id === 'tavern')!;

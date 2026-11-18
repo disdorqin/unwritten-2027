@@ -7,7 +7,10 @@ import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcF
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 
-type ActorName = NpcName | typeof tavernWaiterName;
+const memorialClerkName = '纪守信';
+export const memorialClerkHome = [419.25, 334.1] as const;
+
+type ActorName = NpcName | typeof tavernWaiterName | typeof memorialClerkName;
 
 type Point = readonly [east: number, north: number];
 
@@ -33,6 +36,8 @@ const roles: ReadonlyArray<{
     palette: ['#d9a377', '#233147', '#36536b', '#b55a43', '#2e3748', '#e0b558', '#efd3a0', '#6e4939'] },
   { name: tavernWaiterName, job: '酒馆跑堂', home: tavernWaiterHome, stroll: tavernWaiterStroll, indoorFloor: tavernWaiterFloor,
     palette: ['#eeb587', '#39282b', '#426d62', '#ead3a4', '#614b3b', '#bd5944', '#f5d68b', '#75462f'] },
+  { name: memorialClerkName, job: '新区信箱管理员', home: memorialClerkHome, stroll: memorialClerkHome,
+    palette: ['#e0a988', '#514238', '#4d566d', '#dfd2b9', '#333544', '#923d38', '#daaf70', '#49375a'] },
 ];
 
 type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
@@ -58,6 +63,12 @@ const costumes: Readonly<Record<ActorName, readonly Part[]>> = {
     [[.34, .98, .29], [.47, .073, .31], 7],
     [[.28, 1.053, .291], [.126, .095, .129], 6],
     [[.45, 1.044, .29], [.115, .08, .108], 6],
+  ],
+  [memorialClerkName]: [
+    [[-.37, .96, .228], [.208, .31, .10], 7],
+    [[-.37, 1.105, .228], [.215, .04, .085], 3],
+    [[-.37, .97, .286], [.147, .14, .028], 6],
+    [[.128, 1.14, .226], [.089, .132, .04], 3],
   ],
   // Innkeeper: long cloth apron, a folded towel and a chunky tankard with a square handle.
   罗大江: [
@@ -159,7 +170,7 @@ export function createTownNpcActivity(
   heightAt: (east: number, north: number) => number,
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
   isDaytime?: () => boolean,
-  zodiacHints?: (name: NpcName) => readonly string[] | undefined,
+  zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
@@ -339,6 +350,10 @@ export function createTownNpcActivity(
       openWaiterConversation(panel, visitsBefore);
       return;
     }
+    if (name === memorialClerkName) {
+      openMemorialClerkConversation(panel, visitsBefore);
+      return;
+    }
     const dialogue = npcAuthoredDialogue[name];
     const stories = npcExpansion[name];
     const turns = talkTurns[index];
@@ -397,6 +412,35 @@ export function createTownNpcActivity(
       context.announce(npcFarewell(name, period));
     });
     panel.append(speech, selector, controls);
+  }
+
+  function openMemorialClerkConversation(panel: HTMLElement, visitsBefore: number) {
+    const { familiar, guides, newYear, questions, gossip } = npcAuthoredDialogue[memorialClerkName];
+    const speech = document.createElement('p');
+    speech.setAttribute('role', 'status');
+    const greeting = npcPeriod(new Date(), isDaytime?.()) === '跨年夜' ? newYear
+      : visitsBefore === 0 ? familiar.初见 : visitsBefore < 4 ? familiar.再访
+      : familiar.常客.filter(line => !line.includes('点灯接力'));
+    speech.textContent = greeting[visitsBefore % greeting.length];
+    const controls = document.createElement('div');
+    controls.className = 'town-mail-form';
+    function action(label: string, run: () => void) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.onclick = run;
+      button.textContent = label;
+      controls.append(button);
+    }
+    let guideIndex = 0;
+    const mailboxGuides = guides.slice(0, 3);
+    action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
+    action('聊聊镇民', () => { speech.textContent = gossip[0]; });
+    action('问镇长近况', () => { speech.textContent = questions.host[1].text; });
+    action('问你们怎么认识', () => { speech.textContent = questions.host[0].text; });
+    const clue = zodiacHints?.(memorialClerkName)?.[0];
+    if (clue) action('问生肖线索', () => { speech.textContent = clue; });
+    action('道别', () => { panel.closest('dialog')?.close(); });
+    panel.append(speech, controls);
   }
 
   function openWaiterConversation(panel: HTMLElement, visitsBefore: number) {
