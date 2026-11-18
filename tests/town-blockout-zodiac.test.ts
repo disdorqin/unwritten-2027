@@ -44,6 +44,17 @@ test('the central bridge provides no dry underdeck route and the Snake fallback 
   const { colliders } = readWalkGeometry(lighthouse);
   const [east, height, z] = lighthouse.localToWorld(new Vector3(...lighthouseSnakeSite.stand)).toArray();
   assert.equal(grid.heightAt(east, -z), height);
+  assert.deepEqual([east, -z, height], [402.05, 78, 12]);
+  const zodiac = createZodiacProgress(['snake']);
+  const collection = createTownZodiacSites(zodiac, () => {});
+  const pickup = collection.mount(lighthouse, lighthouseSnakeSite);
+  assert.equal(nearestTownActivity([pickup], east, -z, height), pickup);
+  collection.update(new Vector3(east, height + 1.62, z), true);
+  assert.equal(collection.mesh.count, 1);
+  pickup.run();
+  assert.equal(zodiac.rows().find(row => row.id === 'snake')?.location, '灯塔 · 西塔基');
+  assert.equal(nearestTownActivity([pickup], east, -z, height), undefined);
+
   const waypoints = [[408, 84.35], [401.9, 84.35], [401.9, -z], [east, -z]];
   for (let leg = 1; leg < waypoints.length; leg++) {
     const [ax, an] = waypoints[leg - 1], [bx, bn] = waypoints[leg];

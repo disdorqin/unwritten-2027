@@ -14,6 +14,7 @@ const faces = {
   dragon: ['龙', '#6b9b87'],
   pig: ['猪', '#b97283'],
   monkey: ['猴', '#ba815e'],
+  snake: ['蛇', '#6b9b87'],
 } as const;
 type SiteId = keyof typeof faces;
 const tiles = Object.keys(faces) as SiteId[];

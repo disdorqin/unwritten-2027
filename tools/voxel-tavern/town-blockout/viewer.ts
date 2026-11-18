@@ -89,7 +89,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
-import { createZodiacProgress, postMousePosition } from './town-zodiac';
+import { createZodiacProgress, lighthouseSnakeSite, postMousePosition } from './town-zodiac';
 import {
   createTownZodiacSites, greenhouseRabbitSite, hotSpringPigSite, lanternWorkshopMonkeySite, towerDragonClues,
   towerDragonSite, workshopMonkeyClues,
@@ -1305,7 +1305,7 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse', 'rabbit', 'dragon', 'horse', 'monkey', 'rooster', 'pig'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'rabbit', 'dragon', 'snake', 'horse', 'monkey', 'rooster', 'pig'], zodiacStorage);
 const zodiacSites = createTownZodiacSites(zodiac, label => {
   announceActivity(`${label} · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1402,6 +1402,7 @@ const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 activitySpots.push(
   zodiacSites.mount(architecture.get('glasshouse')!, greenhouseRabbitSite),
+  zodiacSites.mount(architecture.get('lighthouse')!, lighthouseSnakeSite),
   zodiacSites.mount(tower, towerDragonSite(towerStops.lookout)),
   zodiacSites.mount(architecture.get('lantern-workshop')!, lanternWorkshopMonkeySite),
 );
