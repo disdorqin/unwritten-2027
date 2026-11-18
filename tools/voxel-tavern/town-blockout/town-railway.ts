@@ -31,6 +31,7 @@ function platformOffsets(x: number, n: number, platform: RailPlatform) {
 }
 const chunkSize = expansion.chunkSize;
 const gauge = 1.66;
+const coachBenchZ = 2.48 * .49;
 const clearanceCell = 16;
 const stationRoad = extensionRoads.find(road => road.id === 'station-approach')!;
 const bathRoad = extensionRoads.find(road => road.id === 'hot-spring-approach')!;
@@ -409,8 +410,9 @@ function buildVehicle(engine: boolean, accent: string, geometry: BoxGeometry, op
     for (const z of [-2.48, 2.48]) {
       box(0, 1.52, z, 2.03, .52, .18, accent);
       box(0, 1.83, z, 2.09, .11, .24, brass);
-      box(0, 1.48, z * .49, 1.58, .17, .58, cream);
-      box(0, 1.68, z * .49 + .23, 1.58, .48, .13, '#93644e');
+      const benchZ = Math.sign(z) * coachBenchZ;
+      box(0, 1.48, benchZ, 1.58, .17, .58, cream);
+      box(0, 1.68, benchZ + .23, 1.58, .48, .13, '#93644e');
       box(0, 2.62, z * .84, .23, .26, .2, '#564d45');
       lamp(0, 2.55, z * .84, .15, .18, .21);
       for (const x of [-.82, .82]) lamp(x, 1.33, z * 1.035, .15, .16, .043, '#ed8455');
@@ -587,6 +589,10 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
     { model: buildVehicle(false, '#426756', geometry, opaque, glow), offset: 0 },
     { model: buildVehicle(false, '#6b505d', geometry, opaque, glow), offset: -6.15 },
   ];
+  const coachCharmAnchor = new Object3D();
+  coachCharmAnchor.name = 'tour-train-under-seat';
+  coachCharmAnchor.position.set(0, 1.28, coachBenchZ - .55);
+  vehicles[1].model.add(coachCharmAnchor);
   const view = new Object3D();
   view.name = 'tour-train-view';
   group.add(...vehicles.map(({ model }) => model), view);
@@ -646,7 +652,7 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
   const currentStop = () => phase.stopped ? timetable.legs[phase.leg].from : undefined;
   updatePoses(Infinity);
   return {
-    group, boarding, stops, view, route, vehicleBlocks, supportIndices: track.supportIndices,
+    group, boarding, stops, view, coachCharmAnchor, route, vehicleBlocks, supportIndices: track.supportIndices,
     keepClear: route.keepClear,
     setPanorama: track.setPanorama,
     get riding() { return riding; },

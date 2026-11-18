@@ -76,6 +76,7 @@ import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
+import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
@@ -667,7 +668,7 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'castle') return architecture.has('ice-castle');
   if (feature === 'mixing') return architecture.has('tavern');
   return true;
-}, () => !nightMode);
+}, () => !nightMode, name => name === '钟铁生' && zodiac.canCollect('horse') ? railHorseClues : undefined);
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
@@ -1146,7 +1147,11 @@ const stampSites = [
 ];
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
-const zodiac = createZodiacProgress(['mouse'], zodiacStorage);
+const zodiac = createZodiacProgress(['mouse', 'horse'], zodiacStorage);
+const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
+  announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
+  playPostChime(true);
+});
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
   [stationTicketStamp], riddleActivity.getProgress, zodiac,
@@ -1332,6 +1337,7 @@ const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) {
+    if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
     if (stop) return { label: `在${stop.label}下车`, run: () => leaveRide() };
     const next = railway.nextStop;

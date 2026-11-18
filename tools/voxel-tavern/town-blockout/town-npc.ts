@@ -147,6 +147,7 @@ export function createTownNpcActivity(
   heightAt: (east: number, north: number) => number,
   guideEnabled: (feature: TownNpcGuide) => boolean = feature => guideDefaults.has(feature),
   isDaytime?: () => boolean,
+  zodiacHints?: (name: NpcName) => readonly string[] | undefined,
 ): TownActivity & {
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
@@ -213,7 +214,7 @@ export function createTownNpcActivity(
     },
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
-  const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0 }));
+  const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0, zodiac: 0 }));
   let visits: Partial<Record<NpcName, number>> = {};
   try {
     const previous: unknown = JSON.parse(localStorage.getItem(savedVisitKey) ?? 'null');
@@ -372,6 +373,8 @@ export function createTownNpcActivity(
       const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
       speech.textContent = guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
     });
+    const clues = zodiacHints?.(name);
+    if (clues?.length) action('问生肖线索', () => { speech.textContent = clues[turns.zodiac++ % clues.length]; });
     action('道别', () => {
       panel.closest('dialog')?.close();
       context.announce(npcFarewell(name, period));
