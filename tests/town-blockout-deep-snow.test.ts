@@ -19,6 +19,8 @@ test('plowed town terrain, approach routes and district paving stay full speed i
     assert.equal(snow.movementScale(x, north, grid.heightAt(x, north)), 1, `cleared terrain at ${x},${north}`);
   }
   assert.equal(snow.movementScale(...wild, () => true), 1);
+  assert.equal(snow.depthAt(...wild, () => true), 0);
+  assert.equal(snow.depthAt(...wild), 1);
 });
 
 test('ceremony storm accumulation gives ordinary, packed and deep movement targets', () => {
@@ -43,6 +45,7 @@ test('ceremony storm accumulation gives ordinary, packed and deep movement targe
   assert.equal(snow.movementScale(...wild), .62);
   assert.ok(Math.abs(11.3 * snow.movementScale(...wild, undefined, true) - 8.25) < 1e-10);
   assert.equal(snow.movementScale(...courtyard), .85);
+  assert.equal(snow.depthAt(...courtyard), .5);
   assert.equal(snow.depth().servings, 5);
 
   snow.update(0, false);

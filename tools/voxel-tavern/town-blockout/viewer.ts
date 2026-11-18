@@ -32,7 +32,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
 } from './town-ceremony';
-import { createCeremonyFrost } from './town-frost';
+import { createCeremonyFrost, hasFrostCeremonyRelief } from './town-frost';
 import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
@@ -673,7 +673,7 @@ let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
 function warmFromDrink() {
   warmDrinkUntil = performance.now() + 45_000;
-  ceremonyFrost.setWarmth('hot-drink', true);
+  ceremonyFrost.drinkHot();
 }
 const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
@@ -808,10 +808,12 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
+let effectiveSnowIntensity = 1;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
   onSnowIntensity(intensity) {
+    effectiveSnowIntensity = intensity;
     snowfall.setIntensity(intensity);
     snowCover.setIntensity(intensity);
   },
@@ -1577,6 +1579,7 @@ const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchP
 if (startInMuseum) selector.value = '纪念馆入口';
 let previous = performance.now();
 let snowMoveScale = 1;
+let chillMoveScale = 1;
 let widePanorama = false;
 function walkable(x: number, n: number) {
   if (homeReturn) return sharedHomeWalkable(x, n);
@@ -1811,19 +1814,21 @@ renderer.setAnimationLoop(now => {
     if (!walkRender.equals(walkCurrent)) {
       // Snap after teleports and seating changes instead of interpolating across town.
       walkClock.reset();
-      snowMoveScale = 1;
+      snowMoveScale = chillMoveScale = 1;
       walkPrevious.copy(walkRender);
       walkCurrent.copy(walkRender);
     }
     let interpolation = 1;
     if (moveAllowed()) {
+      const chillEnabled = ceremonyFrost.enabled();
+      const chillTarget = ceremonyFrost.walkingScale();
       const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor / Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
         if (skatesOnIce()) {
-          snowMoveScale = 1;
+          snowMoveScale = chillMoveScale = 1;
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
           if ((glide.east || glide.north) &&
             !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
@@ -1833,12 +1838,13 @@ renderer.setAnimationLoop(now => {
             const water = waterAtFeet();
             let moveScale = 1;
             if (water || airHeight !== undefined) {
-              snowMoveScale = 1;
+              snowMoveScale = chillMoveScale = 1;
               moveScale = water ? water.speed * (sprint ? 7.5 / 11.3 : 1) : .8;
             } else {
               const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
               snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
-              moveScale = snowMoveScale;
+              chillMoveScale = chillEnabled ? approachTownSnowScale(chillMoveScale, chillTarget, townPhysicsDelta) : 1;
+              moveScale = snowMoveScale * chillMoveScale;
             }
             const nx = x + east * moveScale * townPhysicsDelta;
             const nn = n + north * moveScale * townPhysicsDelta;
@@ -1952,6 +1958,13 @@ renderer.setAnimationLoop(now => {
     warmDrinkUntil = 0;
     ceremonyFrost.setWarmth('hot-drink', false);
   }
+  const coldEast = boardingGround ? camera.position.x : seated?.x ?? x;
+  const coldNorth = boardingGround ? -camera.position.z : seated?.n ?? n;
+  const coldGround = boardingGround ? camera.position.y - eye : airHeight ?? ground;
+  const coldExposed = walking && !homeReturn && !sheltered && !isLakeSkateIce(coldEast, coldNorth);
+  const coldDepth = coldExposed && effectiveSnowIntensity >= 2
+    ? snowCover.depthAt(coldEast, coldNorth, coldGround, snowCleared) : 0;
+  ceremonyFrost.setExposure(effectiveSnowIntensity, coldDepth, coldExposed, hasFrostCeremonyRelief(ceremonyState));
   ceremonyFrost.update(dt);
   stageActivity.syncCeremony(ceremonyState.now, walking ? x : Infinity, n);
   if (hourlyBellsRemaining && ceremonyState.now >= nextHourlyBell) {

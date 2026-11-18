@@ -1,10 +1,6 @@
-// 仪式冻纹叠层（设计：《跨年夜仪式与中心广场设计-v1》§4）。
-// 寒冷等级只写这个 DOM 叠层：不掉血、不减速、不锁交互、不写任何玩法状态（§4.3 红线）。
-// 基线等级由仪式时钟曲线给出（town-ceremony 的 frostBaselineAt，与雪势共用一条曲线）；
-// 个人回暖只降低自己的表现等级：身处回暖点时以约 1 级/20 秒向「基线 −2」消退，
-// 离开后以同样速率回到基线。纯逻辑的 FrostTracker 与 DOM 渲染分离，前者可单测。
-
-import type { FrostLevel } from './town-ceremony';
+// 原冻纹基线继续由仪式曲线驱动。寒意设计 v1 把个人暴露与基线取较高值，
+// 两条通道共用该等级。移动系数仅由 viewer 在着地步行分支消费。
+import type { CeremonyState, FrostLevel } from './town-ceremony';
 
 export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
 
@@ -20,6 +16,15 @@ export const frostLevelStyles: Record<FrostLevel, { opacity: number; band: numbe
 export const frostWarmRate = 1 / 20;
 /** 回暖最多把个人等级压到基线以下 2 级（设计 §4.2 的「−1~2 级」取上限）。 */
 export const frostWarmOffset = 2;
+
+const exposureWarmRates: Record<WarmthSource, number> = {
+  'fire-source': 1 / 5, onsen: 1 / 8, interior: 1 / 10, 'hot-drink': 1 / 10,
+};
+
+export function hasFrostCeremonyRelief({ phase, now }: Pick<CeremonyState, 'phase' | 'now'>) {
+  return phase === 'converge' || phase === 'approach' || phase === 'countdown' ||
+    phase === 'climax' || (phase === 'afterglow' && new Date(now).getMinutes() < 30);
+}
 
 function clampLevel(value: number): number {
   return Math.min(3, Math.max(0, value));
@@ -44,6 +49,10 @@ export interface FrostTracker {
   setBaseline(level: FrostLevel): void;
   baseline(): FrostLevel;
   setWarmth(source: WarmthSource, active: boolean): void;
+  drinkHot(): void;
+  setExposure(intensity: number, depth: number, exposed: boolean, ceremonyRelief: boolean, mobilityFactor?: number): void;
+  exposure(): number;
+  walkingScale(enabled?: boolean): number;
   warming(): boolean;
   /** 推进 dt 秒，返回当前个人等级（浮点，便于渲染平滑插值）。 */
   update(dtSeconds: number): number;
@@ -54,37 +63,65 @@ export interface FrostTracker {
 
 export function createFrostTracker(): FrostTracker {
   let baseline: FrostLevel = 0;
-  let personal = 0;
+  let baselinePersonal = 0;
+  let exposure = 0;
+  let snowIntensity = 1;
+  let exposureGrowth = 0;
+  let warmRate = 0;
+  let relief = false;
   let synced = false;
   const warmth = new Set<WarmthSource>();
+  const personal = () => Math.max(baselinePersonal, exposure);
+  const displayLevel = () => Math.round(personal()) as FrostLevel;
 
-  function target(): number {
-    return warmth.size > 0 ? Math.max(0, baseline - frostWarmOffset) : baseline;
+  function setWarmth(source: WarmthSource, active: boolean) {
+    if (warmth.has(source) === active) return;
+    if (active) warmth.add(source);
+    else warmth.delete(source);
+    warmRate = 0;
+    for (const current of warmth) warmRate = Math.max(warmRate, exposureWarmRates[current]);
   }
 
   return {
     setBaseline(level: FrostLevel) { baseline = level; },
     baseline: () => baseline,
-    setWarmth(source: WarmthSource, active: boolean) {
-      if (active) warmth.add(source);
-      else warmth.delete(source);
+    setWarmth,
+    drinkHot() {
+      exposure = Math.max(0, exposure - 1);
+      setWarmth('hot-drink', true);
+    },
+    setExposure(intensity, depth, exposed, ceremonyRelief, mobilityFactor = 1) {
+      snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
+      relief = ceremonyRelief;
+      exposureGrowth = exposed && snowIntensity >= 2
+        ? (snowIntensity - 1) / 270 * (depth >= .6 ? 1.5 : 1) * (relief ? .5 : 1) *
+          (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1)
+        : 0;
+    },
+    exposure: () => exposure,
+    walkingScale(enabled = true) {
+      if (!enabled) return 1;
+      const level = displayLevel();
+      return level === 3 && !relief ? .80 : level >= 2 ? .90 : 1;
     },
     warming: () => warmth.size > 0,
     update(dtSeconds: number) {
-      // 首次更新直接对齐目标：迟入/重连的玩家冻纹状态立即补齐（设计 §5），不从 0 慢慢爬。
+      const dt = Number.isFinite(dtSeconds) ? Math.max(0, dtSeconds) : 0;
+      const goal = warmth.size > 0 ? Math.max(0, baseline - frostWarmOffset) : baseline;
       if (!synced) {
         synced = true;
-        personal = target();
-        return personal;
+        baselinePersonal = goal;
+      } else {
+        const step = frostWarmRate * dt;
+        if (baselinePersonal < goal) baselinePersonal = Math.min(goal, baselinePersonal + step);
+        else if (baselinePersonal > goal) baselinePersonal = Math.max(goal, baselinePersonal - step);
       }
-      const goal = target();
-      const step = frostWarmRate * Math.max(0, dtSeconds);
-      if (personal < goal) personal = Math.min(goal, personal + step);
-      else if (personal > goal) personal = Math.max(goal, personal - step);
-      return personal;
+      const rate = warmRate > 0 ? -warmRate : snowIntensity < 2 ? -1 / 120 : exposureGrowth;
+      exposure = clampLevel(exposure + rate * dt);
+      return personal();
     },
-    personal: () => personal,
-    displayLevel: () => Math.round(clampLevel(personal)) as FrostLevel,
+    personal,
+    displayLevel,
   };
 }
 
@@ -129,7 +166,8 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
       lastOpacity = opacity;
       edges.style.opacity = opacity;
     }
-    if (tint) tint.style.opacity = String(Math.round(style.tint * 100) / 100);
+    const tintOpacity = String(Math.round(style.tint * 100) / 100);
+    if (tint && tint.style.opacity !== tintOpacity) tint.style.opacity = tintOpacity;
     if (style.level !== lastLevel) {
       lastLevel = style.level;
       root.dataset.level = String(style.level);
@@ -163,7 +201,10 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   return {
     mountSettings,
     setBaseline: (level: FrostLevel) => tracker.setBaseline(level),
-    setWarmth: (source: WarmthSource, active: boolean) => tracker.setWarmth(source, active),
+    setWarmth: tracker.setWarmth,
+    setExposure: tracker.setExposure,
+    drinkHot: tracker.drinkHot,
+    walkingScale: () => tracker.walkingScale(enabled),
     setEnabled(next: boolean) { enabled = next; render(); },
     enabled: () => enabled,
     update(dtSeconds: number) {

@@ -6,7 +6,7 @@ import {
   dimLevelAt, frostBaselineAt, snowIntensityAt, type CeremonyCue,
 } from '../tools/voxel-tavern/town-blockout/town-ceremony.ts';
 import {
-  createFrostTracker, frostLevelStyles, frostWarmOffset, frostWarmRate,
+  createFrostTracker, frostLevelStyles, frostWarmOffset, frostWarmRate, hasFrostCeremonyRelief,
 } from '../tools/voxel-tavern/town-blockout/town-frost.ts';
 
 // 全部时刻用本地时间构造，与实现的设计口径一致（设备本地时间，设计 §3）。
@@ -266,6 +266,81 @@ test('frost tracker: any single warmth source is enough, floor is level 0', () =
   assert.ok(Math.abs(tracker.update(20) - 0) < 1e-9); // 基线 1 − 2 压到 0 为止
   tracker.setWarmth('fire-source', false);
   assert.ok(Math.abs(tracker.update(20) - 1) < 1e-9);
+});
+
+test('frost exposure follows the snow curve, full depth pressure and calm-weather decay', () => {
+  const tracker = createFrostTracker();
+  tracker.update(600);
+  assert.equal(tracker.exposure(), 0);
+  tracker.setExposure(3, 0, true, false);
+  assert.equal(tracker.update(135), 1);
+  assert.equal(tracker.walkingScale(), 1);
+  assert.equal(tracker.update(135), 2);
+
+  tracker.setExposure(1.9, 0, true, false);
+  assert.equal(tracker.update(120), 1);
+  tracker.setExposure(4, 0, false, false);
+  assert.equal(tracker.update(90), 1);
+  tracker.setExposure(4, 0, true, false);
+  assert.equal(tracker.update(90), 2);
+
+  tracker.setExposure(3, .6, true, false);
+  assert.equal(tracker.update(90), 3);
+  assert.equal(tracker.walkingScale(), .8);
+});
+
+test('fastest warmth source lowers exposure while the old ceremony baseline keeps its rate', () => {
+  const tracker = createFrostTracker();
+  tracker.setBaseline(3);
+  tracker.setExposure(4, 0, true, false);
+  assert.equal(tracker.update(270), 3);
+  tracker.setWarmth('interior', true);
+  tracker.setWarmth('onsen', true);
+  tracker.setWarmth('fire-source', true);
+  assert.equal(tracker.update(15), 2.25);
+  assert.equal(tracker.exposure(), 0);
+  tracker.setWarmth('fire-source', false);
+  tracker.setWarmth('onsen', false);
+  tracker.setWarmth('interior', false);
+  tracker.update(270);
+  assert.equal(tracker.exposure(), 3);
+
+  tracker.drinkHot();
+  assert.equal(tracker.exposure(), 2);
+  tracker.drinkHot();
+  assert.equal(tracker.exposure(), 1);
+  tracker.update(10);
+  assert.equal(tracker.exposure(), 0);
+
+  for (const [source, seconds] of [['fire-source', 15], ['onsen', 24], ['interior', 30]] as const) {
+    const fresh = createFrostTracker();
+    fresh.setExposure(4, 0, true, false);
+    fresh.update(270);
+    fresh.setWarmth(source, true);
+    assert.equal(fresh.update(seconds), 0, source);
+  }
+});
+
+test('ceremony relief halves pressure and caps L3 walking drag without changing the visible level', () => {
+  const tracker = createFrostTracker();
+  const relieved = hasFrostCeremonyRelief(ceremonyStateAt(at(31, 23, 30)));
+  assert.equal(relieved, true);
+  assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(at(31, 21))), false);
+  assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(atJan(0, 29, 59))), true);
+  assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(atJan(0, 30))), false);
+
+  tracker.setExposure(4, 0, true, relieved);
+  assert.equal(tracker.update(180), 1);
+  tracker.setBaseline(3);
+  tracker.update(60);
+  assert.equal(tracker.displayLevel(), 3);
+  assert.equal(tracker.walkingScale(), .9);
+
+  tracker.setExposure(4, 0, true, false);
+  assert.equal(tracker.walkingScale(), .8);
+  assert.equal(tracker.walkingScale(false), 1);
+  assert.equal(tracker.displayLevel(), 3);
+  assert.ok(Math.abs(.62 * tracker.walkingScale() - .496) < 1e-10);
 });
 
 test('frost level styles match the design bands', () => {

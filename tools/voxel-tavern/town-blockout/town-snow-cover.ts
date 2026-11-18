@@ -37,17 +37,24 @@ export function createTownSnowCover(grid: Ground) {
     return !bridgeAt(x, north) && !isWater(x, north) && Math.abs(ground - grid.heightAt(x, north)) <= .18;
   }
 
+  function depthAt(x: number, north: number, ground: number, isCleared?: GroundMask) {
+    if (!snowNight || intensity <= 1 || cover < .25) return 0;
+    const surface = sampleGround(x, north);
+    const depth = surface === 0 ? cover : surface === 3 ? cover * .5 : 0;
+    if (depth < .25 || !hasSnowAtFeet(x, north, ground) || bridgeMouthKeepClear(x, north, 0) ||
+      extensionRoadClearance(x, north, 0) || extensionStreetClearance(x, north, 0) ||
+      isCleared?.(x, north, ground)) return 0;
+    return depth;
+  }
+
   return {
+    depthAt,
     setIntensity(nextIntensity: number) {
       if (Number.isFinite(nextIntensity)) intensity = Math.max(1, Math.min(4, nextIntensity));
     },
     movementScale(x: number, north: number, ground: number, isCleared?: GroundMask, sprint = false) {
-      if (!snowNight || intensity <= 1 || cover < .25) return 1;
-      const surface = sampleGround(x, north);
-      const depth = surface === 0 ? cover : surface === 3 ? cover * .5 : 0;
-      if (depth < .25 || !hasSnowAtFeet(x, north, ground) || bridgeMouthKeepClear(x, north, 0) ||
-        extensionRoadClearance(x, north, 0) || extensionStreetClearance(x, north, 0) ||
-        isCleared?.(x, north, ground)) return 1;
+      const depth = depthAt(x, north, ground, isCleared);
+      if (depth < .25) return 1;
       if (depth >= .6) return sprint ? deepSprintScale : .62;
       return sprint ? .8 : .85;
     },
