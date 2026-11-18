@@ -114,6 +114,33 @@ const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
 const presence = createTownPresence(scene, camera, announceActivity);
 const railway = createTownRailway(grid, presence.serverNow);
+const frontRailStation = railway.stops.find(stop => stop.id === 'railway-station')!;
+const previousStationEye = new Vector3();
+let stationViewStillSince = Infinity;
+const stationCullCamera = new PerspectiveCamera();
+const stationSourceProjection = new Matrix4();
+const stationCullTurn = .07;
+
+function stationViewCamera() {
+  if (stationCullCamera.position.equals(camera.position) && stationSourceProjection.equals(camera.projectionMatrix)
+      && stationCullCamera.quaternion.angleTo(camera.quaternion) <= stationCullTurn) return stationCullCamera;
+  stationSourceProjection.copy(camera.projectionMatrix);
+  stationCullCamera.copy(camera, false);
+  const projection = stationSourceProjection.elements;
+  const [halfWidth, halfHeight] = [1 / projection[0], 1 / projection[5]];
+  // Even a corner ray's unit direction moves by no more than this chord when rotating.
+  const guard = 2 * Math.sin(stationCullTurn / 2);
+  const cornerDepth = 1 / Math.hypot(halfWidth, halfHeight, 1);
+  const depthGuard = guard / cornerDepth;
+  stationCullCamera.near = camera.near * (1 - depthGuard);
+  stationCullCamera.far = camera.far * (1 + depthGuard);
+  stationCullCamera.updateProjectionMatrix();
+  const padded = stationCullCamera.projectionMatrix.elements;
+  padded[0] = (cornerDepth - guard) / (halfWidth * cornerDepth + guard);
+  padded[5] = (cornerDepth - guard) / (halfHeight * cornerDepth + guard);
+  stationCullCamera.projectionMatrixInverse.copy(stationCullCamera.projectionMatrix).invert();
+  return stationCullCamera;
+}
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -1778,10 +1805,25 @@ renderer.setAnimationLoop(now => {
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
+  const stationView = !profileOriginalDraws && walking && !homeReturn && !boardingGround
+    && Math.abs(camera.position.x - frontRailStation.x) < 2.1
+    && Math.abs(-camera.position.z - frontRailStation.n) < 10
+    && camera.position.y > frontRailStation.ground + .8
+    && camera.getWorldDirection(lookAhead).x < -.24;
+  if (!stationView) stationViewStillSince = Infinity;
+  else if (!Number.isFinite(stationViewStillSince) || !previousStationEye.equals(camera.position)) {
+    stationViewStillSince = now;
+    previousStationEye.copy(camera.position);
+  }
+  // Defer rebuilding while walking. Reuse the padded selection while standing and looking around.
+  const cullStationView = now - stationViewStillSince >= 150;
+  const cullStaticView = cullAerial || cullStationView;
+  const warmStationView = stationView && !cullStationView;
+  const cullCamera = cullStationView ? stationViewCamera() : cullAerial ? camera : undefined;
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
-  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullAerial ? camera : undefined);
+  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
   districts.setPanorama(wideView);
@@ -1882,14 +1924,15 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) hitFeedback.apply(camera);
     const feedbackMs = profileTown ? performance.now() - startedFeedback : 0;
     const batchesStartedAt = profileTown ? performance.now() : 0;
-    const staticViewRoots = cullAerial || warmAerial ? [landscape, detailedBridges, ...(trackViewRoot ? [trackViewRoot] : []),
-      ...(extensionStreets ? [extensionStreets.group] : []), ...architecture.values()] : [];
-    if (warmAerial) {
+    const staticViewRoots = cullStaticView || warmAerial || warmStationView ? [landscape, detailedBridges,
+      ...(trackViewRoot ? [trackViewRoot] : []), ...(extensionStreets ? [extensionStreets.group] : []),
+      ...architecture.values()] : [];
+    if (warmAerial || warmStationView) {
       viewBatches.warm(staticViewRoots);
       viewFaces.warm(architecture.values());
     }
-    viewBatches.update(cullAerial, camera, staticViewRoots);
-    viewFaces.update(cullAerial, camera.position, architecture.values());
+    viewBatches.update(cullStaticView, cullCamera ?? camera, staticViewRoots);
+    viewFaces.update(cullStaticView, camera.position, architecture.values());
     const detailMs = profileTown ? terrainMs + performance.now() - batchesStartedAt : 0;
     const shakeAge = now - bellShakeStartedAt;
     const shakeBell = walking && shakeAge >= 0 && shakeAge < 320 && !reduceSnowEffects.matches;
