@@ -37,6 +37,13 @@ export function createTownSnowCover(grid: Ground) {
     return !bridgeAt(x, north) && !isWater(x, north) && Math.abs(ground - grid.heightAt(x, north)) <= .18;
   }
 
+  function exposedSnowAt(x: number, north: number, ground: number, isCleared?: GroundMask) {
+    const surface = sampleGround(x, north);
+    return (surface === 0 || surface === 3) && hasSnowAtFeet(x, north, ground) &&
+      !bridgeMouthKeepClear(x, north, 0) && !extensionRoadClearance(x, north, 0) &&
+      !extensionStreetClearance(x, north, 0) && !isCleared?.(x, north, ground);
+  }
+
   function depthAt(x: number, north: number, ground: number, isCleared?: GroundMask) {
     if (!snowNight || intensity <= 1 || cover < .25) return 0;
     const surface = sampleGround(x, north);
@@ -49,6 +56,7 @@ export function createTownSnowCover(grid: Ground) {
 
   return {
     depthAt,
+    exposedSnowAt,
     setIntensity(nextIntensity: number) {
       if (Number.isFinite(nextIntensity)) intensity = Math.max(1, Math.min(4, nextIntensity));
     },

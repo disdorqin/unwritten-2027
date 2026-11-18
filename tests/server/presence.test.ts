@@ -732,6 +732,12 @@ test("P2b chat relay validates scope and rate, while changed poses replay in a n
   const newcomer = await join("花名册");
   const roster = await newcomer.text.next(message => message.type === "join" && message.id === speaker.id);
   assert.equal(roster.pose, 4);
+  speaker.socket.send(JSON.stringify({ type: "pose", pose: 8 }));
+  assert.deepEqual(await listener.text.next(message => message.type === "pose"),
+    { type: "pose", id: speaker.id, pose: 8 });
+  speaker.socket.send(JSON.stringify({ type: "pose", pose: 0 }));
+  assert.deepEqual(await listener.text.next(message => message.type === "pose"),
+    { type: "pose", id: speaker.id, pose: 0 });
 });
 
 test("test fireworks joins five continuously then sends the same scheduled event to all joined sockets", { timeout: 8000 }, async context => {

@@ -12,6 +12,7 @@ import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
+import { fallingPronePose } from './landing-pose.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import {
@@ -238,7 +239,7 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function receivePose(peer: Peer, pose: unknown) {
-    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 5 ||
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || (pose > 5 && pose !== fallingPronePose) ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
     const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });

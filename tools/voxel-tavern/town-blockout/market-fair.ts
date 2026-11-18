@@ -225,6 +225,7 @@ export type MarketFairView = {
   camera: Camera;
   /** 玩家当前镇面位置与是否处于步行模式（轨道俯瞰时不亮气泡）。 */
   player(): { x: number; n: number; walking: boolean };
+  onHotDrink?(): void;
 };
 
 export function createMarketFairActivity(
@@ -279,6 +280,7 @@ export function createMarketFairActivity(
       board.shout(index, stall.closing, clock, MARKET_BUBBLE_SHOW_SECONDS + .5);
       return;
     }
+    if (stall.kind === '热饮') view.onHotDrink?.();
     board.shout(index, board.nextLine(index), clock);
     flashIcon(stall.icon);
   }

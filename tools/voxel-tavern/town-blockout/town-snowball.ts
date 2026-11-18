@@ -361,6 +361,7 @@ export function createTownSnowballFight({
     aimMarker.visible = false;
   }
 
+  let landingBurstSeed = 0;
   function burst(at: Vector3, target: boolean, seed: number, remote = false) {
     let count = compactEffects ? (target ? 7 : 4) : (target ? 12 : 7);
     if (remote) {
@@ -490,5 +491,6 @@ export function createTownSnowballFight({
   }
 
   return { gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
-    showAim, hideAim, update, getState, dispose };
+    showAim, hideAim, update, getState, dispose,
+    landingBurst(at: Vector3) { if (!disposed) burst(at, true, ++landingBurstSeed); } };
 }

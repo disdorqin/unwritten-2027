@@ -1,9 +1,11 @@
 import type { VoxelPersonPart } from './town-voxel-person';
+import { fallingPronePose } from '../../../src/presence/landing-pose';
 
-export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5;
+export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5 | typeof fallingPronePose;
 
 export function isTownAvatarPose(value: unknown): value is TownAvatarPose {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 5;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 &&
+    (value <= 5 || value === fallingPronePose);
 }
 
 export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, riding: boolean, seated: boolean, skateSpeed: number): TownAvatarPose {
@@ -16,6 +18,7 @@ export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, rid
 
 export function avatarRootOffset(pose: TownAvatarPose) {
   if (pose === 2) return -.55;
+  if (pose === fallingPronePose) return .46;
   return pose === 1 || pose === 5 ? -.45 : 0;
 }
 
@@ -44,6 +47,11 @@ export function writeAvatarPart(
   } else if (pose === 3 && y > .74) {
     pivotY = .74;
     pitch = .105;
+  }
+
+  if (pose === fallingPronePose) {
+    pivotY = 0;
+    pitch = -Math.PI / 2;
   }
 
   const cp = pitch ? Math.cos(pitch) : 1;
