@@ -239,5 +239,10 @@ export function createPlazaGroupPhoto(options: {
     body.append(wrapper);
   }
 
-  return { request, receive, update, capture, active: () => !!round, locked };
+  function leaveForCeremony() {
+    if (round?.shared && !round.optedOut) options.leave(round.id);
+    if (round) finish();
+  }
+
+  return { request, receive, update, capture, active: () => !!round, locked, leaveForCeremony };
 }

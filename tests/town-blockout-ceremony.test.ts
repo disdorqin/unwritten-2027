@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ceremonyArrivalAt, ceremonyEdgeLandings, ceremonyLandingCentre, ceremonyMainLandings,
+  readCeremonyArrival, townCeremonyMidnight,
+} from '../src/presence/ceremony-arrival.ts';
+import { MAX_SESSIONS } from '../src/presence/protocol.ts';
+import { createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import {
   ceremonyCuesBetween, ceremonyEveYear, ceremonyMidnight, ceremonyStateAt,
   createCeremonyDirector, createLocalCeremonyClock, createServerCeremonyClock,
   dimLevelAt, frostBaselineAt, snowIntensityAt, type CeremonyCue,
@@ -17,6 +23,34 @@ function atJan(h = 0, m = 0, s = 0, ms = 0): number {
   return new Date(2027, 0, 1, h, m, s, ms).getTime();
 }
 const midnight = atJan(0, 0, 0);
+
+test('ceremony slots fit both plaza bounds and meet the 1.2m clearance at full capacity', () => {
+  assert.equal(new Date(townCeremonyMidnight).toISOString(), '2026-12-31T16:00:00.000Z');
+  assert.ok(ceremonyMainLandings.length >= MAX_SESSIONS);
+  assert.ok(ceremonyEdgeLandings.length >= MAX_SESSIONS);
+  const terrain = createTerrainGrid();
+  const all = [...ceremonyMainLandings, ...ceremonyEdgeLandings];
+  for (const [i, { east, north }] of all.entries()) {
+    for (const [west, south, maxEast, maxNorth] of [layout.plaza.bounds, [161, 152, 251, 212]]) {
+      assert.ok(east > west && east < maxEast && north > south && north < maxNorth);
+    }
+    assert.equal(isWater(east, north), false);
+    assert.equal(terrain.heightAt(east, north), 12);
+    const radius = Math.hypot(east - ceremonyLandingCentre[0], north - ceremonyLandingCentre[1]);
+    const radii = i < ceremonyMainLandings.length ? [4, 7, 10] : [13.5, 16.5];
+    assert.ok(radii.some(r => Math.abs(r - radius) < .01));
+    for (const other of all.slice(i + 1)) assert.ok(Math.hypot(east - other.east, north - other.north) >= 1.2);
+  }
+});
+
+test('ceremony arrival decode refuses malformed or unknown slots', () => {
+  const event = { type: 'event', kind: 'ceremony-arrival', startAt: townCeremonyMidnight, slot: 0, edge: false };
+  assert.deepEqual(readCeremonyArrival(event), event);
+  assert.equal(ceremonyArrivalAt(event.slot, event.edge), ceremonyMainLandings[0]);
+  for (const bad of [{ slot: -1 }, { slot: 1.2 }, { slot: 200 }, { startAt: NaN }, { edge: 0 }]) {
+    assert.equal(readCeremonyArrival({ ...event, ...bad }), undefined);
+  }
+});
 
 test('ceremony clocks: local provider and reserved server provider offset', () => {
   let local = 1_000_000;

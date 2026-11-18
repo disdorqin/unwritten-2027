@@ -1,7 +1,7 @@
-import { createLocalCeremonyClock, type CeremonyClock } from './town-ceremony';
+import type { CeremonyClock } from './town-ceremony';
 import { createTownPresenceClock } from './town-presence-clock';
 
-export async function loadRehearsalClock(): Promise<CeremonyClock> {
+export async function loadRehearsalClock(): Promise<CeremonyClock | undefined> {
   const clock = createTownPresenceClock();
   const sentAt = performance.now();
   try {
@@ -17,7 +17,6 @@ export async function loadRehearsalClock(): Promise<CeremonyClock> {
       }
     }
   } catch {
-    // A rehearsal build with an unavailable clock continues with the ordinary local clock.
+    // An unavailable rehearsal clock leaves the real ceremony clock in place.
   }
-  return createLocalCeremonyClock();
 }
