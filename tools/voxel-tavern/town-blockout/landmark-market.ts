@@ -365,18 +365,11 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
     round: new SphereGeometry(.5, 10, 8),
     cylinder: new CylinderGeometry(.5, .5, 1, 10),
   };
-  const buckets = new Map<string, Part[]>();
-  const cellSize = 16;
+  const byMaterial = new Map<string, Part[]>();
   for (const part of parts) {
-    const [x, , z] = part.position;
-    // The riddle slots retain their per-slot instance-count and emission controls.
-    const cell = part.riddleSlot === undefined
-      ? `${Math.floor((x + cellSize / 2) / cellSize)}:${Math.floor((z + cellSize / 2) / cellSize)}`
-      : 'riddle';
-    const finish = part.glow ? (part.color === amber ? 'gold' : 'orange') : 'opaque';
-    const key = `${cell}/${part.shape}/${finish}`;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key)!.push(part);
+    const key = [part.shape, part.glow ? (part.color === amber ? 'gold' : 'orange') : 'opaque'].join('/');
+    if (!byMaterial.has(key)) byMaterial.set(key, []);
+    byMaterial.get(key)!.push(part);
   }
   const q = new Quaternion();
   const axis = new Vector3(0, 0, 1);
@@ -384,7 +377,7 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
   const pos = new Vector3();
   const size = new Vector3();
   const updateRiddleBatches: WorkshopRiddleWall['update'][] = [];
-  for (const [key, batch] of buckets) {
+  for (const batch of byMaterial.values()) {
     const { color, shape, glow } = batch[0];
     const material = new MeshStandardMaterial({
       roughness: .92,
@@ -392,7 +385,6 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
       emissiveIntensity: glow ? (color === amber ? 1.25 : .72) : 0,
     });
     const mesh = new InstancedMesh(shapes[shape], material, batch.length);
-    mesh.name = `Market cell ${key}`;
     for (const [index, part] of batch.entries()) {
       q.setFromAxisAngle(axis, part.rotation ?? 0);
       matrix.compose(pos.set(...part.position), q, size.set(...part.size));
