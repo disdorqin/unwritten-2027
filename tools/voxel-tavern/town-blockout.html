@@ -25,6 +25,14 @@
           autocomplete="nickname" aria-describedby="town-presence-name-hint">
       </label>
       <small id="town-presence-name-hint">最多 24 字，下次连接时生效</small>
+      <details id="town-mascot-owner" hidden>
+        <summary>镇长</summary>
+        <input id="town-mascot-owner-key" type="password" maxlength="128" autocomplete="off"
+          aria-label="镇长口令" placeholder="口令至少 10 字">
+        <button id="town-mascot-owner-verify" type="button">验证</button>
+        <output id="town-mascot-owner-status" aria-live="polite">未验证</output>
+        <label hidden><input id="town-mascot-follow" type="checkbox" checked> 小未跟随</label>
+      </details>
       <nav aria-label="查看方式">
         <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
         <button id="walk" type="button" aria-pressed="false">第一人称</button>

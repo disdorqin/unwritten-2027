@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { MASCOT_ACTOR_ID } from "../../src/presence/protocol.js";
 import { readPersonalFireworkRelay } from "../../src/presence/personal-fireworks.js";
 import {
   decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, type SnowballRelayEvent,
@@ -219,6 +221,38 @@ test("poll and WebSocket clients share one world state", async t => {
   const fromSocket = relayFor(wsTexts, 18)!;
   assert.equal(fromSocket.from, wsId);
   assert.deepEqual(relayFor(pollClient.texts, 18), fromSocket);
+});
+
+test("poll-only owner verification relays the reserved mascot and rejects unverified peers", async t => {
+  const ownerKey = "isolated-poll-test-key";
+  let rejected = 0;
+  const { base } = await startServer(t, { ownerKey, onMascotClaimRejected: count => { rejected = count; } });
+  const owner = new PollClient(base);
+  const guest = new PollClient(base);
+  await owner.join("轮询服主");
+  await guest.join("轮询访客");
+  await owner.poll(stateBody(100, 100, 10, 1));
+  await guest.poll(stateBody(104, 100, 10, 1));
+  const challenge = owner.texts.find(frame => frame.type === "owner-challenge") as { nonce?: string } | undefined;
+  assert.match(challenge?.nonce ?? "", /^[0-9a-f]{48}$/);
+  await owner.poll(textEventBody({ type: "owner-proof",
+    proof: createHash("sha256").update(ownerKey).update(challenge!.nonce!).digest("hex") }));
+  assert.ok(owner.texts.some(frame => frame.type === "owner-result" && (frame as { accepted?: boolean }).accepted === true));
+
+  const reserved = makeRecord(101, 100, 10, 1);
+  reserved.writeUInt16LE(MASCOT_ACTOR_ID, 0);
+  await guest.poll(binEventBody(reserved));
+  assert.equal(rejected, 1);
+  await owner.poll(binEventBody(reserved));
+  await guest.waitFor("verified mascot snapshot", () => guest.snapshots()
+    .some(records => records.some(record => record.id === MASCOT_ACTOR_ID && record.east === 101)));
+
+  const response = await fetch(`${base}/presence/poll/leave`, {
+    method: "POST", headers: { "x-presence-session": owner.session },
+  });
+  assert.equal(response.status, 200);
+  await guest.waitFor("mascot leaves when its owner leaves", () =>
+    guest.texts.some(frame => frame.type === "leave" && frame.id === MASCOT_ACTOR_ID));
 });
 
 test("queued snapshots coalesce to the latest frame for slow pollers", async t => {

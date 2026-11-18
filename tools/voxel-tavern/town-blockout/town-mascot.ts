@@ -1,5 +1,7 @@
 import { Color, Matrix4, Object3D, type InstancedMesh } from 'three';
 import { layout } from './terrain';
+import type { MascotFollowPoint } from './mascot-follow';
+import { isSharedHomePosition, sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
 type Point = readonly [east: number, north: number];
 type Part = {
@@ -161,6 +163,7 @@ export function sampleMascotLocation(now: number, patrol: MascotPatrol) {
 export type TownMascotOptions = {
   now: () => number;
   groundAt: GroundAt;
+  follow?: () => MascotFollowPoint | undefined;
   visible: (east: number, north: number, ground: number) => boolean;
 };
 
@@ -184,9 +187,13 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
     const now = options.now();
     // Share repeatable location and movement phase while limiting instance writes to 25 Hz.
     const tick = Math.floor(now / 40) * 40;
-    const point = sampleMascotLocation(tick, patrol);
-    const ground = options.groundAt(point.x, point.n);
-    if (ground === undefined || !options.visible(point.x, point.n, ground)) {
+    const follow = options.follow?.();
+    const point = follow ?? sampleMascotLocation(tick, patrol);
+    const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
+    const visible = ground !== undefined && options.visible(point.x, point.n, ground);
+    if (visible && follow && isSharedHomePosition(follow.x, follow.n, follow.ground)) batch.layers.enable(sharedHomeLayer);
+    else batch.layers.disable(sharedHomeLayer);
+    if (ground === undefined || !visible) {
       if (shown) { batch.count = start; shown = false; }
       return false;
     }
@@ -196,9 +203,11 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
     lastTick = tick;
     const seconds = tick / 1000;
     const idlePhase = seconds % 60;
-    const rest = !point.speed ? Math.max(0, Math.min(1, idlePhase - 41, 49 - idlePhase)) : 0;
+    const rest = 'seated' in point && point.seated ? 1
+      : !point.speed ? Math.max(0, Math.min(1, idlePhase - 41, 49 - idlePhase)) : 0;
     const grazing = !point.speed && !rest && seconds % 21 >= 18 && seconds % 21 < 19.2;
-    const step = point.speed ? Math.sin(seconds * point.speed * 2.2 * Math.PI * 2) : 0;
+    const slide = 'sliding' in point && point.sliding;
+    const step = point.speed ? Math.sin(seconds * point.speed * 2.2 * Math.PI * 2) * (slide ? .35 : 1) : 0;
     const bounce = point.speed ? Math.abs(step) * .012 : Math.sin(seconds * 2.8) * .004;
 
     // Hooves sit above the town's thin paving and turf dressing.
