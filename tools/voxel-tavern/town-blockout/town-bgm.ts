@@ -206,7 +206,7 @@ export function renderDailyBgmPreview(context: OfflineAudioContext) {
   return context.startRendering();
 }
 
-export function createTownBgm() {
+export function createTownBgm(getAudioContext: () => AudioContext) {
   const settings = readSettings();
   let graph: AudioGraph<AudioContext> | undefined;
   let timer: number | undefined;
@@ -243,7 +243,7 @@ export function createTownBgm() {
   function activate() {
     if (!entered || settings.muted || settings.volume === 0) return;
     try {
-      graph ??= makeGraph(new AudioContext(), inRoom);
+      graph ??= makeGraph(getAudioContext(), inRoom);
       const current = graph;
       function run() {
         updateOutput();

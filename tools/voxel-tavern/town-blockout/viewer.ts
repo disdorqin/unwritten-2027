@@ -664,7 +664,7 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-panel-controls'));
-const townBgm = createTownBgm();
+const townBgm = createTownBgm(festival.getAudioContext);
 townBgm.mountControls(element('town-panel-controls'));
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(

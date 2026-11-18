@@ -229,10 +229,14 @@ export function createFestival(
     setMessage(next);
   }
 
+  function getAudioContext() {
+    return audio ??= new AudioContext();
+  }
+
   function tryEnableAudio() {
     try {
-      audio ??= new AudioContext();
-      return audio.state === 'running' ? Promise.resolve() : audio.resume().catch(() => {});
+      const context = getAudioContext();
+      return context.state === 'running' ? Promise.resolve() : context.resume().catch(() => {});
     } catch {
       // Browser permission and Web Audio availability do not affect the show.
     }
@@ -323,6 +327,7 @@ export function createFestival(
   return {
     startShow,
     showActive() { return elapsed >= 0 || tracks.size > 0; },
+    getAudioContext,
     enableAudio() { void tryEnableAudio(); },
     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);

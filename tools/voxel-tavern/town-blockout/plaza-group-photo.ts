@@ -4,13 +4,13 @@ import {
   type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from '../../../src/presence/plaza-photo';
 import { downloadTownCanvas } from './town-photo-download';
+import { recordTownChroniclePlazaPhoto } from './town-chronicle';
 import './plaza-group-photo.css';
 
 type Round = { id: number; captureAt: number; shared: boolean; entered: boolean; optedOut: boolean; lineup?: PlazaPhotoPerson[] };
 type Placement = { east: number; north: number; height: number; active: boolean };
 type PhotoFrame = { round: Round; people: PlazaPhotoPerson[]; showNames: boolean; shutter: boolean };
 
-const photoStorageKey = 'unwritten.chronicle.plaza-photos.v1';
 
 export function createPlazaGroupPhoto(options: {
   now(): number;
@@ -133,13 +133,7 @@ export function createPlazaGroupPhoto(options: {
       id: `plaza-photo-${frame.round.captureAt}-${frame.round.id}`,
       at: frame.round.captureAt, names: frame.people.map(person => person.name), occasion: '日常合影',
     };
-    try {
-      const existing: unknown = JSON.parse(localStorage.getItem(photoStorageKey) ?? '[]');
-      const records = Array.isArray(existing) ? existing.filter(item => item && item.id !== entry.id) : [];
-      localStorage.setItem(photoStorageKey, JSON.stringify([...records.slice(-39), entry]));
-      window.dispatchEvent(new CustomEvent('town-chronicle:plaza-photo', { detail: entry }));
-      return true;
-    } catch { return false; }
+    return recordTownChroniclePlazaPhoto(entry);
   }
 
   function capture(source: HTMLCanvasElement, camera: PerspectiveCamera, frame: PhotoFrame) {
