@@ -30,6 +30,7 @@ import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
 import { createTownFireworksActivity } from './town-fireworks-activity';
+import { createPersonalFireworkStall } from './personal-firework-stall';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
@@ -776,6 +777,22 @@ presence.onFireworks((seed, theme, ageMs, own) => {
   if (own) fireworks.markStarted(ageMs);
   festival.launchPublicFireworks(seed, theme, ageMs / 1000);
 });
+const personalFireworks = createPersonalFireworkStall({ ...activityContext, announce: announceActivity }, {
+  player: () => ({ x, y: ground, z: -n, yaw,
+    area: boardingGround ? 'train' : hotSpringSoak.active() ? 'pool' :
+      homeReturn || roofed(x, n, ground) ? 'house' : 'open',
+    ceremony: ceremony.state().phase === 'climax' }),
+  ground: (east, z) => grid.heightAt(east, -z),
+  blocked: (east, north, feet) => !walkable(east, north) || obstructed(east, north, feet) || roofed(east, north, feet),
+  now: presence.serverNow,
+  owner: () => presence.selfId() ?? 0,
+  launch(event, activeCeremony) {
+    festival.enableAudio();
+    festival.playPersonalFirework(event.kind, Math.hypot(camera.position.x - event.x,
+      camera.position.y - event.y, camera.position.z - event.z), activeCeremony);
+  },
+});
+activities.push({ spots: [personalFireworks.spot] });
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
@@ -1168,6 +1185,7 @@ function cancelSnowAction(source?: 'mouse' | 'touch') {
   snowballs.hideAim();
 }
 function beginSnowAction(source: 'mouse' | 'touch') {
+  personalFireworks.extinguishSparkler();
   if (!moveAllowed() || snowHold || waterAtFeet()?.mode === 'swim') return;
   if (homeReturn) {
     announceActivity('屋里不兴打雪仗');
@@ -1519,7 +1537,7 @@ function currentAction() {
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   if (nearest) return nearest;
   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoArc(x, n, ground)) return plazaPhotoAction;
-  return tavernActivity.carryAction();
+  return tavernActivity.carryAction() ?? (personalFireworks.hasStock() ? personalFireworks.bag : undefined);
 }
 function interact() {
   currentAction()?.run();
@@ -2232,6 +2250,7 @@ renderer.setAnimationLoop(now => {
     townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
       roofed(seated?.x ?? x, seated?.n ?? n, ground)));
   }
+  festival.setPersonalFireworkFrame(personalFireworks.frame(camera.position));
   festival.update(dt);
   const ceremonyState = ceremony.update();
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;

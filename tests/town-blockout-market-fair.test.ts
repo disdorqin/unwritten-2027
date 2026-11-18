@@ -101,11 +101,11 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
   const batches = group.children.filter((child): child is Mesh =>
     child instanceof Mesh && child.name === 'Museum sign atlas');
   assert.equal(batches.length, 1);
-  assert.equal(batches[0].geometry.index?.count, 30);
+  assert.equal(batches[0].geometry.index?.count, 36);
   assert.deepEqual(bannerTitles, ['冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶']);
   group.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
   const { colliders } = readWalkGeometry(group);
-  assert.equal(colliders.length, 38);
+  assert.equal(colliders.length, 39);
   const bodyRadius = .27;
   const spots: TownActivitySpot[] = marketStalls.map(stall => ({
     x: stall.spot.x, n: stall.spot.n, ground: stall.spot.ground, range: stall.spot.range,
