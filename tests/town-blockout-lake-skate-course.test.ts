@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { iceFishingStations } from '../tools/voxel-tavern/town-blockout/ice-fishing-activity.ts';
 import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from '../tools/voxel-tavern/town-blockout/lake-skate-course.ts';
 import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 
@@ -33,4 +34,24 @@ test('the ice skating surface excludes the shore, water inlet and snowball lane'
   assert.equal(isLakeSkateIce(302, 68.5), false);
   assert.equal(isLakeSkateIce(350, 89), false);
   assert.equal(isLakeSkateIce(lakeSkateStation.x, lakeSkateStation.n), true);
+});
+
+test('all three fishing stations are on rendered ice outside the skating corridor', () => {
+  const grid = createTerrainGrid();
+  const path = [lakeSkateStation, ...lakeSkateGates];
+  assert.equal(iceFishingStations.length, 3);
+  for (const { x, n } of iceFishingStations) {
+    for (const [east, north] of [[x, n], [x - 1.5, n - 1.5], [x - .55, n + .9]]) {
+      assert.ok(canEnter(east, north) && isLakeSkateIce(east, north));
+      assert.equal(grid.surfaces[Math.round(east) + Math.round(north) * grid.gridWidth], 4);
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1], b = path[i];
+        const dx = b.x - a.x, dn = b.n - a.n;
+        const projected = ((east - a.x) * dx + (north - a.n) * dn) / (dx * dx + dn * dn);
+        const t = Math.max(0, Math.min(1, projected));
+        const distance = Math.hypot(east - a.x - dx * t, north - a.n - dn * t);
+        assert.ok(distance >= 4.3, 'all shore-side assets leave room for the skate course');
+      }
+    }
+  }
 });
