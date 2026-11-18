@@ -132,17 +132,17 @@ export function addScenery(group: Group, grid: Ground) {
     }
     for (const east of [216.5, 231.5]) {
       for (let north = 157; north <= n; north += 11) {
-        pillars.push({ at: [east, plazaHeight + .36, -north], scale: [.21, .72, .21], tint: '#453f48' });
-        pillars.push({ at: [east, plazaHeight + .10, -north], scale: [.42, .20, .42], tint: '#78869b' });
-        lights.push({ at: [east, plazaHeight + .87, -north], scale: [.36, .30, .36] });
-        caps.push({ at: [east, plazaHeight + 1.05, -north], scale: [.49, .11, .49], tint: '#602b32' });
-        caps.push({ at: [east, plazaHeight + 1.15, -north], scale: [.32, .08, .32], tint: '#c3d8ec' });
-        glowPositions.push([east, plazaHeight + .87, -north]);
+        pillars.push({ at: [east, plazaHeight + .18, -north], scale: [.21, .36, .21], tint: '#453f48' });
+        pillars.push({ at: [east, plazaHeight + .07, -north], scale: [.42, .14, .42], tint: '#78869b' });
+        lights.push({ at: [east, plazaHeight + .44, -north], scale: [.36, .16, .36] });
+        caps.push({ at: [east, plazaHeight + .55, -north], scale: [.49, .06, .49], tint: '#602b32' });
+        caps.push({ at: [east, plazaHeight + .60, -north], scale: [.32, .04, .32], tint: '#c3d8ec' });
+        glowPositions.push([east, plazaHeight + .44, -north]);
         blockers.push({ x: east, n: north, radius: .25 });
         for (const sign of [-1, 1]) {
-          pillars.push({ at: [east + sign * .063, plazaHeight + .51, -north + .112],
+          pillars.push({ at: [east + sign * .063, plazaHeight + .25, -north + .112],
             scale: [.09, .035, .032], tint: '#d2a56c', turn: sign * Math.PI / 4 });
-          pillars.push({ at: [east + sign * .089, plazaHeight + .57, -north + .114],
+          pillars.push({ at: [east + sign * .089, plazaHeight + .30, -north + .114],
             scale: [.032, .102, .033], tint: '#d2a56c' });
         }
       }
@@ -338,8 +338,7 @@ export function addScenery(group: Group, grid: Ground) {
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
-  instances(group, box, neutral, pavers);
-  instances(group, box, neutral, [...pillars, ...caps]);
+  instances(group, box, neutral, [...pavers, ...pillars, ...caps]);
   instances(group, box, new MeshBasicMaterial({ color: '#ffb969' }), lights);
   const glow = makeGlows(group, glowPositions);
   const lampLightPool = Array.from({ length: 3 }, () => new PointLight('#ffb469', 0, 13, 2));

@@ -52,7 +52,7 @@ test('the plaza stays flat and each crossing uses its bridge deck', () => {
   }
 });
 
-test('town expansion keeps original landmark origins and increases the playable grid', () => {
+test('town expansion keeps landmark origins except for the approved stage relocation', () => {
   assert.deepEqual(worldBounds, { width: 640, depth: 512 });
   assert.deepEqual([gridWidth, gridDepth], [641, 513]);
   assert.deepEqual([layout.width, layout.depth], [448, 384]);
@@ -68,7 +68,7 @@ test('town expansion keeps original landmark origins and increases the playable 
     'market-stalls': [154, 105, 10],
     glasshouse: [372, 96, 11],
     lighthouse: [408, 78, 12],
-    stage: [238, 157, 12],
+    stage: [238, 140, 12],
   });
 });
 
