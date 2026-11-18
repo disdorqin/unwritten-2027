@@ -7,6 +7,8 @@ import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcF
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 
+import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
 
@@ -173,6 +175,7 @@ export function createTownNpcActivity(
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
 ): TownActivity & {
+  registerResident: ReturnType<typeof createTownResidentController>['register'];
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
 } {
@@ -185,8 +188,9 @@ export function createTownNpcActivity(
   });
   const hatStart = costumeCount;
   const heldStart = hatStart + roles.length * snowHat.length;
+  const residentStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    heldStart + roles.length);
+    residentStart + townResidentCapacity);
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -239,16 +243,27 @@ export function createTownNpcActivity(
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
   const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0, zodiac: 0 }));
-  const visits: Partial<Record<ActorName, number>> = {};
+  const visits: Partial<Record<ActorName | TownResidentName, number>> = {};
   try {
     const previous: unknown = JSON.parse(localStorage.getItem(savedVisitKey) ?? 'null');
     if (previous && typeof previous === 'object') {
-      for (const { name } of roles) {
+      for (const name of [...roles.map(role => role.name), ...townResidentNames]) {
         const count = (previous as Record<string, unknown>)[name];
         if (typeof count === 'number' && Number.isSafeInteger(count) && count > 0) visits[name] = count;
       }
     }
   } catch { /* Private browsers keep the visit counts for this session. */ }
+
+  function visit(name: ActorName | TownResidentName) {
+    const visitsBefore = visits[name] ?? 0;
+    visits[name] = visitsBefore + 1;
+    try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
+    catch { /* The in-memory count still works. */ }
+    return visitsBefore;
+  }
+
+  const residents = createTownResidentController(villagers, residentStart, context, visit,
+    () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
 
   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
@@ -343,10 +358,7 @@ export function createTownNpcActivity(
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
 
-    const visitsBefore = visits[name] ?? 0;
-    visits[name] = visitsBefore + 1;
-    try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
-    catch { /* The in-memory count still works. */ }
+    const visitsBefore = visit(name);
     if (name === tavernWaiterName) {
       openWaiterConversation(panel, visitsBefore);
       return;
@@ -537,9 +549,11 @@ export function createTownNpcActivity(
 
   return {
     spots,
+    registerResident: residents.register,
     snowballTargets,
     updateSnowFight,
     update(dt) {
+      residents.update();
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = false;
       for (let i = 0; i < roles.length; i++) {
