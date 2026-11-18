@@ -24,6 +24,9 @@
 .panel.town-panel-collapsed .town-panel-heading { margin: 0; }
 .panel.town-panel-collapsed h1 { display: none; }
 
+.town-bgm-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; margin-block-start: 6px; }
+.town-bgm-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.town-bgm-controls input { width: min(86px, 25vw); accent-color: #e6bf82; }
 @media (pointer: coarse) {
-  .panel .town-panel-toggle { min-height: 44px; }
+  .panel .town-panel-toggle, .town-bgm-controls label { min-height: 44px; }
 }

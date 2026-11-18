@@ -38,6 +38,7 @@ import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
 import { createTouchLook } from './touch-look';
 import { createDesktopLook, type DesktopLookLockFailure } from './desktop-look';
+import { createTownBgm } from './town-bgm';
 import { terraceStop } from './museum-terrace';
 import { createMuseumInspection } from './museum-inspection';
 import { createMuseumLaunch } from './museum-launch';
@@ -600,6 +601,9 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+const townBgm = createTownBgm();
+townBgm.mountControls(element('town-panel-controls'));
+let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak({ sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking);
 const lightsButton = element<HTMLButtonElement>('town-lights-button');
 function showLightCount({ lit, total }: { lit: number; total: number }) {
@@ -1359,11 +1363,13 @@ rehearse.onclick = () => {
   controls.target.set(225, 54, -207);
   controls.update();
 };
-walk.onclick = () => {
-  mode(true);
+walk.onclick = event => {
+  if (mode(true) && walking && event.isTrusted) townBgm.enter();
   desktopLook.engage();
 };
-selector.onchange = () => mode(true);
+selector.onchange = event => {
+  if (mode(true) && walking && event.isTrusted) townBgm.enter();
+};
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
@@ -1819,6 +1825,11 @@ renderer.setAnimationLoop(now => {
   const local = museumPosition();
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered || Boolean(homeReturn));
+  if (now >= nextBgmRoomCheck) {
+    nextBgmRoomCheck = now + 180;
+    townBgm.setIndoor(walking && (Boolean(homeReturn) || sheltered ||
+      roofed(seated?.x ?? x, seated?.n ?? n, ground)));
+  }
   festival.update(dt);
   const ceremonyState = ceremony.update();
   ceremonyOverlay.apply(ceremonyState);
