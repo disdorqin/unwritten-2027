@@ -1,0 +1,29 @@
+.panel .town-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.panel .town-panel-heading h1 { margin: 0; }
+.panel .town-panel-toggle {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.panel.town-panel-collapsed {
+  width: max-content;
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.panel.town-panel-collapsed .town-panel-heading { margin: 0; }
+.panel.town-panel-collapsed h1 { display: none; }
+
+@media (pointer: coarse) {
+  .panel .town-panel-toggle { min-height: 44px; }
+}
