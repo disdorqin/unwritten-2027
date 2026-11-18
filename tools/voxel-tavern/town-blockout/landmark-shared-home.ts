@@ -135,6 +135,7 @@ export function createSharedHomeSpots(
   leave: () => void,
   photo: (filename: string) => void,
   room: SharedHome,
+  openDoorBook: () => void,
 ): TownActivitySpot[] {
   const spots: TownActivitySpot[] = seats.map(({ label, x, z, yaw, approach }) => ({
     ...world(x - Math.sin(yaw) * approach, z + Math.cos(yaw) * approach), label: `就座 · ${label}`, range: .65,
@@ -145,6 +146,7 @@ export function createSharedHomeSpots(
   }));
   spots.push(
     { ...world(doorX, 5.39), range: .81, label: '出门 · 返回来时的屋门', run: leave },
+    { ...world(.59, 4.42), range: .78, label: '百门册 · 选一扇门出去', run: openDoorBook },
     { ...world(hearth.x, -3.83), range: .85, label: '烤火 · 壁炉回暖',
       run() {
         const at = world(hearth.x, -5.52, 1.06);
@@ -231,6 +233,15 @@ export function buildSharedHome(): SharedHome {
   put(doorX, 2.57, 5.66, 1.72, .18, .32, trim);
   put(doorX + .48, 1.06, 5.48, .11, .11, .15, brass);
   put(doorX, 2.90, 5.72, .67, .19, .10, brass, true);
+
+  table(.59, 5.33, .78, .51);
+  put(.59, .90, 5.30, .61, .055, .38, '#782e38');
+  put(.59, .955, 5.30, .58, .065, .35, '#fcdfaa');
+  for (const side of [-1, 1]) {
+    put(.59 + side * .15, 1.02, 5.30, .285, .025, .34, '#fff1c9');
+    for (let row = 0; row < 3; row++) put(.59 + side * .15, 1.045, 5.19 + row * .09, .20, .008, .018, '#8a6048');
+  }
+  put(.59, 1.02, 5.30, .028, .03, .37, brass);
 
   const hills = [.14, .29, .48, .67, .58, .39, .54, .32];
   for (const x of [-5.32, 2.65]) {

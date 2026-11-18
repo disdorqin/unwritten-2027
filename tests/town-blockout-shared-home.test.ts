@@ -61,12 +61,13 @@ test('the entrance connects to every seat, hearth, photograph and exit on walkab
   const seated: TownSeat[] = [];
   const messages: string[] = [];
   let exited = false;
+  let doorBookOpened = false;
   let filename = '';
   const spots = createSharedHomeSpots({
     sit: seat => seated.push(seat), face() {}, announce: message => messages.push(message),
     open() { throw new Error('The postcard form is exercised in Chrome.'); },
-  }, () => { exited = true; }, name => { filename = name; }, room);
-  assert.equal(spots.length, 19);
+  }, () => { exited = true; }, name => { filename = name; }, room, () => { doorBookOpened = true; });
+  assert.equal(spots.length, 20);
   for (const spot of spots) {
     assert.equal(stand(spot.x, spot.n), true, spot.label);
     const ex = Math.round((spot.x - sharedHomeSpawn.x) / step);
@@ -76,6 +77,7 @@ test('the entrance connects to every seat, hearth, photograph and exit on walkab
   }
   assert.equal(seated.length, 14);
   assert.equal(exited, true);
+  assert.equal(doorBookOpened, true);
   assert.equal(filename, 'UNWRITTEN-2027-shared-home.png');
   assert.deepEqual(messages, ['靠近壁炉，冻纹会慢慢消退。', '窗边的台灯熄了。']);
   assert.equal(room.toggleDeskLamp(), true);
