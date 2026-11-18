@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTownSnowCover } from '../tools/voxel-tavern/town-blockout/town-snow-cover.ts';
-import { townSnowWeatherAt, townWeatherEpoch } from '../tools/voxel-tavern/town-blockout/town-weather.ts';
+import { createTownWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame, townWeatherEpoch } from '../tools/voxel-tavern/town-blockout/town-weather.ts';
 
 test('shared weather stays consistent, rotates several times and eases the visual change', () => {
   const step = 1_000;
@@ -26,21 +26,44 @@ test('shared weather stays consistent, rotates several times and eases the visua
 });
 
 test('stronger weather piles up faster and a lighter tier recedes gradually', () => {
-  const makeCover = () => createTownSnowCover({
-    gridWidth: 1, gridDepth: 1, surfaces: new Uint8Array(1), heightAt: () => 12,
-  });
   const tiers = ['light', 'medium', 'heavy'] as const;
-  const samples = tiers.map(tier => {
-    const cover = makeCover();
-    cover.updateWeather(20, townSnowWeatherAt(0, tier));
-    return cover.amount();
-  });
+  const samples = tiers.map(tier => createTownWeatherCover().update(20, townSnowWeatherAt(0, tier)));
   assert.ok(samples[0] < samples[1] && samples[1] < samples[2]);
-  const cover = makeCover();
-  cover.updateWeather(180, townSnowWeatherAt(0, 'heavy'));
-  assert.equal(cover.amount(), 1);
-  cover.updateWeather(1, townSnowWeatherAt(0, 'light'));
-  assert.ok(cover.amount() < 1 && cover.amount() > .98);
-  cover.updateWeather(200, townSnowWeatherAt(0, 'light'));
-  assert.equal(cover.amount(), .18);
+  const cover = createTownWeatherCover();
+  assert.equal(cover.update(180, townSnowWeatherAt(0, 'heavy')), 1);
+  const melting = cover.update(1, townSnowWeatherAt(0, 'light'));
+  assert.ok(melting < 1 && melting > .98);
+  assert.equal(cover.update(200, townSnowWeatherAt(0, 'light')), .18);
+});
+
+test('heavy visual snow leaves the normal day empty and preserves formal night gameplay rates', () => {
+  const ground = { gridWidth: 101, gridDepth: 101, surfaces: new Uint8Array(101 * 101), heightAt: () => 12 };
+  const physical = createTownSnowCover(ground);
+  const visual = createTownWeatherCover();
+  const heavy = townSnowWeatherAt(0, 'heavy');
+  assert.equal(visual.update(180, heavy), 1);
+  physical.update(180, false);
+  assert.equal(physical.amount(), 0);
+  assert.equal(physical.depthAt(20, 20, 12), 0);
+  assert.equal(physical.movementScale(20, 20, 12), 1);
+  assert.equal(physical.depth().servings, 3);
+  assert.equal(physical.canGather(20, 20, 12), true);
+
+  physical.setIntensity(4);
+  physical.update(55, true);
+  assert.equal(physical.depthAt(20, 20, 12), 1);
+  assert.equal(physical.movementScale(20, 20, 12), .62);
+  assert.equal(physical.depth().servings, 5);
+  visual.update(200, townSnowWeatherAt(0, 'light'));
+  assert.equal(physical.amount(), 1);
+  physical.update(0, false);
+  assert.equal(physical.depthAt(20, 20, 12), 0);
+  assert.equal(physical.movementScale(20, 20, 12), 1);
+});
+
+test('formal night visual intensity follows the existing continuous ceremony curve', () => {
+  for (const snowIntensity of [1, 1.75, 2.45, 3.2, 4]) {
+    const result = townSnowWeatherForFrame({ now: townWeatherEpoch, phase: 'countdown', snowIntensity });
+    assert.equal(result.intensity, snowIntensity);
+  }
 });

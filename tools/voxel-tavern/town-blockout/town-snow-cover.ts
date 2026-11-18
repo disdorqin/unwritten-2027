@@ -1,7 +1,6 @@
 import { bridgeAt, gridStep, isWater, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import { extensionRoadClearance, extensionStreetClearance } from './town-extension';
-import type { TownSnowWeather } from './town-weather';
 
 type Ground = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt' | 'gridWidth' | 'gridDepth' | 'surfaces'>;
 type GroundMask = (x: number, north: number, ground: number) => boolean;
@@ -26,7 +25,6 @@ export function createTownSnowCover(grid: Ground) {
   let cover = 0;
   let intensity = 1;
   let snowNight = false;
-  let sharedWeather = false;
 
   function sampleGround(x: number, north: number) {
     const col = Math.round(x / gridStep);
@@ -47,7 +45,7 @@ export function createTownSnowCover(grid: Ground) {
   }
 
   function depthAt(x: number, north: number, ground: number, isCleared?: GroundMask) {
-    if ((!sharedWeather && (!snowNight || intensity <= 1)) || cover < .25) return 0;
+    if (!snowNight || intensity <= 1 || cover < .25) return 0;
     const surface = sampleGround(x, north);
     const depth = surface === 0 ? cover : surface === 3 ? cover * .5 : 0;
     if (depth < .25 || !hasSnowAtFeet(x, north, ground) || bridgeMouthKeepClear(x, north, 0) ||
@@ -68,17 +66,7 @@ export function createTownSnowCover(grid: Ground) {
       if (depth >= .6) return sprint ? deepSprintScale : .62;
       return sprint ? .8 : .85;
     },
-    updateWeather(seconds: number, weather: Pick<TownSnowWeather, 'pilingRate' | 'targetCover'>) {
-      if (!Number.isFinite(seconds) || seconds <= 0) return;
-      sharedWeather = true;
-      if (cover < weather.targetCover) {
-        cover = Math.min(weather.targetCover, cover + seconds * weather.pilingRate / accumulationSeconds);
-      } else {
-        cover = Math.max(weather.targetCover, cover - seconds / meltSeconds);
-      }
-    },
     update(seconds: number, isSnowNight: boolean) {
-      sharedWeather = false;
       snowNight = isSnowNight;
       if (!Number.isFinite(seconds) || seconds <= 0) return;
       if (snowNight && intensity >= 1.5) {

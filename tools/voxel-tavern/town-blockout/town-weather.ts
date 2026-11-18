@@ -1,3 +1,5 @@
+import type { CeremonyState } from './town-ceremony';
+
 const minuteMs = 60_000;
 const weatherSlotCount = 64;
 export const townWeatherEpoch = Date.UTC(2026, 0, 1);
@@ -51,14 +53,46 @@ export function townSnowWeatherAt(sharedTime: number, ceremonyOverride?: TownSno
   const next = slots[(index + 1) % slots.length].tier;
   const t = Math.max(0, 1 - (slot.end - phase) / slot.transition);
   const progress = t * t * (3 - 2 * t);
-  const tier = ceremonyOverride ?? slot.tier;
-  const nextTier = ceremonyOverride ?? next;
+  if (ceremonyOverride) return sampleProfile(ceremonyOverride, ceremonyOverride, 0);
+  return sampleProfile(slot.tier, next, progress);
+}
+
+function sampleProfile(tier: TownSnowTier, nextTier: TownSnowTier, progress: number): TownSnowWeather {
   const from = profiles[tier], to = profiles[nextTier];
   const interpolate = (a: number, b: number) => a + (b - a) * progress;
   return {
-    tier, nextTier, progress: ceremonyOverride ? 0 : progress,
+    tier, nextTier, progress,
     intensity: interpolate(from.intensity, to.intensity),
     fogNear: interpolate(from.fogNear, to.fogNear), fogFar: interpolate(from.fogFar, to.fogFar),
     pilingRate: interpolate(from.pilingRate, to.pilingRate), targetCover: interpolate(from.targetCover, to.targetCover),
+  };
+}
+
+export function townSnowWeatherForFrame(
+  state: Pick<CeremonyState, 'now' | 'phase' | 'snowIntensity'>,
+): TownSnowWeather {
+  if (state.phase === 'ordinary') return townSnowWeatherAt(state.now);
+  const level = state.snowIntensity;
+  if (level <= profiles.light.intensity) return sampleProfile('light', 'light', 0);
+  if (level >= profiles.heavy.intensity) return sampleProfile('heavy', 'heavy', 0);
+  const [tier, next] = level < profiles.medium.intensity ? ['light', 'medium'] as const : ['medium', 'heavy'] as const;
+  const progress = (level - profiles[tier].intensity) / (profiles[next].intensity - profiles[tier].intensity);
+  return { ...sampleProfile(tier, next, progress), intensity: level };
+}
+
+/** Accumulation sent only to the terrain renderer. */
+export function createTownWeatherCover() {
+  let cover = 0;
+  return {
+    update(seconds: number, weather: Pick<TownSnowWeather, 'pilingRate' | 'targetCover'>) {
+      if (Number.isFinite(seconds) && seconds > 0) {
+        if (cover < weather.targetCover) {
+          cover = Math.min(weather.targetCover, cover + seconds * weather.pilingRate / 55);
+        } else {
+          cover = Math.max(weather.targetCover, cover - seconds / 150);
+        }
+      }
+      return cover;
+    },
   };
 }
