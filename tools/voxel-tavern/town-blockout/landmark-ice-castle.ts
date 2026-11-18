@@ -28,6 +28,35 @@ export const iceThrone = {
   hallDoor: [7.2, 2.15, 0],
 } as const;
 
+function useCastleEmissionColor(material: MeshLambertMaterial, masked = false) {
+  if (masked) useLandmarkEmissionMask(material);
+  const applyMask = masked ? material.onBeforeCompile : undefined;
+  material.onBeforeCompile = (shader, renderer) => {
+    applyMask?.call(material, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vColor.rgb;');
+  };
+  material.customProgramCacheKey = () => masked ? 'castle-emission-color-mask' : 'castle-emission-color';
+}
+
+function useCastleIceFresnel(material: MeshLambertMaterial, variant: 'masonry' | 'emission-mask') {
+  const compile = material.onBeforeCompile;
+  const pale = new Color(palette.paleIce).toArray().map(value => value.toFixed(6)).join(', ');
+  const varying = 'varying float vCastleIce;';
+  material.onBeforeCompile = (shader, renderer) => {
+    compile.call(material, shader, renderer);
+    shader.vertexShader = 'attribute float castleIce;\n' + varying + '\n'
+      + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvCastleIce = castleIce;');
+    shader.fragmentShader = varying + '\n' + shader.fragmentShader.replace('#include <normal_fragment_maps>', `
+      #include <normal_fragment_maps>
+      float iceEdge = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+      float iceEdgeSquared = iceEdge * iceEdge;
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${pale}), 0.65 * vCastleIce * iceEdgeSquared * iceEdgeSquared);
+    `);
+  };
+  material.customProgramCacheKey = () => 'castle-ice-fresnel-' + variant;
+}
+
 // Detail is opaque and split into opaque masonry and luminous inlays per wing.
 // Only the walkable surfaces and walls carry collision.
 function castleModel() {
@@ -39,9 +68,11 @@ function castleModel() {
   const luminous: BufferGeometry[] = [];
   const colors = new Map(Object.entries(palette).map(([key, rgb]) => [key, new Color(rgb)]));
   const mason = new MeshLambertMaterial({ vertexColors: true });
+  useCastleIceFresnel(mason, 'masonry');
   const lanterns = new MeshLambertMaterial({
-    vertexColors: true, emissive: '#ccc5b8', emissiveIntensity: .19,
+    vertexColors: true, emissive: '#ffffff', emissiveIntensity: .4,
   });
+  useCastleEmissionColor(lanterns);
 
   function add(shape: BufferGeometry, x: number, y: number, z: number, finish: Finish, yaw: number) {
     const geometry = shape.index ? shape.toNonIndexed() : shape;
@@ -53,6 +84,9 @@ function castleModel() {
     const values = new Float32Array(geometry.getAttribute('position').count * 3);
     for (let i = 0; i < values.length; i += 3) rgb.toArray(values, i);
     geometry.setAttribute('color', new BufferAttribute(values, 3));
+    const isIce = finish === 'deepIce' || finish === 'blueIce' || finish === 'ice' || finish === 'paleIce';
+    const iceMask = new Uint8Array(geometry.getAttribute('position').count).fill(isIce ? 1 : 0);
+    geometry.setAttribute('castleIce', new BufferAttribute(iceMask, 1));
     (finish === 'lantern' || finish === 'glint' ? luminous : opaque).push(geometry);
   }
 
@@ -90,7 +124,8 @@ function castleModel() {
       }
       const geometry = mergeGeometries(pieces)!;
       const material = lanterns.clone();
-      useLandmarkEmissionMask(material);
+      useCastleEmissionColor(material, true);
+      useCastleIceFresnel(material, 'emission-mask');
       const mesh = new Mesh(geometry, material);
       mesh.name = wing;
       group.add(mesh);
@@ -149,6 +184,19 @@ export function buildIceCastle() {
     block(x, base + 1.9, z, .48, .15, .48, 'snow');
   }
 
+  function icicleRow(x0: number, z0: number, x1: number, z1: number, eave: number, phase: number) {
+    const lengths = [.36, .77, .48, .9, .53, .67, .41];
+    const count = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / .64));
+    for (let i = 0; i < count; i++) {
+      const t = (i + .5) / count;
+      const index = (i + phase) % lengths.length;
+      const height = lengths[index];
+      const width = .12 + height * .18;
+      crystal(x0 + (x1 - x0) * t, eave - height / 2, z0 + (z1 - z0) * t,
+        width, height, width, index % 3 === 2 ? 'ice' : 'paleIce', index * .29);
+    }
+  }
+
   function turret(x: number, z: number, size: number, shoulder: number, crown: number) {
     solid(x, .12, z, size + .45, .63, size + .45, 'foundation');
     solid(x, .73, z, size, shoulder - .73, size, 'blueIce');
@@ -170,6 +218,13 @@ export function buildIceCastle() {
       block(x, shoulder * fraction, z, size + .28, .2, size + .28, 'ice');
     }
     block(x, shoulder, z, size + .68, .41, size + .68, 'snow');
+    const facade = size / 2 + .22;
+    const span = size / 2 - .23;
+    for (const side of [-1, 1]) {
+      const phase = side < 0 ? 1 : 3;
+      icicleRow(x - span, z + side * facade, x + span, z + side * facade, shoulder - .15, phase);
+      icicleRow(x + side * facade, z - span, x + side * facade, z + span, shoulder - .15, phase + 1);
+    }
     const roof = new CylinderGeometry(0, size * Math.SQRT1_2 + .28, crown, 4, 1);
     add(roof, x, shoulder + crown / 2, z, 'deepIce', Math.PI / 4);
     for (const level of [.17, .4, .66]) {
@@ -196,6 +251,7 @@ export function buildIceCastle() {
   }
   solid(-20.7, 4.87, 0, 3, 5.48, 7.1, 'blueIce');
   block(-20.7, 5.02, 0, 3.28, .31, 3.72, 'snow');
+  icicleRow(-22.24, -1.72, -22.24, 1.72, 4.93, 2);
   block(-20.7, 10.39, 0, 3.49, .46, 22.7, 'snow');
   for (const z of [-9.8, -7.1, -4.4, -1.7, 1.7, 4.4, 7.1, 9.8]) {
     block(-22.08, 10.98, z, .86, .88, 1.23, 'ice');
@@ -217,6 +273,9 @@ export function buildIceCastle() {
     solid(.2, .12, z, 36.5, 4.9, .87, 'blueIce');
     block(.25, .72, z, 36.55, .35, 1.12, 'deepIce');
     block(.25, 4.97, z, 36.8, .29, 1.24, 'snow');
+    const phase = side < 0 ? 0 : 2;
+    icicleRow(-13.7, z + side * .51, 15.6, z + side * .51, 4.86, phase);
+    icicleRow(-13.2, z - side * .51, 7.8, z - side * .51, 4.86, phase + 2);
     for (let x = -13.5; x < 18; x += 2.4) {
       block(x, 5.36, z, 1.37, .63, .95, 'ice');
       block(x, 5.72, z, 1.53, .18, 1.1, 'snow');
@@ -251,6 +310,8 @@ export function buildIceCastle() {
     for (const x of [8.9, 12.4, 15.9, 19.4]) {
       block(x - 1.46, 5.9, side * 9.7, .38, 11.55, .27, 'paleIce');
       lancet(x, 4.83, side * 9.78, 1.74, 4.22, side * Math.PI / 2 - Math.PI / 2);
+      block(x, 8.76, side * 9.92, 2.21, .19, .56, 'snow');
+      icicleRow(x - 1.02, side * 10.09, x + 1.02, side * 10.09, 8.7, side < 0 ? 4 : 2);
       lancet(x, 4.83, side * 8.83, 1.32, 3.46, -side * Math.PI / 2 - Math.PI / 2);
     }
     for (const z of [side * 3.6, side * 7.15]) lancet(20.25, 5.05, z, 1.37, 4.46, -Math.PI / 2);
@@ -261,6 +322,7 @@ export function buildIceCastle() {
   }
   solid(7.2, 4.18, 0, .86, 7.42, 5.4, 'blueIce');
   block(7.2, 4.21, 0, 1.25, .28, 5.67, 'snow');
+  icicleRow(6.65, -2.65, 6.65, 2.65, 4.12, 1);
   crystal(6.37, 7.42, 0, .56, 2.54, 2.54, 'paleIce');
   crystal(6.07, 7.42, 0, .28, 1.51, 1.51, 'pane');
   for (let tier = 0; tier < 13; tier++) {
