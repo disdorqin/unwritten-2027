@@ -158,6 +158,20 @@ test('station interaction spots stay aligned with the scaled model and the timet
   assert.equal(spots[1].x, 538.8);
   assert.equal(spots[2].x, 507.4);
   assert.equal(spots[2].n, 326.9);
+  assert.equal(spots[2].ground, 26.14);
+  const { n, ground } = spots[2];
+  const canStand = canStandAt(station);
+  const floors = station.userData.floors as Box[];
+  for (let step = 0; step <= 61; step++) {
+    const east = spots[2].x + step / 10;
+    assert.ok(canStand(east, n, ground), `guide approach obstructed at east ${east}`);
+    const localX = east - station.position.x;
+    const localZ = -n - station.position.z;
+    assert.ok(floors.some(({ min, max }) =>
+      Math.abs(max[1] - (ground - station.position.y)) < .001 &&
+      localX >= min[0] && localX <= max[0] && localZ >= min[2] && localZ <= max[2]),
+    `guide approach lacks floor at east ${east}`);
+  }
   spots[0].run();
   assert.equal(stamp, stationTicketStamp.id);
   assert.equal(spots[0].available?.(), false);
@@ -178,8 +192,12 @@ test('station interaction spots stay aligned with the scaled model and the timet
   spots[2].run();
   assert.equal(title, '全图玩法总台');
   assert.deepEqual(description.split('\n\n').map(section => section.split(' · ')[0]), RAILWAY_STATION_NAMES);
-  assert.match(description, /滑冰、冰钓/);
-  assert.match(description, /城堡西门/);
+  for (const copy of ['站台东侧有雪橇架', '沿灯路进站厅南门', '沿有灯的林间小道',
+    '自由滑行或沿金灯门计时', '到西侧钓位可抛竿', '城堡西门', '浴场西门']) {
+    assert.ok(description.includes(copy), `missing wayfinding: ${copy}`);
+  }
+  assert.deepEqual(railHallGuide.board.split('\n').filter(line => line.includes(' · '))
+    .map(line => line.split(' · ')[0]), RAILWAY_STATION_NAMES);
   const hotSpringGuide = '温泉站 · 室外四池泡汤\n西浅汤、东深汤、岩池、雪见池';
   assert.ok(description.includes(hotSpringGuide));
   assert.ok(railHallGuide.board.includes(hotSpringGuide));

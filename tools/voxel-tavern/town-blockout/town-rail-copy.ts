@@ -27,12 +27,12 @@ export function createRailOvernightBroadcast() {
 
 const railDestinationGuide = {
   'coaster-station': {
-    activity: '候车、环镇观景',
-    route: '在站台时刻牌查看下一班。去站厅可搭一站，在火车站前站下车。',
+    activity: '雪橇、环镇观景',
+    route: '站台东侧有雪橇架。想环镇观景，可以在时刻牌查看发车时间。去站厅请搭一站，在火车站前站下车。',
   },
   'railway-station': {
     activity: '车票盖章、查班次',
-    route: '从站台往东下楼，沿灯走到站厅。售票窗在西侧，时刻表在东侧。',
+    route: '从站台往东下楼，沿灯路进站厅南门。到西侧售票窗盖车票戳，西墙看总台，东侧查实时班次。',
   },
   'forest-station': {
     activity: '林间木屋、雪路散步',
@@ -40,15 +40,15 @@ const railDestinationGuide = {
   },
   'lake-station': {
     activity: '滑冰、冰钓',
-    route: '从北侧台阶离开站台，向冰湖南口走，从南岸下到冰面。',
+    route: '从北侧台阶离站，沿雪路去冰湖南岸。到东侧换鞋点可自由滑行或沿金灯门计时，到西侧钓位可抛竿。',
   },
   'ice-castle': {
     activity: '王座就座、取景',
-    route: '沿北向接驳道前行，顺着灯路走到城堡西门。',
+    route: '向北下台阶，再沿灯路往西绕到城堡西门。进大厅可在王座就座或保存取景。',
   },
   'hot-spring': {
     activity: `室外四池泡汤\n${hotSpringPools.map(({ name }) => name).join('、')}`,
-    route: '向东下台阶，沿铺石转向北，到浴场西门。',
+    route: '向东下台阶，沿铺石转向北，从浴场西门进四池区。到池边选一池入水回暖。',
   },
 } satisfies Record<TownRailStopId, { activity: string; route: string }>;
 
