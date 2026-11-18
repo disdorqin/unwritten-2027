@@ -1,0 +1,28 @@
+.town-mail { display: grid; gap: .65rem; }
+.town-mail :is(h3, p, ul) { margin-block: 0 .45rem; }
+.town-mail-controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.town-mail-form { display: grid; gap: .4rem; margin-bottom: .9rem; }
+.town-mail-form label { display: grid; gap: .2rem; }
+.town-mail-form :is(input, select, textarea) { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; }
+.town-mail-form > button { justify-self: start; }
+.town-mail-form [hidden] { display: none; }
+.town-mail-over-limit { color: #ffc19e; }
+.town-mail-feedback:empty { display: none; }
+.town-mail-ready { color: #ffba96; }
+.town-mail-list { display: grid; gap: .45rem; list-style: none; padding: 0; }
+.town-mail-list li { padding: .55rem .65rem; border: 1px solid #587392; border-radius: .4rem; }
+.town-mail-list li > button { margin-inline-start: .5rem; }
+.town-mail-list p, .town-mail-letter { white-space: pre-wrap; overflow-wrap: anywhere; }
+.town-mail-sealing, .town-mail-opening {
+  display: block; width: 2.9rem; height: 1.7rem; margin: .3rem 0 .8rem;
+  border: 1px solid #dac299; border-radius: .2rem; background: linear-gradient(145deg, #ce9b6c 48%, #8c443c 49% 53%, #f1c88e 54%);
+  animation: town-mail-fold .55s ease-out both;
+}
+.town-mail-opening { animation-direction: reverse; }
+@keyframes town-mail-fold {
+  from { transform: translateY(-.6rem) rotate(-10deg); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .town-mail-sealing, .town-mail-opening { animation-duration: .01ms; }
+}

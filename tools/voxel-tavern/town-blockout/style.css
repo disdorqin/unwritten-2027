@@ -86,9 +86,6 @@ label, output, #help, #load-status { font-size: 12px; }
 #place-card h2 { margin: 0 28px 14px 0; font-size: 24px; }
 #place-card p { color: #cfdaeb; line-height: 1.6; }
 .close-card { float: right; }
-#letter-form label { display: block; margin-bottom: 6px; }
-#letter-body { display: block; width: 100%; max-height: 43vh; margin: 0 0 12px; padding: 10px; border: 1px solid #6d819d; border-radius: 5px; resize: vertical; background: #101a2b; color: inherit; font: inherit; }
-#letter-receipt { margin-left: 8px; color: #ffda9d; }
 #museum-card { color-scheme: light; width: min(560px,calc(100vw - 26px)); border: 1px solid #aa8860; border-radius: 10px; color: #392824; background: #f6eedc; padding: 25px 26px; box-shadow: 0 16px 45px #090f20a8; }
 #museum-card::backdrop { background: #0a101fab; }
 #museum-card button { background: #633e32; border-color: #633e32; color: #fff2d9; }

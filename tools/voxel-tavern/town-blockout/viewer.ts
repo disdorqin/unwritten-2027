@@ -38,6 +38,7 @@ import { nearestTownActivity, type TownActivity, type TownActivityContext, type 
 import { createTavernActivity } from './tavern-activity';
 import './tavern-mix-panel.css';
 import { createPostActivity } from './post-activity';
+import { createTownMailActivity } from './town-mail-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
 import { createIceActivity } from './ice-activity';
@@ -444,10 +445,6 @@ const placeCard = element<HTMLDialogElement>('place-card');
 const activityPanel = element('town-activity-content');
 const activityStatus = element('town-activity-status');
 let activityMessageTimer: number | undefined;
-const letterForm = element<HTMLFormElement>('letter-form');
-const letterBody = element<HTMLTextAreaElement>('letter-body');
-const letterReceipt = element('letter-receipt');
-const letterKey = 'unwritten:snow-town-letter';
 let photoFilename: string | undefined;
 const museumInspection = createMuseumInspection(renderer, camera.aspect);
 const museumLaunch = createMuseumLaunch(renderer, camera.aspect);
@@ -484,32 +481,15 @@ function museumPosition() {
 }
 museumMapButton.onclick = () => museumVisit.openMap(museumPosition());
 
-function openPlace(title: string, description: string, writing = false) {
+function openPlace(title: string, description: string) {
   pauseForPanel();
   element('place-title').textContent = title;
   element('place-text').textContent = description;
-  letterForm.hidden = !writing;
-  activityPanel.hidden = writing;
+  activityPanel.hidden = false;
   activityPanel.replaceChildren();
-  if (writing) {
-    letterReceipt.textContent = '';
-    try { letterBody.value = localStorage.getItem(letterKey) ?? ''; }
-    catch { letterBody.value = ''; }
-  }
   if (!placeCard.open) placeCard.showModal();
   return activityPanel;
 }
-letterForm.onsubmit = event => {
-  event.preventDefault();
-  const value = letterBody.value.trim();
-  if (!value) return;
-  try {
-    localStorage.setItem(letterKey, value);
-    letterReceipt.textContent = '已寄存在这台设备上';
-  } catch {
-    letterReceipt.textContent = '浏览器未允许本地保存';
-  }
-};
 placeCard.addEventListener('close', () => renderer.domElement.focus());
 
 function leaveRide() {
@@ -586,6 +566,9 @@ function announceActivity(message: string, gold = false) {
 activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing);
 const activitySpots = activities.flatMap(activity => activity.spots);
+const townMail = createTownMailActivity({ open: activityContext.open, announce: announceActivity }, grid.heightAt);
+scene.add(townMail.group);
+activitySpots.push(...townMail.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
@@ -992,11 +975,6 @@ function registerLandmarkActivities(id: string, group: Group) {
     }));
   }
 }
-const tour = [
-  { x: 262.1, n: 205.6, radius: 2.9, maxHeight: 15.6, label: '给 2027 写封信', run() {
-    openPlace('写给 2027', '给未来的自己留一封信。寄存后可以在同一浏览器里回来读。', true);
-  } },
-];
 function currentAction() {
   if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) return { label: railway.atPlatform ? '下车' : '结束乘坐并回到站台', run: leaveRide };
@@ -1018,9 +996,7 @@ function currentAction() {
       railway.board();
     } };
   }
-  return nearestTownActivity(activitySpots, x, n, ground)
-    ?? tour.find(spot => ground <= spot.maxHeight && Math.hypot(x - spot.x, n - spot.n) < spot.radius)
-    ?? tavernActivity.carryAction();
+  return nearestTownActivity(activitySpots, x, n, ground) ?? tavernActivity.carryAction();
 }
 function interact() {
   currentAction()?.run();
