@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh } from 'three';
+import { InstancedMesh, Mesh } from 'three';
 import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import {
@@ -98,6 +98,14 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
   const terrain = createTerrainGrid();
   const group = buildMarketLandmark(plot);
+  const cellBatches = group.children.filter((child): child is InstancedMesh => child instanceof InstancedMesh);
+  assert.equal(new Set(cellBatches.map(batch => batch.name)).size, cellBatches.length);
+  assert.ok(new Set(cellBatches.map(batch => batch.name.split('/')[0])).size >= 3);
+  assert.ok(cellBatches.every(batch => batch.boundingSphere && batch.boundingSphere.radius > 0));
+  const triangles = cellBatches.reduce((sum, batch) => sum + batch.count * (batch.geometry.index?.count ?? 0) / 3, 0);
+  const previousBuckets = new Set(cellBatches.map(batch => batch.name.split('/').slice(1).join('/')));
+  t.diagnostic(`market geometry buckets ${previousBuckets.size} → ${cellBatches.length}, ${triangles} tris before culling`);
+
   const batches = group.children.filter((child): child is Mesh =>
     child instanceof Mesh && child.name === 'Museum sign atlas');
   assert.equal(batches.length, 1);
