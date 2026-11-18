@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>UNWRITTEN 2027 · 雪夜小镇单人预览</title>
+  <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
   <script type="module" src="./town-blockout/town-panel.ts"></script>
@@ -13,12 +13,18 @@
   <main id="scene" aria-label="雪镇三维场景"></main>
   <aside class="panel" aria-label="小镇控制">
     <div class="town-panel-heading">
-      <h1>UNWRITTEN 2027 <small>单人预览</small></h1>
+      <h1>UNWRITTEN 2027</h1>
+      <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
       <button id="town-panel-toggle" class="town-panel-toggle" type="button"
         aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
     </div>
     <p id="env-banner" role="note" hidden>当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</p>
     <div id="town-panel-controls">
+      <label class="town-presence-name">昵称
+        <input id="town-presence-name" type="text" maxlength="48" placeholder="留空使用游客名"
+          autocomplete="nickname" aria-describedby="town-presence-name-hint">
+      </label>
+      <small id="town-presence-name-hint">最多 24 字，下次连接时生效</small>
       <nav aria-label="查看方式">
         <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
         <button id="walk" type="button" aria-pressed="false">第一人称</button>
@@ -35,8 +41,18 @@
         <button id="town-passport-button" type="button">纪念戳册</button>
         <button id="town-lights-button" type="button">点亮小镇</button>
       </nav>
+      <section id="town-chat" aria-label="小镇聊天" hidden>
+        <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
+        <form id="town-chat-form">
+          <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
+          <input id="town-chat-text" type="text" maxlength="200" autocomplete="off"
+            aria-label="聊天消息" placeholder="说点什么">
+          <button type="submit">发送</button>
+        </form>
+      </section>
     </div>
   </aside>
+  <span id="town-chat-self" aria-hidden="true" hidden></span>
   <section id="museum-inspection" aria-labelledby="exhibit-title" hidden>
     <header>
       <div><p id="exhibit-month"></p><h2 id="exhibit-title"></h2></div>

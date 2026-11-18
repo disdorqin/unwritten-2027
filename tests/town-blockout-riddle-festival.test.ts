@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Color, PerspectiveCamera, Scene, type InstancedMesh, type Points, type ShaderMaterial } from 'three';
-import { createFestival, makePlayerFireworksTable } from '../tools/voxel-tavern/town-blockout/festival.ts';
+import { createFestival, makePlayerFireworksTable, makeTestFireworksTable } from '../tools/voxel-tavern/town-blockout/festival.ts';
 import { createSnowfall } from '../tools/voxel-tavern/town-blockout/snowfall.ts';
 import { createTownLights } from '../tools/voxel-tavern/town-blockout/town-lights.ts';
 import { createTownFireworksActivity } from '../tools/voxel-tavern/town-blockout/town-fireworks-activity.ts';
@@ -233,4 +233,37 @@ test('the southern plaza has one public spot and its accepted request starts the
   time += fireworksCooldownMs - 2000;
   spot.run();
   assert.match(notices.at(-1) ?? '', /烟花师傅在装填.*2 秒/);
+});
+
+test('configured test fireworks stay on one atlas and both peers render the same seeded positions', () => {
+  const table = makeTestFireworksTable(0x5530020f);
+  assert.deepEqual(table, makeTestFireworksTable(0x5530020f));
+  assert.notDeepEqual(table, makeTestFireworksTable(0x55300210));
+  assert.equal(table.duration, 36);
+  assert.equal(table.bursts.length,22);
+  assert.deepEqual(table.launchPoints.map(({ id }) => id), ['plaza','lake']);
+  const scenes = [new Scene(), new Scene()];
+  const peers = scenes.map(scene => createFestival(scene));
+  const points = scenes.map(scene => scene.children[0] as Points);
+  const buffers = points.map(object => object.geometry.getAttribute('position'));
+  let now = 5000;
+  for (const peer of peers) {
+    assert.equal(peer.startShow(table,{ ageSeconds: -.25, clockMs: () => now }),true);
+    assert.equal(peer.start(),false);
+    peer.update(.1);
+  }
+  assert.ok(points.every(object => !object.visible));
+  now += 700;
+  peers.forEach(peer => peer.update(0));
+  assert.ok(points.every(object => object.visible && object.geometry.drawRange.count === 12));
+  const pointsAtFrame = points.map(object => Array.from(object.geometry.getAttribute('position').array.slice(0,36)));
+  assert.deepEqual(pointsAtFrame[0],pointsAtFrame[1]);
+  assert.ok(pointsAtFrame[0][0] < 250);
+  assert.ok(pointsAtFrame[0][18] > 300);
+  assert.ok(scenes.every((scene, index) => scene.children.length === 1 &&
+    scene.children[0] === points[index] && points[index].geometry.getAttribute('position') === buffers[index]));
+  now += 36_000;
+  peers.forEach(peer => peer.update(0));
+  assert.ok(points.every(object => !object.visible));
+  assert.ok(peers.every(peer => !peer.showActive()));
 });

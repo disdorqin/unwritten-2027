@@ -6,6 +6,7 @@ import { playTowerBell, playTowerChime } from '../tower-chime';
 import {
   fireworksShowMs, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from '../../../src/presence/firework-sites';
+import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
 
 type Burst = {
   time: number;
@@ -99,14 +100,43 @@ const themeColors = {
   ],
 } as const;
 
+const testLaunchPoints = [
+  { id: 'plaza', x: 223, y: 15, z: -195 },
+  { id: 'lake', x: 344, y: 7, z: -66 },
+] as const;
+const testShapes = ['peony', 'ring', 'willow'] as const;
+const testColors = [
+  ['#ff5767', '#fff1c7'], ['#ffc26b', '#fff1c7'], ['#7ad9ff', '#d5fbff'],
+  ['#76f6db', '#fff1c7'], ['#f599df', '#ffc26b'],
+] as const;
+
+function makeFireworksRandom(seed: number) {
+  let rng = seed >>> 0;
+  return () => {
+    rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
+    return rng / 0x100000000;
+  };
+}
+
+export function makeTestFireworksTable(seed: number): FireworksTable {
+  const random = makeFireworksRandom(seed);
+  const beats = [.85, 4.1, 7.35, 10.6, 13.9, 17.15, 20.4, 23.65, 26.9, 30.05, 32.45];
+  const bursts = beats.flatMap(time => testLaunchPoints.map(({ id, x, z }, index) => {
+    const [outer, inner] = testColors[Math.floor(random() * testColors.length)];
+    return {
+      time: time + index * .24, x: x + random() * 28 - 14,
+      y: 44 + random() * 17, z: z + random() * 15 - 10,
+      radius: 12 + random() * 5, shape: testShapes[Math.floor(random() * testShapes.length)],
+      outer, inner, launchId: id,
+    };
+  }));
+  return { duration: testFireworksShowMs / 1000, launchPoints: testLaunchPoints, bursts };
+}
+
 export function makePlayerFireworksTable(seed: number, theme: FireworksTheme): FireworksTable {
   const shapePattern = patterns[seed % patterns.length];
   const palette = themeColors[theme];
-  let rng = seed >>> 0;
-  function random() {
-    rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
-    return rng / 0x100000000;
-  }
+  const random = makeFireworksRandom(seed);
   const [x, y, z] = publicFireworksStand.launch;
   return {
     duration: fireworksShowMs / 1_000,
@@ -214,7 +244,7 @@ export function createFestival(
   scene.add(sparks);
 
   let elapsed = -1;
-  const tracks = new Map<FireworksProgram, number>();
+  const tracks = new Map<FireworksProgram, { age: number; clockMs?: () => number; startedAt: number }>();
   let playerProgram: FireworksProgram | undefined;
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
@@ -303,9 +333,9 @@ export function createFestival(
     }
   }
 
-  function launch(program: FireworksProgram, ageSeconds: number) {
+  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number) {
     if (tracks.has(program) || !Number.isFinite(ageSeconds) || ageSeconds >= program.duration) return false;
-    tracks.set(program, ageSeconds);
+    tracks.set(program, { age: ageSeconds, clockMs, startedAt: clockMs ? clockMs() - ageSeconds * 1000 : 0 });
     return true;
   }
 
@@ -315,10 +345,10 @@ export function createFestival(
     announce('');
   }
 
-  function startShow(table: FireworksTable, opts: { ageSeconds?: number; interruptPreview?: boolean } = {}) {
-    if (tracks.size || (elapsed >= 0 && !opts.interruptPreview)) return false;
+  function startShow(table: FireworksTable, opts: { ageSeconds?: number; interruptPreview?: boolean; clockMs?: () => number } = {}) {
+    if (tracks.size || (elapsed >= 0 && !opts.interruptPreview && !opts.clockMs)) return false;
     const program = compileShow(table);
-    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0)) return false;
+    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0, opts.clockMs)) return false;
     stopPreview();
     playerProgram = program;
     return true;
@@ -406,13 +436,13 @@ export function createFestival(
           }
         }
       }
-      for (const [program, age] of tracks) {
-        const time = age + delta;
+      for (const [program, track] of tracks) {
+        const time = track.clockMs ? (track.clockMs() - track.startedAt) / 1000 : track.age + delta;
         if (time >= program.duration) {
           tracks.delete(program);
           if (program === playerProgram) playerProgram = undefined;
         } else {
-          tracks.set(program, time);
+          track.age = time;
           if (time >= 0) drawSequence(program.bursts, time);
         }
       }

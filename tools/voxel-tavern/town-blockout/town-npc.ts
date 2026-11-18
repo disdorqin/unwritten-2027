@@ -331,6 +331,7 @@ export function createTownNpcActivity(
     context.face(spot.x, spot.n, spot.ground + 1.61);
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
+
     const visitsBefore = visits[name] ?? 0;
     visits[name] = visitsBefore + 1;
     try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }

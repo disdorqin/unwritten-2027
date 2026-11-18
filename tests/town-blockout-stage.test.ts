@@ -81,7 +81,7 @@ test('stage retains the viewer activity contract and guest toggles leave the clo
   assert.equal(roots.length, 1);
   roots[0].traverse(node => {
     assert.notEqual(node.type, 'PointLight');
-    if ('isInstancedMesh' in node && node.isInstancedMesh) batches.push(node as InstanceBatch);
+    if ('isInstancedMesh' in node && node.isInstancedMesh && 'instanceMatrix' in node) batches.push(node as InstanceBatch);
   });
   assert.equal(batches.length, 2);
   const [performers, lights] = batches;
@@ -148,7 +148,7 @@ test('New Year Eve slots reuse the manual show and stop near-stage-only animatio
       sit() {}, face() { throw new Error('scheduled playback must not move the camera'); },
     });
     for (const root of roots) root.traverse(node => {
-      if ('isInstancedMesh' in node && node.isInstancedMesh) batches.push(node as InstanceBatch);
+      if ('isInstancedMesh' in node && node.isInstancedMesh && 'instanceMatrix' in node) batches.push(node as InstanceBatch);
     });
     return { activity, batches, announcements };
   };

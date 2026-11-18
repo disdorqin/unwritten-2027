@@ -15,6 +15,7 @@ import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark, villageHousePortals } from './landmark-village';
+
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createTownViewBatches } from './town-view-batches';
@@ -27,7 +28,7 @@ import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
-import { createFestival } from './festival';
+import { createFestival, makeTestFireworksTable } from './festival';
 import { createTownFireworksActivity } from './town-fireworks-activity';
 import {
   ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, createLocalCeremonyClock, type CeremonyCue,
@@ -76,6 +77,7 @@ import { railPlatformCopy } from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { createTownPresence } from './town-presence';
+import { effectiveTownAvatarPose } from './town-presence-pose';
 import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
 import { createPlazaGroupPhoto } from './plaza-group-photo';
 import { downloadTownCanvas } from './town-photo-download';
@@ -122,7 +124,7 @@ const landscape = new Group();
 const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
-const presence = createTownPresence(scene, camera, announceActivity);
+const presence = createTownPresence(scene, camera, announceActivity, resetMovement);
 const plazaCamera = new PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far);
 plazaCamera.position.set(plazaCameraPosition[0], grid.heightAt(...plazaCameraPosition) + 3, -plazaCameraPosition[1]);
 plazaCamera.lookAt(224, 24, -193);
@@ -694,6 +696,7 @@ panel => openTavernDice(panel, () => {
   return '这局你输了，罚酒一杯。';
 }));
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
+let drinkingPoseUntil = 0;
 let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
 function warmFromDrink() {
@@ -702,6 +705,7 @@ function warmFromDrink() {
 }
 const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
+  () => { drinkingPoseUntil = performance.now() + 2500; },
 );
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
@@ -734,6 +738,9 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
+presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed), {
+  ageSeconds, clockMs: () => performance.now(),
+}));
 const plazaPhoto = createPlazaGroupPhoto({
   now: presence.serverNow, ownId: presence.photoPlayerId, request: presence.requestPlazaPhoto,
   leave: presence.leavePlazaPhoto, nearby: presence.nearbyPhotoPeople, announce: announceActivity, open: activityContext.open,
@@ -929,10 +936,24 @@ const playerTarget: TownSnowballTarget = {
 };
 const snowballTargets = [playerTarget, ...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
 const targetById = new Map(snowballTargets.map(target => [target.id, target]));
+const remoteSnowballTargets: TownSnowballTarget[] = [];
+const remoteTargetPool = Array.from({ length: 48 }, (): TownSnowballTarget => ({
+  id: '', label: '', x: 0, y: 0, z: 0, radius: playerTarget.radius, height: playerTarget.height,
+  shape: 'capsule', onHit() {},
+}));
+const remoteSnowballNames = new Map<string, string>();
+const recentSnowballHits = new Map<number, number>();
+const remoteSnowballOrigin = new Vector3();
+const remoteSnowballDirection = new Vector3();
+let snowballSessionId: number | null = null;
+
+function snowballName(id: string) {
+  return targetById.get(id)?.label ?? remoteSnowballNames.get(id) ?? id;
+}
 const snowballBoard = createTownSnowballBoard({
   open: activityContext.open,
   announce: message => announceActivity(message, true),
-  label: id => targetById.get(id)?.label ?? id,
+  label: snowballName,
 });
 function announceSnowballTitles() {
   const { snowballKing, sharpshooter, popularityKing } = snowballBoard.getTitles();
@@ -993,8 +1014,26 @@ const sweepSnowball = createSnowballSweep({
   targets: snowballTargets,
   scoreAt: target => !roofed(target.x, -target.z, target.y),
 });
+function showSnowballHit(streak: number, targetName: string) {
+  if (!walking) return;
+  if (!formalSnowFight || ![3, 5, 8].includes(streak)) {
+    announceActivity(streak > 1 ? `连中 ${streak} 次 · ${targetName}` : `击中${targetName}`);
+  }
+  snowballHitMark.textContent = streak > 1 ? `+${streak} 连中` : '啪！';
+  snowballHitMark.getAnimations().forEach(animation => animation.cancel());
+  if (!reduceSnowEffects.matches) {
+    snowballHitMark.animate([{ opacity: 1, transform: 'translate(-50%, 0)' },
+      { opacity: 0, transform: 'translate(-50%, -28px)' }], { duration: 520, easing: 'ease-out' });
+  }
+}
+
 const snowballs = createTownSnowballFight({
-  scene, sweep: sweepSnowball,
+  scene,
+  sweep: (from, to, radius, thrower, source) =>
+    sweepSnowball(from, to, radius, thrower, source === 'player' ? remoteSnowballTargets : undefined),
+  relayPlayerThrow: (ballId, origin, dir) => presence.sendSnowballThrow({
+    ballId, east: origin.x, north: -origin.z, height: origin.y, dirX: dir.x, dirY: dir.y, dirZ: dir.z,
+  }),
   canScoreAtLaunch: outdoorLaunch,
   onChange: showSnowballScore,
   onEvent(event) {
@@ -1004,30 +1043,72 @@ const snowballs = createTownSnowballFight({
       if (event.scoreable) snowballBoard.recordMiss(event.thrower);
     } else {
       const target = event.targetId ? targetById.get(event.targetId) : undefined;
-      if (event.scored) {
+      if (event.shotBy === 'remote' && target === playerTarget && event.zone &&
+        event.ballId !== undefined && moveAllowed() && !roofed(playerTarget.x, -playerTarget.z, playerTarget.y)) {
+        target.onHit(event.velocity.x, event.velocity.z);
+        hitFeedback.hit(event.zone);
+        snowballs.clearCombo();
+        presence.sendSnowballHit({ ballId: event.ballId, throwerId: Number(event.thrower.slice(2)), zone: event.zone });
+      } else if (event.scored) {
         target?.onHit(event.velocity.x, event.velocity.z);
         if (target === playerTarget && moveAllowed()) hitFeedback.hit(event.zone);
         const recipient = target?.shape === 'box' ? undefined : target?.id;
-        const streak = snowballBoard.recordHit(event.thrower, recipient, {
-          announce: formalSnowFight,
-        });
-        if (walking && event.thrower === 'local') {
-          if (!formalSnowFight || ![3, 5, 8].includes(streak)) {
-            announceActivity(streak > 1 ? `连中 ${streak} 次 · ${target?.label ?? '目标'}` : `击中${target?.label ?? '目标'}`);
-          }
-          snowballHitMark.textContent = streak > 1 ? `+${streak} 连中` : '啪！';
-          snowballHitMark.getAnimations().forEach(animation => animation.cancel());
-          if (!reduceSnowEffects.matches) {
-            snowballHitMark.animate([{ opacity: 1, transform: 'translate(-50%, 0)' },
-              { opacity: 0, transform: 'translate(-50%, -28px)' }], { duration: 520, easing: 'ease-out' });
-          }
-        }
+        const streak = snowballBoard.recordHit(event.thrower, recipient, { announce: formalSnowFight });
+        if (event.thrower === 'local') showSnowballHit(streak, target?.label ?? '目标');
       } else if (event.scoreable) {
         snowballBoard.recordMiss(event.thrower);
       }
     }
     renderer.domElement.dispatchEvent(new CustomEvent('town-snowball', { detail: event }));
   },
+});
+
+function updateSnowballSession(id: number | null) {
+  if (id === snowballSessionId) return;
+  snowballSessionId = id;
+  recentSnowballHits.clear();
+  remoteSnowballNames.clear();
+  snowballBoard.clearRemoteScores();
+  snowballs.clearRemote();
+}
+
+function remoteSnowballKey(id: number) {
+  const key = `p:${id}`;
+  const name = presence.snowballName(id);
+  if (name) remoteSnowballNames.set(key, name);
+  return key;
+}
+
+presence.onSnowballEvent(event => {
+  const me = presence.selfId();
+  if (me === null) return;
+  updateSnowballSession(me);
+  const thrower = event.throwerId === me ? 'local' : remoteSnowballKey(event.throwerId);
+  if (event.kind === 'throw') {
+    if (event.throwerId === me || Math.abs(event.height - (airHeight ?? ground)) > 10) return;
+    remoteSnowballOrigin.set(event.east, event.height, -event.north);
+    remoteSnowballDirection.set(event.dirX, event.dirY, event.dirZ);
+    if (snowballs.throwRemote(remoteSnowballOrigin, remoteSnowballDirection, thrower, event.ballId)) {
+      snowballBoard.recordThrow(thrower);
+      presence.animateSnowballThrow(event.throwerId);
+    }
+    return;
+  }
+  const time = performance.now();
+  for (const [key, expires] of recentSnowballHits) {
+    if (time < expires) break;
+    recentSnowballHits.delete(key);
+  }
+  const shot = event.throwerId * 65536 + event.ballId;
+  if (recentSnowballHits.has(shot)) return;
+  recentSnowballHits.set(shot, time + 3000);
+  const target = event.confirmerId === me ? 'local' : remoteSnowballKey(event.confirmerId);
+  snowballs.confirmRemoteImpact(thrower, event.ballId);
+  const streak = snowballBoard.recordHit(thrower, target, { announce: formalSnowFight });
+  if (event.throwerId === me) {
+    snowballs.confirmPlayerHit();
+    showSnowballHit(streak, snowballName(target));
+  }
 });
 
 function aimsAtNearbySnow() {
@@ -1145,6 +1226,19 @@ function updateSnowFight(dt: number) {
   playerTarget.x = x;
   playerTarget.y = active ? airHeight ?? ground : -10000;
   playerTarget.z = -n;
+  updateSnowballSession(presence.selfId());
+  let remoteCount = 0;
+  for (const peer of presence.getSnowballPeers()) {
+    if (Math.abs(peer.height - (airHeight ?? ground)) > 10 || remoteCount >= remoteTargetPool.length) continue;
+    const target = remoteTargetPool[remoteCount];
+    target.id = `p:${peer.id}`;
+    target.label = peer.name;
+    target.x = peer.east;
+    target.y = peer.height;
+    target.z = -peer.north;
+    remoteSnowballTargets[remoteCount++] = target;
+  }
+  remoteSnowballTargets.length = remoteCount;
   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
   updateHeldSnowAction(dt);
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
@@ -1511,7 +1605,7 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
 function skatesOnIce() {
@@ -1561,7 +1655,7 @@ touchJump.addEventListener('pointerdown', event => {
 });
 touchJump.addEventListener('click', requestJump);
 addEventListener('keydown', e => {
-  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement) return;
+  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (museumOverlay()) {
     if (e.code === 'Escape' || (e.code === 'KeyE' && !e.repeat)) {
       e.preventDefault();
@@ -1816,6 +1910,8 @@ function showLiveRailSchedule(title: string, read: () => string) {
   }, { once: true });
 }
 mode(startInMuseum);
+let presenceSkateSpeed = 0;
+let previousPoseSession: number | null = null;
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
@@ -1879,8 +1975,10 @@ renderer.setAnimationLoop(now => {
         if (skatesOnIce()) {
           snowMoveScale = chillMoveScale = 1;
           const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
+          const glideEast = x, glideNorth = n;
           if ((glide.east || glide.north) &&
             !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
+          presenceSkateSpeed = Math.hypot(x - glideEast, n - glideNorth) / townPhysicsDelta;
         } else {
           lakeSkateMotion.reset();
           if (forward || right) {
@@ -1918,6 +2016,12 @@ renderer.setAnimationLoop(now => {
     controls.update();
     element('position').textContent = '';
   }
+  if (!walking || !moveAllowed() || !skatesOnIce()) presenceSkateSpeed = 0;
+  const poseSession = presence.selfId();
+  if (!walking || (previousPoseSession !== null && previousPoseSession !== poseSession)) drinkingPoseUntil = 0;
+  previousPoseSession = poseSession;
+  presence.setActivityPose(effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
+    !!boardingGround, !!seated, presenceSkateSpeed));
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,

@@ -1,8 +1,11 @@
 import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { BoxGeometry, Color, DynamicDrawUsage, Frustum, InstancedMesh, Matrix4, MeshLambertMaterial,
   Sphere, Vector3, type PerspectiveCamera, type Scene } from 'three';
+import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
 import { voxelPersonParts } from './town-voxel-person';
+import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import './town-presence-avatars.css';
+import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
 export type PresenceAvatarActor = {
   id: number;
@@ -11,6 +14,9 @@ export type PresenceAvatarActor = {
   north: number;
   height: number;
   yaw: number;
+  throwGestureStarted?: number;
+  pose?: TownAvatarPose;
+  stride?: number;
 };
 
 const capacity = 48;
@@ -25,18 +31,19 @@ const coatColors = [
   ['#cb987b', '#3e354d', '#855b83', '#dcc3ad', '#52445b', '#db9a62', '#f3c68c', '#815541'],
 ].map(palette => palette.map(hex => new Color(hex)));
 
+type ReadBubble = (id: number, now: number) => TownChatBubble | undefined;
+
 export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): {
-  render(actors: readonly PresenceAvatarActor[], view?: PerspectiveCamera, showNames?: boolean): void;
+  render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, view?: PerspectiveCamera, showNames?: boolean): void;
   clear(): void;
 } {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
   mesh.name = 'town-presence-avatars';
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-  const matrices = mesh.instanceMatrix.array;
-  // Each matrix starts at identity. The middle column and bottom row stay fixed.
-  for (let instance = 0; instance < capacity * partCount; instance++) {
-    matrices[instance * 16 + 5] = voxelPersonParts[instance % partCount][1][1];
-  }
+  const matrices = mesh.instanceMatrix.array as Float32Array;
+  const matrixSlots = Array.from({ length: capacity }, () => ({
+    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0,
+  }));
   // The mesh spans the town. Test individual body bounds before packing the instance buffer.
   mesh.frustumCulled = false;
   mesh.visible = false;
@@ -53,8 +60,11 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     const label = document.createElement('span');
     label.className = 'town-presence-nameplate';
     label.hidden = true;
-    overlay.append(label);
-    return label;
+    const bubble = document.createElement('span');
+    bubble.className = 'town-presence-chat-bubble';
+    bubble.hidden = true;
+    overlay.append(label, bubble);
+    return { label, bubble, chat: undefined as TownChatBubble | undefined, fading: false };
   });
 
   const viewProjection = new Matrix4();
@@ -68,7 +78,11 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   let shown = 0;
 
   function finishLabels(count: number) {
-    for (let i = count; i < shown; i++) labels[i].hidden = true;
+    for (let i = count; i < shown; i++) {
+      labels[i].label.hidden = true;
+      labels[i].bubble.hidden = true;
+      labels[i].chat = undefined;
+    }
     if ((count === 0) !== (shown === 0)) overlay.hidden = count === 0;
     shown = count;
   }
@@ -79,7 +93,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     if (shown) finishLabels(0);
   }
 
-  function render(actors: readonly PresenceAvatarActor[], viewCamera = camera, showNames = true) {
+  function render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, viewCamera = camera, showNames = true) {
     if (actors.length === 0) {
       clear();
       return;
@@ -94,10 +108,16 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     let visible = 0;
     let shownNext = 0;
     let colorsChanged = false;
+    const elapsedMs = performance.now();
+    let updateStart = -1;
+    let updateEnd = -1;
+    mesh.instanceMatrix.clearUpdateRanges();
 
     for (const actor of actors) {
       const worldZ = -actor.north;
-      body.center.set(actor.east, actor.height + .96, worldZ);
+      const pose = actor.pose ?? 0;
+      const rootOffset = avatarRootOffset(pose);
+      body.center.set(actor.east, actor.height + rootOffset + .96, worldZ);
       if (!frustum.intersectsSphere(body)) continue;
       if (visible >= capacity) break;
 
@@ -108,20 +128,36 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       const colorIndex = actor.id % coatColors.length;
       const palette = coatColors[colorIndex];
       const recolor = colorIndex !== slotColors[visible];
+      const progress = (elapsedMs - (actor.throwGestureStarted ?? -Infinity)) / 350;
+      const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
+      const stride = actor.stride ?? 0;
+      const slot = matrixSlots[visible];
+      const dirty = slot.id !== actor.id || slot.east !== actor.east || slot.north !== actor.north ||
+        slot.height !== actor.height || slot.yaw !== actor.yaw || slot.pose !== pose ||
+        slot.stride !== stride || slot.armPitch !== armPitch;
       const firstInstance = visible * partCount;
-      for (let offset = 0; offset < partCount; offset++) {
-        const [[x, y, z], [width, , depth], tint] = voxelPersonParts[offset];
-        const instance = firstInstance + offset;
-        const matrix = instance * 16;
-        // Three.js stores the scaled local X and Z axes as columns.
-        matrices[matrix] = width * cosine;
-        matrices[matrix + 2] = -width * sine;
-        matrices[matrix + 8] = depth * sine;
-        matrices[matrix + 10] = depth * cosine;
-        matrices[matrix + 12] = actor.east + x * cosine + z * sine;
-        matrices[matrix + 13] = actor.height + y;
-        matrices[matrix + 14] = worldZ - x * sine + z * cosine;
-        if (recolor) mesh.setColorAt(instance, palette[tint]);
+      if (dirty) {
+        for (let offset = 0; offset < partCount; offset++) {
+          writeAvatarPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], pose,
+            actor.east, actor.height + rootOffset, worldZ, cosine, sine, stride, armPitch);
+        }
+        slot.id = actor.id;
+        slot.east = actor.east;
+        slot.north = actor.north;
+        slot.height = actor.height;
+        slot.yaw = actor.yaw;
+        slot.pose = pose;
+        slot.stride = stride;
+        slot.armPitch = armPitch;
+        const firstMatrix = firstInstance * 16;
+        if (updateEnd !== firstMatrix) {
+          if (updateStart >= 0) mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
+          updateStart = firstMatrix;
+        }
+        updateEnd = firstMatrix + partCount * 16;
+      }
+      if (recolor) for (let offset = 0; offset < partCount; offset++) {
+        mesh.setColorAt(firstInstance + offset, palette[voxelPersonParts[offset][2]]);
       }
       if (recolor) {
         slotColors[visible] = colorIndex;
@@ -130,33 +166,47 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       visible++;
 
       if (!showNames) continue;
-      head.set(actor.east, actor.height + headHeight, worldZ);
+      head.set(actor.east, actor.height + rootOffset + headHeight, worldZ);
       if (head.distanceToSquared(viewCamera.position) > labelDistanceSquared) continue;
       const cameraZ = view[2] * head.x + view[6] * head.y + view[10] * head.z + view[14];
       if (cameraZ >= 0) continue;
       head.applyMatrix4(viewProjection);
       if (Math.abs(head.x) > 1 || Math.abs(head.y) > 1 || Math.abs(head.z) > 1) continue;
-      const label = labels[shownNext];
+      const nameplate = labels[shownNext];
+      const { label, bubble } = nameplate;
+      const message = readBubble?.(actor.id, elapsedMs);
+      const movedBubble = nameplate.chat !== message;
+      if (movedBubble) {
+        nameplate.chat = message;
+        bubble.hidden = !message;
+        if (message) bubble.textContent = message.text;
+      }
+      const fading = !!message && message.until - elapsedMs <= chatBubbleFadeMs;
+      if (nameplate.fading !== fading) {
+        nameplate.fading = fading;
+        bubble.classList.toggle('is-fading', fading);
+      }
       if (labelNames[shownNext] !== actor.name) {
         labelNames[shownNext] = actor.name;
         label.textContent = actor.name;
       }
       const px = Math.round((1 + head.x) * halfWidth);
       const py = Math.round((1 - head.y) * halfHeight);
-      if (px !== labelX[shownNext] || py !== labelY[shownNext]) {
+      const moved = px !== labelX[shownNext] || py !== labelY[shownNext];
+      if (moved) {
         labelX[shownNext] = px;
         labelY[shownNext] = py;
         label.style.transform = `translate3d(${px}px, ${py}px, 0)`;
       }
+      if (message && (moved || movedBubble)) bubble.style.transform = label.style.transform;
       if (shownNext >= shown) label.hidden = false;
       shownNext++;
     }
 
     mesh.count = visible * partCount;
     mesh.visible = visible > 0;
-    if (mesh.visible) {
-      mesh.instanceMatrix.clearUpdateRanges();
-      mesh.instanceMatrix.addUpdateRange(0, mesh.count * 16);
+    if (updateStart >= 0) {
+      mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
       mesh.instanceMatrix.needsUpdate = true;
     }
     if (colorsChanged && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;

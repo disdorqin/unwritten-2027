@@ -1,7 +1,12 @@
 import type { PerspectiveCamera, Scene } from 'three';
+import {
+  decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, SNOWBALL_EVENT_PREFIX,
+  type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
+} from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
-import { createTownPresenceClock } from './town-presence-clock';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
+import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
+import { createTownPresenceClock } from './town-presence-clock';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
@@ -9,49 +14,137 @@ import {
   type PresencePose, type PresenceSample,
 } from './town-presence-motion';
 
-type Actor = PresencePose & { id: number; name: string; history: PresenceSample[]; seen: number };
+import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+
+type Actor = PresencePose & {
+  id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
+  pose: TownAvatarPose; stepPhase: number; stride: number;
+};
+
+type TownNotice = { kind: 'announce'; message: string }
+  | { kind: 'test-fireworks'; seed: number; startAt: number };
+const queuedEventLimit = 128;
+const eventFrameLimit = 20;
+const eventFrameBudgetMs = 0.2;
 
 const sampleInterval = .1;
+const retryDelays = [1000, 2000, 5000, 10000, 30000] as const;
 const maximumBufferedBytes = 1024;
 const guestNameKey = 'unwritten.presence.name.v1';
 
-function guestName() {
-  try {
-    const stored = localStorage.getItem(guestNameKey)?.trim();
-    if (stored && [...stored].length <= 24 && !/[\p{Cc}\p{Cf}\p{Cs}]/u.test(stored)) return stored;
-  } catch { /* Private browsing can disable local storage. */ }
-  return `小镇游客${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+function presenceName() {
+  const input = document.querySelector<HTMLInputElement>('#town-presence-name');
+  const guest = `小镇游客${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+  const normalize = (value: string) => [...value.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').trim()].slice(0, 24).join('');
+  let name = '';
+  try { name = normalize(localStorage.getItem(guestNameKey) ?? ''); } catch { /* Storage is optional. */ }
+  if (input) {
+    input.value = name;
+    const save = () => {
+      const cleaned = input.value.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '');
+      const chars = [...cleaned];
+      if (chars.length > 24 || cleaned !== input.value) input.value = chars.slice(0, 24).join('');
+      name = normalize(input.value);
+      try {
+        if (name) localStorage.setItem(guestNameKey, name);
+        else localStorage.removeItem(guestNameKey);
+      } catch { /* Keep using the current page's name. */ }
+    };
+    input.addEventListener('input', event => { if (!(event as InputEvent).isComposing) save(); });
+    input.addEventListener('compositionend', save);
+    input.addEventListener('change', () => { save(); input.value = name; });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing) input.blur();
+    });
+  }
+  return () => name || guest;
 }
 
-export function createTownPresence(scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void) {
+export function createTownPresence(
+  scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void, onChatFocus: () => void = () => {},
+) {
+  const getName = presenceName();
+  const chat = createTownChat(sendChat, onChatFocus);
+  const chatEvents: TownChatMessage[] = [];
+  const status = document.getElementById('town-presence-status');
   const clock = createTownPresenceClock();
-  let fireworksSupported = false;
   let photoSupported = false;
-  let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
-  let ownId = 0;
-  let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
-  let clockSamples = false;
   let clockRequest: number | undefined;
   let nextClockSample = Infinity;
-  const label = guestName();
+  let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
+  let fireworksSupported = false;
+  let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
   const roster = new Map<number, string>();
   const actors = new Map<number, Actor>();
   const renderList: Actor[] = [];
+  const remoteActivityPoses = new Map<number, TownAvatarPose>();
+  const pendingActivityPoses = new Map<number, TownAvatarPose>();
+  let activityPose: TownAvatarPose = 0;
+  let sentActivityPose: TownAvatarPose | undefined;
+  const snowballEvents: SnowballRelayEvent[] = [];
+  const notices: TownNotice[] = [];
+  let onSnowballEvent: ((event: SnowballRelayEvent) => void) | undefined;
+  let onTestFireworks: ((seed: number, ageSeconds: number) => void) | undefined;
+  let joinedId: number | null = null;
+  let joinedName: string | undefined;
+  let serverEpochOffset: number | undefined;
   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
   let socket: WebSocket | undefined;
   let timeout: number | undefined;
+  let retryTimer: number | undefined;
+  let retryAt: number | undefined;
+  let retryIndex = 0;
   let inTown = false;
   let show = false;
   let haveId = false;
+  let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
   let remaining = 0;
   let lastPosition = -1;
   let lastHeightYaw = -1;
   let moving = false;
-  let insideSharedHome = false;
+
+  function updateStatus() {
+    if (!status) return;
+    const text = haveId ? `同镇 ${roster.size + 1} 人` : socket ? '连接中…' : '单人模式';
+    if (status.textContent !== text) status.textContent = text;
+  }
+
+  function cancelRetryTimer() {
+    if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    retryTimer = undefined;
+  }
+
+  function resetRetry() {
+    cancelRetryTimer();
+    retryAt = undefined;
+    retryIndex = 0;
+  }
+
+  function scheduleConnection() {
+    if (!inTown || socket || retryTimer !== undefined || document.visibilityState !== 'visible') return;
+    if (retryAt === undefined) {
+      connect();
+      return;
+    }
+    retryTimer = window.setTimeout(() => {
+      retryTimer = undefined;
+      if (!inTown || socket || document.visibilityState !== 'visible') return;
+      retryAt = undefined;
+      connect();
+    }, Math.max(0, retryAt - performance.now()));
+  }
+
+  function connectionLost() {
+    disconnect(false);
+    if (!inTown) return;
+    retryAt = performance.now() + retryDelays[retryIndex];
+    retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
+    scheduleConnection();
+  }
 
   function disconnect(graceful: boolean) {
     if (timeout !== undefined) window.clearTimeout(timeout);
@@ -59,15 +152,25 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     const active = socket;
     socket = undefined;
     haveId = false;
-    fireworksSupported = false;
+    joinedId = null;
+    joinedName = undefined;
+    serverEpochOffset = undefined;
+    snowballEvents.length = 0;
+    notices.length = 0;
+    chatEvents.length = 0;
+    chat.setConnected(false);
     photoSupported = false;
-    clockSamples = false;
+    fireworksSupported = false;
     clockRequest = undefined;
     nextClockSample = Infinity;
     roster.clear();
     actors.clear();
     renderList.length = 0;
+    sentActivityPose = undefined;
+    remoteActivityPoses.clear();
+    pendingActivityPoses.clear();
     avatars?.clear();
+    updateStatus();
     if (active) {
       try {
         if (graceful && active.readyState === WebSocket.OPEN) active.send(JSON.stringify({ type: 'leave' }));
@@ -79,9 +182,9 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
   function receive(data: unknown) {
     if (typeof data === 'string') {
       let message: {
-        type?: string; id?: number; name?: string; self?: boolean; epochMs?: number; sentAt?: number;
-        fireworks?: boolean; kind?: string; seed?: number; theme?: FireworksTheme; startAt?: number;
-        from?: number; reason?: string; waitMs?: number; plazaPhoto?: boolean;
+        type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
+        kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
+        fireworks?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -97,7 +200,7 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       if (message.type === 'event' && message.kind === 'fireworks') {
         if (haveId && isFireworksSeed(message.seed) && isFireworksTheme(message.theme) &&
             Number.isSafeInteger(message.startAt)) {
-          playFireworks?.(message.seed, message.theme, clock.now() - message.startAt!, message.from === ownId);
+          playFireworks?.(message.seed, message.theme, clock.now() - message.startAt!, message.from === joinedId);
         }
         return;
       }
@@ -115,19 +218,39 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
         }
         return;
       }
+      if (haveId && message.type === 'chat') {
+        if (chatEvents.length < 24) {
+          const event = parseTownChat(message);
+          if (event && roster.has(event.id)) chatEvents.push(event);
+        }
+        return;
+      }
+      if (haveId && message.type === 'event') {
+        if (notices.length >= 8) return;
+        if (message.kind === 'announce' && typeof message.message === 'string') {
+          notices.push({ kind: 'announce', message: message.message });
+        } else if (message.kind === 'test-fireworks' && Number.isInteger(message.seed) &&
+          typeof message.startAt === 'number' && Number.isFinite(message.startAt)) {
+          notices.push({ kind: 'test-fireworks', seed: message.seed!, startAt: message.startAt });
+        }
+        return;
+      }
       if (!Number.isInteger(message.id) || message.id! < 1 || message.id! > 65535) return;
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
           haveId = true;
-          ownId = id;
+          joinedId = id;
           fireworksSupported = message.fireworks === true;
           photoSupported = message.plazaPhoto === true;
-          if (typeof message.epochMs === 'number') {
+          joinedName = message.name;
+          chat.setConnected(true);
+          if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
+            serverEpochOffset = message.epochMs - performance.now();
             clock.accept(message.epochMs);
-            clockSamples = true;
-            nextClockSample = 0;
+            if (photoSupported) nextClockSample = 0;
           }
+          resetRetry();
           if (timeout !== undefined) window.clearTimeout(timeout);
           timeout = undefined;
           lastPosition = lastHeightYaw = -1;
@@ -135,17 +258,35 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
           remaining = 0;
         } else if (!roster.has(id) && roster.size < 64) {
           roster.set(id, message.name);
+          if (isTownAvatarPose(message.pose)) pendingActivityPoses.set(id, message.pose);
           announce(`${message.name} 进镇了`);
         }
+      } else if (message.type === 'pose' && roster.has(id) && isTownAvatarPose(message.pose)) {
+        pendingActivityPoses.set(id, message.pose);
       } else if (message.type === 'leave') {
         const name = roster.get(id);
+        pendingActivityPoses.delete(id);
+        remoteActivityPoses.delete(id);
         roster.delete(id);
         actors.delete(id);
+        chat.forget(id);
         if (name) announce(`${name} 离镇了`);
       }
+      updateStatus();
       return;
     }
     if (!haveId || !(data instanceof ArrayBuffer)) return;
+    if (new Uint8Array(data, 0, Math.min(1, data.byteLength))[0] === SNOWBALL_EVENT_PREFIX) {
+      if (snowballEvents.length >= queuedEventLimit) return;
+      const events = decodeSnowballEvents(data);
+      if (events) {
+        for (const event of events) {
+          if (snowballEvents.length >= queuedEventLimit) break;
+          snowballEvents.push(event);
+        }
+      }
+      return;
+    }
     const stamp = ++epoch;
     const time = performance.now();
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
@@ -153,7 +294,8 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       if (name === undefined || isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       let actor = actors.get(id);
       if (!actor) {
-        actor = { id, name, east, north, height, yaw, history: [], seen: stamp };
+        actor = { id, name, east, north, height, yaw, history: [], seen: stamp,
+          pose: remoteActivityPoses.get(id) ?? 0, stepPhase: 0, stride: 0 };
         actors.set(id, actor);
       }
       actor.seen = stamp;
@@ -168,27 +310,17 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       const ws = new WebSocket(`${protocol}//${location.host}/presence`);
       socket = ws;
       ws.binaryType = 'arraybuffer';
-      timeout = window.setTimeout(() => { if (socket === ws) disconnect(false); }, 3000);
+      updateStatus();
+      timeout = window.setTimeout(() => { if (socket === ws) connectionLost(); }, 3000);
       ws.onopen = () => {
         if (socket === ws) {
-          try { ws.send(JSON.stringify({ type: 'join', name: label })); }
-          catch { disconnect(false); }
+          try { ws.send(JSON.stringify({ type: 'join', name: getName() })); }
+          catch { connectionLost(); }
         }
       };
       ws.onmessage = event => { if (socket === ws) receive(event.data); };
-      ws.onerror = ws.onclose = () => { if (socket === ws) disconnect(false); };
-    } catch { disconnect(false); }
-  }
-
-  function sampleClock() {
-    const active = socket;
-    if (!clockSamples || active?.readyState !== WebSocket.OPEN) return;
-    const now = performance.now();
-    if (now < nextClockSample || active.bufferedAmount > maximumBufferedBytes) return;
-    nextClockSample = now + 60_000;
-    clockRequest = now;
-    try { active.send(JSON.stringify({ type: 'clock', sentAt: now })); }
-    catch { disconnect(false); }
+      ws.onerror = ws.onclose = () => { if (socket === ws) connectionLost(); };
+    } catch { connectionLost(); }
   }
 
   function sendPose(dt: number) {
@@ -204,50 +336,114 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
     if (!changed && !moving) return;
     // Send one terminal pose at the moving → stationary edge so peers stop extrapolating.
     try { active.send(outgoing.buffer); }
-    catch { disconnect(false); return; }
+    catch { connectionLost(); return; }
     seq = (seq + 1) & 65535;
     moving = changed && lastPosition !== -1;
     lastPosition = position;
     lastHeightYaw = heightYaw;
   }
 
+  function sendChat(scope: TownChatScope, text: string) {
+    if (joinedId === null || joinedName === undefined || !sendEvent(JSON.stringify({ type: 'chat', scope, text }))) return false;
+    chat.receive({ id: joinedId, name: joinedName, scope, text }, true);
+    return true;
+  }
+  function sendEvent(bytes: string | Uint8Array) {
+    const active = socket;
+    if (!haveId || active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
+    try { active.send(bytes); return true; }
+    catch { connectionLost(); return false; }
+  }
+
+  function samplePhotoClock() {
+    if (!photoSupported || !haveId) return;
+    const sentAt = performance.now();
+    if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
+    clockRequest = sentAt;
+    nextClockSample = sentAt + 60_000;
+  }
+
+  function syncActivityPoses() {
+    if (haveId && sentActivityPose !== activityPose && sendEvent(JSON.stringify({ type: 'pose', pose: activityPose }))) {
+      sentActivityPose = activityPose;
+    }
+    for (const [id, pose] of pendingActivityPoses) {
+      remoteActivityPoses.set(id, pose);
+      const actor = actors.get(id);
+      if (actor) actor.pose = pose;
+    }
+    pendingActivityPoses.clear();
+  }
+
+  function drainEvents() {
+    for (const notice of notices) {
+      if (notice.kind === 'announce') announce(notice.message);
+      else if (serverEpochOffset !== undefined) {
+        onTestFireworks?.(notice.seed, (performance.now() + serverEpochOffset - notice.startAt) / 1000);
+      }
+    }
+    notices.length = 0;
+    if (!snowballEvents.length && !chatEvents.length) return;
+    const end = performance.now() + eventFrameBudgetMs;
+    for (let i = 0; i < eventFrameLimit; i++) {
+      const snowball = snowballEvents.shift();
+      if (snowball) onSnowballEvent?.(snowball);
+      else {
+        const message = chatEvents.shift();
+        if (!message) break;
+        chat.receive(message);
+      }
+      if (performance.now() >= end) break;
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') scheduleConnection();
+    else cancelRetryTimer();
+  });
   window.addEventListener('pagehide', () => {
     inTown = false;
+    resetRetry();
     disconnect(true);
   });
 
   return {
     serverNow: clock.now,
-    playerName: () => label,
-    photoPlayerId: () => ownId || 1,
+    photoPlayerId: () => joinedId ?? 1,
     onPlazaPhoto(handler: (notice: PlazaPhotoNotice) => void) { showPhoto = handler; },
     requestPlazaPhoto() {
-      if (!photoSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return false;
-      try { socket.send(JSON.stringify({ type: 'event', kind: 'plaza-photo-request' })); }
-      catch { disconnect(false); return false; }
-      return true;
+      return photoSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-request' }));
     },
     leavePlazaPhoto(id: number) {
-      if (!photoSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return;
-      try { socket.send(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id })); }
-      catch { disconnect(false); }
+      if (photoSupported) sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id }));
     },
     nearbyPhotoPeople() {
-      return plazaPhotoLineup([{ id: ownId || 1, name: label, east: local.east, north: local.north, height: local.height }, ...actors.values()]);
+      return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },
     renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
       avatars ??= createPresenceAvatars(scene, camera);
-      avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), view, showNames);
+      avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
     },
-    riderSlot: () => (Math.max(1, ownId) - 1) % 12,
+    selfId: () => joinedId,
+    playerName: () => joinedName ?? getName(),
+    setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
+    chatFocused: chat.focused,
+    snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
+    getSnowballPeers: (): readonly (PresencePose & { id: number; name: string })[] => renderList,
+    sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
+    sendSnowballHit: (event: SnowballHit) => sendEvent(encodeSnowballHit(event)),
+    animateSnowballThrow(id: number) {
+      const actor = actors.get(id);
+      if (actor) actor.throwGestureStarted = performance.now();
+    },
+    onSnowballEvent(handler: (event: SnowballRelayEvent) => void) { onSnowballEvent = handler; },
+    onTestFireworks(handler: (seed: number, ageSeconds: number) => void) { onTestFireworks = handler; },
+    riderSlot: () => (Math.max(1, joinedId ?? 1) - 1) % 12,
     onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
       playFireworks = handler;
     },
     requestFireworks(seed: number, theme: FireworksTheme) {
-      if (!fireworksSupported || !haveId || socket?.readyState !== WebSocket.OPEN) return false;
-      try { socket.send(JSON.stringify({ type: 'event', kind: 'fireworks', seed, theme })); }
-      catch { disconnect(false); return false; }
-      return true;
+      return fireworksSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'fireworks', seed, theme }));
     },
     sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
       show = visible;
@@ -267,22 +463,35 @@ export function createTownPresence(scene: Scene, camera: PerspectiveCamera, anno
       }
       if (inTown === active) return;
       inTown = active;
-      if (active) connect();
-      else disconnect(true);
+      if (active) scheduleConnection();
+      else {
+        resetRetry();
+        disconnect(true);
+      }
     },
     update(dt: number) {
       if (!socket) return;
       sendPose(dt);
-      sampleClock();
-      if (!show || !actors.size) { avatars?.clear(); return; }
+      samplePhotoClock();
+      syncActivityPoses();
+      drainEvents();
+      if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
       avatars ??= createPresenceAvatars(scene, camera);
       const now = performance.now();
       renderList.length = 0;
       for (const actor of actors.values()) {
+        const east = actor.east, north = actor.north;
         samplePresencePose(actor.history, now, actor);
+        if (actor.pose === 0 || actor.pose === 3) {
+          const distance = Math.hypot(actor.east - east, actor.north - north);
+          if (distance > .001 && distance < 2 && dt > 0) {
+            actor.stepPhase = (actor.stepPhase + distance * 4.4) % (2 * Math.PI);
+            actor.stride = Math.sin(actor.stepPhase) * Math.min(1, distance / (dt * 2.8));
+          } else actor.stride = 0;
+        } else actor.stride = 0;
         renderList.push(actor);
       }
-      avatars.render(renderList);
+      avatars.render(renderList, chat.bubble);
     },
   };
 }

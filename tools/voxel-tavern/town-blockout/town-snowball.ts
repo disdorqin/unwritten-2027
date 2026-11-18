@@ -13,9 +13,11 @@ export type SnowballContact = {
   score?: boolean;
   zone?: SnowballHitZone;
 };
-type ShotBy = 'player' | 'npc';
+type ShotBy = 'player' | 'npc' | 'remote';
 type EventBase = {
   id: number; thrower: string; time: number; velocity: Vector3; shotBy: ShotBy; scoreable: boolean;
+  ballId?: number;
+  relayed?: boolean;
 };
 export type SnowballEvent =
   | (EventBase & { type: 'throw'; from: string; origin: Vector3; dir: Vector3; power: number; t: number })
@@ -27,7 +29,8 @@ export type SnowballEvent =
 type SnowballOptions = {
   scene: Scene;
   /** Return the nearest contact in this sweep. The input vectors are owned by the simulator. */
-  sweep(from: Vector3, to: Vector3, radius: number, thrower: string): SnowballContact | undefined;
+  sweep(from: Vector3, to: Vector3, radius: number, thrower: string, shotBy: ShotBy): SnowballContact | undefined;
+  relayPlayerThrow?(ballId: number, origin: Vector3, direction: Vector3): boolean;
   canScoreAtLaunch?(origin: Vector3, thrower: string): boolean;
   onEvent?(event: SnowballEvent): void;
   onChange?(state: SnowballState): void;
@@ -37,6 +40,9 @@ type SnowballOptions = {
 const ammoLimit = 10;
 const shotLimit = 64;
 const sparkLimit = 72;
+const remoteShotLimit = 8;
+export const REMOTE_BURST_CAP = 8;
+const duplicateWindowMs = 3000;
 const aimSamples = 32;
 const landingTint = '#d3eaff';
 const targetTint = '#ffce89';
@@ -141,7 +147,7 @@ function createAimMarker() {
 }
 
 export function createTownSnowballFight({
-  scene, sweep, canScoreAtLaunch, onEvent, onChange, now = Date.now,
+  scene, sweep, relayPlayerThrow, canScoreAtLaunch, onEvent, onChange, now = Date.now,
 }: SnowballOptions) {
   const shotMesh = new InstancedMesh(new IcosahedronGeometry(snowballRadius, 0),
     new MeshLambertMaterial({ color: '#eef8ff', emissive: '#394755' }), shotLimit);
@@ -173,11 +179,14 @@ export function createTownSnowballFight({
 
   const shots = Array.from({ length: shotLimit }, () => ({
     id: 0, thrower: '', shotBy: 'player' as ShotBy, active: false, age: 0, duration: 0, scoreable: false,
+    ballId: 0, relayed: false,
     at: new Vector3(), previous: new Vector3(), velocity: new Vector3(),
   }));
   const sparks = Array.from({ length: sparkLimit }, () => ({
     age: 0, lifetime: 0, size: 0, at: new Vector3(), velocity: new Vector3(),
   }));
+  const remoteBurstUntil = new Float64Array(REMOTE_BURST_CAP);
+  const seenRemoteThrows = new Map<string, number>();
   const destination = new Vector3();
   const previewVelocity = new Vector3();
   const previewFrom = new Vector3();
@@ -205,7 +214,7 @@ export function createTownSnowballFight({
     return true;
   }
 
-  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy) {
+  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy, ballId?: number) {
     if (disposed || !thrower || !validAim(origin, direction, power)) return false;
     if (shotBy === 'player' && (ammo === 0 || simulationTime + 1e-9 < nextThrow)) return false;
     let shot = shots[0];
@@ -219,15 +228,20 @@ export function createTownSnowballFight({
     const strength = clampPower(power);
     shot.active = true;
     shot.id = ++shotId;
+    shot.ballId = ballId ?? (shot.id & 0xffff);
     shot.thrower = thrower;
     shot.shotBy = shotBy;
-    shot.scoreable = canScoreAtLaunch?.(origin, thrower) !== false;
+    shot.scoreable = shotBy !== 'remote' && canScoreAtLaunch?.(origin, thrower) !== false;
+    shot.relayed = false;
     shot.at.copy(origin);
     shot.previous.copy(origin);
     shot.age = 0;
     shot.velocity.copy(direction).normalize().multiplyScalar(snowballSpeed(strength));
     shot.duration = flightTime(shot.velocity);
     if (shotBy === 'player') {
+      if (shot.scoreable && strength === 1 && relayPlayerThrow) {
+        shot.relayed = relayPlayerThrow(shot.ballId, origin, direction);
+      }
       nextThrow = simulationTime + throwCooldown;
       ammo--;
       onChange?.(getState());
@@ -237,7 +251,7 @@ export function createTownSnowballFight({
       onEvent({
         type: 'throw', id: shot.id, thrower, from: thrower, shotBy, time, t: time,
         origin: origin.clone(), dir: direction.clone().normalize(), power: strength,
-        velocity: shot.velocity.clone(), scoreable: shot.scoreable,
+        velocity: shot.velocity.clone(), scoreable: shot.scoreable, ballId: shot.ballId, relayed: shot.relayed,
       });
     }
     return true;
@@ -250,6 +264,46 @@ export function createTownSnowballFight({
 
   function throwNpc(origin: Vector3, direction: Vector3, thrower: string, power = defaultPower) {
     return launch(origin, direction, thrower, power, 'npc');
+  }
+
+  function throwRemote(origin: Vector3, direction: Vector3, thrower: string, ballId: number) {
+    const time = now();
+    for (const [key, until] of seenRemoteThrows) {
+      if (time < until) break;
+      seenRemoteThrows.delete(key);
+    }
+    const key = `${thrower}:${ballId}`;
+    if (seenRemoteThrows.has(key)) return false;
+    seenRemoteThrows.set(key, time + duplicateWindowMs);
+    let activeByThrower = 0;
+    for (const shot of shots) {
+      if (shot.active && shot.shotBy === 'remote' && shot.thrower === thrower && ++activeByThrower >= remoteShotLimit) {
+        return false;
+      }
+    }
+    return launch(origin, direction, thrower, 1, 'remote', ballId);
+  }
+
+  function clearRemote() {
+    seenRemoteThrows.clear();
+    for (const shot of shots) if (shot.shotBy === 'remote') shot.active = false;
+  }
+
+  function confirmPlayerHit() {
+    if (disposed) return;
+    hits++;
+    combo++;
+    tallyUntil = simulationTime + comboWindow;
+    onChange?.(getState());
+  }
+
+  function confirmRemoteImpact(thrower: string, ballId: number) {
+    for (const shot of shots) {
+      if (!shot.active || shot.thrower !== thrower || shot.ballId !== ballId) continue;
+      shot.active = false;
+      burst(shot.at, true, ballId, shot.shotBy === 'remote');
+      return;
+    }
   }
 
   function showAim(origin: Vector3, direction: Vector3, power: number, thrower = 'local') {
@@ -267,7 +321,7 @@ export function createTownSnowballFight({
     for (let segment = 1; arrival < horizon; segment++) {
       const time = Math.min(segment * tick, horizon);
       ballisticPosition(previewTo, origin, previewVelocity, time);
-      const hit = sweep(previewFrom, previewTo, snowballRadius, thrower);
+      const hit = sweep(previewFrom, previewTo, snowballRadius, thrower, 'player');
       if (hit) {
         const stepLength = previewFrom.distanceTo(previewTo);
         const fraction = stepLength > 0 ? Math.min(1, previewFrom.distanceTo(hit.at) / stepLength) : 0;
@@ -307,8 +361,13 @@ export function createTownSnowballFight({
     aimMarker.visible = false;
   }
 
-  function burst(at: Vector3, target: boolean, seed: number) {
-    const count = compactEffects ? (target ? 7 : 4) : (target ? 12 : 7);
+  function burst(at: Vector3, target: boolean, seed: number, remote = false) {
+    let count = compactEffects ? (target ? 7 : 4) : (target ? 12 : 7);
+    if (remote) {
+      const free = remoteBurstUntil.findIndex(until => until <= simulationTime);
+      if (free === -1) count = 1;
+      else remoteBurstUntil[free] = simulationTime + .43;
+    }
     for (let i = 0; i < count; i++) {
       const spark = sparks[sparkCursor];
       sparkCursor = (sparkCursor + 1) % sparks.length;
@@ -337,21 +396,19 @@ export function createTownSnowballFight({
       shot.age += step;
       shot.previous.copy(shot.at);
       ballisticPosition(destination, shot.at, shot.velocity, step);
-      const contact = sweep(shot.at, destination, snowballRadius, shot.thrower);
+      const contact = sweep(shot.at, destination, snowballRadius, shot.thrower, shot.shotBy);
       if (contact) {
         const travel = shot.at.distanceTo(destination);
         const hitTime = travel > 0 ? step * Math.min(1, shot.at.distanceTo(contact.at) / travel) : 0;
         shot.velocity.y -= snowballGravity * hitTime;
         shot.active = false;
         const target = contact.kind === 'target';
-        const scoreable = shot.scoreable && contact.score !== false;
+        const scoreable = shot.scoreable && contact.score !== false &&
+          !(shot.relayed && (!target || contact.targetId?.startsWith('npc:')));
         const scored = scoreable && target;
-        burst(contact.at, target, shot.id);
+        burst(contact.at, target, shot.relayed || shot.shotBy === 'remote' ? shot.ballId : shot.id, shot.shotBy === 'remote');
         if (scored && shot.shotBy === 'player') {
-          hits++;
-          combo++;
-          tallyUntil = simulationTime + comboWindow;
-          onChange?.(getState());
+          confirmPlayerHit();
         } else if (scoreable && (shot.shotBy === 'player' ||
           (scored && (contact.targetId === 'local' || contact.targetId === 'local-player')))) {
           clearCombo();
@@ -360,7 +417,7 @@ export function createTownSnowballFight({
           ...contact, type: 'impact', id: shot.id, thrower: shot.thrower, time: now(),
           at: contact.at.clone(), velocity: shot.velocity.clone(), shotBy: shot.shotBy,
           combo, by: shot.thrower, target: contact.targetId,
-          streak: shot.shotBy === 'player' ? combo : 0, scored, scoreable,
+          streak: shot.shotBy === 'player' ? combo : 0, scored, scoreable, ballId: shot.ballId, relayed: shot.relayed,
         });
         continue;
       }
@@ -368,10 +425,11 @@ export function createTownSnowballFight({
       shot.velocity.y -= snowballGravity * step;
       if (shot.age < shot.duration - 1e-9) continue;
       shot.active = false;
-      if (shot.scoreable && shot.shotBy === 'player') clearCombo();
+      if (shot.scoreable && shot.shotBy === 'player' && !shot.relayed) clearCombo();
       onEvent?.({
         type: 'miss', id: shot.id, thrower: shot.thrower, by: shot.thrower, time: now(),
-        at: shot.at.clone(), velocity: shot.velocity.clone(), shotBy: shot.shotBy, scoreable: shot.scoreable,
+        at: shot.at.clone(), velocity: shot.velocity.clone(), shotBy: shot.shotBy,
+        scoreable: shot.scoreable && !shot.relayed, ballId: shot.ballId, relayed: shot.relayed,
       });
     }
     for (const spark of sparks) {
@@ -431,5 +489,6 @@ export function createTownSnowballFight({
     }
   }
 
-  return { gather, throwBall, throwNpc, showAim, hideAim, update, getState, dispose };
+  return { gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
+    showAim, hideAim, update, getState, dispose };
 }

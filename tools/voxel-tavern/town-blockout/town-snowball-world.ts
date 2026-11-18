@@ -101,7 +101,9 @@ export function createSnowballSweep(world: World) {
     return closest;
   }
 
-  return (from: Vector3, to: Vector3, radius: number, thrower?: string): SnowballContact | undefined => {
+  return (from: Vector3, to: Vector3, radius: number, thrower?: string,
+    extraTargets: readonly TownSnowballTarget[] = [],
+  ): SnowballContact | undefined => {
     let closest = worldEntry(from, to, radius);
     if (closest === 0) return { at: contact.copy(from), kind: 'world' };
     let hit: TownSnowballTarget | undefined;
@@ -111,7 +113,9 @@ export function createSnowballSweep(world: World) {
     const highY = Math.max(from.y, to.y) + radius;
     const lowZ = Math.min(from.z, to.z);
     const highZ = Math.max(from.z, to.z);
-    for (const target of world.targets) {
+    const baseCount = world.targets.length;
+    for (let i = 0; i < baseCount + extraTargets.length; i++) {
+      const target = i < baseCount ? world.targets[i] : extraTargets[i - baseCount];
       const { x, y, z, radius: width, height } = target;
       const box = target.shape === 'box';
       const reach = width + radius + (box ? 0 : chestRadiusBonus);
@@ -149,6 +153,7 @@ export function createSnowballSweep(world: World) {
     contact.lerpVectors(from, to, closest);
     if (!hit) return { at: contact, kind: 'world' };
     const zone = hit.shape === 'box' ? undefined : contact.y >= hit.y + hit.height * headHeightRatio ? 'head' : 'torso';
-    return { at: contact, kind: 'target', targetId: hit.id, score: world.scoreAt?.(hit), zone };
+    return { at: contact, kind: 'target', targetId: hit.id,
+      score: hit.id.startsWith('p:') ? false : world.scoreAt?.(hit), zone };
   };
 }
