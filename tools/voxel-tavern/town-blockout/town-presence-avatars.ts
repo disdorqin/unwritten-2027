@@ -4,6 +4,7 @@ import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
 import { voxelPersonParts } from './town-voxel-person';
 import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import './town-presence-avatars.css';
+import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
 export type PresenceAvatarActor = {
   id: number;
@@ -46,6 +47,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   mesh.frustumCulled = false;
   mesh.visible = false;
   mesh.count = 0;
+  mesh.layers.enable(sharedHomeLayer);
   scene.add(mesh);
 
   const overlay = document.createElement('div');

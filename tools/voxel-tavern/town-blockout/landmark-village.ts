@@ -1,6 +1,7 @@
-import { BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
+import { BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D, Vector3 } from 'three';
 import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
+import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
 
 type Piece = { color: string; center: [number, number, number]; size: [number, number, number] };
 
@@ -9,6 +10,7 @@ export function buildVillageLandmark(plot: TownPlot) {
   const pieces: Piece[] = [];
   const solids: Box[] = [];
   const floors: Box[] = [];
+  const housePortalStands: [number, number][] = [];
   const add = (color: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
     pieces.push({color, center: [x, y, z], size: [w, h, d]});
   };
@@ -108,6 +110,10 @@ export function buildVillageLandmark(plot: TownPlot) {
     if (!walkIn) {
       add(beam, x, 1.14, front + .1, 1.2, 2.15, .16);
       add(color, x, 1.14, front + .2, .9, 1.94, .08);
+      for (const mark of housePortalPlaque) {
+        add(mark.color, x + mark.x, 1.22 + mark.y, front + .286 + mark.z, mark.w, mark.h, mark.d);
+      }
+      housePortalStands.push([x, front + 1.42]);
     }
     for (let step = 0; step < 9; step++) {
       const span = (w + 1) * (1 - step / 9);
@@ -203,5 +209,17 @@ export function buildVillageLandmark(plot: TownPlot) {
   }
   group.userData.colliders = solids;
   group.userData.floors = floors;
+  group.userData.housePortalStands = housePortalStands;
   return group;
+}
+
+export function villageHousePortals(group: Group, heightAt: (x: number, n: number) => number): TownHousePortal[] {
+  const stands = group.userData.housePortalStands as [number, number][];
+  group.updateWorldMatrix(true, false);
+  const forward = new Vector3(0, 0, 1).transformDirection(group.matrixWorld);
+  return stands.map(([localX, localZ], index) => {
+    const point = group.localToWorld(new Vector3(localX, 0, localZ));
+    const x = point.x, n = -point.z;
+    return { id: `village:${index}`, x, n, ground: heightAt(x, n), exitYaw: Math.atan2(forward.x, -forward.z) };
+  });
 }

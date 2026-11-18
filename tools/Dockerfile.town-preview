@@ -5,7 +5,7 @@ COPY tools/voxel-tavern/package.json tools/voxel-tavern/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY docs/p0-layout-draft.json /app/docs/p0-layout-draft.json
 COPY tools/voxel-tavern/ ./
-COPY src/presence/snowball-events.ts src/presence/test-fireworks.ts /app/src/presence/
+COPY src/presence/snowball-events.ts src/presence/test-fireworks.ts src/presence/shared-home-space.ts /app/src/presence/
 RUN npm run build -- --mode town-preview
 
 FROM caddy:2-alpine

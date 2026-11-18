@@ -69,6 +69,19 @@ label, output, #help, #load-status { font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .hot-spring-soak::after { animation: none; }
 }
+.hot-spring-progress {
+  position: fixed;
+  left: 50%;
+  bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px));
+  transform: translateX(-50%);
+  border: 1px solid #bc9671;
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: #142035ee;
+  color: #ffebcb;
+  font-size: 13px;
+  pointer-events: none;
+}
 
 #town-activity-content { display: grid; gap: 10px; min-width: 0; }
 #town-activity-content[hidden] { display: none; }
@@ -224,6 +237,38 @@ body.museum-inspecting :is(.panel, #load-status, #festival-status) { display: no
 #snowball-hit-mark {
   position: fixed; top: calc(50% - 42px); left: 50%; z-index: 4; opacity: 0; pointer-events: none;
   color: #ffe5a3; font-weight: 700; text-shadow: 0 1px 3px #0b1a28;
+}
+#ceremony-frost {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  contain: strict;
+}
+#ceremony-frost > div { position: absolute; inset: 0; pointer-events: none; }
+#ceremony-frost .frost-edges {
+  opacity: 0;
+  background: url('./snowball-impact-frost.png') repeat center / min(480px, 55vw) auto;
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 83%, #000 104%);
+}
+#ceremony-frost[data-level="2"] .frost-edges {
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 73%, #000 103%);
+}
+#ceremony-frost[data-level="3"] .frost-edges {
+  mask-image: radial-gradient(ellipse farthest-side at center, transparent 62%, #000 104%);
+}
+#ceremony-frost .frost-tint { background: #86bbec; opacity: 0; }
+#ceremony-frost .frost-breath:not([hidden]) {
+  inset: auto 25% -13% 25%; height: 38%;
+  background: radial-gradient(ellipse, #d7ebff68, transparent 66%);
+  animation: ceremony-breath 4s ease-out infinite;
+}
+@keyframes ceremony-breath {
+  0%, 53%, 100% { opacity: 0; transform: translateY(10%); }
+  14% { opacity: .56; }
+  53% { transform: translateY(-24%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ceremony-frost .frost-edges { opacity: .25 !important; }
+  #ceremony-frost .frost-breath { display: none !important; }
 }
 #snowball-frost {
   position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; contain: strict;

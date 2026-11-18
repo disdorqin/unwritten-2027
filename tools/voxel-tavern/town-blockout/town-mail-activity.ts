@@ -62,7 +62,7 @@ function feedback() {
   return status;
 }
 
-function playLock(opening: boolean) {
+export function playPostChime(opening: boolean) {
   if (typeof AudioContext === 'undefined') return;
   try {
     const audio = new AudioContext();
@@ -209,7 +209,7 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
         action(content, '开启时光信箱', () => {
           const result = mail.openTimebox();
           if (!result.ok) { status.textContent = errors[result.reason]; return; }
-          playLock(true);
+          playPostChime(true);
           showStatus();
           playPanelAnimation(content, 'town-mail-opening');
         });
@@ -288,7 +288,7 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
           status.textContent = result.reason === 'capacity' ? '最多封存 5 封，请先撤回一封再写。' : errors[result.reason];
           return;
         }
-        playLock(false);
+        playPostChime(false);
         showStatus('已封存');
         playPanelAnimation(content, 'town-mail-sealing');
       };

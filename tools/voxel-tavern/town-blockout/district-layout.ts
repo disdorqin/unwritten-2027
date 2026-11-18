@@ -5,6 +5,7 @@ import {
 import { buildDistrictHousing, type DistrictTheme } from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
+import type { TownHousePortal } from './town-house-portals';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Style = Parameters<typeof buildDistrictHousing>[0];
@@ -45,6 +46,7 @@ export function addDistrictHousing(
   railwayKeepClear: KeepClear = () => false,
 ) {
   const sites: Site[] = [];
+  const housePortals: TownHousePortal[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
   const courtyardSnow = new MeshLambertMaterial({ color: '#b5c3d6' });
@@ -168,6 +170,12 @@ export function addDistrictHousing(
       sites.push(site);
 
       const dx = Math.sin(angle), dn = -Math.cos(angle);
+      const side = model.userData.houseDoorEast as number;
+      const stand = d / 2 + 1.42;
+      const doorX = x + dx * stand - dn * side;
+      const doorN = n + dn * stand + dx * side;
+      housePortals.push({ id: `old-town:${x}:${n}`, x: doorX, n: doorN,
+        ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
       for (let distance = start; distance < reach; distance += .8) {
@@ -229,5 +237,6 @@ export function addDistrictHousing(
   const keepClear: KeepClear = (x, n, radius) => !openSpace(x, n, radius) || lampBlocked(x, n)
     || paths.some(({ start, end, radius: size }) => lineDistance(x, n, start, end) < radius + size + .6)
     || completed.some(site => within(x, n, site, radius + 2));
-  return { count: sites.length, sites, keepClear, setPanorama, blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
+  return { count: sites.length, sites, housePortals, keepClear, setPanorama,
+    blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }

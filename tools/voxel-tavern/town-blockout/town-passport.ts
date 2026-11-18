@@ -1,5 +1,6 @@
 import type { TownActivityContext } from './town-activity';
 import { tavernRecipes } from './tavern-mix-book';
+import type { ZodiacProgress } from './town-zodiac';
 
 export type PassportStamp<Id extends string = string> = { id: Id; label: string; hint: string };
 
@@ -69,6 +70,7 @@ export function createTownPassport<Id extends string>(
   drinkCollection?: () => readonly string[],
   extensionStamps: readonly PassportStamp[] = [],
   riddleProgress?: () => { totalSolved: number; fullLightDays: readonly string[]; fullLightToday: boolean },
+  zodiac?: ZodiacProgress,
 ) {
   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
   const extensionById = new Map(extensionStamps.map(stamp => [stamp.id, stamp]));
@@ -202,6 +204,34 @@ export function createTownPassport<Id extends string>(
           section.append(stamp);
         }
       }
+      panel.append(section);
+    }
+
+    if (zodiac) {
+      const section = document.createElement('section');
+      section.className = 'passport-extensions';
+      section.dataset.collection = 'zodiac';
+      const title = document.createElement('h3');
+      title.textContent = `生肖寻宝 ${zodiac.count()} / 12`;
+      const stamp = document.createElement('p');
+      stamp.dataset.themeStamp = '未年';
+      stamp.textContent = '未年印 · 待盖章';
+      stamp.style.color = '#aeb9c6';
+      const entries = document.createElement('ul');
+      for (const charm of zodiac.rows()) {
+        const row = document.createElement('li');
+        row.dataset.charm = charm.id;
+        row.dataset.collected = String(!!charm.date);
+        if (charm.sealed) row.dataset.sealed = 'true';
+        const label = document.createElement('strong');
+        label.textContent = charm.label + ' · ';
+        const clue = document.createElement(charm.date ? 's' : 'span');
+        clue.textContent = charm.clue;
+        row.append(label, clue);
+        if (charm.date) row.append(` · ${charm.location} · ${charm.date}`);
+        entries.append(row);
+      }
+      section.append(title, stamp, entries);
       panel.append(section);
     }
 

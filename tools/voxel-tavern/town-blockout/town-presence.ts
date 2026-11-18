@@ -4,6 +4,7 @@ import {
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
+import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import {
   presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
@@ -88,6 +89,7 @@ export function createTownPresence(
   let inTown = false;
   let show = false;
   let haveId = false;
+  let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
   let remaining = 0;
@@ -240,7 +242,7 @@ export function createTownPresence(
     const time = performance.now();
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
       const name = roster.get(id);
-      if (name === undefined) return;
+      if (name === undefined || isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       let actor = actors.get(id);
       if (!actor) {
         actor = { id, name, east, north, height, yaw, history: [], seen: stamp,
@@ -350,6 +352,7 @@ export function createTownPresence(
 
   return {
     selfId: () => joinedId,
+    playerName: () => joinedName ?? getName(),
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
     chatFocused: chat.focused,
     snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
@@ -369,6 +372,14 @@ export function createTownPresence(
         local.north = north;
         local.height = height;
         local.yaw = yaw;
+        const indoors = isSharedHomePosition(east, north, height);
+        if (insideSharedHome !== indoors) {
+          insideSharedHome = indoors;
+          actors.clear();
+          renderList.length = 0;
+          avatars?.clear();
+          remaining = 0;
+        }
       }
       if (inTown === active) return;
       inTown = active;

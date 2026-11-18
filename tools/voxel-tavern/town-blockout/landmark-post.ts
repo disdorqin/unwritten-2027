@@ -388,6 +388,12 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   parcel(-1.77, ground + 1.27, -1.62, .34);
   parcel(1.39, ground + 1.27, -1.48, .45);
   parcel(2.93, ground, -6.2, .77);
+  // Soft, tied postal sacks leave a narrow visible gap beside the sorting wall.
+  for (const [x, z, size] of [[2.35, -6.29, .46], [2.62, -6.42, .36]]) {
+    box('parcel', x, ground + size * .40, z, size, size * .8, size * .7);
+    box('parcel', x, ground + size * .82, z, size * .7, size * .27, size * .52);
+    box('paper', x, ground + size * .98, z, size * .33, .055, size * .31);
+  }
   parcel(-5.8, mezzanine, -4.72, .61);
   parcel(-5.9, mezzanine, -5.5, .62);
   for (let z = -4; z <= 5; z += 4.5) {

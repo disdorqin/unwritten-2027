@@ -117,6 +117,9 @@
   #town-chat-self, .town-presence-chat-bubble { transition: none; }
 }
 
+.town-bgm-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; margin-block-start: 6px; }
+.town-bgm-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.town-bgm-controls input { width: min(86px, 25vw); accent-color: #e6bf82; }
 @media (pointer: coarse) {
-  .panel .town-panel-toggle, #town-chat-form :is(input, button) { min-height: 44px; }
+  .panel .town-panel-toggle, #town-chat-form :is(input, button), .town-bgm-controls label { min-height: 44px; }
 }

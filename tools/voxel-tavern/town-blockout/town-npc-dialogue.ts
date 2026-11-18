@@ -2,6 +2,7 @@
 // This module includes only dialogue presented to visitors.
 import script from './town-npc-dialogue.json';
 import expansion from './town-npc-expansion.json';
+import { npcAddedDialogue } from './town-npc-added-dialogue';
 
 export type NpcName = keyof typeof script;
 type ScriptPeriod = '傍晚' | '夜里' | '跨年夜';
@@ -16,6 +17,9 @@ type RoleScript = {
   refusals: string[];
 };
 export const npcScript: Readonly<Record<NpcName, RoleScript>> = script;
+
+// Authored dialogue can be ready before actors or their activity sites are installed.
+export const npcAuthoredDialogue = { ...npcScript, ...npcAddedDialogue } as const;
 
 export type TownNpcGuide = 'seating' | 'stage' | 'postcard' | 'wishes' | 'ice' |
   'lantern' | 'mixing' | 'spring' | 'castle' | 'rail' | 'bell';
@@ -66,7 +70,7 @@ export function npcGreeting(name: NpcName, period: NpcPeriod, visitsBefore: numb
     const suitable = familiar.filter(line => !/今晚|今夜|夜里|天黑/.test(line));
     return suitable[lineIndex % suitable.length] ?? daytimeGreetings[name];
   }
-  const greetings = useFamiliar ? familiar : npcScript[name].greetings[period];
+  const greetings = useFamiliar ? familiar : npcAuthoredDialogue[name].greetings[period];
   return greetings[lineIndex % greetings.length];
 }
 
@@ -74,9 +78,9 @@ export function npcFarewell(name: NpcName, period: NpcPeriod): string {
   if (period === '白天') {
     // Keep the existing line's safety advice without saying that it is about to get dark.
     if (name === '顾长明') return '下塔慢点，台阶滑。';
-    return npcScript[name].farewells.傍晚;
+    return npcAuthoredDialogue[name].farewells.傍晚;
   }
-  return npcScript[name].farewells[period];
+  return npcAuthoredDialogue[name].farewells[period];
 }
 
 type Question = readonly [id: number, label: string];
@@ -129,7 +133,7 @@ export function answerNpcQuestion(name: NpcName, id: number, holiday = false): {
   kind: 'fact' | 'broad' | 'refusal';
   text: string;
 } {
-  const role = npcScript[name];
+  const role = npcAuthoredDialogue[name];
   const holidayAnswer = holiday ? npcExpansion[name].holidayFacts?.[id] : undefined;
   const fact = facts.has(id) ? holidayAnswer ?? role.facts[id] : undefined;
   if (fact) return { kind: 'fact', text: fact };
