@@ -7,6 +7,7 @@ import { districtParcels, districtStreets, extensionPlots, extensionRoads, memor
 import type { Box } from './landmark-kit';
 import type { TownSeat } from './town-activity';
 import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
+import { locateZodiacDogMailbox, zodiacDogHouseId, type ZodiacDogMailbox } from './town-zodiac-dog';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Point = readonly [east: number, north: number];
@@ -118,6 +119,7 @@ export function buildExtensionStreets(
   const colliders: Box[] = [];
   const sites: BuildingSite[] = [];
   const housePortals: TownHousePortal[] = [];
+  let dogMailbox: ZodiacDogMailbox | undefined;
   const establishedSites: BuildingSite[] = [];
   const infillSites: BuildingSite[] = [];
   const seating: CourtyardSeat[] = [];
@@ -309,8 +311,25 @@ export function buildExtensionStreets(
       put(mark.x, 1.18 + mark.y, front + .326 + mark.z, mark.w, mark.h, mark.d, mark.color, false);
     }
     const [doorX, doorN] = at(0, front + 1.42);
-    housePortals.push({ id: `district:${x}:${n}`, x: doorX, n: doorN,
-      ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(s, -c) });
+    const portal: TownHousePortal = { id: `district:${x}:${n}`, x: doorX, n: doorN,
+      ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(s, -c) };
+    housePortals.push(portal);
+    if (portal.id === zodiacDogHouseId) {
+      dogMailbox = locateZodiacDogMailbox(portal, grid.heightAt);
+      const [east, feet, z] = dogMailbox.mailbox;
+      const north = -z;
+      const fixture = (y: number, outward: number, width: number, height: number, depth: number, tint: string) =>
+        add(cell, east + outward * s, feet + y, north - outward * c, width, height, depth, tint, yaw, true);
+      fixture(.01, 0, .50, .19, .44, '#697888');
+      fixture(.43, 0, .14, .69, .14, '#4a4a46');
+      fixture(.81, 0, .45, .28, .34, '#3f645c');
+      fixture(.969, 0, .49, .05, .40, '#536b72');
+      fixture(1.005, -.035, .47, .04, .35, snow);
+      fixture(.84, .173, .32, .045, .023, '#293e44');
+      fixture(.745, .173, .16, .085, .026, '#c4a273');
+      fixture(.91, .175, .035, .038, .02, '#e4c7a6');
+      colliders.push(plate(east, north, feet - .06, turned ? .46 : .52, 1.10, turned ? .52 : .46));
+    }
     const door = at(0, front + 1.14);
     colliders.push(plate(x, n, bottom, site.w, height + base - bottom, site.d));
     return door;
@@ -597,5 +616,5 @@ export function buildExtensionStreets(
     }
   }
 
-  return { group, update, counts, sites, seating, housePortals };
+  return { group, update, counts, sites, seating, housePortals, dogMailbox };
 }
