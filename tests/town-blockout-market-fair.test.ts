@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh } from 'three';
+import type { Mesh } from 'three';
 import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import {
@@ -68,8 +68,9 @@ test('market stalls keep published coordinates, stable tasting IDs, and sourced 
   });
 });
 
-test('four live banners share the entrance atlas and tasting spots stay usable', t => {
+test('the market entrance signs and four live banners share one atlas without changing tasting spots', t => {
   const bannerTitles: string[] = [];
+  const entranceSigns: string[] = [];
   let bannerTitle = '';
   // 记录幌子 atlas 入图前写入的竖排文字。
   const previousDocument = globalThis.document;
@@ -80,6 +81,7 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
         fillRect() {}, strokeRect() {}, drawImage() {},
         createLinearGradient: () => ({ addColorStop() {} }),
         fillText(value: string) {
+          if (value === '河畔年集' || value === '爆竹声中一岁除') entranceSigns.push(value);
           if (value.length === 1) {
             bannerTitle += value;
             if (bannerTitle.length === 4) {
@@ -99,9 +101,10 @@ test('four live banners share the entrance atlas and tasting spots stay usable',
   const terrain = createTerrainGrid();
   const group = buildMarketLandmark(plot);
   const batches = group.children.filter((child): child is Mesh =>
-    child instanceof Mesh && child.name === 'Museum sign atlas');
+    (child as Mesh).isMesh && child.name === 'Museum sign atlas');
   assert.equal(batches.length, 1);
-  assert.equal(batches[0].geometry.index?.count, 30);
+  assert.equal(batches[0].geometry.index?.count, 36);
+  assert.deepEqual(entranceSigns, ['河畔年集', '爆竹声中一岁除']);
   assert.deepEqual(bannerTitles, ['冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶']);
   group.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
   const { colliders } = readWalkGeometry(group);

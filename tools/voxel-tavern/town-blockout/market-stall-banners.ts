@@ -49,11 +49,11 @@ function createBannerCanvas([title, subtitle]: readonly [string, string]) {
 
 export function addMarketStallBanners(
   parent: Group, stalls: readonly MarketStallLayout[], entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
+  ...additionalSigns: Mesh<PlaneGeometry, MeshStandardMaterial>[]
 ) {
-  const previousMap = entrance.material.map;
-  const source = previousMap?.image as HTMLCanvasElement | undefined;
-  if (!source || typeof document === 'undefined') {
-    parent.add(entrance);
+  const signs = [entrance, ...additionalSigns];
+  if (!entrance.material.map?.image || typeof document === 'undefined') {
+    parent.add(...signs);
     return;
   }
 
@@ -73,13 +73,20 @@ export function addMarketStallBanners(
       width: bannerWidth, height: bannerHeight, yaw: 0 });
   }
   if (!labels.length) {
-    parent.add(entrance);
+    parent.add(...signs);
     return;
   }
 
-  const { width, height } = entrance.geometry.parameters;
-  labels.push({ source, parent, x: entrance.position.x, y: entrance.position.y,
-    z: entrance.position.z, width, height, yaw: entrance.rotation.y });
+  for (const sign of signs) {
+    const tile = sign.material.map?.image as HTMLCanvasElement | undefined;
+    if (!tile) {
+      parent.add(sign);
+      continue;
+    }
+    const { width, height } = sign.geometry.parameters;
+    labels.push({ source: tile, parent, x: sign.position.x, y: sign.position.y,
+      z: sign.position.z, width, height, yaw: sign.rotation.y });
+  }
   // Both heights use the atlas's small-label batch. All nine tiles and the entry sign fit on one page.
   const batches: Mesh[] = [];
   addOpaqueMuseumLabels(labels, batches);
@@ -92,8 +99,11 @@ export function addMarketStallBanners(
     atlasMaterial.dispose();
   }
 
-  // The old entry surface and its texture are replaced by the shared batch.
-  entrance.geometry.dispose();
-  entrance.material.dispose();
-  previousMap?.dispose();
+  // The sign surfaces and their textures are replaced by the shared batch.
+  for (const sign of signs) {
+    if (sign.parent === parent) continue;
+    sign.geometry.dispose();
+    sign.material.map?.dispose();
+    sign.material.dispose();
+  }
 }
