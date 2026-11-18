@@ -50,6 +50,7 @@ import { createTavernActivity } from './tavern-activity';
 import { createTavernDrinkEffects } from './tavern-drink-effects';
 import { createTavernSeatSpots } from './tavern-seats';
 import './tavern-mix-panel.css';
+import { openTavernDice } from './tavern-dice';
 import './tavern-drink-effects.css';
 import { createPostActivity } from './post-activity';
 import { createTownMailActivity, playPostChime } from './town-mail-activity';
@@ -668,7 +669,12 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (feature === 'castle') return architecture.has('ice-castle');
   if (feature === 'mixing') return architecture.has('tavern');
   return true;
-}, () => !nightMode, name => name === '钟铁生' && zodiac.canCollect('horse') ? railHorseClues : undefined);
+}, () => !nightMode, name => name === '钟铁生' && zodiac.canCollect('horse') ? railHorseClues : undefined,
+panel => openTavernDice(panel, () => {
+  if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
+  if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
+  return '这局你输了，罚酒一杯。';
+}));
 const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
 let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
