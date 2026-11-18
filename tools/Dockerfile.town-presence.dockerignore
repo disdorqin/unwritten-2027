@@ -1,0 +1,10 @@
+*
+!src/
+!src/presence/
+!src/presence/**
+**/node_modules/
+**/.env*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx

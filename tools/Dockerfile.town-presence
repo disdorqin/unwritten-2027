@@ -1,0 +1,18 @@
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY src/presence/package.json src/presence/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund --fetch-retries=1
+COPY src/presence/ ./src/presence/
+RUN ./node_modules/.bin/tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --rootDir src --outDir dist/server src/presence/index.ts
+
+FROM node:22-bookworm-slim
+ARG TOWN_RELEASE=local
+LABEL org.opencontainers.image.revision=${TOWN_RELEASE}
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules/ws/ ./node_modules/ws/
+COPY --from=build /app/dist/server/presence/ ./dist/server/presence/
+USER node
+EXPOSE 8090
+CMD ["node", "dist/server/presence/index.js"]

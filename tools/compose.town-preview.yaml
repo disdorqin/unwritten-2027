@@ -20,6 +20,25 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  presence:
+    image: unwritten-town-presence:${TOWN_RELEASE:-local}
+    build:
+      context: ..
+      dockerfile: tools/Dockerfile.town-presence
+      args:
+        TOWN_RELEASE: ${TOWN_RELEASE:-local}
+    restart: unless-stopped
+    environment:
+      PRESENCE_HOST: "0.0.0.0"
+      PRESENCE_PORT: "8090"
+      PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
+    expose:
+      - "8090"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 volumes:
   certificates:
   caddy_config:
