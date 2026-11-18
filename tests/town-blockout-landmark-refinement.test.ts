@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildIceCastle } from '../tools/voxel-tavern/town-blockout/landmark-ice-castle.ts';
 import {
+  createIcePalaceRace, icePalaceBalconyRace, icePalaceProgressKey,
+} from '../tools/voxel-tavern/town-blockout/ice-palace-race.ts';
+import {
   createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp,
 } from '../tools/voxel-tavern/town-blockout/landmark-refinement-activity.ts';
 import { buildRailwayStation } from '../tools/voxel-tavern/town-blockout/landmark-station.ts';
 import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
-import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { createTownPassport } from '../tools/voxel-tavern/town-blockout/town-passport.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
 import { RAILWAY_STATION_NAMES } from '../tools/voxel-tavern/town-blockout/town-rail-stops.ts';
@@ -40,6 +43,86 @@ test('the ice throne has two clear spots and the photo faces the hall entrance',
   spots[1].run();
   assert.deepEqual(focus, [491.2, 72, 14.15]);
   assert.equal(filename, 'UNWRITTEN-2027-ice-throne.png');
+});
+
+test('the balcony timer requires standing on the start and upper finish and keeps the fastest local record', () => {
+  const progress = { iceKey: true, race: { towerBestMs: 11000, balconyBestMs: 7500 } };
+  let raw = JSON.stringify(progress);
+  let writes = 0;
+  const storage = {
+    getItem(key: string) { assert.equal(key, icePalaceProgressKey); return raw; },
+    setItem(key: string, value: string) { assert.equal(key, icePalaceProgressKey); raw = value; writes++; },
+  };
+  let now = 1400;
+  const race = createIcePalaceRace(storage, () => now);
+  const { start, finish } = icePalaceBalconyRace;
+  assert.doesNotMatch(race.update(...finish, true), /用时/);
+  assert.match(race.update(start[0], start[1], 0, true), /踏上箭头板开始/);
+  assert.equal(race.running, false);
+  race.update(...start, false);
+  assert.equal(race.running, false);
+  assert.match(race.update(...start, true), /0\.0 秒/);
+  now += 1300;
+  assert.match(race.update(...start, true), /1\.3 秒/);
+  now += 3900;
+  race.update(finish[0], .15, finish[2], true);
+  race.update(...finish, false);
+  assert.equal(race.running, true);
+  assert.match(race.update(...finish, true), /5\.2 秒 · 个人最佳 5\.2 秒/);
+  assert.deepEqual(JSON.parse(raw), { iceKey: true, race: { towerBestMs: 11000, balconyBestMs: 5200 } });
+  assert.equal(writes, 1);
+
+  const restored = createIcePalaceRace(storage, () => now);
+  assert.match(restored.update(-24.1, .12, 0, true), /个人最佳 5\.2 秒/);
+  restored.update(...start, true);
+  now += 8000;
+  restored.update(...finish, true);
+  assert.equal(writes, 1);
+  restored.update(...start, true);
+  assert.equal(restored.update(-27, 0, 0, true), '');
+  assert.equal(restored.running, false);
+  assert.doesNotMatch(restored.update(...finish, true), /用时/);
+});
+
+test('a solo player can walk the unchanged west-door and south-stair collision route to the race finish', () => {
+  const castle = buildIceCastle();
+  castle.position.set(484, 12, -72);
+  const supports: Box[] = castle.userData.floors;
+  const blockers: Box[] = castle.userData.colliders;
+  const stand = canStandAt(castle);
+  const terrain = createTerrainGrid();
+  const race = castle.userData.palaceRace as ReturnType<typeof createIcePalaceRace>;
+  let [x, z] = [-26, 0];
+  let feet = terrain.heightAt(484 + x, 72 - z) - 12;
+  let message = '';
+  const route = [icePalaceBalconyRace.start, [9.74, .15, 0], [9.74, .15, 6.2],
+    [17.83, 3.09, 6.2], [17.83, 3.09, .48], icePalaceBalconyRace.finish];
+  function restsOn(localX: number, localZ: number, { min, max }: Box) {
+    return Math.hypot(Math.max(min[0] - localX, localX - max[0], 0),
+      Math.max(min[2] - localZ, localZ - max[2], 0)) < .27;
+  }
+  for (const [nextX, nextY, nextZ] of route) {
+    const fromX = x, fromZ = z;
+    const steps = Math.ceil(Math.hypot(nextX - fromX, nextZ - fromZ) / .11);
+    for (let i = 1; i <= steps; i++) {
+      x = fromX + (nextX - fromX) * i / steps;
+      z = fromZ + (nextZ - fromZ) * i / steps;
+      const e = 484 + x, n = 72 - z;
+      let floor = terrain.heightAt(e, n) - 12;
+      for (const support of supports) {
+        if (support.max[1] <= feet + .43 && restsOn(x, z, support)) floor = Math.max(floor, support.max[1]);
+      }
+      for (const blocker of blockers) {
+        if (blocker.max[1] <= feet + .03 && restsOn(x, z, blocker)) floor = Math.max(floor, blocker.max[1]);
+      }
+      assert.ok(canEnter(e, n) && stand(e, n, 12 + floor), `blocked at ${x}, ${floor}, ${z}`);
+      assert.ok(Math.abs(floor - feet) <= .43, `unwalkable step at ${x}, ${z}`);
+      feet = floor;
+      message = race.update(x, feet, z, true);
+    }
+    assert.ok(Math.abs(feet - nextY) < .00001);
+  }
+  assert.match(message, /抵达观景台/);
 });
 
 test('a blocked bench front keeps the seat available from a clear side', () => {

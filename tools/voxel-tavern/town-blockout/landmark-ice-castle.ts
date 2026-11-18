@@ -10,6 +10,7 @@ import {
 } from './ice-castle-refinement';
 import { addOpaqueMuseumLabels } from './museum-label-atlas';
 import { createMuseumLabelCanvas } from './museum-label-canvas';
+import { createIcePalaceRace, icePalaceBalconyRace } from './ice-palace-race';
 
 const palette = {
   foundation: '#31546f',
@@ -188,6 +189,16 @@ export function buildIceCastle() {
   const parts = castleModel();
   const { block, crystal, solid, floor, flush, finish, add, bounds, colliders } = parts;
 
+  function raceArrow(x: number, feet: number, z: number, yaw: number, scale = 1) {
+    const segment = (dx: number, dz: number, width: number, angle: number) => {
+      const px = x + scale * (Math.cos(yaw) * dx + Math.sin(yaw) * dz);
+      const pz = z + scale * (-Math.sin(yaw) * dx + Math.cos(yaw) * dz);
+      block(px, feet + .029, pz, width * scale, .014, .15 * scale, 'glint', yaw + angle);
+    };
+    segment(-.11, 0, .83, 0);
+    for (const side of [-1, 1]) segment(.24, side * .125, .42, side * Math.PI / 4);
+  }
+
   // Wall-local coordinates simplify the same leaded glass pattern on all four faces.
   function lancet(x: number, base: number, z: number, width: number, height: number, yaw: number) {
     function pane(offset: number, y: number, projection: number, w: number, h: number, finish: Finish, detail?: IceDetail) {
@@ -320,6 +331,10 @@ export function buildIceCastle() {
       pixel === '+' ? 'glint' : 'paleIce');
   }));
   block(-22.28, 5.91, 0, .26, .87, 3.24, 'deepIce');
+  const [startX, startY, startZ] = icePalaceBalconyRace.start;
+  block(startX, startY + .011, startZ, 1.6, .021, 1.6, 'paleIce');
+  block(startX, startY + .023, startZ, 1.42, .008, 1.42, 'deepIce');
+  raceArrow(startX, startY, startZ, 0);
   flush('西门与双塔', true);
 
   floor(3.3, .12, 0, 35.8, 33.8, .22, 'foundation');
@@ -487,9 +502,20 @@ export function buildIceCastle() {
   lamp(20.02, 2.17, -7.67, true);
   addIceCastleCarvings(parts);
   addIceCastleChandelier(parts);
+  // These inlays guide racers to the south stair while preserving the existing floor supports.
+  raceArrow(9.74, .15, 1.45, -Math.PI / 2, .73);
+  raceArrow(9.74, .15, 4.10, -Math.PI / 2, .73);
+  raceArrow(10.11, .15, 6.2, 0, .65);
+  const [finishX, finishY, finishZ] = icePalaceBalconyRace.finish;
+  block(finishX, finishY + .011, finishZ, 1.6, .021, 1.6, 'paleIce');
+  for (const u of [-1, 0, 1]) for (const v of [-1, 0, 1]) {
+    block(finishX + u * .465, finishY + .024, finishZ + v * .465, .451, .008, .451,
+      (u + v) % 2 === 0 ? 'deepIce' : 'snow');
+  }
   flush('大殿内装与观景层');
   const group = finish();
   group.userData.throne = iceThrone;
+  group.userData.palaceRace = createIcePalaceRace();
   const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
   addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2, plaqueStyle);
   if (typeof document !== 'undefined') {

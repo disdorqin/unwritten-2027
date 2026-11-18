@@ -9,6 +9,7 @@ import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark
 import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
 import { buildTavernLandmark } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
+import type { IcePalaceRace } from './ice-palace-race';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark } from './landmark-market';
@@ -297,6 +298,7 @@ let museumLightClock = 0;
 const castleEye = new Vector3();
 const castleLightPosition = new Vector3();
 let nearbyIceExhibit: string | undefined;
+let visiblePalaceRace: IcePalaceRace | undefined;
 
 function updateMuseumLights(dt: number, eyePosition: Vector3) {
   const castle = architecture.get('ice-castle');
@@ -314,7 +316,17 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
       light.color.set(source.color);
       light.distance = source.distance;
     });
-    const exhibit = walking && !seated && !boardingGround && airHeight === undefined
+    const race = castle.userData.palaceRace as IcePalaceRace | undefined;
+    if (race) {
+      visiblePalaceRace = race;
+      let status = '';
+      if (walking && !seated && !boardingGround && !homeReturn) {
+        status = race.update(x - castle.position.x, (airHeight ?? ground) - castle.position.y,
+          -n - castle.position.z, airHeight === undefined);
+      } else race.cancel();
+      if (palaceRaceStatus.textContent !== status) palaceRaceStatus.textContent = status;
+    }
+    const exhibit = walking && !seated && !boardingGround && airHeight === undefined && !race?.running
       ? refinement.exhibits.find(({ stand: [x, y, z] }) =>
         Math.abs(castleEye.y - eye - y) < .55 && (castleEye.x - x) ** 2 + (castleEye.z - z) ** 2 < .9 ** 2)
       : undefined;
@@ -326,6 +338,11 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
     return;
   }
   nearbyIceExhibit = undefined;
+  if (visiblePalaceRace) {
+    visiblePalaceRace.cancel();
+    visiblePalaceRace = undefined;
+    palaceRaceStatus.textContent = '';
+  }
   museumLightClock -= dt;
   if (museumLightClock > 0) return;
   museumLightClock = .15;
@@ -537,6 +554,7 @@ const lookAhead = new Vector3();
 const placeCard = element<HTMLDialogElement>('place-card');
 const activityPanel = element('town-activity-content');
 const activityStatus = element('town-activity-status');
+const palaceRaceStatus = element<HTMLOutputElement>('ice-palace-race-status');
 let activityMessageTimer: number | undefined;
 let photoFilename: string | undefined;
 const museumInspection = createMuseumInspection(renderer, camera.aspect);
