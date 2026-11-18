@@ -238,7 +238,7 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function receivePose(peer: Peer, pose: unknown) {
-    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 5 ||
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || (pose > 5 && pose !== 7) ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
     const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });
