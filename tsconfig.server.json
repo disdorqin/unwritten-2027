@@ -7,5 +7,6 @@
     "outDir": "dist/server",
     "rootDir": "src"
   },
-  "include": ["src/server", "src/shared", "src/presence"]
+  "include": ["src/server", "src/shared", "src/presence"],
+  "exclude": ["src/presence/index-rehearsal.ts", "src/presence/rehearsal-clock.ts"]
 }

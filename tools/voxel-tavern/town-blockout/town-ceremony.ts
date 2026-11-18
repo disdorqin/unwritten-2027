@@ -48,6 +48,8 @@ export interface CeremonyState {
 /** 编排层只依赖这个接口（设计 §5）：单人版给本地提供者，多人版给服务端提供者。 */
 export interface CeremonyClock {
   now(): number;
+  /** A shared ceremony calendar can set its timezone independently of the local device. */
+  readonly utcOffsetMinutes?: number;
 }
 
 /** 单人版：设备本地时间，与时光信箱 UNLOCK_AT 的本地口径同源（设计 §3）。 */
@@ -71,32 +73,39 @@ export function createServerCeremonyClock(localNow: () => number = () => Date.no
   };
 }
 
-// ---------------------------------------------------------------- 时间轴（设备本地时间）
+// ---------------------------------------------------------------- 时间轴（默认设备本地时间）
 
 const minute = 60_000;
 const hour = 60 * minute;
 
 /** 某年跨年夜的零点（次年 1 月 1 日 00:00 本地时间）。eveYear = 12-31 所在年份。 */
-export function ceremonyMidnight(eveYear: number): number {
-  return new Date(eveYear + 1, 0, 1, 0, 0, 0, 0).getTime();
+export function ceremonyMidnight(eveYear: number, utcOffsetMinutes?: number): number {
+  return calendarDayStart(eveYear + 1, 0, 1, utcOffsetMinutes);
 }
 
-function eveDayStart(eveYear: number): number {
-  return new Date(eveYear, 11, 31, 0, 0, 0, 0).getTime();
+function calendarDayStart(year: number, month: number, day: number, utcOffsetMinutes?: number): number {
+  if (utcOffsetMinutes === undefined) return new Date(year, month, day).getTime();
+  return Date.UTC(year, month, day) - utcOffsetMinutes * minute;
+}
+
+function eveDayStart(eveYear: number, utcOffsetMinutes?: number): number {
+  return calendarDayStart(eveYear, 11, 31, utcOffsetMinutes);
 }
 
 /** 找到 now 所属（或即将到来）的跨年夜周期年份；窗口外返回最近的下一场。 */
-export function ceremonyEveYear(now: number): number {
-  const year = new Date(now).getFullYear();
+export function ceremonyEveYear(now: number, utcOffsetMinutes?: number): number {
+  const year = utcOffsetMinutes === undefined
+    ? new Date(now).getFullYear()
+    : new Date(now + utcOffsetMinutes * minute).getUTCFullYear();
   // 1 月 1 日凌晨 02:00 前仍属上一年的跨年夜周期。
-  if (now < ceremonyMidnight(year - 1) + 2 * hour) return year - 1;
-  if (now < ceremonyMidnight(year) + 2 * hour) return year;
+  if (now < ceremonyMidnight(year - 1, utcOffsetMinutes) + 2 * hour) return year - 1;
+  if (now < ceremonyMidnight(year, utcOffsetMinutes) + 2 * hour) return year;
   return year + 1;
 }
 
-function phaseAt(now: number, eveYear: number): CeremonyPhase {
-  const start = eveDayStart(eveYear);
-  const midnight = ceremonyMidnight(eveYear);
+function phaseAt(now: number, eveYear: number, utcOffsetMinutes?: number): CeremonyPhase {
+  const start = eveDayStart(eveYear, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
   if (now < start || now >= midnight + hour) return 'ordinary';
   if (now < start + 20 * hour) return 'standby';
   if (now < start + 21.5 * hour) return 'mailbox';
@@ -123,9 +132,9 @@ const snowKnots: ReadonlyArray<readonly [number, number]> = [
   [hour, 1],
 ];
 
-export function snowIntensityAt(now: number): number {
-  const eveYear = ceremonyEveYear(now);
-  const midnight = ceremonyMidnight(eveYear);
+export function snowIntensityAt(now: number, utcOffsetMinutes?: number): number {
+  const eveYear = ceremonyEveYear(now, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
   const offset = now - midnight;
   if (offset < snowKnots[0][0] || offset > hour) return 1;
   for (let i = 1; i < snowKnots.length; i++) {
@@ -137,10 +146,10 @@ export function snowIntensityAt(now: number): number {
   return 1;
 }
 
-export function frostBaselineAt(now: number): FrostLevel {
-  const eveYear = ceremonyEveYear(now);
-  const start = eveDayStart(eveYear);
-  const midnight = ceremonyMidnight(eveYear);
+export function frostBaselineAt(now: number, utcOffsetMinutes?: number): FrostLevel {
+  const eveYear = ceremonyEveYear(now, utcOffsetMinutes);
+  const start = eveDayStart(eveYear, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
   if (now < start + 20 * hour) return 0;
   if (now < start + 21.5 * hour) return 1;
   if (now < start + 23 * hour) return 2;
@@ -150,24 +159,24 @@ export function frostBaselineAt(now: number): FrostLevel {
   return 0;
 }
 
-export function dimLevelAt(now: number): number {
-  const eveYear = ceremonyEveYear(now);
-  const midnight = ceremonyMidnight(eveYear);
+export function dimLevelAt(now: number, utcOffsetMinutes?: number): number {
+  const eveYear = ceremonyEveYear(now, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
   if (now >= midnight - 10_000 && now < midnight) return .3;
   if (now >= midnight - 10 * minute && now < midnight - 10_000) return .6;
   return 1;
 }
 
-export function ceremonyStateAt(now: number): CeremonyState {
-  const eveYear = ceremonyEveYear(now);
-  const midnight = ceremonyMidnight(eveYear);
-  const phase = phaseAt(now, eveYear);
+export function ceremonyStateAt(now: number, utcOffsetMinutes?: number): CeremonyState {
+  const eveYear = ceremonyEveYear(now, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
+  const phase = phaseAt(now, eveYear, utcOffsetMinutes);
   return {
     now,
     phase,
-    snowIntensity: snowIntensityAt(now),
-    frostBaseline: frostBaselineAt(now),
-    dimLevel: dimLevelAt(now),
+    snowIntensity: snowIntensityAt(now, utcOffsetMinutes),
+    frostBaseline: frostBaselineAt(now, utcOffsetMinutes),
+    dimLevel: dimLevelAt(now, utcOffsetMinutes),
     secondsToMidnight: phase === 'converge' || phase === 'approach' || phase === 'countdown'
       ? (midnight - now) / 1000
       : null,
@@ -177,9 +186,9 @@ export function ceremonyStateAt(now: number): CeremonyState {
 // ---------------------------------------------------------------- cue 表（设计 §3.4）
 
 /** 某一周期内全部 cue 的发生时刻（未排序过滤前）。 */
-function cycleCues(eveYear: number): CeremonyCue[] {
-  const start = eveDayStart(eveYear);
-  const midnight = ceremonyMidnight(eveYear);
+function cycleCues(eveYear: number, utcOffsetMinutes?: number): CeremonyCue[] {
+  const start = eveDayStart(eveYear, utcOffsetMinutes);
+  const midnight = ceremonyMidnight(eveYear, utcOffsetMinutes);
   const cues: CeremonyCue[] = [
     { type: 'mailbox-open', at: start + 20 * hour },
     { type: 'lights-dim', at: midnight - 10 * minute, level: .6 },
@@ -236,20 +245,21 @@ export interface CeremonyDirector {
 }
 
 export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHooks = {}): CeremonyDirector {
+  const { utcOffsetMinutes } = clock;
   let lastNow: number | undefined;
   let scheduledYear: number | undefined;
   let schedule: CeremonyCue[] = [];
   let lastSnow: number | undefined;
   let lastFrost: FrostLevel | undefined;
   let lastDim: number | undefined;
-  let current = ceremonyStateAt(clock.now());
+  let current = ceremonyStateAt(clock.now(), utcOffsetMinutes);
 
   function update(): CeremonyState {
     const now = clock.now();
-    const year = ceremonyEveYear(now);
+    const year = ceremonyEveYear(now, utcOffsetMinutes);
     if (scheduledYear !== year) {
       scheduledYear = year;
-      schedule = cycleCues(year).sort((a, b) => a.at - b.at);
+      schedule = cycleCues(year, utcOffsetMinutes).sort((a, b) => a.at - b.at);
     }
     if (lastNow !== undefined && now > lastNow) {
       for (const cue of schedule) {
@@ -258,7 +268,7 @@ export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHook
       }
     }
     lastNow = now;
-    current = ceremonyStateAt(now);
+    current = ceremonyStateAt(now, utcOffsetMinutes);
     if (lastSnow === undefined || Math.abs(current.snowIntensity - lastSnow) > .001) {
       lastSnow = current.snowIntensity;
       hooks.onSnowIntensity?.(current.snowIntensity);

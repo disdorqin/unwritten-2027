@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, type RequestListener } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
@@ -28,6 +28,7 @@ type Options = {
   tiers?: readonly PresenceTier[];
   now?: () => number;
   testFireworks?: boolean;
+  requestListener?: RequestListener;
 };
 
 type Peer = {
@@ -102,7 +103,7 @@ export async function createPresenceServer(options: Options = {}) {
   const northLimit = metresToLimit(options.depth ?? TOWN_BOUNDS.depth);
   const heightLimit = metresToLimit(options.height ?? TOWN_BOUNDS.height);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
-  const http = createServer((_req, res) => { res.writeHead(404).end(); });
+  const http = createServer(options.requestListener ?? ((_req, res) => { res.writeHead(404).end(); }));
   const peers = new Map<number, Peer>();
   let fireworksOccupiedUntil = 0;
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
