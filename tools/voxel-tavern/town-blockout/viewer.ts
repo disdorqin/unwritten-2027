@@ -49,9 +49,10 @@ import { createMuseumLaunch } from './museum-launch';
 import { createMuseumGuide } from './museum-guide';
 import { museumHorizontalScale } from './museum-scale';
 import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownActivitySpot, type TownSeat } from './town-activity';
-import { createTavernActivity } from './tavern-activity';
+import { createTavernActivity, tavernCupLimit } from './tavern-activity';
 import { createTavernDrinkEffects } from './tavern-drink-effects';
-import { createTavernSeatSpots } from './tavern-seats';
+import { createTavernSeatSpots, type TavernCupRow } from './tavern-seats';
+import { createTavernTableCups } from './tavern-table-cups';
 import { buildTavernWarmShed, createTavernWarmShedSpots, inTavernWarmShed, nearTavernWarmShedFire } from './tavern-warm-shed';
 import './tavern-mix-panel.css';
 import { openTavernDice } from './tavern-dice';
@@ -562,7 +563,7 @@ let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
-let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
+let seated: (TownSeat & { pitch: number; tavern?: true; cupRow?: TavernCupRow }) | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
 const lookAhead = new Vector3();
@@ -695,7 +696,7 @@ const npcActivity = createTownNpcActivity({ ...activityContext, announce: announ
   if (name === '罗大江' && zodiac.canCollect('rooster')) return tavernRoosterClues;
 },
 panel => openTavernDice(panel, () => {
-  if (tavernDrinkEffects.getLevel() >= 3) return '这局你输了。酒意已满，免罚酒。';
+  if (tavernDrinkEffects.getLevel() === 4) return '这局你输了。酒意已满，免罚酒。';
   if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
   return '这局你输了，罚酒一杯。';
 }), {
@@ -718,6 +719,11 @@ function warmFromDrink() {
   warmDrinkUntil = performance.now() + 45_000;
   ceremonyFrost.drinkHot();
 }
+function warmFromHotDrink() {
+  warmFromDrink();
+  tavernDrinkEffects.drinkHot();
+}
+const tavernTableCups = createTavernTableCups(scene, tavernCupLimit);
 const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
   () => { drinkingPoseUntil = performance.now() + 2500; },
@@ -1436,7 +1442,7 @@ function registerLandmarkActivities(id: string, group: Group) {
       const now = performance.now();
       if (now < nextBathTeaAt) return;
       nextBathTeaAt = now + 60_000;
-      warmFromDrink();
+      warmFromHotDrink();
       announceActivity('热茶和点心已备好 · 暖意入身');
     });
     tea.available = () => performance.now() >= nextBathTeaAt;
@@ -1464,10 +1470,9 @@ function seatedTavernNpc() {
   if (seated?.tavern) return nearestTownActivity(npcActivity.spots, seated.x, seated.n, ground);
 }
 function openTavernSeatActions() {
-  const drink = tavernActivity.carryAction();
   const talk = seatedTavernNpc();
   const panel = openPlace('酒馆座位', '');
-  for (const action of [drink, talk, { label: '起身', run: leaveSeat }]) {
+  for (const action of [talk, { label: '起身', run: leaveSeat }]) {
     if (!action) continue;
     const button = document.createElement('button');
     button.type = 'button';
@@ -1486,7 +1491,7 @@ function currentAction() {
     return { label: '在此下车', run: () => leaveRide() };
   }
   if (seated) {
-    if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
+    if (seated.tavern && seatedTavernNpc()) return tavernSeatAction;
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   }
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
@@ -1510,7 +1515,6 @@ function currentAction() {
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   if (nearest) return nearest;
   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoArc(x, n, ground)) return plazaPhotoAction;
-  return tavernActivity.carryAction();
 }
 function interact() {
   currentAction()?.run();
@@ -1619,6 +1623,20 @@ function lookAllowed() {
   return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
+function canSipWithMouse() {
+  return lookAllowed() && airHeight === undefined && tavernActivity.heldCups().length > 0;
+}
+let suppressDrinkMenu = false;
+renderer.domElement.addEventListener('pointerdown', event => {
+  suppressDrinkMenu = event.pointerType === 'mouse' && event.button === 2 && canSipWithMouse();
+  if (!suppressDrinkMenu) return;
+  event.preventDefault();
+  tavernActivity.sipOne();
+});
+renderer.domElement.addEventListener('contextmenu', event => {
+  if (event.button === 2 && (suppressDrinkMenu || canSipWithMouse())) event.preventDefault();
+  suppressDrinkMenu = false;
+});
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -1901,11 +1919,14 @@ if (tavernPlot) {
   activitySpots.push(...createTavernSeatSpots(tavernPlot, {
     sit(seat) {
       activityContext.sit(seat);
-      if (seated) seated.tavern = true;
+      if (seated) {
+        seated.tavern = true;
+        seated.cupRow = seat.cupRow;
+      }
     },
   }, canStandAtActivity));
   activitySpots.push(...createTavernWarmShedSpots(tavernPlot, grid.heightAt,
-    { ...activityContext, announce: announceActivity }, warmFromDrink, canStandAtActivity));
+    { ...activityContext, announce: announceActivity }, warmFromHotDrink, canStandAtActivity));
 }
 registerHomeDoors(districts.housePortals);
 const cabins = architecture.get('cabins');
@@ -2237,6 +2258,7 @@ renderer.setAnimationLoop(now => {
   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
+  tavernTableCups.update(seated?.cupRow, tavernActivity.heldCups());
   rehearse.disabled = festival.active();
   const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
   touchWalk.setAllowed(moveAllowed());

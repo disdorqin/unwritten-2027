@@ -7,14 +7,16 @@ import { createTavernMixProps } from './tavern-mix-props';
 import type { TavernDrinkFeedback } from './tavern-drink-effects';
 
 const mixSeconds = 2.2;
-const drinkStages = ['', '微醺', '上头', '酒意已满'] as const;
+const drinkStages = ['', '微醺', '上头', '上头', '酒意已满'] as const;
+export const tavernCupLimit = 4;
+type TavernOrder = { recipe: TavernRecipe; quantity: number };
 type MixSession = {
   generation: number;
   panel: HTMLElement;
   dialog: HTMLDialogElement | null;
   view: ReturnType<typeof renderTavernMixPanel>;
-  active?: { recipe: TavernRecipe; elapsed: number };
-  served?: TavernRecipe;
+  active?: TavernOrder & { elapsed: number };
+  served?: TavernOrder;
 };
 
 export function createTavernActivity(context: TownActivityContext, drinkFeedback?: TavernDrinkFeedback, onDrink?: () => void, onSip?: () => void) {
@@ -31,7 +33,20 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
   const book = createTavernMixBook();
   let props: ReturnType<typeof createTavernMixProps> | undefined;
   let session: MixSession | undefined;
-  let held: TavernRecipe | undefined;
+  const held: TavernRecipe[] = [];
+  const remaining = () => tavernCupLimit - held.length;
+  let countBadge: HTMLSpanElement | undefined;
+  function updateCupCount() {
+    if (!countBadge && held.length) {
+      countBadge = document.createElement('span');
+      countBadge.className = 'tavern-drink-count';
+      countBadge.setAttribute('role', 'status');
+      (document.getElementById('scene') ?? document.body).append(countBadge);
+    }
+    if (!countBadge) return;
+    countBadge.hidden = !held.length;
+    countBadge.textContent = held.length ? `${held.length} 杯 · 右键喝一杯` : '';
+  }
   // Session generation guard (R3-D2): every openMixer() bumps the generation.
   // Delayed cleanup paths (the shared dialog's 'close' event, which the
   // browser dispatches asynchronously, and the frame-loop guard) must only
@@ -76,22 +91,27 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
       panel, dialog,
       view: renderTavernMixPanel(panel, {
         ids: book.ids,
-        mix(base, addIn) {
-          if (session !== current || current.active) return false;
+        remaining,
+        mix(base, addIn, quantity) {
+          if (session !== current || current.active || !Number.isInteger(quantity) ||
+              quantity < 1 || quantity > remaining()) return false;
           const recipe = getTavernRecipe(base, addIn);
           if (!recipe) return false;
           current.served = undefined;
-          current.active = { recipe, elapsed: 0 };
+          current.active = { recipe, quantity, elapsed: 0 };
           props ??= createTavernMixProps(context.scene, counterTop);
           props.update(recipe.color, 0);
           return true;
         },
         take(recipeId) {
-          if (session !== current || current.served?.id !== recipeId) return false;
-          held = current.served;
+          const order = current.served;
+          if (session !== current || order?.recipe.id !== recipeId || order.quantity > remaining()) return false;
+          for (let cup = 0; cup < order.quantity; cup++) held.push(order.recipe);
           current.served = undefined;
           props?.hide();
-          context.announce(`端起了「${held.name}」，找个地方可以喝一口。`);
+          updateCupCount();
+          context.announce(order.quantity === 1 ? `端起了「${order.recipe.name}」，找个地方可以喝一口。`
+            : `端起了 ${order.quantity} 杯「${order.recipe.name}」。`);
           // Attribute the queued 'close' event to this session's generation
           // before closing, so the shared-dialog handler can tell it apart
           // from a genuine close of any newer session.
@@ -119,28 +139,24 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
   return {
     spots,
     getMixIds: book.ids,
-    carryAction() {
-      const drink = held;
-      if (!drink || drinkFeedback?.isDrinking()) return undefined;
-      return {
-        label: `喝一口「${drink.name}」`,
-        run() {
-          if (held !== drink) return;
-          if (drinkFeedback) {
-            const started = drinkFeedback.sip(drink.color, level => {
-              onDrink?.();
-              context.announce(`喝了一口「${drink.name}」 · 空杯 · ${drinkStages[level]}`);
-            });
-            if (!started) return;
-            context.announce(`举杯喝「${drink.name}」`);
-          } else {
-            onDrink?.();
-            context.announce(`喝了一口「${drink.name}」`);
-          }
-          held = undefined;
-          onSip?.();
-        },
-      };
+    heldCups: (): readonly TavernRecipe[] => held,
+    sipOne() {
+      const drink = held[0];
+      if (!drink) return false;
+      if (drinkFeedback) {
+        if (!drinkFeedback.sip(drink.color, level => {
+          onDrink?.();
+          context.announce(`喝了一口「${drink.name}」 · 空杯 · ${drinkStages[level]}`);
+        })) return false;
+        context.announce(`举杯喝「${drink.name}」`);
+      } else {
+        onDrink?.();
+        context.announce(`喝了一口「${drink.name}」`);
+      }
+      held.shift();
+      updateCupCount();
+      onSip?.();
+      return true;
     },
     update(dt: number) {
       const current = session;
@@ -157,8 +173,8 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
       current.view.setProgress(progress);
       if (progress < 1) return;
       current.active = undefined;
-      current.served = mix.recipe;
-      current.view.finish(mix.recipe, book.record(mix.recipe.id));
+      current.served = mix;
+      current.view.finish(mix.recipe, book.record(mix.recipe.id), mix.quantity);
     },
   };
 }
