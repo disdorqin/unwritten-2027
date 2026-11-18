@@ -12,6 +12,7 @@
     "build": "tsc --noEmit && vite build && tsc -p tsconfig.server.json",
     "build:client": "tsc --noEmit && vite build",
     "start": "node dist/server/server/index.js",
+    "start:presence": "node dist/server/presence/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
