@@ -39,6 +39,7 @@ import { createTavernActivity } from './tavern-activity';
 import './tavern-mix-panel.css';
 import { createPostActivity } from './post-activity';
 import { createTownMailActivity } from './town-mail-activity';
+import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
 import { createIceActivity } from './ice-activity';
@@ -569,6 +570,11 @@ const activitySpots = activities.flatMap(activity => activity.spots);
 const townMail = createTownMailActivity({ open: activityContext.open, announce: announceActivity }, grid.heightAt);
 scene.add(townMail.group);
 activitySpots.push(...townMail.spots);
+const riddleActivity = createRiddleActivity({ open: activityContext.open, announce: announceActivity }, architecture.get('lantern-workshop'), {
+  celebrate: () => festival.launchWorkshopBurst(116.25, 15.4, -115),
+  chime: () => festival.playRiddleChime(),
+});
+activitySpots.push(...riddleActivity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
@@ -856,7 +862,10 @@ const stampSites = [
   { id: 'bath', label: '温泉浴场', hint: '在温泉浴场西门内侧。', x: 526, n: 159 },
   { id: 'castle', label: '冰雪城堡', hint: '在冰雪城堡西门内侧。', x: 462, n: 71 },
 ];
-const passport = createTownPassport({ ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds, [stationTicketStamp]);
+const passport = createTownPassport(
+  { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
+  [stationTicketStamp], riddleActivity.getProgress,
+);
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
   const { collected, total } = passport.getProgress();
@@ -1436,6 +1445,7 @@ renderer.setAnimationLoop(now => {
   const sheltered = walking && Math.abs(local.x) < 19.55 && local.z > -13.7 && local.z < 12.85;
   snowfall.update(camera, dt, walking, sheltered);
   festival.update(dt);
+  if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();

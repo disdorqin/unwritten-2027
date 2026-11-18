@@ -99,6 +99,7 @@ export function createFestival(
   scene.add(sparks);
 
   let elapsed = -1;
+  let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
   let message = '';
   let audio: AudioContext | undefined;
@@ -143,8 +144,8 @@ export function createFestival(
     }
   }
 
-  function drawBurst(burst: Burst, t: number) {
-    const particleCount = reducedMotion ? 32 : sparkCount;
+  function drawBurst(burst: Burst, t: number, maxSparks = sparkCount) {
+    const particleCount = reducedMotion ? Math.min(32, maxSparks) : maxSparks;
     const echoes = reducedMotion ? 1 : trailCount;
     for (let i = 0; i < particleCount; i++) {
       const angle = i * 2.399963 + burst.x;
@@ -186,30 +187,61 @@ export function createFestival(
       void tryEnableAudio()?.then(() => { if (audio && elapsed < 0) playTowerChime(audio, 0, 1); });
       return true;
     },
+    playRiddleChime() {
+      void tryEnableAudio()?.then(() => {
+        if (!audio || audio.state !== 'running') return;
+        const now = audio.currentTime;
+        const note = audio.createOscillator();
+        const volume = audio.createGain();
+        note.type = 'sine';
+        note.frequency.setValueAtTime(1047, now);
+        volume.gain.setValueAtTime(.0001, now);
+        volume.gain.exponentialRampToValueAtTime(.06, now + .02);
+        volume.gain.exponentialRampToValueAtTime(.0001, now + .3);
+        note.connect(volume).connect(audio.destination);
+        note.start(now);
+        note.stop(now + .31);
+      });
+    },
+    launchWorkshopBurst(x: number, y: number, z: number) {
+      if (workshop) return false;
+      workshop = {
+        burst: { time: 0, x, y, z, radius: 3.4, shape: 'peony', outer: gold, inner: cream },
+        elapsed: 0,
+      };
+      return true;
+    },
     active() { return elapsed >= 0; },
     update(dt: number) {
-      if (elapsed < 0) return;
-      const previous = elapsed;
-      elapsed += Math.max(0, dt);
-      if (elapsed < countdown) {
-        announce(String(Math.ceil(countdown - elapsed)));
-        return;
-      }
-      if (previous < countdown && audio) playTowerChime(audio, 0, 3);
-      const time = elapsed - countdown;
-      announce(time < 3.8 ? '新年快乐！' : '');
-      if (time >= duration) {
-        elapsed = -1;
-        sparks.visible = false;
-        complete?.();
-        return;
-      }
+      if (elapsed < 0 && !workshop) return;
+      const delta = Math.max(0, dt);
       used = 0;
-      for (const burst of bursts) {
-        const age = time - burst.time;
-        if (age < -flight || age > lifetime + .22) continue;
-        if (age < 0) drawRocket(burst, age);
-        else drawBurst(burst, age);
+      if (elapsed >= 0) {
+        const previous = elapsed;
+        elapsed += delta;
+        if (elapsed < countdown) {
+          announce(String(Math.ceil(countdown - elapsed)));
+        } else {
+          if (previous < countdown && audio) playTowerChime(audio, 0, 3);
+          const time = elapsed - countdown;
+          announce(time < 3.8 ? '新年快乐！' : '');
+          if (time >= duration) {
+            elapsed = -1;
+            complete?.();
+          } else {
+            for (const burst of bursts) {
+              const age = time - burst.time;
+              if (age < -flight || age > lifetime + .22) continue;
+              if (age < 0) drawRocket(burst, age);
+              else drawBurst(burst, age);
+            }
+          }
+        }
+      }
+      if (workshop) {
+        workshop.elapsed += delta;
+        if (workshop.elapsed > lifetime + .22) workshop = undefined;
+        else drawBurst(workshop.burst, workshop.elapsed, 36);
       }
       sparks.visible = used > 0;
       geometry.setDrawRange(0, used);

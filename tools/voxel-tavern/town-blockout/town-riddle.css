@@ -1,0 +1,35 @@
+.riddle-card { display: grid; gap: 10px; }
+.riddle-card h3, .riddle-card p { margin: 0; }
+.riddle-paper {
+  padding: 16px;
+  background: #f1dfbe;
+  color: #412a24;
+  border: 2px solid #ad704e;
+  border-radius: 7px;
+  line-height: 1.65;
+}
+.riddle-options, .riddle-answer { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.riddle-answer label { display: grid; gap: 4px; flex: 1 1 146px; }
+.riddle-answer input {
+  min-width: 0;
+  font: inherit;
+  padding: 8px;
+  color: #f1dfbe;
+  background: #132132;
+  border: 1px solid #8193ad;
+  border-radius: 4px;
+}
+.riddle-hint { color: #f1d29e; }
+.riddle-feedback { min-height: 1.4em; }
+@media (prefers-reduced-motion: no-preference) {
+  .riddle-card--shake .riddle-paper { animation: riddle-shake 180ms ease-in-out; }
+  .riddle-card--flip .riddle-paper { animation: riddle-flip 310ms ease-out; }
+}
+@keyframes riddle-shake {
+  25%, 75% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+}
+@keyframes riddle-flip {
+  0% { transform: perspective(550px) rotateY(-82deg); }
+  100% { transform: perspective(550px) rotateY(0); }
+}

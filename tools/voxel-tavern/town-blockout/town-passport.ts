@@ -68,6 +68,7 @@ export function createTownPassport<Id extends string>(
   stamps: readonly PassportStamp<Id>[],
   drinkCollection?: () => readonly string[],
   extensionStamps: readonly PassportStamp[] = [],
+  riddleProgress?: () => { totalSolved: number; fullLightDays: readonly string[]; fullLightToday: boolean },
 ) {
   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
   const extensionById = new Map(extensionStamps.map(stamp => [stamp.id, stamp]));
@@ -175,7 +176,7 @@ export function createTownPassport<Id extends string>(
       panel.append(download, status);
     }
 
-    if (extensionById.size) {
+    if (extensionById.size || riddleProgress) {
       const section = document.createElement('section');
       section.className = 'passport-extensions';
       const heading = document.createElement('h3');
@@ -189,6 +190,18 @@ export function createTownPassport<Id extends string>(
         list.append(row);
       }
       section.append(heading, list);
+      if (riddleProgress) {
+        const riddles = riddleProgress();
+        const progress = document.createElement('p');
+        progress.dataset.collection = 'riddles';
+        progress.textContent = `灯谜 · 累计猜对 ${riddles.totalSolved} 题 · 今日全亮累计 ${riddles.fullLightDays.length} 天`;
+        section.append(progress);
+        if (riddles.fullLightToday) {
+          const stamp = document.createElement('strong');
+          stamp.textContent = '今日全亮';
+          section.append(stamp);
+        }
+      }
       panel.append(section);
     }
 

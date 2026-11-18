@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedMesh,
   Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace, SphereGeometry,
   Vector3, Quaternion,
 } from 'three';
@@ -7,7 +7,12 @@ import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 
 type Vector = [number, number, number];
-type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean };
+type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
+
+export type WorkshopRiddleWall = {
+  stands: readonly Vector[];
+  update(active: number, lit: ReadonlySet<number>): void;
+};
 
 const wood = ['#74462d', '#8e5031', '#693823', '#9c6041'];
 const trim = '#40251d';
@@ -225,7 +230,22 @@ function buildGuild() {
   put(stone[0], -5.6, 8.52, -2.53, .94, .28, .97);
   put(snow[0], -5.6, 8.71, -2.53, .92, .15, .97);
 
-  const building = batchParts(s.parts);
+  const stands: Vector[] = [];
+  put(trim, 0, 2.9, rear + .28, 15.25, .18, .21);
+  put(wood[2], 0, 1.85, rear + .21, 15.18, 1.85, .12);
+  for (let slot = 0; slot < 10; slot++) {
+    const x = -6.75 + slot * 1.5;
+    const z = rear + .45;
+    const firstPart = s.parts.length;
+    put(gold, x, 2.65, z, .06, .42, .055);
+    put(darkRed, x, 2.42, z, .33, .075, .33, 'cylinder');
+    put(darkRed, x, 1.90, z, .34, .075, .34, 'cylinder');
+    put('#9b3024', x, 2.16, z, .55, .49, .50, 'round', true);
+    put('#e8d1aa', x, 1.65, z + .075, .22, .26, .06);
+    for (let index = firstPart; index < s.parts.length; index++) s.parts[index].riddleSlot = slot;
+    stands.push([x, .15, -4.70]);
+  }
+  const building = batchParts(s.parts, { stands, rearWallZ: rear });
   building.add(makeSign('春灯工坊', 3.7, .86, 0, 4.49, 7.76));
   building.rotation.y = -Math.PI / 2;
   const walls = [
@@ -342,7 +362,7 @@ function buildStalls() {
   return root;
 }
 
-function batchParts(parts: Part[]) {
+function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rearWallZ: number }) {
   const group = new Group();
   const shapes = {
     box: new BoxGeometry(1, 1, 1),
@@ -360,6 +380,7 @@ function batchParts(parts: Part[]) {
   const matrix = new Matrix4();
   const pos = new Vector3();
   const size = new Vector3();
+  const updateRiddleBatches: WorkshopRiddleWall['update'][] = [];
   for (const batch of byMaterial.values()) {
     const { color, shape, glow } = batch[0];
     const material = new MeshStandardMaterial({
@@ -374,8 +395,79 @@ function batchParts(parts: Part[]) {
       mesh.setMatrixAt(index, matrix);
       mesh.setColorAt(index, new Color(part.color));
     }
+    const riddleIndices = batch.flatMap((part, index) => part.riddleSlot === undefined ? [] : [{ slot: part.riddleSlot, index }]);
+    if (riddleWall && riddleIndices.length) {
+      const firstRiddle = riddleIndices[0].index;
+      let selectedCount = batch.length;
+      const emission = glow
+        ? new InstancedBufferAttribute(new Float32Array(batch.length).fill(1), 1).setUsage(DynamicDrawUsage)
+        : undefined;
+      if (emission) {
+        mesh.geometry = mesh.geometry.clone();
+        mesh.geometry.setAttribute('riddleGlow', emission);
+        const eye = new Vector3();
+        const minimum = new Vector3(Infinity, Infinity, Infinity);
+        const maximum = new Vector3(-Infinity, -Infinity, -Infinity);
+        for (const { index } of riddleIndices) {
+          const { position: [x, y, z], size: [w, h, d] } = batch[index];
+          minimum.min(new Vector3(x - w / 2, y - h / 2, z - d / 2));
+          maximum.max(new Vector3(x + w / 2, y + h / 2, z + d / 2));
+        }
+        const corners = [minimum.x, maximum.x].flatMap(x =>
+          [minimum.y, maximum.y].flatMap(y => [minimum.z, maximum.z].map(z => new Vector3(x, y, z))));
+        mesh.onBeforeRender = (_renderer, _scene, camera) => {
+          group.worldToLocal(camera.getWorldPosition(eye));
+          const plane = riddleWall.rearWallZ;
+          // The original rear planks form a continuous opaque rectangle at this depth.
+          // All projected corners must sit inside it before any globe is skipped.
+          const hidden = eye.z < plane && minimum.z > plane && corners.every(corner => {
+            const t = (plane - eye.z) / (corner.z - eye.z);
+            const x = eye.x + (corner.x - eye.x) * t;
+            const y = eye.y + (corner.y - eye.y) * t;
+            return Math.abs(x) < 8.70 && y > .46 && y < 4.84;
+          });
+          mesh.count = hidden ? firstRiddle : selectedCount;
+        };
+        material.onBeforeCompile = shader => {
+          shader.vertexShader = 'attribute float riddleGlow; varying float vRiddleGlow;\n' + shader.vertexShader
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRiddleGlow = riddleGlow;');
+          shader.fragmentShader = 'varying float vRiddleGlow;\n' + shader.fragmentShader
+            .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vRiddleGlow;');
+        };
+      }
+      updateRiddleBatches.push((active, lit) => {
+        // Slots are appended in numerical order after the workshop's existing fixtures.
+        // An inactive slot submits neither its paper globe nor its cord, caps and riddle tag.
+        const count = riddleIndices.find(({ slot }) => slot >= active)?.index ?? batch.length;
+        if (selectedCount !== count) {
+          selectedCount = count;
+          mesh.count = count;
+          // Invalidate the panoramic batch's cache, which is keyed to the instance matrix version.
+          mesh.instanceMatrix.needsUpdate = true;
+        }
+        if (!emission) return;
+        let changed = false;
+        for (const { slot, index } of riddleIndices) {
+          const value = lit.has(slot) ? 1.8 : 0;
+          if (Math.abs(emission.getX(index) - value) < .0001) continue;
+          emission.setX(index, value);
+          changed = true;
+        }
+        if (changed) emission.needsUpdate = true;
+      });
+    }
     mesh.computeBoundingSphere();
     group.add(mesh);
+  }
+  if (riddleWall) {
+    const wall: WorkshopRiddleWall = {
+      stands: riddleWall.stands,
+      update(active, lit) {
+        for (const update of updateRiddleBatches) update(active, lit);
+      },
+    };
+    wall.update(6, new Set());
+    group.userData.riddleWall = wall;
   }
   return group;
 }
