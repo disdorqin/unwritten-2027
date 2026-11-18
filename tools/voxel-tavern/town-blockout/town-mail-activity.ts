@@ -4,6 +4,7 @@ import { layout } from './terrain';
 import {
   createTownMailStore, townMailLimits, townMailNpcNames, townMailRecipients, townMailTextLength, UNLOCK_AT,
 } from './town-mail-store';
+import { recordTownChronicleTimeboxUnlock } from './town-chronicle';
 import './town-mail.css';
 
 type Mailbox = 'main' | 'branch';
@@ -141,9 +142,16 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
     window.dispatchEvent(new CustomEvent('town-activity-event', { detail }));
   });
   const furniture = makeMailboxFurniture(groundAt);
+  let unlockRecorded = false;
+  function syncTimeboxChronicle() {
+    if (unlockRecorded) return;
+    const event = mail.timeboxUnlockRecord();
+    if (event) unlockRecorded = recordTownChronicleTimeboxUnlock(event, storage);
+  }
   function syncRibbons() {
     const delay = new Date(UNLOCK_AT).getTime() - Date.now();
     furniture.showRibbon(mail.timeboxStatus().ready);
+    syncTimeboxChronicle();
     if (delay > 0 && typeof window !== 'undefined') {
       window.setTimeout(syncRibbons, Math.min(delay, 2_147_000_000));
     }
@@ -193,6 +201,7 @@ export function createTownMailActivity(context: Pick<TownActivityContext, 'open'
       status.textContent = notice;
       const state = mail.timeboxStatus(source === 'main');
       furniture.showRibbon(state.ready);
+      if (state.ready) syncTimeboxChronicle();
       const header = node('h3', state.opened ? '已开启' : state.ready ? '已到开启时间' : '未到开启时间');
       if (state.ready) header.className = 'town-mail-ready';
       content.append(header, node('p', '封存 ' + state.count + ' / ' + townMailLimits.sealed + ' 封'));

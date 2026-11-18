@@ -1,4 +1,5 @@
 import { npcScript, type NpcName } from './town-npc-dialogue';
+import { isStoredRecord, readCollection, writeCollection, type StorageAccess } from './town-text-store';
 
 export const UNLOCK_AT = '2026-12-31T20:00:00';
 export const townMailKeys = { wall: 'unwritten.wall.v1', timebox: 'unwritten.timebox.v1' } as const;
@@ -19,9 +20,7 @@ type PlayerEnvelope = Pick<Letter, 'id' | 'recipientName' | 'sealedAt'>;
 type NpcEnvelope = Pick<NpcLetter, 'id' | 'authorName' | 'fromNpc'> &
   ({ title: string; recipientName: string } | { title?: undefined; recipientName?: undefined });
 type Envelope = PlayerEnvelope | NpcEnvelope;
-type Collection<Item> = { version: 1; items: Item[] };
 type LetterDraft = Pick<Letter, 'recipientType' | 'recipientName' | 'body' | 'signature'>;
-type StorageAccess = Pick<Storage, 'getItem' | 'setItem'>;
 type RejectReason = 'empty' | 'length' | 'blocked' | 'duplicate' | 'cooldown' | 'capacity' | 'storage' | 'locked' | 'missing';
 type Result = { ok: true } | { ok: false; reason: RejectReason };
 type EventBase = { actor: 'player:local'; t: number };
@@ -98,9 +97,6 @@ const containsBlockedText = (value: string) =>
 const reject = (reason: RejectReason): Result => ({ ok: false, reason });
 const ok: Result = { ok: true };
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 const isTime = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 8.64e15;
 function base(value: Record<string, unknown>) {
@@ -109,45 +105,16 @@ function base(value: Record<string, unknown>) {
     typeof value.authorName === 'string' && typeof value.body === 'string' && isTime(value.createdAt);
 }
 function isMessage(value: unknown): value is Message {
-  return record(value) && base(value) && value.kind === 'wall' && typeof value.pinned === 'boolean';
+  return isStoredRecord(value) && base(value) && value.kind === 'wall' && typeof value.pinned === 'boolean';
 }
 function isRecipient(value: unknown): value is RecipientType {
   return typeof value === 'string' && Object.hasOwn(townMailRecipients, value);
 }
 function isPlayerLetter(value: unknown): value is Letter {
-  return record(value) && base(value) && value.kind === 'letter' && value.authorType === 'player' &&
+  return isStoredRecord(value) && base(value) && value.kind === 'letter' && value.authorType === 'player' &&
     isRecipient(value.recipientType) && typeof value.recipientName === 'string' &&
     typeof value.signature === 'string' && isTime(value.sealedAt) &&
     (value.openedAt === null || isTime(value.openedAt)) && value.fromNpc === false;
-}
-
-function readCollection<Item>(storage: StorageAccess | undefined, key: string, guard: (item: unknown) => item is Item): Item[] {
-  if (!storage) return [];
-  let raw: string | null;
-  try { raw = storage.getItem(key); }
-  catch { return []; }
-  if (raw === null) return [];
-  try {
-    // Add a migration step here when an older collection version becomes supported.
-    const parsed: unknown = JSON.parse(raw);
-    if (record(parsed) && parsed.version === 1 && Array.isArray(parsed.items) && parsed.items.every(guard)) {
-      return parsed.items;
-    }
-  } catch { /* Preserve the source below. */ }
-  try {
-    storage.setItem(key + '.bak', raw);
-    storage.setItem(key, JSON.stringify({ version: 1, items: [] }));
-  } catch { /* A read-only browser still opens the empty panel. */ }
-  return [];
-}
-
-function writeCollection<Item>(storage: StorageAccess | undefined, key: string, items: Item[]) {
-  if (!storage) return false;
-  try {
-    const payload: Collection<Item> = { version: 1, items };
-    storage.setItem(key, JSON.stringify(payload));
-    return true;
-  } catch { return false; }
 }
 
 function validate(value: string, width: number, required = true): RejectReason | undefined {
@@ -293,6 +260,13 @@ export function createTownMailStore(storage: StorageAccess | undefined, clock = 
     };
   }
 
+  function timeboxUnlockRecord() {
+    const at = new Date(UNLOCK_AT).getTime();
+    if (clock() < at) return null;
+    const playerLetters = letters().filter(letter => letter.sealedAt < at).length;
+    return { at, playerLetters, npcLetters: NPC_LETTERS.length };
+  }
+
   function publicLetters() {
     const items = letters();
     if (!allow(items, clock())) return [];
@@ -303,7 +277,7 @@ export function createTownMailStore(storage: StorageAccess | undefined, clock = 
   }
 
   return {
-    postMessage, sealLetter, readLetter, openTimebox, retractLetter, timeboxStatus, publicLetters,
+    postMessage, sealLetter, readLetter, openTimebox, retractLetter, timeboxStatus, timeboxUnlockRecord, publicLetters,
     wallMessages: () => messages().sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt),
   };
 }
