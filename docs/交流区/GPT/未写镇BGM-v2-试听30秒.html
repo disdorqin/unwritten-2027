@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#201923">
+<title>未写镇 · 年味试听 v2</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#211923;color:#fff1e1}*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#523040 0,transparent 65%),#211923}
+main{width:min(100%,36rem);padding:clamp(24px,7vw,56px);border:1px solid #805162;border-radius:24px;background:#2a202a}
+h1{font-size:clamp(26px,7vw,42px);margin:0 0 14px;line-height:1.18}
+p{color:#f0d0bb;line-height:1.6;margin:0 0 24px}
+audio{width:100%;display:block;margin:18px 0 10px}
+button,a{border-radius:8px;padding:11px 16px;min-height:44px;font:inherit}
+button{background:#ffcc8f;color:#39222b;border:0;font-weight:700;cursor:pointer}
+button:disabled{opacity:.65;cursor:wait}a{display:inline-flex;margin-top:12px;color:#ffd4a2}a[hidden],audio[hidden]{display:none}
+small{display:block;color:#e3bda8;margin-top:14px;min-height:1.3em}
+</style>
+</head>
+<body>
+<main>
+<h1>未写镇 · 年味试听 v2</h1>
+<p>试听 30 秒。笛子与扬琴 · 起、承两句 · 66 BPM</p>
+<button id="play" type="button">播放试听</button>
+<audio id="audio" controls hidden></audio>
+<a id="save" download="未写镇-年味-v2-试听30秒.wav" hidden>下载 WAV</a>
+<small id="status" role="status"></small>
+</main>
+<script>
+const bars = [[[62,1],[64,1],[66,1],[69,1]],[[71,1.5],[69,0.5],[66,1],[64,1]],[[66,1],[69,1],[71,1],[69,1]],[[66,1],[64,1],[69,2]],[[69,1],[71,1],[69,1],[66,1]],[[64,1],[66,1],[69,1],[66,1]],[[64,1],[66,1],[64,1],[62,1]],[[64,1.5],[66,0.5],[62,2]]];
+const bpm = 66;
+const secondsPerBeat = 60 / bpm;
+const start = .055;
+const hz = note => 440 * 2 ** ((note - 69) / 12);
+const notePlan = bars.flatMap((bar, index) => {
+  let beat = index * 4;
+  return bar.map(([midi, beats], noteIndex) => {
+    const at = beat * secondsPerBeat + start;
+    beat += beats;
+    const phraseEnd = (index === 3 || index === 7) && noteIndex === bar.length - 1;
+    return { midi, beats, at, phraseEnd };
+  });
+});
+
+function noiseBuffer(context, duration, seed, decay) {
+  const buffer = context.createBuffer(1, Math.ceil(duration * context.sampleRate), context.sampleRate);
+  const samples = buffer.getChannelData(0);
+  let state = seed;
+  for (let i = 0; i < samples.length; i++) {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    samples[i] = (state / 0x100000000 * 2 - 1) * (1 - i / samples.length) ** decay;
+  }
+  return buffer;
+}
+
+function dizi(context, out, breathNoise, { midi, beats, at, phraseEnd }, first) {
+  const frequency = hz(midi);
+  const beatEnd = at + beats * secondsPerBeat;
+  const breath = phraseEnd ? (midi === 62 ? .27 : .24) : 0;
+  const fadeStart = phraseEnd ? beatEnd - breath - .13 : beatEnd + .035;
+  const fadeEnd = phraseEnd ? beatEnd - breath : beatEnd + .075;
+  const gain = context.createGain();
+  gain.gain.setValueAtTime(0, at);
+  gain.gain.linearRampToValueAtTime(.18, at + .075);
+  gain.gain.setValueAtTime(.168, fadeStart);
+  gain.gain.linearRampToValueAtTime(0, fadeEnd);
+  gain.connect(out);
+  let vibrato;
+  let depth;
+  if (beats >= 1) {
+    vibrato = context.createOscillator();
+    vibrato.frequency.value = 5;
+    depth = context.createGain();
+    depth.gain.setValueAtTime(0, at + .3);
+    depth.gain.linearRampToValueAtTime(10.36, at + .52);
+    vibrato.connect(depth);
+    vibrato.start(at + .3);
+    vibrato.stop(fadeEnd);
+  }
+  for (const [harmonic, amount] of [[1,.78],[2,.172],[3,.074]]) {
+    const oscillator = context.createOscillator();
+    const mix = context.createGain();
+    oscillator.frequency.value = frequency * harmonic;
+    mix.gain.value = amount;
+    if (depth) depth.connect(oscillator.detune);
+    oscillator.connect(mix).connect(gain);
+    oscillator.start(at);
+    oscillator.stop(fadeEnd + .005);
+  }
+  const air = context.createBufferSource();
+  const color = context.createBiquadFilter();
+  const level = context.createGain();
+  air.buffer = breathNoise;
+  air.loop = true;
+  color.type = 'bandpass';
+  color.frequency.value = frequency * 1.95;
+  color.Q.value = 1.08;
+  level.gain.value = first ? .1 : .09;
+  air.connect(color).connect(level).connect(gain);
+  air.start(at, (midi * .063) % breathNoise.duration);
+  air.stop(fadeEnd);
+}
+
+function yangqin(context, out, tick, at, note, weight) {
+  const fundamental = hz(note);
+  const body = context.createGain();
+  body.gain.setValueAtTime(.0001, at);
+  body.gain.exponentialRampToValueAtTime(.075 * weight, at + .007);
+  body.gain.exponentialRampToValueAtTime(.0001, at + .59);
+  body.connect(out);
+  for (const [harmonic, level] of [[1,.65],[2,.20],[3,.089],[4.2,.042]]) {
+    const partial = context.createOscillator();
+    const gain = context.createGain();
+    partial.frequency.value = fundamental * harmonic;
+    gain.gain.setValueAtTime(level, at);
+    gain.gain.exponentialRampToValueAtTime(.001, at + .37 / Math.sqrt(harmonic));
+    partial.connect(gain).connect(body);
+    partial.start(at);
+    partial.stop(at + .60);
+  }
+  const strike = context.createBufferSource();
+  const tickLevel = context.createGain();
+  strike.buffer = tick;
+  tickLevel.gain.value = .086;
+  strike.connect(tickLevel).connect(body);
+  strike.start(at);
+}
+
+function tonePad(context, destination, at, end, tones) {
+  for (const [i, note] of tones.entries()) {
+    const oscillator = context.createOscillator();
+    const level = context.createGain();
+    oscillator.type = i ? 'sine' : 'triangle';
+    oscillator.frequency.setValueAtTime(hz(note - (i ? 1 : 2)), at);
+    oscillator.frequency.exponentialRampToValueAtTime(hz(note), at + .3);
+    level.gain.setValueAtTime(0, at);
+    level.gain.linearRampToValueAtTime(i ? .027 : .032, at + Math.min(1.8, end - at - .2));
+    level.gain.setValueAtTime(i ? .027 : .032, Math.max(at + 1.8, end - 1.75));
+    level.gain.linearRampToValueAtTime(0, end);
+    oscillator.connect(level).connect(destination);
+    oscillator.start(at);
+    oscillator.stop(end + .005);
+  }
+}
+
+async function render(leadOnly = false) {
+  const sampleRate = 24000;
+  const context = new OfflineAudioContext(1, 30 * sampleRate, sampleRate);
+  const master = context.createGain();
+  master.gain.value = .55;
+  master.connect(context.destination);
+  const lead = context.createBiquadFilter();
+  lead.type = 'lowpass';
+  lead.frequency.value = 10800;
+  lead.Q.value = .2;
+  lead.connect(master);
+  const breath = noiseBuffer(context, 2.5, 31879, .02);
+  notePlan.forEach((note, i) => dizi(context, lead, breath, note, i === 0 || i === 15));
+
+  if (!leadOnly) {
+    const strings = context.createGain();
+    strings.gain.value = .39;
+    strings.connect(master);
+    const reverb = context.createConvolver();
+    reverb.buffer = noiseBuffer(context, 2.1, 91813, 3.3);
+    const wet = context.createGain();
+    wet.gain.value = .15;
+    strings.connect(reverb);
+    lead.connect(reverb);
+    reverb.connect(wet).connect(master);
+    const pad = context.createBiquadFilter();
+    pad.type = 'lowpass';
+    pad.frequency.value = 600;
+    pad.Q.value = .1;
+    pad.connect(master);
+    const chords = [
+      { wave:[50, 57, 62, 69, 74, 69, 62, 57], bass:[38,45] },
+      { wave:[59, 66, 69, 74, 78, 74, 69, 66], bass:[35,42] },
+      { wave:[55, 62, 67, 71, 74, 69, 71, 62], bass:[43,50] },
+      { wave:[57, 64, 69, 71, 76, 71, 69, 64], bass:[45,52] },
+    ];
+    const beatWeights = [.84,.64,.73,.88,.66,.62,.76,.69];
+    const tick = noiseBuffer(context, .008, 77163, 1.7);
+    for (let i = 0; i < chords.length; i++) {
+      const chordAt = start + i * 8 * secondsPerBeat;
+      const chordEnd = start + (i + 1) * 8 * secondsPerBeat;
+      tonePad(context, pad, chordAt, i === 3 ? 29.91 : chordEnd + 1.76, chords[i].bass);
+      for (let pulse = 0; pulse < 16; pulse++) {
+        const at = chordAt + pulse * secondsPerBeat / 2;
+        const weight = beatWeights[pulse % 8] * (i === 3 && pulse > 13 ? .82 : 1);
+        yangqin(context, strings, tick, at, chords[i].wave[pulse % 8], weight);
+      }
+    }
+  }
+  master.gain.setValueAtTime(.55, 29.3);
+  master.gain.linearRampToValueAtTime(0, 29.99);
+  return context.startRendering();
+}
+
+function wav(buffer) {
+  const waveform = buffer.getChannelData(0);
+  const data = new DataView(new ArrayBuffer(44 + waveform.length * 2));
+  const writeText = (offset, text) => [...text].forEach((char, i) => data.setUint8(offset + i, char.charCodeAt(0)));
+  writeText(0, 'RIFF');
+  data.setUint32(4, data.byteLength - 8, true);
+  writeText(8, 'WAVEfmt ');
+  data.setUint32(16, 16, true);
+  data.setUint16(20, 1, true);
+  data.setUint16(22, 1, true);
+  data.setUint32(24, buffer.sampleRate, true);
+  data.setUint32(28, buffer.sampleRate * 2, true);
+  data.setUint16(32, 2, true);
+  data.setUint16(34, 16, true);
+  writeText(36, 'data');
+  data.setUint32(40, waveform.length * 2, true);
+  waveform.forEach((sample, i) => {
+    data.setInt16(44 + i * 2, Math.round(Math.min(1, Math.max(-1, sample)) * 32767), true);
+  });
+  return new Blob([data], { type: 'audio/wav' });
+}
+
+const play = document.querySelector('#play');
+const status = document.querySelector('#status');
+const audio = document.querySelector('#audio');
+const save = document.querySelector('#save');
+play.onclick = async () => {
+  play.disabled = true;
+  status.textContent = '正在合成试听…';
+  try {
+    audio.src = save.href = URL.createObjectURL(wav(await render()));
+    audio.hidden = save.hidden = false;
+    play.hidden = true;
+    status.textContent = '';
+    try { await audio.play(); } catch { status.textContent = '请点播放器中的播放按钮。'; }
+  } catch {
+    play.disabled = false;
+    status.textContent = '此浏览器未能合成音频。请用 Chrome 或 Edge 打开。';
+  }
+};
+</script>
+</body>
+</html>
