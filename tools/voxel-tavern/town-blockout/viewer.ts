@@ -9,6 +9,7 @@ import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark
 import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
 import { buildTavernLandmark } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
+import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
 import type { IcePalaceRace } from './ice-palace-race';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
@@ -327,6 +328,7 @@ const castleEye = new Vector3();
 const castleLightPosition = new Vector3();
 let nearbyIceExhibit: string | undefined;
 let visiblePalaceRace: IcePalaceRace | undefined;
+let palaceTowerStatus = '';
 
 function updateMuseumLights(dt: number, eyePosition: Vector3) {
   const castle = architecture.get('ice-castle');
@@ -352,7 +354,8 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
         status = race.update(x - castle.position.x, (airHeight ?? ground) - castle.position.y,
           -n - castle.position.z, airHeight === undefined);
       } else race.cancel();
-      if (palaceRaceStatus.textContent !== status) palaceRaceStatus.textContent = status;
+      const displayStatus = palaceTowerStatus || status;
+      if (palaceRaceStatus.textContent !== displayStatus) palaceRaceStatus.textContent = displayStatus;
     }
     const exhibit = walking && !seated && !boardingGround && airHeight === undefined && !race?.running
       ? refinement.exhibits.find(({ stand: [x, y, z] }) =>
@@ -463,10 +466,12 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
     (overview || Math.hypot(east - origin[0], north - origin[1]) < 148));
   if (!plot) return;
   requestedPlots.add(plot.id);
-  extensionBuilders[plot.id]().then(group => {
+  const palaceModule = plot.id === 'ice-castle' ? import('./ice-palace-landmark-activity') : undefined;
+  Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
+    if (palace) registerIcePalaceActivities(group, palace.createIcePalaceLandmarkActivity);
   }).catch(error => {
     requestedPlots.delete(plot.id);
     console.error(`Loading ${plot.id}`, error);
@@ -750,6 +755,7 @@ function nearbyActivity<T extends TownActivity>(create: (context: TownActivityCo
   return activity;
 }
 const stageActivity = nearbyActivity(createStageActivity);
+let icePalaceActivity: ReturnType<typeof createIcePalaceLandmarkActivity> | undefined;
 const activities: TownActivity[] = [
   nearbyActivity(createPostActivity), stageActivity, nearbyActivity(createMarketActivity),
   nearbyActivity(createIceActivity), nearbyActivity(createWishActivity), nearbyActivity(createRestActivity),
@@ -1127,6 +1133,7 @@ presence.onSnowballEvent(event => {
   if (recentSnowballHits.has(shot)) return;
   recentSnowballHits.set(shot, time + 3000);
   const target = event.confirmerId === me ? 'local' : remoteSnowballKey(event.confirmerId);
+  if (event.confirmerId === me) icePalaceActivity?.confirmedHit();
   snowballs.confirmRemoteImpact(thrower, event.ballId);
   const streak = snowballBoard.recordHit(thrower, target, { announce: formalSnowFight });
   if (event.throwerId === me) {
@@ -1422,6 +1429,23 @@ activitySpots.push(
 
 function canStandAtActivity(east: number, north: number, feet: number) {
   return walkable(east, north) && !obstructed(east, north, feet);
+}
+
+function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity) {
+  const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
+    canStand: canStandAtActivity,
+    warmFromDrink,
+    onToast: duration => { drinkingPoseUntil = performance.now() + duration; },
+    onRaceStatus: status => { palaceTowerStatus = status; },
+    playerName: presence.playerName,
+  });
+  icePalaceActivity = activity;
+  activitySpots.push(...activity.spots);
+  activities.push({
+    ...activity,
+    update: dt => activity.step(dt, walking && !boardingGround && !homeReturn
+      ? { x, n, ground, grounded: airHeight === undefined, seated } : undefined),
+  });
 }
 
 function registerLandmarkActivities(id: string, group: Group) {
