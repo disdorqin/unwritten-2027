@@ -730,7 +730,8 @@ const tavernActivity = createTavernActivity(
   () => { drinkingPoseUntil = performance.now() + 2500; },
 );
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
-const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt,
+  () => { passport.collectExtension('ice-fishing-catalogue'); });
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
   { camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink },
@@ -1304,7 +1305,8 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp, { id: 'ice-fishing-catalogue', label: '冰钓图鉴', hint: '在冰湖钓齐鲫鱼、鲈鱼与白鱼。' }],
+  riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
