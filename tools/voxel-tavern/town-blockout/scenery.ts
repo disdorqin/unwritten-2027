@@ -7,6 +7,8 @@ import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addLandmarkNameplate } from './landmark-label';
 import { campfirePartsPerSite, maxCampfireSites, type CampfirePiece } from './town-campfires';
+import { plazaInformationSites } from './plaza-information-activity';
+import { plazaSnowSupplySites, plazaSnowSupplySize, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
@@ -66,6 +68,9 @@ export function addScenery(group: Group, grid: Ground) {
   const pavers: Instance[] = [];
   const glowPositions: Position[] = [];
   const blockers: Blocker[] = [];
+  const supplyMounds: {
+    site: PlazaSnowSupplySite; firstCap: number; ground: number; parts: Instance[]; heightScale: number;
+  }[] = [];
   const [w, s, e, n] = layout.plaza.bounds;
   function nearEntrance(x: number, north: number, margin: number) {
     return layout.plots.some(({ connect: [ax, an], door: [bx, bn] }) => {
@@ -182,6 +187,14 @@ export function addScenery(group: Group, grid: Ground) {
       }
       if (index % 4 === 2) plazaGlow(x, north, .04, [.22, .04, .22]);
     }
+    const { x: countdownEast, n: countdownNorth } = plazaInformationSites.countdown;
+    plazaBox(countdownEast, countdownNorth, .073, [.62, .146, .34], '#8b898f');
+    plazaBox(countdownEast, countdownNorth, .40, [.24, .65, .20], '#583d32');
+    plazaBox(countdownEast, countdownNorth, .83, [1.12, .45, .16], '#693e33');
+    plazaBox(countdownEast, countdownNorth - .088, .83, [.95, .31, .031], '#e3ca98');
+    plazaBox(countdownEast, countdownNorth, 1.08, [1.19, .07, .22], '#924c3b');
+    plazaBox(countdownEast, countdownNorth - .108, .846, [.61, .027, .011], '#9c7760');
+    blockers.push({ x: countdownEast, n: countdownNorth, radius: .24 });
     for (const [x, north] of [[199.7, 209.7], [203.1, 209.7]]) {
       plazaBox(x, north, .36, [.18, .72, .18], '#62463a');
       plazaGlow(x, north, .82, [.3, .26, .3]);
@@ -202,21 +215,23 @@ export function addScenery(group: Group, grid: Ground) {
     plazaBox(boardEast, boardNorth, .84, [3.15, .63, .14], '#653e37');
     plazaBox(boardEast, boardNorth, 1.16, [3.26, .08, .28], '#97453b');
     for (let index = 0; index < 4; index++) {
-      plazaBox(boardEast + (index - 1.5) * .74, boardNorth - .083, .84, [.66, .45, .012], '#d2b58b');
+      for (const side of [-1, 1]) {
+        plazaBox(boardEast + (index - 1.5) * .74, boardNorth + side * .083, .84, [.66, .45, .012], '#d2b58b');
+      }
     }
     blockers.push({ x: boardEast, n: boardNorth, radius: 1.55 });
 
-    for (const [x, north] of [[238, 205], [240, 173]]) {
-      plazaBox(x, north, .20, [.77, .40, .77], '#655252');
-      plazaBox(x, north, .42, [1.02, .18, 1.02], '#453c43');
-      plazaGlow(x, north, .54, [.59, .12, .59]);
-      blockers.push({ x, n: north, radius: .50 });
-      for (const angle of [Math.PI * .17, Math.PI / 2, Math.PI * .83]) {
-        const seatX = x + 1.62 * Math.cos(angle);
-        const seatNorth = north + 1.62 * Math.sin(angle);
-        plazaBox(seatX, seatNorth, .28, [.95, .18, .45], '#78544a', angle + Math.PI / 2);
-        plazaBox(seatX, seatNorth, .10, [.48, .20, .40], '#53545d');
-      }
+    const moundWidth = plazaSnowSupplySize.halfWidth * 2;
+    for (const site of plazaSnowSupplySites) {
+      const { east, north } = site;
+      const firstCap = caps.length;
+      plazaBox(east, north, .073, [moundWidth, .146, moundWidth], '#9bbbd0');
+      plazaBox(east - .04, north + .035, .185, [1.17, .16, 1.16], '#c3ddea');
+      plazaBox(east + .043, north - .07, .30, [.91, .16, .89], '#d9e9f4');
+      plazaBox(east + .17, north + .10, .365, [.57, .14, .55], '#e4f1f9');
+      plazaBox(east - .08, north - .06, plazaSnowSupplySize.height - .028,
+        [.44, .056, .37], '#f1f8fc');
+      supplyMounds.push({ site, firstCap, ground: plazaHeight, parts: caps.slice(firstCap), heightScale: 1 });
     }
     for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
     inlay(242, 203, .64, .46, '#b58b5d');
@@ -355,7 +370,8 @@ export function addScenery(group: Group, grid: Ground) {
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
-  const sceneryPartCount = pavers.length + pillars.length + caps.length;
+  const sceneryCapOffset = pavers.length + pillars.length;
+  const sceneryPartCount = sceneryCapOffset + caps.length;
   const sceneryParts = instances(group, box, neutral, [...pavers, ...pillars, ...caps], campfirePartsPerSite * maxCampfireSites);
   instances(group, box, new MeshBasicMaterial({ color: '#ffb969' }), lights);
   const glow = makeGlows(group, glowPositions);
@@ -364,8 +380,30 @@ export function addScenery(group: Group, grid: Ground) {
   group.add(...lampLightPool);
   let night = true;
   let nextLightUpdate = 0;
+  const moundPose = new Object3D();
 
   return {
+    updatePlazaSnowSupply(heightScale: (site: PlazaSnowSupplySite) => number, east: number, north: number) {
+      if (east < w - 18 || east > e + 18 || north < s - 18 || north > n + 18) return;
+      let changed = false;
+      for (const mound of supplyMounds) {
+        const height = heightScale(mound.site);
+        if (!Number.isFinite(height) || height === mound.heightScale ||
+            (height !== 1 && Math.abs(height - mound.heightScale) < .01)) continue;
+        mound.heightScale = height;
+        for (let i = 0; i < mound.parts.length; i++) {
+          const { at: [x, y, z], scale: [width, size, depth] } = mound.parts[i];
+          moundPose.position.set(x, mound.ground + (y - mound.ground) * height, z);
+          moundPose.scale.set(width, size * height, depth);
+          moundPose.updateMatrix();
+          const index = sceneryCapOffset + mound.firstCap + i;
+          sceneryParts.setMatrixAt(index, moundPose.matrix);
+          sceneryParts.instanceMatrix.addUpdateRange(index * 16, 16);
+        }
+        changed = true;
+      }
+      if (changed) sceneryParts.instanceMatrix.needsUpdate = true;
+    },
     setCampfirePieces(parts: readonly CampfirePiece[]) {
       const count = sceneryPartCount + parts.length;
       if (count > sceneryParts.instanceMatrix.count) throw new RangeError('Campfire scenery exceeds the world batch reserve');
@@ -380,6 +418,8 @@ export function addScenery(group: Group, grid: Ground) {
         sceneryParts.setMatrixAt(sceneryPartCount + index, pose.matrix);
         sceneryParts.setColorAt(sceneryPartCount + index, tint.set(color));
       });
+      // Campfires and plaza snow can both change before the next render.
+      if (parts.length) sceneryParts.instanceMatrix.addUpdateRange(sceneryPartCount * 16, parts.length * 16);
       sceneryParts.instanceMatrix.needsUpdate = true;
       sceneryParts.instanceColor!.needsUpdate = true;
       sceneryParts.computeBoundingSphere();

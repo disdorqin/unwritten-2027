@@ -8,10 +8,9 @@ import type { TownActivity, TownActivityContext } from './town-activity';
 const storageKey = 'unwritten:town-blessings';
 const textLimit = 120;
 const wishLimit = 20;
-const [plazaWest, , , plazaNorth] = layout.plaza.bounds;
 const { height: plazaHeight } = layout.plaza;
-const anchorX = plazaWest + 10.4;
-const anchorNorth = plazaNorth - 1.35;
+const anchorX = 201.4;
+const anchorNorth = 210.65;
 const paperColors = ['#de7466', '#edb66d', '#e5a18b', '#e5c697'];
 
 function readWishes(): string[] {
@@ -25,7 +24,7 @@ function readWishes(): string[] {
   return [];
 }
 
-export function createWishActivity(context: TownActivityContext): TownActivity {
+export function createWishActivity(context: TownActivityContext): TownActivity & { latestWish(): string | undefined } {
   const group = new Group();
   group.name = 'Wish tree and town blessings';
   group.position.set(anchorX, plazaHeight, -anchorNorth);
@@ -207,6 +206,7 @@ export function createWishActivity(context: TownActivityContext): TownActivity {
   }
 
   return {
+    latestWish: () => wishes[0],
     spots: [{ x: anchorX + .10, n: anchorNorth - 3.65, ground: plazaHeight, range: 2.15, label: '写匿名祝福', run: openWall }],
     blocked(x, n, ground) {
       if (Math.abs(ground - plazaHeight) > 1.65) return false;

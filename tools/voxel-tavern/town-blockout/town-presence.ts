@@ -517,6 +517,7 @@ export function createTownPresence(
     },
     selfId: () => joinedId,
     playerName: () => joinedName ?? getName(),
+    townRoster: (): readonly string[] | undefined => haveId && joinedName ? [joinedName, ...roster.values()] : undefined,
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
     chatFocused: chat.focused,
     snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),
