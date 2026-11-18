@@ -156,13 +156,13 @@ export function createTavernDrinkEffects() {
     return true;
   }
 
-  function apply(camera: PerspectiveCamera, now: number, moving: boolean, firstPerson = true) {
+  function apply(camera: PerspectiveCamera, now: number, moving: boolean, firstPerson = true, suppressMotion = false) {
     if (showingFirstPerson !== firstPerson) {
       showingFirstPerson = firstPerson;
       if (vignette) vignette.hidden = !firstPerson;
       if (cup) cup.hidden = !firstPerson;
     }
-    if (!firstPerson || !motionEnabled || !level) return;
+    if (!firstPerson || suppressMotion || !motionEnabled || !level) return;
     tiltedCamera = camera;
     savedOrientation.copy(camera.quaternion);
     const wave = (now - swayStartedAt) * (2 * Math.PI / waveCycle);

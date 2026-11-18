@@ -4,6 +4,7 @@ import {
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
 import { createPresenceAvatars } from './town-presence-avatars';
+import { createRemoteSledCues, createSledAnimation, sledSnowAmount, type SledAnimationFrame } from './sled-animation';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
@@ -11,7 +12,7 @@ import { createTownPresenceClock } from './town-presence-clock';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
-  presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
+  presenceInterpolateDelay, presenceRecordBytes, pushPresenceSample, samplePresencePose, visitPresenceSnapshot, writePresencePose,
   type PresencePose, type PresenceSample,
 } from './town-presence-motion';
 
@@ -20,6 +21,13 @@ import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
   pose: TownAvatarPose; stepPhase: number; stride: number;
+  sledAnimation?: SledAnimationFrame;
+  sled?: { cues: ReturnType<typeof createRemoteSledCues>; motion: ReturnType<typeof createSledAnimation>; snowTime: number; sampleTime?: number };
+};
+
+type SledPresenceEffects = {
+  ground(x: number, n: number): number;
+  snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
 };
 
 type TownNotice = { kind: 'announce'; message: string }
@@ -63,6 +71,7 @@ function presenceName() {
 
 export function createTownPresence(
   scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void, onChatFocus: () => void = () => {},
+  sledEffects?: SledPresenceEffects,
 ) {
   const getName = presenceName();
   const chat = createTownChat(sendChat, onChatFocus);
@@ -110,6 +119,47 @@ export function createTownPresence(
   let lastPosition = -1;
   let lastHeightYaw = -1;
   let moving = false;
+
+  function animateObservedSled(actor: Actor, dt: number, now: number, effects: SledPresenceEffects) {
+    const mounted = actor.pose === 7;
+    if (!mounted && !actor.sled) return;
+    const sled = actor.sled ??= {
+      cues: createRemoteSledCues(effects.ground), motion: createSledAnimation(effects.ground), snowTime: 0,
+    };
+    const target = now - presenceInterpolateDelay;
+    let sample: PresenceSample | undefined;
+    for (let i = actor.history.length - 1; i >= 0; i--) {
+      if (actor.history[i].time <= target) { sample = actor.history[i]; break; }
+    }
+    sample ??= actor.history[0];
+    if (sample && mounted && sample.time !== sled.sampleTime) {
+      if (sled.sampleTime !== undefined && actor.history.length === 1) {
+        sled.cues.reset();
+        sled.motion.reset();
+      }
+      sled.sampleTime = sample.time;
+      sled.cues.observe(sample);
+    }
+    const fresh = mounted && sample !== undefined && target - sample.time <= 500;
+    const speed = fresh ? sled.cues.speed : 0;
+    const turn = fresh ? sled.cues.turn : 0;
+    const braking = fresh && sled.cues.braking;
+    const airborne = fresh && sled.cues.airborne;
+    const frame = sled.motion.step(dt, { ...actor, mounted, speed, turn, braking, airborne });
+    actor.sledAnimation = frame.weight > 0 || mounted ? frame : undefined;
+    if (!actor.sledAnimation) { actor.sled = undefined; return; }
+
+    const land = sled.cues.takeLanding();
+    if (!mounted || airborne || (camera.position.x - actor.east) ** 2 + (camera.position.z + actor.north) ** 2 > 40 ** 2) return;
+    const amount = sledSnowAmount(speed, braking, frame.uneven);
+    sled.snowTime = amount ? sled.snowTime + dt : 0;
+    if (land || (amount && sled.snowTime >= .05)) {
+      const drift = braking ? -frame.side * .42 : 0;
+      effects.snow(actor.east + Math.cos(actor.yaw) * drift, actor.north - Math.sin(actor.yaw) * drift,
+        effects.ground(actor.east, actor.north), actor.yaw, land ? 11 : amount, land ? 'land' : braking ? 'brake' : undefined);
+      sled.snowTime = 0;
+    }
+  }
 
   function updateStatus() {
     if (!status) return;
@@ -523,6 +573,7 @@ export function createTownPresence(
       for (const actor of actors.values()) {
         const east = actor.east, north = actor.north;
         samplePresencePose(actor.history, now, actor);
+        if (sledEffects) animateObservedSled(actor, dt, now, sledEffects);
         if (actor.pose === 0 || actor.pose === 3) {
           const distance = Math.hypot(actor.east - east, actor.north - north);
           if (distance > .001 && distance < 2 && dt > 0) {

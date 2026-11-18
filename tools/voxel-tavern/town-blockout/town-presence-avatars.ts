@@ -5,6 +5,8 @@ import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
 import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
 import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
 import { remoteSledParts } from './sled-visuals';
+import type { SledAnimationFrame } from './sled-animation';
+import { createSledRiderMatrices, writeSledRiderPart, writeSledShellPart } from './sled-rider-pose';
 import './town-presence-avatars.css';
 
 export type PresenceAvatarActor = {
@@ -17,6 +19,7 @@ export type PresenceAvatarActor = {
   throwGestureStarted?: number;
   pose?: TownAvatarPose;
   stride?: number;
+  sledAnimation?: SledAnimationFrame;
 };
 
 const capacity = 48;
@@ -45,7 +48,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   const matrices = mesh.instanceMatrix.array as Float32Array;
   const matrixSlots = Array.from({ length: capacity }, () => ({
-    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0, first: -1,
+    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0, first: -1, animated: false,
   }));
   // The mesh spans the town. Test individual body bounds before packing the instance buffer.
   mesh.frustumCulled = false;
@@ -131,27 +134,35 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       const sine = Math.sin(yaw);
       const colorIndex = actor.id % coatColors.length;
       const palette = coatColors[colorIndex];
-      const count = partCount + (pose === 7 ? sledPartCount : 0);
+      const animation = actor.sledAnimation;
+      const sledVisible = pose === 7 || animation !== undefined;
+      const count = partCount + (sledVisible ? sledPartCount : 0);
       const progress = (elapsedMs - (actor.throwGestureStarted ?? -Infinity)) / 350;
       const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
       const stride = actor.stride ?? 0;
       const slot = matrixSlots[visible];
       const firstInstance = instances;
       const movedInstance = slot.first !== firstInstance;
-      const changedPose = slot.pose !== pose;
+      const changedPose = slot.pose !== pose || slot.animated !== Boolean(animation);
       const recolor = movedInstance || changedPose || colorIndex !== slotColors[visible];
       const dirty = movedInstance || changedPose || slot.id !== actor.id || slot.east !== actor.east ||
         slot.north !== actor.north || slot.height !== actor.height || slot.yaw !== actor.yaw ||
-        slot.stride !== stride || slot.armPitch !== armPitch;
+        slot.stride !== stride || slot.armPitch !== armPitch || Boolean(animation);
       if (dirty) {
+        if (animation) createSledRiderMatrices(actor.east, actor.height + animation.shellLift, actor.north, actor.yaw, animation);
         for (let offset = 0; offset < partCount; offset++) {
-          writeAvatarPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], pose,
+          const index = (firstInstance + offset) * 16;
+          if (animation) writeSledRiderPart(matrices, index, voxelPersonParts[offset], animation);
+          else writeAvatarPart(matrices, index, voxelPersonParts[offset], pose,
             actor.east, actor.height + rootOffset, worldZ, cosine, sine, stride, armPitch);
         }
-        if (pose === 7) for (let offset = 0; offset < sledPartCount; offset++) {
-          writeAvatarPart(matrices, (firstInstance + partCount + offset) * 16, sledGeometry[offset], 0,
+        if (sledVisible) for (let offset = 0; offset < sledPartCount; offset++) {
+          const index = (firstInstance + partCount + offset) * 16;
+          if (animation) writeSledShellPart(matrices, index, sledGeometry[offset]);
+          else writeAvatarPart(matrices, index, sledGeometry[offset], 0,
             actor.east, actor.height, worldZ, cosine, sine, 0, 0);
         }
+        slot.animated = Boolean(animation);
         slot.first = firstInstance;
         slot.id = actor.id;
         slot.east = actor.east;
@@ -171,7 +182,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       if (recolor) {
         for (let offset = 0; offset < partCount; offset++)
           mesh.setColorAt(firstInstance + offset, palette[voxelPersonParts[offset][2]]);
-        if (pose === 7) for (let offset = 0; offset < sledPartCount; offset++)
+        if (sledVisible) for (let offset = 0; offset < sledPartCount; offset++)
           mesh.setColorAt(firstInstance + partCount + offset, sledColors[offset]);
         slotColors[visible] = colorIndex;
         colorsChanged = true;

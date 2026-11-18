@@ -2,7 +2,7 @@ export type PresencePose = { east: number; north: number; height: number; yaw: n
 export type PresenceSample = PresencePose & { time: number; seq: number };
 
 const turn = 2 * Math.PI;
-const interpolateDelay = 120;
+export const presenceInterpolateDelay = 120;
 const extrapolationLimit = 250;
 const teleportDistanceSquared = 12 ** 2;
 const maxHistory = 8;
@@ -58,7 +58,7 @@ export function pushPresenceSample(history: PresenceSample[], sample: PresenceSa
 
 export function samplePresencePose(history: readonly PresenceSample[], now: number, output: PresencePose) {
   if (!history.length) return;
-  const target = now - interpolateDelay;
+  const target = now - presenceInterpolateDelay;
   const first = history[0];
   if (history.length === 1 || target <= first.time) {
     output.east = first.east;
