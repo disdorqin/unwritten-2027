@@ -13,6 +13,7 @@ import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout
 import { createTownPassport } from '../tools/voxel-tavern/town-blockout/town-passport.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
 import { RAILWAY_STATION_NAMES } from '../tools/voxel-tavern/town-blockout/town-rail-stops.ts';
+import { railHallGuide } from '../tools/voxel-tavern/town-blockout/town-rail-copy.ts';
 
 function canStandAt(group: ReturnType<typeof buildIceCastle>) {
   const { position, userData } = group;
@@ -179,7 +180,9 @@ test('station interaction spots stay aligned with the scaled model and the timet
   assert.deepEqual(description.split('\n\n').map(section => section.split(' · ')[0]), RAILWAY_STATION_NAMES);
   assert.match(description, /滑冰、冰钓/);
   assert.match(description, /城堡西门/);
-  assert.match(description, /室外四池泡汤/);
+  const hotSpringGuide = '温泉站 · 室外四池泡汤\n西浅汤、东深汤、岩池、雪见池';
+  assert.ok(description.includes(hotSpringGuide));
+  assert.ok(railHallGuide.board.includes(hotSpringGuide));
 });
 
 test('the railway ticket survives reload separately from the core passport reward', () => {
