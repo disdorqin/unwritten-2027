@@ -289,7 +289,6 @@ const builders: Record<string, Builder> = {
 };
 type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps?: Ramp[] };
 const architecture = new Map<string, Group>();
-const status = element('load-status');
 const festivalText = element('festival-status');
 const rehearse = element<HTMLButtonElement>('rehearse');
 const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles);
@@ -441,12 +440,6 @@ function geometryAt(east: number, north: number) {
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
 }
-function describeTown() {
-  const newBuildings = extensionStreets?.counts.buildings ?? 0;
-  const newTrees = extensionStreets?.counts.trees ?? 0;
-  status.textContent = `${architecture.size + districts.count + newBuildings} 处建筑与设施 · ${forest.count + newTrees} 株树`;
-}
-describeTown();
 
 const extensionBuilders: Record<string, () => Promise<Group>> = {
   'railway-station': () => import('./landmark-station').then(module => module.buildRailwayStation()),
@@ -464,10 +457,8 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
-    describeTown();
   }).catch(error => {
     requestedPlots.delete(plot.id);
-    status.textContent = '新区建筑读取失败';
     console.error(`Loading ${plot.id}`, error);
   });
 }
@@ -489,9 +480,9 @@ async function loadBuildings() {
   }));
   walkGeometry = geometry();
   const failed = results.filter(result => result.status === 'rejected').length;
-  if (failed) status.textContent = `${failed} 栋替换模型加载失败`;
+  if (failed) console.warn(`${failed} 栋替换模型加载失败`);
 }
-if (location.protocol !== 'file:') loadBuildings().catch(() => { status.textContent = '建筑清单读取失败'; });
+if (location.protocol !== 'file:') loadBuildings().catch(error => console.error('建筑清单读取失败', error));
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -566,7 +557,6 @@ let ground = 0;
 let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
-let reservedRailStop: TownRailStopId | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
 let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
 let rideYawOffset = 0;
@@ -624,24 +614,28 @@ function openPlace(title: string, description: string) {
 }
 placeCard.addEventListener('close', () => renderer.domElement.focus());
 
-function leaveRide(cancel = false) {
-  if (!boardingGround) return;
-  const arrival = railway.disembark();
-  if (!arrival && !cancel) {
-    announceActivity('列车行进中，到站后可下车');
-    return;
+function leaveRide() {
+  if (!boardingGround) return true;
+  const platform = railway.currentStop;
+  const arrival = railway.disembark((east, north, feet) =>
+    !isWater(east, north) && !townWater.at(east, north) && canStandAtActivity(east, north, feet));
+  if (!arrival) {
+    announceActivity('附近暂时没有安全落脚点');
+    return false;
   }
-  if (!arrival) railway.cancelRide();
-  const departure = boardingGround;
-  const platform = arrival ?? railway.lastStop ?? departure;
   boardingGround = undefined;
-  reservedRailStop = undefined;
   lastRailStopShown = undefined;
   resetMovement();
-  if (!settleTownLanding(platform.x, platform.n, platform.ground)) settleTownLanding(platform.x, platform.n);
-  yaw = platform.yaw;
+  if (platform) {
+    if (!settleTownLanding(platform.x, platform.n, platform.ground)) settleTownLanding(platform.x, platform.n);
+  } else {
+    ({ x, n, ground } = arrival);
+    airHeight = undefined;
+    riseSpeed = 0;
+  }
+  yaw = arrival.yaw;
   pitch = 0;
-  if (!arrival && cancel) announceActivity(`已为您在最近的车站停靠：${railway.lastStop?.label ?? '站台'}`);
+  return true;
 }
 function leaveSeat() {
   if (!seated) return;
@@ -1467,15 +1461,7 @@ function currentAction() {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
     if (stop) return { label: `在${stop.label}下车`, run: () => leaveRide() };
-    const next = railway.nextStop;
-    return {
-      label: reservedRailStop === next.id ? `已预约${next.label}下车` : '预约下一站下车',
-      run() {
-        if (reservedRailStop === next.id) return;
-        reservedRailStop = next.id;
-        announceActivity(`下一站：${next.label} —— 已为您预约下车`);
-      },
-    };
+    return { label: '在此下车', run: () => leaveRide() };
   }
   if (seated) {
     if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
@@ -1551,7 +1537,7 @@ function mode(next: boolean) {
     if (homeReturn) return false;
   }
   lakeSkating.stop();
-  leaveRide(true);
+  if (!leaveRide()) return false;
   leaveSeat();
   resetMovement();
   activityStatus.textContent = '';
@@ -1671,7 +1657,7 @@ addEventListener('keydown', e => {
   if ((seated || boardingGround) && e.code === 'Escape') {
     e.preventDefault();
     if (seated) leaveSeat();
-    else leaveRide(true);
+    else leaveRide();
     return;
   }
   if (e.code === 'Escape' && document.pointerLockElement === renderer.domElement) {
@@ -1928,7 +1914,6 @@ renderer.setAnimationLoop(now => {
     if (stopped && stopped.id !== lastRailStopShown) {
       lastRailStopShown = stopped.id;
       announceActivity(`${stopped.label}到了。${stopped.arrival}`);
-      if (stopped.id === reservedRailStop) leaveRide();
     } else if (!stopped) lastRailStopShown = undefined;
   }
   if (beacon) {
@@ -1949,7 +1934,7 @@ renderer.setAnimationLoop(now => {
     faceFrom(seatX, -seatZ, camera.position.y, heading + rideYawOffset, ridePitch);
     const stop = railway.currentStop;
     element('position').textContent = stop ? `环镇列车 · 到达${stop.label}` :
-      `下一站：${railway.nextStop.label} · ${reservedRailStop ? '已预约下车' : '按动作键预约下一站下车'}`;
+      `下一站：${railway.nextStop.label} · 按动作键在此下车`;
   } else if (walking && seated) {
     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
     element('position').textContent = '已就座';
@@ -2074,10 +2059,8 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       registerHomeDoors(extensionStreets.housePortals);
-      describeTown();
     }).catch(error => {
       streetsRequested = false;
-      status.textContent = '新区街景读取失败';
       console.error('Loading extension streets', error);
     });
   }
