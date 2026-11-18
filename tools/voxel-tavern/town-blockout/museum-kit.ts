@@ -14,7 +14,7 @@ export type MuseumLight = { position: Point; color: string; power: number; dista
 export type MuseumBuilder = ReturnType<typeof createMuseumBuilder>;
 const up = new Vector3(0, 1, 0);
 
-export function createMuseumBuilder() {
+export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
   const group = new Group();
   group.scale.set(museumHorizontalScale, 1, museumHorizontalScale);
   const interior = new Group();
@@ -140,7 +140,7 @@ export function createMuseumBuilder() {
         section.add(mesh);
       });
     }
-    addOpaqueMuseumLabels(opaqueLabels, smallLabels);
+    addOpaqueMuseumLabels(opaqueLabels, smallLabels, { mergeSizes: mergeLabelSizes });
     if (interior.children.length) {
       group.add(interior);
       group.userData.detailInterior = interior;

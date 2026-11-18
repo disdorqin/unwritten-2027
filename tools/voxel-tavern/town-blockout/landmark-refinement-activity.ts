@@ -2,6 +2,7 @@ import { Vector3, type Group } from 'three';
 import type { buildExtensionStreets } from './extension-streets';
 import type { iceThrone } from './landmark-ice-castle';
 import type { railwayStationStops } from './landmark-station';
+import { stationSignCopy } from './station-sign-copy';
 import type { PassportStamp } from './town-passport';
 import type { createTownRailway } from './town-railway';
 import type { TownActivityContext, TownActivitySpot } from './town-activity';
@@ -35,10 +36,10 @@ export function createRailwayStationSpots(
       run: () => passport.collectExtension(stationTicketStamp.id),
     },
     {
-      x: board.x, n: -board.z, ground: board.y, range: 1.45, label: '查看环镇列车时刻表',
+      x: board.x, n: -board.z, ground: board.y, range: 1.45, label: `查看${stationSignCopy.timetable}`,
       run() {
         const { atPlatform, metres, seconds } = railway.timetable();
-        context.open('环镇列车时刻表', atPlatform ? '列车在站台候车。'
+        context.open(stationSignCopy.timetable, atPlatform ? '列车在站台候车。'
           : `列车行驶中，距回站约 ${Math.round(metres)} 米，预计 ${Math.ceil(seconds)} 秒。`);
       },
     },

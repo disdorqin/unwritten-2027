@@ -36,7 +36,7 @@ function paintTile(ink: CanvasRenderingContext2D, tile: Tile) {
   }
 }
 
-function renderPage(page: Page, smallLabels: Mesh[]) {
+function renderPage(page: Page, smallLabels: Mesh[], mergeSizes: boolean) {
   const canvas = document.createElement('canvas');
   canvas.width = page.heights.filter(Boolean).length * tileWidth;
   canvas.height = Math.max(...page.heights);
@@ -50,7 +50,7 @@ function renderPage(page: Page, smallLabels: Mesh[]) {
   for (const { label, tile } of page.labels) {
     const pair = batches.get(label.parent) ?? [undefined, undefined];
     if (!batches.has(label.parent)) batches.set(label.parent, pair);
-    const kind = label.height <= 1.2 ? 1 : 0;
+    const kind = !mergeSizes && label.height <= 1.2 ? 1 : 0;
     const batch = pair[kind] ?? (pair[kind] = { positions: [], uv: [], indices: [] });
     const first = batch.positions.length / 3;
     const east = Math.cos(label.yaw) * label.width / 2;
@@ -85,7 +85,9 @@ function renderPage(page: Page, smallLabels: Mesh[]) {
   };
 }
 
-export function addOpaqueMuseumLabels(labels: readonly OpaqueMuseumLabel[], smallLabels: Mesh[]) {
+export function addOpaqueMuseumLabels(
+  labels: readonly OpaqueMuseumLabel[], smallLabels: Mesh[], { mergeSizes = false } = {},
+) {
   const pages: Page[] = [];
   const placed = new Map<HTMLCanvasElement, { page: Page; tile: Tile }>();
   for (const label of [...labels].sort((a, b) => b.source.height - a.source.height)) {
@@ -105,7 +107,7 @@ export function addOpaqueMuseumLabels(labels: readonly OpaqueMuseumLabel[], smal
     }
     place.page.labels.push({ label, tile: place.tile });
   }
-  const redraw = new Map(pages.map(page => [page, renderPage(page, smallLabels)]));
+  const redraw = new Map(pages.map(page => [page, renderPage(page, smallLabels, mergeSizes)]));
   return (source: HTMLCanvasElement) => {
     const place = placed.get(source);
     if (place) redraw.get(place.page)!(place.tile);

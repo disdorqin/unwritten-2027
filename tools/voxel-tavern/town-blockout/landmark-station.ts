@@ -1,5 +1,6 @@
 import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
+import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
 
 type Point = readonly [number, number, number];
 
@@ -21,7 +22,7 @@ export const railwayStationStops = {
 };
 
 function stationBuilder() {
-  const builder = createMuseumBuilder();
+  const builder = createMuseumBuilder({ mergeLabelSizes: true });
   const u = 1 / museumHorizontalScale;
   const local = stationLocalPoint;
   return {
@@ -35,8 +36,8 @@ function stationBuilder() {
       builder.beam(paint, local(a), local(b), size),
     panel: (paint: string, a: Point, b: Point, c: Point, d: Point) =>
       builder.panel(paint, local(a), local(b), local(c), local(d)),
-    sign: (title: string, x: number, y: number, z: number, w: number, h: number, angle = 0) =>
-      builder.label(title, x * u, y, z * u, w * u, h, angle, { background: '#292f32', accent: '#d6ae6a' }),
+    sign: (title: string, x: number, y: number, z: number, w: number, h: number, angle = 0, background = '#292f32') =>
+      builder.label(title, x * u, y, z * u, w * u, h, angle, { background, color: '#fff', accent: '#d6ae6a' }),
     finish: builder.finish,
   };
 }
@@ -179,8 +180,11 @@ export function buildRailwayStation() {
     gableRoof(b, x, 1.15, w, 18.7, y, rise);
   }
   for (const z of [-7.08, 9.41]) b.box(brick, 0, 7.74, z, 14.9, .95, .61);
-  b.sign('冬夜火车站', 0, 6.45, 9.76, 10.8, 1.36);
-  b.sign('小镇入口  ·  钟楼广场', 0, 5.32, -7.37, 10.1, 1.09, Math.PI);
+  b.sign(TOWN_STATION_NAME, 0, 6.45, 9.76, 10.8, 1.36);
+  b.sign(stationSignCopy.englishName, 0, 7.74, 9.75, 11.4, .65);
+  b.sign(stationSignCopy.townSubtitle, 0, 5.3, 9.76, 10.4, .72);
+  b.sign(stationSignCopy.entrance, 5.05, 4.04, 9.676, 2.05, .58);
+  b.sign(stationSignCopy.exit, 0, 5.32, -7.37, 10.1, 1.09, Math.PI);
   const clockZ = 10.58;
   b.box(dark, 0, 9.59, clockZ, 3.9, 2.77, .51);
   b.box(brass, 0, 9.59, clockZ + .28, 2.82, 2.26, .24);
@@ -192,13 +196,18 @@ export function buildRailwayStation() {
     b.box(paint, 0, y, -11.8, width, .17, depth);
   }
   b.box(brass, 0, 5.6, -16.09, 51.4, .09, .15);
+  b.box('#ebc163', 0, .15, -16.02, 51.4, .026, .16);
+  for (const [x, text] of [[-11.25, stationSignCopy.platformSafety], [11.25, stationSignCopy.waiting]] as const) {
+    b.box(dark, x, 2.82, -15.21, 7.68, .83, .43);
+    b.sign(text, x, 2.82, -14.985, 7.34, .73);
+  }
   for (const x of [-19, -11.3, 0, 11.3, 19]) lamp(b, x, 5.35, -13.4);
   for (const x of [-17, 17]) bench(b, x, -9.2, .14, 5.8, -1);
 
   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
   b.box(dark, 12.8, 3.8, -6.7, 8.7, 1.68, .18);
-  b.sign('时刻表', 12.8, 3.8, -6.59, 8.3, 1.36);
+  b.sign(stationSignCopy.timetable, 12.8, 3.8, -6.59, 8.3, 1.36);
   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
   for (const x of [-15.5, -12.7, -9.9]) {
@@ -271,7 +280,7 @@ export function buildCoasterStation() {
     lamp(b, -12.95, 3.04, z);
   }
   b.box(wood, -12.25, 4.78, 0, .37, .33, 7.7);
-  b.sign('环镇线候车站', -12.52, 4.19, 0, 6.48, 1.07, -Math.PI / 2);
+  b.sign(stationSignCopy.coasterEntrance, -12.52, 4.19, 0, 6.48, 1.07, -Math.PI / 2, '#8f242b');
   b.sign('上车点  ·  环镇线', -4.55, 3.98, -4.64, 5.7, .88);
   for (const z of [-8.8, 8.8]) {
     b.solid(wood, -11.26, .49, z, 1.21, .67, 1.28);
