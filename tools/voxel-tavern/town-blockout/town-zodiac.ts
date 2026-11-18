@@ -45,6 +45,7 @@ export function createZodiacProgress(available: readonly TestPickupId[], storage
   const canCollect = (id: CharmId) => mounted.has(id) && !collected[id];
 
   return {
+    registerPickup(id: TestPickupId) { mounted.add(id); },
     canCollect,
     collect(id: CharmId, date = new Date()) {
       if (!canCollect(id) || !Number.isFinite(date.getTime())) return false;
