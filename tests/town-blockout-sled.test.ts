@@ -44,11 +44,40 @@ test('a fast collision detaches the sled and tumbles the rider for two turns', (
   assert.equal(ride.active(), false);
   assert.ok(ride.recovering());
   assert.equal(burst, 34);
-  assert.ok(ride.parked() && ride.parked()!.speed > 0);
-  ride.finishFrame(.625, 0, wall);
+  const impact = ride.parked()!;
+  const impactNorth = impact.n;
+  assert.ok(impact.speed > 0 && impact.north < 0);
+  for (let tick = 0; tick < 75; tick++) ride.finishFrame(1 / 120, 0, wall);
   assert.ok(Math.abs(ride.roll() - 2 * Math.PI) < 1e-8);
-  ride.finishFrame(.625, 0, wall);
+  for (let tick = 0; tick < 120; tick++) ride.finishFrame(1 / 120, 0, wall);
   assert.equal(ride.recovering(), false);
+  assert.equal(impact.speed, 0);
+  assert.ok(impactNorth - impact.n >= 3);
+  assert.equal(ride.mount(impact.x, impact.n, impact.y, impact.yaw), true);
+});
+
+test('a slower collision stops the sled at contact without making the rider tumble', () => {
+  let burst = 0;
+  const ride = createSledRide({
+    height: () => 12,
+    surface: () => ({ surface: 1, deepSnow: false }),
+    blocked: (_, north) => north > 5,
+    snow: (_, __, ___, ____, count) => { burst = Math.max(burst, count); },
+    stopped() {},
+  });
+  assert.equal(ride.mount(0, 0, 12, 0), true);
+  for (let tick = 0; tick < 1_200 && ride.active(); tick++) ride.step(1 / 120, { forward: 1, turn: 0 });
+  assert.equal(ride.active(), false);
+  assert.equal(ride.recovering(), true);
+  assert.equal(ride.roll(), 0);
+  assert.equal(burst, 15);
+  const impact = ride.parked()!;
+  assert.equal(impact.speed, 0);
+  const impactNorth = impact.n;
+  ride.finishFrame(.65, 0, 5);
+  assert.equal(ride.recovering(), false);
+  assert.equal(impact.n, impactNorth);
+  assert.equal(ride.mount(impact.x, impact.n, impact.y, impact.yaw), true);
 });
 
 test('local sled, racks and mist use shared batches', () => {
