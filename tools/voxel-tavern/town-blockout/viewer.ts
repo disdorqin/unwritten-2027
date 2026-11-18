@@ -1810,9 +1810,10 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
     return;
   }
   let mounted: Omit<MascotFollowPoint, 'speed'> | undefined;
-  if (boardingGround) {
-    railway.coachMascotAnchor.getWorldPosition(mascotRailCenter);
-    railway.coachMascotAnchor.getWorldDirection(mascotRailForward);
+  const coach = railway.coachCharmAnchor.parent;
+  if (boardingGround && coach) {
+    coach.localToWorld(mascotRailCenter.set(.62, 1.10, .43));
+    coach.getWorldDirection(mascotRailForward);
     mounted = {
       x: mascotRailCenter.x, n: -mascotRailCenter.z, ground: mascotRailCenter.y,
       yaw: Math.atan2(mascotRailForward.x, -mascotRailForward.z),
