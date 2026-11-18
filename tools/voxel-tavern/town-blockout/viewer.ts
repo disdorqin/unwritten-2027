@@ -75,7 +75,7 @@ import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { createTownRailway, type TownRailStopId } from './town-railway';
-import { railPlatformCopy } from './town-rail-copy';
+import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
@@ -840,6 +840,7 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
 ceremonyFrost.mountSettings(element('town-panel-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
+const railOvernightBroadcast = createRailOvernightBroadcast();
 const postUnlockTime = new Date(UNLOCK_AT).getTime();
 setPostOpeningReady(architecture.get('post-office'), Date.now() >= postUnlockTime);
 const cameraBeforeBellShake = new Quaternion();
@@ -1410,7 +1411,9 @@ function registerLandmarkActivities(id: string, group: Group) {
           '从站厅出门，沿站前路向西步行到火车站前站，在黄线外候车。列车停稳后可以上车。');
       },
     });
-    activitySpots.push(...createRailwayStationSpots(group, activityContext, railway, passport, canStandAtActivity, showLiveRailSchedule));
+    activitySpots.push(...createRailwayStationSpots(
+      group, activityContext, railway, passport, canStandAtActivity, ceremonyClock.now, showLiveRailSchedule,
+    ));
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group));
     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
@@ -1882,8 +1885,13 @@ for (const stop of railway.stops) {
   activitySpots.push({
     x: stop.x, n: stop.n, ground: stop.ground,
     range: 2, label: `查看${stop.label}时刻表`,
-    run: () => showLiveRailSchedule(`环镇线 · ${stop.label}`, () => railPlatformCopy(railway, stop)),
+    run: () => showLiveRailSchedule(`环镇线 · ${stop.label}`, () => railPlatformCopy(railway, stop, ceremonyClock.now())),
   });
+}
+
+function atRailwayPlatform() {
+  return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
+    Math.abs(ground - stop.ground) < .65 && Math.hypot(x - stop.x, n - stop.n) < 3));
 }
 
 function showLiveRailSchedule(title: string, read: () => string) {
@@ -2155,6 +2163,10 @@ renderer.setAnimationLoop(now => {
   }
   festival.update(dt);
   const ceremonyState = ceremony.update();
+  const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
+  if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
+  const railNotice = railOvernightBroadcast(ceremonyState.now, atRailwayPlatform);
+  if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
   ceremonyFrost.setWarmth('interior', sheltered || Boolean(homeReturn));
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());

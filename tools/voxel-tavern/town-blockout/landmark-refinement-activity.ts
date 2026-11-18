@@ -27,6 +27,7 @@ export function createRailwayStationSpots(
   railway: ReturnType<typeof createTownRailway>,
   passport: { hasExtension(id: string): boolean; collectExtension(id: string): boolean },
   canStand: TownStand,
+  ceremonyNow: () => number,
   liveSchedule?: (title: string, read: () => string) => void,
 ): TownActivitySpot[] {
   const stops = group.userData.stops as typeof railwayStationStops;
@@ -42,7 +43,7 @@ export function createRailwayStationSpots(
     {
       x: board.x, n: -board.z, ground: board.y, range: 1.45, label: `查看${stationSignCopy.timetable}`,
       run() {
-        const read = () => railHallCopy(railway);
+        const read = () => railHallCopy(railway, ceremonyNow());
         if (liveSchedule) liveSchedule(stationSignCopy.timetable, read);
         else context.open(stationSignCopy.timetable, read());
       },

@@ -152,7 +152,7 @@ test('station interaction spots stay aligned with the scaled model and the timet
   }, railway, {
     hasExtension(id) { return stamp === id; },
     collectExtension(id) { stamp = id; return true; },
-  }, canStandAt(station));
+  }, canStandAt(station), () => now);
   assert.equal(spots.length, 3);
   assert.equal(spots[0].x, 513.3);
   assert.equal(spots[1].x, 538.8);
