@@ -9,6 +9,8 @@ import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterNam
 import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
 import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
 
+import { houseDoorBookCopy } from './town-house-door-book';
+
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
 
@@ -41,6 +43,8 @@ const roles: ReadonlyArray<{
   { name: memorialClerkName, job: '新区信箱管理员', home: memorialClerkHome, stroll: memorialClerkHome,
     palette: ['#e0a988', '#514238', '#4d566d', '#dfd2b9', '#333544', '#923d38', '#daaf70', '#49375a'] },
 ];
+
+export const townNpcDoorAnchors = roles.map(({ name, home: [x, n] }) => ({ label: name, x, n }));
 
 type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
 
@@ -419,6 +423,7 @@ export function createTownNpcActivity(
       const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
       speech.textContent = guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
     });
+    if (name === '苏小满') action('问百门通', () => { speech.textContent = houseDoorBookCopy.courier; });
     const clues = zodiacHints?.(name);
     if (clues?.length) action('问生肖线索', () => { speech.textContent = clues[turns.zodiac++ % clues.length]; });
     action('道别', () => {
@@ -448,6 +453,7 @@ export function createTownNpcActivity(
     let guideIndex = 0;
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
+    action('问百门通', () => { speech.textContent = houseDoorBookCopy.clerk; });
     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
     action('问镇长近况', () => { speech.textContent = questions.host[1].text; });
     action('问你们怎么认识', () => { speech.textContent = questions.host[0].text; });

@@ -1,5 +1,8 @@
+export type HouseDoorZone = 'central' | 'market' | 'memorial' | 'lakeside' | 'forest';
+
 export type TownHousePortal = {
   id: string;
+  zone: HouseDoorZone;
   x: number;
   n: number;
   ground: number;
