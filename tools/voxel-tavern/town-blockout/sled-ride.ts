@@ -150,6 +150,10 @@ export function createSledRide(world: SledWorld) {
 
   return {
     spot, mount, leave, step, finishFrame,
+    interrupt() {
+      if (active) leave();
+      recovery = recoveryDuration = rollTurns = landingCompression = 0;
+    },
     active: () => active,
     parked: () => parked,
     recovering: () => recovery > 0,

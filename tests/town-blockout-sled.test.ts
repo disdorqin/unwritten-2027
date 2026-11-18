@@ -80,6 +80,31 @@ test('a slower collision stops the sled at contact without making the rider tumb
   assert.equal(ride.mount(impact.x, impact.n, impact.y, impact.yaw), true);
 });
 
+test('an external teleport clears rider recovery without moving the sled', () => {
+  const ride = createSledRide({
+    height: () => 12,
+    surface: () => ({ surface: 1, deepSnow: false }),
+    blocked: (_, north) => north > 5,
+    snow() {},
+    stopped() {},
+  });
+  assert.equal(ride.mount(0, 0, 12, 0), true);
+  for (let tick = 0; tick < 1_200 && ride.active(); tick++) ride.step(1 / 120, { forward: 1, turn: 0 });
+  const parked = ride.parked();
+  assert.ok(parked);
+  assert.ok(ride.recovering());
+  ride.interrupt();
+  assert.equal(ride.active(), false);
+  assert.equal(ride.recovering(), false);
+  assert.equal(ride.compression(), 0);
+  assert.equal(ride.parked(), parked);
+
+  assert.equal(ride.mount(0, 0, 12, 0), true);
+  ride.interrupt();
+  assert.equal(ride.active(), false);
+  assert.equal(ride.parked()?.n, 0);
+});
+
 test('local sled, racks and mist use shared batches', () => {
   const scene = new Scene();
   createTownSledVisuals(scene, [{ x: 378, n: 303, y: 23, yaw: Math.PI }]);

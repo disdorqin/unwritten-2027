@@ -2030,7 +2030,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
 
   ceremonyArrivalPose = {
     value: effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
-      !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active()),
+      !!boardingGround, !!seated, presenceSkateSpeed),
     until: now + 350,
   };
   if (sharedHome) sharedHome.visible = false;
@@ -2040,7 +2040,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   lastRailStopShown = undefined;
   leaveSeat();
   lakeSkating.stop();
-  leaveSled();
+  sledRide.interrupt();
   plazaPhoto.leaveForCeremony();
   if (placeCard.open) placeCard.close();
   if (museumVisit.dialog.open) museumVisit.dialog.close();
