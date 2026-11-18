@@ -2,8 +2,9 @@ import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { BoxGeometry, Color, DynamicDrawUsage, Frustum, InstancedMesh, Matrix4, MeshLambertMaterial,
   Sphere, Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { chatBubbleFadeMs, type TownChatBubble } from './town-chat';
-import { voxelPersonParts } from './town-voxel-person';
+import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
 import { avatarRootOffset, writeAvatarPart, type TownAvatarPose } from './town-presence-pose';
+import { remoteSledParts } from './sled-visuals';
 import './town-presence-avatars.css';
 
 export type PresenceAvatarActor = {
@@ -23,6 +24,9 @@ const labelDistanceSquared = 40 ** 2;
 const headHeight = 2.13;
 const bodyRadius = 1.14;
 const partCount = voxelPersonParts.length;
+const sledPartCount = remoteSledParts.length;
+const sledGeometry: VoxelPersonPart[] = remoteSledParts.map(([position, size]) => [position, size, 0]);
+const sledColors = remoteSledParts.map(([, , tint]) => new Color(tint));
 const coatColors = [
   ['#e6b18c', '#423541', '#a54345', '#e0caaf', '#4c4357', '#ddae5f', '#f0d6a0', '#8f5745'],
   ['#bd896a', '#263b4f', '#4d7c99', '#dfcfaa', '#3a4b63', '#d38d5a', '#ecd0a8', '#784b3c'],
@@ -36,12 +40,12 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, view?: PerspectiveCamera, showNames?: boolean): void;
   clear(): void;
 } {
-  const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
+  const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * (partCount + sledPartCount));
   mesh.name = 'town-presence-avatars';
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   const matrices = mesh.instanceMatrix.array as Float32Array;
   const matrixSlots = Array.from({ length: capacity }, () => ({
-    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0,
+    id: -1, east: 0, north: 0, height: 0, yaw: 0, pose: 0, stride: 0, armPitch: 0, first: -1,
   }));
   // The mesh spans the town. Test individual body bounds before packing the instance buffer.
   mesh.frustumCulled = false;
@@ -105,6 +109,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     const halfWidth = window.innerWidth / 2;
     const halfHeight = window.innerHeight / 2;
     let visible = 0;
+    let instances = 0;
     let shownNext = 0;
     let colorsChanged = false;
     const elapsedMs = performance.now();
@@ -126,20 +131,28 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       const sine = Math.sin(yaw);
       const colorIndex = actor.id % coatColors.length;
       const palette = coatColors[colorIndex];
-      const recolor = colorIndex !== slotColors[visible];
+      const count = partCount + (pose === 7 ? sledPartCount : 0);
       const progress = (elapsedMs - (actor.throwGestureStarted ?? -Infinity)) / 350;
       const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
       const stride = actor.stride ?? 0;
       const slot = matrixSlots[visible];
-      const dirty = slot.id !== actor.id || slot.east !== actor.east || slot.north !== actor.north ||
-        slot.height !== actor.height || slot.yaw !== actor.yaw || slot.pose !== pose ||
+      const firstInstance = instances;
+      const movedInstance = slot.first !== firstInstance;
+      const changedPose = slot.pose !== pose;
+      const recolor = movedInstance || changedPose || colorIndex !== slotColors[visible];
+      const dirty = movedInstance || changedPose || slot.id !== actor.id || slot.east !== actor.east ||
+        slot.north !== actor.north || slot.height !== actor.height || slot.yaw !== actor.yaw ||
         slot.stride !== stride || slot.armPitch !== armPitch;
-      const firstInstance = visible * partCount;
       if (dirty) {
         for (let offset = 0; offset < partCount; offset++) {
           writeAvatarPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], pose,
             actor.east, actor.height + rootOffset, worldZ, cosine, sine, stride, armPitch);
         }
+        if (pose === 7) for (let offset = 0; offset < sledPartCount; offset++) {
+          writeAvatarPart(matrices, (firstInstance + partCount + offset) * 16, sledGeometry[offset], 0,
+            actor.east, actor.height, worldZ, cosine, sine, 0, 0);
+        }
+        slot.first = firstInstance;
         slot.id = actor.id;
         slot.east = actor.east;
         slot.north = actor.north;
@@ -153,16 +166,18 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
           if (updateStart >= 0) mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
           updateStart = firstMatrix;
         }
-        updateEnd = firstMatrix + partCount * 16;
-      }
-      if (recolor) for (let offset = 0; offset < partCount; offset++) {
-        mesh.setColorAt(firstInstance + offset, palette[voxelPersonParts[offset][2]]);
+        updateEnd = firstMatrix + count * 16;
       }
       if (recolor) {
+        for (let offset = 0; offset < partCount; offset++)
+          mesh.setColorAt(firstInstance + offset, palette[voxelPersonParts[offset][2]]);
+        if (pose === 7) for (let offset = 0; offset < sledPartCount; offset++)
+          mesh.setColorAt(firstInstance + partCount + offset, sledColors[offset]);
         slotColors[visible] = colorIndex;
         colorsChanged = true;
       }
       visible++;
+      instances += count;
 
       if (!showNames) continue;
       head.set(actor.east, actor.height + rootOffset + headHeight, worldZ);
@@ -202,8 +217,8 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
       shownNext++;
     }
 
-    mesh.count = visible * partCount;
-    mesh.visible = visible > 0;
+    mesh.count = instances;
+    mesh.visible = instances > 0;
     if (updateStart >= 0) {
       mesh.instanceMatrix.addUpdateRange(updateStart, updateEnd - updateStart);
       mesh.instanceMatrix.needsUpdate = true;

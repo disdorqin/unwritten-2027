@@ -12,7 +12,9 @@ test('online activity pose follows layered priority and a half-metre skate thres
   assert.equal(effectiveTownAvatarPose(false, false, false, true, 8), 1);
   assert.equal(effectiveTownAvatarPose(false, false, false, false, .5), 0);
   assert.equal(effectiveTownAvatarPose(false, false, false, false, .51), 3);
-  for (const v of [0, 1, 2, 3, 4, 5]) assert.equal(isTownAvatarPose(v), true);
+  assert.equal(effectiveTownAvatarPose(false, false, false, true, 8, true), 7);
+  assert.equal(effectiveTownAvatarPose(false, false, true, true, 8, true), 5);
+  for (const v of [0, 1, 2, 3, 4, 5, 7]) assert.equal(isTownAvatarPose(v), true);
   for (const v of [undefined, null, -1, 1.5, 6, 255, '1', NaN]) assert.equal(isTownAvatarPose(v), false);
 });
 
