@@ -3,6 +3,7 @@ import {
   decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, SNOWBALL_EVENT_PREFIX,
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
+import { MASCOT_ACTOR_ID } from '../../../src/presence/protocol';
 import { createPresenceAvatars } from './town-presence-avatars';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
@@ -68,6 +69,18 @@ export function createTownPresence(
   const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
   const clock = createTownPresenceClock();
+  const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
+  const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
+  const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
+  const ownerStatus = document.getElementById('town-mascot-owner-status');
+  const ownerFollow = document.querySelector<HTMLInputElement>('#town-mascot-follow');
+  const mascotHistory: PresenceSample[] = [];
+  const mascotWire = new DataView(new ArrayBuffer(presenceRecordBytes));
+  const mascotPose: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
+  let ownerNonce: string | undefined;
+  let ownerVerified = false;
+  let mascotSeq = 0;
+  let nextMascotSample = 0;
   let photoSupported = false;
   let clockRequest: number | undefined;
   let nextClockSample = Infinity;
@@ -152,6 +165,13 @@ export function createTownPresence(
     const active = socket;
     socket = undefined;
     haveId = false;
+    ownerVerified = false;
+    ownerNonce = undefined;
+    mascotHistory.length = 0;
+    if (ownerInput) { ownerInput.value = ''; ownerInput.hidden = false; }
+    if (ownerSubmit) ownerSubmit.hidden = false;
+    if (ownerFollow?.parentElement) ownerFollow.parentElement.hidden = true;
+    if (ownerPanel) ownerPanel.hidden = true;
     joinedId = null;
     joinedName = undefined;
     serverEpochOffset = undefined;
@@ -185,9 +205,29 @@ export function createTownPresence(
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
+        nonce?: string; accepted?: boolean;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (haveId && message.type === 'owner-challenge') {
+        if (typeof message.nonce === 'string' && /^[0-9a-f]{48}$/.test(message.nonce)) {
+          ownerNonce = message.nonce;
+          if (ownerPanel && globalThis.crypto?.subtle) ownerPanel.hidden = false;
+        }
+        return;
+      }
+      if (haveId && message.type === 'owner-result') {
+        ownerVerified = ownerVerified || message.accepted === true;
+        if (ownerStatus) ownerStatus.textContent = ownerVerified ? '已验证' : '未验证';
+        if (ownerInput) ownerInput.hidden = ownerVerified;
+        if (ownerSubmit) ownerSubmit.hidden = ownerVerified;
+        if (ownerFollow?.parentElement) ownerFollow.parentElement.hidden = !ownerVerified;
+        return;
+      }
+      if (message.type === 'leave' && message.id === MASCOT_ACTOR_ID) {
+        mascotHistory.length = 0;
+        return;
+      }
       if (message.type === 'event' && (message.kind === 'plaza-photo-invite' || message.kind === 'plaza-photo-lineup')) {
         const notice = haveId && readPlazaPhotoNotice(message);
         if (notice) showPhoto?.(notice);
@@ -289,9 +329,16 @@ export function createTownPresence(
     }
     const stamp = ++epoch;
     const time = performance.now();
+    let mascotSeen = false;
     const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
+      if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
+      if (id === MASCOT_ACTOR_ID) {
+        mascotSeen = true;
+        pushPresenceSample(mascotHistory, { east, north, height, yaw, seq: sequence, time });
+        return;
+      }
       const name = roster.get(id);
-      if (name === undefined || isSharedHomePosition(east, north, height) !== insideSharedHome) return;
+      if (name === undefined) return;
       let actor = actors.get(id);
       if (!actor) {
         actor = { id, name, east, north, height, yaw, history: [], seen: stamp,
@@ -301,6 +348,7 @@ export function createTownPresence(
       actor.seen = stamp;
       pushPresenceSample(actor.history, { east, north, height, yaw, seq: sequence, time });
     });
+    if (valid && !mascotSeen) mascotHistory.length = 0;
     if (valid) for (const actor of actors.values()) if (actor.seen !== stamp) actors.delete(actor.id);
   }
 
@@ -397,6 +445,41 @@ export function createTownPresence(
     }
   }
 
+  async function verifyOwner() {
+    if (!ownerInput || ownerVerified || !haveId || !socket) return;
+    if (!ownerNonce) {
+      sendEvent(JSON.stringify({ type: 'owner-challenge-request' }));
+      return;
+    }
+    if ([...ownerInput.value].length < 10) return;
+    const current = socket;
+    const nonce = ownerNonce;
+    ownerNonce = undefined;
+    const bytes = new TextEncoder().encode(ownerInput.value + nonce);
+    ownerInput.value = '';
+    try {
+      const hash = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+      if (socket !== current || !haveId) return;
+      const proof = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+      sendEvent(JSON.stringify({ type: 'owner-proof', proof }));
+    } finally {
+      bytes.fill(0);
+    }
+  }
+
+  ownerSubmit?.addEventListener('click', () => { void verifyOwner().catch(() => {}); });
+  ownerInput?.addEventListener('keydown', event => {
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      ownerSubmit?.click();
+      ownerInput.blur();
+    }
+  });
+  ownerFollow?.addEventListener('change', () => {
+    if (ownerVerified && !ownerFollow.checked) sendEvent(JSON.stringify({ type: 'owner-mascot-stop' }));
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') scheduleConnection();
     else cancelRetryTimer();
@@ -409,6 +492,31 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    ownerFollowsMascot: () => ownerVerified && !!ownerFollow?.checked,
+    sendMascot(pose: PresencePose) {
+      const active = socket;
+      const time = performance.now();
+      if (!ownerVerified || !ownerFollow?.checked || time < nextMascotSample ||
+          active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return;
+      nextMascotSample = time + 100;
+      writePresencePose(pose, mascotSeq, mascotWire);
+      mascotWire.setUint16(0, MASCOT_ACTOR_ID, true);
+      try {
+        active.send(mascotWire.buffer);
+        mascotSeq = (mascotSeq + 1) & 65535;
+      } catch { connectionLost(); }
+    },
+    sampleRemoteMascot() {
+      const last = mascotHistory.at(-1);
+      const now = performance.now();
+      if (!last || now - last.time > 2250) return;
+      const previous = mascotHistory.at(-2);
+      samplePresencePose(mascotHistory, now, mascotPose);
+      const speed = previous && now - last.time < 300
+        ? Math.min(7.5, Math.hypot(last.east - previous.east, last.north - previous.north) * 1000 /
+          Math.max(1, last.time - previous.time)) : 0;
+      return { x: mascotPose.east, n: mascotPose.north, yaw: mascotPose.yaw, ground: mascotPose.height, speed };
+    },
     photoPlayerId: () => joinedId ?? 1,
     onPlazaPhoto(handler: (notice: PlazaPhotoNotice) => void) { showPhoto = handler; },
     requestPlazaPhoto() {
