@@ -371,10 +371,13 @@ index cc92239..fc40f47 100644
        for (const x of [-w * .31, 0, w * .31]) {
          const radius = x === 0 ? entry / 2 + .29 : Math.min(w * .104, 1.35);
 diff --git a/tools/voxel-tavern/town-blockout/district-layout.ts b/tools/voxel-tavern/town-blockout/district-layout.ts
-index 29dd3ca..5dc18a4 100644
+index 29dd3ca..b1dc69f 100644
 --- a/tools/voxel-tavern/town-blockout/district-layout.ts
 +++ b/tools/voxel-tavern/town-blockout/district-layout.ts
-@@ -3,8 +3,14 @@ import {
+@@ -1,10 +1,17 @@
+ import {
+-  BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
++  Box3, BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
    MeshLambertMaterial, Object3D,
  } from 'three';
  import {
@@ -385,12 +388,13 @@ index 29dd3ca..5dc18a4 100644
 +import type { Box, Ramp } from './landmark-kit';
 +import { createMarketHomeAtlas } from './market-home-atlas';
 +import { buildMarketHomeInterior, marketHomeIds } from './market-home-interior';
-+import { buildMarketHomePorch, planMarketHomePorch, type MarketHomePorch } from './market-home-porch';
++import { planMarketHomeLateralPorch, type MarketHomeLateralPorch } from './market-home-lateral-porch';
++import { buildMarketHomePorch, planMarketHomePorch, type MarketHomePorch, type MarketHomePorchInput } from './market-home-porch';
 +import { auditMarketHomeEntrance, createMarketHomeWorldGeometry } from './market-home-world-geometry';
  import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
  import { bridgeMouthKeepClear } from './road-clearance';
  import type { TownHousePortal } from './town-house-portals';
-@@ -24,7 +30,35 @@ type HousingRejection = {
+@@ -24,7 +31,36 @@ type HousingRejection = {
  type KeepClear = (x: number, n: number, radius: number) => boolean;
  type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
  type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
@@ -412,7 +416,7 @@ index 29dd3ca..5dc18a4 100644
 +  floors: Box[];
 +  ramps: Ramp[];
 +  approach: { east: number; north: number; ground: number };
-+  porch: MarketHomePorch;
++  porch: MarketHomePorch & Partial<Pick<MarketHomeLateralPorch, 'side' | 'route'>>;
 +  furnishingWitness: NonNullable<ReturnType<typeof createMarketHomeWorldGeometry>['furnishingWitness']>;
 +  foundationY: number;
 +  minTerrainY: number;
@@ -421,12 +425,13 @@ index 29dd3ca..5dc18a4 100644
 +};
  const housingCellSize = 96;
 +const marketHomeRoster: ReadonlySet<string> = new Set(marketHomeIds);
++const lateralMarketPorchId = 'old-town:137:168';
 +const playerRadius = .27;
 +const shellWall = .22;
  const theaterHouseRelocations = new Map<string, readonly [number, number]>([
    ['158:184', [160, 130]],
    ['179:155', [146.5, 129.5]],
-@@ -85,6 +119,45 @@ const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
+@@ -85,6 +121,72 @@ const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
  const within = (x: number, n: number, { x: cx, n: cn, w, d }: Pick<Site, 'x' | 'n' | 'w' | 'd'>, margin: number) =>
    Math.abs(x - cx) < w / 2 + margin && Math.abs(n - cn) < d / 2 + margin;
 
@@ -451,6 +456,33 @@ index 29dd3ca..5dc18a4 100644
 +  };
 +}
 +
++function marketShellRenderBoxes(model: Group) {
++  const boxes: Box[] = [];
++  const instance = new Matrix4();
++  const matrix = new Matrix4();
++  const box = new Box3();
++  model.updateMatrixWorld(true);
++  model.traverse(item => {
++    if (!(item instanceof Mesh)) return;
++    if (!item.geometry.boundingBox) item.geometry.computeBoundingBox();
++    const source = item.geometry.boundingBox;
++    if (!source) return;
++    const add = (world: Matrix4) => {
++      box.copy(source).applyMatrix4(world);
++      boxes.push({ min: box.min.toArray(), max: box.max.toArray() });
++    };
++    if (!(item instanceof InstancedMesh)) {
++      add(item.matrixWorld);
++      return;
++    }
++    for (let i = 0; i < item.count; i++) {
++      item.getMatrixAt(i, instance);
++      add(matrix.multiplyMatrices(item.matrixWorld, instance));
++    }
++  });
++  return boxes;
++}
++
 +function overlapsOriginalDoor(portal: TownHousePortal, { min, max }: Box) {
 +  const dx = Math.max(min[0] - portal.x, portal.x - max[0], 0);
 +  const dz = Math.max(min[2] + portal.n, -portal.n - max[2], 0);
@@ -472,7 +504,7 @@ index 29dd3ca..5dc18a4 100644
  const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][] }[] = [
    { theme: 'forest', styles: ['alpine', 'alpine', 'courtyard'], points: [[110,277],[133,266],[149,281],[172,282],[191,282],[216,280],[128,247],[131,218],[117,202],[101,184],[105,152],[96,239],[70,229],[63,194],[85,287],[111,307],[147,320],[172,323],[191,325]] },
    { theme: 'memorial', styles: ['courtyard', 'machiya', 'courtyard'], points: [[318,267],[312,243],[338,232],[358,228],[364,207],[375,242],[391,234],[410,219],[414,190],[406,165],[333,317],[353,321],[398,297],[393,272],[380,282],[310,318],[373,335]] },
-@@ -97,6 +170,7 @@ export function addDistrictHousing(
+@@ -97,6 +199,7 @@ export function addDistrictHousing(
    parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean,
    railwayKeepClear: KeepClear = () => false,
    plazaBounds: readonly number[] = layout.plaza.bounds,
@@ -480,7 +512,7 @@ index 29dd3ca..5dc18a4 100644
  ) {
    const [west, south, east, north] = plazaBounds;
    const relocations = phaseThreeBounds.every((edge, i) => edge === plazaBounds[i])
-@@ -105,6 +179,10 @@ export function addDistrictHousing(
+@@ -105,6 +208,10 @@ export function addDistrictHousing(
    const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
    const movedSites = new Set<Site>();
    const housePortals: TownHousePortal[] = [];
@@ -491,7 +523,7 @@ index 29dd3ca..5dc18a4 100644
    const rejectedHomes: HousingRejection[] = [];
    const housingCards = new Map<string, ReturnType<typeof districtHousingCard>>();
    const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
-@@ -201,6 +279,77 @@ export function addDistrictHousing(
+@@ -201,6 +308,89 @@ export function addDistrictHousing(
      return false;
    }
 
@@ -514,7 +546,7 @@ index 29dd3ca..5dc18a4 100644
 +    const shell = buildDistrictHousing(style, w, d, variant, 'market', undefined, cardVariant, true);
 +    const entrance = shell.userData.marketEntrance as DistrictMarketEntrance | undefined;
 +    if (!entrance) return;
-+    const porch = planMarketHomePorch({
++    const porchInput: MarketHomePorchInput = {
 +      east: x, north: n, angle, foundationY: level, entrance,
 +      heightAt: grid.heightAt,
 +      blocked(east, north, radius) {
@@ -522,8 +554,24 @@ index 29dd3ca..5dc18a4 100644
 +          paths.some(path => lineDistance(east, north, path.start, path.end) < path.radius + radius) ||
 +          sites.some(other => other !== site && within(east, north, footprints(other), radius));
 +      },
-+    });
++    };
++    shell.position.set(x, level, -n);
++    shell.rotation.y = angle;
++    addFoundation(shell, site, level, minTerrainY);
++    const straight = planMarketHomePorch(porchInput);
++    const lateral = !straight && portal.id === lateralMarketPorchId
++      ? planMarketHomeLateralPorch(porchInput, marketShellRenderBoxes(shell))
++      : undefined;
++    const porch = straight ?? lateral;
 +    if (!porch) return;
++    const dx = Math.sin(angle), dn = -Math.cos(angle);
++    const platform = lateral?.route.at(-2);
++    if (lateral && (!platform ||
++        Math.hypot(lateral.approach.east - portal.x, lateral.approach.north - portal.n) > 1e-6 ||
++        Math.abs(lateral.approach.ground - portal.ground) > 1e-6 ||
++        Math.abs((platform.north - n) * dx - (platform.east - x) * dn - entrance.x) > 1e-6)) return;
++    const outside = platform ?? porch.approach;
++    const outsideZ = (outside.east - x) * dx + (outside.north - n) * dn;
 +    const windowFinish = {
 +      tint: ['#ffc181', '#ffd3a1', '#ffbc76'][Math.abs(variant % 3)],
 +      panes: districtWindowPanes[districtHousingCard('market', cardVariant).window],
@@ -532,10 +580,9 @@ index 29dd3ca..5dc18a4 100644
 +    const world = createMarketHomeWorldGeometry(interior, { x, n, level, angle }, {
 +      shell: marketShellGeometry(site, entrance), interiorPlacement: { y: entrance.floorY },
 +    });
-+    const dx = Math.sin(angle), dn = -Math.cos(angle);
-+    const outsideZ = (porch.approach.east - x) * dx + (porch.approach.north - n) * dn;
 +    const audit = auditMarketHomeEntrance(world, {
-+      doorX: entrance.x, outsideZ, insideZ: world.interiorFrontZ - .45, surfaceAt: grid.heightAt, porch,
++      doorX: entrance.x, outsideZ, outsideGround: platform?.ground,
++      insideZ: world.interiorFrontZ - .45, surfaceAt: grid.heightAt, porch,
 +    });
 +    const colliders = [...world.colliders, ...porch.colliders];
 +    const floors = [...world.floors, ...porch.floors];
@@ -548,9 +595,6 @@ index 29dd3ca..5dc18a4 100644
 +      interior.dispose();
 +      return;
 +    }
-+    shell.position.set(x, level, -n);
-+    shell.rotation.y = angle;
-+    addFoundation(shell, site, level, minTerrainY);
 +    const group = new Group();
 +    group.name = `${portal.id} market home`;
 +    group.add(world.group, buildMarketHomePorch(porch));
@@ -569,7 +613,7 @@ index 29dd3ca..5dc18a4 100644
    for (const { theme, styles, points } of neighborhoods) {
      let housingCardIndex = 0;
      for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
-@@ -258,22 +407,14 @@ export function addDistrictHousing(
+@@ -258,22 +448,14 @@ export function addDistrictHousing(
          continue;
        }
        const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
@@ -594,7 +638,7 @@ index 29dd3ca..5dc18a4 100644
        sites.push(site);
        zoneCounts[theme ?? 'central']++;
        if (relocation) movedSites.add(site);
-@@ -284,8 +425,14 @@ export function addDistrictHousing(
+@@ -284,8 +466,14 @@ export function addDistrictHousing(
        const doorX = x + dx * stand - dn * side;
        const doorN = n + dn * stand + dx * side;
        if (theme) housingCards.set(id, districtHousingCard(theme, cardVariant));
@@ -611,7 +655,7 @@ index 29dd3ca..5dc18a4 100644
        const start = d / 2 + .55;
        const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
        let sweptEnd = start;
-@@ -324,6 +471,14 @@ export function addDistrictHousing(
+@@ -324,6 +512,14 @@ export function addDistrictHousing(
      }
    }
 
@@ -626,7 +670,7 @@ index 29dd3ca..5dc18a4 100644
    for (const [key, cell] of cells) renderBatches(detailed, cell, 'Old town housing ' + key);
    function setPanorama(wide: boolean) {
      detailed.visible = !wide;
-@@ -358,5 +513,10 @@ export function addDistrictHousing(
+@@ -358,5 +554,10 @@ export function addDistrictHousing(
      });
    }
    return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, housingCards, keepClear, setPanorama, sweptAt,
@@ -1089,6 +1133,171 @@ index 0000000..0df3de4
 +    },
 +  };
 +}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-lateral-porch.ts b/tools/voxel-tavern/town-blockout/market-home-lateral-porch.ts
+new file mode 100644
+index 0000000..739181b
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-lateral-porch.ts
+@@ -0,0 +1,159 @@
++import type { Box } from './landmark-kit';
++import type { MarketHomePorch, MarketHomePorchInput } from './market-home-porch';
++
++type Point = { east: number; north: number };
++type Waypoint = Point & { ground: number };
++export type MarketHomeLateralPorch = MarketHomePorch & { side: -1 | 1; route: Waypoint[] };
++
++const radius = .27;
++const bodyHeight = 1.8;
++const stepHeight = .43;
++const epsilon = .025;
++const railWidth = .07;
++const treadDepth = .24;
++const insideEdge = .16;
++const outsideEdge = 1.10;
++const stairLine = (insideEdge + outsideEdge) / 2;
++const originalStand = 1.42;
++
++function overlaps(box: Box, { east, north }: Point) {
++  const dx = Math.max(box.min[0] - east, east - box.max[0], 0);
++  const dz = Math.max(box.min[2] + north, -north - box.max[2], 0);
++  return dx * dx + dz * dz < radius * radius;
++}
++
++function audit(
++  input: MarketHomePorchInput, supports: readonly Box[], walls: readonly Box[], exterior: readonly Box[], route: readonly Point[],
++  start: number, finish: number, stride: number,
++) {
++  let feet = start;
++  let maxStep = 0;
++  let minHeadroom = Infinity;
++  const waypoints: Waypoint[] = [{ ...route[0], ground: start }];
++  for (let i = 1; i < route.length; i++) {
++    const a = route[i - 1];
++    const b = route[i];
++    const cuts = Math.ceil(Math.hypot(b.east - a.east, b.north - a.north) / stride);
++    for (let j = 1; j <= cuts; j++) {
++      const point = { east: a.east + (b.east - a.east) * j / cuts, north: a.north + (b.north - a.north) * j / cuts };
++      const height = input.heightAt(point.east, point.north);
++      if (height === undefined || !Number.isFinite(height) || input.blocked(point.east, point.north, radius)) return;
++      let next = height;
++      for (const box of supports) {
++        if (box.max[1] <= feet + stepHeight && overlaps(box, point)) next = Math.max(next, box.max[1]);
++      }
++      for (const box of walls) {
++        if (box.max[1] <= feet + .03 && overlaps(box, point)) next = Math.max(next, box.max[1]);
++      }
++      const hits = (box: Box) => next + epsilon < box.max[1] && next + bodyHeight - epsilon > box.min[1] && overlaps(box, point);
++      const change = Math.abs(next - feet);
++      if (change > stepHeight || supports.some(hits) || walls.some(hits) || exterior.some(hits)) return;
++      for (const box of exterior) {
++        if (box.min[1] >= next + bodyHeight - epsilon && overlaps(box, point)) {
++          minHeadroom = Math.min(minHeadroom, box.min[1] - next);
++        }
++      }
++      maxStep = Math.max(maxStep, change);
++      feet = next;
++    }
++    waypoints.push({ ...b, ground: feet });
++  }
++  if (Math.abs(feet - finish) > epsilon || minHeadroom <= bodyHeight + epsilon) return;
++  return { maxStep, minHeadroom, waypoints };
++}
++
++/**
++ * B-04 exceptional frontage. Call only for the surveyed high threshold after
++ * the straight porch has been rejected, and only after the exterior is cleared.
++ * The original B13 return point remains the first waypoint on raw terrain.
++ */
++export function planMarketHomeLateralPorch(
++  input: MarketHomePorchInput, exteriorCollision: readonly Box[],
++): MarketHomeLateralPorch | undefined {
++  const { east, north, angle, foundationY, entrance, heightAt, blocked } = input;
++  const { x, frontZ, width, height, floorY } = entrance;
++  const quarterTurns = Math.round(angle / (Math.PI / 2));
++  if (![east, north, angle, foundationY, x, frontZ, width, height, floorY].every(Number.isFinite) ||
++      Math.abs(angle - quarterTurns * Math.PI / 2) > 1e-6 || width < 1.25 || height < 1.85 ||
++      exteriorCollision.length === 0) return;
++  const sin = Math.round(Math.sin(angle));
++  const cos = Math.round(Math.cos(angle));
++  const halfWidth = width / 2;
++  const thresholdY = foundationY + floorY;
++  const clearance = (outsideEdge - insideEdge - 2 * railWidth) / 2 - radius;
++  for (const side of [1, -1] as const) {
++    function world(u: number, v: number): Point {
++      const localX = x + u * side;
++      const localZ = frontZ + v;
++      return { east: east + cos * localX + sin * localZ, north: north + sin * localX - cos * localZ };
++    }
++    function bounds(left: number, right: number, inner: number, outer: number, low: number, top: number): Box {
++      const a = world(left, inner);
++      const b = world(right, outer);
++      return { min: [Math.min(a.east, b.east), low, -Math.max(a.north, b.north)],
++        max: [Math.max(a.east, b.east), top, -Math.min(a.north, b.north)] };
++    }
++    function floorBox(left: number, right: number, inner: number, outer: number, top: number): Box | undefined {
++      let low = Infinity;
++      for (let a = 0; a <= 10; a++) {
++        for (let b = 0; b <= 10; b++) {
++          const point = world(left + (right - left) * a / 10, inner + (outer - inner) * b / 10);
++          const raw = heightAt(point.east, point.north);
++          if (raw === undefined || !Number.isFinite(raw) || raw > top - epsilon || blocked(point.east, point.north, .12)) return;
++          low = Math.min(low, raw);
++        }
++      }
++      return bounds(left, right, inner, outer, low - .08, top);
++    }
++    const approachPoint = world(0, originalStand);
++    const ground = heightAt(approachPoint.east, approachPoint.north);
++    if (ground === undefined || !Number.isFinite(ground) || blocked(approachPoint.east, approachPoint.north, radius)) continue;
++    const approach = { ...approachPoint, ground };
++    const landing = floorBox(-halfWidth, halfWidth, 0, outsideEdge, thresholdY);
++    if (!landing) continue;
++    const floor = bounds(-halfWidth, halfWidth, -.58, 0, thresholdY - .08, thresholdY);
++    const landingRail = (left: number, right: number, inner: number, outer: number) =>
++      bounds(left, right, inner, outer, landing.min[1], thresholdY + .9);
++    for (const count of [6, 7, 8]) {
++      const foot = halfWidth + count * treadDepth + radius + .05;
++      const lowPoint = world(foot, stairLine);
++      const low = heightAt(lowPoint.east, lowPoint.north);
++      if (low === undefined || !Number.isFinite(low)) continue;
++      const riser = (thresholdY - low) / (count + 1);
++      if (riser <= 0 || riser > .40) continue;
++      const floors = [landing];
++      const colliders = [
++        landingRail(-halfWidth, halfWidth, outsideEdge - railWidth, outsideEdge),
++        landingRail(-halfWidth, -halfWidth + railWidth, 0, outsideEdge),
++      ];
++      for (let index = 0; index < count; index++) {
++        const left = halfWidth + index * treadDepth;
++        const right = left + treadDepth;
++        const top = thresholdY - (index + 1) * riser;
++        const stair = floorBox(left, right, insideEdge, outsideEdge, top);
++        if (!stair) break;
++        floors.push(stair);
++        colliders.push(
++          bounds(left, right, insideEdge, insideEdge + railWidth, stair.min[1], top + .9),
++          bounds(left, right, outsideEdge - railWidth, outsideEdge, stair.min[1], top + .9),
++        );
++      }
++      if (floors.length !== count + 1 || [...floors, ...colliders].some(box => overlaps(box, approachPoint))) continue;
++      const route = [approachPoint, world(foot, originalStand), lowPoint, world(0, stairLine), world(0, -radius - .02)];
++      const reverse = [...route].reverse();
++      const floorsForAudit = [...floors, floor];
++      const forward = audit(input, floorsForAudit, colliders, exteriorCollision, route, ground, thresholdY, .025);
++      const backward = audit(input, floorsForAudit, colliders, exteriorCollision, reverse, thresholdY, ground, .025);
++      const sprint = audit(input, floorsForAudit, colliders, exteriorCollision, route, ground, thresholdY, 11.3 / 60);
++      const reverseSprint = audit(input, floorsForAudit, colliders, exteriorCollision, reverse, thresholdY, ground, 11.3 / 60);
++      if (!forward || !backward || !sprint || !reverseSprint) continue;
++      return {
++        floors, colliders, ramps: [], approach, side, route: forward.waypoints,
++        maximumStep: Math.max(forward.maxStep, backward.maxStep, sprint.maxStep, reverseSprint.maxStep),
++        minimumClearWidth: 2 * (clearance + radius),
++        minimumClearHeight: Math.min(height, forward.minHeadroom, backward.minHeadroom, sprint.minHeadroom, reverseSprint.minHeadroom),
++        leftClearance: clearance, rightClearance: clearance,
++      };
++    }
++  }
++}
 diff --git a/tools/voxel-tavern/town-blockout/market-home-porch.ts b/tools/voxel-tavern/town-blockout/market-home-porch.ts
 new file mode 100644
 index 0000000..fad1205
@@ -1372,10 +1581,10 @@ index 0000000..d95cada
 +}
 diff --git a/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts b/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts
 new file mode 100644
-index 0000000..d7641c3
+index 0000000..96195e9
 --- /dev/null
 +++ b/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,256 @@
 +import type { Box, Ramp } from './landmark-kit';
 +import { marketHomeDoorHalfWidth, type buildMarketHomeInterior } from './market-home-interior';
 +import { sampleMarketHomeWalk } from './market-home-walk';
@@ -1520,6 +1729,8 @@ index 0000000..d7641c3
 +type EntranceAuditOptions = Readonly<{
 +  doorX: number;
 +  outsideZ: number;
++  /** Feet height reached by a separately walked porch route. Verified against its physical platform. */
++  outsideGround?: number;
 +  insideZ: number;
 +  surfaceAt(east: number, north: number): number | undefined;
 +  porch?: MarketHomeWalkGeometry;
@@ -1531,12 +1742,20 @@ index 0000000..d7641c3
 +export function auditMarketHomeEntrance(world: MarketHomeWorldGeometry, options: EntranceAuditOptions) {
 +  const invalid = (reason: 'invalid-route' | 'no-support' | 'step' | 'obstruction' | 'room-floor' | 'clearance') =>
 +    ({ ok: false as const, reason });
-+  const { doorX, outsideZ, insideZ, surfaceAt } = options;
++  const { doorX, outsideZ, outsideGround, insideZ, surfaceAt, porch } = options;
 +  if (![doorX, outsideZ, insideZ].every(Number.isFinite) || outsideZ <= world.interiorFrontZ ||
 +      insideZ >= world.interiorFrontZ - bodyRadius || insideZ <= world.interiorBackZ + bodyRadius) {
 +    return invalid('invalid-route');
 +  }
-+  const { porch } = options;
++  if (outsideGround !== undefined) {
++    if (!Number.isFinite(outsideGround)) return invalid('invalid-route');
++    const [x, , z] = world.localToWorld([doorX, 0, outsideZ]);
++    const hasPlatform = porch?.floors?.some(({ min, max }) =>
++      Math.abs(max[1] - outsideGround) <= comparisonEpsilon &&
++      x - bodyRadius >= min[0] && x + bodyRadius <= max[0] &&
++      z - bodyRadius >= min[2] && z + bodyRadius <= max[2]);
++    if (!hasPlatform) return invalid('no-support');
++  }
 +  const colliders = [...world.colliders, ...(porch?.colliders ?? [])];
 +  const floors = [...world.floors, ...(porch?.floors ?? [])];
 +  const ramps = [...world.ramps, ...(porch?.ramps ?? [])];
@@ -1603,13 +1822,18 @@ index 0000000..d7641c3
 +    return { ok: true as const, samples };
 +  }
 +
-+  const forward = trace(outsideZ, insideZ);
++  const forward = trace(outsideZ, insideZ, outsideGround);
 +  if (!forward.ok) return forward;
++  if (outsideGround !== undefined && Math.abs(forward.samples[0].ground - outsideGround) > comparisonEpsilon) {
++    return invalid('no-support');
++  }
 +  const inside = forward.samples.at(-1)!;
 +  if (Math.abs(inside.ground - world.interiorFloorY) > comparisonEpsilon ||
 +      !overlapsBody(inside.x, -inside.n, world.floors[0])) return invalid('room-floor');
 +  const reverse = trace(insideZ, outsideZ, inside.ground);
 +  if (!reverse.ok) return reverse;
++  if (outsideGround !== undefined &&
++      Math.abs(reverse.samples.at(-1)!.ground - outsideGround) > comparisonEpsilon) return invalid('no-support');
 +  if (![minLeftClearance, minRightClearance, minHeadroom].every(Number.isFinite) ||
 +      minLeftClearance <= 0 || minRightClearance <= 0 || minHeadroom <= bodyHeight) return invalid('clearance');
 +  return {
@@ -1618,7 +1842,7 @@ index 0000000..d7641c3
 +  };
 +}
 diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
-index 72cc9c1..e1f52b8 100644
+index 72cc9c1..33e4636 100644
 --- a/tools/voxel-tavern/town-blockout/viewer.ts
 +++ b/tools/voxel-tavern/town-blockout/viewer.ts
 @@ -276,7 +276,9 @@ addTownRailWayfinding(scene, grid.heightAt);
@@ -1683,8 +1907,7 @@ index 72cc9c1..e1f52b8 100644
 +    const spot: TownActivitySpot = {
 +      x: door.x, n: door.n, ground: door.ground, range: 1.6,
 +      label: home ? '集市屋门' : '进入屋舍空间',
-       available: () => !homeReturn,
--      run: () => enterSharedHome(door),
++      available: () => !homeReturn,
 +      run: () => home ? openMarketHomeEntrance(door, spot) : enterSharedHome(door),
 +    };
 +    activitySpots.push(spot);
@@ -1692,7 +1915,8 @@ index 72cc9c1..e1f52b8 100644
 +    if (furnishing) activitySpots.push({
 +      x: furnishing.x, n: furnishing.n, ground: furnishing.ground, range: .85,
 +      label: furnishing.label,
-+      available: () => !homeReturn,
+       available: () => !homeReturn,
+-      run: () => enterSharedHome(door),
 +      run() {
 +        activityContext.face(furnishing.target.x, furnishing.target.n, furnishing.target.ground);
 +        announceActivity(furnishing.label);
@@ -1700,3 +1924,45 @@ index 72cc9c1..e1f52b8 100644
      });
    }
  }
+@@ -1117,8 +1162,22 @@ function availableHouseDoorGround(east: number, north: number) {
+   return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+ }
+
+-async function prewarmHouseDoorExit(entry: TownHousePortal, target: TownHousePortal, conceal: Animation) {
++function resolveHouseDoorLanding(target: TownHousePortal) {
+   const landing = findHouseDoorLanding(target, availableHouseDoorGround);
++  if (landing || !districts.marketHomes.has(target.id)) return landing;
++  // If a player blocks otherwise usable landing positions, keep the recorded-door return.
++  const staticLanding = findHouseDoorLanding(target, (east, north) => dryTownLandingHeight(east, north, undefined, true));
++  if (staticLanding) return;
++  // An installed porch can occupy the three short offsets. Keep the same destination's original stand.
++  const ground = dryTownLandingHeight(target.x, target.n, target.ground, true);
++  if (ground !== undefined && Math.abs(ground - target.ground) <= 1e-6 &&
++      !houseDoorOccupied(target.x, target.n, ground)) {
++    return { x: target.x, n: target.n, ground };
++  }
++}
++
++async function prewarmHouseDoorExit(entry: TownHousePortal, target: TownHousePortal, conceal: Animation) {
++  const landing = resolveHouseDoorLanding(target);
+   if (!landing) return;
+   // The prediction only chooses textures. Landing is revalidated when the door actually opens.
+   const destination = new Vector3(landing.x, landing.ground + eye, -landing.n);
+@@ -1162,7 +1221,7 @@ async function exitThroughHouseDoor(target: TownHousePortal) {
+     // A timed ceremony can move a visitor out of the shared room while the DOM fades.
+     if (homeReturn !== entry) return;
+     homeReturn = undefined;
+-    const landing = findHouseDoorLanding(target, availableHouseDoorGround);
++    const landing = resolveHouseDoorLanding(target);
+     if (landing) {
+       ({ x, n, ground } = landing);
+       yaw = target.exitYaw;
+@@ -1195,7 +1254,7 @@ function checkHouseDoorLanding() {
+   const check = houseDoorLandingCheck;
+   if (!check || !houseDoorOccupied(x, n, ground)) return;
+   // The already established AOI only delivers exterior peers as the player re-enters the town.
+-  const landing = findHouseDoorLanding(check.target, availableHouseDoorGround);
++  const landing = resolveHouseDoorLanding(check.target);
+   if (landing) ({ x, n, ground } = landing);
+   else {
+     leaveToRecordedDoor(check.entry, check.target);

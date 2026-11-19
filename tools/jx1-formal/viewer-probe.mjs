@@ -96,7 +96,7 @@ if (${guard}) {
       action: actionButton.hidden ? '' : actionButton.textContent,
       menuId: document.querySelector<HTMLElement>('#market-home-entrance')?.dataset.doorId ?? null,
       dialogOpen: placeCard.open,
-      visits: JSON.parse(localStorage.getItem('unwritten.houses.doors.v1') ?? '[]') as string[] }),
+      visits: (JSON.parse(localStorage.getItem('unwritten.houses.doors.v1') ?? '{}') as { items?: string[] }).items ?? [] }),
   } });
 }
 `;

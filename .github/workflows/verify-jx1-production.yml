@@ -53,6 +53,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/jx1-formal"
           node ci/tools/jx1-formal/record-unmodified-registry.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" "$JX1_RUNTIME_COMMIT"
+          (cd town && node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . snapshot) > "$RUNNER_TEMP/jx1-formal/static-baseline.json"
           git -C town apply --check --whitespace=error "../ci/$JX1_PATCH_PATH"
           git -C town apply --whitespace=error "../ci/$JX1_PATCH_PATH"
           sha256sum "ci/$JX1_PATCH_PATH" > "$RUNNER_TEMP/jx1-formal/patch-sha256.txt"
@@ -64,6 +65,12 @@ jobs:
           set -euo pipefail
           npm run typecheck
           node --import tsx --test tests/town-blockout-house-portals.test.ts tests/town-blockout-shared-home.test.ts tests/town-blockout-market-entrance.test.ts tests/town-blockout-market-homes.test.ts tests/town-blockout-market-home-atlas.test.ts
+
+      - name: Audit all 17 physical passages and 92 door-book destinations
+        working-directory: town
+        shell: bash
+        run: |
+          node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . candidate "$RUNNER_TEMP/jx1-formal/static-baseline.json" --require-all --known-book-five > "$RUNNER_TEMP/jx1-formal/all-house-sweeps.json"
 
       - name: Verify four staged physical tours and the shared keyboard and touch menu
         shell: bash
