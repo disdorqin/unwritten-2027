@@ -88,8 +88,7 @@ function compareRegistry(expected, actual, enabledIds) {
 
 async function openMenu(session, id, allowVisit = true) {
   const { page, cdp } = session;
-  const before = await frame(page, { mask: outdoor, home: null, canMove: true });
-  assert.ok(before.action, 'The player must have a real door action at the current position');
+  const before = await frame(page, { mask: outdoor, home: null, canMove: true, action: '集市屋门' });
   if (cdp) await page.locator('#world-action').tap({ timeout });
   else await page.keyboard.press('e');
   await page.locator(`#place-card[open] ${menu}`).waitFor({ state: 'visible', timeout });
