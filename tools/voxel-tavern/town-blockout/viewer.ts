@@ -6,7 +6,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
-import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
+import { buildTowerLandmark, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
+import { updateTowerTime } from './clocktower-face';
+import { createDailyTowerChime, isTowerCeremonyWindow } from './town-clocktower-time';
 import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
@@ -1248,6 +1250,7 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
+const dailyTowerChime = createDailyTowerChime();
 let overtureMidnight: number | undefined;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
@@ -1266,6 +1269,13 @@ function bellDistance() {
   return camera.position.distanceTo(towerBellPosition);
 }
 
+function startTowerHourly(at: number, strikes: number, audible: boolean) {
+  if (audible) festival.playCeremonyBell('hourly', bellDistance());
+  bellMotion.strike(.65);
+  nextHourlyBell = at + 2020;
+  hourlyBellsRemaining = strikes - 1;
+}
+
 function handleCeremonyCue(cue: CeremonyCue) {
   ceremonyOverlay.cue(cue);
   switch (cue.type) {
@@ -1276,10 +1286,7 @@ function handleCeremonyCue(cue: CeremonyCue) {
       }
       break;
     case 'hourly-chime':
-      festival.playCeremonyBell('hourly', bellDistance());
-      bellMotion.strike(.65);
-      nextHourlyBell = cue.at + 2020;
-      hourlyBellsRemaining = cue.strikes - 1;
+      startTowerHourly(cue.at, cue.strikes, true);
       break;
     case 'countdown-tick':
       festival.playCeremonyBell('tick', bellDistance());
@@ -1904,6 +1911,11 @@ activitySpots.push(
     announceActivity('表盘层 · 黄铜指针与传动齿轮');
   }),
   towerBellSpot,
+  localSpot(tower, [-11.9, .3125, -3.75], 1.3, '查看钟机展陈', () => {
+    const gearWall = tower.localToWorld(new Vector3(-11.9, 1.77, -5.51));
+    activityContext.face(gearWall.x, -gearWall.z, gearWall.y);
+    announceActivity('钟机展陈 · 这组齿轮把钟摆节拍传到指针。');
+  }),
   localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
     const [, deck, opening] = towerStops.lookout;
     const center = tower.localToWorld(new Vector3(0, deck, opening));
@@ -2965,6 +2977,7 @@ renderer.setAnimationLoop(now => {
     Math.abs(camera.position.y - grid.heightAt(site.x, site.n)) < 18);
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
   if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+  updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
   if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z, !walking);
   if (!homeReturn && !extensionStreetsLoad && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
     void prepareExtensionStreets();
@@ -2999,10 +3012,20 @@ renderer.setAnimationLoop(now => {
   }
   personalFirecrackers.update();
   const ceremonyState = ceremony.update();
+  const offset = ceremonyClock.utcOffsetMinutes;
+  const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
+  const towerInCeremony = isTowerCeremonyWindow(ceremonyState.now, midnight);
+  updateTowerTime(tower, ceremonyState.now, ceremonyState.secondsToMidnight, ceremonyState.phase === 'climax');
+  const hour = dailyTowerChime(ceremonyState.now, towerInCeremony);
+  if (towerInCeremony) townLights.setDusk(false);
+  if (hour) {
+    startTowerHourly(hour.at, hour.strikes, hour.audible);
+    marketFair.refresh();
+    if (hour.hour === 17 || hour.hour === 18) townLights.setDusk(true);
+    else if (hour.hour === 7) townLights.setDusk(false);
+  }
   let ceremonyElapsed: number | undefined;
   if (ceremonyState.phase !== 'ordinary') {
-    const offset = ceremonyClock.utcOffsetMinutes;
-    const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
     ceremonyElapsed = (ceremonyState.now - midnight) / 1000;
     if (ceremonyState.phase === 'approach' && overtureMidnight !== midnight) {
       overtureMidnight = midnight;

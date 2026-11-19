@@ -43,11 +43,13 @@ export function createTownLights(
   activate(id: TownLightId): boolean;
   openBook(): void;
   setCeremonyBand(band: number): void;
+  setDusk(enabled: boolean): void;
   setCeremonyDim(level: number): void;
 } {
   const lit = new Set<TownLightId>(savedLights());
   let ceremonyBand = -1;
   let ceremonyDim = 1;
+  let dusk = false;
   const dimmedColor = new Color();
   const partsPerLight = 15;
   const fixtures = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), stations.length * partsPerLight);
@@ -88,7 +90,7 @@ export function createTownLights(
   context.scene.add(fixtures);
 
   function paint({ id, pane, wick, cross, band }: typeof pieces[number]) {
-    const glowing = lit.has(id) || band <= ceremonyBand;
+    const glowing = lit.has(id) || band <= ceremonyBand || dusk && (id === 'plaza' || id === 'workshop');
     fixtures.setColorAt(pane, dimmedColor.copy(glowing ? colors.lamp : colors.glass).multiplyScalar(ceremonyDim));
     dimmedColor.copy(glowing ? colors.filament : colors.shade).multiplyScalar(ceremonyDim);
     fixtures.setColorAt(wick, dimmedColor);
@@ -160,6 +162,11 @@ export function createTownLights(
     },
     activate,
     openBook,
+    setDusk(enabled) {
+      if (dusk === enabled) return;
+      dusk = enabled;
+      pieces.forEach(paint);
+    },
     setCeremonyBand(band) {
       if (!Number.isInteger(band) || band < -1 || band > 3 || ceremonyBand === band) return;
       ceremonyBand = band;

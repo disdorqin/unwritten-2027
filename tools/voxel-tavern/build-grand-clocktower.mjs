@@ -2,7 +2,7 @@
 const centerX=-3, centerZ=37.5;
 const faces=['north','south','west','east'];
 
-export function buildGrandClocktower({box,beam,lantern}) {
+export function buildGrandClocktower({box,beam,lantern,dynamicHands=false}) {
  function face(side,material,u,y,n,width,height,depth){
   if(side==='north')beam(material,centerX+u,y,centerZ-n-depth,width,height,depth);
   else if(side==='south')beam(material,centerX-u-width,y,centerZ+n,width,height,depth);
@@ -185,7 +185,7 @@ export function buildGrandClocktower({box,beam,lantern}) {
    else for(const r of [2.3,2.49,2.68])mark(i%15?'dark':'teal',angle,r,.25);
   }
   const hands=[{angle:Math.PI*11.6/6,length:2.58,width:.25},{angle:Math.PI*10.7/6,length:1.72,width:.3125}];
-  for(const {angle,length,width} of hands){
+  if(!dynamicHands)for(const {angle,length,width} of hands){
    for(let d=0;d<length;d+=.12){
     const widen=d>length-.5?.125:0;
     const x=Math.sin(angle)*d, y=dialY+Math.cos(angle)*d;
