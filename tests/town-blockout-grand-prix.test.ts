@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   createGrandPrix, grandPrixCheckpoints, grandPrixProgressKey,
@@ -20,6 +21,13 @@ const at = (index: number) => {
   const point = grandPrixCheckpoints[index];
   return [point.x, point.n] as const;
 };
+
+test('the rehearsal page contains each sled and Grand Prix HUD output', () => {
+  const html = readFileSync(new URL('../tools/voxel-tavern/town-blockout.html', import.meta.url), 'utf8');
+  for (const id of ['sled-status', 'grand-prix-status', 'grand-prix-board']) {
+    assert.equal(html.match(new RegExp(`<output id="${id}"`, 'g'))?.length, 1, id);
+  }
+});
 
 test('a full run advances only in order and only on the matching leg', () => {
   let clock = 0;

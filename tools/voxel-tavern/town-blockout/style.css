@@ -42,6 +42,27 @@ label, output, #help { font-size: 12px; }
 #ice-palace-race-status { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
 :is(#town-activity-status, #ice-palace-race-status):empty,
 .museum-inspecting :is(#town-activity-status, #ice-palace-race-status) { display: none; }
+:is(#sled-status, #grand-prix-status, #grand-prix-board) {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 28px));
+  padding: 8px 12px;
+  border: 1px solid #a68a67;
+  border-radius: 7px;
+  background: #142035ee;
+  color: #ffebcb;
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+#sled-status { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
+#grand-prix-status { bottom: max(214px, calc(env(safe-area-inset-bottom) + 208px)); }
+#grand-prix-board { top: max(72px, calc(env(safe-area-inset-top) + 66px)); }
+:is(#sled-status, #grand-prix-status, #grand-prix-board):empty,
+.museum-inspecting :is(#sled-status, #grand-prix-status, #grand-prix-board) { display: none; }
 .hot-spring-soak {
   position: fixed;
   inset: 0;
