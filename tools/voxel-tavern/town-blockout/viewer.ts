@@ -29,6 +29,7 @@ import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable } from './landmark-shared-home';
 import { type TownHousePortal } from './town-house-portals';
 import { createHouseDoorBook, findHouseDoorLanding, houseDoorBookCopy, recordHouseDoorVisit, renderHouseDoorBook } from './town-house-door-book';
+import { prewarmHouseDoorTextures } from './town-house-door-textures';
 import './town-house-door-book.css';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
@@ -1079,8 +1080,17 @@ function houseDoorOccupied(east: number, north: number, feet: number) {
 }
 
 function availableHouseDoorGround(east: number, north: number) {
-  const feet = dryTownLandingHeight(east, north);
+  const feet = dryTownLandingHeight(east, north, undefined, true);
   return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+}
+
+async function prewarmHouseDoorExit(entry: TownHousePortal, target: TownHousePortal, conceal: Animation) {
+  const landing = findHouseDoorLanding(target, availableHouseDoorGround);
+  if (!landing) return;
+  // The prediction only chooses textures. Landing is revalidated when the door actually opens.
+  const destination = new Vector3(landing.x, landing.ground + eye, -landing.n);
+  await prewarmHouseDoorTextures(renderer, scene, camera, destination, target.exitYaw,
+    () => homeReturn === entry && houseDoorTravel && conceal.playState === 'running');
 }
 
 function leaveToRecordedDoor(entry: TownHousePortal, target: TownHousePortal) {
@@ -1113,6 +1123,7 @@ async function exitThroughHouseDoor(target: TownHousePortal) {
       fade.className = 'house-door-fade';
       document.body.append(fade);
       const conceal = fade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+      void prewarmHouseDoorExit(entry, target, conceal).catch(() => {});
       await conceal.finished.catch(() => {});
     }
     // A timed ceremony can move a visitor out of the shared room while the DOM fades.
@@ -2275,7 +2286,9 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
-  if (homeReturn) return sharedHomeSpawn.ground;
+  return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+}
+function outdoorSurfaceAt(east: number, north: number) {
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function snowCleared(east: number, north: number, feet: number) {
@@ -2362,10 +2375,12 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
   });
 }
 
-function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity, radius = bodyRadius) {
+function supportAt(
+  east: number, north: number, limit: number, solidLimit = -Infinity, radius = bodyRadius,
+  surface = surfaceAt(east, north), { floors, ramps, colliders } = geometryAt(east, north),
+) {
   const z = -north;
-  let height = surfaceAt(east, north);
-  const { floors, ramps, colliders } = geometryAt(east, north);
+  let height = surface;
   for (const floor of floors) {
     if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
   }
@@ -2384,22 +2399,24 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
   return height;
 }
 
-function obstructed(east: number, north: number, feet: number) {
+function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
-  const { colliders, floors } = geometryAt(east, north);
   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
     activities.some(activity => activity.blocked?.(east, north, feet)) ||
     colliders.some(intersects) || floors.some(intersects);
 }
 
-function dryTownLandingHeight(east: number, north: number, heightHint?: number) {
+function dryTownLandingHeight(east: number, north: number, heightHint?: number, outdoors = false) {
+  const canStand = outdoors ? outdoorWalkable : walkable;
   if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
-    north > worldBounds.depth - bodyRadius || !walkable(east, north)) return undefined;
+    north > worldBounds.depth - bodyRadius || !canStand(east, north)) return undefined;
   if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
-  const base = heightHint ?? surfaceAt(east, north);
-  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
-  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet)) return undefined;
+  const surface = outdoors ? outdoorSurfaceAt(east, north) : surfaceAt(east, north);
+  const geometry = outdoors ? outdoorGeometryAt(east, north) : geometryAt(east, north);
+  const base = heightHint ?? surface;
+  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon, bodyRadius, surface, geometry);
+  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry)) return undefined;
   return Number.isFinite(feet) ? feet : undefined;
 }
 
