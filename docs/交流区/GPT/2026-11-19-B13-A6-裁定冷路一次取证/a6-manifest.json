@@ -1,0 +1,53 @@
+{
+  "sha": "2b5add2782f63ac098b01f8036e4068c2fa786ac",
+  "source": "district:513:366",
+  "target": "district:550:412",
+  "clock": "2026-11-20T14:15:00+08:00",
+  "settings": {
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "vendor": "Google Inc. (Intel)",
+    "width": 1000,
+    "height": 650,
+    "dpr": 1,
+    "renderDpr": 1,
+    "quality": "balanced",
+    "reduced": false
+  },
+  "chrome": "146.0.7680.178",
+  "door": {
+    "id": "district:550:412",
+    "zone": "memorial",
+    "x": 543.08,
+    "n": 412,
+    "ground": 11.985442810058586,
+    "exitYaw": -1.5707963267948968
+  },
+  "presenceBefore": {
+    "online": 1,
+    "tier": 0,
+    "egressBytesPerSecond": 86
+  },
+  "final": {
+    "x": 543.6,
+    "n": 412,
+    "ground": 11.893461799621578,
+    "inside": false,
+    "travelling": false,
+    "mask": 1
+  },
+  "frames": 192,
+  "events": 17,
+  "gl": 624,
+  "errors": [],
+  "peak": 83.30000000000018,
+  "over50": 1,
+  "tiers": [
+    "medium"
+  ],
+  "presenceAfter": {
+    "online": 1,
+    "tier": 0,
+    "egressBytesPerSecond": 0
+  },
+  "didClick": true
+}
