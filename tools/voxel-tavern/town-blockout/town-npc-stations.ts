@@ -24,7 +24,6 @@ type StationOptions = {
   palaceProgress?: () => PalaceProgress | undefined;
   marketStall?: (name: MarketName) => { station: TownResidentStation; activity?: TownActivitySpot } | undefined;
   canCollect?: Parameters<typeof residentZodiacClues>[1];
-  authorizedSnakeClue?: string;
   awakenedGoldGoat?: () => boolean;
 };
 
@@ -53,7 +52,7 @@ export function registerTownResidentStations(npc: Pick<ReturnType<typeof createT
   const lake = options.campfires.find(site => site.id === 'lakeside');
   function clueOptions(name: TownResidentName) {
     return { clues: () => residentZodiacClues(name, options.canCollect ?? (() => false),
-      options.awakenedGoldGoat?.(), options.authorizedSnakeClue) };
+      options.awakenedGoldGoat?.()) };
   }
   const forestSpot = npc.registerResident('樊樵', () =>
     options.forestChop() ? byFire(townResidentStations.forest, forest) : undefined, clueOptions('樊樵'));

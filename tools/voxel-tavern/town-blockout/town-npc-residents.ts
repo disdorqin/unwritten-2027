@@ -61,7 +61,8 @@ export function createTownResidentController(
   const registered = new Map<TownResidentName, ResidentRegistration>();
   const pose = new Object3D();
   const color = new Color();
-  batch.count = bodyStart;
+  let instanceEnd = bodyStart;
+  batch.count = instanceEnd;
 
   function redraw() {
     let index = bodyStart;
@@ -81,7 +82,8 @@ export function createTownResidentController(
         index++;
       }
     }
-    batch.count = index;
+    instanceEnd = index;
+    batch.count = instanceEnd;
     batch.instanceMatrix.needsUpdate = true;
     if (batch.instanceColor) batch.instanceColor.needsUpdate = true;
   }
@@ -121,7 +123,7 @@ export function createTownResidentController(
     return spot;
   }
 
-  return { register, update };
+  return { register, update, instanceEnd: () => instanceEnd };
 }
 
 function openResidentDialog({ name, options }: ResidentRegistration, panel: HTMLElement, visits: number, isNewYear: boolean) {
@@ -167,18 +169,15 @@ type ResidentClueId = 'ox' | 'monkey' | 'dragon' | 'rooster' | 'rabbit' | 'snake
 
 export function residentZodiacClues(
   name: TownResidentName, available: (id: ResidentClueId) => boolean, awakenedGoldGoat = false,
-  authorizedSnakeClue?: string,
 ) {
   if (name === '秦知礼') return [palaceStewardDialogue.clues[awakenedGoldGoat ? 1 : 0]];
   const ids = {
     贾明灯: ['ox', 'monkey'], 文墨生: ['ox', 'dragon'], 胡六环: ['ox', 'rooster'],
-    翁寒江: ['rabbit'], 樊樵: ['tiger'],
+    翁寒江: ['rabbit', 'snake'], 樊樵: ['tiger'],
   } as const;
   const clues: string[] = [];
   ids[name].forEach((id, index) => {
     if (available(id)) clues.push(residentDialogue[name].clues[index]);
   });
-  // The old bridge clue remains in the first corpus. The active lighthouse port supplies its approved replacement.
-  if (name === '翁寒江' && authorizedSnakeClue && available('snake')) clues.push(authorizedSnakeClue);
   return clues;
 }

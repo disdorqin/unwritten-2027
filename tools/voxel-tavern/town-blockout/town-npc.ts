@@ -6,7 +6,7 @@ import { snowballGravity, snowballSpeed } from './town-snowball';
 import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
-
+import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
 import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
 
 const memorialClerkName = '纪守信';
@@ -174,6 +174,7 @@ export function createTownNpcActivity(
   isDaytime?: () => boolean,
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
+  mascot?: TownMascotOptions,
 ): TownActivity & {
   registerResident: ReturnType<typeof createTownResidentController>['register'];
   snowballTargets: readonly TownSnowballTarget[];
@@ -190,7 +191,7 @@ export function createTownNpcActivity(
   const heldStart = hatStart + roles.length * snowHat.length;
   const residentStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    residentStart + townResidentCapacity);
+    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0));
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -264,6 +265,7 @@ export function createTownNpcActivity(
 
   const residents = createTownResidentController(villagers, residentStart, context, visit,
     () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
+  const updateMascot = mascot && addMascotToNpcBatch(villagers, residentStart, mascot);
 
   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
@@ -357,7 +359,6 @@ export function createTownNpcActivity(
     context.face(spot.x, spot.n, spot.ground + 1.61);
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
-
     const visitsBefore = visit(name);
     if (name === tavernWaiterName) {
       openWaiterConversation(panel, visitsBefore);
@@ -555,7 +556,7 @@ export function createTownNpcActivity(
     update(dt) {
       residents.update();
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
-      let changed = false;
+      let changed = updateMascot?.(residents.instanceEnd()) ?? false;
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];

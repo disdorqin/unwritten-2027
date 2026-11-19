@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { Scene, type InstancedMesh } from 'three';
+import { Color, Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
 import { nearestTownActivity, type TownActivitySpot } from '../tools/voxel-tavern/town-blockout/town-activity';
 import type { CampfireSite } from '../tools/voxel-tavern/town-blockout/town-campfires';
+import { lighthouseSnakeClue } from '../tools/voxel-tavern/town-blockout/town-zodiac';
+import { mascotHome, townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
 import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
 import { palaceStewardDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-palace-dialogue';
 import { residentZodiacClues } from '../tools/voxel-tavern/town-blockout/town-npc-residents';
@@ -87,11 +89,61 @@ test('the 25 Qin lines match the manuscript and clue gates do not expose the obs
     ...role.questions.host.map(row => row.text), ...role.questions.outside.map(row => row.text), ...role.gossip,
   ], lines);
   assert.ok(residentZodiacClues('翁寒江', () => true).every(line => !line.includes('桥洞')));
-  assert.deepEqual(residentZodiacClues('翁寒江', id => id === 'snake', false, '定稿灯塔线索'), ['定稿灯塔线索']);
+  assert.deepEqual(residentZodiacClues('翁寒江', id => id === 'snake'), [lighthouseSnakeClue]);
   assert.deepEqual(residentZodiacClues('秦知礼', () => true), [role.clues[0]]);
   assert.deepEqual(residentZodiacClues('秦知礼', () => false, true), [role.clues[1]]);
   const initial = { key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false };
   assert.equal(palaceStewardGuides(initial)[0], 0);
   assert.equal(palaceStewardGuides({ ...initial, key: true })[0], 4);
   assert.equal(palaceStewardGuides({ ...initial, key: true, throneRoom: true, gallery: true, mirrorCache: true })[0], 3);
+});
+
+test('resident station visibility and 小未 repack the same batch without replacing each other', () => {
+  const scene = new Scene();
+  let shown = true;
+  const activity = createTownNpcActivity({
+    scene, open: () => { throw Error('not needed'); }, announce() {}, face() {}, sit() {},
+  }, () => 10, undefined, undefined, undefined, undefined, {
+    now: () => 900_000, groundAt: () => 10, visible: () => shown,
+  });
+  const batch = scene.children[0] as InstancedMesh;
+  const base = batch.count;
+  const matrix = new Matrix4();
+  const position = new Vector3();
+  const tint = new Color();
+  const palette = new Color(townMascotParts[0].tint);
+  const count = townMascotParts.length;
+  let station = false;
+  const spot = activity.registerResident('樊樵', () => station ? townResidentStations.forest : undefined);
+  function checkMascot(offset: number) {
+    assert.equal(batch.count, offset + count);
+    batch.getMatrixAt(offset, matrix);
+    position.setFromMatrixPosition(matrix);
+    assert.ok(Math.hypot(position.x - mascotHome[0], position.z + mascotHome[1]) < .07);
+    batch.getColorAt(offset, tint);
+    assert.ok(Math.hypot(tint.r - palette.r, tint.g - palette.g, tint.b - palette.b) < 1e-6);
+  }
+
+  activity.update?.(0);
+  checkMascot(base);
+  station = true;
+  activity.update?.(0);
+  assert.equal(spot.available?.(), true);
+  checkMascot(base + 23);
+  batch.getMatrixAt(base, matrix);
+  position.setFromMatrixPosition(matrix);
+  assert.ok(Math.hypot(position.x - townResidentStations.forest.actor[0],
+    position.z + townResidentStations.forest.actor[1]) < .7);
+
+  shown = false;
+  activity.update?.(0);
+  assert.equal(batch.count, base + 23);
+  shown = true;
+  activity.update?.(0);
+  checkMascot(base + 23);
+  station = false;
+  activity.update?.(0);
+  assert.equal(spot.available?.(), false);
+  checkMascot(base);
+  assert.equal(scene.children.length, 1);
 });
