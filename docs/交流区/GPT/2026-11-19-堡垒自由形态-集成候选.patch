@@ -1,5 +1,5 @@
 diff --git a/src/presence/server.ts b/src/presence/server.ts
-index 2b1d237..d11570d 100644
+index 2b1d237..70a85ca 100644
 --- a/src/presence/server.ts
 +++ b/src/presence/server.ts
 @@ -18,8 +18,8 @@ import { isIcePalaceThroneRecord } from './ice-throne-site.js';
@@ -35,7 +35,8 @@ index 2b1d237..d11570d 100644
 +      if (event.speed > sledWallMaximumReportSpeed || !peer.record) return;
 +      const impact = sledWallImpact(event.speed);
 +      if (impact.layers === 0) return;
-       // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
+-      // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
++      // 位置记录 10 Hz、45.2 m/s 下每 100 ms 位移约 4.52 m；6 m 容差覆盖记录滞后，
        // 同时把裁定范围钉在墙边，杜绝隔图遥报。
        const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
          peer.record.north / 100 - wallCellCentre(event.gy));
