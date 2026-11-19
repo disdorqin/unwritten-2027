@@ -4,7 +4,7 @@ import {
   type Material,
 } from 'three';
 import expansion from '../../../docs/p0-layout-draft.json';
-import type { createTerrainGrid } from './terrain';
+import { layout, type createTerrainGrid } from './terrain';
 import type { Box } from './landmark-kit';
 import { extensionRoads } from './town-extension';
 import { stationSignCopy } from './station-sign-copy';
@@ -17,6 +17,8 @@ type XYZ = [number, number, number];
 type Part = { position: XYZ; size: XYZ; tint: string; rotation?: Quaternion; closeDetail?: boolean };
 
 const guideReplacements = new Map<string, [number, number][]>([
+  // A short straight at each dock and a gentle offset between them give both grades room to meet.
+  ['478,255', [[478,248], [478,255], [481,266], [481,284], [477,298]]],
   ['477,320', [[477,308], [477,320], [477,332], [478.5,343]]],
   ['112,417', [[124,420], [112,420], [101,420]]],
   ['366,25', [[338,27], [350,27], [363,27]]],
@@ -36,6 +38,9 @@ const clearanceCell = 16;
 const stationRoad = extensionRoads.find(road => road.id === 'station-approach')!;
 const bathRoad = extensionRoads.find(road => road.id === 'hot-spring-approach')!;
 const forestRoad = extensionRoads.find(road => road.id === 'north-forest-approach')!;
+const centralRoads = layout.roads.filter(road => ['south-loop', 'southeast', 'northeast'].includes(road.id));
+const headroomRoads = [stationRoad, ...centralRoads];
+const footingKeepoutRoads = [bathRoad, ...headroomRoads];
 const up = new Vector3(0, 1, 0);
 const limit = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 const smooth = (value: number) => {
@@ -43,7 +48,7 @@ const smooth = (value: number) => {
   return t * t * (3 - 2 * t);
 };
 
-function distanceToRoad(x: number, north: number, road: typeof stationRoad) {
+function distanceToRoad(x: number, north: number, road: { points: readonly (readonly number[])[] }) {
   let distance = Infinity;
   for (let i = 1; i < road.points.length; i++) {
     const [east, n] = road.points[i - 1];
@@ -87,9 +92,18 @@ export function buildTownRailRoute(grid: Terrain) {
     }
     return { ...platform, distance };
   }).sort((a, b) => a.distance - b.distance);
-  const stationApproaches = points.map((_, i) => stops.map(stop => {
-    const distance = Math.abs(i * step - stop.distance);
-    const approach = Math.max(0, Math.min(distance, length - distance) - stop.halfLength);
+  // Dock alignment changes horizontal chords after the timetable samples the spline.
+  const horizontalSpans = points.map((point, i) => {
+    const next = points[(i + 1) % count];
+    return Math.hypot(next.x - point.x, next.z - point.z);
+  });
+  const horizontalOffsets = [0];
+  for (const span of horizontalSpans) horizontalOffsets.push(horizontalOffsets.at(-1)! + span);
+  const horizontalLength = horizontalOffsets[count];
+  const heightStops = stops.map(stop => ({ stop, horizontalOffset: horizontalOffsets[Math.round(stop.distance / step)] }));
+  const stationApproaches = points.map((_, i) => heightStops.map(({ stop, horizontalOffset }) => {
+    const distance = Math.abs(horizontalOffsets[i] - horizontalOffset);
+    const approach = Math.max(0, Math.min(distance, horizontalLength - distance) - stop.halfLength);
     return { stop, approach };
   }));
   const minHeights = grounds.map((ground, i) => {
@@ -97,7 +111,7 @@ export function buildTownRailRoute(grid: Terrain) {
     const terrainEnvelope = ground + .62 + 5.7 * smooth(approach / 35);
     const point = points[i];
     // Reserve walking headroom through the overpass, including the sloping girder ends.
-    if (distanceToRoad(point.x, -point.z, stationRoad) <= stationRoad.width / 2 + 1) {
+    if (headroomRoads.some(road => distanceToRoad(point.x, -point.z, road) <= road.width / 2 + 1)) {
       return Math.max(terrainEnvelope, ground + 3.05);
     }
     return terrainEnvelope;
@@ -108,7 +122,8 @@ export function buildTownRailRoute(grid: Terrain) {
     for (let index = 1; index <= count * 2; index++) {
       const here = (direction * index + count * 2) % count;
       const previous = (here - direction + count) % count;
-      grades[here] = Math.max(grades[here], grades[previous] - maxGrade * step);
+      const span = horizontalSpans[direction > 0 ? previous : here];
+      grades[here] = Math.max(grades[here], grades[previous] - maxGrade * span);
     }
   }
   for (let i = 0; i < count; i++) {
@@ -217,9 +232,8 @@ function buildTrack(
       z: center.z - dx * normalScale * side,
     }));
     const margin = pad * Math.SQRT2 + .30;
-    if (footings.some(({ x, z }) =>
-      distanceToRoad(x, -z, bathRoad) < bathRoad.width / 2 + margin ||
-      distanceToRoad(x, -z, stationRoad) < stationRoad.width / 2 + margin)) return;
+    if (footings.some(({ x, z }) => footingKeepoutRoads.some(road =>
+      distanceToRoad(x, -z, road) < road.width / 2 + margin))) return;
     return { rise, width, pad, footings };
   }
   const extraSupports = new Set<number>();
@@ -455,7 +469,7 @@ function buildLandmarkPlatforms(
   const trim = '#483e40';
   const stone = '#637586';
   const warning = '#eac572';
-  const protectsRoads = (x: number, n: number) => [forestRoad, bathRoad, stationRoad].some(road =>
+  const protectsRoads = (x: number, n: number) => [forestRoad, bathRoad, ...headroomRoads].some(road =>
     distanceToRoad(x, n, road) < road.width / 2 + .58);
   for (const [i, platform] of orderedPlatforms.entries()) {
     const { x, n, ground, axis } = platform;
