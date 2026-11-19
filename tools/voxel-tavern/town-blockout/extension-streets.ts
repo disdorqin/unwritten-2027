@@ -5,6 +5,7 @@ import {
 import { canEnter, isWater, layout, riverX, type createTerrainGrid } from './terrain';
 import { districtParcels, districtStreets, extensionPlots, extensionRoads, memorialInfill } from './town-extension';
 import type { Box } from './landmark-kit';
+import { districtHousingCard, districtWindowPanes } from './district-housing';
 import type { TownSeat } from './town-activity';
 import { housePortalPlaque, type TownHousePortal } from './town-house-portals';
 import { locateZodiacDogMailbox, zodiacDogHouseId, type ZodiacDogMailbox } from './town-zodiac-dog';
@@ -119,6 +120,8 @@ export function buildExtensionStreets(
   const colliders: Box[] = [];
   const sites: BuildingSite[] = [];
   const housePortals: TownHousePortal[] = [];
+  const housingCards = new Map<string, ReturnType<typeof districtHousingCard>>();
+  const housingCardIndex: Record<District, number> = { forest: 0, memorial: 0, market: 0, lakeside: 0 };
   let dogMailbox: ZodiacDogMailbox | undefined;
   const establishedSites: BuildingSite[] = [];
   const infillSites: BuildingSite[] = [];
@@ -173,6 +176,7 @@ export function buildExtensionStreets(
     const w = turned ? site.d : site.w;
     const d = turned ? site.w : site.d;
     const colors = districtTints[district];
+    const card = districtHousingCard(district, housingCardIndex[district]++);
     const body = colors.body[variant % colors.body.length];
     const hot = ['#ffd3a4', '#f4b883', '#c7d9e5'][variant % 3];
     const dark = colors.dark;
@@ -189,8 +193,11 @@ export function buildExtensionStreets(
     const window = (u: number, y: number, v: number, width: number, height: number, facing: 1 | -1) => {
       put(u, y, v, width + .25, height + .20, .18, dark, false);
       put(u, y, v + facing * .113, width, height, .06, hot, false, 'lit');
-      put(u, y, v + facing * .152, .076, height, .062, dark);
-      put(u, y - height * .08, v + facing * .153, width, .067, .058, dark);
+      const panes = districtWindowPanes[card.window];
+      for (let pane = 1; pane < panes; pane++) {
+        put(u + (pane / panes - .5) * width, y, v + facing * .152, .076, height, .062, dark);
+      }
+      if (panes > 1) put(u, y - height * .08, v + facing * .153, width, .067, .058, dark);
       put(u, y - height / 2 - .15, v + facing * .14, width + .4, .13, .31, trim);
       put(u, y - height / 2 - .075, v + facing * .15, width + .29, .05, .25, blueSnow);
     };
@@ -206,21 +213,42 @@ export function buildExtensionStreets(
       const ridge = rawLog ? Math.min(4.8, w * .39) : Math.min(3.6, w * .32);
       const steps = rawLog ? 11 : 9;
       const eave = rawLog ? .74 : .45;
+      const transverse = card.roof === 'cross-gable';
+      const span = transverse ? d : w;
+      const depth = transverse ? w : d;
+      const hip = card.roof === 'hip' ? Math.min(d * .31, w * .26) : 0;
+      const roofBand = (u: number, y: number, v: number, span: number, h: number, run: number, tint: Tint) => {
+        if (transverse) put(v, y, u, run, h, span, tint, false);
+        else put(u, y, v, span, h, run, tint, false);
+      };
       for (let i = 0; i < steps; i++) {
         const t = i / steps;
         const level = height + (i + .5) * ridge / steps;
-        const measure = (w + 2 * eave) * (1 - t);
-        put(0, level, 0, measure, ridge / steps + .035, d + 2 * eave, colors.roof, false);
-        const band = Math.min(measure / 2, (w + 2 * eave) * .55 / steps);
+        const measure = (span + 2 * eave) * (1 - t);
+        const run = depth + 2 * eave - 2 * hip * Math.min(1, t * 2);
+        roofBand(0, level, 0, measure, ridge / steps + .035, run, colors.roof);
+        const band = Math.min(measure / 2, (span + 2 * eave) * .55 / steps);
         for (const side of [-1, 1]) {
-          put(side * (measure - band) / 2, level + ridge / steps * .5, 0, band, .10, d + 2 * eave - .14,
-            (variant + i) % 4 === 1 ? blueSnow : snow, false);
-          const inset = front + eave + .035;
-          put(0, level - .03, side * inset, Math.max(.3, measure - .46), ridge / steps + .02, .09,
-            rawLog ? trim : body);
+          roofBand(side * (measure - band) / 2, level + ridge / steps * .5, 0, band, .10, run - .14,
+            (variant + i) % 4 === 1 ? blueSnow : snow);
+          roofBand(0, level - .03, side * (run / 2 + .035), Math.max(.3, measure - .46),
+            ridge / steps + .02, .09, rawLog ? trim : body);
         }
       }
-      put(0, height + ridge + .08, 0, .24, .22, d + 2 * eave, snow, false);
+      roofBand(0, height + ridge + .08, 0, .24, .22, depth + 2 * eave - 2 * hip, snow);
+      if (transverse) {
+        const entranceSpan = Math.min(w * .41, d * .48);
+        const entranceRise = ridge * .62;
+        const crossRun = d * .42 + eave;
+        const crossN = front + eave - crossRun / 2;
+        const courses = 6;
+        for (let course = 0; course < courses; course++) {
+          const band = entranceSpan * (1 - course / courses);
+          const level = height + (course + .5) * entranceRise / courses;
+          put(0, level, crossN, band, entranceRise / courses + .035, crossRun, colors.roof, false);
+          put(0, level + entranceRise / courses / 2, crossN, band, .074, crossRun - .09, snow, false);
+        }
+      }
 
       if (rawLog) {
         for (let y = .47; y < height - .08; y += .41) {
@@ -234,7 +262,7 @@ export function buildExtensionStreets(
         }
         put(0, 2.79, front + .55, w * .90, .20, 1.54, colors.roof, false);
         put(0, 2.91, front + .54, w * .88, .08, 1.48, snow, false);
-        window(0, height + ridge * .29, front + eave + .08, 1.30, .94, 1);
+        if (!hip) window(0, height + ridge * .28, front + eave + .08, 1.30, .94, 1);
       } else {
         for (let y = .64; y < 1.93; y += .34) {
           for (let i = 0; i < 6; i++) {
@@ -244,7 +272,7 @@ export function buildExtensionStreets(
         }
         put(0, height + .18, front + .53, w * .76, .15, 1.38, trim, false);
         put(0, height + .28, front + .53, w * .71, .10, 1.25, snow, false);
-        window(0, height + ridge * .33, front + eave + .09, 2.1, .98, 1);
+        if (!hip) window(0, height + ridge * .28, front + eave + .09, Math.min(2.1, w * .19), .98, 1);
       }
 
       put(-w * .29, height + ridge * .73, -d * .19, .81, 2.68, .92, rawLog ? '#846b62' : colors.foundation, false);
@@ -253,23 +281,47 @@ export function buildExtensionStreets(
       put(0, height + .12, 0, w + .70, .31, d + .61, colors.roof, false);
       put(0, height + .31, 0, w + .53, .14, d + .47, snow, false);
       if (district === 'memorial') {
-        const side = variant % 2 ? 1 : -1;
-        put(w * .29 * side, height + .62, -d * .10, w * .37, .89, d * .61, '#677b88', false);
-        put(w * .29 * side, height + 1.13, -d * .10, w * .35, .13, d * .58, blueSnow, false);
+        if (card.roof === 'parapet') {
+          for (const side of [-1, 1]) {
+            put(0, height + .50, side * (front - .12), w + .25, .33, .31, dark, false);
+            put(side * (w / 2 - .12), height + .50, 0, .31, .33, d - .3, dark, false);
+            put(0, height + .67, side * (front - .12), w + .25, .08, .34, blueSnow, false);
+          }
+        } else {
+          const sides = card.roof === 'twin-clerestory' ? [-1, 1] : [-1];
+          for (const side of sides) {
+            const x = w * .29 * side;
+            put(x, height + .62, -d * .10, w * .37, .89, d * .61, '#677b88', false);
+            put(x, height + 1.13, -d * .10, w * .35, .13, d * .58, blueSnow, false);
+            window(x, height + .62, d * .205, w * .25, .42, 1);
+          }
+        }
         put(0, 2.96, front + .76, w * .95, .24, 2.02, '#596b7d', false);
         put(0, 3.105, front + .76, w * .92, .075, 1.96, snow, false);
         for (const sign of [-1, 1]) {
           put(sign * w * .45, 1.50, front + 1.56, .25, 3, .25, trim, false);
           put(sign * w * .25, height - .86, front + .04, w * .38, .30, .16, colors.foundation, false);
         }
-        for (let i = 0; i < 9; i++) put((i - 4) * w * .086, height + .50, front - .10, .15, .42, .29, trim);
+        if (card.roof !== 'parapet') {
+          for (let i = 0; i < 9; i++) put((i - 4) * w * .086, height + .50, front - .10, .15, .42, .29, trim);
+        }
       } else {
         put(0, height + .54, front, w, .66, .56, body, false);
         put(0, height + .92, front, w + .23, .19, .67, trim, false);
         put(0, height + 1.04, front, w + .16, .11, .63, snow, false);
-        for (let i = 0; i < 3; i++) {
-          put(0, height + 1.16 + i * .41, front, w * (.52 - i * .13), .45, .66, body, false);
-          put(0, height + 1.37 + i * .41, front, w * (.53 - i * .13), .11, .70, blueSnow);
+        if (card.roof === 'stepped-parapet') {
+          for (let i = 0; i < 3; i++) {
+            put(0, height + 1.16 + i * .41, front, w * (.52 - i * .13), .45, .66, body, false);
+            put(0, height + 1.37 + i * .41, front, w * (.53 - i * .13), .11, .70, blueSnow);
+          }
+        } else if (card.roof === 'pavilion') {
+          put(0, height + .70, 0, w * .54, .64, d * .55, dark, false);
+          for (let course = 0; course < 4; course++) {
+            const span = w * (.57 - course * .11);
+            const run = d * (.58 - course * .09);
+            put(0, height + 1.08 + course * .15, 0, span, .17, run, colors.roof, false);
+            put(0, height + 1.165 + course * .15, 0, span - .045, .06, run - .045, snow, false);
+          }
         }
         for (let y = .46; y < height; y += .32) {
           for (const f of [-1, 1]) put(0, y, f * (front + .035), w, .027, .052, dark);
@@ -314,6 +366,7 @@ export function buildExtensionStreets(
     const portal: TownHousePortal = { id: `district:${x}:${n}`, zone: district, x: doorX, n: doorN,
       ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(s, -c) };
     housePortals.push(portal);
+    housingCards.set(portal.id, card);
     if (portal.id === zodiacDogHouseId) {
       dogMailbox = locateZodiacDogMailbox(portal, grid.heightAt);
       const [east, feet, z] = dogMailbox.mailbox;
@@ -616,5 +669,5 @@ export function buildExtensionStreets(
     }
   }
 
-  return { group, update, counts, sites, seating, housePortals, dogMailbox };
+  return { group, update, counts, sites, seating, housePortals, housingCards, dogMailbox };
 }

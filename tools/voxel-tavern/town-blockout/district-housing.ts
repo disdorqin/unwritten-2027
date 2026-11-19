@@ -5,6 +5,35 @@ export type HousingStyle = 'alpine' | 'courtyard' | 'machiya' | 'shop';
 export type DistrictTheme = 'forest' | 'memorial' | 'market' | 'lakeside';
 export type CentralResidentialCard = 6 | 8 | 9 | 11 | 12 | 13 | 15 | 19 | 20;
 
+const districtHousingCards = {
+  forest: [
+    { roof: 'gable', window: 'lattice' },
+    { roof: 'hip', window: 'sash' },
+    { roof: 'cross-gable', window: 'casement' },
+  ],
+  memorial: [
+    { roof: 'clerestory', window: 'picture' },
+    { roof: 'twin-clerestory', window: 'sash' },
+    { roof: 'parapet', window: 'casement' },
+  ],
+  market: [
+    { roof: 'stepped-parapet', window: 'lattice' },
+    { roof: 'parapet', window: 'sash' },
+    { roof: 'pavilion', window: 'casement' },
+  ],
+  lakeside: [
+    { roof: 'hip', window: 'picture' },
+    { roof: 'gable', window: 'casement' },
+    { roof: 'cross-gable', window: 'sash' },
+  ],
+} as const;
+
+export function districtHousingCard<T extends DistrictTheme>(theme: T, variant: number): typeof districtHousingCards[T][number] {
+  return districtHousingCards[theme][Math.abs(Math.trunc(variant)) % districtHousingCards[theme].length];
+}
+
+export const districtWindowPanes = { picture: 1, sash: 2, casement: 3, lattice: 4 } as const;
+
 type Block = {
   color: string;
   center: [number, number, number];
@@ -49,7 +78,8 @@ const snow = '#e1ecf8';
 const shadedSnow = '#cfdfed';
 
 export function buildDistrictHousing(
-  style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme, centralCard?: CentralResidentialCard,
+  style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme,
+  centralCard?: CentralResidentialCard, cardVariant = variant,
 ): Group {
   const group = new Group();
   const pieces: Block[] = [];
@@ -103,7 +133,7 @@ export function buildDistrictHousing(
     for (let i = 1; i < lattice; i++) {
       local(beam, (i / lattice - .5) * size, 0, .218, frame === 'shoji' ? .13 : .077, tall, .045);
     }
-    local(beam, 0, -.04, .219, size, .083, .05);
+    if (lattice > 1) local(beam, 0, -.04, .219, size, .083, .05);
     if (frame === 'sliding') {
       local(trim, 0, tall / 2, .28, size + .12, .095, .10);
       local(trim, 0, -tall / 2, .28, size + .12, .095, .10);
@@ -199,7 +229,7 @@ export function buildDistrictHousing(
       const endInset = hippedEnd * Math.min(fraction * 2, 1);
       const courseRun = run + 2 * overhang - 2 * endInset;
       if (centralCard === undefined) {
-        runBlock(cladding, 0, y - .035, 0, fill, rise / bands + .025, run);
+        runBlock(cladding, 0, y - .035, 0, fill, rise / bands + .025, Math.min(run, courseRun));
         runBlock(tile, 0, y + .027, 0, a, rise / bands + .17, courseRun);
       } else {
         const edge = Math.min(a / 2, (span + 2 * overhang) / bands * .58);
@@ -320,8 +350,29 @@ export function buildDistrictHousing(
 
   // The four expansion elevations are rebuilt within the original lot envelope.
   // Every piece enters the existing opaque or emissive instance batch.
+  function districtSnowRoof(
+    roof: 'gable' | 'hip' | 'cross-gable', eave: number, rise: number, edge: number, cladding: string,
+    paneCount: number,
+  ) {
+    if (roof === 'cross-gable') {
+      gable(0, 0, d, w, eave, rise, 'x', edge, cladding);
+      const span = Math.min(w * .42, d * .49);
+      const run = d * .40;
+      const streetGable = front - run / 2;
+      gable(0, streetGable, span, run, eave, rise * .63, 'z', edge, cladding);
+      windowAt(0, eave + rise * .24, front + edge, span * .48, .82, 0, paneCount);
+    } else if (roof === 'hip') {
+      gable(0, 0, w, d, eave, rise, 'z', edge, cladding, Math.min(w * .26, d * .31));
+    } else {
+      gable(0, 0, w, d, eave, rise, 'z', edge, cladding);
+      windowAt(0, eave + rise * .29, front + edge, Math.min(1.90, w * .22), .89, 0, paneCount);
+    }
+  }
+
   function themedFacing(district: DistrictTheme) {
     const split = Math.abs(variant % 3);
+    const card = districtHousingCard(district, cardVariant);
+    const panes = districtWindowPanes[card.window];
     const eave = district === 'forest' ? 4.55 + split * .56
       : district === 'lakeside' ? 4.5 + split * .52
       : district === 'memorial' ? 4.62 + split * .68 : 5.5 + split * .4;
@@ -334,12 +385,23 @@ export function buildDistrictHousing(
     for (const facing of [1, 3] as const) {
       const x = (facing === 1 ? 1 : -1) * w / 2;
       for (const z of [-d * .25, d * .24]) {
-        windowAt(x, 2, z, Math.min(1.62, d * .22), 1.38, facing);
+        windowAt(x, 2, z, Math.min(1.62, d * .22), 1.38, facing, panes);
       }
     }
     for (const sign of [-1, 1]) {
-      windowAt(sign * w * .27, 2, back, Math.min(1.7, w * .24), 1.36, 2);
+      windowAt(sign * w * .27, 2, back, Math.min(1.7, w * .24), 1.36, 2, panes);
       lantern(sign * (entry / 2 + .58), 2.51, front + .4, .31);
+    }
+    const frontageX = w * .38;
+    if (district === 'forest') {
+      stackWood(-frontageX, front + .10, .19);
+      waterJar(frontageX, front + .10);
+    } else if (district === 'market') {
+      lowFence(-frontageX, front + .12);
+      waterJar(frontageX, front + .10);
+    } else {
+      lowFence(-frontageX, front + .12);
+      planter(frontageX, front + .10);
     }
 
     if (district === 'forest') {
@@ -356,21 +418,31 @@ export function buildDistrictHousing(
       slopedCanopy(0, front, porchWidth, 3.16, 1.05);
       for (const sign of [-1, 1]) {
         add(beam, sign * (porchWidth / 2 - .21), 1.64, front + .89, .24, 3.04, .24);
-        windowAt(sign * w * .288, 1.88, front, Math.min(1.9, w * .23), 1.4, 0);
+        windowAt(sign * w * .288, 1.88, front, Math.min(1.9, w * .23), 1.4, 0, panes);
       }
       const rise = Math.min(4.8, w * .41);
-      gable(0, 0, w, d, eave, rise, 'z', .72, trim);
-      windowAt(0, eave + rise * .29, front + .75, 1.27, .87, 0);
+      const { roof } = districtHousingCard('forest', cardVariant);
+      districtSnowRoof(roof, eave, rise, .72, trim, panes);
       chimney(-w * .23, eave + rise * .52, back * .42, 1.72);
     } else if (district === 'memorial') {
       // Concrete frames, a glazed cantilever, and an offset clerestory define the modern row.
       add(tile, 0, eave + .16, 0, w + .66, .34, d + .58);
       add(snow, 0, eave + .39, 0, w + .56, .13, d + .49);
-      const towerX = (split === 1 ? 1 : -1) * w * .24;
-      add(beam, towerX, eave + .83, -.12 * d, w * .38, .88, d * .58);
-      add(trim, towerX, eave + 1.34, -.12 * d, w * .40, .15, d * .60);
-      add(snow, towerX, eave + 1.46, -.12 * d, w * .37, .095, d * .56);
-      windowAt(towerX, eave + .83, d * .17, w * .25, .44, 0, 4);
+      if (card.roof === 'parapet') {
+        for (const side of [-1, 1]) {
+          add(beam, 0, eave + .51, side * (front - .12), w + .25, .34, .29);
+          add(shadedSnow, 0, eave + .70, side * (front - .12), w + .25, .06, .33);
+          add(beam, side * (w / 2 - .12), eave + .51, 0, .29, .34, d - .32);
+        }
+      } else {
+        const towers = card.roof === 'twin-clerestory' ? [-w * .24, w * .24] : [-w * .24];
+        for (const x of towers) {
+          add(beam, x, eave + .83, -.12 * d, w * .38, .88, d * .58);
+          add(trim, x, eave + 1.34, -.12 * d, w * .40, .15, d * .60);
+          add(snow, x, eave + 1.46, -.12 * d, w * .37, .095, d * .56);
+          windowAt(x, eave + .83, d * .17, w * .25, .44, 0, panes);
+        }
+      }
       const canopyWidth = w * .88;
       add(beam, 0, 3.31, front + .54, canopyWidth, .17, 1.15);
       add('#9fbaca', 0, 3.405, front + .53, canopyWidth - .17, .076, 1.00);
@@ -379,8 +451,8 @@ export function buildDistrictHousing(
       for (const sign of [-1, 1]) {
         const x = sign * w * .269;
         add(trim, sign * (w / 2 - .16), eave / 2, front + .10, .29, eave, .26);
-        windowAt(x, 1.84, front, glassWidth, 2.11, 0, 3);
-        windowAt(x, (eave + 3.44) / 2, front, glassWidth * .94, Math.min(1.38, eave - 3.5), 0, 4);
+        windowAt(x, 1.84, front, glassWidth, 2.11, 0, panes);
+        windowAt(x, (eave + 3.44) / 2, front, glassWidth * .94, Math.min(1.38, eave - 3.5), 0, panes);
       }
       add(beam, 0, eave - .14, front + .1, w + .07, .18, .23);
     } else if (district === 'market') {
@@ -400,12 +472,19 @@ export function buildDistrictHousing(
           }
         }
         add(shadedSnow, x, spring + radius * .68, front + .186, .30, .25, .35);
-        if (x) windowAt(x, 1.57, front, radius * 1.51, 1.22, 0, 3);
-        windowAt(x, eave - 1.23, front, Math.min(1.61, w * .18), 1.30, 0, 3);
+        if (x) windowAt(x, 1.57, front, radius * 1.51, 1.22, 0, panes);
+        windowAt(x, eave - 1.23, front, Math.min(1.61, w * .18), 1.30, 0, panes);
       }
       add(tile, 0, eave + .11, 0, w + .61, .28, d + .59);
       add(snow, 0, eave + .30, 0, w + .53, .11, d + .50);
-      for (let row = 0; row < 3; row++) {
+      if (card.roof === 'pavilion') {
+        const span = w * .55;
+        const run = d * .56;
+        add(beam, 0, eave + .60, 0, span, .50, run);
+        gable(0, 0, span, run, eave + .84, .66, 'z', .27, wall, run * .21);
+      }
+      const parapetCourses = card.roof === 'stepped-parapet' ? 3 : 1;
+      for (let row = 0; row < parapetCourses; row++) {
         const span = w * (.99 - row * .21);
         add(wall, 0, eave + .41 + row * .35, front - .06, span, .44, .51);
         add(trim, 0, eave + .65 + row * .35, front - .04, span + .14, .13, .61);
@@ -430,12 +509,12 @@ export function buildDistrictHousing(
         }
       }
       for (const sign of [-1, 1]) {
-        windowAt(sign * w * .272, 2.07, front, Math.min(2.64, w * .27), 2.43, 0, 3);
+        windowAt(sign * w * .272, 2.07, front, Math.min(2.64, w * .27), 2.43, 0, panes);
         add(trim, sign * w * .34, eave - .15, front + .11, w * .25, .16, .20);
       }
       const rise = Math.min(3.5, w * .285);
-      gable(0, 0, w, d, eave, rise, 'z', .48, wall);
-      windowAt(0, eave + rise * .28, front + .515, Math.min(2.38, w * .29), 1.05, 0, 3);
+      const { roof } = districtHousingCard('lakeside', cardVariant);
+      districtSnowRoof(roof, eave, rise, .48, wall, panes);
       chimney(-w * .24, eave + rise * .50, back * .44, 1.42);
     }
   }

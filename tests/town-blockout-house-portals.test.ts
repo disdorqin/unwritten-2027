@@ -114,6 +114,20 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   assert.equal(book.reduce((count, group) => count + group.rows.length, 0), 92);
   assert.ok(book.every(group => group.rows.length > 0 && group.rows.every(row => row.door.zone === group.zone)));
   t.diagnostic(`百门册 ${book.map(group => group.label + ' ' + group.rows.length).join(' / ')}`);
+  const oldCards = district.housePortals.filter(({ zone }) => zone !== 'central');
+  assert.equal(district.housingCards.size, oldCards.length);
+  assert.equal(extensions.housingCards.size, extensions.housePortals.length);
+  for (const [houses, cards] of [[oldCards, district.housingCards], [extensions.housePortals, extensions.housingCards]] as const) {
+    for (const zone of ['forest', 'memorial', 'market', 'lakeside'] as const) {
+      const local = houses.filter(house => house.zone === zone).map(({ id }) => {
+        const card = cards.get(id);
+        assert.ok(card, `${id} must have a physical roof and window card`);
+        return card;
+      });
+      assert.equal(new Set(local.map(({ roof }) => roof)).size, 3, `${zone} roof forms`);
+      assert.equal(new Set(local.map(({ window }) => window)).size, 3, `${zone} window forms`);
+    }
+  }
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   const [west, south, plazaEast, plazaNorth] = layout.plaza.bounds;
   const moved = district.relocations.size === 13

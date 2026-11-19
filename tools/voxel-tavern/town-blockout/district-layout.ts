@@ -2,7 +2,9 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, Object3D,
 } from 'three';
-import { buildDistrictHousing, type CentralResidentialCard, type DistrictTheme } from './district-housing';
+import {
+  buildDistrictHousing, districtHousingCard, type CentralResidentialCard, type DistrictTheme,
+} from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import type { TownHousePortal } from './town-house-portals';
@@ -91,6 +93,7 @@ export function addDistrictHousing(
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
   const rejectedHomes: HousingRejection[] = [];
+  const housingCards = new Map<string, ReturnType<typeof districtHousingCard>>();
   const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
@@ -186,6 +189,7 @@ export function addDistrictHousing(
   }
 
   for (const { theme, styles, points } of neighborhoods) {
+    let housingCardIndex = 0;
     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
       const address = `${sourceEast}:${sourceNorth}`;
       const id = `old-town:${address}`;
@@ -243,7 +247,8 @@ export function addDistrictHousing(
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
       const centralCard = theme === undefined ? plazaResidentialCards.get(address) : undefined;
-      const model = buildDistrictHousing(style, w, d, site.variant, theme, centralCard);
+      const cardVariant = housingCardIndex++;
+      const model = buildDistrictHousing(style, w, d, site.variant, theme, centralCard, cardVariant);
       model.position.set(x, level, -n);
       model.rotation.y = angle;
       const plinth = new Mesh(foundation, stone);
@@ -265,6 +270,7 @@ export function addDistrictHousing(
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
+      if (theme) housingCards.set(id, districtHousingCard(theme, cardVariant));
       housePortals.push({ id, zone: theme ?? 'central', x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
@@ -338,6 +344,6 @@ export function addDistrictHousing(
       return along >= start && along <= end && Math.abs(offsetX * dn - offsetN * dx) <= 1.08;
     });
   }
-  return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, keepClear, setPanorama, sweptAt,
+  return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, housingCards, keepClear, setPanorama, sweptAt,
     blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }
