@@ -35,6 +35,7 @@ type ReadBubble = (id: number, now: number) => TownChatBubble | undefined;
 export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): {
   render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, view?: PerspectiveCamera, showNames?: boolean): void;
   clear(): void;
+  setHighlight(id: number | null): void;
 } {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
   mesh.name = 'town-presence-avatars';
@@ -74,6 +75,8 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
   const labelX = new Int32Array(capacity).fill(-1);
   const labelY = new Int32Array(capacity).fill(-1);
   const labelNames = new Array<string>(capacity);
+  const labelHolder = new Array<boolean>(capacity).fill(false);
+  let highlightId: number | null = null;
   let shown = 0;
 
   function finishLabels(count: number) {
@@ -189,6 +192,11 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
         labelNames[shownNext] = actor.name;
         label.textContent = actor.name;
       }
+      const holder = highlightId !== null && actor.id === highlightId;
+      if (labelHolder[shownNext] !== holder) {
+        labelHolder[shownNext] = holder;
+        label.classList.toggle('is-bell-holder', holder);
+      }
       const px = Math.round((1 + head.x) * halfWidth);
       const py = Math.round((1 - head.y) * halfHeight);
       const moved = px !== labelX[shownNext] || py !== labelY[shownNext];
@@ -212,5 +220,8 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera): 
     finishLabels(shownNext);
   }
 
-  return { render, clear };
+  return {
+    render, clear,
+    setHighlight(id: number | null) { highlightId = id; },
+  };
 }
