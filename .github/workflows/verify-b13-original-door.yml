@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/verify-b13-original-door.yml'
       - 'tools/verify-b13-original-door.mjs'
+      - 'tools/b13-browser-fixture.mjs'
+      - 'tools/verify-b13-door-book.mjs'
+      - 'tools/measure-jx1-door-thresholds.mjs'
 
 permissions:
   contents: read
@@ -15,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      B13_BASELINE: e80f9835d765ba10f1fce931c32e1dd8edc739f9
+      B13_BASELINE: 75859a094757c5dcee8b874eef86ec37f4204907
     steps:
       - name: Check out the evidence runner
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -23,7 +26,7 @@ jobs:
           persist-credentials: false
           path: ci
 
-      - name: Check out the existing integrated B13 implementation
+      - name: Check out the exact release-source baseline
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ env.B13_BASELINE }}
@@ -49,9 +52,20 @@ jobs:
         working-directory: town
         run: node --import tsx --test tests/town-blockout-shared-home.test.ts tests/town-blockout-house-portals.test.ts
 
+      - name: Measure the existing market door thresholds
+        working-directory: town
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/b13-proof"
+          node --import tsx ../ci/tools/measure-jx1-door-thresholds.mjs . > "$RUNNER_TEMP/b13-proof/jx1-door-thresholds.json"
+
       - name: Run one keyboard session per original door
         shell: bash
         run: node ci/tools/verify-b13-original-door.mjs town "$RUNNER_TEMP/b13-proof"
+
+      - name: Verify alternate door travel and reduced motion
+        shell: bash
+        run: node ci/tools/verify-b13-door-book.mjs town "$RUNNER_TEMP/b13-proof/door-book"
 
       - name: Upload keyboard and rendered evidence
         if: always()
