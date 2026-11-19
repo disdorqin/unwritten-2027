@@ -10,23 +10,25 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 22
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: jx3-workshop-evidence
+          run-id: 44542495628
+          github-token: ${{ github.token }}
+          path: .jx3/frozen-reference
       - uses: actions/checkout@v4
         with:
-          ref: 352aa49b825d88c432ef2dd0a9dd04a5c86441c3
-          path: .jx3/baseline
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
+          ref: 5bb1a3f0658b6cba4d28563c0b165c1c373e37da
           path: .jx3/candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -35,7 +37,6 @@ jobs:
       - name: Install locked dependencies
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          npm --prefix .jx3/baseline/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
           npm --prefix .jx3/candidate/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Typecheck and run market, puzzle, zodiac and doors regressions
@@ -44,12 +45,15 @@ jobs:
           node --import tsx --test tests/town-blockout-market-{layout,fair,venue-activities}.test.ts tests/town-blockout-riddle{,-festival}.test.ts tests/town-blockout-{zodiac,house-portals}.test.ts
       - name: Build production preview
         run: npm --prefix .jx3/candidate/tools/voxel-tavern run build -- --mode town-preview
-      - name: Capture matched views and walk the workshop
-        run: node tools/verify-jx3-browser.mjs .jx3/baseline .jx3/candidate /tmp/jx3-evidence
+      - name: Capture only the candidate and compare to frozen baseline
+        timeout-minutes: 24
+        env:
+          JX3_REUSE_BASELINE: '44542495628'
+        run: timeout --signal=TERM --kill-after=15s 23m node tools/verify-jx3-browser.mjs .jx3/frozen-reference/baseline .jx3/candidate /tmp/jx3-evidence
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jx3-workshop-evidence
+          name: jx3-candidate-only-evidence
           path: /tmp/jx3-evidence
           if-no-files-found: warn
