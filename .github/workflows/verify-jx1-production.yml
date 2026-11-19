@@ -14,8 +14,13 @@ permissions:
 jobs:
   doorway:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        plan: [cardinal-walk-plan, nine-home-walk-plan]
     env:
+      JX1_PLAN: ${{ matrix.plan }}
       JX1_RUNTIME_COMMIT: 2dff658fd664bba873f4ad62293e1f3e1f8d1174
       JX1_PATCH_PATH: docs/交流区/GPT/JX-1协作-2026-11-19/b04-production-on-2dff658.patch
     steps:
@@ -72,16 +77,16 @@ jobs:
         run: |
           node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . candidate "$RUNNER_TEMP/jx1-formal/static-baseline.json" --require-all --known-book-five > "$RUNNER_TEMP/jx1-formal/all-house-sweeps.json"
 
-      - name: Verify four staged physical tours and the shared keyboard and touch menu
+      - name: Verify the staged or continuous physical tour and touch input
         shell: bash
         run: |
-          node ci/tools/jx1-formal/verify-jx1-production.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" ci/tools/jx1-formal/cardinal-walk-plan.json "$RUNNER_TEMP/jx1-formal/cardinal-walk"
+          node ci/tools/jx1-formal/verify-jx1-production.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" "ci/tools/jx1-formal/$JX1_PLAN.json" "$RUNNER_TEMP/jx1-formal/$JX1_PLAN"
 
       - name: Upload registry, input and rendered proof
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: jx1-formal-doorways
+          name: jx1-formal-${{ matrix.plan }}
           path: ${{ runner.temp }}/jx1-formal
           retention-days: 14
           if-no-files-found: warn

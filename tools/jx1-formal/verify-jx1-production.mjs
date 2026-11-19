@@ -28,7 +28,7 @@ async function frame(page, expected = {}, limit = timeout) {
     const pose = window.__jx1ProductionProof?.sample();
     if (!pose?.lastFrame?.calls || !pose?.lastFrame?.triangles || !pose.walking || pose.travelling) return;
     if (pose.frames <= (expected.after ?? 0)) return;
-    for (const key of ['mask', 'home', 'menuId', 'dialogOpen', 'canvasFocused', 'canMove']) {
+    for (const key of ['mask', 'home', 'menuId', 'dialogOpen', 'canvasFocused', 'canMove', 'segmentRejected']) {
       if (key in expected && pose[key] !== expected[key]) return;
     }
     if (expected.action && !pose.action.includes(expected.action)) return;
@@ -164,7 +164,9 @@ async function moveTo(session, target, options = {}) {
   try {
     end = await beginForward(session);
     if (options.block) {
-      observed = await frame(page, { after: before.frames + 6, home: before.home, mask: before.mask });
+      observed = await frame(page, {
+        after: before.frames, home: before.home, mask: before.mask, segmentRejected: true,
+      }, target.timeout ?? 12_000);
     } else {
       observed = await frame(page, {
         after: before.frames, home: before.home, mask: before.mask, near: target, tolerance,

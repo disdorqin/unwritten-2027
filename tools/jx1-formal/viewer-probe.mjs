@@ -91,6 +91,7 @@ if (${guard}) {
     endSegment: () => { const frames = jx1Segment; jx1Segment = undefined; return frames; },
     events: () => events.slice(),
     sample: () => ({ ...jx1Pose(), frames: jx1Frame, lastFrame: jx1LastFrame,
+      segmentRejected: Boolean(jx1Segment?.some(move => move.accepted === false)),
       mask: camera.layers.mask, home: homeReturn?.id ?? null, walking, travelling: houseDoorTravel,
       canMove: moveAllowed(), canvasFocused: document.activeElement === renderer.domElement,
       action: actionButton.hidden ? '' : actionButton.textContent,
