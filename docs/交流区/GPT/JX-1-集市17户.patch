@@ -226,10 +226,10 @@ index 0000000..30adca7
 +}
 diff --git a/tools/voxel-tavern/town-blockout/market-home-interior.ts b/tools/voxel-tavern/town-blockout/market-home-interior.ts
 new file mode 100644
-index 0000000..a13d4f8
+index 0000000..a041ae6
 --- /dev/null
 +++ b/tools/voxel-tavern/town-blockout/market-home-interior.ts
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,163 @@
 +import {
 +  BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight,
 +} from 'three';
@@ -313,22 +313,42 @@ index 0000000..a13d4f8
 +  }
 +  wallPart(0, doorHeight, halfDepth, doorWidth, ceiling - doorHeight, framing, beam);
 +
-+  const windowWidth = 1.45;
-+  const windowX = (arrangement % 2 ? 1 : -1) * .95;
-+  const windowMin = windowX - windowWidth / 2;
-+  const windowMax = windowX + windowWidth / 2;
++  // Match the rear pair in district-housing.ts themedFacing at the surveyed shell width.
++  const windowWidth = Math.min(1.7, width * .24);
++  const windowOffset = Math.min(width * .27, halfWidth - windowWidth / 2 - .18);
++  const windowY = 2;
++  const windowHeight = 1.36;
++  const windowBottom = windowY - windowHeight / 2;
++  const windowTop = windowY + windowHeight / 2;
 +  const windowZ = -halfDepth;
-+  wallPart((-halfWidth + windowMin) / 2, 0, windowZ, windowMin + halfWidth, ceiling, framing);
-+  wallPart((windowMax + halfWidth) / 2, 0, windowZ, halfWidth - windowMax, ceiling, framing);
-+  wallPart(windowX, 0, windowZ, windowWidth, .96, framing);
-+  wallPart(windowX, 2.52, windowZ, windowWidth, ceiling - 2.52, framing);
-+  put(windowX, .91, windowZ + .07, windowWidth + .22, .12, .31, trim);
-+  put(windowX, 2.46, windowZ + .055, windowWidth + .18, .10, .18, beam);
-+  glow.push({ x: windowX, y: 1.02, z: windowZ, width: windowWidth, height: 1.44, depth: .035, color: '#dcc297' });
-+  for (let column = 0; column <= 3; column++) {
-+    put(windowMin + column * windowWidth / 3, .98, windowZ + .055, .065, 1.57, .11, beam);
++  function rearWallBetween(left: number, right: number) {
++    put((left + right) / 2, 0, windowZ, right - left, ceiling, framing, wall);
 +  }
-+  put(windowX, 1.66, windowZ + .055, windowWidth, .07, .11, beam);
++
++  // Glazed openings are visual; the rear wall remains a closed player boundary.
++  colliders.push({
++    min: [-halfWidth, 0, windowZ - framing / 2],
++    max: [halfWidth, ceiling, windowZ + framing / 2],
++  });
++  let wallStart = -halfWidth;
++  for (const windowX of [-windowOffset, windowOffset]) {
++    const windowMin = windowX - windowWidth / 2;
++    const windowMax = windowX + windowWidth / 2;
++    rearWallBetween(wallStart, windowMin);
++    put(windowX, 0, windowZ, windowWidth, windowBottom, framing, wall);
++    put(windowX, windowTop, windowZ, windowWidth, ceiling - windowTop, framing, wall);
++    put(windowX, windowBottom - .19, windowZ + .07, windowWidth + .36, .14, .31, trim);
++    put(windowX, windowTop - .015, windowZ + .055, windowWidth + .18, .10, .18, beam);
++    glow.push({ x: windowX, y: windowBottom, z: windowZ, width: windowWidth,
++      height: windowHeight, depth: .035, color: '#dcc297' });
++    for (let column = 0; column <= 3; column++) {
++      put(windowMin + column * windowWidth / 3, windowBottom - .025,
++        windowZ + .055, .065, windowHeight + .05, .11, beam);
++    }
++    put(windowX, windowY - .08, windowZ + .055, windowWidth, .083, .11, beam);
++    wallStart = windowMax;
++  }
++  rearWallBetween(wallStart, halfWidth);
 +  put(0, ceiling, 0, halfWidth * 2 + .3, .16, halfDepth * 2 + .28, beam);
 +  for (const z of [-halfDepth * .72, 0, halfDepth * .72]) {
 +    put(0, ceiling - .21, z, halfWidth * 2, .24, .19, trim);
@@ -354,7 +374,7 @@ index 0000000..a13d4f8
 +  }
 +  const batches = [batch(solid, wood), batch(glow, warmGlass)];
 +  const light = new PointLight('#ffce8e', 18, 12, 2);
-+  light.position.set(windowX, 2.42, windowZ + .64);
++  light.position.set(0, 2.42, windowZ + .64);
 +  group.add(light);
 +  group.userData = { colliders, floors: [floor] };
 +  let released = false;
@@ -733,15 +753,16 @@ index 0000000..60331e7
 +Object.assign(window, { __marketHomesReview: { ids: marketHomeIds, select, capture, walk, stats, snapshot } });
 diff --git a/tests/town-blockout-market-homes.test.ts b/tests/town-blockout-market-homes.test.ts
 new file mode 100644
-index 0000000..ad62cf1
+index 0000000..9d6a7b0
 --- /dev/null
 +++ b/tests/town-blockout-market-homes.test.ts
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,78 @@
 +import assert from 'node:assert/strict';
 +import test from 'node:test';
-+import { Group, type InstancedMesh } from 'three';
++import { Group, Matrix4, type InstancedMesh } from 'three';
++import { buildDistrictHousing } from '../tools/voxel-tavern/town-blockout/district-housing.ts';
 +import { buildMarketHomeInterior, marketHomeIds } from '../tools/voxel-tavern/town-blockout/market-home-interior.ts';
-+import { marketHomeWalkRoute, sampleMarketHomeWalk } from '../tools/voxel-tavern/town-blockout/market-home-walk.ts';
++import { canStandInMarketHome, marketHomeWalkRoute, sampleMarketHomeWalk } from '../tools/voxel-tavern/town-blockout/market-home-walk.ts';
 +
 +test('the 17 original market doors have distinct furnished rooms and continuous local return loops', () => {
 +  assert.equal(marketHomeIds.length, 17);
@@ -763,6 +784,39 @@ index 0000000..ad62cf1
 +    }
 +  }
 +  assert.equal(signatures.size, 17);
++});
++
++test('the rear glazing matches the market shell and keeps the rear boundary closed', () => {
++  function glazing(mesh: InstancedMesh, wallZ: number) {
++    const matrix = new Matrix4();
++    const windows = [];
++    for (let index = 0; index < mesh.count; index++) {
++      mesh.getMatrixAt(index, matrix);
++      const { elements } = matrix;
++      if (Math.abs(elements[14] - wallZ) < 1e-5) {
++        windows.push([elements[12], elements[13], elements[0], elements[5]]);
++      }
++    }
++    return windows.sort(([left], [right]) => left - right);
++  }
++
++  // Narrowest and widest surveyed JX-1 shells.
++  for (const [width, depth] of [[9.2, 8.1], [15.5, 11.85]]) {
++    const shell = buildDistrictHousing('shop', width, depth, 137, 'market');
++    const room = buildMarketHomeInterior(marketHomeIds[0], width, depth);
++    try {
++      const outside = glazing(shell.children[1] as InstancedMesh, -depth / 2 - .17);
++      const inside = glazing(room.group.children[1] as InstancedMesh, -room.halfDepth);
++      assert.equal(outside.length, 2);
++      assert.deepEqual(inside, outside);
++      for (const [x] of inside) {
++        assert.equal(canStandInMarketHome(x, -room.halfDepth + .28, room.colliders,
++          room.halfWidth, room.halfDepth), false);
++      }
++    } finally {
++      room.dispose();
++    }
++  }
 +});
 +
 +test('a selected market room releases its geometry and leaves other scenes mounted', () => {

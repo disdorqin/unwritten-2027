@@ -10,7 +10,7 @@
  import {
    buildMarketHomeFurnishings, type MarketHomePiece, type MarketHomeTheme,
  } from './market-home-furnishings';
-@@ -29,7 +30,16 @@
+@@ -29,7 +30,16 @@ const profiles = {
  export const marketHomeIds = Object.keys(profiles) as (keyof typeof profiles)[];
  export const marketHomeDoorHalfWidth = .65;
  
@@ -28,7 +28,7 @@
    if (!Object.hasOwn(profiles, id)) throw new RangeError('The door is outside the JX-1 roster.');
    if (![width, depth].every(value => Number.isFinite(value) && value > 0)) {
      throw new RangeError('Market homes need the surveyed shell dimensions.');
-@@ -51,11 +61,14 @@
+@@ -51,11 +61,14 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
    const framing = .18;
    const doorWidth = 2 * marketHomeDoorHalfWidth;
    const doorHeight = 2.2;
@@ -46,7 +46,7 @@
      colliders.push({
        min: [x - width / 2, y, z - depth / 2],
        max: [x + width / 2, y + height, z + depth / 2],
-@@ -69,8 +82,8 @@
+@@ -69,8 +82,8 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
    for (let row = 0; row < plankCount; row++) {
      const z = -halfDepth + (row + .5) * plankDepth;
      const cut = (row % 4 - 1.5) * .38;
@@ -57,20 +57,40 @@
    }
    for (const sign of [-1, 1]) {
      wallPart(sign * (halfWidth + framing / 2), 0, 0, framing, ceiling, 2 * halfDepth + framing);
-@@ -92,9 +105,9 @@
-   wallPart(windowX, 2.52, windowZ, windowWidth, ceiling - 2.52, framing);
-   put(windowX, .91, windowZ + .07, windowWidth + .22, .12, .31, trim);
-   put(windowX, 2.46, windowZ + .055, windowWidth + .18, .10, .18, beam);
--  glow.push({ x: windowX, y: 1.02, z: windowZ, width: windowWidth, height: 1.44, depth: .035, color: '#dcc297' });
--  for (let column = 0; column <= 3; column++) {
--    put(windowMin + column * windowWidth / 3, .98, windowZ + .055, .065, 1.57, .11, beam);
-+  glow.push({ x: windowX, y: 1.02, z: windowZ, width: windowWidth, height: 1.44, depth: .035, color: windowFinish.tint });
-+  for (let column = 0; column <= windowFinish.panes; column++) {
-+    put(windowMin + column * windowWidth / windowFinish.panes, .98, windowZ + .055, .065, 1.57, .11, beam);
+@@ -90,7 +103,7 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
+   const windowTop = windowY + windowHeight / 2;
+   const windowZ = -halfDepth;
+   function rearWallBetween(left: number, right: number) {
+-    put((left + right) / 2, 0, windowZ, right - left, ceiling, framing, wall);
++    put((left + right) / 2, 0, windowZ, right - left, ceiling, framing, wall, 'plaster');
    }
-   put(windowX, 1.66, windowZ + .055, windowWidth, .07, .11, beam);
-   put(0, ceiling, 0, halfWidth * 2 + .3, .16, halfDepth * 2 + .28, beam);
-@@ -106,24 +119,30 @@
+ 
+   // Glazed openings are visual; the rear wall remains a closed player boundary.
+@@ -103,17 +116,17 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
+     const windowMin = windowX - windowWidth / 2;
+     const windowMax = windowX + windowWidth / 2;
+     rearWallBetween(wallStart, windowMin);
+-    put(windowX, 0, windowZ, windowWidth, windowBottom, framing, wall);
+-    put(windowX, windowTop, windowZ, windowWidth, ceiling - windowTop, framing, wall);
++    put(windowX, 0, windowZ, windowWidth, windowBottom, framing, wall, 'plaster');
++    put(windowX, windowTop, windowZ, windowWidth, ceiling - windowTop, framing, wall, 'plaster');
+     put(windowX, windowBottom - .19, windowZ + .07, windowWidth + .36, .14, .31, trim);
+     put(windowX, windowTop - .015, windowZ + .055, windowWidth + .18, .10, .18, beam);
+     glow.push({ x: windowX, y: windowBottom, z: windowZ, width: windowWidth,
+-      height: windowHeight, depth: .035, color: '#dcc297' });
+-    for (let column = 0; column <= 3; column++) {
+-      put(windowMin + column * windowWidth / 3, windowBottom - .025,
++      height: windowHeight, depth: .035, color: windowFinish.tint });
++    for (let column = 0; column <= windowFinish.panes; column++) {
++      put(windowMin + column * windowWidth / windowFinish.panes, windowBottom - .025,
+         windowZ + .055, .065, windowHeight + .05, .11, beam);
+     }
+-    put(windowX, windowY - .08, windowZ + .055, windowWidth, .083, .11, beam);
++    if (windowFinish.panes > 1) put(windowX, windowY - .08, windowZ + .055, windowWidth, .083, .11, beam);
+     wallStart = windowMax;
+   }
+   rearWallBetween(wallStart, halfWidth);
+@@ -126,24 +139,30 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
    const geometry = new BoxGeometry(1, 1, 1);
    const wood = new MeshLambertMaterial();
    const warmGlass = new MeshBasicMaterial();
@@ -90,7 +110,7 @@
 +      paint.set(color);
 +      if (bakeWarmth) {
 +        // Keep the window wash on the existing solid batch; moving or switching rooms changes no scene lights.
-+        const distanceSquared = (x - windowX) ** 2 + (y + height / 2 - 1.7) ** 2 + (z - windowZ) ** 2;
++        const distanceSquared = (Math.abs(x) - windowOffset) ** 2 + (y + height / 2 - windowY) ** 2 + (z - windowZ) ** 2;
 +        paint.lerp(warmTint, .21 / (1 + distanceSquared * .28));
 +      }
 +      mesh.setColorAt(index, paint);
@@ -101,13 +121,13 @@
    }
 -  const batches = [batch(solid, wood), batch(glow, warmGlass)];
 -  const light = new PointLight('#ffce8e', 18, 12, 2);
--  light.position.set(windowX, 2.42, windowZ + .64);
+-  light.position.set(0, 2.42, windowZ + .64);
 -  group.add(light);
 +  const batches = [batch(solid, wood, true), batch(glow, warmGlass, false)];
    group.userData = { colliders, floors: [floor] };
    let released = false;
    return {
-@@ -137,7 +156,6 @@
+@@ -157,7 +176,6 @@ export function buildMarketHomeInterior(id: string, width: number, depth: number
        geometry.dispose();
        wood.dispose();
        warmGlass.dispose();
