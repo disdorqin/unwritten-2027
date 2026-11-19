@@ -65,7 +65,7 @@ test('the registered walk approaches and cloud outlooks are clear in the actual 
     const bridge = model.getObjectByName('trail-approach') as Mesh | undefined;
     assert.ok(bridge?.isMesh, `${id} has an approach board`);
     bridge.geometry.computeBoundingBox();
-    const board = bridge.geometry.boundingBox!;
+    const board: Box3 = bridge.geometry.boundingBox!;
     assert.ok(bridge.position.z + board.min.z <= localApproach.z, `${id} board reaches the trail edge`);
     assert.ok(Math.abs(bridge.position.z + board.max.z + depth / 2) < tolerance,
       `${id} board reaches the back of the deck`);
@@ -74,8 +74,9 @@ test('the registered walk approaches and cloud outlooks are clear in the actual 
       const [left, right] = site.approachEdgeHeights;
       const roadHeight = left + (right - left) * across;
       for (const along of [.01, .99]) {
-        const z = bridge.position.z + board.min.z + (board.max.z - board.min.z) * along;
-        const hit = rayBetween(model, world(x, .3, z), world(x, -.25, z))[0];
+        const z: number = bridge.position.z + board.min.z + (board.max.z - board.min.z) * along;
+        const hit: ReturnType<typeof rayBetween>[number] | undefined =
+          rayBetween(model, world(x, .3, z), world(x, -.25, z))[0];
         const expected = roadHeight + (height - roadHeight) * along;
         assert.ok(hit?.object === bridge && Math.abs(hit.point.y - expected) < tolerance,
           `${id} board joins the registered trail crossfall to the level deck`);

@@ -16,6 +16,7 @@ const frozenReference = process.env.JX3_REUSE_BASELINE === '44542495628' ? {
 const viewSize = { width: 1000, height: 650 };
 const frozenClock = Date.parse('2026-12-31T14:00:00+08:00');
 const frameTimeout = 120_000;
+const pairedWeather = ['weatherTier', 'snowIntensity', 'snowCover', 'fogNear', 'fogFar'];
 const viewportOptions = { viewport: viewSize, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'zh-CN' };
 const exteriorTarget = [126, 13, -115];
 const outside = [
@@ -378,7 +379,7 @@ try {
     const item = after.screenshots.find(image => image.id === old.id && image.group === 'exterior');
     assert.ok(item, `Missing candidate exterior ${old.id}`);
     assert.ok(matchCamera(item.pose.camera, old.pose.camera), `Camera mismatch at ${old.id}`);
-    for (const field of ['weatherTier', 'snowIntensity', 'snowCover', 'fogNear', 'fogFar']) {
+    for (const field of pairedWeather) {
       assert.equal(item.frames.at(-1)[field], old.frames.at(-1)[field], `${field} mismatch at ${old.id}`);
     }
     return { id: old.id, baseline: old.frames.at(-1), candidate: item.frames.at(-1) };
@@ -403,6 +404,9 @@ try {
   assert.equal(after.walkError, undefined, after.walkError);
   assert.equal(details.length, 4, 'The baseline needs all four interior views');
   assert.ok(details.every(view => view.matchedCamera), 'The candidate needs all four matched interior views');
+  for (const view of details) {
+    for (const field of pairedWeather) assert.equal(view.candidate[field], view.baseline[field], `${field} mismatch at ${view.id}`);
+  }
 } finally {
   await browser.close();
 }
