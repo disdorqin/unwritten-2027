@@ -840,6 +840,7 @@ export function createTownPresence(
     },
     selfId: () => joinedId,
     playerName: () => joinedName ?? getName(),
+    townRoster: (): readonly string[] | undefined => joinedId !== null && joinedName ? [joinedName, ...roster.values()] : undefined,
     onlineThroneOwned: () => iceThroneSupported ? crownedId !== null && crownedId === joinedId : undefined,
     remoteCrown: () => crownedId === null ? undefined : renderList.find(actor => actor.id === crownedId),
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },

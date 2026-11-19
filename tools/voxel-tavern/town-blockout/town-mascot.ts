@@ -1,5 +1,4 @@
 import { Color, Matrix4, Object3D, type InstancedMesh } from 'three';
-import { layout } from './terrain';
 import type { MascotFollowPoint } from './mascot-follow';
 import { isSharedHomePosition, sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
@@ -16,10 +15,9 @@ type GroundAt = (east: number, north: number) => number | undefined;
 const wool = '#fff1d9', shadedWool = '#dfc6a4', gold = '#e9aa3d';
 const scarf = '#ad3645', hoof = '#302b35', eye = '#191b23';
 const torso = 0, head = 1, tail = 2, bell = 3, frontLeftLeg = 4;
-const [west, , , north] = layout.plaza.bounds;
 
-// The tree trunk sits west of the wish board anchor.
-export const mascotHome = [west + 9.25, north - 2.75] as const;
+// The tree and the mascot's corner stay in place when the plaza expands.
+export const mascotHome = [200.25, 209.25] as const;
 const heart = [232, 190] as const;
 const marketGate = [154, 97.9] as const;
 const marketApproach = [[191, 181], [172, 175], [151, 156], [127, 140], [108, 114],

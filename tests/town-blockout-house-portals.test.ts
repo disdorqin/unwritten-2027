@@ -18,13 +18,16 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   const landscape = new Group();
   const grid = createTerrainGrid();
   const track = createTownRailway(grid);
-  // Only the street lamp sprite texture needs a DOM canvas during geometry construction.
+  // Street lamp glows and the expanded plaza nameplate need an offscreen canvas.
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: { createElement: () => ({ getContext: () => ({
       createRadialGradient: () => ({ addColorStop() {} }),
       fillRect() {},
+      strokeRect() {},
+      fillText() {},
+      drawImage() {},
     }) }) },
   });
   let scenery: ReturnType<typeof addScenery>;

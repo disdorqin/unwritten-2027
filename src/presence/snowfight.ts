@@ -43,6 +43,9 @@ const RAIL_PLATFORMS: readonly (readonly unknown[])[] = [[473.5,224,24,"north"],
 const DOOR_POINTS: readonly (readonly number[])[] = [[226,216],[159,221],[264,202],[337,262.375],[378,306],[101,261],[117.5,115],[154,95],[365.76,96],[408,84],[238,164]];
 const INTERIOR_RECTS: readonly (readonly number[])[] = [[226,223,34,14],[159,230,22,18],[264,210,16,16],[337,277,63,42.75],[378,316,34,20],[91,271,30,20],[126,115,17,24],[154,105,36,20],[372,96,13,20],[408,78,12,12],[80,416,9,9],[94,431,10,9],[76,449,11,10],[104,458,10,10],[92,477,12,10],[125,470,13,11],[134,436,10,9],[145,467,10,9],[151,493,11,10],[163,441,13,10],[168,489,10,9],[187,485,10,9],[194,453,12,11],[211,491,11,9],[410,343,11,10],[421,363,15,11],[441,381,14,12],[462,420,13,10],[479,398,16,12],[489,438,11,10],[502,401,11,10],[520,417,14,12],[550,412,13,11],[555,438,13,11],[503,451,13,10],[532,448,13,11],[516,273,11,10],[535,267,12,10],[554,272,13,11],[572,280,13,10],[589,295,13,11],[566,322,11,12],[603,314,15,12],[603,338,12,10],[590,362,13,12],[571,376,11,10],[548,352,11,8],[551,385,12,11],[526,358,13,10],[513,366,10,9],[428,94,11,9],[431,115,12,10],[521,82,12,10],[539,85,13,11],[551,65,10,9],[560,85,13,10],[570,133,13,11],[586,136,11,10],[607,117,12,10],[619,146,12,11],[601,163,10,9],[620,175,12,10],[596,192,12,10],[576,207,11,10],[552,216,13,10],[528,207,12,11],[519,178,10,9],[510,103,11,9],[502,401,11,10],[520,417,14,12],[550,412,13,11]];
 const STAGE_RECT: readonly number[] = [238,157,18,14];
+const PLAZA_STAGE_RECT = [238, 140, 18, 14] as const;
+const PLAZA_WEST_ROADS = [[161, 202, 151, 215, 3.5], [161, 181, 151, 156, 3.5],
+  [245, 152, 260, 155, 3.5]] as const;
 const RIVER_POINTS: readonly (readonly number[])[] = [[231,384],[232,342],[266,298],[290,263],[302,230],[291,192],[289,149],[282,100],[287,76],[274,38],[263,0]];
 
 export type WallSiteRejection = 'bounds' | 'secret' | 'stage' | 'platform' | 'rail' | 'road' | 'river' | 'door' | 'interior';
@@ -73,7 +76,7 @@ function rectEdgeDistance(east: number, north: number, rect: readonly number[]):
 export function classifyWallSite(east: number, north: number): WallSiteRejection | undefined {
   if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 || east > 640 || north > 512) return 'bounds';
   if (inRect(east, north, PALACE_SECRET_RECT, WALL_CLEARANCE)) return 'secret';
-  if (inRect(east, north, STAGE_RECT, WALL_CLEARANCE)) return 'stage';
+  if (inRect(east, north, STAGE_RECT, WALL_CLEARANCE) || inRect(east, north, PLAZA_STAGE_RECT, WALL_CLEARANCE)) return 'stage';
   for (const platform of RAIL_PLATFORMS) {
     const [px, pn, halfLength, axis] = platform as [number, number, number, string];
     const along = axis === 'north' ? Math.abs(north - pn) : Math.abs(east - px);
@@ -81,6 +84,7 @@ export function classifyWallSite(east: number, north: number): WallSiteRejection
     if (along <= halfLength + WALL_CLEARANCE && lateral <= 2.5 + WALL_CLEARANCE) return 'platform';
   }
   for (const seg of RAIL_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'rail';
+  for (const seg of PLAZA_WEST_ROADS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
   for (const seg of ROAD_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
   for (let i = 1; i < RIVER_POINTS.length; i++) {
     const seg = [RIVER_POINTS[i - 1][0], RIVER_POINTS[i - 1][1], RIVER_POINTS[i][0], RIVER_POINTS[i][1]];

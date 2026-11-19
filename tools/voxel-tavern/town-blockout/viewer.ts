@@ -76,6 +76,7 @@ import { createTownMailActivity, playPostChime } from './town-mail-activity';
 import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
+import { stageProgram } from './stage-choreography';
 import { createMarketActivity } from './market-activity';
 import { createMarketFairActivity, marketTastingStamp } from './market-fair';
 import { createMarketResidentStationLookup } from './market-resident-stations';
@@ -124,6 +125,8 @@ import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale } from './town-snow-cover';
 import { createTownSnowField } from './town-snow-field';
+import { createPlazaInformationActivity } from './plaza-information-activity';
+import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
 import { createSledRide } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
@@ -528,6 +531,7 @@ function geometry() {
       }
     }
   }
+  index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
   const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
@@ -901,6 +905,7 @@ function nearbyActivity<T extends TownActivity>(create: (context: TownActivityCo
   return activity;
 }
 const stageActivity = nearbyActivity(createStageActivity);
+const wishActivity = nearbyActivity(createWishActivity);
 let icePalaceActivity: ReturnType<typeof createIcePalaceLandmarkActivity> | undefined;
 const icePalaceCrown = createIcePalaceCrown(document.body);
 let icePalaceSelfCrowned = false;
@@ -909,7 +914,7 @@ function palaceThroneSeat() {
 }
 const activities: TownActivity[] = [
   nearbyActivity(createPostActivity), stageActivity, nearbyActivity(createMarketActivity),
-  nearbyActivity(createIceActivity), nearbyActivity(createWishActivity), nearbyActivity(createRestActivity),
+  nearbyActivity(createIceActivity), wishActivity, nearbyActivity(createRestActivity),
 ];
 function announceActivity(message: string, gold = false) {
   activityStatus.textContent = message;
@@ -1136,7 +1141,9 @@ let snowHold: { source: 'mouse' | 'touch'; started: number } | undefined;
 let snowAction: 'gather' | 'aim' | undefined;
 let gatherTime = 0;
 const gatherRayEnd = new Vector3();
-const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false };
+const plazaSnowSupply = createPlazaSnowSupply();
+const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false,
+  supply: undefined as PlazaSnowSupplySite | undefined };
 let formalSnowFight = false;
 let enteredSnowFight = false;
 let snowOnHead = 0;
@@ -1426,8 +1433,11 @@ function aimsAtNearbySnow() {
     snow = Math.abs(height - at.y) < .18 && !roofed(x, n, ground) &&
       !townWater.at(at.x, north) && !roofed(at.x, north, height) && snowCover.canGather(at.x, north, height);
   }
-  Object.assign(gatherCheck, { x, n, ground, yaw, pitch, snow });
-  return snow;
+  const aimedSupply = plazaSnowSupply.aimed(tossOrigin, gatherRayEnd, grid.heightAt, hit);
+  const supply = aimedSupply && !roofed(x, n, ground) && !townWater.at(aimedSupply.east, aimedSupply.north) &&
+    !roofed(aimedSupply.east, aimedSupply.north, grid.heightAt(aimedSupply.east, aimedSupply.north)) ? aimedSupply : undefined;
+  Object.assign(gatherCheck, { x, n, ground, yaw, pitch, snow: snow || !!supply, supply });
+  return gatherCheck.snow;
 }
 function aimSnowball() {
   const flat = Math.cos(pitch);
@@ -1485,7 +1495,7 @@ function updateHeldSnowAction(dt: number) {
     gatherTime += dt;
     if (gatherTime >= gatherSeconds) {
       gatherTime -= gatherSeconds;
-      snowballs.gather(snowCover.depth().servings);
+      plazaSnowSupply.gather(snowballs, snowCover.depth().servings, gatherCheck.supply);
       teamFight.onGatherTick();
     }
   } else {
@@ -2119,7 +2129,7 @@ function walkable(x: number, n: number) {
 }
 function outdoorWalkable(x: number, n: number) {
   const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
-  return terrainPassable && !scenery.blocked(x, n) && !districts.blocked(x, n) &&
+  return terrainPassable && !scenery.blocked(x, n) && !scenery.plazaCoverBlocks(x, n, bodyRadius) && !districts.blocked(x, n) &&
     !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
 const bodyHeight = 1.8;
@@ -2375,7 +2385,7 @@ function campfireGround(east: number, north: number, height?: number) {
         (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
   return feet;
 }
-const campfireSites = findRegionalCampfires(campfireGround);
+const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds);
 const forestChopSites = findForestChopSites(campfireSites, campfireGround);
 const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites, { isNight: () => nightMode });
 const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
@@ -2401,6 +2411,19 @@ activitySpots.push(...registerTownResidentStations(npcActivity, {
   marketStall: marketResidentLookup,
   canCollect: zodiac.canCollect,
 }));
+
+const plazaInformation = createPlazaInformationActivity(showLiveRailSchedule, {
+  clock: ceremonyClock,
+  train: () => railway.timetable('coaster-station'),
+  roster: presence.townRoster,
+  stage: () => {
+    const state = stageActivity.getShowState();
+    return state.playing ? stageProgram.find(({ id }) => id === state.act)?.announcement : undefined;
+  },
+  formalSnowFight: () => nightMode && snowCover.depth().level >= 1,
+  latestWish: wishActivity.latestWish,
+}, grid.heightAt, canStandAtActivity);
+activitySpots.push(...plazaInformation.spots);
 
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
@@ -2752,6 +2775,7 @@ renderer.setAnimationLoop(now => {
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   outdoorCampfires.updateFlames(dt, camera.position.x, -camera.position.z, Boolean(homeReturn));
+  scenery.updatePlazaSnowSupply(plazaSnowSupply.heightScale, camera.position.x, -camera.position.z);
   const museum = architecture.get('memorial');
   const smallLabels = museum?.userData.smallLabels as Mesh[] | undefined;
   if (smallLabels) for (const label of smallLabels) label.visible = !wideView;
