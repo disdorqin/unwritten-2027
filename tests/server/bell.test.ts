@@ -95,7 +95,7 @@ async function fixture(context: TestContext) {
     const pose = (east: number, north: number, height = 12) => {
       seq++;
       const bytes = Buffer.alloc(12);
-      [65_534, Math.round(east * 100), Math.round(north * 100), Math.round(height * 100), 0, seq]
+      [0, Math.round(east * 100), Math.round(north * 100), Math.round(height * 100), 0, seq]
         .forEach((value, index) => bytes.writeUInt16LE(value, index * 2));
       socket.send(bytes);
     };

@@ -90,7 +90,7 @@ async function fixture(context: TestContext) {
 
   function sendPose(socket: WebSocket, east: number, north: number, sequence: number) {
     const bytes = Buffer.alloc(12);
-    [65_534, east * 100, north * 100, 1000, 0, sequence].forEach((value, index) => {
+    [0, east * 100, north * 100, 1000, 0, sequence].forEach((value, index) => {
       bytes.writeUInt16LE(value, index * 2);
     });
     socket.send(bytes);
