@@ -163,7 +163,62 @@ export type TownMascotOptions = {
   groundAt: GroundAt;
   follow?: () => MascotFollowPoint | undefined;
   visible: (east: number, north: number, ground: number) => boolean;
+  bell?: {
+    runningAudio: () => AudioContext | undefined;
+    listenerDistance: (east: number, north: number, ground: number) => number | undefined;
+  };
 };
+
+function trackMascotBell(bell: NonNullable<TownMascotOptions['bell']>) {
+  let last: { x: number; n: number; tick: number; following: boolean } | undefined;
+  let travelled = 0;
+  let lastBell = -Infinity;
+  return (point: { x: number; n: number; speed: number; seated?: boolean; sliding?: boolean },
+    ground: number | undefined, tick: number, following: boolean) => {
+    if (ground === undefined || point.speed <= 0 || point.seated || point.sliding) {
+      last = undefined;
+      travelled = 0;
+      return;
+    }
+    const previous = last;
+    if (previous?.tick === tick) return;
+    last = { x: point.x, n: point.n, tick, following };
+    const gap = previous ? Math.hypot(point.x - previous.x, point.n - previous.n) : Infinity;
+    if (!previous || previous.following !== following || tick <= previous.tick || tick - previous.tick > 240 || gap > 1.9) {
+      travelled = 0;
+      return;
+    }
+    // Ignore interpolation jitter and accumulate actual walking distance, not animation time.
+    if (gap < .002) return;
+    travelled += gap;
+    const stride = .36;
+    if (travelled < stride || tick - lastBell < 220) return;
+    travelled %= stride;
+    const distance = bell.listenerDistance(point.x, point.n, ground);
+    if (distance === undefined || !Number.isFinite(distance) || distance < 0 || distance >= 16) return;
+    const context = bell.runningAudio();
+    if (context?.state !== 'running') return;
+    lastBell = tick;
+    const at = context.currentTime;
+    const level = (1 - distance / 16) ** 2;
+    for (const [frequency, amplitude, duration] of [[920, .030, .15], [1470, .014, .082]]) {
+      const tone = context.createOscillator();
+      const envelope = context.createGain();
+      tone.frequency.setValueAtTime(frequency, at);
+      envelope.gain.setValueAtTime(0, at);
+      envelope.gain.linearRampToValueAtTime(amplitude * level, at + .006);
+      envelope.gain.linearRampToValueAtTime(0, at + duration);
+      tone.connect(envelope);
+      envelope.connect(context.destination);
+      tone.onended = () => {
+        tone.disconnect();
+        envelope.disconnect();
+      };
+      tone.start(at);
+      tone.stop(at + duration);
+    }
+  };
+}
 
 export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, options: TownMascotOptions) {
   const root = new Object3D();
@@ -175,6 +230,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
   let patrol: MascotPatrol;
   let planned = false;
   let lastTick = NaN, lastStart = initialStart, shown = false;
+  const updateBell = options.bell && trackMascotBell(options.bell);
 
   return function update(start = initialStart) {
     if (!planned) {
@@ -187,6 +243,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
     const follow = options.follow?.();
     const point = follow ?? sampleMascotLocation(tick, patrol);
     const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
+    updateBell?.(point, ground, tick, follow !== undefined);
     const visible = ground !== undefined && options.visible(point.x, point.n, ground);
     if (visible && follow && isSharedHomePosition(follow.x, follow.n, follow.ground)) batch.layers.enable(sharedHomeLayer);
     else batch.layers.disable(sharedHomeLayer);

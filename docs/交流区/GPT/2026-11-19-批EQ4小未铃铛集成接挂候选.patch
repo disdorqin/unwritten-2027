@@ -1,0 +1,202 @@
+diff --git a/tools/voxel-tavern/town-blockout/festival.ts b/tools/voxel-tavern/town-blockout/festival.ts
+index c232dd495ee748699d3c4f8d0290323fbb0cfb86..a2d2e36eac60c9fb67fd6dd79d77ed0872176c55 100644
+--- a/tools/voxel-tavern/town-blockout/festival.ts
++++ b/tools/voxel-tavern/town-blockout/festival.ts
+@@ -348,6 +348,7 @@ export function createFestival(
+     showActive() { return elapsed >= 0 || hasMainTrack(); },
+     mountAudioSettings: showAudio.mountSettings,
+     getAudioContext,
++    runningAudioContext: () => audio?.state === 'running' ? audio : undefined,
+     enableAudio() { void tryEnableAudio(); },
+     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
+       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
+diff --git a/tools/voxel-tavern/town-blockout/town-mascot.ts b/tools/voxel-tavern/town-blockout/town-mascot.ts
+index 9b1d130ffc4bb50637081d6d2e825c97df01a3fe..d7dbd89586eadda45d9b71b4f8664eaa1e840e11 100644
+--- a/tools/voxel-tavern/town-blockout/town-mascot.ts
++++ b/tools/voxel-tavern/town-blockout/town-mascot.ts
+@@ -163,8 +163,63 @@ export type TownMascotOptions = {
+   groundAt: GroundAt;
+   follow?: () => MascotFollowPoint | undefined;
+   visible: (east: number, north: number, ground: number) => boolean;
++  bell?: {
++    runningAudio: () => AudioContext | undefined;
++    listenerDistance: (east: number, north: number, ground: number) => number | undefined;
++  };
+ };
+ 
++function trackMascotBell(bell: NonNullable<TownMascotOptions['bell']>) {
++  let last: { x: number; n: number; tick: number; following: boolean } | undefined;
++  let travelled = 0;
++  let lastBell = -Infinity;
++  return (point: { x: number; n: number; speed: number; seated?: boolean; sliding?: boolean },
++    ground: number | undefined, tick: number, following: boolean) => {
++    if (ground === undefined || point.speed <= 0 || point.seated || point.sliding) {
++      last = undefined;
++      travelled = 0;
++      return;
++    }
++    const previous = last;
++    if (previous?.tick === tick) return;
++    last = { x: point.x, n: point.n, tick, following };
++    const gap = previous ? Math.hypot(point.x - previous.x, point.n - previous.n) : Infinity;
++    if (!previous || previous.following !== following || tick <= previous.tick || tick - previous.tick > 240 || gap > 1.9) {
++      travelled = 0;
++      return;
++    }
++    // Ignore interpolation jitter and accumulate actual walking distance, not animation time.
++    if (gap < .002) return;
++    travelled += gap;
++    const stride = .36;
++    if (travelled < stride || tick - lastBell < 220) return;
++    travelled %= stride;
++    const distance = bell.listenerDistance(point.x, point.n, ground);
++    if (distance === undefined || !Number.isFinite(distance) || distance < 0 || distance >= 16) return;
++    const context = bell.runningAudio();
++    if (context?.state !== 'running') return;
++    lastBell = tick;
++    const at = context.currentTime;
++    const level = (1 - distance / 16) ** 2;
++    for (const [frequency, amplitude, duration] of [[920, .030, .15], [1470, .014, .082]]) {
++      const tone = context.createOscillator();
++      const envelope = context.createGain();
++      tone.frequency.setValueAtTime(frequency, at);
++      envelope.gain.setValueAtTime(0, at);
++      envelope.gain.linearRampToValueAtTime(amplitude * level, at + .006);
++      envelope.gain.linearRampToValueAtTime(0, at + duration);
++      tone.connect(envelope);
++      envelope.connect(context.destination);
++      tone.onended = () => {
++        tone.disconnect();
++        envelope.disconnect();
++      };
++      tone.start(at);
++      tone.stop(at + duration);
++    }
++  };
++}
++
+ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, options: TownMascotOptions) {
+   const root = new Object3D();
+   const pose = new Object3D();
+@@ -175,6 +230,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+   let patrol: MascotPatrol;
+   let planned = false;
+   let lastTick = NaN, lastStart = initialStart, shown = false;
++  const updateBell = options.bell && trackMascotBell(options.bell);
+ 
+   return function update(start = initialStart) {
+     if (!planned) {
+@@ -187,6 +243,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+     const follow = options.follow?.();
+     const point = follow ?? sampleMascotLocation(tick, patrol);
+     const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
++    updateBell?.(point, ground, tick, follow !== undefined);
+     const visible = ground !== undefined && options.visible(point.x, point.n, ground);
+     if (visible && follow && isSharedHomePosition(follow.x, follow.n, follow.ground)) batch.layers.enable(sharedHomeLayer);
+     else batch.layers.disable(sharedHomeLayer);
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index dbf494e5448b83df2ba78ccf8b99a7b839764ce6..05857aeed1f8da624eba0fbe280c4e58e3de5646 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -897,6 +897,13 @@ panel => openTavernDice(panel, () => {
+   now: presence.serverNow,
+   groundAt: mascotOutdoorGround,
+   follow: () => presence.ownerFollowsMascot() && walking ? ownedMascot : presence.sampleRemoteMascot(),
++  bell: {
++    runningAudio: festival.runningAudioContext,
++    listenerDistance(east, north, feet) {
++      if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return;
++      return Math.hypot(camera.position.x - east, camera.position.y - feet - .214, camera.position.z + north);
++    },
++  },
+   visible(east, north, feet) {
+     if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return false;
+     mascotBounds.center.set(east, feet + .32, -north);
+diff --git a/tests/town-blockout-mascot-bell.test.ts b/tests/town-blockout-mascot-bell.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5d4251b3eb59c87f08b1a56b54963b7efd7263a8
+--- /dev/null
++++ b/tests/town-blockout-mascot-bell.test.ts
+@@ -0,0 +1,82 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { BoxGeometry, InstancedMesh, MeshLambertMaterial } from 'three';
++import type { MascotFollowPoint } from '../tools/voxel-tavern/town-blockout/mascot-follow.ts';
++import { addMascotToNpcBatch, townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot.ts';
++
++test('the mascot neck bell uses its existing two animated instances', () => {
++  const parts = townMascotParts.filter(part => part.joint === 3);
++  assert.equal(townMascotParts.length, 100);
++  assert.deepEqual(parts.map(({ tint }) => tint), ['#e9aa3d', '#302b35']);
++});
++
++test('walking chimes use unlocked audio only and respect distance, jump and mounted state', t => {
++  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), townMascotParts.length);
++  const point: MascotFollowPoint = { x: 0, n: 0, ground: 0, yaw: 0, speed: 2 };
++  const frequencies: number[] = [], peaks: number[] = [];
++  const context = {
++    state: 'suspended', currentTime: 10, destination: {},
++    createOscillator: () => ({
++      frequency: { setValueAtTime: (frequency: number) => frequencies.push(frequency) },
++      connect() {}, disconnect() {}, start() {}, stop() {},
++    }),
++    createGain: () => ({
++      gain: {
++        setValueAtTime() {},
++        linearRampToValueAtTime: (gain: number) => { if (gain > 0) peaks.push(gain); },
++      },
++      connect() {}, disconnect() {},
++    }),
++  };
++  let time = 0, distance: number | undefined = 0;
++  const update = addMascotToNpcBatch(batch, 0, {
++    now: () => time,
++    groundAt: () => undefined,
++    follow: () => point,
++    visible: () => false,
++    bell: {
++      runningAudio: () => context as unknown as AudioContext,
++      listenerDistance: () => distance,
++    },
++  });
++  function step(east: number, elapsed = 120) {
++    point.x = east;
++    time += elapsed;
++    update();
++    update(); // A repeated render in the same tick must not replay the chime.
++  }
++  step(0);
++  step(.2);
++  step(.4);
++  assert.deepEqual(frequencies, []);
++  context.state = 'running';
++  step(.6);
++  step(.8);
++  assert.deepEqual(frequencies, [920, 1470]);
++  assert.deepEqual(peaks, [.03, .014]);
++  assert.equal(batch.count, 0, 'chime remains audible just off camera without an extra draw');
++  distance = 8;
++  step(1);
++  step(1.2);
++  assert.deepEqual(peaks, [.03, .014, .0075, .0035]);
++  distance = 16;
++  step(1.4);
++  step(1.6);
++  step(1.8);
++  distance = undefined;
++  step(2);
++  step(2.2);
++  distance = 0;
++  step(10); // A jump of more than one render step, not a walk.
++  step(10.2, 480); // Ignore a suspended tab's elapsed time.
++  point.seated = true;
++  step(10.4);
++  delete point.seated;
++  point.sliding = true;
++  step(10.6);
++  delete point.sliding;
++  point.speed = 0;
++  step(10.8);
++  assert.deepEqual(frequencies, [920, 1470, 920, 1470]);
++  t.diagnostic('2 chimes / 4 partials; peaks 0.030 and 0.0075 at 0 m and 8 m; zero from suspended, boundary, other layer, teleport, seated, skating or stationary samples');
++});
