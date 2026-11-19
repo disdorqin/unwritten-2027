@@ -67,6 +67,7 @@ test('southern pad preserves the building anchor and contributes its real collis
 test('castle south station still connects at its stair foot and clears the maze across its six-metre width', () => {
   const stop = railPlatforms.find(({ id }) => id === 'ice-castle');
   assert.ok(stop && 'stairs' in stop);
+  assert.deepEqual(stop.trail, icePalaceForecourt.stationTrail);
   assert.deepEqual(icePalaceForecourt.stationTrail[0], stop.stairs.end);
   assert.deepEqual(icePalaceForecourt.stationTrail.at(-1), [460, 72]);
   assert.ok(hitsMaze(496, 45), 'The old approach needs the western bypass');

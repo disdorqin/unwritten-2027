@@ -1,3 +1,4 @@
+import { icePalaceSite } from './ice-palace-site';
 import { TOWN_STATION_NAME } from './station-sign-copy';
 
 export const railPlatforms = [
@@ -26,7 +27,7 @@ export const railPlatforms = [
   { id: 'ice-castle', label: '城堡南站', x: 496, n: 23.5, ground: 10.31, yaw: 0,
     east: 496, north: 20, railY: 9.45, axis: 'east', halfLength: 10, speed: 9,
     stairs: { end: [496, 34], axis: 'north' },
-    trail: [[496, 34], [496, 45], [486, 53.3], [465.5, 53.3], [461.6, 54.2], [460.1, 58.8], [460.1, 69.8], [460, 72]],
+    trail: icePalaceSite.stationTrail,
     direction: '沿接驳小道往北到冰雪城堡 · 走灯亮着的那条',
     arrival: '去城堡的乘客沿小道往北，灯亮着的那条。' },
   { id: 'hot-spring', label: '温泉站', x: 505.5, n: 144, ground: 22.56, yaw: Math.PI / 2,
