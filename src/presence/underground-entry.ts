@@ -21,8 +21,9 @@ export type UndergroundEntryOptions = {
   isDepthLineCrossing(point: UndergroundEntryPoint, direction: UndergroundEntryDirection): boolean;
   isFirstFallPool(point: UndergroundEntryPoint): boolean;
   initial?: UndergroundEntrySnapshot;
-  // Commit through the world's single authority before returning an event to its caller.
-  save(snapshot: UndergroundEntrySnapshot): void;
+  // Commit synchronously through the world's single authority before publishing an event.
+  // Throw on failure so the caller can retry the same transition.
+  save(snapshot: UndergroundEntrySnapshot): undefined;
 };
 
 function isFinitePoint(point: UndergroundEntryPoint): boolean {

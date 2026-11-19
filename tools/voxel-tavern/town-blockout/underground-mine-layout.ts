@@ -3,7 +3,7 @@ export const undergroundMineGalleryWidth = 4;
 export const undergroundMineGalleryHeight = 3.5;
 
 export type UndergroundMineSpec = {
-  pool: { length: number; width: number; depth: number };
+  pool: { length: number; width: number; depth: number; shaftAperture?: { width: number; length: number } };
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
@@ -39,6 +39,12 @@ function validate(spec: UndergroundMineSpec) {
   }
 
   const diameter = 2 * walker.radius;
+  const aperture = pool.shaftAperture;
+  if (aperture && !(Number.isFinite(aperture.width) && Number.isFinite(aperture.length) &&
+      aperture.width > diameter && aperture.width < pool.width &&
+      aperture.length > diameter && aperture.length < pool.length)) {
+    throw new RangeError('The first mine shaft aperture cannot fit the pool and walking profile');
+  }
   const shoreGrade = pool.depth / shoreLength;
   const galleryGrade = gallery.drop / gallery.length;
   const slopedClearance = Math.max(shoreGrade, galleryGrade) * diameter;
@@ -92,6 +98,15 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
     camp.side === 'left' ? -halfGallery - camp.extension : -halfGallery,
     camp.side === 'right' ? halfGallery + camp.extension : halfGallery, campFloor, campFloor, roomHeight);
   const spans = [poolSpan, shore, main, gap, campSpan];
+  const poolLanding: Point = [0, level, pool.length / 2];
+  const aperture = pool.shaftAperture;
+  const poolShaftOpening = aperture && {
+    roofY: poolFloor + poolSpan.height,
+    minX: -aperture.width / 2,
+    maxX: aperture.width / 2,
+    minZ: poolLanding[2] - aperture.length / 2,
+    maxZ: poolLanding[2] + aperture.length / 2,
+  };
 
   const triangles: Record<Surface, number[]> = { rock: [], rail: [], water: [] };
 
@@ -103,6 +118,10 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
     const { start, end, floorStart, floorEnd } = span;
     quad(surface, [left, floorStart, start], [left, floorEnd, end],
       [right, floorEnd, end], [right, floorStart, start]);
+  }
+
+  function ceilingStrip(y: number, left: number, right: number, start: number, end: number) {
+    quad('rock', [left, y, start], [right, y, start], [right, y, end], [left, y, end]);
   }
 
   function faceAt(z: number, left: number, right: number, bottom: number, top: number, toPositiveZ: boolean) {
@@ -135,8 +154,16 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
       [left, topEnd, end], [left, floorEnd, end]);
     quad('rock', [right, floorStart, start], [right, floorEnd, end],
       [right, topEnd, end], [right, topStart, start]);
-    quad('rock', [left, topStart, start], [right, topStart, start],
-      [right, topEnd, end], [left, topEnd, end]);
+    if (span === poolSpan && poolShaftOpening) {
+      const { roofY, minX, maxX, minZ, maxZ } = poolShaftOpening;
+      ceilingStrip(roofY, left, right, start, minZ);
+      ceilingStrip(roofY, left, right, maxZ, end);
+      ceilingStrip(roofY, left, minX, minZ, maxZ);
+      ceilingStrip(roofY, maxX, right, minZ, maxZ);
+    } else {
+      quad('rock', [left, topStart, start], [right, topStart, start],
+        [right, topEnd, end], [left, topEnd, end]);
+    }
 
     if (span === poolSpan || span === shore) {
       // Render an independent water surface. Traversal uses the continuous bed below it.
@@ -162,7 +189,6 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
       y + Math.max(before.height, after.height), after.height > before.height);
   }
 
-  const poolLanding: Point = [0, level, pool.length / 2];
   const campMidpoint = (campSpan.start + campSpan.end) / 2;
   const campSafe: Point = [(campSpan.left + campSpan.right) / 2, campFloor, campMidpoint];
   const route = spans.map(span => ({
@@ -225,6 +251,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
     crouchInterval: [gap.start - walker.radius, gap.end + walker.radius] as const,
     anchors: {
       poolLanding,
+      poolShaftOpening,
       shoreExit: [0, level, shore.end] as Point,
       campRecovery: {
         position: campSafe,

@@ -14,7 +14,7 @@ const below = { ...firstFallLanding, height: -1 };
 
 function fixture(overrides: Partial<UndergroundEntryOptions> = {}) {
   const saved: UndergroundEntrySnapshot[] = [];
-  const options = {
+  const options: UndergroundEntryOptions = {
     depthLine: 0,
     firstFallLanding,
     canUseWinch: (playerId: string) => playerId !== 'remote',

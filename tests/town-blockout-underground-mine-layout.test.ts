@@ -41,6 +41,39 @@ test('mine meshes expose the locked level and dimensions, flush double rail and 
   assert.equal(layout.queryPassage(2.001, 18, 0, 1.8), undefined);
 });
 
+test('the shaft envelope opens the pool roof above the first-fall anchor', () => {
+  const spec = fixture();
+  const width = 2, length = 2;
+  const dry = createUndergroundMineLayout({ ...spec, pool: { ...spec.pool, shaftAperture: { width, length } } });
+  const opening = dry.anchors.poolShaftOpening;
+  assert.deepEqual(opening, { roofY: -86.5, minX: -1, maxX: 1, minZ: 1, maxZ: 3 });
+  assert.ok(opening);
+  assert.equal(dry.anchors.poolLanding[0], (opening.minX + opening.maxX) / 2);
+  assert.equal(dry.anchors.poolLanding[2], (opening.minZ + opening.maxZ) / 2);
+
+  let roofArea = 0;
+  for (let offset = 0; offset < dry.mesh.rock.length; offset += 9) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = dry.mesh.rock.subarray(offset, offset + 9);
+    if (ay !== opening.roofY || by !== opening.roofY || cy !== opening.roofY ||
+        Math.max(az, bz, cz) > spec.pool.length) continue;
+    assert.ok(Math.max(ax, bx, cx) <= opening.minX || Math.min(ax, bx, cx) >= opening.maxX ||
+      Math.max(az, bz, cz) <= opening.minZ || Math.min(az, bz, cz) >= opening.maxZ);
+    roofArea += Math.abs((bx - ax) * (cz - az) - (bz - az) * (cx - ax)) / 2;
+  }
+  assert.equal(roofArea, spec.pool.width * spec.pool.length - width * length);
+  assert.deepEqual(dry.mesh.water, createUndergroundMineLayout(spec).mesh.water);
+});
+
+test('an invalid shaft envelope is rejected before geometry is generated', () => {
+  const spec = fixture();
+  for (const shaftAperture of [{ width: .5, length: 2 }, { width: 2, length: spec.pool.length },
+    { width: NaN, length: 2 }]) {
+    assert.throws(() => createUndergroundMineLayout({ ...spec, pool: { ...spec.pool, shaftAperture } }),
+      /shaft aperture/);
+  }
+  assert.equal(createUndergroundMineLayout(spec).anchors.poolShaftOpening, undefined);
+});
+
 test('a continuous solo route leads through the stone shore and crouch slot to the safe campfire', () => {
   const spec = fixture();
   const { pool, gallery, walker, shoreLength } = spec;

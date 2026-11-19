@@ -14,7 +14,7 @@ const crater = createMeteorCrater({
   mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
 });
 const mineSpec: UndergroundMineSpec = {
-  pool: { length: 4, width: 6, depth: 1.2 },
+  pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
   shoreLength: 8,
   gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
   collapse: { length: 3, width: 1.2, height: 1.3 },
