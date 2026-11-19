@@ -705,7 +705,14 @@ panel => openTavernDice(panel, () => {
   if (!tavernDrinkEffects.sip('#ce8c40', () => {})) return '这局你输了。正在喝酒，免另添一杯。';
   return '这局你输了，罚酒一杯。';
 }));
-const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
+const practiceStatus = element<HTMLOutputElement>('snow-practice-status');
+const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt, {
+  status(text) {
+    practiceStatus.textContent = text;
+    practiceStatus.hidden = !text;
+  },
+  announce: announceActivity,
+});
 let drinkingPoseUntil = 0;
 let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
@@ -1106,6 +1113,7 @@ const snowballs = createTownSnowballFight({
   canScoreAtLaunch: outdoorLaunch,
   onChange: showSnowballScore,
   onEvent(event) {
+    practiceTarget.onSnowballEvent(event);
     if (event.type === 'throw') {
       if (event.scoreable) snowballBoard.recordThrow(event.thrower);
     } else if (event.type === 'miss') {
@@ -2331,6 +2339,7 @@ renderer.setAnimationLoop(now => {
     townLights.setCeremonyBand(ceremonyState.phase === 'afterglow' ? 3 : -1);
   }
   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
+  practiceTarget.updateRound();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();

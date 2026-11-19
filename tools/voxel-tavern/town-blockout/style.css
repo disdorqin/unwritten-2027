@@ -220,7 +220,7 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status) { display: none
   display: grid; gap: 5px;
   padding: 7px; border: 1px solid #6d819d; border-radius: 10px; background: #101a2beb;
 }
-#snowball-score { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
+:is(#snowball-score, #snow-practice-status) { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
 #snowball-board { grid-column: 1 / -1; }
 #snowball-action-meter { grid-column: 1 / -1; width: 100%; height: 9px; accent-color: #efc786; }
 #snowball-controls { max-width: min(220px, 56vw); }
