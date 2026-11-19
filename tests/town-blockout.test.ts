@@ -109,6 +109,13 @@ test('legacy houses reserve rail clearance while nearby open sites stay occupied
   assert.ok(!after.blocked(390, 32), 'south dwelling must clear the track');
   assert.ok(!before.blocked(63, 194), 'the established west clearing stays open after rerouting');
   assert.ok(!after.blocked(63, 194), 'moving the track does not put a new cabin in the clearing');
+  const clearing = 'old-town:63:194';
+  assert.equal(before.rejectedHomes.find(({ id }) => id === clearing)?.reason, 'preserved-clearing');
+  assert.equal(after.rejectedHomes.find(({ id }) => id === clearing)?.reason, 'preserved-clearing');
+  if (after.relocations.size === 13) {
+    assert.ok(after.housePortals.some(({ id }) => id === 'old-town:105:152'),
+      'the approved phase-three relocation clears the track');
+  }
   assert.ok(rail.keepClear(18, 185));
   assert.ok(after.blocked(405, 51), 'northward neighboring dwelling is still in place');
   const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32) && !(x === 63 && n === 194));

@@ -10,6 +10,15 @@ import type { TownHousePortal } from './town-house-portals';
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Style = Parameters<typeof buildDistrictHousing>[0];
 type Site = { x: number; n: number; w: number; d: number; angle: number; style: Style; variant: number };
+type HousingRejectionReason = 'preserved-clearing' | 'rail' | 'slope' | 'plaza' | 'open-space' | 'lamp' | 'path' | 'setback';
+type HousingRejection = {
+  id: string;
+  zone: DistrictTheme | 'central';
+  location: readonly [east: number, north: number];
+  relocated: boolean;
+  overlapsPlaza: boolean;
+  reason: HousingRejectionReason;
+};
 type KeepClear = (x: number, n: number, radius: number) => boolean;
 type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
 type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
@@ -20,6 +29,24 @@ const theaterHouseRelocations = new Map<string, readonly [number, number]>([
   ['200:151', [147, 182.5]],
   ['246:135', [146, 199]],
 ]);
+
+const phaseThreeBounds = [97, 128, 271, 212] as const;
+const plazaHouseRelocations: ReadonlyMap<string, readonly [east: number, north: number]> = new Map([
+  ['117:202', [115.5, 220]],
+  ['101:184', [89.5, 166.5]],
+  ['105:152', [68.25, 183.5]],
+  ['137:168', [180.25, 120]],
+  ['158:184', [192.75, 118.5]],
+  ['179:155', [203.5, 95.75]],
+  ['173:135', [182, 91]],
+  ['156:141', [107, 93]],
+  ['246:135', [261, 120]],
+  ['220:138', [250.5, 79.5]],
+  ['197:132', [173, 63]],
+  ['200:151', [198.5, 223]],
+  ['262:180', [269.5, 241.5]],
+]);
+
 // Keys stay tied to the original lot and portal, including the relocated C-06.
 const plazaResidentialCards = new Map<string, CentralResidentialCard>([
   ['200:151', 6], ['262:180', 8], ['264:228', 9], ['253:243', 11], ['221:251', 12],
@@ -38,7 +65,6 @@ const paths = [
   ...layout.roads.flatMap(({ points, width }) => points.slice(1).map((end, i) => ({ start: points[i], end, radius: width / 2 }))),
   ...layout.plots.map(({ connect, door }) => ({ start: connect, end: door, radius: 2 })),
 ];
-const [west, south, east, north] = layout.plaza.bounds;
 const bounds = layout.plots.map(({ origin: [x, n], footprint: [w, d] }) => ({ x, n, w, d }));
 const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
 const within = (x: number, n: number, { x: cx, n: cn, w, d }: Pick<Site, 'x' | 'n' | 'w' | 'd'>, margin: number) =>
@@ -55,10 +81,16 @@ const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][
 export function addDistrictHousing(
   parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean,
   railwayKeepClear: KeepClear = () => false,
+  plazaBounds: readonly number[] = layout.plaza.bounds,
 ) {
+  const [west, south, east, north] = plazaBounds;
+  const relocations = phaseThreeBounds.every((edge, i) => edge === plazaBounds[i])
+    ? plazaHouseRelocations : south === 152 ? theaterHouseRelocations : new Map<string, readonly [number, number]>();
   const sites: Site[] = [];
+  const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
+  const rejectedHomes: HousingRejection[] = [];
   const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
@@ -108,12 +140,22 @@ export function addDistrictHousing(
       || n < 8 + radius || x < 8 + radius || n > layout.depth - 8 - radius || x > layout.width - 8 - radius;
   }
 
+  function insidePlaza(x: number, n: number, radius: number) {
+    return x > west - radius && x < east + radius && n > south - radius && n < north + radius;
+  }
+
   function openSpace(x: number, n: number, radius: number) {
     const cx = Math.round(x), cn = Math.round(n);
     return !outside(x, n, radius) && !bridgeMouthKeepClear(x, n, radius) && grid.surfaces[cn * grid.gridWidth + cx] !== 4
-      && !(x > west - radius && x < east + radius && n > south - radius && n < north + radius)
+      && !insidePlaza(x, n, radius)
       && !bounds.some(plot => within(x, n, plot, radius + 1.1))
       && !waterfront.some(plot => within(x, n, plot, radius));
+  }
+
+  function sampleFailure(x: number, n: number): HousingRejectionReason | undefined {
+    if (!openSpace(x, n, 1.4)) return insidePlaza(x, n, 1.4) ? 'plaza' : 'open-space';
+    if (lampBlocked(x, n)) return 'lamp';
+    if (!paths.every(({ start, end, radius }) => lineDistance(x, n, start, end) > radius + 1.35)) return 'path';
   }
 
   const footprints = (site: Site) => Math.abs(Math.sin(site.angle)) > .5 ? { ...site, w: site.d, d: site.w } : site;
@@ -146,7 +188,8 @@ export function addDistrictHousing(
   for (const { theme, styles, points } of neighborhoods) {
     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
       const address = `${sourceEast}:${sourceNorth}`;
-      const relocation = south === 152 ? theaterHouseRelocations.get(address) : undefined;
+      const id = `old-town:${address}`;
+      const relocation = relocations.get(address);
       const [x, n] = relocation ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
@@ -158,18 +201,45 @@ export function addDistrictHousing(
       });
       const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(sourceEast) };
       const footprint = footprints(site);
-      // Preserve the established west clearing after the track relocates behind Mirror Lake.
-      if (address === '63:194' || conflictsWithRail(footprint)) continue;
       const samples = edges(site);
+      function reject(reason: HousingRejectionReason) {
+        rejectedHomes.push({
+          id, zone: theme ?? 'central', location: [x, n], relocated: relocation !== undefined,
+          overlapsPlaza: samples.some(([px, pn]) => insidePlaza(px, pn, 1.4)), reason,
+        });
+      }
+      // Preserve the established west clearing after the track relocates behind Mirror Lake.
+      if (address === '63:194') {
+        reject('preserved-clearing');
+        continue;
+      }
+      if (conflictsWithRail(footprint)) {
+        reject('rail');
+        continue;
+      }
       const heights = samples.map(([px, pn]) => grid.heightAt(px, pn));
-      if (Math.max(...heights) - Math.min(...heights) > 5.3) continue;
-      if (!samples.every(([px, pn]) => openSpace(px, pn, 1.4) && !lampBlocked(px, pn)
-        && paths.every(({ start, end, radius }) => lineDistance(px, pn, start, end) > radius + 1.35))) continue;
+      if (Math.max(...heights) - Math.min(...heights) > 5.3) {
+        reject('slope');
+        continue;
+      }
+      let failure: HousingRejectionReason | undefined;
+      for (const [px, pn] of samples) {
+        failure = sampleFailure(px, pn);
+        if (failure) break;
+      }
+      if (failure) {
+        reject(failure);
+        continue;
+      }
       if (sites.some(other => {
         const size = footprints(other);
+        // The receiving strip is tighter. Keep a 1.8 m structural gap at moved houses.
         const setback = relocation || movedSites.has(other) ? 1.8 : 3.6;
         return within(x, n, { ...size, w: size.w + footprint.w, d: size.d + footprint.d }, setback);
-      })) continue;
+      })) {
+        reject('setback');
+        continue;
+      }
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
       const centralCard = theme === undefined ? plazaResidentialCards.get(address) : undefined;
@@ -187,6 +257,7 @@ export function addDistrictHousing(
       const cell = cellAt(x, n);
       addModel(model, cell);
       sites.push(site);
+      zoneCounts[theme ?? 'central']++;
       if (relocation) movedSites.add(site);
 
       const dx = Math.sin(angle), dn = -Math.cos(angle);
@@ -194,7 +265,7 @@ export function addDistrictHousing(
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
-      housePortals.push({ id: `old-town:${address}`, zone: theme ?? 'central', x: doorX, n: doorN,
+      housePortals.push({ id, zone: theme ?? 'central', x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
@@ -267,6 +338,6 @@ export function addDistrictHousing(
       return along >= start && along <= end && Math.abs(offsetX * dn - offsetN * dx) <= 1.08;
     });
   }
-  return { count: sites.length, sites, housePortals, keepClear, setPanorama, sweptAt,
+  return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, keepClear, setPanorama, sweptAt,
     blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }
