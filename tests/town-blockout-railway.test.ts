@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createTerrainGrid, isWater } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
 import { createRailTimetable } from '../tools/voxel-tavern/town-blockout/town-rail-timetable.ts';
 import { extensionRoads } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
@@ -9,9 +9,13 @@ import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 const grid = createTerrainGrid();
 const epoch = Date.UTC(2026, 0, 1);
 
-function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-forest-approach', colliders: Box[]) {
-  const road = extensionRoads.find(road => road.id === id)!;
+function surveyRoadHeadroom(
+  road: { points: readonly (readonly number[])[]; width: number },
+  colliders: Box[], center?: readonly [east: number, north: number],
+) {
   let minimum = Infinity;
+  let checked = 0;
+  let hits = 0;
   for (const [i, [ax, an]] of road.points.slice(0, -1).entries()) {
     const [bx, bn] = road.points[i + 1];
     const dx = bx - ax;
@@ -23,19 +27,41 @@ function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-fo
       for (let lane = -road.width / 2 + .28; lane <= road.width / 2 - .28; lane += .30) {
         const x = ax + dx * t - dn / distance * lane;
         const north = an + dn * t + dx / distance * lane;
+        if (center && Math.hypot(center[0] - x, center[1] - north) > 9) continue;
+        checked++;
         const feet = grid.heightAt(x, north);
+        let intersects = false;
         for (const { min, max } of colliders) {
           const xDistance = Math.max(min[0] - x, x - max[0], 0);
           const zDistance = Math.max(min[2] + north, -north - max[2], 0);
           if (max[1] > feet + .025 && xDistance ** 2 + zDistance ** 2 < .27 ** 2) {
             minimum = Math.min(minimum, min[1] - feet);
+            intersects = true;
           }
         }
+        if (intersects) hits++;
       }
     }
   }
-  return minimum;
+  return { minimum, checked, hits };
 }
+
+function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-forest-approach', colliders: Box[]) {
+  const road = extensionRoads.find(road => road.id === id)!;
+  return surveyRoadHeadroom(road, colliders).minimum;
+}
+
+test('the existing track stays out of both M3 northeast road clearance sample areas', t => {
+  const train = createTownRailway(grid, () => epoch);
+  const colliders: Box[] = [...train.group.userData.colliders, ...train.group.userData.floors];
+  const road = layout.roads.find(({ id }) => id === 'northeast')!;
+  for (const [center, expected] of [[[275, 192], 2604], [[336, 246], 2669]] as const) {
+    const report = surveyRoadHeadroom(road, colliders, center);
+    assert.equal(report.checked, expected);
+    assert.equal(report.hits, 0);
+    t.diagnostic(JSON.stringify({ center, checked: report.checked, hits: report.hits }));
+  }
+});
 
 test('tour railway encircles the original town, makes both river crossings and clears the snow', () => {
   const train = createTownRailway(grid, () => epoch);
