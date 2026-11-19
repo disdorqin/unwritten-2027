@@ -40,8 +40,10 @@ function checkpoint(value: unknown): value is Checkpoint {
 
 function parseBlueprint(value: unknown): SnowMazeBlueprint | undefined {
   if (!record(value) || !checkpoint(value.entry) || !checkpoint(value.bell) ||
-      !Array.isArray(value.columns) || !value.columns.length || value.columns.length * mazeWallLayers > WALL_TOWN_CAP ||
-      !value.columns.every(cell => record(cell) && Number.isSafeInteger(cell.gx) && Number.isSafeInteger(cell.gy))) return;
+      !Array.isArray(value.columns) || !value.columns.length || value.columns.length * mazeWallLayers > WALL_TOWN_CAP) return;
+  for (const cell of value.columns) {
+    if (!record(cell) || !Number.isSafeInteger(cell.gx) || !Number.isSafeInteger(cell.gy)) return;
+  }
   return {
     entry: { east: value.entry.east, north: value.entry.north, radius: value.entry.radius },
     bell: { east: value.bell.east, north: value.bell.north, radius: value.bell.radius },

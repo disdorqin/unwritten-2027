@@ -55,6 +55,9 @@ test('solo trial requires validated entry, lawful route and continuous bell hold
 
 test('blueprint compilation rejects duplicates, cap overflow, forbidden walls and invalid course inputs', () => {
   const road = { gx: 322, gy: 404 };
+  const sparseColumns = new Array<typeof column>(2);
+  sparseColumns[0] = column;
+  assert.equal(compileSnowMaze({ ...blueprint, columns: sparseColumns }, rules), undefined);
   assert.equal(compileSnowMaze({ ...blueprint, columns: [column, column] }, rules), undefined);
   assert.equal(compileSnowMaze({ ...blueprint, columns: Array.from({ length: WALL_TOWN_CAP / 2 + 1 }, () => column) }, rules), undefined);
   assert.equal(compileSnowMaze({ ...blueprint, columns: [road] },
