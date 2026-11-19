@@ -150,6 +150,17 @@ async function main() {
   assert.ok(blocked.wallClearance >= 0 && !blocked.frontierReached);
   assertDetail(blocked, true, false, 0, 0);
   assert.equal(blocked.layerTransitions.length, 0);
+  const around = await walk(page, 'd', 'move beyond the outer jamb', () => window.__p1Review.getState().east >= 4.25);
+  const bypass = await walk(page, 'w', 'refuse a crossing beyond the jamb', before => {
+    const state = window.__p1Review.getState();
+    return state.blocked > before && state.lastBlock === 'aperture';
+  }, around.blocked);
+  assert.ok(bypass.east >= 4.25 && bypass.north < -10 && bypass.north > -10.3);
+  assert.ok(bypass.wallClearance > .3 && !bypass.frontierReached);
+  assert.equal(bypass.seamCrossings, 0);
+  assert.equal(bypass.layerTransitions.length, 0);
+  assertDetail(bypass, true, false, 0, 0);
+  await walk(page, 's', 'clear the front of the jamb', () => window.__p1Review.getState().north <= -10.6);
   await walk(page, 'a', 'recover into the clear center', () => Math.abs(window.__p1Review.getState().east) <= .20);
   const interior = await walk(page, 'w', 'walk through the gate to the arrival plateau',
     () => window.__p1Review.getState().frontierReached);

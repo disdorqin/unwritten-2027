@@ -38,7 +38,7 @@ const headings = {
 } as const;
 type Heading = keyof typeof headings;
 type View = Heading | 'gate';
-type BlockReason = 'extent' | 'step' | 'gate';
+type BlockReason = 'extent' | 'step' | 'gate' | 'aperture';
 type DetailLayer = 'front-ridge' | 'main-summit';
 type LayerChange = { from: DetailLayer; to: DetailLayer };
 type LayerFrame = LayerChange & {
@@ -207,7 +207,8 @@ function gateClearance(x: number, n: number, y: number): number | null {
 function rejectMove(reason: BlockReason) {
   blocked++;
   lastBlock = reason;
-  status.textContent = reason === 'gate' ? '门框挡住了这一步。' : '已到局部试走范围边界。';
+  if (reason === 'aperture') status.textContent = '请从山门门洞穿过。';
+  else status.textContent = reason === 'gate' ? '门框挡住了这一步。' : '已到局部试走范围边界。';
 }
 
 function move() {
@@ -222,8 +223,16 @@ function move() {
   if (Math.abs(nextFeet - feet) > stepHeight) return rejectMove('step');
   if ((gateClearance(nextEast, nextNorth, nextFeet) ?? Infinity) < 0) return rejectMove('gate');
 
+  const crossesSeam = (north < seamNorth) !== (nextNorth < seamNorth);
+  if (crossesSeam) {
+    const fraction = (seamNorth - north) / (nextNorth - north);
+    const crossingEast = east + (nextEast - east) * fraction;
+    const centreClearance = mainSummitLayout.gate.clearWidth / 2 - bodyRadius;
+    if (Math.abs(crossingEast) > centreClearance) return rejectMove('aperture');
+  }
+
   maxAcceptedStep = Math.max(maxAcceptedStep, Math.abs(nextFeet - feet));
-  if ((north < seamNorth) !== (nextNorth < seamNorth)) {
+  if (crossesSeam) {
     seamCrossings++;
     changeDetail(nextNorth < seamNorth ? 'front-ridge' : 'main-summit');
   }
