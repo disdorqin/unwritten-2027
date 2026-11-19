@@ -65,7 +65,11 @@ worktree() {
 
 compose() {
   local sha="$1" tree="$2"; shift 2
-  TOWN_RELEASE="$sha" docker compose -p unwritten-preview -f "$tree/tools/compose.town-preview.yaml" -f "$override" "$@"
+  local -a env_args=()
+  if [[ -f "$REPO_DIR/.env" ]]; then
+    env_args=(--env-file "$REPO_DIR/.env")
+  fi
+  TOWN_RELEASE="$sha" docker compose "${env_args[@]}" -p unwritten-preview -f "$tree/tools/compose.town-preview.yaml" -f "$override" "$@"
 }
 
 cd "$REPO_DIR"
