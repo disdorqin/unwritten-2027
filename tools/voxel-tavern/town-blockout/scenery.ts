@@ -66,7 +66,9 @@ function sceneryRandom() {
   };
 }
 
-export function addScenery(group: Group, grid: Ground) {
+export function addScenery(
+  group: Group, grid: Ground, keepClear: (east: number, north: number, radius: number) => boolean = () => false,
+) {
   const random = sceneryRandom();
   const pillars: Instance[] = [];
   const lights: Instance[] = [];
@@ -90,7 +92,7 @@ export function addScenery(group: Group, grid: Ground) {
     });
   }
   const lamp = (x: number, y: number, north: number) => {
-    if (nearEntrance(x, north, 1.35)) return;
+    if (nearEntrance(x, north, 1.35) || keepClear(x, north, .65 / Math.SQRT2)) return;
     const z = -north;
     pillars.push({ at: [x, y + 1.3, z], scale: [.21, 2.6, .21], tint: '#453f48' });
     pillars.push({ at: [x, y + .21, z], scale: [.48, .42, .48], tint: '#78869b' });

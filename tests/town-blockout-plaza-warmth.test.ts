@@ -77,7 +77,7 @@ test('expanded plaza opts into three fixed fires while the original B5 placement
   assert.deepEqual(findRegionalCampfires(ground, [161, 161, 251, 212]), baseline);
 
   const all = findRegionalCampfires(ground, expanded);
-  assert.equal(all.length, maxCampfireSites);
+  assert.equal(all.length, 8);
   assert.deepEqual(findRegionalCampfires(ground, phaseThree), all);
   assert.deepEqual(all.slice(0, baseline.length), baseline);
   assert.deepEqual(all.slice(5).map(({ id, x, n }) => [id, x, n]), [
@@ -93,7 +93,7 @@ test('expanded plaza opts into three fixed fires while the original B5 placement
 test('central fire cores, seated approaches and the southwest wood pile fit the expanded plaza', () => {
   const canStand = checkedGround();
   const fires = findRegionalCampfires(canStand, layout.plaza.bounds);
-  assert.equal(fires.length, maxCampfireSites);
+  assert.equal(fires.length, 8);
   const sites = fires.filter(site => centralIds.some(id => id === site.id));
   assert.deepEqual(sites.map(site => [site.x, site.n, site.ground, site.seats.length]), [
     [238, 205, 12, 3], [240, 173, 12, 3], [178, 162, 12, 4],

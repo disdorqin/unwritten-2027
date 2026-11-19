@@ -9,7 +9,7 @@ import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
 import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
 import { bridgeAt, canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { nearestTownActivity } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
-import { createTownCampfires, fireWarmthRadius, type CampfireSite } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
+import { campfirePartsPerSite, campfirePieces, createTownCampfires, findRegionalCampfires, fireWarmthRadius, maxCampfireSites, pineCampfireId, type CampfireSite } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
 import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 import {
   createForestCampfire, findForestChopSites, forestChopHits, forestChopRange, forestWoodPileLimit, forestWoodStorageKey,
@@ -179,4 +179,80 @@ test('three stages and village chimney growth reuse one particle pool with uncha
   const lowFlames = scene.children.at(-1);
   assert.ok(lowFlames instanceof Points);
   assert.equal(lowFlames.geometry.drawRange.count, 1 + 24);
+});
+
+test('pine fire adds a ninth site with six warm seats and leaves the eight accepted sites unchanged', t => {
+  const levelGround = (_x: number, _n: number, fixed?: number) => fixed ?? 12;
+  const before = findRegionalCampfires(levelGround, layout.plaza.bounds);
+  const after = findRegionalCampfires(levelGround, layout.plaza.bounds, { pineCamp: true });
+  assert.equal(before.length, 8);
+  assert.equal(maxCampfireSites, 9);
+  assert.equal(after.length, maxCampfireSites);
+  assert.deepEqual(after.slice(0, before.length), before);
+  const pine = after.at(-1)!;
+  assert.deepEqual([pine.id, pine.x, pine.n, pine.ground], [pineCampfireId, 418, 225, 12]);
+  assert.deepEqual(pine.woodPile, { x: 416.5, n: 223.65, ground: 12 });
+  assert.equal(pine.seats.length, 6);
+
+  const scene = new Scene();
+  const warmSittings: number[] = [];
+  const outdoor = createTownCampfires(scene, { sit: seat => {
+    assert.ok(outdoor.warmAt(seat.x, seat.n, seat.eyeY - 1.475));
+    warmSittings.push(seat.eyeY);
+  } }, after);
+  for (const seat of pine.seats) {
+    assert.ok(Math.abs(Math.hypot(seat.x - pine.x, seat.n - pine.n) - 2.15) < 1e-8);
+    assert.equal(outdoor.blocked?.(seat.approach.x, seat.approach.n, seat.approach.ground), false);
+  }
+  const pineSit = outdoor.spots.filter(spot => spot.label === '在松林火塘旁坐下');
+  assert.equal(pineSit.length, 6);
+  pineSit.forEach(spot => spot.run());
+  assert.equal(warmSittings.length, 6);
+  assert.ok(outdoor.warmAt(421, 225, 12));
+  assert.equal(outdoor.warmAt(421.01, 225, 12), false);
+  const pieces = campfirePieces(after);
+  assert.equal(campfirePieces([pine]).length, 45);
+  assert.ok(pieces.length <= maxCampfireSites * campfirePartsPerSite);
+  assert.equal(scene.children.filter(child => child instanceof Points).length, 1);
+  t.diagnostic(`fixture: ${before.length}→${after.length} fires, pine adds 45 pieces, ${pieces.length}/${maxCampfireSites * campfirePartsPerSite} used, 6 warm seats, 1 particle batch`);
+});
+
+test('pine chopping and feeding a supported site reuse five strikes while keeping old fuel separate', t => {
+  const flat = () => 12;
+  const [pine] = findRegionalCampfires(flat, undefined, { pineCamp: true }).filter(fire => fire.id === pineCampfireId);
+  const chopSites = findForestChopSites([pine], flat);
+  const chopSite = chopSites.find(site => site.id === pineCampfireId)!;
+  assert.deepEqual([chopSite.x, chopSite.n, chopSite.props.x, chopSite.props.n], [415.5, 223.7, 414.05, 223.7]);
+
+  const data = new Map([[forestWoodStorageKey, JSON.stringify({ piles: { village: 2, campfire: 2 } })]]);
+  const storage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => { data.set(key, value); },
+  };
+  const notes: string[] = [];
+  let time = 0, lit = 0;
+  const options = { pineCamp: pine, isNight: () => true, now: () => time, storage, onPineCampLit: () => { lit++; } };
+  const activity = createForestCampfire(new Scene(), { announce: line => notes.push(line) }, chopSites, options);
+  const chop = activity.spots.find(spot => spot.label === '松林营地劈柴')!;
+  const feed = activity.spots.find(spot => spot.label === '给松林火塘添柴')!;
+  assert.ok(chop && feed);
+  const outdoor = createTownCampfires(new Scene(), { sit() {} }, [pine], activity.flames);
+  assert.equal(outdoor.blocked?.(feed.x, feed.n, feed.ground), false);
+  feed.run();
+  assert.equal(lit, 0);
+
+  for (let stock = 0; stock < 4; stock++) {
+    for (let hit = 1; hit < forestChopHits; hit++) { time += 400; chop.run(); }
+    assert.equal(activity.pineCampState().wood, 0);
+    time += 400;
+    chop.run();
+    assert.equal(activity.pineCampState().wood, 1);
+    feed.run();
+    assert.deepEqual(activity.pineCampState(), { wood: 0, fuel: stock + 1, level: stock === 3 ? 2 : 0 });
+  }
+  assert.equal(lit, 1);
+  assert.deepEqual(activity.state(), { fuel: 4, piles: { village: 2, campfire: 2 }, attended: false });
+  assert.deepEqual(createForestCampfire(new Scene(), { announce() {} }, chopSites, options).pineCampState(), activity.pineCampState());
+  assert.deepEqual([...data.keys()], [forestWoodStorageKey]);
+  t.diagnostic('fixture: fourth strike no wood, fifth strike +1; four feeds unlock night stage, original camp fuel unchanged');
 });

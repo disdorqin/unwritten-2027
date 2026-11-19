@@ -5,6 +5,10 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
+import { buildPineCamp } from './town-pine-camp';
+import { createPineCampActivity } from './town-pine-camp-activity';
+import { campfirePieces, createTownCampfires, findRegionalCampfires, pineCampfireId } from './town-campfires';
+import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
 import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
 import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
@@ -173,12 +177,16 @@ function stationViewCamera() {
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
-const scenery = addScenery(landscape, grid);
+const pineCamp = buildPineCamp(grid);
+landscape.add(pineCamp.group);
+const scenery = addScenery(landscape, grid, pineCamp.keepClear);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
-  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
+  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) ||
+  pineCamp.keepClear(east, north, radius));
 const forest = addForestDensity(landscape, grid,
-  (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius),
+  (east, north, radius) => districts.keepClear(east, north, radius) ||
+    streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
 const snowButton = element<HTMLButtonElement>('snow');
@@ -435,7 +443,7 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -1979,6 +1987,41 @@ for (const stop of railway.stops) {
   });
 }
 
+function campfireGround(east: number, north: number, height?: number) {
+  if (bridgeAt(east, north) || isLakeSkateIce(east, north) || townWater.at(east, north)) return;
+  const base = height ?? pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
+  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  if (Math.abs(feet - base) > (height === undefined ? .30 : .14) ||
+      !canStandAtActivity(east, north, feet) || roofed(east, north, feet) ||
+      activitySpots.some(spot => Math.abs(spot.ground - feet) < .65 &&
+        (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
+  return feet;
+}
+const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds, { pineCamp: true });
+const forestCampfire = createForestCampfire(scene, { announce: announceActivity },
+  findForestChopSites(campfireSites, campfireGround),
+  { isNight: () => nightMode, pineCamp: campfireSites.find(site => site.id === pineCampfireId) });
+const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
+scenery.setCampfirePieces(campfirePieces(campfireSites));
+const pineCampActivity = createPineCampActivity({ open: activityContext.open, announce: announceActivity }, {
+  heightAt(east, north) {
+    const base = pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
+    return supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  },
+  canStand: canStandAtActivity,
+  rollingAt() {
+    if (!walking || homeReturn || seated || sledRide.active() || railway.riding ||
+        boardingGround || airHeight !== undefined) return;
+    const exposed = snowCover.exposedSnowAt(x, n, ground, snowCleared);
+    const snow = !exposed ? 'other' : snowCover.depthAt(x, n, ground, snowCleared) >= .6 ? 'deep' : 'shallow';
+    return { x, n, snow };
+  },
+  setFormation: pineCamp.setFormation,
+  setTreasureTrailVisible: pineCamp.setTreasureTrailVisible,
+});
+activities.push(outdoorCampfires, forestCampfire, pineCampActivity);
+activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots, ...pineCampActivity.spots);
+
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
     Math.abs(ground - stop.ground) < .65 && Math.hypot(x - stop.x, n - stop.n) < 3));
@@ -2243,6 +2286,7 @@ renderer.setAnimationLoop(now => {
   const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
+  outdoorCampfires.updateFlames(dt, camera.position.x, -camera.position.z, Boolean(homeReturn));
   if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, snowCover.amount(), cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   forest.setPanorama(wideView);
@@ -2305,7 +2349,8 @@ renderer.setAnimationLoop(now => {
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
     ? sharedHomeHearthWarmth(shedEast, shedNorth, shedFeet)
-    : shedSheltered && nearTavernWarmShedFire(tavernPlot, shedEast, shedNorth, shedFeet));
+    : (shedSheltered && nearTavernWarmShedFire(tavernPlot, shedEast, shedNorth, shedFeet)) ||
+      (walking && !boardingGround && !sheltered && outdoorCampfires.warmAt(shedEast, shedNorth, shedFeet)));
   if (warmDrinkUntil && now >= warmDrinkUntil) {
     warmDrinkUntil = 0;
     ceremonyFrost.setWarmth('hot-drink', false);

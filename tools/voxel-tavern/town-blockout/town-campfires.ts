@@ -9,7 +9,8 @@ import { memorialTimeboxAnnex } from './town-mail-sites';
 import { roadCorridorKeepClear } from './road-clearance';
 
 export const fireWarmthRadius = 3;
-export const maxCampfireSites = 8;
+export const maxCampfireSites = 9;
+export const pineCampfireId = 'pine-camp';
 export const campfirePartsPerSite = 44;
 const fireParticles = 48;
 const smokeParticles = 8;
@@ -18,6 +19,7 @@ const forestAngle = .12;
 export type CampfireForestOptions = {
   level(): 0 | 1 | 2;
   onForestSeat?(): void;
+  pineLevel?(): 0 | 1 | 2;
   villageSmoke?: { x: number; n: number; height: number; scale(): number };
 };
 
@@ -65,6 +67,11 @@ const plazaSites: readonly Seed[] = [
   { id: 'plaza-campfire', label: '广场篝火', style: 'stone', origin: [178, 162], facing: 0, fixed: true,
     ring: [0, Math.PI / 2, Math.PI, -Math.PI / 2], woodPile: [-1.50, -1.35] },
 ];
+const pineCampSeed: Seed = {
+  id: pineCampfireId, label: '松林火塘', style: 'stone', origin: [418, 225], facing: -Math.PI / 2, fixed: true,
+  ring: [0, Math.PI / 3, -Math.PI / 3, 2 * Math.PI / 3, -2 * Math.PI / 3, Math.PI],
+  woodPile: [-1.50, -1.35],
+};
 const fixedOffset = [[0, 0]] as const;
 const siteOffsets = [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [1.2, 1.2], [-1.2, 1.2], [1.2, -1.2], [-1.2, -1.2]] as const;
 const regionalOffsets = [...siteOffsets, ...[2, 3.5, 5, 6.5, 8, 10, 12, 14, 16, 18, 20, 22].flatMap(radius =>
@@ -99,10 +106,16 @@ function plazaIncludesCampfires(bounds?: readonly number[]) {
   });
 }
 
-export function findRegionalCampfires(groundAt: CheckGround, plazaBounds?: readonly number[]): CampfireSite[] {
-  const usePlaza = plazaIncludesCampfires(plazaBounds);
+export function findRegionalCampfires(
+  groundAt: CheckGround,
+  plazaBounds?: readonly number[],
+  options?: { pineCamp?: boolean },
+): CampfireSite[] {
+  const seeds = [...regionalSites];
+  if (plazaIncludesCampfires(plazaBounds)) seeds.push(...plazaSites);
+  if (options?.pineCamp) seeds.push(pineCampSeed);
   const fires: CampfireSite[] = [];
-  for (const seed of usePlaza ? [...regionalSites, ...plazaSites] : regionalSites) {
+  for (const seed of seeds) {
     const spread = seatSpread(seed);
     const ring = seed.ring ?? (seed.style === 'stone' ? [-1.13, -.40, .40, 1.13] : [-.97, 0, .97]);
     const offsets = seed.fixed ? fixedOffset : seed.id === 'forest' || seed.id === 'lakeside' ? regionalOffsets : siteOffsets;
@@ -134,7 +147,7 @@ export function findRegionalCampfires(groundAt: CheckGround, plazaBounds?: reado
             approach: { x: approachX, n: approachN, ground: approachGround } });
         }
       }
-      if (seats.length < 2) continue;
+      if (seats.length < (seed.id === pineCampfireId ? ring.length : 2)) continue;
       let woodPile: Surface | undefined;
       if (seed.woodPile) {
         const pileX = x + seed.woodPile[0], pileN = n + seed.woodPile[1];
@@ -291,7 +304,8 @@ export function createTownCampfires(
       for (const [index, site] of sites.entries()) {
         const isStone = site.style === 'stone';
         const y = site.ground + (isStone ? .31 : .59);
-        const profile = site.id === 'forest' && forest ? forestFlames[forest.level()] : undefined;
+        const level = site.id === 'forest' ? forest?.level() : site.id === pineCampfireId ? forest?.pineLevel?.() : undefined;
+        const profile = level === undefined ? undefined : forestFlames[level];
         const glow = profile?.glow ?? 1;
         emit(site.x, y + .07, -site.n, (isStone ? 1.88 : 1.35) * glow, .31 * glow, .26);
         if ((site.x - east) ** 2 + (site.n - north) ** 2 > 40 ** 2) continue;

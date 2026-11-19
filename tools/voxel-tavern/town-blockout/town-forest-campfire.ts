@@ -1,11 +1,12 @@
 import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, type Scene } from 'three';
 import { roadCorridorKeepClear } from './road-clearance';
 import type { TownActivity, TownActivityContext } from './town-activity';
-import type { CampfireForestOptions, CampfireSite } from './town-campfires';
+import { pineCampfireId, type CampfireForestOptions, type CampfireSite } from './town-campfires';
 import { layout } from './terrain';
 
 type Place = { x: number; n: number; ground: number };
-type SiteId = 'village' | 'campfire';
+const forestSiteIds = ['village', 'campfire', pineCampfireId] as const;
+type SiteId = typeof forestSiteIds[number];
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 type Piles = Record<SiteId, number>;
 export type ForestChopSite = Place & { id: SiteId; props: Place };
@@ -19,15 +20,17 @@ const maximumRhythmMs = 950;
 const propRadius = .72;
 const standOffset = 1.45;
 const nearCandidates = [[0, 0], [0, -.45], [-.45, 0], [0, .45], [.45, 0]] as const;
-const siteLabel = { village: '木屋旁劈柴', campfire: '篝火旁劈柴' } as const;
+const siteLabel = { village: '木屋旁劈柴', campfire: '篝火旁劈柴', [pineCampfireId]: '松林营地劈柴' } as const;
 
 export function findForestChopSites(
   fires: readonly CampfireSite[],
   walkableGround: (east: number, north: number) => number | undefined,
 ): ForestChopSite[] {
-  const campfire = fires.find(({ id }) => id === 'forest');
   const seeds: { id: SiteId; x: number; n: number }[] = [{ id: 'village', x: 94.30, n: 263.25 }];
-  if (campfire) seeds.push({ id: 'campfire', x: campfire.x - 2.50, n: campfire.n - 1.30 });
+  for (const [fireId, chopId] of [['forest', 'campfire'], [pineCampfireId, pineCampfireId]] as const) {
+    const fire = fires.find(({ id }) => id === fireId);
+    if (fire) seeds.push({ id: chopId, x: fire.x - 2.50, n: fire.n - 1.30 });
+  }
 
   function clearPlate(x: number, n: number, radius: number) {
     if (roadCorridorKeepClear(x, n, radius + .18)) return;
@@ -62,22 +65,24 @@ function browserStorage() {
 }
 
 function readForestWood(storage: StoragePort | undefined) {
-  const piles: Piles = { village: 0, campfire: 0 };
+  const piles: Piles = { village: 0, campfire: 0, [pineCampfireId]: 0 };
   let attended = false;
+  let pineFuel = 0;
   try {
     const saved = JSON.parse(storage?.getItem(forestWoodStorageKey) ?? '{}');
-    for (const id of ['village', 'campfire'] as const) {
+    for (const id of forestSiteIds) {
       const count = saved?.piles?.[id];
       if (Number.isInteger(count)) piles[id] = Math.min(forestWoodPileLimit, Math.max(0, count));
     }
     attended = saved?.attended === true;
-  } catch { /* A broken save leaves the two wood piles empty. */ }
-  return { piles, attended };
+    if (Number.isInteger(saved?.pineFuel)) pineFuel = Math.min(forestWoodPileLimit, Math.max(0, saved.pineFuel));
+  } catch { /* A broken save leaves the wood piles empty. */ }
+  return { piles, attended, pineFuel };
 }
 
 function buildChopProps(scene: Scene, sites: readonly ForestChopSite[], counts: Piles) {
   const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), sites.length * (6 + 3 * forestWoodPileLimit));
-  batch.name = '森林两处劈柴墩与柴垛';
+  batch.name = '森林劈柴墩与柴垛';
   batch.instanceMatrix.setUsage(DynamicDrawUsage);
   scene.add(batch);
   const pose = new Object3D();
@@ -119,7 +124,7 @@ export function createForestCampfire(
   scene: Scene,
   context: Pick<TownActivityContext, 'announce'>,
   sites: readonly ForestChopSite[],
-  options: { isNight(): boolean; now?: () => number; storage?: StoragePort },
+  options: { isNight(): boolean; now?: () => number; storage?: StoragePort; pineCamp?: CampfireSite; onPineCampLit?(): void },
 ) {
   const storage = options.storage ?? browserStorage();
   const now = options.now ?? Date.now;
@@ -128,6 +133,7 @@ export function createForestCampfire(
   const beats = new Map<SiteId, { count: number; at: number }>();
   const fuel = () => saved.piles.campfire + saved.piles.village;
   const level = () => fuel() < blazeThreshold ? 0 : options.isNight() ? 2 : 1;
+  const pineLevel = () => saved.pineFuel < blazeThreshold ? 0 : options.isNight() ? 2 : 1;
   const levelNames = ['微火', '旺火', '篝火晚会'] as const;
 
   function persist() {
@@ -157,7 +163,29 @@ export function createForestCampfire(
     saved.piles[id]++;
     refresh?.();
     persist();
+    if (id === pineCampfireId) {
+      context.announce(`柴垛 ${saved.piles[id]}/${forestWoodPileLimit}`);
+      return;
+    }
     context.announce(`柴垛 ${saved.piles[id]}/${forestWoodPileLimit} · 燃料 ${fuel()} · ${levelNames[level()]}`);
+  }
+
+  function addPineCampWood() {
+    if (saved.piles[pineCampfireId] === 0) {
+      context.announce('到松林劈柴，再回火塘添柴。');
+      return;
+    }
+    if (saved.pineFuel >= forestWoodPileLimit) {
+      context.announce('柴垛已满');
+      return;
+    }
+    const first = saved.pineFuel === 0;
+    saved.piles[pineCampfireId]--;
+    saved.pineFuel++;
+    refresh?.();
+    persist();
+    context.announce(`松林火塘 · 燃料 ${saved.pineFuel} · ${levelNames[pineLevel()]}`);
+    if (first) options.onPineCampLit?.();
   }
 
   function recordPartySeat() {
@@ -172,16 +200,25 @@ export function createForestCampfire(
   const flames: CampfireForestOptions = {
     level,
     onForestSeat: recordPartySeat,
+    pineLevel,
     // The chimney on the walk-in cabin in landmark-village.ts.
     villageSmoke: {
       x: cabinEast + 7.5, n: cabinNorth - .075, height: cabinGround + 5.775,
       scale: () => saved.piles.village >= forestWoodPileLimit ? 1.6 : 1,
     },
   };
+  const spots: TownActivity['spots'] = sites.map(({ id, x, n, ground }) => ({
+    x, n, ground, label: siteLabel[id], range: forestChopRange, run: () => chop(id),
+  }));
+  const pineCamp = options.pineCamp;
+  const pile = pineCamp?.woodPile;
+  if (pineCamp && pile && sites.some(({ id }) => id === pineCampfireId)) {
+    // Reach the north side of the pile from the existing fire pad.
+    spots.push({ x: pile.x, n: pile.n + propRadius + .18, ground: pineCamp.ground,
+      range: forestChopRange, label: '给松林火塘添柴', run: addPineCampWood });
+  }
   const activity: TownActivity = {
-    spots: sites.map(({ id, x, n, ground }) => ({
-      x, n, ground, label: siteLabel[id], range: forestChopRange, run: () => chop(id),
-    })),
+    spots,
     blocked(east, north, feet) {
       return sites.some(({ props }) => Math.abs(feet - props.ground) < .9 &&
         Math.hypot(east - props.x, north - props.n) < propRadius);
@@ -193,6 +230,7 @@ export function createForestCampfire(
     flames,
     level,
     recordPartySeat,
-    state: () => ({ fuel: fuel(), piles: { ...saved.piles }, attended: saved.attended }),
+    state: () => ({ fuel: fuel(), piles: { village: saved.piles.village, campfire: saved.piles.campfire }, attended: saved.attended }),
+    pineCampState: () => ({ wood: saved.piles[pineCampfireId], fuel: saved.pineFuel, level: pineLevel() }),
   };
 }
