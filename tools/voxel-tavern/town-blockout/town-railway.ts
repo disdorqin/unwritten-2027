@@ -429,12 +429,13 @@ function buildVehicle(engine: boolean, accent: string, geometry: BoxGeometry, op
 
 function buildLandmarkPlatforms(
   grid: Terrain, parent: Group, geometry: BoxGeometry, opaque: Material, colliders: Box[], cycleSeconds: number,
+  orderedPlatforms: readonly RailPlatform[],
 ) {
   const floors: Box[] = [];
   const parts: Part[] = [];
   const cardHeight = 128;
   const canvas = typeof document === 'undefined' ? undefined : document.createElement('canvas');
-  if (canvas) { canvas.width = 640; canvas.height = 1024; }
+  if (canvas) { canvas.width = 640; canvas.height = Math.max(1024, orderedPlatforms.length * cardHeight); }
   const ink = canvas?.getContext('2d');
   const vertices: number[] = [];
   const uv: number[] = [];
@@ -456,7 +457,7 @@ function buildLandmarkPlatforms(
   const warning = '#eac572';
   const protectsRoads = (x: number, n: number) => [forestRoad, bathRoad, stationRoad].some(road =>
     distanceToRoad(x, n, road) < road.width / 2 + .58);
-  for (const [i, platform] of platforms.entries()) {
+  for (const [i, platform] of orderedPlatforms.entries()) {
     const { x, n, ground, axis } = platform;
     const alongEast = axis === 'east';
     const lateral = Math.sign(alongEast ? n - platform.north : x - platform.east);
@@ -489,34 +490,36 @@ function buildLandmarkPlatforms(
       box(lampX, ground + 2.48, lampN, .31, .34, .31, '#ffb770');
       box(lampX, ground + 2.68, lampN, .46, .09, .46, trim);
 
-      const [ex, en] = platform.stairs.end;
-      const stepEast = platform.stairs.axis === 'east';
-      const dockSpan = stepEast === alongEast ? 9 : 1.3;
-      const direction = Math.sign(stepEast ? ex - x : en - n);
-      const [sx, sn] = 'start' in platform.stairs ? platform.stairs.start
-        : [x + (stepEast ? direction * dockSpan : 0), n + (stepEast ? 0 : direction * dockSpan)];
-      const run = Math.hypot(ex - sx, en - sn);
-      const landing = grid.heightAt(ex, en) + .06;
-      const steps = Math.max(Math.ceil(Math.abs(ground - landing) / .22), Math.ceil(run / .8));
-      for (let step = 0; step < steps; step++) {
-        const ratio = (step + .5) / steps;
-        const px = sx + (ex - sx) * ratio, pn = sn + (en - sn) * ratio;
-        const y = ground + (landing - ground) * (step + 1) / steps;
-        const stepLength = run / steps + .025;
-        floor(px, y, pn, stepEast ? stepLength : 2.18, stepEast ? 2.18 : stepLength, timber);
-        if (step % 4 === 0 && y - grid.heightAt(px, pn) > .6) {
-          const side = stepEast ? [0, 1.02] : [1.02, 0];
-          for (const sign of [-1, 1]) {
-            const px2 = px + side[0] * sign, pn2 = pn + side[1] * sign;
-            const bottom = grid.heightAt(px2, pn2) - .06;
-            if (y > bottom + .25 && !protectsRoads(px2, pn2)) {
-              solid(px2, bottom, pn2, .22, y - bottom - .20, .22, stone);
+      if ('stairs' in platform) {
+        const [ex, en] = platform.stairs.end;
+        const stepEast = platform.stairs.axis === 'east';
+        const dockSpan = stepEast === alongEast ? 9 : 1.3;
+        const direction = Math.sign(stepEast ? ex - x : en - n);
+        const [sx, sn] = 'start' in platform.stairs ? platform.stairs.start
+          : [x + (stepEast ? direction * dockSpan : 0), n + (stepEast ? 0 : direction * dockSpan)];
+        const run = Math.hypot(ex - sx, en - sn);
+        const landing = grid.heightAt(ex, en) + .06;
+        const steps = Math.max(Math.ceil(Math.abs(ground - landing) / .22), Math.ceil(run / .8));
+        for (let step = 0; step < steps; step++) {
+          const ratio = (step + .5) / steps;
+          const px = sx + (ex - sx) * ratio, pn = sn + (en - sn) * ratio;
+          const y = ground + (landing - ground) * (step + 1) / steps;
+          const stepLength = run / steps + .025;
+          floor(px, y, pn, stepEast ? stepLength : 2.18, stepEast ? 2.18 : stepLength, timber);
+          if (step % 4 === 0 && y - grid.heightAt(px, pn) > .6) {
+            const side = stepEast ? [0, 1.02] : [1.02, 0];
+            for (const sign of [-1, 1]) {
+              const px2 = px + side[0] * sign, pn2 = pn + side[1] * sign;
+              const bottom = grid.heightAt(px2, pn2) - .06;
+              if (y > bottom + .25 && !protectsRoads(px2, pn2)) {
+                solid(px2, bottom, pn2, .22, y - bottom - .20, .22, stone);
+              }
             }
           }
         }
-      }
 
-      for (let leg = 1; leg < platform.trail.length; leg++) {
+      }
+      if ('trail' in platform) for (let leg = 1; leg < platform.trail.length; leg++) {
         const [x0, n0] = platform.trail[leg - 1];
         const dx = platform.trail[leg][0] - x0, dn = platform.trail[leg][1] - n0;
         const count = Math.ceil(Math.hypot(dx, dn) / 1.6);
@@ -542,7 +545,7 @@ function buildLandmarkPlatforms(
     ink.fillStyle = '#faf0da';
     ink.font = 'bold 24px system-ui, sans-serif';
     ink.fillText(`环镇线 · ${platform.label}`, 15, tile + 30);
-    const following = [...platforms.slice(i + 1), ...platforms.slice(0, i)];
+    const following = [...orderedPlatforms.slice(i + 1), ...orderedPlatforms.slice(0, i)];
     ink.font = '16px system-ui, sans-serif';
     ink.fillText(`顺环方向 · 依次经 ${following.map(stop => stop.label).join('、')} 回到${platform.label}`, 15, tile + 52);
     ink.fillText(`本站　下一站：${following[0].label}`, 15, tile + 73);
@@ -598,7 +601,7 @@ export function createTownRailway(grid: Terrain, now: () => number = Date.now) {
   group.add(...vehicles.map(({ model }) => model), view);
   const { stops } = route;
   const timetable = createRailTimetable(stops, route.length);
-  group.userData.floors = buildLandmarkPlatforms(grid, group, geometry, opaque, track.colliders, timetable.cycleSeconds);
+  group.userData.floors = buildLandmarkPlatforms(grid, group, geometry, opaque, track.colliders, timetable.cycleSeconds, route.stops);
   const phase = { leg: 0, distance: 0, stopped: false, secondsLeft: 0 };
   const boarding = { x: stops[0].x, n: stops[0].n, ground: stops[0].ground };
   timetable.sample(now(), phase);

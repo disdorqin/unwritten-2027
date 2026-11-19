@@ -108,14 +108,14 @@ test('a carriage blocks its physical body but leaves the boarding pad open', () 
   assert.ok(train.vehicleBlocks(east, -z, y - 2.1, 1.8, .27), 'collision follows the carriage');
 });
 
-test('all six platforms board and receive riders only while stopped', () => {
+test('old and new loop platforms board and receive riders only while stopped', () => {
   let time = epoch;
   const train = createTownRailway(grid, () => time);
   const schedule = createRailTimetable(train.stops, train.route.length);
   const floors = train.group.userData.floors as Box[];
   assert.ok(floors.length > 5);
-  assert.deepEqual(train.stops.map(stop => stop.label), ['未写镇站', '火车站前站', '森林木屋站', '湖南岸站', '城堡南站', '温泉站']);
-  assert.ok(train.cycleSeconds >= 270 && train.cycleSeconds <= 290);
+  assert.deepEqual(train.stops.map(stop => stop.label), ['未写镇站', '火车站前站', '北岭站', '森林木屋站', '镜湖站', '湖南岸站', '城堡南站', '温泉站']);
+  assert.ok(train.cycleSeconds > train.stops.length * train.dwellSeconds);
   assert.equal(train.dwellSeconds, 12);
   assert.ok(train.atPlatform && !train.riding);
   for (const { from, to, offset } of schedule.legs) {

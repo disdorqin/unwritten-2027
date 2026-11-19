@@ -153,7 +153,8 @@ export function addDistrictHousing(
       });
       const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(sourceEast) };
       const footprint = footprints(site);
-      if (conflictsWithRail(footprint)) continue;
+      // Preserve the established west clearing after the track relocates behind Mirror Lake.
+      if (address === '63:194' || conflictsWithRail(footprint)) continue;
       const samples = edges(site);
       const heights = samples.map(([px, pn]) => grid.heightAt(px, pn));
       if (Math.max(...heights) - Math.min(...heights) > 5.3) continue;

@@ -3,7 +3,8 @@
 // 服务端→客户端：WALL_SET（块落定/受损后的权威状态）、WALL_CLEAR（块塌落批量移除）。
 // 车道 B 追加 kind 7 SLED_SMASH（雪橇高速撞穿一层墙的骑乘端报告，服务端裁定销毁，见 decode/encode）。
 import { SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
-import { WALL_TOWN_CAP, freeWallTeam, type SnowWallTeam, type WallBlock } from './snowfight.js';
+import { TOWN_BOUNDS } from './protocol.js';
+import { WALL_CELL, WALL_TOWN_CAP, freeWallTeam, type SnowWallTeam, type WallBlock } from './snowfight.js';
 
 export const SNOWFIGHT_PLACE = 3;
 export const SNOWFIGHT_WALL_HIT = 4;
@@ -17,8 +18,8 @@ const WALL_HIT_BYTES = 13;
 // 8 字节：gx/gy u16 + 速度 u8 + 保留字节；同样避开 12 字节（理由同 WALL_HIT 注）。
 const SLED_SMASH_BYTES = 8;
 const WALL_SET_BYTES = 12;
-const MAX_GRID_X = 1280; // 640 m / 0.5 m
-const MAX_GRID_Y = 1024; // 512 m / 0.5 m
+const MAX_GRID_X = TOWN_BOUNDS.width / WALL_CELL;
+const MAX_GRID_Y = TOWN_BOUNDS.depth / WALL_CELL;
 export const WALL_CLEAR_CHUNK = 40;
 
 export type SnowfightClientEvent =

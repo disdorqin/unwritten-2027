@@ -36,6 +36,12 @@ export const railPlatforms = [
     trail: [[528, 144], [528, 145.65], [525.75, 146.4], [524.6, 149.2], [524.6, 157.9], [524, 158]],
     direction: '出站往东到温泉浴场 · 冻透了，先去泡一泡回暖',
     arrival: '泡汤的乘客请下车——车上不回暖，汤里回暖。' },
+  { id: 'north-ridge-station', label: '北岭站', x: 300, n: 445.5, ground: 65.86, yaw: 0,
+    east: 300, north: 449, railY: 65, axis: 'east', halfLength: 10, speed: 8.7,
+    direction: '北岭山腰线', arrival: '北岭站' },
+  { id: 'mirror-lake-station', label: '镜湖站', x: 21.5, n: 185, ground: 16.34, yaw: Math.PI / 2,
+    east: 18, north: 185, railY: 15.48, axis: 'north', halfLength: 10, speed: 11,
+    direction: '镜湖西岸', arrival: '镜湖站' },
 ] as const;
 
 export type RailPlatform = (typeof railPlatforms)[number];

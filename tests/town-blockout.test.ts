@@ -53,8 +53,8 @@ test('the plaza stays flat and each crossing uses its bridge deck', () => {
 });
 
 test('town expansion keeps landmark origins except for the approved stage relocation', () => {
-  assert.deepEqual(worldBounds, { width: 640, depth: 512 });
-  assert.deepEqual([gridWidth, gridDepth], [641, 513]);
+  assert.deepEqual(worldBounds, { width: 640, depth: 540 });
+  assert.deepEqual([gridWidth, gridDepth], [641, 541]);
   assert.deepEqual([layout.width, layout.depth], [448, 384]);
   assert.deepEqual(layout.plaza.spawn, [223, 180]);
   assert.deepEqual(Object.fromEntries(layout.plots.map(({ id, origin }) => [id, origin])), {
@@ -90,12 +90,13 @@ test('expanded streets cross the legacy seams and the northern river stays outsi
       }
     }
   }
-  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231]]) {
+  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231], [540, 231]]) {
     assert.equal(riverX(n), x);
     assert.ok(!canEnter(x, n));
   }
   assert.ok(!canEnter(640, 224));
-  assert.ok(!canEnter(93, 512));
+  assert.ok(canEnter(93, 512));
+  assert.ok(!canEnter(93, 540));
 });
 
 test('legacy houses reserve rail clearance while nearby open sites stay occupied', () => {
@@ -106,8 +107,9 @@ test('legacy houses reserve rail clearance while nearby open sites stay occupied
 
   assert.ok(before.blocked(390, 32), 'original south dwelling exists without rail clearance');
   assert.ok(!after.blocked(390, 32), 'south dwelling must clear the track');
-  assert.ok(before.blocked(63, 194), 'original west cabin exists without rail clearance');
-  assert.ok(!after.blocked(63, 194), 'west cabin must clear the track');
+  assert.ok(!before.blocked(63, 194), 'the established west clearing stays open after rerouting');
+  assert.ok(!after.blocked(63, 194), 'moving the track does not put a new cabin in the clearing');
+  assert.ok(rail.keepClear(18, 185));
   assert.ok(after.blocked(405, 51), 'northward neighboring dwelling is still in place');
   const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32) && !(x === 63 && n === 194));
   assert.deepEqual(after.sites, unaffected);

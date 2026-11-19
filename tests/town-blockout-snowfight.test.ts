@@ -164,7 +164,7 @@ test('sled smash codec round-trips and rejects garbage', () => {
   assert.equal(decodeSnowfightClientEvent(stretched), undefined);
   // 越界格拒绝
   assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 1280, gy: 0, speed: 10 })), undefined);
-  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1024, speed: 10 })), undefined);
+  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1080, speed: 10 })), undefined);
   // 撞穿帧不是中继帧
   assert.equal(decodeSnowfightRelay(frame), null);
 });
