@@ -3,7 +3,7 @@ import {
   Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight, Vector3,
   Points, PointsMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
 } from 'three';
-import { canEnter, layout } from './terrain';
+import { canEnter, gridStep, layout, plazaCoreBounds, plazaPavingAllowed } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addLandmarkNameplate } from './landmark-label';
 import type { Box } from './landmark-kit';
@@ -57,12 +57,17 @@ function makeGlows(group: Group, positions: Position[]) {
 }
 
 type Blocker = { x: number; n: number; radius: number };
-export function addScenery(group: Group, grid: Ground) {
+
+function sceneryRandom() {
   let seed = 271;
-  const random = () => {
+  return () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
+}
+
+export function addScenery(group: Group, grid: Ground) {
+  const random = sceneryRandom();
   const pillars: Instance[] = [];
   const lights: Instance[] = [];
   const caps: Instance[] = [];
@@ -74,6 +79,8 @@ export function addScenery(group: Group, grid: Ground) {
     site: PlazaSnowSupplySite; firstCap: number; ground: number; parts: Instance[]; heightScale: number;
   }[] = [];
   const [w, s, e, n] = layout.plaza.bounds;
+  const [coreWest, coreSouth, coreEast, coreNorth] = plazaCoreBounds;
+  const hasPlazaCore = w <= coreWest && s <= coreSouth && e >= coreEast && n >= coreNorth;
   function nearEntrance(x: number, north: number, margin: number) {
     return layout.plots.some(({ connect: [ax, an], door: [bx, bn] }) => {
       const dx = bx - ax;
@@ -99,21 +106,49 @@ export function addScenery(group: Group, grid: Ground) {
     caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
   };
 
-  if (w === 161 && s === 152 && e === 251 && n === 212) {
-    function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
-      pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
+  const pavingColors = ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'] as const;
+  function pave(x: number, north: number, width: number, depth: number, tint: string) {
+    const centreEast = x + width / 2, centreNorth = north + depth / 2;
+    const tileRadius = Math.hypot(width, depth) / 2;
+    if (plazaPavingAllowed(centreEast, centreNorth, tileRadius) &&
+        grid.heightAt(centreEast, centreNorth) === plazaHeight &&
+        grid.heightAt(x, north) === plazaHeight &&
+        grid.heightAt(x + width, north) === plazaHeight &&
+        grid.heightAt(x, north + depth) === plazaHeight &&
+        grid.heightAt(x + width, north + depth) === plazaHeight) {
+      pavers.push({ at: [centreEast, plazaHeight - .025, -centreNorth],
+        scale: [width - .035, .085, depth - .035], tint });
+      return;
     }
-    for (const [west, east] of [[w, 219], [219, 229], [229, e]]) {
+    // Split only at cuts and sloping edges; the full-size stone stays everywhere else.
+    if (Math.max(width, depth) <= gridStep) return;
+    if (width >= depth) {
+      const first = Math.max(gridStep, Math.floor(width / (2 * gridStep)) * gridStep);
+      pave(x, north, first, depth, tint);
+      pave(x + first, north, width - first, depth, tint);
+    } else {
+      const first = Math.max(gridStep, Math.floor(depth / (2 * gridStep)) * gridStep);
+      pave(x, north, width, first, tint);
+      pave(x, north + first, width, depth - first, tint);
+    }
+  }
+
+  if (hasPlazaCore) {
+    function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
+      if (plazaPavingAllowed(x, north, Math.hypot(width, depth) / 2)) {
+        pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
+      }
+    }
+    for (const [west, east] of [[coreWest, 219], [219, 229], [229, coreEast]]) {
       for (let x = west; x < east; x += 4) {
-        for (let north = s; north < n; north += 4) {
-          const width = Math.min(4, east - x), depth = Math.min(4, n - north);
-          const seam = x === west || north === s || north + depth === n;
+        for (let north = coreSouth; north < coreNorth; north += 4) {
+          const width = Math.min(4, east - x), depth = Math.min(4, coreNorth - north);
+          const seam = x === west || north === coreSouth || north + depth === coreNorth;
           const tint = west === 219
             ? ['#a8988a', '#b3a295'][Math.floor(random() * 2)]
-            : seam ? '#6f7887' : ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'][Math.floor(random() * 4)];
-          pavers.push({ at: [x + width / 2, plazaHeight - .025, -north - depth / 2],
-            scale: [width - .035, .085, depth - .035], tint });
-          if (west !== 219 && (north - s) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
+            : seam ? '#6f7887' : pavingColors[Math.floor(random() * pavingColors.length)];
+          pave(x, north, width, depth, tint);
+          if (west !== 219 && (north - coreSouth) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
         }
       }
     }
@@ -137,15 +172,30 @@ export function addScenery(group: Group, grid: Ground) {
           1.03, .14, '#d5e8f4', fork);
       }
     }
-    // Keep the non-colliding edge lights in the existing emissive batch.
-    for (const north of [s + 2, n - 2]) {
-      lights.push({ at: [(w + e) / 2, plazaHeight + .023, -north], scale: [e - w - 4, .01, .095] });
+    // Leave breaks at road cuts and keep each continuous run in one emissive instance.
+    function edgeLight(x: number, north: number, span: number, alongEast: boolean) {
+      const stripeWidth = .095;
+      const dx = alongEast ? 1 : 0, dn = alongEast ? 0 : 1;
+      let start = 0;
+      function placeRun(end: number) {
+        if (end <= start) return;
+        const length = end - start, mid = (start + end) / 2;
+        lights.push({ at: [x + dx * mid, plazaHeight + .023, -north - dn * mid],
+          scale: [alongEast ? length : stripeWidth, .01, alongEast ? stripeWidth : length] });
+      }
+      for (let along = 0; along < span; along += gridStep) {
+        const step = Math.min(gridStep, span - along);
+        const mid = along + step / 2;
+        if (plazaPavingAllowed(x + dx * mid, north + dn * mid, Math.hypot(step, stripeWidth) / 2)) continue;
+        placeRun(along);
+        start = along + step;
+      }
+      placeRun(span);
     }
-    for (const east of [w + 2, e - 2]) {
-      lights.push({ at: [east, plazaHeight + .023, -(s + n) / 2], scale: [.095, .01, n - s - 4] });
-    }
+    for (const north of [coreSouth + 2, coreNorth - 2]) edgeLight(coreWest + 2, north, coreEast - coreWest - 4, true);
+    for (const east of [coreWest + 2, coreEast - 2]) edgeLight(east, coreSouth + 2, coreNorth - coreSouth - 4, false);
     for (const east of [216.5, 231.5]) {
-      for (let north = 157; north <= n; north += 11) {
+      for (let north = 157; north <= coreNorth; north += 11) {
         pillars.push({ at: [east, plazaHeight + .18, -north], scale: [.21, .36, .21], tint: '#453f48' });
         pillars.push({ at: [east, plazaHeight + .07, -north], scale: [.42, .14, .42], tint: '#78869b' });
         lights.push({ at: [east, plazaHeight + .44, -north], scale: [.36, .16, .36] });
@@ -254,6 +304,20 @@ export function addScenery(group: Group, grid: Ground) {
     }
     for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
     inlay(242, 203, .64, .46, '#b58b5d');
+    const annexRandom = sceneryRandom();
+    for (const [west, south, east, top] of [
+      [w, s, e, coreSouth], [w, coreSouth, coreWest, coreNorth],
+      [coreEast, coreSouth, e, coreNorth], [w, coreNorth, e, n],
+    ]) {
+      for (let x = west; x < east; x += 4) {
+        for (let north = south; north < top; north += 4) {
+          const width = Math.min(4, east - x), depth = Math.min(4, top - north);
+          const seam = x === w || north === s || x + width === e || north + depth === n;
+          const tint = seam ? '#6f7887' : pavingColors[Math.floor(annexRandom() * pavingColors.length)];
+          pave(x, north, width, depth, tint);
+        }
+      }
+    }
   } else {
     for (let x = w + 1; x < e; x += 2) {
       for (let north = s + 1; north < n; north += 1.5) {
@@ -317,9 +381,14 @@ export function addScenery(group: Group, grid: Ground) {
     ] as const) plazaBox(x, north, y, [width, height, depth], tint);
   }
 
-  for (const x of [w - 1.1, e + 1.1]) {
-    for (const north of [s + 2, s + 18, s + 32, n - 2]) {
-      if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5))) continue;
+  // Retain the approved east light line inside the annex; the station side stays clear.
+  const perimeterLamps = [[w - 1.1, s, n], hasPlazaCore
+    ? [coreEast + 1.1, coreSouth, coreNorth] : [e + 1.1, s, n]];
+  for (const [x, south, top] of perimeterLamps) {
+    for (const north of [south + 2, south + 18, south + 32, top - 2]) {
+      if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5)) ||
+          roadCorridorKeepClear(x, north, .75) || layout.plots.some(({ origin, footprint }) =>
+            Math.abs(x - origin[0]) <= footprint[0] / 2 + .7 && Math.abs(north - origin[1]) <= footprint[1] / 2 + .7)) continue;
       lamp(x, grid.heightAt(x, north), north);
     }
   }
@@ -355,7 +424,8 @@ export function addScenery(group: Group, grid: Ground) {
         const cell = Math.round(north) * grid.gridWidth + Math.round(x);
         const inPlot = layout.plots.some(({ origin, footprint }) =>
           Math.abs(x - origin[0]) <= footprint[0] / 2 + .7 && Math.abs(north - origin[1]) <= footprint[1] / 2 + .7);
-        if (grid.surfaces[cell] === 0 && canEnter(x, north) && !inPlot
+        const freeSnowfightField = hasPlazaCore && w <= x && x < coreWest && north >= 166 && north <= n;
+        if (grid.surfaces[cell] === 0 && canEnter(x, north) && !inPlot && !freeSnowfightField
           && !roadCorridorKeepClear(x, north, .75)
           && blockers.every(b => Math.hypot(x - b.x, north - b.n) > 4)) {
           lamp(x, grid.heightAt(x, north), north);

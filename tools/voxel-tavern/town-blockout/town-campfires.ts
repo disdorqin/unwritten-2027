@@ -57,7 +57,8 @@ const regionalSites: readonly Seed[] = [
   { id: 'memorial', label: '新区时光信箱火盆', style: 'brazier', origin: [memorialTimeboxAnnex.x, memorialTimeboxAnnex.n + 2.72], facing: Math.PI / 2 },
   { id: 'market', label: '年集坐食区火炉', style: 'brazier', origin: [163, 90], facing: Math.PI },
 ];
-const expandedPlaza = [161, 152, 251, 212] as const;
+const seatRadius = .61;
+const woodPileRadius = .72;
 const plazaSites: readonly Seed[] = [
   { id: 'plaza-brazier-a', label: '广场火盆甲', style: 'brazier', origin: [238, 205], facing: 0, fixed: true, spread: 2.05 },
   { id: 'plaza-brazier-b', label: '广场火盆乙', style: 'brazier', origin: [240, 173], facing: 0, fixed: true, spread: 2.05 },
@@ -80,12 +81,29 @@ export type CampfireSite = Surface & {
   woodPile?: Surface;
 };
 
+function seatSpread(seed: Seed) {
+  return seed.spread ?? (seed.style === 'stone' ? 2.15 : 1.65);
+}
+
+function plazaIncludesCampfires(bounds?: readonly number[]) {
+  if (bounds?.length !== 4 || !bounds.every(Number.isFinite)) return false;
+  const [west, south, east, north] = bounds;
+  const fits = (x: number, n: number, radius: number) =>
+    x - radius >= west && x + radius <= east && n - radius >= south && n + radius <= north;
+  // Opt in the complete plaza set once the fire cores, seats and log pile fit.
+  return plazaSites.every(seed => {
+    const [x, n] = seed.origin;
+    const pile = seed.woodPile;
+    return fits(x, n, seatSpread(seed) + seatRadius) &&
+      (!pile || fits(x + pile[0], n + pile[1], woodPileRadius));
+  });
+}
+
 export function findRegionalCampfires(groundAt: CheckGround, plazaBounds?: readonly number[]): CampfireSite[] {
-  const usePlaza = plazaBounds?.length === expandedPlaza.length &&
-    expandedPlaza.every((edge, index) => plazaBounds[index] === edge);
+  const usePlaza = plazaIncludesCampfires(plazaBounds);
   const fires: CampfireSite[] = [];
   for (const seed of usePlaza ? [...regionalSites, ...plazaSites] : regionalSites) {
-    const spread = seed.spread ?? (seed.style === 'stone' ? 2.15 : 1.65);
+    const spread = seatSpread(seed);
     const ring = seed.ring ?? (seed.style === 'stone' ? [-1.13, -.40, .40, 1.13] : [-.97, 0, .97]);
     const offsets = seed.fixed ? fixedOffset : seed.id === 'forest' || seed.id === 'lakeside' ? regionalOffsets : siteOffsets;
     for (const [dx, dn] of offsets) {
@@ -105,7 +123,7 @@ export function findRegionalCampfires(groundAt: CheckGround, plazaBounds?: reado
         const angle = seed.facing + turn;
         const east = x + Math.sin(angle) * spread;
         const north = n + Math.cos(angle) * spread;
-        if (roadCorridorKeepClear(east, north, .61)) continue;
+        if (roadCorridorKeepClear(east, north, seatRadius)) continue;
         const height = groundAt(east, north, seed.ground);
         const approachX = x + Math.sin(angle) * (spread - .68);
         const approachN = n + Math.cos(angle) * (spread - .68);
@@ -122,7 +140,7 @@ export function findRegionalCampfires(groundAt: CheckGround, plazaBounds?: reado
         const pileX = x + seed.woodPile[0], pileN = n + seed.woodPile[1];
         const ground = groundAt(pileX, pileN);
         if (ground === undefined || Math.abs(ground - feet) > .20 ||
-            roadCorridorKeepClear(pileX, pileN, .72)) continue;
+            roadCorridorKeepClear(pileX, pileN, woodPileRadius)) continue;
         woodPile = { x: pileX, n: pileN, ground };
       }
       fires.push({ id: seed.id, label: seed.label, style: seed.style, x, n, ground: feet, seats,
@@ -248,9 +266,9 @@ export function createTownCampfires(
         const pile = site.woodPile;
         return distanceSquared < (site.style === 'stone' ? 1 : .81) ** 2 ||
           (pile !== undefined && feet < pile.ground + .45 && feet + 1.8 > pile.ground &&
-            (east - pile.x) ** 2 + (north - pile.n) ** 2 < .72 ** 2) ||
+            (east - pile.x) ** 2 + (north - pile.n) ** 2 < woodPileRadius ** 2) ||
           (distanceSquared < 2.76 ** 2 && site.seats.some(seat => feet < seat.ground + .5 &&
-            feet + 1.8 > seat.ground && (east - seat.x) ** 2 + (north - seat.n) ** 2 < .61 ** 2));
+            feet + 1.8 > seat.ground && (east - seat.x) ** 2 + (north - seat.n) ** 2 < seatRadius ** 2));
       });
     },
     warmAt: (east, north, feet) => nearCampfire(sites, east, north, feet),

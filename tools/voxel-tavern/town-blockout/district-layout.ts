@@ -33,7 +33,6 @@ const paths = [
   ...layout.roads.flatMap(({ points, width }) => points.slice(1).map((end, i) => ({ start: points[i], end, radius: width / 2 }))),
   ...layout.plots.map(({ connect, door }) => ({ start: connect, end: door, radius: 2 })),
 ];
-const [west, south, east, north] = layout.plaza.bounds;
 const bounds = layout.plots.map(({ origin: [x, n], footprint: [w, d] }) => ({ x, n, w, d }));
 const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
 const within = (x: number, n: number, { x: cx, n: cn, w, d }: Pick<Site, 'x' | 'n' | 'w' | 'd'>, margin: number) =>
@@ -50,7 +49,9 @@ const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][
 export function addDistrictHousing(
   parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean,
   railwayKeepClear: KeepClear = () => false,
+  plazaBounds: readonly number[] = layout.plaza.bounds,
 ) {
+  const [west, south, east, north] = plazaBounds;
   const sites: Site[] = [];
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
@@ -141,7 +142,7 @@ export function addDistrictHousing(
   for (const { theme, styles, points } of neighborhoods) {
     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
       const address = `${sourceEast}:${sourceNorth}`;
-      const relocation = west === 161 && south === 152 ? plazaHouseRelocations.get(address) : undefined;
+      const relocation = plazaHouseRelocations.get(address);
       const [x, n] = relocation ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
