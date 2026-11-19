@@ -207,9 +207,17 @@ async function legacyReturn(session, id, stand) {
   near(spawn.north, 493.64, .05, 'Shared room spawn north');
   near(spawn.ground, 150, .01, 'Shared room spawn ground');
   assert.ok(spawn.visits.includes(id), 'Shared action must write the originating visit');
-  const target = { east: 625.18, north: 492.85, tolerance: .13 };
-  await moveTo(session, target);
-  const atExit = await frame(page, { mask: shared, home: id, action: reentryLabel });
+  if (cdp) await observe(page, 'aim', { east: spawn.east, north: spawn.north - 1 });
+  const stop = cdp ? await beginForward(session) : async () => page.keyboard.up('s');
+  let atExit;
+  try {
+    if (!cdp) await page.keyboard.down('s');
+    atExit = await frame(page, { after: spawn.frames, mask: shared, home: id, action: reentryLabel });
+  } finally {
+    await stop();
+  }
+  assert.equal(atExit.air, null);
+  assert.ok(atExit.north < spawn.north, 'Native movement reached the original return prompt');
   if (cdp) await page.locator('#world-action').tap({ timeout });
   else await page.keyboard.press('e');
   const returned = await frame(page, { after: atExit.frames, mask: outdoor, home: null, canMove: true });
