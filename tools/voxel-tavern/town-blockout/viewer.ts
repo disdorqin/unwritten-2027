@@ -399,7 +399,7 @@ type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps
 const architecture = new Map<string, Group>();
 const festivalText = element('festival-status');
 const rehearse = element<HTMLButtonElement>('rehearse');
-const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles);
+const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles, grid.heightAt);
 const actionButton = element<HTMLButtonElement>('world-action');
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 function validBox({ min, max }: Box) {
@@ -949,7 +949,7 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
-presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed), {
+presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed, grid.heightAt), {
   ageSeconds, clockMs: () => performance.now(),
 }));
 const plazaPhoto = createPlazaGroupPhoto({
@@ -1238,6 +1238,7 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   announce: announceActivity,
 });
 ceremonyFrost.mountSettings(element('town-panel-controls'));
+festival.mountAudioSettings(element('town-panel-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const railOvernightBroadcast = createRailOvernightBroadcast();
@@ -1247,6 +1248,7 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
+let overtureMidnight: number | undefined;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
@@ -2159,6 +2161,7 @@ function skatesOnIce() {
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
 }
 function turnView(horizontal: number, vertical: number) {
+  if (horizontal || vertical) ceremonyLook = undefined;
   if (boardingGround) {
     rideYawOffset += horizontal;
     ridePitch = Math.max(-1.42, Math.min(1.42, ridePitch + vertical));
@@ -2634,6 +2637,7 @@ mode(startInMuseum);
 let presenceSkateSpeed = 0;
 let previousPoseSession: number | null = null;
 let ceremonyArrivalPose: { value: TownAvatarPose; until: number } | undefined;
+let ceremonyLook: { began: number; deadline: number; yaw: number; pitch: number } | undefined;
 
 function arriveAtCeremony(event: CeremonyArrival, now: number) {
   const landing = ceremonyArrivalAt(event.slot, event.edge);
@@ -2678,6 +2682,11 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
     : [stage.origin[0], stage.origin[1], stage.origin[2] + 15];
   yaw = Math.atan2(faceEast - x, faceNorth - n);
   pitch = Math.atan2(faceHeight - ground - eye, Math.hypot(faceEast - x, faceNorth - n));
+  const worldNow = ceremonyClock.now();
+  const midnight = ceremonyMidnight(ceremonyEveYear(worldNow, ceremonyClock.utcOffsetMinutes), ceremonyClock.utcOffsetMinutes);
+  ceremonyLook = !reduceSnowEffects.matches && worldNow < midnight
+    ? { began: worldNow, deadline: midnight, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)), pitch }
+    : undefined;
   faceFrom(x, n, ground + eye, yaw, pitch);
   presence.sample(walking, x, n, ground, yaw);
   if (!event.edge && !reduceSnowEffects.matches) {
@@ -2695,6 +2704,21 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   const startEast = x, startNorth = n;
+  if (ceremonyLook) {
+    if (!lookAllowed() || keys.size || seated || boardingGround) ceremonyLook = undefined;
+    if (ceremonyLook) {
+      const { began, deadline, yaw: initialYaw, pitch: initialPitch } = ceremonyLook;
+      const elapsed = ceremonyClock.now();
+      if (elapsed > deadline + 2000) ceremonyLook = undefined;
+      else {
+        const t = Math.min(1, Math.max(0, (elapsed - began) / (deadline - began)));
+        const amount = t * t * (3 - 2 * t);
+        yaw = initialYaw * (1 - amount);
+        pitch = initialPitch + (Math.PI / 10 - initialPitch) * amount;
+        if (t === 1) ceremonyLook = undefined;
+      }
+    }
+  }
   movementStepMs = 0;
   landingFeedback.update(frameSeconds);
   landingSnow.update(frameSeconds);
@@ -2975,7 +2999,18 @@ renderer.setAnimationLoop(now => {
   }
   personalFirecrackers.update();
   const ceremonyState = ceremony.update();
-  festival.update(dt);
+  let ceremonyElapsed: number | undefined;
+  if (ceremonyState.phase !== 'ordinary') {
+    const offset = ceremonyClock.utcOffsetMinutes;
+    const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
+    ceremonyElapsed = (ceremonyState.now - midnight) / 1000;
+    if (ceremonyState.phase === 'approach' && overtureMidnight !== midnight) {
+      overtureMidnight = midnight;
+      festival.launchOverture(midnight - 600_000, ceremonyClock.now);
+    }
+  }
+  const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
+  festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
   const weather = townSnowWeatherForFrame(ceremonyState);
   const effectiveSnowIntensity = weather.intensity;

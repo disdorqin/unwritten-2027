@@ -64,11 +64,11 @@ test('an active authored ceremony skips the old shell and finishes on the author
   assert.equal(festival.launchCeremony('fireworks-main', start, clock), true);
   festival.update(100);
   assert.equal(sparks.visible, false, 'a previously launched shell produces no after-image for the late client');
-  now = start + 700;
+  now = start + 1_400;
   festival.update(0);
   assert.equal(sparks.visible, true);
   assert.ok(sparks.geometry.drawRange.count > 0);
-  now = start + 20_000;
+  now = start + 29_000;
   festival.update(0);
   assert.equal(festival.showActive(), false);
   now = start;

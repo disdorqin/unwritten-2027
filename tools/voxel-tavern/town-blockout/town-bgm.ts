@@ -214,6 +214,7 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
   let nextTime = 0;
   let entered = false;
   let inRoom = false;
+  let duck = 1;
 
   function schedule() {
     timer = undefined;
@@ -231,7 +232,7 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
   function updateOutput() {
     if (!graph) return;
     const at = graph.context.currentTime;
-    graph.master.gain.setTargetAtTime(settings.muted ? 0 : settings.volume / 100 * (inRoom ? .82 : 1), at, .075);
+    graph.master.gain.setTargetAtTime(settings.muted ? 0 : settings.volume / 100 * (inRoom ? .82 : 1) * duck, at, .075);
     graph.room.frequency.setTargetAtTime(inRoom ? roomCutoff : plainsCutoff, at, .16);
     graph.percussion.gain.setTargetAtTime(inRoom ? 0 : 1, at, .09);
     if ((settings.muted || settings.volume === 0) && timer !== undefined) {
@@ -290,6 +291,13 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
 
   return {
     mountControls,
+    setDuck(level: number) {
+      if (level !== duck) {
+        duck = level;
+        updateOutput();
+      }
+      return settings.muted ? 0 : settings.volume / 100;
+    },
     enter() {
       entered = true;
       activate();
