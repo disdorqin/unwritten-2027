@@ -1,6 +1,6 @@
 import { townPhotoCaption } from '../shared/town-photo-caption.js';
 
-const frameCount = 3;
+const personalFrameCount = 3;
 
 type PlayerId = string;
 
@@ -10,6 +10,11 @@ type TownPhoto = Readonly<{
   pointId: string;
   capturedAt: number;
   caption: string;
+}>;
+
+type HomePhotoWall = Readonly<{
+  personal: readonly (TownPhoto | null)[];
+  centerpiece: TownPhoto | null;
 }>;
 
 type PhotoMemoryOptions = {
@@ -61,18 +66,20 @@ export function createTownPhotoMemory({ photoPoints, midnight, canVisit }: Photo
     },
 
     setHomeFrame(owner: PlayerId, slot: number, photoId: string | null) {
-      if (!owner || !Number.isInteger(slot) || slot < 1 || slot > frameCount) return false;
+      if (!owner || !Number.isInteger(slot) || slot < 1 || slot > personalFrameCount) return false;
       const selfie = photoId === null ? undefined : selfies.get(photoId);
       if (photoId !== null && selfie?.owner !== owner) return false;
-      const row = frames.get(owner) ?? Array<TownPhoto | null>(frameCount).fill(null);
+      const row = frames.get(owner) ?? Array<TownPhoto | null>(personalFrameCount).fill(null);
       row[slot - 1] = selfie?.photo ?? null;
       frames.set(owner, row);
       return true;
     },
 
-    homeFramesFor(visitor: PlayerId, owner: PlayerId): readonly (TownPhoto | null)[] | undefined {
+    homeFramesFor(visitor: PlayerId, owner: PlayerId): HomePhotoWall | undefined {
       if (!visitor || !owner || (visitor !== owner && !canVisit(visitor, owner))) return;
-      return [...(frames.get(owner) ?? Array<TownPhoto | null>(frameCount).fill(null))];
+      const personal = [...(frames.get(owner) ?? Array<TownPhoto | null>(personalFrameCount).fill(null))];
+      const centerpiece = group?.present.has(owner) ? group.photo : null;
+      return { personal, centerpiece };
     },
   };
 }

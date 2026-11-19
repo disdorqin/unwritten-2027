@@ -32,7 +32,7 @@ test('the midnight capture issues the same receipt only to the frozen attendance
   assert.ok(Object.isFrozen(photos.midnightFor('owner')));
 });
 
-test('home frames accept only the owner’s system selfie references, with visitor read access', () => {
+test('three personal frames and one midnight centerpiece preserve owner and visitor permissions', () => {
   const photos = memory();
   assert.equal(photos.recordSelfie('owner', 'upload', 'missing-place', townCeremonyMidnight), undefined);
   assert.equal(photos.recordSelfie('owner', 'https://example.com/upload.png', 'plaza', townCeremonyMidnight), undefined);
@@ -45,16 +45,20 @@ test('home frames accept only the owner’s system selfie references, with visit
   assert.equal(photos.recordSelfie('other-owner', 'capture-first', 'plaza', townCeremonyMidnight), undefined);
   assert.equal(photos.setHomeFrame('owner', 0, first!.id), false);
   assert.equal(photos.setHomeFrame('owner', 4, first!.id), false);
+  assert.equal(photos.setHomeFrame('owner', 4, null), false);
   assert.equal(photos.setHomeFrame('visitor', 1, first!.id), false);
   assert.equal(photos.setHomeFrame('owner', 1, 'https://example.com/upload.png'), false);
   assert.equal(photos.recordMidnight('town-2027', townCeremonyMidnight, ['owner']), true);
   assert.equal(photos.setHomeFrame('owner', 1, 'town-2027'), false);
   assert.equal(photos.setHomeFrame('owner', 1, first!.id), true);
   assert.equal(photos.setHomeFrame('owner', 3, second!.id), true);
-  assert.deepEqual(photos.homeFramesFor('visitor', 'owner'), [first, null, second]);
+  const centerpiece = photos.midnightFor('owner');
+  assert.ok(centerpiece);
+  assert.deepEqual(photos.homeFramesFor('visitor', 'owner'), { personal: [first, null, second], centerpiece });
+  assert.deepEqual(photos.homeFramesFor('absent', 'absent'), { personal: [null, null, null], centerpiece: null });
   assert.equal(photos.homeFramesFor('uninvited', 'owner'), undefined);
   assert.equal(photos.setHomeFrame('owner', 1, null), true);
-  assert.deepEqual(photos.homeFramesFor('owner', 'owner'), [null, null, second]);
+  assert.deepEqual(photos.homeFramesFor('owner', 'owner'), { personal: [null, null, second], centerpiece });
 });
 
 test('the photo stamp derives its date from the capture clock rather than the device timezone', () => {
