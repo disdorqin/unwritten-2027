@@ -1,0 +1,219 @@
+diff --git a/src/shared/flight.ts b/src/shared/flight.ts
+new file mode 100644
+index 0000000..224ac95
+--- /dev/null
++++ b/src/shared/flight.ts
+@@ -0,0 +1,96 @@
++export type FlightStation =
++  | 'summit-lodge'
++  | 'cloud-terrace-lodge'
++  | 'warrior-city-forge'
++  | 'starport-assembly-pad'
++  | 'starport-recovery-pad'
++  | 'other';
++
++export type FlightProgress = Readonly<{
++  snowWingClaimed: boolean;
++  boosterCollected: boolean;
++  aircraftAssembled: boolean;
++}>;
++
++// The host validates station reach, summit registration, and completed forge payment.
++export type FlightMilestone =
++  | { kind: 'claim-snow-wing'; station: FlightStation; summitRegistered: boolean }
++  | {
++    kind: 'collect-booster';
++    station: FlightStation;
++    forgePayment?: Readonly<{ meteoriteIron: number; stardustOre: number }>;
++  }
++  | { kind: 'assemble-aircraft'; station: FlightStation };
++
++export function applyFlightMilestone(progress: FlightProgress, event: FlightMilestone): FlightProgress {
++  switch (event.kind) {
++    case 'claim-snow-wing':
++      return event.station === 'summit-lodge' && event.summitRegistered && !progress.snowWingClaimed
++        ? { ...progress, snowWingClaimed: true }
++        : progress;
++    case 'collect-booster': {
++      const payment = event.forgePayment;
++      return event.station === 'warrior-city-forge' && !progress.boosterCollected && payment?.meteoriteIron === 1 &&
++          Number.isSafeInteger(payment.stardustOre) && payment.stardustOre > 0
++        ? { ...progress, boosterCollected: true }
++        : progress;
++    }
++    case 'assemble-aircraft':
++      return event.station === 'starport-assembly-pad' && progress.snowWingClaimed &&
++          progress.boosterCollected && !progress.aircraftAssembled
++        ? { ...progress, aircraftAssembled: true }
++        : progress;
++  }
++}
++
++export type AircraftThrottle = 'off' | 'cruise' | 'full';
++
++export const aircraftFuelCanFullPowerMs = 600_000;
++export const aircraftLevelSpeedLimit = 38;
++export const aircraftDiveSpeedLimit = 40;
++
++function checkFuel(remainingFullPowerMs: number) {
++  if (remainingFullPowerMs < 0 || !Number.isSafeInteger(remainingFullPowerMs * 2)) {
++    throw new RangeError('Aircraft fuel must be a nonnegative number of half milliseconds');
++  }
++}
++
++// Apply the fuel increment and ore charge as one host inventory transaction.
++export function prepareAircraftRefuel(
++  remainingFullPowerMs: number,
++  { station, airborne, stardustOre }: Readonly<{
++    station: FlightStation;
++    airborne: boolean;
++    stardustOre: number;
++  }>,
++) {
++  checkFuel(remainingFullPowerMs);
++  if (airborne || (station !== 'starport-recovery-pad' && station !== 'warrior-city-forge') ||
++      !Number.isSafeInteger(stardustOre) || stardustOre < 1) return;
++  const nextFuel = remainingFullPowerMs + aircraftFuelCanFullPowerMs;
++  checkFuel(nextFuel);
++  return { remainingFullPowerMs: nextFuel, stardustOreSpent: 1 as const };
++}
++
++// Whole-millisecond host intervals retain exact half-rate cruise accounting.
++export function burnAircraftFuel(remainingFullPowerMs: number, requestedThrottle: AircraftThrottle, elapsedMs: number) {
++  checkFuel(remainingFullPowerMs);
++  if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0) throw new RangeError('Invalid aircraft elapsed milliseconds');
++
++  const rate = requestedThrottle === 'full' ? 1 : requestedThrottle === 'cruise' ? .5 : 0;
++  const burned = Math.min(remainingFullPowerMs, rate * elapsedMs);
++  const nextFuel = remainingFullPowerMs - burned;
++  const poweredMs = rate === 0 ? 0 : burned / rate;
++  const throttle: AircraftThrottle = nextFuel > 0 ? requestedThrottle : 'off';
++  return { remainingFullPowerMs: nextFuel, throttle, poweredMs, glideMs: elapsedMs - poweredMs };
++}
++
++export function capAircraftSpeed(speedMps: number, diving: boolean) {
++  return Math.max(0, Math.min(speedMps, diving ? aircraftDiveSpeedLimit : aircraftLevelSpeedLimit));
++}
++
++// The host owns the gradual curve, flight motion, frost rendering and world units.
++export function aircraftThrustBand(altitudeM: number): 'normal' | 'fading' | 'ceiling' {
++  if (altitudeM >= 1000) return 'ceiling';
++  return altitudeM > 900 ? 'fading' : 'normal';
++}
+diff --git a/tests/town-blockout-flight.test.ts b/tests/town-blockout-flight.test.ts
+new file mode 100644
+index 0000000..b042bff
+--- /dev/null
++++ b/tests/town-blockout-flight.test.ts
+@@ -0,0 +1,111 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import {
++  aircraftDiveSpeedLimit,
++  aircraftFuelCanFullPowerMs,
++  aircraftLevelSpeedLimit,
++  aircraftThrustBand,
++  applyFlightMilestone,
++  burnAircraftFuel,
++  capAircraftSpeed,
++  prepareAircraftRefuel,
++  type FlightProgress,
++} from '../src/shared/flight.ts';
++import { sledMaximumSpeed } from '../src/shared/sled-speed.ts';
++
++const empty: FlightProgress = Object.freeze({
++  snowWingClaimed: false,
++  boosterCollected: false,
++  aircraftAssembled: false,
++});
++
++test('snow wing needs summit registration and is collected only at the summit lodge', () => {
++  const registered = { kind: 'claim-snow-wing', station: 'summit-lodge', summitRegistered: true } as const;
++  assert.equal(applyFlightMilestone(empty, { ...registered, summitRegistered: false }), empty);
++  assert.equal(applyFlightMilestone(empty, { ...registered, station: 'cloud-terrace-lodge' }), empty);
++  const progress = applyFlightMilestone(empty, registered);
++  assert.deepEqual(progress, { ...empty, snowWingClaimed: true });
++  assert.equal(applyFlightMilestone(progress, registered), progress);
++});
++
++test('the booster is collected at the warrior city forge after a valid host payment', () => {
++  const collect = { kind: 'collect-booster', station: 'warrior-city-forge' } as const;
++  assert.equal(applyFlightMilestone(empty, collect), empty);
++  const payment = { meteoriteIron: 1, stardustOre: 2 };
++  assert.equal(applyFlightMilestone(empty, { ...collect, station: 'starport-assembly-pad', forgePayment: payment }), empty);
++  assert.equal(applyFlightMilestone(empty, { ...collect, forgePayment: { ...payment, meteoriteIron: 0 } }), empty);
++  assert.equal(applyFlightMilestone(empty, { ...collect, forgePayment: { ...payment, meteoriteIron: 2 } }), empty);
++  assert.equal(applyFlightMilestone(empty, { ...collect, forgePayment: { ...payment, stardustOre: 0 } }), empty);
++  assert.equal(applyFlightMilestone(empty, { ...collect, forgePayment: { ...payment, stardustOre: 1.5 } }), empty);
++  // The ore quantity here is supplied by the host transaction, not a fixed recipe.
++  for (const stardustOre of [1, 2]) {
++    const completed = { ...collect, forgePayment: { ...payment, stardustOre } };
++    const progress = applyFlightMilestone(empty, completed);
++    assert.deepEqual(progress, { ...empty, boosterCollected: true });
++    assert.equal(applyFlightMilestone(progress, completed), progress);
++  }
++});
++
++test('wing and booster together unlock the aircraft once at the starport assembly pad', () => {
++  const assemble = { kind: 'assemble-aircraft', station: 'starport-assembly-pad' } as const;
++  const wingOnly = { ...empty, snowWingClaimed: true };
++  const boosterOnly = { ...empty, boosterCollected: true };
++  const complete = { ...empty, snowWingClaimed: true, boosterCollected: true };
++  for (const incomplete of [empty, wingOnly, boosterOnly]) assert.equal(applyFlightMilestone(incomplete, assemble), incomplete);
++  assert.equal(applyFlightMilestone(complete, { ...assemble, station: 'starport-recovery-pad' }), complete);
++  const assembled = applyFlightMilestone(complete, assemble);
++  assert.deepEqual(assembled, { ...complete, aircraftAssembled: true });
++  assert.equal(applyFlightMilestone(assembled, assemble), assembled);
++});
++
++test('one ore adds one can only when grounded at a refueling site', () => {
++  const host = { station: 'starport-recovery-pad', airborne: false, stardustOre: 1 } as const;
++  const fueled = { stardustOreSpent: 1, remainingFullPowerMs: 600_000 };
++  assert.equal(aircraftFuelCanFullPowerMs, 600_000);
++  assert.deepEqual(prepareAircraftRefuel(0, host), fueled);
++  assert.deepEqual(prepareAircraftRefuel(0, { ...host, station: 'warrior-city-forge' }), fueled);
++  for (const invalid of [
++    { ...host, station: 'starport-assembly-pad' } as const,
++    { ...host, station: 'summit-lodge' } as const,
++    { ...host, airborne: true },
++    { ...host, stardustOre: 0 },
++    { ...host, stardustOre: 1.5 },
++  ]) assert.equal(prepareAircraftRefuel(0, invalid), undefined);
++  assert.deepEqual(prepareAircraftRefuel(7.5, host), { ...fueled, remainingFullPowerMs: 600_007.5 });
++});
++
++test('a can lasts 600 s full or 1200 s cruise, with no use in off', t => {
++  const can = aircraftFuelCanFullPowerMs;
++  assert.equal(burnAircraftFuel(can, 'full', 599_999).remainingFullPowerMs, 1);
++  assert.equal(burnAircraftFuel(can, 'cruise', 1_199_999).remainingFullPowerMs, .5);
++  const atEmpty = { remainingFullPowerMs: 0, throttle: 'off', glideMs: 0 };
++  assert.deepEqual(burnAircraftFuel(can, 'full', 600_000), { ...atEmpty, poweredMs: 600_000 });
++  assert.deepEqual(burnAircraftFuel(can, 'cruise', 1_200_000), { ...atEmpty, poweredMs: 1_200_000 });
++  assert.deepEqual(burnAircraftFuel(can, 'off', 1_200_000), {
++    remainingFullPowerMs: can, throttle: 'off', poweredMs: 0, glideMs: 1_200_000,
++  });
++  t.diagnostic('1 can × 1.0 full-rate: 600.000 s · 1 can × 0.5 cruise: 1200.000 s');
++});
++
++test('depletion during a step switches to gliding and half-rate budget survives a split step', () => {
++  const cruise = burnAircraftFuel(2, 'cruise', 3);
++  assert.equal(cruise.remainingFullPowerMs, .5);
++  const lastFullStep = burnAircraftFuel(cruise.remainingFullPowerMs, 'full', 2);
++  assert.deepEqual(lastFullStep, { remainingFullPowerMs: 0, throttle: 'off', poweredMs: .5, glideMs: 1.5 });
++  assert.deepEqual(burnAircraftFuel(0, 'full', 10), { remainingFullPowerMs: 0, throttle: 'off', poweredMs: 0, glideMs: 10 });
++  assert.throws(() => burnAircraftFuel(0, 'cruise', Infinity), RangeError);
++  assert.throws(() => burnAircraftFuel(-1, 'off', 1), RangeError);
++});
++
++test('powered speed limits sit below the sled ceiling and altitude bands introduce no new thrust curve', () => {
++  assert.equal(capAircraftSpeed(100, false), aircraftLevelSpeedLimit);
++  assert.equal(capAircraftSpeed(100, true), aircraftDiveSpeedLimit);
++  assert.equal(capAircraftSpeed(15, false), 15);
++  assert.equal(aircraftLevelSpeedLimit, 38);
++  assert.equal(aircraftDiveSpeedLimit, 40);
++  assert.ok(aircraftDiveSpeedLimit < sledMaximumSpeed);
++  assert.equal(aircraftThrustBand(900), 'normal');
++  assert.equal(aircraftThrustBand(901), 'fading');
++  assert.equal(aircraftThrustBand(999), 'fading');
++  assert.equal(aircraftThrustBand(1000), 'ceiling');
++});
