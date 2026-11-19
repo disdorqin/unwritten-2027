@@ -7,13 +7,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { build, height, near, serveClientAsset, swiftShader, timeoutMs, width } from './b13-browser-fixture.mjs';
+import { build, near, serveClientAsset, swiftShader, timeoutMs } from './b13-browser-fixture.mjs';
 
 const doorIds = ['district:513:366', 'district:550:412'];
 const ordinaryClock = '2026-11-20T14:15:00+08:00';
 const names = ['B13 甲', 'B13 乙'];
 const enterLabel = '进入屋舍空间';
 const returnLabel = '出门 · 返回来时的屋门';
+const viewport = { width: 800, height: 520 };
 const runtimeFiles = [
   'src/presence/server.ts',
   'src/presence/shared-home-space.ts',
@@ -129,7 +130,7 @@ async function readFrame(page, required) {
     if (condition.minNorth !== undefined && pose.north < condition.minNorth) return;
     if (condition.action && !pose.action?.includes(condition.action)) return;
     return pose;
-  }, required, { timeout: timeoutMs })).jsonValue();
+  }, required, { polling: 100, timeout: timeoutMs })).jsonValue();
 }
 
 async function saveScreenshot(page, output, result, state) {
@@ -141,7 +142,7 @@ async function saveScreenshot(page, output, result, state) {
 
 async function startClient(browser, url, result) {
   const context = await browser.newContext({
-    viewport: { width, height }, deviceScaleFactor: 1, locale: 'zh-CN', reducedMotion: 'reduce',
+    viewport, deviceScaleFactor: 1, locale: 'zh-CN', reducedMotion: 'reduce',
   });
   const page = await context.newPage();
   page.on('pageerror', error => result.errors.push(error.message));
@@ -173,13 +174,16 @@ async function startClient(browser, url, result) {
     });
   }, result.name);
   try {
+    result.bootstrap = 'navigate';
     const response = await page.goto(`${url}/town-blockout.html?profile&b13TwoClients`, {
       waitUntil: 'domcontentloaded', timeout: timeoutMs,
     });
     assert.equal(response?.status(), 200);
     await page.waitForFunction(() => Boolean(window.__b13TwoClients), null, { timeout: timeoutMs });
     await page.locator('#jump').selectOption({ label: '东北纪念馆' });
+    result.bootstrap = 'join-and-render';
     const outdoors = await readFrame(page, { home: null, mask: 1, joined: true });
+    result.bootstrap = 'stage-original-door';
     const door = await page.evaluate(id => window.__b13TwoClients.stage(id), result.id);
     result.door = door;
     result.approach = await readFrame(page, {
@@ -188,6 +192,7 @@ async function startClient(browser, url, result) {
     near(result.approach.east, door.x, .05, 'Approach east');
     near(result.approach.north, door.n, .05, 'Approach north');
     assert.equal(result.approach.name, result.name);
+    result.bootstrap = 'ready';
     return { context, page, result };
   } catch (error) {
     result.lastObserved = await page.evaluate(() => window.__b13TwoClients?.sample()).catch(() => null);
@@ -261,23 +266,24 @@ async function returnOriginal(client, key, output) {
   assert.deepEqual(result.errors, [], 'Viewer raised errors');
 }
 
-async function checkBrowser(browser, url, output, evidence) {
+async function checkBrowser(openBrowser, url, output, evidence) {
   const clients = [];
   try {
     for (const [index, id] of doorIds.entries()) {
       evidence.step = `join-${id}`;
       const result = { id, name: names[index], screenshots: {}, errors: [], wire: { joinIds: [], poses: 0, snapshots: 0 } };
       evidence.results.push(result);
-      clients.push(await startClient(browser, url, result));
+      const client = await startClient(await openBrowser(), url, result);
+      clients.push(client);
+      // Leave the first client in the shared room before loading a second exterior scene.
+      evidence.step = `enter-${id}`;
+      await enter(client);
     }
     const [alpha, beta] = clients;
     const alphaId = alpha.result.approach.selfId;
     const betaId = beta.result.approach.selfId;
-    assert.notEqual(alphaId, betaId, 'The two contexts must hold distinct server sessions');
+    assert.notEqual(alphaId, betaId, 'The two browsers must hold distinct server sessions');
 
-    evidence.step = 'enter-different-doors';
-    await enter(alpha);
-    await enter(beta);
     evidence.step = 'separate-in-the-same-room';
     await walkWhile(alpha, 'w', { after: alpha.result.inside.frames, minNorth: alpha.result.inside.north + 2.4 });
     alpha.result.spread = await readFrame(alpha.page, roomCondition(alpha, { after: alpha.result.inside.frames + 3 }));
@@ -454,12 +460,12 @@ const checkout = path.resolve(sourcePath);
 const output = path.resolve(outputPath);
 const temporary = await mkdtemp(path.join(tmpdir(), 'town-b13-two-clients-'));
 const resolvePackage = createRequire(path.join(checkout, 'package.json'));
-let browser;
+const browsers = [];
 let server;
 const evidence = {
   status: 'starting', mode: option ?? 'browser', clock: ordinaryClock,
   runtimeCommit: process.env.B13_RUNTIME_COMMIT ?? null, browser: null,
-  viewport: { width, height, dpr: 1 }, results: [], connectionLogs: [],
+  viewport: { ...viewport, dpr: 1 }, results: [], connectionLogs: [],
 };
 await mkdir(output, { recursive: true });
 try {
@@ -489,9 +495,12 @@ try {
     } else {
       evidence.step = 'launch-browser';
       const { chromium } = resolvePackage('@playwright/test');
-      browser = await chromium.launch({ args: swiftShader, executablePath: process.env.B13_CHROMIUM_PATH });
-      evidence.browser = browser.version();
-      await checkBrowser(browser, started.url, output, evidence);
+      await checkBrowser(async () => {
+        const browser = await chromium.launch({ args: swiftShader, executablePath: process.env.B13_CHROMIUM_PATH });
+        browsers.push(browser);
+        evidence.browser = browser.version();
+        return browser;
+      }, started.url, output, evidence);
       evidence.status = 'browser-passed';
       console.log('Two Chromium clients saw each other in the shared room and each walked out through its own door.');
     }
@@ -507,7 +516,7 @@ try {
   process.exitCode = 1;
 } finally {
   try {
-    if (browser) await browser.close();
+    await Promise.all(browsers.map(browser => browser.close()));
     if (server) await server.close();
   } finally {
     await writeFile(path.join(output, 'b13-two-clients.json'), JSON.stringify(evidence, null, 2) + '\n');
