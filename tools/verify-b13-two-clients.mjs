@@ -179,7 +179,9 @@ async function startClient(browser, url, result) {
       waitUntil: 'domcontentloaded', timeout: timeoutMs,
     });
     assert.equal(response?.status(), 200);
-    await page.waitForFunction(() => Boolean(window.__b13TwoClients), null, { timeout: timeoutMs });
+    await page.bringToFront();
+    result.bootstrap = 'fixture-ready';
+    await page.waitForFunction(() => Boolean(window.__b13TwoClients), null, { polling: 100, timeout: timeoutMs });
     await page.locator('#jump').selectOption({ label: '东北纪念馆' });
     result.bootstrap = 'join-and-render';
     const outdoors = await readFrame(page, { home: null, mask: 1, joined: true });
