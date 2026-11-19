@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 扩展走查</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b1119; color: #e5ecf5; font: 16px/1.5 "Noto Sans SC", system-ui, sans-serif; }
+    main { margin: auto; max-width: 1040px; padding: 2rem 1.5rem; }
+    h1 { margin: 0 0 .3rem; font-size: clamp(1.5rem, 3.4vw, 2.125rem); }
+    p { margin: .25rem 0 1rem; color: #aebdcd; }
+    nav, #review-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+    button { border: 1px solid #3c5166; background: #162231; color: inherit; padding: .5rem .85rem; border-radius: .35rem; font: inherit; cursor: pointer; }
+    button[aria-pressed="true"] { background: #25485a; border-color: #96d4dc; }
+    button:focus-visible { outline: 2px solid #96d4dc; outline-offset: 2px; }
+    #review-viewport { height: clamp(17rem, 60vh, 35rem); border: 1px solid #395167; border-radius: .45rem; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #review-location { margin: .75rem 0 .35rem; font-size: 1.125rem; }
+    #review-status { min-height: 3rem; margin-bottom: .5rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>未写镇扩展走查</h1>
+    <p>分支候选。场景与门位使用局部夹具，供核对地下和轨道舱的接线。</p>
+    <nav aria-label="候选场景">
+      <button id="review-underground" type="button">陨星原与井口</button>
+      <button id="review-orbital" type="button">轨道舱</button>
+    </nav>
+    <div id="review-viewport"></div>
+    <h2 id="review-location"></h2>
+    <p id="review-status" role="status"></p>
+    <div id="review-actions" aria-label="当前操作"></div>
+  </main>
+  <script type="module" src="./town-blockout/town-expansion-review.ts"></script>
+</body>
+</html>
