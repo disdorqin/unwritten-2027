@@ -57,17 +57,25 @@ test('V3 finale and off-hours backstage unlock the extra photo spot in either or
     assert.equal(replay.unlockPhotoSpot, false);
   }
   assert.equal(dailyStageVisit({ sawFinale: true, sawBackstage: false }, 'backstage-visit', true), undefined);
-  assert.deepEqual(dailyFinaleCue(1, 5), { includeLeaderAddendum: false, subtitleAfterimageFrames: 0 });
-  assert.deepEqual(dailyFinaleCue(2, 6), { includeLeaderAddendum: true, subtitleAfterimageFrames: 1 });
-  t.diagnostic('finale/backstage in both orders: one ticket and one photo unlock; personal 5/6 → 0/1 subtitle frame');
+  assert.deepEqual(dailyFinaleCue(1, 5, false), { includeLeaderAddendum: false, subtitleAfterimageFrames: 0 });
+  assert.deepEqual(dailyFinaleCue(2, 6, false), { includeLeaderAddendum: true, subtitleAfterimageFrames: 1 });
+  assert.deepEqual(dailyFinaleCue(3, 12, true), { includeLeaderAddendum: false, subtitleAfterimageFrames: 0 });
+  t.diagnostic('one ticket and one photo unlock; personal 5/6 → 0/1 subtitle frame; silent overpass → 0 frames');
 });
 
 test('V4 accepted host selection uses only three mail material slots', t => {
   const stages = [1, 2, 3] as const;
-  assert.deepEqual(stages.map(stage => dailyMailErrand(stage, false)), [undefined, undefined, undefined]);
-  assert.deepEqual(stages.map(stage => dailyMailErrand(stage, true)?.paperSlot),
+  const postOffice = {
+    selectedByHost: true, atPostOffice: true, handledByCourier: true, transaction: 'send-letter',
+  } as const;
+  assert.deepEqual(stages.map(stage => dailyMailErrand(stage, postOffice)?.paperSlot),
     ['list-fragment', 'star-map-fragment', 'courier-line-slot']);
-  t.diagnostic('host not selected → 0/3 errands; selected → 3/3 structured material slots');
+  assert.equal(dailyMailErrand(1, { ...postOffice, transaction: 'run-errand' })?.paperSlot, 'list-fragment');
+  assert.equal(dailyMailErrand(1, { ...postOffice, selectedByHost: false }), undefined);
+  assert.equal(dailyMailErrand(1, { ...postOffice, atPostOffice: false }), undefined);
+  assert.equal(dailyMailErrand(1, { ...postOffice, handledByCourier: false }), undefined);
+  assert.equal(dailyMailErrand(1, { ...postOffice, transaction: 'other' }), undefined);
+  t.diagnostic('two eligible post-office flows, three structural slots, four blocked fixture cases');
 });
 
 test('V4 meteor visits record the actor without granting or transferring the shard', t => {
@@ -95,9 +103,10 @@ test('V5 prop and reaction cues preserve the approved two-card and personal hear
   assert.deepEqual([dailyOldWishCue(1, [true, false]), dailyOldWishCue(2, [false, true]),
     dailyOldWishCue(3, [false, false])], [{ cardSlot: 1 }, { cardSlot: 2 }, { knotMotifOnly: true }]);
   assert.equal(dailyOldWishCue(2, [true, false]), undefined);
-  assert.deepEqual(dailyHearthCue(2, [12]), { breakCount: 2, finalHalfLineSlot: false });
-  assert.deepEqual(dailyHearthCue(3, [0, 7]), { breakCount: 2, finalHalfLineSlot: false });
-  assert.deepEqual(dailyHearthCue(3, [7, 8]), { breakCount: 2, finalHalfLineSlot: true });
+  assert.deepEqual(dailyHearthCue(2, [12], 'dusk'), { breakCount: 2, finalHalfLineSlot: false });
+  assert.deepEqual(dailyHearthCue(3, [0, 7], 'dusk'), { breakCount: 2, finalHalfLineSlot: false });
+  assert.deepEqual(dailyHearthCue(3, [7, 8], 'dusk'), { breakCount: 2, finalHalfLineSlot: true });
+  assert.deepEqual(dailyHearthCue(3, [12], 'night'), { breakCount: 2, finalHalfLineSlot: false });
   assert.equal(dailyNinthChimeAftermath(1, 0, 0, true), 'deflection-line-slot');
   assert.equal(dailyNinthChimeAftermath(2, 0, 59_999, true), 'mechanism-line-slot');
   assert.equal(dailyNinthChimeAftermath(3, 7, 59_999, true), undefined);

@@ -64,17 +64,30 @@ export function dailyStageVisit(history: StageHistory, visit: StageVisit, perfor
   };
 }
 
-export function dailyFinaleCue(stage: DailyStage, personallyHeard: number) {
+export function dailyFinaleCue(
+  stage: DailyStage,
+  personallyHeard: number,
+  atSilentOverpass: boolean,
+) {
   return {
-    includeLeaderAddendum: stage >= 2,
-    subtitleAfterimageFrames: personallyHeard >= 6 ? 1 : 0,
+    includeLeaderAddendum: !atSilentOverpass && stage >= 2,
+    subtitleAfterimageFrames: !atSilentOverpass && personallyHeard >= 6 ? 1 : 0,
   } as const;
 }
 
 const mailPaperSlots = ['list-fragment', 'star-map-fragment', 'courier-line-slot'] as const;
 
-export function dailyMailErrand(stage: DailyStage, selectedByHost: boolean) {
-  if (selectedByHost) return { id: 'daily-old-paper', paperSlot: mailPaperSlots[stage - 1] } as const;
+type MailErrandContext = Readonly<{
+  selectedByHost: boolean;
+  atPostOffice: boolean;
+  handledByCourier: boolean;
+  transaction: 'send-letter' | 'run-errand' | 'other';
+}>;
+
+export function dailyMailErrand(stage: DailyStage, context: MailErrandContext) {
+  if (!context.selectedByHost || !context.atPostOffice || !context.handledByCourier ||
+      context.transaction === 'other') return;
+  return { id: 'daily-old-paper', paperSlot: mailPaperSlots[stage - 1] } as const;
 }
 
 type MeteorRegistration = Readonly<{ eventId: string; playerId: string }>;
@@ -134,9 +147,13 @@ export function dailyOldWishCue(stage: DailyStage, approvedCardSlots: readonly [
   return approvedCardSlots[stage - 1] ? { cardSlot: stage } as const : undefined;
 }
 
-export function dailyHearthCue(stage: DailyStage, audienceHeardCounts: readonly number[]) {
+export function dailyHearthCue(
+  stage: DailyStage,
+  audienceHeardCounts: readonly number[],
+  session: 'dusk' | 'night',
+) {
   return {
     breakCount: Math.min(stage, 2),
-    finalHalfLineSlot: stage === 3 && audienceHeardCounts.some(heard => heard >= 8),
+    finalHalfLineSlot: session === 'dusk' && stage === 3 && audienceHeardCounts.some(heard => heard >= 8),
   } as const;
 }
