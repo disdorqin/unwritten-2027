@@ -8,6 +8,7 @@ on:
       - 'tools/verify-b13-original-door.mjs'
       - 'tools/b13-browser-fixture.mjs'
       - 'tools/verify-b13-door-book.mjs'
+      - 'tools/verify-b13-two-clients.mjs'
       - 'tools/measure-jx1-door-thresholds.mjs'
 
 permissions:
@@ -39,6 +40,7 @@ jobs:
           node-version: '24'
 
       - name: Install locked dependencies and Chromium
+        id: install
         working-directory: town
         shell: bash
         run: |
@@ -66,6 +68,16 @@ jobs:
       - name: Verify alternate door travel and reduced motion
         shell: bash
         run: node ci/tools/verify-b13-door-book.mjs town "$RUNNER_TEMP/b13-proof/door-book"
+
+      - name: Verify two clients against the actual presence server
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          B13_RUNTIME_COMMIT: ${{ env.B13_BASELINE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node ci/tools/verify-b13-two-clients.mjs town "$RUNNER_TEMP/b13-proof/transport" --transport-only
+          node ci/tools/verify-b13-two-clients.mjs town "$RUNNER_TEMP/b13-proof/two-clients"
 
       - name: Upload keyboard and rendered evidence
         if: always()

@@ -54,7 +54,7 @@ const mime = {
   '.mp3': 'audio/mpeg', '.webp': 'image/webp', '.woff2': 'font/woff2',
 };
 
-async function build(checkout, dist) {
+async function build(checkout, dist, instrumentation = fixture) {
   const root = path.join(checkout, 'tools', 'voxel-tavern');
   const viewer = path.join(root, 'town-blockout', 'viewer.ts');
   const source = await readFile(viewer, 'utf8');
@@ -76,12 +76,32 @@ async function build(checkout, dist) {
         if (path.resolve(id) !== viewer) return null;
         assert.equal(code.split(anchor).length, 2);
         injections++;
-        return { code: code.replace(anchor, anchor + fixture), map: null };
+        return { code: code.replace(anchor, anchor + instrumentation), map: null };
       },
     }],
   });
   assert.equal(injections, 1, 'Expected one viewer fixture in the build');
   assert.equal(await readFile(viewer, 'utf8'), source, 'Viewer source changed on disk');
+}
+
+async function serveClientAsset(checkout, dist, pathname, response) {
+  if (pathname === '/favicon.ico') return response.writeHead(204).end();
+  const name = pathname === '/' ? 'town-blockout.html' : pathname.slice(1);
+  let filename = path.resolve(dist, name);
+  if (!filename.startsWith(dist + path.sep)) return response.writeHead(400).end();
+  let size;
+  try {
+    size = (await stat(filename)).size;
+  } catch {
+    if (!/^models\/[\w-]+\.glb$/.test(name)) return response.writeHead(404).end();
+    filename = path.join(checkout, 'public', name);
+    size = (await stat(filename)).size;
+  }
+  response.writeHead(200, {
+    'Content-Type': mime[path.extname(filename)] ?? 'application/octet-stream',
+    'Content-Length': size,
+  });
+  createReadStream(filename).on('error', () => response.destroy()).pipe(response);
 }
 
 async function serve(checkout, dist) {
@@ -95,23 +115,7 @@ async function serve(checkout, dist) {
       if (pathname === '/presence' || pathname.startsWith('/presence/')) {
         return response.writeHead(503).end('Presence outside this single-client check');
       }
-      if (pathname === '/favicon.ico') return response.writeHead(204).end();
-      const name = pathname === '/' ? 'town-blockout.html' : pathname.slice(1);
-      let filename = path.resolve(dist, name);
-      if (!filename.startsWith(dist + path.sep)) return response.writeHead(400).end();
-      let size;
-      try {
-        size = (await stat(filename)).size;
-      } catch {
-        if (!/^models\/[\w-]+\.glb$/.test(name)) return response.writeHead(404).end();
-        filename = path.join(checkout, 'public', name);
-        size = (await stat(filename)).size;
-      }
-      response.writeHead(200, {
-        'Content-Type': mime[path.extname(filename)] ?? 'application/octet-stream',
-        'Content-Length': size,
-      });
-      createReadStream(filename).on('error', () => response.destroy()).pipe(response);
+      await serveClientAsset(checkout, dist, pathname, response);
     } catch {
       if (!response.headersSent) response.writeHead(404).end();
       else response.destroy();
@@ -138,4 +142,4 @@ function near(actual, expected, tolerance, label) {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual}, expected ${expected} ±${tolerance}`);
 }
 
-export { build, near, ordinaryClock, readFrame, serve, swiftShader, timeoutMs, width, height };
+export { build, near, ordinaryClock, readFrame, serve, serveClientAsset, swiftShader, timeoutMs, width, height };
