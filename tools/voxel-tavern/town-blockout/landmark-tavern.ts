@@ -1,6 +1,6 @@
 import {
   BufferGeometry, CanvasTexture, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial,
-  NearestFilter, NearestMipmapNearestFilter, RepeatWrapping, SRGBColorSpace,
+  NearestFilter, NearestMipmapNearestFilter, RepeatWrapping, SRGBColorSpace, type Vector3,
 } from 'three';
 import { gunzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import type { TownPlot } from './landmark-kit';
@@ -189,11 +189,47 @@ function isInside(x: number, y: number, z: number) {
   return Math.abs(x) < 6.125 && z > -5.1 && z < 5.18 && y > 2.99 && y < 12.1;
 }
 
+const interiorMin: Vec3 = [-6, 3, -5];
+const interiorMax: Vec3 = [6, 12, 5];
+const tavernLayers = new WeakMap<Group, { near: Group; distant: Group; min: Vec3; max: Vec3 }>();
+
+function isInteriorPart([x0, y0, z0, x1, y1, z1]: Box) {
+  // Keep any voxel touching an exterior wall or opening in the shell.
+  return x0 > interiorMin[0] && x1 < interiorMax[0] && z0 > interiorMin[2] && z1 < interiorMax[2]
+    && y0 >= interiorMin[1] && y1 <= interiorMax[1];
+}
+
+export function tavernInteriorContains(group: Group, east: number, north: number, feet: number) {
+  const layer = tavernLayers.get(group);
+  if (!layer) return false;
+  const { min, max } = layer;
+  const { x, y, z } = group.position;
+  return east >= x + min[0] && east <= x + max[0] && -north >= z + min[2] && -north <= z + max[2]
+    && feet >= y + min[1] && feet <= y + max[1];
+}
+
+export function updateTavernInteriorVisibility(group: Group, eye: Vector3, playerInside = false) {
+  const layer = tavernLayers.get(group);
+  if (!layer) return;
+  // Borrow the museum's 48 metre scale and keep four metres of hysteresis.
+  const radius = layer.near.visible ? 52 : 48;
+  const visible = playerInside || eye.distanceToSquared(group.position) <= radius ** 2;
+  layer.near.visible = visible;
+  layer.distant.visible = !visible;
+}
+
 export function buildTavernLandmark(plot: TownPlot) {
   const { parts, colors } = buildParts();
   const group = new Group();
   group.name = '未写酒馆';
   const transform = tavernModelToPlot(plot);
+  const near = new Group();
+  near.name = '未写酒馆 · 近处内饰';
+  const distant = new Group();
+  distant.name = '未写酒馆 · 远处外壳';
+  distant.visible = false;
+  group.add(near, distant);
+  tavernLayers.set(group, { near, distant, min: transform(...interiorMin), max: transform(...interiorMax) });
   const stairs: Box[] = Array.from({ length: 20 }, (_, step) => {
     const y = 3 + step * .25;
     const z = 3.5 - step * .375;
@@ -230,12 +266,18 @@ export function buildTavernLandmark(plot: TownPlot) {
       } satisfies TavernRoosterSill;
     }
   }
-  const materialBuffers = new Map<string, { positions: number[]; normals: number[]; uv: number[]; lighting: number[] }>();
+  const materialBuffers = new Map<string, {
+    positions: number[]; normals: number[]; uv: number[]; lighting: number[]; shellIndices: number[];
+  }>();
   for (const { m, b } of parts) {
     let buffers = materialBuffers.get(m);
     if (!buffers) {
-      buffers = { positions: [], normals: [], uv: [], lighting: [] };
+      buffers = { positions: [], normals: [], uv: [], lighting: [], shellIndices: [] };
       materialBuffers.set(m, buffers);
+    }
+    const firstVertex = buffers.positions.length / 3;
+    if (!isInteriorPart(b)) {
+      for (let i = 0; i < sides.length * boxFaces.length; i++) buffers.shellIndices.push(firstVertex + i);
     }
     const center = b.slice(0, 3).map((value, i) => (value + b[3 + i]) / 2);
     let brightness = isInside(center[0], center[1], center[2]) ? .19 : 1;
@@ -259,15 +301,28 @@ export function buildTavernLandmark(plot: TownPlot) {
       }
     }
   }
-  for (const [name, { positions, normals, uv, lighting }] of materialBuffers) {
+  for (const [name, { positions, normals, uv, lighting, shellIndices }] of materialBuffers) {
     const geometry = new BufferGeometry()
       .setAttribute('position', new Float32BufferAttribute(positions, 3))
       .setAttribute('normal', new Float32BufferAttribute(normals, 3))
       .setAttribute('uv', new Float32BufferAttribute(uv, 2))
       .setAttribute('color', new Float32BufferAttribute(lighting, 3));
-    const mesh = new Mesh(geometry, makeMaterial(name, colors[name]));
+    const material = makeMaterial(name, colors[name]);
+    const mesh = new Mesh(geometry, material);
     mesh.name = `酒馆 · ${name}`;
-    group.add(mesh);
+    if (shellIndices.length === geometry.getAttribute('position').count) {
+      group.add(mesh);
+      continue;
+    }
+    near.add(mesh);
+    if (shellIndices.length === 0) continue;
+
+    // Preserve the original near geometry and share its vertex buffers with the shell-only draw.
+    const shellGeometry = new BufferGeometry().setIndex(shellIndices);
+    for (const [key, value] of Object.entries(geometry.attributes)) shellGeometry.setAttribute(key, value);
+    const shell = new Mesh(shellGeometry, material);
+    shell.name = mesh.name;
+    distant.add(shell);
   }
   const toBox = ([x0, y0, z0, x1, y1, z1]: Box) => ({ min: transform(x0, y0, z0), max: transform(x1, y1, z1) });
   const wallBoxes: Box[] = [
