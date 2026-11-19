@@ -225,7 +225,7 @@ function roomCondition(client, extra = {}) {
   return { home: client.result.id, mask: 2, selfId: client.result.approach.selfId, ...extra };
 }
 
-async function enter(client, output) {
+async function enter(client) {
   const { page, result } = client;
   await page.bringToFront();
   await page.keyboard.press('e');
@@ -243,7 +243,6 @@ async function enter(client, output) {
     near(before.east, result.door.x, 1e-6, 'Same menu door east');
     near(before.north, result.door.n, 1e-6, 'Same menu door north');
     result.menu = { id: result.id, before, labels: [enterLabel, '参观这户'] };
-    await saveScreenshot(page, output, result, 'market-menu');
     const focused = await shared.evaluate(button => button === document.activeElement);
     assert.ok(focused, 'The shared-room choice must receive initial keyboard focus');
     await page.keyboard.press('Enter');
@@ -270,7 +269,7 @@ async function walkWhile(client, key, condition) {
   }
 }
 
-async function readCandidateBook(client, output) {
+async function readCandidateBook(client) {
   const { page, result } = client;
   const threshold = await walkWhile(client, 'd', { after: result.inside.frames, action: bookLabel });
   assert.ok(threshold.east > result.inside.east + .5, 'D moved toward the shared-room door book');
@@ -286,7 +285,6 @@ async function readCandidateBook(client, output) {
   assert.equal(await entries.count(), 28);
   assert.equal(await entries.first().getAttribute('data-house-door'), result.id);
   assert.match(await entries.first().textContent(), /刚从这儿进/);
-  await saveScreenshot(page, output, result, 'door-book');
   await page.keyboard.press('Escape');
   await dialog.waitFor({ state: 'hidden', timeout: timeoutMs });
   await page.waitForFunction(() => document.activeElement === document.querySelector('#scene canvas'),
@@ -349,7 +347,7 @@ async function checkBrowser(openBrowser, url, output, evidence) {
       clients.push(client);
       // Leave the first client in the shared room before loading a second exterior scene.
       evidence.step = `enter-${id}`;
-      await enter(client, output);
+      await enter(client);
     }
     const [alpha, beta] = clients;
     const alphaId = alpha.result.approach.selfId;
@@ -358,7 +356,7 @@ async function checkBrowser(openBrowser, url, output, evidence) {
 
     if (candidateMode) {
       evidence.step = 'open-and-close-candidate-door-book';
-      await readCandidateBook(beta, output);
+      await readCandidateBook(beta);
     }
 
     evidence.step = 'separate-in-the-same-room';
