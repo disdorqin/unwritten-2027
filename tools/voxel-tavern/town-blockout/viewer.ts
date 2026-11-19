@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
-import { buildTowerLandmark, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
+import { buildTowerLandmark, setClocktowerDuskLighting, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
 import { updateTowerTime } from './clocktower-face';
 import { createDailyTowerChime } from './town-clocktower-time';
 import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
@@ -103,7 +103,7 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createMascotFollower, type MascotFollowPoint } from './mascot-follow';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
-import { registerTownResidentStations } from './town-npc-stations';
+import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
@@ -857,6 +857,13 @@ function showLightCount({ lit, total }: { lit: number; total: number }) {
 const townLights = createTownLights({ ...activityContext, announce: announceActivity }, grid, showLightCount);
 showLightCount(townLights.getProgress());
 lightsButton.onclick = townLights.openBook;
+let towerDusk = false;
+function setTowerDusk(enabled: boolean) {
+  if (towerDusk === enabled) return;
+  towerDusk = enabled;
+  townLights.setDusk(enabled);
+  setClocktowerDuskLighting(tower, enabled);
+}
 const mascotFrustum = new Frustum();
 const mascotViewProjection = new Matrix4();
 const mascotBounds = new Sphere(new Vector3(), .54);
@@ -2600,7 +2607,9 @@ activitySpots.push(...createMarketVenueActivities(
   architecture.get('market-stalls'), activityContext, dryTownLandingHeight,
   filename => { photoFilename = filename; },
 ));
+const plazaResidentGathering = createPlazaResidentGathering(canStandAtActivity);
 activitySpots.push(...registerTownResidentStations(npcActivity, {
+  plazaGathering: plazaResidentGathering,
   campfires: campfireSites,
   canStand: canStandAtActivity,
   isNight: () => nightMode,
@@ -3017,15 +3026,17 @@ renderer.setAnimationLoop(now => {
   const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
   updateTowerTime(tower, ceremonyState.now, ceremonyState.secondsToMidnight, ceremonyState.phase === 'climax');
   const dailyChime = dailyTowerChime(ceremonyState.now, ceremonyState.phase);
-  if (ceremonyState.phase !== 'ordinary') townLights.setDusk(false);
+  const ordinaryBellHours = ceremonyState.phase === 'ordinary';
+  plazaResidentGathering.tick(ceremonyState.now, ordinaryBellHours);
+  if (!ordinaryBellHours) setTowerDusk(false);
   if (dailyChime) {
     const { cue, audible } = dailyChime;
     if (audible) {
       handleCeremonyCue(cue);
       marketFair.refresh();
-      // The existing resident controller supplies stations, but no timed plaza rotation.
-      if (cue.hour === 17 || cue.hour === 18) townLights.setDusk(true);
-      else if (cue.hour === 7) townLights.setDusk(false);
+      plazaResidentGathering.start(cue.at, cue.hour, campfireSites);
+      if (cue.hour === 17 || cue.hour === 18) setTowerDusk(true);
+      else if (cue.hour === 7) setTowerDusk(false);
     } else {
       bellMotion.strike(.65);
       nextHourlyBell = cue.at + 2020;

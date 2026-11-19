@@ -31,6 +31,13 @@ export function clocktowerHeight(y: number) {
 
 const towerWingGroups = new WeakMap<Group, readonly [Group, Group]>();
 
+export function setClocktowerDuskLighting(tower: Group, enabled: boolean) {
+  const exteriorGlow = tower.children.find(child => child.name === 'glow');
+  if (exteriorGlow instanceof InstancedMesh && exteriorGlow.material instanceof MeshLambertMaterial) {
+    exteriorGlow.material.emissiveIntensity = enabled ? 1 : .85;
+  }
+}
+
 export function updateTowerWingVisibility(tower: Group, east: number, north: number, height: number) {
   const wings = towerWingGroups.get(tower);
   if (!wings) return;

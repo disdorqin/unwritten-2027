@@ -25,7 +25,39 @@ type StationOptions = {
   marketStall?: (name: MarketName) => { station: TownResidentStation; activity?: TownActivitySpot } | undefined;
   canCollect?: Parameters<typeof residentZodiacClues>[1];
   awakenedGoldGoat?: () => boolean;
+  plazaGathering?: ReturnType<typeof createPlazaResidentGathering>;
 };
+
+// Use an existing NPC stroll cycle for the length of one gathering round.
+const plazaGatheringRoundMs = 27_000;
+
+export function createPlazaResidentGathering(
+  canStand: StationOptions['canStand'],
+) {
+  const stations = new Map<MarketName, TownResidentStation>();
+  let until = 0;
+  return {
+    start(at: number, hour: number, fires: readonly CampfireSite[]) {
+      until = at + plazaGatheringRoundMs;
+      stations.clear();
+      const plazaFire = fires.find(fire => fire.id === 'plaza-brazier-a');
+      if (!plazaFire) return;
+      for (const { approach, x, n, ground } of plazaFire.seats) {
+        // Keep one merchant at their stall. Reuse only validated plaza anchor pairs.
+        const actor = [x, n, ground] as const;
+        const talk = [approach.x, approach.n, approach.ground] as const;
+        if (!canStand(...actor) || !canStand(...talk)) continue;
+        const name = marketResidentNames[(hour + stations.size) % marketResidentNames.length];
+        stations.set(name, { actor, talk });
+        if (stations.size === marketResidentNames.length - 1) break;
+      }
+    },
+    tick(now: number, ordinary: boolean) {
+      if (!ordinary || now >= until) stations.clear();
+    },
+    station(name: MarketName) { return stations.get(name); },
+  };
+}
 
 export function palaceStewardGuides(progress?: PalaceProgress) {
   if (!progress) return [];
@@ -67,7 +99,7 @@ export function registerTownResidentStations(npc: Pick<ReturnType<typeof createT
 
   const stallSpots = marketResidentNames.map(name => npc.registerResident(name, () => {
     const stall = options.marketStall?.(name);
-    return stall?.activity ? safe(stall.station) : undefined;
+    return stall?.activity ? options.plazaGathering?.station(name) ?? safe(stall.station) : undefined;
   }, { ...clueOptions(name), activity: () => options.marketStall?.(name)?.activity }));
   return [forestSpot, fishingSpot, palaceSpot, ...stallSpots];
 }

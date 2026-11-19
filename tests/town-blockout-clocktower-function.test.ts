@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Matrix4, type InstancedMesh } from 'three';
+import { Group, InstancedMesh, Matrix4, MeshLambertMaterial } from 'three';
 import { updateTowerTime } from '../tools/voxel-tavern/town-blockout/clocktower-face.ts';
-import { buildTowerLandmark, clocktowerHeight, updateTowerWingVisibility } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
+import { buildTowerLandmark, clocktowerHeight, setClocktowerDuskLighting, updateTowerWingVisibility } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
 import { towerWingRidge } from '../tools/voxel-tavern/town-blockout/clocktower-wings.ts';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import { createDailyTowerChime, towerTime } from '../tools/voxel-tavern/town-blockout/town-clocktower-time.ts';
 import { ceremonyStateAt } from '../tools/voxel-tavern/town-blockout/town-ceremony.ts';
-import { createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { findRegionalCampfires } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
+import { createPlazaResidentGathering, marketResidentNames } from '../tools/voxel-tavern/town-blockout/town-npc-stations.ts';
 
 const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
 const [east, north, level] = plot.origin;
@@ -87,6 +89,42 @@ test('late wakeup and joining on an hour never replay it, with a five-second cro
     assert.equal(Boolean(run(boundary + lag, 'ordinary')), expected);
     assert.equal(run(boundary + lag + 1, 'ordinary'), undefined);
   }
+});
+
+test('ordinary clock hours rotate two market residents through existing plaza anchors', t => {
+  const grid = createTerrainGrid();
+  const plazaBounds = layout.plaza.bounds;
+  const fires = findRegionalCampfires((x, n, y) => y ?? grid.heightAt(x, n), plazaBounds);
+  const gather = createPlazaResidentGathering((x, n) => canEnter(x, n));
+  const start = at('2026-11-19T17:00:00');
+  gather.start(start, 17, fires);
+  const participants = marketResidentNames.filter(name => gather.station(name));
+  assert.deepEqual(participants, ['贾明灯', '胡六环']);
+  const anchors = participants.map(name => gather.station(name)!);
+  assert.notDeepEqual(anchors[0].actor, anchors[1].actor);
+  gather.tick(start + 26_999, true);
+  assert.ok(gather.station('贾明灯'));
+  gather.tick(start + 27_000, true);
+  assert.equal(marketResidentNames.filter(name => gather.station(name)).length, 0);
+  gather.start(start + 3_600_000, 18, fires);
+  assert.deepEqual(marketResidentNames.filter(name => gather.station(name)), ['贾明灯', '文墨生']);
+  gather.tick(start + 3_600_001, false);
+  assert.equal(marketResidentNames.filter(name => gather.station(name)).length, 0);
+  t.diagnostic(JSON.stringify({ participants, anchors }));
+});
+
+test('the dusk cue brightens the existing exterior lantern batch without allocating a new draw', t => {
+  const tower = buildTowerLandmark(plot);
+  const lanterns = tower.children.find(child => child.name === 'glow');
+  assert.ok(lanterns instanceof InstancedMesh && lanterns.material instanceof MeshLambertMaterial);
+  const children = tower.children.length;
+  assert.equal(lanterns.material.emissiveIntensity, .85);
+  setClocktowerDuskLighting(tower, true);
+  assert.equal(lanterns.material.emissiveIntensity, 1);
+  setClocktowerDuskLighting(tower, false);
+  assert.equal(lanterns.material.emissiveIntensity, .85);
+  assert.equal(tower.children.length, children);
+  t.diagnostic(JSON.stringify({ instances: lanterns.count, children }));
 });
 
 function walk(targets: readonly (readonly [number, number])[], tower: Group) {
