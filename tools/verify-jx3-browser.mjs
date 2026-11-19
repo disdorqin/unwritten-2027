@@ -11,7 +11,7 @@ const [baseline, candidate, output] = process.argv.slice(2).map(value => path.re
 assert.ok(baseline && candidate && output, 'Pass baseline checkout or frozen evidence directory, candidate checkout, and output path.');
 const frozenReference = process.env.JX3_REUSE_BASELINE === '44542495628' ? {
   run: 44542495628, artifact: 14541047246, sha: '352aa49b825d88c432ef2dd0a9dd04a5c86441c3',
-  candidate: '5bb1a3f0658b6cba4d28563c0b165c1c373e37da',
+  candidate: process.env.JX3_CANDIDATE_SHA ?? '5bb1a3f0658b6cba4d28563c0b165c1c373e37da',
 } : undefined;
 const viewSize = { width: 1000, height: 650 };
 const frozenClock = Date.parse('2026-12-31T14:00:00+08:00');

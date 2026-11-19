@@ -28,7 +28,7 @@ jobs:
           path: .jx3/frozen-reference
       - uses: actions/checkout@v4
         with:
-          ref: 5bb1a3f0658b6cba4d28563c0b165c1c373e37da
+          ref: ${{ github.sha }}
           path: .jx3/candidate
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -49,6 +49,7 @@ jobs:
         timeout-minutes: 24
         env:
           JX3_REUSE_BASELINE: '44542495628'
+          JX3_CANDIDATE_SHA: ${{ github.sha }}
         run: timeout --signal=TERM --kill-after=15s 23m node tools/verify-jx3-browser.mjs .jx3/frozen-reference/baseline .jx3/candidate /tmp/jx3-evidence
       - name: Upload evidence
         if: always()
