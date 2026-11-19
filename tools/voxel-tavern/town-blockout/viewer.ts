@@ -996,6 +996,8 @@ function prepareExtensionStreets() {
   });
 }
 
+let houseDoorProgramsWarming = false;
+
 async function openHouseDoorBook() {
   const entry = homeReturn;
   if (!entry || houseDoorTravel) return;
@@ -1008,6 +1010,12 @@ async function openHouseDoorBook() {
   if (!extensionStreets) {
     loading.textContent = '屋门清单暂未登记齐，请关册后重试。';
     return;
+  }
+  if (!houseDoorProgramsWarming) {
+    houseDoorProgramsWarming = true;
+    const exteriorCamera = camera.clone();
+    exteriorCamera.layers.set(0);
+    void renderer.compileAsync(scene, exteriorCamera).catch(() => { houseDoorProgramsWarming = false; });
   }
   const anchors = [
     ...layout.plots.map(({ door: [x, n] }, i) => ({ label: plotLabels[i], x, n })),

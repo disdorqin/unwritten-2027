@@ -14,6 +14,10 @@ type KeepClear = (x: number, n: number, radius: number) => boolean;
 type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
 type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
 const housingCellSize = 96;
+const theaterHouseRelocations = new Map<string, readonly [number, number]>([
+  ['200:151', [147, 182.5]],
+  ['246:135', [146, 199]],
+]);
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
   const dx = b[0] - a[0];
@@ -46,6 +50,7 @@ export function addDistrictHousing(
   railwayKeepClear: KeepClear = () => false,
 ) {
   const sites: Site[] = [];
+  const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
   const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
   const foundation = new BoxGeometry();
@@ -132,7 +137,10 @@ export function addDistrictHousing(
   }
 
   for (const { theme, styles, points } of neighborhoods) {
-    for (const [i, [x, n]] of points.entries()) {
+    for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
+      const address = `${sourceEast}:${sourceNorth}`;
+      const relocation = south === 152 ? theaterHouseRelocations.get(address) : undefined;
+      const [x, n] = relocation ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
       const d = 8.1 + (i % 4) * 1.25;
@@ -141,7 +149,7 @@ export function addDistrictHousing(
         const distance = (heading: number) => lineDistance(x + 6 * Math.sin(heading), n - 6 * Math.cos(heading), nearest.start, nearest.end);
         return distance(value) < distance(best) ? value : best;
       });
-      const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(x) };
+      const site = { x, n, w, d, angle, style, variant: 11 * i + Math.round(sourceEast) };
       const footprint = footprints(site);
       if (conflictsWithRail(footprint)) continue;
       const samples = edges(site);
@@ -151,7 +159,8 @@ export function addDistrictHousing(
         && paths.every(({ start, end, radius }) => lineDistance(px, pn, start, end) > radius + 1.35))) continue;
       if (sites.some(other => {
         const size = footprints(other);
-        return within(x, n, { ...size, w: size.w + footprint.w, d: size.d + footprint.d }, 3.6);
+        const setback = relocation || movedSites.has(other) ? 1.8 : 3.6;
+        return within(x, n, { ...size, w: size.w + footprint.w, d: size.d + footprint.d }, setback);
       })) continue;
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
@@ -169,13 +178,14 @@ export function addDistrictHousing(
       const cell = cellAt(x, n);
       addModel(model, cell);
       sites.push(site);
+      if (relocation) movedSites.add(site);
 
       const dx = Math.sin(angle), dn = -Math.cos(angle);
       const side = model.userData.houseDoorEast as number;
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
-      housePortals.push({ id: `old-town:${x}:${n}`, zone: theme ?? 'central', x: doorX, n: doorN,
+      housePortals.push({ id: `old-town:${address}`, zone: theme ?? 'central', x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
