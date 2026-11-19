@@ -136,7 +136,7 @@ import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
-import { createSledRide } from './sled-ride';
+import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
 import { createSledAnimation } from './sled-animation';
 import { createSledDrift } from './sled-drift';
@@ -203,6 +203,10 @@ const sledRacks = [
 const sledVisuals = createTownSledVisuals(scene, sledRacks);
 const sledAnimation = createSledAnimation((east, north) => grid.heightAt(east, north));
 const sledDrift = createSledDrift();
+const sledWallCollider = createSledWallCollider(
+  (gx, gy) => teamFight.wallColumnAt(gx, gy),
+  (gx, gy, speed) => presence.sendSnowfightSledSmash(gx, gy, speed),
+);
 const sledRide = createSledRide({
   height: sledGroundAt,
   surface(sx, nn, y) {
@@ -211,20 +215,16 @@ const sledRide = createSledRide({
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
   },
-  blocked: (sx, nn, y) => {
-    if (obstructed(sx, nn, y)) return true;
-    // 雪墙交叉（车道 B）：墙列按本地镜像挡橇，橇体低于墙顶才算撞上。
-    // 一层墙且速度 >6 m/s 不挡——高速撞穿，销毁由服务端按报告裁定（见 sledSmash 报告处）；
-    // 其余（厚墙、或一层墙低速）一律按障碍走既有撞毁/翻橇规则。
+  blocked: obstructed,
+  wallBlocked: (sx, nn, y) => {
     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
-    if (!column || y >= column.ground + column.height * .5) return false;
-    return !(column.height === 1 && sledRide.speed() > 6);
+    return !!column && y < column.ground + column.height * .5;
   },
+  wallImpact: sledWallCollider.collide,
   snow: (sx, nn, y, snowYaw, count, effect) => sledVisuals.puff(sx, nn, y, snowYaw, count, effect),
   stopped: () => announceActivity('雪橇停稳了，找个下坡再出发'),
   smoothFlight: () => announceActivity('漂亮'),
 });
-let sledWallCellKey = ''; // 雪橇当前所在墙格（撞穿报告按格进入沿触发，见移动分支）
 const sledTrackView = createSledTrackView(scene, sledGroundAt);
 const grandPrix = createGrandPrix();
 const sledStatus = element<HTMLOutputElement>('sled-status');
@@ -243,7 +243,6 @@ presence.onGrandPrixResult(result => {
 function leaveSled() {
   sledRide.leave();
   sledDrift.reset();
-  sledWallCellKey = '';
 }
 const previousStationEye = new Vector3();
 let stationViewStillSince = Infinity;
@@ -2849,7 +2848,6 @@ renderer.setAnimationLoop(now => {
         if (sledRide.active() || sledRide.recovering()) {
           snowMoveScale = chillMoveScale = 1;
           lakeSkateMotion.reset();
-          if (!sledRide.active()) sledWallCellKey = '';
           if (sledRide.active()) {
             const beforeX = x, beforeN = n;
             if (sledSpace && Math.abs(right) > .1) steeredWithSpace = true;
@@ -2870,19 +2868,6 @@ renderer.setAnimationLoop(now => {
             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
               Math.hypot(x - beforeX, n - beforeN) > .05) {
               snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55, sledRide.drifting());
-            }
-            if (sledRide.active()) {
-              // 雪墙撞穿报告（车道 B）：进入新的一层墙格、速度 >6、橇体低于墙顶 →
-              // 报服务端裁定销毁；本地不预毁，墙块以服务端 WALL_CLEAR 广播为准消失。
-              const smashGx = wallCellOf(x), smashGy = wallCellOf(n);
-              const smashKey = `${smashGx},${smashGy}`;
-              if (smashKey !== sledWallCellKey) {
-                sledWallCellKey = smashKey;
-                const column = teamFight.wallColumnAt(smashGx, smashGy);
-                if (column?.height === 1 && sledRide.speed() > 6 && spot.y < column.ground + .5) {
-                  presence.sendSnowfightSledSmash(smashGx, smashGy, Math.ceil(sledRide.speed()));
-                }
-              }
             }
             if (!sledRide.active()) sledDrift.reset();
           }

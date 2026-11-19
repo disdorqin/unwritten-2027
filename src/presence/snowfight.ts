@@ -1,7 +1,9 @@
 // D1 团队雪仗（占点 + 雪墙堡垒）共享逻辑：服务端权威状态机与雪墙场，客户端同源镜像。
 // 数值口径见《未写镇3.0总任务书-2026-11-19》§1 D1；此处只实现规则，不含传输与渲染。
 
+import { sledMaximumSpeed } from '../shared/sled-speed.js';
 import { TOWN_BOUNDS } from './protocol.js';
+import { cabinWallHousing, extensionWallHousing, oldTownWallHousing } from './snowfight-housing-sites.js';
 
 export const SNOWFIGHT_TEAM_NAMES = ['红围巾队', '金铃队'] as const;
 export type SnowfightTeam = 0 | 1;
@@ -37,6 +39,19 @@ export function wallCellCentre(cell: number): number {
   return (cell + .5) * WALL_CELL;
 }
 
+/** The report byte is integral; keep its band identical to the measured speed. */
+export function sledWallReportSpeed(speed: number): number {
+  return speed > 22 ? Math.ceil(speed) : Math.floor(speed);
+}
+
+// Muse 32eb675 §5. Main-window ride tuning also uses this approved cap.
+export const sledWallMaximumReportSpeed = sledWallReportSpeed(sledMaximumSpeed);
+
+export function sledWallImpact(speed: number): { layers: number; multiplier: number } {
+  const layers = speed > 22 ? WALL_MAX_LAYERS : speed >= 15 ? 2 : speed >= 8 ? 1 : 0;
+  return { layers, multiplier: speed > 22 ? .7 : .5 };
+}
+
 // Zone geometry extracted 2026-11-19 from layout.json, town-extension.ts (extensionRoads/districtStreets/districtParcels),
 // docs/p0-layout-draft.json (rail guide, with town-railway.ts guideReplacements applied) and town-rail-stops.ts.
 // Segments are [ax, an, bx, bn, halfWidth]; rects are [centreEast, centreNorth, width, depth]; doors are [east, north];
@@ -56,6 +71,15 @@ export type WallSiteRejection = 'bounds' | 'secret' | 'stage' | 'platform' | 'ra
 
 const PALACE_SECRET_RECT = [484, 72, 48, 38] as const; // 冰晶宫殿主体与密室带（前庭 n<53 不在此内）
 const SHARED_HOME_RECT = [626, 498, 14, 12] as const;
+// Preserve the landmark envelopes used by the current placement model. The cabins
+// have individual building envelopes. The market stalls are open-air.
+const [clocktower, tavern, postOffice, memorial, longHall, , lanternWorkshop, , glasshouse, lighthouse] = INTERIOR_RECTS;
+const FREE_INTERIOR_RECTS = [
+  clocktower, tavern, postOffice, memorial, longHall, lanternWorkshop, glasshouse, lighthouse,
+  ...oldTownWallHousing,
+  ...extensionWallHousing,
+  ...cabinWallHousing,
+];
 
 function segmentDistance(east: number, north: number, seg: readonly number[]): number {
   const [ax, an, bx, bn] = seg;
@@ -100,6 +124,29 @@ export function classifyWallSite(east: number, north: number): WallSiteRejection
   if (inRect(east, north, SHARED_HOME_RECT)) return 'interior';
   for (const rect of INTERIOR_RECTS) if (inRect(east, north, rect)) return 'interior';
   for (const rect of INTERIOR_RECTS) if (rectEdgeDistance(east, north, rect) < WALL_CLEARANCE + .2) return 'door';
+  return undefined;
+}
+
+/** 自由堆砌只禁水面、铁路正线与建筑内。比赛沿用上面的场地限制。 */
+export function classifyFreeWallSite(east: number, north: number): WallSiteRejection | undefined {
+  if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 ||
+      east > TOWN_BOUNDS.width || north > TOWN_BOUNDS.depth) return 'bounds';
+  if (inRect(east, north, PALACE_SECRET_RECT)) return 'secret';
+  if (inRect(east, north, SHARED_HOME_RECT) || FREE_INTERIOR_RECTS.some(rect => inRect(east, north, rect))) return 'interior';
+  if (RAIL_SEGMENTS.some(seg => segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE)) return 'rail';
+  // Match terrain.ts riverX/isWater and the dry bridge decks in layout.json.
+  const bridges = [[298, 253, 279], [192, 278, 304], [149, 276, 302], [100, 269, 295]];
+  const bridge = bridges.some(([row, west, right]) => Math.abs(north - row) <= 4 && east >= west && east <= right);
+  if (bridge) return undefined;
+  const inlet = east >= 287 && east <= 305 && Math.abs(north - (76 - (east - 287) / 2)) < 4;
+  if (inlet) return 'river';
+  for (let i = 1; i < RIVER_POINTS.length; i++) {
+    const [x0, n0] = RIVER_POINTS[i - 1], [x1, n1] = RIVER_POINTS[i];
+    if (north >= n1) {
+      const river = x1 + (x0 - x1) * Math.min(1, (north - n1) / (n0 - n1));
+      return Math.abs(east - river) < 8 ? 'river' : undefined;
+    }
+  }
   return undefined;
 }
 
@@ -170,6 +217,13 @@ export class SnowWallField {
       if (layer !== -1) removed.push(...this.collapse(key, column, layer));
     }
     return removed;
+  }
+
+  /** 雪橇从上往下削层，保留下面各块的原有 HP 和归属。 */
+  breakTop(gx: number, gy: number, layers: number): WallBlock[] {
+    const key = this.key(gx, gy);
+    const column = this.columns.get(key);
+    return column && layers > 0 ? this.collapse(key, column, Math.max(0, column.length - layers)) : [];
   }
 
   /** 命中一块：hp-1；击毁则其上整段塌落。返回受损块或塌落块列表。 */

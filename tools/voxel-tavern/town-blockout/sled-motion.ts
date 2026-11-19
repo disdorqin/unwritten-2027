@@ -197,7 +197,19 @@ export function createSledMotion() {
     return kind;
   }
 
-  return { reset, takeOff, step, land, state };
+  function wallImpact(speed: number, normalEast: number, normalNorth: number) {
+    if (normalEast || normalNorth) {
+      const dot = east * normalEast + north * normalNorth;
+      east -= 2 * dot * normalEast;
+      north -= 2 * dot * normalNorth;
+      const reboundHeading = Math.atan2(east, north);
+      heading = unwrapAngle(reboundHeading - (rollingBack ? Math.PI : 0));
+    }
+    setSpeed(speed);
+    return updateState();
+  }
+
+  return { reset, takeOff, step, land, state, wallImpact };
 }
 
 export function sledCrashKind(speed: number) {

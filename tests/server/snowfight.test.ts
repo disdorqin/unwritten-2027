@@ -3,6 +3,7 @@ import { EventEmitter, once } from "node:events";
 import { test, type TestContext } from "node:test";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { classifyFreeWallSite, classifyWallSite, sledWallImpact, sledWallReportSpeed } from "../../src/presence/snowfight.js";
 import {
   decodeSnowfightRelay, encodeSledSmash, encodeWallHit, encodeWallPlace, type SnowfightRelayEvent,
 } from "../../src/presence/snowfight-events.js";
@@ -170,7 +171,7 @@ test("snowfight: start assigns teams, place validates half and roads, three hits
       "duplicate wall-hit report is ignored");
   });
 
-test("snowfight: sled smash clears a one-layer wall for both clients, rejects slow thick and far reports",
+test("snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity",
   { timeout: 9000 }, async context => {
     const { join, sendPose } = await fixture(context);
     const a = await join("红队甲");
@@ -199,12 +200,12 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     };
 
     // 正例：B 的位置记录就在墙格 (600,500) 格心 (300.25, 250.25) 边上，
-    // 45 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
+    // 30 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
     await place(600, 500, 0);
     sendPose(b.socket, 300, 250, 2);
     const clearA = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
     const clearB = b.walls.next(events => events.some(event => event.kind === "wall-clear"));
-    smash(600, 500, 45);
+    smash(600, 500, 30);
     const [relayA, relayB] = await Promise.all([clearA, clearB]);
     const clear = relayA.find(event => event.kind === "wall-clear");
     assert.ok(clear && clear.kind === "wall-clear");
@@ -217,13 +218,28 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     await place(600, 500, 0);
     smash(600, 500, 6);
     await noClear();
-    smash(600, 500, 46); // integer report exceeds the shared 45.2 m/s cap
+    smash(600, 500, 47);
     await noClear();
 
-    // 厚墙（同格堆到 2 层）：高速报告也被拒，列高必须恰为 1
     await place(600, 500, 1);
-    smash(600, 500, 12);
+    await place(600, 500, 2);
+    await place(600, 500, 3);
+    async function clearLayers(speed: number, layers: number[]) {
+      const awaits = [a, b].map(client => client.walls.next(events =>
+        events.some(event => event.kind === "wall-clear")));
+      smash(600, 500, sledWallReportSpeed(speed));
+      const expected = [{ kind: "wall-clear", blocks: layers.map(layer => ({ gx: 600, gy: 500, layer })) }];
+      for (const received of await Promise.all(awaits)) assert.deepEqual(received, expected);
+      console.log("sled wall m/s, layers cleared across both clients", speed, layers);
+    }
+    smash(600, 500, sledWallReportSpeed(7.99));
     await noClear();
+    await clearLayers(8, [3]);
+    await clearLayers(15, [1, 2]);
+    await place(600, 500, 1);
+    await place(600, 500, 2);
+    await place(600, 500, 3);
+    await clearLayers(22.01, [0, 1, 2, 3]);
 
     // 远报：B 退回广场（距格心约 94 m），同一报告被位置裁定拒绝；
     // 回到墙边后重报同格（二层列旁的一层新格 602,500）立即生效，作为近距正对照。
@@ -238,6 +254,73 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     await clearNear;
   });
 
+test("free wall placement keeps only outdoors water, mainline and buildings out", () => {
+  const sites = [[183.75, 203.75, "road"], [238.25, 140.25, "stage"],
+    [473.75, 224.25, "platform"], [226.25, 215.25, "door"]] as const;
+  for (const [east, north, before] of sites) {
+    assert.equal(classifyWallSite(east, north), before);
+    assert.equal(classifyFreeWallSite(east, north), undefined);
+  }
+  assert.equal(classifyFreeWallSite(291, 197), "river");
+  assert.equal(classifyFreeWallSite(297, 71), "river");
+  assert.equal(classifyFreeWallSite(478, 224), "rail");
+  assert.equal(classifyFreeWallSite(226, 223), "interior");
+  assert.equal(classifyFreeWallSite(133.25, 266.25), "interior");
+  assert.equal(classifyFreeWallSite(133.25, 272.25), undefined);
+  assert.equal(classifyFreeWallSite(80.25, 416.25), undefined);
+  assert.equal(classifyFreeWallSite(82.25, 272.25), "interior");
+  assert.equal(classifyFreeWallSite(87.25, 266.25), undefined);
+  assert.equal(classifyFreeWallSite(484, 72), "secret");
+  assert.equal(classifyFreeWallSite(291, 192), undefined);
+  assert.equal(classifyFreeWallSite(50, 470), undefined);
+  const speeds = [7.99, 8, 14.99, 15, 22, 22.01, 30, 45, 45.2];
+  assert.deepEqual(speeds.map(sledWallReportSpeed), [7, 8, 14, 15, 22, 23, 30, 45, 46]);
+  assert.deepEqual(speeds.map(speed => sledWallImpact(sledWallReportSpeed(speed)).layers), [0, 1, 1, 2, 2, 4, 4, 4, 4]);
+});
+
+test("snowfight: approved upper-band reports 45 and 46 clear all four layers", { timeout: 9000 }, async context => {
+  const { join, sendPose } = await fixture(context);
+  const a = await join("高档橇甲");
+  const b = await join("高档橇乙");
+  sendPose(a.socket, 320, 250, 1);
+  for (const [author, gx, speed] of [[a, 640, 45], [b, 644, 45.2]] as const) {
+    const gy = 500;
+    for (let layer = 0; layer < 4; layer++) {
+      const set = author.walls.next(events => events.some(event =>
+        event.kind === "wall-set" && event.gx === gx && event.gy === gy && event.layer === layer));
+      author.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
+      await set;
+    }
+    const frames = [a, b].map(client => client.walls.next(events =>
+      events.some(event => event.kind === "wall-clear" && event.blocks.some(block => block.gx === gx))));
+    const report = sledWallReportSpeed(speed);
+    a.socket.send(Buffer.from(encodeSledSmash({ gx, gy, speed: report })));
+    for (const frame of await Promise.all(frames)) {
+      assert.deepEqual(frame, [{ kind: "wall-clear", blocks: [0, 1, 2, 3].map(layer => ({ gx, gy, layer })) }]);
+    }
+    console.log("approved sled speed, wire speed and layers cleared on both clients", speed, report, 4);
+  }
+});
+
+test("free snow wall server rejects occupied homes and accepts dry exterior", { timeout: 9000 }, async context => {
+  const { join } = await fixture(context);
+  const a = await join("试墙建造");
+  const b = await join("试墙见证");
+  const rejected = a.text.next(message => message.type === "snowfight-rejected");
+  a.socket.send(Buffer.from(encodeWallPlace(266, 532)));
+  assert.equal((await rejected).reason, "interior");
+  assert.equal(a.walls.pending().length, 0);
+  assert.equal(b.walls.pending().length, 0);
+  for (const [gx, gy] of [[266, 544], [160, 832]]) {
+    const frames = [a, b].map(client => client.walls.next(events =>
+      events.some(event => event.kind === "wall-set" && event.gx === gx && event.gy === gy)));
+    a.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
+    for (const frame of await Promise.all(frames)) {
+      assert.deepEqual(frame, [{ kind: "wall-set", gx, gy, layer: 0, hp: 3, ownerId: a.id, team: 2 }]);
+    }
+  }
+});
+
 test("free snow walls relay three authored layers, survive joining, and clear before ceremony arrival",
   { timeout: 9000 }, async context => {
     let epoch = Date.now();
@@ -246,7 +329,7 @@ test("free snow walls relay three authored layers, survive joining, and clear be
     const { join } = await fixture(context, startAt);
     const a = await join("雪墙作者");
     const b = await join("雪墙访客");
-    const outside = { gx: 600, gy: 500 };
+    const outside = { gx: 640, gy: 500 };
     const landing = { gx: 448, gy: 376 };
 
     for (const [site, layers] of [[outside, 3], [landing, 1]] as const) {

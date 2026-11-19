@@ -3,7 +3,7 @@ import {
   MeshBasicMaterial, MeshLambertMaterial, Object3D, RingGeometry, Vector3, type Scene,
 } from 'three';
 import {
-  SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite,
+  SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyFreeWallSite, classifyWallSite,
   wallCellCentre, wallCellOf, type SnowfightTeam,
 } from '../../../src/presence/snowfight';
 import type { createTownPresence, SnowfightState } from './town-presence';
@@ -311,7 +311,7 @@ export function createTeamSnowfight(options: {
     const east = wallCellCentre(gx);
     const north = wallCellCentre(gy);
     if (state?.phase === 'build' && team !== undefined && !buildHalfAllows(team, east)) return 'half';
-    const site = classifyWallSite(east, north);
+    const site = active() ? classifyWallSite(east, north) : classifyFreeWallSite(east, north);
     if (site) return site;
     if (columnHeight(gx, gy) >= WALL_MAX_LAYERS) return 'stack';
     if (active() && walls.size >= WALL_TOWN_CAP && ![...walls.values()].some(wall => wall.team === 2)) return 'cap';

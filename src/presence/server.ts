@@ -1,5 +1,4 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { sledMaximumSpeed } from '../shared/sled-speed.js';
 import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
@@ -19,8 +18,8 @@ import { isIcePalaceThroneRecord } from './ice-throne-site.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
-  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_BLOCK_HP, WALL_CELL, buildHalfAllows,
-  classifyWallSite, freeWallTeam, wallCellCentre,
+  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_CELL, buildHalfAllows,
+  classifyFreeWallSite, classifyWallSite, freeWallTeam, sledWallImpact, sledWallMaximumReportSpeed, wallCellCentre,
 } from './snowfight.js';
 import {
   SNOWFIGHT_PLACE, SNOWFIGHT_SLED_SMASH, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear,
@@ -711,7 +710,7 @@ export async function createPresenceServer(options: Options = {}) {
         rejectSnowfight(peer, 'half');
         return;
       }
-      const site = classifyWallSite(east, north);
+      const site = team === freeWallTeam ? classifyFreeWallSite(east, north) : classifyWallSite(east, north);
       if (site) {
         rejectSnowfight(peer, site);
         return;
@@ -731,26 +730,16 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (event.kind === 'sled-smash') {
-      // 雪橇撞穿一层墙（车道 B）：报告端为骑乘者本端，服务端按现行列高、报告速度与
-      // 本人位置裁定。速度沿用本协议的模拟端报告信任模型（同 WALL_HIT)，只作闸门：
-      // 须 >6（与 sledCrashKind 同阈值），上限采用双方共用的雪橇速度硬顶。
-      if (event.speed <= 6 || event.speed > sledMaximumSpeed) return;
-      if (snowWalls.height(event.gx, event.gy) !== 1) return;
-      if (!peer.record) return;
-      // 位置记录 10 Hz、45.2 m/s 下每 100 ms 位移约 4.52 m；6 m 容差覆盖记录滞后，
+      if (event.speed > sledWallMaximumReportSpeed || !peer.record) return;
+      const impact = sledWallImpact(event.speed);
+      if (impact.layers === 0) return;
+      // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
       // 同时把裁定范围钉在墙边，杜绝隔图遥报。
       const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
         peer.record.north / 100 - wallCellCentre(event.gy));
       if (distance > 6) return;
-      // 按雪墙规则销毁：等效 damage×WALL_BLOCK_HP（D1 回执挂载口径），中间受损态不广播，
-      // 全体只收最终 WALL_CLEAR，双端镜像一次收敛。
-      for (let i = 0; i < WALL_BLOCK_HP; i++) {
-        const result = snowWalls.damage(event.gx, event.gy, 0, time);
-        if (result && 'destroyed' in result) {
-          for (const frame of encodeWallClear(result.destroyed)) broadcastBinary(frame);
-          break;
-        }
-      }
+      const removed = snowWalls.breakTop(event.gx, event.gy, impact.layers);
+      for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
       return;
     }
     const seenKey = `${event.throwerId}:${event.ballId}`;
