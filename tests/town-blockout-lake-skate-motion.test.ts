@@ -38,3 +38,25 @@ test('halving the simulation step retains equivalent steering and coasting', () 
   regular.reset();
   assert.deepEqual(regular.step(0, 0, townPhysicsDelta), { east: 0, north: 0 });
 });
+
+test('carrying treasure scales the measured turning radius without changing the speed of that step', t => {
+  const regular = createLakeSkateMotion();
+  const carrying = createLakeSkateMotion();
+  let start = { east: 0, north: 0 };
+  for (let i = 0; i < 100; i++) {
+    start = regular.step(8, 0, townPhysicsDelta);
+    carrying.step(8, 0, townPhysicsDelta, true);
+  }
+  const plain = regular.step(0, 8, townPhysicsDelta);
+  const laden = carrying.step(0, 8, townPhysicsDelta, true);
+  const plainSpeed = Math.hypot(plain.east, plain.north), ladenSpeed = Math.hypot(laden.east, laden.north);
+  assert.ok(Math.abs(plainSpeed - ladenSpeed) < 1e-10);
+  const heading = Math.atan2(start.north, start.east);
+  const plainRadius = plainSpeed * townPhysicsDelta / (Math.atan2(plain.north, plain.east) - heading);
+  const ladenRadius = ladenSpeed * townPhysicsDelta / (Math.atan2(laden.north, laden.east) - heading);
+  assert.ok(Math.abs(ladenRadius / plainRadius - 1.5) < 1e-10);
+  const coast = carrying.step(0, 0, townPhysicsDelta, true);
+  assert.ok(Math.abs(Math.atan2(coast.north, coast.east) - Math.atan2(laden.north, laden.east)) < 1e-10);
+  assert.ok(Math.hypot(coast.east, coast.north) < ladenSpeed);
+  t.diagnostic(`fixed-step radius ${plainRadius.toFixed(6)}→${ladenRadius.toFixed(6)} m, ratio ${(ladenRadius / plainRadius).toFixed(6)}, speed ${ladenSpeed.toFixed(6)} m/s`);
+});
