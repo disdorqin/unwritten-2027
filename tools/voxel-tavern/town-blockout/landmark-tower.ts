@@ -4,7 +4,7 @@ import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Me
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
 import type { Ramp, TownPlot } from './landmark-kit';
 import { attachTowerTime, clockBoardDimensions } from './clocktower-face';
-import { buildTowerWingRoof, buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing, towerWingRoofCourse } from './clocktower-wings';
+import { buildTowerWingRoof, buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing, towerEastBridge, towerWingRoofCourse } from './clocktower-wings';
 
 type Vec3 = [number, number, number];
 type Bounds = { min: Vec3; max: Vec3 };
@@ -17,6 +17,9 @@ const unit32 = 1 / 32;
 const hallCeiling = 10.25;
 const dialBandStart = 53.5;
 const dialBandEnd = 71.625;
+const fourthStopDoor = {
+  xMin: 2.65625, xMax: 3.78125, sill: 10.8125, lintel: 13.0625, near: 4.5, far: 5.375,
+};
 
 /** The entrance and ground floor are anchored. The round dials move as a band. */
 export function clocktowerHeight(y: number) {
@@ -116,6 +119,15 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       box(kind, x, y, z, w, h, -archHalf - z);
       box(kind, x, y, archHalf, w, h, z + d - archHalf);
       box(kind, x, archLintel, -archHalf, w, y + h - archLintel, 2 * archHalf);
+    } else if (z >= fourthStopDoor.near && x < fourthStopDoor.xMax && x + w > fourthStopDoor.xMin &&
+      y < fourthStopDoor.lintel && y + h > fourthStopDoor.sill) {
+      // Cut the approved opening through each independent south facade band.
+      const left = Math.max(x, fourthStopDoor.xMin);
+      const right = Math.min(x + w, fourthStopDoor.xMax);
+      box(kind, x, y, z, left - x, h, d);
+      box(kind, right, y, z, x + w - right, h, d);
+      box(kind, left, y, z, right - left, fourthStopDoor.sill - y, d);
+      box(kind, left, fourthStopDoor.lintel, z, right - left, y + h - fourthStopDoor.lintel, d);
     } else if (y >= 87.75 && y < 90.25 && z >= 1.9375 && z < 3.125 && d <= .3125 && x < .75 && x + w > -.75) {
       // The four upper slate courses frame a real lookout slit on the plaza side.
       box(kind, x, y, z, Math.min(w, -.75 - x), h, d);
@@ -138,6 +150,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   const halfWidth = plot.footprint[0] / 2;
   const south = plot.footprint[1] / 2;
   const wingDepth = south;
+  const apronDepth = 4;
+  const rampWidth = 3;
+  const treadHalf = halfWidth - rampWidth;
+  const treadDepth = .39;
+  const treadRise = .105;
+  const levels = 3;
+  const stairDepth = treadDepth * levels;
   for (const side of [-1, 1]) {
     const wing = (kind: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
       const fromZ = Math.max(-wingDepth, z);
@@ -146,7 +165,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     };
     const inner = 5.4;
     const outer = halfWidth - .75;
-    buildTowerWingShell(tower, side, inner, outer, wingDepth, box, solid, floor);
+    buildTowerWingShell(tower, side, inner, outer, wingDepth, box, solid, floor, treadHalf, stairDepth);
     for (const u of [5.65, 9.55, 13.08, 16.1]) {
       wing('blueStone', u - .14, .66, wingDepth - .52, .63, .41, .74);
       wing('ivory', u, 1.07, wingDepth - .49, .35, 6.05, .54);
@@ -178,13 +197,6 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     box('brass', x - .08, y + .31, 6.25, .16, .115, .11);
   }
   for (const x of [-2.53, 2.27]) box('limestone', x, .31, 5.7, .27, 3.87, .76);
-  const apronDepth = 4;
-  const rampWidth = 3;
-  const treadHalf = halfWidth - rampWidth;
-  const treadDepth = .39;
-  const treadRise = .105;
-  const levels = 3;
-  const stairDepth = treadDepth * levels;
 
   // The three treads and two flush end ramps share the whole plot span.
   box('paveEdge', -halfWidth, -.0625, south, 2 * halfWidth, .03125, apronDepth);
@@ -259,7 +271,14 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       solid(-inner, bottom, edge, inner * 2, top - bottom, depth);
     }
   }
-  shaftWalls(hallCeiling, dialBandStart, 4.5, 5.375);
+  const { xMin: doorLeft, xMax: doorRight, sill, lintel, near, far } = fourthStopDoor;
+  const shaftDepth = far - near;
+  for (const x of [-far, near]) solid(x, hallCeiling, -far, shaftDepth, dialBandStart - hallCeiling, 2 * far);
+  solid(-near, hallCeiling, -far, 2 * near, dialBandStart - hallCeiling, shaftDepth);
+  solid(-near, hallCeiling, near, doorLeft + near, dialBandStart - hallCeiling, shaftDepth);
+  solid(doorRight, hallCeiling, near, near - doorRight, dialBandStart - hallCeiling, shaftDepth);
+  solid(doorLeft, hallCeiling, near, doorRight - doorLeft, sill - hallCeiling, shaftDepth);
+  solid(doorLeft, lintel, near, doorRight - doorLeft, dialBandStart - lintel, shaftDepth);
   shaftWalls(dialBandStart, dialBandEnd, 5, 5.5);
   // The belfry has open arches. Its perimeter guard is aligned with the old iron grilles.
   shaftWalls(71.625, 72.875, 4.875, 5.375);
@@ -380,7 +399,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       const ex = Math.sign(x) * outer;
       const ez = Math.sign(z) * outer;
       guard(ex, z - lane / 2, ex, z + lane / 2, y);
-      guard(x - lane / 2, ez, x + lane / 2, ez, y);
+      if (i === 4) {
+        guard(x - lane / 2, ez, doorLeft, ez, y);
+        guard(doorRight, ez, x + lane / 2, ez, y);
+        deck(x - lane / 2, ez, x + lane / 2, near, y);
+      } else {
+        guard(x - lane / 2, ez, x + lane / 2, ez, y);
+      }
       lamp(box, ex - Math.sign(x) * .25, y + 1.375, ez - Math.sign(z) * .25, .52);
       box('wood', x - lane / 2, y - .4375, z - lane / 2, lane, .1875, .25);
     }
@@ -504,6 +529,55 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   furnishWestTowerWing(wingKit);
   parts = wingParts[1];
   furnishEastTowerWing(wingKit);
+
+  // The separate bridge rounds the south pier above the existing porch. The
+  // wing stays within z ±7 and the outer bridge rail stays north of z 11.
+  parts = shellParts;
+  const { xMin: ridgeLeft, xMax: ridgeRight, ridgeEdge } = towerEastBridge;
+  const bridgeY = 11.2;
+  const bridgeWidth = ridgeRight - ridgeLeft;
+  const passNorth = pierFar + .15625;
+  const passSouth = passNorth + bridgeWidth;
+  const bridgeLeft = (doorLeft + doorRight - bridgeWidth) / 2;
+  const bridgeRight = bridgeLeft + bridgeWidth;
+  const topStep = 6.625;
+  const middleStep = 6;
+  function stoneDeck(x0: number, z0: number, x1: number, z1: number, y: number) {
+    box('blueStone', x0, y - .21875, z0, x1 - x0, .15625, z1 - z0);
+    box('ivory', x0, y - .0625, z0, x1 - x0, .0625, z1 - z0);
+    floor(x0, y - .21875, z0, x1 - x0, .21875, z1 - z0);
+  }
+  const deckUnderside = bridgeY - .21875;
+  for (const course of [5, 3, 1]) {
+    const roof = towerWingRoofCourse(wingDepth, course);
+    const baseY = roof.baseY + roof.thickness;
+    const z = roof.innerZ + .15;
+    for (const x of [ridgeLeft + .16, ridgeRight - .38]) {
+      box('stone', x, baseY, z, .22, deckUnderside - baseY, .36);
+    }
+    box('blueStone', ridgeLeft, deckUnderside - .125, z, bridgeWidth, .125, .36);
+  }
+  for (const z of [passNorth + .15, passSouth - .275]) {
+    box('oak', bridgeLeft, deckUnderside - .25, z, ridgeRight - bridgeLeft, .25, .125);
+  }
+  stoneDeck(ridgeLeft, ridgeEdge, ridgeRight, passSouth, bridgeY);
+  stoneDeck(bridgeLeft, passNorth, ridgeLeft, passSouth, bridgeY);
+  stoneDeck(bridgeLeft, topStep, bridgeRight, passNorth, bridgeY);
+  stoneDeck(doorLeft, middleStep, doorRight, topStep, 11);
+  stoneDeck(doorLeft, near, doorRight, middleStep, sill);
+  guard(ridgeRight, ridgeEdge, ridgeRight, passSouth, bridgeY);
+  guard(ridgeLeft, ridgeEdge, ridgeLeft, passNorth, bridgeY);
+  guard(bridgeRight, passNorth, ridgeLeft, passNorth, bridgeY);
+  guard(bridgeLeft, passSouth, ridgeRight, passSouth, bridgeY);
+  guard(bridgeLeft, topStep, bridgeLeft, passSouth, bridgeY);
+  guard(bridgeRight, topStep, bridgeRight, passNorth, bridgeY);
+  for (const [deckEdge, doorEdge] of [[bridgeLeft, doorLeft], [bridgeRight, doorRight]]) {
+    guard(Math.min(deckEdge, doorEdge), topStep, Math.max(deckEdge, doorEdge), topStep, 11);
+    guard(doorEdge, far, doorEdge, topStep, sill, bridgeY);
+    const x = deckEdge - .28;
+    box('stone', x, hallCeiling, far, .56, .375, .82);
+    box('limestone', x - .09375, hallCeiling + .375, far, .7475, deckUnderside - hallCeiling - .375, 1.5);
+  }
   parts = interiorParts;
   // A small lookout instrument sits by the existing west rail, leaving the approach clear.
   box('oak', -1.46, lookoutY, 1.49, .15, .83, .17);

@@ -1,0 +1,1090 @@
+{
+  "label": "closeout-baseline",
+  "proof": "closeout",
+  "errors": [],
+  "warn": [],
+  "gpu": {
+    "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "quality": "balanced"
+  },
+  "body": {
+    "min": [
+      209,
+      11.9375,
+      -230.00000008940697
+    ],
+    "max": [
+      243,
+      129.125,
+      -212
+    ],
+    "name": "clocktower",
+    "shaftWidth": 13.75,
+    "stops": {
+      "dial": [
+        0,
+        76.84375,
+        1.25
+      ],
+      "bell": [
+        0.65,
+        84.71875,
+        0.65
+      ],
+      "lookout": [
+        1,
+        106.8125,
+        1.3
+      ]
+    },
+    "focus": [
+      0,
+      78.53125,
+      4.90625
+    ],
+    "west": false,
+    "east": false,
+    "windows": [
+      {
+        "x": -7.9125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          -7.9125,
+          5.72
+        ],
+        "style": "tavern"
+      },
+      {
+        "x": -11.5125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          -11.5125,
+          5.72
+        ],
+        "style": "tavern"
+      },
+      {
+        "x": -15.1125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          -15.1125,
+          5.72
+        ],
+        "style": "tavern"
+      },
+      {
+        "x": 7.9125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          7.9125,
+          5.72
+        ],
+        "style": "tavern"
+      },
+      {
+        "x": 11.5125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          11.5125,
+          5.72
+        ],
+        "style": "tavern"
+      },
+      {
+        "x": 15.1125,
+        "y": 3.775,
+        "z": 6.775,
+        "yaw": 3.141592653589793,
+        "width": 2.125,
+        "height": 3.45,
+        "ground": 0.3125,
+        "approach": [
+          15.1125,
+          5.72
+        ],
+        "style": "tavern"
+      }
+    ],
+    "colliders": 578,
+    "floors": 509,
+    "ramps": 3,
+    "apron": [
+      {
+        "min": [
+          -17,
+          -0.0625,
+          7
+        ],
+        "max": [
+          17,
+          0,
+          11
+        ]
+      },
+      {
+        "min": [
+          -14,
+          0,
+          6.61
+        ],
+        "max": [
+          14,
+          0.105,
+          7
+        ]
+      },
+      {
+        "min": [
+          -14,
+          0,
+          6.22
+        ],
+        "max": [
+          14,
+          0.21,
+          6.609999999999999
+        ]
+      },
+      {
+        "min": [
+          -14,
+          0,
+          5.83
+        ],
+        "max": [
+          14,
+          0.315,
+          6.22
+        ]
+      }
+    ],
+    "sideRamps": [
+      {
+        "min": [
+          -17,
+          0,
+          5.83
+        ],
+        "max": [
+          -14,
+          0.315,
+          7
+        ]
+      },
+      {
+        "min": [
+          14,
+          0,
+          5.83
+        ],
+        "max": [
+          17,
+          0.315,
+          7
+        ]
+      }
+    ]
+  },
+  "performance": {
+    "plaza": {
+      "frameMs": {
+        "count": 72,
+        "p95": 8.299999999999272,
+        "avg": 5.381944444444445,
+        "max": 41.80000000000018
+      },
+      "calls": {
+        "count": 72,
+        "p95": 99,
+        "avg": 99,
+        "max": 99
+      },
+      "triangles": {
+        "count": 72,
+        "p95": 834150,
+        "avg": 834150,
+        "max": 834150
+      }
+    },
+    "porch": {
+      "frameMs": {
+        "count": 72,
+        "p95": 12.5,
+        "avg": 8.393055555555545,
+        "max": 20.899999999999636
+      },
+      "calls": {
+        "count": 72,
+        "p95": 183,
+        "avg": 183,
+        "max": 183
+      },
+      "triangles": {
+        "count": 72,
+        "p95": 1256762,
+        "avg": 1256762,
+        "max": 1256762
+      }
+    }
+  },
+  "routes": {
+    "ramp -15.5": {
+      "start": {
+        "ok": true,
+        "x": 210.5,
+        "n": 212,
+        "ground": 12
+      },
+      "tried": 128,
+      "blocked": 57,
+      "first": [
+        210.5,
+        215.76,
+        210.5,
+        215.7,
+        12,
+        null
+      ],
+      "maxStep": 0.3125,
+      "minimumClearance": 8.3675,
+      "points": [
+        {
+          "target": [
+            -15.5,
+            9
+          ],
+          "x": 210.5,
+          "n": 214,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            7.3
+          ],
+          "x": 210.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            7
+          ],
+          "x": 210.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            6.8
+          ],
+          "x": 210.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            6.55
+          ],
+          "x": 210.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            6.3
+          ],
+          "x": 210.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            6.1
+          ],
+          "x": 210.5,
+          "n": 216.9,
+          "height": 12.3125,
+          "headroom": 8.3675,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            5.83
+          ],
+          "x": 210.5,
+          "n": 217.17,
+          "height": 12.315,
+          "headroom": 8.618999999999998,
+          "air": null
+        },
+        {
+          "target": [
+            -15.5,
+            5.52
+          ],
+          "x": 210.5,
+          "n": 217.48,
+          "height": 12.3125,
+          "headroom": 8.621499999999997,
+          "air": null
+        }
+      ]
+    },
+    "ramp -15.25": {
+      "start": {
+        "ok": true,
+        "x": 210.75,
+        "n": 212,
+        "ground": 12
+      },
+      "tried": 128,
+      "blocked": 57,
+      "first": [
+        210.75,
+        215.76,
+        210.75,
+        215.7,
+        12,
+        null
+      ],
+      "maxStep": 0.3125,
+      "minimumClearance": 8.3675,
+      "points": [
+        {
+          "target": [
+            -15.25,
+            9
+          ],
+          "x": 210.75,
+          "n": 214,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            7.3
+          ],
+          "x": 210.75,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            7
+          ],
+          "x": 210.75,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            6.8
+          ],
+          "x": 210.75,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            6.55
+          ],
+          "x": 210.75,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            6.3
+          ],
+          "x": 210.75,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            6.1
+          ],
+          "x": 210.75,
+          "n": 216.9,
+          "height": 12.3125,
+          "headroom": 8.3675,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            5.83
+          ],
+          "x": 210.75,
+          "n": 217.17,
+          "height": 12.315,
+          "headroom": 8.618999999999998,
+          "air": null
+        },
+        {
+          "target": [
+            -15.25,
+            5.52
+          ],
+          "x": 210.75,
+          "n": 217.48,
+          "height": 12.3125,
+          "headroom": 8.621499999999997,
+          "air": null
+        }
+      ]
+    },
+    "ramp 15.25": {
+      "start": {
+        "ok": true,
+        "x": 241.25,
+        "n": 212,
+        "ground": 12
+      },
+      "tried": 128,
+      "blocked": 57,
+      "first": [
+        241.25,
+        215.76,
+        241.25,
+        215.7,
+        12,
+        null
+      ],
+      "maxStep": 0.3125,
+      "minimumClearance": 2.375,
+      "points": [
+        {
+          "target": [
+            15.25,
+            9
+          ],
+          "x": 241.25,
+          "n": 214,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            7.3
+          ],
+          "x": 241.25,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            7
+          ],
+          "x": 241.25,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            6.8
+          ],
+          "x": 241.25,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            6.55
+          ],
+          "x": 241.25,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            6.3
+          ],
+          "x": 241.25,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            6.1
+          ],
+          "x": 241.25,
+          "n": 216.9,
+          "height": 12.3125,
+          "headroom": 8.3675,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            5.83
+          ],
+          "x": 241.25,
+          "n": 217.17,
+          "height": 12.315,
+          "headroom": 8.618999999999998,
+          "air": null
+        },
+        {
+          "target": [
+            15.25,
+            5.52
+          ],
+          "x": 241.25,
+          "n": 217.48,
+          "height": 12.3125,
+          "headroom": 2.375,
+          "air": null
+        }
+      ]
+    },
+    "ramp 15.5": {
+      "start": {
+        "ok": true,
+        "x": 241.5,
+        "n": 212,
+        "ground": 12
+      },
+      "tried": 128,
+      "blocked": 57,
+      "first": [
+        241.5,
+        215.76,
+        241.5,
+        215.7,
+        12,
+        null
+      ],
+      "maxStep": 0.3125,
+      "minimumClearance": 2.375,
+      "points": [
+        {
+          "target": [
+            15.5,
+            9
+          ],
+          "x": 241.5,
+          "n": 214,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            7.3
+          ],
+          "x": 241.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            7
+          ],
+          "x": 241.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            6.8
+          ],
+          "x": 241.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            6.55
+          ],
+          "x": 241.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            6.3
+          ],
+          "x": 241.5,
+          "n": 215.7,
+          "height": 12,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            6.1
+          ],
+          "x": 241.5,
+          "n": 216.9,
+          "height": 12.3125,
+          "headroom": 8.3675,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            5.83
+          ],
+          "x": 241.5,
+          "n": 217.17,
+          "height": 12.315,
+          "headroom": 8.618999999999998,
+          "air": null
+        },
+        {
+          "target": [
+            15.5,
+            5.52
+          ],
+          "x": 241.5,
+          "n": 217.48,
+          "height": 12.3125,
+          "headroom": 2.375,
+          "air": null
+        }
+      ]
+    },
+    "entryToFourth": {
+      "start": {
+        "ok": true,
+        "x": 226,
+        "n": 212,
+        "ground": 12
+      },
+      "tried": 1197,
+      "blocked": 87,
+      "first": [
+        233.875,
+        221.05882352941177,
+        233.875,
+        221.1235294117647,
+        23.5375,
+        null
+      ],
+      "maxStep": 0.3125,
+      "minimumClearance": 3.3500000000000014,
+      "points": [
+        {
+          "target": [
+            0,
+            6.4
+          ],
+          "x": 226,
+          "n": 216.6,
+          "height": 12.315,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            0,
+            -3
+          ],
+          "x": 226,
+          "n": 226,
+          "height": 12.3125,
+          "headroom": 3.71875,
+          "air": null
+        },
+        {
+          "target": [
+            4.65,
+            -3
+          ],
+          "x": 230.65,
+          "n": 226,
+          "height": 12.3125,
+          "headroom": 9.9375,
+          "air": null
+        },
+        {
+          "target": [
+            4.65,
+            0
+          ],
+          "x": 230.65,
+          "n": 223,
+          "height": 12.3125,
+          "headroom": 9.9375,
+          "air": null
+        },
+        {
+          "target": [
+            6.65,
+            0
+          ],
+          "x": 232.65,
+          "n": 223,
+          "height": 12.3125,
+          "headroom": 10.0625,
+          "air": null
+        },
+        {
+          "target": [
+            6.65,
+            4.48
+          ],
+          "x": 232.65,
+          "n": 218.52,
+          "height": 12.3125,
+          "headroom": 9.1295,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            4.48
+          ],
+          "x": 233.4,
+          "n": 218.52,
+          "height": 12.53125,
+          "headroom": 8.91075,
+          "air": null
+        },
+        {
+          "target": [
+            14.45,
+            4.48
+          ],
+          "x": 240.45,
+          "n": 218.52,
+          "height": 14.9375,
+          "headroom": 6.5045,
+          "air": null
+        },
+        {
+          "target": [
+            14.45,
+            -1.5
+          ],
+          "x": 240.45,
+          "n": 224.5,
+          "height": 16.90625,
+          "headroom": 5.614249999999998,
+          "air": null
+        },
+        {
+          "target": [
+            14.45,
+            -4.48
+          ],
+          "x": 240.45,
+          "n": 227.48,
+          "height": 17.5625,
+          "headroom": 3.8795,
+          "air": null
+        },
+        {
+          "target": [
+            10.2,
+            -4.48
+          ],
+          "x": 236.2,
+          "n": 227.48,
+          "height": 19.53125,
+          "headroom": 3.3500000000000014,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            -4.48
+          ],
+          "x": 233.4,
+          "n": 227.48,
+          "height": 20.1875,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            -2.8
+          ],
+          "x": 233.4,
+          "n": 225.8,
+          "height": 21.0625,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            -0.9
+          ],
+          "x": 233.4,
+          "n": 223.9,
+          "height": 22.6875,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            0
+          ],
+          "x": 233.4,
+          "n": 223,
+          "height": 23.5375,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.4,
+            1.1
+          ],
+          "x": 233.4,
+          "n": 221.9,
+          "height": 23.5375,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.875,
+            1.1
+          ],
+          "x": 233.875,
+          "n": 221.9,
+          "height": 23.5375,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.875,
+            2.2
+          ],
+          "x": 233.875,
+          "n": 221.1235294117647,
+          "height": 23.5375,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.875,
+            3
+          ],
+          "x": 233.875,
+          "n": 220,
+          "height": 23.5375,
+          "headroom": null,
+          "air": null
+        },
+        {
+          "target": [
+            7.875,
+            7.78125
+          ],
+          "x": 233.875,
+          "n": 215.21875,
+          "height": 23.5375,
+          "headroom": null,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            6.125,
+            7.78125
+          ],
+          "x": 232.125,
+          "n": 215.21875,
+          "height": 23.5375,
+          "headroom": null,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            7.78125
+          ],
+          "x": 229.21875,
+          "n": 215.21875,
+          "height": 23.5375,
+          "headroom": null,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            6.625
+          ],
+          "x": 229.21875,
+          "n": 216.375,
+          "height": 23.5375,
+          "headroom": null,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            6.3
+          ],
+          "x": 229.21875,
+          "n": 216.7,
+          "height": 23.5375,
+          "headroom": null,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            5.86
+          ],
+          "x": 229.21875,
+          "n": 217.14,
+          "height": 23.5375,
+          "headroom": 85.74375,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            5.375
+          ],
+          "x": 229.21875,
+          "n": 217.32187499999998,
+          "height": 23.5375,
+          "headroom": 55.49375,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            4.5
+          ],
+          "x": 229.21875,
+          "n": 217.32187499999998,
+          "height": 23.5375,
+          "headroom": 55.49375,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            4.25
+          ],
+          "x": 229.21875,
+          "n": 217.32187499999998,
+          "height": 23.5375,
+          "headroom": 55.49375,
+          "air": 23.5375
+        },
+        {
+          "target": [
+            3.21875,
+            3.21875
+          ],
+          "x": 229.21875,
+          "n": 219.78125,
+          "height": 23.5375,
+          "headroom": 12.899999999999999,
+          "air": 23.5375
+        }
+      ]
+    }
+  },
+  "pictures": [
+    "m6-closeout-plaza.png",
+    "m6-west-ramp.png",
+    "m6-east-ramp.png",
+    "m6-fourth-stop.png",
+    "m6-bridge-overview.png",
+    "m6-bridge-south-arm.png"
+  ]
+}

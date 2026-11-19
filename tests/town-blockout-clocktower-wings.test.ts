@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InstancedMesh, Matrix4, Scene } from 'three';
+import { Box3, InstancedMesh, Matrix4, Raycaster, Scene, Vector3 } from 'three';
 import { buildTowerLandmark, clocktowerHeight } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import type { TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
@@ -33,11 +33,13 @@ function isBlocked(x: number, z: number, y: number, obstacles: Box[]) {
 }
 
 function walk(targets: readonly Point[], geometry: ReturnType<typeof makeFixture>) {
-  const { floors, colliders } = geometry;
+  const { floors, colliders, ramps } = geometry;
   const obstacles = [...floors, ...colliders];
   let [x, z] = targets[0];
   let y = grid.heightAt(east + x, north - z);
   let stepCount = 0;
+  let minimumHeadroom = Infinity;
+  let maxStep = 0;
   const endpoints = [y];
   for (const [targetX, targetZ] of targets.slice(1)) {
     const fromX = x, fromZ = z;
@@ -47,19 +49,32 @@ function walk(targets: readonly Point[], geometry: ReturnType<typeof makeFixture
       z = fromZ + (targetZ - fromZ) * step / steps;
       const worldX = east + x, worldZ = z - north;
       const maxRise = y + .43;
-      const next = floors.reduce((support, cell) =>
+      let next = floors.reduce((support, cell) =>
         cell.max[1] <= maxRise && touches(worldX, worldZ, cell) ? Math.max(support, cell.max[1]) : support,
-      grid.heightAt(worldX, -worldZ));
+        grid.heightAt(worldX, -worldZ));
+      for (const ramp of ramps) {
+        if (worldX < ramp.min[0] || worldX > ramp.max[0] || worldZ < ramp.min[2] || worldZ > ramp.max[2]) continue;
+        const axis = ramp.axis === 'x' ? 0 : 2;
+        const position = axis === 0 ? worldX : worldZ;
+        const progress = (position - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
+        const support = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending > 0 ? progress : 1 - progress);
+        if (support <= maxRise) next = Math.max(next, support);
+      }
       assert.ok(Math.abs(y - next) <= .43 + 1e-9, `height ${y}→${next} at ${x},${z}`);
       const blockage = obstacles.find(cell => next + .025 < cell.max[1] && next + bodyHeight - .025 > cell.min[1] &&
         touches(worldX, worldZ, cell));
       assert.equal(blockage, undefined, `obstruction on raw-local route at ${x.toFixed(3)},${z.toFixed(3)}, world y=${next}`);
+      for (const cell of obstacles) {
+        const clearance = cell.min[1] - next;
+        if (clearance > .025 && clearance < minimumHeadroom && touches(worldX, worldZ, cell)) minimumHeadroom = clearance;
+      }
+      maxStep = Math.max(maxStep, Math.abs(next - y));
       y = next;
       stepCount++;
     }
     endpoints.push(y);
   }
-  return { y, stepCount, endpoints };
+  return { y, stepCount, endpoints, minimumHeadroom, maxStep };
 }
 
 const eastApproach = [[0, 11], [0, 6.4], [0, -3], [4.65, -3], [4.65, 0], [6.65, 0], [6.65, 4.48],
@@ -147,4 +162,54 @@ test('east wing reaches the mezzanine and the 2.2 m ridge platform with 2 m stai
     t.diagnostic(`headroom raw x=${x},z=${z}, feet Y=${y}: ${Number.isFinite(ceiling) ? (ceiling - y).toFixed(5) + ' m' : 'no overhead collider'}`);
   }
   t.diagnostic(`east mezzanine: ${mezz.stepCount} steps to ${mezz.y} m; ridge: ${summit.stepCount} steps to ${summit.y} m.`);
+});
+
+test('both three-metre ramp centres cross the wing front continuously', t => {
+  const geometry = makeFixture();
+  for (const x of [-15.5, 15.5]) {
+    const route = walk([11, 7, 6.55, 6.3, 5.83, 5.52, 7, 11].map(z => [x, z]), geometry);
+    assert.equal(route.endpoints[4], level + .315);
+    assert.equal(route.endpoints[5], level + .3125);
+    assert.equal(route.y, level);
+    assert.ok(route.maxStep < .1, `unexpected ramp jump ${route.maxStep} m`);
+    assert.ok(route.minimumHeadroom >= bodyHeight, `ramp headroom ${route.minimumHeadroom} m`);
+    t.diagnostic(`x=${x}: ${route.stepCount} steps, crest Y=${route.endpoints[4]}, max step ${route.maxStep.toFixed(5)} m, net headroom ${route.minimumHeadroom.toFixed(5)} m.`);
+  }
+});
+
+test('east ridge platform connects around the pier to the fourth tower stop and back down', t => {
+  const geometry = makeFixture();
+  const corner = 3.21875;
+  const approach: Point[] = [...eastApproach, [14.45, -4.48], [10.2, -4.48], [7.4, -4.48], [7.4, -.9], [7.4, 1.1],
+    [7.875, 1.1], [7.875, 7.78125], [corner, 7.78125], [corner, 6.3], [corner, 5.6], [corner, 4.5], [corner, corner]];
+  const bridge = walk(approach, geometry);
+  assert.deepEqual(bridge.endpoints.slice(-6), [11.2, 11.2, 11, 10.8125, 10.8125, 10.8125]
+    .map(raw => level + clocktowerHeight(raw)));
+  assert.ok(bridge.minimumHeadroom >= 2.25);
+  const returnToHall = walk([...approach, [-corner, corner], [-corner, -corner], [corner, -corner],
+    [corner, corner], [0, 3.2], [0, 0]], geometry);
+  assert.equal(returnToHall.y, level + .3125);
+  t.diagnostic(`entry to fourth deck: ${bridge.stepCount} steps, feet Y=${bridge.y}, net headroom ${bridge.minimumHeadroom.toFixed(5)} m; full return ${returnToHall.stepCount} steps to feet Y=${returnToHall.y}.`);
+});
+
+test('fourth stop has a visible south opening and the tower keeps its measured height', t => {
+  const { tower, colliders } = makeFixture();
+  tower.updateMatrixWorld(true);
+  assert.equal(new Box3().setFromObject(tower, true).max.y - level, 117.125);
+  const doorLeft = east + 2.65625;
+  const doorRight = east + 3.78125;
+  const sill = level + clocktowerHeight(10.8125);
+  const lintel = level + clocktowerHeight(13.0625);
+  const southernWall = colliders.filter(box =>
+    box.min[2] === 4.5 - north && box.max[2] === 5.375 - north);
+  assert.equal(southernWall.length, 4);
+  assert.ok(southernWall.some(box => box.min[0] === doorLeft && box.max[0] === doorRight && box.min[1] === lintel));
+  assert.ok(southernWall.some(box => box.min[0] === doorLeft && box.max[0] === doorRight && box.max[1] === sill));
+  for (const x of [doorLeft + .125, (doorLeft + doorRight) / 2, doorRight - .125]) {
+    for (const y of [sill + .125, (sill + lintel) / 2, lintel - .125]) {
+      const ray = new Raycaster(new Vector3(x, y, 5.6 - north), new Vector3(0, 0, -1), 0, 1.125);
+      assert.equal(ray.intersectObject(tower, true).length, 0, `facade crosses door at x=${x}, y=${y}`);
+    }
+  }
+  t.diagnostic(`9 unobstructed facade sightlines; door width ${doorRight - doorLeft} m, rendered clear height ${lintel - sill} m.`);
 });

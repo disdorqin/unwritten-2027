@@ -7,6 +7,7 @@ export const towerHallFloor = .3125;
 export const towerWingMezzanine = 4.9;
 export const towerWingStairWidth = 1.125;
 export const towerWingRidge = 11.225;
+export const towerEastBridge = { xMin: 7.125, xMax: 8.625, ridgeEdge: 2.2 };
 const frontWindowY = 2.05;
 const frontWindowHeight = 3.45;
 const frontWindowWidth = 2.125;
@@ -21,7 +22,7 @@ const halfLanding = halfStair + .30;
 const wingRiser = .21875;
 
 export function buildTowerWingShell(tower: Group, side: number, inner: number, outer: number, depth: number, box: Box,
-  solid: Volume, floor: Volume) {
+  solid: Volume, floor: Volume, rampInner: number, rampRun: number) {
   const span = outer - inner;
   const wall = .45;
   const top = 8.64;
@@ -32,12 +33,22 @@ export function buildTowerWingShell(tower: Group, side: number, inner: number, o
     wing('limestone', x, y, z, w, h, d);
     solid(side > 0 ? x : -x - w, y, z, w, h, d);
   };
-  wing('blueStone', inner, 0, -depth, span + .25, .25, depth * 2);
-  wing('ivory', inner, .25, -depth, span + .25, .0625, depth * 2);
-  floor(side > 0 ? inner : -outer - .25, 0, -depth, span + .25, towerHallFloor, depth * 2);
+  const floorPiece = (x: number, w: number, front: number) => {
+    wing('blueStone', x, 0, -depth, w, .25, front + depth);
+    wing('ivory', x, .25, -depth, w, .0625, front + depth);
+    floor(side > 0 ? x : -x - w, 0, -depth, w, towerHallFloor, front + depth);
+  };
+  floorPiece(inner, rampInner - inner, depth);
+  floorPiece(rampInner, outer + .25 - rampInner, depth - rampRun);
   wallPiece(inner, towerHallFloor, -depth, span, top - towerHallFloor, wall);
   wallPiece(outer - wall, towerHallFloor, -depth, wall, top - towerHallFloor, depth * 2 - wall);
-  wallPiece(inner, towerHallFloor, depth - wall, span, frontWindowY - towerHallFloor, wall);
+  // Keep both jambs of the outer sash and run the approach beneath its sill.
+  const rampDoor = windowEdges[windowEdges.length - 1];
+  const rampDoorEnd = rampDoor + frontWindowWidth;
+  const rampLintel = 2.025;
+  wallPiece(inner, towerHallFloor, depth - wall, rampDoor - inner, frontWindowY - towerHallFloor, wall);
+  wallPiece(rampDoorEnd, towerHallFloor, depth - wall, outer - rampDoorEnd, frontWindowY - towerHallFloor, wall);
+  wallPiece(rampDoor, rampLintel, depth - wall, frontWindowWidth, frontWindowY - rampLintel, wall);
   const upper = frontWindowY + frontWindowHeight;
   wallPiece(inner, upper, depth - wall, span, top - upper, wall);
   let previous = inner;
@@ -55,7 +66,8 @@ export function buildTowerWingShell(tower: Group, side: number, inner: number, o
       wing('ivory', center + side * (frontWindowWidth / 2 + .035) - .06, frontWindowY - .12, depth - .15,
         .12, frontWindowHeight + .12, .15);
     }
-    wing('blueStone', edge - .075, frontWindowY - .15, depth - .39, frontWindowWidth + .15, .15, .39);
+    const sill = edge === rampDoor ? rampLintel : frontWindowY - .15;
+    wing('blueStone', edge - .075, sill, depth - .39, frontWindowWidth + .15, frontWindowY - sill, .39);
     wing('ivory', edge - .09, upper, depth - .13, frontWindowWidth + .18, .16, .13);
     for (let i = 0; i < 4; i++) {
       const inset = i * .17;
@@ -65,7 +77,9 @@ export function buildTowerWingShell(tower: Group, side: number, inner: number, o
   }
   // End the side return at the back of the front wall so the last sash stays clear to its far jamb.
   wallPiece(previous, frontWindowY, depth - wall, outer - previous, frontWindowHeight, wall);
-  for (const [y, kind] of [[1, 'blueStone'], [7.45, 'brass'], [8.48, 'blueStone']] as const) {
+  wing('blueStone', inner, 1, depth - .14, rampDoor - inner, .24, .14);
+  wing('blueStone', rampDoorEnd, 1, depth - .14, outer - rampDoorEnd, .24, .14);
+  for (const [y, kind] of [[7.45, 'brass'], [8.48, 'blueStone']] as const) {
     wing(kind, inner, y, depth - .14, span, .24, .14);
   }
 }
@@ -109,8 +123,11 @@ export function buildTowerWingRoof(side: number, inner: number, outer: number, d
   if (side < 0) {
     box('roofGlaze', -outer - .45, towerWingRidge, -.18, outer - inner + .55, .23, .36);
   } else {
-    box('roofShadow', inner, 10.1, 2.2, outer - inner, towerWingRidge - 10.1, .6);
-    solid(inner, 10.1, 2.2, outer - inner, towerWingRidge - 10.1, .6);
+    const { xMin, xMax, ridgeEdge } = towerEastBridge;
+    for (const [from, to] of [[inner, xMin], [xMax, outer]]) {
+      box('roofShadow', from, 10.1, ridgeEdge, to - from, towerWingRidge - 10.1, .6);
+      solid(from, 10.1, ridgeEdge, to - from, towerWingRidge - 10.1, .6);
+    }
   }
 }
 
@@ -181,11 +198,12 @@ export function furnishEastTowerWing({ box, deck, guard, stair, lamp }: Furnishi
   stair(eastStairInnerX, eastNorthTurn + halfLanding, eastStairInnerX, 0,
     thirdY, wingRiser, towerWingStairWidth, 13);
   // The ridge deck is the 50th surface. Its rise is fixed by the roof ridge rather than another full riser.
-  const deckWest = 5.4, deckEast = 16.25, deckSouth = 2.2;
+  const deckWest = 5.4, deckEast = 16.25, deckSouth = towerEastBridge.ridgeEdge;
   deck(deckWest, 0, deckEast, deckSouth, towerWingRidge);
   guard(deckWest, 0, eastStairInnerX - halfLanding, 0, towerWingRidge);
   guard(eastStairInnerX + halfLanding, 0, deckEast, 0, towerWingRidge);
-  guard(deckWest, deckSouth, deckEast, deckSouth, towerWingRidge);
+  guard(deckWest, deckSouth, towerEastBridge.xMin, deckSouth, towerWingRidge);
+  guard(towerEastBridge.xMax, deckSouth, deckEast, deckSouth, towerWingRidge);
   guard(deckEast, 0, deckEast, deckSouth, towerWingRidge);
   guard(deckWest, 0, deckWest, deckSouth, towerWingRidge);
   box('brass', 8.28, towerWingRidge + .08, 1.34, 7.36, .06, .12);
