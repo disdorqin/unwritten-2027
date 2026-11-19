@@ -199,12 +199,12 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     };
 
     // 正例：B 的位置记录就在墙格 (600,500) 格心 (300.25, 250.25) 边上，
-    // 30 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
+    // 45 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
     await place(600, 500, 0);
     sendPose(b.socket, 300, 250, 2);
     const clearA = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
     const clearB = b.walls.next(events => events.some(event => event.kind === "wall-clear"));
-    smash(600, 500, 30);
+    smash(600, 500, 45);
     const [relayA, relayB] = await Promise.all([clearA, clearB]);
     const clear = relayA.find(event => event.kind === "wall-clear");
     assert.ok(clear && clear.kind === "wall-clear");
@@ -217,7 +217,7 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     await place(600, 500, 0);
     smash(600, 500, 6);
     await noClear();
-    smash(600, 500, 31);
+    smash(600, 500, 46); // integer report exceeds the shared 45.2 m/s cap
     await noClear();
 
     // 厚墙（同格堆到 2 层）：高速报告也被拒，列高必须恰为 1

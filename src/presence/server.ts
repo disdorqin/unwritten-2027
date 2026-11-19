@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { sledMaximumSpeed } from '../shared/sled-speed.js';
 import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
@@ -732,11 +733,11 @@ export async function createPresenceServer(options: Options = {}) {
     if (event.kind === 'sled-smash') {
       // 雪橇撞穿一层墙（车道 B）：报告端为骑乘者本端，服务端按现行列高、报告速度与
       // 本人位置裁定。速度沿用本协议的模拟端报告信任模型（同 WALL_HIT)，只作闸门：
-      // 须 >6（与 sledCrashKind 同阈值），上限为重调后的 30 m/s 硬顶。
-      if (event.speed <= 6 || event.speed > 30) return;
+      // 须 >6（与 sledCrashKind 同阈值），上限采用双方共用的雪橇速度硬顶。
+      if (event.speed <= 6 || event.speed > sledMaximumSpeed) return;
       if (snowWalls.height(event.gx, event.gy) !== 1) return;
       if (!peer.record) return;
-      // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
+      // 位置记录 10 Hz、45.2 m/s 下每 100 ms 位移约 4.52 m；6 m 容差覆盖记录滞后，
       // 同时把裁定范围钉在墙边，杜绝隔图遥报。
       const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
         peer.record.north / 100 - wallCellCentre(event.gy));

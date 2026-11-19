@@ -1,5 +1,6 @@
-export const sledMaximumSpeed = 30;
-export const sledSoftSpeed = 28;
+import { sledMaximumSpeed } from '../../../src/shared/sled-speed';
+export { sledMaximumSpeed };
+export const sledSoftSpeed = 43.2;
 export const sledRadius = .35;
 export const sledIceFriction = .12;
 export const sledGlideRatio = 4.5;
@@ -7,9 +8,8 @@ export const sledGlideRatio = 4.5;
 const restSpeed = .025;
 const gradeVelocityThreshold = .15;
 const sledGravity = 16;
-const baseDrag = .0045;
-const highDragStartSpeed = 24;
-const levelPushSpeed = 9.5;
+const baseDrag = .0135;
+const levelPushSpeed = 22.6;
 const uphillPushSpeed = 4;
 const levelSlope = .06;
 const pushableSlope = .25;
@@ -32,8 +32,9 @@ function friction({ surface, deepSnow }: SledSurface) {
 }
 
 function dragAt(speed: number) {
-  const highSpeed = clamp((speed - highDragStartSpeed) / (sledMaximumSpeed - highDragStartSpeed), 0, 1);
-  return baseDrag * speed * speed * (1 + 2 * highSpeed ** 3);
+  // Subquadratic wind resistance preserves the existing slope/friction model
+  // while letting sustained 10/20/30% downhill grades occupy three speed bands.
+  return baseDrag * Math.pow(speed, 1.5);
 }
 
 function unwrapAngle(angle: number) {
