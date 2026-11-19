@@ -2601,7 +2601,7 @@ function campfireGround(east: number, north: number, height?: number) {
 }
 const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds, { pineCamp: true });
 const pineFire = campfireSites.find(site => site.id === pineCampfireId);
-const forestChopSites = findForestChopSites(campfireSites.filter(site => site.id !== pineCampfireId), campfireGround);
+const forestChopSites = findForestChopSites(campfireSites, campfireGround);
 const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites,
   { isNight: () => nightMode, pineCamp: pineFire });
 const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);

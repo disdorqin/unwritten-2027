@@ -14,6 +14,7 @@ import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel
 import {
   createForestCampfire, findForestChopSites, forestChopHits, forestChopRange, forestWoodPileLimit, forestWoodStorageKey,
 } from '../tools/voxel-tavern/town-blockout/town-forest-campfire.ts';
+import { buildPineCamp } from '../tools/voxel-tavern/town-blockout/town-pine-camp.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
 import { createTownWater } from '../tools/voxel-tavern/town-blockout/town-water.ts';
 
@@ -26,8 +27,9 @@ const fires: CampfireSite[] = [{
   x: fireX, n: fireN, ground: grid.heightAt(fireX, fireN), seats: [firePoint],
 }];
 
-function checkedMapGround() {
+function checkedMapGround(withPineCamp = false) {
   const area = new Group();
+  const pineCamp = withPineCamp ? buildPineCamp(grid) : undefined;
   const railway = createTownRailway(grid);
   const water = createTownWater(grid);
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -39,16 +41,18 @@ function checkedMapGround() {
     }) }) },
   });
   let scenery: ReturnType<typeof addScenery>;
-  try { scenery = addScenery(area, grid); }
+  try { scenery = addScenery(area, grid, pineCamp?.keepClear); }
   finally {
     if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
     else Reflect.deleteProperty(globalThis, 'document');
   }
   const houses = addDistrictHousing(area, grid, scenery.blocked, railway.keepClear);
   const streets = addStreetscape(area, grid,
-    (x, n, margin) => houses.keepClear(x, n, margin) || extensionRoadClearance(x, n, margin));
+    (x, n, margin) => houses.keepClear(x, n, margin) || extensionRoadClearance(x, n, margin) ||
+      pineCamp?.keepClear(x, n, margin) === true);
   const forest = addForestDensity(area, grid,
-    (x, n, margin) => houses.keepClear(x, n, margin) || streets.occupied(x, n, margin),
+    (x, n, margin) => houses.keepClear(x, n, margin) || streets.occupied(x, n, margin) ||
+      pineCamp?.keepClear(x, n, margin) === true,
     (x, n, margin) => railway.keepClear(x, n, margin) || extensionRoadClearance(x, n, margin) ||
       extensionStreetClearance(x, n, margin));
   const cabinPlot = layout.plots.find(({ id }) => id === 'cabins')!;
@@ -56,20 +60,25 @@ function checkedMapGround() {
   const [e, n, height] = cabinPlot.origin;
   cabin.position.set(e, height, -n);
   const { colliders, floors } = readWalkGeometry(cabin);
+  const pineGeometry = pineCamp ? readWalkGeometry(pineCamp.group) : undefined;
+  const collisionBoxes = [
+    ...colliders, ...floors, ...(pineGeometry?.colliders ?? []), ...(pineGeometry?.floors ?? []),
+  ];
 
-  return (x: number, n: number) => {
-    const feet = grid.heightAt(x, n);
+  const groundAt = (x: number, n: number) => {
+    const feet = pineCamp?.fireGroundAt(x, n) ?? grid.heightAt(x, n);
     if (!canEnter(x, n) || bridgeAt(x, n) || water.at(x, n) || railway.keepClear(x, n, .27) ||
         extensionRoadClearance(x, n, .27) || extensionStreetClearance(x, n, .27) ||
         [scenery, houses, streets, forest].some(item => item.blocked(x, n))) return;
-    const hit = [...colliders, ...floors].some(({ min, max }) => feet + .025 < max[1] && feet + 1.775 > min[1] &&
+    const hit = collisionBoxes.some(({ min, max }) => feet + .025 < max[1] && feet + 1.775 > min[1] &&
       Math.hypot(Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0)) < .27);
     return hit ? undefined : feet;
   };
+  return { groundAt, houses };
 }
 
 test('both chop spots and their prop footprints are clear against the production map', () => {
-  const checked = checkedMapGround();
+  const { groundAt: checked } = checkedMapGround();
   const sites = findForestChopSites(fires, checked);
   assert.equal(sites.length, 2);
   const [village, camp] = sites;
@@ -218,11 +227,35 @@ test('pine fire adds a ninth site with six warm seats and leaves the eight accep
 });
 
 test('pine chopping and feeding a supported site reuse five strikes while keeping old fuel separate', t => {
-  const flat = () => 12;
-  const [pine] = findRegionalCampfires(flat, undefined, { pineCamp: true }).filter(fire => fire.id === pineCampfireId);
-  const chopSites = findForestChopSites([pine], flat);
+  const { groundAt, houses } = checkedMapGround(true);
+  const pine = findRegionalCampfires(groundAt, layout.plaza.bounds, { pineCamp: true }).find(fire => fire.id === pineCampfireId)!;
+  assert.ok(pine);
+  const chopSites = findForestChopSites([pine], groundAt);
   const chopSite = chopSites.find(site => site.id === pineCampfireId)!;
-  assert.deepEqual([chopSite.x, chopSite.n, chopSite.props.x, chopSite.props.n], [415.5, 223.7, 414.05, 223.7]);
+  assert.ok(chopSite);
+  assert.deepEqual([chopSite.x, chopSite.n, chopSite.props.x, chopSite.props.n], [416.5, 229, 415.05, 229]);
+  const house = houses.sites[houses.housePortals.findIndex(portal => portal.id === 'old-town:410:219')];
+  assert.ok(house);
+  const sideOn = Math.abs(Math.sin(house.angle)) > .5;
+  const houseEast = house.x + (sideOn ? house.d : house.w) / 2;
+  const houseNorth = house.n + (sideOn ? house.w : house.d) / 2;
+  const westProbeX = chopSite.props.x - .72;
+  const westProbeY = groundAt(westProbeX, chopSite.props.n);
+  assert.notEqual(westProbeY, undefined);
+  assert.equal(houses.blocked(westProbeX, chopSite.props.n), false);
+  t.diagnostic(`pine site ${JSON.stringify(chopSite)}; ground delta ${Math.abs(chopSite.ground - chopSite.props.ground).toFixed(6)}`);
+  t.diagnostic(`house east ${houseEast.toFixed(3)}, north ${houseNorth.toFixed(3)}; signed east offsets spot ${(chopSite.x - houseEast).toFixed(3)}, prop ${(chopSite.props.x - houseEast).toFixed(3)}; minimum north isolation beyond .27m house radius ${(chopSite.n - houseNorth - .27).toFixed(3)}m`);
+  t.diagnostic(`prop west ground sample at ${westProbeX.toFixed(3)}/${chopSite.props.n}: ${westProbeY!.toFixed(6)}`);
+  const distance = (a: { x: number; n: number }, b: { x: number; n: number }) => Math.hypot(a.x - b.x, a.n - b.n);
+  for (const seat of pine.seats) {
+    assert.ok(distance(seat, chopSite) > .61 + .58);
+    assert.ok(distance(seat, chopSite.props) > .61 + .72);
+  }
+  assert.ok(distance(pine.woodPile!, chopSite) > .72 + .58);
+  assert.ok(distance(pine.woodPile!, chopSite.props) > .72 + .72);
+  const blockedAnchor = (x: number, n: number) => x === chopSite.x && n === chopSite.n ? undefined : groundAt(x, n);
+  assert.ok(!findForestChopSites([pine], blockedAnchor).some(spot => spot.id === pineCampfireId),
+    'the pine activity must stay off if its only surveyed footprint becomes blocked');
 
   const data = new Map([[forestWoodStorageKey, JSON.stringify({ piles: { village: 2, campfire: 2 } })]]);
   const storage = {
@@ -236,6 +269,8 @@ test('pine chopping and feeding a supported site reuse five strikes while keepin
   const chop = activity.spots.find(spot => spot.label === '松林营地劈柴')!;
   const feed = activity.spots.find(spot => spot.label === '给松林火塘添柴')!;
   assert.ok(chop && feed);
+  assert.equal(nearestTownActivity(activity.spots, chop.x, chop.n, chop.ground), chop);
+  assert.equal(nearestTownActivity(activity.spots, feed.x, feed.n, feed.ground), feed);
   const outdoor = createTownCampfires(new Scene(), { sit() {} }, [pine], activity.flames);
   assert.equal(outdoor.blocked?.(feed.x, feed.n, feed.ground), false);
   feed.run();
@@ -247,7 +282,9 @@ test('pine chopping and feeding a supported site reuse five strikes while keepin
     time += 400;
     chop.run();
     assert.equal(activity.pineCampState().wood, 1);
+    t.diagnostic(`round ${stock + 1}: hits 1–4 → 0 wood, hit 5 → ${activity.pineCampState().wood} wood`);
     feed.run();
+    t.diagnostic(`after adding wood: ${JSON.stringify(activity.pineCampState())}`);
     assert.deepEqual(activity.pineCampState(), { wood: 0, fuel: stock + 1, level: stock === 3 ? 2 : 0 });
   }
   assert.equal(lit, 1);

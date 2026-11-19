@@ -19,7 +19,8 @@ const minimumRhythmMs = 175;
 const maximumRhythmMs = 950;
 const propRadius = .72;
 const standOffset = 1.45;
-const nearCandidates = [[0, 0], [0, -.45], [-.45, 0], [0, .45], [.45, 0]] as const;
+const fixedChopOffset = [[0, 0]] as const;
+const nearCandidates = [...fixedChopOffset, [0, -.45], [-.45, 0], [0, .45], [.45, 0]] as const;
 const siteLabel = { village: '木屋旁劈柴', campfire: '篝火旁劈柴', [pineCampfireId]: '松林营地劈柴' } as const;
 
 export function findForestChopSites(
@@ -27,10 +28,10 @@ export function findForestChopSites(
   walkableGround: (east: number, north: number) => number | undefined,
 ): ForestChopSite[] {
   const seeds: { id: SiteId; x: number; n: number }[] = [{ id: 'village', x: 94.30, n: 263.25 }];
-  for (const [fireId, chopId] of [['forest', 'campfire'], [pineCampfireId, pineCampfireId]] as const) {
-    const fire = fires.find(({ id }) => id === fireId);
-    if (fire) seeds.push({ id: chopId, x: fire.x - 2.50, n: fire.n - 1.30 });
-  }
+  const forestFire = fires.find(({ id }) => id === 'forest');
+  if (forestFire) seeds.push({ id: 'campfire', x: forestFire.x - 2.50, n: forestFire.n - 1.30 });
+  const pineFire = fires.find(({ id }) => id === pineCampfireId);
+  if (pineFire) seeds.push({ id: pineCampfireId, x: pineFire.x - 1.50, n: pineFire.n + 4.00 });
 
   function clearPlate(x: number, n: number, radius: number) {
     if (roadCorridorKeepClear(x, n, radius + .18)) return;
@@ -45,7 +46,8 @@ export function findForestChopSites(
 
   const spots: ForestChopSite[] = [];
   for (const { id, x, n } of seeds) {
-    for (const [dx, dn] of nearCandidates) {
+    const offsets = id === pineCampfireId ? fixedChopOffset : nearCandidates;
+    for (const [dx, dn] of offsets) {
       const east = x + dx;
       const north = n + dn;
       const ground = clearPlate(east, north, forestChopRange);
