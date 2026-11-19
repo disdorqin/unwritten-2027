@@ -4,7 +4,7 @@ import { test, type TestContext } from "node:test";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
 import {
-  decodeSnowfightRelay, encodeWallHit, encodeWallPlace, type SnowfightRelayEvent,
+  decodeSnowfightRelay, encodeSledSmash, encodeWallHit, encodeWallPlace, type SnowfightRelayEvent,
 } from "../../src/presence/snowfight-events.js";
 
 const messageTimeout = 3500;
@@ -165,4 +165,70 @@ test("snowfight: start assigns teams, place validates half and roads, three hits
     await new Promise(resolve => setTimeout(resolve, 250));
     assert.ok(!a.walls.pending().flat().some(event => event.kind === "wall-set" && event.hp < 3),
       "duplicate wall-hit report is ignored");
+  });
+
+test("snowfight: sled smash clears a one-layer wall for both clients, rejects slow thick and far reports",
+  { timeout: 9000 }, async context => {
+    const { join, sendPose } = await fixture(context);
+    const a = await join("红队甲");
+    const b = await join("金队乙");
+    sendPose(a.socket, 224, 188, 1);
+    sendPose(b.socket, 230, 188, 1);
+    const startedA = a.text.next(message => message.type === "snowfight" && message.phase === "build");
+    const startedB = b.text.next(message => message.type === "snowfight" && message.phase === "build");
+    a.socket.send(JSON.stringify({ type: "event", kind: "snowfight-start" }));
+    await Promise.all([startedA, startedB]);
+
+    const place = async (gx: number, gy: number, layer: number) => {
+      const set = a.walls.next(events => events.some(
+        event => event.kind === "wall-set" && event.gx === gx && event.gy === gy && event.layer === layer));
+      a.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
+      await set;
+    };
+    const smash = (gx: number, gy: number, speed: number) =>
+      b.socket.send(Buffer.from(encodeSledSmash({ gx, gy, speed })));
+    const noClear = async () => {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      assert.ok(!a.walls.pending().flat().some(event => event.kind === "wall-clear"),
+        "no wall-clear broadcast reaches the wall owner");
+      assert.ok(!b.walls.pending().flat().some(event => event.kind === "wall-clear"),
+        "no wall-clear broadcast reaches the sledder");
+    };
+
+    // 正例：B 的位置记录就在墙格 (600,500) 格心 (300.25, 250.25) 边上，
+    // 10 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
+    await place(600, 500, 0);
+    sendPose(b.socket, 300, 250, 2);
+    const clearA = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
+    const clearB = b.walls.next(events => events.some(event => event.kind === "wall-clear"));
+    smash(600, 500, 10);
+    const [relayA, relayB] = await Promise.all([clearA, clearB]);
+    const clear = relayA.find(event => event.kind === "wall-clear");
+    assert.ok(clear && clear.kind === "wall-clear");
+    if (clear && clear.kind === "wall-clear") {
+      assert.deepEqual(clear.blocks, [{ gx: 600, gy: 500, layer: 0 }]);
+    }
+    assert.ok(relayB.some(event => event.kind === "wall-clear"), "both clients observe the same clear");
+
+    // 慢速（6 m/s，闸门含等于）不算撞穿：墙还在，无任何 WALL_CLEAR
+    await place(600, 500, 0);
+    smash(600, 500, 6);
+    await noClear();
+
+    // 厚墙（同格堆到 2 层）：高速报告也被拒，列高必须恰为 1
+    await place(600, 500, 1);
+    smash(600, 500, 12);
+    await noClear();
+
+    // 远报：B 退回广场（距格心约 94 m），同一报告被位置裁定拒绝；
+    // 回到墙边后重报同格（二层列旁的一层新格 602,500）立即生效，作为近距正对照。
+    await place(602, 500, 0);
+    sendPose(b.socket, 230, 188, 3);
+    smash(602, 500, 12);
+    await noClear();
+    sendPose(b.socket, 301, 250, 4);
+    const clearNear = a.walls.next(events => events.some(event => event.kind === "wall-clear" &&
+      event.blocks.some(block => block.gx === 602 && block.gy === 500 && block.layer === 0)));
+    smash(602, 500, 12);
+    await clearNear;
   });

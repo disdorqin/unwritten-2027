@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, PerspectiveCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
+import { scaledDrawCount } from './town-quality';
 
 const count = 1_580;
 const foregroundCount = 530;
@@ -91,6 +92,16 @@ export function createSnowfall(scene: Scene) {
     `,
   });
 
+  // Quality tiers (M5) thin the falling snow by draw range only: the flake
+  // field, its seeds and the storm reveal order are unchanged, fewer of the
+  // buffer's flakes are drawn. Storm extras sit after the base flakes in
+  // threshold order, so one scaled range serves both.
+  let densityScale = 1;
+  let stormExtra = 0;
+  function applyDrawRange() {
+    geometry.setDrawRange(0, scaledDrawCount(count + stormExtra, densityScale, count + stormCount));
+  }
+
   const particles = new Points(geometry, material);
   particles.name = 'Drifting snow';
   particles.frustumCulled = false;
@@ -115,7 +126,13 @@ export function createSnowfall(scene: Scene) {
       const storm = Math.max(0, Math.min(1, (intensity - 1) / 3));
       if (storm === material.uniforms.storm.value) return;
       material.uniforms.storm.value = storm;
-      geometry.setDrawRange(0, count + Math.min(stormCount, Math.ceil(storm / (1 - stormFade) * stormCount)));
+      stormExtra = Math.min(stormCount, Math.ceil(storm / (1 - stormFade) * stormCount));
+      applyDrawRange();
+    },
+    setDensityScale(scale: number) {
+      if (!Number.isFinite(scale) || scale <= 0 || scale === densityScale) return;
+      densityScale = scale;
+      applyDrawRange();
     },
     setEnabled(enabled: boolean) { active = enabled; },
     enabled() { return active; },

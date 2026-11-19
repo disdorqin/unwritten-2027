@@ -15,11 +15,12 @@ import {
 import { createPresenceEgress } from './egress.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
-  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, buildHalfAllows, classifyWallSite,
-  wallCellCentre,
+  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_BLOCK_HP, buildHalfAllows,
+  classifyWallSite, wallCellCentre,
 } from './snowfight.js';
 import {
-  SNOWFIGHT_PLACE, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear, encodeWallSet,
+  SNOWFIGHT_PLACE, SNOWFIGHT_SLED_SMASH, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear,
+  encodeWallSet,
 } from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import {
@@ -34,6 +35,9 @@ import {
   inBellVenue, tryBellTouch, type BellConfig, type BellState, type BellStateEvent,
 } from './bell-game.js';
 
+/** S2 连接日志出口：每个连接事件调用一次，参数为一行完整的 JSON 文本。 */
+export type PresenceConnectionLog = (line: string) => void;
+
 type Options = {
   host?: string;
   port?: number;
@@ -46,6 +50,8 @@ type Options = {
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
   bellConfig?: Partial<BellConfig>;
+  /** S2 结构化连接日志的注入点；默认 console.log。 */
+  connectionLog?: PresenceConnectionLog;
 };
 
 type PollFrame = { t: 'text'; d: string } | { t: 'bin'; d: Uint8Array };
@@ -59,6 +65,8 @@ type Peer = {
   /** 轮询会话令牌与最近一次轮询时刻（now() 时钟）。 */
   session?: string;
   lastPollAt: number;
+  /** S2 连接日志：断开原因码，由各断开路径在回收前置入，remove() 统一记录。 */
+  dropReason?: string;
   id: number;
   name?: string;
   record?: PresenceRecord;
@@ -132,6 +140,18 @@ function bytesOf(data: RawData): Uint8Array {
 export async function createPresenceServer(options: Options = {}) {
   const tiers = checkTiers(options.tiers ?? [BASE_TIER]);
   const now = options.now ?? (() => performance.now());
+  const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
+  /**
+   * S2 结构化连接日志：一行一个 JSON，字段只有时间戳/传输/peer/步骤/结果码。
+   * 与客户端四步故障码（PG-1/WS-2/FR-3/HB-4）对位：attempt≈页面/握手到达、
+   * session≈握手与会话建立、join≈首帧完成、drop≈心跳超时或会话回收。
+   * 绝不记录聊天文本、昵称、IP 或任何口令类信息。
+   */
+  function connLog(transport: 'ws' | 'poll' | '-', peer: number | '-', step: 'attempt' | 'session' | 'join' | 'drop', result: string) {
+    try {
+      connectionLog(JSON.stringify({ ts: new Date().toISOString(), transport, peer, step, result }));
+    } catch { /* 日志出口异常不得影响连接服务本身。 */ }
+  }
   const egress = createPresenceEgress();
   const fireworks = options.testFireworks ? createTestFireworksSchedule() : undefined;
   const eastLimit = metresToLimit(options.width ?? TOWN_BOUNDS.width);
@@ -200,12 +220,14 @@ export async function createPresenceServer(options: Options = {}) {
 
   /** 协议错误时断开该对等端：WS 关连接（1008），轮询直接回收会话。 */
   function failPeer(peer: Peer) {
+    peer.dropReason ??= 'protocol-error';
     if (peer.transport === 'ws') peer.socket?.close(1008);
     else remove(peer);
   }
 
   /** 对等端主动离开（leave 消息）：与 failPeer 同路，只是 WS 侧用普通关闭。 */
   function closePeer(peer: Peer) {
+    peer.dropReason ??= 'leave';
     if (peer.transport === 'ws') peer.socket?.close();
     else remove(peer);
   }
@@ -260,24 +282,43 @@ export async function createPresenceServer(options: Options = {}) {
     const reply = (status: number, payload: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(payload));
     };
-    if (req.method !== 'POST') { reply(405, { error: 'method' }); return; }
+    if (req.method !== 'POST') {
+      if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'method');
+      reply(405, { error: 'method' });
+      return;
+    }
     const origin = req.headers.origin;
     if (origin) {
       try {
         const source = new URL(origin);
         if ((source.protocol !== 'https:' && source.protocol !== 'http:') || source.host !== req.headers.host) {
+          if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'origin');
           reply(403, { error: 'origin' });
           return;
         }
-      } catch { reply(403, { error: 'origin' }); return; }
+      } catch {
+        if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'origin');
+        reply(403, { error: 'origin' });
+        return;
+      }
     }
     let body: { name?: unknown; state?: unknown; events?: unknown };
     try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
-    catch { reply(400, { error: 'body' }); return; }
+    catch {
+      if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
+      reply(400, { error: 'body' });
+      return;
+    }
 
     if (req.url === POLL_JOIN_PATH) {
-      if (closing || peers.size >= MAX_SESSIONS) { reply(503, { error: 'full' }); return; }
+      if (closing || peers.size >= MAX_SESSIONS) {
+        connLog('poll', '-', 'attempt', 'full');
+        reply(503, { error: 'full' });
+        return;
+      }
+      connLog('poll', '-', 'attempt', 'accepted');
       const peer = createPeer('poll');
+      connLog('poll', peer.id, 'session', 'ok');
       receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name }), 'utf8'));
       if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
       const session = randomBytes(16).toString('hex');
@@ -289,10 +330,15 @@ export async function createPresenceServer(options: Options = {}) {
 
     const token = req.headers['x-presence-session'];
     const peer = typeof token === 'string' ? pollSessions.get(token) : undefined;
-    if (!peer || !peers.has(peer.id)) { reply(401, { error: 'session' }); return; }
+    if (!peer || !peers.has(peer.id)) {
+      connLog('poll', '-', 'session', 'unknown');
+      reply(401, { error: 'session' });
+      return;
+    }
     peer.lastPollAt = now();
 
     if (req.url === POLL_LEAVE_PATH) {
+      peer.dropReason ??= 'leave';
       remove(peer);
       reply(200, {});
       return;
@@ -310,7 +356,12 @@ export async function createPresenceServer(options: Options = {}) {
           receiveText(peer, Buffer.from(frame.d, 'utf8'));
         } else if (frame.t === 'bin' && typeof frame.d === 'string') {
           const bytes = Buffer.from(frame.d, 'base64');
-          if (bytes.byteLength > 0 && bytes[0] === SNOWBALL_EVENT_PREFIX) receiveSnowball(peer, bytes);
+          if (bytes.byteLength > 0 && bytes[0] === SNOWBALL_EVENT_PREFIX) {
+            // 与 WS 分发同口径：snowfight 帧（放墙/命中/撞穿）先行裁定，其余才是雪球。
+            if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
+              bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);
+            else receiveSnowball(peer, bytes);
+          }
         }
       }
     }
@@ -621,6 +672,29 @@ export async function createPresenceServer(options: Options = {}) {
       broadcastBinary(encodeWallSet(placed.block));
       return;
     }
+    if (event.kind === 'sled-smash') {
+      // 雪橇撞穿一层墙（车道 B）：报告端为骑乘者本端，服务端按现行列高、报告速度与
+      // 本人位置裁定。速度沿用本协议的模拟端报告信任模型（同 WALL_HIT)，只作闸门：
+      // 须 >6（与 sledCrashKind 的翻橇阈值同口径），上限 20 = 17 m/s 硬顶 + 报告取整余量。
+      if (event.speed <= 6 || event.speed > 20) return;
+      if (snowWalls.height(event.gx, event.gy) !== 1) return;
+      if (!peer.record) return;
+      // 位置记录 10 Hz、17 m/s 下每 100 ms 位移 1.7 m；6 m 容差覆盖记录滞后，
+      // 同时把裁定范围钉在墙边，杜绝隔图遥报。
+      const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
+        peer.record.north / 100 - wallCellCentre(event.gy));
+      if (distance > 6) return;
+      // 按雪墙规则销毁：等效 damage×WALL_BLOCK_HP（D1 回执挂载口径），中间受损态不广播，
+      // 全体只收最终 WALL_CLEAR，双端镜像一次收敛。
+      for (let i = 0; i < WALL_BLOCK_HP; i++) {
+        const result = snowWalls.damage(event.gx, event.gy, 0, time);
+        if (result && 'destroyed' in result) {
+          for (const frame of encodeWallClear(result.destroyed)) broadcastBinary(frame);
+          break;
+        }
+      }
+      return;
+    }
     const seenKey = `${event.throwerId}:${event.ballId}`;
     const seenAt = wallHitSeen.get(seenKey);
     if (seenAt !== undefined && time - seenAt < throwWindowMs) return;
@@ -656,6 +730,7 @@ export async function createPresenceServer(options: Options = {}) {
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
     if (peer.session) pollSessions.delete(peer.session);
+    connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
     snowMatch.removePlayer(peer.id);
     ceremonyWaiting.delete(peer);
     // 持铃人离镇：铃原地掉落、立即拾取，不让对局卡死。
@@ -818,13 +893,14 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     const name = validName(message.name);
-    if (!name) { failPeer(peer); return; }
+    if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
     const joinedAt = Date.now();
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
+    connLog(peer.transport, peer.id, 'join', 'ok');
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
@@ -910,22 +986,25 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   http.on('upgrade', (req, socket, head) => {
-    if (req.url !== PRESENCE_PATH) { refuse(socket, '404 Not Found'); return; }
+    if (req.url !== PRESENCE_PATH) { connLog('ws', '-', 'attempt', 'path'); refuse(socket, '404 Not Found'); return; }
     const origin = req.headers.origin;
     if (origin) {
       try {
         const source = new URL(origin);
         if ((source.protocol !== 'https:' && source.protocol !== 'http:') || source.host !== req.headers.host) {
+          connLog('ws', '-', 'attempt', 'origin');
           refuse(socket, '403 Forbidden');
           return;
         }
-      } catch { refuse(socket, '403 Forbidden'); return; }
+      } catch { connLog('ws', '-', 'attempt', 'origin'); refuse(socket, '403 Forbidden'); return; }
     }
-    if (closing || peers.size >= MAX_SESSIONS) { refuse(socket, '503 Service Unavailable'); return; }
+    if (closing || peers.size >= MAX_SESSIONS) { connLog('ws', '-', 'attempt', 'full'); refuse(socket, '503 Service Unavailable'); return; }
+    connLog('ws', '-', 'attempt', 'accepted');
     wss.handleUpgrade(req, socket, head, ws => {
       const peer = createPeer('ws', ws);
-      peer.joinTimer = setTimeout(() => ws.close(1008), 5000);
-      ws.on('error', () => { remove(peer); ws.terminate(); });
+      connLog('ws', peer.id, 'session', 'ok');
+      peer.joinTimer = setTimeout(() => { connLog('ws', peer.id, 'join', 'timeout'); ws.close(1008); }, 5000);
+      ws.on('error', () => { peer.dropReason ??= 'socket-error'; remove(peer); ws.terminate(); });
       ws.on('close', () => remove(peer));
       ws.on('pong', () => { peer.alive = true; });
       ws.on('message', (data, binary) => {
@@ -933,7 +1012,8 @@ export async function createPresenceServer(options: Options = {}) {
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
-        else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT) receiveSnowfight(peer, bytes);
+        else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
+          bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);
         else receiveSnowball(peer, bytes);
       });
     });
@@ -950,7 +1030,10 @@ export async function createPresenceServer(options: Options = {}) {
     const time = now();
     // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
     for (const peer of [...peers.values()]) {
-      if (peer.transport === 'poll' && time - peer.lastPollAt > POLL_SESSION_TIMEOUT_MS) remove(peer);
+      if (peer.transport === 'poll' && time - peer.lastPollAt > POLL_SESSION_TIMEOUT_MS) {
+        peer.dropReason ??= 'poll-timeout';
+        remove(peer);
+      }
     }
     updateFireworks(time);
     const wallNow = Date.now();
@@ -976,7 +1059,7 @@ export async function createPresenceServer(options: Options = {}) {
     for (const peer of peers.values()) {
       const socket = peer.socket;
       if (!socket) continue;
-      if (!peer.alive) { socket.terminate(); continue; }
+      if (!peer.alive) { peer.dropReason ??= 'heartbeat-timeout'; socket.terminate(); continue; }
       if (socket.readyState === WebSocket.OPEN) {
         peer.alive = false;
         socket.ping();

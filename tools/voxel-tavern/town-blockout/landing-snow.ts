@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Points, PointsMaterial, type Scene } from 'three';
+import { scaledDrawCount } from './town-quality';
 
 const particleCount = 12;
 const lifespan = .35;
@@ -30,6 +31,12 @@ export function createLandingSnow(scene: Scene) {
   }
 
   return {
+    // Quality tiers (M5) thin the burst by draw range; the flake ring itself
+    // is computed exactly as before.
+    setDensityScale(scale: number) {
+      if (!Number.isFinite(scale) || scale <= 0) return;
+      geometry.setDrawRange(0, scaledDrawCount(particleCount, scale, particleCount));
+    },
     burst(x: number, y: number, depth: number) {
       east = x;
       feet = y;

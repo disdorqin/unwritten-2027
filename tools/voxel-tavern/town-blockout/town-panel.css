@@ -169,4 +169,14 @@
 .town-bgm-controls input { width: min(86px, 25vw); accent-color: #e6bf82; }
 @media (pointer: coarse) {
   .panel .town-panel-toggle, #town-chat-form :is(input, button), .town-bgm-controls label { min-height: 44px; }
+  /* Touch top-bar slimming (3.0 M2): the panel idles to a fade (town-panel.ts
+     adds the class after a few untouched seconds) and the two secondary
+     texts — the help paragraph and the nickname hint — leave the top bar.
+     Both return the moment the panel is touched or focused. */
+  .panel { transition: opacity .6s ease; }
+  .panel.town-panel-idle { opacity: .45; }
+  .panel #help, #town-presence-name-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none; }
 }
