@@ -22,7 +22,10 @@ test('review actions take the covered shaft through first fall, camp checks and 
   assert.match(current().status, /坠落伤害 0/);
   trigger('检查主巷至营地');
   assert.match(current().status, /198 个脚点通过/);
+  assert.match(current().location, /营地/);
   trigger('返回井底潭走查点');
+  assert.match(current().status, /回程 198 个脚点通过.*低缝蹲行/);
+  assert.match(current().location, /井底潭/);
   trigger('乘吊笼返回坑底');
   assert.match(current().status, /盖板保持开启/);
   trigger('乘吊笼下井');
@@ -59,4 +62,40 @@ test('review actions use the gate guards and distinct arrivals for both orbital 
   trigger('检视地宫侧门前点');
   trigger('返回地宫');
   assert.match(current().status, /地宫核心舱门返回/);
+});
+
+test('the crater well shows concealing debris until the authority reveals the shaft', () => {
+  let view: ExpansionView;
+  const review = createUndergroundReview(next => { view = next; });
+  const trigger = (label: string) => {
+    const action = view!.actions.find(([name]) => name === label);
+    assert.ok(action);
+    action[1]();
+  };
+  review.show();
+  const crater = view!.group;
+  const cover = crater.getObjectByName('crater-well-concealment');
+  const shaft = crater.getObjectByName('crater-well-open-shaft');
+  const winch = crater.getObjectByName('crater-well-winch');
+  const base = crater.getObjectByName('crater-broken-crane-base');
+  assert.ok(cover && shaft && winch && base);
+  assert.ok(cover.getObjectByName('crater-well-cap'));
+  assert.ok(cover.getObjectByName('crater-well-rubble'));
+  assert.equal(cover.children.filter(part => part.name.startsWith('crater-well-ore-')).length, 3);
+  assert.equal(winch.parent, base.parent);
+  assert.ok(winch.position.distanceTo(base.position) < 1.5);
+  assert.equal(cover.visible, true);
+  assert.equal(shaft.visible, false);
+
+  trigger('查看坑底绞盘');
+  assert.equal(cover.visible, true);
+  trigger('转绞盘并走查首坠');
+  assert.match(view!.status, /坠落伤害 0/);
+  assert.equal(cover.visible, false);
+  assert.equal(shaft.visible, true);
+  trigger('乘吊笼返回坑底');
+  assert.equal(view!.group, crater);
+  assert.equal(cover.visible, false);
+  assert.equal(shaft.visible, true);
+  assert.equal(winch.visible, true);
 });

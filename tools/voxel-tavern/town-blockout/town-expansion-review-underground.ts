@@ -22,6 +22,69 @@ const mineSpec: UndergroundMineSpec = {
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 };
 
+function wellModel(radius: number, floor: number) {
+  const group = new THREE.Group();
+  group.position.y = floor;
+  const cover = new THREE.Group();
+  cover.name = 'crater-well-concealment';
+  const shaft = new THREE.Group();
+  shaft.name = 'crater-well-open-shaft';
+  group.add(cover, shaft);
+
+  const stone = new THREE.MeshStandardMaterial({ color: 0x707981, flatShading: true });
+  const ore = new THREE.MeshStandardMaterial({ color: 0x464550, flatShading: true });
+  const rust = new THREE.MeshStandardMaterial({ color: 0x805742 });
+  const iron = new THREE.MeshStandardMaterial({ color: 0x353b40 });
+  const mesh = (parent: THREE.Group, geometry: THREE.BufferGeometry, material: THREE.Material,
+    x: number, y: number, z: number) => {
+    const part = new THREE.Mesh(geometry, material);
+    part.position.set(x, y, z);
+    parent.add(part);
+    return part;
+  };
+
+  // The slab closes the aperture under an irregular rock crust.
+  const cap = mesh(cover, new THREE.CylinderGeometry(radius + .05, radius + .05, .18, 32), iron, 0, -.07, 0);
+  cap.name = 'crater-well-cap';
+  const rubble = mesh(cover, new THREE.CylinderGeometry(radius * 1.09, radius * 1.16, .26, 8),
+    stone, 0, .10, 0);
+  rubble.name = 'crater-well-rubble';
+  const fragment = new THREE.IcosahedronGeometry(1);
+  for (let i = 0; i < 11; i++) {
+    const angle = i * 2.399963;
+    const reach = i < 3 ? radius * .38 : radius * .79;
+    const chunk = mesh(cover, fragment, i < 3 ? ore : stone,
+      Math.sin(angle) * reach, .26, Math.cos(angle) * reach);
+    if (i < 3) chunk.name = `crater-well-ore-${i}`;
+    chunk.scale.set(.45 + .13 * (i % 3), .25 + .08 * (i % 3), .47 + .07 * (i % 2));
+    chunk.rotation.y = angle;
+  }
+
+  mesh(shaft, new THREE.CylinderGeometry(radius, radius, 5, 128, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x26303a, side: THREE.DoubleSide }), 0, -2.5, 0);
+  mesh(shaft, new THREE.CylinderGeometry(radius, radius, .12, 32),
+    new THREE.MeshBasicMaterial({ color: 0x18202a }), 0, -4.5, 0);
+
+  // These are local preview props. The site host supplies their production anchors.
+  const machinery = new THREE.Group();
+  machinery.position.set(radius * 2.6, 0, radius * .5);
+  group.add(machinery);
+  const craneBase = mesh(machinery, new THREE.BoxGeometry(1.1, .45, 1.25), stone, .55, .225, 0);
+  craneBase.name = 'crater-broken-crane-base';
+  mesh(machinery, new THREE.BoxGeometry(.28, 1.5, .29), rust, .55, 1.14, 0).rotation.z = .15;
+  mesh(machinery, new THREE.BoxGeometry(1.23, .25, .31), rust, .12, 1.71, 0).rotation.z = -.34;
+  const winch = new THREE.Group();
+  winch.name = 'crater-well-winch';
+  winch.position.set(-.62, 0, .72);
+  machinery.add(winch);
+  mesh(winch, new THREE.BoxGeometry(.79, .24, .48), iron, 0, .12, 0);
+  for (const x of [-.27, .27]) mesh(winch, new THREE.BoxGeometry(.11, .43, .34), rust, x, .39, 0);
+  mesh(winch, new THREE.CylinderGeometry(.22, .22, .55, 12), iron, 0, .51, 0).rotation.z = Math.PI / 2;
+  mesh(winch, new THREE.BoxGeometry(.11, .4, .10), rust, -.35, .59, 0).rotation.x = -.38;
+  mesh(winch, new THREE.BoxGeometry(.29, .11, .12), iron, -.46, .75, -.06);
+  return { group, cover, shaft };
+}
+
 function craterModel() {
   const group = new THREE.Group();
   const vertices: number[] = [];
@@ -59,14 +122,7 @@ function craterModel() {
     new THREE.BufferGeometry().setFromPoints(path),
     new THREE.LineBasicMaterial({ color: 0xf0bd73 }),
   ));
-  const radius = 2 * meteorCraterRimRadius / rings;
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, 5, subdivisions, 1, true),
-    new THREE.MeshStandardMaterial({ color: 0x26303a, side: THREE.DoubleSide }),
-  );
-  shaft.position.y = -37.5;
-  group.add(shaft);
-  return { group, radius };
+  return { group, radius: 2 * meteorCraterRimRadius / rings };
 }
 
 function mineModel(mine: ReturnType<typeof createUndergroundMineLayout>) {
@@ -98,12 +154,8 @@ export function createUndergroundReview(show: (view: ExpansionView) => void) {
   const [poolEast, poolHeight, poolZ] = mine.anchors.poolLanding;
   const pool: UndergroundEntryPoint = { east: poolEast, north: -poolZ, height: poolHeight };
   const depthLine = (dryShaft.height + pool.height) / 2;
-  const cover = new THREE.Mesh(
-    new THREE.CylinderGeometry(outside.radius + .03, outside.radius + .03, .22, 128),
-    new THREE.MeshStandardMaterial({ color: 0x514539 }),
-  );
-  cover.position.y = dryShaft.height + .12;
-  outside.group.add(cover);
+  const well = wellModel(outside.radius, dryShaft.height);
+  outside.group.add(well.group);
 
   let atWinch = false;
   let atPool = false;
@@ -139,14 +191,16 @@ export function createUndergroundReview(show: (view: ExpansionView) => void) {
     render();
   }
 
-  function walkToCamp() {
+  function walkMineRoute(goal: 'camp' | 'pool') {
+    const towardCamp = goal === 'camp';
     const { radius, standingHeight, crouchingHeight } = mineSpec.walker;
     const [crouchFrom, crouchTo] = mine.crouchInterval;
     const sampleSteps = 32;
+    const route = towardCamp ? mine.route : [...mine.route].reverse();
     let sampled = 0;
-    const pass = mine.route.every(({ from, to }) => {
+    const pass = route.every(({ from, to }) => {
       for (let step = 0; step <= sampleSteps; step++) {
-        const t = step / sampleSteps;
+        const t = (towardCamp ? step : sampleSteps - step) / sampleSteps;
         const x = from[0] + (to[0] - from[0]) * t;
         const z = from[2] + (to[2] - from[2]) * t;
         const height = z >= crouchFrom && z <= crouchTo ? crouchingHeight : standingHeight;
@@ -155,24 +209,27 @@ export function createUndergroundReview(show: (view: ExpansionView) => void) {
       }
       return true;
     });
-    if (pass) atPool = false;
-    status = pass ? '首段 ' + sampled + ' 个脚点通过，低缝蹲行，终点为营地恢复点。' : '首段碰撞校验发现阻塞。';
+    const leg = towardCamp ? '首段' : '回程';
+    const destination = towardCamp ? '营地恢复点' : '井底潭';
+    if (pass) atPool = !towardCamp;
+    status = pass ? `${leg} ${sampled} 个脚点通过，低缝蹲行，终点为${destination}。` : `${leg}碰撞校验发现阻塞。`;
     render();
   }
 
   function render() {
+    const { coverVisible, shaftVisible } = entry.sceneState();
+    well.cover.visible = coverVisible;
+    well.shaft.visible = shaftVisible;
     if (entry.modeOf(player) === 'survival') {
       const followed = atPool ? mine.anchors.poolLanding : mine.anchors.campRecovery.position;
       show({
         group: inside, target: new THREE.Vector3(followed[0], followed[1], followed[2]), span: atPool ? 20 : 16,
         location: atPool ? '矿洞首段 · 井底潭' : '矿洞首段 · 营地', status,
-        actions: atPool ? [['检查主巷至营地', walkToCamp], ['乘吊笼返回坑底', ascend]]
-          : [['返回井底潭走查点', () => { atPool = true; status = '已切回井底潭走查点。'; render(); }]],
+        actions: atPool ? [['检查主巷至营地', () => walkMineRoute('camp')], ['乘吊笼返回坑底', ascend]]
+          : [['返回井底潭走查点', () => walkMineRoute('pool')]],
       });
       return;
     }
-    const { coverVisible } = entry.sceneState();
-    cover.visible = coverVisible;
     show({
       group: outside.group, target: new THREE.Vector3(0, atWinch ? -26 : -14, 0), span: atWinch ? 54 : 129,
       location: atWinch ? '陨星原坑底 · 井口' : '陨星原 · 三层环台', status,
