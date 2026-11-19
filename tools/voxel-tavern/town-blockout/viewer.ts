@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
 import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
-import { buildTavernLandmark } from './landmark-tavern';
+import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
 import type { IcePalaceRace } from './ice-palace-race';
@@ -2894,6 +2894,9 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) hitFeedback.apply(camera);
     const feedbackMs = profileTown ? performance.now() - startedFeedback : 0;
     const batchesStartedAt = profileTown ? performance.now() : 0;
+    const insideTavern = walking && !homeReturn && !boardingGround &&
+      tavernInteriorContains(tavern, seated?.x ?? x, seated?.n ?? n, airHeight ?? ground);
+    updateTavernInteriorVisibility(tavern, (groupPhotoFrame ? plazaCamera : camera).position, insideTavern);
     const staticViewRoots = cullStaticView || warmAerial || warmStationView ? [landscape, detailedBridges,
       ...(trackViewRoot ? [trackViewRoot] : []), ...(extensionStreets ? [extensionStreets.group] : []),
       ...architecture.values()] : [];
