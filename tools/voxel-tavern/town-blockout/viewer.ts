@@ -77,7 +77,9 @@ import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
-import { createMarketFairActivity } from './market-fair';
+import { createMarketFairActivity, marketTastingStamp } from './market-fair';
+import { createMarketResidentStationLookup } from './market-resident-stations';
+import { createMarketVenueActivities } from './market-venue-activities';
 import { createIceActivity } from './ice-activity';
 import { createIceFishingActivity, iceFishingCatalogueStamp, iceFishingStation } from './ice-fishing-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
@@ -879,7 +881,13 @@ const iceFishing = createIceFishingActivity({ ...activityContext, announce: anno
   () => collectRegionalStamp(iceFishingCatalogueStamp.id));
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
-  { camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink },
+  {
+    camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink,
+    marketPassport: {
+      collect: () => passport.collectExtension(marketTastingStamp.id),
+      collected: () => passport.hasExtension(marketTastingStamp.id),
+    },
+  },
 );
 function nearbyActivity<T extends TownActivity>(create: (context: TownActivityContext) => T): T {
   const activity = create({
@@ -1586,7 +1594,7 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp], riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
@@ -2374,6 +2382,15 @@ const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSit
 scenery.setCampfirePieces(campfirePieces(campfireSites));
 activities.push(outdoorCampfires, forestCampfire);
 activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots);
+const marketResidentLookup = createMarketResidentStationLookup({
+  market: () => architecture.get('market-stalls'),
+  fairSpots: marketFair.spots,
+  standableGround: dryTownLandingHeight,
+});
+activitySpots.push(...createMarketVenueActivities(
+  architecture.get('market-stalls'), activityContext, dryTownLandingHeight,
+  filename => { photoFilename = filename; },
+));
 activitySpots.push(...registerTownResidentStations(npcActivity, {
   campfires: campfireSites,
   canStand: canStandAtActivity,
@@ -2381,6 +2398,7 @@ activitySpots.push(...registerTownResidentStations(npcActivity, {
   forestChop: () => forestCampfire.spots.find(spot => spot.label === '篝火旁劈柴'),
   mainFishing: () => iceFishing.spots[0],
   palaceProgress: () => icePalaceActivity?.state(),
+  marketStall: marketResidentLookup,
   canCollect: zodiac.canCollect,
 }));
 
