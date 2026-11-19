@@ -1,0 +1,405 @@
+{
+  "mode": "staged-walk-smoke",
+  "enableIds": [
+    "old-town:94:100",
+    "old-town:220:138",
+    "old-town:197:132"
+  ],
+  "menuDoors": [
+    "old-town:94:100"
+  ],
+  "legacyDoor": "district:513:366",
+  "touchMenu": "old-town:94:100",
+  "tours": [
+    {
+      "id": "old-town:94:100",
+      "start": {
+        "east": 94.5,
+        "north": 119.97,
+        "ground": 9.030615,
+        "tolerance": 0.13
+      },
+      "street": [
+        {
+          "east": 94.5,
+          "north": 119.97,
+          "ground": 9.030615,
+          "tolerance": 0.13
+        },
+        {
+          "east": 94.5,
+          "north": 105.47,
+          "ground": 9.201018,
+          "tolerance": 0.13
+        },
+        {
+          "east": 94,
+          "north": 105.47,
+          "ground": 9.176122,
+          "tolerance": 0.1
+        }
+      ],
+      "threshold": {
+        "east": 94,
+        "north": 104.05,
+        "ground": 10.17687,
+        "tolerance": 0.4
+      },
+      "object": {
+        "east": 90.55,
+        "north": 100.8404,
+        "ground": 10.17687,
+        "tolerance": 0.13,
+        "action": "查看书桌"
+      },
+      "ingress": [
+        {
+          "east": 94,
+          "north": 105.47,
+          "ground": 9.176122,
+          "tolerance": 0.1
+        },
+        {
+          "east": 94,
+          "north": 103.37,
+          "ground": 10.17687,
+          "tolerance": 0.1
+        },
+        {
+          "east": 94,
+          "north": 103.27,
+          "ground": 10.17687,
+          "tolerance": 0.12
+        },
+        {
+          "east": 94,
+          "north": 100.8404,
+          "ground": 10.17687,
+          "tolerance": 0.12
+        }
+      ],
+      "egress": [
+        {
+          "east": 94,
+          "north": 100.8404,
+          "ground": 10.17687,
+          "tolerance": 0.12
+        },
+        {
+          "east": 94,
+          "north": 103.27,
+          "ground": 10.17687,
+          "tolerance": 0.12
+        },
+        {
+          "east": 94,
+          "north": 103.37,
+          "ground": 10.17687,
+          "tolerance": 0.1
+        },
+        {
+          "east": 94,
+          "north": 105.47,
+          "ground": 9.176122,
+          "tolerance": 0.1
+        }
+      ],
+      "returnStreet": [
+        {
+          "east": 94,
+          "north": 105.47,
+          "ground": 9.176122,
+          "tolerance": 0.1
+        },
+        {
+          "east": 94.5,
+          "north": 105.47,
+          "ground": 9.201018,
+          "tolerance": 0.13
+        },
+        {
+          "east": 94.5,
+          "north": 119.97,
+          "ground": 9.030615,
+          "tolerance": 0.13
+        }
+      ]
+    },
+    {
+      "id": "old-town:220:138",
+      "start": {
+        "east": 236.72,
+        "north": 145.5,
+        "ground": 12,
+        "tolerance": 0.13
+      },
+      "street": [
+        {
+          "east": 236.72,
+          "north": 145.5,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 236.72,
+          "north": 138,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 226.72,
+          "north": 138,
+          "ground": 11.03494,
+          "tolerance": 0.1
+        }
+      ],
+      "threshold": {
+        "east": 225.3,
+        "north": 138,
+        "ground": 11.705463,
+        "tolerance": 0.4
+      },
+      "object": {
+        "east": 219.493,
+        "north": 141.45,
+        "ground": 11.705463,
+        "tolerance": 0.13,
+        "action": "查看陶器台"
+      },
+      "ingress": [
+        {
+          "east": 226.72,
+          "north": 138,
+          "ground": 11.03494,
+          "tolerance": 0.1
+        },
+        {
+          "east": 224.62,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.1
+        },
+        {
+          "east": 224.52,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.12
+        },
+        {
+          "east": 219.493,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.12
+        }
+      ],
+      "egress": [
+        {
+          "east": 219.493,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.12
+        },
+        {
+          "east": 224.52,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.12
+        },
+        {
+          "east": 224.62,
+          "north": 138,
+          "ground": 11.705463,
+          "tolerance": 0.1
+        },
+        {
+          "east": 226.72,
+          "north": 138,
+          "ground": 11.03494,
+          "tolerance": 0.1
+        }
+      ],
+      "returnStreet": [
+        {
+          "east": 226.72,
+          "north": 138,
+          "ground": 11.03494,
+          "tolerance": 0.1
+        },
+        {
+          "east": 236.72,
+          "north": 138,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 236.72,
+          "north": 145.5,
+          "ground": 12,
+          "tolerance": 0.13
+        }
+      ]
+    },
+    {
+      "id": "old-town:197:132",
+      "start": {
+        "east": 236.845,
+        "north": 145.5,
+        "ground": 12,
+        "tolerance": 0.13
+      },
+      "street": [
+        {
+          "east": 236.845,
+          "north": 145.5,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 236.845,
+          "north": 145,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 214.095,
+          "north": 145,
+          "ground": 9.878575,
+          "tolerance": 0.13
+        },
+        {
+          "east": 214.095,
+          "north": 133.5,
+          "ground": 8.743991,
+          "tolerance": 0.13
+        },
+        {
+          "east": 207.845,
+          "north": 133.5,
+          "ground": 8.53645,
+          "tolerance": 0.13
+        },
+        {
+          "east": 207.845,
+          "north": 132,
+          "ground": 8.550268,
+          "tolerance": 0.13
+        },
+        {
+          "east": 204.345,
+          "north": 132,
+          "ground": 8.558903,
+          "tolerance": 0.1
+        }
+      ],
+      "threshold": {
+        "east": 202.925,
+        "north": 132,
+        "ground": 10.216356,
+        "tolerance": 0.4
+      },
+      "object": {
+        "east": 198.166,
+        "north": 128.55,
+        "ground": 10.216356,
+        "tolerance": 0.13,
+        "action": "查看书桌"
+      },
+      "ingress": [
+        {
+          "east": 204.345,
+          "north": 132,
+          "ground": 8.558903,
+          "tolerance": 0.1
+        },
+        {
+          "east": 201.85,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.1
+        },
+        {
+          "east": 201.75,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.12
+        },
+        {
+          "east": 198.166,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.12
+        }
+      ],
+      "egress": [
+        {
+          "east": 198.166,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.12
+        },
+        {
+          "east": 201.75,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.12
+        },
+        {
+          "east": 201.85,
+          "north": 132,
+          "ground": 10.216356,
+          "tolerance": 0.1
+        },
+        {
+          "east": 204.345,
+          "north": 132,
+          "ground": 8.558903,
+          "tolerance": 0.1
+        }
+      ],
+      "returnStreet": [
+        {
+          "east": 204.345,
+          "north": 132,
+          "ground": 8.558903,
+          "tolerance": 0.1
+        },
+        {
+          "east": 207.845,
+          "north": 132,
+          "ground": 8.550268,
+          "tolerance": 0.13
+        },
+        {
+          "east": 207.845,
+          "north": 133.5,
+          "ground": 8.53645,
+          "tolerance": 0.13
+        },
+        {
+          "east": 214.095,
+          "north": 133.5,
+          "ground": 8.743991,
+          "tolerance": 0.13
+        },
+        {
+          "east": 214.095,
+          "north": 145,
+          "ground": 9.878575,
+          "tolerance": 0.13
+        },
+        {
+          "east": 236.845,
+          "north": 145,
+          "ground": 12,
+          "tolerance": 0.13
+        },
+        {
+          "east": 236.845,
+          "north": 145.5,
+          "ground": 12,
+          "tolerance": 0.13
+        }
+      ]
+    }
+  ]
+}
