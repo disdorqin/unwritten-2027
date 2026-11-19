@@ -733,13 +733,13 @@ index 0000000..60331e7
 +Object.assign(window, { __marketHomesReview: { ids: marketHomeIds, select, capture, walk, stats, snapshot } });
 diff --git a/tests/town-blockout-market-homes.test.ts b/tests/town-blockout-market-homes.test.ts
 new file mode 100644
-index 0000000..c5284e2
+index 0000000..ad62cf1
 --- /dev/null
 +++ b/tests/town-blockout-market-homes.test.ts
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,44 @@
 +import assert from 'node:assert/strict';
 +import test from 'node:test';
-+import { Group, InstancedMesh } from 'three';
++import { Group, type InstancedMesh } from 'three';
 +import { buildMarketHomeInterior, marketHomeIds } from '../tools/voxel-tavern/town-blockout/market-home-interior.ts';
 +import { marketHomeWalkRoute, sampleMarketHomeWalk } from '../tools/voxel-tavern/town-blockout/market-home-walk.ts';
 +
@@ -770,7 +770,8 @@ index 0000000..c5284e2
 +  const other = new Group();
 +  const room = buildMarketHomeInterior(marketHomeIds[0], 10, 9.8);
 +  parent.add(other, room.group);
-+  const batch = room.group.children.find(child => child instanceof InstancedMesh);
++  const batch = room.group.children.find((child): child is InstancedMesh =>
++    'isInstancedMesh' in child && child.isInstancedMesh === true);
 +  assert.ok(batch);
 +  let released = 0;
 +  batch.geometry.addEventListener('dispose', () => released++);
