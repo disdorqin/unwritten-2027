@@ -326,19 +326,20 @@ test('frost exposure follows snow strength and full depth pressure, and recedes 
   tracker.update(600);
   assert.equal(tracker.exposure(), 0);
   tracker.setExposure(3, 0, true, false);
-  assert.ok(Math.abs(tracker.update(120) - 1) < 1e-9);
+  const secondsPerShallowLevel = 270 / 2.85;
+  assert.ok(Math.abs(tracker.update(secondsPerShallowLevel) - 1) < 1e-9);
   assert.equal(tracker.walkingScale(), .95);
-  assert.ok(Math.abs(tracker.update(120) - 2) < 1e-9);
+  assert.ok(Math.abs(tracker.update(secondsPerShallowLevel) - 2) < 1e-9);
 
   tracker.setExposure(1, 0, true, false);
   assert.ok(Math.abs(tracker.update(100) - 2.5) < 1e-9);
   tracker.setExposure(4, 0, false, false);
   assert.ok(Math.abs(tracker.update(120) - 1.5) < 1e-9);
   tracker.setExposure(4, 0, true, false);
-  assert.ok(Math.abs(tracker.update(50) - 2) < 1e-9);
+  assert.ok(Math.abs(tracker.update(37.5) - 2) < 1e-9);
 
   tracker.setExposure(3, .6, true, false);
-  assert.ok(Math.abs(tracker.update(80) - 3) < 1e-9);
+  assert.ok(Math.abs(tracker.update(270 / 4.275) - 3) < 1e-9);
   assert.equal(tracker.walkingScale(), .65);
 });
 
@@ -383,7 +384,7 @@ test('ceremony relief halves pressure and caps L3 walking drag without changing 
   assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(atJan(0, 30))), false);
 
   tracker.setExposure(4, 0, true, relieved);
-  assert.ok(Math.abs(tracker.update(200) - 1) < 1e-9);
+  assert.ok(Math.abs(tracker.update(150) - 1) < 1e-9);
   tracker.setBaseline(3);
   tracker.update(60);
   assert.equal(tracker.displayLevel(), 3);

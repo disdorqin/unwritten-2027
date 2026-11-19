@@ -128,7 +128,7 @@ export function createFrostTracker(): FrostTracker {
       sledding = sleddingActive === true;
       naturallyThaws = surface === 'lamp' || surface === 'none';
       const snowPressure = surface === 'dark-snow' && snowIntensity >= 1
-        ? (1.35 + (snowIntensity - 1) * .45) * (depth >= .6 ? 1.5 : 1)
+        ? (1.35 + (snowIntensity - 1) * .75) * (depth >= .6 ? 1.5 : 1)
         : 0;
       const wetPressure = surface === 'water' ? Math.max(1, snowIntensity - 1) * wetColdMultiplier : 0;
       exposureGrowth = (snowPressure + wetPressure) * exposureRate * (relief ? .5 : 1) *

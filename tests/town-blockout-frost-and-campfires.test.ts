@@ -16,10 +16,10 @@ function assertNear(actual: number, expected: number, tolerance = 1e-9) {
 
 for (const [label, intensity, depth, expected] of [
   ['weak shallow (1)', 1, 0, [100, 200, 400, 600]],
-  ['ordinary shallow (2)', 2, .599, [75, 150, 300, 450]],
-  ['ordinary deep (2)', 2, .6, [50, 100, 200, 300]],
-  ['acceptance deep (3)', 3, .6, [40, 80, 160, 240]],
-  ['strong deep (4)', 4, .6, [100 / 3, 200 / 3, 400 / 3, 200]],
+  ['ordinary shallow (2)', 2, .599, [64.3, 128.6, 257.1, 385.7]],
+  ['ordinary deep (2)', 2, .6, [42.9, 85.7, 171.4, 257.1]],
+  ['acceptance deep (3)', 3, .6, [31.6, 63.2, 126.3, 189.5]],
+  ['strong deep (4)', 4, .6, [25, 50, 100, 150]],
 ] as const) {
   test(`standing in ${label} snow reaches all frost thresholds at the specified rate`, () => {
     const frost = createFrostTracker();
@@ -31,7 +31,7 @@ for (const [label, intensity, depth, expected] of [
         frames++;
       }
       assert.ok(frost.personal() >= target);
-      assertNear(frames * frostFrame, expected[index], frostFrame + 1e-9);
+      assertNear(frames * frostFrame, expected[index], frostFrame + .05 + 1e-9);
       if (target === .5) {
         assert.equal(frost.displayLevel(), 1);
         assert.equal(frost.walkingScale(), .95);
@@ -117,14 +117,15 @@ test('ceremony relief halves growth and limits L2 and L3 slowdown, including dee
   const relieved = createFrostTracker();
   frost.setExposure(3, .6, 'dark-snow', false);
   relieved.setExposure(3, .6, 'dark-snow', true);
-  assertNear(frost.update(160), 2);
-  assertNear(relieved.update(160), 1);
+  const secondsPerLevel = 270 / 4.275;
+  assertNear(frost.update(2 * secondsPerLevel), 2);
+  assertNear(relieved.update(2 * secondsPerLevel), 1);
   assert.equal(frost.walkingScale(), .88);
   assert.equal(relieved.walkingScale(), .95);
-  assertNear(relieved.update(160), 2);
+  assertNear(relieved.update(2 * secondsPerLevel), 2);
   assert.equal(relieved.walkingScale(), .90);
-  assertNear(frost.update(80), 3);
-  assertNear(relieved.update(160), 3);
+  assertNear(frost.update(secondsPerLevel), 3);
+  assertNear(relieved.update(2 * secondsPerLevel), 3);
   assert.equal(frost.walkingScale(), .65);
   assert.equal(relieved.walkingScale(), .90);
   assert.equal(frost.walkingScale(false), 1);
@@ -135,13 +136,13 @@ test('ceremony relief halves growth and limits L2 and L3 slowdown, including dee
 test('sledding preserves the natural thaw exemption on snow and water and resumes exposure on dismount', () => {
   const rider = createFrostTracker();
   rider.setExposure(3, .6, 'dark-snow', false);
-  assertNear(rider.update(160), 2);
+  assertNear(rider.update(2 * 270 / 4.275), 2);
   rider.setExposure(4, .6, 'dark-snow', false, 1, true);
   assertNear(rider.update(60), 1.5);
   rider.setExposure(4, 0, 'water', false, 1, true);
   assertNear(rider.update(60), 1);
   rider.setExposure(3, .6, 'dark-snow', false);
-  assertNear(rider.update(80), 2);
+  assertNear(rider.update(270 / 4.275), 2);
 });
 
 test('snow contact excludes paving and upper floors without changing depth scaling', () => {
@@ -184,15 +185,15 @@ test('frost overlay strengthens its three tiers, skips steady paints, and honors
   assertNear(sampleFrostStyle(2.1).clearPercent, 56.2);
 
   frost.setExposure(4, 0, 'dark-snow', false);
-  frost.update(100);
+  frost.update(75);
   assert.equal(root.dataset.level, '1');
   assert.equal(scene.style.filter, 'blur(1.2px)');
   assert.equal(styles.get('--frost-clear'), '70%');
-  frost.update(100);
+  frost.update(75);
   assert.equal(root.dataset.level, '2');
   assert.equal(scene.style.filter, 'blur(2.6px)');
   assert.equal(styles.get('--frost-clear'), '58%');
-  frost.update(100);
+  frost.update(75);
   assert.equal(root.dataset.level, '3');
   assert.equal(scene.style.filter, 'blur(4.8px)');
   assert.equal(styles.get('--frost-clear'), '40%');
