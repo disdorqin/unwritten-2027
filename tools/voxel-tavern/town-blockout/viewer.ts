@@ -595,6 +595,7 @@ async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
   const models: Model[] = await response.json();
+  if (models.length === 0) return;
   const loader = new GLTFLoader();
   const results = await Promise.allSettled(models.map(async model => {
     const plot = layout.plots.find(item => item.id === model.id);
