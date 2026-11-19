@@ -1,0 +1,409 @@
+--- a/tools/voxel-tavern/town-blockout/market-home-interior.ts
++++ b/tools/voxel-tavern/town-blockout/market-home-interior.ts
+@@ -1,7 +1,8 @@
+ import {
+-  BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight,
++  BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, type Texture,
+ } from 'three';
+ import type { Box } from './landmark-kit';
++import { setMarketHomeAtlas, type MarketHomeFinish } from './market-home-atlas';
+ import {
+   buildMarketHomeFurnishings, type MarketHomePiece, type MarketHomeTheme,
+ } from './market-home-furnishings';
+@@ -29,7 +30,16 @@
+ export const marketHomeIds = Object.keys(profiles) as (keyof typeof profiles)[];
+ export const marketHomeDoorHalfWidth = .65;
+ 
+-export function buildMarketHomeInterior(id: string, width: number, depth: number) {
++type MarketHomeWindowFinish = Readonly<{ tint: string; panes: 1 | 2 | 3 | 4 }>;
++const defaultWindowFinish: MarketHomeWindowFinish = { tint: '#ffc181', panes: 4 };
++
++export function buildMarketHomeInterior(
++  id: string,
++  width: number,
++  depth: number,
++  windowFinish = defaultWindowFinish,
++  atlas?: Texture,
++) {
+   if (!Object.hasOwn(profiles, id)) throw new RangeError('The door is outside the JX-1 roster.');
+   if (![width, depth].every(value => Number.isFinite(value) && value > 0)) {
+     throw new RangeError('Market homes need the surveyed shell dimensions.');
+@@ -51,11 +61,14 @@
+   const framing = .18;
+   const doorWidth = 2 * marketHomeDoorHalfWidth;
+   const doorHeight = 2.2;
+-  function put(x: number, y: number, z: number, width: number, height: number, depth: number, color: string) {
+-    solid.push({ x, y, z, width, height, depth, color });
++  function put(
++    x: number, y: number, z: number, width: number, height: number, depth: number,
++    color: string, finish: MarketHomeFinish = 'wood',
++  ) {
++    solid.push({ x, y, z, width, height, depth, color, finish });
+   }
+   function wallPart(x: number, y: number, z: number, width: number, height: number, depth: number, color = wall) {
+-    put(x, y, z, width, height, depth, color);
++    put(x, y, z, width, height, depth, color, color === wall ? 'plaster' : 'wood');
+     colliders.push({
+       min: [x - width / 2, y, z - depth / 2],
+       max: [x + width / 2, y + height, z + depth / 2],
+@@ -69,8 +82,8 @@
+   for (let row = 0; row < plankCount; row++) {
+     const z = -halfDepth + (row + .5) * plankDepth;
+     const cut = (row % 4 - 1.5) * .38;
+-    put((cut - halfWidth) / 2, -.02, z, halfWidth + cut, .02, plankDepth - .012, boards[(row + arrangement) % 4]);
+-    put((cut + halfWidth) / 2, -.02, z, halfWidth - cut, .02, plankDepth - .012, boards[(row + arrangement + 1) % 4]);
++    put((cut - halfWidth) / 2, -.02, z, halfWidth + cut, .02, plankDepth - .012, boards[(row + arrangement) % 4], 'plank');
++    put((cut + halfWidth) / 2, -.02, z, halfWidth - cut, .02, plankDepth - .012, boards[(row + arrangement + 1) % 4], 'plank');
+   }
+   for (const sign of [-1, 1]) {
+     wallPart(sign * (halfWidth + framing / 2), 0, 0, framing, ceiling, 2 * halfDepth + framing);
+@@ -92,9 +105,9 @@
+   wallPart(windowX, 2.52, windowZ, windowWidth, ceiling - 2.52, framing);
+   put(windowX, .91, windowZ + .07, windowWidth + .22, .12, .31, trim);
+   put(windowX, 2.46, windowZ + .055, windowWidth + .18, .10, .18, beam);
+-  glow.push({ x: windowX, y: 1.02, z: windowZ, width: windowWidth, height: 1.44, depth: .035, color: '#dcc297' });
+-  for (let column = 0; column <= 3; column++) {
+-    put(windowMin + column * windowWidth / 3, .98, windowZ + .055, .065, 1.57, .11, beam);
++  glow.push({ x: windowX, y: 1.02, z: windowZ, width: windowWidth, height: 1.44, depth: .035, color: windowFinish.tint });
++  for (let column = 0; column <= windowFinish.panes; column++) {
++    put(windowMin + column * windowWidth / windowFinish.panes, .98, windowZ + .055, .065, 1.57, .11, beam);
+   }
+   put(windowX, 1.66, windowZ + .055, windowWidth, .07, .11, beam);
+   put(0, ceiling, 0, halfWidth * 2 + .3, .16, halfDepth * 2 + .28, beam);
+@@ -106,24 +119,30 @@
+   const geometry = new BoxGeometry(1, 1, 1);
+   const wood = new MeshLambertMaterial();
+   const warmGlass = new MeshBasicMaterial();
++  if (atlas) setMarketHomeAtlas(geometry, wood, solid.map(({ finish }) => finish ?? 'wood'), atlas);
+   const instance = new Object3D();
+-  function batch(pieces: MarketHomePiece[], material: MeshLambertMaterial | MeshBasicMaterial) {
++  const paint = new Color();
++  const warmTint = new Color(windowFinish.tint);
++  function batch(pieces: MarketHomePiece[], material: MeshLambertMaterial | MeshBasicMaterial, bakeWarmth: boolean) {
+     const mesh = new InstancedMesh(geometry, material, pieces.length);
+     pieces.forEach(({ x, y, z, width, height, depth, color }, index) => {
+       instance.position.set(x, y + height / 2, z);
+       instance.scale.set(width, height, depth);
+       instance.updateMatrix();
+       mesh.setMatrixAt(index, instance.matrix);
+-      mesh.setColorAt(index, new Color(color));
++      paint.set(color);
++      if (bakeWarmth) {
++        // Keep the window wash on the existing solid batch; moving or switching rooms changes no scene lights.
++        const distanceSquared = (x - windowX) ** 2 + (y + height / 2 - 1.7) ** 2 + (z - windowZ) ** 2;
++        paint.lerp(warmTint, .21 / (1 + distanceSquared * .28));
++      }
++      mesh.setColorAt(index, paint);
+     });
+     mesh.computeBoundingSphere();
+     group.add(mesh);
+     return mesh;
+   }
+-  const batches = [batch(solid, wood), batch(glow, warmGlass)];
+-  const light = new PointLight('#ffce8e', 18, 12, 2);
+-  light.position.set(windowX, 2.42, windowZ + .64);
+-  group.add(light);
++  const batches = [batch(solid, wood, true), batch(glow, warmGlass, false)];
+   group.userData = { colliders, floors: [floor] };
+   let released = false;
+   return {
+@@ -137,7 +156,6 @@
+       geometry.dispose();
+       wood.dispose();
+       warmGlass.dispose();
+-      light.dispose();
+     },
+   };
+ }
+--- a/tools/voxel-tavern/town-blockout/market-home-furnishings.ts
++++ b/tools/voxel-tavern/town-blockout/market-home-furnishings.ts
+@@ -1,4 +1,5 @@
+ import type { Box } from './landmark-kit';
++import type { MarketHomeFinish } from './market-home-atlas';
+ 
+ export type MarketHomeTheme = 'tea-table' | 'pantry' | 'linen' | 'ceramics' | 'woodwork' | 'books';
+ 
+@@ -18,6 +19,7 @@
+   height: number;
+   depth: number;
+   color: string;
++  finish?: MarketHomeFinish;
+ };
+ 
+ export type MarketHomeDetail = 'furniture' | 'utensils' | 'light' | 'textiles' | 'storage' | 'planter';
+@@ -51,8 +53,11 @@
+   const glow: MarketHomePiece[] = [];
+   const colliders: Box[] = [];
+   const categories: MarketHomeDetail[] = ['furniture', 'utensils', 'light', 'textiles', 'storage', 'planter'];
+-  function put(x: number, y: number, z: number, width: number, height: number, depth: number, color: string, lit = false) {
+-    (lit ? glow : solid).push({ x, y, z, width, height, depth, color });
++  function put(
++    x: number, y: number, z: number, width: number, height: number, depth: number,
++    color: string, finish: MarketHomeFinish = 'wood', lit = false,
++  ) {
++    (lit ? glow : solid).push({ x, y, z, width, height, depth, color, finish });
+   }
+   function block(x: number, z: number, width: number, height: number, depth: number) {
+     colliders.push({ min: [x - width / 2, 0, z - depth / 2], max: [x + width / 2, height, z + depth / 2] });
+@@ -84,9 +89,9 @@
+   block(deskX, deskZ, deskWidth, deskTop, deskDepth);
+ 
+   function jar(x: number, y: number, z: number, width: number, height: number, glaze: string) {
+-    put(x, y, z, width * .77, height, width, glaze);
+-    put(x, y + height * .15, z, width, height * .64, width * .76, glaze);
+-    put(x, y + height, z, width * .58, .055, width * .58, edge);
++    put(x, y, z, width * .77, height, width, glaze, 'ceramic');
++    put(x, y + height * .15, z, width, height * .64, width * .76, glaze, 'ceramic');
++    put(x, y + height, z, width * .58, .055, width * .58, edge, 'ceramic');
+   }
+   const propX = deskX + side * .10;
+   if (theme === 'tea-table') {
+@@ -100,8 +105,8 @@
+     }
+   } else if (theme === 'linen') {
+     for (const [dz, y, color] of [[-.36, 0, linen], [-.29, .09, accent], [.23, 0, '#987068']] as const) {
+-      put(propX, deskTop + y, deskZ + dz, .56, .085, .39, color);
+-      put(propX - side * .21, deskTop + y + .085, deskZ + dz, .085, .017, .37, dark);
++      put(propX, deskTop + y, deskZ + dz, .56, .085, .39, color, 'cloth');
++      put(propX - side * .21, deskTop + y + .085, deskZ + dz, .085, .017, .37, dark, 'cloth');
+     }
+   } else if (theme === 'ceramics') {
+     jar(propX + side * .08, deskTop, deskZ - .39, .31, .35, '#7a9093');
+@@ -116,20 +121,20 @@
+   } else {
+     for (let i = 0; i < 4; i++) {
+       put(propX + side * .12, deskTop, deskZ - .42 + i * .092, .28, .24 + i % 3 * .058, .077,
+-        [accent, '#52616c', '#8d704f'][i % 3]);
++        [accent, '#52616c', '#8d704f'][i % 3], 'book');
+     }
+-    put(propX - side * .17, deskTop, deskZ + .30, .43, .048, .34, linen);
+-    put(propX - side * .17, deskTop + .052, deskZ + .30, .028, .071, .35, dark);
++    put(propX - side * .17, deskTop, deskZ + .30, .43, .048, .34, linen, 'book');
++    put(propX - side * .17, deskTop + .052, deskZ + .30, .028, .071, .35, dark, 'book');
+   }
+ 
+   const bedX = -side * (halfWidth - .96);
+   const bedZ = -halfDepth + 1.58 + (arrangement % 3) * .23;
+   const bedDepth = 2.20 + (arrangement % 4) * .12;
+   put(bedX, 0, bedZ, 1.33, .35, bedDepth, wood);
+-  put(bedX, .35, bedZ, 1.23, .20, bedDepth - .15, linen);
+-  put(bedX, .55, bedZ + .26, 1.25, .087, bedDepth - .68, accent);
+-  for (const dz of [.19, .45]) put(bedX, .637, bedZ + dz, 1.18, .015, .10, '#d5a781');
+-  put(bedX, .55, bedZ - bedDepth / 2 + .37, .81, .16, .45, '#f1dfbe');
++  put(bedX, .35, bedZ, 1.23, .20, bedDepth - .15, linen, 'cloth');
++  put(bedX, .55, bedZ + .26, 1.25, .087, bedDepth - .68, accent, 'cloth');
++  for (const dz of [.19, .45]) put(bedX, .637, bedZ + dz, 1.18, .015, .10, '#d5a781', 'cloth');
++  put(bedX, .55, bedZ - bedDepth / 2 + .37, .81, .16, .45, '#f1dfbe', 'cloth');
+   put(bedX, 0, bedZ - bedDepth / 2, 1.37, .89, .13, dark);
+   block(bedX, bedZ - .03, 1.37, .89, bedDepth + .12);
+ 
+@@ -144,13 +149,13 @@
+   }
+   jar(shelfX, 1.023, shelfZ - .28, .25, .23, '#a97660');
+   put(shelfX + side * .16, 1.127, shelfZ - .28, .10, .099, .052, '#875944');
+-  put(shelfX, 1.023, shelfZ + .23, .47, .047, .31, linen);
++  put(shelfX, 1.023, shelfZ + .23, .47, .047, .31, linen, 'cloth');
+   block(shelfX, shelfZ, .80, 1.03, shelfDepth + .06);
+ 
+   const lampZ = halfDepth * (.62 + (arrangement % 2) * .08);
+   const lampX = side * (halfWidth - .24);
+   put(lampX, 1.77, lampZ, .30, .098, .28, dark);
+-  put(lampX - side * .10, 1.86, lampZ, .21, .27, .21, ember, true);
++  put(lampX - side * .10, 1.86, lampZ, .21, .27, .21, ember, 'plaster', true);
+   put(lampX - side * .10, 2.13, lampZ, .27, .061, .27, brass);
+   for (const dz of [-.10, .10]) put(lampX - side * .215, 1.84, lampZ + dz, .033, .30, .029, wood);
+ 
+@@ -165,8 +170,8 @@
+ 
+   const rugZ = halfDepth * .25 + (arrangement % 5) * .14;
+   const rugDepth = 1.47 + (arrangement % 4) * .13;
+-  put(0, .003, rugZ, 1.65, .015, rugDepth, accent);
+-  for (const dx of [-.72, .72]) put(dx, .018, rugZ, .064, .005, rugDepth, '#bf9270');
++  put(0, .003, rugZ, 1.65, .015, rugDepth, accent, 'cloth');
++  for (const dx of [-.72, .72]) put(dx, .018, rugZ, .064, .005, rugDepth, '#bf9270', 'cloth');
+ 
+   return { solid, glow, colliders, categories };
+ }
+--- a/tools/voxel-tavern/town-blockout/market-homes-review.ts
++++ b/tools/voxel-tavern/town-blockout/market-homes-review.ts
+@@ -1,13 +1,15 @@
+ import {
+   BufferGeometry, Color, DirectionalLight, Float32BufferAttribute, Group, HemisphereLight,
+-  Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
++  Mesh, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer, type Texture,
+ } from 'three';
++import { districtWindowPanes } from './district-housing';
+ import { addDistrictHousing } from './district-layout';
+ import { buildPineCamp } from './town-pine-camp';
+ import { addScenery } from './scenery';
+ import { canEnter, createTerrainGrid, isWater } from './terrain';
+ import { createTownRailway } from './town-railway';
+ import { buildMarketHomeInterior, marketHomeIds } from './market-home-interior';
++import { createMarketHomeAtlas } from './market-home-atlas';
+ import { canStandInMarketHome, marketHomeWalkRoute } from './market-home-walk';
+ import streetRoutes from './market-homes-review-routes.json';
+ 
+@@ -104,8 +106,11 @@
+ 
+ function room() {
+   if (!activeRoom) {
+-    const { site } = rowsById.get(selected)!;
+-    activeRoom = buildMarketHomeInterior(selected, site.w, site.d);
++    const { site, card } = rowsById.get(selected)!;
++    const palette = ['#ffc181', '#ffd3a1', '#ffbc76'];
++    const tint = palette[Math.abs(Math.trunc(site.variant)) % palette.length];
++    const panes = card ? districtWindowPanes[card.window] : 4;
++    activeRoom = buildMarketHomeInterior(selected, site.w, site.d, { tint, panes }, roomAtlas);
+     interior.add(activeRoom.group);
+   }
+   return activeRoom;
+@@ -242,21 +247,36 @@
+   }
+ }
+ 
+-for (const id of marketHomeIds) picker.add(new Option(id, id));
+-picker.addEventListener('change', () => select(picker.value));
+-for (const element of document.querySelectorAll<HTMLButtonElement>('[data-camera]')) {
+-  element.addEventListener('click', () => {
+-    if (!walking) capture(element.dataset.camera as Angle);
+-  });
+-}
+-walkButton.addEventListener('click', () => { if (!walking) void walk(); });
++let roomAtlas: Texture | undefined;
++let closed = false;
+ const resize = new ResizeObserver(draw);
+-resize.observe(viewport);
+ window.addEventListener('pagehide', event => {
+   if (event.persisted) return;
++  closed = true;
+   resize.disconnect();
+   activeRoom?.dispose();
++  roomAtlas?.dispose();
+   renderer.dispose();
+ });
+-select(selected);
+-Object.assign(window, { __marketHomesReview: { ids: marketHomeIds, select, capture, walk, stats, snapshot } });
++picker.disabled = walkButton.disabled = true;
++void createMarketHomeAtlas().then(atlas => {
++  if (closed) {
++    atlas.dispose();
++    return;
++  }
++  roomAtlas = atlas;
++  for (const id of marketHomeIds) picker.add(new Option(id, id));
++  picker.addEventListener('change', () => select(picker.value));
++  for (const element of document.querySelectorAll<HTMLButtonElement>('[data-camera]')) {
++    element.addEventListener('click', () => {
++      if (!walking) capture(element.dataset.camera as Angle);
++    });
++  }
++  walkButton.addEventListener('click', () => { if (!walking) void walk(); });
++  resize.observe(viewport);
++  select(selected);
++  picker.disabled = walkButton.disabled = false;
++  Object.assign(window, { __marketHomesReview: { ids: marketHomeIds, select, capture, walk, stats, snapshot } });
++}, error => {
++  if (!closed) status.textContent = String(error);
++});
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-atlas.ts
+@@ -0,0 +1,54 @@
++import {
++  CanvasTexture, InstancedBufferAttribute, NearestFilter, SRGBColorSpace,
++  type BoxGeometry, type MeshLambertMaterial, type Texture,
++} from 'three';
++import { makeVoxelTexture } from '../textures';
++
++const finishes = ['plaster', 'plank', 'wood', 'cloth', 'ceramic', 'book'] as const;
++export type MarketHomeFinish = typeof finishes[number];
++const tileSize = 16;
++const gutter = 1;
++const stride = tileSize + 2 * gutter;
++const atlasWidth = finishes.length * stride;
++
++export async function createMarketHomeAtlas() {
++  const images = await Promise.all(finishes.map(finish => makeVoxelTexture(finish, '#dedede')));
++  const canvas = document.createElement('canvas');
++  canvas.width = atlasWidth;
++  canvas.height = stride;
++  const ink = canvas.getContext('2d');
++  if (!ink) throw new Error('Could not create the market home material atlas.');
++  ink.imageSmoothingEnabled = false;
++  for (const [index, image] of images.entries()) {
++    ink.drawImage(image, index * stride + gutter, gutter);
++  }
++  const atlas = new CanvasTexture(canvas);
++  atlas.colorSpace = SRGBColorSpace;
++  atlas.magFilter = atlas.minFilter = NearestFilter;
++  atlas.generateMipmaps = false;
++  return atlas;
++}
++
++/** The host owns the atlas. A room only owns its instance attribute and material. */
++export function setMarketHomeAtlas(
++  geometry: BoxGeometry,
++  material: MeshLambertMaterial,
++  pieceFinishes: readonly MarketHomeFinish[],
++  atlas: Texture,
++) {
++  geometry.setAttribute('marketHomeTile', new InstancedBufferAttribute(
++    Float32Array.from(pieceFinishes, finish => finishes.indexOf(finish)),
++    1,
++  ));
++  material.map = atlas;
++  material.onBeforeCompile = shader => {
++    shader.vertexShader = 'attribute float marketHomeTile;\n' + shader.vertexShader.replace(
++      '#include <uv_vertex>',
++      '#include <uv_vertex>\n#ifdef USE_MAP\n' +
++      '  vec2 tilePixel = vec2(marketHomeTile * ' + stride.toFixed(1) + ', 0.0) + ' +
++      'vec2(' + (gutter + .5).toFixed(1) + ') + clamp(vMapUv, 0.0, 1.0) * ' + (tileSize - 1).toFixed(1) + ';\n' +
++      '  vMapUv = tilePixel / vec2(' + atlasWidth.toFixed(1) + ', ' + stride.toFixed(1) + ');\n#endif',
++    );
++  };
++  material.customProgramCacheKey = () => 'market-home-material-atlas';
++}
+--- /dev/null
++++ b/tests/town-blockout-market-home-atlas.test.ts
+@@ -0,0 +1,42 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  DataTexture, ShaderLib, type BoxGeometry, type InstancedBufferAttribute, type InstancedMesh,
++  type MeshBasicMaterial, type MeshLambertMaterial,
++} from 'three';
++import { buildMarketHomeInterior, marketHomeIds } from '../tools/voxel-tavern/town-blockout/market-home-interior.ts';
++
++test('all rooms use one host atlas with six fixture finishes and two drawing batches', () => {
++  const atlas = new DataTexture(new Uint8Array(108 * 18 * 4), 108, 18);
++  let disposed = false;
++  atlas.addEventListener('dispose', () => { disposed = true; });
++  const seen = new Set<number>();
++  for (const id of marketHomeIds) {
++    const room = buildMarketHomeInterior(id, 9.65, 9.4, undefined, atlas);
++    try {
++      assert.equal(room.group.children.length, 2, id);
++      const [solid, glow] = room.group.children as [InstancedMesh<BoxGeometry, MeshLambertMaterial>,
++        InstancedMesh<BoxGeometry, MeshBasicMaterial>];
++      assert.ok(solid.isInstancedMesh && glow.isInstancedMesh, id);
++      assert.ok(solid.material.isMeshLambertMaterial && glow.material.isMeshBasicMaterial, id);
++      assert.equal(solid.material.map, atlas, id);
++      assert.equal(glow.material.map, null, id);
++      const tiles = solid.geometry.getAttribute('marketHomeTile') as InstancedBufferAttribute;
++      assert.ok(tiles.isInstancedBufferAttribute, id);
++      assert.equal(tiles.count, solid.count, id);
++      for (const tile of tiles.array) seen.add(tile);
++      const shader = { vertexShader: ShaderLib.lambert.vertexShader } as Parameters<
++        typeof solid.material.onBeforeCompile
++      >[0];
++      solid.material.onBeforeCompile(shader, {} as Parameters<typeof solid.material.onBeforeCompile>[1]);
++      assert.match(shader.vertexShader, /attribute float marketHomeTile;/);
++      assert.match(shader.vertexShader, /vMapUv = tilePixel \/ vec2\(108\.0, 18\.0\)/);
++    } finally {
++      room.dispose();
++    }
++    assert.equal(disposed, false, id);
++  }
++  assert.deepEqual([...seen].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5]);
++  atlas.dispose();
++  assert.equal(disposed, true);
++});
