@@ -3,6 +3,7 @@ import {
   Matrix4, MeshLambertMaterial, Object3D, Points, PointsMaterial, type Scene,
 } from 'three';
 import type { SledAnimationFrame } from './sled-animation';
+import { particleDensityScale, scaledParticleCount } from './town-quality';
 import { createSledRiderMatrices, writeSledRiderPart } from './sled-rider-pose';
 import { voxelPersonParts } from './town-voxel-person';
 
@@ -91,7 +92,10 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   let head = 0;
   let active = 0;
   function puff(x: number, n: number, y: number, heading: number, amount: number, effect?: 'brake' | 'land') {
-    for (let i = 0; i < amount; i++) {
+    // Quality tiers (M5) scale the mist spend; the spray pattern (angles use
+    // the caller's amount) and velocities are unchanged.
+    const spend = scaledParticleCount(amount, particleDensityScale());
+    for (let i = 0; i < spend; i++) {
       const id = head++ % count;
       const offset = id * 3;
       if (lifetime[id] === 0) active++;

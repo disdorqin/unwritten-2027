@@ -1,6 +1,7 @@
 // D1 团队雪仗二进制事件（沿 P2b 0xFF 事件层扩展，kind 3–6；kind 1/2 为雪球投掷/命中）。
 // 客户端→服务端：PLACE（请求放墙，层高由服务端按列高裁定）、WALL_HIT（雪球命中墙的模拟端报告）。
 // 服务端→客户端：WALL_SET（块落定/受损后的权威状态）、WALL_CLEAR（块塌落批量移除）。
+// 车道 B 追加 kind 7 SLED_SMASH（雪橇高速撞穿一层墙的骑乘端报告，服务端裁定销毁，见 decode/encode）。
 import { SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import { WALL_TOWN_CAP, type SnowfightTeam, type WallBlock } from './snowfight.js';
 
@@ -8,10 +9,13 @@ export const SNOWFIGHT_PLACE = 3;
 export const SNOWFIGHT_WALL_HIT = 4;
 export const SNOWFIGHT_WALL_SET = 5;
 export const SNOWFIGHT_WALL_CLEAR = 6;
+export const SNOWFIGHT_SLED_SMASH = 7;
 
 const PLACE_BYTES = 8;
 // 13 字节：刻意避开 12 字节 presence 位置记录的长度，避免被服务端分发误判为状态记录。
 const WALL_HIT_BYTES = 13;
+// 8 字节：gx/gy u16 + 速度 u8 + 保留字节；同样避开 12 字节（理由同 WALL_HIT 注）。
+const SLED_SMASH_BYTES = 8;
 const WALL_SET_BYTES = 12;
 const MAX_GRID_X = 1280; // 640 m / 0.5 m
 const MAX_GRID_Y = 1024; // 512 m / 0.5 m
@@ -19,7 +23,8 @@ export const WALL_CLEAR_CHUNK = 40;
 
 export type SnowfightClientEvent =
   | { kind: 'place'; gx: number; gy: number }
-  | { kind: 'wall-hit'; gx: number; gy: number; layer: number; ballId: number; throwerId: number };
+  | { kind: 'wall-hit'; gx: number; gy: number; layer: number; ballId: number; throwerId: number }
+  | { kind: 'sled-smash'; gx: number; gy: number; speed: number };
 
 export type SnowfightRelayEvent =
   | { kind: 'wall-set'; gx: number; gy: number; layer: number; hp: number; ownerId: number; team: SnowfightTeam }
@@ -63,6 +68,16 @@ export function encodeWallHit(event: { gx: number; gy: number; layer: number; ba
   view.setUint16(8, event.ballId, true);
   view.setUint16(10, event.throwerId, true);
   view.setUint8(12, 0); // 保留字节（帧长 13，见 WALL_HIT_BYTES 注）
+  return bytesOf(view);
+}
+
+/** 雪橇撞穿报告：speed 为骑乘端实测 m/s（取整），服务端只作 >6 闸门与上限合理性校验。 */
+export function encodeSledSmash(event: { gx: number; gy: number; speed: number }): Uint8Array {
+  const view = frame(SNOWFIGHT_SLED_SMASH, SLED_SMASH_BYTES);
+  view.setUint16(2, event.gx, true);
+  view.setUint16(4, event.gy, true);
+  view.setUint8(6, Math.max(0, Math.min(255, Math.round(event.speed))));
+  view.setUint8(7, 0); // 保留字节（帧长 8，见 SLED_SMASH_BYTES 注）
   return bytesOf(view);
 }
 
@@ -111,6 +126,13 @@ export function decodeSnowfightClientEvent(bytes: Binary): SnowfightClientEvent 
     const throwerId = view.getUint16(10, true);
     if (!validCell(gx, gy) || layer > 3 || !throwerId) return undefined;
     return { kind: 'wall-hit', gx, gy, layer, ballId, throwerId };
+  }
+  if (kind === SNOWFIGHT_SLED_SMASH && view.byteLength === SLED_SMASH_BYTES) {
+    const gx = view.getUint16(2, true);
+    const gy = view.getUint16(4, true);
+    const speed = view.getUint8(6);
+    if (!validCell(gx, gy)) return undefined;
+    return { kind: 'sled-smash', gx, gy, speed };
   }
   return undefined;
 }

@@ -33,6 +33,11 @@
       </nav>
       <label>前往 <select id="jump"></select></label>
       <label>触屏转向灵敏度 <input id="touch-look-sensitivity" type="range" min="0.5" max="2.5" step="0.1" value="1.4"></label>
+      <label>画质 <select id="quality-tier">
+        <option value="smooth">流畅</option>
+        <option value="balanced" selected>均衡</option>
+        <option value="fine">精美</option>
+      </select></label>
       <button id="view-valley" type="button">雪谷取景</button>
       <p id="help"></p>
       <output id="position"></output>
@@ -123,9 +128,6 @@
   <output id="snowball-hit-mark" aria-hidden="true"></output>
   <output id="town-activity-status" aria-live="polite"></output>
   <output id="ice-palace-race-status" aria-label="冰雪城堡观景台计时" aria-live="off"></output>
-  <output id="sled-status" aria-live="off"></output>
-  <output id="grand-prix-status" aria-live="off"></output>
-  <output id="grand-prix-board" aria-live="polite"></output>
   <output id="festival-status" aria-live="polite"></output>
   <dialog id="place-card" aria-labelledby="place-title">
     <form method="dialog"><button class="close-card" aria-label="关闭">×</button></form>

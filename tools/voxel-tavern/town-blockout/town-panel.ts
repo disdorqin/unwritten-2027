@@ -27,3 +27,23 @@ toggle.addEventListener('click', () => {
     // Keep the current state for this page.
   }
 });
+
+// Touch top-bar slimming (3.0 M2): on coarse pointers the panel fades after
+// a few idle seconds so the top strip stops covering the view; touching or
+// focusing the panel restores it at once and re-arms the timer. Fine
+// pointers (desktop) never fade.
+const coarsePointer = matchMedia('(pointer: coarse)');
+let idleFadeTimer: number | undefined;
+function armIdleFade() {
+  if (!coarsePointer.matches) return;
+  clearTimeout(idleFadeTimer);
+  idleFadeTimer = window.setTimeout(() => panel.classList.add('town-panel-idle'), 6000);
+}
+function wakePanel() {
+  panel.classList.remove('town-panel-idle');
+  armIdleFade();
+}
+panel.addEventListener('pointerdown', wakePanel);
+panel.addEventListener('focusin', wakePanel);
+coarsePointer.addEventListener?.('change', wakePanel);
+armIdleFade();
