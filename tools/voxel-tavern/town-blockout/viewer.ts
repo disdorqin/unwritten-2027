@@ -11,6 +11,7 @@ import { buildTavernLandmark } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
 import type { IcePalaceRace } from './ice-palace-race';
+import type { CastleIceSlideLanding, createCastleIceSlideActivity } from './ice-palace-slide';
 import { createIcePalaceCrown } from './ice-palace-crown';
 import './ice-palace-crown.css';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
@@ -43,6 +44,8 @@ import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type Cer
 import { wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires } from './town-campfires';
+import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
+import { createLongHallRelay, longHallRelayStamp } from './long-hall-relay';
 import { createLandingFeedback } from './landing-feedback';
 import { createLandingSnow } from './landing-snow';
 import { buildMuseumLandmark } from './landmark-museum';
@@ -76,7 +79,7 @@ import { createStageActivity } from './stage-activity';
 import { createMarketActivity } from './market-activity';
 import { createMarketFairActivity } from './market-fair';
 import { createIceActivity } from './ice-activity';
-import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
+import { createIceFishingActivity, iceFishingCatalogueStamp, iceFishingStation } from './ice-fishing-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
 import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-course';
 import { createLakeSkateMotion } from './lake-skate-motion';
@@ -554,12 +557,13 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
     (overview || Math.hypot(east - origin[0], north - origin[1]) < 148));
   if (!plot) return;
   requestedPlots.add(plot.id);
-  const palaceModule = plot.id === 'ice-castle' ? import('./ice-palace-landmark-activity') : undefined;
+  const palaceModule = plot.id === 'ice-castle'
+    ? Promise.all([import('./ice-palace-landmark-activity'), import('./ice-palace-slide')]) : undefined;
   Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
-    if (palace) registerIcePalaceActivities(group, palace.createIcePalaceLandmarkActivity);
+    if (palace) registerIcePalaceActivities(group, palace[0].createIcePalaceLandmarkActivity, palace[1].createCastleIceSlideActivity);
   }).catch(error => {
     requestedPlots.delete(plot.id);
     console.error(`Loading ${plot.id}`, error);
@@ -684,6 +688,8 @@ let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
 let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
+let palaceSlide: ReturnType<typeof createCastleIceSlideActivity> | undefined;
+let palaceSlideGround: number | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
 const lookAhead = new Vector3();
@@ -762,8 +768,23 @@ function leaveRide() {
   pitch = 0;
   return true;
 }
-function leaveSeat() {
+function landPalaceSlide(landing: CastleIceSlideLanding) {
+  ({ x, n, ground, yaw } = landing);
+  airHeight = undefined;
+  riseSpeed = pitch = 0;
+  resetMovement();
+}
+function leaveSeat(resetSlide = false) {
   if (!seated) return;
+  if (palaceSlide?.active()) {
+    if (resetSlide) palaceSlide.reset();
+    else {
+      const landing = palaceSlide.cancel();
+      if (!landing) return;
+      landPalaceSlide(landing);
+    }
+  }
+  palaceSlideGround = undefined;
   seated = undefined;
   stopTravel();
   hotSpringSoak.leave();
@@ -852,8 +873,9 @@ const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
   () => { drinkingPoseUntil = performance.now() + 2500; },
 );
-const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
-const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, () => nightMode);
+const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt,
+  () => collectRegionalStamp(iceFishingCatalogueStamp.id));
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
   { camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink },
@@ -1563,7 +1585,7 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp], riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
@@ -1571,6 +1593,18 @@ function showStampCount() {
   passportButton.textContent = `纪念戳册 ${collected}/${total}`;
 }
 showStampCount();
+function collectRegionalStamp(id: string) {
+  if (passport.collectExtension(id)) showStampCount();
+}
+const longHallRelayStatus = element<HTMLOutputElement>('long-hall-relay-status');
+const longHallRelay = createLongHallRelay(
+  architecture.get('long-hall')!, { announce: announceActivity }, {
+    award: () => collectRegionalStamp(longHallRelayStamp.id),
+    status: text => { longHallRelayStatus.textContent = text; },
+  },
+);
+activities.push(longHallRelay);
+activitySpots.push(...longHallRelay.spots);
 passportButton.onclick = () => {
   passport.open();
   showStampCount();
@@ -1696,7 +1730,8 @@ function canStandAtActivity(east: number, north: number, feet: number) {
   return walkable(east, north) && !obstructed(east, north, feet);
 }
 
-function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity) {
+function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity,
+  createSlide: typeof createCastleIceSlideActivity) {
   const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
     onlineThroneOwned: presence.onlineThroneOwned,
@@ -1711,7 +1746,8 @@ function registerIcePalaceActivities(group: Group, createActivity: typeof create
     playerName: presence.playerName,
   });
   icePalaceActivity = activity;
-  activitySpots.push(...activity.spots);
+  palaceSlide = createSlide(group, { ...activityContext, announce: announceActivity }, canStandAtActivity);
+  activitySpots.push(...activity.spots, ...palaceSlide.spots);
   activities.push({
     ...activity,
     update: dt => activity.step(dt, walking && !boardingGround && !homeReturn
@@ -1864,7 +1900,7 @@ function mode(next: boolean) {
   }
   lakeSkating.stop();
   if (!leaveRide()) return false;
-  leaveSeat();
+  leaveSeat(true);
   resetMovement();
   activityStatus.textContent = '';
   if (next) {
@@ -2320,7 +2356,7 @@ for (const stop of railway.stops) {
   });
 }
 
-const campfireSites = findRegionalCampfires((east, north, height) => {
+function campfireGround(east: number, north: number, height?: number) {
   if (bridgeAt(east, north) || isLakeSkateIce(east, north) || townWater.at(east, north)) return;
   const base = height ?? grid.heightAt(east, north);
   const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
@@ -2329,11 +2365,14 @@ const campfireSites = findRegionalCampfires((east, north, height) => {
       activitySpots.some(spot => Math.abs(spot.ground - feet) < .65 &&
         (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
   return feet;
-});
-const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites);
+}
+const campfireSites = findRegionalCampfires(campfireGround);
+const forestChopSites = findForestChopSites(campfireSites, campfireGround);
+const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites, { isNight: () => nightMode });
+const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
 scenery.setCampfirePieces(campfirePieces(campfireSites));
-activities.push(outdoorCampfires);
-activitySpots.push(...outdoorCampfires.spots);
+activities.push(outdoorCampfires, forestCampfire);
+activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots);
 
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
@@ -2384,7 +2423,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   railway.cancelRide();
   boardingGround = undefined;
   lastRailStopShown = undefined;
-  leaveSeat();
+  leaveSeat(true);
   lakeSkating.stop();
   plazaPhoto.leaveForCeremony();
   if (placeCard.open) placeCard.close();
@@ -2427,6 +2466,14 @@ renderer.setAnimationLoop(now => {
   landingSnow.update(frameSeconds);
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
+  const slide = palaceSlide?.step(dt, Boolean(seated));
+  if (slide?.kind === 'riding') {
+    seated = { ...slide.seat, pitch: slide.pitch };
+    palaceSlideGround = slide.ground;
+  } else if (slide?.kind === 'land') {
+    leaveSeat();
+    landPalaceSlide(slide.landing);
+  }
   if (boardingGround) {
     const stopped = railway.currentStop;
     if (stopped && stopped.id !== lastRailStopShown) {
@@ -2577,7 +2624,7 @@ renderer.setAnimationLoop(now => {
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
-    boardingGround ? camera.position.y - eye : throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground,
+    boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
     boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? yaw,
     walking && !museumOverlay(),
   );

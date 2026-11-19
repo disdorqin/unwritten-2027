@@ -22,7 +22,7 @@ label, output, #help { font-size: 12px; }
 #world-action { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); white-space: nowrap; padding: 11px 17px; background: #f2cf94; border-color: #f2cf94; color: #17202e; }
 #festival-status { position: fixed; top: 15%; left: 50%; transform: translateX(-50%); font-size: clamp(28px, 4.5vw, 63px); color: #ffe1aa; text-shadow: 0 2px 25px #412406; white-space: nowrap; pointer-events: none; }
 #place-card { width: min(460px, calc(100vw - 28px)); border: 1px solid #899ab2; border-radius: 12px; background: #162238; color: inherit; padding: 25px; box-shadow: 0 12px 40px #080d1c90; }
-:is(#town-activity-status, #ice-palace-race-status) {
+:is(#town-activity-status, #ice-palace-race-status, #long-hall-relay-status) {
   position: fixed;
   left: 50%;
   bottom: max(112px, calc(env(safe-area-inset-bottom) + 106px));
@@ -39,9 +39,9 @@ label, output, #help { font-size: 12px; }
   line-height: 1.45;
   pointer-events: none;
 }
-#ice-palace-race-status { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
-:is(#town-activity-status, #ice-palace-race-status):empty,
-.museum-inspecting :is(#town-activity-status, #ice-palace-race-status) { display: none; }
+:is(#ice-palace-race-status, #long-hall-relay-status) { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
+:is(#town-activity-status, #ice-palace-race-status, #long-hall-relay-status):empty,
+.museum-inspecting :is(#town-activity-status, #ice-palace-race-status, #long-hall-relay-status) { display: none; }
 :is(#sled-status, #grand-prix-status, #grand-prix-board) {
   position: fixed;
   left: 50%;
