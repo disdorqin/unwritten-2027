@@ -1,0 +1,63 @@
+name: Verify B13 original-door keyboard baseline
+
+on:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-b13-original-door.yml'
+      - 'tools/verify-b13-original-door.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  original-door:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      B13_BASELINE: e80f9835d765ba10f1fce931c32e1dd8edc739f9
+    steps:
+      - name: Check out the evidence runner
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: ci
+
+      - name: Check out the existing integrated B13 implementation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.B13_BASELINE }}
+          persist-credentials: false
+          path: town
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+
+      - name: Install locked dependencies and Chromium
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$B13_BASELINE"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix tools/voxel-tavern --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Verify the shared room and the door registry
+        working-directory: town
+        run: node --import tsx --test tests/town-blockout-shared-home.test.ts tests/town-blockout-house-portals.test.ts
+
+      - name: Run one keyboard session per original door
+        shell: bash
+        run: node ci/tools/verify-b13-original-door.mjs town "$RUNNER_TEMP/b13-proof"
+
+      - name: Upload keyboard and rendered evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: b13-original-door-proof
+          path: ${{ runner.temp }}/b13-proof
+          retention-days: 14
+          if-no-files-found: warn
