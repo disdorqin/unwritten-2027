@@ -8,6 +8,9 @@ type Point = { x: number; north: number; height: number };
 type Segment = { a: Point; dx: number; dn: number; dh: number; lengthSquared: number; halfWidth: number };
 
 const [west, south, east, north] = layout.plaza.bounds;
+const clocktower = layout.plots.find(plot => plot.id === 'clocktower')!;
+const [towerEast] = clocktower.origin;
+const towerHalfWidth = clocktower.footprint[0] / 2;
 const memorial = layout.plots.find(plot => plot.id === 'memorial')!;
 const [memorialEast, memorialNorth, memorialLevel] = memorial.origin;
 const [marketEast, marketNorth] = layout.plots.find(plot => plot.id === 'market-stalls')!.origin;
@@ -138,6 +141,11 @@ function sample(x: number, n: number) {
     const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
     const distance = Math.hypot(dx, dn);
     if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
+  }
+  // The tower apron is a level walking slab. Keep the terrain beneath its pavers,
+  // leaving the shared boundary with the plaza at the original datum.
+  if (Math.abs(x - towerEast) <= towerHalfWidth && n > clocktower.connect[1] && n <= clocktower.door[1]) {
+    elevation = Math.min(elevation, layout.plaza.height - 1 / 32);
   }
   if (plazaDistance === 0) elevation = layout.plaza.height;
   if (isWater(x, n)) elevation = Math.min(elevation, 3.4);

@@ -3,8 +3,10 @@ import { test } from 'node:test';
 import { Group, Matrix4, type InstancedMesh } from 'three';
 import { updateTowerTime } from '../tools/voxel-tavern/town-blockout/clocktower-face.ts';
 import { buildTowerLandmark, clocktowerHeight, updateTowerWingVisibility } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
+import { towerWingRidge } from '../tools/voxel-tavern/town-blockout/clocktower-wings.ts';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
-import { createDailyTowerChime, isTowerCeremonyWindow, towerTime } from '../tools/voxel-tavern/town-blockout/town-clocktower-time.ts';
+import { createDailyTowerChime, towerTime } from '../tools/voxel-tavern/town-blockout/town-clocktower-time.ts';
+import { ceremonyStateAt } from '../tools/voxel-tavern/town-blockout/town-ceremony.ts';
 import { createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 
 const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
@@ -43,23 +45,48 @@ test('the four exterior faces mirror their geometry and the readout follows Beij
   assert.ok(board.instanceMatrix.version > digitVersion);
 });
 
-test('ordinary Beijing hours dispatch three chimes, respect night mute and cannot double C2', () => {
+test('a crossed ordinary Beijing hour schedules three strikes, with audio from 07 through 23 inclusive', () => {
+  for (const [hour, audible] of [[0, false], [3, false], [6, false], [7, true], [17, true], [23, true]] as const) {
+    const run = createDailyTowerChime();
+    const boundary = at(`2026-12-30T${String(hour).padStart(2, '0')}:00:00`);
+    assert.equal(run(boundary - 60_000, 'ordinary'), undefined);
+    assert.deepEqual(run(boundary, 'ordinary'), {
+      cue: { type: 'hourly-chime', at: boundary, hour, strikes: 3 }, audible,
+    });
+    assert.equal(run(boundary - 1, 'ordinary'), undefined);
+    assert.equal(run(boundary + 1, 'ordinary'), undefined);
+  }
+});
+
+test('the ordinary bypass stays silent through standby, the three ceremony hours and afterglow', () => {
+  for (const start of ['2026-12-31T00:00:00', '2026-12-31T07:00:00', '2026-12-31T19:00:00',
+    '2026-12-31T21:00:00', '2026-12-31T22:00:00', '2026-12-31T23:00:00', '2027-01-01T00:00:00']) {
+    const run = createDailyTowerChime();
+    const boundary = at(start);
+    const tick = (now: number) => run(now, ceremonyStateAt(now, 480).phase);
+    tick(boundary - 60_000);
+    assert.equal(tick(boundary), undefined);
+  }
   const run = createDailyTowerChime();
-  const midnight = at('2027-01-01T00:00:00');
-  const sample = (date: string) => {
-    const now = at(date);
-    return run(now, isTowerCeremonyWindow(now, midnight));
-  };
-  assert.equal(sample('2026-12-30T07:00:20'), undefined);
-  assert.equal(sample('2026-12-30T08:00:00')?.strikes, 3);
-  assert.equal(sample('2026-12-30T08:00:00'), undefined);
-  assert.equal(sample('2026-12-30T17:00:00')?.audible, true);
-  assert.equal(sample('2026-12-30T23:00:00')?.audible, false);
-  assert.equal(sample('2026-12-31T19:00:00'), undefined);
-  assert.equal(sample('2026-12-31T23:00:00'), undefined);
-  assert.equal(sample('2027-01-01T00:00:00'), undefined);
-  assert.equal(sample('2027-01-01T01:00:00')?.audible, false);
-  assert.equal(sample('2027-01-01T07:00:00')?.audible, true);
+  const boundary = at('2027-01-01T01:00:00');
+  assert.equal(run(boundary - 60_000, 'afterglow'), undefined);
+  assert.deepEqual(run(boundary, ceremonyStateAt(boundary, 480).phase), {
+    cue: { type: 'hourly-chime', at: boundary, hour: 1, strikes: 3 }, audible: false,
+  });
+});
+
+test('late wakeup and joining on an hour never replay it, with a five-second crossing allowance', () => {
+  const boundary = at('2026-12-30T17:00:00');
+  const joined = createDailyTowerChime();
+  assert.equal(joined(boundary, 'ordinary'), undefined);
+  assert.equal(joined(boundary + 2_000, 'ordinary'), undefined);
+
+  for (const [lag, expected] of [[5_000, true], [5_001, false], [62 * 60_000, false]] as const) {
+    const run = createDailyTowerChime();
+    assert.equal(run(boundary - 1, 'ordinary'), undefined);
+    assert.equal(Boolean(run(boundary + lag, 'ordinary')), expected);
+    assert.equal(run(boundary + lag + 1, 'ordinary'), undefined);
+  }
 });
 
 function walk(targets: readonly (readonly [number, number])[], tower: Group) {
@@ -96,9 +123,12 @@ test('the plaza entrance leads to both wings and a continuous east stair', () =>
   tower.position.set(east, level, -north);
   const west = walk([[0, 11], [0, 6.4], [0, 0], [-12.9, 0], [-12.9, -3.8], [-10.9,-3.8]], tower);
   assert.equal(west.y, level + .3125);
-  const eastRoute = [[0,11], [0,6.4], [0,-3], [4.65,-3], [4.65,0], [6.65,0], [6.65,4.48], [7.4,4.48], [14.45,4.48], [14.45,-4.48], [7.4,-4.48], [7.4,4.48], [7.4,5.6], [15.2,5.6]] as const;
-  const stair = walk(eastRoute, tower);
-  assert.equal(stair.y, level + clocktowerHeight(11.25));
+  const eastApproach = [[0, 11], [0, 6.4], [0, -3], [4.65, -3], [4.65, 0],
+    [6.65, 0], [6.65, 4.48], [7.4, 4.48], [14.45, 4.48], [14.45, -1.5]] as const;
+  assert.equal(walk([...eastApproach, [13, -1.5]], tower).y, level + 4.9);
+  const stair = walk([...eastApproach, [14.45, -4.48], [7.4, -4.48],
+    [7.4, -2.8], [7.4, -.9], [7.4, 0], [7.4, 1.1], [15.2, 1.1]], tower);
+  assert.equal(stair.y, level + clocktowerHeight(towerWingRidge));
   updateTowerWingVisibility(tower, 224, 188, 13.7);
   assert.equal(tower.getObjectByName('Clocktower · west exhibition')?.visible, false);
   assert.equal(tower.getObjectByName('Clocktower · east stair and overlook')?.visible, false);

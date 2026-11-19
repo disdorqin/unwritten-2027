@@ -8,7 +8,7 @@ import { addScenery } from './scenery';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
 import { buildTowerLandmark, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
 import { updateTowerTime } from './clocktower-face';
-import { createDailyTowerChime, isTowerCeremonyWindow } from './town-clocktower-time';
+import { createDailyTowerChime } from './town-clocktower-time';
 import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
@@ -1269,13 +1269,6 @@ function bellDistance() {
   return camera.position.distanceTo(towerBellPosition);
 }
 
-function startTowerHourly(at: number, strikes: number, audible: boolean) {
-  if (audible) festival.playCeremonyBell('hourly', bellDistance());
-  bellMotion.strike(.65);
-  nextHourlyBell = at + 2020;
-  hourlyBellsRemaining = strikes - 1;
-}
-
 function handleCeremonyCue(cue: CeremonyCue) {
   ceremonyOverlay.cue(cue);
   switch (cue.type) {
@@ -1286,7 +1279,10 @@ function handleCeremonyCue(cue: CeremonyCue) {
       }
       break;
     case 'hourly-chime':
-      startTowerHourly(cue.at, cue.strikes, true);
+      festival.playCeremonyBell('hourly', bellDistance());
+      bellMotion.strike(.65);
+      nextHourlyBell = cue.at + 2020;
+      hourlyBellsRemaining = cue.strikes - 1;
       break;
     case 'countdown-tick':
       festival.playCeremonyBell('tick', bellDistance());
@@ -1911,6 +1907,11 @@ activitySpots.push(
     announceActivity('表盘层 · 黄铜指针与传动齿轮');
   }),
   towerBellSpot,
+  localSpot(tower, [-2.12, .3125, 4.12], 1.25, '查看登塔图', () => {
+    const diagram = tower.localToWorld(new Vector3(-3.52, 2.43, 4.81));
+    activityContext.face(diagram.x, -diagram.z, diagram.y);
+    announceActivity('登塔 · 表盘层看齿轮，钟层拉绳，瞭望台取景。');
+  }),
   localSpot(tower, [-11.9, .3125, -3.75], 1.3, '查看钟机展陈', () => {
     const gearWall = tower.localToWorld(new Vector3(-11.9, 1.77, -5.51));
     activityContext.face(gearWall.x, -gearWall.z, gearWall.y);
@@ -3014,15 +3015,22 @@ renderer.setAnimationLoop(now => {
   const ceremonyState = ceremony.update();
   const offset = ceremonyClock.utcOffsetMinutes;
   const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
-  const towerInCeremony = isTowerCeremonyWindow(ceremonyState.now, midnight);
   updateTowerTime(tower, ceremonyState.now, ceremonyState.secondsToMidnight, ceremonyState.phase === 'climax');
-  const hour = dailyTowerChime(ceremonyState.now, towerInCeremony);
-  if (towerInCeremony) townLights.setDusk(false);
-  if (hour) {
-    startTowerHourly(hour.at, hour.strikes, hour.audible);
-    marketFair.refresh();
-    if (hour.hour === 17 || hour.hour === 18) townLights.setDusk(true);
-    else if (hour.hour === 7) townLights.setDusk(false);
+  const dailyChime = dailyTowerChime(ceremonyState.now, ceremonyState.phase);
+  if (ceremonyState.phase !== 'ordinary') townLights.setDusk(false);
+  if (dailyChime) {
+    const { cue, audible } = dailyChime;
+    if (audible) {
+      handleCeremonyCue(cue);
+      marketFair.refresh();
+      // The existing resident controller supplies stations, but no timed plaza rotation.
+      if (cue.hour === 17 || cue.hour === 18) townLights.setDusk(true);
+      else if (cue.hour === 7) townLights.setDusk(false);
+    } else {
+      bellMotion.strike(.65);
+      nextHourlyBell = cue.at + 2020;
+      hourlyBellsRemaining = cue.strikes - 1;
+    }
   }
   let ceremonyElapsed: number | undefined;
   if (ceremonyState.phase !== 'ordinary') {

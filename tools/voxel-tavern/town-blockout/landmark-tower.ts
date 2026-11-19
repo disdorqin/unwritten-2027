@@ -3,8 +3,8 @@ import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Me
 // @ts-expect-error The original JavaScript builder has no declaration file.
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
 import type { Ramp, TownPlot } from './landmark-kit';
-import { attachTowerTime } from './clocktower-face';
-import { buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing } from './clocktower-wings';
+import { attachTowerTime, clockBoardDimensions } from './clocktower-face';
+import { buildTowerWingRoof, buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing, towerWingRoofCourse } from './clocktower-wings';
 
 type Vec3 = [number, number, number];
 type Bounds = { min: Vec3; max: Vec3 };
@@ -101,6 +101,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     x = -3 - x - w;
     y -= 2;
     z = 37.5 - z - d;
+    const outwardX = x === 5.875 || x + w === -5.875;
+    const outwardZ = z === 5.875 || z + d === -5.875;
+    const tangent = outwardX ? z + d / 2 : x + w / 2;
+    // The old dark hand relief is one layer forward from the fixed chapter marks.
+    const oldClockHand = kind === 'dark' && (outwardX || outwardZ) &&
+      Math.hypot(tangent, y + h / 2 - 65) <= 2.7;
+    if (oldClockHand) return;
     const oldSlab = w >= 10 && d >= 10 && [10.25, 53, 71, 79.8125].includes(y);
     const oldFurniture = y >= .3125 && y < 5.6 && x >= -4.99 && x + w <= 4.99 && z >= -5 && z + d <= 5;
     const oldBells = y >= 73.125 && y < 79 && Math.max(Math.abs(x), Math.abs(x + w), Math.abs(z), Math.abs(z + d)) < 4.625;
@@ -117,22 +124,28 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       box(kind, x, y, z, w, h, d);
     }
   };
-  buildGrandClocktower({ box: oldBox, beam: oldBox, dynamicHands: true, lantern: (x: number, y: number, z: number) => {
+  buildGrandClocktower({ box: oldBox, beam: oldBox, lantern: (x: number, y: number, z: number) => {
     if (y < 7.5 && z < 41) lamp(box, -3 - x, y - 2, 37.5 - z);
   } });
 
   // Side wings and entrance surround from B01. The lowest bands are aligned to
   // the plaza-facing plot edge rather than projecting into the footpath.
+  const boardSurfaceZ = 5.5;
+  const boardY = 47;
+  const { width: boardWidth, height: boardHeight } = clockBoardDimensions;
+  box('dark', -boardWidth / 2, boardY - boardHeight / 2, boardSurfaceZ, boardWidth, boardHeight, clockBoardDimensions.depth);
+
   const halfWidth = plot.footprint[0] / 2;
   const south = plot.footprint[1] / 2;
-  const wingDepth = south - .45;
+  const wingDepth = south;
   for (const side of [-1, 1]) {
     const wing = (kind: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
-      box(kind, side > 0 ? x : -x - w, y, z, w, h, d);
+      const fromZ = Math.max(-wingDepth, z);
+      const toZ = Math.min(wingDepth, z + d);
+      box(kind, side > 0 ? x : -x - w, y, fromZ, w, h, toZ - fromZ);
     };
     const inner = 5.4;
     const outer = halfWidth - .75;
-    const span = outer - inner;
     buildTowerWingShell(tower, side, inner, outer, wingDepth, box, solid, floor);
     for (const u of [5.65, 9.55, 13.08, 16.1]) {
       wing('blueStone', u - .14, .66, wingDepth - .52, .63, .41, .74);
@@ -140,25 +153,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
       wing('brass', u - .1, 7.1, wingDepth - .54, .54, .23, .66);
       wing('snowFeather', u - .16, 8.72, wingDepth - .54, .64, .13, .75);
     }
-    if (side < 0) for (let course = 0; course < 10; course++) {
-      const z = wingDepth - course * .65;
-      const y = 8.68 + course * .254;
-      for (const dz of [z - .65, -z]) {
-        wing(course % 3 ? 'roof' : 'roofShadow', inner - .15, y, dz, span + .65, .23, .65);
-        for (let x = inner; x < outer; x += .7) {
-          if ((Math.round(x * 10) + course) % 4 !== 1) wing('snowFeather', x, y + .23, dz + .035, .65, .12, .56);
-        }
-      }
-    }
-    if (side < 0) {
-      wing('roofGlaze', inner - .1, 11.225, -.18, span + .55, .23, .36);
-    } else {
-      wing('roofGlaze', inner, 8.65, -wingDepth, span, .27, .56);
-      wing('stone', outer - .46, 8.65, -wingDepth, .6, .27, wingDepth * 2);
-      for (const x of [7.28, 11.68, 15.69]) {
-        wing('ivory', x, 8.60, wingDepth - .6, .38, 2.62, .42);
-      }
-    }
+    buildTowerWingRoof(side, inner, outer, wingDepth, box, solid);
     for (const y of [1.25, 1.56, 1.87]) {
       wing('blueStone', 5.6, y, wingDepth - .1, .7, .095, .13);
     }
@@ -183,22 +178,37 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     box('brass', x - .08, y + .31, 6.25, .16, .115, .11);
   }
   for (const x of [-2.53, 2.27]) box('limestone', x, .31, 5.7, .27, 3.87, .76);
-  const entryHalf = 6.5;
-  box('paving', -halfWidth, -.047, south, 2 * halfWidth, .064, 4);
-  for (const x of [-5.9, 5.9]) box('paveEdge', x - .11, .016, south, .22, .02, 4);
-  for (let i = 0; i < 3; i++) {
-    const h = .105 * (i + 1);
-    const z = south - (i + 1) * .39;
-    box(i === 2 ? 'ivory' : 'blueStone', -entryHalf, 0, z, 2 * entryHalf, h, .39);
-    floor(-entryHalf, 0, z, 2 * entryHalf, h, .39);
-  }
-  for (const x of [-entryHalf - 1, entryHalf]) {
-    for (let i = 0; i < 12; i++) {
-      const depth = 1.17 / 12;
-      const y = .315 * (12 - i) / 12;
-      box('paving', x, 0, south - 1.17 + i * depth, 1, y, depth);
+  const apronDepth = 4;
+  const rampWidth = 3;
+  const treadHalf = halfWidth - rampWidth;
+  const treadDepth = .39;
+  const treadRise = .105;
+  const levels = 3;
+  const stairDepth = treadDepth * levels;
+
+  // The three treads and two flush end ramps share the whole plot span.
+  box('paveEdge', -halfWidth, -.0625, south, 2 * halfWidth, .03125, apronDepth);
+  floor(-halfWidth, -.0625, south, 2 * halfWidth, .0625, apronDepth);
+  for (let z = south; z < south + apronDepth; z++) {
+    for (let x = -halfWidth; x < halfWidth; x++) {
+      const band = x === -treadHalf || x === treadHalf - 1;
+      box(band ? 'blueStone' : 'paving', x + .015625, -.03125, z + .015625, .96875, .03125, .96875);
     }
-    ramps.push({ ...bounds(x, 0, south - 1.17, 1, .315, 1.17), axis: 'z', ascending: -1 });
+  }
+  for (let i = 0; i < levels; i++) {
+    const h = treadRise * (i + 1);
+    const z = south - (i + 1) * treadDepth;
+    box(i === levels - 1 ? 'ivory' : 'blueStone', -treadHalf, 0, z, 2 * treadHalf, h, treadDepth);
+    floor(-treadHalf, 0, z, 2 * treadHalf, h, treadDepth);
+  }
+  for (const x of [-halfWidth, treadHalf]) {
+    const slices = 12;
+    const depth = stairDepth / slices;
+    for (let i = 0; i < slices; i++) {
+      const rise = treadRise * levels * (slices - i) / slices;
+      box(i % 3 === 0 ? 'paveEdge' : 'paving', x, 0, south - stairDepth + i * depth, rampWidth, rise, depth);
+    }
+    ramps.push({ ...bounds(x, 0, south - stairDepth, rampWidth, treadRise * levels, stairDepth), axis: 'z', ascending: -1 });
   }
   floor(-6.5, 0, -6.5, 13, .3125, 13);
   floor(-1.875, .3125, 5.25, 3.75, .1875, .4375);
@@ -209,17 +219,37 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     solid(x, .25, -5.75, .625, 10, 5.75 - archHalf);
     solid(x, .25, archHalf, .625, 10, 5.75 - archHalf);
     solid(x, archLintel, -archHalf, .625, 10.25 - archLintel, 2 * archHalf);
-    for (const z of [-.96875, .875]) box('oak', x - .047, archSill, z, .719, 2.25, .09375);
-    for (let i = 0; i < 7; i++) {
-      const a = i * Math.PI / 6;
-      box('ivory', x - .04, archLintel + .23 * Math.sin(a), Math.cos(a) * archHalf - .10, .705, .16, .20);
+    for (const z of [-1.015625, archHalf]) {
+      box('limestone', x, archSill, z, .625, 2.25, .140625);
+    }
+    for (let i = 0; i <= 10; i++) {
+      const angle = i * Math.PI / 10;
+      const z = Math.cos(angle) * .99;
+      const y = archLintel + .35 * Math.sin(angle);
+      box(i % 2 ? 'ivory' : 'limestone', x - .047, y, z - .10, .719, .16, .20);
+      box('brass', x - .061, y + .154, z - .035, .747, .043, .07);
     }
   }
-  // The corner piers read from the plaza and stay outside the existing stair core.
-  for (const x of [-6.50, 5.25]) for (const z of [-6.50, 5.25]) {
-    box('blueStone', x, hallCeiling, z, 1.25, .65, 1.25);
-    box('stone', x + .063, hallCeiling + .65, z + .063, 1.124, dialBandStart - hallCeiling - 1.30, 1.124);
-    box('ivory', x, dialBandStart - .65, z, 1.25, .65, 1.25);
+  // A pair of ledges visually seats each solid pier on the wing roof or roof terrace.
+  const pierNear = 5.375;
+  const pierFar = 6.875;
+  for (const x of [-pierFar, pierNear]) for (const z of [-pierFar, pierNear]) {
+    const footingWidth = .9375;
+    const footingX = x < 0 ? -pierNear - 1 : pierNear + .0625;
+    for (let course = 0; course < 3; course++) {
+      const roof = towerWingRoofCourse(wingDepth, course);
+      const start = Math.max(pierNear, roof.innerZ);
+      const end = Math.min(pierFar, roof.outerZ);
+      const footingZ = z < 0 ? -end : start;
+      const footingY = roof.baseY + roof.thickness;
+      box('blueStone', footingX, footingY, footingZ, footingWidth, hallCeiling - footingY, end - start);
+      solid(footingX, footingY, footingZ, footingWidth, hallCeiling - footingY, end - start);
+    }
+    box('blueStone', x, hallCeiling, z, 1.5, .375, 1.5);
+    box('limestone', x + .0625, hallCeiling + .375, z + .0625, 1.375, .375, 1.375);
+    box('stone', x, hallCeiling + .75, z, 1.5, dialBandStart - hallCeiling - 1.125, 1.5);
+    box('ivory', x, dialBandStart - .375, z, 1.5, .375, 1.5);
+    solid(x, hallCeiling, z, 1.5, dialBandStart - hallCeiling, 1.5);
   }
 
   function shaftWalls(bottom: number, top: number, inner: number, outer: number) {
@@ -409,6 +439,16 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   guard(-1.65625, .8125, .28125, .8125, lookoutY);
 
   // A brass nosing, carved wooden joinery and warm lamps follow the tavern palette.
+  // Copper route diagram on the interior face of the entrance wall.
+  box('copperDark', -4.61, 1.43, 4.85, 2.19, 1.88, .15);
+  box('dark', -4.52, 1.52, 4.81, 2.01, 1.70, .06);
+  box('brass', -3.53, 1.72, 4.78, .055, 1.32, .032);
+  for (const [index, height] of [1.83, 2.38, 2.93].entries()) {
+    box('gold', -3.61, height, 4.745, .21, .15, .06);
+    for (let i = 0; i <= index; i++) {
+      box('copper', -3.36 + i * .20, height + .03, 4.76, .13, .09, .05);
+    }
+  }
   box('runner', -1.1875, hallY, .75, 2.375, unit32, 4.5);
   for (const x of [-1.15625, 1.125]) box('brass', x, hallY + unit32, .75, unit32, unit32, 4.5);
   for (const z of [-2.6875, 2.6875]) {
@@ -469,6 +509,14 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   box('oak', -1.46, lookoutY, 1.49, .15, .83, .17);
   box('brass', -1.57, lookoutY + .80, 1.30, .35, .24, .55);
   box('copperDark', -1.53, lookoutY + .83, 1.83, .28, .18, .11);
+  // Bell emblem on the lookout rail, kept separate from the photo action.
+  const bellPlaque = ['00100', '01110', '11011', '11011', '11111', '00100'];
+  box('copperDark', .54, lookoutY + .70, 1.745, .56, .54, .105);
+  for (const [row, pixels] of bellPlaque.entries()) {
+    for (const [column, pixel] of [...pixels].entries()) {
+      if (pixel === '1') box('gold', .64 + column * .071, lookoutY + 1.123 - row * .065, 1.718, .053, .048, .032);
+    }
+  }
   const gearZ = -.8125;
   box('wood', -1.625, dialY, -1.125, 3.125, .4375, .75);
   box('oakEnd', -1.6875, dialY + .4375, -1.1875, 3.25, .09375, .875);
@@ -591,6 +639,13 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   box('iron', .125, toolBoard + .125, -2.09375, .1875, .15625, .15625);
   box('iron', .578125, toolBoard + .625, -2.09375, .1875, .21875, .15625);
   box('oakEnd', -2.15625, bellY + 5.28125, 1.6875, .5625, .125, .375);
+  // Retired ropes hang alongside the active mechanism rather than on the approach.
+  box('copperDark', .98, toolBoard + .20, -2.20, .89, .65, .095);
+  for (const ropeX of [1.13, 1.42, 1.70]) {
+    box('brass', ropeX, toolBoard + .67, -2.11, .085, .08, .07);
+    box('oakEnd', ropeX + .02, toolBoard + .21, -2.10, .046, .48, .045);
+    box('copper', ropeX - .025, toolBoard + .14, -2.10, .132, .075, .05);
+  }
   box('iron', -1.90625, bellY + 4.1875, 1.84375, .0625, 1.09375, .0625);
   box('brass', -1.96875, bellY + 4.21875, 1.78125, .1875, .09375, .1875);
 
@@ -686,33 +741,36 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     };
   }
   addBatches(tower, shellParts);
-  attachTowerTime(tower, clocktowerHeight(faceY), clocktowerHeight(47));
+  attachTowerTime(tower, clocktowerHeight(faceY), clocktowerHeight(boardY), boardSurfaceZ);
   const detailInterior = new Group();
   detailInterior.name = 'Tower stairs and interiors';
-  // Bounds per height band let the camera frustum reject stairs and rooms on other levels.
+  // Share the floor bands with the wing interiors, while keeping each wing independently visible.
   const cutoffs = [hallCeiling, 26, 43, 59, 68, 79.8125].map(clocktowerHeight);
-  const sections = Array.from({ length: cutoffs.length + 1 }, () => new Map<string, Cuboid[]>());
-  for (const [kind, cubes] of interiorParts) {
-    for (const cube of cubes) {
-      const index = cutoffs.findIndex(cutoff => cube.at[1] < cutoff);
-      const section = sections[index < 0 ? cutoffs.length : index];
-      const batch = section.get(kind);
-      if (batch) batch.push(cube);
-      else section.set(kind, [cube]);
+  function addInteriorSections(target: Group, components: Map<string, Cuboid[]>) {
+    const sections = Array.from({ length: cutoffs.length + 1 }, () => new Map<string, Cuboid[]>());
+    for (const [kind, cubes] of components) {
+      for (const cube of cubes) {
+        const index = cutoffs.findIndex(cutoff => cube.at[1] < cutoff);
+        const section = sections[index < 0 ? cutoffs.length : index];
+        const batch = section.get(kind);
+        if (batch) batch.push(cube);
+        else section.set(kind, [cube]);
+      }
+    }
+    for (const [index, section] of sections.entries()) {
+      if (!section.size) continue;
+      const layer = new Group();
+      layer.name = `Tower interior layer ${index + 1}`;
+      addBatches(layer, section);
+      target.add(layer);
     }
   }
-  for (const [index, section] of sections.entries()) {
-    if (!section.size) continue;
-    const layer = new Group();
-    layer.name = `Tower interior layer ${index + 1}`;
-    addBatches(layer, section);
-    detailInterior.add(layer);
-  }
+  addInteriorSections(detailInterior, interiorParts);
   const westWing = new Group(), eastWing = new Group();
   westWing.name = 'Clocktower · west exhibition';
   eastWing.name = 'Clocktower · east stair and overlook';
-  addBatches(westWing, wingParts[0]);
-  addBatches(eastWing, wingParts[1]);
+  addInteriorSections(westWing, wingParts[0]);
+  addInteriorSections(eastWing, wingParts[1]);
   detailInterior.add(westWing, eastWing);
   towerWingGroups.set(tower, [westWing, eastWing]);
   tower.userData.bellMotion = attachBell(detailInterior);
