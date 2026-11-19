@@ -1,0 +1,30 @@
+✔ starport and core each reach the corresponding airlock opening and return to their own ground opening (2.656114ms)
+✔ the host checks each ground and airlock opening independently instead of trusting a claimed route (0.562728ms)
+✔ boarding via starport does not prevent returning via core after walking to its airlock opening (1.258127ms)
+✔ either direction requires the specific gate to be open at traversal time (0.529374ms)
+✔ a missing, mismatched, invalid or obstructed landing is refused instead of falling back (0.440996ms)
+✔ rejects unknown requests and ignores client-supplied positions, lock state and destinations (0.531769ms)
+✔ the crater cover and alternate descents stay locked until one authorized opening (9.301486ms)
+✔ a pending first fall survives reload and only its verified pool landing settles at zero damage (0.85834ms)
+✔ first-fall landing can be retried after reconnect and a failed save (1.574997ms)
+✔ only confirmed movement through the configured depth line changes mode (0.816752ms)
+✔ an opened cage reloads both directions and keeps each visitor’s first entry separate (8.890027ms)
+✔ failed saves publish no state change and allow an authoritative retry (0.390589ms)
+✔ saved state copies are isolated and invalid depth configuration fails at startup (2.59331ms)
+✔ crater fixes the rim, three descending terraces and a flat floor in relative space (7.94545ms)
+✔ the clockwise descending path produces a continuous graded and traversable centreline (35.417686ms)
+ℹ centreline 1501 points, longest step 0.806501 m, sampled max grade 7.928146%, analytical 7.932670%, max surface error 1.42e-14 m
+✔ the tread has a radial flat and a continuous shoulder, and joins the rim and floor (0.711929ms)
+✔ invalid terrace and main path plans are rejected instead of silently reshaping the site (1.33549ms)
+✔ mine meshes expose the locked level and dimensions, flush double rail and a separate water surface (4.933476ms)
+✔ a continuous solo route leads through the stone shore and crouch slot to the safe campfire (3.218533ms)
+✔ the crouching footprint clears the slope and collapse join (8.276688ms)
+✔ unwalkable dimensions and an unassigned camp side are rejected instead of filled with defaults (4.112502ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1172.201135

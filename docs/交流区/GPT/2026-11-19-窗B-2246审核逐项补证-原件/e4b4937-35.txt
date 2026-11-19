@@ -1,0 +1,47 @@
+✔ starport and core each reach the corresponding airlock opening and return to their own ground opening (7.347987ms)
+✔ the host checks each ground and airlock opening independently instead of trusting a claimed route (0.446035ms)
+✔ boarding via starport does not prevent returning via core after walking to its airlock opening (0.281741ms)
+✔ either direction requires the specific gate to be open at traversal time (0.292826ms)
+✔ a missing, mismatched, invalid or obstructed landing is refused instead of falling back (0.42536ms)
+✔ rejects unknown requests and ignores client-supplied positions, lock state and destinations (1.032205ms)
+✔ the shaft opens only when authorized and the lift awaits the first fall (4.97937ms)
+✔ a pending first fall survives reload and only its verified pool landing settles at zero damage (1.420719ms)
+✔ first-fall landing can be retried after reconnect and a failed save (5.1946ms)
+✔ only confirmed movement through the configured depth line changes mode (0.407007ms)
+✔ an opened cage reloads both directions and keeps each visitor’s first entry separate (1.035139ms)
+✔ failed saves publish no state change and allow an authoritative retry (0.50624ms)
+✔ saved state copies are isolated and invalid depth configuration fails at startup (1.352901ms)
+✔ review actions take the covered shaft through first fall, camp checks and repeat cage travel (132.893747ms)
+✔ review actions use the gate guards and distinct arrivals for both orbital routes (19.478885ms)
+✔ the crater well shows concealing debris until the authority reveals the shaft (99.58245ms)
+✔ crater fixes the rim, three descending terraces and a flat floor in relative space (10.130878ms)
+✔ the clockwise descending path produces a continuous graded and traversable centreline (7.813609ms)
+ℹ centreline 1501 points, longest step 0.806501 m, sampled max grade 7.928146%, analytical 7.932670%, max surface error 1.42e-14 m
+✔ the tread has a radial flat and a continuous shoulder, and joins the rim and floor (0.454682ms)
+✔ invalid terrace and main path plans are rejected instead of silently reshaping the site (0.717264ms)
+✔ preview triangles cover the crater trail and its standing band through both seams (139.392288ms)
+ℹ offset 0 m: 1501/1501, peak 7.926886%, height error 0.000005737 m, 28421 triangles
+ℹ offset -0.27 m: 1501/1501, peak 8.065681%, height error 0.000181987 m, 28421 triangles
+ℹ offset 0.27 m: 1501/1501, peak 7.881813%, height error 0.000179471 m, 28421 triangles
+✔ the two arrivals and door approaches are distinct, walkable and face into the airlock (24.252736ms)
+✔ the two destinations use town-chronicle rings and the status wall has just two green systems (9.248416ms)
+✔ a continuous open route crosses the ramp to the two walkable hand positions (20.557885ms)
+✔ the walking footprint rejects walls, corners, console and captain furniture (4.667302ms)
+✔ the two hand hooks surround a blank, half-page log with its own indicator (4.756069ms)
+✔ all five cockpit console colliders have visible models at the same positions (3.975636ms)
+✔ interior size scales the floor, markers, rendered log and collision bounds together (12.959631ms)
+✔ window motion is driven by an explicit local clock and leaves the walking surface stable (5.315552ms)
+✔ mine meshes expose the locked level and dimensions, flush double rail and a separate water surface (3.647348ms)
+✔ the shaft envelope opens the pool roof above the first-fall anchor (3.185632ms)
+✔ an invalid shaft envelope is rejected before geometry is generated (1.601372ms)
+✔ a continuous solo route leads through the stone shore and crouch slot to the safe campfire (2.040499ms)
+✔ the crouching footprint clears the slope and collapse join (2.804656ms)
+✔ unwalkable dimensions and an unassigned camp side are rejected instead of filled with defaults (0.596782ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1651.697963
