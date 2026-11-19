@@ -11,7 +11,7 @@ import {
   type SnowballRelayEvent,
 } from "../../src/presence/snowball-events.js";
 import { testFireworksAnnouncement, testFireworksDwellMs, testFireworksLeadMs, testFireworksNoticeMs } from "../../src/presence/test-fireworks.js";
-import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
+import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, plazaPhotoStand, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
@@ -297,7 +297,7 @@ function sendPhotoOptOut(socket: WebSocket, id: number) {
 }
 
 function sendPhotoPose(socket: WebSocket, east: number, sequence = 1) {
-  socket.send(encodePose({ ...pose, east: east * 100, north: 18_300, height: 1_200, sequence }));
+  socket.send(encodePose({ ...pose, east: east * 100, north: 16_244, height: 1_235, sequence }));
 }
 
 const photoInvite = (message: Control) => message.type === "event" && message.kind === "plaza-photo-invite";
@@ -383,9 +383,9 @@ test("plaza photo relay freezes one shared roster, honours a matching opt-out an
     assert.equal(lineups[0].id, invite.id);
     assert.equal(lineups[0].captureAt, invite.captureAt);
     assert.deepEqual(lineups[0].people, [
-      { id: host.id, name: host.name, east: 224, north: 183, height: 12 },
-      { id: staying.id, name: staying.name, east: 225, north: 183, height: 12 },
-      { id: catchUp.id, name: catchUp.name, east: 226, north: 183, height: 12 },
+      { id: host.id, name: host.name, east: 224, north: 162.44, height: 12.35 },
+      { id: staying.id, name: staying.name, east: 225, north: 162.44, height: 12.35 },
+      { id: catchUp.id, name: catchUp.name, east: 226, north: 162.44, height: 12.35 },
     ]);
 
     const late = await join("锁定后进镇");
@@ -401,6 +401,30 @@ test("plaza photo relay freezes one shared roster, honours a matching opt-out an
     assert.ok(photoInvite(next));
     assert.notEqual(next.id, invite.id);
   });
+
+test("the existing photo event admits 48 live WebSocket players at the new physical theater", { timeout: 12_000 }, async context => {
+  let wallTime = Date.now();
+  context.mock.method(Date, "now", () => wallTime);
+  const { join } = await fixture(context);
+  const clients = await Promise.all(Array.from({ length: 48 }, (_, index) => join(`看台镇民 ${index + 1}`)));
+  const expected = clients.map((client, index) => {
+    const row = Math.floor(index / 12);
+    const east = Math.round((plazaPhotoStand.centreEast + (index % 12 - 5.5) * 1.28) * 100);
+    const north = Math.round((plazaPhotoStand.south + (row + .5) * plazaPhotoStand.run) * 100);
+    const height = Math.round((plazaPhotoStand.base + (row + 1) * plazaPhotoStand.rise) * 100);
+    client.socket.send(encodePose({ ...pose, east, north, height, sequence: 1 }));
+    client.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+    return { id: client.id, name: client.name, east: east / 100, north: north / 100, height: height / 100 };
+  }).sort((a, b) => a.id - b.id);
+  await Promise.all(clients.map(client => client.text.next(clockReply)));
+
+  sendPhotoRequest(clients[0].socket);
+  const notices = await Promise.all(clients.map(client => client.text.next(photoInvite)));
+  wallTime = notices[0].captureAt! - plazaPhotoLockMs;
+  const lineups = await Promise.all([clients[0], clients[47]].map(client => client.text.next(photoLineup)));
+  assert.deepEqual(lineups[0], lineups[1]);
+  assert.deepEqual(lineups[0].people, expected);
+});
 
 test("presence returns a common server epoch to separately connected train riders", { timeout: 7000 }, async context => {
   const { join } = await fixture(context);

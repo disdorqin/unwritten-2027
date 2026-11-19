@@ -1,15 +1,17 @@
 import { Vector3, type PerspectiveCamera } from 'three';
 import {
-  inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs,
+  inPlazaPhotoStand, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs,
   type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from '../../../src/presence/plaza-photo';
 import { downloadTownCanvas } from './town-photo-download';
+import type { TheaterPhotoView } from './theater-photo-camera';
 import { recordTownChroniclePlazaPhoto } from './town-chronicle';
 
 
 type Round = { id: number; captureAt: number; shared: boolean; entered: boolean; optedOut: boolean; lineup?: PlazaPhotoPerson[] };
 type Placement = { east: number; north: number; height: number; active: boolean };
-type PhotoFrame = { round: Round; people: PlazaPhotoPerson[]; showNames: boolean; shutter: boolean };
+type PhotoFrame = { round: Round; people: PlazaPhotoPerson[]; showNames: boolean; view: TheaterPhotoView; shutter: boolean };
+type PhotoCrop = { x: number; y: number; width: number; height: number };
 
 const lineupGraceMs = 500;
 
@@ -36,7 +38,7 @@ export function createPlazaGroupPhoto(options: {
   const count = document.createElement('p');
   count.dataset.photoCountdown = '';
   const directions = document.createElement('p');
-  directions.textContent = '走到出生点以北的两道合影弧线附近，按站位自由排队。';
+  directions.textContent = '到社戏看台集合，在台阶上自由排队。';
   const guide = document.createElement('div');
   guide.className = 'plaza-photo-lineup-guide';
   guide.setAttribute('aria-hidden', 'true');
@@ -60,7 +62,15 @@ export function createPlazaGroupPhoto(options: {
   plate.checked = true;
   plate.onchange = () => { previewNames = plate.checked; };
   plateToggle.append(plate, ' 显示铭牌');
-  panel.append(count, directions, guide, enter, leave, plateToggle);
+  const view = document.createElement('select');
+  view.setAttribute('aria-label', '合影机位');
+  for (const [value, label] of [['stage', '戏台景'], ['clocktower', '钟楼景']] as const) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    view.append(option);
+  }
+  panel.append(count, directions, guide, enter, leave, plateToggle, view);
   document.body.append(panel);
 
   function locked() {
@@ -101,7 +111,7 @@ export function createPlazaGroupPhoto(options: {
   }
 
   function update({ east, north, height, active }: Placement): PhotoFrame | undefined {
-    eligible = active && inPlazaPhotoArc(east, north, height);
+    eligible = active && inPlazaPhotoStand(east, north, height);
     const current = round;
     if (!current) return;
     const time = options.now();
@@ -123,6 +133,7 @@ export function createPlazaGroupPhoto(options: {
       directions.hidden = current.entered;
       enter.hidden = standing || current.entered || !eligible;
       plateToggle.hidden = standing;
+      view.hidden = standing;
     }
     if (current.entered && remaining <= plazaPhotoLockMs) {
       if (!locked()) {
@@ -144,7 +155,7 @@ export function createPlazaGroupPhoto(options: {
       return;
     }
     const people = current.lineup ?? (current.shared ? options.nearby() : options.nearby().filter(person => person.id === own));
-    return { round: current, people, showNames: previewNames, shutter: remaining <= 0 && !!current.lineup };
+    return { round: current, people, showNames: previewNames, view: view.value === 'clocktower' ? 'clocktower' : 'stage', shutter: remaining <= 0 && !!current.lineup };
   }
 
   function record(frame: PhotoFrame) {
@@ -155,15 +166,15 @@ export function createPlazaGroupPhoto(options: {
     return recordTownChroniclePlazaPhoto(entry);
   }
 
-  function capture(source: HTMLCanvasElement, camera: PerspectiveCamera, frame: PhotoFrame) {
+  function capture(source: HTMLCanvasElement, camera: PerspectiveCamera, frame: PhotoFrame, crop: PhotoCrop) {
     if (round !== frame.round) return;
     finish();
     const raw = document.createElement('canvas');
-    raw.width = source.width;
-    raw.height = source.height;
+    raw.width = crop.width;
+    raw.height = crop.height;
     const rawContext = raw.getContext('2d');
     if (!rawContext || !raw.width || !raw.height) return;
-    rawContext.drawImage(source, 0, 0);
+    rawContext.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, raw.width, raw.height);
     const point = new Vector3();
     const labels = frame.people.map(person => {
       point.set(person.east, person.height + 2.15, -person.north).project(camera);

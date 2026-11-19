@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector3, WebGLRenderer, Frustum, Sphere,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -90,7 +90,8 @@ import { createTownNpcActivity } from './town-npc';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
-import { inPlazaPhotoArc, plazaPhotoCamera as plazaCameraPosition } from '../../../src/presence/plaza-photo';
+import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
+import { createTheaterPhotoCamera } from './theater-photo-camera';
 import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
@@ -158,9 +159,8 @@ const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
   (east, north) => grid.heightAt(east, north));
-const plazaCamera = new PerspectiveCamera(camera.fov, camera.aspect, camera.near, camera.far);
-plazaCamera.position.set(plazaCameraPosition[0], grid.heightAt(...plazaCameraPosition) + 3, -plazaCameraPosition[1]);
-plazaCamera.lookAt(224, 24, -193);
+const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, camera.far);
+const plazaCanvasSize = new Vector2();
 const railway = createTownRailway(grid, presence.serverNow);
 const frontRailStation = railway.stops.find(stop => stop.id === 'railway-station')!;
 
@@ -1740,7 +1740,7 @@ function currentAction() {
   }
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   if (nearest) return nearest;
-  if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoArc(x, n, ground)) return plazaPhotoAction;
+  if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
   return tavernActivity.carryAction();
 }
 function interact() {
@@ -2689,13 +2689,33 @@ renderer.setAnimationLoop(now => {
     let drinkEffectsMs = profileTown ? performance.now() - drinkStartedAt : 0;
     try {
       if (groupPhotoFrame) {
-        if (plazaCamera.aspect !== camera.aspect) {
-          plazaCamera.aspect = camera.aspect;
-          plazaCamera.updateProjectionMatrix();
+        createTheaterPhotoCamera(groupPhotoFrame.view, groupPhotoFrame.people, grid.heightAt, plazaCamera);
+        renderer.getSize(plazaCanvasSize);
+        const width = Math.floor(Math.min(plazaCanvasSize.x, plazaCanvasSize.y * plazaCamera.aspect));
+        const height = Math.floor(width / plazaCamera.aspect);
+        const left = Math.floor((plazaCanvasSize.x - width) / 2);
+        const bottom = Math.floor((plazaCanvasSize.y - height) / 2);
+        renderer.setScissorTest(false);
+        renderer.clear();
+        renderer.setViewport(left, bottom, width, height);
+        renderer.setScissor(left, bottom, width, height);
+        renderer.setScissorTest(true);
+        try {
+          presence.renderPlazaPhoto(groupPhotoFrame.people, plazaCamera, groupPhotoFrame.showNames);
+          renderer.render(scene, plazaCamera);
+          if (groupPhotoFrame.shutter) {
+            const ratio = renderer.getPixelRatio();
+            plazaPhoto.capture(renderer.domElement, plazaCamera, groupPhotoFrame, {
+              x: Math.round(left * ratio),
+              y: renderer.domElement.height - Math.round((bottom + height) * ratio),
+              width: Math.round(width * ratio),
+              height: Math.round(height * ratio),
+            });
+          }
+        } finally {
+          renderer.setScissorTest(false);
+          renderer.setViewport(0, 0, plazaCanvasSize.x, plazaCanvasSize.y);
         }
-        presence.renderPlazaPhoto(groupPhotoFrame.people, plazaCamera, groupPhotoFrame.showNames);
-        renderer.render(scene, plazaCamera);
-        if (groupPhotoFrame.shutter) plazaPhoto.capture(renderer.domElement, plazaCamera, groupPhotoFrame);
       } else renderer.render(scene, camera);
     }
     finally {
