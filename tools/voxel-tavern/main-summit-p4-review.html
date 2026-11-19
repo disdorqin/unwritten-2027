@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 绝顶登记</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; background: #a8bcd1; }
+    body { margin: 0; overflow: hidden; }
+    [hidden] { display: none !important; }
+    canvas { display: block; }
+    nav, main { position: fixed; z-index: 1; background: #192937f2; color: #f5f7fa; border: 1px solid #d4e3eb44; border-radius: 8px; }
+    nav { inset: 12px auto auto 12px; display: flex; gap: 4px; padding: 4px; }
+    main { inset: auto auto 12px 12px; max-width: calc(100vw - 50px); padding: 12px; display: grid; gap: 8px; }
+    button { color: inherit; background: transparent; font: inherit; padding: 8px 10px; border: none; border-radius: 5px; cursor: pointer; }
+    button[aria-pressed="true"], #action { background: #385b74; }
+    button:focus-visible { outline: 2px solid #fff7dc; outline-offset: 2px; }
+    #help { color: #c3d6e1; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <nav aria-label="登记场景">
+    <button type="button" data-p4-area="cloud-deck" aria-pressed="true">云海台</button>
+    <button type="button" data-p4-area="summit" aria-pressed="false">绝顶入口</button>
+  </nav>
+  <main>
+    <div id="help">WASD 行走 · ← → 转身 · E 互动</div>
+    <output id="status" role="status"></output>
+    <button type="button" id="action" hidden></button>
+  </main>
+  <script type="module" src="./town-blockout/main-summit-p4-review.ts"></script>
+</body>
+</html>
