@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
@@ -45,6 +45,7 @@
     </div>
   </aside>
   <section id="town-chat" aria-label="小镇聊天" hidden>
+    <button id="town-chat-toggle" type="button" aria-expanded="true">聊天<span id="town-chat-unread" aria-hidden="true" hidden></span></button>
     <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
     <form id="town-chat-form">
       <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
@@ -85,6 +86,7 @@
   <button id="lock-look" type="button" hidden>点击锁定鼠标视角</button>
   <button id="touch-jump" type="button" hidden>跳跃</button>
   <button id="touch-sprint" type="button" hidden aria-pressed="false">疾跑</button>
+  <button id="fullscreen-toggle" type="button" hidden aria-pressed="false">全屏</button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
   <aside id="snowball-controls" aria-label="打雪仗" hidden>

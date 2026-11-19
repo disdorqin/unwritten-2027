@@ -83,6 +83,25 @@
 .touch-play #town-chat {
   bottom: max(145px, calc(env(safe-area-inset-bottom) + 122px));
 }
+#town-chat-toggle { display: none; }
+.touch-play #town-chat-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px;
+}
+#town-chat-unread {
+  width: 8px; height: 8px; border-radius: 50%; background: #ff9d5c; flex: none;
+}
+#town-chat-unread[hidden] { display: none; }
+#town-chat.town-chat-collapsed { width: max-content; padding: 6px; }
+#town-chat.town-chat-collapsed :is(#town-chat-log, #town-chat-form) { display: none; }
+/* Expanded on touch: cap the panel so its top edge never reaches the
+   top-left panel heading (status chip). Bottom stays at 145px above the
+   joystick zone; the top 68px strip stays clear, so the log shrinks
+   instead of the panel growing over the chip. */
+.touch-play #town-chat:not(.town-chat-collapsed):not([hidden]) {
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 213px); max-height: calc(100dvh - 213px);
+}
+.touch-play #town-chat-log { min-height: 0; }
 #town-chat-log {
   max-height: min(130px, 20dvh);
   overflow-y: auto;

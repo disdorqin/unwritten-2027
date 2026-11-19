@@ -43,6 +43,7 @@ import { buildMuseumLandmark } from './landmark-museum';
 import type { MuseumLight } from './museum-kit';
 import { createMuseumVisit } from './museum-visit';
 import { createTouchWalk } from './touch-walk';
+import { createViewportControls } from './town-viewport';
 import { createTouchLook } from './touch-look';
 import { setTouchLookSensitivity, touchLookSensitivity } from './touch-look-curve';
 import { createDesktopLook, type DesktopLookLockFailure } from './desktop-look';
@@ -534,6 +535,13 @@ const eye = 1.65;
 const keys = new Set<string>();
 const touchSprintButton = element<HTMLButtonElement>('touch-sprint');
 const touchWalk = createTouchWalk(element('touch-walk'), touchSprintButton);
+const viewportControls = createViewportControls({
+  fullscreenButton: element<HTMLButtonElement>('fullscreen-toggle'),
+  chatPanel: element('town-chat'),
+  chatToggle: element<HTMLButtonElement>('town-chat-toggle'),
+  chatUnread: element('town-chat-unread'),
+  chatLog: element('town-chat-log'),
+});
 const museumMapButton = element<HTMLButtonElement>('museum-map-button');
 const crosshair = element('walk-crosshair');
 const lockLookButton = element<HTMLButtonElement>('lock-look');
@@ -1624,6 +1632,7 @@ walk.onclick = event => {
   if ((!walking || event.detail !== 0) && (!mode(true) || !walking)) return;
   renderer.domElement.focus({ preventScroll: true });
   if (event.isTrusted) townBgm.enter();
+  if (event.isTrusted) viewportControls.tryEnterFullscreen();
   desktopLook.engage();
 };
 selector.onchange = event => {
@@ -1740,13 +1749,23 @@ addEventListener('keyup', e => {
   if (!forwardHeld()) doubleForward = false;
 });
 addEventListener('blur', resetMovement);
-addEventListener('resize', () => {
+let fittedWidth = 0;
+let fittedHeight = 0;
+function fitRenderer() {
+  if (innerWidth === fittedWidth && innerHeight === fittedHeight) return;
+  fittedWidth = innerWidth;
+  fittedHeight = innerHeight;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   museumInspection.resize(camera.aspect);
   museumLaunch.resize(camera.aspect);
   renderer.setSize(innerWidth, innerHeight);
-});
+}
+addEventListener('resize', fitRenderer);
+addEventListener('orientationchange', fitRenderer);
+// Mobile browsers resize the visual viewport when the address bar shows or
+// hides; refit then too so the canvas never leaves a gap at the edges.
+visualViewport?.addEventListener('resize', fitRenderer);
 const startInMuseum = document.body.dataset.start === 'museum' || new URLSearchParams(location.search).get('visit') === 'museum';
 if (startInMuseum) selector.value = '纪念馆入口';
 let previous = performance.now();
