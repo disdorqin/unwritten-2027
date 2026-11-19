@@ -185,8 +185,9 @@ async function drive(page, east, north) {
       }
       const timer = setTimeout(() => {
         cleanup();
-        reject(Error(`Walking to ${east}/${north}: best distance ${watch.best.toFixed(3)} after ${watch.observed} frames`));
-      }, 100_000);
+        const { east: stoppedEast, north: stoppedNorth } = window.__jx3.sample();
+        reject(Error(`Walking to ${east}/${north}: best distance ${watch.best.toFixed(3)} after ${watch.observed} frames at E${stoppedEast.toFixed(3)}/N${stoppedNorth.toFixed(3)}`));
+      }, 180_000);
       canvas.addEventListener('town-frame-profile', inspect);
       inspect();
     }), { east, north });
@@ -241,7 +242,7 @@ async function run(checkout, label, browser) {
     await rename(`${file}.tmp`, file);
   }
   async function image(id, group) {
-    const frames = await renderFrames(page);
+    const frames = await renderFrames(page, 4);
     assert.ok(frames.every(frame => frame.calls > 0 && frame.triangles > 0));
     const pose = await sample(page);
     const file = `${group}-${id}.png`;
@@ -286,6 +287,16 @@ async function run(checkout, label, browser) {
       await page.evaluate(({ position, target }) => window.__jx3.overview(position, target), { position, target: exteriorTarget });
       await image(id, 'exterior');
     }
+    if (label === 'candidate') {
+      const forecourt = [
+        ['cistern', [112.9, 12.5, -121.1], [119.3, 11.1, -121.1]],
+        ['firewood-and-pennant', [112.9, 12.4, -109.5], [119.1, 12.0, -108.9]],
+      ];
+      for (const [id, position, target] of forecourt) {
+        await page.evaluate(({ position, target }) => window.__jx3.overview(position, target), { position, target });
+        await image(id, 'forecourt');
+      }
+    }
     try {
       await nativeStreet();
       for (const [east, north, imageId] of travel) {
@@ -315,16 +326,6 @@ async function run(checkout, label, browser) {
     } catch (error) {
       walkError = String(error);
       log(`walking stopped: ${walkError}`);
-    }
-    if (label === 'candidate' && !walkError) {
-      const forecourt = [
-        ['cistern', [112.9, 12.5, -121.1], [119.3, 11.1, -121.1]],
-        ['firewood-and-pennant', [112.9, 12.4, -109.5], [119.1, 12.0, -108.9]],
-      ];
-      for (const [id, position, target] of forecourt) {
-        await page.evaluate(({ position, target }) => window.__jx3.overview(position, target), { position, target });
-        await image(id, 'forecourt');
-      }
     }
     assert.ok(traffic.clock > 0, 'No rehearsal clock request was observed');
     assert.deepEqual(errors, [], `${label} page/asset requests failed`);
