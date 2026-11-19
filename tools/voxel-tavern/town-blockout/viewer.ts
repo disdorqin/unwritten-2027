@@ -12,7 +12,7 @@ import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { IcePalaceRace } from './ice-palace-race';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
-import { buildMarketLandmark, marketOxSite } from './landmark-market';
+import { buildMarketLandmark } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
 import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
@@ -93,9 +93,6 @@ import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createLighthouseSnakeCharm } from './town-zodiac-snake';
-import { createTownZodiacSites } from './town-zodiac-atlas';
-import { createZodiacDogPostcard } from './town-zodiac-dog';
-import { buildTigerZodiacAnchor, tigerZodiacSite } from './town-zodiac-tiger-anchor';
 import { createRailHorseCharm, railHorseClues } from './town-zodiac-rail';
 import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-rooster';
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
@@ -109,6 +106,7 @@ import { createTownSnowballFight, type SnowballState } from './town-snowball';
 import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
 import { createTownSnowballBoard } from './town-snowball-board';
+import { createTownBellGame } from './town-bell';
 import { addTownSnowBoard } from './town-snow-board';
 import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
@@ -410,8 +408,6 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
-const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
-scene.add(tigerPine);
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
 let streetsRequested = false;
 let homeReturn: TownHousePortal | undefined;
@@ -439,7 +435,7 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -995,6 +991,13 @@ const snowballBoard = createTownSnowballBoard({
   announce: message => announceActivity(message, true),
   label: snowballName,
 });
+const bellGame = createTownBellGame({
+  scene, camera, presence,
+  getAudioContext: festival.getAudioContext,
+  announce: announceActivity,
+  heightAt: (east, north) => grid.heightAt(east, north),
+  localPosition: () => ({ east: x, north: n, height: ground }),
+});
 function announceSnowballTitles() {
   const { snowballKing, sharpshooter, popularityKing } = snowballBoard.getTitles();
   const winners = [
@@ -1312,11 +1315,6 @@ const stampSites = [
 let zodiacStorage: Storage | undefined;
 try { zodiacStorage = window.localStorage; } catch { /* Use transient progress if storage is blocked. */ }
 const zodiac = createZodiacProgress(['mouse', 'snake', 'horse', 'rooster'], zodiacStorage);
-const zodiacSites = createTownZodiacSites(zodiac, label => {
-  announceActivity(`${label} · 已收集 ${zodiac.count()}/12`);
-  playPostChime(true);
-});
-scene.add(zodiacSites.mesh);
 const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
   announceActivity(`马 · 已收集 ${zodiac.count()}/12`);
   playPostChime(true);
@@ -1410,10 +1408,6 @@ activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, z
 }));
 const tower = architecture.get('clocktower')!;
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
-activitySpots.push(
-  zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
-  zodiacSites.mount(tigerPine, tigerZodiacSite),
-);
 const [bellX, bellDeck, bellZ] = towerStops.bell;
 const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
 const bellMotion = tower.userData.bellMotion as TowerBellMotion;
@@ -2209,6 +2203,7 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  bellGame.update(dt);
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
@@ -2250,18 +2245,12 @@ renderer.setAnimationLoop(now => {
       walkGeometry = geometry();
       activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
       registerHomeDoors(extensionStreets.housePortals);
-      const dogMailbox = extensionStreets.dogMailbox;
-      if (dogMailbox) {
-        activitySpots.push(zodiacSites.mount(extensionStreets.group, dogMailbox.charm),
-          createZodiacDogPostcard(dogMailbox, activityContext));
-      }
     }).catch(error => {
       streetsRequested = false;
       console.error('Loading extension streets', error);
     });
   }
   extensionStreets?.update(camera, wideView);
-  zodiacSites.update(camera.position, !homeReturn && !wideView);
   const baths = architecture.get('hot-spring');
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);

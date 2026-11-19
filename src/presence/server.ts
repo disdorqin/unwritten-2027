@@ -22,6 +22,10 @@ import {
   inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
   type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from './plaza-photo.js';
+import {
+  applyBellTouch, bellStandings, bellTitleDue, createBellMatch, defaultBellConfig, dropBell, endBellMatch,
+  inBellVenue, tryBellTouch, type BellConfig, type BellState, type BellStateEvent,
+} from './bell-game.js';
 
 type Options = {
   host?: string;
@@ -34,6 +38,7 @@ type Options = {
   testFireworks?: boolean;
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
+  bellConfig?: Partial<BellConfig>;
 };
 
 type PollFrame = { t: 'text'; d: string } | { t: 'bin'; d: Uint8Array };
@@ -64,6 +69,7 @@ type Peer = {
   floodCount: number;
   pendingThrows: Map<number, PendingThrow>;
   nextClockSample: number;
+  nextBellRequest: number;
   nextFireworksRequest: number;
   nextPersonalFireworks: number;
   nextPhotoRequest: number;
@@ -137,6 +143,11 @@ export async function createPresenceServer(options: Options = {}) {
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
   const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
+  const bellConfig: BellConfig = { ...defaultBellConfig, ...options.bellConfig };
+  let bell: BellState | undefined;
+  let bellAnnounced = new Set<string>();
+  const bellNames = new Map<number, string>();
+  let bellSyncAt = 0;
   let fireworksOccupiedUntil = 0;
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
   let photoId = 0;
@@ -204,7 +215,7 @@ export async function createPresenceServer(options: Options = {}) {
       tokenAt: t, outbox: [], outboxBytes: 0, lastPollAt: t,
       throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
       floodAt: t, floodCount: 0, pendingThrows: new Map(),
-      nextClockSample: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
+      nextClockSample: 0, nextBellRequest: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
     };
     peers.set(id, peer);
     return peer;
@@ -320,6 +331,96 @@ export async function createPresenceServer(options: Options = {}) {
     }
   }
 
+  function bellStateEvent(): BellStateEvent | undefined {
+    if (!bell) return undefined;
+    const holderPeer = bell.holderId === null ? undefined : peers.get(bell.holderId);
+    return {
+      type: 'event', kind: 'bell-state',
+      phase: bell.phase,
+      endsAt: bell.endsAt,
+      holderSince: bell.holderSince,
+      holder: holderPeer?.name && holderPeer.record ? {
+        id: holderPeer.id, name: holderPeer.name,
+        east: holderPeer.record.east / 100, north: holderPeer.record.north / 100, height: holderPeer.record.height / 100,
+      } : null,
+      loose: bell.loose ? { ...bell.loose } : null,
+      pickableAt: bell.pickableAt,
+      totals: [...bell.totals.entries()],
+    };
+  }
+
+  function publishBell() {
+    const event = bellStateEvent();
+    if (event) broadcast(JSON.stringify(event));
+  }
+
+  function requestBell(peer: Peer) {
+    const throttleNow = performance.now();
+    if (throttleNow < peer.nextBellRequest) return;
+    peer.nextBellRequest = throttleNow + 500;
+    if (bell?.phase === 'running') {
+      send(peer, JSON.stringify({ type: 'bell-rejected', reason: 'busy' }));
+      return;
+    }
+    const position = peer.record;
+    if (!position || !inBellVenue({ east: position.east / 100, north: position.north / 100 })) {
+      send(peer, JSON.stringify({ type: 'bell-rejected', reason: 'position' }));
+      return;
+    }
+    bell = createBellMatch(Date.now(), bellConfig);
+    bellAnnounced = new Set();
+    bellNames.clear();
+    bellSyncAt = Date.now();
+    publishBell();
+  }
+
+  function requestBellTouch(peer: Peer) {
+    if (!bell || bell.phase !== 'running' || !peer.record) return;
+    const holderPeer = bell.holderId === null ? undefined : peers.get(bell.holderId);
+    const result = tryBellTouch(bell, peer.id,
+      { east: peer.record.east / 100, north: peer.record.north / 100 },
+      holderPeer?.record ? { east: holderPeer.record.east / 100, north: holderPeer.record.north / 100 } : null,
+      Date.now(), bellConfig);
+    if (!result.ok) return;
+    if (peer.name) bellNames.set(peer.id, peer.name);
+    applyBellTouch(bell, peer.id, Date.now());
+    publishBell();
+  }
+
+  function dropHeldBell(holder: Peer, dirEast: number, dirNorth: number, pickupDelayMs?: number) {
+    if (!bell || bell.phase !== 'running' || bell.holderId !== holder.id || !holder.record) return;
+    dropBell(bell,
+      { east: holder.record.east / 100, north: holder.record.north / 100 },
+      dirEast, dirNorth, Date.now(), bellConfig, pickupDelayMs);
+    publishBell();
+  }
+
+  function updateBell(wallNow: number) {
+    if (!bell || bell.phase !== 'running') return;
+    const due = bellTitleDue(bell, wallNow, bellAnnounced, bellConfig);
+    if (due) {
+      bellAnnounced.add(due.key);
+      const name = bellNames.get(due.id) ?? peers.get(due.id)?.name;
+      if (name) broadcast(JSON.stringify({ type: 'event', kind: 'bell-title', id: due.id, name, tier: due.tier }));
+    }
+    if (wallNow >= bell.endsAt) {
+      endBellMatch(bell, wallNow);
+      publishBell();
+      const standings = bellStandings(bell, wallNow)
+        .map(({ id, ms }) => ({ id, name: bellNames.get(id) ?? peers.get(id)?.name ?? '', ms }))
+        .filter(entry => entry.name);
+      broadcast(JSON.stringify({
+        type: 'event', kind: 'bell-end',
+        winner: standings[0] ?? null, standings: standings.slice(0, 8),
+      }));
+      return;
+    }
+    if (wallNow - bellSyncAt >= 5000) {
+      bellSyncAt = wallNow;
+      publishBell();
+    }
+  }
+
   function relevantPeers(peer: Peer, radius: number, limit: number, heightGate = false) {
     const state = peer.record;
     if (!state) return [];
@@ -361,6 +462,12 @@ export async function createPresenceServer(options: Options = {}) {
       const relay = encodeSnowballRelay({ ...event, confirmerId: peer.id });
       send(thrower, relay);
       for (const recipient of pending.recipients) send(recipient, relay);
+      // 持铃人被雪球命中：铃按投掷方向滚出（D3 规则，服务端权威触发）。
+      if (bell?.phase === 'running' && bell.holderId === peer.id && peer.record && thrower.record) {
+        dropHeldBell(peer,
+          (peer.record.east - thrower.record.east) / 100,
+          (peer.record.north - thrower.record.north) / 100);
+      }
       return;
     }
 
@@ -406,6 +513,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (!peers.delete(peer.id)) return;
     if (peer.session) pollSessions.delete(peer.session);
     ceremonyWaiting.delete(peer);
+    // 持铃人离镇：铃原地掉落、立即拾取，不让对局卡死。
+    if (bell?.phase === 'running' && bell.holderId === peer.id) dropHeldBell(peer, 0, 0, 0);
     clearTimeout(peer.joinTimer);
     if (!peer.name) return;
     online--;
@@ -515,6 +624,14 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'bell-start') {
+        if (allowEvent(peer, now())) requestBell(peer);
+        return;
+      }
+      if (message.kind === 'bell-touch') {
+        if (allowEvent(peer, now())) requestBellTouch(peer);
+        return;
+      }
       if (message.kind === 'plaza-photo-request') {
         if (allowEvent(peer, now())) requestPhoto(peer);
         return;
@@ -548,8 +665,10 @@ export async function createPresenceServer(options: Options = {}) {
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
+    const bellEvent = bellStateEvent();
+    if (bellEvent) send(peer, JSON.stringify(bellEvent));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
@@ -666,6 +785,7 @@ export async function createPresenceServer(options: Options = {}) {
     updateFireworks(time);
     const wallNow = Date.now();
     updateCeremony(wallNow);
+    updateBell(wallNow);
     if (photo) updatePhoto(wallNow);
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;

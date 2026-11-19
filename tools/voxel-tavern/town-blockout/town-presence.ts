@@ -21,6 +21,7 @@ import {
   POLL_JOIN_URL, POLL_LEAVE_URL, POLL_URL, base64ToArrayBuffer, buildPollBody, parsePollMessages,
   pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
 } from './town-presence-poll';
+import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -84,6 +85,10 @@ export function createTownPresence(
   let onCeremonyArrival: ((landing: CeremonyArrival) => void) | undefined;
   let fireworksSupported = false;
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
+  let bellSupported = false;
+  const bellEvents: BellEvent[] = [];
+  let onBellEvent: ((event: BellEvent) => void) | undefined;
+  let bellHolderId: number | null = null;
   const local: PresencePose = { east: 0, north: 0, height: 0, yaw: 0 };
   const outgoing = new DataView(new ArrayBuffer(presenceRecordBytes));
   const roster = new Map<number, string>();
@@ -301,6 +306,10 @@ export function createTownPresence(
     chat.setConnected(false);
     photoSupported = false;
     fireworksSupported = false;
+    bellSupported = false;
+    bellEvents.length = 0;
+    bellHolderId = null;
+    avatars?.setHighlight(null);
     clockRequest = undefined;
     nextClockSample = Infinity;
     roster.clear();
@@ -343,7 +352,7 @@ export function createTownPresence(
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
-        fireworks?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
+        fireworks?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -368,6 +377,16 @@ export function createTownPresence(
         if (message.reason === 'cooldown' && Number.isFinite(message.waitMs)) {
           announce(`烟花师傅在装填 · ${Math.ceil(message.waitMs! / 1000)} 秒`);
         } else if (message.reason === 'position') announce('请靠近烟花燃放点再试');
+        return;
+      }
+      if (message.type === 'bell-rejected') {
+        if (!haveId) return;
+        announce(message.reason === 'busy' ? '抢铃铛正在进行中' : '请到广场上再开启抢铃铛');
+        return;
+      }
+      if (message.type === 'event' && typeof message.kind === 'string' && message.kind.startsWith('bell-')) {
+        const event = haveId ? readBellEvent(message) : undefined;
+        if (event && bellEvents.length < 8) bellEvents.push(event);
         return;
       }
       if (message.type === 'clock') {
@@ -415,6 +434,7 @@ export function createTownPresence(
           link.joined(roster.size + 1);
           joinedId = id;
           fireworksSupported = message.fireworks === true;
+          bellSupported = message.bell === true;
           photoSupported = message.plazaPhoto === true;
           joinedName = message.name;
           chat.setConnected(true);
@@ -575,6 +595,8 @@ export function createTownPresence(
       }
     }
     notices.length = 0;
+    for (const event of bellEvents) onBellEvent?.(event);
+    bellEvents.length = 0;
     if (!snowballEvents.length && !chatEvents.length) return;
     const end = performance.now() + eventFrameBudgetMs;
     for (let i = 0; i < eventFrameLimit; i++) {
@@ -643,6 +665,18 @@ export function createTownPresence(
     requestFireworks(seed: number, theme: FireworksTheme) {
       return fireworksSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'fireworks', seed, theme }));
     },
+    bellSupported: () => bellSupported,
+    requestBellStart() {
+      return bellSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'bell-start' }));
+    },
+    sendBellTouch() {
+      return sendEvent(JSON.stringify({ type: 'event', kind: 'bell-touch' }));
+    },
+    onBellEvent(handler: (event: BellEvent) => void) { onBellEvent = handler; },
+    setBellHolder(id: number | null) {
+      bellHolderId = id;
+      avatars?.setHighlight(id);
+    },
     sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
       show = visible;
       if (active) {
@@ -678,6 +712,7 @@ export function createTownPresence(
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
       avatars ??= createPresenceAvatars(scene, camera);
+      avatars.setHighlight(bellHolderId);
       const now = performance.now();
       renderList.length = 0;
       for (const actor of actors.values()) {
