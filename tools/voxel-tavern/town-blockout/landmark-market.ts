@@ -241,6 +241,45 @@ function dressGuildExterior({ put }: Workshop, rear: number) {
   }
 }
 
+function furnishGuildForecourt({ put }: Workshop) {
+  const floor = .15;
+  const z = 6.62;
+  const cisternX = -6.10;
+  const firewoodX = 6.10;
+  put(stone[2], cisternX, floor + .055, z, .60, .11, .60, 'cylinder');
+  put('#756759', cisternX, floor + .30, z, .56, .46, .56, 'cylinder');
+  put('#4b5f68', cisternX, floor + .54, z, .60, .10, .60, 'cylinder');
+  put('#91b5c3', cisternX, floor + .593, z, .47, .026, .47, 'cylinder');
+  put('#d6e7e8', cisternX - .10, floor + .609, z + .04, .15, .013, .19);
+
+  put(trim, firewoodX, floor + .045, z, .68, .09, .60);
+  for (const [row, offsets] of [[0, [-.22, 0, .22]], [1, [-.13, .13]]] as const) {
+    for (const dx of offsets) {
+      const y = floor + .177 + row * .17;
+      const x = firewoodX + dx;
+      put(wood[row], x, y, z, .17, .17, .55);
+      put('#bb8753', x, y, z + .275, .145, .14, .035);
+    }
+  }
+  put(trim, firewoodX - .29, floor + .22, z, .045, .35, .51);
+  put(trim, firewoodX + .29, floor + .22, z, .045, .35, .51);
+
+  // A lantern emblem distinguishes the hanging guild pennant from the central nameplate.
+  const pennantX = 6.15;
+  put(trim, pennantX, 4.16, 7.86, .76, .075, .12);
+  put(darkRed, pennantX, 3.79, 7.90, .58, .68, .055);
+  put(darkRed, pennantX - .17, 3.415, 7.90, .24, .10, .055);
+  put(darkRed, pennantX + .17, 3.415, 7.90, .24, .10, .055);
+  put(gold, pennantX, 3.83, 7.935, .31, .26, .023);
+  put(red, pennantX, 3.83, 7.95, .19, .18, .018);
+  put(gold, pennantX, 3.63, 7.94, .052, .16, .026);
+
+  return [
+    collision(cisternX, floor, z, .60, .62, .60),
+    collision(firewoodX, floor, z, .68, .44, .60),
+  ];
+}
+
 function buildGuild() {
   const s = createWorkshop();
   const { put } = s;
@@ -323,6 +362,7 @@ function buildGuild() {
 
   furnishGuildRooms(s);
   dressGuildExterior(s, rear);
+  const forecourtColliders = furnishGuildForecourt(s);
   const stands: Vector[] = [];
   put(trim, 0, 2.9, rear + .28, 15.25, .18, .21);
   put(wood[2], 0, 1.85, rear + .21, 15.18, 1.85, .12);
@@ -378,6 +418,7 @@ function buildGuild() {
       collision(x, head, front, 6.38, 4.95 - head, .38),
     ]),
     ...facadeWindows.flatMap(x => [-2.4, 1.6].map(z => collision(x, 0, z, 2.47, 1.33, 1.12))),
+    ...forecourtColliders,
   ];
   for (const x of facadeWindows) {
     addTownWindow(building, {

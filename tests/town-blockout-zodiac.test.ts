@@ -203,6 +203,7 @@ test('the workshop crates and existing bench admit the monkey climb continuously
     [-3.70, 4.46, 7.67], [3.70, 4.46, 7.67],
     [-8.95, 4.56, -5.30], [8.95, 4.56, -5.30],
     [-4.22, 4.72, -6.76], [4.22, 4.72, -6.76],
+    [-6.20, .759, 6.66], [6.10, .195, 6.62], [6.15, 3.79, 7.90],
   ].map(([x, y, z]) => new Vector3(x, y, z));
   const matched = new Set<Vector3>();
   for (const child of workshop.children) {
@@ -215,7 +216,7 @@ test('the workshop crates and existing bench admit the monkey climb continuously
       }
     }
   }
-  assert.equal(matched.size, exterior.length, 'all four elevations keep their trim with zero active riddles');
+  assert.equal(matched.size, exterior.length, 'the trim and forecourt details survive with zero active riddles');
   wall.update(6, new Set());
 
   const terrain = createTerrainGrid();
@@ -223,8 +224,14 @@ test('the workshop crates and existing bench admit the monkey climb continuously
   const batch = createTownZodiacSites(zodiac, () => {});
   const spot = batch.mount(workshop, lanternWorkshopMonkeySite);
   const { colliders, floors } = readWalkGeometry(workshop);
-  assert.equal(colliders.length, 45);
+  assert.equal(colliders.length, 47);
   assert.equal(floors.length, 8);
+  const forecourtBounds = colliders.slice(-2).map(({ min, max }) =>
+    [min, max].map(point => point.map(value => Number(value.toFixed(3)))));
+  assert.deepEqual(forecourtBounds, [
+    [[119.08, 10.15, -121.40], [119.68, 10.77, -120.80]],
+    [[119.08, 10.15, -109.24], [119.68, 10.59, -108.56]],
+  ]);
   const obstacles = [...colliders, ...floors];
   const localToWorld = (point: readonly [number, number, number]) => workshop.localToWorld(new Vector3(...point));
   const overlaps = (box: Box, vector: Vector3) =>

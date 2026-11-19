@@ -316,6 +316,16 @@ async function run(checkout, label, browser) {
       walkError = String(error);
       log(`walking stopped: ${walkError}`);
     }
+    if (label === 'candidate' && !walkError) {
+      const forecourt = [
+        ['cistern', [112.9, 12.5, -121.1], [119.3, 11.1, -121.1]],
+        ['firewood-and-pennant', [112.9, 12.4, -109.5], [119.1, 12.0, -108.9]],
+      ];
+      for (const [id, position, target] of forecourt) {
+        await page.evaluate(({ position, target }) => window.__jx3.overview(position, target), { position, target });
+        await image(id, 'forecourt');
+      }
+    }
     assert.ok(traffic.clock > 0, 'No rehearsal clock request was observed');
     assert.deepEqual(errors, [], `${label} page/asset requests failed`);
   } finally {
