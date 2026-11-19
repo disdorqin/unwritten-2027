@@ -17,10 +17,7 @@ export const icePalaceForecourt = {
   mazeEntry: [483.5, 47.75, 12.12],
   mazeGrotto: [499.75, 44.75, 12.12],
   stationTrailWidth: 6,
-  stationTrail: [
-    [496, 34], [472, 39], [472, 48], [466, 53.3],
-    [461.6, 54.2], [460.1, 58.8], [460.1, 69.8], [460, 72],
-  ],
+  stationTrail: icePalaceSite.stationTrail,
   southGateTrail: [[472, 48], [477, 51], [481, 54], [486, 54], [486, 55.65]],
   mazeEntryTrail: [[472, 48], [483.5, 47.75], [484.75, 47.75]],
 } as const;
