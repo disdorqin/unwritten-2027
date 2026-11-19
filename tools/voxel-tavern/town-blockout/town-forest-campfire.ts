@@ -30,8 +30,8 @@ export function findForestChopSites(
   const seeds: { id: SiteId; x: number; n: number }[] = [{ id: 'village', x: 94.30, n: 263.25 }];
   const forestFire = fires.find(({ id }) => id === 'forest');
   if (forestFire) seeds.push({ id: 'campfire', x: forestFire.x - 2.50, n: forestFire.n - 1.30 });
-  // Surveyed south of the fire pad, keeping its seats, woodpile and snowman route clear.
-  if (fires.some(({ id }) => id === pineCampfireId)) seeds.push({ id: pineCampfireId, x: 418.5, n: 218.5 });
+  const pineFire = fires.find(({ id }) => id === pineCampfireId);
+  if (pineFire) seeds.push({ id: pineCampfireId, x: pineFire.x - 1.50, n: pineFire.n + 4.00 });
 
   function clearPlate(x: number, n: number, radius: number) {
     if (roadCorridorKeepClear(x, n, radius + .18)) return;
