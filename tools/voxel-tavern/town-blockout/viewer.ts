@@ -5,6 +5,9 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
+import { buildPineCamp } from './town-pine-camp';
+import { createPineCampActivity } from './town-pine-camp-activity';
+import { createPineFireActivities, createRegionalCarry, isPineStoryTime } from './town-pine-camp-fire-activity';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
 import { buildTowerLandmark, setClocktowerDuskLighting, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
 import { updateTowerTime } from './clocktower-face';
@@ -48,7 +51,7 @@ import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
-import { campfirePieces, createTownCampfires, findRegionalCampfires } from './town-campfires';
+import { campfirePieces, createTownCampfires, findRegionalCampfires, pineCampfireId } from './town-campfires';
 import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
 import { createLongHallRelay, longHallRelayStamp } from './long-hall-relay';
 import { createLandingFeedback } from './landing-feedback';
@@ -271,12 +274,15 @@ function stationViewCamera() {
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
-const scenery = addScenery(landscape, grid);
+const pineCamp = buildPineCamp(grid);
+landscape.add(pineCamp.group);
+const scenery = addScenery(landscape, grid, pineCamp.keepClear);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
-  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
+  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
 const forest = addForestDensity(landscape, grid,
-  (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius),
+  (east, north, radius) => districts.keepClear(east, north, radius) ||
+    streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
 const snowButton = element<HTMLButtonElement>('snow');
@@ -542,7 +548,7 @@ function geometry() {
     }
   }
   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -2035,6 +2041,9 @@ function currentAction() {
   }
   if (seated) {
     if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
+    if (isAtPineSeat(seated) && isPineStoryTime(ceremonyClock.now(), !nightMode)) {
+      return { label: '听松林火塘故事会', run: pineFireActivities.openStory };
+    }
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   }
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2583,7 +2592,7 @@ for (const stop of railway.stops) {
 
 function campfireGround(east: number, north: number, height?: number) {
   if (bridgeAt(east, north) || isLakeSkateIce(east, north) || townWater.at(east, north)) return;
-  const base = height ?? grid.heightAt(east, north);
+  const base = height ?? pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
   const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
   if (Math.abs(feet - base) > (height === undefined ? .30 : .14) ||
       !canStandAtActivity(east, north, feet) || roofed(east, north, feet) ||
@@ -2591,13 +2600,44 @@ function campfireGround(east: number, north: number, height?: number) {
         (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
   return feet;
 }
-const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds);
-const forestChopSites = findForestChopSites(campfireSites, campfireGround);
-const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites, { isNight: () => nightMode });
+const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds, { pineCamp: true });
+const pineFire = campfireSites.find(site => site.id === pineCampfireId);
+const forestChopSites = findForestChopSites(campfireSites.filter(site => site.id !== pineCampfireId), campfireGround);
+const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites,
+  { isNight: () => nightMode, pineCamp: pineFire });
 const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
 scenery.setCampfirePieces(campfirePieces(campfireSites));
-activities.push(outdoorCampfires, forestCampfire);
-activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots);
+
+function isAtPineSeat(seat: TownSeat) {
+  return pineFire?.seats.some(site => site.x === seat.x && site.n === seat.n && site.ground + 1.475 === seat.eyeY) ?? false;
+}
+
+const regionalCarry = createRegionalCarry();
+const pineFireActivities = createPineFireActivities({ open: activityContext.open, announce: announceActivity }, regionalCarry, {
+  lighted: () => forestCampfire.pineCampState().fuel > 0,
+  warmFromRoast: warmFromDrink,
+  storyHint: () => pineCampActivity.storyHint(),
+  leaveSeat,
+});
+const pineCampActivity = createPineCampActivity({ open: activityContext.open, announce: announceActivity }, {
+  heightAt(east, north) {
+    const base = pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
+    return supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  },
+  canStand: canStandAtActivity,
+  rollingAt() {
+    if (!walking || homeReturn || seated || sledRide.active() || railway.riding ||
+        boardingGround || airHeight !== undefined) return;
+    const exposed = isExposedSnowAt(grid, x, n, ground, snowCleared);
+    const snow = !exposed ? 'other' : snowCover.depthAt(x, n, ground, snowCleared) >= .6 ? 'deep' : 'shallow';
+    return { x, n, snow };
+  },
+  setFormation: pineCamp.setFormation,
+  setTreasureTrailVisible: pineCamp.setTreasureTrailVisible,
+  openGrill: pineFire ? pineFireActivities.openGrill : undefined,
+});
+activities.push(outdoorCampfires, forestCampfire, pineCampActivity, { spots: [], update: pineFireActivities.update });
+activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots, ...pineCampActivity.spots);
 const marketResidentLookup = createMarketResidentStationLookup({
   market: () => architecture.get('market-stalls'),
   fairSpots: marketFair.spots,

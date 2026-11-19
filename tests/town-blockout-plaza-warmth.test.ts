@@ -74,7 +74,7 @@ test('expanded plaza opts into three fixed fires while the original B5 placement
   assert.deepEqual(findRegionalCampfires(ground, original), baseline);
 
   const all = findRegionalCampfires(ground, expanded);
-  assert.equal(all.length, maxCampfireSites);
+  assert.equal(all.length, 8);
   assert.deepEqual(all.slice(0, baseline.length), baseline);
   assert.deepEqual(all.slice(5).map(({ id, x, n }) => [id, x, n]), [
     ['plaza-brazier-a', 238, 205], ['plaza-brazier-b', 240, 173], ['plaza-campfire', 178, 162],

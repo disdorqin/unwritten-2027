@@ -57,7 +57,9 @@ function makeGlows(group: Group, positions: Position[]) {
 }
 
 type Blocker = { x: number; n: number; radius: number };
-export function addScenery(group: Group, grid: Ground) {
+export function addScenery(
+  group: Group, grid: Ground, keepClear: (east: number, north: number, radius: number) => boolean = () => false,
+) {
   let seed = 271;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -83,7 +85,7 @@ export function addScenery(group: Group, grid: Ground) {
     });
   }
   const lamp = (x: number, y: number, north: number) => {
-    if (nearEntrance(x, north, 1.35)) return;
+    if (nearEntrance(x, north, 1.35) || keepClear(x, north, .65 / Math.SQRT2)) return;
     const z = -north;
     pillars.push({ at: [x, y + 1.3, z], scale: [.21, 2.6, .21], tint: '#453f48' });
     pillars.push({ at: [x, y + .21, z], scale: [.48, .42, .48], tint: '#78869b' });
