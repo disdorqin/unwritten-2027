@@ -645,7 +645,8 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function receivePose(peer: Peer, pose: unknown) {
-    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 5 ||
+    // Pose 7 (sledding) is valid; pose 6 stays reserved and is rejected.
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 7 || pose === 6 ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
     const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });
@@ -778,6 +779,17 @@ export async function createPresenceServer(options: Options = {}) {
       }
       if (message.kind === 'snowfight-start') {
         requestSnowfightStart(peer);
+        return;
+      }
+      if (message.kind === 'grand-prix') {
+        // 3.0 D2 town leaderboard relay: the server only validates and relays;
+        // timing authority stays with the finishing client, boards are per-client.
+        if (allowEvent(peer, now())) {
+          const totalMs = 'totalMs' in message ? message.totalMs : undefined;
+          if (typeof totalMs === 'number' && Number.isInteger(totalMs) && totalMs >= 45_000 && totalMs <= 1_800_000) {
+            broadcast(JSON.stringify({ type: 'event', kind: 'grand-prix', id: peer.id, name: peer.name, totalMs, at: Date.now() }));
+          }
+        }
         return;
       }
       if (message.kind === 'plaza-photo-request') {
