@@ -15,6 +15,7 @@ test('review actions take the covered shaft through first fall, camp checks and 
   };
   review.show();
   assert.match(current().location, /三层环台/);
+  assert.equal(current().group.userData.craterRoadSamples, 4503);
   trigger('查看坑底绞盘');
   assert.match(current().status, /和平模式/);
   trigger('转绞盘并走查首坠');

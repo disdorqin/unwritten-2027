@@ -92,3 +92,42 @@ test('invalid terrace and main path plans are rejected instead of silently resha
   assert.throws(() => createMeteorCrater({ ...plan, mainTrail: { ...plan.mainTrail, turns: .5 } }), /grade/);
   assert.throws(() => createMeteorCrater(plan).mainTrailPoint(1.01), /progress/);
 });
+
+test('preview triangles cover the crater trail and its standing band through both seams', t => {
+  const crater = createMeteorCrater(plan);
+  const { positions, indices, heightAt } = crater.buildPreviewSurface(meteorCraterRimRadius / 30);
+  assert.equal(heightAt(0, 0), undefined);
+  assert.equal(heightAt(0, 10), -meteorCraterDepth);
+  assert.equal(heightAt(0, 62), undefined);
+  assert.equal(crater.heightOffsetAt(0, 56), undefined);
+  for (let i = 0; i < indices.length; i += 3) {
+    const [a, b, c] = [indices[i], indices[i + 1], indices[i + 2]].map(index => index * 3);
+    const abx = positions[b] - positions[a], acx = positions[c] - positions[a];
+    const abz = positions[b + 2] - positions[a + 2], acz = positions[c + 2] - positions[a + 2];
+    assert.ok(abz * acx - abx * acz > 0, 'top-face normal must point up');
+  }
+
+  const intervals = 1500;
+  for (const offset of [0, -.27, .27]) {
+    let previous: { east: number; north: number; y: number } | undefined;
+    let maxGrade = 0, maxHeightError = 0;
+    for (let i = 0; i <= intervals; i++) {
+      const { east, north, heightOffset } = crater.mainTrailPoint(i / intervals);
+      const scale = 1 + offset / Math.hypot(east, north);
+      const pointEast = east * scale, pointNorth = north * scale;
+      const y = heightAt(pointEast, pointNorth);
+      assert.notEqual(y, undefined, `trail sample ${i} at offset ${offset} m must be on a rendered triangle`);
+      if (y === undefined) throw new Error('Trail sample must have a height.');
+      if (previous) {
+        maxGrade = Math.max(maxGrade, Math.abs(y - previous.y) /
+          Math.hypot(pointEast - previous.east, pointNorth - previous.north));
+      }
+      maxHeightError = Math.max(maxHeightError, Math.abs(y - heightOffset));
+      previous = { east: pointEast, north: pointNorth, y };
+    }
+    assert.ok(maxGrade <= plan.mainTrail.maxGrade, `offset ${offset} m peak ${maxGrade}`);
+    assert.ok(maxHeightError < .001, `offset ${offset} m height error ${maxHeightError}`);
+    t.diagnostic(`offset ${offset} m: ${intervals + 1}/${intervals + 1}, peak ${(100 * maxGrade).toFixed(6)}%, ` +
+      `height error ${maxHeightError.toFixed(9)} m, ${indices.length / 3} triangles`);
+  }
+});

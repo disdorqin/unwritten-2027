@@ -30,8 +30,6 @@ function isFinitePoint(point: UndergroundEntryPoint): boolean {
   return Number.isFinite(point.east) && Number.isFinite(point.north) && Number.isFinite(point.height);
 }
 
-const openedRoutes = ['spiral', 'slide', 'side-door'] as const;
-
 export function createUndergroundEntry(options: UndergroundEntryOptions) {
   const { depthLine } = options;
   const firstFallLanding = { ...options.firstFallLanding };
@@ -72,6 +70,8 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
 
   return {
     snapshot: () => snapshotOf(well, players),
+    // R3-11: the three surface approaches stop at the crater floor.
+    // Only the shaft and its lift depend on the underground entry state.
     sceneState() {
       const open = well.kind === 'open';
       const cageAvailable = well.kind === 'open' && !well.firstFallPending;
@@ -79,7 +79,6 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
         coverVisible: !open,
         shaftVisible: open,
         cageAvailable: { down: cageAvailable, up: cageAvailable },
-        unlockedDescents: open ? [...openedRoutes] : [],
       };
     },
     modeOf,

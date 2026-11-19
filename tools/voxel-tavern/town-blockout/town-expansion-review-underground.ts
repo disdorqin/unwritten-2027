@@ -1,18 +1,19 @@
 import * as THREE from 'three';
 import { createUndergroundEntry, type UndergroundEntryPoint } from '../../../src/presence/underground-entry.js';
-import { createMeteorCrater, meteorCraterRimRadius } from './meteor-crater.js';
+import { createMeteorCrater, meteorCraterRimRadius, type MeteorCraterPlan } from './meteor-crater.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout.js';
 import type { ExpansionView } from './town-expansion-review-renderer.js';
 
 // Relative review fixtures only. Production coordinates, grade limits, and dimensions come from the host.
-const crater = createMeteorCrater({
+const craterPlan: MeteorCraterPlan = {
   terraces: [
     { outerRadius: 50, innerRadius: 46, depth: 7 },
     { outerRadius: 41, innerRadius: 37, depth: 16 },
     { outerRadius: 32, innerRadius: 27, depth: 26 },
   ],
   mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
-});
+};
+const crater = createMeteorCrater(craterPlan);
 const mineSpec: UndergroundMineSpec = {
   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
   shoreLength: 8,
@@ -87,42 +88,42 @@ function wellModel(radius: number, floor: number) {
 
 function craterModel() {
   const group = new THREE.Group();
-  const vertices: number[] = [];
-  const faces: number[] = [];
-  const rings = 60;
-  const subdivisions = 128;
-  for (let ring = 0; ring <= rings; ring++) {
-    const radius = ring * meteorCraterRimRadius / rings;
-    for (let spoke = 0; spoke < subdivisions; spoke++) {
-      const angle = spoke * 2 * Math.PI / subdivisions;
-      const east = radius * Math.sin(angle);
-      const north = radius * Math.cos(angle);
-      vertices.push(east, crater.heightOffsetAt(east, north) ?? 0, -north);
-      if (ring <= 2) continue;
-      const nextSpoke = (spoke + 1) % subdivisions;
-      const a = (ring - 1) * subdivisions + spoke;
-      const b = ring * subdivisions + spoke;
-      const c = ring * subdivisions + nextSpoke;
-      const d = (ring - 1) * subdivisions + nextSpoke;
-      faces.push(a, c, b);
-      if (ring > 1) faces.push(a, d, c);
+  const radius = meteorCraterRimRadius / 30;
+  const surface = crater.buildPreviewSurface(radius);
+  const bowl = new THREE.BufferGeometry();
+  bowl.setAttribute('position', new THREE.BufferAttribute(surface.positions, 3));
+  bowl.setIndex(new THREE.BufferAttribute(surface.indices, 1));
+  bowl.computeVertexNormals();
+  group.add(new THREE.Mesh(bowl, new THREE.MeshStandardMaterial({ color: 0x7c8791 })));
+
+  const roadIntervals = 1500;
+  const path: THREE.Vector3[] = [];
+  let samples = 0;
+  let maxGrade = 0;
+  for (const offset of [0, -mineSpec.walker.radius, mineSpec.walker.radius]) {
+    let previous: THREE.Vector3 | undefined;
+    for (let i = 0; i <= roadIntervals; i++) {
+      const { east, north } = crater.mainTrailPoint(i / roadIntervals);
+      const scale = 1 + offset / Math.hypot(east, north);
+      const x = east * scale, z = -north * scale;
+      const y = surface.heightAt(x, -z);
+      if (y === undefined) {
+        previous = undefined;
+        continue;
+      }
+      const point = new THREE.Vector3(x, y, z);
+      if (previous) maxGrade = Math.max(maxGrade, Math.abs(y - previous.y) / Math.hypot(x - previous.x, z - previous.z));
+      previous = point;
+      if (offset === 0) path.push(point.clone().add(new THREE.Vector3(0, .4, 0)));
+      samples++;
     }
   }
-  const bowl = new THREE.BufferGeometry();
-  bowl.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  bowl.setIndex(faces);
-  bowl.computeVertexNormals();
-  group.add(new THREE.Mesh(bowl, new THREE.MeshStandardMaterial({ color: 0x7c8791, side: THREE.DoubleSide })));
-
-  const path = Array.from({ length: 241 }, (_, index) => {
-    const { east, north, heightOffset } = crater.mainTrailPoint(index / 240);
-    return new THREE.Vector3(east, heightOffset + .4, -north);
-  });
   group.add(new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(path),
     new THREE.LineBasicMaterial({ color: 0xf0bd73 }),
   ));
-  return { group, radius: 2 * meteorCraterRimRadius / rings };
+  group.userData.craterRoadSamples = samples;
+  return { group, radius, roadPasses: samples === 3 * (roadIntervals + 1) && maxGrade <= craterPlan.mainTrail.maxGrade };
 }
 
 function mineModel(mine: ReturnType<typeof createUndergroundMineLayout>) {
@@ -233,7 +234,12 @@ export function createUndergroundReview(show: (view: ExpansionView) => void) {
     show({
       group: outside.group, target: new THREE.Vector3(0, atWinch ? -26 : -14, 0), span: atWinch ? 54 : 129,
       location: atWinch ? '陨星原坑底 · 井口' : '陨星原 · 三层环台', status,
-      actions: !atWinch ? [['查看坑底绞盘', () => { atWinch = true; status = '已选择坑底绞盘走查点，地面仍为和平模式。'; render(); }]]
+      actions: !atWinch ? [['查看坑底绞盘', () => {
+        atWinch = outside.roadPasses;
+        status = atWinch ? '已选择坑底绞盘走查点，地面仍为和平模式。'
+          : '螺旋道走查发现断点或超出预览坡限。';
+        render();
+      }]]
         : coverVisible ? [['转绞盘并走查首坠', () => { if (entry.openWell(player).kind === 'opened') descend(true); }]]
         : [['乘吊笼下井', () => descend(false)]],
     });

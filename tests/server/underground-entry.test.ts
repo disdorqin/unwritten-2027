@@ -28,10 +28,10 @@ function fixture(overrides: Partial<UndergroundEntryOptions> = {}) {
   return { entry: createUndergroundEntry(options), saved, options };
 }
 
-test('the crater cover and alternate descents stay locked until one authorized opening', () => {
+test('the shaft opens only when authorized and the lift awaits the first fall', () => {
   const { entry, saved } = fixture();
   assert.deepEqual(entry.sceneState(), {
-    coverVisible: true, shaftVisible: false, cageAvailable: { down: false, up: false }, unlockedDescents: [],
+    coverVisible: true, shaftVisible: false, cageAvailable: { down: false, up: false },
   });
   assert.equal(entry.requestCageRide('visitor', 'down').kind, 'locked');
   assert.equal(entry.requestCageRide('visitor', 'up').kind, 'locked');
@@ -47,7 +47,6 @@ test('the crater cover and alternate descents stay locked until one authorized o
   assert.equal(saved.length, 1);
   assert.deepEqual(entry.sceneState(), {
     coverVisible: false, shaftVisible: true, cageAvailable: { down: false, up: false },
-    unlockedDescents: ['spiral', 'slide', 'side-door'],
   });
   assert.equal(entry.modeOf('opener'), 'peace');
 });
