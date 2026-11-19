@@ -33,6 +33,7 @@ const plazaGatheringRoundMs = 27_000;
 
 export function createPlazaResidentGathering(
   canStand: StationOptions['canStand'],
+  heightAt: (east: number, north: number) => number,
 ) {
   const stations = new Map<MarketName, TownResidentStation>();
   let until = 0;
@@ -42,10 +43,12 @@ export function createPlazaResidentGathering(
       stations.clear();
       const plazaFire = fires.find(fire => fire.id === 'plaza-brazier-a');
       if (!plazaFire) return;
-      for (const { approach, x, n, ground } of plazaFire.seats) {
-        // Keep one merchant at their stall. Reuse only validated plaza anchor pairs.
-        const actor = [x, n, ground] as const;
-        const talk = [approach.x, approach.n, approach.ground] as const;
+      for (const { approach } of plazaFire.seats) {
+        // Use the walkable side of each seat, which itself is a solid prop.
+        const actor = [approach.x, approach.n, approach.ground] as const;
+        const east = plazaFire.x + (approach.x - plazaFire.x) * .75;
+        const north = plazaFire.n + (approach.n - plazaFire.n) * .75;
+        const talk = [east, north, heightAt(east, north)] as const;
         if (!canStand(...actor) || !canStand(...talk)) continue;
         const name = marketResidentNames[(hour + stations.size) % marketResidentNames.length];
         stations.set(name, { actor, talk });

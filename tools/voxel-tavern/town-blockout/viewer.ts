@@ -2607,7 +2607,7 @@ activitySpots.push(...createMarketVenueActivities(
   architecture.get('market-stalls'), activityContext, dryTownLandingHeight,
   filename => { photoFilename = filename; },
 ));
-const plazaResidentGathering = createPlazaResidentGathering(canStandAtActivity);
+const plazaResidentGathering = createPlazaResidentGathering(canStandAtActivity, grid.heightAt);
 activitySpots.push(...registerTownResidentStations(npcActivity, {
   plazaGathering: plazaResidentGathering,
   campfires: campfireSites,

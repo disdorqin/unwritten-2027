@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InstancedMesh, Matrix4, MeshLambertMaterial } from 'three';
+import { Group, InstancedMesh, Matrix4, MeshLambertMaterial, Scene } from 'three';
 import { updateTowerTime } from '../tools/voxel-tavern/town-blockout/clocktower-face.ts';
 import { buildTowerLandmark, clocktowerHeight, setClocktowerDuskLighting, updateTowerWingVisibility } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
 import { towerWingRidge } from '../tools/voxel-tavern/town-blockout/clocktower-wings.ts';
@@ -8,7 +8,7 @@ import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/
 import { createDailyTowerChime, towerTime } from '../tools/voxel-tavern/town-blockout/town-clocktower-time.ts';
 import { ceremonyStateAt } from '../tools/voxel-tavern/town-blockout/town-ceremony.ts';
 import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
-import { findRegionalCampfires } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
+import { createTownCampfires, findRegionalCampfires } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
 import { createPlazaResidentGathering, marketResidentNames } from '../tools/voxel-tavern/town-blockout/town-npc-stations.ts';
 
 const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
@@ -95,7 +95,10 @@ test('ordinary clock hours rotate two market residents through existing plaza an
   const grid = createTerrainGrid();
   const plazaBounds = layout.plaza.bounds;
   const fires = findRegionalCampfires((x, n, y) => y ?? grid.heightAt(x, n), plazaBounds);
-  const gather = createPlazaResidentGathering((x, n) => canEnter(x, n));
+  const outdoors = createTownCampfires(new Scene(), { sit() {} }, fires);
+  const gather = createPlazaResidentGathering(
+    (x, n, y) => canEnter(x, n) && !outdoors.blocked?.(x, n, y), grid.heightAt,
+  );
   const start = at('2026-11-19T17:00:00');
   gather.start(start, 17, fires);
   const participants = marketResidentNames.filter(name => gather.station(name));
