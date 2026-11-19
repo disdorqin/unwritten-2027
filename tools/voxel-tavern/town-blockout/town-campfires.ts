@@ -20,6 +20,7 @@ export type CampfireForestOptions = {
   level(): 0 | 1 | 2;
   onForestSeat?(): void;
   pineLevel?(): 0 | 1 | 2;
+  onPineSeat?(): void;
   villageSmoke?: { x: number; n: number; height: number; scale(): number };
 };
 
@@ -270,6 +271,7 @@ export function createTownCampfires(
       run() {
         context.sit({ x: seat.x, n: seat.n, eyeY: seat.ground + 1.475, yaw: seat.yaw });
         if (site.id === 'forest') forest?.onForestSeat?.();
+        else if (site.id === pineCampfireId) forest?.onPineSeat?.();
       },
     }))),
     blocked(east, north, feet) {

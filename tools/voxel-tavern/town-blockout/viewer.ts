@@ -69,6 +69,7 @@ import { createMarketActivity } from './market-activity';
 import { createMarketFairActivity } from './market-fair';
 import { createIceActivity } from './ice-activity';
 import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
+import { createPineFireActivities, createRegionalCarry, isPineStoryTime } from './town-pine-camp-fire-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
 import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-course';
 import { createLakeSkateMotion } from './lake-skate-motion';
@@ -579,7 +580,7 @@ let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
-let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
+let seated: (TownSeat & { pitch: number; tavern?: true; pineCamp?: true }) | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
 const lookAhead = new Vector3();
@@ -784,7 +785,10 @@ function leaveSled() {
   stopTravel();
 }
 const leaveSledAction = { label: '下雪橇', run: leaveSled };
-const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const regionalCarry = createRegionalCarry();
+const iceFishing = createIceFishingActivity(
+  { ...activityContext, announce: announceActivity }, grid.heightAt, undefined, regionalCarry.collectFish,
+);
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
   { camera, player: () => ({ x, n, walking }) },
@@ -1557,6 +1561,8 @@ function currentAction() {
   }
   if (seated) {
     if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
+    if (seated.pineCamp && isPineStoryTime(ceremonyClock.now(), !nightMode))
+      return { label: '听松林火塘故事会', run: pineFireActivities.openStory };
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   }
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
@@ -2001,8 +2007,17 @@ const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds,
 const forestCampfire = createForestCampfire(scene, { announce: announceActivity },
   findForestChopSites(campfireSites, campfireGround),
   { isNight: () => nightMode, pineCamp: campfireSites.find(site => site.id === pineCampfireId) });
-const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
+const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, {
+  ...forestCampfire.flames,
+  onPineSeat() { if (seated) seated.pineCamp = true; },
+});
 scenery.setCampfirePieces(campfirePieces(campfireSites));
+const pineFireActivities = createPineFireActivities({ open: activityContext.open, announce: announceActivity }, regionalCarry, {
+  lighted: () => forestCampfire.pineCampState().fuel > 0,
+  warmFromRoast: warmFromDrink,
+  storyHint: () => pineCampActivity.storyHint(),
+  leaveSeat,
+});
 const pineCampActivity = createPineCampActivity({ open: activityContext.open, announce: announceActivity }, {
   heightAt(east, north) {
     const base = pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
@@ -2018,8 +2033,9 @@ const pineCampActivity = createPineCampActivity({ open: activityContext.open, an
   },
   setFormation: pineCamp.setFormation,
   setTreasureTrailVisible: pineCamp.setTreasureTrailVisible,
+  openGrill: campfireSites.some(site => site.id === pineCampfireId) ? pineFireActivities.openGrill : undefined,
 });
-activities.push(outdoorCampfires, forestCampfire, pineCampActivity);
+activities.push(outdoorCampfires, forestCampfire, pineCampActivity, { spots: [], update: pineFireActivities.update });
 activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots, ...pineCampActivity.spots);
 
 function atRailwayPlatform() {

@@ -4,7 +4,7 @@ import { TOWN_STATION_NAME } from './station-sign-copy';
 export const railPlatforms = [
   { id: 'coaster-station', label: TOWN_STATION_NAME, x: 473.5, n: 224, ground: 19.18, yaw: -Math.PI / 2,
     east: 478, north: 224, railY: 19.68, axis: 'north', halfLength: 24, speed: 11,
-    direction: '雪原过山车乘车口在旁 · 红牌是过山车，深牌是火车，别上错车',
+    direction: '雪原过山车乘车口在旁 · 红牌是过山车，深牌是火车，别上错车 · 松林营地',
     arrival: '换乘过山车的乘客看清牌子——红牌过山车，深牌火车。' },
   { id: 'railway-station', label: '火车站前站', x: 480.5, n: 320, ground: 34.05, yaw: Math.PI / 2,
     east: 477, north: 320, railY: 33.19, axis: 'north', halfLength: 10, speed: 10,

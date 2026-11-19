@@ -4,6 +4,7 @@ import { townMailLimits, townMailTextLength } from './town-mail-store';
 const material = [426, 172] as const;
 const snowmanField = [415, 165] as const;
 const caretaker = [421, 226] as const;
+const grill = [419.3, 225] as const;
 const clueSites = [
   { at: [399, 189], label: '林口木牌' },
   { at: [415, 227], label: '篝火旁石堆' },
@@ -24,7 +25,7 @@ type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 
 export type PineCampRollSample = { x: number; n: number; snow: 'shallow' | 'deep' | 'other' };
 
-export const pineCampActivityAnchors = { material, snowmanField, caretaker, clueSites, field } as const;
+export const pineCampActivityAnchors = { material, snowmanField, caretaker, grill, clueSites, field } as const;
 
 function validName(name: string) {
   return townMailTextLength(name) <= townMailLimits.signature && /[^\p{White_Space}\p{P}\p{Cf}]/u.test(name);
@@ -160,8 +161,9 @@ export function createPineCampActivity(
     rollingAt(): PineCampRollSample | undefined;
     canStand(x: number, n: number, ground: number): boolean;
     treasureEndpointReady?(): boolean;
+    openGrill?(): void;
   },
-): TownActivity {
+): TownActivity & { storyHint(): string | undefined } {
   const progress = createPineCampProgress({
     ...options,
     onSnowmanFormed() {
@@ -257,7 +259,11 @@ export function createPineCampActivity(
       spot(material, '物料棚', openMaterials),
       spot(clueSites[3].at, clueSites[3].label, () => openClue(3), () => options.treasureEndpointReady?.() === true && progress.clueProgress() >= 3),
       spot(snowmanField, '雪人场', openSnowmanField),
+      ...(options.openGrill ? [spot(grill, '查看松林烤架', options.openGrill)] : []),
     ],
+    storyHint() {
+      return clueSites.at(progress.clueProgress())?.label;
+    },
     update(dt) {
       if (progress.isRolling() && Number.isFinite(dt) && dt > 0) progress.roll(options.rollingAt());
     },

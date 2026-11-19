@@ -144,6 +144,7 @@ function buildFishingSpots(context: TownActivityContext, heightAt: (x: number, n
 
 export function createIceFishingActivity(
   context: TownActivityContext, heightAt: (x: number, n: number) => number, recordCatalogue?: () => void,
+  collectFreshFish?: () => boolean,
 ): TownActivity {
   const spots = buildFishingSpots(context, heightAt);
   const catches = readLog();
@@ -178,9 +179,16 @@ export function createIceFishingActivity(
     record.className = 'ice-fishing-record';
     const action = document.createElement('button');
     action.type = 'button';
+    const collect = document.createElement('button');
+    collect.type = 'button';
+    collect.textContent = '收入随身格';
+    const release = document.createElement('button');
+    release.type = 'button';
+    release.textContent = '放生';
+    collect.hidden = release.hidden = true;
     content.style.display = 'grid';
     content.style.gap = '10px';
-    content.append(status, action, record);
+    content.append(status, action, collect, release, record);
     panel.append(content);
     const current: Session = {
       content, dialog: panel.closest('dialog'), status, record, action, spot,
@@ -189,8 +197,25 @@ export function createIceFishingActivity(
     session = current;
     showRecord(current);
     setPhase(current, 'idle', '可以抛竿了。');
+    let pendingCatch = '';
+    function finishCatch(message: string) {
+      if (!pendingCatch) return;
+      pendingCatch = '';
+      collect.hidden = release.hidden = true;
+      action.disabled = false;
+      setPhase(current, 'caught', message);
+      action.focus({ preventScroll: true });
+    }
+    collect.addEventListener('click', () => {
+      if (!canPlay(current) || !pendingCatch) return;
+      if (collectFreshFish?.()) finishCatch(`${pendingCatch}已收入随身格。`);
+      else status.textContent = '随身格已满，仍可放生。';
+    });
+    release.addEventListener('click', () => {
+      if (canPlay(current)) finishCatch(`已放生${pendingCatch}。`);
+    });
     action.addEventListener('click', () => {
-      if (!canPlay(current) || current.phase === 'waiting') return;
+      if (!canPlay(current) || current.phase === 'waiting' || pendingCatch) return;
       if (current.phase === 'bite') {
         const fish = species[Math.floor(Math.random() * species.length)];
         const saved = readLog();
@@ -201,6 +226,12 @@ export function createIceFishingActivity(
         catch { stored = false; }
         showRecord(current);
         setPhase(current, 'caught', `钓上了${fish.name}！${stored ? '' : '收获保留在本次试玩。'}`);
+        if (collectFreshFish) {
+          pendingCatch = fish.name;
+          action.disabled = true;
+          collect.hidden = release.hidden = false;
+          collect.focus({ preventScroll: true });
+        }
         spot.moveFloat(.026);
         return;
       }
