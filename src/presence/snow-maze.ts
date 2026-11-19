@@ -160,6 +160,52 @@ export function compileSnowMaze(value: unknown, rules: Rules) {
   };
 }
 
+type CompiledMaze = NonNullable<ReturnType<typeof compileSnowMaze>>;
+type MazeRun = NonNullable<ReturnType<CompiledMaze['begin']>>;
+
+/** One invitation scope. The host supplies authoritative player IDs, poses and timestamps. */
+export function createSnowMazeChallenge(
+  maze: CompiledMaze,
+  challengeId: string,
+  authorId: number,
+  invitees: readonly number[],
+) {
+  const validPlayer = (id: number) => Number.isSafeInteger(id) && id > 0;
+  if (!challengeId.trim() || !validPlayer(authorId) || !invitees.every(validPlayer)) return;
+
+  const invited = new Set(invitees);
+  const runs = new Map<number, MazeRun>();
+  const bestTimes = new Map<number, number>();
+
+  return {
+    start(runnerId: number, at: number, position: Point) {
+      if ((runnerId !== authorId && !invited.has(runnerId)) || runs.has(runnerId)) return false;
+      const run = maze.begin(at, position);
+      if (!run) return false;
+      runs.set(runnerId, run);
+      return true;
+    },
+    move(runnerId: number, at: number, position: Point) {
+      const run = runs.get(runnerId);
+      if (!run?.update(at, position)) return false;
+      const { elapsedMs } = run.state();
+      if (elapsedMs !== undefined) {
+        runs.delete(runnerId);
+        bestTimes.set(runnerId, Math.min(bestTimes.get(runnerId) ?? elapsedMs, elapsedMs));
+      }
+      return true;
+    },
+    reportFor(viewerId: number) {
+      if (viewerId !== authorId) return;
+      const guestResults = [...bestTimes]
+        .filter(([runnerId]) => runnerId !== authorId)
+        .map(([runnerId, elapsedMs]) => ({ runnerId, elapsedMs }))
+        .sort((a, b) => a.elapsedMs - b.elapsedMs || a.runnerId - b.runnerId);
+      return { challengeId, personalBestMs: bestTimes.get(authorId), guestResults };
+    },
+  };
+}
+
 export function loadOwnSnowMaze(storage: Storage): SnowMazeBlueprint | undefined {
   try {
     return parseBlueprint(JSON.parse(storage.getItem(ownMazeKey) ?? 'null'));

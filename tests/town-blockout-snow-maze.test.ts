@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compileSnowMaze, loadOwnSnowMaze } from '../src/presence/snow-maze';
+import { compileSnowMaze, createSnowMazeChallenge, loadOwnSnowMaze } from '../src/presence/snow-maze';
 import { CAPTURE_MS, WALL_BLOCK_HP, WALL_TOWN_CAP } from '../src/presence/snowfight';
 
 // Synthetic course from the same clear west-plaza test area as the fortress fixture.
@@ -78,4 +78,62 @@ test('a compiled self-authored blueprint round-trips without mutating its walls,
   assert.deepEqual(reread.wallBlocks(), maze.wallBlocks());
   assert.equal(loadOwnSnowMaze({ ...storage, getItem: () => '{"columns":"corrupt"}' }), undefined);
   assert.equal(maze.saveOwn({ ...storage, setItem: () => { throw new Error('quota'); } }), false);
+});
+
+test('an invited player finishes an authored course and only its author receives their result', t => {
+  const maze = compileSnowMaze(blueprint, rules)!;
+  const invitees = [7];
+  const challenge = createSnowMazeChallenge(maze, 'sample-a', 1, invitees)!;
+  invitees.push(8);
+
+  assert.equal(challenge.start(8, 0, entry), false);
+  assert.equal(challenge.start(7, 0, bell), false);
+  assert.equal(challenge.start(7, 0, entry), true);
+  assert.equal(challenge.start(7, 0, entry), false);
+  assert.equal(challenge.move(7, 200, bell), false);
+  assert.equal(challenge.move(7, 250, { east: 132, north: entry.north }), true);
+  assert.equal(challenge.move(7, 500, { east: 132, north: bell.north }), true);
+  assert.equal(challenge.move(7, 1000, bell), true);
+  assert.equal(challenge.move(7, 1000 + CAPTURE_MS - 1, bell), true);
+  assert.deepEqual(challenge.reportFor(1), { challengeId: 'sample-a', personalBestMs: undefined, guestResults: [] });
+  assert.equal(challenge.move(7, 1000 + CAPTURE_MS, bell), true);
+  assert.equal(challenge.move(7, 1000 + CAPTURE_MS + 1, bell), false);
+  assert.equal(challenge.reportFor(7), undefined);
+  assert.equal(challenge.reportFor(8), undefined);
+  const report = challenge.reportFor(1)!;
+  assert.deepEqual(report.guestResults, [{ runnerId: 7, elapsedMs: 6000 }]);
+  report.guestResults[0].elapsedMs = 0;
+  assert.equal(challenge.reportFor(1)!.guestResults[0].elapsedMs, 6000);
+  t.diagnostic('fixture shortest successful bell hold in this run: 5,000 ms; author received one guest result of 6,000 ms; other views returned no report');
+});
+
+test('author times are kept out of guest ranking and separate challenges keep independent reports', t => {
+  const maze = compileSnowMaze(blueprint, rules)!;
+  assert.equal(createSnowMazeChallenge(maze, '', 1, [7]), undefined);
+  assert.equal(createSnowMazeChallenge(maze, 'sample-a', 0, [7]), undefined);
+  assert.equal(createSnowMazeChallenge(maze, 'sample-a', 1, [NaN]), undefined);
+  const first = createSnowMazeChallenge(maze, 'sample-a', 1, [7, 8])!;
+  const second = createSnowMazeChallenge(maze, 'sample-b', 1, [7])!;
+
+  function run(challenge: NonNullable<ReturnType<typeof createSnowMazeChallenge>>, runnerId: number, at: number, bellAt: number) {
+    assert.equal(challenge.start(runnerId, at, entry), true);
+    assert.equal(challenge.move(runnerId, at + 250, { east: 132, north: entry.north }), true);
+    assert.equal(challenge.move(runnerId, at + 500, { east: 132, north: bell.north }), true);
+    assert.equal(challenge.move(runnerId, at + bellAt, bell), true);
+    assert.equal(challenge.move(runnerId, at + bellAt + CAPTURE_MS, bell), true);
+  }
+
+  run(first, 1, 0, 750);
+  run(first, 7, 100, 1500);
+  run(first, 8, 250, 1250);
+  run(first, 7, 7000, 1000);
+  run(first, 7, 14_000, 2000);
+  assert.deepEqual(first.reportFor(1), {
+    challengeId: 'sample-a',
+    personalBestMs: 5750,
+    guestResults: [{ runnerId: 7, elapsedMs: 6000 }, { runnerId: 8, elapsedMs: 6250 }],
+  });
+  assert.deepEqual(second.reportFor(1), { challengeId: 'sample-b', personalBestMs: undefined, guestResults: [] });
+  assert.equal(second.move(7, 15_000, bell), false);
+  t.diagnostic('fixture author 5,750 ms kept separate; guests 6,000/6,250 ms sorted, slower retry discarded, second challenge had 0 results');
 });
