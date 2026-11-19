@@ -3,6 +3,7 @@ import {
   MeshLambertMaterial, Object3D, PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import { layout } from './terrain';
+import { mascotHome } from './town-mascot';
 import type { TownActivity, TownActivityContext } from './town-activity';
 
 const storageKey = 'unwritten:town-blessings';
@@ -43,6 +44,22 @@ export function createWishActivity(context: TownActivityContext): TownActivity &
     transform.updateMatrix();
     (glow ? luminous : solid).push({ matrix: transform.matrix.clone(), tint: new Color(tint) });
   }
+
+  // Keep 小未's corner open towards the plaza and share the tree's existing solid batch.
+  const [homeEast, homeNorth] = mascotHome;
+  const petX = homeEast - anchorX, petZ = anchorNorth - homeNorth;
+  part('#56654a', petX, .012, petZ, 1.32, .016, .98);
+  part('#72805c', petX + .09, .020, petZ + .02, .97, .008, .71);
+  for (const [x, z, shade] of [[-.43,.25,'#7c8966'], [.28,-.26,'#687650'], [.44,.21,'#6c7a52']] as const) {
+    part(shade, petX + x, .023, petZ + z, .23, .009, .19);
+  }
+  for (const x of [-.69, -.25, .18]) {
+    part(dark, petX + x, .14, petZ - .48, .079, .28, .079);
+  }
+  for (const y of [.099, .207]) part(trim, petX - .25, y, petZ - .48, .99, .052, .055);
+  part(oak, petX - .45, .070, petZ - .23, .34, .12, .19);
+  part(dark, petX - .45, .135, petZ - .23, .275, .024, .13);
+  part('#9b9261', petX - .46, .148, petZ - .22, .175, .021, .079);
 
   // Plum trunk and branches shelter a board at the edge of the paving.
   part(dark, -2.25, 1.42, -.16, .40, 2.84, .43);

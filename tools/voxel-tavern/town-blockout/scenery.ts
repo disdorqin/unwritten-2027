@@ -6,6 +6,7 @@ import {
 import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addLandmarkNameplate } from './landmark-label';
+import type { Box } from './landmark-kit';
 import { campfirePartsPerSite, maxCampfireSites, type CampfirePiece } from './town-campfires';
 import { plazaInformationSites } from './plaza-information-activity';
 import { plazaSnowSupplySites, plazaSnowSupplySize, type PlazaSnowSupplySite } from './plaza-snow-supply';
@@ -68,6 +69,7 @@ export function addScenery(group: Group, grid: Ground) {
   const pavers: Instance[] = [];
   const glowPositions: Position[] = [];
   const blockers: Blocker[] = [];
+  const plazaCoverBoxes: Box[] = [];
   const supplyMounds: {
     site: PlazaSnowSupplySite; firstCap: number; ground: number; parts: Instance[]; heightScale: number;
   }[] = [];
@@ -92,8 +94,12 @@ export function addScenery(group: Group, grid: Ground) {
     blockers.push({ x, n: north, radius: .25 });
   };
 
+  const plazaHeight = layout.plaza.height;
+  const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string, turn = 0) => {
+    caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
+  };
+
   if (w === 161 && s === 152 && e === 251 && n === 212) {
-    const plazaHeight = layout.plaza.height;
     function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
       pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
     }
@@ -155,9 +161,6 @@ export function addScenery(group: Group, grid: Ground) {
         }
       }
     }
-    const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string, turn = 0) => {
-      caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
-    };
     const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
       lights.push({ at: [x, plazaHeight + y, -north], scale });
     };
@@ -233,60 +236,24 @@ export function addScenery(group: Group, grid: Ground) {
         [.44, .056, .37], '#f1f8fc');
       supplyMounds.push({ site, firstCap, ground: plazaHeight, parts: caps.slice(firstCap), heightScale: 1 });
     }
+    // The E226 covers stay removed to preserve the plaza's north–south route.
+    const coverEast = 240;
+    for (const coverNorth of [198.8, 166]) {
+      plazaBox(coverEast, coverNorth, .41, [3, .82, .48], '#9db4c6');
+      plazaBox(coverEast, coverNorth, .91, [3, .18, .5], '#e1eef8');
+      for (const [index, eastOffset] of [-.99, 0, .99].entries()) {
+        plazaBox(coverEast + eastOffset, coverNorth, .26, [.94, .34, .5],
+          index % 2 === 0 ? '#bcd0df' : '#c4d6e4');
+        plazaBox(coverEast - eastOffset, coverNorth, .61, [.94, .27, .5],
+          index % 2 === 0 ? '#c4d6e4' : '#bcd0df');
+      }
+      plazaCoverBoxes.push({
+        min: [coverEast - 1.5, plazaHeight, -coverNorth - .25],
+        max: [coverEast + 1.5, plazaHeight + 1, -coverNorth + .25],
+      });
+    }
     for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
     inlay(242, 203, .64, .46, '#b58b5d');
-
-    const snowFamily = [[240.5, 200.5, .87], [244.8, 200.5, .65], [247.6, 204.8, .79], [247.6, 208.0, .52]];
-    for (const [x, north, size] of snowFamily) {
-      for (const [y, width] of [[.34, 1.02], [.82, .76], [1.22, .59]]) {
-        plazaBox(x, north, y * size, [width * size, width * .66 * size, width * size], '#e1eef9');
-        plazaBox(x, north, (y + width * .32) * size,
-          [width * .72 * size, width * .18 * size, width * .72 * size], '#f0f6ff');
-      }
-      plazaBox(x, north, 1.03 * size, [.62 * size, .11 * size, .64 * size], '#933e37');
-      plazaBox(x + .18 * size, north - .34 * size, .89 * size, [.16 * size, .24 * size, .075], '#b65043');
-      for (const side of [-1, 1]) {
-        plazaBox(x + side * .13 * size, north - .31 * size, 1.30 * size, [.07 * size, .07 * size, .05], '#354454');
-      }
-      plazaBox(x, north - .37 * size, 1.17 * size, [.08 * size, .075 * size, .18 * size], '#b97442');
-      plazaBox(x, north, 1.49 * size, [.67 * size, .09 * size, .67 * size], '#3f5268');
-      plazaBox(x, north, 1.60 * size, [.44 * size, .18 * size, .44 * size], '#3f5268');
-      blockers.push({ x, n: north, radius: .49 * size });
-    }
-
-    const horseEast = 242.5, horseNorth = 207.5;
-    const iceHorseBox = (x: number, z: number, y: number, scale: Position, tint: string) => {
-      plazaBox(horseEast + x, horseNorth - z, y, scale, tint);
-    };
-    iceHorseBox(0, 0, .13, [2.70, .26, 1.62], '#6f96b3');
-    iceHorseBox(0, 0, .34, [2.38, .16, 1.31], '#abcce0');
-    for (const side of [-1, 1]) {
-      const z = side * .31;
-      iceHorseBox(-.69, z, .75, [.24, .71, .24], '#87bbd8');
-      iceHorseBox(-.56, z, 1.15, [.32, .51, .26], '#a6d3eb');
-      iceHorseBox(.61, z, .78, [.20, .67, .23], '#8ebfdb');
-      iceHorseBox(.79, z, 1.08, [.32, .20, .23], '#afd8ed');
-      iceHorseBox(side * .72, z, .46, [.32, .12, .27], '#b9e3f1');
-      iceHorseBox(.83, z * .57, 2.37, [.13, .29, .13], '#cdebf3');
-    }
-    iceHorseBox(-.05, 0, 1.38, [1.53, .53, .81], '#93c8e1');
-    iceHorseBox(-.05, 0, 1.65, [1.31, .23, .66], '#c0e3f0');
-    iceHorseBox(.55, 0, 1.79, [.46, .69, .55], '#9fcde6');
-    iceHorseBox(.76, 0, 2.17, [.48, .32, .46], '#bbdfee');
-    iceHorseBox(1.05, 0, 2.02, [.38, .23, .41], '#a2cfe5');
-    iceHorseBox(.88, -.24, 2.22, [.07, .07, .04], '#527e9a');
-    iceHorseBox(-.86, 0, 1.5, [.23, .18, .26], '#b6dded');
-    iceHorseBox(-1.02, 0, 1.29, [.20, .30, .21], '#abd9ee');
-    blockers.push({ x: horseEast, n: horseNorth, radius: 1.36 });
-
-    for (const [x, north] of [[218, 190], [246, 184], [246, 196]]) {
-      for (const [y, width, depth, height, tint] of [
-        [.08, .94, 1.38, .16, '#adbfd1'],
-        [.24, .77, 1.13, .25, '#cad9e6'],
-        [.41, .58, .82, .15, '#e0ecf6'],
-        [.51, .44, .51, .075, '#edf5fb'],
-      ] as const) plazaBox(x, north, y, [width, height, depth], tint);
-    }
   } else {
     for (let x = w + 1; x < e; x += 2) {
       for (let north = s + 1; north < n; north += 1.5) {
@@ -296,6 +263,60 @@ export function addScenery(group: Group, grid: Ground) {
       }
     }
   }
+
+  // These approved northeast decorations remain on both plaza footprints.
+  const snowFamily = [[240.5, 200.5, .87], [244.8, 200.5, .65], [247.6, 204.8, .79], [247.6, 208.0, .52]];
+  for (const [x, north, size] of snowFamily) {
+    for (const [y, width] of [[.34, 1.02], [.82, .76], [1.22, .59]]) {
+      plazaBox(x, north, y * size, [width * size, width * .66 * size, width * size], '#e1eef9');
+      plazaBox(x, north, (y + width * .32) * size,
+        [width * .72 * size, width * .18 * size, width * .72 * size], '#f0f6ff');
+    }
+    plazaBox(x, north, 1.03 * size, [.62 * size, .11 * size, .64 * size], '#933e37');
+    plazaBox(x + .18 * size, north - .34 * size, .89 * size, [.16 * size, .24 * size, .075], '#b65043');
+    for (const side of [-1, 1]) {
+      plazaBox(x + side * .13 * size, north - .31 * size, 1.30 * size, [.07 * size, .07 * size, .05], '#354454');
+    }
+    plazaBox(x, north - .37 * size, 1.17 * size, [.08 * size, .075 * size, .18 * size], '#b97442');
+    plazaBox(x, north, 1.49 * size, [.67 * size, .09 * size, .67 * size], '#3f5268');
+    plazaBox(x, north, 1.60 * size, [.44 * size, .18 * size, .44 * size], '#3f5268');
+    blockers.push({ x, n: north, radius: .49 * size });
+  }
+
+  const horseEast = 242.5, horseNorth = 207.5;
+  const iceHorseBox = (x: number, z: number, y: number, scale: Position, tint: string) => {
+    plazaBox(horseEast + x, horseNorth - z, y, scale, tint);
+  };
+  iceHorseBox(0, 0, .13, [2.70, .26, 1.62], '#6f96b3');
+  iceHorseBox(0, 0, .34, [2.38, .16, 1.31], '#abcce0');
+  for (const side of [-1, 1]) {
+    const z = side * .31;
+    iceHorseBox(-.69, z, .75, [.24, .71, .24], '#87bbd8');
+    iceHorseBox(-.56, z, 1.15, [.32, .51, .26], '#a6d3eb');
+    iceHorseBox(.61, z, .78, [.20, .67, .23], '#8ebfdb');
+    iceHorseBox(.79, z, 1.08, [.32, .20, .23], '#afd8ed');
+    iceHorseBox(side * .72, z, .46, [.32, .12, .27], '#b9e3f1');
+    iceHorseBox(.83, z * .57, 2.37, [.13, .29, .13], '#cdebf3');
+  }
+  iceHorseBox(-.05, 0, 1.38, [1.53, .53, .81], '#93c8e1');
+  iceHorseBox(-.05, 0, 1.65, [1.31, .23, .66], '#c0e3f0');
+  iceHorseBox(.55, 0, 1.79, [.46, .69, .55], '#9fcde6');
+  iceHorseBox(.76, 0, 2.17, [.48, .32, .46], '#bbdfee');
+  iceHorseBox(1.05, 0, 2.02, [.38, .23, .41], '#a2cfe5');
+  iceHorseBox(.88, -.24, 2.22, [.07, .07, .04], '#527e9a');
+  iceHorseBox(-.86, 0, 1.5, [.23, .18, .26], '#b6dded');
+  iceHorseBox(-1.02, 0, 1.29, [.20, .30, .21], '#abd9ee');
+  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36 });
+
+  for (const [x, north] of [[218, 190], [246, 184], [246, 196]]) {
+    for (const [y, width, depth, height, tint] of [
+      [.08, .94, 1.38, .16, '#adbfd1'],
+      [.24, .77, 1.13, .25, '#cad9e6'],
+      [.41, .58, .82, .15, '#e0ecf6'],
+      [.51, .44, .51, .075, '#edf5fb'],
+    ] as const) plazaBox(x, north, y, [width, height, depth], tint);
+  }
+
   for (const x of [w - 1.1, e + 1.1]) {
     for (const north of [s + 2, s + 18, s + 32, n - 2]) {
       if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5))) continue;
@@ -428,6 +449,14 @@ export function addScenery(group: Group, grid: Ground) {
       const radius = 7;
       return night && lampLocations.some(lamp => Math.abs(lamp.y - feet - 1.6) <= 3.6 &&
         (lamp.x - east) ** 2 + (lamp.z + north) ** 2 <= radius ** 2);
+    },
+    plazaCoverBoxes,
+    plazaCoverBlocks(east: number, north: number, radius: number) {
+      return plazaCoverBoxes.some(({ min, max }) => {
+        const dx = Math.max(min[0] - east, east - max[0], 0);
+        const dn = Math.max(min[2] + north, -north - max[2], 0);
+        return dx * dx + dn * dn < radius * radius;
+      });
     },
     blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {
