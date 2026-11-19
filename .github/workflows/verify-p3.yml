@@ -8,9 +8,13 @@ on:
       - tests/town-blockout-main-summit-trail.test.ts
       - tests/town-blockout-main-summit-sled-*.test.ts
       - tools/verify-main-summit-trail*
+      - tools/verify-main-summit-snow-belt.ts
+      - tools/probe-main-summit-sled-ride.ts
+      - tools/fixtures/main-summit-snow-belt-survey.json
       - tools/voxel-tavern/main-summit-trails-review.html
       - tools/voxel-tavern/town-blockout/main-summit-trail*.ts
       - tools/voxel-tavern/town-blockout/main-summit-sled-*.ts
+      - tools/voxel-tavern/town-blockout/main-summit-snow-*.ts
 
 permissions:
   contents: read
@@ -28,7 +32,7 @@ jobs:
         with:
           node-version: '24'
       - name: Compose the surveyed P-1 terrain fixture
-        run: git restore --source=bc397d9 -- tools/voxel-tavern/town-blockout/main-summit-block.ts
+        run: git restore --source=cb47ce2 -- tools/voxel-tavern/town-blockout/main-summit-block.ts
       - name: Install locked dependencies
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
@@ -41,6 +45,7 @@ jobs:
           node --import tsx --test --test-isolation=none tests/town-blockout-main-summit-trail.test.ts tests/town-blockout-main-summit-sled-*.test.ts
           mkdir -p /tmp/p3-evidence
           node --import tsx tools/verify-main-summit-trail-survey.ts | tee /tmp/p3-evidence/survey.json
+          node --import tsx tools/verify-main-summit-snow-belt.ts | tee /tmp/p3-evidence/snow-belt.json
       - name: Walk the summit trail and time the isolated sled candidate
         run: |
           node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5813 --strictPort >/tmp/p3-vite.log 2>&1 &
