@@ -7,6 +7,8 @@ on:
       - 'docs/交流区/GPT/JX-1-集市17户.patch'
       - '.github/workflows/verify-jx1-market-homes.yml'
       - 'tools/verify-jx1-market-homes.mjs'
+      - 'tools/compare-market-homes.mjs'
+      - 'tools/paired-review.html'
       - 'docs/交流区/GPT/JX-1协作-2026-11-19/market-home-material-atlas.patch'
 
 permissions:
@@ -59,6 +61,11 @@ jobs:
           sha256sum "$RUNNER_TEMP/jx1.patch" | tee "$JX_OUTPUT/patch-sha256.txt"
           git apply --check --whitespace=error "$RUNNER_TEMP/jx1.patch"
           git apply --whitespace=error "$RUNNER_TEMP/jx1.patch"
+          JX_BARE="$RUNNER_TEMP/jx1-bare"
+          mkdir -p "$JX_BARE/tools"
+          cp -a package.json src "$JX_BARE/"
+          cp -a tools/voxel-tavern "$JX_BARE/tools/"
+          printf 'JX_BARE=%s\n' "$JX_BARE" >> "$GITHUB_ENV"
           git -C ../ci show "$JX_CANDIDATE_SHA:$JX_ATLAS_PATH" > "$RUNNER_TEMP/jx1-atlas.patch"
           sha256sum "$RUNNER_TEMP/jx1-atlas.patch" | tee "$JX_OUTPUT/atlas-sha256.txt"
           git apply --check --whitespace=error "$RUNNER_TEMP/jx1-atlas.patch"
@@ -75,6 +82,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Verify the market candidate and the original door book
+        id: candidate-tests
         working-directory: town
         shell: bash
         run: |
@@ -96,6 +104,16 @@ jobs:
           done
           curl -fsS --max-time 5 "$JX_URL" >/dev/null
           node ../ci/tools/verify-jx1-market-homes.mjs
+
+      - name: Compare the same cameras before and after the material atlas
+        if: ${{ !cancelled() && steps.candidate-tests.outcome == 'success' }}
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          ln -s "$PWD/node_modules" "$JX_BARE/node_modules"
+          ln -s "$PWD/tools/voxel-tavern/node_modules" "$JX_BARE/tools/voxel-tavern/node_modules"
+          node ../ci/tools/compare-market-homes.mjs "$JX_BARE" "$PWD" "$JX_OUTPUT/paired"
 
       - name: Upload the proof bundle
         if: always()

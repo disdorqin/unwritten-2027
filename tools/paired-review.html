@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 集市住宅 A/B</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #f3ead8; background: #20252d; }
+    main { width: min(100% - 2rem, 88rem); margin: 2rem auto; }
+    h1 { font-size: clamp(1.45rem, 3vw, 2.25rem); margin: 0 0 1.35rem; }
+    h2 { font-size: 1rem; margin: 0; }
+    #filters { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+    label { display: flex; align-items: center; gap: .5rem; }
+    select { font: inherit; color: inherit; background: #303945; border: 1px solid #707888; border-radius: .25rem; padding: .4rem .7rem; }
+    select:focus-visible, a:focus-visible { outline: 2px solid #ffdb9d; outline-offset: 3px; }
+    #comparison { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    figure { min-width: 0; margin: 0; background: #2b313b; border: 1px solid #414a59; border-radius: .45rem; overflow: hidden; }
+    figcaption { display: flex; justify-content: space-between; align-items: baseline; padding: .65rem .85rem; gap: .25rem .75rem; flex-wrap: wrap; }
+    figcaption p { margin: 0; color: #d4c7b5; font-size: .875rem; font-variant-numeric: tabular-nums; }
+    figure a { display: block; }
+    figure a:focus-visible { outline-offset: -3px; }
+    img { display: block; width: 100%; height: auto; }
+    #details { margin: 1.25rem 0 .75rem; font-size: .875rem; color: #d4c7b5; }
+    .attachment { margin: .8rem 0 0; font-size: .875rem; }
+    a { color: #ffdb9d; }
+    @media (max-width: 42rem) {
+      #comparison { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>集市住宅同机位对照</h1>
+    <div id="filters">
+      <label>门号 <select id="home"></select></label>
+      <label>机位 <select id="angle"></select></label>
+    </div>
+    <p id="details" role="status"></p>
+    <div id="comparison">
+      <figure>
+        <figcaption><h2>A · 基础材质</h2><p id="before-counts"></p></figcaption>
+        <a href="" id="before-link"><img id="before-image" alt=""></a>
+      </figure>
+      <figure>
+        <figcaption><h2>B · 独立图集</h2><p id="after-counts"></p></figcaption>
+        <a href="" id="after-link"><img id="after-image" alt=""></a>
+      </figure>
+    </div>
+    <p class="attachment"><a href="./paired-market-homes.json">下载相机与渲染记录</a></p>
+  </main>
+  <script id="pairs" type="application/json">__JX1_PAIRED_FRAMES__</script>
+  <script>
+    const pairs = JSON.parse(document.getElementById('pairs').textContent);
+    const home = document.getElementById('home');
+    const angle = document.getElementById('angle');
+    const angleLabels = { interior: '室内', street: '街面', north: '北', east: '东', south: '南', west: '西' };
+    const format = new Intl.NumberFormat('zh-Hans');
+    const signed = new Intl.NumberFormat('zh-Hans', { signDisplay: 'exceptZero' });
+    for (const id of new Set(pairs.map(pair => pair.id))) home.add(new Option(id, id));
+    for (const [key, label] of Object.entries(angleLabels)) angle.add(new Option(label, key));
+
+    function render() {
+      const pair = pairs.find(view => view.id === home.value && view.angle === angle.value);
+      for (const [side, label] of [['before', 'A 基础材质'], ['after', 'B 独立图集']]) {
+        const data = pair[side];
+        const image = document.getElementById(side + '-image');
+        image.alt = label + ' · ' + pair.id + ' · ' + angleLabels[pair.angle];
+        image.src = data.file;
+        image.width = pair.camera.width;
+        image.height = pair.camera.height;
+        document.getElementById(side + '-link').href = data.file;
+        document.getElementById(side + '-counts').textContent =
+          format.format(data.draws) + ' 次绘制 · ' + format.format(data.triangles) + ' 个三角形';
+      }
+      document.getElementById('details').textContent = 'B − A · ' + signed.format(pair.deltaDraws) + ' 次绘制 · ' +
+        signed.format(pair.deltaTriangles) + ' 个三角形 · PNG ' + (pair.samePng ? '相同' : '不同');
+    }
+
+    home.addEventListener('change', render);
+    angle.addEventListener('change', render);
+    render();
+  </script>
+</body>
+</html>
