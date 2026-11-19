@@ -88,6 +88,14 @@ async function walk(page, key, stage, predicate, argument, limit = 12_000) {
   return after;
 }
 
+function assertDetail(state, frontPresent, arrivalPresent, frontReleased, arrivalReleased) {
+  assert.equal(state.apronPresent, frontPresent);
+  assert.equal(state.arrivalDetailPresent, arrivalPresent);
+  assert.equal(state.detailLayer, frontPresent ? 'front-ridge' : arrivalPresent ? 'main-summit' : null);
+  assert.deepEqual(state.frontFloorDisposals, { geometry: frontReleased, material: frontReleased });
+  assert.deepEqual(state.arrivalFloorDisposals, { geometry: arrivalReleased, material: arrivalReleased });
+}
+
 async function main() {
   server = await limited('Vite initialization', createServer({
     root: viteRoot, configFile: path.join(viteRoot, 'vite.config.ts'),
@@ -126,9 +134,13 @@ async function main() {
   const initial = await button(page, 'gate', 'gate');
   assert.equal(initial.gateMounted, true);
   assert.equal(initial.gateMeshes, 3);
-  assert.ok(initial.apronPresent && initial.coarsePresent);
+  assert.ok(initial.coarsePresent);
+  assertDetail(initial, true, false, 0, 0);
+  assert.equal(initial.layerTransitions.length, 0);
   assert.ok(Math.abs(initial.east) < .01 && Math.abs(initial.north + 14) < .01);
   assert.ok(Math.abs(initial.feet - 347) < .01);
+  await page.screenshot({ path: path.join(output, 'gate-approach.png'), timeout: timeLeft(8_000) });
+  walkthroughImages.push({ file: 'gate-approach.png', state: initial });
   const offset = await walk(page, 'd', 'move to the side of the gate', () => window.__p1Review.getState().east >= 2.375);
   const blocked = await walk(page, 'w', 'stop at the side jamb', before => {
     const state = window.__p1Review.getState();
@@ -136,18 +148,23 @@ async function main() {
   }, offset.blocked);
   assert.ok(blocked.east > 2 && blocked.north <= -10 && blocked.north >= -11);
   assert.ok(blocked.wallClearance >= 0 && !blocked.frontierReached);
+  assertDetail(blocked, true, false, 0, 0);
+  assert.equal(blocked.layerTransitions.length, 0);
   await walk(page, 'a', 'recover into the clear center', () => Math.abs(window.__p1Review.getState().east) <= .20);
   const interior = await walk(page, 'w', 'walk through the gate to the arrival plateau',
     () => window.__p1Review.getState().frontierReached);
   assert.ok(interior.north >= 20 && interior.gateMounted);
   assert.ok(Math.abs(interior.feet - 347) < .01 && interior.accepted > initial.accepted);
   assert.equal(interior.seamCrossings - initial.seamCrossings, 1);
+  assertDetail(interior, false, true, 1, 0);
+  assert.equal(interior.layerTransitions.length, 1);
   await page.screenshot({ path: path.join(output, 'arrival-plateau.png'), timeout: timeLeft(8_000) });
   walkthroughImages.push({ file: 'arrival-plateau.png', state: interior });
 
   const outside = await walk(page, 's', 'return on foot and unload the gate',
     () => window.__p1Review.getState().returned);
-  assert.ok(outside.north <= -14 && outside.coarsePresent && outside.apronPresent);
+  assert.ok(outside.north <= -14 && outside.coarsePresent);
+  assertDetail(outside, true, false, 1, 1);
   assert.ok(Math.abs(outside.feet - 347) < .01);
   assert.equal(outside.seamCrossings - initial.seamCrossings, 2);
   assert.ok(outside.maxAcceptedStep <= .01, 'The traversal changed support height at the terrace seam');
@@ -158,6 +175,17 @@ async function main() {
   assert.equal(outside.coarseGeometryDisposals, initial.coarseGeometryDisposals);
   assert.equal(outside.coarseMaterialDisposals, initial.coarseMaterialDisposals);
   assert.ok(outside.geometries <= initial.geometries, 'The unloaded gate retains extra renderer geometries');
+  const transitions = outside.layerTransitions;
+  assert.equal(transitions.length, 2);
+  assert.deepEqual(transitions.map(({ from, to }) => [from, to]),
+    [['front-ridge', 'main-summit'], ['main-summit', 'front-ridge']]);
+  assert.deepEqual(transitions.map(({ frontPresent, arrivalDetailPresent }) => [frontPresent, arrivalDetailPresent]),
+    [[false, true], [true, false]]);
+  assert.ok(transitions[0].frame > initial.frame && transitions[1].frame > transitions[0].frame);
+  for (const transition of transitions) {
+    assert.ok(transition.coarsePresent && transition.gateMounted && transition.draws > 0 && transition.triangles > 0,
+      'A detail-layer transition did not produce a rendered frame with the retained coarse object and gate');
+  }
   await page.screenshot({ path: path.join(output, 'outside-return.png'), timeout: timeLeft(8_000) });
   walkthroughImages.push({ file: 'outside-return.png', state: outside });
 
@@ -177,9 +205,13 @@ async function main() {
   assert.equal(reentered.gateGeometryDisposals, outside.gateGeometryDisposals);
   assert.equal(reentered.gateMaterialDisposals, outside.gateMaterialDisposals);
   assert.ok(reentered.geometries <= initial.geometries, 'Remount retained extra renderer geometries');
+  assertDetail(reentered, true, false, 1, 1);
+  assert.deepEqual(reentered.layerTransitions, transitions);
   await page.locator('#dispose').click({ timeout: timeLeft(5_000) });
   const disposed = await watch(page, () => window.__p1Review.getState().disposed);
-  assert.ok(!disposed.gateMounted && !disposed.apronPresent && !disposed.coarsePresent);
+  assert.ok(!disposed.gateMounted && !disposed.coarsePresent);
+  assertDetail(disposed, false, false, 2, 1);
+  assert.deepEqual(disposed.layerTransitions, transitions);
   assert.equal(disposed.gateGeometryDisposals - outside.gateGeometryDisposals, 3);
   assert.equal(disposed.gateMaterialDisposals - outside.gateMaterialDisposals, 1);
   assert.equal(disposed.coarseGeometryDisposals - outside.coarseGeometryDisposals, 1);

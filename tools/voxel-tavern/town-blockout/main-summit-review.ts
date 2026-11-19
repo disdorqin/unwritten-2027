@@ -31,19 +31,7 @@ const halfPlazaWidth = mainSummitSpec.arrivalPlaza[0] / 2;
 const halfApronWidth = 6;
 const apronSouth = -22;
 const seamNorth = mainSummitBounds.south;
-const apronCentre = (apronSouth + seamNorth) / 2;
-const apronGeometry = new PlaneGeometry(halfApronWidth * 2, seamNorth - apronSouth, 12, 12);
-const apronVertices = apronGeometry.getAttribute('position');
-for (let index = 0; index < apronVertices.count; index++) {
-  apronVertices.setZ(index, frontRidgeAt(apronVertices.getX(index), apronCentre + apronVertices.getY(index)) - arrivalHeight);
-}
-apronGeometry.computeVertexNormals();
-const apron = new Mesh(apronGeometry,
-  new MeshLambertMaterial({ color: '#99a9b7' }));
-apron.name = 'fixture-cloud-terrace';
-apron.rotation.x = -Math.PI / 2;
-apron.position.set(0, arrivalHeight, -apronCentre);
-stage.add(apron);
+const plazaNorth = mainSummitSpec.arrivalPlaza[1];
 
 const headings = {
   north: [0, -1_600], east: [1_600, 0], south: [0, 1_600], west: [-1_600, 0],
@@ -51,6 +39,19 @@ const headings = {
 type Heading = keyof typeof headings;
 type View = Heading | 'gate';
 type BlockReason = 'extent' | 'step' | 'gate';
+type DetailLayer = 'front-ridge' | 'main-summit';
+type LayerChange = { from: DetailLayer; to: DetailLayer };
+type LayerFrame = LayerChange & {
+  frame: number;
+  draws: number;
+  triangles: number;
+  coarsePresent: boolean;
+  coarseRendered: boolean;
+  activeDetailRendered: boolean;
+  gateMounted: boolean;
+  frontPresent: boolean;
+  arrivalDetailPresent: boolean;
+};
 
 const buttons = Object.fromEntries((['gate', ...Object.keys(headings)] as View[]).map(name => [
   name, document.querySelector<HTMLButtonElement>(name === 'gate' ? '#gate' : `#view-${name}`)!,
@@ -81,11 +82,66 @@ let gate: ReturnType<typeof block.enter> | undefined;
 let gateGeometryDisposals = 0, gateMaterialDisposals = 0;
 let coarseGeometryDisposals = 0, coarseMaterialDisposals = 0;
 let coarseRendered = false;
+let activeDetailRendered = false;
+let detail: { layer: DetailLayer; mesh: Mesh<PlaneGeometry, MeshLambertMaterial> } | undefined;
+const frontFloorDisposals = { geometry: 0, material: 0 };
+const arrivalFloorDisposals = { geometry: 0, material: 0 };
+let pendingLayerChange: LayerChange | undefined;
+const layerTransitions: LayerFrame[] = [];
 let frame = 0, raf = 0, previousTime = performance.now();
 
 block.coarse.geometry.addEventListener('dispose', () => coarseGeometryDisposals++);
 block.coarse.material.addEventListener('dispose', () => coarseMaterialDisposals++);
 block.coarse.onAfterRender = () => { coarseRendered = true; };
+
+function removeDetail() {
+  if (!detail) return;
+  detail.mesh.removeFromParent();
+  detail.mesh.geometry.dispose();
+  detail.mesh.material.dispose();
+  detail = undefined;
+}
+
+function mountDetail(layer: DetailLayer) {
+  const front = layer === 'front-ridge';
+  const width = 2 * (front ? halfApronWidth : halfPlazaWidth);
+  const south = front ? apronSouth : seamNorth;
+  const north = front ? seamNorth : plazaNorth;
+  const centre = (south + north) / 2;
+  const geometry = new PlaneGeometry(width, north - south, width, north - south);
+  const vertices = geometry.getAttribute('position');
+  const heightAt = front ? frontRidgeAt : block.heightAt;
+  for (let index = 0; index < vertices.count; index++) {
+    const height = heightAt(vertices.getX(index), centre + vertices.getY(index));
+    vertices.setZ(index, height! - arrivalHeight);
+  }
+  geometry.computeVertexNormals();
+  const material = new MeshLambertMaterial(front ? { color: '#99a9b7' } : {
+    color: '#a8b5c3', polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+  });
+  const disposals = front ? frontFloorDisposals : arrivalFloorDisposals;
+  geometry.addEventListener('dispose', () => disposals.geometry++);
+  material.addEventListener('dispose', () => disposals.material++);
+  const mesh = new Mesh(geometry, material);
+  mesh.name = front ? 'fixture-cloud-terrace' : 'fixture-main-summit-detail';
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(0, arrivalHeight, -centre);
+  mesh.onAfterRender = () => { activeDetailRendered = true; };
+  stage.add(mesh);
+  detail = { layer, mesh };
+}
+
+function changeDetail(to: DetailLayer) {
+  const from = detail?.layer;
+  if (!from || from === to) return;
+  removeDetail();
+  mountDetail(to);
+  pendingLayerChange = { from, to };
+}
+
+function detailPresent(layer: DetailLayer) {
+  return detail?.layer === layer && detail.mesh.parent === stage;
+}
 
 function mountGate() {
   if (gate || disposed) return;
@@ -133,7 +189,7 @@ function selectView(next: View) {
 function floorAt(x: number, n: number) {
   const halfWidth = n < seamNorth ? halfApronWidth : halfPlazaWidth;
   if (Math.abs(x) > halfWidth - bodyRadius || n < apronSouth + bodyRadius ||
-      n > mainSummitSpec.arrivalPlaza[1] - bodyRadius) return undefined;
+      n > plazaNorth - bodyRadius) return undefined;
   return n < seamNorth ? frontRidgeAt(x, n) : block.heightAt(x, n);
 }
 
@@ -167,7 +223,10 @@ function move() {
   if ((gateClearance(nextEast, nextNorth, nextFeet) ?? Infinity) < 0) return rejectMove('gate');
 
   maxAcceptedStep = Math.max(maxAcceptedStep, Math.abs(nextFeet - feet));
-  if ((north < seamNorth) !== (nextNorth < seamNorth)) seamCrossings++;
+  if ((north < seamNorth) !== (nextNorth < seamNorth)) {
+    seamCrossings++;
+    changeDetail(nextNorth < seamNorth ? 'front-ridge' : 'main-summit');
+  }
   [east, north, feet] = [nextEast, nextNorth, nextFeet];
   accepted++;
   lastBlock = null;
@@ -194,7 +253,10 @@ function getState() {
     gateGeometryDisposals, gateMaterialDisposals,
     coarsePresent: block.coarse.parent === stage, coarseVisible: block.coarse.parent === stage && coarseRendered,
     coarseGeometryDisposals, coarseMaterialDisposals,
-    apronPresent: apron.parent === stage, disposed,
+    apronPresent: detailPresent('front-ridge'), arrivalDetailPresent: detailPresent('main-summit'),
+    detailLayer: detail?.layer ?? null, activeDetailRendered,
+    frontFloorDisposals: { ...frontFloorDisposals }, arrivalFloorDisposals: { ...arrivalFloorDisposals },
+    layerTransitions: layerTransitions.map(change => ({ ...change })), disposed,
     camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
       aspect: camera.aspect, fov: camera.fov, far: camera.far },
   };
@@ -221,8 +283,15 @@ function animate(now: number) {
   previousTime = now;
   updateCamera();
   coarseRendered = false;
+  activeDetailRendered = false;
   renderer.render(scene, camera);
   frame++;
+  if (pendingLayerChange) {
+    layerTransitions.push({ ...pendingLayerChange, frame, draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+      coarsePresent: block.coarse.parent === stage, coarseRendered, activeDetailRendered, gateMounted: gate?.group.parent === stage,
+      frontPresent: detailPresent('front-ridge'), arrivalDetailPresent: detailPresent('main-summit') });
+    pendingLayerChange = undefined;
+  }
   position.value = `${view} · E ${east.toFixed(3)} / N ${north.toFixed(3)} / Y ${feet.toFixed(3)}`;
   raf = requestAnimationFrame(animate);
 }
@@ -234,9 +303,8 @@ function dispose() {
   keys.clear();
   block.dispose();
   gate = undefined;
-  apron.removeFromParent();
-  apron.geometry.dispose();
-  apron.material.dispose();
+  removeDetail();
+  coarseRendered = activeDetailRendered = false;
   stage.removeFromParent();
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('keyup', onKeyUp);
@@ -258,6 +326,7 @@ window.addEventListener('blur', onBlur);
 window.addEventListener('resize', resize);
 window.addEventListener('pagehide', dispose, { once: true });
 Object.defineProperty(window, '__p1Review', { value: Object.freeze({ getState }) });
+mountDetail('front-ridge');
 mountGate();
 resize();
 updateCamera();
