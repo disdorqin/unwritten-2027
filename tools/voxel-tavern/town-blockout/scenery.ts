@@ -214,7 +214,8 @@ export function addScenery(group: Group, grid: Ground) {
     const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
       lights.push({ at: [x, plazaHeight + y, -north], scale });
     };
-    const gateEast = 161, gateNorth = 190;
+    // Keep the inner gate on the original plaza core as the outer bounds expand.
+    const gateEast = coreWest, gateNorth = 190;
     for (const north of [187.85, 192.15]) {
       plazaBox(gateEast, north, .18, [.66, .36, .66], '#8b8b94');
       plazaBox(gateEast, north, 1.94, [.41, 3.32, .41], '#7e423e');

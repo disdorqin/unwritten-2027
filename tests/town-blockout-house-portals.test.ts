@@ -14,6 +14,30 @@ import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-rail
 
 const { Group } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as typeof import('three');
 
+// Fixed 92-door snapshot from the B2a layout [161, 152, 251, 212]. Use IDs,
+// rather than just the total, so an accidental replacement door cannot cover a loss.
+const baselineDoorIds = [
+  ...[
+    '101:184', '105:152', '117:202', '133:266', '137:168', '137:70', '149:281',
+    '156:141', '158:184', '172:282', '172:323', '173:135', '179:155', '179:248',
+    '186:104', '188:65', '191:282', '191:325', '197:132', '199:262', '200:151',
+    '202:247', '206:110', '216:280', '217:66', '220:138', '221:251', '228:110',
+    '234:74', '246:114', '246:135', '249:264', '253:243', '262:180', '264:228',
+    '329:155', '331:172', '337:130', '349:184', '351:144', '358:163', '364:207',
+    '375:177', '391:234', '405:51', '406:165', '410:119', '410:219', '414:190',
+    '422:101', '70:229', '94:100',
+  ].map(address => 'old-town:' + address),
+  ...[
+    '125:470', '145:467', '151:493', '168:489', '211:491', '410:343', '421:363',
+    '489:438', '502:401', '503:451', '513:366', '516:273', '520:417', '521:82',
+    '528:207', '532:448', '535:267', '539:85', '550:412', '551:385', '551:65',
+    '552:216', '554:272', '555:438', '560:85', '571:376', '572:280', '576:207',
+    '586:136', '589:295', '590:362', '603:314', '603:338', '619:146', '620:175',
+    '76:449', '92:477', '94:431',
+  ].map(address => 'district:' + address),
+  'village:0', 'village:1',
+].sort();
+
 test('every built decorative house has a unique dry, clear portal on its real front', t => {
   const landscape = new Group();
   const grid = createTerrainGrid();
@@ -50,21 +74,37 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   assert.equal(extensions.housePortals.length, extensions.counts.buildings);
   assert.equal(cottagePortals.length, 2, 'the furnished cabin keeps its existing physical door');
   const portals = [...district.housePortals, ...extensions.housePortals, ...cottagePortals];
-  assert.equal(new Set(portals.map(({ id }) => id)).size, portals.length);
+  const actualIds = portals.map(({ id }) => id).sort();
+  const registry = new Set(actualIds);
+  assert.equal(registry.size, portals.length);
+  const baselineRegistry = new Set(baselineDoorIds);
+  const missing = baselineDoorIds.filter(id => !registry.has(id));
+  const added = actualIds.filter(id => !baselineRegistry.has(id));
+  const rejectedById = new Map(district.rejectedHomes.map(home => [home.id, home]));
+  const details = missing.map(id => {
+    const rejection = rejectedById.get(id);
+    if (!rejection) return id;
+    const { zone, location, relocated, reason, overlapsPlaza } = rejection;
+    return `${id} ${zone} [${location.join(', ')}] (${relocated ? 'mapped' : 'unmapped'}, ${reason}${overlapsPlaza ? ', plaza overlap' : ''})`;
+  });
+  const diff = [`missing ${missing.length}: ${details.join('; ') || 'none'}`,
+    `added ${added.length}: ${added.join(', ') || 'none'}`].join('\n');
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
-  assert.equal(portals.length, 92, 'the plaza work preserves the 92-door registry');
-  const moved = [
-    ['158:184', 160, 130], ['179:155', 146.5, 129.5],
-    ['200:151', 147, 182.5], ['246:135', 146, 199],
-  ] as const;
+  assert.equal(portals.length, 92, `the plaza work preserves the 92-door registry\n${diff}`);
+  assert.deepEqual(actualIds, baselineDoorIds, `the 92-door registry preserves every B2a ID\n${diff}`);
+  t.diagnostic(diff);
+
+  const [west, south, plazaEast, plazaNorth] = layout.plaza.bounds;
+  const moved = Array.from(district.relocations, ([address, [east, north]]) => [address, east, north] as const);
   for (const [address, east, north] of moved) {
     const site = district.sites.find(site => site.x === east && site.n === north);
-    assert.ok(site && east >= 146 && east <= 160, `${address} inside the receiving strip`);
-    assert.ok(portals.some(portal => portal.id === 'old-town:' + address), `${address} stable door ID`);
+    assert.ok(site, `${address} was built at its approved receiving location [${east}, ${north}]`);
+    assert.ok(registry.has('old-town:' + address), `${address} stable door ID`);
     const sideways = Math.abs(Math.sin(site.angle)) > .5;
     const halfEast = (sideways ? site.d : site.w) / 2 + 1;
     const halfNorth = (sideways ? site.w : site.d) / 2 + 1;
-    assert.ok(east + halfEast <= 161 || north + halfNorth <= 152, `${address} plaza edge clear`);
+    assert.ok(east + halfEast <= west - 1.4 || east - halfEast >= plazaEast + 1.4 ||
+      north + halfNorth <= south - 1.4 || north - halfNorth >= plazaNorth + 1.4, `${address} plaza edge clear`);
     const paths = layout.roads.flatMap(({ points, width }) => points.slice(1).map((end, index) =>
       ({ start: points[index], end, halfWidth: width / 2 })));
     let minimum = Infinity;
