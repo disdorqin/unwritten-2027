@@ -24,10 +24,19 @@ type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
 type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
 const housingCellSize = 96;
 const plazaHouseRelocations: ReadonlyMap<string, readonly [east: number, north: number]> = new Map([
-  ['158:184', [160, 130]],
-  ['179:155', [146.5, 129.5]],
-  ['200:151', [147, 182.5]],
-  ['246:135', [146, 199]],
+  ['117:202', [115.5, 220]],
+  ['101:184', [89.5, 166.5]],
+  ['105:152', [68.25, 183.5]],
+  ['137:168', [180.25, 120]],
+  ['158:184', [192.75, 118.5]],
+  ['179:155', [203.5, 95.75]],
+  ['173:135', [182, 91]],
+  ['156:141', [107, 93]],
+  ['246:135', [261, 120]],
+  ['220:138', [250.5, 79.5]],
+  ['197:132', [173, 63]],
+  ['200:151', [198.5, 223]],
+  ['262:180', [269.5, 241.5]],
 ]);
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
@@ -62,6 +71,7 @@ export function addDistrictHousing(
 ) {
   const [west, south, east, north] = plazaBounds;
   const sites: Site[] = [];
+  const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
   const rejectedHomes: HousingRejection[] = [];
@@ -225,6 +235,7 @@ export function addDistrictHousing(
       const cell = cellAt(x, n);
       addModel(model, cell);
       sites.push(site);
+      zoneCounts[theme ?? 'central']++;
       if (relocation) movedSites.add(site);
 
       const dx = Math.sin(angle), dn = -Math.cos(angle);
@@ -305,6 +316,6 @@ export function addDistrictHousing(
       return along >= start && along <= end && Math.abs(offsetX * dn - offsetN * dx) <= 1.08;
     });
   }
-  return { count: sites.length, sites, housePortals, relocations: plazaHouseRelocations, rejectedHomes, keepClear, setPanorama, sweptAt,
+  return { count: sites.length, zoneCounts, sites, housePortals, relocations: plazaHouseRelocations, rejectedHomes, keepClear, setPanorama, sweptAt,
     blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
 }

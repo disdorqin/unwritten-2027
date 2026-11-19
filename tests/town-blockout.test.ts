@@ -135,9 +135,14 @@ test('legacy houses reserve rail clearance while nearby open sites stay occupied
 
   assert.ok(before.blocked(390, 32), 'original south dwelling exists without rail clearance');
   assert.ok(!after.blocked(390, 32), 'south dwelling must clear the track');
-  assert.ok(before.blocked(63, 194), 'original west cabin exists without rail clearance');
-  assert.ok(!after.blocked(63, 194), 'west cabin must clear the track');
+  const westCabin = 'old-town:63:194';
+  const movedNeighbor = 'old-town:105:152';
+  assert.equal(before.rejectedHomes.find(({ id }) => id === westCabin)?.reason, 'setback',
+    'the west cabin also competes with the approved receiving site even without the track');
+  assert.equal(after.rejectedHomes.find(({ id }) => id === westCabin)?.reason, 'rail',
+    'with the track, the west cabin fails the unchanged rail clearance check');
+  assert.ok(after.housePortals.some(({ id }) => id === movedNeighbor), 'the relocated neighbor clears the track');
   assert.ok(after.blocked(405, 51), 'northward neighboring dwelling is still in place');
-  const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32) && !(x === 63 && n === 194));
+  const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32));
   assert.deepEqual(after.sites, unaffected);
 });

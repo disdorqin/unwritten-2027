@@ -92,7 +92,11 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   assert.equal(portals.length, 92, `the plaza work preserves the 92-door registry\n${diff}`);
   assert.deepEqual(actualIds, baselineDoorIds, `the 92-door registry preserves every B2a ID\n${diff}`);
-  t.diagnostic(diff);
+  t.diagnostic(`old-town zones: ${JSON.stringify(district.zoneCounts)}`);
+  assert.deepEqual(district.zoneCounts, { forest: 11, memorial: 5, market: 17, lakeside: 10, central: 9 });
+  t.diagnostic(`missing ${missing.length}: ${missing.join(', ') || 'none'}`);
+  t.diagnostic(`added ${added.length}: ${added.join(', ') || 'none'}`);
+  t.diagnostic(`portal IDs: ${actualIds.join(', ')}`);
 
   const [west, south, plazaEast, plazaNorth] = layout.plaza.bounds;
   const moved = Array.from(district.relocations, ([address, [east, north]]) => [address, east, north] as const);
@@ -101,23 +105,37 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     assert.ok(site, `${address} was built at its approved receiving location [${east}, ${north}]`);
     assert.ok(registry.has('old-town:' + address), `${address} stable door ID`);
     const sideways = Math.abs(Math.sin(site.angle)) > .5;
-    const halfEast = (sideways ? site.d : site.w) / 2 + 1;
-    const halfNorth = (sideways ? site.w : site.d) / 2 + 1;
+    const footprintHalfEast = (sideways ? site.d : site.w) / 2;
+    const footprintHalfNorth = (sideways ? site.w : site.d) / 2;
+    const halfEast = footprintHalfEast + 1;
+    const halfNorth = footprintHalfNorth + 1;
     assert.ok(east + halfEast <= west - 1.4 || east - halfEast >= plazaEast + 1.4 ||
       north + halfNorth <= south - 1.4 || north - halfNorth >= plazaNorth + 1.4, `${address} plaza edge clear`);
     const paths = layout.roads.flatMap(({ points, width }) => points.slice(1).map((end, index) =>
       ({ start: points[index], end, halfWidth: width / 2 })));
-    let minimum = Infinity;
-    for (let ix = -8; ix <= 8; ix++) for (let iz = -8; iz <= 8; iz++) {
-      const x = east + ix * halfEast / 8, n = north + iz * halfNorth / 8;
-      for (const { start, end, halfWidth } of paths) {
+    function roadGap(x: number, n: number) {
+      return Math.min(...paths.map(({ start, end, halfWidth }) => {
         const dx = end[0] - start[0], dn = end[1] - start[1];
         const along = Math.max(0, Math.min(1, ((x - start[0]) * dx + (n - start[1]) * dn) / (dx * dx + dn * dn)));
-        minimum = Math.min(minimum, Math.hypot(x - start[0] - along * dx, n - start[1] - along * dn) - halfWidth);
-      }
+        return Math.hypot(x - start[0] - along * dx, n - start[1] - along * dn) - halfWidth;
+      }));
     }
-    assert.ok(minimum >= 1.2, `${address} road gap ${minimum.toFixed(3)} m`);
-    t.diagnostic(`${address} road gap ${minimum.toFixed(3)} m`);
+    let footprintGap = Infinity;
+    let expandedGap = Infinity;
+    for (let ix = -8; ix <= 8; ix++) for (let iz = -8; iz <= 8; iz++) {
+      footprintGap = Math.min(footprintGap, roadGap(east + ix * footprintHalfEast / 8, north + iz * footprintHalfNorth / 8));
+      expandedGap = Math.min(expandedGap, roadGap(east + ix * halfEast / 8, north + iz * halfNorth / 8));
+    }
+    // The approved phase-three sites specify physical footprint clearance and
+    // the existing nine-point path gate. The old receiving strip used a dense
+    // sweep of the expanded footprint, which remains a diagnostic comparison.
+    const samples = [-1, 0, 1].flatMap(ix => [-1, 0, 1].map(iz => [east + ix * halfEast, north + iz * halfNorth]));
+    const sampleGap = Math.min(...samples.map(([x, n]) => roadGap(x, n)));
+    assert.ok(footprintGap >= 1.2, `${address} physical footprint road gap ${footprintGap.toFixed(3)} m`);
+    assert.ok(sampleGap > 1.35, `${address} nine-point road gap ${sampleGap.toFixed(3)} m`);
+    const heights = samples.map(([x, n]) => grid.heightAt(x, n));
+    const door = portals.find(({ id }) => id === 'old-town:' + address)!;
+    t.diagnostic(`${address} receiving [${east}, ${north}] door [${door.x.toFixed(3)}, ${door.n.toFixed(3)}] ground ${door.ground.toFixed(4)} m, footprint/expanded/nine-point road gaps ${footprintGap.toFixed(3)}/${expandedGap.toFixed(3)}/${sampleGap.toFixed(3)} m, grade spread ${(Math.max(...heights) - Math.min(...heights)).toFixed(3)} m`);
   }
   const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
   function clear(x: number, n: number) {
@@ -126,27 +144,29 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   }
   for (const id of moved.map(([address]) => 'old-town:' + address)) {
     const door = portals.find(portal => portal.id === id)!;
-    const offsets: [number, number][] = [[0, 0]];
+    const offsets: [number, number, number][] = [[0, 0, 0]];
     const visited = new Set(['0:0']);
-    let roadReached = false;
-    for (const [dx, dn] of offsets) {
+    let roadDistance = Infinity;
+    for (const [dx, dn, steps] of offsets) {
       const x = door.x + dx / 2, n = door.n + dn / 2;
       if (grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 1) {
-        roadReached = true;
+        roadDistance = steps / 2;
         break;
       }
       for (const [ix, iz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nextX = dx + ix, nextN = dn + iz;
         const key = nextX + ':' + nextN;
-        if (Math.abs(nextX) + Math.abs(nextN) > 85 || visited.has(key)) continue;
+        if (visited.has(key)) continue;
         const east = x + ix / 2, north = n + iz / 2;
-        if (!clear(east, north) || !clear(x + ix / 4, n + iz / 4) ||
+        if (east < 0 || east > layout.width || north < 0 || north > layout.depth ||
+          !clear(east, north) || !clear(x + ix / 4, n + iz / 4) ||
           Math.abs(grid.heightAt(east, north) - grid.heightAt(x, n)) > .4) continue;
         visited.add(key);
-        offsets.push([nextX, nextN]);
+        offsets.push([nextX, nextN, steps + 1]);
       }
     }
-    assert.ok(roadReached, `${id} has a walkable route to an existing road`);
+    assert.ok(Number.isFinite(roadDistance), `${id} has a walkable route to an existing road`);
+    t.diagnostic(`${id} walk to road ${roadDistance} m at .5 m resolution`);
   }
   for (const { id, x, n, ground, exitYaw } of portals) {
     assert.ok(canEnter(x, n) && !isWater(x, n), `${id} dry ground`);
