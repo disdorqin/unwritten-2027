@@ -10,6 +10,7 @@ import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
 import {
   personalFireworkParticleLimit, personalFireworkVisibleLimit, type PersonalFireworkKind, type PersonalFireworkParticle,
 } from './personal-fireworks';
+import { createCeremonyFireworksDispatch } from './ceremony-fireworks-clock';
 
 type Burst = {
   time: number;
@@ -340,9 +341,9 @@ export function createFestival(
     }
   }
 
-  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number) {
+  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number, startAt?: number) {
     if (tracks.has(program) || !Number.isFinite(ageSeconds) || ageSeconds >= program.duration) return false;
-    tracks.set(program, { age: ageSeconds, clockMs, startedAt: clockMs ? clockMs() - ageSeconds * 1000 : 0 });
+    tracks.set(program, { age: ageSeconds, clockMs, startedAt: startAt ?? (clockMs ? clockMs() - ageSeconds * 1000 : 0) });
     return true;
   }
 
@@ -361,6 +362,7 @@ export function createFestival(
     return true;
   }
 
+  const dispatchCeremony = createCeremonyFireworksDispatch(flight);
   return {
     startShow,
     showActive() { return elapsed >= 0 || tracks.size > 0; },
@@ -369,14 +371,16 @@ export function createFestival(
     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
     },
-    launchCeremony(cue: CeremonyFireworksCue, ageSeconds = 0) {
-      if (!launch(ceremonyPrograms[cue], ageSeconds)) return false;
-      stopPreview();
-      if (playerProgram) {
-        tracks.delete(playerProgram);
-        playerProgram = undefined;
-      }
-      return true;
+    launchCeremony(cue: CeremonyFireworksCue, startAt: number, clockMs: () => number) {
+      return dispatchCeremony(ceremonyPrograms[cue], startAt, clockMs(), clockMs, (program, playback) => {
+        if (!launch(program, playback.ageSeconds, playback.clockMs, playback.startAt)) return false;
+        stopPreview();
+        if (playerProgram) {
+          tracks.delete(playerProgram);
+          playerProgram = undefined;
+        }
+        return true;
+      });
     },
     launchPublicFireworks(seed: number, theme: FireworksTheme, ageSeconds = 0) {
       if (!isFireworksSeed(seed) || !isFireworksTheme(theme)) return false;

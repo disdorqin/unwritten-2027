@@ -267,7 +267,7 @@ export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHook
         if (cue.at > lastNow) hooks.onCue?.(cue);
       }
     }
-    lastNow = now;
+    lastNow = Math.max(lastNow ?? now, now);
     current = ceremonyStateAt(now, utcOffsetMinutes);
     if (lastSnow === undefined || Math.abs(current.snowIntensity - lastSnow) > .001) {
       lastSnow = current.snowIntensity;

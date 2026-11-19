@@ -1080,7 +1080,7 @@ function handleCeremonyCue(cue: CeremonyCue) {
     case 'fireworks-main':
     case 'fireworks-far':
     case 'fireworks-finale':
-      festival.launchCeremony(cue.type, (ceremonyClock.now() - cue.at) / 1000);
+      festival.launchCeremony(cue.type, cue.at, ceremonyClock.now);
       break;
   }
 }
@@ -2631,8 +2631,8 @@ renderer.setAnimationLoop(now => {
       roofed(seated?.x ?? x, seated?.n ?? n, ground)));
   }
   personalFirecrackers.update();
-  festival.update(dt);
   const ceremonyState = ceremony.update();
+  festival.update(dt);
   const weatherStartedAt = profileTown ? performance.now() : 0;
   const weather = townSnowWeatherForFrame(ceremonyState);
   const effectiveSnowIntensity = weather.intensity;

@@ -47,19 +47,24 @@ test('ceremony fireworks use one pooled Points at the plaza, lake and memorial w
   const particles = scene.children[0] as Points;
   const positions = particles.geometry.attributes.position;
 
-  assert.equal(festival.launchCeremony('fireworks-main', 500), false);
-  assert.equal(festival.launchCeremony('fireworks-main'), true);
-  assert.equal(festival.launchCeremony('fireworks-main'), false);
+  let now = 1_000_000;
+  const clock = () => now;
+  assert.equal(festival.launchCeremony('fireworks-main', now - 500_000, clock), false);
+  assert.equal(festival.launchCeremony('fireworks-main', now, clock), true);
+  assert.equal(festival.launchCeremony('fireworks-main', now, clock), false);
+  now += 400;
   festival.update(.4);
   assert.ok(particles.geometry.drawRange.count > 0);
   assert.ok(positions.getX(0) > 200 && positions.getX(0) < 250);
 
-  assert.equal(festival.launchCeremony('fireworks-far'), true);
+  assert.equal(festival.launchCeremony('fireworks-far', now, clock), true);
+  now += 200;
   festival.update(.2);
   const zs = Array.from({ length: particles.geometry.drawRange.count }, (_, index) => positions.getZ(index));
   assert.ok(zs.some(z => z > -100), 'lake rockets should use the lake launch position');
   assert.ok(zs.some(z => z < -250), 'memorial rockets should use the memorial launch position');
-  assert.equal(festival.launchCeremony('fireworks-finale'), true);
+  assert.equal(festival.launchCeremony('fireworks-finale', now, clock), true);
+  now += 1_400;
   festival.update(1.4);
   assert.ok(particles.geometry.drawRange.count > 0);
   assert.ok(particles.geometry.drawRange.count <= positions.count);
@@ -67,6 +72,7 @@ test('ceremony fireworks use one pooled Points at the plaza, lake and memorial w
   assert.equal(scene.children.length, 1);
   assert.deepEqual([announcements, previews], [0, 0]);
 
+  now += 20_000;
   festival.update(20);
   assert.equal(particles.visible, false);
   assert.equal(particles.geometry.drawRange.count, 0);

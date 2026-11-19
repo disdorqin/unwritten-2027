@@ -233,6 +233,23 @@ test('director fires each cue once, in order, across the midnight boundary', () 
   for (let i = 1; i < fired.length; i++) assert.ok(fired[i].at >= fired[i - 1].at);
 });
 
+test('a clock correction cannot replay ceremony cues already delivered by the director', () => {
+  const midnight = ceremonyMidnight(2026, 480);
+  let now = midnight - 100;
+  const times: number[] = [];
+  const director = createCeremonyDirector({ now: () => now, utcOffsetMinutes: 480 }, {
+    onCue: cue => { if (cue.type === 'fireworks-main') times.push(cue.at); },
+  });
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  now = midnight - 50;
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  assert.deepEqual(times, [midnight + 1000]);
+});
+
 test('director state during countdown and late join without replay', () => {
   let now = at(31, 23, 59, 55);
   const director = createCeremonyDirector({ now: () => now });
