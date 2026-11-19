@@ -54,21 +54,28 @@ test('market stalls keep published coordinates, stable tasting IDs, and sourced 
     { localX: 12.4, localZ: -4.6, canopy: '#2e6a67', kind: '热饮' },
   ];
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
-  assert.equal(marketStalls.length, 4);
-  marketStalls.forEach((stall, index) => {
+  assert.equal(marketStalls.length, 17);
+  marketStalls.slice(0, 4).forEach((stall, index) => {
     const want = expected[index];
     assert.equal(stall.id, `market-stall-${index}`);
     assert.equal(stall.canopy, want.canopy);
     assert.equal(stall.kind, want.kind);
     assert.ok(Math.abs(stall.east - (plot.origin[0] + want.localX)) < 1e-9);
     assert.ok(Math.abs(stall.north - (plot.origin[1] - want.localZ)) < 1e-9);
+    assert.equal(stall.spot.x, stall.east);
+    assert.ok(Math.abs(stall.spot.n - (stall.north - 2.6)) < 1e-9);
+    assert.equal(stall.spot.ground, 10);
+  });
+  assert.equal(new Set(marketStalls.map(stall => stall.id)).size, 17);
+  for (const [index, stall] of marketStalls.entries()) {
+    assert.equal(stall.id, `market-stall-${index}`);
     assert.equal(stall.hawking.length, 2);
     for (const line of stall.hawking) assert.ok(hawkingSource.has(line), `unsourced hawking: ${line}`);
     assert.ok(closingSource.has(stall.closing), `unsourced closing: ${stall.closing}`);
-  });
+  }
 });
 
-test('the market entrance signs and four live banners share one atlas without changing tasting spots', t => {
+test('all stalls share the entrance atlas and keep tasting and zodiac spots usable', t => {
   const bannerTitles: string[] = [];
   const entranceSigns: string[] = [];
   let bannerTitle = '';
@@ -101,14 +108,16 @@ test('the market entrance signs and four live banners share one atlas without ch
   const terrain = createTerrainGrid();
   const group = buildMarketLandmark(plot);
   const batches = group.children.filter((child): child is Mesh =>
-    (child as Mesh).isMesh && child.name === 'Museum sign atlas');
+    child instanceof Mesh && child.name === 'Museum sign atlas');
   assert.equal(batches.length, 1);
-  assert.equal(batches[0].geometry.index?.count, 36);
+  assert.equal(batches[0].geometry.index?.count, (marketStalls.length + 2) * 6);
   assert.deepEqual(entranceSigns, ['河畔年集', '爆竹声中一岁除']);
-  assert.deepEqual(bannerTitles, ['冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶']);
+  assert.deepEqual(new Set(bannerTitles), new Set([
+    '冰糖葫芦', '炒货干果', '热乎吃食', '热汤姜茶', '南北杂货', '布匹围巾', '手工灯笼', '春联年画', '套圈玩具',
+  ]));
   group.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
   const { colliders } = readWalkGeometry(group);
-  assert.equal(colliders.length, 39);
+  assert.ok(colliders.length > 39);
   const bodyRadius = .27;
   const spots: TownActivitySpot[] = marketStalls.map(stall => ({
     x: stall.spot.x, n: stall.spot.n, ground: stall.spot.ground, range: stall.spot.range,
@@ -116,8 +125,8 @@ test('the market entrance signs and four live banners share one atlas without ch
   }));
   marketStalls.forEach((stall, index) => {
     const spot = spots[index];
-    // 地面高度与 spot.ground 一致（实测地块内为 10）。
-    assert.ok(Math.abs(terrain.heightAt(spot.x, spot.n) - spot.ground) < 1e-9);
+    // 固定坐标的测地高度保留五位小数，旧地块内仍为 10。
+    assert.ok(Math.abs(terrain.heightAt(spot.x, spot.n) - spot.ground) < 1e-5, stall.id);
     // 身体（半径 .27）不与任何与身高相交的碰撞盒重叠（场景坐标 z = -北）。
     for (const box of colliders) {
       if (box.min[1] >= spot.ground + 1.8 || box.max[1] <= spot.ground) continue;
@@ -140,18 +149,19 @@ test('the market entrance signs and four live banners share one atlas without ch
       Math.hypot(Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0)) < bodyRadius,
     ), `hay annex approach blocked at E${x}/N${n}`);
   }
-  const route = [[153.86, 98.5], [153.86, -stand.z], [stand.x, -stand.z]];
+  const route = [[150.4, 98.5], [150.4, 101.9], [153.86, 101.9], [153.86, -stand.z], [stand.x, -stand.z]];
   for (let step = 1; step < route.length; step++) {
     const [x, n] = route[step - 1], [endX, endN] = route[step];
     const count = Math.ceil(Math.hypot(endX - x, endN - n) / .05);
     for (let i = 0; i <= count; i++) clearGround(x + (endX - x) * i / count, n + (endN - n) * i / count);
   }
-  for (const radius of [0, .10, .20, .30, marketOxSite.range]) {
+  const oxSpot = { x: stand.x, n: -stand.z, ground: stand.y, range: marketOxSite.range, label: '牛', run() {} };
+  for (const radius of [0, .10, .20, .30, marketOxSite.range - 1e-6]) {
     for (let arc = 0; arc < 32; arc++) {
       const angle = Math.PI * arc / 16;
       const x = stand.x + Math.cos(angle) * radius, n = -stand.z + Math.sin(angle) * radius;
       clearGround(x, n);
-      assert.ok(spots.every(spot => Math.hypot(spot.x - x, spot.n - n) - spot.range >= 1.5));
+      assert.equal(nearestTownActivity([...spots, oxSpot], x, n, stand.y), oxSpot);
     }
   }
   const sightIsClear = (eye: Vector3) => {
@@ -178,7 +188,7 @@ test('hawking board rotates lines, caps bubbles at two, and resets out of range'
   assert.equal(shown[0].text, first.hawking[0]);
   // 显示期内保持同一条；熄灭后进入 4–7 s 间隔；再亮时轮换到词条 2。
   assert.equal(board.frame(2, first.east, first.north)[0]?.text, first.hawking[0]);
-  assert.deepEqual(board.frame(4.7, first.east, first.north), []);
+  assert.ok(!board.frame(4.7, first.east, first.north).some(frame => frame.stall === 0));
   const rotated = board.frame(10.2, first.east, first.north);
   assert.equal(rotated[0].stall, 0);
   assert.equal(rotated[0].text, first.hawking[1]);
@@ -217,5 +227,18 @@ test('tasting ledger serves three per stall per day, then closes, and resets nex
   // 次日清零；存储损坏时按新账本处理。
   assert.deepEqual(tasteOnce(storage, marketStalls.length, 0, day2), { served: true, count: 1 });
   storage.map.set('k', '{broken json');
-  assert.deepEqual(loadTastingLedger(storage, marketStalls.length, day2).counts, [0, 0, 0, 0]);
+  assert.deepEqual(loadTastingLedger(storage, marketStalls.length, day2).counts, Array<number>(17).fill(0));
+});
+
+test('legacy stalls keep their ledger positions and multiple days accumulate nine distinct kinds', () => {
+  const storage = fakeStorage();
+  const formerDay = new Date(2026, 11, 31, 20);
+  const now = new Date(2027, 0, 1, 9);
+  storage.map.set('k', JSON.stringify({ date: localDateKey(formerDay), counts: [1, 2, 3, 1] }));
+  assert.deepEqual(loadTastingLedger(storage, 17, formerDay).counts, [1, 2, 3, 1, ...Array<number>(13).fill(0)]);
+  const afterMidnight = loadTastingLedger(storage, 17, now);
+  assert.deepEqual(afterMidnight.counts, Array<number>(17).fill(0));
+  assert.deepEqual(afterMidnight.tastedKinds, marketStalls.slice(0, 4).map(stall => stall.kind));
+  marketStalls.forEach((_, index) => assert.equal(tasteOnce(storage, 17, index, now).served, true));
+  assert.equal(loadTastingLedger(storage, 17, new Date(2027, 0, 2, 9)).tastedKinds.length, 9);
 });

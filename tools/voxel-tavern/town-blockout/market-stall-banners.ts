@@ -1,5 +1,6 @@
 import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry } from 'three';
 import { addOpaqueMuseumLabels, type OpaqueMuseumLabel } from './museum-label-atlas';
+import { marketStallLocalPoint, type MarketStallLayout } from './market-stall-layout';
 
 export const marketBannerCopy = {
   '吃食（烤肠/炸串）': ['热乎吃食', '刚出炉 · 趁热吃'],
@@ -14,7 +15,7 @@ export const marketBannerCopy = {
 } as const;
 
 type StallKind = keyof typeof marketBannerCopy;
-export type MarketStallLayout = readonly [x: number, z: number, width: number, color: string, kind?: string];
+export type MarketBannerPlacement = Pick<MarketStallLayout, 'x' | 'z' | 'width' | 'yaw' | 'base'> & { kind?: string };
 
 const bannerWidth = 1;
 const bannerHeight = 1.14;
@@ -48,7 +49,7 @@ function createBannerCanvas([title, subtitle]: readonly [string, string]) {
 }
 
 export function addMarketStallBanners(
-  parent: Group, stalls: readonly MarketStallLayout[], entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
+  parent: Group, stalls: readonly MarketBannerPlacement[], originY: number, entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
   ...additionalSigns: Mesh<PlaneGeometry, MeshStandardMaterial>[]
 ) {
   const signs = [entrance, ...additionalSigns];
@@ -59,7 +60,8 @@ export function addMarketStallBanners(
 
   const tiles = new Map<StallKind, HTMLCanvasElement>();
   const labels: OpaqueMuseumLabel[] = [];
-  for (const [x, z, width, , kind] of stalls) {
+  for (const stall of stalls) {
+    const { width, kind } = stall;
     const labelKind = kind === '吃食' ? '吃食（烤肠/炸串）' : kind === '热饮' ? '热饮（姜茶/热汤）' : kind;
     if (labelKind === undefined || !Object.hasOwn(marketBannerCopy, labelKind)) continue;
     const key = labelKind as StallKind;
@@ -69,8 +71,9 @@ export function addMarketStallBanners(
       tiles.set(key, tile);
     }
     // The pennant lies on the front face of the existing right-hand post.
-    labels.push({ source: tile, parent, x: x + width / 2 - .2, y: 2.18, z: z + 2.32,
-      width: bannerWidth, height: bannerHeight, yaw: 0 });
+    const [x, z] = marketStallLocalPoint(stall, width / 2 - .2, 2.32);
+    labels.push({ source: tile, parent, x, y: stall.base - originY + 2.18, z,
+      width: bannerWidth, height: bannerHeight, yaw: stall.yaw });
   }
   if (!labels.length) {
     parent.add(...signs);
