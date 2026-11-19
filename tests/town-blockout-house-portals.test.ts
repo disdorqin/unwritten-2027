@@ -5,6 +5,7 @@ import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district
 import { buildExtensionStreets } from '../tools/voxel-tavern/town-blockout/extension-streets.ts';
 import { addForestDensity } from '../tools/voxel-tavern/town-blockout/forest-density.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
+import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { buildVillageLandmark, villageHousePortals } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
 import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
 import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
@@ -42,7 +43,7 @@ const baselineDoorIds = [
   'village:0', 'village:1',
 ].sort();
 
-test('every built decorative house has a unique dry, clear portal on its real front', t => {
+test('every built decorative house has a unique dry, clear portal on its real front', async t => {
   const landscape = new Group();
   const grid = createTerrainGrid();
   const track = createTownRailway(grid);
@@ -58,9 +59,12 @@ test('every built decorative house has a unique dry, clear portal on its real fr
       drawImage() {},
     }) }) },
   });
+  const guildPlot = layout.plots.find(({ id }) => id === 'lantern-workshop')!;
   let scenery: ReturnType<typeof addScenery>;
+  let guild: ReturnType<typeof buildMarketLandmark>;
   try {
     scenery = addScenery(landscape, grid);
+    guild = buildMarketLandmark(guildPlot);
   } finally {
     if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
     else Reflect.deleteProperty(globalThis, 'document');
@@ -185,6 +189,50 @@ test('every built decorative house has a unique dry, clear portal on its real fr
         })) return;
     return ground;
   }
+  await t.test('the workshop street and both rooms have a clear round trip', t => {
+    const [east, north, height] = guildPlot.origin;
+    guild.position.set(east, height, -north);
+    const walk = readWalkGeometry(guild);
+    const obstacles = [...walk.colliders, ...walk.floors];
+    const points = [
+      guildPlot.connect, [118.1, 115.1], [121.4, 115.4], [122.5, 120.3],
+      [122.5, 117], [126.3, 117], [126.3, 120.2], [126.3, 117],
+      [130, 117], [130, 120.2], [130, 117], [121.4, 115.4], [117.2, 115],
+    ];
+    const radius = .27;
+    const bodyHeight = 1.775;
+    const stepUp = .43;
+    let feet = grid.heightAt(guildPlot.connect[0], guildPlot.connect[1]);
+    let sampled = 0;
+    let peakStep = 0;
+    for (let index = 1; index < points.length; index++) {
+      const [fromX, fromN] = points[index - 1];
+      const [toX, toN] = points[index];
+      const steps = Math.ceil(Math.hypot(toX - fromX, toN - fromN) / .1);
+      for (let step = 0; step <= steps; step++) {
+        const x = fromX + step / steps * (toX - fromX);
+        const n = fromN + step / steps * (toN - fromN);
+        const label = `route ${index} at ${x.toFixed(3)}, ${n.toFixed(3)}`;
+        const ground = dryGround(x, n);
+        assert.ok(ground !== undefined && !scenery.plazaCoverBlocks(x, n, radius), `${label}: street`);
+        const overlaps = ({ min, max }: (typeof obstacles)[number]) => Math.hypot(
+          Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0),
+        ) < radius;
+        const support = walk.floors.reduce((y, floor) =>
+          floor.max[1] <= feet + stepUp && overlaps(floor) ? Math.max(y, floor.max[1]) : y, ground);
+        const rise = Math.abs(support - feet);
+        assert.ok(rise <= stepUp, `${label}: ${rise.toFixed(3)} m step`);
+        assert.ok(!obstacles.some(box => overlaps(box) && support + .025 < box.max[1] &&
+          support + bodyHeight > box.min[1]), `${label}: workshop collision`);
+        peakStep = Math.max(peakStep, rise);
+        feet = support;
+        sampled++;
+      }
+    }
+    assert.equal(sampled, 571);
+    t.diagnostic(`${points.length - 1} route targets, ${sampled} samples, peak step ${peakStep.toFixed(6)} m`);
+  });
+
   // Check the nine M3 approaches separately from the exact 92-ID catalogue.
   const m3DoorAddresses = ['137:70', '186:104', '206:110', '228:110', '246:114',
     '349:184', '351:144', '358:163', '364:207'];
