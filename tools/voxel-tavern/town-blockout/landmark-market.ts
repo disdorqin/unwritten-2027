@@ -266,6 +266,7 @@ function furnishGuildForecourt({ put }: Workshop) {
 
   // A lantern emblem distinguishes the hanging guild pennant from the central nameplate.
   const pennantX = 6.15;
+  for (const offset of [-.28, .28]) put(trim, pennantX + offset, 4.23, 7.74, .08, .14, .28);
   put(trim, pennantX, 4.16, 7.86, .76, .075, .12);
   put(darkRed, pennantX, 3.79, 7.90, .58, .68, .055);
   put(darkRed, pennantX - .17, 3.415, 7.90, .24, .10, .055);
