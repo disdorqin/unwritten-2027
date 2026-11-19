@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, Object3D,
 } from 'three';
-import { buildDistrictHousing, type DistrictTheme } from './district-housing';
+import { buildDistrictHousing, type CentralResidentialCard, type DistrictTheme } from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import type { TownHousePortal } from './town-house-portals';
@@ -19,6 +19,11 @@ const theaterHouseRelocations = new Map<string, readonly [number, number]>([
   ['179:155', [146.5, 129.5]],
   ['200:151', [147, 182.5]],
   ['246:135', [146, 199]],
+]);
+// Keys stay tied to the original lot and portal, including the relocated C-06.
+const plazaResidentialCards = new Map<string, CentralResidentialCard>([
+  ['200:151', 6], ['262:180', 8], ['264:228', 9], ['253:243', 11], ['221:251', 12],
+  ['202:247', 13], ['179:248', 15], ['249:264', 19], ['199:262', 20],
 ]);
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
@@ -167,7 +172,8 @@ export function addDistrictHousing(
       })) continue;
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
-      const model = buildDistrictHousing(style, w, d, site.variant, theme);
+      const centralCard = theme === undefined ? plazaResidentialCards.get(address) : undefined;
+      const model = buildDistrictHousing(style, w, d, site.variant, theme, centralCard);
       model.position.set(x, level, -n);
       model.rotation.y = angle;
       const plinth = new Mesh(foundation, stone);

@@ -48,6 +48,12 @@ function createBannerCanvas([title, subtitle]: readonly [string, string]) {
   return canvas;
 }
 
+export function addTavernStreetBanner(parent: Group, x: number, y: number, z: number) {
+  if (typeof document === 'undefined') return;
+  const source = createBannerCanvas(['未写酒馆', '']);
+  addOpaqueMuseumLabels([{ source, parent, x, y, z, width: bannerWidth, height: bannerHeight, yaw: 0 }], []);
+}
+
 export function addMarketStallBanners(
   parent: Group, stalls: readonly MarketBannerPlacement[], originY: number, entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
   ...additionalSigns: Mesh<PlaneGeometry, MeshStandardMaterial>[]

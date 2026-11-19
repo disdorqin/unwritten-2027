@@ -1,4 +1,5 @@
 import layout from './layout.json';
+import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
 
 export { layout, worldBounds };
@@ -9,6 +10,20 @@ type Segment = { a: Point; dx: number; dn: number; dh: number; lengthSquared: nu
 const [west, south, east, north] = layout.plaza.bounds;
 const memorial = layout.plots.find(plot => plot.id === 'memorial')!;
 const [memorialEast, memorialNorth, memorialLevel] = memorial.origin;
+const [marketEast, marketNorth] = layout.plots.find(plot => plot.id === 'market-stalls')!.origin;
+const gradedMarketCounters = new Set([5, 6, 7, 13, 14, 15, 16].map(index => `market-stall-${index}`));
+const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(stall => {
+  const [x, z] = marketStallLocalPoint(stall, 0, 2.6);
+  const [nearX, nearZ] = marketStallLocalPoint(stall, 1.05, 2.6);
+  return {
+    east: marketEast + x,
+    north: marketNorth - z,
+    eastRadius: Math.abs(nearX - x) + 1,
+    northRadius: Math.abs(nearZ - z) + 1,
+    level: stall.counterGround,
+  };
+});
+
 // Extend the paved apron datum below a full terrain grid cell at the south lip.
 const memorialApron = [memorialEast - 11, memorialNorth - memorial.footprint[1] / 2 - 1,
   memorialEast + 11, memorial.door[1] + 1];
@@ -118,6 +133,12 @@ function sample(x: number, n: number) {
   elevation = mix(elevation, road.height, 1 - fade(road.edge / 5));
   const apronDistance = boxDistance(x, n, memorialApron);
   elevation = mix(elevation, memorialLevel, 1 - fade(apronDistance / 5));
+  for (const apron of marketCounterAprons) {
+    const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
+    const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
+    const distance = Math.hypot(dx, dn);
+    if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
+  }
   if (plazaDistance === 0) elevation = layout.plaza.height;
   if (isWater(x, n)) elevation = Math.min(elevation, 3.4);
   return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };

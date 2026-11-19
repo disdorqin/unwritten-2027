@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { bridgeAt, isWater, layout, riverX, waterHeight, type createTerrainGrid } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
+import { addTavernStreetBanner } from './market-stall-banners';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Dimensions = [width: number, height: number, depth: number];
@@ -206,7 +207,7 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     box(bx, y + 1.25, bn, [2.39, .04, .12], snow, direction);
   }
 
-  function fence(x: number, n: number, direction: number, length: number) {
+  function fence(x: number, n: number, direction: number, length: number, height = 1.22) {
     const nx = Math.cos(direction), nn = Math.sin(direction);
     const interval = 2.6;
     let last: { x: number; n: number; y: number } | undefined;
@@ -215,11 +216,12 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
       const fn = n + d * nn;
       if (!reserve(fx, fn, .56, .27)) { last = undefined; continue; }
       const y = grid.heightAt(fx, fn);
-      box(fx, y + .61, fn, [.27, 1.22, .27], timber, direction);
-      box(fx, y + 1.23, fn, [.33, .08, .32], snow, direction);
+      box(fx, y + height / 2, fn, [.27, height, .27], timber, direction);
+      box(fx, y + height + .01, fn, [.33, .08, .32], snow, direction);
       if (last) {
-        for (const height of [.39, .90]) {
-          beam(last.x, last.y + height, last.n, fx, y + height, fn, .14, wood);
+        for (const rail of [.39, .90]) {
+          const offset = rail * height / 1.22;
+          beam(last.x, last.y + offset, last.n, fx, y + offset, fn, .14, wood);
         }
         colliders.push({ x: (last.x + fx) / 2, n: (last.n + fn) / 2, radius: interval * .31 });
       }
@@ -297,6 +299,31 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     }
     // Leave the existing tavern name readable below the center of the cable.
     festivalString(x - spread, y + height, n - edge, x + spread, y + height, n - edge, .41, id === 'tavern');
+  }
+
+  // Keep the tavern's south approach open by putting the new furniture on the east verge.
+  const [tavernX, tavernNorth] = layout.plots.find(plot => plot.id === 'tavern')!.origin;
+  const vergeEast = tavernX + 13;
+  fence(vergeEast, tavernNorth, Math.PI / 2, 5.2, .66);
+  const pileNorth = tavernNorth - 5.3;
+  if (reserve(vergeEast, pileNorth, .76, .67)) {
+    const y = grid.heightAt(vergeEast, pileNorth);
+    for (const [row, count] of [3, 2, 1].entries()) {
+      for (let column = 0; column < count; column++) {
+        const x = vergeEast + (column - (count - 1) / 2) * .21;
+        const logY = y + .12 + row * .17;
+        box(x, logY, pileNorth, [.18, .20, 1.00], timber);
+        box(x, logY, pileNorth - .508, [.15, .16, .025], wood);
+      }
+    }
+    box(vergeEast, y + .61, pileNorth, [.54, .116, 1.03], snow);
+  }
+  const flagNorth = tavernNorth - 7.15;
+  if (reserve(vergeEast, flagNorth, .62, .18)) {
+    const y = grid.heightAt(vergeEast, flagNorth);
+    box(vergeEast, y + 1.46, flagNorth, [.16, 2.92, .16], timber);
+    box(vergeEast - .42, y + 2.83, flagNorth, [.92, .12, .12], wood);
+    addTavernStreetBanner(group, vergeEast - .46, y + 2.14, -flagNorth - .08);
   }
 
   const [towerX, towerNorth, towerY] = layout.plots.find(plot => plot.id === 'clocktower')!.origin;
