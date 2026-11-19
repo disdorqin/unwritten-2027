@@ -1,0 +1,183 @@
+diff --git a/tests/town-blockout-market-banners.test.ts b/tests/town-blockout-market-banners.test.ts
+index 92e9ab15a29437958a4490c262f9ffad41b3e022..13b7c681e9ddab6a704fbef128526581d509502b 100644
+--- a/tests/town-blockout-market-banners.test.ts
++++ b/tests/town-blockout-market-banners.test.ts
+@@ -31 +31 @@
+-test('untyped stalls leave the entrance sign and seventeen placed banners share one atlas', () => {
++test('untyped stalls leave the entrance sign and all placed banners share one atlas', () => {
+@@ -68,2 +68,2 @@
+-    assert.equal(batch.geometry.getAttribute('position').count, 4 * (17 + 1));
+-    assert.equal(batch.geometry.index?.count, 6 * (17 + 1));
++    assert.equal(batch.geometry.getAttribute('position').count, 4 * (marketStallLayouts.length + 1));
++    assert.equal(batch.geometry.index?.count, 6 * (marketStallLayouts.length + 1));
+diff --git a/tests/town-blockout-market-fair.test.ts b/tests/town-blockout-market-fair.test.ts
+index 1357aa01d0a68b658d9d087808ca7de24e8ab1c4..075bc36b845f9e50affc6b20f69c3f6d08a80001 100644
+--- a/tests/town-blockout-market-fair.test.ts
++++ b/tests/town-blockout-market-fair.test.ts
+@@ -11,0 +12 @@
++import { marketStallLayouts } from '../tools/voxel-tavern/town-blockout/market-stall-layout.ts';
+@@ -113 +114 @@
+-  assert.equal(batches[0].geometry.index?.count, (marketStalls.length + 2) * 6);
++  assert.equal(batches[0].geometry.index?.count, (marketStallLayouts.length + 2) * 6);
+diff --git a/tests/town-blockout-market-layout.test.ts b/tests/town-blockout-market-layout.test.ts
+index 43bc550f235448fce786416cf7bf70e5419f5062..90d58cf9057e526585f8c4302a07b5ccc87d005f 100644
+--- a/tests/town-blockout-market-layout.test.ts
++++ b/tests/town-blockout-market-layout.test.ts
+@@ -7 +7 @@
+-  marketStallLayouts, marketStallLocalPoint,
++  marketExpansionStalls, marketStallLayouts, marketStallLocalPoint,
+@@ -8,0 +9 @@
++import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance.ts';
+@@ -11 +12 @@
+-test('market geometry keeps the old stalls and produces all seventeen kinds and row counts', t => {
++test('market geometry preserves the old booths and added stalls keep their full row and stand clearance', t => {
+@@ -32 +33,2 @@
+-  assert.equal(marketStallLayouts.length, 17);
++  const phaseThree = layout.plaza.bounds.join(',') === '97,128,271,212';
++  assert.equal(marketStallLayouts.length, phaseThree ? 24 : 17);
+@@ -34 +36 @@
+-  assert.equal(new Set(group.userData.marketStallIds).size, 17);
++  assert.equal(new Set(group.userData.marketStallIds).size, marketStallLayouts.length);
+@@ -44,2 +46,3 @@
+-  assert.deepEqual(counts(marketStallLayouts.map(stall => stall.row)), { main: 5, east: 3, opposite: 5, north: 2, forecourt: 2 });
+-  assert.deepEqual(counts(marketStallLayouts.map(stall => stall.kind)), {
++  const original = marketStallLayouts.slice(0, 17);
++  assert.deepEqual(counts(original.map(stall => stall.row)), { main: 5, east: 3, opposite: 5, north: 2, forecourt: 2 });
++  assert.deepEqual(counts(original.map(stall => stall.kind)), {
+@@ -61,0 +65,16 @@
++  if (phaseThree) {
++    const world = marketExpansionStalls.map(({ id, x, z, yaw, base, row }) =>
++      [id, x + plot.origin[0], plot.origin[1] - z, yaw, base, row] as const);
++    assert.deepEqual(world.map(([, east, north, yaw, , row]) => [east, north, yaw, row]), [
++      [110, 142, Math.PI, 'spillover'], [117.5, 142, Math.PI, 'spillover'], [147.5, 142, Math.PI, 'spillover'],
++      [155, 142, Math.PI, 'spillover'], [162.5, 142, Math.PI, 'spillover'], [170, 142, Math.PI, 'spillover'],
++      [137.8, 129.6, Math.PI / 2, 'north'],
++    ]);
++    assert.deepEqual(world.map(([id]) => id), Array.from({ length: 7 }, (_, i) => `market-stall-${17 + i}`));
++    for (const [, east, north, yaw] of world) {
++      const [halfEast, halfNorth] = yaw === Math.PI ? [3.11, 2.69] : [2.69, 3.235];
++      for (const dx of [-halfEast, 0, halfEast]) for (const dn of [-halfNorth, 0, halfNorth]) {
++        assert.ok(!roadCorridorKeepClear(east + dx, north + dn, .27), `road clear at ${east + dx}/${north + dn}`);
++      }
++    }
++  }
+diff --git a/tools/voxel-tavern/town-blockout/district-layout.ts b/tools/voxel-tavern/town-blockout/district-layout.ts
+index a3cd95d375fd9080649f60714231740c752a6abf..2b4a8f24e3a78389142f21a67c919f7ca926201b 100644
+--- a/tools/voxel-tavern/town-blockout/district-layout.ts
++++ b/tools/voxel-tavern/town-blockout/district-layout.ts
+@@ -6,0 +7 @@
++import { marketSpilloverWalkAt } from './market-stall-layout';
+@@ -264 +265 @@
+-    return sweptPaths.some(({ x, n, dx, dn, start, end }) => {
++    return marketSpilloverWalkAt(east, north) || sweptPaths.some(({ x, n, dx, dn, start, end }) => {
+diff --git a/tools/voxel-tavern/town-blockout/landmark-market.ts b/tools/voxel-tavern/town-blockout/landmark-market.ts
+index 137b6ebc5b632fbf55268fc140fe02ab0111ff6a..e2b3283360f242de2764bd62be2005bb6d408b7c 100644
+--- a/tools/voxel-tavern/town-blockout/landmark-market.ts
++++ b/tools/voxel-tavern/town-blockout/landmark-market.ts
+@@ -547 +547,2 @@
+-      local.put(stone[2], 0, -.36, -.15, stall.width - .20, .72, 4.64);
++      const footingDepth = stall.footingDepth ?? .72;
++      local.put(stone[2], 0, -footingDepth / 2, -.15, stall.width - .20, footingDepth, 4.64);
+diff --git a/tools/voxel-tavern/town-blockout/market-fair.ts b/tools/voxel-tavern/town-blockout/market-fair.ts
+index 24595e2f05282852504ad567c90326b77dd8bf76..5dc871a76208fdaaf43af4f7fe36ad4236a9ac41 100644
+--- a/tools/voxel-tavern/town-blockout/market-fair.ts
++++ b/tools/voxel-tavern/town-blockout/market-fair.ts
+@@ -4 +4 @@
+-import { marketStallLayouts, marketStallLocalPoint, type MarketStallKind } from './market-stall-layout';
++import { marketStallLayouts, marketStallLocalPoint, marketTastingStallCount, type MarketStallKind } from './market-stall-layout';
+@@ -101 +101,2 @@
+-  return marketStallLayouts.map(stall => {
++  // The overflow row provides physical booths and approach stands. The saved tasting indices stay the same.
++  return marketStallLayouts.slice(0, marketTastingStallCount).map(stall => {
+diff --git a/tools/voxel-tavern/town-blockout/market-stall-layout.ts b/tools/voxel-tavern/town-blockout/market-stall-layout.ts
+index 26cc608b3f6b4b49e5e0a5972dca65ff51d9361b..c050c8e78cd2670964ffc9a3bb586b3fb4101377 100644
+--- a/tools/voxel-tavern/town-blockout/market-stall-layout.ts
++++ b/tools/voxel-tavern/town-blockout/market-stall-layout.ts
+@@ -0,0 +1,2 @@
++import layout from './layout.json';
++
+@@ -6 +8 @@
+-export type MarketStallRow = 'main' | 'east' | 'opposite' | 'north' | 'forecourt';
++export type MarketStallRow = 'main' | 'east' | 'opposite' | 'north' | 'forecourt' | 'spillover';
+@@ -17,0 +20 @@
++  footingDepth?: number;
+@@ -27 +30 @@
+-  yaw: number, base: number,
++  yaw: number, base: number, footingDepth?: number,
+@@ -53,3 +56,35 @@
+-export const marketStallLayouts: readonly MarketStallLayout[] = stalls.map((
+-  [x, z, width, canopy, kind, row, yaw, base], index,
+-) => ({ id: `market-stall-${index}`, x, z, width, canopy, kind, row, yaw, base, counterGround: index === 4 ? oxApproachGround : base }));
++export const marketTastingStallCount = stalls.length;
++const phaseThreeBounds = [97, 128, 271, 212] as const;
++const phaseThree = phaseThreeBounds.every((edge, i) => edge === layout.plaza.bounds[i]);
++const [marketEast, marketNorth] = layout.plots.find(plot => plot.id === 'market-stalls')!.origin;
++
++// Maintain the template pitch on both sides of the southwest road. The road
++// occupies one continuous break. The lower-left last foundation meets the cut grade.
++const expansion: readonly Stall[] = [
++  [110 - marketEast, marketNorth - 142, 4.9, '#a1342d', '糖葫芦', 'spillover', north, 12],
++  [117.5 - marketEast, marketNorth - 142, 4.9, '#92562e', '干果炒货', 'spillover', north, 12, 1.17],
++  [147.5 - marketEast, marketNorth - 142, 4.9, '#8a312d', '吃食', 'spillover', north, 12],
++  [155 - marketEast, marketNorth - 142, 4.9, '#2e6a67', '热饮', 'spillover', north, 12],
++  [162.5 - marketEast, marketNorth - 142, 4.9, '#95702c', '杂货', 'spillover', north, 12],
++  [170 - marketEast, marketNorth - 142, 4.9, '#593f7c', '布匹/围巾', 'spillover', north, 12],
++  [-16.2, -24.6, 5.15, '#b54126', '灯笼', 'north', east, 10.81512, .78],
++];
++
++function stallLayout(
++  [x, z, width, canopy, kind, row, yaw, base, footingDepth]: Stall, index: number,
++): MarketStallLayout {
++  return { id: `market-stall-${index}`, x, z, width, canopy, kind, row, yaw, base,
++    counterGround: index === 4 ? oxApproachGround : base,
++    ...(footingDepth === undefined ? {} : { footingDepth }) };
++}
++
++export const marketStallLayouts: readonly MarketStallLayout[] =
++  (phaseThree ? [...stalls, ...expansion] : stalls).map(stallLayout);
++
++export const marketExpansionStalls = marketStallLayouts.slice(marketTastingStallCount);
++
++export function marketSpilloverWalkAt(x: number, n: number) {
++  const localX = x - marketEast, localZ = marketNorth - n;
++  return marketExpansionStalls.some(stall => stall.row === 'spillover' &&
++    Math.abs(localX - stall.x) < stall.width / 2 && Math.abs(localZ - (stall.z - 2.6)) <= 1);
++}
+diff --git a/tools/voxel-tavern/town-blockout/terrain.ts b/tools/voxel-tavern/town-blockout/terrain.ts
+index 98bcbe5eec4dc87871c4bf50ca34e370a36ca845..619d3ea570760be1c554c1056230435101a10b62 100644
+--- a/tools/voxel-tavern/town-blockout/terrain.ts
++++ b/tools/voxel-tavern/town-blockout/terrain.ts
+@@ -2 +2 @@
+-import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
++import { marketExpansionStalls, marketStallLayouts, marketStallLocalPoint, type MarketStallLayout } from './market-stall-layout';
+@@ -18 +18 @@
+-const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(stall => {
++function marketCounterApron(stall: MarketStallLayout) {
+@@ -28 +28,3 @@
+-});
++}
++const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(marketCounterApron);
++const expansionCounterAprons = marketExpansionStalls.map(marketCounterApron);
+@@ -110,0 +113,10 @@
++function gradeMarketCounters(x: number, n: number, elevation: number, aprons: readonly ReturnType<typeof marketCounterApron>[]) {
++  for (const apron of aprons) {
++    const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
++    const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
++    const distance = Math.hypot(dx, dn);
++    if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
++  }
++  return elevation;
++}
++
+@@ -139,6 +151 @@
+-  for (const apron of marketCounterAprons) {
+-    const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
+-    const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
+-    const distance = Math.hypot(dx, dn);
+-    if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
+-  }
++  elevation = gradeMarketCounters(x, n, elevation, marketCounterAprons);
+@@ -150,0 +158,3 @@
++  if (expansionCounterAprons.length && road.edge > 0) {
++    elevation = gradeMarketCounters(x, n, elevation, expansionCounterAprons);
++  }
