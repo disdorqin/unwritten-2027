@@ -1842,10 +1842,18 @@ index 0000000..96195e9
 +  };
 +}
 diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
-index 72cc9c1..33e4636 100644
+index 72cc9c1..a2b44e5 100644
 --- a/tools/voxel-tavern/town-blockout/viewer.ts
 +++ b/tools/voxel-tavern/town-blockout/viewer.ts
-@@ -276,7 +276,9 @@ addTownRailWayfinding(scene, grid.heightAt);
+@@ -30,6 +30,7 @@ import { addTerrainMeshes } from './terrain-mesh';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
++import { marketHomeIds } from './market-home-interior';
+ import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
+ import { buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable } from './landmark-shared-home';
+ import { type TownHousePortal } from './town-house-portals';
+@@ -276,7 +277,9 @@ addTownRailWayfinding(scene, grid.heightAt);
  const pineCamp = buildPineCamp(grid);
  landscape.add(pineCamp.group);
  const scenery = addScenery(landscape, grid, pineCamp.keepClear);
@@ -1856,7 +1864,7 @@ index 72cc9c1..33e4636 100644
  const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
    districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
  const forest = addForestDensity(landscape, grid,
-@@ -555,6 +557,11 @@ function geometry() {
+@@ -555,6 +558,11 @@ function geometry() {
      index(floors, (cell, box) => cell.floors.push(box));
      index(ramps, (cell, ramp) => cell.ramps.push(ramp));
    }
@@ -1868,18 +1876,32 @@ index 72cc9c1..33e4636 100644
    return chunks;
  }
  let walkGeometry = geometry();
-@@ -1031,14 +1038,52 @@ activitySpots.push(...sledRacks.map(rack => ({
+@@ -1031,14 +1039,70 @@ activitySpots.push(...sledRacks.map(rack => ({
    },
  })));
  activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
++const marketHomeDoorIds = new Set<string>(marketHomeIds);
 +function openMarketHomeEntrance(door: TownHousePortal, spot: TownActivitySpot) {
-+  const panel = openPlace('集市屋门', '');
++  const restoreMouseLock = document.pointerLockElement === renderer.domElement;
++  const canVisit = () => districts.marketHomes.has(door.id);
++  const panel = openPlace('集市屋门', canVisit() ? '' : '这户门廊尚未开放。');
++  let restored = false;
++  function restoreControls() {
++    if (restored || placeCard.open) return;
++    restored = true;
++    renderer.domElement.focus({ preventScroll: true });
++    touchWalk.setAllowed(moveAllowed());
++    if (restoreMouseLock && lookAllowed()) desktopLook.engage();
++  }
++  placeCard.addEventListener('close', restoreControls, { once: true });
 +  const menu = document.createElement('div');
 +  menu.id = 'market-home-entrance';
 +  menu.dataset.doorId = door.id;
 +  const commands = [
 +    { key: 'shared', label: '进入屋舍空间', select: () => enterSharedHome(door) },
-+    { key: 'visit', label: '参观这户', select: () => announceActivity('沿门廊步行进入这户，沿原门返回街面') },
++    { key: 'visit', label: '参观这户', select: () => {
++      if (canVisit()) announceActivity('沿门廊步行进入这户，沿原门返回街面');
++    } },
 +    { key: 'cancel', label: '取消' },
 +  ];
 +  for (const { key, label, select } of commands) {
@@ -1887,14 +1909,17 @@ index 72cc9c1..33e4636 100644
 +    button.type = 'button';
 +    button.dataset.marketHomeAction = key;
 +    button.textContent = label;
++    button.disabled = key === 'visit' && !canVisit();
 +    button.onclick = () => {
++      if (!placeCard.open || !panel.contains(button) || button.disabled) return;
 +      placeCard.close();
 +      if (select && currentAction() === spot) select();
++      restoreControls();
 +    };
 +    menu.append(button);
 +  }
 +  panel.append(menu);
-+  menu.querySelector('button')?.focus();
++  menu.querySelector('button')?.focus({ preventScroll: true });
 +}
 +
  function registerHomeDoors(doors: readonly TownHousePortal[]) {
@@ -1903,12 +1928,13 @@ index 72cc9c1..33e4636 100644
      homeDoors.set(door.id, door);
 -    activitySpots.push({
 -      x: door.x, n: door.n, ground: door.ground, range: 1.6, label: '进入屋舍空间',
++    const marketDoor = marketHomeDoorIds.has(door.id);
 +    const home = districts.marketHomes.get(door.id);
 +    const spot: TownActivitySpot = {
 +      x: door.x, n: door.n, ground: door.ground, range: 1.6,
-+      label: home ? '集市屋门' : '进入屋舍空间',
++      label: marketDoor ? '集市屋门' : '进入屋舍空间',
 +      available: () => !homeReturn,
-+      run: () => home ? openMarketHomeEntrance(door, spot) : enterSharedHome(door),
++      run: () => marketDoor ? openMarketHomeEntrance(door, spot) : enterSharedHome(door),
 +    };
 +    activitySpots.push(spot);
 +    const furnishing = home?.furnishingWitness;
@@ -1924,7 +1950,7 @@ index 72cc9c1..33e4636 100644
      });
    }
  }
-@@ -1117,8 +1162,22 @@ function availableHouseDoorGround(east: number, north: number) {
+@@ -1117,8 +1181,22 @@ function availableHouseDoorGround(east: number, north: number) {
    return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
  }
 
@@ -1948,7 +1974,7 @@ index 72cc9c1..33e4636 100644
    if (!landing) return;
    // The prediction only chooses textures. Landing is revalidated when the door actually opens.
    const destination = new Vector3(landing.x, landing.ground + eye, -landing.n);
-@@ -1162,7 +1221,7 @@ async function exitThroughHouseDoor(target: TownHousePortal) {
+@@ -1162,7 +1240,7 @@ async function exitThroughHouseDoor(target: TownHousePortal) {
      // A timed ceremony can move a visitor out of the shared room while the DOM fades.
      if (homeReturn !== entry) return;
      homeReturn = undefined;
@@ -1957,7 +1983,7 @@ index 72cc9c1..33e4636 100644
      if (landing) {
        ({ x, n, ground } = landing);
        yaw = target.exitYaw;
-@@ -1195,7 +1254,7 @@ function checkHouseDoorLanding() {
+@@ -1195,7 +1273,7 @@ function checkHouseDoorLanding() {
    const check = houseDoorLandingCheck;
    if (!check || !houseDoorOccupied(x, n, ground)) return;
    // The already established AOI only delivers exterior peers as the player re-enters the town.

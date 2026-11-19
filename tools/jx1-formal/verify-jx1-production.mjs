@@ -76,13 +76,17 @@ function compareRegistry(expected, actual, enabledIds) {
   assert.deepEqual([...actual.active].sort(), [...enabledIds].sort(), 'Only explicitly enabled and successfully constructed candidates may activate');
   const plain = expectedIds.filter(id => !expected.marketIds.includes(id));
   assert.equal(plain.length, 75);
+  for (const id of expected.marketIds) {
+    const spots = actualById.get(id).spots.filter(spot => spot.label === '集市屋门' && spot.range === 1.6);
+    assert.equal(spots.length, 1, `${id} must retain one chooser spot before and after physical activation`);
+  }
   for (const id of plain) {
     assert.ok(actualById.get(id).spots.some(spot => spot.label === legacyLabel && spot.range === 1.6), `${id} lost its registered legacy spot`);
   }
   return { checked: expectedIds.length, market: expected.marketIds.length, legacySpots: plain.length };
 }
 
-async function openMenu(session, id) {
+async function openMenu(session, id, allowVisit = true) {
   const { page, cdp } = session;
   const before = await frame(page, { mask: outdoor, home: null, canMove: true });
   assert.ok(before.action, 'The player must have a real door action at the current position');
@@ -94,7 +98,7 @@ async function openMenu(session, id) {
   assert.equal((await control(page, 'visit').textContent())?.trim(), '参观这户');
   for (const kind of ['shared', 'visit', 'cancel']) {
     assert.equal(await control(page, kind).count(), 1, `Missing a unique ${kind} button`);
-    assert.ok(await control(page, kind).isEnabled());
+    assert.equal(await control(page, kind).isEnabled(), kind !== 'visit' || allowVisit, `Unexpected ${kind} permission`);
   }
   return before;
 }
@@ -215,7 +219,7 @@ async function legacyReturn(session, id, stand) {
   return { spawn, atExit, returned };
 }
 
-async function checkMenu(browser, url, id, isTouch, output, result) {
+async function checkMenu(browser, url, id, isTouch, output, result, allowVisit = true) {
   const session = await start(browser, url, isTouch);
   const { page } = session;
   try {
@@ -223,16 +227,20 @@ async function checkMenu(browser, url, id, isTouch, output, result) {
     const door = registry.doors.find(door => door.id === id);
     assert.ok(door, `Market door ${id} fell out of the registry`);
     result.stand = await observe(page, 'stage', id);
-    const initial = await openMenu(session, id);
+    const initial = await openMenu(session, id, allowVisit);
     result.menu = await capture(page, output, `${id.replaceAll(':', '-')}-${isTouch ? 'touch' : 'keyboard'}-menu.png`);
     if (isTouch) await choose(session, 'cancel');
     else await page.keyboard.press('Escape');
     result.cancel = await afterCancel(session, initial);
-    const visitBefore = await openMenu(session, id);
-    await choose(session, 'visit');
-    result.visit = await frame(page, { after: visitBefore.frames, mask: outdoor, home: null, canMove: true, dialogOpen: false });
-    assertVisitStayed(visitBefore, result.visit);
-    await openMenu(session, id);
+    if (allowVisit) {
+      const visitBefore = await openMenu(session, id);
+      await choose(session, 'visit');
+      result.visit = await frame(page, { after: visitBefore.frames, mask: outdoor, home: null, canMove: true, dialogOpen: false });
+      assertVisitStayed(visitBefore, result.visit);
+    } else {
+      result.visitDisabled = true;
+    }
+    await openMenu(session, id, allowVisit);
     await choose(session, 'shared');
     result.shared = await legacyReturn(session, id, result.stand);
     near(relativeAngle(result.shared.returned.yaw, door.exitYaw), 0, exact, 'Selected shared-room exit yaw');
@@ -240,7 +248,9 @@ async function checkMenu(browser, url, id, isTouch, output, result) {
     assert.ok(result.input.every(event => event.trusted), 'Menu verification received an untrusted event');
     if (isTouch) {
       assert.ok(result.input.some(event => event.id === 'world-action' && event.pointer === 'touch'));
-      for (const kind of ['cancel', 'visit', 'shared']) assert.ok(result.input.some(event => event.action === kind && event.pointer === 'touch'));
+      for (const kind of allowVisit ? ['cancel', 'visit', 'shared'] : ['cancel', 'shared']) {
+        assert.ok(result.input.some(event => event.action === kind && event.pointer === 'touch'));
+      }
       assert.ok(result.input.some(event => event.id === 'touch-walk' && event.type === 'touchmove'));
     } else {
       for (const code of ['KeyE', 'Escape', 'Enter']) assert.ok(result.input.some(event => event.code === code));
@@ -469,10 +479,11 @@ try {
     evidence.step = 'check-original-legacy-action';
     evidence.plainDoor = {};
     await checkLegacy(browser, started.url, doors.get(plan.legacyDoor), evidence.plainDoor);
-    if (plan.mode === 'closed-gate') {
-      evidence.step = 'check-unverified-market-door-legacy-action';
-      evidence.closedMarketDoor = {};
-      await checkLegacy(browser, started.url, doors.get(baseline.marketIds[0]), evidence.closedMarketDoor);
+    const closedMarketId = baseline.marketIds.find(id => !plan.enableIds.includes(id));
+    if (closedMarketId) {
+      evidence.step = 'check-unverified-market-door-chooser';
+      evidence.closedMarketDoor = { id: closedMarketId, modality: 'keyboard' };
+      await checkMenu(browser, started.url, closedMarketId, false, output, evidence.closedMarketDoor, false);
     }
     for (const id of menuDoors) {
       evidence.step = `keyboard-menu:${id}`;
