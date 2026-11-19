@@ -16,4 +16,5 @@ ARG TOWN_RELEASE=local
 ENV TOWN_RELEASE=${TOWN_RELEASE}
 LABEL org.opencontainers.image.revision=${TOWN_RELEASE}
 COPY --from=build /app/tools/voxel-tavern/dist/ /srv/
+COPY public/models/post-office.glb public/models/clocktower.glb public/models/tavern.glb /srv/models/
 COPY tools/Caddyfile.town-preview /etc/caddy/Caddyfile
