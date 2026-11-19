@@ -1,0 +1,36 @@
+name: Verify town Compose images
+on:
+  push:
+    branches:
+      - town-verify-compose-fbfa322-20261119
+permissions:
+  contents: read
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TOWN_RELEASE: 'fbfa3222e8b547168673eb76db5011283e2dcaac'
+      TOWN_REHEARSAL_BUILD: 'on'
+    steps:
+      - name: Check out the verified candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 'fbfa3222e8b547168673eb76db5011283e2dcaac'
+          persist-credentials: false
+      - name: Build and verify both images
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TOWN_RELEASE"
+          printf 'candidate=%s rehearsal=%s\n' "$TOWN_RELEASE" "$TOWN_REHEARSAL_BUILD"
+          docker compose version
+          docker compose -p town-compose-verify -f tools/compose.town-preview.yaml config --quiet
+          docker compose -p town-compose-verify -f tools/compose.town-preview.yaml build web presence
+          for name in unwritten-town-preview unwritten-town-presence; do
+            image="$name:$TOWN_RELEASE"
+            revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
+            id="$(docker image inspect --format '{{.Id}}' "$image")"
+            test "$revision" = "$TOWN_RELEASE"
+            printf 'verified image=%s revision=%s id=%s\n' "$image" "$revision" "$id"
+          done
