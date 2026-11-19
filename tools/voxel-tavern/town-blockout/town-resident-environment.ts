@@ -1,6 +1,7 @@
 export const residentDossierRoles = [
   'mayor', 'railmaster', 'firekeeper', 'registrar', 'palace-guard', 'market-representative',
-  'troupe-leader', 'bell-keeper', 'courier', 'lake-fisher', 'mine-watch', 'sky-watch', 'mascot',
+  'troupe-leader', 'bell-keeper', 'courier', 'lake-fisher', 'mine-watch', 'sky-watch',
+  'foothill-registrar', 'mascot',
 ] as const;
 
 export type TownEnvironmentRole = typeof residentDossierRoles[number];

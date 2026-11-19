@@ -18,6 +18,9 @@ test('resident actions wait for their authoritative placement and emit no text',
 
 test('the dossier relationships include every listed role without assigning placements', () => {
   assert.equal(residentNamedBonds.length, 9);
+  assert.equal(residentDossierRoles.filter(role => role !== 'mascot').length, 13);
+  assert.ok(residentDossierRoles.includes('foothill-registrar'));
+  assert.equal(residentHabitAt('world-anomaly-advanced', role => role === 'foothill-registrar' ? anchor : undefined), undefined);
   assert.equal(new Set(residentDossierRoles).size, residentDossierRoles.length);
   for (const [a, b, cue] of residentNamedBonds) {
     const forward = residentBondBetween(a, b, () => anchor);
