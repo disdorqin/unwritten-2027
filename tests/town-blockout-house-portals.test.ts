@@ -170,7 +170,11 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     const door = portals.find(({ id }) => id === 'old-town:' + address)!;
     t.diagnostic(`${address} receiving [${east}, ${north}] door [${door.x.toFixed(3)}, ${door.n.toFixed(3)}] ground ${door.ground.toFixed(4)} m, footprint/expanded/nine-point road gaps ${footprintGap.toFixed(3)}/${expandedGap.toFixed(3)}/${sampleGap.toFixed(3)} m, grade spread ${(Math.max(...heights) - Math.min(...heights)).toFixed(3)} m`);
   }
-  const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
+  const railGeometry = readWalkGeometry(track.group);
+  const colliders = [
+    ...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders,
+    ...railGeometry.colliders, ...railGeometry.floors,
+  ];
   function dryGround(x: number, n: number) {
     const ground = grid.heightAt(x, n);
     if (!canEnter(x, n) || isWater(x, n) || district.blocked(x, n) || scenery.blocked(x, n) ||
@@ -181,7 +185,7 @@ test('every built decorative house has a unique dry, clear portal on its real fr
         })) return;
     return ground;
   }
-  // Establish signed-off landing points before an M3 track alignment is applied.
+  // Check the nine M3 approaches separately from the exact 92-ID catalogue.
   const m3DoorAddresses = ['137:70', '186:104', '206:110', '228:110', '246:114',
     '349:184', '351:144', '358:163', '364:207'];
   for (const address of m3DoorAddresses) {

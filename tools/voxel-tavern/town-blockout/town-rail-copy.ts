@@ -52,6 +52,9 @@ const railDestinationGuide = {
   },
   'north-ridge-station': { activity: '山腰观景', route: '北岭山腰线' },
   'mirror-lake-station': { activity: '镜湖西岸', route: '西岸下车，镜湖在东侧。' },
+  market: { activity: '年节集市', route: '从西侧木阶离站，沿步道进入集市。' },
+  plaza: { activity: '广场、社戏台', route: '从西侧木阶离站，沿步道走到广场东沿。' },
+  memorial: { activity: '纪念馆', route: '从东侧木阶离站，接东北路走到纪念馆。' },
 } satisfies Record<TownRailStopId, { activity: string; route: string }>;
 
 const guideStops = railPlatforms.map(({ id, label }) => ({ label, ...railDestinationGuide[id] }));

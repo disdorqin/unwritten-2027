@@ -49,6 +49,19 @@ const plazaHouseRelocations: ReadonlyMap<string, readonly [east: number, north: 
   ['262:180', [269.5, 241.5]],
 ]);
 
+// Relocate nine lots around the central rail corridor without changing their door IDs.
+const centralRailHouseRelocations: ReadonlyMap<string, readonly [east: number, north: number]> = new Map([
+  ['137:70', [136, 71]],
+  ['186:104', [181, 112]],
+  ['206:110', [210.5, 101.5]],
+  ['228:110', [229.5, 105.5]],
+  ['246:114', [246.5, 111.5]],
+  ['349:184', [347.5, 184]],
+  ['351:144', [361, 143]],
+  ['358:163', [365, 160.5]],
+  ['364:207', [368, 207]],
+]);
+
 // Keys stay tied to the original lot and portal, including the relocated C-06.
 const plazaResidentialCards = new Map<string, CentralResidentialCard>([
   ['200:151', 6], ['262:180', 8], ['264:228', 9], ['253:243', 11], ['221:251', 12],
@@ -193,7 +206,7 @@ export function addDistrictHousing(
     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
       const address = `${sourceEast}:${sourceNorth}`;
       const id = `old-town:${address}`;
-      const relocation = relocations.get(address);
+      const relocation = relocations.get(address) ?? centralRailHouseRelocations.get(address);
       const [x, n] = relocation ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);

@@ -51,19 +51,20 @@ function roadHeadroom(id: 'station-approach' | 'hot-spring-approach' | 'north-fo
   return surveyRoadHeadroom(road, colliders).minimum;
 }
 
-test('the existing track stays out of both M3 northeast road clearance sample areas', t => {
+test('both M3 northeast roads retain pedestrian headroom below the built track', t => {
   const train = createTownRailway(grid, () => epoch);
   const colliders: Box[] = [...train.group.userData.colliders, ...train.group.userData.floors];
   const road = layout.roads.find(({ id }) => id === 'northeast')!;
   for (const [center, expected] of [[[275, 192], 2604], [[336, 246], 2669]] as const) {
     const report = surveyRoadHeadroom(road, colliders, center);
     assert.equal(report.checked, expected);
-    assert.equal(report.hits, 0);
-    t.diagnostic(JSON.stringify({ center, checked: report.checked, hits: report.hits }));
+    assert.ok(report.hits > 0, `the central rail must cross the road near ${center}`);
+    assert.ok(report.minimum >= 1.95, `clearance at ${center}: ${report.minimum} m`);
+    t.diagnostic(JSON.stringify({ center, checked: report.checked, railOverhead: report.hits, minimum: report.minimum }));
   }
 });
 
-test('tour railway encircles the original town, makes both river crossings and clears the snow', () => {
+test('tour railway encircles the original town, makes both river crossings and clears the snow', t => {
   const train = createTownRailway(grid, () => epoch);
   const { route } = train;
   const xs = route.points.map(point => point.x);
@@ -77,13 +78,16 @@ test('tour railway encircles the original town, makes both river crossings and c
   assert.equal(grid.heightAt(train.boarding.x, train.boarding.n), 19);
   assert.ok(train.keepClear(478, 224));
   assert.ok(!train.keepClear(train.boarding.x, train.boarding.n));
+  let maximumGrade = 0;
   for (const [i, a] of route.points.entries()) {
     const b = route.points[(i + 1) % route.points.length];
+    const grade = Math.abs(b.y - a.y) / Math.hypot(b.x - a.x, b.z - a.z);
+    maximumGrade = Math.max(maximumGrade, grade);
     const station = route.stops.find(stop => {
       const length = Math.abs(i * route.step - stop.distance);
       return Math.min(length, route.length - length) < stop.halfLength + 4;
     });
-    assert.ok(Math.abs(b.y - a.y) / route.step < .23, `steep track at segment ${i}`);
+    assert.ok(grade <= .23, `steep track at segment ${i}: ${grade * 100}%`);
     assert.ok(a.y >= grid.heightAt(a.x, -a.z) + .60, `track clips terrain at segment ${i}`);
     if (!station) {
       const p = a.clone().lerp(b, .5);
@@ -95,6 +99,7 @@ test('tour railway encircles the original town, makes both river crossings and c
       }
     }
   }
+  t.diagnostic(JSON.stringify({ maximumGradePercent: maximumGrade * 100, routeLength: route.length, stops: train.stops.length }));
 });
 
 test('raised railway leaves walking headroom and supports both banks of the bath road', () => {
@@ -140,7 +145,10 @@ test('old and new loop platforms board and receive riders only while stopped', (
   const schedule = createRailTimetable(train.stops, train.route.length);
   const floors = train.group.userData.floors as Box[];
   assert.ok(floors.length > 5);
-  assert.deepEqual(train.stops.map(stop => stop.label), ['未写镇站', '火车站前站', '北岭站', '森林木屋站', '镜湖站', '湖南岸站', '城堡南站', '温泉站']);
+  assert.deepEqual(train.stops.map(stop => stop.label), [
+    '未写镇站', '火车站前站', '北岭站', '森林木屋站', '镜湖站', '集市站', '广场站', '纪念馆站', '湖南岸站', '城堡南站', '温泉站',
+  ]);
+  assert.deepEqual(train.stops.slice(5, 8).map(stop => stop.railY), [10.7, 15.05, 24.9]);
   assert.ok(train.cycleSeconds > train.stops.length * train.dwellSeconds);
   assert.equal(train.dwellSeconds, 12);
   assert.ok(train.atPlatform && !train.riding);
