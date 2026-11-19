@@ -54,7 +54,7 @@ const mime = {
   '.mp3': 'audio/mpeg', '.webp': 'image/webp', '.woff2': 'font/woff2',
 };
 
-async function build(checkout, dist, instrumentation = fixture) {
+async function build(checkout, dist, instrumentation = fixture, transformViewer = code => code) {
   const root = path.join(checkout, 'tools', 'voxel-tavern');
   const viewer = path.join(root, 'town-blockout', 'viewer.ts');
   const source = await readFile(viewer, 'utf8');
@@ -76,7 +76,7 @@ async function build(checkout, dist, instrumentation = fixture) {
         if (path.resolve(id) !== viewer) return null;
         assert.equal(code.split(anchor).length, 2);
         injections++;
-        return { code: code.replace(anchor, anchor + instrumentation), map: null };
+        return { code: transformViewer(code).replace(anchor, anchor + instrumentation), map: null };
       },
     }],
   });

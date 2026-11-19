@@ -9,11 +9,14 @@ import { pathToFileURL } from 'node:url';
 
 import { build, near, serveClientAsset, swiftShader, timeoutMs } from './b13-browser-fixture.mjs';
 
-const doorIds = ['district:513:366', 'district:550:412'];
+const candidateMode = process.argv.slice(4).includes('--candidate');
+const doorIds = candidateMode ? ['old-town:228:110', 'old-town:246:114'] : ['district:513:366', 'district:550:412'];
 const ordinaryClock = '2026-11-20T14:15:00+08:00';
 const names = ['B13 甲', 'B13 乙'];
 const enterLabel = '进入屋舍空间';
+const marketDoorLabel = '集市屋门';
 const returnLabel = '出门 · 返回来时的屋门';
+const bookLabel = '百门册 · 选一扇门出去';
 const viewport = { width: 800, height: 520 };
 const runtimeFiles = [
   'src/presence/server.ts',
@@ -79,6 +82,14 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
 }
 `;
 
+function activateCandidateDoors(code) {
+  const anchor = 'const verifiedMarketHomeIds = new Set<string>();';
+  assert.equal(code.split(anchor).length, 2, 'Expected the closed production market-door gate exactly once');
+  return code.replace(anchor, `const verifiedMarketHomeIds = new Set<string>(
+    import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.1' &&
+      new URLSearchParams(location.search).has('b13Candidate') ? ${JSON.stringify(doorIds)} : []);`);
+}
+
 async function loadPresence(checkout, resolvePackage) {
   resolvePackage('tsx/esm/api').register();
   const load = file => import(pathToFileURL(path.join(checkout, 'src', 'presence', file)).href);
@@ -128,6 +139,7 @@ async function readFrame(page, required) {
       Math.abs(peer.height - condition.peer.ground) <= .03))) return;
     if (condition.avatar && !(pose.avatarParts > 0 && pose.lastAvatarRender === pose.frames)) return;
     if (condition.minNorth !== undefined && pose.north < condition.minNorth) return;
+    if (condition.maxEast !== undefined && pose.east > condition.maxEast) return;
     if (condition.action && !pose.action?.includes(condition.action)) return;
     return pose;
   }, required, { polling: 100, timeout: timeoutMs })).jsonValue();
@@ -164,18 +176,20 @@ async function startClient(browser, url, result) {
       if (Buffer.isBuffer(payload) && payload.length === 12) result.wire.poses++;
     });
   });
-  await page.addInitScript(name => {
+  await page.addInitScript(({ name, candidate }) => {
     localStorage.setItem('unwritten.presence.name.v1', name);
     window.__b13DoorKeys = [];
+    const keys = ['KeyE', 'KeyW', 'KeyS'];
+    if (candidate) keys.push('Enter', 'KeyD', 'KeyA', 'Escape');
     addEventListener('keydown', event => {
-      if (['KeyE', 'KeyW', 'KeyS'].includes(event.code)) {
+      if (keys.includes(event.code)) {
         window.__b13DoorKeys.push({ code: event.code, trusted: event.isTrusted, repeat: event.repeat });
       }
     });
-  }, result.name);
+  }, { name: result.name, candidate: candidateMode });
   try {
     result.bootstrap = 'navigate';
-    const response = await page.goto(`${url}/town-blockout.html?profile&b13TwoClients`, {
+    const response = await page.goto(`${url}/town-blockout.html?profile&b13TwoClients${candidateMode ? '&b13Candidate' : ''}`, {
       waitUntil: 'domcontentloaded', timeout: timeoutMs,
     });
     assert.equal(response?.status(), 200);
@@ -189,7 +203,7 @@ async function startClient(browser, url, result) {
     const door = await page.evaluate(id => window.__b13TwoClients.stage(id), result.id);
     result.door = door;
     result.approach = await readFrame(page, {
-      after: outdoors.frames, home: null, mask: 1, selfId: outdoors.selfId, action: enterLabel,
+      after: outdoors.frames, home: null, mask: 1, selfId: outdoors.selfId, action: candidateMode ? marketDoorLabel : enterLabel,
     });
     near(result.approach.east, door.x, .05, 'Approach east');
     near(result.approach.north, door.n, .05, 'Approach north');
@@ -211,14 +225,38 @@ function roomCondition(client, extra = {}) {
   return { home: client.result.id, mask: 2, selfId: client.result.approach.selfId, ...extra };
 }
 
-async function enter(client) {
+async function enter(client, output) {
   const { page, result } = client;
   await page.bringToFront();
   await page.keyboard.press('e');
+  if (candidateMode) {
+    const menu = page.locator('#place-card[open] #market-home-entrance');
+    await menu.waitFor({ state: 'visible', timeout: timeoutMs });
+    assert.equal(await menu.getAttribute('data-door-id'), result.id);
+    const shared = menu.locator('[data-market-home-action=shared]');
+    assert.equal((await shared.textContent())?.trim(), enterLabel);
+    const visit = menu.locator('[data-market-home-action=visit]');
+    assert.equal((await visit.textContent())?.trim(), '参观这户');
+    assert.ok(await visit.isEnabled());
+    const before = await page.evaluate(() => window.__b13TwoClients.sample());
+    assert.equal(before.home, null, 'Opening the market menu alone must not enter the shared room');
+    near(before.east, result.door.x, 1e-6, 'Same menu door east');
+    near(before.north, result.door.n, 1e-6, 'Same menu door north');
+    result.menu = { id: result.id, before, labels: [enterLabel, '参观这户'] };
+    await saveScreenshot(page, output, result, 'market-menu');
+    const focused = await shared.evaluate(button => button === document.activeElement);
+    assert.ok(focused, 'The shared-room choice must receive initial keyboard focus');
+    await page.keyboard.press('Enter');
+    await menu.waitFor({ state: 'hidden', timeout: timeoutMs });
+  }
   result.inside = await readFrame(page, roomCondition(client, { after: result.approach.frames }));
   near(result.inside.east, 625.18, .05, 'Shared-room spawn east');
   near(result.inside.north, 493.64, .05, 'Shared-room spawn north');
   near(result.inside.ground, 150, .01, 'Shared-room ground');
+  if (candidateMode) {
+    result.menu.visits = await page.evaluate(() => JSON.parse(localStorage.getItem('unwritten.houses.doors.v1') ?? '{}').items ?? []);
+    assert.deepEqual(result.menu.visits, [result.id], 'The shared choice must record its own original entrance');
+  }
 }
 
 async function walkWhile(client, key, condition) {
@@ -230,6 +268,35 @@ async function walkWhile(client, key, condition) {
   } finally {
     await page.keyboard.up(key);
   }
+}
+
+async function readCandidateBook(client, output) {
+  const { page, result } = client;
+  const threshold = await walkWhile(client, 'd', { after: result.inside.frames, action: bookLabel });
+  assert.ok(threshold.east > result.inside.east + .5, 'D moved toward the shared-room door book');
+  await page.keyboard.press('e');
+  const dialog = page.locator('#place-card[open]');
+  const book = dialog.locator('.house-door-book');
+  await book.waitFor({ state: 'visible', timeout: timeoutMs });
+  const title = await dialog.locator('#place-title').textContent();
+  assert.equal(title, '百门册 · 一屋通百门');
+  const zones = await book.locator('[data-house-door-zone]').allTextContents();
+  assert.deepEqual(zones, ['中央 9', '集市 28', '纪念 14', '湖畔 20', '森林 21']);
+  const entries = book.locator('[data-house-door]');
+  assert.equal(await entries.count(), 28);
+  assert.equal(await entries.first().getAttribute('data-house-door'), result.id);
+  assert.match(await entries.first().textContent(), /刚从这儿进/);
+  await saveScreenshot(page, output, result, 'door-book');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden', timeout: timeoutMs });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#scene canvas'),
+    null, { polling: 100, timeout: timeoutMs });
+  const closed = await readFrame(page, roomCondition(client, { after: threshold.frames }));
+  near(closed.east, threshold.east, .25, 'Door-book Escape kept the indoor position east');
+  near(closed.north, threshold.north, .25, 'Door-book Escape kept the indoor position north');
+  const back = await walkWhile(client, 'a', { after: closed.frames, maxEast: result.inside.east + .10 });
+  near(back.east, result.inside.east, .30, 'Returned to clear indoor line after closing the book');
+  result.book = { title, zones, originalDoor: result.id, threshold, closed, back };
 }
 
 async function frameRemote(client, other, output) {
@@ -261,7 +328,10 @@ async function returnOriginal(client, key, output) {
   await saveScreenshot(page, output, result, 'returned');
   result.input = await page.evaluate(() => window.__b13DoorKeys);
   const keys = result.input.filter(event => !event.repeat);
-  assert.deepEqual(keys.map(event => event.code), key === 'w' ? ['KeyE', 'KeyW', 'KeyW', 'KeyE'] : ['KeyE', 'KeyS', 'KeyE']);
+  const entryKeys = candidateMode ? ['KeyE', 'Enter'] : ['KeyE'];
+  const bookKeys = result.book ? ['KeyD', 'KeyE', 'Escape', 'KeyA'] : [];
+  const returnKeys = key === 'w' ? ['KeyW', 'KeyW', 'KeyE'] : ['KeyS', 'KeyE'];
+  assert.deepEqual(keys.map(event => event.code), [...entryKeys, ...bookKeys, ...returnKeys]);
   assert.ok(keys.every(event => event.trusted), 'Entry, separation, walk and return inputs must be trusted');
   assert.deepEqual(result.wire.joinIds, [approach.selfId], 'The browser must join only once over WebSocket');
   assert.ok(result.wire.poses > 0 && result.wire.snapshots > 0, 'The browser must exchange binary pose and snapshot frames');
@@ -279,12 +349,17 @@ async function checkBrowser(openBrowser, url, output, evidence) {
       clients.push(client);
       // Leave the first client in the shared room before loading a second exterior scene.
       evidence.step = `enter-${id}`;
-      await enter(client);
+      await enter(client, output);
     }
     const [alpha, beta] = clients;
     const alphaId = alpha.result.approach.selfId;
     const betaId = beta.result.approach.selfId;
     assert.notEqual(alphaId, betaId, 'The two browsers must hold distinct server sessions');
+
+    if (candidateMode) {
+      evidence.step = 'open-and-close-candidate-door-book';
+      await readCandidateBook(beta, output);
+    }
 
     evidence.step = 'separate-in-the-same-room';
     await walkWhile(alpha, 'w', { after: alpha.result.inside.frames, minNorth: alpha.result.inside.north + 2.4 });
@@ -357,7 +432,7 @@ async function transportInputs(checkout, resolvePackage) {
   const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
   const extensions = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
   const doors = doorIds.map(id => {
-    const door = extensions.housePortals.find(portal => portal.id === id);
+    const door = [...districts.housePortals, ...extensions.housePortals].find(portal => portal.id === id);
     assert.ok(door, `Production registry lacks ${id}`);
     return door;
   });
@@ -455,9 +530,12 @@ async function checkTransport(checkout, resolvePackage, url, evidence) {
   }
 }
 
-const [sourcePath, outputPath, option] = process.argv.slice(2);
-assert.ok(sourcePath && outputPath && [undefined, '--build-only', '--transport-only'].includes(option),
-  'Usage: node verify-b13-two-clients.mjs CHECKOUT OUTPUT_DIR [--build-only|--transport-only]');
+const [sourcePath, outputPath, ...flags] = process.argv.slice(2);
+const proofFlags = flags.filter(flag => flag !== '--candidate');
+const [option] = proofFlags;
+assert.ok(sourcePath && outputPath && proofFlags.length <= 1 && flags.length === new Set(flags).size &&
+    [undefined, '--build-only', '--transport-only'].includes(option),
+  'Usage: node verify-b13-two-clients.mjs CHECKOUT OUTPUT_DIR [--build-only|--transport-only] [--candidate]');
 const checkout = path.resolve(sourcePath);
 const output = path.resolve(outputPath);
 const temporary = await mkdtemp(path.join(tmpdir(), 'town-b13-two-clients-'));
@@ -468,6 +546,7 @@ const evidence = {
   status: 'starting', mode: option ?? 'browser', clock: ordinaryClock,
   runtimeCommit: process.env.B13_RUNTIME_COMMIT ?? null, browser: null,
   viewport: { ...viewport, dpr: 1 }, results: [], connectionLogs: [],
+  candidate: candidateMode ? { loopbackActivation: doorIds } : null,
 };
 await mkdir(output, { recursive: true });
 try {
@@ -479,7 +558,7 @@ try {
   const dist = option === '--transport-only' ? null : path.join(temporary, 'dist');
   if (dist) {
     evidence.step = 'build-rehearsal-viewer';
-    await build(checkout, dist, fixture);
+    await build(checkout, dist, fixture, candidateMode ? activateCandidateDoors : undefined);
   }
   if (option === '--build-only') {
     evidence.status = 'build-only';
@@ -504,7 +583,9 @@ try {
         return browser;
       }, started.url, output, evidence);
       evidence.status = 'browser-passed';
-      console.log('Two Chromium clients saw each other in the shared room and each walked out through its own door.');
+      console.log(candidateMode
+        ? 'Two Chromium clients joined through the staged market menu, saw each other, retained their door book and returned to their own doors.'
+        : 'Two Chromium clients saw each other in the shared room and each walked out through its own door.');
     }
     const joins = evidence.connectionLogs.filter(log => log.step === 'join' && log.result === 'ok');
     assert.equal(joins.length, 2);

@@ -72,6 +72,7 @@ jobs:
           node --import tsx --test tests/town-blockout-house-portals.test.ts tests/town-blockout-shared-home.test.ts tests/town-blockout-market-entrance.test.ts tests/town-blockout-market-homes.test.ts tests/town-blockout-market-home-atlas.test.ts
 
       - name: Audit all 17 physical passages and 92 door-book destinations
+        id: doorway-geometry
         working-directory: town
         shell: bash
         run: |
@@ -81,6 +82,13 @@ jobs:
         shell: bash
         run: |
           node ci/tools/jx1-formal/verify-jx1-production.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" "ci/tools/jx1-formal/$JX1_PLAN.json" "$RUNNER_TEMP/jx1-formal/$JX1_PLAN"
+
+      - name: Verify actual shared-room visibility from two active market doors
+        if: ${{ !cancelled() && matrix.plan == 'cardinal-walk-plan' && steps.doorway-geometry.outcome == 'success' }}
+        env:
+          B13_RUNTIME_COMMIT: ${{ env.JX1_RUNTIME_COMMIT }}
+        shell: bash
+        run: node ci/tools/verify-b13-two-clients.mjs town "$RUNNER_TEMP/jx1-formal/two-market-guests" --candidate
 
       - name: Upload registry, input and rendered proof
         if: always()
