@@ -136,7 +136,6 @@ type HideSeekHost = {
   now: () => number;
   positions: () => HideSeekPositions;
   sendTo: (recipient: PeerId, notice: HideSeekNotice) => void;
-  revealCrossRegionDoor: boolean;
 };
 
 type HideSeekDoorArrival =
@@ -173,7 +172,7 @@ export function createHideAndSeekAuthority(
 
     // Invoke after the host has resolved occupancy and accepted the final exterior pose.
     doorArrival(id: PeerId, arrival: HideSeekDoorArrival) {
-      if (!host.revealCrossRegionDoor || arrival.status !== 'settled') return;
+      if (arrival.status !== 'settled') return;
       const destination = host.positions().get(id);
       if (!destination) return;
       const reveal = round.doorTravel(id, arrival.entry, destination, host.now());
