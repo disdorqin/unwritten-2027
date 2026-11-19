@@ -8,6 +8,8 @@ on:
       - tools/verify-expansion-review.mjs
       - tools/voxel-tavern/town-expansion-review.html
       - tools/voxel-tavern/town-blockout/town-expansion-review*.ts
+      - tools/voxel-tavern/town-blockout/orbital-early-rooms.ts
+      - tests/town-blockout-orbital-early-rooms.test.ts
       - tests/town-blockout-expansion-review.test.ts
 
 permissions:

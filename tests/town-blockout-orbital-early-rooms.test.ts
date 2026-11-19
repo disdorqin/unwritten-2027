@@ -81,6 +81,23 @@ test('the two hand hooks surround a blank, half-page log with its own indicator'
   assert.ok(group.getObjectByName('upturned-cup'));
 });
 
+test('all five cockpit console colliders have visible models at the same positions', () => {
+  const { group, collisions } = createOrbitalEarlyRooms();
+  const cockpit = group.getObjectByName('orbital-cockpit');
+  assert.ok(cockpit);
+  const consoles = cockpit.children.filter(child => child.name === 'worn-bridge-console');
+  const consoleColliders = collisions.filter(collider => collider.kind === 'console');
+  assert.equal(consoles.length, 5);
+  assert.equal(consoleColliders.length, consoles.length);
+  for (const [index, console] of consoles.entries()) {
+    const { x, z } = console.getWorldPosition(new Vector3());
+    const { minX, maxX, minN, maxN } = consoleColliders[index]!;
+    assert.ok(console.visible && console.children.some(child => child instanceof Mesh && child.visible));
+    assert.ok(Math.abs(x - (minX + maxX) / 2) < 1e-10);
+    assert.ok(Math.abs(-z - (minN + maxN) / 2) < 1e-10);
+  }
+});
+
 test('interior size scales the floor, markers, rendered log and collision bounds together', () => {
   const base = createOrbitalEarlyRooms();
   const large = createOrbitalEarlyRooms({ scale: 2 });

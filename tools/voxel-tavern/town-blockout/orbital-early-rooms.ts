@@ -174,6 +174,7 @@ export function createOrbitalEarlyRooms({ scale = 1 }: { scale?: number } = {}) 
       box(station, key === 1 && i === 0 ? brass : rib, (key % 3 - 1) * .21, .96,
         key < 3 ? -.13 : .09, .13, .04, .13);
     }
+    bridgeGroup.add(station);
     obstacle('console', x, n, .66, .54);
     const rail = box(bridgeGroup, blue, i * 1.83, 3.67, 11.39, 1.55, .06, .09);
     rail.name = 'cockpit-window-rail';
