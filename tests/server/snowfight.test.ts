@@ -1,0 +1,168 @@
+import assert from "node:assert/strict";
+import { EventEmitter, once } from "node:events";
+import { test, type TestContext } from "node:test";
+import { WebSocket } from "ws";
+import { createPresenceServer } from "../../src/presence/server.js";
+import {
+  decodeSnowfightRelay, encodeWallHit, encodeWallPlace, type SnowfightRelayEvent,
+} from "../../src/presence/snowfight-events.js";
+
+const messageTimeout = 3500;
+
+type Control = {
+  type: string;
+  id?: number;
+  name?: string;
+  self?: boolean;
+  snowfight?: boolean;
+  reason?: string;
+  phase?: string;
+  teams?: [number, number][];
+  scores?: [number, number];
+};
+
+function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T, accept = (_frame: Buffer) => true) {
+  const ready = new EventEmitter();
+  const frames: Buffer[] = [];
+  socket.on("message", (raw, isBinary) => {
+    if (isBinary !== binary) return;
+    const frame = Buffer.isBuffer(raw) ? raw : Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw);
+    if (!accept(frame)) return;
+    frames.push(frame);
+    ready.emit("message");
+  });
+  return {
+    pending: () => frames.map(decode),
+    next(predicate: (frame: T) => boolean): Promise<T> {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          ready.off("message", available);
+          reject(new Error("snowfight message timed out"));
+        }, messageTimeout);
+        function available() {
+          try {
+            for (let index = 0; index < frames.length; index++) {
+              const frame = decode(frames[index]);
+              if (!predicate(frame)) continue;
+              frames.splice(0, index + 1);
+              clearTimeout(timeout);
+              ready.off("message", available);
+              resolve(frame);
+              return;
+            }
+          } catch (error) {
+            clearTimeout(timeout);
+            ready.off("message", available);
+            reject(error);
+          }
+        }
+        ready.on("message", available);
+        available();
+      });
+    },
+  };
+}
+
+async function fixture(context: TestContext) {
+  const server = await createPresenceServer({ host: "127.0.0.1", port: 0 });
+  const url = "ws://127.0.0.1:" + server.address().port + "/presence";
+  const sockets: WebSocket[] = [];
+  context.after(async () => {
+    for (const socket of sockets) socket.terminate();
+    await server.close();
+  });
+
+  async function join(name: string) {
+    const socket = new WebSocket(url);
+    socket.on("error", () => undefined);
+    sockets.push(socket);
+    const text = inbox(socket, false, raw => JSON.parse(raw.toString()) as Control);
+    const walls = inbox(socket, true,
+      frame => decodeSnowfightRelay(frame) ?? [],
+      frame => frame[0] === 0xff && frame[1] >= 5);
+    await once(socket, "open");
+    const joined = text.next(message => message.type === "join" && message.self === true);
+    socket.send(JSON.stringify({ type: "join", name }));
+    const self = await joined;
+    assert.equal(self.snowfight, true, "join advertises snowfight support");
+    return { socket, text, walls, id: self.id!, name };
+  }
+
+  function sendPose(socket: WebSocket, east: number, north: number, sequence: number) {
+    const bytes = Buffer.alloc(12);
+    [65_534, east * 100, north * 100, 1000, 0, sequence].forEach((value, index) => {
+      bytes.writeUInt16LE(value, index * 2);
+    });
+    socket.send(bytes);
+  }
+
+  return { join, sendPose };
+}
+
+test("snowfight: start assigns teams, place validates half and roads, three hits clear a wall",
+  { timeout: 9000 }, async context => {
+    const { join, sendPose } = await fixture(context);
+    const a = await join("红队甲");
+    const b = await join("金队乙");
+    sendPose(a.socket, 224, 188, 1);
+    sendPose(b.socket, 230, 188, 1);
+
+    const startedA = a.text.next(message => message.type === "snowfight" && message.phase === "build");
+    const startedB = b.text.next(message => message.type === "snowfight" && message.phase === "build");
+    a.socket.send(JSON.stringify({ type: "event", kind: "snowfight-start" }));
+    const [stateA, stateB] = await Promise.all([startedA, startedB]);
+    const teamOf = (state: Control, id: number) => state.teams?.find(([peer]) => peer === id)?.[1];
+    assert.equal(teamOf(stateA, a.id), 0, "first id takes red");
+    assert.equal(teamOf(stateA, b.id), 1);
+    assert.deepEqual(stateB.scores, [0, 0]);
+
+    // 合法放墙（西半场空地）：双方都收到 WALL_SET
+    const setA = a.walls.next(events => events.some(event => event.kind === "wall-set"));
+    const setB = b.walls.next(events => events.some(event => event.kind === "wall-set"));
+    a.socket.send(Buffer.from(encodeWallPlace(600, 500)));
+    const [relayA, relayB] = await Promise.all([setA, setB]);
+    const placed = relayA.find(event => event.kind === "wall-set");
+    assert.ok(placed && placed.kind === "wall-set");
+    if (placed && placed.kind === "wall-set") {
+      assert.equal(placed.hp, 3);
+      assert.equal(placed.team, 0);
+      assert.equal(placed.ownerId, a.id);
+    }
+    assert.ok(relayB.some(event => event.kind === "wall-set"));
+
+    // 建造段越半场：拒放 'half'，且不产生 WALL_SET
+    const halfReject = a.text.next(message => message.type === "snowfight-rejected" && message.reason === "half");
+    a.socket.send(Buffer.from(encodeWallPlace(800, 500)));
+    assert.equal((await halfReject).reason, "half");
+
+    // 道路正中：拒放 'road'
+    const roadReject = a.text.next(message => message.type === "snowfight-rejected" && message.reason === "road");
+    a.socket.send(Buffer.from(encodeWallPlace(367, 407)));
+    assert.equal((await roadReject).reason, "road");
+
+    // 三击塌墙：hp 3→2→1→WALL_CLEAR
+    const hit = (ballId: number) =>
+      b.socket.send(Buffer.from(encodeWallHit({ gx: 600, gy: 500, layer: 0, ballId, throwerId: b.id })));
+    const damaged1 = a.walls.next(events => events.some(
+      event => event.kind === "wall-set" && event.hp === 2));
+    hit(101);
+    await damaged1;
+    const damaged2 = a.walls.next(events => events.some(
+      event => event.kind === "wall-set" && event.hp === 1));
+    hit(102);
+    await damaged2;
+    const cleared = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
+    hit(103);
+    const clearEvents = await cleared;
+    const clear = clearEvents.find(event => event.kind === "wall-clear");
+    assert.ok(clear && clear.kind === "wall-clear");
+    if (clear && clear.kind === "wall-clear") {
+      assert.deepEqual(clear.blocks, [{ gx: 600, gy: 500, layer: 0 }]);
+    }
+
+    // 重复 ballId 的命中报告被去重：不再有后续墙事件
+    hit(103);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.ok(!a.walls.pending().flat().some(event => event.kind === "wall-set" && event.hp < 3),
+      "duplicate wall-hit report is ignored");
+  });

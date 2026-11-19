@@ -3,6 +3,11 @@ import {
   decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, SNOWBALL_EVENT_PREFIX,
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
+import {
+  decodeSnowfightRelay, encodeWallHit, encodeWallPlace,
+  type SnowfightRelayEvent,
+} from '../../../src/presence/snowfight-events';
+import type { SnowfightPhase } from '../../../src/presence/snowfight';
 import { createPresenceAvatars } from './town-presence-avatars';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
@@ -30,6 +35,17 @@ type Actor = PresencePose & {
 
 type TownNotice = { kind: 'announce'; message: string }
   | { kind: 'test-fireworks'; seed: number; startAt: number };
+
+export type SnowfightState = {
+  phase: SnowfightPhase;
+  endsInMs: number;
+  scores: [number, number];
+  teams: [number, number][];
+  owners: number[];
+  activePoint: number;
+  captureTeam: number;
+  captureProgress: number;
+};
 const queuedEventLimit = 128;
 const eventFrameLimit = 20;
 const eventFrameBudgetMs = 0.2;
@@ -99,8 +115,14 @@ export function createTownPresence(
   let activityPose: TownAvatarPose = 0;
   let sentActivityPose: TownAvatarPose | undefined;
   const snowballEvents: SnowballRelayEvent[] = [];
+  const snowfightWallEvents: SnowfightRelayEvent[] = [];
   const notices: TownNotice[] = [];
   let onSnowballEvent: ((event: SnowballRelayEvent) => void) | undefined;
+  let snowfightSupported = false;
+  let snowfightState: SnowfightState | undefined;
+  let onSnowfightWallEvent: ((event: SnowfightRelayEvent) => void) | undefined;
+  let onSnowfightState: ((state: SnowfightState) => void) | undefined;
+  let onSnowfightRejected: ((reason: string) => void) | undefined;
   let onTestFireworks: ((seed: number, ageSeconds: number) => void) | undefined;
   let joinedId: number | null = null;
   let joinedName: string | undefined;
@@ -298,6 +320,9 @@ export function createTownPresence(
     joinedName = undefined;
     serverEpochOffset = undefined;
     snowballEvents.length = 0;
+    snowfightWallEvents.length = 0;
+    snowfightSupported = false;
+    snowfightState = undefined;
     notices.length = 0;
     chatEvents.length = 0;
     ceremonyArrival = undefined;
@@ -389,6 +414,15 @@ export function createTownPresence(
         if (event && bellEvents.length < 8) bellEvents.push(event);
         return;
       }
+      if (message.type === 'snowfight' && haveId) {
+        snowfightState = message as unknown as SnowfightState;
+        onSnowfightState?.(snowfightState);
+        return;
+      }
+      if (message.type === 'snowfight-rejected' && haveId) {
+        if (typeof message.reason === 'string') onSnowfightRejected?.(message.reason);
+        return;
+      }
       if (message.type === 'clock') {
         if (haveId && clockRequest !== undefined && message.sentAt === clockRequest && typeof message.epochMs === 'number') {
           clock.accept(message.epochMs, clockRequest);
@@ -435,6 +469,7 @@ export function createTownPresence(
           joinedId = id;
           fireworksSupported = message.fireworks === true;
           bellSupported = message.bell === true;
+          snowfightSupported = (message as { snowfight?: unknown }).snowfight === true;
           photoSupported = message.plazaPhoto === true;
           joinedName = message.name;
           chat.setConnected(true);
@@ -473,6 +508,14 @@ export function createTownPresence(
     }
     if (!haveId || !(data instanceof ArrayBuffer)) return;
     if (new Uint8Array(data, 0, Math.min(1, data.byteLength))[0] === SNOWBALL_EVENT_PREFIX) {
+      const wallEvents = decodeSnowfightRelay(data);
+      if (wallEvents) {
+        for (const event of wallEvents) {
+          if (snowfightWallEvents.length >= 256) break;
+          snowfightWallEvents.push(event);
+        }
+        return;
+      }
       if (snowballEvents.length >= queuedEventLimit) return;
       const events = decodeSnowballEvents(data);
       if (events) {
@@ -597,6 +640,10 @@ export function createTownPresence(
     notices.length = 0;
     for (const event of bellEvents) onBellEvent?.(event);
     bellEvents.length = 0;
+    for (let i = 0; i < 40 && snowfightWallEvents.length; i++) {
+      const event = snowfightWallEvents.shift();
+      if (event) onSnowfightWallEvent?.(event);
+    }
     if (!snowballEvents.length && !chatEvents.length) return;
     const end = performance.now() + eventFrameBudgetMs;
     for (let i = 0; i < eventFrameLimit; i++) {
@@ -652,6 +699,18 @@ export function createTownPresence(
     getSnowballPeers: (): readonly (PresencePose & { id: number; name: string })[] => renderList,
     sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
     sendSnowballHit: (event: SnowballHit) => sendEvent(encodeSnowballHit(event)),
+    snowfightAvailable: () => snowfightSupported,
+    requestSnowfightStart: () => sendEvent(JSON.stringify({ type: 'event', kind: 'snowfight-start' })),
+    sendSnowfightPlace: (gx: number, gy: number) => sendEvent(encodeWallPlace(gx, gy)),
+    sendSnowfightWallHit: (event: { gx: number; gy: number; layer: number; ballId: number; throwerId: number }) =>
+      sendEvent(encodeWallHit(event)),
+    onSnowfightWallEvent(handler: (event: SnowfightRelayEvent) => void) { onSnowfightWallEvent = handler; },
+    onSnowfightState(handler: (state: SnowfightState) => void) {
+      onSnowfightState = handler;
+      if (snowfightState) handler(snowfightState);
+    },
+    snowfightState: () => snowfightState,
+    onSnowfightRejected(handler: (reason: string) => void) { onSnowfightRejected = handler; },
     animateSnowballThrow(id: number) {
       const actor = actors.get(id);
       if (actor) actor.throwGestureStarted = performance.now();
