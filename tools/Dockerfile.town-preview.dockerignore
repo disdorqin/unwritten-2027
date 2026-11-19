@@ -4,6 +4,8 @@
 !src/
 !src/presence/
 !src/presence/*.ts
+!src/shared/
+!src/shared/*.ts
 !tools/
 !tools/Caddyfile.town-preview
 !tools/voxel-tavern/
