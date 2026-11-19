@@ -3,6 +3,8 @@
 
 export const SNOWFIGHT_TEAM_NAMES = ['红围巾队', '金铃队'] as const;
 export type SnowfightTeam = 0 | 1;
+export const freeWallTeam = 2;
+export type SnowWallTeam = SnowfightTeam | typeof freeWallTeam;
 
 export type SnowfightPoint = { id: string; label: string; east: number; north: number };
 export const SNOWFIGHT_POINTS: readonly SnowfightPoint[] = [
@@ -106,7 +108,7 @@ export function buildHalfAllows(team: SnowfightTeam, east: number): boolean {
 
 export type WallBlock = {
   gx: number; gy: number; layer: number;
-  ownerId: number; team: SnowfightTeam; hp: number;
+  ownerId: number; team: SnowWallTeam; hp: number;
   placedAt: number; touchedAt: number;
 };
 
@@ -126,19 +128,46 @@ export class SnowWallField {
     return this.columns.get(this.key(gx, gy))?.[layer];
   }
 
-  place(gx: number, gy: number, ownerId: number, team: SnowfightTeam, now: number):
-    { block: WallBlock } | { reason: 'stack' | 'cap' } {
+  place(gx: number, gy: number, ownerId: number, team: SnowWallTeam, now: number):
+    { block: WallBlock; cleared: WallBlock[] } | { reason: 'stack' | 'cap' } {
     const key = this.key(gx, gy);
-    const column = this.columns.get(key) ?? [];
-    if (column.length >= WALL_MAX_LAYERS) return { reason: 'stack' };
+    if (this.height(gx, gy) >= WALL_MAX_LAYERS) return { reason: 'stack' };
+    const cleared = this.total >= WALL_TOWN_CAP ? this.evictOldestFree() : [];
     if (this.total >= WALL_TOWN_CAP) return { reason: 'cap' };
+    const column = this.columns.get(key) ?? [];
     const block: WallBlock = {
       gx, gy, layer: column.length, ownerId, team, hp: WALL_BLOCK_HP, placedAt: now, touchedAt: now,
     };
     column.push(block);
     this.columns.set(key, column);
     this.total++;
-    return { block };
+    return { block, cleared };
+  }
+
+  private collapse(key: string, column: WallBlock[], layer: number): WallBlock[] {
+    const removed = column.splice(layer);
+    this.total -= removed.length;
+    if (!column.length) this.columns.delete(key);
+    return removed;
+  }
+
+  private evictOldestFree(): WallBlock[] {
+    let oldest: WallBlock[] | undefined;
+    for (const column of this.columns.values()) {
+      // During team play, preserve team walls resting on a free base.
+      if (column.at(-1)?.team !== freeWallTeam) continue;
+      if (!oldest || column[0].placedAt < oldest[0].placedAt) oldest = column;
+    }
+    return oldest ? this.collapse(this.key(oldest[0].gx, oldest[0].gy), oldest, 0) : [];
+  }
+
+  clearWhere(matches: (block: WallBlock) => boolean): WallBlock[] {
+    const removed: WallBlock[] = [];
+    for (const [key, column] of this.columns) {
+      const layer = column.findIndex(matches);
+      if (layer !== -1) removed.push(...this.collapse(key, column, layer));
+    }
+    return removed;
   }
 
   /** 命中一块：hp-1；击毁则其上整段塌落。返回受损块或塌落块列表。 */
@@ -150,11 +179,8 @@ export class SnowWallField {
     if (!column || !block) return undefined;
     block.hp--;
     if (block.hp > 0) return { damaged: block };
-    const destroyed = column.splice(layer);
-    this.total -= destroyed.length;
-    if (!column.length) this.columns.delete(key);
     void now;
-    return { destroyed };
+    return { destroyed: this.collapse(key, column, layer) };
   }
 
   /** 无人维护自塌：自 touchedAt 超过 WALL_DECAY_MS 的最低块起，上方整段塌落。 */
@@ -163,10 +189,8 @@ export class SnowWallField {
     for (const [key, column] of this.columns) {
       const stale = column.findIndex(block => now - block.touchedAt > WALL_DECAY_MS);
       if (stale === -1) continue;
-      removed.push(...column.splice(stale));
-      if (!column.length) this.columns.delete(key);
+      removed.push(...this.collapse(key, column, stale));
     }
-    this.total -= removed.length;
     return removed;
   }
 

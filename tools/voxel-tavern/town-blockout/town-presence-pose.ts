@@ -1,17 +1,17 @@
 import type { VoxelPersonPart } from './town-voxel-person';
 
-// Pose 6 stays reserved/invalid; pose 7 is sledding (P2b design, wired by 3.0 D2).
-export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5 | 7;
+// Pose 6 stays reserved. The existing activity pose channel carries straight and drifting sleds.
+export type TownAvatarPose = 0 | 1 | 2 | 3 | 4 | 5 | 7 | 8;
 
 export function isTownAvatarPose(value: unknown): value is TownAvatarPose {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 7 && value !== 6;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 8 && value !== 6;
 }
 
-export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, riding: boolean, seated: boolean, skateSpeed: number, sledding = false): TownAvatarPose {
+export function effectiveTownAvatarPose(drinking: boolean, soaking: boolean, riding: boolean, seated: boolean, skateSpeed: number, sledding = false, sledDrift = false): TownAvatarPose {
   if (drinking) return 4;
   if (soaking) return 2;
   if (riding) return 5;
-  if (sledding) return 7;
+  if (sledding) return sledDrift ? 8 : 7;
   if (seated) return 1;
   return skateSpeed > .5 ? 3 : 0;
 }

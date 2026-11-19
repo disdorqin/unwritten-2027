@@ -25,16 +25,15 @@ export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
 export type FrostExposure = 'none' | 'dark-snow' | 'lamp' | 'water';
 const naturalThawRate = 1 / 120;
 const exposureRate = 1 / 270;
-// 3.0 H1 表现加强（任务书 §2 H1）：三档逐档加深——maskClear 更小 = 霜爬得更靠屏心，
-// blur 更大 = 冻花更糊。触发与回暖口径不变，只改表现与速度下限。
-const maskClear = [100, 74, 58, 40] as const;
-const blurByLevel = [0, 0, 2, 4.8] as const;
+// 清晰区与模糊程度随冻纹等级插值。
+const maskClear = [100, 70, 58, 40] as const;
+const blurByLevel = [0, 1.2, 2.6, 4.8] as const;
 export const wetColdMultiplier = 2;
 
 /** 每级的表现参数（设计 §4.1，数值经 3.0 H1 加强）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
 export const frostLevelStyles: Record<FrostLevel, { opacity: number; band: number; tint: number; breath: boolean }> = {
   0: { opacity: 0, band: 0, tint: 0, breath: false },
-  1: { opacity: .35, band: .10, tint: .04, breath: false },
+  1: { opacity: .45, band: .12, tint: .06, breath: false },
   2: { opacity: .65, band: .20, tint: .13, breath: false },
   3: { opacity: .90, band: .34, tint: .22, breath: true },
 };
@@ -122,13 +121,15 @@ export function createFrostTracker(): FrostTracker {
     },
     setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1, sleddingActive = false) {
       const surface = input === true ? 'dark-snow' : input === false ? 'none' : input;
-      const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
+      const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(0, intensity)) : 0;
       relief = ceremonyRelief;
       // 3.0 H1 雪橇豁免：乘坐雪橇时寒意不涨反退——累积入口按姿态门控，
       // 雪面与水面压力一律清零，update() 侧再按自然消退速率回落（见下）。
       sledding = sleddingActive === true;
-      naturallyThaws = surface === 'lamp' || (surface !== 'water' && snowIntensity < 2);
-      const snowPressure = surface === 'dark-snow' && snowIntensity >= 2 ? (snowIntensity - 1) * (depth >= .6 ? 1.5 : 1) : 0;
+      naturallyThaws = surface === 'lamp' || surface === 'none';
+      const snowPressure = surface === 'dark-snow' && snowIntensity >= 1
+        ? (1.35 + (snowIntensity - 1) * .75) * (depth >= .6 ? 1.5 : 1)
+        : 0;
       const wetPressure = surface === 'water' ? Math.max(1, snowIntensity - 1) * wetColdMultiplier : 0;
       exposureGrowth = (snowPressure + wetPressure) * exposureRate * (relief ? .5 : 1) *
         (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1);
@@ -138,8 +139,9 @@ export function createFrostTracker(): FrostTracker {
     walkingScale(enabled = true) {
       if (!enabled) return 1;
       const level = displayLevel();
-      // 3.0 H1：L3 速度下限 ×0.80 → ×0.65（仪式豁免时仍封顶 ×0.90）。
-      return level === 3 && !relief ? .65 : level >= 2 ? .90 : 1;
+      if (level === 3) return relief ? .90 : .65;
+      if (level === 2) return relief ? .90 : .88;
+      return level === 1 ? .95 : 1;
     },
     warming: () => warmth.size > 0,
     update(dtSeconds: number) {

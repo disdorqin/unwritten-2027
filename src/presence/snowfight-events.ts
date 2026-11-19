@@ -3,7 +3,7 @@
 // 服务端→客户端：WALL_SET（块落定/受损后的权威状态）、WALL_CLEAR（块塌落批量移除）。
 // 车道 B 追加 kind 7 SLED_SMASH（雪橇高速撞穿一层墙的骑乘端报告，服务端裁定销毁，见 decode/encode）。
 import { SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
-import { WALL_TOWN_CAP, type SnowfightTeam, type WallBlock } from './snowfight.js';
+import { WALL_TOWN_CAP, freeWallTeam, type SnowWallTeam, type WallBlock } from './snowfight.js';
 
 export const SNOWFIGHT_PLACE = 3;
 export const SNOWFIGHT_WALL_HIT = 4;
@@ -27,7 +27,7 @@ export type SnowfightClientEvent =
   | { kind: 'sled-smash'; gx: number; gy: number; speed: number };
 
 export type SnowfightRelayEvent =
-  | { kind: 'wall-set'; gx: number; gy: number; layer: number; hp: number; ownerId: number; team: SnowfightTeam }
+  | { kind: 'wall-set'; gx: number; gy: number; layer: number; hp: number; ownerId: number; team: SnowWallTeam }
   | { kind: 'wall-clear'; blocks: readonly { gx: number; gy: number; layer: number }[] };
 
 type Binary = ArrayBuffer | ArrayBufferView;
@@ -153,8 +153,8 @@ export function decodeSnowfightRelay(bytes: Binary): SnowfightRelayEvent[] | nul
       const hp = view.getUint8(offset + 7);
       const ownerId = view.getUint16(offset + 8, true);
       const team = view.getUint8(offset + 10);
-      if (!validCell(gx, gy) || layer > 3 || hp < 1 || hp > 3 || (team !== 0 && team !== 1)) return null;
-      events.push({ kind: 'wall-set', gx, gy, layer, hp, ownerId, team: team as SnowfightTeam });
+      if (!validCell(gx, gy) || layer > 3 || hp < 1 || hp > 3 || (team !== 0 && team !== 1 && team !== freeWallTeam)) return null;
+      events.push({ kind: 'wall-set', gx, gy, layer, hp, ownerId, team });
       offset += WALL_SET_BYTES;
     } else if (kind === SNOWFIGHT_WALL_CLEAR) {
       if (offset + 3 > view.byteLength) return null;

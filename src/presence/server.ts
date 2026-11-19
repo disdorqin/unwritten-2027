@@ -18,8 +18,8 @@ import { isIcePalaceThroneRecord } from './ice-throne-site.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
-  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_BLOCK_HP, buildHalfAllows,
-  classifyWallSite, wallCellCentre,
+  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_BLOCK_HP, WALL_CELL, buildHalfAllows,
+  classifyWallSite, freeWallTeam, wallCellCentre,
 } from './snowfight.js';
 import {
   SNOWFIGHT_PLACE, SNOWFIGHT_SLED_SMASH, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear,
@@ -27,7 +27,8 @@ import {
 } from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import {
-  ceremonyLandingAnnouncement, ceremonyLandingLeadMs, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
+  ceremonyLandingAnnouncement, ceremonyLandingCentre, ceremonyLandingLeadMs, ceremonyLandingOuterRadius,
+  ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
 } from './ceremony-arrival.js';
 import {
   inPlazaPhotoRequestZone, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
@@ -407,8 +408,26 @@ export async function createPresenceServer(options: Options = {}) {
     if (event) broadcast(JSON.stringify(event));
   }
 
+  function inCeremonyArrivalWindow(time: number) {
+    return time >= ceremonyStartAt - ceremonyLandingLeadMs && time < ceremonyEndAt;
+  }
+
+  function blocksCeremonyArrival(east: number, north: number) {
+    const dx = Math.max(0, Math.abs(east - ceremonyLandingCentre[0]) - WALL_CELL / 2);
+    const dn = Math.max(0, Math.abs(north - ceremonyLandingCentre[1]) - WALL_CELL / 2);
+    return Math.hypot(dx, dn) <= ceremonyLandingOuterRadius;
+  }
+
+  function clearCeremonyWalls(time: number) {
+    if (!inCeremonyArrivalWindow(time)) return;
+    const cleared = snowWalls.clearWhere(block => block.team === freeWallTeam &&
+      blocksCeremonyArrival(wallCellCentre(block.gx), wallCellCentre(block.gy)));
+    for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+  }
+
   function updateCeremony(time: number) {
-    if (time < ceremonyStartAt - ceremonyLandingLeadMs || time >= ceremonyEndAt || !ceremonyWaiting.size) return;
+    if (!inCeremonyArrivalWindow(time) || !ceremonyWaiting.size) return;
+    clearCeremonyWalls(time);
     for (const peer of ceremonyWaiting) {
       if (time < ceremonyStartAt && !peer.ceremonyWarned) {
         if (!send(peer, ceremonyPreannouncement)) continue;
@@ -630,7 +649,7 @@ export async function createPresenceServer(options: Options = {}) {
         announceSnowfight(event.winner === 'draw'
           ? `团队雪仗结束 · ${a} : ${b} 平局！`
           : `团队雪仗结束 · ${SNOWFIGHT_TEAM_NAMES[event.winner]}胜 ${a} : ${b}！`);
-        const cleared = snowWalls.clear();
+        const cleared = snowWalls.clearWhere(block => block.team !== freeWallTeam);
         for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
         broadcastSnowfightState();
       }
@@ -638,12 +657,14 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function updateSnowfight(time: number) {
-    if (snowMatch.phase !== 'build' && snowMatch.phase !== 'battle') return;
-    const positions = new Map<number, { east: number; north: number }>();
-    for (const peer of peers.values()) {
-      if (peer.name && peer.record) positions.set(peer.id, { east: peer.record.east / 100, north: peer.record.north / 100 });
+    const matchActive = snowMatch.phase === 'build' || snowMatch.phase === 'battle';
+    if (matchActive) {
+      const positions = new Map<number, { east: number; north: number }>();
+      for (const peer of peers.values()) {
+        if (peer.name && peer.record) positions.set(peer.id, { east: peer.record.east / 100, north: peer.record.north / 100 });
+      }
+      handleMatchEvents(snowMatch.tick(time, positions));
     }
-    handleMatchEvents(snowMatch.tick(time, positions));
     if (time - snowDecayAt >= 1000) {
       snowDecayAt = time;
       for (const peer of peers.values()) {
@@ -651,7 +672,7 @@ export async function createPresenceServer(options: Options = {}) {
       }
       const removed = snowWalls.decay(time);
       for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
-      if (time - snowStateAt >= 1000) broadcastSnowfightState();
+      if (matchActive && time - snowStateAt >= 1000) broadcastSnowfightState();
     }
   }
 
@@ -663,7 +684,7 @@ export async function createPresenceServer(options: Options = {}) {
       sendSnowfightStateTo(peer);
       return;
     }
-    const cleared = snowWalls.clear();
+    const cleared = snowWalls.clearWhere(block => block.team !== freeWallTeam);
     for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
     snowMatch.start([...peers.values()].filter(other => other.name).map(other => other.id), now());
     announceSnowfight('团队雪仗开始 · 先堆墙备战，三分钟后开打！');
@@ -677,14 +698,15 @@ export async function createPresenceServer(options: Options = {}) {
     const event = decodeSnowfightClientEvent(bytes);
     if (!event) return;
     if (event.kind === 'place') {
-      const team = snowMatch.teamOf(peer.id);
-      if (team === undefined || (snowMatch.phase !== 'build' && snowMatch.phase !== 'battle')) {
+      const matchActive = snowMatch.phase === 'build' || snowMatch.phase === 'battle';
+      const team = matchActive ? snowMatch.teamOf(peer.id) : freeWallTeam;
+      if (team === undefined) {
         rejectSnowfight(peer, 'phase');
         return;
       }
       const east = wallCellCentre(event.gx);
       const north = wallCellCentre(event.gy);
-      if (snowMatch.phase === 'build' && !buildHalfAllows(team, east)) {
+      if (team !== freeWallTeam && snowMatch.phase === 'build' && !buildHalfAllows(team, east)) {
         rejectSnowfight(peer, 'half');
         return;
       }
@@ -693,23 +715,28 @@ export async function createPresenceServer(options: Options = {}) {
         rejectSnowfight(peer, site);
         return;
       }
+      if (team === freeWallTeam && inCeremonyArrivalWindow(Date.now()) && blocksCeremonyArrival(east, north)) {
+        rejectSnowfight(peer, 'phase');
+        return;
+      }
       if (!consume(peer.snowPlace, time, 4, 6)) return;
       const placed = snowWalls.place(event.gx, event.gy, peer.id, team, time);
       if ('reason' in placed) {
         rejectSnowfight(peer, placed.reason);
         return;
       }
+      for (const frame of encodeWallClear(placed.cleared)) broadcastBinary(frame);
       broadcastBinary(encodeWallSet(placed.block));
       return;
     }
     if (event.kind === 'sled-smash') {
       // 雪橇撞穿一层墙（车道 B）：报告端为骑乘者本端，服务端按现行列高、报告速度与
       // 本人位置裁定。速度沿用本协议的模拟端报告信任模型（同 WALL_HIT)，只作闸门：
-      // 须 >6（与 sledCrashKind 的翻橇阈值同口径），上限 20 = 17 m/s 硬顶 + 报告取整余量。
-      if (event.speed <= 6 || event.speed > 20) return;
+      // 须 >6（与 sledCrashKind 同阈值），上限为重调后的 30 m/s 硬顶。
+      if (event.speed <= 6 || event.speed > 30) return;
       if (snowWalls.height(event.gx, event.gy) !== 1) return;
       if (!peer.record) return;
-      // 位置记录 10 Hz、17 m/s 下每 100 ms 位移 1.7 m；6 m 容差覆盖记录滞后，
+      // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
       // 同时把裁定范围钉在墙边，杜绝隔图遥报。
       const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
         peer.record.north / 100 - wallCellCentre(event.gy));
@@ -762,8 +789,8 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function receivePose(peer: Peer, pose: unknown) {
-    // Pose 7 (sledding) is valid; pose 6 stays reserved and is rejected.
-    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 7 || pose === 6 ||
+    // The existing pose event carries pose 7 (sled) or 8 (drift); 6 stays reserved.
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 8 || pose === 6 ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
     observeIceThrone(peer, now());
@@ -1032,7 +1059,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, firecrackers: true, iceThrone: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
@@ -1044,11 +1071,12 @@ export async function createPresenceServer(options: Options = {}) {
     if (snowMatch.phase === 'build' || snowMatch.phase === 'battle') {
       snowMatch.addPlayer(peer.id);
       sendSnowfightStateTo(peer);
-      const blocks = snowWalls.snapshot();
-      for (let i = 0; i < blocks.length; i += 20) {
-        send(peer, Buffer.concat(blocks.slice(i, i + 20).map(block => encodeWallSet(block))));
-      }
       broadcastSnowfightState();
+    }
+    clearCeremonyWalls(joinedAt);
+    const blocks = snowWalls.snapshot();
+    for (let i = 0; i < blocks.length; i += 20) {
+      send(peer, Buffer.concat(blocks.slice(i, i + 20).map(block => encodeWallSet(block))));
     }
     updateFireworks(now());
     updateCeremony(joinedAt);

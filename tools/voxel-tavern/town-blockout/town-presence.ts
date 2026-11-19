@@ -140,6 +140,7 @@ export function createTownPresence(
   const notices: TownNotice[] = [];
   let onSnowballEvent: ((event: SnowballRelayEvent) => void) | undefined;
   let snowfightSupported = false;
+  let freeSnowWallsSupported = false;
   let snowfightState: SnowfightState | undefined;
   let onSnowfightWallEvent: ((event: SnowfightRelayEvent) => void) | undefined;
   let onSnowfightState: ((state: SnowfightState) => void) | undefined;
@@ -357,7 +358,7 @@ export function createTownPresence(
     serverEpochOffset = undefined;
     snowballEvents.length = 0;
     snowfightWallEvents.length = 0;
-    snowfightSupported = false;
+    snowfightSupported = freeSnowWallsSupported = false;
     snowfightState = undefined;
     notices.length = 0;
     chatEvents.length = 0;
@@ -545,6 +546,7 @@ export function createTownPresence(
           fireworksSupported = message.fireworks === true;
           bellSupported = message.bell === true;
           snowfightSupported = (message as { snowfight?: unknown }).snowfight === true;
+          freeSnowWallsSupported = (message as { freeSnowWalls?: unknown }).freeSnowWalls === true;
           firecrackersSupported = message.firecrackers === true;
           photoSupported = message.plazaPhoto === true;
           joinedName = message.name;
@@ -850,6 +852,7 @@ export function createTownPresence(
     sendSnowballThrow: (event: SnowballThrow) => sendEvent(encodeSnowballThrow(event)),
     sendSnowballHit: (event: SnowballHit) => sendEvent(encodeSnowballHit(event)),
     snowfightAvailable: () => snowfightSupported,
+    freeSnowWallsAvailable: () => freeSnowWallsSupported,
     requestSnowfightStart: () => sendEvent(JSON.stringify({ type: 'event', kind: 'snowfight-start' })),
     sendSnowfightPlace: (gx: number, gy: number) => sendEvent(encodeWallPlace(gx, gy)),
     sendSnowfightWallHit: (event: { gx: number; gy: number; layer: number; ballId: number; throwerId: number }) =>

@@ -892,7 +892,7 @@ test("test fireworks stays off by default even with five joined and an elapsed d
   assert.ok(clients.every(client => !client.text.pending().some(message => message.type === "event")));
 });
 
-test("presence relays sledding pose 7, rejects reserved pose 6, and relays validated grand-prix results", { timeout: 7000 }, async context => {
+test("presence relays sledding and drifting poses, rejects reserved pose 6, and relays validated grand-prix results", { timeout: 7000 }, async context => {
   const { join } = await fixture(context);
   const [sender, observer] = await Promise.all([join("雪橇手"), join("观赛者")]);
   sender.socket.send(encodePose(pose));
@@ -902,6 +902,13 @@ test("presence relays sledding pose 7, rejects reserved pose 6, and relays valid
   const sledPose = observer.text.next(message => message.type === "pose" && message.id === sender.id);
   sender.socket.send(JSON.stringify({ type: "pose", pose: 7 }));
   assert.equal((await sledPose).pose, 7);
+
+  const driftPose = observer.text.next(message => message.type === "pose" && message.id === sender.id);
+  sender.socket.send(JSON.stringify({ type: "pose", pose: 8 }));
+  assert.equal((await driftPose).pose, 8);
+  const late = await join("后来观赛");
+  const driftSnapshot = await late.text.next(message => message.type === "join" && message.id === sender.id);
+  assert.equal(driftSnapshot.pose, 8);
 
   sender.socket.send(JSON.stringify({ type: "pose", pose: 6 }));
   await delay(60);

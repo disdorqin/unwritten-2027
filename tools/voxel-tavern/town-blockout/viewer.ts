@@ -217,6 +217,7 @@ const sledRide = createSledRide({
   },
   snow: (sx, nn, y, snowYaw, count, effect) => sledVisuals.puff(sx, nn, y, snowYaw, count, effect),
   stopped: () => announceActivity('雪橇停稳了，找个下坡再出发'),
+  smoothFlight: () => announceActivity('漂亮'),
 });
 let sledWallCellKey = ''; // 雪橇当前所在墙格（撞穿报告按格进入沿触发，见移动分支）
 const sledTrackView = createSledTrackView(scene, sledGroundAt);
@@ -644,6 +645,20 @@ const eye = 1.65;
 const keys = new Set<string>();
 const touchSprintButton = element<HTMLButtonElement>('touch-sprint');
 const touchWalk = createTouchWalk(element('touch-walk'), touchSprintButton);
+const walkSprintLabel = touchSprintButton.textContent;
+let sledSpace = false;
+let steeredWithSpace = false;
+let touchSledDrift: { pointer: number; since: number } | undefined;
+touchSprintButton.addEventListener('pointerdown', event => {
+  if (sledRide.active() && event.pointerType === 'touch') {
+    touchSledDrift = { pointer: event.pointerId, since: performance.now() };
+  }
+});
+for (const eventType of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+  touchSprintButton.addEventListener(eventType, event => {
+    if (touchSledDrift?.pointer === event.pointerId) touchSledDrift = undefined;
+  });
+}
 const viewportControls = createViewportControls({
   fullscreenButton: element<HTMLButtonElement>('fullscreen-toggle'),
   chatPanel: element('town-chat'),
@@ -676,6 +691,8 @@ let forwardPressedAt = -Infinity;
 let doubleForward = false;
 function stopTravel() {
   keys.clear();
+  sledSpace = steeredWithSpace = false;
+  touchSledDrift = undefined;
   forwardPressedAt = -Infinity;
   doubleForward = false;
   touchWalk.reset();
@@ -1503,6 +1520,7 @@ const teamFight = createTeamSnowfight({
   },
   snowDepthLevel: () => snowCover.depth().level,
   canScoop: () => aimsAtNearbySnow(),
+  freeBuildAvailable: presence.freeSnowWallsAvailable,
 });
 
 function updateSnowballSession(id: number | null) {
@@ -1608,12 +1626,15 @@ function beginSnowAction(source: 'mouse' | 'touch') {
   gatherCheck.x = NaN;
   if (source === 'mouse') updateHeldSnowAction(0);
 }
+function freeWallPlacementArmed() {
+  return !teamFight.active() && teamFight.canBuild() && teamFight.buildMode() && teamFight.material() > 0;
+}
 function finishSnowAction(source: 'mouse' | 'touch') {
   if (!snowHold || snowHold.source !== source) return;
-  const fire = moveAllowed() && !aimsAtNearbySnow() && waterAtFeet()?.mode !== 'swim';
+  const fire = moveAllowed() && (freeWallPlacementArmed() || !aimsAtNearbySnow()) && waterAtFeet()?.mode !== 'swim';
   cancelSnowAction(source);
   if (!fire) return;
-  if (teamFight.buildMode() && teamFight.active()) {
+  if (teamFight.buildMode() && teamFight.canBuild()) {
     teamFight.tryPlace();
     return;
   }
@@ -1632,6 +1653,7 @@ function updateHeldSnowAction(dt: number) {
     return;
   }
   if (snowHold.source === 'touch' && performance.now() - snowHold.started < touchHoldMilliseconds) return;
+  if (freeWallPlacementArmed()) return;
   if (aimsAtNearbySnow()) {
     snowAction = 'gather';
     snowballs.hideAim();
@@ -1659,7 +1681,7 @@ const touchSnowball = {
   start: () => beginSnowAction('touch'),
   finish(milliseconds: number) {
     if (!snowHold || snowHold.source !== 'touch') return false;
-    if (milliseconds < touchHoldMilliseconds) {
+    if (milliseconds < touchHoldMilliseconds && !freeWallPlacementArmed()) {
       cancelSnowAction('touch');
       return false;
     }
@@ -2229,8 +2251,10 @@ addEventListener('keydown', e => {
   if (moveAllowed() && e.code === 'Space') {
     if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
-      if (sledRide.active()) sledRide.jump(3.2);
-      else requestJump();
+      if (sledRide.active()) {
+        sledSpace = true;
+        steeredWithSpace = keys.has('KeyA') || keys.has('ArrowLeft') || keys.has('KeyD') || keys.has('ArrowRight');
+      } else requestJump();
     }
     return;
   }
@@ -2245,6 +2269,11 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => {
+  if (e.code === 'Space' && sledSpace) {
+    sledSpace = false;
+    // Keep a tap as a jump. Space used with steering stays a ground control.
+    if (!steeredWithSpace && sledRide.active() && moveAllowed()) sledRide.jump(3.2);
+  }
   keys.delete(e.code);
   if (!forwardHeld()) doubleForward = false;
 });
@@ -2737,11 +2766,15 @@ renderer.setAnimationLoop(now => {
           if (!sledRide.active()) sledWallCellKey = '';
           if (sledRide.active()) {
             const beforeX = x, beforeN = n;
+            if (sledSpace && Math.abs(right) > .1) steeredWithSpace = true;
             const driftState = sledDrift.update(townPhysicsDelta, {
               grounded: !sledRide.airborne(), speed: sledRide.speed(),
               turn: right, lateral: sledRide.lateral(),
+              engaged: sledRide.drifting() && (forward < -.1 || sledSpace ||
+                (touchSledDrift !== undefined && now - touchSledDrift.since >= touchHoldMilliseconds)),
             });
-            sledRide.step(townPhysicsDelta, { forward, turn: right }, driftState.boost);
+            sledRide.step(townPhysicsDelta, { forward, turn: right, drift: sledSpace ||
+              (touchSledDrift !== undefined && now - touchSledDrift.since >= touchHoldMilliseconds) }, driftState.boost);
             const spot = sledRide.spot;
             x = spot.x;
             n = spot.n;
@@ -2750,7 +2783,7 @@ renderer.setAnimationLoop(now => {
             yaw = spot.yaw;
             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
               Math.hypot(x - beforeX, n - beforeN) > .05) {
-              snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55);
+              snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55, sledRide.drifting());
             }
             if (sledRide.active()) {
               // 雪墙撞穿报告（车道 B）：进入新的一层墙格、速度 >6、橇体低于墙顶 →
@@ -2823,7 +2856,7 @@ renderer.setAnimationLoop(now => {
   if (ceremonyArrivalPose && now >= ceremonyArrivalPose.until) ceremonyArrivalPose = undefined;
   const activityPose = walking && landingFeedback.pose() === 'prone'
     ? effectiveTownAvatarPose(false, false, false, true, 0)
-    : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active());
+    : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
   presence.sample(walking,
@@ -2841,6 +2874,7 @@ renderer.setAnimationLoop(now => {
   const sledFrame = sledAnimation.step(dt, {
     mounted: sledRide.active(), east: x, north: n, height: airHeight ?? ground, yaw,
     speed: sledRide.speed(), turn: sledRide.turnRate(), braking: sledRide.braking(), airborne: sledRide.airborne(),
+    drifting: sledRide.drifting(),
   });
   const sledDisplay = sledRide.active() ? sledRide.spot : sledRide.parked();
   if (sledDisplay) {
@@ -2859,6 +2893,8 @@ renderer.setAnimationLoop(now => {
       (sledDrift.drifting() ? ` · 漂移充能 ${Math.round(sledDrift.charge() * 100)}%`
         : sledDrift.boosting() ? ' · 漂移加速' : '')
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
+  const sprintLabel = sledRide.active() ? '漂移' : walkSprintLabel;
+  if (touchSprintButton.textContent !== sprintLabel) touchSprintButton.textContent = sprintLabel;
   const gpStatus = walking
     ? grandPrix.update(x, n, { sledding: sledRide.active(), skating: skatesOnIce() && presenceSkateSpeed > .5 })
     : '';
@@ -2977,9 +3013,9 @@ renderer.setAnimationLoop(now => {
   let coldDepth = 0;
   if (walking && !indoors && !boardingGround && airHeight === undefined && !isLakeSkateIce(shedEast, shedNorth)) {
     if (!seated && waterAtFeet()) coldSurface = 'water';
-    else if (!nightMode || scenery.litAt(shedEast, shedNorth, shedFeet) || townLights.litAt(shedEast, shedNorth, shedFeet)) {
+    else if (scenery.litAt(shedEast, shedNorth, shedFeet) || townLights.litAt(shedEast, shedNorth, shedFeet)) {
       coldSurface = 'lamp';
-    } else if (effectiveSnowIntensity >= 2 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
+    } else if (effectiveSnowIntensity >= 1 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
       coldSurface = 'dark-snow';
       coldDepth = snowCover.depthAt(shedEast, shedNorth, shedFeet, districts.sweptAt);
     }

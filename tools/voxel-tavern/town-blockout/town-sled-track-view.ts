@@ -8,6 +8,14 @@ const verticesPerSlot = 12;
 const spine = [-1, 1, -1, 1, 1, -1];
 const ends = [0, 0, 1, 0, 1, 1];
 
+function joinedNormal(east: number, north: number, adjoiningEast: number, adjoiningNorth: number) {
+  const length = Math.hypot(adjoiningEast, adjoiningNorth);
+  if (!length) return [east, north];
+  const dx = east + adjoiningNorth / length, dn = north - adjoiningEast / length;
+  const norm = Math.hypot(dx, dn);
+  return norm ? [dx / norm, dn / norm] : [east, north];
+}
+
 export function createSledTrackView(scene: Scene, ground: (x: number, n: number) => number) {
   const geometry = new BufferGeometry();
   const position = new BufferAttribute(new Float32Array(snowFieldTrackCapacity * verticesPerSlot * 3), 3)
@@ -40,13 +48,21 @@ export function createSledTrackView(scene: Scene, ground: (x: number, n: number)
         const east = segment.x2 - segment.x1, north = segment.n2 - segment.n1;
         const distance = Math.hypot(east, north) || 1;
         const sideEast = north / distance, sideNorth = -east / distance;
+        let startEast = sideEast, startNorth = sideNorth, endEast = sideEast, endNorth = sideNorth;
+        const before = segments[slot - 1], after = segments[slot + 1];
+        if (before && (segment.drifting || before.drifting) && before.x2 === segment.x1 && before.n2 === segment.n1) {
+          [startEast, startNorth] = joinedNormal(sideEast, sideNorth, before.x2 - before.x1, before.n2 - before.n1);
+        }
+        if (after && (segment.drifting || after.drifting) && segment.x2 === after.x1 && segment.n2 === after.n1) {
+          [endEast, endNorth] = joinedNormal(sideEast, sideNorth, after.x2 - after.x1, after.n2 - after.n1);
+        }
         const deep = segment.strength >= .8;
         const shade = deep ? .29 : .43;
         const opacity = segment.alpha * .52;
         for (const rail of [-1, 1]) for (let i = 0; i < 6; i++) {
           const offset = rail * .29 + spine[i] * (deep ? .047 : .034);
-          const px = segment.x1 + east * ends[i] + sideEast * offset;
-          const pn = segment.n1 + north * ends[i] + sideNorth * offset;
+          const px = segment.x1 + east * ends[i] + (ends[i] ? endEast : startEast) * offset;
+          const pn = segment.n1 + north * ends[i] + (ends[i] ? endNorth : startNorth) * offset;
           const vertex = slot * verticesPerSlot + (rail === -1 ? 0 : 6) + i;
           position.setXYZ(vertex, px, ground(px, pn) + .028, -pn);
           color.setXYZW(vertex, shade * .79, shade * .90, shade, opacity);

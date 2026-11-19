@@ -126,7 +126,7 @@ test('each plaza fire uses the original three-metre B5 exposure warmth and one s
     assert.equal(all.warmAt(site.x + fireWarmthRadius + .01, site.n, site.ground), false);
     const tracker = createFrostTracker();
     tracker.setExposure(4, 0, 'dark-snow', false);
-    tracker.update(270);
+    tracker.update(300);
     assert.equal(tracker.exposure(), 3);
     tracker.setWarmth('fire-source', all.warmAt(site.x, site.n - 2.9, site.ground));
     tracker.update(5);

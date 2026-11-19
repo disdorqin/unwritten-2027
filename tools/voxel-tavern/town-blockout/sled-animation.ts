@@ -1,3 +1,5 @@
+import { sledMaximumSpeed } from './sled-motion';
+
 const rad = Math.PI / 180;
 const mountSeconds = .4;
 const clamp = (x: number, min: number, max: number) => Math.min(max, Math.max(min, x));
@@ -7,7 +9,7 @@ export const sledYawDelta = (from: number, to: number) => Math.atan2(Math.sin(to
 
 type HeightAt = (east: number, north: number) => number;
 type SledCue = { mounted: boolean; east: number; north: number; height: number; yaw: number;
-  speed: number; turn: number; braking: boolean; airborne: boolean };
+  speed: number; turn: number; braking: boolean; airborne: boolean; drifting?: boolean };
 
 export function sledSnowAmount(speed: number, braking: boolean, roughness = 0) {
   if (braking && speed > .5) return 14;
@@ -38,7 +40,7 @@ export function createSledAnimation(heightAt: HeightAt) {
     const center = heightAt(east, north);
     const uneven = Math.max(Math.abs(front + rear - 2 * center), Math.abs(left + right - 2 * center));
     const vibration = mounted && !airborne && speed > 4 ? clamp((uneven - .035) / .11, 0, 1) * clamp(speed / 10, 0, 1) : 0;
-    const bending = mounted ? clamp(turn * 11, -18, 18) * rad : 0;
+    const bending = mounted ? clamp(turn * (cue.drifting ? 18 : 11), -18, 18) * rad : 0;
     bend = toward(bend, bending, dt, .2);
     pitch = toward(pitch, mounted ? airborne ? -8 * rad : -clamp(Math.atan(front - rear), -.32, .32) : 0, dt, .15);
     slopeRoll = toward(slopeRoll, mounted && !airborne ? clamp(Math.atan(left - right), -.23, .23) : 0, dt, .15);
@@ -108,7 +110,7 @@ export function createRemoteSledCues(heightAt: HeightAt) {
       return;
     }
     const oldSpeed = speed;
-    speed = Math.min(17, distance / seconds);
+    speed = Math.min(sledMaximumSpeed, distance / seconds);
     turn = sledYawDelta(older.yaw, sample.yaw) / seconds;
     const ground = heightAt(sample.east, sample.north);
     const wasAirborne = airborne;

@@ -15,6 +15,8 @@ type Control = {
   name?: string;
   self?: boolean;
   snowfight?: boolean;
+  freeSnowWalls?: boolean;
+  kind?: string;
   reason?: string;
   phase?: string;
   teams?: [number, number][];
@@ -63,8 +65,8 @@ function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) =>
   };
 }
 
-async function fixture(context: TestContext) {
-  const server = await createPresenceServer({ host: "127.0.0.1", port: 0 });
+async function fixture(context: TestContext, ceremonyStartAt?: number) {
+  const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ceremonyStartAt });
   const url = "ws://127.0.0.1:" + server.address().port + "/presence";
   const sockets: WebSocket[] = [];
   context.after(async () => {
@@ -85,6 +87,7 @@ async function fixture(context: TestContext) {
     socket.send(JSON.stringify({ type: "join", name }));
     const self = await joined;
     assert.equal(self.snowfight, true, "join advertises snowfight support");
+    assert.equal(self.freeSnowWalls, true);
     return { socket, text, walls, id: self.id!, name };
   }
 
@@ -196,12 +199,12 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     };
 
     // 正例：B 的位置记录就在墙格 (600,500) 格心 (300.25, 250.25) 边上，
-    // 10 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
+    // 30 m/s 撞穿一层墙——双端都收到同一份 WALL_CLEAR，块按雪墙规则整块销毁。
     await place(600, 500, 0);
     sendPose(b.socket, 300, 250, 2);
     const clearA = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
     const clearB = b.walls.next(events => events.some(event => event.kind === "wall-clear"));
-    smash(600, 500, 10);
+    smash(600, 500, 30);
     const [relayA, relayB] = await Promise.all([clearA, clearB]);
     const clear = relayA.find(event => event.kind === "wall-clear");
     assert.ok(clear && clear.kind === "wall-clear");
@@ -213,6 +216,8 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
     // 慢速（6 m/s，闸门含等于）不算撞穿：墙还在，无任何 WALL_CLEAR
     await place(600, 500, 0);
     smash(600, 500, 6);
+    await noClear();
+    smash(600, 500, 31);
     await noClear();
 
     // 厚墙（同格堆到 2 层）：高速报告也被拒，列高必须恰为 1
@@ -231,4 +236,53 @@ test("snowfight: sled smash clears a one-layer wall for both clients, rejects sl
       event.blocks.some(block => block.gx === 602 && block.gy === 500 && block.layer === 0)));
     smash(602, 500, 12);
     await clearNear;
+  });
+
+test("free snow walls relay three authored layers, survive joining, and clear before ceremony arrival",
+  { timeout: 9000 }, async context => {
+    let epoch = Date.now();
+    context.mock.method(Date, "now", () => epoch);
+    const startAt = epoch + 20_000;
+    const { join } = await fixture(context, startAt);
+    const a = await join("雪墙作者");
+    const b = await join("雪墙访客");
+    const outside = { gx: 600, gy: 500 };
+    const landing = { gx: 448, gy: 376 };
+
+    for (const [site, layers] of [[outside, 3], [landing, 1]] as const) {
+      for (let layer = 0; layer < layers; layer++) {
+        const atLayer = (events: SnowfightRelayEvent[]) => events.some(event =>
+          event.kind === "wall-set" && event.gx === site.gx && event.gy === site.gy && event.layer === layer);
+        const frames = [a.walls.next(atLayer), b.walls.next(atLayer)];
+        a.socket.send(Buffer.from(encodeWallPlace(site.gx, site.gy)));
+        for (const events of await Promise.all(frames)) {
+          assert.deepEqual(events, [{ kind: "wall-set", ...site, layer, hp: 3, ownerId: a.id, team: 2 }]);
+        }
+      }
+    }
+
+    const late = await join("迟到端");
+    const snapshot = await late.walls.next(events => events.length === 4);
+    assert.deepEqual(snapshot.flatMap(e => e.kind === "wall-set" && e.gx === outside.gx ? [e.layer] : []), [0, 1, 2]);
+
+    const order: string[] = [];
+    b.socket.on("message", (raw, binary) => {
+      if (binary) {
+        if (Buffer.isBuffer(raw) && decodeSnowfightRelay(raw)?.some(e => e.kind === "wall-clear")) order.push("clear");
+      } else if (JSON.parse(raw.toString()).kind === "ceremony-arrival") order.push("arrival");
+    });
+    const arrival = b.text.next(message => message.kind === "ceremony-arrival");
+    const removed = b.walls.next(events => events.some(e => e.kind === "wall-clear"));
+    epoch = startAt - 10_000;
+    assert.deepEqual(await removed, [{ kind: "wall-clear", blocks: [{ ...landing, layer: 0 }] }]);
+    await arrival;
+    assert.deepEqual(order, ["clear", "arrival"]);
+
+    const blocked = a.text.next(message => message.type === "snowfight-rejected" && message.reason === "phase");
+    a.socket.send(Buffer.from(encodeWallPlace(landing.gx, landing.gy)));
+    await blocked;
+    const after = await join("仪式访客");
+    const remaining = await after.walls.next(events => events.some(e => e.kind === "wall-set"));
+    assert.equal(remaining.length, 3);
+    assert.ok(remaining.every(e => e.kind === "wall-set" && e.gx === outside.gx));
   });

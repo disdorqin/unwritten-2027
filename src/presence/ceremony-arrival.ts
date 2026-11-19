@@ -5,6 +5,7 @@ export const townCeremonyMidnight = Date.UTC(2026, 11, 31, 16);
 export const ceremonyLandingLeadMs = 10_000;
 export const ceremonyLateWindowMs = 10 * 60_000;
 export const ceremonyLandingCentre = [224, 188] as const;
+export const ceremonyLandingOuterRadius = 16.5;
 // The guide specifies the T−10 cue but gives no verbatim announcement for it.
 export const ceremonyLandingAnnouncement = '跨年仪式即将开始，全镇将前往中央广场。';
 
@@ -61,7 +62,7 @@ function spreadRings(rings: Landing[][]): readonly Landing[] {
 }
 
 export const ceremonyMainLandings = spreadRings([ring(4, 18, 0), ring(7, 30, .5), ring(10, 44, .25)]);
-export const ceremonyEdgeLandings = spreadRings([ring(13.5, 60, .5), ring(16.5, 74, .25)]);
+export const ceremonyEdgeLandings = spreadRings([ring(13.5, 60, .5), ring(ceremonyLandingOuterRadius, 74, .25)]);
 
 export function ceremonyArrivalAt(slot: number, edge: boolean): Landing | undefined {
   return (edge ? ceremonyEdgeLandings : ceremonyMainLandings)[slot];

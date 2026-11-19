@@ -168,7 +168,8 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
       const armPitch = progress >= 0 && progress < 1 ? -1.55 * Math.sin(Math.PI * progress) : 0;
       const stride = actor.stride ?? 0;
       let sledFrame: ReturnType<ReturnType<typeof createSledAnimation>['step']> | undefined;
-      if (pose === 7) {
+      const sledding = pose === 7 || pose === 8;
+      if (sledding) {
         seenSled.add(actor.id);
         let state = sledStates.get(actor.id);
         if (!state) {
@@ -179,6 +180,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
         sledFrame = state.anim.step(1 / 60, {
           mounted: true, east: actor.east, north: actor.north, height: actor.height, yaw: actor.yaw,
           speed: state.cues.speed, turn: state.cues.turn, braking: state.cues.braking, airborne: state.cues.airborne,
+          drifting: pose === 8,
         });
         createSledRiderMatrices(actor.east, actor.height + rootOffset, actor.north, actor.yaw, sledFrame);
         const sledFirst = sledVisible * sledPartCount;
@@ -189,13 +191,13 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
         sledVisible++;
       }
       const slot = matrixSlots[visible];
-      const dirty = pose === 7 || slot.id !== actor.id || slot.east !== actor.east || slot.north !== actor.north ||
+      const dirty = sledding || slot.id !== actor.id || slot.east !== actor.east || slot.north !== actor.north ||
         slot.height !== actor.height || slot.yaw !== actor.yaw || slot.pose !== pose ||
         slot.stride !== stride || slot.armPitch !== armPitch;
       const firstInstance = visible * partCount;
       if (dirty) {
         for (let offset = 0; offset < partCount; offset++) {
-          if (pose === 7 && sledFrame) {
+          if (sledFrame) {
             writeSledRiderPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], sledFrame);
           } else {
             writeAvatarPart(matrices, (firstInstance + offset) * 16, voxelPersonParts[offset], pose,

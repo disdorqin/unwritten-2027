@@ -7,9 +7,10 @@ type SledWorld = {
   blocked(x: number, n: number, y: number): boolean;
   snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
   stopped(): void;
+  smoothFlight?(): void;
 };
 type Spot = { x: number; n: number; y: number; yaw: number };
-type SledControls = { forward: number; turn: number };
+type SledControls = { forward: number; turn: number; drift?: boolean };
 
 export function createSledRide(world: SledWorld) {
   const motion = createSledMotion();
@@ -18,7 +19,7 @@ export function createSledRide(world: SledWorld) {
   let parked: (Spot & { east: number; north: number; speed: number }) | undefined;
   let recovery = 0, recoveryDuration = 0, rollTurns = 0;
   let snowTime = 0, curbCooldown = 0, wasStalled = false;
-  let landingCompression = 0;
+  let landingCompression = 0, flightSeconds = 0;
   let braking = false, turnRate = 0, deepSnow = false;
 
   function mount(x: number, n: number, y: number, yaw: number) {
@@ -27,7 +28,7 @@ export function createSledRide(world: SledWorld) {
     motion.reset(yaw);
     active = true;
     parked = undefined;
-    snowTime = curbCooldown = turnRate = 0;
+    snowTime = curbCooldown = turnRate = flightSeconds = 0;
     braking = deepSnow = false;
     wasStalled = false;
     return true;
@@ -105,6 +106,7 @@ export function createSledRide(world: SledWorld) {
       motion.reset(next.heading, next.speed * .97);
       curbCooldown = .22;
     }
+    flightSeconds = next.airborne ? flightSeconds + dt : 0;
     const nextY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
     if (world.blocked(x, n, nextY)) {
       const eastBlocked = world.blocked(x, spot.n, nextY);
@@ -119,17 +121,20 @@ export function createSledRide(world: SledWorld) {
     if (next.airborne && next.vertical <= 0 && nextY === floor) {
       const impact = Math.abs(next.vertical);
       const landing = motion.land(grade);
+      if (landing === 'smooth' && flightSeconds >= 1.2) world.smoothFlight?.();
+      flightSeconds = 0;
       world.snow(x, n, floor, spot.yaw, landing === 'smooth' ? 8 : landing === 'hard' ? 16 : 24, 'land');
       if (landing === 'spill') { crash(0); return; }
       if (landing === 'hard') landingCompression = Math.min(.17, impact * .012);
     }
-    const mist = next.airborne ? 0 : sledSnowAmount(next.speed, braking, Math.abs(curbRise));
+    const sideSpray = next.drifting || braking;
+    const mist = next.airborne ? 0 : sledSnowAmount(next.speed, sideSpray, Math.abs(curbRise));
     snowTime = mist ? snowTime + dt : 0;
     if (mist && snowTime >= .05) {
-      const side = turnRate > .05 ? 1 : -1;
-      world.snow(x + (braking ? Math.cos(spot.yaw) * side * .42 : 0),
-        n - (braking ? Math.sin(spot.yaw) * side * .42 : 0),
-        floor, spot.yaw, mist, braking ? 'brake' : undefined);
+      const side = next.drifting ? (Math.sign(next.slipAngle) || -Math.sign(turnRate)) : turnRate > .05 ? 1 : -1;
+      world.snow(x + (sideSpray ? Math.cos(spot.yaw) * side * .42 : 0),
+        n - (sideSpray ? Math.sin(spot.yaw) * side * .42 : 0),
+        floor, spot.yaw, mist, sideSpray ? 'brake' : undefined);
       snowTime = 0;
     }
   }
@@ -162,6 +167,7 @@ export function createSledRide(world: SledWorld) {
       recovery = recoveryDuration = rollTurns = landingCompression = 0;
     },
     braking: () => active && braking,
+    drifting: () => active && motion.state.drifting,
     turnRate: () => active ? turnRate : 0,
     lateral: () => motion.state.lateral,
     deepSnow: () => deepSnow,

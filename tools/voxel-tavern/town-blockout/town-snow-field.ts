@@ -39,12 +39,12 @@ const fieldStepSeconds = .25;
 
 export type SnowFieldTrack = {
   x1: number; n1: number; x2: number; n2: number;
-  strength: number; alpha: number;
+  strength: number; alpha: number; drifting?: boolean;
 };
 
 type TrackRecord = {
   x1: number; n1: number; x2: number; n2: number;
-  strength: number; born: number; cover: number;
+  strength: number; born: number; cover: number; drifting?: boolean;
 };
 
 export function createTownSnowField(grid: Ground) {
@@ -195,10 +195,10 @@ export function createTownSnowField(grid: Ground) {
       return index < 0 ? 0 : dug[index];
     },
     /** 雪痕登记（D2 长雪痕）：一段轨迹，强度由深雪/普通决定，留存与积盖由场统一推进。 */
-    addTrack(x1: number, n1: number, x2: number, n2: number, strength: number) {
+    addTrack(x1: number, n1: number, x2: number, n2: number, strength: number, drifting = false) {
       if (![x1, n1, x2, n2, strength].every(Number.isFinite) || strength <= 0) return;
       if (tracks.length >= snowFieldTrackCapacity) tracks.shift();
-      tracks.push({ x1, n1, x2, n2, strength: Math.min(1, strength), born: fieldTime, cover: 0 });
+      tracks.push({ x1, n1, x2, n2, strength: Math.min(1, strength), born: fieldTime, cover: 0, ...(drifting ? { drifting } : {}) });
     },
     trackSegments(): SnowFieldTrack[] {
       const life = snowFieldTrackLifeSeconds;
@@ -208,6 +208,7 @@ export function createTownSnowField(grid: Ground) {
         return {
           x1: track.x1, n1: track.n1, x2: track.x2, n2: track.n2,
           strength: track.strength, alpha: track.strength * (1 - track.cover) * fade,
+          ...(track.drifting ? { drifting: true } : {}),
         };
       });
     },

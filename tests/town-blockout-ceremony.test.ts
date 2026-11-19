@@ -233,23 +233,6 @@ test('director fires each cue once, in order, across the midnight boundary', () 
   for (let i = 1; i < fired.length; i++) assert.ok(fired[i].at >= fired[i - 1].at);
 });
 
-test('a clock correction cannot replay ceremony cues already delivered by the director', () => {
-  const midnight = ceremonyMidnight(2026, 480);
-  let now = midnight - 100;
-  const times: number[] = [];
-  const director = createCeremonyDirector({ now: () => now, utcOffsetMinutes: 480 }, {
-    onCue: cue => { if (cue.type === 'fireworks-main') times.push(cue.at); },
-  });
-  director.update();
-  now = midnight + 1_100;
-  director.update();
-  now = midnight - 50;
-  director.update();
-  now = midnight + 1_100;
-  director.update();
-  assert.deepEqual(times, [midnight + 1000]);
-});
-
 test('director state during countdown and late join without replay', () => {
   let now = at(31, 23, 59, 55);
   const director = createCeremonyDirector({ now: () => now });
@@ -338,24 +321,25 @@ test('frost tracker: any single warmth source is enough, floor is level 0', () =
   assert.ok(Math.abs(tracker.update(20) - 1) < 1e-9);
 });
 
-test('frost exposure follows the snow curve, full depth pressure and calm-weather decay', () => {
+test('frost exposure follows snow strength and full depth pressure, and recedes on cleared roads', () => {
   const tracker = createFrostTracker();
   tracker.update(600);
   assert.equal(tracker.exposure(), 0);
   tracker.setExposure(3, 0, true, false);
-  assert.equal(tracker.update(135), 1);
-  assert.equal(tracker.walkingScale(), 1);
-  assert.equal(tracker.update(135), 2);
+  const secondsPerShallowLevel = 270 / 2.85;
+  assert.ok(Math.abs(tracker.update(secondsPerShallowLevel) - 1) < 1e-9);
+  assert.equal(tracker.walkingScale(), .95);
+  assert.ok(Math.abs(tracker.update(secondsPerShallowLevel) - 2) < 1e-9);
 
-  tracker.setExposure(1.9, 0, true, false);
-  assert.equal(tracker.update(120), 1);
+  tracker.setExposure(1, 0, true, false);
+  assert.ok(Math.abs(tracker.update(100) - 2.5) < 1e-9);
   tracker.setExposure(4, 0, false, false);
-  assert.equal(tracker.update(90), 1);
+  assert.ok(Math.abs(tracker.update(120) - 1.5) < 1e-9);
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.update(90), 2);
+  assert.ok(Math.abs(tracker.update(37.5) - 2) < 1e-9);
 
   tracker.setExposure(3, .6, true, false);
-  assert.equal(tracker.update(90), 3);
+  assert.ok(Math.abs(tracker.update(270 / 4.275) - 3) < 1e-9);
   assert.equal(tracker.walkingScale(), .65);
 });
 
@@ -363,7 +347,7 @@ test('fastest warmth source lowers exposure while the old ceremony baseline keep
   const tracker = createFrostTracker();
   tracker.setBaseline(3);
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.update(270), 3);
+  assert.equal(tracker.update(300), 3);
   tracker.setWarmth('interior', true);
   tracker.setWarmth('onsen', true);
   tracker.setWarmth('fire-source', true);
@@ -372,7 +356,7 @@ test('fastest warmth source lowers exposure while the old ceremony baseline keep
   tracker.setWarmth('fire-source', false);
   tracker.setWarmth('onsen', false);
   tracker.setWarmth('interior', false);
-  tracker.update(270);
+  tracker.update(300);
   assert.equal(tracker.exposure(), 3);
 
   tracker.drinkHot();
@@ -385,7 +369,7 @@ test('fastest warmth source lowers exposure while the old ceremony baseline keep
   for (const [source, seconds] of [['fire-source', 15], ['onsen', 24], ['interior', 30]] as const) {
     const fresh = createFrostTracker();
     fresh.setExposure(4, 0, true, false);
-    fresh.update(270);
+    fresh.update(300);
     fresh.setWarmth(source, true);
     assert.equal(fresh.update(seconds), 0, source);
   }
@@ -400,7 +384,7 @@ test('ceremony relief halves pressure and caps L3 walking drag without changing 
   assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(atJan(0, 30))), false);
 
   tracker.setExposure(4, 0, true, relieved);
-  assert.equal(tracker.update(180), 1);
+  assert.ok(Math.abs(tracker.update(150) - 1) < 1e-9);
   tracker.setBaseline(3);
   tracker.update(60);
   assert.equal(tracker.displayLevel(), 3);
@@ -416,12 +400,29 @@ test('ceremony relief halves pressure and caps L3 walking drag without changing 
 test('frost level styles match the design bands', () => {
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].opacity),
-    [0, .35, .65, .90],
+    [0, .45, .65, .90],
   );
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].band),
-    [0, .10, .20, .34],
+    [0, .12, .20, .34],
   );
   assert.equal(frostLevelStyles[3].breath, true);
   assert.equal(frostLevelStyles[2].breath, false);
+});
+
+test('a clock correction cannot replay ceremony cues already delivered by the director', () => {
+  const midnight = ceremonyMidnight(2026, 480);
+  let now = midnight - 100;
+  const times: number[] = [];
+  const director = createCeremonyDirector({ now: () => now, utcOffsetMinutes: 480 }, {
+    onCue: cue => { if (cue.type === 'fireworks-main') times.push(cue.at); },
+  });
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  now = midnight - 50;
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  assert.deepEqual(times, [midnight + 1000]);
 });
