@@ -1,4 +1,12 @@
 export const PRESENCE_PATH = '/presence';
+/** S3 备用通道（HTTPS 轮询）：与 WS 共用同一会话/世界状态，路径挂在 /presence* 下以便现行反代直通。 */
+export const POLL_JOIN_PATH = '/presence/poll/join';
+export const POLL_PATH = '/presence/poll';
+export const POLL_LEAVE_PATH = '/presence/poll/leave';
+/** 轮询节奏：客户端每 500 ms 一次往返（状态上报与快照拉取均为 2 Hz）。 */
+export const POLL_INTERVAL_MS = 500;
+/** 轮询会话超时：超过此时长没有新的轮询请求即视为离线并回收会话。 */
+export const POLL_SESSION_TIMEOUT_MS = 10_000;
 export const MAX_SESSIONS = 64;
 export const MAX_VISIBLE = 48;
 export const RECORD_BYTES = 12;

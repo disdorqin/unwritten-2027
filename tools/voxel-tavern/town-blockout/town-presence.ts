@@ -17,6 +17,10 @@ import {
 
 import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { createPresenceLinkStatus } from './town-presence-status';
+import {
+  POLL_JOIN_URL, POLL_LEAVE_URL, POLL_URL, base64ToArrayBuffer, buildPollBody, parsePollMessages,
+  pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
+} from './town-presence-poll';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -98,6 +102,17 @@ export function createTownPresence(
   let serverEpochOffset: number | undefined;
   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
   let socket: WebSocket | undefined;
+  /** 当前 WS 尝试是否已完成入镇（用于区分「静默探测失败」与「在线掉线」）。 */
+  let socketJoined = false;
+  /** S3 备用通道：WS 不可用时以 HTTPS 轮询维持同一会话，WS 只作后台探测。 */
+  type PollChannel = {
+    session: string; timer: number; inFlight: boolean;
+    outEvents: (string | Uint8Array)[]; pendingState?: ArrayBuffer;
+  };
+  let poll: PollChannel | undefined;
+  let pollRetryTimer: number | undefined;
+  /** receive() 正在处理哪条通道的帧（轮询帧与 WS 帧共用同一接收逻辑）。 */
+  let receivingFrom: 'ws' | 'poll' = 'ws';
   let timeout: number | undefined;
   let retryTimer: number | undefined;
   let retryAt: number | undefined;
@@ -146,19 +161,133 @@ export function createTownPresence(
   }
 
   function connectionLost() {
+    if (poll && !socketJoined) {
+      // 备用通道在跑、这次只是后台 WS 探测失败：只收探测连接，不动轮询会话与名册。
+      const active = socket;
+      socket = undefined;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      timeout = undefined;
+      if (active) { try { active.close(); } catch { /* 探测连接已断开。 */ } }
+      retryAt = performance.now() + retryDelays[retryIndex];
+      retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
+      scheduleConnection();
+      return;
+    }
     disconnect(false);
     link.failed();
     if (!inTown) return;
     retryAt = performance.now() + retryDelays[retryIndex];
     retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
     scheduleConnection();
+    void startPoll();
+  }
+
+  function stopPoll(sendLeave: boolean) {
+    if (pollRetryTimer !== undefined) window.clearTimeout(pollRetryTimer);
+    pollRetryTimer = undefined;
+    const active = poll;
+    poll = undefined;
+    if (!active) return;
+    window.clearInterval(active.timer);
+    if (sendLeave && active.session) {
+      void fetch(POLL_LEAVE_URL, {
+        method: 'POST', headers: { 'x-presence-session': active.session }, keepalive: true,
+      }).catch(() => { /* 离线离开时服务端会按轮询超时回收会话。 */ });
+    }
+  }
+
+  function retryPollLater() {
+    if (pollRetryTimer !== undefined || !inTown) return;
+    pollRetryTimer = window.setTimeout(() => {
+      pollRetryTimer = undefined;
+      if (inTown && !poll && !socketJoined) void startPoll();
+    }, 2000);
+  }
+
+  function feedPollMessages(payload: unknown) {
+    const messages = parsePollMessages(payload);
+    if (!messages) return;
+    receivingFrom = 'poll';
+    try {
+      for (const message of messages) {
+        if (message.t === 'text') receive(message.d);
+        else receive(base64ToArrayBuffer(message.d));
+      }
+    } finally { receivingFrom = 'ws'; }
+  }
+
+  async function pollJoin(channel: PollChannel): Promise<boolean> {
+    try {
+      const response = await fetch(POLL_JOIN_URL, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: getName() }),
+      });
+      if (!response.ok) return false;
+      const data = await response.json() as { session?: unknown };
+      if (typeof data.session !== 'string' || poll !== channel) return false;
+      channel.session = data.session;
+      feedPollMessages(data);
+      link.useFallback(roster.size + (haveId ? 1 : 0));
+      return haveId;
+    } catch { return false; }
+  }
+
+  async function startPoll() {
+    if (poll || !inTown) return;
+    const channel: PollChannel = { session: '', timer: 0, inFlight: false, outEvents: [] };
+    poll = channel;
+    if (!await pollJoin(channel) || poll !== channel) {
+      if (poll === channel) poll = undefined;
+      retryPollLater();
+      return;
+    }
+    channel.timer = window.setInterval(() => { void flushPoll(channel); }, pollIntervalMs);
+  }
+
+  async function flushPoll(channel: PollChannel) {
+    if (channel.inFlight || poll !== channel || !channel.session) return;
+    channel.inFlight = true;
+    const state = channel.pendingState;
+    channel.pendingState = undefined;
+    const events = channel.outEvents;
+    channel.outEvents = [];
+    try {
+      const response = await fetch(POLL_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
+        body: buildPollBody(state, events),
+      });
+      if (poll !== channel) return;
+      if (response.status === 401 || response.status === 410) {
+        // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
+        requeuePollEvents(channel.outEvents, events);
+        channel.session = '';
+        if (!await pollJoin(channel) && poll === channel) {
+          stopPoll(false);
+          retryPollLater();
+        }
+        return;
+      }
+      if (!response.ok) throw new Error('poll failed');
+      feedPollMessages(await response.json());
+    } catch {
+      // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
+      if (poll === channel) requeuePollEvents(channel.outEvents, events);
+    } finally { channel.inFlight = false; }
+  }
+
+  /** WS 探测成功入镇：把轮询会话退掉，正式切回 WS（状态由 WS 流重新同步）。 */
+  function promoteFromPoll() {
+    if (poll) stopPoll(true);
   }
 
   function disconnect(graceful: boolean) {
     if (timeout !== undefined) window.clearTimeout(timeout);
     timeout = undefined;
+    stopPoll(graceful);
     const active = socket;
     socket = undefined;
+    socketJoined = false;
     haveId = false;
     joinedId = null;
     joinedName = undefined;
@@ -278,6 +407,10 @@ export function createTownPresence(
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
+          if (receivingFrom === 'ws') {
+            socketJoined = true;
+            if (poll) promoteFromPoll();
+          }
           haveId = true;
           link.joined(roster.size + 1);
           joinedId = id;
@@ -290,9 +423,12 @@ export function createTownPresence(
             clock.accept(message.epochMs);
             if (photoSupported) nextClockSample = 0;
           }
-          resetRetry();
-          if (timeout !== undefined) window.clearTimeout(timeout);
-          timeout = undefined;
+          if (receivingFrom === 'ws') {
+            // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
+            resetRetry();
+            if (timeout !== undefined) window.clearTimeout(timeout);
+            timeout = undefined;
+          }
           lastPosition = lastHeightYaw = -1;
           moving = false;
           remaining = 0;
@@ -350,7 +486,9 @@ export function createTownPresence(
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${protocol}//${location.host}/presence`);
       socket = ws;
-      link.attemptStarted();
+      socketJoined = false;
+      // 备用通道在跑时这是后台探测：不把 HUD 翻回「连接中」，探测成功才切回。
+      if (!poll) link.attemptStarted();
       ws.binaryType = 'arraybuffer';
       updateStatus();
       timeout = window.setTimeout(() => { if (socket === ws) connectionLost(); }, 3000);
@@ -368,18 +506,23 @@ export function createTownPresence(
 
   function sendPose(dt: number) {
     const active = socket;
-    if (!haveId || active?.readyState !== WebSocket.OPEN) return;
+    if (!haveId || (!poll && active?.readyState !== WebSocket.OPEN)) return;
     remaining -= dt;
-    if (remaining > 0 || active.bufferedAmount > maximumBufferedBytes) return;
-    remaining = remaining > -sampleInterval ? remaining + sampleInterval : sampleInterval;
+    // 备用通道下状态上报降频：采样间隔由 0.1 s 放宽到 0.5 s（2 Hz），只发最新一帧。
+    const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
+    if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
+    remaining = remaining > -interval ? remaining + interval : interval;
     writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
     const changed = position !== lastPosition || heightYaw !== lastHeightYaw;
     if (!changed && !moving) return;
     // Send one terminal pose at the moving → stationary edge so peers stop extrapolating.
-    try { active.send(outgoing.buffer); }
-    catch { connectionLost(); return; }
+    if (poll) poll.pendingState = outgoing.buffer.slice(0);
+    else {
+      try { active!.send(outgoing.buffer); }
+      catch { connectionLost(); return; }
+    }
     seq = (seq + 1) & 65535;
     moving = changed && lastPosition !== -1;
     lastPosition = position;
@@ -392,8 +535,14 @@ export function createTownPresence(
     return true;
   }
   function sendEvent(bytes: string | Uint8Array) {
+    if (!haveId) return false;
+    if (poll) {
+      // 备用通道：事件先入队，随 2 Hz 轮询往返批量发出（失败自动重发）。
+      pushPollEvent(poll.outEvents, bytes);
+      return true;
+    }
     const active = socket;
-    if (!haveId || active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
+    if (active?.readyState !== WebSocket.OPEN || active.bufferedAmount > maximumBufferedBytes) return false;
     try { active.send(bytes); return true; }
     catch { connectionLost(); return false; }
   }
@@ -522,7 +671,7 @@ export function createTownPresence(
       }
     },
     update(dt: number) {
-      if (!socket) return;
+      if (!socket && !poll) return;
       sendPose(dt);
       samplePhotoClock();
       syncActivityPoses();

@@ -9,7 +9,8 @@
  *   WS-2 握手步：连接在打开前失败/超时（长连接被网络拦截的典型表现）
  *   FR-3 首帧步：连接已打开，但入镇确认未在超时内到达，或在此步断开
  *   HB-4 心跳步：已入镇，但首个状态帧到达前断开；或同步完成后连接中断
- * 'fallback' 相位为 S3 备用通道（HTTPS 轮询）预留，本版不进入。
+ * 'fallback' 相位对应 S3 备用通道（HTTPS 轮询）：WS 失败后由 town-presence.ts
+ * 切入轮询并调用 useFallback()，HUD 显示「备用通道 · N 人」；WS 后台探测恢复后切回。
  */
 
 export type PresenceLinkPhase = 'off' | 'connecting' | 'online' | 'retrying' | 'fallback';
@@ -115,7 +116,7 @@ export function createPresenceLinkStatus(onChange: (snapshot: PresenceLinkSnapsh
       people = 0;
       emit();
     },
-    /** S3 预留：切到备用通道（HTTPS 轮询）后调用，本版无调用点。 */
+    /** S3：切到备用通道（HTTPS 轮询）后调用，HUD 显示「备用通道 · N 人」。 */
     useFallback(count: number) {
       phase = 'fallback';
       people = count;
