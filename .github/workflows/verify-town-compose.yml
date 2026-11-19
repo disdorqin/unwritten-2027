@@ -34,3 +34,59 @@ jobs:
             test "$revision" = "$TOWN_RELEASE"
             printf 'verified image=%s revision=%s id=%s\n' "$image" "$revision" "$id"
           done
+      - name: Probe the OCI entrypoints and all three GLB assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          web="unwritten-town-preview:$TOWN_RELEASE"
+          presence="unwritten-town-presence:$TOWN_RELEASE"
+          docker network create town-glb-probe >/dev/null
+          trap 'docker rm -f town-glb-web town-glb-presence >/dev/null 2>&1 || true; docker network rm town-glb-probe >/dev/null 2>&1 || true' EXIT
+          printf 'web image commands: ' && docker image inspect --format 'entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}' "$web"
+          printf 'presence image commands: ' && docker image inspect --format 'entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}' "$presence"
+          docker run -d --name town-glb-presence --network town-glb-probe --network-alias presence -e TOWN_REHEARSAL_AT=2026-12-31T23:59:00+08:00 "$presence" >/dev/null
+          docker run -d --name town-glb-web --network town-glb-probe -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1::80 "$web" >/dev/null
+          address="$(docker port town-glb-web 80/tcp)"
+          base_url="http://$address"
+          for attempt in {1..30}; do
+            if health="$(curl -fsS --max-time 2 "$base_url/healthz" 2>/dev/null)" && test "$health" = "town-preview $TOWN_RELEASE"; then break; fi
+            sleep 1
+          done
+          printf 'health=%s\n' "$health"
+          test "$health" = "town-preview $TOWN_RELEASE"
+          mkdir "$RUNNER_TEMP/town-glb-probe"
+          cd "$RUNNER_TEMP/town-glb-probe"
+          for route in / /town-blockout.html /town-blockout/buildings/index.json /presence/rehearsal-clock; do
+            file="${route//\//_}"
+            printf 'entry %s ' "$route"
+            curl -fsS -o "$file" -w 'status=%{http_code} bytes=%{size_download} mime=%{content_type}\n' "$base_url$route"
+          done
+          cmp _ _town-blockout.html
+          printf 'manifest '; cat _town-blockout_buildings_index.json
+          printf 'compiled presence bytes='; docker exec town-glb-presence sh -c 'wc -c </app/dist/server/presence/index.js'
+          docker logs town-glb-presence
+          docker exec town-glb-web sh -ec 'printf "container entry bytes="; wc -c </srv/town-blockout.html; for name in post-office clocktower tavern; do printf "find %s: " "$name"; find /srv -type f -name "$name.glb"; done'
+          failed=0
+          for name in post-office clocktower tavern; do
+            source_bytes="$(git -C "$GITHUB_WORKSPACE" cat-file -s "HEAD:public/models/$name.glb")"
+            source_hash="$(git -C "$GITHUB_WORKSPACE" cat-file blob "HEAD:public/models/$name.glb" | sha256sum | cut -d" " -f1)"
+            printf 'source public/models/%s.glb bytes=%s sha256=%s\n' "$name" "$source_bytes" "$source_hash"
+            if docker exec town-glb-web test -f "/srv/models/$name.glb"; then
+              image_bytes="$(docker exec town-glb-web sh -c 'wc -c <"$1"' _ "/srv/models/$name.glb")"
+              image_hash="$(docker exec town-glb-web sha256sum "/srv/models/$name.glb" | cut -d" " -f1)"
+              printf 'image /srv/models/%s.glb bytes=%s sha256=%s\n' "$name" "$image_bytes" "$image_hash"
+              if [[ "$image_bytes" != "$source_bytes" || "$image_hash" != "$source_hash" ]]; then failed=1; fi
+            else
+              printf 'image /srv/models/%s.glb absent\n' "$name"
+              failed=1
+            fi
+            http="$(curl -sS -o "$name.glb" -w '%{http_code} %{size_download} %{content_type}' "$base_url/models/$name.glb")"
+            printf 'http /models/%s.glb status_bytes_mime=%s\n' "$name" "$http"
+            read -r code size mime <<<"$http"
+            body_hash="$(sha256sum "$name.glb" | cut -d" " -f1)"
+            if [[ "$code" != 200 || "$size" != "$source_bytes" || "$body_hash" != "$source_hash" ]]; then failed=1; fi
+          done
+          if [[ "$failed" != 0 ]]; then
+            echo "GLB gate failed: web image files or serving bytes are missing or incorrect."
+            exit 1
+          fi
