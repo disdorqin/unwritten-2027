@@ -24,7 +24,7 @@ const anchors: IcePalaceActivityAnchors = {
   },
 };
 
-function setup() {
+function setup(onlineThroneOwned?: () => boolean | undefined) {
   const group = new Group();
   group.position.set(484, 12, -72);
   group.rotation.y = Math.PI / 2;
@@ -37,6 +37,7 @@ function setup() {
   const winterStorage = new Map<string, string>();
   const activity = createIcePalaceActivity(group, anchors, { announce: message => names.push(message) }, {
     now: () => time, playerName: () => '雪友', throneChanged: owned => crowns.push(owned), bellSound: note => bells.push(note),
+    onlineThroneOwned,
     storage: { getItem: key => winterStorage.get(key) ?? null, setItem: (key, value) => winterStorage.set(key, value) },
     towerRace: {
       running: false,
@@ -168,4 +169,37 @@ test('the actual saved throne seat gates crowning and confirmed hit counts; leav
   activity.step(0);
   assert.equal(races.at(-1), '');
   assert.ok(raceCancelled() > 0);
+});
+
+test('the online crown follows the server and local seat timers do not carry across modes', () => {
+  let serverOwnership: boolean | undefined;
+  const { activity, names, point, walk } = setup(() => serverOwnership);
+  const { x, n, ground } = point(anchors.throneSeat);
+  const seat = { x, n, eyeY: ground, yaw: 0 };
+  const sit = (now: number) => walk(now, anchors.throneSeat, 0, seat);
+
+  sit(0);
+  serverOwnership = false;
+  sit(3000);
+  sit(6000);
+  assert.equal(activity.state().crowned, false);
+
+  serverOwnership = true;
+  sit(6100);
+  activity.confirmedHit();
+  activity.confirmedHit();
+  activity.confirmedHit();
+  assert.equal(activity.state().crowned, true);
+  assert.deepEqual(names, []);
+
+  serverOwnership = false;
+  sit(6200);
+  assert.equal(activity.state().crowned, false);
+  serverOwnership = undefined;
+  sit(6300);
+  sit(9299);
+  assert.equal(activity.state().crowned, false);
+  sit(9300);
+  assert.equal(activity.state().crowned, true);
+  assert.deepEqual(names, ['雪友 登临冰雪王座']);
 });

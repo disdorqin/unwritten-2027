@@ -46,6 +46,8 @@ type IcePalaceActivityOptions = {
   bellSound?(note: Bell): void;
   rejected?(): void;
   throneChanged?(owned: boolean): void;
+  /** Return undefined for local play. Connected and reconnecting clients return the last server result. */
+  onlineThroneOwned?(): boolean | undefined;
   playerName?(): string;
   towerRace?: IcePalaceRace;
   onRaceStatus?(status: string): void;
@@ -81,6 +83,7 @@ export function createIcePalaceActivity(
   let nearPalace = false;
   let platePressed = false;
   let seated = false;
+  let serverOwnership: boolean | undefined;
   let raceStatus = '';
   let playerInStairRoom = false;
   let stairExitUntil = 0;
@@ -89,6 +92,8 @@ export function createIcePalaceActivity(
     context.announce(owned ? `${playerName || '你'} 登临冰雪王座` : '冰雪之主退位，王座空悬');
     options.throneChanged?.(owned);
   });
+
+  const ownsCrown = () => serverOwnership ?? throne.owned();
 
   function worldLocation(point: IcePalacePoint) {
     const world = worldPoint(point);
@@ -129,7 +134,7 @@ export function createIcePalaceActivity(
   function state(time = now()): IcePalaceActivityState {
     const progress = puzzles.state(time);
     return {
-      ...progress, nearPalace, platePressed, crowned: throne.owned(), doors: doorStates(time, progress),
+      ...progress, nearPalace, platePressed, crowned: ownsCrown(), doors: doorStates(time, progress),
       blockPositions: blocks.map(({ position }) => [...position] as const),
     };
   }
@@ -192,7 +197,11 @@ export function createIcePalaceActivity(
     const wasNear = nearPalace;
     const localPlayer = player && playerNear(player.x, player.n) ? player : undefined;
     nearPalace = localPlayer !== undefined;
-    if (!nearPalace && !wasNear && !throne.owned()) return;
+    const wasCrowned = ownsCrown();
+    const nextOwner = options.onlineThroneOwned?.();
+    if ((serverOwnership === undefined) !== (nextOwner === undefined)) throne.reset();
+    serverOwnership = nextOwner;
+    if (!nearPalace && !wasNear && !wasCrowned && !ownsCrown()) return;
 
     if (localPlayer) for (const { motion, home, target, distance } of blocks) {
       if (!motion.direction || dt <= 0) continue;
@@ -227,7 +236,7 @@ export function createIcePalaceActivity(
     const seat = worldLocation(anchors.throneSeat);
     seated = nearPalace && !!player?.seated && Math.abs(player.seated.eyeY - seat.ground) <= .3 &&
       Math.hypot(player.seated.x - seat.x, player.seated.n - seat.n) <= .4;
-    throne.update(time, seated);
+    if (serverOwnership === undefined) throne.update(time, seated);
     publish();
   }
 
@@ -248,6 +257,7 @@ export function createIcePalaceActivity(
   return {
     spots, blocked, step, state,
     confirmedHit() {
+      if (options.onlineThroneOwned?.() !== undefined) return;
       throne.receiveConfirmedHit(seated);
       publish();
     },

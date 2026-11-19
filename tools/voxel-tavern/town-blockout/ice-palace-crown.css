@@ -1,0 +1,31 @@
+.ice-palace-crown {
+  position: fixed;
+  inset: 0 auto auto 0;
+  width: 27px;
+  height: 19px;
+  translate: -50% calc(-100% - 22px);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px #162f4e) drop-shadow(0 0 3px #69cce7);
+}
+
+.ice-palace-crown::before,
+.ice-palace-crown::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.ice-palace-crown::before {
+  background: linear-gradient(#f4ffff, #b7f1ff 54%, #638cbd);
+  clip-path: polygon(0 20%, 25% 42%, 50% 0, 75% 42%, 100% 20%, 85% 90%, 73% 100%, 27% 100%, 15% 90%);
+}
+
+.ice-palace-crown::after {
+  background: linear-gradient(90deg, #70b7da, #f0ffff 48%, #6eafd2);
+  clip-path: polygon(14% 50%, 28% 58%, 50% 18%, 72% 58%, 86% 50%, 77% 83%, 23% 83%);
+}
+
+.ice-palace-crown.is-self {
+  inset: max(62px, calc(env(safe-area-inset-top) + 52px)) auto auto 50%;
+  translate: -50% 0;
+}

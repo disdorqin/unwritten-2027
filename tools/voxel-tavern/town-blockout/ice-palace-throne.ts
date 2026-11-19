@@ -39,5 +39,10 @@ export function createIceThrone(onChange: (owned: boolean) => void) {
       if (crownedAt !== undefined && ++hits >= hitLimit) abdicate(seated);
     },
     owned: () => crownedAt !== undefined,
+    reset() {
+      claimSince = crownedAt = leftAt = undefined;
+      hits = 0;
+      needsReseat = false;
+    },
   };
 }
