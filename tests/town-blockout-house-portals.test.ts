@@ -50,7 +50,11 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   assert.equal(extensions.housePortals.length, extensions.counts.buildings);
   assert.equal(cottagePortals.length, 2, 'the furnished cabin keeps its existing physical door');
   const portals = [...district.housePortals, ...extensions.housePortals, ...cottagePortals];
-  assert.equal(new Set(portals.map(({ id }) => id)).size, portals.length);
+  const ids = new Set(portals.map(({ id }) => id));
+  assert.equal(ids.size, portals.length);
+  assert.equal(ids.size, 92, 'the theater apron retains the established door catalog');
+  assert.ok(ids.has('old-town:200:151'));
+  assert.ok(ids.has('old-town:246:135'));
   t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
   for (const { id, x, n, ground, exitYaw } of portals) {
