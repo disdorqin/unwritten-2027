@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HideAndSeekRound, type HideSeekPosition } from '../../src/presence/hide-and-seek.ts';
+import {
+  createHideAndSeekAuthority, HideAndSeekRound, type HideSeekNotice, type HideSeekPosition,
+} from '../../src/presence/hide-and-seek.ts';
 
 const start = 10_000;
 const [seeker, hiderA, hiderB, hiderC, hiderD, hiderE] = [1, 2, 3, 4, 5, 6];
@@ -102,4 +104,96 @@ test('resident direction lookup is only available to uncaught hiders in a live r
   session.advance(start + 90_000, positions);
   assert.equal(session.seekerDirection(hiderB, start + 90_001, positions), undefined);
   assert.equal(session.seekerDirection(hiderA, start + 720_000, positions), undefined);
+});
+
+function authorityFixture(revealCrossRegionDoor: boolean, startingPose = plaza) {
+  let now = start;
+  const outsider = 99;
+  const positions = new Map([
+    [seeker, startingPose], [hiderA, sceneB], [hiderB, sceneA], [hiderC, sceneA2],
+    [hiderD, plaza], [outsider, sceneB],
+  ]);
+  const sent: { recipient: number; notice: HideSeekNotice }[] = [];
+  const host = {
+    now: () => now,
+    positions: () => positions,
+    sendTo: (recipient: number, notice: HideSeekNotice) => sent.push({ recipient, notice }),
+    revealCrossRegionDoor,
+  };
+  return { host, positions, sent, at: (offset: number) => { now = start + offset; } };
+}
+
+test('host requires accepted starting poses and provides the seeker plaza gate', () => {
+  const outside = authorityFixture(false, sceneA);
+  assert.throws(() => createHideAndSeekAuthority(seeker, [hiderA, hiderB], rules, outside.host), RangeError);
+  const fixture = authorityFixture(false);
+  assert.throws(() => createHideAndSeekAuthority(seeker, [hiderA, hiderE], rules, fixture.host), RangeError);
+  const session = createHideAndSeekAuthority(seeker, [hiderA, hiderB], rules, fixture.host);
+  fixture.at(89_999);
+  assert.equal(session.canMove(seeker, sceneA), false);
+  assert.equal(session.canMove(seeker, plaza), true);
+  assert.equal(session.canMove(hiderA, sceneA), true);
+  fixture.at(90_000);
+  assert.equal(session.canMove(seeker, sceneA), true);
+});
+
+test('host routes each region notice privately and anonymizes the seeker histogram independently of roster order', () => {
+  const fixture = authorityFixture(false);
+  const session = createHideAndSeekAuthority(seeker, [hiderA, hiderB, hiderC, hiderD], rules, fixture.host);
+  fixture.at(179_999);
+  assert.deepEqual(session.tick().captures, [hiderD]);
+  assert.deepEqual(fixture.sent, []);
+  fixture.at(180_000);
+  session.tick();
+  assert.deepEqual(fixture.sent, [
+    { recipient: hiderA, notice: { kind: 'own-region', region: 'B' } },
+    { recipient: hiderB, notice: { kind: 'own-region', region: 'A' } },
+    { recipient: hiderC, notice: { kind: 'own-region', region: 'A' } },
+    { recipient: seeker, notice: { kind: 'region-counts', counts: [{ region: 'A', hiders: 2 }, { region: 'B', hiders: 1 }] } },
+  ]);
+  fixture.at(180_001);
+  session.tick();
+  assert.equal(fixture.sent.length, 4);
+});
+
+test('host reveals only the accepted cross-region door destination, within the round, when enabled', () => {
+  const fixture = authorityFixture(true);
+  const session = createHideAndSeekAuthority(seeker, [hiderA, hiderB], rules, fixture.host);
+  fixture.at(89_999);
+  session.doorArrival(hiderA, { status: 'settled', entry: sceneA });
+  fixture.at(90_000);
+  session.doorArrival(hiderA, { status: 'fallback' });
+  session.doorArrival(hiderA, { status: 'cancelled' });
+  session.doorArrival(hiderA, { status: 'settled', entry: sceneB });
+  session.doorArrival(hiderC, { status: 'settled', entry: sceneB });
+  assert.deepEqual(fixture.sent, []);
+  // The host's accepted position has changed to scene A although the requested door was in scene B.
+  fixture.positions.set(hiderA, sceneA2);
+  session.doorArrival(hiderA, { status: 'settled', entry: sceneB });
+  assert.deepEqual(fixture.sent, [seeker, hiderA, hiderB].map(recipient => ({
+    recipient, notice: { kind: 'door-region', region: 'A' },
+  })));
+
+  const disabled = authorityFixture(false);
+  const silent = createHideAndSeekAuthority(seeker, [hiderA, hiderB], rules, disabled.host);
+  disabled.at(90_000);
+  silent.doorArrival(hiderA, { status: 'settled', entry: sceneA });
+  assert.deepEqual(disabled.sent, []);
+});
+
+test('host keeps the existing NPC direction private and returns final scores only once', () => {
+  const fixture = authorityFixture(false);
+  const session = createHideAndSeekAuthority(seeker, [hiderA, hiderB], rules, fixture.host);
+  fixture.at(90_000);
+  assert.deepEqual(session.residentDirection(hiderA), { east: 1, north: -1 });
+  assert.equal(session.residentDirection(seeker), undefined);
+  assert.equal(session.residentDirection(hiderD), undefined);
+  assert.deepEqual(fixture.sent, []);
+  fixture.at(720_000);
+  assert.deepEqual(session.tick(), {
+    captures: [], finished: true,
+    scores: { captures: 0, hiders: [{ hiderId: hiderA, survivedMs: 720_000 }, { hiderId: hiderB, survivedMs: 720_000 }] },
+  });
+  assert.equal(session.residentDirection(hiderA), undefined);
+  assert.equal(session.tick().scores, undefined);
 });

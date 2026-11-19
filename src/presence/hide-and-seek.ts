@@ -103,7 +103,9 @@ export class HideAndSeekRound {
       privateReports.push({ hiderId, region });
       counts.set(region, (counts.get(region) ?? 0) + 1);
     }
-    const seekerReport = Array.from(counts, ([region, hiders]) => ({ region, hiders }));
+    // Sort by region so the anonymous histogram cannot expose roster order.
+    const seekerReport = Array.from(counts, ([region, hiders]) => ({ region, hiders }))
+      .sort((a, b) => a.region.localeCompare(b.region));
     return { captures, areas: { privateReports, seekerReport }, finished: false };
   }
 
@@ -123,4 +125,65 @@ export class HideAndSeekRound {
     const seeker = positions.get(this.seekerId), hider = positions.get(id);
     if (seeker && hider) return { east: seeker.east - hider.east, north: seeker.north - hider.north };
   }
+}
+
+export type HideSeekNotice =
+  | { kind: 'own-region'; region: Region }
+  | { kind: 'region-counts'; counts: AreaReport['seekerReport'] }
+  | { kind: 'door-region'; region: Region };
+
+type HideSeekHost = {
+  now: () => number;
+  positions: () => HideSeekPositions;
+  sendTo: (recipient: PeerId, notice: HideSeekNotice) => void;
+  revealCrossRegionDoor: boolean;
+};
+
+type HideSeekDoorArrival =
+  | { status: 'settled'; entry: HideSeekPosition }
+  | { status: 'fallback' | 'cancelled' };
+
+/** Host hooks take accepted pose records and never broadcast the combined area payload. */
+export function createHideAndSeekAuthority(
+  seekerId: PeerId, hiderIds: readonly PeerId[], rules: HideSeekRules, host: HideSeekHost,
+) {
+  const peers = [seekerId, ...hiderIds];
+  const positions = host.positions();
+  const seeker = positions.get(seekerId);
+  if (!seeker || !rules.isInPlaza(seeker)) throw new RangeError('The seeker must start in the plaza');
+  if (hiderIds.some(id => !positions.has(id))) throw new RangeError('Each hider needs an accepted starting pose');
+  const round = new HideAndSeekRound(seekerId, hiderIds, host.now(), rules);
+
+  return {
+    canMove(id: PeerId, destination: HideSeekPosition) {
+      return round.canMove(id, destination, host.now());
+    },
+
+    tick() {
+      const now = host.now();
+      const { captures, areas, finished } = round.advance(now, host.positions());
+      if (areas) {
+        for (const { hiderId, region } of areas.privateReports) {
+          host.sendTo(hiderId, { kind: 'own-region', region });
+        }
+        host.sendTo(seekerId, { kind: 'region-counts', counts: areas.seekerReport });
+      }
+      return { captures, finished, scores: finished ? round.scores(now) : undefined };
+    },
+
+    // Invoke after the host has resolved occupancy and accepted the final exterior pose.
+    doorArrival(id: PeerId, arrival: HideSeekDoorArrival) {
+      if (!host.revealCrossRegionDoor || arrival.status !== 'settled') return;
+      const destination = host.positions().get(id);
+      if (!destination) return;
+      const reveal = round.doorTravel(id, arrival.entry, destination, host.now());
+      if (!reveal) return;
+      for (const recipient of peers) host.sendTo(recipient, { kind: 'door-region', region: reveal.region });
+    },
+
+    // The host calls this from an accepted stationary NPC interaction and uses existing copy.
+    residentDirection(id: PeerId) {
+      return round.seekerDirection(id, host.now(), host.positions());
+    },
+  };
 }
