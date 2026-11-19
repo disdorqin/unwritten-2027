@@ -222,7 +222,17 @@ test('pine chopping and feeding a supported site reuse five strikes while keepin
   const [pine] = findRegionalCampfires(flat, undefined, { pineCamp: true }).filter(fire => fire.id === pineCampfireId);
   const chopSites = findForestChopSites([pine], flat);
   const chopSite = chopSites.find(site => site.id === pineCampfireId)!;
-  assert.deepEqual([chopSite.x, chopSite.n, chopSite.props.x, chopSite.props.n], [415.5, 223.7, 414.05, 223.7]);
+  assert.deepEqual([chopSite.x, chopSite.n, chopSite.props.x, chopSite.props.n], [418.5, 218.5, 417.05, 218.5]);
+  const distance = (a: { x: number; n: number }, b: { x: number; n: number }) => Math.hypot(a.x - b.x, a.n - b.n);
+  for (const seat of pine.seats) {
+    assert.ok(distance(seat, chopSite) > .61 + .58);
+    assert.ok(distance(seat, chopSite.props) > .61 + .72);
+  }
+  assert.ok(distance(pine.woodPile!, chopSite) > .72 + .58);
+  assert.ok(distance(pine.woodPile!, chopSite.props) > .72 + .72);
+  const blockedAnchor = (x: number, n: number) => x === chopSite.x && n === chopSite.n ? undefined : flat();
+  assert.ok(!findForestChopSites([pine], blockedAnchor).some(spot => spot.id === pineCampfireId),
+    'the pine activity must stay off if its only surveyed footprint becomes blocked');
 
   const data = new Map([[forestWoodStorageKey, JSON.stringify({ piles: { village: 2, campfire: 2 } })]]);
   const storage = {
