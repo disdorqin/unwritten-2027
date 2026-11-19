@@ -3,6 +3,7 @@ import { test, type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
+import { readPersonalFireworkRelay } from "../../src/presence/personal-fireworks.js";
 import {
   decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, type SnowballRelayEvent,
 } from "../../src/presence/snowball-events.js";
@@ -195,6 +196,29 @@ test("poll and WebSocket clients share one world state", async t => {
     if (Date.now() - wsStart > 3500) throw new Error("ws snapshot containing the poll peer timed out");
     await delay(40);
   }
+
+  const relayFor = (frames: TextFrame[], seed: number) => frames
+    .map(readPersonalFireworkRelay)
+    .find(event => event?.seed === seed);
+  await pollClient.poll(textEventBody({
+    type: "event", kind: "personal-firework", item: "sparkler",
+    seed: 17, east: 100, north: 100, height: 11.28, yaw: 0,
+  }));
+  await pollClient.waitFor("one matching firecracker on each transport", () =>
+    Boolean(relayFor(pollClient.texts, 17) && relayFor(wsTexts, 17)));
+  const fromPoll = relayFor(pollClient.texts, 17)!;
+  assert.equal(fromPoll.from, pollClient.id);
+  assert.deepEqual(relayFor(wsTexts, 17), fromPoll);
+
+  socket.send(JSON.stringify({
+    type: "event", kind: "personal-firework", item: "rocket",
+    seed: 18, east: 104, north: 100, height: 11.28, yaw: 0,
+  }));
+  await pollClient.waitFor("a WebSocket firecracker on both transports", () =>
+    Boolean(relayFor(pollClient.texts, 18) && relayFor(wsTexts, 18)));
+  const fromSocket = relayFor(wsTexts, 18)!;
+  assert.equal(fromSocket.from, wsId);
+  assert.deepEqual(relayFor(pollClient.texts, 18), fromSocket);
 });
 
 test("queued snapshots coalesce to the latest frame for slow pollers", async t => {
