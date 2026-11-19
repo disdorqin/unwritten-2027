@@ -7,6 +7,8 @@ on:
       - '.github/workflows/verify-jx1-production.yml'
       - 'docs/交流区/GPT/JX-1协作-2026-11-19/b04-production-on-2dff658.patch'
       - 'tools/jx1-formal/**'
+      - 'tools/verify-b13-two-clients.mjs'
+      - 'tools/b13-browser-fixture.mjs'
 
 permissions:
   contents: read
