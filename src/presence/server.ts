@@ -702,7 +702,9 @@ export async function createPresenceServer(options: Options = {}) {
     const time = now();
     if (!allowEvent(peer, time)) return;
     const position = peer.record;
-    if (!position ||
+    // The existing presence poses also cover indoor or vehicle areas whose position alone is ambiguous.
+    const onTrainOrInBath = peer.pose === 5 || peer.pose === 2;
+    if (!position || onTrainOrInBath ||
         Math.hypot(event.east - position.east / 100, event.north - position.north / 100) > 2.4 ||
         Math.abs(event.height - position.height / 100) > 2.2 ||
         personalFireworkRestricted(position.east / 100, position.north / 100, position.height / 100) ||

@@ -263,6 +263,12 @@ test("nearby personal firecrackers relay beside the author, reject indoors and r
   assert.equal((await indoors.text.next(message => message.type === "personal-firework-rejected")).reason, "position");
   sendFirecracker(author, 21, 160, 107);
   assert.equal((await author.text.next(message => message.seed === 21)).reason, "position");
+  setPose(indoors, 155, 97);
+  for (const [pose, seed] of [[5, 23], [2, 24]]) {
+    indoors.socket.send(JSON.stringify({ type: "pose", pose }));
+    sendFirecracker(indoors, seed, 155, 97);
+    assert.equal((await indoors.text.next(message => message.seed === seed)).reason, "position");
+  }
   for (const [i, player] of players.entries()) sendFirecracker(player, i, 154 + i);
   const observeBurst = async (client: typeof author) => {
     const events = [];
