@@ -919,8 +919,9 @@ const tavernActivity = createTavernActivity(
   () => { drinkingPoseUntil = performance.now() + 2500; },
 );
 const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, () => nightMode);
+const regionalCarry = createRegionalCarry();
 const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt,
-  () => collectRegionalStamp(iceFishingCatalogueStamp.id));
+  () => collectRegionalStamp(iceFishingCatalogueStamp.id), regionalCarry.collectFish);
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
   {
@@ -2611,7 +2612,6 @@ function isAtPineSeat(seat: TownSeat) {
   return pineFire?.seats.some(site => site.x === seat.x && site.n === seat.n && site.ground + 1.475 === seat.eyeY) ?? false;
 }
 
-const regionalCarry = createRegionalCarry();
 const pineFireActivities = createPineFireActivities({ open: activityContext.open, announce: announceActivity }, regionalCarry, {
   lighted: () => forestCampfire.pineCampState().fuel > 0,
   warmFromRoast: warmFromDrink,
