@@ -4,7 +4,7 @@ import {
   type SnowballHit, type SnowballRelayEvent, type SnowballThrow,
 } from '../../../src/presence/snowball-events';
 import {
-  decodeSnowfightRelay, encodeWallHit, encodeWallPlace,
+  decodeSnowfightRelay, encodeSledSmash, encodeWallHit, encodeWallPlace,
   type SnowfightRelayEvent,
 } from '../../../src/presence/snowfight-events';
 import type { SnowfightPhase } from '../../../src/presence/snowfight';
@@ -726,6 +726,8 @@ export function createTownPresence(
     sendSnowfightPlace: (gx: number, gy: number) => sendEvent(encodeWallPlace(gx, gy)),
     sendSnowfightWallHit: (event: { gx: number; gy: number; layer: number; ballId: number; throwerId: number }) =>
       sendEvent(encodeWallHit(event)),
+    sendSnowfightSledSmash: (gx: number, gy: number, speed: number) =>
+      sendEvent(encodeSledSmash({ gx, gy, speed })),
     onSnowfightWallEvent(handler: (event: SnowfightRelayEvent) => void) { onSnowfightWallEvent = handler; },
     onSnowfightState(handler: (state: SnowfightState) => void) {
       onSnowfightState = handler;

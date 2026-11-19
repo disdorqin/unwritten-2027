@@ -42,27 +42,6 @@ label, output, #help { font-size: 12px; }
 #ice-palace-race-status { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
 :is(#town-activity-status, #ice-palace-race-status):empty,
 .museum-inspecting :is(#town-activity-status, #ice-palace-race-status) { display: none; }
-:is(#sled-status, #grand-prix-status, #grand-prix-board) {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  box-sizing: border-box;
-  width: max-content;
-  max-width: min(420px, calc(100vw - 28px));
-  padding: 8px 12px;
-  border: 1px solid #a68a67;
-  border-radius: 7px;
-  background: #142035ee;
-  color: #ffebcb;
-  font-size: 13px;
-  text-align: center;
-  pointer-events: none;
-}
-#sled-status { bottom: max(164px, calc(env(safe-area-inset-bottom) + 158px)); }
-#grand-prix-status { bottom: max(214px, calc(env(safe-area-inset-bottom) + 208px)); }
-#grand-prix-board { top: max(72px, calc(env(safe-area-inset-top) + 66px)); }
-:is(#sled-status, #grand-prix-status, #grand-prix-board):empty,
-.museum-inspecting :is(#sled-status, #grand-prix-status, #grand-prix-board) { display: none; }
 .hot-spring-soak {
   position: fixed;
   inset: 0;
@@ -307,6 +286,21 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   .panel .festival-button, .panel #view-museum { margin-top: 4px; }
   .touch-play #museum-map-button { top: auto; bottom: max(103px, calc(env(safe-area-inset-bottom) + 55px)); min-height: 42px; }
   #museum-card { padding: 18px; }
+}
+@media (orientation: portrait) and (pointer: coarse) {
+  /* Portrait play (3.0 M4): no landscape lock. The top strip keeps a right
+     lane clear for the fullscreen / museum buttons, the expanded panel
+     scrolls internally instead of covering the view, the chat yields the
+     right-hand button column, and the snowfight panel drops below the top
+     strip. Layout only — no portrait-specific art. */
+  .panel { width: min(304px, calc(100vw - 76px)); }
+  .panel:not(.town-panel-collapsed) {
+    display: flex; flex-direction: column;
+    max-height: calc(100dvh - max(11px, env(safe-area-inset-top)) - max(11px, env(safe-area-inset-bottom)));
+  }
+  #town-panel-controls { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+  #town-chat { width: min(320px, calc(100vw - 108px)); }
+  #snowfight-panel { top: max(64px, calc(env(safe-area-inset-top) + 52px)); }
 }
 /* Ceremony DOM overlays share no WebGL batches. */
 #ceremony-dim {

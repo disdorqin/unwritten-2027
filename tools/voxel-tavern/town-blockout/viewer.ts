@@ -37,6 +37,7 @@ import {
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
+import { wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires } from './town-campfires';
 import { createLandingFeedback } from './landing-feedback';
@@ -48,6 +49,7 @@ import { createTouchWalk } from './touch-walk';
 import { createViewportControls } from './town-viewport';
 import { createTouchLook } from './touch-look';
 import { setTouchLookSensitivity, touchLookSensitivity } from './touch-look-curve';
+import { particleDensityScale, qualityPixelRatioCap, qualityTier, setQualityTier } from './town-quality';
 import { createDesktopLook, type DesktopLookLockFailure } from './desktop-look';
 import { createTownBgm } from './town-bgm';
 import { terraceStop } from './museum-terrace';
@@ -138,7 +140,7 @@ const weatherFog = new Fog('#adc2dd', 360, 1300);
 scene.fog = weatherFog;
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
 const renderer = new WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
 renderer.setSize(innerWidth, innerHeight);
 element('scene').append(renderer.domElement);
 renderer.domElement.setAttribute('aria-label', '雪镇建模预览');
@@ -187,10 +189,19 @@ const sledRide = createSledRide({
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
   },
-  blocked: (sx, nn, y) => obstructed(sx, nn, y),
+  blocked: (sx, nn, y) => {
+    if (obstructed(sx, nn, y)) return true;
+    // 雪墙交叉（车道 B）：墙列按本地镜像挡橇，橇体低于墙顶才算撞上。
+    // 一层墙且速度 >6 m/s 不挡——高速撞穿，销毁由服务端按报告裁定（见 sledSmash 报告处）；
+    // 其余（厚墙、或一层墙低速）一律按障碍走既有撞毁/翻橇规则。
+    const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
+    if (!column || y >= column.ground + column.height * .5) return false;
+    return !(column.height === 1 && sledRide.speed() > 6);
+  },
   snow: (sx, nn, y, snowYaw, count, effect) => sledVisuals.puff(sx, nn, y, snowYaw, count, effect),
   stopped: () => announceActivity('雪橇停稳了，找个下坡再出发'),
 });
+let sledWallCellKey = ''; // 雪橇当前所在墙格（撞穿报告按格进入沿触发，见移动分支）
 const sledTrackView = createSledTrackView(scene, sledGroundAt);
 const grandPrix = createGrandPrix();
 const sledStatus = element<HTMLOutputElement>('sled-status');
@@ -209,6 +220,7 @@ presence.onGrandPrixResult(result => {
 function leaveSled() {
   sledRide.leave();
   sledDrift.reset();
+  sledWallCellKey = '';
 }
 const previousStationEye = new Vector3();
 let stationViewStillSince = Infinity;
@@ -620,6 +632,14 @@ const touchJump = element<HTMLButtonElement>('touch-jump');
 const walkClock = createTownPhysicsClock();
 const landingFeedback = createLandingFeedback();
 const landingSnow = createLandingSnow(scene);
+// 3.0 M5 quality tiers: resolution cap + particle density, applied live.
+// 'balanced' (the default) reproduces the pre-tier values exactly.
+function applyQualityTier() {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
+  snowfall.setDensityScale(particleDensityScale());
+  landingSnow.setDensityScale(particleDensityScale());
+}
+applyQualityTier();
 const lakeSkateMotion = createLakeSkateMotion();
 const walkPrevious = new Vector3();
 const walkCurrent = new Vector3();
@@ -1877,6 +1897,12 @@ const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
 const lookSensitivityInput = element<HTMLInputElement>('touch-look-sensitivity');
 lookSensitivityInput.value = String(touchLookSensitivity());
 lookSensitivityInput.addEventListener('input', () => setTouchLookSensitivity(Number(lookSensitivityInput.value)));
+const qualityTierSelect = element<HTMLSelectElement>('quality-tier');
+qualityTierSelect.value = qualityTier();
+qualityTierSelect.addEventListener('change', () => {
+  setQualityTier(qualityTierSelect.value);
+  applyQualityTier();
+});
 function canJump() {
   return moveAllowed() && landingFeedback.pose() === 'none' && airHeight === undefined &&
     (waterAtFeet()?.depth ?? 0) <= shoreJumpDepth;
@@ -1888,10 +1914,18 @@ function requestJump() {
   riseSpeed = jumpVelocity;
   snowballJumped();
 }
+/** 触屏跳跃与键盘 Space 同口径（车道 B）：乘橇时走 ride.jump 雪橇跳，其余走步行跳。 */
+function requestJumpAction() {
+  if (sledRide.active()) {
+    if (moveAllowed()) sledRide.jump(3.2);
+    return;
+  }
+  requestJump();
+}
 touchJump.addEventListener('pointerdown', event => {
-  if (event.pointerType === 'touch') { event.preventDefault(); requestJump(); }
+  if (event.pointerType === 'touch') { event.preventDefault(); requestJumpAction(); }
 });
-touchJump.addEventListener('click', requestJump);
+touchJump.addEventListener('click', requestJumpAction);
 addEventListener('keydown', e => {
   if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (museumOverlay()) {
@@ -2324,6 +2358,7 @@ renderer.setAnimationLoop(now => {
         if (sledRide.active() || sledRide.recovering()) {
           snowMoveScale = chillMoveScale = 1;
           lakeSkateMotion.reset();
+          if (!sledRide.active()) sledWallCellKey = '';
           if (sledRide.active()) {
             const beforeX = x, beforeN = n;
             const driftState = sledDrift.update(townPhysicsDelta, {
@@ -2340,6 +2375,19 @@ renderer.setAnimationLoop(now => {
             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
               Math.hypot(x - beforeX, n - beforeN) > .05) {
               snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55);
+            }
+            if (sledRide.active()) {
+              // 雪墙撞穿报告（车道 B）：进入新的一层墙格、速度 >6、橇体低于墙顶 →
+              // 报服务端裁定销毁；本地不预毁，墙块以服务端 WALL_CLEAR 广播为准消失。
+              const smashGx = wallCellOf(x), smashGy = wallCellOf(n);
+              const smashKey = `${smashGx},${smashGy}`;
+              if (smashKey !== sledWallCellKey) {
+                sledWallCellKey = smashKey;
+                const column = teamFight.wallColumnAt(smashGx, smashGy);
+                if (column?.height === 1 && sledRide.speed() > 6 && spot.y < column.ground + .5) {
+                  presence.sendSnowfightSledSmash(smashGx, smashGy, Math.ceil(sledRide.speed()));
+                }
+              }
             }
             if (!sledRide.active()) sledDrift.reset();
           }
@@ -2602,7 +2650,7 @@ renderer.setAnimationLoop(now => {
   touchWalk.setAllowed(moveAllowed());
   crosshair.hidden = !lookAllowed();
   touchJump.hidden = !moveAllowed() || !touchWalk.active();
-  touchJump.disabled = !canJump();
+  touchJump.disabled = sledRide.active() ? sledRide.airborne() : !canJump();
   touchSprintButton.hidden = !moveAllowed() || !touchWalk.active();
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   const action = currentAction();

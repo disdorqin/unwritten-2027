@@ -4,7 +4,8 @@ import {
   SnowWallField, SnowfightMatch, WALL_DECAY_MS, buildHalfAllows, classifyWallSite, wallCellOf,
 } from '../src/presence/snowfight';
 import {
-  decodeSnowfightClientEvent, decodeSnowfightRelay, encodeWallClear, encodeWallHit, encodeWallPlace, encodeWallSet,
+  SNOWFIGHT_SLED_SMASH, decodeSnowfightClientEvent, decodeSnowfightRelay, encodeSledSmash, encodeWallClear,
+  encodeWallHit, encodeWallPlace, encodeWallSet,
 } from '../src/presence/snowfight-events';
 import { DigField, MaterialBank } from '../tools/voxel-tavern/town-blockout/town-snowfight';
 
@@ -147,6 +148,25 @@ test('snowfight codec round-trips and rejects garbage', () => {
   assert.equal(decodeSnowfightClientEvent(new Uint8Array([0xff, 99, 0, 0])), undefined);
   assert.equal(decodeSnowfightRelay(new Uint8Array([0xff, 5, 1, 2])), null);
   assert.equal(decodeSnowfightRelay(encodeWallPlace(1, 1)), null, 'client frames are not relay frames');
+});
+
+test('sled smash codec round-trips and rejects garbage', () => {
+  const frame = encodeSledSmash({ gx: 600, gy: 500, speed: 10 });
+  assert.equal(frame.byteLength, 8, 'smash frame is 8 bytes, never the 12-byte record length');
+  assert.equal(frame[1], SNOWFIGHT_SLED_SMASH);
+  assert.deepEqual(decodeSnowfightClientEvent(frame), { kind: 'sled-smash', gx: 600, gy: 500, speed: 10 });
+  assert.deepEqual(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 0, speed: 17 })),
+    { kind: 'sled-smash', gx: 0, gy: 0, speed: 17 });
+  // 长度不对（截断/拉长到 12 字节）一律拒绝，避免被当成位置记录或误读字段
+  assert.equal(decodeSnowfightClientEvent(frame.slice(0, 6)), undefined);
+  const stretched = new Uint8Array(12);
+  stretched.set(frame);
+  assert.equal(decodeSnowfightClientEvent(stretched), undefined);
+  // 越界格拒绝
+  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 1280, gy: 0, speed: 10 })), undefined);
+  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1024, speed: 10 })), undefined);
+  // 撞穿帧不是中继帧
+  assert.equal(decodeSnowfightRelay(frame), null);
 });
 
 test('material bank caps and dig field deepens pits with a cap', () => {

@@ -9,6 +9,7 @@ import {
 import type { createTownPresence, SnowfightState } from './town-presence';
 import type { TownSnowballTarget } from './town-snow-target';
 import { createSnowfightAudio } from './snowfight-audio';
+import { particleDensityScale, scaledParticleCount } from './town-quality';
 
 export const MATERIAL_CAP = 40;
 export const DIG_CAP = 96;
@@ -241,7 +242,9 @@ export function createTeamSnowfight(options: {
   let burstCursor = 0;
 
   function burst(at: Vector3, big = false) {
-    const count = big ? 22 : 18;
+    // Quality tiers (M5) scale how many sparks a burst spends from the ring
+    // pool; sizes, lifetimes and velocities are unchanged.
+    const count = scaledParticleCount(big ? 22 : 18, particleDensityScale());
     for (let i = 0; i < count; i++) {
       const spark = bursts[burstCursor];
       burstCursor = (burstCursor + 1) % bursts.length;
@@ -429,6 +432,13 @@ export function createTeamSnowfight(options: {
     buildMode: () => buildMode,
     tryPlace,
     wallTargets: () => targets,
+    /** 本地镜像中的墙列（雪橇交叉判定用）：无墙返回 undefined；ground 为该列基座地面高。 */
+    wallColumnAt(gx: number, gy: number) {
+      const height = columnHeight(gx, gy);
+      if (!height) return undefined;
+      const base = walls.get(key(gx, gy, 0));
+      return { height, ground: base ? base.ground : groundAt(gx, gy) };
+    },
     material: () => material.amount,
     onGatherTick() {
       if (!active()) return;
