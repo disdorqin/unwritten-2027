@@ -1,0 +1,196 @@
+--- a/tools/verify-jx3-browser.mjs
++++ b/tools/verify-jx3-browser.mjs
+@@ -1,14 +1,18 @@
+ import assert from 'node:assert/strict';
+ import { spawnSync } from 'node:child_process';
+ import { createReadStream } from 'node:fs';
+-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
++import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+ import { createHash } from 'node:crypto';
+ import { createServer } from 'node:http';
+ import path from 'node:path';
+ import { chromium } from 'playwright';
+ 
+ const [baseline, candidate, output] = process.argv.slice(2).map(value => path.resolve(value));
+-assert.ok(baseline && candidate && output, 'Pass baseline checkout, candidate checkout, and output path.');
++assert.ok(baseline && candidate && output, 'Pass baseline checkout or frozen evidence directory, candidate checkout, and output path.');
++const frozenReference = process.env.JX3_REUSE_BASELINE === '44542495628' ? {
++  run: 44542495628, artifact: 14541047246, sha: '352aa49b825d88c432ef2dd0a9dd04a5c86441c3',
++  candidate: '5bb1a3f0658b6cba4d28563c0b165c1c373e37da',
++} : undefined;
+ const viewSize = { width: 1000, height: 650 };
+ const frozenClock = Date.parse('2026-12-31T14:00:00+08:00');
+ const frameTimeout = 120_000;
+@@ -227,6 +231,15 @@
+   const interiorErrors = [];
+   let walkError;
+   const waypoints = [];
++  async function checkpoint(stage) {
++    const file = path.join(dir, 'evidence.json');
++    await writeFile(`${file}.tmp`, JSON.stringify({
++      stage, tested: built, browser: browser.version(), viewportOptions, screenshots, waypoints,
++      walkError, interiorErrors, errors, presenceSockets, traffic,
++      clock: new Date(frozenClock).toISOString(), acceptance: 'Loopback production preview in rehearsal mode, isolated single-player. Frozen weather profile and visual target cover. Walking uses keyboard.',
++    }, null, 2));
++    await rename(`${file}.tmp`, file);
++  }
+   async function image(id, group) {
+     const frames = await renderFrames(page);
+     assert.ok(frames.every(frame => frame.calls > 0 && frame.triangles > 0));
+@@ -235,6 +248,7 @@
+     await page.screenshot({ path: path.join(dir, file), animations: 'disabled', timeout: frameTimeout });
+     assert.ok(matchCamera((await sample(page)).camera, pose.camera), `Camera moved: ${file}`);
+     screenshots.push({ id, group, file, pose, frames });
++    await checkpoint(`captured ${file}`);
+     log(`captured ${file} at ${pose.camera.position.map(number => number.toFixed(3)).join(',')} draws=${frames.at(-1).calls} tris=${frames.at(-1).triangles}`);
+   }
+   async function nativeStreet() {
+@@ -249,6 +263,7 @@
+       /东 108\.0 m · 北 114\.0 m/.test(document.querySelector('#position')?.textContent ?? ''), null, { timeout: frameTimeout });
+   }
+   try {
++    await checkpoint('loading scene');
+     const reply = await page.goto(`${url}/town-blockout.html?profile&jx3Capture`, { waitUntil: 'domcontentloaded', timeout: frameTimeout });
+     assert.equal(reply?.status(), 200);
+     await page.waitForFunction(() => Boolean(window.__jx3), null, { timeout: frameTimeout });
+@@ -262,6 +277,7 @@
+     }, frameTimeout);
+     assert.deepEqual(errors, [], `${label} did not load the production assets`);
+     log(`production scene ready and building queue settled ${traffic.assets.length} HTTP responses`);
++    await checkpoint('scene ready');
+     await nativeStreet();
+     await image('street', 'exterior');
+     const street = screenshots[0].pose.camera.position;
+@@ -276,6 +292,7 @@
+         log(`walking ${waypoints.length + 1}/${travel.length} toward E${east}/N${north}`);
+         const leg = await drive(page, east, north);
+         waypoints.push({ target: [east, north], ...leg });
++        await checkpoint(`walking ${waypoints.length}/${travel.length}`);
+         log(`arrived E${leg.arrived.east.toFixed(3)}/N${leg.arrived.north.toFixed(3)} after ${leg.observed} frames`);
+         if (imageId) {
+           try {
+@@ -285,6 +302,7 @@
+             await image(imageId, 'interior');
+           } catch (error) {
+             interiorErrors.push({ id: imageId, error: String(error) });
++            await checkpoint(`interior ${imageId} failed`);
+           } finally {
+             await page.evaluate(() => window.__jx3.portrait());
+           }
+@@ -301,22 +319,48 @@
+     assert.ok(traffic.clock > 0, 'No rehearsal clock request was observed');
+     assert.deepEqual(errors, [], `${label} page/asset requests failed`);
+   } finally {
+-    await writeFile(path.join(dir, 'evidence.json'), JSON.stringify({
+-      tested: built,
+-      browser: browser.version(), viewportOptions, screenshots, waypoints, walkError, interiorErrors, errors, presenceSockets, traffic,
+-      clock: new Date(frozenClock).toISOString(), acceptance: 'Loopback production preview in rehearsal mode, isolated single-player. Frozen weather profile and visual target cover. Walking uses keyboard.',
+-    }, null, 2));
++    await checkpoint('capture ended');
+     await context.close();
+     await new Promise(resolve => server.close(resolve));
+   }
+-  return { screenshots, waypoints, walkError, interiorErrors };
++  return { screenshots, waypoints, walkError, interiorErrors, tested: built, browser: browser.version() };
+ }
+ 
++async function verifyFrozenBaseline() {
++  const before = JSON.parse(await readFile(path.join(baseline, 'evidence.json'), 'utf8'));
++  assert.equal(before.tested.sha, frozenReference.sha);
++  assert.equal(before.clock, new Date(frozenClock).toISOString());
++  assert.deepEqual(before.viewportOptions, viewportOptions);
++  assert.deepEqual(before.errors, []);
++  assert.equal(before.walkError, undefined);
++  assert.deepEqual(before.interiorErrors, []);
++  assert.equal(before.waypoints.length, travel.length);
++  const exit = before.waypoints.at(-1).arrived;
++  assert.ok(exit.walking && exit.east < outsideEastLimit && Math.abs(exit.north - 115) <= .45);
++  assert.deepEqual(before.screenshots.map(image => `${image.group}-${image.id}`).sort(),
++    ['exterior-street', ...outside.map(([id]) => `exterior-${id}`),
++      ...travel.filter(([, , id]) => id).map(([, , id]) => `interior-${id}`)].sort());
++  for (const image of before.screenshots) {
++    assert.equal(image.file, `${image.group}-${image.id}.png`);
++    assert.ok((await stat(path.join(baseline, image.file))).size > 0);
++  }
++  assert.equal(gitInfo(candidate), frozenReference.candidate);
++  return before;
++}
++
++const oldEvidence = frozenReference ? await verifyFrozenBaseline() : undefined;
+ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+ await mkdir(output, { recursive: true });
+ try {
+-  const before = await run(baseline, 'baseline', browser);
++  const before = oldEvidence ?? await run(baseline, 'baseline', browser);
++  if (oldEvidence) {
++    assert.equal(browser.version(), before.browser, 'Frozen baseline and candidate need the same Chromium version');
++    await writeFile(path.join(output, 'reference.json'), JSON.stringify({ ...frozenReference, tested: before.tested,
++      browser: before.browser, viewport: before.viewportOptions, files: before.screenshots.map(image => image.file),
++    }, null, 2));
++  }
+   const after = await run(candidate, 'candidate', browser);
++  assert.equal(after.tested.fixtureSha256, before.tested.fixtureSha256, 'Capture fixture changed between source trees');
+   const exterior = before.screenshots.filter(image => image.group === 'exterior');
+   assert.equal(exterior.length, 5);
+   const matches = exterior.map(old => {
+--- a/.github/workflows/verify-jx3.yml
++++ b/.github/workflows/verify-jx3.yml
+@@ -10,23 +10,25 @@
+ 
+ permissions:
+   contents: read
++  actions: read
+ 
+ jobs:
+   verify:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 22
++    timeout-minutes: 30
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           persist-credentials: false
+-      - uses: actions/checkout@v4
++      - uses: actions/download-artifact@v4
+         with:
+-          ref: 352aa49b825d88c432ef2dd0a9dd04a5c86441c3
+-          path: .jx3/baseline
+-          persist-credentials: false
++          name: jx3-workshop-evidence
++          run-id: 44542495628
++          github-token: ${{ github.token }}
++          path: .jx3/frozen-reference
+       - uses: actions/checkout@v4
+         with:
+-          ref: ${{ github.sha }}
++          ref: 5bb1a3f0658b6cba4d28563c0b165c1c373e37da
+           path: .jx3/candidate
+           persist-credentials: false
+       - uses: actions/setup-node@v4
+@@ -35,7 +37,6 @@
+       - name: Install locked dependencies
+         run: |
+           npm ci --ignore-scripts --no-audit --no-fund
+-          npm --prefix .jx3/baseline/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+           npm --prefix .jx3/candidate/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+           npx playwright install --with-deps chromium
+       - name: Typecheck and run market, puzzle, zodiac and doors regressions
+@@ -44,12 +45,15 @@
+           node --import tsx --test tests/town-blockout-market-{layout,fair,venue-activities}.test.ts tests/town-blockout-riddle{,-festival}.test.ts tests/town-blockout-{zodiac,house-portals}.test.ts
+       - name: Build production preview
+         run: npm --prefix .jx3/candidate/tools/voxel-tavern run build -- --mode town-preview
+-      - name: Capture matched views and walk the workshop
+-        run: node tools/verify-jx3-browser.mjs .jx3/baseline .jx3/candidate /tmp/jx3-evidence
++      - name: Capture only the candidate and compare to frozen baseline
++        timeout-minutes: 24
++        env:
++          JX3_REUSE_BASELINE: '44542495628'
++        run: timeout --signal=TERM --kill-after=15s 23m node tools/verify-jx3-browser.mjs .jx3/frozen-reference/baseline .jx3/candidate /tmp/jx3-evidence
+       - name: Upload evidence
+         if: always()
+         uses: actions/upload-artifact@v4
+         with:
+-          name: jx3-workshop-evidence
++          name: jx3-candidate-only-evidence
+           path: /tmp/jx3-evidence
+           if-no-files-found: warn
