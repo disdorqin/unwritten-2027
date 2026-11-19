@@ -7,14 +7,37 @@ import {
 
 const epoch = 1794981600000;
 
-function fixture() {
+function fixture(startEpoch = epoch) {
   const schedule = createTestFireworksSchedule();
   let seeds = 0;
   return {
     seeds: () => seeds,
-    tick: (online: number, now: number) => schedule.update(online, now, epoch + now, () => ++seeds + 1233),
+    tick: (online: number, now: number) => schedule.update(online, now, startEpoch + now, () => ++seeds + 1233),
   };
 }
+
+test('the full formal Beijing ceremony window suppresses notices and shows; dwell restarts outside', () => {
+  const windowStart = Date.parse('2026-12-31T19:00:00+08:00');
+  const windowLength = Date.parse('2027-01-01T01:00:00+08:00') - windowStart;
+  const { tick, seeds } = fixture(windowStart);
+  for (const elapsed of [0, dwell, dwell + notice, windowLength - 1]) assert.equal(tick(8, elapsed), undefined);
+  assert.equal(seeds(), 0);
+  assert.equal(tick(8, windowLength), undefined);
+  assert.equal(tick(8, windowLength + dwell - 1), undefined);
+  assert.equal(tick(8, windowLength + dwell)?.kind, 'announce');
+  assert.deepEqual(tick(8, windowLength + dwell + notice - lead), {
+    type: 'event', kind: 'test-fireworks', seed: 1234, startAt: windowStart + windowLength + dwell + notice,
+  });
+});
+
+test('a test show that would overlap the beginning of the ceremony is never announced', () => {
+  const windowStart = Date.parse('2026-12-31T19:00:00+08:00');
+  const { tick, seeds } = fixture(windowStart - dwell - notice - show + 1);
+  assert.equal(tick(5, 0), undefined);
+  assert.equal(tick(5, dwell), undefined);
+  assert.equal(tick(5, dwell + notice - lead), undefined);
+  assert.equal(seeds(), 0);
+});
 
 test('five continuous joined peers earn one ten-second notice and one common-start show', () => {
   const { tick, seeds } = fixture();

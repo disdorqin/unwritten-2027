@@ -1,7 +1,7 @@
 import { npcScript, type NpcName } from './town-npc-dialogue';
 import { isStoredRecord, readCollection, writeCollection, type StorageAccess } from './town-text-store';
 
-export const UNLOCK_AT = '2026-12-31T20:00:00';
+export const UNLOCK_AT = '2026-12-31T20:00:00+08:00';
 export const townMailKeys = { wall: 'unwritten.wall.v1', timebox: 'unwritten.timebox.v1' } as const;
 export const townMailLimits = { wall: 60, recipient: 12, letter: 200, signature: 8, sealed: 5, wallItems: 200, cooldown: 3000 };
 export const townMailRecipients = { friend: '跨年夜的朋友', npc: '镇民', self: '明年的自己', town: '小镇' } as const;
