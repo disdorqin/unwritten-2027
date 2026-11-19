@@ -2,15 +2,14 @@ import {
   BoxGeometry, CanvasTexture, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace,
   type BufferGeometry, type Material,
 } from 'three';
+import type { Box } from './landmark-kit';
 import { type createMainSummitCable, type SummitCablePoint } from './main-summit-cable';
 import { sampleNorthRidge350 } from './north-ridge-350-terrain';
 
 type Cable = ReturnType<typeof createMainSummitCable>;
 type Summit = {
   heightAt(east: number, north: number): number | undefined;
-  enter(owner: Group): { colliders: readonly {
-    min: readonly [number, number, number]; max: readonly [number, number, number];
-  }[] };
+  enter(owner: Group): { colliders: readonly Box[] };
   leave(): void;
 };
 type Station = Parameters<Cable['ropes'][number]['dock']>[0];
