@@ -3,6 +3,7 @@ import {
   inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs,
   type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from '../../../src/presence/plaza-photo';
+import { townPhotoCaption, townPlazaPhotoLocation } from '../../../src/shared/town-photo-caption';
 import { downloadTownCanvas } from './town-photo-download';
 import { recordTownChroniclePlazaPhoto } from './town-chronicle';
 
@@ -188,7 +189,7 @@ export function createPlazaGroupPhoto(options: {
     style.add(new Option('测试纪念', 'test'));
     style.add(new Option('无框', 'none'));
     const now = new Date(frame.round.captureAt);
-    const captionDate = now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    const caption = townPhotoCaption(townPlazaPhotoLocation, frame.round.captureAt);
     const unit = Math.max(12, Math.round(raw.width / 58));
     function compose() {
       ctx!.drawImage(raw, 0, 0);
@@ -204,17 +205,19 @@ export function createPlazaGroupPhoto(options: {
           ctx!.fillText(label.name, x, y);
         }
       }
-      if (style.value !== 'test') return;
-      ctx!.strokeStyle = '#f3cd81';
-      ctx!.lineWidth = 4;
-      ctx!.strokeRect(5, 5, raw.width - 10, raw.height - 10);
+      if (style.value === 'test') {
+        ctx!.strokeStyle = '#f3cd81';
+        ctx!.lineWidth = 4;
+        ctx!.strokeRect(5, 5, raw.width - 10, raw.height - 10);
+      }
+      if (!caption) return;
       const captionHeight = unit * 2.6;
       ctx!.fillStyle = '#162437e9';
       ctx!.fillRect(0, raw.height - captionHeight, raw.width, captionHeight);
       ctx!.fillStyle = '#ffe6ae';
       ctx!.font = `600 ${unit}px sans-serif`;
       ctx!.textAlign = 'center';
-      ctx!.fillText(`未写镇 · 测试之夜　${captionDate}`, raw.width / 2, raw.height - unit);
+      ctx!.fillText(caption, raw.width / 2, raw.height - unit);
     }
     names.onchange = style.onchange = compose;
     compose();
