@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InstancedMesh } from 'three';
+import { Group, type InstancedMesh } from 'three';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
 } from '../tools/voxel-tavern/town-blockout/main-summit-registration';
@@ -90,7 +90,7 @@ test('both monument levels mount and dispose independently with height-strict ge
   assert.deepEqual(owner.children, [summit.group, cloud.group]);
   assert.equal(summit.colliders, landmarks.summit.colliders);
   assert.equal(cloud.colliders, raisedDeck.cloudDeck.colliders);
-  assert.ok(summit.group.children.every(mesh => mesh instanceof InstancedMesh));
+  assert.ok(summit.group.children.every(mesh => (mesh as InstancedMesh).isInstancedMesh === true));
   assert.equal(summit.group.children.reduce((count, mesh) => count + (mesh as InstancedMesh).count, 0),
     landmarks.summit.parts.length);
   assert.ok(cloud.group.children.length > 0 && cloud.group.children.length <= 4);
