@@ -105,8 +105,8 @@ if (${guard}) {
 function instrument(code, ids) {
   assert.equal(code.split(entry).length, 2, 'Ambiguous viewer probe anchor');
   assert.equal(code.split(movement).length, 2, 'Ambiguous viewer tryMove header');
-  let source = code.replace(entry, entry + probe)
-    .replace(movement, 'function jx1ProductionTryMove(nextX: number, nextN: number) {');
+  let source = code.replace(movement, 'function jx1ProductionTryMove(nextX: number, nextN: number) {')
+    .replace(entry, entry + probe);
   if (ids.length) {
     assert.equal(source.split(activation).length, 2, 'Expected fail-closed market home activation anchor exactly once');
     source = source.replace(activation, `const verifiedMarketHomeIds = new Set<string>(
