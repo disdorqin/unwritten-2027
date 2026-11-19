@@ -181,6 +181,15 @@ test('every built decorative house has a unique dry, clear portal on its real fr
         })) return;
     return ground;
   }
+  // Establish signed-off landing points before an M3 track alignment is applied.
+  const m3DoorAddresses = ['137:70', '186:104', '206:110', '228:110', '246:114',
+    '349:184', '351:144', '358:163', '364:207'];
+  for (const address of m3DoorAddresses) {
+    const door = portals.find(portal => portal.id === 'old-town:' + address);
+    assert.ok(door, `M3 approach must preserve ${address}`);
+    assert.equal(dryGround(door.x, door.n), door.ground, `clear M3 approach to ${address}`);
+    t.diagnostic(`M3 approach ${address} E${door.x.toFixed(3)}/N${door.n.toFixed(3)}/Y${door.ground.toFixed(3)}`);
+  }
   for (const id of moved.map(([address]) => 'old-town:' + address)) {
     const door = portals.find(portal => portal.id === id)!;
     const offsets: [number, number, number][] = [[0, 0, 0]];
