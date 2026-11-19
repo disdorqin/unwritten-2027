@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group } from 'three';
+import { Frustum, Group, Matrix4, PerspectiveCamera, Raycaster, Vector2, Vector3 } from 'three';
 import {
   createMainSummitBlock, mainSummitBounds, mainSummitSpec, mainSummitLayout,
 } from '../tools/voxel-tavern/town-blockout/main-summit-block.ts';
@@ -118,6 +118,42 @@ test('main summit terrain has broad slopes and gives the coarse proxy its own fo
     const averageDegrees = slopeSum / count;
     assert.ok(count > 6_000 && averageDegrees >= 25 && averageDegrees <= 27);
     t.diagnostic(JSON.stringify({ samples: count, samplingStep: 25, averageDegrees }));
+  } finally {
+    candidate.dispose();
+  }
+});
+
+test('the peak is in view from four local far-field cameras', t => {
+  const candidate = createMainSummitBlock(fixture, northRidgeSummit.height, spacing);
+  try {
+    const { east, north } = fixture.summit;
+    const target = new Vector3(east, mainSummitSpec.summitHeight, -north);
+    const [plateauWidth, plateauDepth] = mainSummitSpec.summitPlateau;
+    const camera = new PerspectiveCamera(50, 1.55, .1, 2_400);
+    const ray = new Raycaster();
+    const frustum = new Frustum();
+    const projection = new Matrix4();
+    const diagnostics = [];
+    candidate.coarse.updateMatrixWorld(true);
+    for (const [side, offsetEast, offsetZ] of [
+      ['east', 1_600, 0], ['west', -1_600, 0], ['north', 0, -1_600], ['south', 0, 1_600],
+    ] as const) {
+      camera.position.set(east + offsetEast, 350, -north + offsetZ);
+      const approachEdge = target.clone().add(new Vector3(
+        Math.sign(offsetEast) * (plateauWidth / 2 - .1), 0, Math.sign(offsetZ) * (plateauDepth / 2 - .1),
+      ));
+      camera.lookAt(approachEdge);
+      camera.updateMatrixWorld(true);
+      frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      assert.ok(frustum.containsPoint(target), `${side} peak is inside the fixture camera's far plane`);
+      assert.ok(frustum.intersectsObject(candidate.coarse));
+      ray.setFromCamera(new Vector2(0, 0), camera);
+      const hit = ray.intersectObject(candidate.coarse)[0];
+      assert.ok(hit && hit.distance > 1_300 && hit.point.y >= 780,
+        `${side} ray reaches the upper silhouette (${hit?.distance}, ${hit?.point.y})`);
+      diagnostics.push({ side, meters: +hit.distance.toFixed(3), elevation: +hit.point.y.toFixed(3) });
+    }
+    t.diagnostic(JSON.stringify(diagnostics));
   } finally {
     candidate.dispose();
   }
