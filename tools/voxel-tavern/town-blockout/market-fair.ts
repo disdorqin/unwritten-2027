@@ -1,7 +1,8 @@
 import { Vector3 } from 'three';
 import type { Camera } from 'three';
 import { layout } from './terrain';
-import { marketStallLayouts, type ExistingMarketStallKind } from './market-stall-layout';
+import { marketStallLayouts, marketStallLocalPoint, type MarketStallKind } from './market-stall-layout';
+import type { PassportStamp } from './town-passport';
 import type { TownActivity, TownActivityContext } from './town-activity';
 
 /**
@@ -26,7 +27,7 @@ export const tastingStorageKey = 'unwritten:market-tasting';
 
 export type MarketStall = {
   id: string;
-  kind: string;
+  kind: MarketStallKind;
   canopy: string;
   /** 摊位中心（镇面坐标：东 / 北）。 */
   east: number;
@@ -61,23 +62,53 @@ const stallCopy = {
     hawking: ['热姜茶，喝一碗，雪夜里不冷手！', '羊汤滚烫，加个饼，暖到心里头！'],
     closing: '汤锅都刷干净咯——明儿头一碗，先紧着你盛！',
   },
-} as const satisfies Record<ExistingMarketStallKind, { icon: string; hawking: readonly string[]; closing: string }>;
+  灯笼: {
+    icon: '🏮',
+    hawking: ['灯笼灯笼，红的亮的，挂门口喜庆一整年！', '手工扎的灯笼，经风经雪，瞧一瞧看一看！'],
+    closing: '试点的灯笼都让人挑走啦，明儿新扎的到了，再来掌眼！',
+  },
+  杂货: {
+    icon: '🧺',
+    hawking: ['针头线脑小百货，家里缺啥我这有！', '清仓啦清仓啦，年底大甩卖，手快有手慢无！'],
+    closing: '样品都试完啦——明儿补了货，您头一个上手！',
+  },
+  '布匹/围巾': {
+    icon: '🧣',
+    hawking: ['新到的围巾手套，软和！给媳妇孩子捎一条！', '花布头子便宜卖，做件新衣裳过年啦！'],
+    closing: '样巾都摸热乎咯，明儿新货到，您先挑花色！',
+  },
+  '玩具/套圈': {
+    icon: '⭕',
+    hawking: ['套圈套圈，一块钱的乐呵，套中啥拿啥！', '拨浪鼓、泥哨子，孩子见了走不动道！'],
+    closing: '试玩的圈儿都套走咯，明儿补齐了，您头一个上手！',
+  },
+  春联年画: {
+    icon: '🧧',
+    hawking: ['春联年画，福字到家——现写现卖，墨还没干！', '写对联嘞，您出句，我落笔！'],
+    closing: '试写的红纸用完啦——明儿墨研足了，头一副给您写！',
+  },
+} as const satisfies Record<MarketStallKind, { icon: string; hawking: readonly string[]; closing: string }>;
+
+export const marketTastingStamp = {
+  id: 'market-nine-tastings', label: '年货集', hint: '9 种全尝',
+} as const satisfies PassportStamp;
+
+const marketKinds = new Set<string>(Object.keys(stallCopy));
 
 export const marketStalls: readonly MarketStall[] = (() => {
   const plot = layout.plots.find(({ id }) => id === 'market-stalls')!;
-  const [originEast, originNorth, base] = plot.origin;
-  return marketStallLayouts.map(([localX, localZ, , canopy, kind], index) => {
-    const east = originEast + localX;
-    const north = originNorth - localZ;
+  const [originEast, originNorth] = plot.origin;
+  return marketStallLayouts.map(stall => {
+    const { id, kind, canopy, x, z, base, counterGround } = stall;
+    const [counterX, counterZ] = marketStallLocalPoint(stall, 0, 2.6);
     return {
-      id: `market-stall-${index}`,
+      id,
       kind,
       canopy,
-      east,
-      north,
+      east: originEast + x,
+      north: originNorth - z,
       anchorY: base + 6.1,
-      // 柜台碰撞面前缘在本地 z +1.96；站位取本地 z +2.6，距柜台 0.64 m，身体不与柜台相交。
-      spot: { x: east, n: originNorth - (localZ + 2.6), ground: base, range: 2.4 },
+      spot: { x: originEast + counterX, n: originNorth - counterZ, ground: counterGround, range: 2.4 },
       ...stallCopy[kind],
     };
   });
@@ -171,7 +202,7 @@ export type TastingStorage = {
   read(): string | null;
   write(value: string): void;
 };
-export type TastingLedger = { date: string; counts: number[] };
+export type TastingLedger = { date: string; counts: number[]; tastedKinds: MarketStallKind[] };
 
 export function localDateKey(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -184,18 +215,27 @@ export function loadTastingLedger(storage: TastingStorage, stallCount: number, n
   try {
     const raw = storage.read();
     const parsed = raw ? JSON.parse(raw) as Partial<TastingLedger> : null;
-    if (parsed && parsed.date === today && Array.isArray(parsed.counts)) {
+    if (parsed && Array.isArray(parsed.counts)) {
       const stored = parsed.counts;
+      const previousCounts = Array.from({ length: stallCount }, (_, index) => {
+        const value = stored[index];
+        return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+      });
+      const tastedKinds = new Set<MarketStallKind>();
+      if (Array.isArray(parsed.tastedKinds)) {
+        for (const kind of parsed.tastedKinds) if (marketKinds.has(kind)) tastedKinds.add(kind);
+      }
+      marketStalls.forEach(({ kind }, index) => {
+        if (previousCounts[index] > 0) tastedKinds.add(kind);
+      });
       return {
         date: today,
-        counts: Array.from({ length: stallCount }, (_, index) => {
-          const value = stored[index];
-          return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
-        }),
+        counts: parsed.date === today ? previousCounts : Array<number>(stallCount).fill(0),
+        tastedKinds: [...tastedKinds],
       };
     }
-  } catch { /* 存储损坏或不可用时按新账本处理。 */ }
-  return { date: today, counts: Array.from({ length: stallCount }, () => 0) };
+  } catch { /* 读不到旧账时从干净的账本继续。 */ }
+  return { date: today, counts: Array<number>(stallCount).fill(0), tastedKinds: [] };
 }
 
 export function saveTastingLedger(storage: TastingStorage, ledger: TastingLedger) {
@@ -208,11 +248,14 @@ export function saveTastingLedger(storage: TastingStorage, ledger: TastingLedger
 export function tasteOnce(
   storage: TastingStorage, stallCount: number, stallIndex: number, now: Date,
 ): { served: boolean; count: number } {
+  if (!Number.isInteger(stallIndex) || stallIndex < 0 || stallIndex >= stallCount) return { served: false, count: 0 };
   const ledger = loadTastingLedger(storage, stallCount, now);
   if (ledger.counts[stallIndex] >= TASTING_DAILY_LIMIT) {
     return { served: false, count: ledger.counts[stallIndex] };
   }
   ledger.counts[stallIndex] += 1;
+  const kind = marketStalls[stallIndex]?.kind;
+  if (kind && !ledger.tastedKinds.includes(kind)) ledger.tastedKinds.push(kind);
   saveTastingLedger(storage, ledger);
   return { served: true, count: ledger.counts[stallIndex] };
 }
@@ -225,6 +268,8 @@ export type MarketFairView = {
   camera: Camera;
   /** 玩家当前镇面位置与是否处于步行模式（轨道俯瞰时不亮气泡）。 */
   player(): { x: number; n: number; walking: boolean };
+  onHotDrink?(): void;
+  marketPassport?: { collect(): boolean; collected(): boolean };
 };
 
 export function createMarketFairActivity(
@@ -232,12 +277,19 @@ export function createMarketFairActivity(
 ): TownActivity {
   void context; // 本切片的反馈走气泡 + 图标，不占用活动面板与状态行。
   const board = new HawkingBoard(marketStalls);
+  let sessionLedger: string | null = null;
+  let browserWriteFailed = false;
   const storage: TastingStorage = {
     read: () => {
-      try { return localStorage.getItem(tastingStorageKey); } catch { return null; }
+      if (browserWriteFailed) return sessionLedger;
+      try { return localStorage.getItem(tastingStorageKey); } catch { return sessionLedger; }
     },
     write: value => {
-      try { localStorage.setItem(tastingStorageKey, value); } catch { /* 会话内账本继续可用。 */ }
+      sessionLedger = value;
+      try {
+        localStorage.setItem(tastingStorageKey, value);
+        browserWriteFailed = false;
+      } catch { browserWriteFailed = true; }
     },
   };
 
@@ -260,6 +312,8 @@ export function createMarketFairActivity(
 
   let clock = 0;
   let iconTimer = 0;
+  let collectionComplete = !!view.marketPassport &&
+    loadTastingLedger(storage, marketStalls.length, new Date()).tastedKinds.length === marketKinds.size;
   const projected = new Vector3();
 
   function flashIcon(glyph: string) {
@@ -279,19 +333,35 @@ export function createMarketFairActivity(
       board.shout(index, stall.closing, clock, MARKET_BUBBLE_SHOW_SECONDS + .5);
       return;
     }
+    if (view.marketPassport && !collectionComplete) {
+      collectionComplete = loadTastingLedger(storage, marketStalls.length, new Date()).tastedKinds.length === marketKinds.size;
+    }
+    if (stall.kind === '热饮') view.onHotDrink?.();
     board.shout(index, board.nextLine(index), clock);
     flashIcon(stall.icon);
   }
 
+  const spots: TownActivity['spots'] = marketStalls.map((stall, index) => ({
+    ...stall.spot,
+    label: `试吃${stall.kind}`,
+    run: () => taste(index),
+  }));
+  const host = marketStalls.find(stall => stall.id === 'market-stall-4');
+  if (host && view.marketPassport) {
+    const passport = view.marketPassport;
+    const ready = () => collectionComplete && !passport.collected();
+    spots.push({
+      ...host.spot,
+      x: host.spot.x - 1.15,
+      range: .65,
+      label: marketTastingStamp.label,
+      available: ready,
+      run() { if (ready()) passport.collect(); },
+    });
+  }
+
   return {
-    spots: marketStalls.map((stall, index) => ({
-      x: stall.spot.x,
-      n: stall.spot.n,
-      ground: stall.spot.ground,
-      range: stall.spot.range,
-      label: `试吃${stall.kind}`,
-      run: () => taste(index),
-    })),
+    spots,
     update(dt) {
       clock += dt;
       const player = view.player();

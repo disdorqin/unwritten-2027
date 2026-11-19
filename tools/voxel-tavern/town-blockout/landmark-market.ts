@@ -1,15 +1,18 @@
 import {
-  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedMesh,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DynamicDrawUsage, Float32BufferAttribute, Group, InstancedBufferAttribute, InstancedMesh,
   Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace, SphereGeometry,
   Vector3, Quaternion,
 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Box, TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
 import { addMarketStallBanners } from './market-stall-banners';
-import { marketStallLayouts } from './market-stall-layout';
+import { marketStallLayouts, marketStallLocalPoint, type MarketStallKind, type MarketStallLayout } from './market-stall-layout';
+import { addMarketFrontFurniture, displayMarketStock, marketDiningTables } from './market-stall-objects';
+import { personalFireworkCopy } from './personal-fireworks';
 
 type Vector = [number, number, number];
-type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; glow?: boolean; riddleSlot?: number };
+type Part = { position: Vector; size: Vector; color: string; shape: 'box' | 'round' | 'cylinder'; rotation?: number; yaw?: number; glow?: boolean; riddleSlot?: number };
 
 export type WorkshopRiddleWall = {
   stands: readonly Vector[];
@@ -144,7 +147,7 @@ export function makeSign(text: string, width: number, height: number, x: number,
   ctx.font = 'bold 56px "Noto Sans CJK SC", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 192, 59);
+  ctx.fillText(text, 192, 59, 342);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
   const material = new MeshStandardMaterial({ map, emissive: '#ab6c2e', emissiveMap: map, emissiveIntensity: .4, roughness: .8 });
@@ -164,6 +167,13 @@ function furnishBench(s: Workshop, x: number, z: number, direction = 1) {
   for (let i = 0; i < 4; i++) put('#a78655', x - .15 + i * .13, 1.35, z - .22, .051, .053, .53);
 }
 
+// Positions use the unrotated workshop frame; the building and all its stages face west together.
+export const workshopMonkeySteps = [
+  [6.92, .66, -3.66],
+  [6.92, 1.33, -2.4], // The existing eastern workbench.
+  [6.92, 2.03, -1.08],
+  [5.40, 2.72, -1.08],
+] as const;
 function buildGuild() {
   const s = createWorkshop();
   const { put } = s;
@@ -255,6 +265,27 @@ function buildGuild() {
     for (let index = firstPart; index < s.parts.length; index++) s.parts[index].riddleSlot = slot;
     stands.push([x, .15, -4.70]);
   }
+  const jumpFloors: Box[] = [];
+  for (const [index, [x, height, z]] of workshopMonkeySteps.entries()) {
+    if (index === 1) continue;
+    const platform = index === workshopMonkeySteps.length - 1;
+    const w = platform ? 1.38 : 1.12;
+    const d = platform ? 1.06 : .96;
+    const depth = platform ? .16 : height - .15;
+    const levels = platform ? 1 : Math.ceil(depth / .66);
+    for (let level = 0; level < levels; level++) {
+      const face = height - (level + .5) * depth / levels;
+      put(wood[platform ? 3 : level % 2], x, face, z, w, depth / levels - .009, d);
+    }
+    jumpFloors.push(collision(x, height - depth, z, w, depth, d));
+    for (const side of [-1, 1]) {
+      put(trim, x + side * (w / 2 - .065), height - depth + .055, z, .115, .11, d);
+      if (platform) {
+        put(wood[2], x + side * .47, height / 2 - .08, z, .12, height - .16, .12);
+        jumpFloors.push(collision(x + side * .47, 0, z, .12, height - .16, .12));
+      }
+    }
+  }
   const building = batchParts(s.parts, { stands, rearWallZ: rear });
   building.add(makeSign('春灯工坊', 3.7, .86, 0, 4.49, 7.76));
   building.rotation.y = -Math.PI / 2;
@@ -285,30 +316,40 @@ function buildGuild() {
     collision(0, 0, .85, 17.43, .15, 14.88),
     collision(0, 0, 7.89, 4.45, .14, 1.07),
     collision(0, .07, 7.40, 4.24, .14, .73),
+    ...jumpFloors,
   ].map(rotateWest);
   return building;
 }
 
-function hangFestoon(s: Workshop, x0: number, x1: number, z: number, y: number) {
+function hangFestoon(s: Workshop, x0: number, x1: number, z0: number, y: number, z1 = z0) {
+  const dx = x1 - x0, dz = z1 - z0;
+  const span = Math.hypot(dx, dz);
+  const yaw = Math.atan2(-dz, dx);
   for (let i = 0; i <= 20; i++) {
     const t = i / 20;
-    const x = x0 + (x1 - x0) * t;
+    const x = x0 + dx * t, z = z0 + dz * t;
     const height = y - Math.sin(t * Math.PI) * .59;
-    s.put(trim, x, height, z, (x1 - x0) / 20 + .08, .055, .055, 'box', false, Math.atan2(-Math.cos(t * Math.PI) * .59 * Math.PI, x1 - x0));
+    s.put(trim, x, height, z, span / 20 + .08, .055, .055, 'box', false, Math.atan2(-Math.cos(t * Math.PI) * .59 * Math.PI, span));
+    s.parts[s.parts.length - 1].yaw = yaw;
     if (i % 3 === 1) lantern(s, x, height - .59, z, .53, i % 2 ? red : '#dd762e');
   }
 }
 
-function makeStall(s: Workshop, x: number, z: number, width: number, color: string, index: number) {
+function makeStall(s: Workshop, x: number, z: number, width: number, color: string, index: number, kind?: MarketStallKind, backDoor = false) {
   const { put } = s;
   const depth = 4.8;
   for (const dx of [-1, 1]) for (const dz of [-1, 1]) post(s, x + dx * (width / 2 - .20), z + dz * 2.15, 3.95, .28);
   for (let i = 0; i < Math.round(width / .42); i++) {
     const px = x - width / 2 + (i + .5) * .42;
-    put(wood[(i + index) % 4], px, 1.83, z - depth / 2, .43, 3.58, .22);
+    if (!backDoor || Math.abs(px - x) >= 1.12) {
+      put(wood[(i + index) % 4], px, 1.83, z - depth / 2, .43, 3.58, .22);
+    }
     put(wood[(i + index + 2) % 4], px, .66, z + 1.38, .43, 1.25, .37);
   }
-  window(s, x, z - 2.29, 2.44, 2.68, .18, 1.2);
+  if (backDoor) {
+    put(trim, x, 2.71, z - 2.4, 2.7, .28, .36);
+    for (const side of [-1, 1]) put(wood[1], x + side * 1.2, 1.36, z - 2.41, .18, 2.72, .34);
+  } else window(s, x, z - 2.29, 2.44, 2.68, .18, 1.2);
   put(wood[2], x, 1.26, z + 1.32, width - .39, .21, 1.15);
   put(wood[1], x, 1.42, z + 1.39, width - .25, .19, 1.04);
   for (const dx of [-1, 1]) {
@@ -325,7 +366,9 @@ function makeStall(s: Workshop, x: number, z: number, width: number, color: stri
   snowRoof(s, x, z, width + .6, depth + .56, 4.05, 1.2);
   put(color, x, .94, z + 1.915, 1.55, .92, .075);
   put(gold, x, .99, z + 1.96, .29, .29, .04, 'round');
-  for (let i = 0; i < 7; i++) {
+  const shellEnd = s.parts.length;
+  if (kind) displayMarketStock(put, kind, width);
+  else for (let i = 0; i < 7; i++) {
     const px = x - width * .37 + i * width * .123;
     put(wood[1], px, 1.56, z + 1.19, .59, .11, .61);
     for (let j = 0; j < 3; j++) {
@@ -338,6 +381,7 @@ function makeStall(s: Workshop, x: number, z: number, width: number, color: stri
     for (const h of [.24, .81]) put(trim, bx, h, z + 1.8, .81, .064, .81, 'cylinder');
     put(snow[1], bx, 1.055, z + 1.8, .75, .072, .75, 'cylinder');
   }
+  return shellEnd;
 }
 
 function makeHayAnnex({ put }: Workshop) {
@@ -368,31 +412,171 @@ function makeHayAnnex({ put }: Workshop) {
   return collision(x, 0, z, 2.04, .93, 1.04);
 }
 
-function buildStalls() {
-  const s = createWorkshop();
-  marketStallLayouts.forEach(([x, z, width, color], i) => makeStall(s, x, z, width, color, i));
-  const hayAnnex = makeHayAnnex(s);
-  for (const x of [-16, -7.8, 8.5, 16]) post(s, x, 3.42, 5.38, .26);
-  for (const [x0, x1] of [[-16, -7.8], [-7.8, 8.5], [8.5, 16]]) hangFestoon(s, x0, x1, 3.42, 5.17);
-  for (const x of [-2.76, 2.76]) {
-    post(s, x, 6.67, 4.64, .27);
-    lantern(s, x, 3.8, 6.86, .5);
+function placeStallPart(stall: MarketStallLayout, part: Part, originY: number): Part {
+  const [x, y, z] = part.position;
+  const [east, depth] = marketStallLocalPoint(stall, x, z);
+  return { ...part, position: [east, y + stall.base - originY, depth], yaw: stall.yaw };
+}
+
+function stallColliders(stall: MarketStallLayout, originY: number, backDoor: boolean) {
+  const { width, base, yaw } = stall;
+  function box(x: number, z: number, w: number, h: number, depth: number) {
+    const [east, north] = marketStallLocalPoint(stall, x, z);
+    return yaw === Math.PI / 2
+      ? collision(east, base - originY, north, depth, h, w)
+      : collision(east, base - originY, north, w, h, depth);
   }
-  const root = batchParts(s.parts);
-  addMarketStallBanners(root, marketStallLayouts, makeSign('河畔年集', 3.4, .74, 0, 4.35, 6.71));
-  root.userData.colliders = [
-    ...marketStallLayouts.flatMap(([x, z, width]) => [
-      collision(x, 0, z - 2.4, width, 3.6, .22),
-      collision(x, 0, z + 1.4, width, 1.51, 1.12),
-      ...[-1, 1].flatMap(side => [
-        collision(x + side * (width / 2 + .25), 0, z + 1.8, .81, 1.09, .81),
-        ...[-2.15, 2.15].map(end => collision(x + side * (width / 2 - .2), 0, z + end, .28, 3.95, .28)),
-      ]),
+  const rear = backDoor ? [-1, 1].map(side => box(side * (width / 2 + 1.05) / 2, -2.4, width / 2 - 1.05, 3.6, .34))
+    : [box(0, -2.4, width, 3.6, .22)];
+  return [
+    ...rear,
+    box(0, 1.4, width, 1.51, 1.12),
+    ...[-1, 1].flatMap(side => [
+      box(side * (width / 2 + .25), 1.8, .81, 1.09, .81),
+      ...[-2.15, 2.15].map(end => box(side * (width / 2 - .2), end, .28, 3.95, .28)),
     ]),
-    ...[-16, -7.8, 8.5, 16].map(x => collision(x, 0, 3.42, .44, 5.38, .44)),
-    ...[-2.76, 2.76].map(x => collision(x, 0, 6.67, .46, 4.64, .46)),
-    hayAnnex,
   ];
+}
+
+const partAxes = { roll: new Vector3(0, 0, 1), yaw: new Vector3(0, 1, 0) };
+const partTransform = (() => {
+  const roll = new Quaternion(), yaw = new Quaternion();
+  const position = new Vector3(), size = new Vector3();
+  return (part: Part, target: Matrix4) => {
+    roll.setFromAxisAngle(partAxes.roll, part.rotation ?? 0);
+    yaw.setFromAxisAngle(partAxes.yaw, part.yaw ?? 0).multiply(roll);
+    return target.compose(position.set(...part.position), yaw, size.set(...part.size));
+  };
+})();
+
+function mergeStallShells(stalls: readonly Part[][]) {
+  const matrix = new Matrix4();
+  const base = new BoxGeometry();
+  const palette = new Map<string, Float32BufferAttribute>();
+  const shells = stalls.map(stall => {
+    const shapes = stall.map(part => {
+      const geometry = base.clone().applyMatrix4(partTransform(part, matrix));
+      let tint = palette.get(part.color);
+      if (!tint) {
+        const rgb = new Color(part.color).toArray();
+        tint = new Float32BufferAttribute(Array.from({ length: 24 }, () => rgb).flat(), 3);
+        palette.set(part.color, tint);
+      }
+      geometry.setAttribute('color', tint);
+      return geometry;
+    });
+    const shell = mergeGeometries(shapes)!;
+    for (const shape of shapes) shape.dispose();
+    return shell;
+  });
+  base.dispose();
+
+  // The individually merged shells share a single opaque submission. Loose stock and lanterns
+  // are reused across the entire street by shape and emissive material.
+  const geometry = mergeGeometries(shells)!;
+  for (const shell of shells) shell.dispose();
+  const mesh = new Mesh(geometry, new MeshStandardMaterial({ vertexColors: true, roughness: .92 }));
+  mesh.name = 'Market stall shells';
+  return mesh;
+}
+
+function marketStreetLights(s: Workshop, originY: number) {
+  const colliders: Box[] = [];
+  function pole(x: number, z: number, y: number) {
+    const localY = y - originY;
+    post({ ...s, put: (color, px, py, pz, w, h, d, shape, glow, rotation) =>
+      s.put(color, px, py + localY, pz, w, h, d, shape, glow, rotation) }, x, z, 5.38 - localY, .28);
+    colliders.push(collision(x, localY, z, .43, 5.38 - localY, .43));
+  }
+  const originalPoles = [-16, -7.8, 8.5, 16];
+  for (const x of originalPoles) {
+    post(s, x, 3.42, 5.38, .26);
+    colliders.push(collision(x, 0, 3.42, .44, 5.38, .44));
+  }
+  for (const [x0, x1] of [[-16, -7.8], [-7.8, 8.5], [8.5, 16]]) hangFestoon(s, x0, x1, 3.42, 5.17);
+
+  for (const x of [-13.25, -6, 1.4, 8.4, 15.35, 21.1]) {
+    pole(x, 3.2, x === 21.1 ? 9.15 : 10);
+    pole(x, -2.62, x === 21.1 ? 9.25 : 10);
+    hangFestoon(s, x, x, 3.2, 5.46, -2.62);
+  }
+
+  pole(-12.1, -8, 10);
+  pole(-12.1, -14.2, 10.25);
+  pole(-12.1, -20.2, 10.61);
+  hangFestoon(s, -12.1, -12.1, -8, 5.2, -14.2);
+  hangFestoon(s, -12.1, -12.1, -14.2, 5.2, -20.2);
+
+  for (const [x, z, y] of [[-17.4, 17.2, 9.1], [-6, 17.2, 9.45], [4.15, 17.2, 9.34], [17.7, 17.2, 9.05],
+    [4.15, 11.4, 9.72], [17.7, 11.4, 9.75]]) pole(x, z, y);
+  hangFestoon(s, -17.4, -6, 17.2, 5.13);
+  hangFestoon(s, 4.15, 17.7, 17.2, 5.13);
+  hangFestoon(s, 4.15, 17.7, 11.4, 5.13);
+  return colliders;
+}
+
+function buildMarketGate(s: Workshop, originY: number) {
+  const y = 9.9 - originY;
+  const z = 11.5;
+  for (const x of [-2.7, 2.7]) {
+    s.put(wood[2], x, y + 2.3, z, .43, 4.84, .43);
+    s.put(stone[1], x, y + .27, z, .66, .79, .63);
+    s.put(wood[3], x, y + 4.82, z, .66, .25, .53);
+    lantern(s, x, y + 3.87, z + .36, .58);
+  }
+  s.put(trim, 0, y + 4.45, z, 6.08, .38, .52);
+  s.put(wood[1], 0, y + 5.03, z, 6.64, .26, .67);
+  s.put(snow[0], 0, y + 5.21, z, 6.83, .18, .76);
+  return {
+    colliders: [-2.7, 2.7].map(x => collision(x, y - .12, z, .66, 5.22, .63)),
+    entry: makeSign('河畔年集', 3.4, .74, 0, y + 4.45, z + .28),
+    fireworks: makeSign(personalFireworkCopy.sign, 2.3, .48, 0, y + 3.86, z + .29),
+  };
+}
+
+function buildStalls(plot: TownPlot) {
+  const originY = plot.origin[2];
+  const street = createWorkshop();
+  const shells: Part[][] = [];
+  const emittedStalls: MarketStallLayout['id'][] = [];
+  const boxes: Box[] = [];
+  for (const [index, stall] of marketStallLayouts.entries()) {
+    const local = createWorkshop();
+    if (index >= 4) {
+      // Keep the timbers grounded on the sloped extensions without flattening existing terrain.
+      local.put(stone[2], 0, -.36, -.15, stall.width - .20, .72, 4.64);
+    }
+    // The existing B14 firecracker counter is reached from the south through this service bay.
+    const backDoor = stall.id === 'market-stall-10';
+    const shellEnd = makeStall(local, 0, 0, stall.width, stall.canopy, index, index < 4 ? undefined : stall.kind, backDoor);
+    const shell: Part[] = [];
+    local.parts.forEach((part, at) => {
+      const placed = placeStallPart(stall, part, originY);
+      if (at < shellEnd && part.shape === 'box' && !part.glow) shell.push(placed);
+      else street.parts.push(placed);
+    });
+    shells.push(shell);
+    emittedStalls.push(stall.id);
+    boxes.push(...stallColliders(stall, originY, backDoor));
+  }
+  const hayAnnex = makeHayAnnex(street);
+  const gate = buildMarketGate(street, originY);
+  const poles = marketStreetLights(street, originY);
+  const furniture = addMarketFrontFurniture(street.put, originY);
+
+  // The west turn has only 1.86 m of clearance along the workshop wall. End the inner
+  // lane in the north pocket instead of routing pedestrians through that corridor.
+  const northPocket = [[-16.85, 10.526361], [-17.55, 10.547592], [-18.2, 10.568361]] as const;
+  for (const [index, [z, base]] of northPocket.entries()) {
+    street.put(stone[index], -11.2, base - originY + .02, z, 2.21, .07, .57);
+  }
+  const root = batchParts(street.parts);
+  root.add(mergeStallShells(shells));
+  addMarketStallBanners(root, marketStallLayouts, originY, gate.entry, gate.fireworks);
+  root.userData.marketStallIds = emittedStalls;
+  root.userData.marketDiningTables = marketDiningTables;
+  root.userData.marketGate = { x: 0, z: 11.5, base: 9.9 };
+  root.userData.colliders = [...boxes, ...poles, ...gate.colliders, ...furniture, hayAnnex];
   root.userData.zodiacOx = marketOxSite;
   return root;
 }
@@ -410,11 +594,7 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
     if (!byMaterial.has(key)) byMaterial.set(key, []);
     byMaterial.get(key)!.push(part);
   }
-  const q = new Quaternion();
-  const axis = new Vector3(0, 0, 1);
   const matrix = new Matrix4();
-  const pos = new Vector3();
-  const size = new Vector3();
   const updateRiddleBatches: WorkshopRiddleWall['update'][] = [];
   for (const batch of byMaterial.values()) {
     const { color, shape, glow } = batch[0];
@@ -425,9 +605,7 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
     });
     const mesh = new InstancedMesh(shapes[shape], material, batch.length);
     for (const [index, part] of batch.entries()) {
-      q.setFromAxisAngle(axis, part.rotation ?? 0);
-      matrix.compose(pos.set(...part.position), q, size.set(...part.size));
-      mesh.setMatrixAt(index, matrix);
+      mesh.setMatrixAt(index, partTransform(part, matrix));
       mesh.setColorAt(index, new Color(part.color));
     }
     const riddleIndices = batch.flatMap((part, index) => part.riddleSlot === undefined ? [] : [{ slot: part.riddleSlot, index }]);
@@ -508,5 +686,5 @@ function batchParts(parts: Part[], riddleWall?: { stands: readonly Vector[]; rea
 }
 
 export function buildMarketLandmark(plot: TownPlot): Group {
-  return plot.id === 'lantern-workshop' ? buildGuild() : buildStalls();
+  return plot.id === 'lantern-workshop' ? buildGuild() : buildStalls(plot);
 }

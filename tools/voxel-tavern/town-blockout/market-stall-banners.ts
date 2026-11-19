@@ -1,5 +1,6 @@
 import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry } from 'three';
 import { addOpaqueMuseumLabels, type OpaqueMuseumLabel } from './museum-label-atlas';
+import { marketStallLocalPoint, type MarketStallLayout } from './market-stall-layout';
 
 export const marketBannerCopy = {
   '吃食（烤肠/炸串）': ['热乎吃食', '刚出炉 · 趁热吃'],
@@ -14,7 +15,7 @@ export const marketBannerCopy = {
 } as const;
 
 type StallKind = keyof typeof marketBannerCopy;
-export type MarketStallLayout = readonly [x: number, z: number, width: number, color: string, kind?: string];
+export type MarketBannerPlacement = Pick<MarketStallLayout, 'x' | 'z' | 'width' | 'yaw' | 'base'> & { kind?: string };
 
 const bannerWidth = 1;
 const bannerHeight = 1.14;
@@ -48,18 +49,19 @@ function createBannerCanvas([title, subtitle]: readonly [string, string]) {
 }
 
 export function addMarketStallBanners(
-  parent: Group, stalls: readonly MarketStallLayout[], entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
+  parent: Group, stalls: readonly MarketBannerPlacement[], originY: number, entrance: Mesh<PlaneGeometry, MeshStandardMaterial>,
+  ...additionalSigns: Mesh<PlaneGeometry, MeshStandardMaterial>[]
 ) {
-  const previousMap = entrance.material.map;
-  const source = previousMap?.image as HTMLCanvasElement | undefined;
-  if (!source || typeof document === 'undefined') {
-    parent.add(entrance);
+  const signs = [entrance, ...additionalSigns];
+  if (!entrance.material.map?.image || typeof document === 'undefined') {
+    parent.add(...signs);
     return;
   }
 
   const tiles = new Map<StallKind, HTMLCanvasElement>();
   const labels: OpaqueMuseumLabel[] = [];
-  for (const [x, z, width, , kind] of stalls) {
+  for (const stall of stalls) {
+    const { width, kind } = stall;
     const labelKind = kind === '吃食' ? '吃食（烤肠/炸串）' : kind === '热饮' ? '热饮（姜茶/热汤）' : kind;
     if (labelKind === undefined || !Object.hasOwn(marketBannerCopy, labelKind)) continue;
     const key = labelKind as StallKind;
@@ -69,17 +71,25 @@ export function addMarketStallBanners(
       tiles.set(key, tile);
     }
     // The pennant lies on the front face of the existing right-hand post.
-    labels.push({ source: tile, parent, x: x + width / 2 - .2, y: 2.18, z: z + 2.32,
-      width: bannerWidth, height: bannerHeight, yaw: 0 });
+    const [x, z] = marketStallLocalPoint(stall, width / 2 - .2, 2.32);
+    labels.push({ source: tile, parent, x, y: stall.base - originY + 2.18, z,
+      width: bannerWidth, height: bannerHeight, yaw: stall.yaw });
   }
   if (!labels.length) {
-    parent.add(entrance);
+    parent.add(...signs);
     return;
   }
 
-  const { width, height } = entrance.geometry.parameters;
-  labels.push({ source, parent, x: entrance.position.x, y: entrance.position.y,
-    z: entrance.position.z, width, height, yaw: entrance.rotation.y });
+  for (const sign of signs) {
+    const tile = sign.material.map?.image as HTMLCanvasElement | undefined;
+    if (!tile) {
+      parent.add(sign);
+      continue;
+    }
+    const { width, height } = sign.geometry.parameters;
+    labels.push({ source: tile, parent, x: sign.position.x, y: sign.position.y,
+      z: sign.position.z, width, height, yaw: sign.rotation.y });
+  }
   // Both heights use the atlas's small-label batch. All nine tiles and the entry sign fit on one page.
   const batches: Mesh[] = [];
   addOpaqueMuseumLabels(labels, batches);
@@ -92,8 +102,11 @@ export function addMarketStallBanners(
     atlasMaterial.dispose();
   }
 
-  // The old entry surface and its texture are replaced by the shared batch.
-  entrance.geometry.dispose();
-  entrance.material.dispose();
-  previousMap?.dispose();
+  // The sign surfaces and their textures are replaced by the shared batch.
+  for (const sign of signs) {
+    if (sign.parent === parent) continue;
+    sign.geometry.dispose();
+    sign.material.map?.dispose();
+    sign.material.dispose();
+  }
 }

@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CanvasTexture, Group, Mesh, MeshStandardMaterial, PlaneGeometry } from 'three';
 import {
-  addMarketStallBanners, marketBannerCopy, type MarketStallLayout,
+  addMarketStallBanners, marketBannerCopy, type MarketBannerPlacement,
 } from '../tools/voxel-tavern/town-blockout/market-stall-banners.ts';
+import { marketStallLayouts } from '../tools/voxel-tavern/town-blockout/market-stall-layout.ts';
 
 test('market banner copy follows every Muse row exactly', () => {
   const source = readFileSync(new URL('../docs/交流区/Claude/2026-11-18-集市幌子文案-v1.md', import.meta.url), 'utf8');
@@ -27,7 +28,7 @@ class FixtureCanvas {
   }
 }
 
-test('untyped stalls leave the entrance sign in place and nine typed banners share its draw', () => {
+test('untyped stalls leave the entrance sign and seventeen placed banners share one atlas', () => {
   const canvases: FixtureCanvas[] = [];
   const fixtureDocument = {
     createElement() {
@@ -46,26 +47,28 @@ test('untyped stalls leave the entrance sign in place and nine typed banners sha
       sign.position.set(0, 4.35, 6.71);
       return sign;
     }
-    const unknown: MarketStallLayout[] = [[-12.5, -4.8, 6.8, '#a1342d'], [37, 0, 6.8, '#a1342d', '糖水']];
+    const unknown: MarketBannerPlacement[] = [
+      { x: -12.5, z: -4.8, width: 6.8, base: 10, yaw: 0 },
+      { x: 37, z: 0, width: 6.8, base: 10, yaw: 0, kind: '糖水' },
+    ];
     const originalSign = entranceSign();
     const unchanged = new Group();
-    addMarketStallBanners(unchanged, unknown, originalSign);
+    addMarketStallBanners(unchanged, unknown, 10, originalSign);
     assert.deepEqual(unchanged.children, [originalSign]);
     assert.equal(canvases.length, 0);
 
-    const typed: MarketStallLayout[] = Object.keys(marketBannerCopy).map((kind, index) => [index * 8, -4.8, 6.8, '#a1342d', kind]);
     const market = new Group();
-    addMarketStallBanners(market, [...typed, ...unknown], entranceSign());
+    addMarketStallBanners(market, [...marketStallLayouts, ...unknown], 10, entranceSign());
     assert.equal(canvases.length, 10, 'one atlas page serves nine cloth tiles plus the original entrance');
     assert.equal(market.children.length, 1);
     const batch = market.children[0] as Mesh<PlaneGeometry, MeshStandardMaterial>;
     assert.ok(batch.material.isMeshStandardMaterial);
     assert.equal(batch.material.emissiveIntensity, .4);
     assert.equal(batch.material.map, batch.material.emissiveMap);
-    assert.equal(batch.geometry.getAttribute('position').count, 4 * (9 + 1));
-    assert.equal(batch.geometry.index?.count, 6 * (9 + 1));
-    assert.deepEqual(canvases.slice(0, 9).map(canvas => canvas.drawn),
-      Object.values(marketBannerCopy).map(([title, subtitle]) => [...title, subtitle]));
+    assert.equal(batch.geometry.getAttribute('position').count, 4 * (17 + 1));
+    assert.equal(batch.geometry.index?.count, 6 * (17 + 1));
+    assert.deepEqual(canvases.slice(0, 9).map(canvas => canvas.drawn.join('').trim()).sort(),
+      Object.values(marketBannerCopy).map(([title, subtitle]) => title + subtitle).sort());
   } finally {
     if (previous) Object.defineProperty(globalThis, 'document', previous);
     else Reflect.deleteProperty(globalThis, 'document');
