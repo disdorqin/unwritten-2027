@@ -109,6 +109,7 @@ import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale, createTownSnowCover } from './town-snow-cover';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
 import { createTownSnowballFight, type SnowballState } from './town-snowball';
+import { createTeamSnowfight } from './town-snowfight';
 import { createSnowballSweep } from './town-snowball-world';
 import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
 import { createTownSnowballBoard } from './town-snowball-board';
@@ -985,6 +986,7 @@ const playerTarget: TownSnowballTarget = {
 const snowballTargets = [playerTarget, ...npcActivity.snowballTargets, ...practiceTarget.snowballTargets];
 const targetById = new Map(snowballTargets.map(target => [target.id, target]));
 const remoteSnowballTargets: TownSnowballTarget[] = [];
+const snowballExtras: TownSnowballTarget[] = [];
 const remoteTargetPool = Array.from({ length: 48 }, (): TownSnowballTarget => ({
   id: '', label: '', x: 0, y: 0, z: 0, radius: playerTarget.radius, height: playerTarget.height,
   shape: 'capsule', onHit() {},
@@ -1067,7 +1069,7 @@ const sweepSnowball = createSnowballSweep({
       (relative <= 3 && (scenery.blocked(east, north) || streetscape.blocked(east, north)));
   },
   targets: snowballTargets,
-  scoreAt: target => !roofed(target.x, -target.z, target.y),
+  scoreAt: target => !target.id.startsWith('wall:') && !roofed(target.x, -target.z, target.y),
 });
 function showSnowballHit(streak: number, targetName: string) {
   if (!walking) return;
@@ -1085,7 +1087,7 @@ function showSnowballHit(streak: number, targetName: string) {
 const snowballs = createTownSnowballFight({
   scene,
   sweep: (from, to, radius, thrower, source) =>
-    sweepSnowball(from, to, radius, thrower, source === 'player' ? remoteSnowballTargets : undefined),
+    sweepSnowball(from, to, radius, thrower, source === 'npc' ? undefined : snowballExtras),
   relayPlayerThrow: (ballId, origin, dir) => presence.sendSnowballThrow({
     ballId, east: origin.x, north: -origin.z, height: origin.y, dirX: dir.x, dirY: dir.y, dirZ: dir.z,
   }),
@@ -1094,19 +1096,40 @@ const snowballs = createTownSnowballFight({
   onEvent(event) {
     if (event.type === 'throw') {
       if (event.scoreable) snowballBoard.recordThrow(event.thrower);
+      if (event.shotBy === 'remote') teamFight.onThrowHeard(event.origin);
     } else if (event.type === 'miss') {
       if (event.scoreable) snowballBoard.recordMiss(event.thrower);
     } else {
       const target = event.targetId ? targetById.get(event.targetId) : undefined;
+      if (event.targetId?.startsWith('wall:')) {
+        teamFight.onWallImpact(event.at);
+        if ((event.shotBy === 'player' || event.shotBy === 'remote') && event.ballId !== undefined) {
+          const [, gx, gy, layer] = event.targetId.split(':').map(Number);
+          const throwerId = event.shotBy === 'player' ? presence.selfId() : Number(event.thrower.slice(2));
+          if (throwerId !== null && Number.isInteger(throwerId)) {
+            presence.sendSnowfightWallHit({ gx, gy, layer, ballId: event.ballId, throwerId });
+          }
+        }
+      }
       if (event.shotBy === 'remote' && target === playerTarget && event.zone &&
         event.ballId !== undefined && moveAllowed() && !roofed(playerTarget.x, -playerTarget.z, playerTarget.y)) {
         target.onHit(event.velocity.x, event.velocity.z);
         hitFeedback.hit(event.zone);
+        if (teamFight.active()) {
+          teamFight.victimFlash();
+          snowStaggerTime = Math.max(snowStaggerTime, .3);
+        }
         snowballs.clearCombo();
         presence.sendSnowballHit({ ballId: event.ballId, throwerId: Number(event.thrower.slice(2)), zone: event.zone });
       } else if (event.scored) {
         target?.onHit(event.velocity.x, event.velocity.z);
-        if (target === playerTarget && moveAllowed()) hitFeedback.hit(event.zone);
+        if (target === playerTarget && moveAllowed()) {
+          hitFeedback.hit(event.zone);
+          if (teamFight.active()) {
+            teamFight.victimFlash();
+            snowStaggerTime = Math.max(snowStaggerTime, .3);
+          }
+        }
         const recipient = target?.shape === 'box' ? undefined : target?.id;
         const streak = snowballBoard.recordHit(event.thrower, recipient, { announce: formalSnowFight });
         if (event.thrower === 'local') showSnowballHit(streak, target?.label ?? '目标');
@@ -1116,6 +1139,20 @@ const snowballs = createTownSnowballFight({
     }
     renderer.domElement.dispatchEvent(new CustomEvent('town-snowball', { detail: event }));
   },
+});
+
+const teamFight = createTeamSnowfight({
+  scene,
+  presence,
+  heightAt: (east, north) => grid.heightAt(east, north),
+  announce: message => announceActivity(message),
+  playerPose: () => ({ east: x, north: n }),
+  aimRay: () => {
+    aimSnowball();
+    return { origin: tossOrigin, dir: tossDirection };
+  },
+  snowDepthLevel: () => snowCover.depth().level,
+  canScoop: () => aimsAtNearbySnow(),
 });
 
 function updateSnowballSession(id: number | null) {
@@ -1163,6 +1200,7 @@ presence.onSnowballEvent(event => {
   if (event.throwerId === me) {
     snowballs.confirmPlayerHit();
     showSnowballHit(streak, snowballName(target));
+    if (teamFight.active()) teamFight.popScore(streak > 1 ? `命中 · 连中 ${streak}` : '命中！');
   }
 });
 
@@ -1211,6 +1249,10 @@ function finishSnowAction(source: 'mouse' | 'touch') {
   const fire = moveAllowed() && !aimsAtNearbySnow() && waterAtFeet()?.mode !== 'swim';
   cancelSnowAction(source);
   if (!fire) return;
+  if (teamFight.buildMode() && teamFight.active()) {
+    teamFight.tryPlace();
+    return;
+  }
   if (snowballs.getState().ammo === 0) {
     announceActivity(source === 'touch' ? '对准近处雪地长按收雪' : '对准近处雪地，长按左键收雪');
     return;
@@ -1236,6 +1278,7 @@ function updateHeldSnowAction(dt: number) {
     if (gatherTime >= gatherSeconds) {
       gatherTime -= gatherSeconds;
       snowballs.gather(snowCover.depth().servings);
+      teamFight.onGatherTick();
     }
   } else {
     snowAction = 'aim';
@@ -1294,6 +1337,9 @@ function updateSnowFight(dt: number) {
     remoteSnowballTargets[remoteCount++] = target;
   }
   remoteSnowballTargets.length = remoteCount;
+  snowballExtras.length = 0;
+  snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
+  teamFight.update(dt);
   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
   updateHeldSnowAction(dt);
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;

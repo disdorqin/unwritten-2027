@@ -14,6 +14,13 @@ import {
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
+import {
+  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, buildHalfAllows, classifyWallSite,
+  wallCellCentre,
+} from './snowfight.js';
+import {
+  SNOWFIGHT_PLACE, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear, encodeWallSet,
+} from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import {
   ceremonyLandingAnnouncement, ceremonyLandingLeadMs, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
@@ -64,6 +71,8 @@ type Peer = {
   throws: TokenBucket;
   chat: TokenBucket;
   poseRate: TokenBucket;
+  snowPlace: TokenBucket;
+  nextSnowfightRequest: number;
   pose: number;
   floodAt: number;
   floodCount: number;
@@ -142,6 +151,11 @@ export async function createPresenceServer(options: Options = {}) {
   const ceremonyStartAt = options.ceremonyStartAt ?? townCeremonyMidnight;
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
+  const snowMatch = new SnowfightMatch();
+  const snowWalls = new SnowWallField();
+  const wallHitSeen = new Map<string, number>();
+  let snowStateAt = 0;
+  let snowDecayAt = 0;
   const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
   const bellConfig: BellConfig = { ...defaultBellConfig, ...options.bellConfig };
   let bell: BellState | undefined;
@@ -213,7 +227,8 @@ export async function createPresenceServer(options: Options = {}) {
     const peer: Peer = {
       transport, socket, id, visible: [], version: 0, alive: true, tokens: rateBurst,
       tokenAt: t, outbox: [], outboxBytes: 0, lastPollAt: t,
-      throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
+      throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t },
+      snowPlace: { tokens: 6, at: t }, nextSnowfightRequest: 0, pose: 0,
       floodAt: t, floodCount: 0, pendingThrows: new Map(),
       nextClockSample: 0, nextBellRequest: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
     };
@@ -468,6 +483,13 @@ export async function createPresenceServer(options: Options = {}) {
           (peer.record.east - thrower.record.east) / 100,
           (peer.record.north - thrower.record.north) / 100);
       }
+      const victimPos = peer.record ? { east: peer.record.east / 100, north: peer.record.north / 100 } : undefined;
+      for (const matchEvent of snowMatch.onHit(peer.id, event.throwerId, victimPos)) {
+        if (matchEvent.type === 'streak') {
+          const name = peers.get(matchEvent.playerId)?.name;
+          if (name) announceSnowfight(`${name} 三连中！`);
+        } else if (matchEvent.type === 'capture-reset') broadcastSnowfightState();
+      }
       return;
     }
 
@@ -491,6 +513,127 @@ export async function createPresenceServer(options: Options = {}) {
     peer.pendingThrows.set(event.ballId, { expiresAt: time + throwWindowMs, recipients, confirmed: false });
   }
 
+  function broadcastBinary(data: Uint8Array) {
+    for (const peer of peers.values()) if (peer.name) send(peer, data);
+  }
+
+  function announceSnowfight(message: string) {
+    broadcast(JSON.stringify({ type: 'event', kind: 'announce', message }));
+  }
+
+  function sendSnowfightStateTo(peer: Peer) {
+    send(peer, JSON.stringify({ type: 'snowfight', ...snowMatch.state(now()) }));
+  }
+
+  function broadcastSnowfightState() {
+    snowStateAt = now();
+    for (const peer of peers.values()) if (peer.name) sendSnowfightStateTo(peer);
+  }
+
+  function rejectSnowfight(peer: Peer, reason: string) {
+    send(peer, JSON.stringify({ type: 'snowfight-rejected', reason }));
+  }
+
+  function handleMatchEvents(events: ReturnType<SnowfightMatch['tick']>) {
+    for (const event of events) {
+      if (event.type === 'phase' && event.phase === 'battle') {
+        announceSnowfight('建造结束 · 开打！在光圈里站满 5 秒占领据点');
+        broadcastSnowfightState();
+      } else if (event.type === 'captured') {
+        announceSnowfight(`${SNOWFIGHT_TEAM_NAMES[event.team]}占领${SNOWFIGHT_POINTS[event.index].label}！`);
+        broadcastSnowfightState();
+      } else if (event.type === 'score' || event.type === 'capture-reset') {
+        broadcastSnowfightState();
+      } else if (event.type === 'finished') {
+        const [a, b] = event.scores;
+        announceSnowfight(event.winner === 'draw'
+          ? `团队雪仗结束 · ${a} : ${b} 平局！`
+          : `团队雪仗结束 · ${SNOWFIGHT_TEAM_NAMES[event.winner]}胜 ${a} : ${b}！`);
+        const cleared = snowWalls.clear();
+        for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+        broadcastSnowfightState();
+      }
+    }
+  }
+
+  function updateSnowfight(time: number) {
+    if (snowMatch.phase !== 'build' && snowMatch.phase !== 'battle') return;
+    const positions = new Map<number, { east: number; north: number }>();
+    for (const peer of peers.values()) {
+      if (peer.name && peer.record) positions.set(peer.id, { east: peer.record.east / 100, north: peer.record.north / 100 });
+    }
+    handleMatchEvents(snowMatch.tick(time, positions));
+    if (time - snowDecayAt >= 1000) {
+      snowDecayAt = time;
+      for (const peer of peers.values()) {
+        if (peer.name && peer.record) snowWalls.refreshFor(peer.id, peer.record.east / 100, peer.record.north / 100, time);
+      }
+      const removed = snowWalls.decay(time);
+      for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
+      if (time - snowStateAt >= 1000) broadcastSnowfightState();
+    }
+  }
+
+  function requestSnowfightStart(peer: Peer) {
+    const wallNow = performance.now();
+    if (wallNow < peer.nextSnowfightRequest) return;
+    peer.nextSnowfightRequest = wallNow + 1000;
+    if (snowMatch.phase === 'build' || snowMatch.phase === 'battle') {
+      sendSnowfightStateTo(peer);
+      return;
+    }
+    const cleared = snowWalls.clear();
+    for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+    snowMatch.start([...peers.values()].filter(other => other.name).map(other => other.id), now());
+    announceSnowfight('团队雪仗开始 · 先堆墙备战，三分钟后开打！');
+    broadcastSnowfightState();
+  }
+
+  function receiveSnowfight(peer: Peer, bytes: Uint8Array) {
+    if (!peer.name) { failPeer(peer); return; }
+    const time = now();
+    if (!allowEvent(peer, time)) return;
+    const event = decodeSnowfightClientEvent(bytes);
+    if (!event) return;
+    if (event.kind === 'place') {
+      const team = snowMatch.teamOf(peer.id);
+      if (team === undefined || (snowMatch.phase !== 'build' && snowMatch.phase !== 'battle')) {
+        rejectSnowfight(peer, 'phase');
+        return;
+      }
+      const east = wallCellCentre(event.gx);
+      const north = wallCellCentre(event.gy);
+      if (snowMatch.phase === 'build' && !buildHalfAllows(team, east)) {
+        rejectSnowfight(peer, 'half');
+        return;
+      }
+      const site = classifyWallSite(east, north);
+      if (site) {
+        rejectSnowfight(peer, site);
+        return;
+      }
+      if (!consume(peer.snowPlace, time, 4, 6)) return;
+      const placed = snowWalls.place(event.gx, event.gy, peer.id, team, time);
+      if ('reason' in placed) {
+        rejectSnowfight(peer, placed.reason);
+        return;
+      }
+      broadcastBinary(encodeWallSet(placed.block));
+      return;
+    }
+    const seenKey = `${event.throwerId}:${event.ballId}`;
+    const seenAt = wallHitSeen.get(seenKey);
+    if (seenAt !== undefined && time - seenAt < throwWindowMs) return;
+    wallHitSeen.set(seenKey, time);
+    if (wallHitSeen.size > 512) {
+      for (const [key, at] of wallHitSeen) if (time - at >= throwWindowMs) wallHitSeen.delete(key);
+    }
+    const result = snowWalls.damage(event.gx, event.gy, event.layer, time);
+    if (!result) return;
+    if ('damaged' in result) broadcastBinary(encodeWallSet(result.damaged));
+    else for (const frame of encodeWallClear(result.destroyed)) broadcastBinary(frame);
+  }
+
   function receiveChat(peer: Peer, text: unknown, requestedScope: unknown) {
     if (typeof text !== 'string') return;
     const clean = text.replace(/[\p{Cc}\p{Cf}\p{Cs}]/gu, '').trim();
@@ -512,6 +655,7 @@ export async function createPresenceServer(options: Options = {}) {
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
     if (peer.session) pollSessions.delete(peer.session);
+    snowMatch.removePlayer(peer.id);
     ceremonyWaiting.delete(peer);
     // 持铃人离镇：铃原地掉落、立即拾取，不让对局卡死。
     if (bell?.phase === 'running' && bell.holderId === peer.id) dropHeldBell(peer, 0, 0, 0);
@@ -632,6 +776,10 @@ export async function createPresenceServer(options: Options = {}) {
         if (allowEvent(peer, now())) requestBellTouch(peer);
         return;
       }
+      if (message.kind === 'snowfight-start') {
+        requestSnowfightStart(peer);
+        return;
+      }
       if (message.kind === 'plaza-photo-request') {
         if (allowEvent(peer, now())) requestPhoto(peer);
         return;
@@ -665,7 +813,7 @@ export async function createPresenceServer(options: Options = {}) {
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
@@ -673,6 +821,15 @@ export async function createPresenceServer(options: Options = {}) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
     }
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
+    if (snowMatch.phase === 'build' || snowMatch.phase === 'battle') {
+      snowMatch.addPlayer(peer.id);
+      sendSnowfightStateTo(peer);
+      const blocks = snowWalls.snapshot();
+      for (let i = 0; i < blocks.length; i += 20) {
+        send(peer, Buffer.concat(blocks.slice(i, i + 20).map(block => encodeWallSet(block))));
+      }
+      broadcastSnowfightState();
+    }
     updateFireworks(now());
     updateCeremony(joinedAt);
   }
@@ -764,6 +921,7 @@ export async function createPresenceServer(options: Options = {}) {
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
+        else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT) receiveSnowfight(peer, bytes);
         else receiveSnowball(peer, bytes);
       });
     });

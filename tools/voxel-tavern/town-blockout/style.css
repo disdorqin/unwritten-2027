@@ -256,6 +256,24 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; contain: strict;
   background-position: center; background-size: 100% 100%; background-repeat: no-repeat;
 }
+#snowfight-panel:not([hidden]) {
+  position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: grid; gap: 3px; justify-items: center; z-index: 4; pointer-events: none;
+  padding: 6px 14px; border: 1px solid #6d819d; border-radius: 10px; background: #101a2bd9;
+  color: #d9eeff; font-size: 14px;
+}
+#snowfight-score { font-weight: 700; color: #ffe5a3; }
+#snowfight-capture { width: 160px; height: 8px; accent-color: #f9d893; }
+#snowfight-material { color: #bfe3ff; padding: 0 3px; }
+#snowfight-hit-flash {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 42%, #eaf6ffcc 100%);
+}
+#snowfight-pop {
+  position: fixed; top: calc(50% - 84px); left: 50%; z-index: 4; opacity: 0; pointer-events: none;
+  transform: translate(-50%, 0); color: #ffe5a3; font-weight: 700; font-size: 18px;
+  text-shadow: 0 1px 3px #0b1a28;
+}
 @media (max-height: 480px) and (pointer: coarse) {
   .touch-play #snowball-controls { bottom: max(102px, calc(env(safe-area-inset-bottom) + 90px)); right: max(76px, calc(env(safe-area-inset-right) + 72px)); }
 }
