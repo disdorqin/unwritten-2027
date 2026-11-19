@@ -1,0 +1,1702 @@
+diff --git a/tests/town-blockout-market-entrance.test.ts b/tests/town-blockout-market-entrance.test.ts
+new file mode 100644
+index 0000000..d92f54e
+--- /dev/null
++++ b/tests/town-blockout-market-entrance.test.ts
+@@ -0,0 +1,72 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group, Raycaster, Vector3 } from 'three';
++import {
++  buildDistrictHousing, type DistrictMarketEntrance,
++} from '../tools/voxel-tavern/town-blockout/district-housing.ts';
++import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district-layout.ts';
++import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
++import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
++import { buildPineCamp } from '../tools/voxel-tavern/town-blockout/town-pine-camp.ts';
++import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
++
++test('every original market shell has a bounded walk-through opening at the existing door', t => {
++  const originalDocument = globalThis.document;
++  globalThis.document = {
++    createElement: () => ({
++      getContext: () => ({
++        createRadialGradient: () => ({ addColorStop() {} }),
++        createLinearGradient: () => ({ addColorStop() {} }),
++        fillRect() {}, strokeRect() {}, fillText() {}, drawImage() {},
++      }),
++    }),
++  } as unknown as Document;
++  t.after(() => {
++    if (originalDocument) globalThis.document = originalDocument;
++    else Reflect.deleteProperty(globalThis, 'document');
++  });
++  const grid = createTerrainGrid();
++  const landscape = new Group();
++  const scenery = addScenery(landscape, grid, buildPineCamp(grid).keepClear);
++  const railway = createTownRailway(grid, () => 0);
++  const { housePortals, sites } = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
++  const market = housePortals.flatMap((portal, index) =>
++    portal.zone === 'market' ? [{ portal, site: sites[index] }] : [],
++  );
++  assert.equal(market.length, 17);
++  for (const [index, { portal, site }] of market.entries()) {
++    const closed = buildDistrictHousing(site.style, site.w, site.d, site.variant, 'market', undefined, index);
++    const open = buildDistrictHousing(site.style, site.w, site.d, site.variant, 'market', undefined, index, true);
++    const entrance = open.userData.marketEntrance as DistrictMarketEntrance;
++    assert.equal(closed.userData.marketEntrance, undefined, portal.id);
++    assert.equal(open.userData.houseDoorEast, closed.userData.houseDoorEast, portal.id);
++    const { floorY, ...aperture } = entrance;
++    assert.deepEqual(aperture, { x: open.userData.houseDoorEast, frontZ: site.d / 2, width: 1.3, height: 2.2 }, portal.id);
++    assert.ok(Math.abs(floorY - .4065) < 1e-12, portal.id);
++    const trace = (target: Group, x: number, y: number, until = entrance.frontZ + 1.5) =>
++      new Raycaster(new Vector3(entrance.x + x, entrance.floorY + y, entrance.frontZ + 1.5),
++        new Vector3(0, 0, -1), 0, until).intersectObject(target, true);
++    assert.ok(trace(closed, 0, 1.63).length, portal.id);
++    for (const x of [-.64, 0, .64]) {
++      for (const y of [.01, .44, 1.63, 1.80, 2.19]) {
++        assert.equal(trace(open, x, y).length, 0, portal.id + ' interior ray ' + [x, y]);
++      }
++    }
++    for (const x of [-.67, .67]) assert.ok(trace(open, x, 1.63, 1.8).length, portal.id);
++    assert.ok(trace(open, 0, 2.22, 1.8).length, portal.id + ' lintel');
++
++    const findFloor = (z: number) =>
++      new Raycaster(new Vector3(entrance.x, .5, z), new Vector3(0, -1, 0), 0, .6)
++        .intersectObject(open, true)[0]?.point.y;
++    assert.ok(Math.abs((findFloor(entrance.frontZ - .05) ?? Infinity) - entrance.floorY) < .0001, portal.id);
++    assert.ok(Math.abs((findFloor(0) ?? Infinity) - .36) < .0001, portal.id + ' wood-floor recess');
++    assert.equal(findFloor(entrance.frontZ + .05), undefined, portal.id + ' replacement porch clear');
++  }
++});
++
++test('market entrance opt-in leaves nonmarket housing closed', () => {
++  for (const theme of ['forest', 'lakeside', 'memorial', undefined] as const) {
++    const house = buildDistrictHousing('shop', 9.2, 8.1, 1, theme, undefined, 0, true);
++    assert.equal(house.userData.marketEntrance, undefined, theme);
++  }
++});
+diff --git a/tests/town-blockout-market-home-atlas.test.ts b/tests/town-blockout-market-home-atlas.test.ts
+new file mode 100644
+index 0000000..b55fe7e
+--- /dev/null
++++ b/tests/town-blockout-market-home-atlas.test.ts
+@@ -0,0 +1,49 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  DataTexture, ShaderLib, type BoxGeometry, type InstancedBufferAttribute, type InstancedMesh,
++  type MeshBasicMaterial, type MeshLambertMaterial,
++} from 'three';
++import { buildMarketHomeInterior, marketHomeIds } from '../tools/voxel-tavern/town-blockout/market-home-interior.ts';
++
++test('all rooms use one host atlas with six fixture finishes and two drawing batches', () => {
++  const atlas = new DataTexture(new Uint8Array(108 * 18 * 4), 108, 18);
++  let disposed = false;
++  atlas.addEventListener('dispose', () => { disposed = true; });
++  const seen = new Set<number>();
++  for (const id of marketHomeIds) {
++    const room = buildMarketHomeInterior(id, 9.65, 9.4, undefined, atlas);
++    try {
++      assert.equal(room.group.children.length, 2, id);
++      const [solid, glow] = room.group.children as [InstancedMesh<BoxGeometry, MeshLambertMaterial>,
++        InstancedMesh<BoxGeometry, MeshBasicMaterial>];
++      assert.ok(solid.isInstancedMesh && glow.isInstancedMesh, id);
++      assert.ok(solid.material.isMeshLambertMaterial && glow.material.isMeshBasicMaterial, id);
++      assert.equal(solid.material.map, atlas, id);
++      assert.equal(glow.material.map, null, id);
++      const tiles = solid.geometry.getAttribute('marketHomeTile') as InstancedBufferAttribute;
++      assert.ok(tiles.isInstancedBufferAttribute, id);
++      assert.equal(tiles.count, solid.count, id);
++      for (const tile of tiles.array) seen.add(tile);
++      const shader = {
++        vertexShader: ShaderLib.lambert.vertexShader,
++        fragmentShader: ShaderLib.lambert.fragmentShader,
++      } as Parameters<
++        typeof solid.material.onBeforeCompile
++      >[0];
++      solid.material.onBeforeCompile(shader, {} as Parameters<typeof solid.material.onBeforeCompile>[1]);
++      assert.match(shader.vertexShader, /attribute float marketHomeTile;/);
++      assert.match(shader.vertexShader, /vec2\(normal.x == 0\.0 \? size.x : size.z, normal.y == 0\.0 \? size.y : size.z\)/);
++      assert.match(shader.vertexShader, /marketHomeTile < 3\.0 \? max\(faceSize \/ 2\.0, vec2\(1\.0\)\) : vec2\(1\.0\)/);
++      assert.match(shader.fragmentShader, /mix\(scaled, fract\(scaled\), step\(vec2\(1\.001\), repeat\)\)/);
++      assert.match(shader.fragmentShader, /marketHomeMapUv = tilePixel \/ vec2\(108\.0, 18\.0\)/);
++      assert.match(shader.fragmentShader, /texture2D\( map, marketHomeMapUv \)/);
++    } finally {
++      room.dispose();
++    }
++    assert.equal(disposed, false, id);
++  }
++  assert.deepEqual([...seen].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5]);
++  atlas.dispose();
++  assert.equal(disposed, true);
++});
+diff --git a/tests/town-blockout-market-homes.test.ts b/tests/town-blockout-market-homes.test.ts
+new file mode 100644
+index 0000000..9d6a7b0
+--- /dev/null
++++ b/tests/town-blockout-market-homes.test.ts
+@@ -0,0 +1,78 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group, Matrix4, type InstancedMesh } from 'three';
++import { buildDistrictHousing } from '../tools/voxel-tavern/town-blockout/district-housing.ts';
++import { buildMarketHomeInterior, marketHomeIds } from '../tools/voxel-tavern/town-blockout/market-home-interior.ts';
++import { canStandInMarketHome, marketHomeWalkRoute, sampleMarketHomeWalk } from '../tools/voxel-tavern/town-blockout/market-home-walk.ts';
++
++test('the 17 original market doors have distinct furnished rooms and continuous local return loops', () => {
++  assert.equal(marketHomeIds.length, 17);
++  assert.equal(new Set(marketHomeIds).size, 17);
++  assert.throws(() => buildMarketHomeInterior('district:516:273', 10, 9), /outside the JX-1 roster/);
++  const signatures = new Set<string>();
++  for (const id of marketHomeIds) {
++    const room = buildMarketHomeInterior(id, 9.65, 9.4);
++    try {
++      assert.ok(room.categories.length >= 4, id);
++      const route = marketHomeWalkRoute(room.halfWidth, room.halfDepth);
++      assert.deepEqual(route[0], route.at(-1), id);
++      const sampled = sampleMarketHomeWalk(route, room.colliders, room.halfWidth, room.halfDepth);
++      assert.equal(sampled.blockedAt, undefined, id);
++      assert.ok(sampled.samples > 160, id);
++      signatures.add(JSON.stringify(room.colliders));
++    } finally {
++      room.dispose();
++    }
++  }
++  assert.equal(signatures.size, 17);
++});
++
++test('the rear glazing matches the market shell and keeps the rear boundary closed', () => {
++  function glazing(mesh: InstancedMesh, wallZ: number) {
++    const matrix = new Matrix4();
++    const windows = [];
++    for (let index = 0; index < mesh.count; index++) {
++      mesh.getMatrixAt(index, matrix);
++      const { elements } = matrix;
++      if (Math.abs(elements[14] - wallZ) < 1e-5) {
++        windows.push([elements[12], elements[13], elements[0], elements[5]]);
++      }
++    }
++    return windows.sort(([left], [right]) => left - right);
++  }
++
++  // Narrowest and widest surveyed JX-1 shells.
++  for (const [width, depth] of [[9.2, 8.1], [15.5, 11.85]]) {
++    const shell = buildDistrictHousing('shop', width, depth, 137, 'market');
++    const room = buildMarketHomeInterior(marketHomeIds[0], width, depth);
++    try {
++      const outside = glazing(shell.children[1] as InstancedMesh, -depth / 2 - .17);
++      const inside = glazing(room.group.children[1] as InstancedMesh, -room.halfDepth);
++      assert.equal(outside.length, 2);
++      assert.deepEqual(inside, outside);
++      for (const [x] of inside) {
++        assert.equal(canStandInMarketHome(x, -room.halfDepth + .28, room.colliders,
++          room.halfWidth, room.halfDepth), false);
++      }
++    } finally {
++      room.dispose();
++    }
++  }
++});
++
++test('a selected market room releases its geometry and leaves other scenes mounted', () => {
++  const parent = new Group();
++  const other = new Group();
++  const room = buildMarketHomeInterior(marketHomeIds[0], 10, 9.8);
++  parent.add(other, room.group);
++  const batch = room.group.children.find((child): child is InstancedMesh =>
++    'isInstancedMesh' in child && child.isInstancedMesh === true);
++  assert.ok(batch);
++  let released = 0;
++  batch.geometry.addEventListener('dispose', () => released++);
++  room.dispose();
++  room.dispose();
++  assert.deepEqual(parent.children, [other]);
++  assert.equal(room.group.children.length, 0);
++  assert.equal(released, 1);
++});
+diff --git a/tools/voxel-tavern/town-blockout/district-housing.ts b/tools/voxel-tavern/town-blockout/district-housing.ts
+index cc92239..fc40f47 100644
+--- a/tools/voxel-tavern/town-blockout/district-housing.ts
++++ b/tools/voxel-tavern/town-blockout/district-housing.ts
+@@ -4,6 +4,13 @@ import { housePortalPlaque } from './town-house-portals';
+ export type HousingStyle = 'alpine' | 'courtyard' | 'machiya' | 'shop';
+ export type DistrictTheme = 'forest' | 'memorial' | 'market' | 'lakeside';
+ export type CentralResidentialCard = 6 | 8 | 9 | 11 | 12 | 13 | 15 | 19 | 20;
++export type DistrictMarketEntrance = Readonly<{
++  x: number;
++  frontZ: number;
++  width: number;
++  height: number;
++  floorY: number;
++}>;
+
+ const districtHousingCards = {
+   forest: [
+@@ -76,10 +83,12 @@ const blockMaterial = new MeshLambertMaterial();
+ const glowMaterial = new MeshLambertMaterial({ emissive: '#ec9344', emissiveIntensity: .38 });
+ const snow = '#e1ecf8';
+ const shadedSnow = '#cfdfed';
++const plinthSnowCenterY = .378;
++const plinthSnowHeight = .057;
+
+ export function buildDistrictHousing(
+   style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme,
+-  centralCard?: CentralResidentialCard, cardVariant = variant,
++  centralCard?: CentralResidentialCard, cardVariant = variant, marketEntrance = false,
+ ): Group {
+   const group = new Group();
+   const pieces: Block[] = [];
+@@ -95,6 +104,10 @@ export function buildDistrictHousing(
+   const d = depth;
+   const front = d / 2;
+   const back = -front;
++  const themedDoorX = 0;
++  const opening: DistrictMarketEntrance | undefined = marketEntrance && theme === 'market'
++    ? { x: themedDoorX, frontZ: front, width: 1.30, height: 2.20, floorY: plinthSnowCenterY + plinthSnowHeight / 2 }
++    : undefined;
+   const glassPalette = theme === 'lakeside' ? ['#b9dbec', '#d1e6ed', '#a7cfe4']
+     : theme === 'memorial' ? ['#e0e3d5', '#d1e2ea', '#c6d1da'] : ['#ffc181', '#ffd3a1', '#ffbc76'];
+   const glow = glassPalette[Math.abs(Math.trunc(variant)) % 3];
+@@ -117,6 +130,29 @@ export function buildDistrictHousing(
+     else wallShell(x, y, z, span, height, run);
+   }
+
++  function besideOpening(
++    color: string, y: number, z: number, height: number, thickness: number, entrance: DistrictMarketEntrance, span = w,
++  ) {
++    const left = entrance.x - entrance.width / 2;
++    const right = entrance.x + entrance.width / 2;
++    add(color, (left - span / 2) / 2, y, z, left + span / 2, height, thickness);
++    add(color, (right + span / 2) / 2, y, z, span / 2 - right, height, thickness);
++  }
++
++  function marketWallShell(eave: number, entrance: DistrictMarketEntrance) {
++    const base = .38;
++    const thickness = .22;
++    const height = eave - base;
++    const y = base + height / 2;
++    add(wall, 0, y, back + thickness / 2, w, height, thickness);
++    for (const side of [-1, 1]) {
++      add(wall, side * (w - thickness) / 2, y, 0, thickness, height, d - 2 * thickness);
++    }
++    besideOpening(wall, y, front - thickness / 2, height, thickness, entrance);
++    const lintel = entrance.floorY + entrance.height;
++    add(wall, entrance.x, (eave + lintel) / 2, front - thickness / 2, entrance.width, eave - lintel, thickness);
++  }
++
+   // Window depth is measured outward from its wall, so all four elevations use the same trim.
+   function windowAt(
+     x: number, y: number, z: number, size: number, tall: number, facing: 0 | 1 | 2 | 3, lattice = 2,
+@@ -158,11 +194,22 @@ export function buildDistrictHousing(
+     const boardDoor = centralCard === 20;
+     const plaqueScale = boardDoor ? 1.24 : 1;
+     const plaqueAnchor = housePortalPlaque[0];
++    const plaqueY = opening ? opening.floorY + opening.height + .25 : y + 1.05;
+     for (const mark of housePortalPlaque) {
+       add(mark.color, x + mark.x + (mark.x - plaqueAnchor.x) * (plaqueScale - 1),
+-        y + 1.05 + mark.y + (mark.y - plaqueAnchor.y) * (plaqueScale - 1), z + .385 + mark.z,
++        plaqueY + mark.y + (mark.y - plaqueAnchor.y) * (plaqueScale - 1), z + .385 + mark.z,
+         mark.w * plaqueScale, mark.h * plaqueScale, mark.d);
+     }
++    if (opening) {
++      group.userData.marketEntrance = opening;
++      const jamb = (size + .35 - opening.width) / 2;
++      for (const side of [-1, 1]) {
++        add(beam, x + side * (opening.width + jamb) / 2, opening.floorY + opening.height / 2,
++          z + .09, jamb, opening.height, .23);
++      }
++      add(trim, x, opening.floorY + opening.height + .075, z + .19, size + .48, .15, .26);
++      return;
++    }
+     add(beam, x, y + 1.18, z + .09, size + .35, 2.36, .23);
+     if (boardDoor) {
+       for (const side of [-1, 1]) {
+@@ -196,8 +243,27 @@ export function buildDistrictHousing(
+   }
+
+   function plinth(x: number, z: number, a: number, b: number) {
+-    add(masonry, x, .18, z, a + .26, .36, b + .24);
+-    add(shadedSnow, x, .378, z, a + .32, .057, b + .3);
++    if (!opening) {
++      add(masonry, x, .18, z, a + .26, .36, b + .24);
++      add(shadedSnow, x, plinthSnowCenterY, z, a + .32, plinthSnowHeight, b + .3);
++      return;
++    }
++    add(masonry, x, .18, z - .06, a + .26, .36, b + .12);
++    besideOpening(masonry, .18, front + .06, .36, .12, opening, a + .26);
++
++    // Leave the room's wood floor flush with the snow threshold.
++    const roomHalfWidth = Math.max(3.6, Math.min(5.3, a / 2 - .23));
++    const roomHalfDepth = Math.max(3.6, Math.min(5.3, b / 2 - .23));
++    const capHalfWidth = a / 2 + .16;
++    const capBack = back - .15;
++    const cap = (centerX: number, centerZ: number, span: number, run: number) =>
++      add(shadedSnow, centerX, plinthSnowCenterY, centerZ, span, plinthSnowHeight, run);
++    cap(0, (capBack - roomHalfDepth) / 2, capHalfWidth * 2, -roomHalfDepth - capBack);
++    cap(0, (front + roomHalfDepth) / 2, capHalfWidth * 2, front - roomHalfDepth);
++    for (const side of [-1, 1]) {
++      cap(side * (capHalfWidth + roomHalfWidth) / 2, 0, capHalfWidth - roomHalfWidth, roomHalfDepth * 2);
++    }
++    besideOpening(shadedSnow, plinthSnowCenterY, front + .075, plinthSnowHeight, .15, opening, capHalfWidth * 2);
+   }
+
+   function stoop(x: number, z: number, size: number) {
+@@ -378,9 +444,10 @@ export function buildDistrictHousing(
+       : district === 'memorial' ? 4.62 + split * .68 : 5.5 + split * .4;
+     const entry = Math.min(1.65, w * .22);
+     plinth(0, 0, w, d);
+-    add(wall, 0, (eave + .38) / 2, 0, w, eave - .38, d);
+-    door(0, front, entry);
+-    stoop(0, front, entry + .16);
++    if (opening) marketWallShell(eave, opening);
++    else add(wall, 0, (eave + .38) / 2, 0, w, eave - .38, d);
++    door(themedDoorX, front, entry);
++    if (!opening) stoop(themedDoorX, front, entry + .16);
+
+     for (const facing of [1, 3] as const) {
+       const x = (facing === 1 ? 1 : -1) * w / 2;
+@@ -458,7 +525,12 @@ export function buildDistrictHousing(
+     } else if (district === 'market') {
+       // Three brick arches read at street distance, with front joints tying them into the brickwork.
+       for (let y = .55; y < eave - .16; y += .34) {
+-        for (const sign of [-1, 1]) add(beam, 0, y, sign * (front + .023), w, .032, .056);
++        add(beam, 0, y, -(front + .023), w, .032, .056);
++        if (opening && y - .016 < opening.floorY + opening.height) {
++          besideOpening(beam, y, front + .023, .032, .056, opening);
++        } else {
++          add(beam, 0, y, front + .023, w, .032, .056);
++        }
+       }
+       for (const x of [-w * .31, 0, w * .31]) {
+         const radius = x === 0 ? entry / 2 + .29 : Math.min(w * .104, 1.35);
+diff --git a/tools/voxel-tavern/town-blockout/district-layout.ts b/tools/voxel-tavern/town-blockout/district-layout.ts
+index 29dd3ca..5dc18a4 100644
+--- a/tools/voxel-tavern/town-blockout/district-layout.ts
++++ b/tools/voxel-tavern/town-blockout/district-layout.ts
+@@ -3,8 +3,14 @@ import {
+   MeshLambertMaterial, Object3D,
+ } from 'three';
+ import {
+-  buildDistrictHousing, districtHousingCard, type CentralResidentialCard, type DistrictTheme,
++  buildDistrictHousing, districtHousingCard, districtWindowPanes, type CentralResidentialCard, type DistrictMarketEntrance,
++  type DistrictTheme,
+ } from './district-housing';
++import type { Box, Ramp } from './landmark-kit';
++import { createMarketHomeAtlas } from './market-home-atlas';
++import { buildMarketHomeInterior, marketHomeIds } from './market-home-interior';
++import { buildMarketHomePorch, planMarketHomePorch, type MarketHomePorch } from './market-home-porch';
++import { auditMarketHomeEntrance, createMarketHomeWorldGeometry } from './market-home-world-geometry';
+ import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
+ import { bridgeMouthKeepClear } from './road-clearance';
+ import type { TownHousePortal } from './town-house-portals';
+@@ -24,7 +30,35 @@ type HousingRejection = {
+ type KeepClear = (x: number, n: number, radius: number) => boolean;
+ type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
+ type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
++type MarketHomeCandidate = {
++  site: Site;
++  portal: TownHousePortal;
++  level: number;
++  minTerrainY: number;
++  maxTerrainY: number;
++  cardVariant: number;
++};
++export type DistrictMarketHome = {
++  id: string;
++  site: Site;
++  portal: TownHousePortal;
++  entrance: DistrictMarketEntrance;
++  group: Group;
++  colliders: Box[];
++  floors: Box[];
++  ramps: Ramp[];
++  approach: { east: number; north: number; ground: number };
++  porch: MarketHomePorch;
++  furnishingWitness: NonNullable<ReturnType<typeof createMarketHomeWorldGeometry>['furnishingWitness']>;
++  foundationY: number;
++  minTerrainY: number;
++  maxTerrainY: number;
++  audit: Extract<ReturnType<typeof auditMarketHomeEntrance>, { ok: true }>;
++};
+ const housingCellSize = 96;
++const marketHomeRoster: ReadonlySet<string> = new Set(marketHomeIds);
++const playerRadius = .27;
++const shellWall = .22;
+ const theaterHouseRelocations = new Map<string, readonly [number, number]>([
+   ['158:184', [160, 130]],
+   ['179:155', [146.5, 129.5]],
+@@ -85,6 +119,45 @@ const waterfront = [{ x: 355, n: 120, w: 16, d: 19 }];
+ const within = (x: number, n: number, { x: cx, n: cn, w, d }: Pick<Site, 'x' | 'n' | 'w' | 'd'>, margin: number) =>
+   Math.abs(x - cx) < w / 2 + margin && Math.abs(n - cn) < d / 2 + margin;
+
++function marketShellGeometry(site: Site, entrance: DistrictMarketEntrance) {
++  const side = site.w / 2;
++  const front = entrance.frontZ;
++  const top = 5.5 + Math.abs(site.variant % 3) * .4;
++  const leftJamb = entrance.x - entrance.width / 2;
++  const rightJamb = entrance.x + entrance.width / 2;
++  const slab: Box = { min: [-side, .36, -front], max: [side, entrance.floorY, front] };
++  return {
++    colliders: [
++      { min: [-side, 0, -front], max: [-side + shellWall, top, front] },
++      { min: [side - shellWall, 0, -front], max: [side, top, front] },
++      { min: [-side, 0, -front], max: [side, top, -front + shellWall] },
++      { min: [-side, 0, front - shellWall], max: [leftJamb, top, front] },
++      { min: [rightJamb, 0, front - shellWall], max: [side, top, front] },
++      { min: [leftJamb, entrance.floorY + entrance.height, front - shellWall], max: [rightJamb, top, front] },
++      { min: [-side - .305, top - .03, -front - .295], max: [side + .305, top + .25, front + .295] },
++    ],
++    floors: [slab],
++  };
++}
++
++function overlapsOriginalDoor(portal: TownHousePortal, { min, max }: Box) {
++  const dx = Math.max(min[0] - portal.x, portal.x - max[0], 0);
++  const dz = Math.max(min[2] + portal.n, -portal.n - max[2], 0);
++  return dx * dx + dz * dz < playerRadius * playerRadius;
++}
++
++function marketPassageAllows(home: DistrictMarketHome, east: number, north: number) {
++  const { site, entrance } = home;
++  const de = east - site.x, dn = north - site.n;
++  const sin = Math.sin(site.angle), cos = Math.cos(site.angle);
++  const localX = de * cos + dn * sin;
++  const localZ = de * sin - dn * cos;
++  if (localZ >= entrance.frontZ - shellWall / 2) {
++    return Math.abs(localX - entrance.x) < entrance.width / 2 - playerRadius;
++  }
++  return Math.abs(localX) < site.w / 2 - shellWall / 2 && localZ > -site.d / 2 + shellWall / 2;
++}
++
+ const neighborhoods: { theme?: DistrictTheme; styles: Style[]; points: number[][] }[] = [
+   { theme: 'forest', styles: ['alpine', 'alpine', 'courtyard'], points: [[110,277],[133,266],[149,281],[172,282],[191,282],[216,280],[128,247],[131,218],[117,202],[101,184],[105,152],[96,239],[70,229],[63,194],[85,287],[111,307],[147,320],[172,323],[191,325]] },
+   { theme: 'memorial', styles: ['courtyard', 'machiya', 'courtyard'], points: [[318,267],[312,243],[338,232],[358,228],[364,207],[375,242],[391,234],[410,219],[414,190],[406,165],[333,317],[353,321],[398,297],[393,272],[380,282],[310,318],[373,335]] },
+@@ -97,6 +170,7 @@ export function addDistrictHousing(
+   parent: Group, grid: Ground, lampBlocked: (x: number, n: number) => boolean,
+   railwayKeepClear: KeepClear = () => false,
+   plazaBounds: readonly number[] = layout.plaza.bounds,
++  approvedMarketDoorIds: ReadonlySet<string> = new Set(),
+ ) {
+   const [west, south, east, north] = plazaBounds;
+   const relocations = phaseThreeBounds.every((edge, i) => edge === plazaBounds[i])
+@@ -105,6 +179,10 @@ export function addDistrictHousing(
+   const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
+   const movedSites = new Set<Site>();
+   const housePortals: TownHousePortal[] = [];
++  const marketHomes = new Map<string, DistrictMarketHome>();
++  const marketHomesBySite = new Map<Site, DistrictMarketHome>();
++  const marketInteriors: ReturnType<typeof buildMarketHomeInterior>[] = [];
++  const models: { model: Group; cell: HousingCell; candidate?: MarketHomeCandidate }[] = [];
+   const rejectedHomes: HousingRejection[] = [];
+   const housingCards = new Map<string, ReturnType<typeof districtHousingCard>>();
+   const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
+@@ -201,6 +279,77 @@ export function addDistrictHousing(
+     return false;
+   }
+
++  function addFoundation(model: Group, site: Site, level: number, minTerrainY: number) {
++    const { w, d } = site;
++    const base = minTerrainY - .28;
++    const plinth = new Mesh(foundation, stone);
++    plinth.scale.set(w + .17, level - base, d + .17);
++    plinth.position.y = (base - level) / 2;
++    model.add(plinth);
++    const cap = new Mesh(foundation, courtyardSnow);
++    cap.scale.set(w + .35, .14, d + .35);
++    cap.position.y = -.09;
++    model.add(cap);
++  }
++
++  function activateMarketHome(candidate: MarketHomeCandidate) {
++    const { site, portal, level, minTerrainY, maxTerrainY, cardVariant } = candidate;
++    const { x, n, angle, style, w, d, variant } = site;
++    const shell = buildDistrictHousing(style, w, d, variant, 'market', undefined, cardVariant, true);
++    const entrance = shell.userData.marketEntrance as DistrictMarketEntrance | undefined;
++    if (!entrance) return;
++    const porch = planMarketHomePorch({
++      east: x, north: n, angle, foundationY: level, entrance,
++      heightAt: grid.heightAt,
++      blocked(east, north, radius) {
++        return !openSpace(east, north, radius) || lampBlocked(east, north) || railwayKeepClear(east, north, radius) ||
++          paths.some(path => lineDistance(east, north, path.start, path.end) < path.radius + radius) ||
++          sites.some(other => other !== site && within(east, north, footprints(other), radius));
++      },
++    });
++    if (!porch) return;
++    const windowFinish = {
++      tint: ['#ffc181', '#ffd3a1', '#ffbc76'][Math.abs(variant % 3)],
++      panes: districtWindowPanes[districtHousingCard('market', cardVariant).window],
++    };
++    const interior = buildMarketHomeInterior(portal.id, w, d, windowFinish);
++    const world = createMarketHomeWorldGeometry(interior, { x, n, level, angle }, {
++      shell: marketShellGeometry(site, entrance), interiorPlacement: { y: entrance.floorY },
++    });
++    const dx = Math.sin(angle), dn = -Math.cos(angle);
++    const outsideZ = (porch.approach.east - x) * dx + (porch.approach.north - n) * dn;
++    const audit = auditMarketHomeEntrance(world, {
++      doorX: entrance.x, outsideZ, insideZ: world.interiorFrontZ - .45, surfaceAt: grid.heightAt, porch,
++    });
++    const colliders = [...world.colliders, ...porch.colliders];
++    const floors = [...world.floors, ...porch.floors];
++    const ramps = [...world.ramps, ...porch.ramps];
++    // The historic B13 anchor must still have its original terrain support at the same point.
++    const obstructsPortal = colliders.some(box => overlapsOriginalDoor(portal, box) &&
++      box.max[1] > portal.ground + .025 && box.min[1] < portal.ground + 1.8 - .025);
++    const raisesPortal = [...floors, ...ramps].some(box => overlapsOriginalDoor(portal, box) && box.max[1] > portal.ground + 1e-6);
++    if (!audit.ok || !world.furnishingWitness || obstructsPortal || raisesPortal) {
++      interior.dispose();
++      return;
++    }
++    shell.position.set(x, level, -n);
++    shell.rotation.y = angle;
++    addFoundation(shell, site, level, minTerrainY);
++    const group = new Group();
++    group.name = `${portal.id} market home`;
++    group.add(world.group, buildMarketHomePorch(porch));
++    const home: DistrictMarketHome = {
++      id: portal.id, site, portal, entrance, group, colliders, floors, ramps, approach: porch.approach, porch,
++      furnishingWitness: world.furnishingWitness,
++      foundationY: level, minTerrainY, maxTerrainY, audit,
++    };
++    marketHomes.set(portal.id, home);
++    marketHomesBySite.set(site, home);
++    marketInteriors.push(interior);
++    detailed.add(group);
++    return shell;
++  }
++
+   for (const { theme, styles, points } of neighborhoods) {
+     let housingCardIndex = 0;
+     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
+@@ -258,22 +407,14 @@ export function addDistrictHousing(
+         continue;
+       }
+       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
+-      const base = Math.min(...heights) - .28;
++      const minTerrainY = Math.min(...heights);
++      const maxTerrainY = Math.max(...heights);
+       const centralCard = theme === undefined ? plazaResidentialCards.get(address) : undefined;
+       const cardVariant = housingCardIndex++;
+       const model = buildDistrictHousing(style, w, d, site.variant, theme, centralCard, cardVariant);
+       model.position.set(x, level, -n);
+       model.rotation.y = angle;
+-      const plinth = new Mesh(foundation, stone);
+-      plinth.scale.set(w + .17, level - base, d + .17);
+-      plinth.position.y = (base - level) / 2;
+-      model.add(plinth);
+-      const cap = new Mesh(foundation, courtyardSnow);
+-      cap.scale.set(w + .35, .14, d + .35);
+-      cap.position.y = -.09;
+-      model.add(cap);
+       const cell = cellAt(x, n);
+-      addModel(model, cell);
+       sites.push(site);
+       zoneCounts[theme ?? 'central']++;
+       if (relocation) movedSites.add(site);
+@@ -284,8 +425,14 @@ export function addDistrictHousing(
+       const doorX = x + dx * stand - dn * side;
+       const doorN = n + dn * stand + dx * side;
+       if (theme) housingCards.set(id, districtHousingCard(theme, cardVariant));
+-      housePortals.push({ id, zone: theme ?? 'central', x: doorX, n: doorN,
+-        ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
++      const portal = { id, zone: theme ?? 'central', x: doorX, n: doorN,
++        ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) } as const;
++      housePortals.push(portal);
++      const candidate = theme === 'market' && marketHomeRoster.has(id) && approvedMarketDoorIds.has(id)
++        ? { site, portal, level, minTerrainY, maxTerrainY, cardVariant }
++        : undefined;
++      addFoundation(model, site, level, minTerrainY);
++      models.push({ model, cell, candidate });
+       const start = d / 2 + .55;
+       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
+       let sweptEnd = start;
+@@ -324,6 +471,14 @@ export function addDistrictHousing(
+     }
+   }
+
++  for (const { model, cell, candidate } of models) {
++    addModel((candidate && activateMarketHome(candidate)) ?? model, cell);
++  }
++  if (marketInteriors.length && typeof document !== 'undefined') {
++    void createMarketHomeAtlas().then(atlas => {
++      for (const interior of marketInteriors) interior.applyAtlas(atlas);
++    }).catch(error => console.warn('Could not load the market home material atlas.', error));
++  }
+   for (const [key, cell] of cells) renderBatches(detailed, cell, 'Old town housing ' + key);
+   function setPanorama(wide: boolean) {
+     detailed.visible = !wide;
+@@ -358,5 +513,10 @@ export function addDistrictHousing(
+     });
+   }
+   return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, housingCards, keepClear, setPanorama, sweptAt,
+-    blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
++    marketHomes,
++    blocked: (x: number, n: number) => completed.some((footprint, i) => {
++      if (!within(x, n, footprint, playerRadius)) return false;
++      const home = marketHomesBySite.get(sites[i]);
++      return !home || !marketPassageAllows(home, x, n);
++    }) };
+ }
+diff --git a/tools/voxel-tavern/town-blockout/market-home-atlas.ts b/tools/voxel-tavern/town-blockout/market-home-atlas.ts
+new file mode 100644
+index 0000000..2cc3683
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-atlas.ts
+@@ -0,0 +1,70 @@
++import {
++  CanvasTexture, InstancedBufferAttribute, NearestFilter, ShaderChunk, SRGBColorSpace,
++  type BoxGeometry, type MeshLambertMaterial, type Texture,
++} from 'three';
++import { makeVoxelTexture } from '../textures';
++
++const surfaceFinishes = ['plaster', 'plank', 'wood'] as const;
++const finishes = [...surfaceFinishes, 'cloth', 'ceramic', 'book'] as const;
++export type MarketHomeFinish = typeof finishes[number];
++const tileSize = 16;
++const gutter = 1;
++const stride = tileSize + 2 * gutter;
++const atlasWidth = finishes.length * stride;
++
++export async function createMarketHomeAtlas() {
++  const images = await Promise.all(finishes.map(finish => makeVoxelTexture(finish, '#dedede')));
++  const canvas = document.createElement('canvas');
++  canvas.width = atlasWidth;
++  canvas.height = stride;
++  const ink = canvas.getContext('2d');
++  if (!ink) throw new Error('Could not create the market home material atlas.');
++  ink.imageSmoothingEnabled = false;
++  for (const [index, image] of images.entries()) {
++    ink.drawImage(image, index * stride + gutter, gutter);
++  }
++  const atlas = new CanvasTexture(canvas);
++  atlas.colorSpace = SRGBColorSpace;
++  atlas.magFilter = atlas.minFilter = NearestFilter;
++  atlas.generateMipmaps = false;
++  return atlas;
++}
++
++/** The host owns the atlas. A room only owns its instance attribute and material. */
++export function setMarketHomeAtlas(
++  geometry: BoxGeometry,
++  material: MeshLambertMaterial,
++  pieceFinishes: readonly MarketHomeFinish[],
++  atlas: Texture,
++) {
++  geometry.setAttribute('marketHomeTile', new InstancedBufferAttribute(
++    Float32Array.from(pieceFinishes, finish => finishes.indexOf(finish)),
++    1,
++  ));
++  material.map = atlas;
++  material.onBeforeCompile = shader => {
++    const varying = 'varying vec3 vMarketHomeTileAndRepeat;\n';
++    // BoxGeometry aligns U with Z on X faces and V with Z on Y faces.
++    shader.vertexShader = 'attribute float marketHomeTile;\n' + varying + shader.vertexShader.replace(
++      '#include <uv_vertex>', `#include <uv_vertex>
++#ifdef USE_MAP
++  vec3 size = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
++  vec2 faceSize = vec2(normal.x == 0.0 ? size.x : size.z, normal.y == 0.0 ? size.y : size.z);
++  vec2 repeat = marketHomeTile < ${surfaceFinishes.length.toFixed(1)} ? max(faceSize / 2.0, vec2(1.0)) : vec2(1.0);
++  vMarketHomeTileAndRepeat = vec3(marketHomeTile, repeat);
++#endif`,
++    );
++    shader.fragmentShader = varying + shader.fragmentShader.replace(
++      '#include <map_fragment>', `#ifdef USE_MAP
++  vec2 repeat = vMarketHomeTileAndRepeat.yz;
++  vec2 scaled = clamp(vMapUv, 0.0, 1.0) * repeat;
++  vec2 tileUV = mix(scaled, fract(scaled), step(vec2(1.001), repeat));
++  vec2 tilePixel = vec2(vMarketHomeTileAndRepeat.x * ${stride.toFixed(1)}, 0.0)
++    + vec2(${(gutter + .5).toFixed(1)}) + tileUV * ${(tileSize - 1).toFixed(1)};
++  vec2 marketHomeMapUv = tilePixel / vec2(${atlasWidth.toFixed(1)}, ${stride.toFixed(1)});
++#endif
++${ShaderChunk.map_fragment.replace('vMapUv', 'marketHomeMapUv')}`,
++    );
++  };
++  material.customProgramCacheKey = () => 'market-home-material-atlas-surface-repeat';
++}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-furnishings.ts b/tools/voxel-tavern/town-blockout/market-home-furnishings.ts
+new file mode 100644
+index 0000000..22fc568
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-furnishings.ts
+@@ -0,0 +1,177 @@
++import type { Box } from './landmark-kit';
++import type { MarketHomeFinish } from './market-home-atlas';
++
++export type MarketHomeTheme = 'tea-table' | 'pantry' | 'linen' | 'ceramics' | 'woodwork' | 'books';
++
++export type MarketHomeFurnishingProfile = {
++  theme: MarketHomeTheme;
++  arrangement: number;
++  halfWidth: number;
++  halfDepth: number;
++  accent: string;
++};
++
++export type MarketHomePiece = {
++  x: number;
++  y: number;
++  z: number;
++  width: number;
++  height: number;
++  depth: number;
++  color: string;
++  finish?: MarketHomeFinish;
++};
++
++export type MarketHomeDetail = 'furniture' | 'utensils' | 'light' | 'textiles' | 'storage' | 'planter';
++
++const wood = '#704b39';
++const edge = '#b07b51';
++const dark = '#3d2f2d';
++const brass = '#d0a06a';
++const linen = '#ead5ae';
++const ember = '#ffc58a';
++
++type Desk = { height: number; depth: number; open: boolean };
++const desks = {
++  'tea-table': { height: .73, depth: 1.68, open: true },
++  pantry: { height: .92, depth: 1.94, open: false },
++  linen: { height: .81, depth: 2.10, open: true },
++  ceramics: { height: .87, depth: 1.80, open: false },
++  woodwork: { height: .94, depth: 2.18, open: true },
++  books: { height: .79, depth: 1.56, open: false },
++} satisfies Record<MarketHomeTheme, Desk>;
++
++/** Describes the fixtures in local room coordinates: floor y=0 and entrance at positive z. */
++export function buildMarketHomeFurnishings({ theme, arrangement, halfWidth, halfDepth, accent }: MarketHomeFurnishingProfile) {
++  const desk = desks[theme];
++  if (!desk || !Number.isInteger(arrangement) || arrangement < 0 || arrangement > 16 ||
++      !Number.isFinite(halfWidth) || !Number.isFinite(halfDepth) || halfWidth < 3.6 || halfDepth < 3.6) {
++    throw new RangeError('Market home furnishings need a registered theme, arrangement and room footprint.');
++  }
++
++  const solid: MarketHomePiece[] = [];
++  const glow: MarketHomePiece[] = [];
++  const colliders: Box[] = [];
++  const categories: MarketHomeDetail[] = ['furniture', 'utensils', 'light', 'textiles', 'storage', 'planter'];
++  function put(
++    x: number, y: number, z: number, width: number, height: number, depth: number,
++    color: string, finish: MarketHomeFinish = 'wood', lit = false,
++  ) {
++    (lit ? glow : solid).push({ x, y, z, width, height, depth, color, finish });
++  }
++  function block(x: number, z: number, width: number, height: number, depth: number) {
++    colliders.push({ min: [x - width / 2, 0, z - depth / 2], max: [x + width / 2, height, z + depth / 2] });
++  }
++
++  const side = arrangement % 2 ? 1 : -1;
++  const lane = Math.floor(arrangement / 2) % 3;
++  const deskX = side * (halfWidth - .79);
++  const deskZ = [-.42, -.10, .22][lane] * halfDepth;
++  const deskWidth = 1.02;
++  const deskDepth = desk.depth + (Math.floor(arrangement / 6) - 1) * .17;
++  const deskTop = desk.height;
++
++  put(deskX, deskTop - .10, deskZ, deskWidth, .10, deskDepth, edge);
++  if (desk.open) {
++    for (const dx of [-.37, .37]) {
++      for (const dz of [-deskDepth / 2 + .13, deskDepth / 2 - .13]) {
++        put(deskX + dx, 0, deskZ + dz, .13, deskTop - .10, .14, wood);
++      }
++    }
++    put(deskX + side * .24, .38, deskZ, .13, .12, deskDepth - .23, dark);
++  } else {
++    put(deskX, 0, deskZ, .88, deskTop - .10, deskDepth - .12, wood);
++    for (const dz of [-deskDepth / 4, deskDepth / 4]) {
++      put(deskX - side * .448, .19, deskZ + dz, .023, deskTop - .33, deskDepth / 2 - .13, dark);
++      put(deskX - side * .471, deskTop - .31, deskZ + dz, .039, .06, .16, brass);
++    }
++  }
++  block(deskX, deskZ, deskWidth, deskTop, deskDepth);
++
++  function jar(x: number, y: number, z: number, width: number, height: number, glaze: string) {
++    put(x, y, z, width * .77, height, width, glaze, 'ceramic');
++    put(x, y + height * .15, z, width, height * .64, width * .76, glaze, 'ceramic');
++    put(x, y + height, z, width * .58, .055, width * .58, edge, 'ceramic');
++  }
++  const propX = deskX + side * .10;
++  if (theme === 'tea-table') {
++    put(propX, deskTop, deskZ, .57, .042, .77, dark);
++    jar(propX + side * .07, deskTop + .042, deskZ - .18, .29, .21, '#a45f4c');
++    for (const dz of [.06, .24]) jar(propX - side * .12, deskTop + .042, deskZ + dz, .13, .13, linen);
++  } else if (theme === 'pantry') {
++    for (const [dz, height] of [[-.50, .31], [0, .22], [.44, .36]]) {
++      put(propX, deskTop, deskZ + dz, .52, height, .34, wood);
++      put(propX - side * .27, deskTop + height - .07, deskZ + dz, .035, .047, .21, brass);
++    }
++  } else if (theme === 'linen') {
++    for (const [dz, y, color] of [[-.36, 0, linen], [-.29, .09, accent], [.23, 0, '#987068']] as const) {
++      put(propX, deskTop + y, deskZ + dz, .56, .085, .39, color, 'cloth');
++      put(propX - side * .21, deskTop + y + .085, deskZ + dz, .085, .017, .37, dark, 'cloth');
++    }
++  } else if (theme === 'ceramics') {
++    jar(propX + side * .08, deskTop, deskZ - .39, .31, .35, '#7a9093');
++    jar(propX - side * .14, deskTop, deskZ + .03, .26, .25, linen);
++    jar(propX + side * .02, deskTop, deskZ + .39, .34, .29, accent);
++  } else if (theme === 'woodwork') {
++    for (const [dx, y, depth] of [[-.15, 0, .87], [.11, 0, .70], [0, .09, .55]]) {
++      put(propX + dx, deskTop + y, deskZ - .29, .16, .081, depth, edge);
++    }
++    put(propX - side * .17, deskTop, deskZ + .53, .20, .09, .43, dark);
++    put(propX + side * .01, deskTop + .09, deskZ + .53, .30, .07, .10, brass);
++  } else {
++    for (let i = 0; i < 4; i++) {
++      put(propX + side * .12, deskTop, deskZ - .42 + i * .092, .28, .24 + i % 3 * .058, .077,
++        [accent, '#52616c', '#8d704f'][i % 3], 'book');
++    }
++    put(propX - side * .17, deskTop, deskZ + .30, .43, .048, .34, linen, 'book');
++    put(propX - side * .17, deskTop + .052, deskZ + .30, .028, .071, .35, dark, 'book');
++  }
++
++  const bedX = -side * (halfWidth - .96);
++  const bedZ = -halfDepth + 1.58 + (arrangement % 3) * .23;
++  const bedDepth = 2.20 + (arrangement % 4) * .12;
++  put(bedX, 0, bedZ, 1.33, .35, bedDepth, wood);
++  put(bedX, .35, bedZ, 1.23, .20, bedDepth - .15, linen, 'cloth');
++  put(bedX, .55, bedZ + .26, 1.25, .087, bedDepth - .68, accent, 'cloth');
++  for (const dz of [.19, .45]) put(bedX, .637, bedZ + dz, 1.18, .015, .10, '#d5a781', 'cloth');
++  put(bedX, .55, bedZ - bedDepth / 2 + .37, .81, .16, .45, '#f1dfbe', 'cloth');
++  put(bedX, 0, bedZ - bedDepth / 2, 1.37, .89, .13, dark);
++  block(bedX, bedZ - .03, 1.37, .89, bedDepth + .12);
++
++  const shelfX = -side * (halfWidth - .60);
++  const shelfZ = halfDepth * (.37 + (arrangement % 3) * .062);
++  const shelfDepth = 1.25 + (arrangement % 3) * .125;
++  put(shelfX, 0, shelfZ, .72, .94, shelfDepth, wood);
++  put(shelfX, .94, shelfZ, .80, .083, shelfDepth + .06, edge);
++  for (const dz of [-.31, .31]) {
++    put(shelfX + side * .364, .22, shelfZ + dz, .030, .47, .52, dark);
++    put(shelfX + side * .389, .53, shelfZ + dz, .050, .051, .16, brass);
++  }
++  jar(shelfX, 1.023, shelfZ - .28, .25, .23, '#a97660');
++  put(shelfX + side * .16, 1.127, shelfZ - .28, .10, .099, .052, '#875944');
++  put(shelfX, 1.023, shelfZ + .23, .47, .047, .31, linen, 'cloth');
++  block(shelfX, shelfZ, .80, 1.03, shelfDepth + .06);
++
++  const lampZ = halfDepth * (.62 + (arrangement % 2) * .08);
++  const lampX = side * (halfWidth - .24);
++  put(lampX, 1.77, lampZ, .30, .098, .28, dark);
++  put(lampX - side * .10, 1.86, lampZ, .21, .27, .21, ember, 'plaster', true);
++  put(lampX - side * .10, 2.13, lampZ, .27, .061, .27, brass);
++  for (const dz of [-.10, .10]) put(lampX - side * .215, 1.84, lampZ + dz, .033, .30, .029, wood);
++
++  const plantX = -side * (halfWidth - .51);
++  const plantZ = halfDepth - .48;
++  jar(plantX, 0, plantZ, .39, .27, '#996951');
++  put(plantX, .31, plantZ, .060, .36, .061, '#5a6652');
++  for (const [dx, h, dz] of [[-.104, .39, -.06], [.09, .52, .08], [.06, .61, -.11]]) {
++    put(plantX + dx, h, plantZ + dz, .23, .092, .17, '#7e8c64');
++  }
++  block(plantX, plantZ, .44, .40, .44);
++
++  const rugZ = halfDepth * .25 + (arrangement % 5) * .14;
++  const rugDepth = 1.47 + (arrangement % 4) * .13;
++  put(0, .003, rugZ, 1.65, .015, rugDepth, accent, 'cloth');
++  for (const dx of [-.72, .72]) put(dx, .018, rugZ, .064, .005, rugDepth, '#bf9270', 'cloth');
++
++  return { solid, glow, colliders, categories };
++}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-interior.ts b/tools/voxel-tavern/town-blockout/market-home-interior.ts
+new file mode 100644
+index 0000000..0df3de4
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-interior.ts
+@@ -0,0 +1,186 @@
++import {
++  BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, type Texture,
++} from 'three';
++import type { Box } from './landmark-kit';
++import { setMarketHomeAtlas, type MarketHomeFinish } from './market-home-atlas';
++import {
++  buildMarketHomeFurnishings, type MarketHomePiece, type MarketHomeTheme,
++} from './market-home-furnishings';
++
++const profiles = {
++  'old-town:137:168': ['tea-table', '#ad6651'],
++  'old-town:158:184': ['pantry', '#648272'],
++  'old-town:179:155': ['linen', '#705b80'],
++  'old-town:173:135': ['ceramics', '#597986'],
++  'old-town:156:141': ['woodwork', '#a68059'],
++  'old-town:94:100': ['books', '#8d634e'],
++  'old-town:137:70': ['linen', '#947253'],
++  'old-town:188:65': ['tea-table', '#5e7975'],
++  'old-town:217:66': ['pantry', '#a35c63'],
++  'old-town:234:74': ['books', '#5c757c'],
++  'old-town:186:104': ['woodwork', '#7b6a8c'],
++  'old-town:206:110': ['ceramics', '#708251'],
++  'old-town:228:110': ['linen', '#a36056'],
++  'old-town:246:114': ['pantry', '#9c7553'],
++  'old-town:246:135': ['tea-table', '#88759a'],
++  'old-town:220:138': ['ceramics', '#6f8372'],
++  'old-town:197:132': ['books', '#a66e56'],
++} as const satisfies Record<string, readonly [MarketHomeTheme, string]>;
++
++export const marketHomeIds = Object.keys(profiles) as (keyof typeof profiles)[];
++export const marketHomeDoorHalfWidth = .65;
++
++type MarketHomeWindowFinish = Readonly<{ tint: string; panes: 1 | 2 | 3 | 4 }>;
++const defaultWindowFinish: MarketHomeWindowFinish = { tint: '#ffc181', panes: 4 };
++
++export function buildMarketHomeInterior(
++  id: string,
++  width: number,
++  depth: number,
++  windowFinish = defaultWindowFinish,
++  atlas?: Texture,
++) {
++  if (!Object.hasOwn(profiles, id)) throw new RangeError('The door is outside the JX-1 roster.');
++  if (![width, depth].every(value => Number.isFinite(value) && value > 0)) {
++    throw new RangeError('Market homes need the surveyed shell dimensions.');
++  }
++  const homeId = id as keyof typeof profiles;
++  const [theme, accent] = profiles[homeId];
++  const arrangement = marketHomeIds.indexOf(homeId);
++  const halfWidth = Math.max(3.6, Math.min(5.3, width / 2 - .23));
++  const halfDepth = Math.max(3.6, Math.min(5.3, depth / 2 - .23));
++  const ceiling = 3.25 + (arrangement % 3) * .15;
++  const furniture = buildMarketHomeFurnishings({ theme, arrangement, halfWidth, halfDepth, accent });
++  const solid: MarketHomePiece[] = [...furniture.solid];
++  const glow: MarketHomePiece[] = [...furniture.glow];
++  const colliders: Box[] = [...furniture.colliders];
++  const floor = { min: [-halfWidth, -.17, -halfDepth], max: [halfWidth, 0, halfDepth] };
++  const beam = '#543b32';
++  const wall = '#c9ad83';
++  const trim = '#85624d';
++  const framing = .18;
++  const doorWidth = 2 * marketHomeDoorHalfWidth;
++  const doorHeight = 2.2;
++  function put(
++    x: number, y: number, z: number, width: number, height: number, depth: number,
++    color: string, finish: MarketHomeFinish = 'wood',
++  ) {
++    solid.push({ x, y, z, width, height, depth, color, finish });
++  }
++  function wallPart(x: number, y: number, z: number, width: number, height: number, depth: number, color = wall) {
++    put(x, y, z, width, height, depth, color, color === wall ? 'plaster' : 'wood');
++    colliders.push({
++      min: [x - width / 2, y, z - depth / 2],
++      max: [x + width / 2, y + height, z + depth / 2],
++    });
++  }
++
++  put(0, -.17, 0, halfWidth * 2, .15, halfDepth * 2, '#563f36');
++  const boards = ['#996746', '#8e5e41', '#aa7951', '#9e6e48'];
++  const plankCount = Math.ceil(2 * halfDepth / .47);
++  const plankDepth = 2 * halfDepth / plankCount;
++  for (let row = 0; row < plankCount; row++) {
++    const z = -halfDepth + (row + .5) * plankDepth;
++    const cut = (row % 4 - 1.5) * .38;
++    put((cut - halfWidth) / 2, -.02, z, halfWidth + cut, .02, plankDepth - .012, boards[(row + arrangement) % 4], 'plank');
++    put((cut + halfWidth) / 2, -.02, z, halfWidth - cut, .02, plankDepth - .012, boards[(row + arrangement + 1) % 4], 'plank');
++  }
++  for (const sign of [-1, 1]) {
++    wallPart(sign * (halfWidth + framing / 2), 0, 0, framing, ceiling, 2 * halfDepth + framing);
++    put(sign * (halfWidth - .034), .02, 0, .068, .28, 2 * halfDepth, trim);
++    const span = halfWidth - marketHomeDoorHalfWidth;
++    wallPart(sign * (marketHomeDoorHalfWidth + span / 2), 0, halfDepth, span, ceiling, framing);
++    put(sign * (marketHomeDoorHalfWidth + .055), 0, halfDepth - .12, .11, doorHeight + .12, .16, beam);
++  }
++  wallPart(0, doorHeight, halfDepth, doorWidth, ceiling - doorHeight, framing, beam);
++
++  // Match the rear pair in district-housing.ts themedFacing at the surveyed shell width.
++  const windowWidth = Math.min(1.7, width * .24);
++  const windowOffset = Math.min(width * .27, halfWidth - windowWidth / 2 - .18);
++  const windowY = 2;
++  const windowHeight = 1.36;
++  const windowBottom = windowY - windowHeight / 2;
++  const windowTop = windowY + windowHeight / 2;
++  const windowZ = -halfDepth;
++  function rearWallBetween(left: number, right: number) {
++    put((left + right) / 2, 0, windowZ, right - left, ceiling, framing, wall, 'plaster');
++  }
++
++  // Glazed openings are visual; the rear wall remains a closed player boundary.
++  colliders.push({
++    min: [-halfWidth, 0, windowZ - framing / 2],
++    max: [halfWidth, ceiling, windowZ + framing / 2],
++  });
++  let wallStart = -halfWidth;
++  for (const windowX of [-windowOffset, windowOffset]) {
++    const windowMin = windowX - windowWidth / 2;
++    const windowMax = windowX + windowWidth / 2;
++    rearWallBetween(wallStart, windowMin);
++    put(windowX, 0, windowZ, windowWidth, windowBottom, framing, wall, 'plaster');
++    put(windowX, windowTop, windowZ, windowWidth, ceiling - windowTop, framing, wall, 'plaster');
++    put(windowX, windowBottom - .19, windowZ + .07, windowWidth + .36, .14, .31, trim);
++    put(windowX, windowTop - .015, windowZ + .055, windowWidth + .18, .10, .18, beam);
++    glow.push({ x: windowX, y: windowBottom, z: windowZ, width: windowWidth,
++      height: windowHeight, depth: .035, color: windowFinish.tint });
++    for (let column = 0; column <= windowFinish.panes; column++) {
++      put(windowMin + column * windowWidth / windowFinish.panes, windowBottom - .025,
++        windowZ + .055, .065, windowHeight + .05, .11, beam);
++    }
++    if (windowFinish.panes > 1) put(windowX, windowY - .08, windowZ + .055, windowWidth, .083, .11, beam);
++    wallStart = windowMax;
++  }
++  rearWallBetween(wallStart, halfWidth);
++  put(0, ceiling, 0, halfWidth * 2 + .3, .16, halfDepth * 2 + .28, beam);
++  for (const z of [-halfDepth * .72, 0, halfDepth * .72]) {
++    put(0, ceiling - .21, z, halfWidth * 2, .24, .19, trim);
++  }
++  const group = new Group();
++  group.name = id;
++  const geometry = new BoxGeometry(1, 1, 1);
++  const wood = new MeshLambertMaterial();
++  const warmGlass = new MeshBasicMaterial();
++  let released = false;
++  function applyAtlas(texture: Texture) {
++    if (released) return;
++    setMarketHomeAtlas(geometry, wood, solid.map(({ finish }) => finish ?? 'wood'), texture);
++    wood.needsUpdate = true;
++  }
++  if (atlas) applyAtlas(atlas);
++  const instance = new Object3D();
++  const paint = new Color();
++  const warmTint = new Color(windowFinish.tint);
++  function batch(pieces: MarketHomePiece[], material: MeshLambertMaterial | MeshBasicMaterial, bakeWarmth: boolean) {
++    const mesh = new InstancedMesh(geometry, material, pieces.length);
++    pieces.forEach(({ x, y, z, width, height, depth, color }, index) => {
++      instance.position.set(x, y + height / 2, z);
++      instance.scale.set(width, height, depth);
++      instance.updateMatrix();
++      mesh.setMatrixAt(index, instance.matrix);
++      paint.set(color);
++      if (bakeWarmth) {
++        // Keep the window wash on the existing solid batch; moving or switching rooms changes no scene lights.
++        const distanceSquared = (Math.abs(x) - windowOffset) ** 2 + (y + height / 2 - windowY) ** 2 + (z - windowZ) ** 2;
++        paint.lerp(warmTint, .21 / (1 + distanceSquared * .28));
++      }
++      mesh.setColorAt(index, paint);
++    });
++    mesh.computeBoundingSphere();
++    group.add(mesh);
++    return mesh;
++  }
++  const batches = [batch(solid, wood, true), batch(glow, warmGlass, false)];
++  group.userData = { colliders, floors: [floor] };
++  return {
++    group, halfWidth, halfDepth, colliders, theme, categories: furniture.categories, accent, applyAtlas,
++    dispose() {
++      if (released) return;
++      released = true;
++      group.removeFromParent();
++      group.clear();
++      for (const mesh of batches) mesh.dispose();
++      geometry.dispose();
++      wood.dispose();
++      warmGlass.dispose();
++    },
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-porch.ts b/tools/voxel-tavern/town-blockout/market-home-porch.ts
+new file mode 100644
+index 0000000..fad1205
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-porch.ts
+@@ -0,0 +1,210 @@
++import { BoxGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial } from 'three';
++import type { Box, Ramp } from './landmark-kit';
++
++export type MarketHomePorchInput = {
++  east: number;
++  north: number;
++  angle: number;
++  foundationY: number;
++  entrance: { x: number; frontZ: number; width: number; height: number; floorY: number };
++  heightAt(east: number, north: number): number | undefined;
++  /** Reject foreign collision and protected surface footprints, excluding this home's legacy coarse blocker. */
++  blocked(east: number, north: number, radius: number): boolean;
++};
++
++export type MarketHomePorch = {
++  floors: Box[];
++  colliders: Box[];
++  ramps: Ramp[];
++  approach: { east: number; north: number; ground: number };
++  maximumStep: number;
++  minimumClearWidth: number;
++  minimumClearHeight: number;
++  leftClearance: number;
++  rightClearance: number;
++};
++
++const bodyRadius = .27;
++const bodyHeight = 1.8;
++const stepHeight = .43;
++const surfaceEpsilon = .025;
++const nominalRiser = .40;
++const treadDepth = .22;
++const railThickness = .08;
++const railHeight = .9;
++const originalStandDistance = 1.42;
++const standSeparation = .04;
++const maximumDepth = originalStandDistance - bodyRadius - standSeparation;
++const maximumTreads = Math.floor(maximumDepth / treadDepth);
++
++function overlaps(box: Box, east: number, z: number) {
++  const dx = Math.max(box.min[0] - east, east - box.max[0], 0);
++  const dz = Math.max(box.min[2] - z, z - box.max[2], 0);
++  return dx ** 2 + dz ** 2 < bodyRadius ** 2;
++}
++
++function checkPath(
++  supports: readonly Box[], walls: readonly Box[], first: number, last: number, firstY: number,
++  sample: (position: number) => { east: number; north: number; height: number | undefined },
++  stride: number,
++) {
++  const segments = Math.ceil(Math.abs(last - first) / stride);
++  let previous = firstY;
++  let maximumStep = 0;
++  for (let index = 0; index <= segments; index++) {
++    const { east, north, height } = sample(first + (last - first) * index / segments);
++    if (height === undefined || !Number.isFinite(height)) return;
++    const z = -north;
++    let next = height;
++    for (const support of supports) {
++      if (support.max[1] <= previous + stepHeight && overlaps(support, east, z)) {
++        next = Math.max(next, support.max[1]);
++      }
++    }
++    for (const wall of walls) {
++      if (wall.max[1] <= previous + .03 && overlaps(wall, east, z)) next = Math.max(next, wall.max[1]);
++    }
++    const blocks = (box: Box) => next + surfaceEpsilon < box.max[1] &&
++      next + bodyHeight - surfaceEpsilon > box.min[1] && overlaps(box, east, z);
++    const change = Math.abs(next - previous);
++    if (change > stepHeight || supports.some(blocks) || walls.some(blocks)) return;
++    maximumStep = Math.max(maximumStep, change);
++    previous = next;
++  }
++  return { maximumStep, end: previous };
++}
++
++export function planMarketHomePorch(input: MarketHomePorchInput): MarketHomePorch | undefined {
++  const { east, north, angle, foundationY, entrance, heightAt, blocked } = input;
++  const { x, frontZ, width, height, floorY } = entrance;
++  if (![east, north, angle, foundationY, x, frontZ, width, height, floorY].every(Number.isFinite)) return;
++  const clearWidth = width - 2 * railThickness;
++  const sideClearance = clearWidth / 2 - bodyRadius;
++  if (sideClearance <= surfaceEpsilon || height - bodyHeight <= surfaceEpsilon) return;
++  // Old-town house axes are cardinal. An AABB must not fill a diagonal doorway.
++  const quarterTurns = Math.round(angle / (Math.PI / 2));
++  if (Math.abs(angle - quarterTurns * Math.PI / 2) > 1e-6) return;
++  const sin = Math.round(Math.sin(quarterTurns * Math.PI / 2));
++  const cos = Math.round(Math.cos(quarterTurns * Math.PI / 2));
++  const halfWidth = width / 2;
++  const thresholdY = foundationY + floorY;
++  const approachZ = frontZ + originalStandDistance;
++  const interiorZ = frontZ - bodyRadius - .02;
++  const toWorld = (localX: number, localZ: number) => ({
++    east: east + cos * localX + sin * localZ,
++    north: north + sin * localX - cos * localZ,
++  });
++  const coordHeight = (localX: number, localZ: number) => {
++    const world = toWorld(localX, localZ);
++    return heightAt(world.east, world.north);
++  };
++  const approachWorld = toWorld(x, approachZ);
++  const ground = heightAt(approachWorld.east, approachWorld.north);
++  if (ground === undefined || !Number.isFinite(ground) || blocked(approachWorld.east, approachWorld.north, bodyRadius)) return;
++  const approach = { ...approachWorld, ground };
++
++  function box(left: number, right: number, inner: number, outer: number, bottom: number, top: number): Box {
++    const a = toWorld(left, inner);
++    const b = toWorld(right, outer);
++    return {
++      min: [Math.min(a.east, b.east), bottom, -Math.max(a.north, b.north)],
++      max: [Math.max(a.east, b.east), top, -Math.min(a.north, b.north)],
++    };
++  }
++
++  function terrainBounds(inner: number, outer: number) {
++    const lateralSamples = Math.ceil(width / .15);
++    const depthSamples = Math.ceil((outer - inner) / .15);
++    let min = Infinity;
++    let max = -Infinity;
++    for (let col = 0; col <= lateralSamples; col++) {
++      const localX = x - halfWidth + width * col / lateralSamples;
++      for (let row = 0; row <= depthSamples; row++) {
++        const point = toWorld(localX, inner + (outer - inner) * row / depthSamples);
++        if (blocked(point.east, point.north, .12)) return;
++        const height = heightAt(point.east, point.north);
++        if (height === undefined || !Number.isFinite(height)) return;
++        min = Math.min(min, height);
++        max = Math.max(max, height);
++      }
++    }
++    return { min, max };
++  }
++
++  // Supports meet the real room floor at its threshold. This probe-only
++  // continuation is not registered as a second interior floor.
++  const threshold = box(x - halfWidth, x + halfWidth, interiorZ - .30, frontZ, thresholdY - .08, thresholdY);
++  for (let count = 1; count <= maximumTreads; count++) {
++    const outside = frontZ + count * treadDepth;
++    const bottomReference = coordHeight(x, Math.min(approachZ, outside + bodyRadius + surfaceEpsilon));
++    if (bottomReference === undefined || !Number.isFinite(bottomReference)) continue;
++    const rise = (thresholdY - bottomReference) / count;
++    if (rise < 0 || rise > nominalRiser) continue;
++
++    const floors: Box[] = [];
++    const colliders: Box[] = [];
++    for (let index = 0; index < count; index++) {
++      const inner = frontZ + index * treadDepth;
++      const outer = inner + treadDepth;
++      const top = thresholdY - index * rise;
++      const terrain = terrainBounds(inner, outer);
++      if (!terrain || terrain.max > top - surfaceEpsilon) break;
++      const bottom = terrain.min - .08;
++      floors.push(box(x - halfWidth, x + halfWidth, inner, outer, bottom, top));
++      colliders.push(
++        box(x - halfWidth, x - halfWidth + railThickness, inner, outer, bottom, top + railHeight),
++        box(x + halfWidth - railThickness, x + halfWidth, inner, outer, bottom, top + railHeight),
++      );
++    }
++    if (floors.length !== count) continue;
++    if ([...floors, ...colliders].some(solid => overlaps(solid, approach.east, -approach.north))) continue;
++
++    const support = [...floors, threshold];
++    let maximumStep = 0;
++    let viable = true;
++    for (const lateral of [0, -sideClearance / 2, sideClearance / 2]) {
++      const sample = (position: number) => {
++        const world = toWorld(x + lateral, position);
++        return { ...world, height: heightAt(world.east, world.north) };
++      };
++      const firstY = sample(approachZ).height;
++      if (firstY === undefined) { viable = false; break; }
++      // Include a dense sweep and a displacement near the production 60 Hz sprint cap.
++      for (const stride of [.025, 11.3 / 60]) {
++        const inward = checkPath(support, colliders, approachZ, interiorZ, firstY, sample, stride);
++        const outward = checkPath(support, colliders, interiorZ, approachZ, thresholdY, sample, stride);
++        if (!inward || !outward || Math.abs(inward.end - thresholdY) > surfaceEpsilon ||
++            Math.abs(outward.end - firstY) > surfaceEpsilon) {
++          viable = false;
++          break;
++        }
++        maximumStep = Math.max(maximumStep, inward.maximumStep, outward.maximumStep);
++      }
++      if (!viable) break;
++    }
++    if (viable) return {
++      floors, colliders, ramps: [], approach, maximumStep,
++      minimumClearWidth: clearWidth, minimumClearHeight: height,
++      leftClearance: sideClearance, rightClearance: sideClearance,
++    };
++  }
++}
++
++export function buildMarketHomePorch(plan: MarketHomePorch): Group {
++  const group = new Group();
++  group.name = 'Market home porch';
++  const geometry = new BoxGeometry();
++  function batch(boxes: readonly Box[], color: string) {
++    const mesh = new InstancedMesh(geometry, new MeshLambertMaterial({ color }), boxes.length);
++    const transform = new Matrix4();
++    boxes.forEach(({ min, max }, index) => {
++      transform.makeScale(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
++      transform.setPosition((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
++      mesh.setMatrixAt(index, transform);
++    });
++    mesh.computeBoundingSphere();
++    return mesh;
++  }
++  group.add(batch(plan.floors, '#806c63'), batch(plan.colliders, '#685a56'));
++  return group;
++}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-walk.ts b/tools/voxel-tavern/town-blockout/market-home-walk.ts
+new file mode 100644
+index 0000000..d95cada
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-walk.ts
+@@ -0,0 +1,59 @@
++import type { Box } from './landmark-kit';
++
++export type MarketHomeWalkPoint = { x: number; z: number };
++
++const bodyRadius = .27;
++const bodyHeight = 1.8;
++const surfaceEpsilon = .025;
++const sampleSpacing = .08;
++
++/** Local ground is y = 0 and the front wall is at positive z. */
++export function canStandInMarketHome(
++  x: number, z: number, colliders: readonly Box[], halfWidth: number, halfDepth: number,
++) {
++  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(halfWidth) || !Number.isFinite(halfDepth) ||
++    Math.abs(x) + bodyRadius > halfWidth || Math.abs(z) + bodyRadius > halfDepth) return false;
++  return !colliders.some(({ min, max }) => {
++    if (max[1] <= surfaceEpsilon || min[1] >= bodyHeight - surfaceEpsilon) return false;
++    const dx = Math.max(min[0] - x, x - max[0], 0);
++    const dz = Math.max(min[2] - z, z - max[2], 0);
++    return dx * dx + dz * dz < bodyRadius * bodyRadius;
++  });
++}
++
++/** Inward, across the rear of the clear aisle, then back to the room's front. */
++export function marketHomeWalkRoute(halfWidth: number, halfDepth: number): MarketHomeWalkPoint[] {
++  if (!Number.isFinite(halfWidth) || halfWidth < 1 || !Number.isFinite(halfDepth) || halfDepth < 1) {
++    throw new RangeError('A market home needs room for its entrance and interior walk.');
++  }
++  const front = halfDepth - .55;
++  const rear = -halfDepth + .85;
++  const side = Math.min(.65, halfWidth - bodyRadius);
++  return [
++    { x: 0, z: front }, { x: 0, z: 0 }, { x: side, z: rear },
++    { x: -side, z: rear }, { x: 0, z: 0 }, { x: 0, z: front },
++  ];
++}
++
++export function sampleMarketHomeWalk(
++  points: readonly MarketHomeWalkPoint[], colliders: readonly Box[], halfWidth: number, halfDepth: number,
++): { samples: number; blockedAt?: MarketHomeWalkPoint } {
++  if (points.length === 0) throw new RangeError('A market home walk needs at least one point.');
++  let samples = 0;
++  for (const [index, to] of points.entries()) {
++    if (!canStandInMarketHome(to.x, to.z, colliders, halfWidth, halfDepth)) return { samples, blockedAt: to };
++    if (index === 0) {
++      samples++;
++      continue;
++    }
++    const from = points[index - 1];
++    const dx = to.x - from.x, dz = to.z - from.z;
++    const steps = Math.ceil(Math.hypot(dx, dz) / sampleSpacing);
++    for (let step = 1; step <= steps; step++) {
++      const x = from.x + dx * step / steps, z = from.z + dz * step / steps;
++      if (!canStandInMarketHome(x, z, colliders, halfWidth, halfDepth)) return { samples, blockedAt: { x, z } };
++      samples++;
++    }
++  }
++  return { samples };
++}
+diff --git a/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts b/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts
+new file mode 100644
+index 0000000..d7641c3
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-home-world-geometry.ts
+@@ -0,0 +1,241 @@
++import type { Box, Ramp } from './landmark-kit';
++import { marketHomeDoorHalfWidth, type buildMarketHomeInterior } from './market-home-interior';
++import { sampleMarketHomeWalk } from './market-home-walk';
++
++type Interior = ReturnType<typeof buildMarketHomeInterior>;
++type Point = readonly [x: number, y: number, z: number];
++
++export type MarketHomePlacement = Readonly<{ x: number; n: number; level: number; angle: number }>;
++export type MarketHomeWalkGeometry = Readonly<{
++  colliders?: readonly Box[];
++  floors?: readonly Box[];
++  ramps?: readonly Ramp[];
++}>;
++export type MarketHomeLocalGeometry = MarketHomeWalkGeometry;
++type WorldGeometryOptions = Readonly<{
++  shell?: MarketHomeLocalGeometry;
++  porch?: MarketHomeLocalGeometry;
++  interiorPlacement?: Readonly<{ x?: number; y?: number; z?: number }>;
++}>;
++
++const bodyRadius = .27;
++const bodyHeight = 1.8;
++const stepHeight = .43;
++const surfaceEpsilon = .025;
++const sampleSpacing = .08;
++const comparisonEpsilon = 1e-9;
++const furnishingLabels = {
++  'tea-table': '查看茶桌', pantry: '查看储物台', linen: '查看布料台',
++  ceramics: '查看陶器台', woodwork: '查看木工台', books: '查看书桌',
++} satisfies Record<Interior['theme'], string>;
++
++function boxAt(box: Box, transform: (point: Point) => Point): Box {
++  const { min, max } = box;
++  if (min.length !== 3 || max.length !== 3 ||
++      min.some((value, axis) => !Number.isFinite(value) || !Number.isFinite(max[axis]) || max[axis] < value)) {
++    throw new RangeError('Market home walk geometry needs finite, ordered bounds.');
++  }
++  const a = transform([min[0], min[1], min[2]]);
++  const b = transform([max[0], max[1], max[2]]);
++  // All approved house rotations are quarter turns, so opposite corners suffice.
++  return { min: a.map((value, axis) => Math.min(value, b[axis])),
++    max: a.map((value, axis) => Math.max(value, b[axis])) };
++}
++
++function overlapsBody(x: number, z: number, { min, max }: Box) {
++  const dx = Math.max(min[0] - x, x - max[0], 0);
++  const dz = Math.max(min[2] - z, z - max[2], 0);
++  return dx * dx + dz * dz < bodyRadius * bodyRadius;
++}
++
++function worldFeet([x, ground, z]: Point) {
++  return { x, n: -z, ground };
++}
++
++export function createMarketHomeWorldGeometry(
++  interior: Interior, placement: MarketHomePlacement, options: WorldGeometryOptions = {},
++) {
++  const { x, n, level, angle } = placement;
++  const { x: roomX = 0, y: roomY = 0, z: roomZ = 0 } = options.interiorPlacement ?? {};
++  const quarterTurn = Math.PI / 2;
++  const turns = Math.round(angle / quarterTurn);
++  if (![x, n, level, angle, roomX, roomY, roomZ].every(Number.isFinite) ||
++      Math.abs(angle - turns * quarterTurn) > comparisonEpsilon) {
++    throw new RangeError('Market homes need a finite placement and the model quarter-turn rotation.');
++  }
++  const turn = ((turns % 4) + 4) % 4;
++  const cos = [1, 0, -1, 0][turn];
++  const sin = [0, 1, 0, -1][turn];
++  function localToWorld([u, v, s]: Point): Point {
++    return [x + cos * u + sin * s, level + v, -n - sin * u + cos * s];
++  }
++  function worldToLocal([east, height, z]: Point): Point {
++    return [cos * (east - x) - sin * (z + n), height - level, sin * (east - x) + cos * (z + n)];
++  }
++  function roomToWorld([u, v, s]: Point) {
++    return localToWorld([roomX + u, roomY + v, roomZ + s]);
++  }
++  function rampToWorld(ramp: Ramp): Ramp {
++    const bounds = boxAt(ramp, localToWorld);
++    if ((ramp.axis !== 'x' && ramp.axis !== 'z') || (ramp.ascending !== 1 && ramp.ascending !== -1)) {
++      throw new RangeError('Market home ramps need a local horizontal axis and direction.');
++    }
++    const axis = ramp.axis === 'x' ? 0 : 2;
++    if (ramp.min[axis] === ramp.max[axis]) throw new RangeError('Market home ramps need a nonzero run.');
++    const alongX = ramp.axis === 'x' ? cos : sin;
++    const alongZ = ramp.axis === 'x' ? -sin : cos;
++    return { ...bounds, axis: alongX ? 'x' : 'z', ascending: alongX + alongZ > 0 ? ramp.ascending : ramp.ascending === 1 ? -1 : 1 };
++  }
++
++  const authoredFloors = interior.group.userData.floors as Box[] | undefined;
++  const floor = authoredFloors?.[0];
++  const header = interior.colliders.find(({ min, max }) =>
++    min[0] === -marketHomeDoorHalfWidth && max[0] === marketHomeDoorHalfWidth &&
++    min[2] < interior.halfDepth && max[2] > interior.halfDepth && min[1] > bodyHeight);
++  if (!floor || authoredFloors?.length !== 1 || floor.max[1] !== 0 || !header) {
++    throw new RangeError('Market home interior is missing its authored floor or front header.');
++  }
++  const ceiling = header.max[1];
++  // These dimensions match the candidate's visible ceiling slab.
++  const ceilingBox: Box = {
++    min: [-interior.halfWidth - .15, ceiling, -interior.halfDepth - .14],
++    max: [interior.halfWidth + .15, ceiling + .16, interior.halfDepth + .14],
++  };
++  const colliders = [...interior.colliders, ceilingBox].map(box => boxAt(box, roomToWorld));
++  const floors = [boxAt(floor, roomToWorld)];
++  const ramps: Ramp[] = [];
++  for (const part of [options.shell, options.porch]) {
++    colliders.push(...(part?.colliders ?? []).map(box => boxAt(box, localToWorld)));
++    floors.push(...(part?.floors ?? []).map(box => boxAt(box, localToWorld)));
++    ramps.push(...(part?.ramps ?? []).map(rampToWorld));
++  }
++
++  const { group } = interior;
++  group.position.set(...roomToWorld([0, 0, 0]));
++  group.rotation.y = turns * quarterTurn;
++  group.updateMatrix();
++
++  // The candidate's first furniture collider bounds the visibly furnished worktop.
++  const desk = interior.colliders[0];
++  const deskX = (desk.min[0] + desk.max[0]) / 2;
++  const deskZ = (desk.min[2] + desk.max[2]) / 2;
++  const standX = deskX < 0 ? desk.max[0] + .55 : desk.min[0] - .55;
++  const approach = [{ x: 0, z: interior.halfDepth - .55 }, { x: 0, z: deskZ }, { x: standX, z: deskZ }];
++  const furnishingWitness = sampleMarketHomeWalk(approach, interior.colliders, interior.halfWidth, interior.halfDepth).blockedAt
++    ? undefined
++    : {
++        ...worldFeet(roomToWorld([standX, 0, deskZ])),
++        label: furnishingLabels[interior.theme],
++        target: worldFeet(roomToWorld([deskX, desk.max[1], deskZ])),
++        route: approach.map(point => worldFeet(roomToWorld([point.x, 0, point.z]))),
++      };
++
++  return {
++    group, colliders, floors, ramps, localToWorld, worldToLocal, furnishingWitness,
++    interiorFrontZ: roomZ + interior.halfDepth,
++    interiorBackZ: roomZ - interior.halfDepth,
++    interiorFloorY: level + roomY,
++  };
++}
++
++type MarketHomeWorldGeometry = ReturnType<typeof createMarketHomeWorldGeometry>;
++type EntranceAuditOptions = Readonly<{
++  doorX: number;
++  outsideZ: number;
++  insideZ: number;
++  surfaceAt(east: number, north: number): number | undefined;
++  porch?: MarketHomeWalkGeometry;
++}>;
++
++type EntranceSample = ReturnType<typeof worldFeet> & { support: 'terrain' | 'floor' | 'ramp' | 'solid' };
++
++/** Trace the door centre in both directions using the existing town controller's contact rules. */
++export function auditMarketHomeEntrance(world: MarketHomeWorldGeometry, options: EntranceAuditOptions) {
++  const invalid = (reason: 'invalid-route' | 'no-support' | 'step' | 'obstruction' | 'room-floor' | 'clearance') =>
++    ({ ok: false as const, reason });
++  const { doorX, outsideZ, insideZ, surfaceAt } = options;
++  if (![doorX, outsideZ, insideZ].every(Number.isFinite) || outsideZ <= world.interiorFrontZ ||
++      insideZ >= world.interiorFrontZ - bodyRadius || insideZ <= world.interiorBackZ + bodyRadius) {
++    return invalid('invalid-route');
++  }
++  const { porch } = options;
++  const colliders = [...world.colliders, ...(porch?.colliders ?? [])];
++  const floors = [...world.floors, ...(porch?.floors ?? [])];
++  const ramps = [...world.ramps, ...(porch?.ramps ?? [])];
++  const bodyBoxes = [...colliders, ...floors];
++  const localBoxes = bodyBoxes.map(box => boxAt(box, world.worldToLocal));
++  let minLeftClearance = Infinity;
++  let minRightClearance = Infinity;
++  let minHeadroom = Infinity;
++  let maxStep = 0;
++
++  function trace(from: number, to: number, firstFeet?: number) {
++    const steps = Math.ceil(Math.abs(from - to) / sampleSpacing);
++    const samples: EntranceSample[] = [];
++    let previous = firstFeet;
++    for (let i = 0; i <= steps; i++) {
++      const localZ = from + (to - from) * i / steps;
++      const [x, , z] = world.localToWorld([doorX, 0, localZ]);
++      const n = -z;
++      const terrain = surfaceAt(x, n);
++      if (terrain === undefined || !Number.isFinite(terrain)) return invalid('no-support');
++      const current = previous ?? terrain;
++      let ground = terrain;
++      let support: EntranceSample['support'] = 'terrain';
++      function useSupport(top: number, limit: number, kind: typeof support) {
++        if (top <= limit + comparisonEpsilon && top >= ground - comparisonEpsilon) {
++          ground = Math.max(ground, top);
++          support = kind;
++        }
++      }
++      for (const floor of floors) {
++        if (overlapsBody(x, z, floor)) useSupport(floor.max[1], current + stepHeight, 'floor');
++      }
++      for (const ramp of ramps) {
++        if (x < ramp.min[0] || x > ramp.max[0] || z < ramp.min[2] || z > ramp.max[2]) continue;
++        const axis = ramp.axis === 'x' ? 0 : 2;
++        const fraction = ((axis === 0 ? x : z) - ramp.min[axis]) / (ramp.max[axis] - ramp.min[axis]);
++        const top = ramp.min[1] + (ramp.max[1] - ramp.min[1]) * (ramp.ascending === 1 ? fraction : 1 - fraction);
++        useSupport(top, current + stepHeight, 'ramp');
++      }
++      for (const solid of colliders) {
++        if (overlapsBody(x, z, solid)) useSupport(solid.max[1], current + .03, 'solid');
++      }
++      const step = Math.abs(ground - current);
++      if (step > stepHeight + comparisonEpsilon) return invalid('step');
++      maxStep = Math.max(maxStep, step);
++      if (bodyBoxes.some(box => ground + surfaceEpsilon < box.max[1] &&
++          ground + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(x, z, box))) {
++        return invalid('obstruction');
++      }
++      const [, feet] = world.worldToLocal([x, ground, z]);
++      for (const box of localBoxes) {
++        const { min, max } = box;
++        if (min[1] >= feet + surfaceEpsilon && overlapsBody(doorX, localZ, box)) {
++          minHeadroom = Math.min(minHeadroom, min[1] - feet);
++        }
++        if (localZ < min[2] || localZ > max[2] || feet + surfaceEpsilon >= max[1] ||
++            feet + bodyHeight - surfaceEpsilon <= min[1]) continue;
++        if (max[0] <= doorX) minLeftClearance = Math.min(minLeftClearance, doorX - max[0] - bodyRadius);
++        if (min[0] >= doorX) minRightClearance = Math.min(minRightClearance, min[0] - doorX - bodyRadius);
++      }
++      samples.push({ x, n, ground, support });
++      previous = ground;
++    }
++    return { ok: true as const, samples };
++  }
++
++  const forward = trace(outsideZ, insideZ);
++  if (!forward.ok) return forward;
++  const inside = forward.samples.at(-1)!;
++  if (Math.abs(inside.ground - world.interiorFloorY) > comparisonEpsilon ||
++      !overlapsBody(inside.x, -inside.n, world.floors[0])) return invalid('room-floor');
++  const reverse = trace(insideZ, outsideZ, inside.ground);
++  if (!reverse.ok) return reverse;
++  if (![minLeftClearance, minRightClearance, minHeadroom].every(Number.isFinite) ||
++      minLeftClearance <= 0 || minRightClearance <= 0 || minHeadroom <= bodyHeight) return invalid('clearance');
++  return {
++    ok: true as const, maxStep, minLeftClearance, minRightClearance, minHeadroom,
++    forward: forward.samples, reverse: reverse.samples,
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 72cc9c1..e1f52b8 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -276,7 +276,9 @@ addTownRailWayfinding(scene, grid.heightAt);
+ const pineCamp = buildPineCamp(grid);
+ landscape.add(pineCamp.group);
+ const scenery = addScenery(landscape, grid, pineCamp.keepClear);
+-const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
++// Add an ID after its doorway has passed the B-04 production movement and collision checks.
++const verifiedMarketHomeIds = new Set<string>();
++const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear, undefined, verifiedMarketHomeIds);
+ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
+   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
+ const forest = addForestDensity(landscape, grid,
+@@ -555,6 +557,11 @@ function geometry() {
+     index(floors, (cell, box) => cell.floors.push(box));
+     index(ramps, (cell, ramp) => cell.ramps.push(ramp));
+   }
++  for (const { colliders, floors, ramps } of districts.marketHomes.values()) {
++    index(colliders, (cell, box) => cell.colliders.push(box));
++    index(floors, (cell, box) => cell.floors.push(box));
++    index(ramps, (cell, ramp) => cell.ramps.push(ramp));
++  }
+   return chunks;
+ }
+ let walkGeometry = geometry();
+@@ -1031,14 +1038,52 @@ activitySpots.push(...sledRacks.map(rack => ({
+   },
+ })));
+ activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
++function openMarketHomeEntrance(door: TownHousePortal, spot: TownActivitySpot) {
++  const panel = openPlace('集市屋门', '');
++  const menu = document.createElement('div');
++  menu.id = 'market-home-entrance';
++  menu.dataset.doorId = door.id;
++  const commands = [
++    { key: 'shared', label: '进入屋舍空间', select: () => enterSharedHome(door) },
++    { key: 'visit', label: '参观这户', select: () => announceActivity('沿门廊步行进入这户，沿原门返回街面') },
++    { key: 'cancel', label: '取消' },
++  ];
++  for (const { key, label, select } of commands) {
++    const button = document.createElement('button');
++    button.type = 'button';
++    button.dataset.marketHomeAction = key;
++    button.textContent = label;
++    button.onclick = () => {
++      placeCard.close();
++      if (select && currentAction() === spot) select();
++    };
++    menu.append(button);
++  }
++  panel.append(menu);
++  menu.querySelector('button')?.focus();
++}
++
+ function registerHomeDoors(doors: readonly TownHousePortal[]) {
+   for (const door of doors) {
+     if (homeDoors.has(door.id)) continue;
+     homeDoors.set(door.id, door);
+-    activitySpots.push({
+-      x: door.x, n: door.n, ground: door.ground, range: 1.6, label: '进入屋舍空间',
++    const home = districts.marketHomes.get(door.id);
++    const spot: TownActivitySpot = {
++      x: door.x, n: door.n, ground: door.ground, range: 1.6,
++      label: home ? '集市屋门' : '进入屋舍空间',
+       available: () => !homeReturn,
+-      run: () => enterSharedHome(door),
++      run: () => home ? openMarketHomeEntrance(door, spot) : enterSharedHome(door),
++    };
++    activitySpots.push(spot);
++    const furnishing = home?.furnishingWitness;
++    if (furnishing) activitySpots.push({
++      x: furnishing.x, n: furnishing.n, ground: furnishing.ground, range: .85,
++      label: furnishing.label,
++      available: () => !homeReturn,
++      run() {
++        activityContext.face(furnishing.target.x, furnishing.target.n, furnishing.target.ground);
++        announceActivity(furnishing.label);
++      },
+     });
+   }
+ }

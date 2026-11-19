@@ -1,0 +1,80 @@
+name: Verify JX-1 production doorway candidate
+
+on:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-jx1-production.yml'
+      - 'docs/交流区/GPT/JX-1协作-2026-11-19/b04-production-on-2dff658.patch'
+      - 'tools/jx1-formal/**'
+
+permissions:
+  contents: read
+
+jobs:
+  doorway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JX1_RUNTIME_COMMIT: 2dff658fd664bba873f4ad62293e1f3e1f8d1174
+      JX1_PATCH_PATH: docs/交流区/GPT/JX-1协作-2026-11-19/b04-production-on-2dff658.patch
+    steps:
+      - name: Check out the review candidate and harness
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: ci
+
+      - name: Check out the exact approved source baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.JX1_RUNTIME_COMMIT }}
+          persist-credentials: false
+          path: town
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+
+      - name: Install locked dependencies and Chromium
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$JX1_RUNTIME_COMMIT"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix tools/voxel-tavern --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Record the untouched 92-door registry and apply the candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jx1-formal"
+          node ci/tools/jx1-formal/record-unmodified-registry.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" "$JX1_RUNTIME_COMMIT"
+          git -C town apply --check --whitespace=error "../ci/$JX1_PATCH_PATH"
+          git -C town apply --whitespace=error "../ci/$JX1_PATCH_PATH"
+          sha256sum "ci/$JX1_PATCH_PATH" > "$RUNNER_TEMP/jx1-formal/patch-sha256.txt"
+
+      - name: Check the market shells, interiors and original shared house
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          node --import tsx --test tests/town-blockout-house-portals.test.ts tests/town-blockout-shared-home.test.ts tests/town-blockout-market-entrance.test.ts tests/town-blockout-market-homes.test.ts tests/town-blockout-market-home-atlas.test.ts
+
+      - name: Verify four staged physical tours and the shared keyboard and touch menu
+        shell: bash
+        run: |
+          node ci/tools/jx1-formal/verify-jx1-production.mjs town "$RUNNER_TEMP/jx1-formal/baseline.json" ci/tools/jx1-formal/cardinal-walk-plan.json "$RUNNER_TEMP/jx1-formal/cardinal-walk"
+
+      - name: Upload registry, input and rendered proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jx1-formal-doorways
+          path: ${{ runner.temp }}/jx1-formal
+          retention-days: 14
+          if-no-files-found: warn
