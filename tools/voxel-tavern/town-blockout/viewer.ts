@@ -95,6 +95,7 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createMascotFollower, type MascotFollowPoint } from './mascot-follow';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
 import { createTownNpcActivity } from './town-npc';
+import { registerTownResidentStations } from './town-npc-stations';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
@@ -2373,6 +2374,15 @@ const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSit
 scenery.setCampfirePieces(campfirePieces(campfireSites));
 activities.push(outdoorCampfires, forestCampfire);
 activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots);
+activitySpots.push(...registerTownResidentStations(npcActivity, {
+  campfires: campfireSites,
+  canStand: canStandAtActivity,
+  isNight: () => nightMode,
+  forestChop: () => forestCampfire.spots.find(spot => spot.label === '篝火旁劈柴'),
+  mainFishing: () => iceFishing.spots[0],
+  palaceProgress: () => icePalaceActivity?.state(),
+  canCollect: zodiac.canCollect,
+}));
 
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>

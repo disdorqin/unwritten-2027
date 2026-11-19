@@ -167,19 +167,18 @@ export type TownMascotOptions = {
   visible: (east: number, north: number, ground: number) => boolean;
 };
 
-export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options: TownMascotOptions) {
+export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, options: TownMascotOptions) {
   const root = new Object3D();
   const pose = new Object3D();
   const partTransform = new Object3D();
   const matrix = new Matrix4(), color = new Color();
   const animated = pivots.map(() => new Matrix4());
-  townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
-  batch.count = start;
+  batch.count = initialStart;
   let patrol: MascotPatrol;
   let planned = false;
-  let lastTick = NaN, shown = false;
+  let lastTick = NaN, lastStart = initialStart, shown = false;
 
-  return function update() {
+  return function update(start = initialStart) {
     if (!planned) {
       patrol = makeMascotPatrol(options.groundAt);
       planned = true;
@@ -197,9 +196,17 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
       if (shown) { batch.count = start; shown = false; }
       return false;
     }
-    if (shown && tick === lastTick) return false;
+    const count = start + townMascotParts.length;
+    const repack = lastStart !== start || batch.count !== count;
+    if (shown && tick === lastTick && !repack) return false;
+    // Station changes repack the shared tail, so restore the mascot's palette even on the same tick.
+    if (repack) {
+      townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
+      if (batch.instanceColor) batch.instanceColor.needsUpdate = true;
+    }
     shown = true;
-    batch.count = start + townMascotParts.length;
+    batch.count = count;
+    lastStart = start;
     lastTick = tick;
     const seconds = tick / 1000;
     const idlePhase = seconds % 60;
