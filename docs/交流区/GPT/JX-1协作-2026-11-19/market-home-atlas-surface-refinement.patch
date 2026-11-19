@@ -1,0 +1,80 @@
+diff --git a/tools/voxel-tavern/town-blockout/market-home-atlas.ts b/tools/voxel-tavern/town-blockout/market-home-atlas.ts
+index 7767e5e..2cc3683 100644
+--- a/tools/voxel-tavern/town-blockout/market-home-atlas.ts
++++ b/tools/voxel-tavern/town-blockout/market-home-atlas.ts
+@@ -1,10 +1,11 @@
+ import {
+-  CanvasTexture, InstancedBufferAttribute, NearestFilter, SRGBColorSpace,
++  CanvasTexture, InstancedBufferAttribute, NearestFilter, ShaderChunk, SRGBColorSpace,
+   type BoxGeometry, type MeshLambertMaterial, type Texture,
+ } from 'three';
+ import { makeVoxelTexture } from '../textures';
+
+-const finishes = ['plaster', 'plank', 'wood', 'cloth', 'ceramic', 'book'] as const;
++const surfaceFinishes = ['plaster', 'plank', 'wood'] as const;
++const finishes = [...surfaceFinishes, 'cloth', 'ceramic', 'book'] as const;
+ export type MarketHomeFinish = typeof finishes[number];
+ const tileSize = 16;
+ const gutter = 1;
+@@ -42,13 +43,28 @@ export function setMarketHomeAtlas(
+   ));
+   material.map = atlas;
+   material.onBeforeCompile = shader => {
+-    shader.vertexShader = 'attribute float marketHomeTile;\n' + shader.vertexShader.replace(
+-      '#include <uv_vertex>',
+-      '#include <uv_vertex>\n#ifdef USE_MAP\n' +
+-      '  vec2 tilePixel = vec2(marketHomeTile * ' + stride.toFixed(1) + ', 0.0) + ' +
+-      'vec2(' + (gutter + .5).toFixed(1) + ') + clamp(vMapUv, 0.0, 1.0) * ' + (tileSize - 1).toFixed(1) + ';\n' +
+-      '  vMapUv = tilePixel / vec2(' + atlasWidth.toFixed(1) + ', ' + stride.toFixed(1) + ');\n#endif',
++    const varying = 'varying vec3 vMarketHomeTileAndRepeat;\n';
++    // BoxGeometry aligns U with Z on X faces and V with Z on Y faces.
++    shader.vertexShader = 'attribute float marketHomeTile;\n' + varying + shader.vertexShader.replace(
++      '#include <uv_vertex>', `#include <uv_vertex>
++#ifdef USE_MAP
++  vec3 size = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
++  vec2 faceSize = vec2(normal.x == 0.0 ? size.x : size.z, normal.y == 0.0 ? size.y : size.z);
++  vec2 repeat = marketHomeTile < ${surfaceFinishes.length.toFixed(1)} ? max(faceSize / 2.0, vec2(1.0)) : vec2(1.0);
++  vMarketHomeTileAndRepeat = vec3(marketHomeTile, repeat);
++#endif`,
++    );
++    shader.fragmentShader = varying + shader.fragmentShader.replace(
++      '#include <map_fragment>', `#ifdef USE_MAP
++  vec2 repeat = vMarketHomeTileAndRepeat.yz;
++  vec2 scaled = clamp(vMapUv, 0.0, 1.0) * repeat;
++  vec2 tileUV = mix(scaled, fract(scaled), step(vec2(1.001), repeat));
++  vec2 tilePixel = vec2(vMarketHomeTileAndRepeat.x * ${stride.toFixed(1)}, 0.0)
++    + vec2(${(gutter + .5).toFixed(1)}) + tileUV * ${(tileSize - 1).toFixed(1)};
++  vec2 marketHomeMapUv = tilePixel / vec2(${atlasWidth.toFixed(1)}, ${stride.toFixed(1)});
++#endif
++${ShaderChunk.map_fragment.replace('vMapUv', 'marketHomeMapUv')}`,
+     );
+   };
+-  material.customProgramCacheKey = () => 'market-home-material-atlas';
++  material.customProgramCacheKey = () => 'market-home-material-atlas-surface-repeat';
+ }
+diff --git a/tests/town-blockout-market-home-atlas.test.ts b/tests/town-blockout-market-home-atlas.test.ts
+index f01c3ef..b55fe7e 100644
+--- a/tests/town-blockout-market-home-atlas.test.ts
++++ b/tests/town-blockout-market-home-atlas.test.ts
+@@ -25,12 +25,19 @@ test('all rooms use one host atlas with six fixture finishes and two drawing bat
+       assert.ok(tiles.isInstancedBufferAttribute, id);
+       assert.equal(tiles.count, solid.count, id);
+       for (const tile of tiles.array) seen.add(tile);
+-      const shader = { vertexShader: ShaderLib.lambert.vertexShader } as Parameters<
++      const shader = {
++        vertexShader: ShaderLib.lambert.vertexShader,
++        fragmentShader: ShaderLib.lambert.fragmentShader,
++      } as Parameters<
+         typeof solid.material.onBeforeCompile
+       >[0];
+       solid.material.onBeforeCompile(shader, {} as Parameters<typeof solid.material.onBeforeCompile>[1]);
+       assert.match(shader.vertexShader, /attribute float marketHomeTile;/);
+-      assert.match(shader.vertexShader, /vMapUv = tilePixel \/ vec2\(108\.0, 18\.0\)/);
++      assert.match(shader.vertexShader, /vec2\(normal.x == 0\.0 \? size.x : size.z, normal.y == 0\.0 \? size.y : size.z\)/);
++      assert.match(shader.vertexShader, /marketHomeTile < 3\.0 \? max\(faceSize \/ 2\.0, vec2\(1\.0\)\) : vec2\(1\.0\)/);
++      assert.match(shader.fragmentShader, /mix\(scaled, fract\(scaled\), step\(vec2\(1\.001\), repeat\)\)/);
++      assert.match(shader.fragmentShader, /marketHomeMapUv = tilePixel \/ vec2\(108\.0, 18\.0\)/);
++      assert.match(shader.fragmentShader, /texture2D\( map, marketHomeMapUv \)/);
+     } finally {
+       room.dispose();
+     }

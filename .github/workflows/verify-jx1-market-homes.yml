@@ -10,6 +10,7 @@ on:
       - 'tools/compare-market-homes.mjs'
       - 'tools/paired-review.html'
       - 'docs/交流区/GPT/JX-1协作-2026-11-19/market-home-material-atlas.patch'
+      - 'docs/交流区/GPT/JX-1协作-2026-11-19/market-home-atlas-surface-refinement.patch'
 
 permissions:
   contents: read
@@ -27,6 +28,7 @@ jobs:
       JX_CANDIDATE_SHA: ${{ github.sha }}
       JX_PATCH_PATH: docs/交流区/GPT/JX-1-集市17户.patch
       JX_ATLAS_PATH: docs/交流区/GPT/JX-1协作-2026-11-19/market-home-material-atlas.patch
+      JX_SURFACE_PATH: docs/交流区/GPT/JX-1协作-2026-11-19/market-home-atlas-surface-refinement.patch
       JX_URL: http://127.0.0.1:4329/tools/voxel-tavern/jx1-market-homes.html
     steps:
       - name: Check out the published candidate receipt
@@ -71,6 +73,10 @@ jobs:
           sha256sum "$RUNNER_TEMP/jx1-atlas.patch" | tee "$JX_OUTPUT/atlas-sha256.txt"
           git apply --check --whitespace=error "$RUNNER_TEMP/jx1-atlas.patch"
           git apply --whitespace=error "$RUNNER_TEMP/jx1-atlas.patch"
+          git -C ../ci show "$JX_CANDIDATE_SHA:$JX_SURFACE_PATH" > "$RUNNER_TEMP/jx1-atlas-surface.patch"
+          sha256sum "$RUNNER_TEMP/jx1-atlas-surface.patch" | tee "$JX_OUTPUT/atlas-surface-sha256.txt"
+          git apply --check --whitespace=error "$RUNNER_TEMP/jx1-atlas-surface.patch"
+          git apply --whitespace=error "$RUNNER_TEMP/jx1-atlas-surface.patch"
           git status --short | tee "$JX_OUTPUT/changed-files.txt"
 
       - name: Install locked dependencies and Chromium
@@ -89,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           npm run typecheck
-          node --import tsx --test tests/town-blockout-market-homes.test.ts tests/town-blockout-house-portals.test.ts
+          node --import tsx --test tests/town-blockout-market-homes.test.ts tests/town-blockout-market-home-atlas.test.ts tests/town-blockout-house-portals.test.ts
 
       - name: Capture rendered homes and replay their inspected paths
         working-directory: town
