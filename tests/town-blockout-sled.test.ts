@@ -49,7 +49,8 @@ test('a fast collision detaches the sled and tumbles the rider for two turns', (
   assert.ok(impact.speed > 0 && impact.north < 0);
   for (let tick = 0; tick < 75; tick++) ride.finishFrame(1 / 120, 0, wall);
   assert.ok(Math.abs(ride.roll() - 2 * Math.PI) < 1e-8);
-  for (let tick = 0; tick < 120; tick++) ride.finishFrame(1 / 120, 0, wall);
+  // A 9.5 m/s flat run can leave 7.6 m/s after the unchanged 0.8 rebound factor.
+  for (let tick = 0; tick < 150; tick++) ride.finishFrame(1 / 120, 0, wall);
   assert.equal(ride.recovering(), false);
   assert.equal(impact.speed, 0);
   assert.ok(impactNorth - impact.n >= 3);
