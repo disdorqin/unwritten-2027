@@ -11,7 +11,6 @@ assert.ok(output, 'JX_OUTPUT is required');
 
 const viewport = { width: 1000, height: 650 };
 const angles = ['street', 'north', 'east', 'south', 'west'];
-const walkCount = 9;
 const routePath = 'tools/voxel-tavern/town-blockout/market-homes-review-routes.json';
 const evidence = {
   baselineSha: process.env.JX_BASELINE_SHA,
@@ -51,7 +50,7 @@ function measuredWalkPlan(ids, routes) {
       sum + Math.hypot(east - route[i][0], north - route[i][1]), 0);
     assert.ok(meters > 0, 'The approach route must move for ' + id);
     return { id, meters };
-  }).sort((a, b) => a.meters - b.meters || a.id.localeCompare(b.id)).slice(0, walkCount);
+  }).sort((a, b) => a.meters - b.meters || a.id.localeCompare(b.id));
 }
 
 function escapeCell(value) {
@@ -228,8 +227,8 @@ async function writeEvidence() {
     '- Houses: ' + evidence.ids.length + '/17',
     '- Exterior images: ' + evidence.shots.filter(shot => angles.includes(shot.angle)).length + '/85',
     '- Interior images: ' + evidence.shots.filter(shot => shot.angle === 'interior').length + '/17',
-    '- Walks completed: ' + evidence.walks.filter(walk => walk.result?.ok === true).length + '/9',
-    '- Fixed street-camera comparisons: ' + evidence.walks.filter(walk => walk.sameCamera).length + '/9',
+    '- Walks completed: ' + evidence.walks.filter(walk => walk.result?.ok === true).length + '/17',
+    '- Fixed street-camera comparisons: ' + evidence.walks.filter(walk => walk.sameCamera).length + '/17',
     '- Mobile candidate UI (390 × 844, DPR 2): ' + (evidence.mobile?.passed ? 'passed' : 'not passed'),
     '- Mobile DOM door options: ' + (evidence.mobile?.doorCount ?? 0) + '/17',
     '- Mobile camera screenshots / trusted taps: ' + (evidence.mobile?.shots.length ?? 0) + '/6 and ' +
@@ -371,8 +370,8 @@ try {
   }
   assert.equal(evidence.shots.filter(shot => angles.includes(shot.angle)).length, 85);
   assert.equal(evidence.shots.filter(shot => shot.angle === 'interior').length, 17);
-  assert.equal(evidence.walks.filter(walk => walk.result?.ok === true).length, walkCount);
-  assert.equal(evidence.walks.filter(walk => walk.sameCamera).length, walkCount);
+  assert.deepEqual(evidence.walks.filter(walk => walk.result?.ok === true).map(walk => walk.id).sort(), [...evidence.ids].sort());
+  assert.equal(evidence.walks.filter(walk => walk.sameCamera).length, evidence.ids.length);
   assert.deepEqual(evidence.pageErrors, [], 'No uncaught page errors are expected');
   assert.deepEqual(evidence.httpErrors, [], 'No HTTP errors are expected for this preview');
   assert.deepEqual(evidence.requestFailures, [], 'All isolated candidate requests must complete');
