@@ -21,16 +21,29 @@ const outside = [
 const travel = [
   [118.1, 115.1], [121.4, 115.4, 'entry'], [122.5, 120.3, 'display'],
   [122.5, 117], [126.3, 117], [126.3, 120.2, 'partition'], [126.3, 117],
-  [130, 117], [130, 120.2, 'packing'], [130, 117], [121.4, 115.4], [117.2, 115],
+  [130, 117], [130, 120.2, 'packing'], [130, 117], [121.4, 115.4], [116.8, 115],
 ];
+// Workshop porch's west edge is E117.575; with a .27 m body radius, the body is out before E117.305.
+const outsideEastLimit = 117.25;
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.json': 'application/json', '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.woff2': 'font/woff2' };
 const anchor = 'overview.onclick = () => mode(false);';
 const faceAnchor = 'function faceFrom(east: number, north: number, height: number, heading: number, tilt: number) {';
 const facePatch = `${faceAnchor}\n  if (jx3FixedPortrait) ({ east, north, height, heading, tilt } = jx3FixedPortrait);`;
+const weatherAnchor = 'const weather = townSnowWeatherForFrame(ceremonyState);';
+const weatherPatch = `const weather = townSnowWeatherForFrame(jx3Capture
+    ? { ...ceremonyState, now: ${frozenClock}, phase: 'ordinary' }
+    : ceremonyState);`;
+const coverAnchor = "visualSnowCover = ceremonyState.phase === 'ordinary'";
+const coverPatch = `visualSnowCover = jx3Capture ? weather.targetCover : ceremonyState.phase === 'ordinary'`;
+const buildingAnchor = "if (location.protocol !== 'file:') loadBuildings().catch(error => console.error('建筑清单读取失败', error));";
+const buildingPatch = `const jx3Buildings = location.protocol === 'file:' ? Promise.resolve()
+  : loadBuildings().catch(error => console.error('建筑清单读取失败', error));`;
 const instrumentation = `
 let jx3FixedPortrait: { east: number; north: number; height: number; heading: number; tilt: number } | undefined;
-if (import.meta.env.MODE === 'town-rehearsal' && new URLSearchParams(location.search).has('jx3Capture')) {
+const jx3Capture = import.meta.env.MODE === 'town-rehearsal' && new URLSearchParams(location.search).has('jx3Capture');
+if (jx3Capture) {
   Object.defineProperty(window, '__jx3', { value: {
+    ready: () => jx3Buildings,
     sample: () => ({ east: x, north: n, ground, yaw, pitch, walking, home: homeReturn?.id ?? null,
       camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), aspect: camera.aspect, fov: camera.fov } }),
     aim: (heading: number, tilt = 0) => {
@@ -61,9 +74,13 @@ async function build(checkout) {
   const root = path.join(checkout, 'tools', 'voxel-tavern');
   const viewer = path.join(root, 'town-blockout', 'viewer.ts');
   const original = await readFile(viewer, 'utf8');
-  assert.equal(original.split(anchor).length, 2, `${viewer}: missing or repeated capture anchor`);
-  assert.equal(original.split(faceAnchor).length, 2, `${viewer}: missing or repeated walking-camera anchor`);
-  const patched = original.replace(anchor, `${anchor}\n${instrumentation}`).replace(faceAnchor, facePatch);
+  const injections = [[anchor, `${anchor}\n${instrumentation}`], [faceAnchor, facePatch],
+    [weatherAnchor, weatherPatch], [coverAnchor, coverPatch], [buildingAnchor, buildingPatch]];
+  let patched = original;
+  for (const [needle, addition] of injections) {
+    assert.equal(patched.split(needle).length, 2, `${viewer}: missing or repeated anchor ${needle}`);
+    patched = patched.replace(needle, addition);
+  }
   try {
     await writeFile(viewer, patched);
     const result = spawnSync(process.execPath, [path.join(root, 'node_modules/vite/bin/vite.js'), 'build', '--mode', 'town-rehearsal'], {
@@ -73,7 +90,9 @@ async function build(checkout) {
   } finally {
     await writeFile(viewer, original);
   }
-  return { dist: path.join(root, 'dist'), sha: gitInfo(checkout), patchedViewerSha256: createHash('sha256').update(patched).digest('hex') };
+  return { dist: path.join(root, 'dist'), sha: gitInfo(checkout),
+    fixtureSha256: createHash('sha256').update(JSON.stringify(injections)).digest('hex'),
+    patchedViewerSha256: createHash('sha256').update(patched).digest('hex') };
 }
 
 async function startServer(checkout, dist) {
@@ -177,7 +196,10 @@ async function drive(page, east, north) {
 }
 
 async function run(checkout, label, browser) {
+  const log = message => console.log(`[jx3 ${label}] ${message}`);
+  log(`build starting ${gitInfo(checkout)}`);
   const built = await build(checkout);
+  log(`build ready ${built.sha}`);
   const { server, url, traffic } = await startServer(checkout, built.dist);
   const context = await browser.newContext(viewportOptions);
   const presenceSockets = [];
@@ -189,6 +211,9 @@ async function run(checkout, label, browser) {
   const errors = [];
   const nonPresence = pathname => !pathname.startsWith('/presence');
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (/建筑清单读取失败|栋替换模型加载失败/.test(message.text())) errors.push(message.text());
+  });
   page.on('requestfailed', request => {
     const why = request.failure()?.errorText;
     if (nonPresence(new URL(request.url()).pathname) && why !== 'net::ERR_ABORTED') errors.push(`${why} ${request.url()}`);
@@ -210,10 +235,16 @@ async function run(checkout, label, browser) {
     await page.screenshot({ path: path.join(dir, file), animations: 'disabled', timeout: frameTimeout });
     assert.ok(matchCamera((await sample(page)).camera, pose.camera), `Camera moved: ${file}`);
     screenshots.push({ id, group, file, pose, frames });
+    log(`captured ${file} at ${pose.camera.position.map(number => number.toFixed(3)).join(',')} draws=${frames.at(-1).calls} tris=${frames.at(-1).triangles}`);
   }
   async function nativeStreet() {
     if ((await sample(page)).walking) await page.locator('#overview').click();
-    await page.locator('#jump').selectOption({ label: '灯坊' });
+    await page.locator('#jump').evaluate(select => {
+      const destination = Array.from(select.options).find(option => option.label === '灯坊');
+      if (!destination) throw new Error('Native 灯坊 destination missing');
+      select.value = destination.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await page.waitForFunction(() => document.querySelector('#walk')?.getAttribute('aria-pressed') === 'true' &&
       /东 108\.0 m · 北 114\.0 m/.test(document.querySelector('#position')?.textContent ?? ''), null, { timeout: frameTimeout });
   }
@@ -221,6 +252,16 @@ async function run(checkout, label, browser) {
     const reply = await page.goto(`${url}/town-blockout.html?profile&jx3Capture`, { waitUntil: 'domcontentloaded', timeout: frameTimeout });
     assert.equal(reply?.status(), 200);
     await page.waitForFunction(() => Boolean(window.__jx3), null, { timeout: frameTimeout });
+    await page.evaluate(async timeout => {
+      let timer;
+      try {
+        await Promise.race([window.__jx3.ready(), new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Building queue did not settle')), timeout);
+        })]);
+      } finally { clearTimeout(timer); }
+    }, frameTimeout);
+    assert.deepEqual(errors, [], `${label} did not load the production assets`);
+    log(`production scene ready and building queue settled ${traffic.assets.length} HTTP responses`);
     await nativeStreet();
     await image('street', 'exterior');
     const street = screenshots[0].pose.camera.position;
@@ -232,8 +273,10 @@ async function run(checkout, label, browser) {
     try {
       await nativeStreet();
       for (const [east, north, imageId] of travel) {
+        log(`walking ${waypoints.length + 1}/${travel.length} toward E${east}/N${north}`);
         const leg = await drive(page, east, north);
         waypoints.push({ target: [east, north], ...leg });
+        log(`arrived E${leg.arrived.east.toFixed(3)}/N${leg.arrived.north.toFixed(3)} after ${leg.observed} frames`);
         if (imageId) {
           try {
             await page.evaluate(({ east, north }) => window.__jx3.portrait({
@@ -247,16 +290,21 @@ async function run(checkout, label, browser) {
           }
         }
       }
+      const endpoint = await sample(page);
+      assert.ok(endpoint.walking && endpoint.east < outsideEastLimit && Math.abs(endpoint.north - 115) <= .45,
+        `The player has not cleared the outside porch: E${endpoint.east}/N${endpoint.north}`);
+      log(`verified outside porch at E${endpoint.east.toFixed(3)}/N${endpoint.north.toFixed(3)}`);
     } catch (error) {
       walkError = String(error);
+      log(`walking stopped: ${walkError}`);
     }
     assert.ok(traffic.clock > 0, 'No rehearsal clock request was observed');
     assert.deepEqual(errors, [], `${label} page/asset requests failed`);
   } finally {
     await writeFile(path.join(dir, 'evidence.json'), JSON.stringify({
-      tested: { ...built, instrumentationSha256: createHash('sha256').update(instrumentation + facePatch).digest('hex') },
+      tested: built,
       browser: browser.version(), viewportOptions, screenshots, waypoints, walkError, interiorErrors, errors, presenceSockets, traffic,
-      clock: new Date(frozenClock).toISOString(), acceptance: 'Loopback production preview bundle in rehearsal mode, isolated single-player. Camera-only instrumentation; walking uses keyboard.',
+      clock: new Date(frozenClock).toISOString(), acceptance: 'Loopback production preview in rehearsal mode, isolated single-player. Frozen weather profile and visual target cover. Walking uses keyboard.',
     }, null, 2));
     await context.close();
     await new Promise(resolve => server.close(resolve));
@@ -296,6 +344,8 @@ try {
   console.log(`Key-controlled route: ${before.waypoints.length}/${travel.length} baseline, ${after.waypoints.length}/${travel.length} candidate`);
   assert.equal(before.waypoints.length, travel.length, before.walkError);
   assert.equal(after.waypoints.length, travel.length, after.walkError);
+  assert.equal(before.walkError, undefined, before.walkError);
+  assert.equal(after.walkError, undefined, after.walkError);
   assert.equal(details.length, 4, 'The baseline needs all four interior views');
   assert.ok(details.every(view => view.matchedCamera), 'The candidate needs all four matched interior views');
 } finally {
