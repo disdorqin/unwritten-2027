@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>未写镇 · 主峰步道与雪橇线路</title>
+<style>
+  html, body { margin: 0; overflow: hidden; background: #bdcedc; font: 15px system-ui, sans-serif }
+  nav, #instructions { position: fixed; z-index: 1; color: white; background: #213142ee; border-radius: 6px }
+  nav { top: 12px; left: 12px; display: flex; padding: 4px; gap: 4px }
+  button { border: 0; border-radius: 4px; padding: 8px 10px; color: white; background: transparent; font: inherit; cursor: pointer }
+  button[aria-pressed="true"] { background: #46667f }
+  #instructions { bottom: 12px; left: 12px; padding: 8px 12px }
+  canvas { display: block }
+</style>
+<nav aria-label="路线">
+  <button type="button" data-p3-action="walk" aria-pressed="true">盘山步道</button>
+  <button type="button" data-p3-action="sled" aria-pressed="false">雪橇线路样场</button>
+</nav>
+<div id="instructions">按 W 沿步道前进</div>
+<script type="module" src="./town-blockout/main-summit-trails-review.ts"></script>
+</html>
