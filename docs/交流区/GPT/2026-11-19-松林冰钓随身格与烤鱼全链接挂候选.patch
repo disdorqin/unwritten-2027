@@ -1,0 +1,254 @@
+diff --git a/tests/town-blockout-pine-camp-fire-activity.test.ts b/tests/town-blockout-pine-camp-fire-activity.test.ts
+index b9f1b91b02655ee1b82c4a6c4dc0e8bace8e6ed0..6a0a15b918f06005d8cbb9bb8d6abf83790652cc 100644
+--- a/tests/town-blockout-pine-camp-fire-activity.test.ts
++++ b/tests/town-blockout-pine-camp-fire-activity.test.ts
+@@ -1,8 +1,13 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
++import { Scene } from 'three';
++import { createIceFishingActivity } from '../tools/voxel-tavern/town-blockout/ice-fishing-activity.ts';
++import { findRegionalCampfires, pineCampfireId } from '../tools/voxel-tavern/town-blockout/town-campfires.ts';
++import { createForestCampfire, findForestChopSites, forestChopHits } from '../tools/voxel-tavern/town-blockout/town-forest-campfire.ts';
++import type { TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
+ import { npcAddedDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-added-dialogue.ts';
+ import {
+-  createRegionalCarry, isPineStoryTime, pineStoryLines, regionalCarryKey,
++  createPineFireActivities, createRegionalCarry, isPineStoryTime, pineStoryLines, regionalCarryKey,
+ } from '../tools/voxel-tavern/town-blockout/town-pine-camp-fire-activity.ts';
+ 
+ test('ice catch and roasting reserve three carry slots and survive reopening the town', () => {
+@@ -55,3 +60,141 @@ test('campfire story uses the Shanghai NPC night segment and existing approved l
+   assert.equal(isPineStoryTime(Date.parse('2026-12-31T22:00:00+08:00'), false), true);
+   assert.deepEqual(pineStoryLines, [npcAddedDialogue.樊樵.familiar.再访[1], npcAddedDialogue.樊樵.guides[3]]);
+ });
++
++test('ice fishing controls put fresh fish in the shared carry and the grill cooks and feeds from that carry', t => {
++  class Element extends EventTarget {
++    children: Element[] = [];
++    textContent = '';
++    dataset: Record<string, string> = {};
++    style: Record<string, string> = {};
++    disabled = false;
++    hidden = false;
++    isConnected = true;
++    onclick?: () => void;
++
++    append(...children: Element[]) { this.children.push(...children); }
++    setAttribute() {}
++    focus() {}
++    closest() { return null; }
++    getContext() { return null; }
++    click() {
++      if (this.disabled || this.hidden) return;
++      this.dispatchEvent(new Event('click'));
++      this.onclick?.();
++    }
++  }
++
++  const values = new Map<string, string>();
++  const storage = {
++    getItem: (key: string) => values.get(key) ?? null,
++    setItem: (key: string, value: string) => { values.set(key, value); },
++  };
++  const body = new Element();
++  for (const [key, value] of Object.entries({
++    document: { body, activeElement: body, createElement: () => new Element() },
++    localStorage: storage,
++  })) {
++    const original = Object.getOwnPropertyDescriptor(globalThis, key);
++    Object.defineProperty(globalThis, key, { configurable: true, value });
++    t.after(() => {
++      if (original) Object.defineProperty(globalThis, key, original);
++      else Reflect.deleteProperty(globalThis, key);
++    });
++  }
++
++  let at = 1_000;
++  let roll = 0;
++  let warmth = 0;
++  let catalogue = 0;
++  let panel = new Element();
++  t.mock.method(Math, 'random', () => roll);
++  const messages: string[] = [];
++  const context: TownActivityContext = {
++    scene: new Scene(),
++    open() {
++      panel.isConnected = false;
++      panel = new Element();
++      return panel as unknown as HTMLElement;
++    },
++    announce(message) { messages.push(message); },
++    face() {},
++    sit() {},
++  };
++  const carry = createRegionalCarry({ storage, now: () => at });
++  const fishing = createIceFishingActivity(context, () => 0, () => { catalogue++; }, carry.collectFish);
++  const ground = () => 12;
++  const fire = findRegionalCampfires(ground, undefined, { pineCamp: true }).find(site => site.id === pineCampfireId);
++  assert.ok(fire);
++  const forest = createForestCampfire(context.scene, context, findForestChopSites([fire], ground), {
++    isNight: () => true, now: () => at, pineCamp: fire, storage,
++  });
++  const chop = forest.spots.find(spot => spot.label === '松林营地劈柴');
++  const feed = forest.spots.find(spot => spot.label === '给松林火塘添柴');
++  assert.ok(chop && feed);
++  const pine = createPineFireActivities(context, carry, {
++    lighted: () => forest.pineCampState().fuel > 0,
++    warmFromRoast: () => { warmth++; },
++    storyHint: () => undefined,
++    leaveSeat() {},
++    now: () => at,
++  });
++  fishing.spots[0].run();
++  const [status, cast, collect, release] = panel.children[0].children;
++  for (const [index, speciesRoll] of [0, .4, .8, 0].entries()) {
++    roll = 0;
++    cast.click();
++    assert.equal(status.dataset.iceFishingStatus, 'waiting');
++    for (let tick = 0; tick < 16; tick++) fishing.update!(.1);
++    assert.equal(status.dataset.iceFishingStatus, 'waiting');
++    fishing.update!(.1);
++    assert.equal(status.dataset.iceFishingStatus, 'bite');
++    assert.equal(cast.textContent, '收线');
++    roll = speciesRoll;
++    cast.click();
++    assert.equal(status.dataset.iceFishingStatus, 'caught');
++    assert.equal(collect.hidden, false);
++    assert.equal(release.hidden, false);
++    collect.click();
++    if (index < 3) {
++      assert.match(status.textContent, /已收入随身格/);
++      assert.equal(carry.snapshot().fresh, index + 1);
++      assert.equal(collect.hidden, true);
++    } else {
++      assert.match(status.textContent, /随身格已满/);
++      assert.equal(carry.snapshot().fresh, 3);
++      assert.equal(release.hidden, false);
++      release.click();
++      assert.match(status.textContent, /已放生/);
++      assert.equal(release.hidden, true);
++      assert.equal(carry.snapshot().used, 3);
++    }
++  }
++  assert.ok(catalogue > 0);
++
++  pine.openGrill();
++  const [grillStatus, begin, eat] = panel.children;
++  assert.match(grillStatus.textContent, /鲜鱼 3 · 烤鱼 0/);
++  assert.equal(begin.disabled, true);
++  for (let fuel = 1; fuel <= 4; fuel++) {
++    for (let hit = 0; hit < forestChopHits; hit++) { at += 400; chop.run(); }
++    feed.run();
++    assert.deepEqual(forest.pineCampState(), { wood: 0, fuel, level: fuel === 4 ? 2 : 0 });
++  }
++  pine.update();
++  assert.equal(begin.disabled, false);
++  begin.click();
++  assert.equal(messages.at(-1), '鲜鱼已挂上烤架');
++  at += 29_999;
++  pine.update();
++  assert.match(grillStatus.textContent, /随身格 3\/3 · 鲜鱼 3 · 烤鱼 0 · 烤制还需 1 秒/);
++  assert.equal(eat.disabled, true);
++  at++;
++  pine.update();
++  assert.match(grillStatus.textContent, /随身格 3\/3 · 鲜鱼 2 · 烤鱼 1$/);
++  assert.equal(eat.disabled, false);
++  eat.click();
++  assert.match(grillStatus.textContent, /随身格 2\/3 · 鲜鱼 2 · 烤鱼 0$/);
++  assert.equal(warmth, 1);
++  assert.equal(messages.at(-1), '吃了一份烤鱼 · 暖意入身');
++  t.diagnostic('cast/reel/collect passed 3 fish; fourth catch released; four five-hit chop rounds fueled the pine fire to stage 2; at 29,999 ms fresh=3 roast=0, at 30,000 ms fresh=2 roast=1, after eating used=2 warm callbacks=1');
++});
+diff --git a/tools/voxel-tavern/town-blockout/ice-fishing-activity.ts b/tools/voxel-tavern/town-blockout/ice-fishing-activity.ts
+index 3ed4b60fb3771be8473d404cf055c22200ac32fb..6210359a3e0c70918b6b0ad31c907287fbf469ec 100644
+--- a/tools/voxel-tavern/town-blockout/ice-fishing-activity.ts
++++ b/tools/voxel-tavern/town-blockout/ice-fishing-activity.ts
+@@ -144,6 +144,7 @@ function buildFishingSpots(context: TownActivityContext, heightAt: (x: number, n
+ 
+ export function createIceFishingActivity(
+   context: TownActivityContext, heightAt: (x: number, n: number) => number, recordCatalogue?: () => void,
++  collectFreshFish?: () => boolean,
+ ): TownActivity {
+   const spots = buildFishingSpots(context, heightAt);
+   const catches = readLog();
+@@ -178,9 +179,16 @@ export function createIceFishingActivity(
+     record.className = 'ice-fishing-record';
+     const action = document.createElement('button');
+     action.type = 'button';
++    const collect = document.createElement('button');
++    collect.type = 'button';
++    collect.textContent = '收入随身格';
++    const release = document.createElement('button');
++    release.type = 'button';
++    release.textContent = '放生';
++    collect.hidden = release.hidden = true;
+     content.style.display = 'grid';
+     content.style.gap = '10px';
+-    content.append(status, action, record);
++    content.append(status, action, collect, release, record);
+     panel.append(content);
+     const current: Session = {
+       content, dialog: panel.closest('dialog'), status, record, action, spot,
+@@ -189,8 +197,25 @@ export function createIceFishingActivity(
+     session = current;
+     showRecord(current);
+     setPhase(current, 'idle', '可以抛竿了。');
++    let pendingCatch = '';
++    function finishCatch(message: string) {
++      if (!pendingCatch) return;
++      pendingCatch = '';
++      collect.hidden = release.hidden = true;
++      action.disabled = false;
++      setPhase(current, 'caught', message);
++      action.focus({ preventScroll: true });
++    }
++    collect.addEventListener('click', () => {
++      if (!canPlay(current) || !pendingCatch) return;
++      if (collectFreshFish?.()) finishCatch(`${pendingCatch}已收入随身格。`);
++      else status.textContent = '随身格已满，仍可放生。';
++    });
++    release.addEventListener('click', () => {
++      if (canPlay(current)) finishCatch(`已放生${pendingCatch}。`);
++    });
+     action.addEventListener('click', () => {
+-      if (!canPlay(current) || current.phase === 'waiting') return;
++      if (!canPlay(current) || current.phase === 'waiting' || pendingCatch) return;
+       if (current.phase === 'bite') {
+         const fish = species[Math.floor(Math.random() * species.length)];
+         const saved = readLog();
+@@ -201,6 +226,12 @@ export function createIceFishingActivity(
+         catch { stored = false; }
+         showRecord(current);
+         setPhase(current, 'caught', `钓上了${fish.name}！${stored ? '' : '收获保留在本次试玩。'}`);
++        if (collectFreshFish) {
++          pendingCatch = fish.name;
++          action.disabled = true;
++          collect.hidden = release.hidden = false;
++          collect.focus({ preventScroll: true });
++        }
+         spot.moveFloat(.026);
+         return;
+       }
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index dbf494e5448b83df2ba78ccf8b99a7b839764ce6..e740da43704005696408b5a0dbf9c0272a78ccb4 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -919,8 +919,9 @@ const tavernActivity = createTavernActivity(
+   () => { drinkingPoseUntil = performance.now() + 2500; },
+ );
+ const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, () => nightMode);
++const regionalCarry = createRegionalCarry();
+ const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt,
+-  () => collectRegionalStamp(iceFishingCatalogueStamp.id));
++  () => collectRegionalStamp(iceFishingCatalogueStamp.id), regionalCarry.collectFish);
+ const marketFair = createMarketFairActivity(
+   { ...activityContext, announce: announceActivity },
+   {
+@@ -2611,7 +2612,6 @@ function isAtPineSeat(seat: TownSeat) {
+   return pineFire?.seats.some(site => site.x === seat.x && site.n === seat.n && site.ground + 1.475 === seat.eyeY) ?? false;
+ }
+ 
+-const regionalCarry = createRegionalCarry();
+ const pineFireActivities = createPineFireActivities({ open: activityContext.open, announce: announceActivity }, regionalCarry, {
+   lighted: () => forestCampfire.pineCampState().fuel > 0,
+   warmFromRoast: warmFromDrink,
