@@ -51,7 +51,10 @@ function sampleAxis(min: number, max: number, spacing: number, anchors: readonly
 export function createMainSummitBlock(layout: MainSummitBlockLayout, arrivalHeight: number, coarseSpacing: number) {
   const { baseHeight, summitHeight, gateLength, summitPlateau, arrivalPlaza, frontRidgeArrivalBand } = mainSummitSpec;
   const { west, east, south, north } = mainSummitBounds;
-  const { summit, shoulders, ridgeHalfWidth, arrivalBlend, gate } = layout;
+  const { ridgeHalfWidth, arrivalBlend } = layout;
+  const summit = { ...layout.summit };
+  const shoulders = layout.shoulders.map(shoulder => ({ ...shoulder }));
+  const gate = { ...layout.gate };
   const halfPlateauWidth = summitPlateau[0] / 2, halfPlateauDepth = summitPlateau[1] / 2;
   const halfPlazaWidth = arrivalPlaza[0] / 2, plazaEnd = arrivalPlaza[1];
   if (!Number.isInteger(coarseSpacing) || coarseSpacing < 1) throw new RangeError('Invalid coarse sampling spacing.');
@@ -61,6 +64,10 @@ export function createMainSummitBlock(layout: MainSummitBlockLayout, arrivalHeig
   if (![ridgeHalfWidth, arrivalBlend, gate.clearWidth, gate.clearHeight, gate.jamb, gate.lintel]
     .every(value => Number.isFinite(value) && value > 0) ||
       gate.clearWidth + gate.jamb * 2 > arrivalPlaza[0]) throw new RangeError('Invalid main summit geometry.');
+  // Keep the 0.27 m radius and 1.8 m standing player clear of both jambs and lintel.
+  if (gate.clearWidth <= .54 || gate.clearHeight < 1.8) {
+    throw new RangeError('Main summit gate clearance is too small for a standing player.');
+  }
   const summitPeak = { ...summit, height: summitHeight };
   for (const [i, peak] of [summitPeak, ...shoulders].entries()) {
     const halfWidth = i === 0 ? halfPlateauWidth : 0;

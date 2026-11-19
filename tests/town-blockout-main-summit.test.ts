@@ -4,7 +4,7 @@ import { Frustum, Group, Matrix4, PerspectiveCamera, Raycaster, Vector2, Vector3
 import {
   createMainSummitBlock, mainSummitBounds, mainSummitSpec, mainSummitLayout,
 } from '../tools/voxel-tavern/town-blockout/main-summit-block.ts';
-import { northRidgeSummit } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain.ts';
+import { northRidgeSummit, sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain.ts';
 
 const fixture = mainSummitLayout;
 const spacing = 100;
@@ -68,6 +68,58 @@ test('the local gate is open for ten metres and meets the cloud terrace without 
       seamStep: candidate.heightAt(0, -10)! - northRidgeSummit.height, floorPoints, capsuleProbes: walkProbes }));
   } finally {
     candidate.dispose();
+  }
+});
+
+test('front ridge survey distinguishes a level deck from a crest that cuts through the gate width', t => {
+  const candidate = createMainSummitBlock(fixture, 347, spacing);
+  try {
+    const bodyRadius = .27;
+    const halfGate = fixture.gate.clearWidth / 2;
+    const lateralOffsets = [-halfGate - bodyRadius, -halfGate, 0, halfGate, halfGate + bodyRadius];
+    for (const e of lateralOffsets) {
+      for (const n of [654, 660, 666]) {
+        assert.equal(sampleNorthRidge350(300 + e, n), candidate.heightAt(e, -10));
+      }
+      assert.equal(candidate.heightAt(e, 0), 347);
+      assert.equal(candidate.heightAt(e, 40), 347);
+    }
+    const crestStep = sampleNorthRidge350(320, 650) - sampleNorthRidge350(320 - halfGate, 650);
+    assert.equal(crestStep, 3);
+    assert.ok(crestStep > .43);
+    t.diagnostic(JSON.stringify({ levelDeck: [300, 660, 347], crest: [320, 650, 350], crestStep }));
+  } finally {
+    candidate.dispose();
+  }
+});
+
+test('the terrain and gate retain the layout validated during construction', () => {
+  const layout = {
+    ...fixture, summit: { ...fixture.summit },
+    shoulders: [{ ...fixture.shoulders[0] }, { ...fixture.shoulders[1] }] as const,
+    gate: { ...fixture.gate },
+  };
+  const candidate = createMainSummitBlock(layout, 350, spacing);
+  try {
+    Object.assign(layout.summit, { east: 700 });
+    Object.assign(layout.shoulders[0], { height: 300 });
+    Object.assign(layout.gate, { clearWidth: .01, clearHeight: .01 });
+    assert.equal(candidate.heightAt(fixture.summit.east, fixture.summit.north), 800);
+    const shoulder = fixture.shoulders[0];
+    assert.equal(candidate.heightAt(shoulder.east, shoulder.north), shoulder.height);
+    const [left, right, roof] = candidate.enter(new Group()).colliders;
+    assert.equal(right.min[0] - left.max[0], fixture.gate.clearWidth);
+    assert.equal(roof.min[1] - 350, fixture.gate.clearHeight);
+  } finally {
+    candidate.dispose();
+  }
+});
+
+test('the gate rejects openings smaller than the standing player', () => {
+  for (const opening of [{ clearWidth: .52 }, { clearHeight: 1.7 }]) {
+    assert.throws(() => createMainSummitBlock({
+      ...fixture, gate: { ...fixture.gate, ...opening },
+    }, 350, spacing), /clearance/);
   }
 });
 
