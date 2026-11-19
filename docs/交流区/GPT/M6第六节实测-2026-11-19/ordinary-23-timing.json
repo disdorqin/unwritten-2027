@@ -1,0 +1,66 @@
+{
+  "init": {
+    "started": true,
+    "x": 224,
+    "n": 188,
+    "ground": 12,
+    "audio": "running"
+  },
+  "end": {
+    "strikes": [
+      {
+        "rehearsalMs": 1798642800006,
+        "wallMs": 63554.79999999702,
+        "strength": 0.65
+      },
+      {
+        "rehearsalMs": 1798642802023,
+        "wallMs": 65572.09999999404,
+        "strength": 0.65
+      },
+      {
+        "rehearsalMs": 1798642804043,
+        "wallMs": 67592.39999999106,
+        "strength": 0.65
+      }
+    ],
+    "audioCues": [
+      {
+        "flavor": "hourly",
+        "distance": 91.59503112375965,
+        "rehearsalMs": 1798642800002,
+        "soundAt": 59.952
+      }
+    ],
+    "audioOscillators": [
+      59.997,
+      59.997,
+      59.997,
+      59.997,
+      59.997,
+      59.997,
+      62.017,
+      62.017,
+      62.017,
+      62.017,
+      62.017,
+      62.017,
+      64.037,
+      64.037,
+      64.037,
+      64.037,
+      64.037,
+      64.037
+    ],
+    "swing": {
+      "max": 0.05988896107928745,
+      "frames": 15825
+    },
+    "audioState": "running",
+    "rehearsalStart": 1798642740000,
+    "wallDuration": 67509.69999998808
+  },
+  "mime": "video/webm;codecs=vp8,opus",
+  "bytes": 297352,
+  "errors": []
+}

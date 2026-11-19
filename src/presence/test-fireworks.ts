@@ -1,3 +1,5 @@
+import { townCeremonyMidnight } from './ceremony-arrival.js';
+
 export const testFireworksPlayers = 5;
 export const testFireworksDwellMs = 15 * 60_000;
 export const testFireworksNoticeMs = 10_000;
@@ -5,6 +7,9 @@ export const testFireworksLeadMs = 250;
 export const testFireworksShowMs = 36_000;
 export const testFireworksRearmMs = 30 * 60_000;
 export const testFireworksAnnouncement = '人齐了，10 秒后广场放烟花！';
+
+const ceremonyWindowStart = townCeremonyMidnight - 5 * 60 * 60_000;
+const ceremonyWindowEnd = townCeremonyMidnight + 60 * 60_000;
 
 export type TestFireworksBroadcast =
   | { type: 'event'; kind: 'announce'; message: typeof testFireworksAnnouncement }
@@ -17,6 +22,15 @@ export function createTestFireworksSchedule() {
 
   return {
     update(online: number, now: number, epochNow: number, nextSeed: () => number): TestFireworksBroadcast | undefined {
+      // Cancel dwell and pending announcements in the formal window. Also avoid starting
+      // a show just before the window when its display would run into the ceremony.
+      const untilStart = plannedStart === undefined ? testFireworksNoticeMs : Math.max(0, plannedStart - now);
+      if (epochNow < ceremonyWindowEnd && epochNow + Math.round(untilStart) + testFireworksShowMs > ceremonyWindowStart) {
+        onlineSince = undefined;
+        plannedStart = undefined;
+        return;
+      }
+
       if (showEnd !== undefined) {
         if (now < showEnd || (online >= testFireworksPlayers && now < showEnd + testFireworksRearmMs)) return;
         showEnd = undefined;

@@ -1,11 +1,15 @@
 import {
-  BoxGeometry, CanvasTexture, Color, DynamicDrawUsage, InstancedMesh, Mesh, MeshBasicMaterial,
+  BoxGeometry, CanvasTexture, Color, DynamicDrawUsage, InstancedMesh, MeshBasicMaterial,
   MeshLambertMaterial, Object3D, PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import type { TownActivity, TownActivityContext } from './town-activity';
+import type { PassportStamp } from './town-passport';
 
 export const iceFishingStation = { x: 337, n: 87 } as const;
-const hole = { x: 335.5, n: 85.5 };
+export const iceFishingStations = [iceFishingStation, { x: 318, n: 80 }, { x: 368, n: 74 }] as const;
+export const iceFishingCatalogueStamp = {
+  id: 'ice-fishing-catalogue', label: '冰钓图鉴', hint: '在冰湖钓齐鲫鱼、鲈鱼与白鱼。',
+} as const satisfies PassportStamp;
 const storageKey = 'unwritten:ice-fishing-log';
 const biteSeconds = 1.6;
 const species = [
@@ -22,6 +26,7 @@ type Session = {
   status: HTMLElement;
   record: HTMLElement;
   action: HTMLButtonElement;
+  spot: ReturnType<typeof buildFishingSpots>[number];
   phase: Phase;
   remaining: number;
   elapsed: number;
@@ -40,9 +45,10 @@ function readLog(): CatchLog {
   return initial;
 }
 
-function buildFishingSpot(context: TownActivityContext, heightAt: (x: number, n: number) => number) {
+function fishingSpotGeometry(station: { x: number; n: number }, heightAt: (x: number, n: number) => number) {
+  const { x, n } = station;
+  const hole = { x: x - 1.5, n: n - 1.5 };
   const waterLevel = heightAt(hole.x, hole.n);
-  const { x, n } = iceFishingStation;
   const postX = x - .55;
   const postN = n + .9;
   const postY = heightAt(postX, postN);
@@ -59,38 +65,50 @@ function buildFishingSpot(context: TownActivityContext, heightAt: (x: number, n:
     [postX, postY + 1.13, postN, .11, .50, 1.20, '#64423c'],
     [postX, postY + 1.40, postN, .15, .07, 1.24, '#e4f3fa'],
   ] as const;
+  return { station, hole, waterLevel, postX, postN, postY, pieces };
+}
+
+function buildFishingSpots(context: TownActivityContext, heightAt: (x: number, n: number) => number) {
+  const sites = iceFishingStations.map(station => fishingSpotGeometry(station, heightAt));
   const floatSize = [
     { h: .12, w: .10, tint: '#e78853' },
     { h: .10, w: .10, tint: '#ffeab4' },
   ] as const;
   const model = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    pieces.length + floatSize.length);
+    sites.reduce((count, site) => count + site.pieces.length + floatSize.length, 0));
   model.name = 'ice-fishing-spot';
   model.instanceMatrix.setUsage(DynamicDrawUsage);
   const pose = new Object3D();
-  pieces.forEach(([east, y, north, w, h, d, tint], index) => {
-    pose.position.set(east, y, -north);
-    pose.scale.set(w, h, d);
-    pose.updateMatrix();
-    model.setMatrixAt(index, pose.matrix);
-    model.setColorAt(index, new Color(tint));
-  });
-  floatSize.forEach(({ tint }, index) => model.setColorAt(pieces.length + index, new Color(tint)));
-  context.scene.add(model);
-
-  function moveFloat(offset: number) {
-    let height = waterLevel + offset;
-    floatSize.forEach(({ h, w }, index) => {
-      pose.position.set(hole.x + .17, height + h / 2, -hole.n);
-      pose.scale.set(w, h, w);
+  const color = new Color();
+  let first = 0;
+  const spots = sites.map(({ station, hole, waterLevel, pieces }) => {
+    for (const [index, [east, y, north, w, h, d, tint]] of pieces.entries()) {
+      pose.position.set(east, y, -north);
+      pose.scale.set(w, h, d);
       pose.updateMatrix();
-      model.setMatrixAt(pieces.length + index, pose.matrix);
-      height += h;
-    });
-    model.instanceMatrix.needsUpdate = true;
-  }
-  moveFloat(.026);
+      model.setMatrixAt(first + index, pose.matrix);
+      model.setColorAt(first + index, color.set(tint));
+    }
+    const floatBase = first + pieces.length;
+    first = floatBase + floatSize.length;
+    floatSize.forEach(({ tint }, index) => model.setColorAt(floatBase + index, color.set(tint)));
+    function moveFloat(offset: number) {
+      let height = waterLevel + offset;
+      floatSize.forEach(({ h, w }, index) => {
+        pose.rotation.y = 0;
+        pose.position.set(hole.x + .17, height + h / 2, -hole.n);
+        pose.scale.set(w, h, w);
+        pose.updateMatrix();
+        model.setMatrixAt(floatBase + index, pose.matrix);
+        height += h;
+      });
+      model.instanceMatrix.needsUpdate = true;
+    }
+    moveFloat(.026);
+    return { station, hole, waterLevel, moveFloat };
+  });
   model.computeBoundingSphere();
+  context.scene.add(model);
 
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -109,19 +127,26 @@ function buildFishingSpot(context: TownActivityContext, heightAt: (x: number, n:
     ink.fillText('冰钓', 128, 58);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
-    const sign = new Mesh(new PlaneGeometry(1.13, .46), new MeshBasicMaterial({ map: texture }));
+    const sign = new InstancedMesh(new PlaneGeometry(1.13, .46), new MeshBasicMaterial({ map: texture }), sites.length);
     sign.name = 'ice-fishing-sign';
-    sign.rotation.y = Math.PI / 2;
-    sign.position.set(postX + .057, postY + 1.13, -postN);
+    pose.rotation.y = Math.PI / 2;
+    pose.scale.set(1, 1, 1);
+    sites.forEach(({ postX, postY, postN }, index) => {
+      pose.position.set(postX + .057, postY + 1.13, -postN);
+      pose.updateMatrix();
+      sign.setMatrixAt(index, pose.matrix);
+    });
+    sign.computeBoundingSphere();
     context.scene.add(sign);
   }
-  return { waterLevel, moveFloat };
+  return spots;
 }
 
 export function createIceFishingActivity(
-  context: TownActivityContext, heightAt: (x: number, n: number) => number,
+  context: TownActivityContext, heightAt: (x: number, n: number) => number, recordCatalogue?: () => void,
+  collectFreshFish?: () => boolean,
 ): TownActivity {
-  const spot = buildFishingSpot(context, heightAt);
+  const spots = buildFishingSpots(context, heightAt);
   const catches = readLog();
   let session: Session | undefined;
 
@@ -130,6 +155,7 @@ export function createIceFishingActivity(
 
   function showRecord(current: Session) {
     current.record.textContent = `本机收获 · ${species.map(({ id, name }) => `${name} ${catches[id]} 条`).join(' · ')}`;
+    if (species.every(({ id }) => catches[id] > 0)) recordCatalogue?.();
   }
 
   function setPhase(current: Session, phase: Phase, message: string) {
@@ -141,9 +167,10 @@ export function createIceFishingActivity(
     current.action.textContent = phase === 'waiting' ? '等鱼咬钩' : phase === 'bite' ? '收线' : '抛竿';
   }
 
-  function open() {
+  function open(spot: Session['spot']) {
+    session?.spot.moveFloat(.026);
     spot.moveFloat(.026);
-    context.face(hole.x, hole.n, spot.waterLevel + .15);
+    context.face(spot.hole.x, spot.hole.n, spot.waterLevel + .15);
     const panel = context.open('冰湖冰钓', '抛竿后等浮标下沉，看到「收线」亮起时及时按下。');
     const content = document.createElement('section');
     const status = document.createElement('p');
@@ -152,19 +179,43 @@ export function createIceFishingActivity(
     record.className = 'ice-fishing-record';
     const action = document.createElement('button');
     action.type = 'button';
+    const collect = document.createElement('button');
+    collect.type = 'button';
+    collect.textContent = '收入随身格';
+    const release = document.createElement('button');
+    release.type = 'button';
+    release.textContent = '放生';
+    collect.hidden = release.hidden = true;
     content.style.display = 'grid';
     content.style.gap = '10px';
-    content.append(status, action, record);
+    content.append(status, action, collect, release, record);
     panel.append(content);
     const current: Session = {
-      content, dialog: panel.closest('dialog'), status, record, action,
+      content, dialog: panel.closest('dialog'), status, record, action, spot,
       phase: 'idle', remaining: 0, elapsed: 0,
     };
     session = current;
     showRecord(current);
     setPhase(current, 'idle', '可以抛竿了。');
+    let pendingCatch = '';
+    function finishCatch(message: string) {
+      if (!pendingCatch) return;
+      pendingCatch = '';
+      collect.hidden = release.hidden = true;
+      action.disabled = false;
+      setPhase(current, 'caught', message);
+      action.focus({ preventScroll: true });
+    }
+    collect.addEventListener('click', () => {
+      if (!canPlay(current) || !pendingCatch) return;
+      if (collectFreshFish?.()) finishCatch(`${pendingCatch}已收入随身格。`);
+      else status.textContent = '随身格已满，仍可放生。';
+    });
+    release.addEventListener('click', () => {
+      if (canPlay(current)) finishCatch(`已放生${pendingCatch}。`);
+    });
     action.addEventListener('click', () => {
-      if (!canPlay(current) || current.phase === 'waiting') return;
+      if (!canPlay(current) || current.phase === 'waiting' || pendingCatch) return;
       if (current.phase === 'bite') {
         const fish = species[Math.floor(Math.random() * species.length)];
         const saved = readLog();
@@ -175,6 +226,12 @@ export function createIceFishingActivity(
         catch { stored = false; }
         showRecord(current);
         setPhase(current, 'caught', `钓上了${fish.name}！${stored ? '' : '收获保留在本次试玩。'}`);
+        if (collectFreshFish) {
+          pendingCatch = fish.name;
+          action.disabled = true;
+          collect.hidden = release.hidden = false;
+          collect.focus({ preventScroll: true });
+        }
         spot.moveFloat(.026);
         return;
       }
@@ -184,14 +241,16 @@ export function createIceFishingActivity(
   }
 
   return {
-    spots: [{ ...iceFishingStation, ground: heightAt(iceFishingStation.x, iceFishingStation.n),
-      range: 1.55, label: '冰湖冰钓', run: open }],
+    spots: spots.map(spot => ({
+      ...spot.station, ground: heightAt(spot.station.x, spot.station.n),
+      range: 1.55, label: '冰湖冰钓', run: () => open(spot),
+    })),
     update(dt: number) {
       const current = session;
       if (!current) return;
       if (!canPlay(current)) {
         session = undefined;
-        spot.moveFloat(.026);
+        current.spot.moveFloat(.026);
         return;
       }
       if (!Number.isFinite(dt) || dt <= 0 || (current.phase !== 'waiting' && current.phase !== 'bite')) return;
@@ -210,7 +269,7 @@ export function createIceFishingActivity(
       }
       const ripple = current.phase === 'bite' ? -.16 - Math.sin(current.elapsed * 20) * .03 :
         current.phase === 'waiting' ? .023 + Math.sin(current.elapsed * 4) * .025 : .026;
-      spot.moveFloat(ripple);
+      current.spot.moveFloat(ripple);
     },
   };
 }

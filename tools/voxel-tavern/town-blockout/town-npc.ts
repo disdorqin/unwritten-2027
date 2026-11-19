@@ -7,6 +7,9 @@ import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcF
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
+import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+
+import { houseDoorBookCopy } from './town-house-door-book';
 
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
@@ -40,6 +43,8 @@ const roles: ReadonlyArray<{
   { name: memorialClerkName, job: '新区信箱管理员', home: memorialClerkHome, stroll: memorialClerkHome,
     palette: ['#e0a988', '#514238', '#4d566d', '#dfd2b9', '#333544', '#923d38', '#daaf70', '#49375a'] },
 ];
+
+export const townNpcDoorAnchors = roles.map(({ name, home: [x, n] }) => ({ label: name, x, n }));
 
 type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
 
@@ -175,6 +180,7 @@ export function createTownNpcActivity(
   playTavernDice?: (panel: HTMLElement) => void,
   mascot?: TownMascotOptions,
 ): TownActivity & {
+  registerResident: ReturnType<typeof createTownResidentController>['register'];
   snowballTargets: readonly TownSnowballTarget[];
   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
 } {
@@ -187,10 +193,9 @@ export function createTownNpcActivity(
   });
   const hatStart = costumeCount;
   const heldStart = hatStart + roles.length * snowHat.length;
-  const mascotStart = heldStart + roles.length;
+  const residentStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    mascotStart + (mascot ? townMascotParts.length : 0));
-  const updateMascot = mascot && addMascotToNpcBatch(villagers, mascotStart, mascot);
+    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0));
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -243,16 +248,28 @@ export function createTownNpcActivity(
   }));
   const facing = roles.map(({ home, stroll }) => Math.atan2(stroll[0] - home[0], home[1] - stroll[1]));
   const talkTurns = roles.map(() => ({ smallTalk: 0, newYear: 0, guides: 0, neighbors: 0, zodiac: 0 }));
-  const visits: Partial<Record<ActorName, number>> = {};
+  const visits: Partial<Record<ActorName | TownResidentName, number>> = {};
   try {
     const previous: unknown = JSON.parse(localStorage.getItem(savedVisitKey) ?? 'null');
     if (previous && typeof previous === 'object') {
-      for (const { name } of roles) {
+      for (const name of [...roles.map(role => role.name), ...townResidentNames]) {
         const count = (previous as Record<string, unknown>)[name];
         if (typeof count === 'number' && Number.isSafeInteger(count) && count > 0) visits[name] = count;
       }
     }
   } catch { /* Private browsers keep the visit counts for this session. */ }
+
+  function visit(name: ActorName | TownResidentName) {
+    const visitsBefore = visits[name] ?? 0;
+    visits[name] = visitsBefore + 1;
+    try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
+    catch { /* The in-memory count still works. */ }
+    return visitsBefore;
+  }
+
+  const residents = createTownResidentController(villagers, residentStart, context, visit,
+    () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
+  const updateMascot = mascot && addMascotToNpcBatch(villagers, residentStart, mascot);
 
   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
@@ -346,11 +363,7 @@ export function createTownNpcActivity(
     context.face(spot.x, spot.n, spot.ground + 1.61);
     const panel = context.open(`${name} · ${job}`, ' ');
     active = { role: name, panel };
-
-    const visitsBefore = visits[name] ?? 0;
-    visits[name] = visitsBefore + 1;
-    try { localStorage.setItem(savedVisitKey, JSON.stringify(visits)); }
-    catch { /* The in-memory count still works. */ }
+    const visitsBefore = visit(name);
     if (name === tavernWaiterName) {
       openWaiterConversation(panel, visitsBefore);
       return;
@@ -410,6 +423,7 @@ export function createTownNpcActivity(
       const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
       speech.textContent = guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
     });
+    if (name === '苏小满') action('问百门通', () => { speech.textContent = houseDoorBookCopy.courier; });
     const clues = zodiacHints?.(name);
     if (clues?.length) action('问生肖线索', () => { speech.textContent = clues[turns.zodiac++ % clues.length]; });
     action('道别', () => {
@@ -439,6 +453,7 @@ export function createTownNpcActivity(
     let guideIndex = 0;
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
+    action('问百门通', () => { speech.textContent = houseDoorBookCopy.clerk; });
     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
     action('问镇长近况', () => { speech.textContent = questions.host[1].text; });
     action('问你们怎么认识', () => { speech.textContent = questions.host[0].text; });
@@ -541,11 +556,13 @@ export function createTownNpcActivity(
 
   return {
     spots,
+    registerResident: residents.register,
     snowballTargets,
     updateSnowFight,
     update(dt) {
+      residents.update();
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
-      let changed = updateMascot?.() ?? false;
+      let changed = updateMascot?.(residents.instanceEnd()) ?? false;
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];

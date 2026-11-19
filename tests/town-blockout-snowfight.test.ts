@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  SnowWallField, SnowfightMatch, WALL_DECAY_MS, buildHalfAllows, classifyWallSite, wallCellOf,
+  SnowWallField, SnowfightMatch, WALL_DECAY_MS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite, freeWallTeam, wallCellOf,
 } from '../src/presence/snowfight';
 import {
   SNOWFIGHT_SLED_SMASH, decodeSnowfightClientEvent, decodeSnowfightRelay, encodeSledSmash, encodeWallClear,
@@ -164,9 +164,30 @@ test('sled smash codec round-trips and rejects garbage', () => {
   assert.equal(decodeSnowfightClientEvent(stretched), undefined);
   // 越界格拒绝
   assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 1280, gy: 0, speed: 10 })), undefined);
-  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1024, speed: 10 })), undefined);
+  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1080, speed: 10 })), undefined);
   // 撞穿帧不是中继帧
   assert.equal(decodeSnowfightRelay(frame), null);
+});
+
+test('free wall capacity replaces oldest neutral and match cleanup preserves neutral layers', () => {
+  const field = new SnowWallField();
+  for (let gx = 0; gx < WALL_TOWN_CAP; gx++) {
+    const result = field.place(gx, 500, 7, freeWallTeam, 1000 + gx);
+    assert.ok('block' in result && result.cleared.length === 0);
+  }
+  assert.equal(field.size, 400);
+  const replacement = field.place(400, 500, 8, freeWallTeam, 2000);
+  assert.ok('block' in replacement);
+  assert.deepEqual(replacement.cleared.map(w => w.gx), [0]);
+  assert.equal(field.size, 400);
+  const team = field.place(2, 500, 9, 0, 2001);
+  assert.ok('block' in team);
+  assert.deepEqual(team.cleared.map(w => w.gx), [1]);
+  assert.equal(field.size, 400);
+  assert.equal(team.block.layer, 1);
+  assert.deepEqual(field.clearWhere(block => block.team !== freeWallTeam), [team.block]);
+  assert.equal(field.blockAt(2, 500, 0)?.ownerId, 7);
+  assert.equal(field.size, 399);
 });
 
 test('material bank caps and dig field deepens pits with a cap', () => {

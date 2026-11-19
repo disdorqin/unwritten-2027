@@ -78,15 +78,16 @@ test('ordinary weather thickens visual snow without changing movement or snowbal
 });
 
 test('the frost tracker receives shared snow strength without overriding depth', () => {
-  const hit = (tier: 'light' | 'medium' | 'heavy', exposed = true) => {
+  const hit = (tier: 'light' | 'medium' | 'heavy', exposed = true, depth = 0) => {
     const weather = townSnowWeatherAt(townWeatherEpoch, tier);
     const tracker = createFrostTracker();
-    tracker.setExposure(weather.intensity, 0, exposed ? 'dark-snow' : 'none', false);
+    tracker.setExposure(weather.intensity, depth, exposed ? 'dark-snow' : 'none', false);
     tracker.update(30);
     return tracker.exposure();
   };
-  assert.equal(hit('light'), 0);
-  assert.ok(hit('medium') > 0);
+  assert.equal(hit('light'), .15);
+  assert.ok(hit('medium') > hit('light'));
+  assert.ok(Math.abs(hit('light', true, .6) - .225) < 1e-9);
   assert.ok(hit('heavy') > hit('medium'));
   assert.equal(hit('heavy', false), 0);
 });

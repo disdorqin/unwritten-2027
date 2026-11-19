@@ -1,8 +1,8 @@
 // 3.0 D2 漂移（任务书 §1 D2）：侧倾+转向进入漂移，漂移攒加速，松开分段释放。
 // 纯状态机：viewer 每帧喂 {grounded, speed, turn, lateral}，模块回当前应施加的
-// 额外加速度 boost（m/s²），由 sled-motion 在地面分支叠加；17 m/s 硬顶仍由
-// sled-motion 的 factor 钳制保证，本模块不直接改速度。
-// 与 sled-motion 内置的「刹车漂移松开 ×1.1」并存：内置项是底盘手感，本模块是
+// 额外加速度 boost（m/s²），由 sled-motion 在地面分支叠加；速度上限仍由
+// sled-motion 钳制，本模块不直接改速度。
+// 与 sled-motion 内置的「漂移出弯奖速」并存：内置项是底盘手感，本模块是
 // D2 的可读攒放（充能条/分段释放），数值表见车道回执。
 export const sledDriftChargeRate = .45; // /s，满充 ≈ 2.22 s
 export const sledDriftDecayRate = .35; // /s，宽限 .5 s 后衰减
@@ -25,6 +25,7 @@ export type SledDriftCue = {
   speed: number;
   turn: number;
   lateral: number;
+  engaged?: boolean;
 };
 
 export function createSledDrift() {
@@ -44,7 +45,7 @@ export function createSledDrift() {
   return {
     update(dt: number, cue: SledDriftCue) {
       if (!(dt > 0)) return { drifting, charge, boost: stages.length ? stages[0].accel : 0 };
-      const inDrift = cue.grounded && cue.speed >= sledDriftMinSpeed &&
+      const inDrift = cue.engaged !== false && cue.grounded && cue.speed >= sledDriftMinSpeed &&
         Math.abs(cue.turn) >= sledDriftMinTurn && Math.abs(cue.lateral) >= sledDriftMinLateral;
       if (inDrift) {
         if (!drifting) { stages = []; stageLeft = 0; } // 重新入漂移取消未放完的段

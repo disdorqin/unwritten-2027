@@ -3,6 +3,36 @@ import { housePortalPlaque } from './town-house-portals';
 
 export type HousingStyle = 'alpine' | 'courtyard' | 'machiya' | 'shop';
 export type DistrictTheme = 'forest' | 'memorial' | 'market' | 'lakeside';
+export type CentralResidentialCard = 6 | 8 | 9 | 11 | 12 | 13 | 15 | 19 | 20;
+
+const districtHousingCards = {
+  forest: [
+    { roof: 'gable', window: 'lattice' },
+    { roof: 'hip', window: 'sash' },
+    { roof: 'cross-gable', window: 'casement' },
+  ],
+  memorial: [
+    { roof: 'clerestory', window: 'picture' },
+    { roof: 'twin-clerestory', window: 'sash' },
+    { roof: 'parapet', window: 'casement' },
+  ],
+  market: [
+    { roof: 'stepped-parapet', window: 'lattice' },
+    { roof: 'parapet', window: 'sash' },
+    { roof: 'pavilion', window: 'casement' },
+  ],
+  lakeside: [
+    { roof: 'hip', window: 'picture' },
+    { roof: 'gable', window: 'casement' },
+    { roof: 'cross-gable', window: 'sash' },
+  ],
+} as const;
+
+export function districtHousingCard<T extends DistrictTheme>(theme: T, variant: number): typeof districtHousingCards[T][number] {
+  return districtHousingCards[theme][Math.abs(Math.trunc(variant)) % districtHousingCards[theme].length];
+}
+
+export const districtWindowPanes = { picture: 1, sash: 2, casement: 3, lattice: 4 } as const;
 
 type Block = {
   color: string;
@@ -47,15 +77,20 @@ const glowMaterial = new MeshLambertMaterial({ emissive: '#ec9344', emissiveInte
 const snow = '#e1ecf8';
 const shadedSnow = '#cfdfed';
 
-export function buildDistrictHousing(style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme): Group {
+export function buildDistrictHousing(
+  style: HousingStyle, width: number, depth: number, variant: number, theme?: DistrictTheme,
+  centralCard?: CentralResidentialCard, cardVariant = variant,
+): Group {
   const group = new Group();
   const pieces: Block[] = [];
   const windows: Block[] = [];
-  const basePalette = styles[style][Math.abs(Math.trunc(variant)) % 3];
+  const paletteIndex = centralCard === 13 ? 2 : Math.abs(Math.trunc(variant)) % 3;
+  const basePalette = styles[style][paletteIndex];
   const facingTheme = theme ?? (style === 'shop' ? 'market' : style === 'courtyard' ? 'memorial' : 'forest');
-  // The central infill keeps its original silhouettes and only takes a light palette blend.
-  const [wall, beam, trim, tile, accent] = districtPalettes[facingTheme].map((color, i) =>
-    '#' + new Color(basePalette[i]).lerp(new Color(color), theme ? .82 : .23).getHexString());
+  const facingPalette = centralCard === 8 ? ['#c6b9ad', '#61554e', '#cfc2b6', '#695d5b', '#8a6860']
+    : districtPalettes[facingTheme];
+  const [wall, beam, trim, tile, accent] = facingPalette.map((color, i) =>
+    '#' + new Color(basePalette[i]).lerp(new Color(color), theme ? .82 : centralCard === 8 ? .67 : .23).getHexString());
   const w = width;
   const d = depth;
   const front = d / 2;
@@ -69,8 +104,24 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     (lit ? windows : pieces).push({ color, center: [x, y, z], size: [a, h, b] });
   }
 
+  function wallShell(x: number, y: number, z: number, span: number, height: number, run: number) {
+    const thickness = .22;
+    for (const side of [-1, 1]) {
+      add(wall, x, y, z + side * (run - thickness) / 2, span, height, thickness);
+      add(wall, x + side * (span - thickness) / 2, y, z, thickness, height, run - 2 * thickness);
+    }
+  }
+
+  function residentialWall(x: number, y: number, z: number, span: number, height: number, run: number) {
+    if (centralCard === undefined) add(wall, x, y, z, span, height, run);
+    else wallShell(x, y, z, span, height, run);
+  }
+
   // Window depth is measured outward from its wall, so all four elevations use the same trim.
-  function windowAt(x: number, y: number, z: number, size: number, tall: number, facing: 0 | 1 | 2 | 3, lattice = 2) {
+  function windowAt(
+    x: number, y: number, z: number, size: number, tall: number, facing: 0 | 1 | 2 | 3, lattice = 2,
+    frame: 'lattice' | 'sliding' | 'shoji' = 'lattice',
+  ) {
     const local = (color: string, u: number, v: number, out: number, a: number, b: number, thickness: number, lit = false) => {
       if (facing === 0) add(color, x + u, y + v, z + out, a, b, thickness, lit);
       if (facing === 1) add(color, x + out, y + v, z - u, thickness, b, a, lit);
@@ -78,26 +129,59 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       if (facing === 3) add(color, x - out, y + v, z + u, thickness, b, a, lit);
     };
     local(beam, 0, 0, .07, size + .24, tall + .22, .18);
-    local(glow, 0, 0, .17, size, tall, .047, true);
+    local(frame === 'shoji' ? '#f2d6ae' : glow, 0, 0, .17, size, tall, .047, true);
     for (let i = 1; i < lattice; i++) {
-      local(beam, (i / lattice - .5) * size, 0, .218, .077, tall, .045);
+      local(beam, (i / lattice - .5) * size, 0, .218, frame === 'shoji' ? .13 : .077, tall, .045);
     }
-    local(beam, 0, -.04, .219, size, .083, .05);
+    if (lattice > 1) local(beam, 0, -.04, .219, size, .083, .05);
+    if (frame === 'sliding') {
+      local(trim, 0, tall / 2, .28, size + .12, .095, .10);
+      local(trim, 0, -tall / 2, .28, size + .12, .095, .10);
+      for (const side of [-1, 1]) {
+        local(beam, side * size * .04, 0, .273, .093, tall, .08);
+        local(accent, side * size * .34, tall * .30, .194, size * .30, tall * .40, .039);
+        local(trim, side * size * .07, -.05, .325, .086, .20, .05);
+      }
+    } else if (frame === 'shoji') {
+      for (const side of [-1, 1]) {
+        local(trim, 0, side * tall * .23, .231, size, .065, .055);
+        local(beam, side * size / 2, 0, .232, .16, tall, .08);
+      }
+      local(beam, 0, -tall * .39, .242, size, tall * .22, .072);
+    }
     local(trim, 0, -tall / 2 - .12, .19, size + .36, .14, .34);
     if (theme) local(shadedSnow, 0, -tall / 2 - .042, .19, size + .30, .045, .29);
   }
 
   function door(x: number, z: number, size: number, y = .28) {
     group.userData.houseDoorEast = x;
+    const boardDoor = centralCard === 20;
+    const plaqueScale = boardDoor ? 1.24 : 1;
+    const plaqueAnchor = housePortalPlaque[0];
     for (const mark of housePortalPlaque) {
-      add(mark.color, x + mark.x, y + 1.05 + mark.y, z + .385 + mark.z, mark.w, mark.h, mark.d);
+      add(mark.color, x + mark.x + (mark.x - plaqueAnchor.x) * (plaqueScale - 1),
+        y + 1.05 + mark.y + (mark.y - plaqueAnchor.y) * (plaqueScale - 1), z + .385 + mark.z,
+        mark.w * plaqueScale, mark.h * plaqueScale, mark.d);
     }
     add(beam, x, y + 1.18, z + .09, size + .35, 2.36, .23);
-    add(accent, x, y + 1.08, z + .235, size, 2.16, .12);
-    add(beam, x, y + 1.15, z + .305, .09, 2.14, .04);
-    for (const s of [-1, 1]) {
-      add(trim, x + s * .22, y + 1.06, z + .35, .10, .12, .08);
-      add(glow, x + s * size * .30, y + 1.63, z + .306, size * .29, .53, .04, true);
+    if (boardDoor) {
+      for (const side of [-1, 1]) {
+        add(accent, x + side * size / 4, y + 1.08, z + .235, size / 2 - .055, 2.14, .12);
+        for (const offset of [-.13, 0, .13]) {
+          add(beam, x + (side / 4 + offset) * size, y + 1.08, z + .307, .042, 2.12, .035);
+        }
+        for (const hingeY of [.56, 1.58]) {
+          add(trim, x + side * size * .37, y + hingeY, z + .316, size * .22, .077, .08);
+        }
+        add(trim, x + side * .19, y + 1.06, z + .36, .115, .15, .086);
+      }
+    } else {
+      add(accent, x, y + 1.08, z + .235, size, 2.16, .12);
+      add(beam, x, y + 1.15, z + .305, .09, 2.14, .04);
+      for (const side of [-1, 1]) {
+        add(trim, x + side * .22, y + 1.06, z + .35, .10, .12, .08);
+        add(glow, x + side * size * .30, y + 1.63, z + .306, size * .29, .53, .04, true);
+      }
     }
     add(trim, x, y + 2.36, z + .19, size + .48, .15, .26);
   }
@@ -130,7 +214,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
   }
 
   function gable(x: number, z: number, span: number, run: number, eave: number, rise: number, axis: 'z' | 'x',
-    overhang = .83, cladding: string = wall) {
+    overhang = .83, cladding: string = wall, hippedEnd = 0) {
     const bands = Math.max(6, Math.ceil(rise / .31));
     const runBlock = (color: string, u: number, y: number, v: number, a: number, h: number, b: number) => {
       if (axis === 'z') add(color, x + u, y, z + v, a, h, b);
@@ -141,14 +225,30 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       const a = (span + 2 * overhang) * (1 - fraction);
       const y = eave + (i + .5) * rise / bands;
       const fill = span * (1 - fraction);
-      runBlock(cladding, 0, y - .035, 0, fill, rise / bands + .025, run);
-      runBlock(tile, 0, y + .027, 0, a, rise / bands + .17, run + 2 * overhang);
+      // Hip the lower end faces, then hold their depth so the upper faces read as a gable.
+      const endInset = hippedEnd * Math.min(fraction * 2, 1);
+      const courseRun = run + 2 * overhang - 2 * endInset;
+      if (centralCard === undefined) {
+        runBlock(cladding, 0, y - .035, 0, fill, rise / bands + .025, Math.min(run, courseRun));
+        runBlock(tile, 0, y + .027, 0, a, rise / bands + .17, courseRun);
+      } else {
+        const edge = Math.min(a / 2, (span + 2 * overhang) / bands * .58);
+        for (const side of [-1, 1]) {
+          runBlock(tile, side * (a - edge) / 2, y + .027, 0, edge, rise / bands + .17, courseRun);
+        }
+        if (hippedEnd && a > 2 * edge) {
+          const end = Math.min(courseRun / 2, hippedEnd / bands * 2.1);
+          for (const side of [-1, 1]) {
+            runBlock(tile, 0, y + .027, side * (courseRun - end) / 2, a - 2 * edge, rise / bands + .17, end);
+          }
+        }
+      }
       if (i > 0) {
         for (const side of [-1, 1]) {
           const shoulder = Math.min(a / 2 - .18, (span + 2 * overhang) / bands * .59);
           if (shoulder > .04) {
             runBlock(i % 4 === 0 ? shadedSnow : snow, side * (a / 2 - shoulder / 2 - .06),
-              y + rise / bands / 2 + .075, .01, shoulder, .16, run + 2 * overhang - .17);
+              y + rise / bands / 2 + .075, .01, shoulder, .16, courseRun - .17);
           }
         }
       } else {
@@ -157,14 +257,17 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
         }
       }
     }
-    runBlock(tile, 0, eave + rise + .053, 0, .42, .22, run + 2 * overhang + .14);
-    runBlock(snow, 0, eave + rise + .18, 0, .37, .10, run + 2 * overhang + .09);
+    const ridgeRun = run + 2 * overhang - 2 * hippedEnd;
+    runBlock(tile, 0, eave + rise + .053, 0, .42, .22, ridgeRun + .14);
+    runBlock(snow, 0, eave + rise + .18, 0, .37, .10, ridgeRun + .09);
     // The sloped faces above extend beyond the wall. Expose the gable boards just beyond the end wall.
     for (let i = 0; i < bands; i++) {
-      const face = span * (1 - (i + .37) / bands);
+      const fraction = (i + .37) / bands;
+      const face = span * (1 - fraction);
+      const endInset = hippedEnd * Math.min(fraction * 2, 1);
       for (const side of [-1, 1]) {
-        runBlock(cladding, 0, eave + (i + .5) * rise / bands, side * (run / 2 + overhang + .015), face,
-          rise / bands + .015, .04);
+        runBlock(cladding, 0, eave + (i + .5) * rise / bands, side * (run / 2 + overhang - endInset + .015),
+          face, rise / bands + .015, .04);
       }
     }
   }
@@ -179,11 +282,67 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     add(beam, x, y - .44, z + depth - .045, span + .37, .16, .18);
   }
 
+  function stackWood(x: number, z: number, depth = .63) {
+    for (let row = 0; row < 3; row++) {
+      for (let log = 0; log < 4 - row; log++) {
+        const left = x + (log - (3 - row) / 2) * .24;
+        const y = .32 + row * .18;
+        add(beam, left, y, z, .22, .165, depth);
+        add(trim, left, y, z + depth / 2 + .011, .17, .126, .03);
+      }
+    }
+  }
+
+  function dryingRack(x: number, z: number) {
+    for (const side of [-1, 1]) add(beam, x + side * .48, .94, z, .10, 1.88, .13);
+    add(beam, x, 1.76, z, 1.12, .077, .09);
+    for (const side of [-1, 1]) {
+      add(side === -1 ? accent : trim, x + side * .25, 1.36, z + .08, .36, .73, .08);
+    }
+  }
+
+  function waterJar(x: number, z: number) {
+    add(masonry, x, .14, z, .65, .28, .28);
+    add(beam, x, .44, z, .63, .32, .27);
+    add(trim, x, .65, z, .52, .13, .24);
+    add('#748a9d', x, .725, z, .43, .027, .19);
+  }
+
+  function lowFence(x: number, z: number) {
+    for (const side of [-1, 1]) add(beam, x + side * .40, .37, z, .12, .74, .12);
+    for (const y of [.25, .52]) add(trim, x, y, z, .90, .11, .09);
+    add(shadedSnow, x, .599, z, .88, .04, .11);
+  }
+
+  function planter(x: number, z: number) {
+    add(beam, x, .18, z, .64, .36, .25);
+    add(masonry, x, .374, z, .55, .04, .22);
+    for (const side of [-1, 1]) {
+      add('#527362', x + side * .13, .46, z, .19, .20, .14);
+      add(shadedSnow, x + side * .13, .574, z, .12, .04, .13);
+    }
+  }
+
+  function finishFrontage(entryX: number, frontage: number) {
+    const side = entryX > 0 ? -1 : 1;
+    const x = side * w * .38;
+    // Keep the furnishing off the existing centered approach and inside the front setback.
+    if (centralCard === 11) {
+      lowFence(-x, frontage + .13);
+      return;
+    }
+    stackWood(x, frontage + .13, .21);
+    waterJar(x - side * 1.02, frontage + .12);
+    if (centralCard === 19) return; // The projecting sign is its third frontage category.
+    planter(x - side * 1.88, frontage + .13);
+  }
+
   function sideWindows(y: number, tall = 1.25) {
     for (const facing of [1, 3] as const) {
       const x = width / 2 * (facing === 1 ? 1 : -1);
       for (const z of [-depth * .24, depth * .23]) {
-        windowAt(x, y, z, Math.min(1.5, depth * .23), tall, facing);
+        const sliding = centralCard === 6;
+        windowAt(x, y, z, Math.min(1.5, depth * .23), tall, facing, sliding ? 4 : 2, sliding ? 'sliding' : 'lattice');
       }
     }
     for (const x of [-width * .27, width * .27]) windowAt(x, y, back, Math.min(1.55, width * .24), tall, 2);
@@ -191,8 +350,29 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
 
   // The four expansion elevations are rebuilt within the original lot envelope.
   // Every piece enters the existing opaque or emissive instance batch.
+  function districtSnowRoof(
+    roof: 'gable' | 'hip' | 'cross-gable', eave: number, rise: number, edge: number, cladding: string,
+    paneCount: number,
+  ) {
+    if (roof === 'cross-gable') {
+      gable(0, 0, d, w, eave, rise, 'x', edge, cladding);
+      const span = Math.min(w * .42, d * .49);
+      const run = d * .40;
+      const streetGable = front - run / 2;
+      gable(0, streetGable, span, run, eave, rise * .63, 'z', edge, cladding);
+      windowAt(0, eave + rise * .24, front + edge, span * .48, .82, 0, paneCount);
+    } else if (roof === 'hip') {
+      gable(0, 0, w, d, eave, rise, 'z', edge, cladding, Math.min(w * .26, d * .31));
+    } else {
+      gable(0, 0, w, d, eave, rise, 'z', edge, cladding);
+      windowAt(0, eave + rise * .29, front + edge, Math.min(1.90, w * .22), .89, 0, paneCount);
+    }
+  }
+
   function themedFacing(district: DistrictTheme) {
     const split = Math.abs(variant % 3);
+    const card = districtHousingCard(district, cardVariant);
+    const panes = districtWindowPanes[card.window];
     const eave = district === 'forest' ? 4.55 + split * .56
       : district === 'lakeside' ? 4.5 + split * .52
       : district === 'memorial' ? 4.62 + split * .68 : 5.5 + split * .4;
@@ -205,12 +385,23 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     for (const facing of [1, 3] as const) {
       const x = (facing === 1 ? 1 : -1) * w / 2;
       for (const z of [-d * .25, d * .24]) {
-        windowAt(x, 2, z, Math.min(1.62, d * .22), 1.38, facing);
+        windowAt(x, 2, z, Math.min(1.62, d * .22), 1.38, facing, panes);
       }
     }
     for (const sign of [-1, 1]) {
-      windowAt(sign * w * .27, 2, back, Math.min(1.7, w * .24), 1.36, 2);
+      windowAt(sign * w * .27, 2, back, Math.min(1.7, w * .24), 1.36, 2, panes);
       lantern(sign * (entry / 2 + .58), 2.51, front + .4, .31);
+    }
+    const frontageX = w * .38;
+    if (district === 'forest') {
+      stackWood(-frontageX, front + .10, .19);
+      waterJar(frontageX, front + .10);
+    } else if (district === 'market') {
+      lowFence(-frontageX, front + .12);
+      waterJar(frontageX, front + .10);
+    } else {
+      lowFence(-frontageX, front + .12);
+      planter(frontageX, front + .10);
     }
 
     if (district === 'forest') {
@@ -227,21 +418,31 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       slopedCanopy(0, front, porchWidth, 3.16, 1.05);
       for (const sign of [-1, 1]) {
         add(beam, sign * (porchWidth / 2 - .21), 1.64, front + .89, .24, 3.04, .24);
-        windowAt(sign * w * .288, 1.88, front, Math.min(1.9, w * .23), 1.4, 0);
+        windowAt(sign * w * .288, 1.88, front, Math.min(1.9, w * .23), 1.4, 0, panes);
       }
       const rise = Math.min(4.8, w * .41);
-      gable(0, 0, w, d, eave, rise, 'z', .72, trim);
-      windowAt(0, eave + rise * .29, front + .75, 1.27, .87, 0);
+      const { roof } = districtHousingCard('forest', cardVariant);
+      districtSnowRoof(roof, eave, rise, .72, trim, panes);
       chimney(-w * .23, eave + rise * .52, back * .42, 1.72);
     } else if (district === 'memorial') {
       // Concrete frames, a glazed cantilever, and an offset clerestory define the modern row.
       add(tile, 0, eave + .16, 0, w + .66, .34, d + .58);
       add(snow, 0, eave + .39, 0, w + .56, .13, d + .49);
-      const towerX = (split === 1 ? 1 : -1) * w * .24;
-      add(beam, towerX, eave + .83, -.12 * d, w * .38, .88, d * .58);
-      add(trim, towerX, eave + 1.34, -.12 * d, w * .40, .15, d * .60);
-      add(snow, towerX, eave + 1.46, -.12 * d, w * .37, .095, d * .56);
-      windowAt(towerX, eave + .83, d * .17, w * .25, .44, 0, 4);
+      if (card.roof === 'parapet') {
+        for (const side of [-1, 1]) {
+          add(beam, 0, eave + .51, side * (front - .12), w + .25, .34, .29);
+          add(shadedSnow, 0, eave + .70, side * (front - .12), w + .25, .06, .33);
+          add(beam, side * (w / 2 - .12), eave + .51, 0, .29, .34, d - .32);
+        }
+      } else {
+        const towers = card.roof === 'twin-clerestory' ? [-w * .24, w * .24] : [-w * .24];
+        for (const x of towers) {
+          add(beam, x, eave + .83, -.12 * d, w * .38, .88, d * .58);
+          add(trim, x, eave + 1.34, -.12 * d, w * .40, .15, d * .60);
+          add(snow, x, eave + 1.46, -.12 * d, w * .37, .095, d * .56);
+          windowAt(x, eave + .83, d * .17, w * .25, .44, 0, panes);
+        }
+      }
       const canopyWidth = w * .88;
       add(beam, 0, 3.31, front + .54, canopyWidth, .17, 1.15);
       add('#9fbaca', 0, 3.405, front + .53, canopyWidth - .17, .076, 1.00);
@@ -250,8 +451,8 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
       for (const sign of [-1, 1]) {
         const x = sign * w * .269;
         add(trim, sign * (w / 2 - .16), eave / 2, front + .10, .29, eave, .26);
-        windowAt(x, 1.84, front, glassWidth, 2.11, 0, 3);
-        windowAt(x, (eave + 3.44) / 2, front, glassWidth * .94, Math.min(1.38, eave - 3.5), 0, 4);
+        windowAt(x, 1.84, front, glassWidth, 2.11, 0, panes);
+        windowAt(x, (eave + 3.44) / 2, front, glassWidth * .94, Math.min(1.38, eave - 3.5), 0, panes);
       }
       add(beam, 0, eave - .14, front + .1, w + .07, .18, .23);
     } else if (district === 'market') {
@@ -271,12 +472,19 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
           }
         }
         add(shadedSnow, x, spring + radius * .68, front + .186, .30, .25, .35);
-        if (x) windowAt(x, 1.57, front, radius * 1.51, 1.22, 0, 3);
-        windowAt(x, eave - 1.23, front, Math.min(1.61, w * .18), 1.30, 0, 3);
+        if (x) windowAt(x, 1.57, front, radius * 1.51, 1.22, 0, panes);
+        windowAt(x, eave - 1.23, front, Math.min(1.61, w * .18), 1.30, 0, panes);
       }
       add(tile, 0, eave + .11, 0, w + .61, .28, d + .59);
       add(snow, 0, eave + .30, 0, w + .53, .11, d + .50);
-      for (let row = 0; row < 3; row++) {
+      if (card.roof === 'pavilion') {
+        const span = w * .55;
+        const run = d * .56;
+        add(beam, 0, eave + .60, 0, span, .50, run);
+        gable(0, 0, span, run, eave + .84, .66, 'z', .27, wall, run * .21);
+      }
+      const parapetCourses = card.roof === 'stepped-parapet' ? 3 : 1;
+      for (let row = 0; row < parapetCourses; row++) {
         const span = w * (.99 - row * .21);
         add(wall, 0, eave + .41 + row * .35, front - .06, span, .44, .51);
         add(trim, 0, eave + .65 + row * .35, front - .04, span + .14, .13, .61);
@@ -301,12 +509,12 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
         }
       }
       for (const sign of [-1, 1]) {
-        windowAt(sign * w * .272, 2.07, front, Math.min(2.64, w * .27), 2.43, 0, 3);
+        windowAt(sign * w * .272, 2.07, front, Math.min(2.64, w * .27), 2.43, 0, panes);
         add(trim, sign * w * .34, eave - .15, front + .11, w * .25, .16, .20);
       }
       const rise = Math.min(3.5, w * .285);
-      gable(0, 0, w, d, eave, rise, 'z', .48, wall);
-      windowAt(0, eave + rise * .28, front + .515, Math.min(2.38, w * .29), 1.05, 0, 3);
+      const { roof } = districtHousingCard('lakeside', cardVariant);
+      districtSnowRoof(roof, eave, rise, .48, wall, panes);
       chimney(-w * .24, eave + rise * .50, back * .44, 1.42);
     }
   }
@@ -354,7 +562,8 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     const recessed = front - Math.min(d * .22, 2.8);
     const highest = variant % 2 === 0 ? 5.7 : 5.1;
     add(masonry, 0, .19, 0, w + .18, .38, d + .19);
-    add(wall, 0, highest / 2 + .12, (recessed + back) / 2, middleWidth, highest - .20, recessed - back);
+    residentialWall(0, highest / 2 + .12, (recessed + back) / 2, middleWidth, highest - .20, recessed - back);
+    if (centralCard !== undefined) finishFrontage(0, front);
     add(trim, 0, 3.04, recessed, middleWidth + .1, .22, .21);
     const gateWidth = Math.min(middleWidth * .62, 2.45);
     door(0, recessed, gateWidth);
@@ -364,23 +573,44 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     for (let z = recessed + .73; z < front + .35; z += stoneStep) {
       add(variant % 2 === 0 ? '#8894a6' : '#a1a3af', 0, .403, z, gateWidth + .75, .061, stoneStep * .93);
     }
-    gable(0, (recessed + back) / 2, recessed - back, middleWidth, highest, Math.min(1.72, d * .23), 'x', .55, trim);
+    const middleRise = Math.min(1.72, d * .23);
+    const middleZ = (recessed + back) / 2;
+    gable(0, middleZ, recessed - back, middleWidth, highest, middleRise, 'x', .55, trim);
+    if (centralCard === 20) {
+      for (const side of [-1, 1]) {
+        const finialX = side * (middleWidth / 2 + .43);
+        add(trim, finialX, highest + middleRise + .09, middleZ, .31, .23, .53);
+        add(beam, finialX - side * .25, highest + middleRise + .08, middleZ, .25, .17, .47);
+      }
+    }
+    if (centralCard === 11) {
+      stackWood(-middleWidth * .34, recessed + .64);
+      dryingRack(middleWidth * .35, recessed + .63);
+    }
     for (const side of [-1, 1]) {
       const x = side * wing;
       plinth(x, wingZ, wingWidth, wingDepth);
-      add(wall, x, 2.28, wingZ, wingWidth, 3.86, wingDepth);
+      residentialWall(x, 2.28, wingZ, wingWidth, 3.86, wingDepth);
       add(masonry, x, .64, front, wingWidth, .49, .22);
       windowAt(x, 2.05, front, Math.min(wingWidth * .62, 1.38), 1.42, 0, 3);
       windowAt(x, 2.04, wingZ - wingDepth / 2, Math.min(wingWidth * .65, 1.39), 1.33, 2, 3);
       windowAt(side * w / 2, 1.98, wingZ + wingDepth * .19, Math.min(wingDepth * .23, 1.39), 1.37, side === 1 ? 1 : 3, 3);
-      gable(x, wingZ, wingDepth, wingWidth, 4.26, 1.42, 'x', .51, beam);
-      // Horse-head parapet at each outer wall rises toward the roof ridge.
-      for (let s = 0; s < 4; s++) {
-        const run = wingDepth * (1 - s * .23) + .22;
-        const y = 4.38 + s * .51;
-        add(wall, side * (w / 2 + .18), y, wingZ, .59, .65, run);
-        add(tile, side * (w / 2 + .19), y + .34, wingZ, .74, .16, run + .23);
-        add(snow, side * (w / 2 + .19), y + .45, wingZ, .66, .08, run + .19);
+      gable(x, wingZ, wingDepth, wingWidth, 4.26, 1.42, 'x', .51, beam, centralCard === 8 ? wingWidth * .28 : 0);
+      if (centralCard !== 8) {
+        const curved = centralCard === 11;
+        const courses = curved ? 7 : 4;
+        // Use the same parapet height for the rounded firewall as for the four-step wall.
+        for (let level = 0; level < courses; level++) {
+          const fraction = level / courses;
+          const profile = curved ? Math.sqrt(1 - fraction * fraction) : 1 - level * .23;
+          const run = wingDepth * profile + .22;
+          const blockHeight = curved ? .42 : .65;
+          const rise = curved ? level * (3 * .51) / (courses - 1) : level * .51;
+          const y = 4.38 + rise + (.65 - blockHeight) / 2;
+          add(wall, side * (w / 2 + .18), y, wingZ, .59, blockHeight, run);
+          add(tile, side * (w / 2 + .19), y + blockHeight / 2 + .015, wingZ, .74, .16, run + .23);
+          add(snow, side * (w / 2 + .19), y + blockHeight / 2 + .125, wingZ, .66, .08, run + .19);
+        }
       }
       lantern(side * (middleWidth * .34), 2.83, recessed + .48, .43);
     }
@@ -389,7 +619,8 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     plinth(0, 0, w, d);
     const eave = variant % 2 === 0 ? 5.82 : 5.24;
     const rise = Math.min(2.35, d * .25);
-    add(wall, 0, eave / 2 + .18, 0, w, eave - .17, d);
+    residentialWall(0, eave / 2 + .18, 0, w, eave - .17, d);
+    if (centralCard !== undefined) finishFrontage(0, front);
     for (const z of [front, back]) {
       for (let x = -w / 2 + .18; x < w / 2; x += .44) add(beam, x, eave / 2 + .18, z + Math.sign(z) * .043, .075, eave - .4, .11);
       for (const y of [3.08, eave - .22]) add(beam, 0, y, z, w + .10, .29, .31);
@@ -397,8 +628,9 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     for (const side of [-1, 1]) {
       add(beam, side * (w / 2 - .15), eave / 2 + .12, front + .17, .29, eave - .23, .44);
       const x = side * w * .274;
-      windowAt(x, 1.76, front, Math.min(2.35, w * .285), 1.65, 0, 8);
-      windowAt(x, (eave + 3.4) / 2, front, Math.min(2.22, w * .26), 1.17, 0, 6);
+      const shoji = centralCard === 15;
+      windowAt(x, 1.76, front, Math.min(2.35, w * .285), 1.65, 0, shoji ? 4 : 8, shoji ? 'shoji' : 'lattice');
+      windowAt(x, (eave + 3.4) / 2, front, Math.min(2.22, w * .26), 1.17, 0, shoji ? 4 : 6, shoji ? 'shoji' : 'lattice');
       add(accent, x, 2.47, front + .32, Math.min(2.57, w * .31), .33, .18);
       for (let i = 1; i <= 5; i++) {
         const offset = (i - 3) * Math.min(w * .04, .33);
@@ -409,8 +641,49 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     sideWindows((eave + 3.4) / 2, 1.12);
     door(0, front, Math.min(1.42, w * .24));
     stoop(0, front, Math.min(1.64, w * .27));
-    slopedCanopy(0, front, w, 3.26, 1.13);
+    if (centralCard === 12) {
+      const entrySpan = Math.min(1.64, w * .27) + .65;
+      const sideSpan = (w - entrySpan) / 2;
+      for (const side of [-1, 1]) slopedCanopy(side * (entrySpan + sideSpan) / 2, front, sideSpan, 3.26, 1.13);
+      slopedCanopy(0, front - .04, entrySpan, 3.45, 1.18);
+      for (let tileIndex = -3; tileIndex <= 3; tileIndex++) {
+        add(trim, tileIndex * entrySpan / 7, 3.04, front + 1.095, entrySpan / 8, .13, .16);
+      }
+      const dormerSpan = w * .24;
+      const dormerRun = d * .26;
+      const dormerX = w * .14;
+      const dormerZ = front * .60;
+      const sill = eave + rise * .40;
+      wallShell(dormerX, sill + .32, dormerZ, dormerSpan, .64, dormerRun);
+      gable(dormerX, dormerZ, dormerSpan, dormerRun, sill + .64, rise * .32, 'z', .24, trim);
+      windowAt(dormerX, sill + .39, dormerZ + dormerRun / 2, dormerSpan * .54, .47, 0, 4);
+    } else slopedCanopy(0, front, w, 3.26, centralCard === 15 ? 1.20 : 1.13);
     gable(0, 0, d, w, eave, rise, 'x', .82, beam);
+    if (centralCard === 6) {
+      for (const side of [-1, 1]) {
+        const end = side * (w / 2 + .69);
+        const ridge = eave + rise;
+        add(beam, end, ridge + .28, 0, .25, .38, .51);
+        add(tile, end, ridge + .43, 0, .21, .17, .35);
+        for (const shoulder of [-1, 1]) {
+          add(trim, end, ridge + .12, shoulder * .23, .26, .16, .19);
+        }
+      }
+    } else if (centralCard === 9) {
+      for (const x of [-w * .29, 0, w * .29]) {
+        windowAt(x, eave - .43, front + .04, w * .16, .27, 0, 6);
+      }
+      chimney(w * .31, eave + rise * .46, back * .52, rise * .58 + .46);
+    } else if (centralCard === 15) {
+      const chainX = w * .42;
+      for (let link = 0; link < 8; link++) {
+        const y = 2.71 - link * .29;
+        const z = front + 1.16;
+        add(beam, chainX, y, z, .14, .24, .11);
+        add(trim, chainX, y, z + .057, .055, .13, .018);
+      }
+      add(masonry, chainX, .20, front + 1.07, .40, .26, .36);
+    }
     for (const side of [-1, 1]) {
       const x = side * w * .41;
       lantern(x, 2.62, front + .71, .32);
@@ -420,7 +693,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
   } else if (style === 'shop') {
     const eave = variant % 2 === 0 ? 6.05 : 5.28;
     plinth(0, 0, w, d);
-    add(wall, 0, eave / 2 + .16, 0, w, eave - .21, d);
+    residentialWall(0, eave / 2 + .16, 0, w, eave - .21, d);
     for (let y = .68; y <= eave - .12; y += .33) {
       for (const s of [-1, 1]) {
         add(beam, 0, y, front * s, w, .041, .069);
@@ -434,6 +707,7 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     const shopWindow = Math.min(w * .53, 4.05);
     const shopX = -w * .18;
     const gateX = w * .31;
+    if (centralCard !== undefined) finishFrontage(gateX, front);
     windowAt(shopX, 1.70, front + .11, shopWindow, 1.72, 0, 5);
     for (let it = 0; it < 6; it++) {
       const x = shopX + (it - 2.5) * shopWindow / 6.7;
@@ -451,24 +725,50 @@ export function buildDistrictHousing(style: HousingStyle, width: number, depth: 
     }
     sideWindows(1.83, 1.39);
     sideWindows(4.3, 1.21);
-    add(beam, 0, eave + .03, 0, w + .61, .29, d + .61);
-    add(snow, 0, eave + .22, 0, w + .53, .12, d + .50);
-    add(wall, 0, eave + .39, front - .03, w, .69, .39);
-    add(trim, 0, eave + .78, front - .03, w + .15, .20, .48);
-    add(shadedSnow, 0, eave + .91, front, w + .08, .11, .47);
-    const rise = 1.1 + (variant % 2 === 0 ? .35 : 0);
-    for (let step = 0; step < 3; step++) {
-      const a = w * (.57 - .15 * step);
-      const y = eave + .83 + (step + .5) * rise / 3;
-      add(wall, 0, y, front - .04, a, rise / 3, .51);
-      add(trim, 0, y + rise / 6, front - .02, a + .16, .16, .59);
-      add(snow, 0, y + rise / 6 + .11, front, a + .14, .087, .52);
-    }
-    for (const side of [-1, 1]) {
-      add(beam, side * (w / 2 - .24), eave + .66, front, .44, .93, .49);
-      add(snow, side * (w / 2 - .24), eave + 1.18, front, .55, .13, .59);
+    if (centralCard === 19) {
+      add(tile, 0, eave + .03, 0, w + 1.38, .29, d + 1.38);
+      add(snow, 0, eave + .23, 0, w + 1.26, .12, d + 1.26);
+      const coping = '#8c6557';
+      for (const side of [-1, 1]) {
+        add(beam, 0, eave + .58, side * front, w, .64, .33);
+        add(beam, side * w / 2, eave + .58, 0, .33, .64, d - .33);
+        add(coping, 0, eave + .95, side * front, w + .31, .23, .47);
+        add(coping, side * w / 2, eave + .95, 0, .47, .23, d - .47);
+        add(shadedSnow, 0, eave + 1.11, side * front, w + .20, .08, .37);
+      }
+      const signX = gateX + w * .11;
+      add(beam, signX, 3.42, front + .43, .11, .14, .90);
+      add(beam, signX, 3.18, front + .70, .07, .42, .066);
+      add(beam, signX, 2.77, front + .70, .18, .56, .64);
+      add(accent, signX, 2.77, front + .70, .194, .43, .49);
+      add(trim, signX, 2.97, front + .70, .21, .11, .54);
+    } else {
+      add(beam, 0, eave + .03, 0, w + .61, .29, d + .61);
+      add(snow, 0, eave + .22, 0, w + .53, .12, d + .50);
+      add(wall, 0, eave + .39, front - .03, w, .69, .39);
+      add(trim, 0, eave + .78, front - .03, w + .15, .20, .48);
+      add(shadedSnow, 0, eave + .91, front, w + .08, .11, .47);
+      const rise = 1.1 + (variant % 2 === 0 ? .35 : 0);
+      for (let step = 0; step < 3; step++) {
+        const a = w * (.57 - .15 * step);
+        const y = eave + .83 + (step + .5) * rise / 3;
+        add(wall, 0, y, front - .04, a, rise / 3, .51);
+        add(trim, 0, y + rise / 6, front - .02, a + .16, .16, .59);
+        add(snow, 0, y + rise / 6 + .11, front, a + .14, .087, .52);
+      }
+      for (const side of [-1, 1]) {
+        add(beam, side * (w / 2 - .24), eave + .66, front, .44, .93, .49);
+        add(snow, side * (w / 2 - .24), eave + 1.18, front, .55, .13, .59);
+      }
     }
     chimney(w * .29, eave + .15, back * .48, 1.47);
+    if (centralCard === 13) {
+      chimney(-w * .27, eave + .24, back * .61, 1.26);
+      for (let i = 0; i < 7; i++) {
+        const length = .17 + (i * 5 % 4) * .055;
+        add('#b9d9ea', (i - 3) * w / 8, eave - length / 2, front + .30, .078, length, .087);
+      }
+    }
   }
 
   const dummy = new Object3D();

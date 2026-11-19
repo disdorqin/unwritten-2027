@@ -52,7 +52,7 @@ export interface CeremonyClock {
   readonly utcOffsetMinutes?: number;
 }
 
-/** 单人版：设备本地时间，与时光信箱 UNLOCK_AT 的本地口径同源（设计 §3）。 */
+/** 单人版默认设备本地时间。正式共用仪式时钟与信箱事件固定使用北京时间。 */
 export function createLocalCeremonyClock(now: () => number = () => Date.now()): CeremonyClock {
   return { now };
 }

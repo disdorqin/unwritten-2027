@@ -1,5 +1,4 @@
 import { Color, Matrix4, Object3D, type InstancedMesh } from 'three';
-import { layout } from './terrain';
 import type { MascotFollowPoint } from './mascot-follow';
 import { isSharedHomePosition, sharedHomeLayer } from '../../../src/presence/shared-home-space';
 
@@ -16,10 +15,9 @@ type GroundAt = (east: number, north: number) => number | undefined;
 const wool = '#fff1d9', shadedWool = '#dfc6a4', gold = '#e9aa3d';
 const scarf = '#ad3645', hoof = '#302b35', eye = '#191b23';
 const torso = 0, head = 1, tail = 2, bell = 3, frontLeftLeg = 4;
-const [west, , , north] = layout.plaza.bounds;
 
-// The tree trunk sits west of the wish board anchor.
-export const mascotHome = [west + 9.25, north - 2.75] as const;
+// The tree and the mascot's corner stay in place when the plaza expands.
+export const mascotHome = [200.25, 209.25] as const;
 const heart = [232, 190] as const;
 const marketGate = [154, 97.9] as const;
 const marketApproach = [[191, 181], [172, 175], [151, 156], [127, 140], [108, 114],
@@ -167,19 +165,18 @@ export type TownMascotOptions = {
   visible: (east: number, north: number, ground: number) => boolean;
 };
 
-export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options: TownMascotOptions) {
+export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, options: TownMascotOptions) {
   const root = new Object3D();
   const pose = new Object3D();
   const partTransform = new Object3D();
   const matrix = new Matrix4(), color = new Color();
   const animated = pivots.map(() => new Matrix4());
-  townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
-  batch.count = start;
+  batch.count = initialStart;
   let patrol: MascotPatrol;
   let planned = false;
-  let lastTick = NaN, shown = false;
+  let lastTick = NaN, lastStart = initialStart, shown = false;
 
-  return function update() {
+  return function update(start = initialStart) {
     if (!planned) {
       patrol = makeMascotPatrol(options.groundAt);
       planned = true;
@@ -197,9 +194,17 @@ export function addMascotToNpcBatch(batch: InstancedMesh, start: number, options
       if (shown) { batch.count = start; shown = false; }
       return false;
     }
-    if (shown && tick === lastTick) return false;
+    const count = start + townMascotParts.length;
+    const repack = lastStart !== start || batch.count !== count;
+    if (shown && tick === lastTick && !repack) return false;
+    // Station changes repack the shared tail, so restore the mascot's palette even on the same tick.
+    if (repack) {
+      townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
+      if (batch.instanceColor) batch.instanceColor.needsUpdate = true;
+    }
     shown = true;
-    batch.count = start + townMascotParts.length;
+    batch.count = count;
+    lastStart = start;
     lastTick = tick;
     const seconds = tick / 1000;
     const idlePhase = seconds % 60;

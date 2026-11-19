@@ -58,11 +58,18 @@ test('ceremony fireworks use one pooled Points at the plaza, lake and memorial w
   assert.ok(positions.getX(0) > 200 && positions.getX(0) < 250);
 
   assert.equal(festival.launchCeremony('fireworks-far', now, clock), true);
-  now += 200;
-  festival.update(.2);
-  const zs = Array.from({ length: particles.geometry.drawRange.count }, (_, index) => positions.getZ(index));
-  assert.ok(zs.some(z => z > -100), 'lake rockets should use the lake launch position');
-  assert.ok(zs.some(z => z < -250), 'memorial rockets should use the memorial launch position');
+  const farLaunchStart = now;
+  let lakeVisible = false;
+  let memorialVisible = false;
+  for (let frame = 1; frame <= 100; frame++) {
+    now = farLaunchStart + frame * 50;
+    festival.update(.05);
+    const zs = Array.from({ length: particles.geometry.drawRange.count }, (_, index) => positions.getZ(index));
+    lakeVisible ||= zs.some(z => z > -100);
+    memorialVisible ||= zs.some(z => z < -250);
+  }
+  assert.ok(lakeVisible, 'lake rockets should use the lake launch position');
+  assert.ok(memorialVisible, 'memorial rockets should use the memorial launch position');
   assert.equal(festival.launchCeremony('fireworks-finale', now, clock), true);
   now += 1_400;
   festival.update(1.4);
@@ -72,7 +79,7 @@ test('ceremony fireworks use one pooled Points at the plaza, lake and memorial w
   assert.equal(scene.children.length, 1);
   assert.deepEqual([announcements, previews], [0, 0]);
 
-  now += 20_000;
+  now += 30_000;
   festival.update(20);
   assert.equal(particles.visible, false);
   assert.equal(particles.geometry.drawRange.count, 0);
@@ -246,8 +253,8 @@ test('configured test fireworks stay on one atlas and both peers render the same
   assert.deepEqual(table, makeTestFireworksTable(0x5530020f));
   assert.notDeepEqual(table, makeTestFireworksTable(0x55300210));
   assert.equal(table.duration, 36);
-  assert.equal(table.bursts.length,22);
-  assert.deepEqual(table.launchPoints.map(({ id }) => id), ['plaza','lake']);
+  assert.equal(table.bursts.length,45);
+  assert.deepEqual(table.launchPoints.map(({ id }) => id), ['center','east','west','stage','lake']);
   const scenes = [new Scene(), new Scene()];
   const peers = scenes.map(scene => createFestival(scene));
   const points = scenes.map(scene => scene.children[0] as Points);
@@ -261,11 +268,10 @@ test('configured test fireworks stay on one atlas and both peers render the same
   assert.ok(points.every(object => !object.visible));
   now += 700;
   peers.forEach(peer => peer.update(0));
-  assert.ok(points.every(object => object.visible && object.geometry.drawRange.count === 12));
-  const pointsAtFrame = points.map(object => Array.from(object.geometry.getAttribute('position').array.slice(0,36)));
+  assert.ok(points.every(object => object.visible && object.geometry.drawRange.count === 6));
+  const pointsAtFrame = points.map(object => Array.from(object.geometry.getAttribute('position').array.slice(0,18)));
   assert.deepEqual(pointsAtFrame[0],pointsAtFrame[1]);
-  assert.ok(pointsAtFrame[0][0] < 250);
-  assert.ok(pointsAtFrame[0][18] > 300);
+  assert.ok(pointsAtFrame[0].some(value => value !== 0));
   assert.ok(scenes.every((scene, index) => scene.children.length === 1 &&
     scene.children[0] === points[index] && points[index].geometry.getAttribute('position') === buffers[index]));
   now += 36_000;

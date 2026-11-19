@@ -21,9 +21,18 @@ function bestSaved() {
 
 function seconds(ms: number) { return (ms / 1000).toFixed(2); }
 
+function gateAxis(index: number) {
+  const gate = lakeSkateGates[index];
+  const before = index === 0 ? lakeSkateStation : lakeSkateGates[index - 1];
+  const dx = gate.x - before.x, dn = gate.n - before.n;
+  const distance = Math.hypot(dx, dn) || 1;
+  return { gate, east: -dn / distance, north: dx / distance };
+}
+
 export function createLakeSkatingActivity(
   context: TownActivityContext,
   heightAt: (x: number, n: number) => number,
+  isNight: () => boolean = () => false,
 ): TownActivity & {
   enabled(): boolean;
   onPosition(x: number, n: number, dt: number, ice: boolean): void;
@@ -34,6 +43,28 @@ export function createLakeSkatingActivity(
   markers.visible = false;
   context.scene.add(markers);
   const shape = new Object3D();
+  const nightLights = new InstancedMesh(markers.geometry,
+    new MeshBasicMaterial({ color: '#dbab76' }), lakeSkateGates.length * 6);
+  nightLights.name = 'Lake skating night lights';
+  let lightIndex = 0;
+  for (let index = 0; index < lakeSkateGates.length; index++) {
+    const { gate, east, north } = gateAxis(index);
+    for (const side of [-1, 1]) {
+      for (const along of [-.25, 0, .25]) {
+        // Studs outside the posts frame the course without filling the skating lane.
+        const gx = gate.x + east * side * 2.20 + north * along;
+        const gn = gate.n + north * side * 2.20 - east * along;
+        shape.position.set(gx, heightAt(gx, gn) + .046, -gn);
+        shape.scale.set(.18, .04, .18);
+        shape.updateMatrix();
+        nightLights.setMatrixAt(lightIndex++, shape.matrix);
+      }
+    }
+  }
+  nightLights.computeBoundingSphere();
+  nightLights.visible = isNight();
+  context.scene.add(nightLights);
+
   const { x, n } = lakeSkateStation;
   let wearing = false;
   let best = bestSaved();
@@ -41,11 +72,7 @@ export function createLakeSkatingActivity(
   let lap: Lap | undefined;
 
   function revealGate(index: number) {
-    const gate = lakeSkateGates[index];
-    const before = index === 0 ? lakeSkateStation : lakeSkateGates[index - 1];
-    const distance = Math.hypot(gate.x - before.x, gate.n - before.n) || 1;
-    const east = -(gate.n - before.n) / distance;
-    const north = (gate.x - before.x) / distance;
+    const { gate, east, north } = gateAxis(index);
     let slot = 0;
     function cube(offset: number, dy: number, w: number, h: number, color: Color) {
       const gx = gate.x + east * offset;
@@ -164,6 +191,7 @@ export function createLakeSkatingActivity(
   return {
     spots: [{ x, n, ground: heightAt(x, n), range: 2.6, label: '冰湖滑冰', run: menu }],
     enabled: () => wearing,
+    update() { nightLights.visible = isNight(); },
     onPosition,
     stop,
   };

@@ -33,12 +33,13 @@ function legalGround(x: number, n: number) {
 }
 
 test('a clocktower wall landing recovers at the nearest accessible paving point', t => {
-  const blocked = { x: 216, n: 217 };
+  // The fourteen-metre wing has moved its actual south wall to N216.
+  const blocked = { x: 216, n: 216 };
   assert.equal(legalGround(blocked.x, blocked.n), undefined);
   const spot = findNearestLegalSpawn(blocked, legalGround);
-  assert.deepEqual(spot, { x: 216, n: 216, ground: 12 });
+  assert.deepEqual(spot, { x: 216, n: 215.5, ground: 12 });
   assert.equal(legalGround(spot.x, spot.n), spot.ground);
-  t.diagnostic('clocktower: E216 N217 inside wall → E216 N216 dry at y12 (1 m)');
+  t.diagnostic('clocktower: E216 N216 at the enlarged south wall → E216 N215.5 on the level apron');
 });
 
 test('a landing in the middle of the river recovers on a dry bank and retains a valid bridge spawn', t => {

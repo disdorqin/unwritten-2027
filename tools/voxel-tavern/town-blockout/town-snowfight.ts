@@ -3,7 +3,7 @@ import {
   MeshBasicMaterial, MeshLambertMaterial, Object3D, RingGeometry, Vector3, type Scene,
 } from 'three';
 import {
-  SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite,
+  SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyFreeWallSite, classifyWallSite,
   wallCellCentre, wallCellOf, type SnowfightTeam,
 } from '../../../src/presence/snowfight';
 import type { createTownPresence, SnowfightState } from './town-presence';
@@ -52,7 +52,7 @@ export class DigField {
 }
 
 type Presence = ReturnType<typeof createTownPresence>;
-type WallView = { gx: number; gy: number; layer: number; hp: number; team: SnowfightTeam; ground: number };
+type WallView = { gx: number; gy: number; layer: number; hp: number; team: SnowfightTeam | 2; ground: number };
 type Burst = { age: number; lifetime: number; size: number; at: Vector3; velocity: Vector3 };
 
 const TEAM_COLORS = ['#e2543e', '#e9aa3d'] as const;
@@ -81,6 +81,7 @@ export function createTeamSnowfight(options: {
   aimRay(): { origin: Vector3; dir: Vector3 } | undefined;
   snowDepthLevel(): number;
   canScoop(): boolean;
+  freeBuildAvailable?(): boolean;
 }) {
   const { scene, presence, heightAt, announce } = options;
   const audio = createSnowfightAudio();
@@ -94,6 +95,7 @@ export function createTeamSnowfight(options: {
   let state: SnowfightState | undefined;
   let stateAt = 0;
   let buildMode = false;
+  let explainedFreeBuild = false;
   let lastRejectAt = 0;
   let prevPhase: string | undefined;
   let prevOwners: number[] = [];
@@ -142,8 +144,9 @@ export function createTeamSnowfight(options: {
       pose.rotation.set(0, 0, 0);
       pose.updateMatrix();
       wallMesh.setMatrixAt(i, pose.matrix);
-      color.set('#eef6ff').lerp(new Color(TEAM_COLORS[wall.team]), .25)
-        .multiplyScalar(wall.hp === 3 ? 1 : wall.hp === 2 ? .82 : .6);
+      color.set('#eef6ff');
+      if (wall.team !== 2) color.lerp(new Color(TEAM_COLORS[wall.team]), .25);
+      color.multiplyScalar(wall.hp === 3 ? 1 : wall.hp === 2 ? .82 : .6);
       wallMesh.setColorAt(i, color);
       i++;
       targets.push({
@@ -281,6 +284,15 @@ export function createTeamSnowfight(options: {
     return state?.phase === 'build' || state?.phase === 'battle';
   }
 
+  function mayBuildFree(): boolean {
+    return !active() && presence.snowfightAvailable() && presence.selfId() !== null &&
+      options.freeBuildAvailable?.() === true;
+  }
+
+  function canBuild(): boolean {
+    return active() || mayBuildFree();
+  }
+
   function aimCell(): { gx: number; gy: number; east: number; north: number } | undefined {
     const ray = options.aimRay();
     if (!ray) return undefined;
@@ -293,16 +305,16 @@ export function createTeamSnowfight(options: {
   }
 
   function placeRejection(gx: number, gy: number): string | undefined {
-    if (!active()) return 'phase';
+    if (!canBuild()) return 'phase';
     const team = myTeam();
-    if (team === undefined) return 'phase';
+    if (active() && team === undefined) return 'phase';
     const east = wallCellCentre(gx);
     const north = wallCellCentre(gy);
-    if (state?.phase === 'build' && !buildHalfAllows(team, east)) return 'half';
-    const site = classifyWallSite(east, north);
+    if (state?.phase === 'build' && team !== undefined && !buildHalfAllows(team, east)) return 'half';
+    const site = active() ? classifyWallSite(east, north) : classifyFreeWallSite(east, north);
     if (site) return site;
     if (columnHeight(gx, gy) >= WALL_MAX_LAYERS) return 'stack';
-    if (walls.size >= WALL_TOWN_CAP) return 'cap';
+    if (active() && walls.size >= WALL_TOWN_CAP && ![...walls.values()].some(wall => wall.team === 2)) return 'cap';
     if (material.amount < 1) return 'empty';
     return undefined;
   }
@@ -327,16 +339,19 @@ export function createTeamSnowfight(options: {
   }
 
   function updateHud() {
+    const buildingAvailable = canBuild();
+    if (!buildingAvailable) buildMode = false;
     if (startButton) startButton.hidden = active() || !presence.snowfightAvailable();
     if (buildButton) {
-      buildButton.hidden = !active();
+      buildButton.hidden = !buildingAvailable;
       buildButton.textContent = buildMode ? '堆墙中 · 点此收起' : '堆墙';
       buildButton.setAttribute('aria-pressed', String(buildMode));
+      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && material.amount > 0 ? '2px solid #9fe8ff' : '';
     }
     if (materialOut) {
-      materialOut.hidden = !active();
+      materialOut.hidden = !buildingAvailable;
       const text = `雪料 ${material.amount}`;
-      if (active() && materialOut.textContent !== text) materialOut.textContent = text;
+      if (buildingAvailable && materialOut.textContent !== text) materialOut.textContent = text;
     }
     if (panel) panel.hidden = !active() && state?.phase !== 'done';
     if (!state) return;
@@ -381,7 +396,6 @@ export function createTeamSnowfight(options: {
     if (phaseChanged && next.phase === 'battle') audio.start();
     if (phaseChanged && next.phase === 'done') audio.finish();
     if (captured) audio.capture();
-    if (!active()) buildMode = false;
     updateHud();
   });
   presence.onSnowfightRejected(reason => noteReject(reason));
@@ -422,6 +436,7 @@ export function createTeamSnowfight(options: {
     if (presence.requestSnowfightStart()) audio.start();
   };
   if (buildButton) buildButton.onclick = () => {
+    if (!canBuild()) return;
     buildMode = !buildMode;
     if (buildMode && material.amount < 1) announce('雪料为零：对准近处雪地长按掏雪攒料');
     updateHud();
@@ -429,6 +444,7 @@ export function createTeamSnowfight(options: {
 
   return {
     active,
+    canBuild,
     buildMode: () => buildMode,
     tryPlace,
     wallTargets: () => targets,
@@ -441,7 +457,8 @@ export function createTeamSnowfight(options: {
     },
     material: () => material.amount,
     onGatherTick() {
-      if (!active()) return;
+      if (!canBuild()) return;
+      const previous = material.amount;
       const level = options.snowDepthLevel();
       if (level >= 2) {
         if (material.add(2) > 0) {
@@ -450,6 +467,10 @@ export function createTeamSnowfight(options: {
           refreshDigs();
         }
       } else material.add(1);
+      if (!explainedFreeBuild && mayBuildFree() && previous < 1 && material.amount > 0) {
+        explainedFreeBuild = true;
+        announce('雪料够了，点『堆墙』可以垒掩体');
+      }
       updateHud();
     },
     onThrowHeard(origin: Vector3) {
@@ -479,7 +500,7 @@ export function createTeamSnowfight(options: {
     },
     update(dt: number) {
       // 虚影预览
-      if (buildMode && active()) {
+      if (buildMode && canBuild()) {
         const cell = aimCell();
         if (cell) {
           const layer = columnHeight(cell.gx, cell.gy);
@@ -510,7 +531,7 @@ export function createTeamSnowfight(options: {
       burstMesh.count = visible;
       burstMesh.visible = visible > 0;
       if (burstMesh.visible) burstMesh.instanceMatrix.needsUpdate = true;
-      if (state) updateHud();
+      if (state || options.freeBuildAvailable) updateHud();
     },
   };
 }

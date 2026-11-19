@@ -1,4 +1,5 @@
 import { UNLOCK_AT } from './town-mail-store';
+import { houseDoorBookCopy } from './town-house-door-book';
 import { browserTextStorage, isStoredRecord, readCollection, writeCollection, type StorageAccess } from './town-text-store';
 
 export const townChronicleKey = 'unwritten.chronicle.v1';
@@ -30,8 +31,16 @@ function isChronicleEntry(value: unknown): value is TownChronicleEntry {
     (value.status === 'draft' || value.status === 'published') && typeof value.pinned === 'boolean';
 }
 
+const houseDoorChronicleEntry: TownChronicleEntry = {
+  id: 'chr-hundred-house-doors', vol: 4, era: '建镇纪', date: null,
+  title: '百门通', body: houseDoorBookCopy.chronicle, source: 'official', actor: null,
+  status: 'published', pinned: false,
+};
+
 export function readPublishedTownChronicle(storage = browserTextStorage()): TownChronicleEntry[] {
-  return readCollection(storage, townChronicleKey, isChronicleEntry).filter(item => item.status === 'published');
+  const entries = readCollection(storage, townChronicleKey, isChronicleEntry)
+    .filter(item => item.status === 'published' && item.id !== houseDoorChronicleEntry.id);
+  return [...entries, { ...houseDoorChronicleEntry }];
 }
 
 function append(entry: TownChronicleEntry, storage: StorageAccess | undefined) {

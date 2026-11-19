@@ -5,19 +5,24 @@ import {
 } from 'three';
 import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
+import { addLandmarkNameplate } from './landmark-label';
+import type { Box } from './landmark-kit';
 import { campfirePartsPerSite, maxCampfireSites, type CampfirePiece } from './town-campfires';
+import { plazaInformationSites } from './plaza-information-activity';
+import { plazaSnowSupplySites, plazaSnowSupplySize, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { publicFireworksStand } from '../../../src/presence/firework-sites';
 
 type Position = [x: number, y: number, z: number];
-type Instance = { at: Position; scale: Position; tint?: string };
+type Instance = { at: Position; scale: Position; tint?: string; turn?: number };
 type Ground = ReturnType<typeof import('./terrain').createTerrainGrid>;
 
 function instances(group: Group, geometry: Geometry, material: Material, items: Instance[], reserve = 0) {
   const mesh = new InstancedMesh(geometry, material, items.length + reserve);
   mesh.count = items.length;
   const dummy = new Object3D();
-  items.forEach(({ at, scale, tint }, index) => {
+  items.forEach(({ at, scale, tint, turn = 0 }, index) => {
     dummy.position.set(...at);
+    dummy.rotation.y = turn;
     dummy.scale.set(...scale);
     dummy.updateMatrix();
     mesh.setMatrixAt(index, dummy.matrix);
@@ -52,7 +57,9 @@ function makeGlows(group: Group, positions: Position[]) {
 }
 
 type Blocker = { x: number; n: number; radius: number };
-export function addScenery(group: Group, grid: Ground) {
+export function addScenery(
+  group: Group, grid: Ground, keepClear: (east: number, north: number, radius: number) => boolean = () => false,
+) {
   let seed = 271;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -64,6 +71,10 @@ export function addScenery(group: Group, grid: Ground) {
   const pavers: Instance[] = [];
   const glowPositions: Position[] = [];
   const blockers: Blocker[] = [];
+  const plazaCoverBoxes: Box[] = [];
+  const supplyMounds: {
+    site: PlazaSnowSupplySite; firstCap: number; ground: number; parts: Instance[]; heightScale: number;
+  }[] = [];
   const [w, s, e, n] = layout.plaza.bounds;
   function nearEntrance(x: number, north: number, margin: number) {
     return layout.plots.some(({ connect: [ax, an], door: [bx, bn] }) => {
@@ -74,7 +85,7 @@ export function addScenery(group: Group, grid: Ground) {
     });
   }
   const lamp = (x: number, y: number, north: number) => {
-    if (nearEntrance(x, north, 1.35)) return;
+    if (nearEntrance(x, north, 1.35) || keepClear(x, north, .65 / Math.SQRT2)) return;
     const z = -north;
     pillars.push({ at: [x, y + 1.3, z], scale: [.21, 2.6, .21], tint: '#453f48' });
     pillars.push({ at: [x, y + .21, z], scale: [.48, .42, .48], tint: '#78869b' });
@@ -85,17 +96,177 @@ export function addScenery(group: Group, grid: Ground) {
     blockers.push({ x, n: north, radius: .25 });
   };
 
-  for (let x = w + 1; x < e; x += 2) {
-    for (let north = s + 1; north < n; north += 1.5) {
-      const edge = x < w + 4 || x > e - 4 || north < s + 3 || north > n - 3;
-      const tint = edge ? '#6f7887' : ['#a08b82', '#a79997', '#a5958a', '#968782'][Math.floor(random() * 4)];
-      pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
-    }
-  }
-  const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string) => {
-    caps.push({ at: [x, grid.heightAt(x, north) + y, -north], scale, tint });
+  const plazaHeight = layout.plaza.height;
+  const plazaBox = (x: number, north: number, y: number, scale: Position, tint: string, turn = 0) => {
+    caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
   };
 
+  if (w === 161 && s === 152 && e === 251 && n === 212) {
+    function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
+      pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
+    }
+    for (const [west, east] of [[w, 219], [219, 229], [229, e]]) {
+      for (let x = west; x < east; x += 4) {
+        for (let north = s; north < n; north += 4) {
+          const width = Math.min(4, east - x), depth = Math.min(4, n - north);
+          const seam = x === west || north === s || north + depth === n;
+          const tint = west === 219
+            ? ['#a8988a', '#b3a295'][Math.floor(random() * 2)]
+            : seam ? '#6f7887' : ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'][Math.floor(random() * 4)];
+          pavers.push({ at: [x + width / 2, plazaHeight - .025, -north - depth / 2],
+            scale: [width - .035, .085, depth - .035], tint });
+          if (west !== 219 && (north - s) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
+        }
+      }
+    }
+    const centreEast = 224, centreNorth = 188;
+    for (const radius of [4, 7, 10]) {
+      const pieces = radius * 8;
+      for (let i = 0; i < pieces; i++) {
+        const angle = i * 2 * Math.PI / pieces;
+        inlay(centreEast + Math.cos(angle) * radius, centreNorth + Math.sin(angle) * radius,
+          2 * Math.PI * radius / pieces + .05, radius === 4 ? .18 : .12,
+          radius === 4 ? '#c6e2ed' : '#8fa7bb', angle + Math.PI / 2);
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      const angle = i * Math.PI / 3;
+      inlay(centreEast + Math.cos(angle) * 1.9, centreNorth + Math.sin(angle) * 1.9, 3.4, .18, '#d5e8f4', angle);
+      for (const side of [-1, 1]) {
+        const fork = angle + side * Math.PI / 3;
+        inlay(centreEast + Math.cos(angle) * 2.5 + Math.cos(fork) * .46,
+          centreNorth + Math.sin(angle) * 2.5 + Math.sin(fork) * .46,
+          1.03, .14, '#d5e8f4', fork);
+      }
+    }
+    // Keep the non-colliding edge lights in the existing emissive batch.
+    for (const north of [s + 2, n - 2]) {
+      lights.push({ at: [(w + e) / 2, plazaHeight + .023, -north], scale: [e - w - 4, .01, .095] });
+    }
+    for (const east of [w + 2, e - 2]) {
+      lights.push({ at: [east, plazaHeight + .023, -(s + n) / 2], scale: [.095, .01, n - s - 4] });
+    }
+    for (const east of [216.5, 231.5]) {
+      for (let north = 157; north <= n; north += 11) {
+        pillars.push({ at: [east, plazaHeight + .18, -north], scale: [.21, .36, .21], tint: '#453f48' });
+        pillars.push({ at: [east, plazaHeight + .07, -north], scale: [.42, .14, .42], tint: '#78869b' });
+        lights.push({ at: [east, plazaHeight + .44, -north], scale: [.36, .16, .36] });
+        caps.push({ at: [east, plazaHeight + .55, -north], scale: [.49, .06, .49], tint: '#602b32' });
+        caps.push({ at: [east, plazaHeight + .60, -north], scale: [.32, .04, .32], tint: '#c3d8ec' });
+        glowPositions.push([east, plazaHeight + .44, -north]);
+        blockers.push({ x: east, n: north, radius: .25 });
+        for (const sign of [-1, 1]) {
+          pillars.push({ at: [east + sign * .063, plazaHeight + .25, -north + .112],
+            scale: [.09, .035, .032], tint: '#d2a56c', turn: sign * Math.PI / 4 });
+          pillars.push({ at: [east + sign * .089, plazaHeight + .30, -north + .114],
+            scale: [.032, .102, .033], tint: '#d2a56c' });
+        }
+      }
+    }
+    const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
+      lights.push({ at: [x, plazaHeight + y, -north], scale });
+    };
+    const gateEast = 161, gateNorth = 190;
+    for (const north of [187.85, 192.15]) {
+      plazaBox(gateEast, north, .18, [.66, .36, .66], '#8b8b94');
+      plazaBox(gateEast, north, 1.94, [.41, 3.32, .41], '#7e423e');
+      plazaBox(gateEast, north, 3.48, [.56, .19, .58], '#c59b55');
+      plazaGlow(gateEast, north, 3.06, [.28, .39, .28]);
+      blockers.push({ x: gateEast, n: north, radius: .35 });
+    }
+    plazaBox(gateEast, gateNorth, 3.66, [.57, .31, 5.16], '#5f3f3b');
+    plazaBox(gateEast, gateNorth, 3.91, [.67, .19, 5.42], '#414b61');
+    plazaBox(gateEast, gateNorth, 4.04, [.49, .14, 4.73], '#cfddeb');
+    addLandmarkNameplate(group, '迎未', gateEast - .31, plazaHeight + 3.62, -gateNorth,
+      1.54, .34, -Math.PI / 2, { background: '#603c38' });
+
+    const yearTreeEast = 208, yearTreeNorth = 198;
+    for (let index = 0; index < 24; index++) {
+      const angle = index * Math.PI / 12;
+      const x = yearTreeEast + 7 * Math.cos(angle);
+      const north = yearTreeNorth + 7 * Math.sin(angle);
+      inlay(x, north, 1.86, .5, '#b9a881', angle + Math.PI / 2);
+      if (index % 3 === 0) {
+        plazaBox(x, north, .28, [1.36, .22, .54], '#835c44', angle + Math.PI / 2);
+        plazaBox(x, north, .11, [.42, .22, .42], '#5b4741');
+      }
+      if (index % 4 === 2) plazaGlow(x, north, .04, [.22, .04, .22]);
+    }
+    const { x: countdownEast, n: countdownNorth } = plazaInformationSites.countdown;
+    plazaBox(countdownEast, countdownNorth, .073, [.62, .146, .34], '#8b898f');
+    plazaBox(countdownEast, countdownNorth, .40, [.24, .65, .20], '#583d32');
+    plazaBox(countdownEast, countdownNorth, .83, [1.12, .45, .16], '#693e33');
+    plazaBox(countdownEast, countdownNorth - .088, .83, [.95, .31, .031], '#e3ca98');
+    plazaBox(countdownEast, countdownNorth, 1.08, [1.19, .07, .22], '#924c3b');
+    plazaBox(countdownEast, countdownNorth - .108, .846, [.61, .027, .011], '#9c7760');
+    blockers.push({ x: countdownEast, n: countdownNorth, radius: .24 });
+    for (const [x, north] of [[199.7, 209.7], [203.1, 209.7]]) {
+      plazaBox(x, north, .36, [.18, .72, .18], '#62463a');
+      plazaGlow(x, north, .82, [.3, .26, .3]);
+      plazaBox(x, north, 1.01, [.42, .12, .42], '#8c3f39');
+    }
+    // The west-facing resting nook leaves the wishing-tree interaction approach open.
+    const nookEast = 198.3, nookNorth = 208.6;
+    plazaBox(nookEast, nookNorth, .045, [1.30, .09, .78], '#b18a52');
+    for (const north of [208.05, 209.15]) {
+      plazaBox(nookEast - .70, north, .25, [.13, .50, .13], '#805c4a');
+      plazaBox(nookEast - .70, north, .23, [.09, .10, .90], '#805c4a');
+    }
+    plazaBox(nookEast + .70, nookNorth, .12, [.32, .24, .42], '#765140');
+    const boardEast = 234, boardNorth = 208;
+    for (const x of [boardEast - 1.4, boardEast + 1.4]) {
+      plazaBox(x, boardNorth, .44, [.18, .88, .25], '#5e4035');
+    }
+    plazaBox(boardEast, boardNorth, .84, [3.15, .63, .14], '#653e37');
+    plazaBox(boardEast, boardNorth, 1.16, [3.26, .08, .28], '#97453b');
+    for (let index = 0; index < 4; index++) {
+      for (const side of [-1, 1]) {
+        plazaBox(boardEast + (index - 1.5) * .74, boardNorth + side * .083, .84, [.66, .45, .012], '#d2b58b');
+      }
+    }
+    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55 });
+
+    const moundWidth = plazaSnowSupplySize.halfWidth * 2;
+    for (const site of plazaSnowSupplySites) {
+      const { east, north } = site;
+      const firstCap = caps.length;
+      plazaBox(east, north, .073, [moundWidth, .146, moundWidth], '#9bbbd0');
+      plazaBox(east - .04, north + .035, .185, [1.17, .16, 1.16], '#c3ddea');
+      plazaBox(east + .043, north - .07, .30, [.91, .16, .89], '#d9e9f4');
+      plazaBox(east + .17, north + .10, .365, [.57, .14, .55], '#e4f1f9');
+      plazaBox(east - .08, north - .06, plazaSnowSupplySize.height - .028,
+        [.44, .056, .37], '#f1f8fc');
+      supplyMounds.push({ site, firstCap, ground: plazaHeight, parts: caps.slice(firstCap), heightScale: 1 });
+    }
+    // The E226 covers stay removed to preserve the plaza's north–south route.
+    const coverEast = 240;
+    for (const coverNorth of [198.8, 166]) {
+      plazaBox(coverEast, coverNorth, .41, [3, .82, .48], '#9db4c6');
+      plazaBox(coverEast, coverNorth, .91, [3, .18, .5], '#e1eef8');
+      for (const [index, eastOffset] of [-.99, 0, .99].entries()) {
+        plazaBox(coverEast + eastOffset, coverNorth, .26, [.94, .34, .5],
+          index % 2 === 0 ? '#bcd0df' : '#c4d6e4');
+        plazaBox(coverEast - eastOffset, coverNorth, .61, [.94, .27, .5],
+          index % 2 === 0 ? '#c4d6e4' : '#bcd0df');
+      }
+      plazaCoverBoxes.push({
+        min: [coverEast - 1.5, plazaHeight, -coverNorth - .25],
+        max: [coverEast + 1.5, plazaHeight + 1, -coverNorth + .25],
+      });
+    }
+    for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
+    inlay(242, 203, .64, .46, '#b58b5d');
+  } else {
+    for (let x = w + 1; x < e; x += 2) {
+      for (let north = s + 1; north < n; north += 1.5) {
+        const edge = x < w + 4 || x > e - 4 || north < s + 3 || north > n - 3;
+        const tint = edge ? '#6f7887' : ['#a08b82', '#a79997', '#a5958a', '#968782'][Math.floor(random() * 4)];
+        pavers.push({ at: [x, layout.plaza.height - .025, -north], scale: [1.965, .085, 1.466], tint });
+      }
+    }
+  }
+
+  // These approved northeast decorations remain on both plaza footprints.
   const snowFamily = [[240.5, 200.5, .87], [244.8, 200.5, .65], [247.6, 204.8, .79], [247.6, 208.0, .52]];
   for (const [x, north, size] of snowFamily) {
     for (const [y, width] of [[.34, 1.02], [.82, .76], [1.22, .59]]) {
@@ -222,9 +393,9 @@ export function addScenery(group: Group, grid: Ground) {
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
-  instances(group, box, neutral, pavers);
-  const sceneryPartCount = pillars.length + caps.length;
-  const sceneryParts = instances(group, box, neutral, [...pillars, ...caps], campfirePartsPerSite * maxCampfireSites);
+  const sceneryCapOffset = pavers.length + pillars.length;
+  const sceneryPartCount = sceneryCapOffset + caps.length;
+  const sceneryParts = instances(group, box, neutral, [...pavers, ...pillars, ...caps], campfirePartsPerSite * maxCampfireSites);
   instances(group, box, new MeshBasicMaterial({ color: '#ffb969' }), lights);
   const glow = makeGlows(group, glowPositions);
   const lampLightPool = Array.from({ length: 3 }, () => new PointLight('#ffb469', 0, 13, 2));
@@ -232,8 +403,30 @@ export function addScenery(group: Group, grid: Ground) {
   group.add(...lampLightPool);
   let night = true;
   let nextLightUpdate = 0;
+  const moundPose = new Object3D();
 
   return {
+    updatePlazaSnowSupply(heightScale: (site: PlazaSnowSupplySite) => number, east: number, north: number) {
+      if (east < w - 18 || east > e + 18 || north < s - 18 || north > n + 18) return;
+      let changed = false;
+      for (const mound of supplyMounds) {
+        const height = heightScale(mound.site);
+        if (!Number.isFinite(height) || height === mound.heightScale ||
+            (height !== 1 && Math.abs(height - mound.heightScale) < .01)) continue;
+        mound.heightScale = height;
+        for (let i = 0; i < mound.parts.length; i++) {
+          const { at: [x, y, z], scale: [width, size, depth] } = mound.parts[i];
+          moundPose.position.set(x, mound.ground + (y - mound.ground) * height, z);
+          moundPose.scale.set(width, size * height, depth);
+          moundPose.updateMatrix();
+          const index = sceneryCapOffset + mound.firstCap + i;
+          sceneryParts.setMatrixAt(index, moundPose.matrix);
+          sceneryParts.instanceMatrix.addUpdateRange(index * 16, 16);
+        }
+        changed = true;
+      }
+      if (changed) sceneryParts.instanceMatrix.needsUpdate = true;
+    },
     setCampfirePieces(parts: readonly CampfirePiece[]) {
       const count = sceneryPartCount + parts.length;
       if (count > sceneryParts.instanceMatrix.count) throw new RangeError('Campfire scenery exceeds the world batch reserve');
@@ -248,6 +441,8 @@ export function addScenery(group: Group, grid: Ground) {
         sceneryParts.setMatrixAt(sceneryPartCount + index, pose.matrix);
         sceneryParts.setColorAt(sceneryPartCount + index, tint.set(color));
       });
+      // Campfires and plaza snow can both change before the next render.
+      if (parts.length) sceneryParts.instanceMatrix.addUpdateRange(sceneryPartCount * 16, parts.length * 16);
       sceneryParts.instanceMatrix.needsUpdate = true;
       sceneryParts.instanceColor!.needsUpdate = true;
       sceneryParts.computeBoundingSphere();
@@ -256,6 +451,14 @@ export function addScenery(group: Group, grid: Ground) {
       const radius = 7;
       return night && lampLocations.some(lamp => Math.abs(lamp.y - feet - 1.6) <= 3.6 &&
         (lamp.x - east) ** 2 + (lamp.z + north) ** 2 <= radius ** 2);
+    },
+    plazaCoverBoxes,
+    plazaCoverBlocks(east: number, north: number, radius: number) {
+      return plazaCoverBoxes.some(({ min, max }) => {
+        const dx = Math.max(min[0] - east, east - max[0], 0);
+        const dn = Math.max(min[2] + north, -north - max[2], 0);
+        return dx * dx + dn * dn < radius * radius;
+      });
     },
     blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {

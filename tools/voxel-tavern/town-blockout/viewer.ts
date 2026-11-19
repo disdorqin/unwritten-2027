@@ -5,12 +5,18 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
+import { buildPineCamp } from './town-pine-camp';
+import { createPineCampActivity } from './town-pine-camp-activity';
+import { createPineFireActivities, createRegionalCarry, isPineStoryTime } from './town-pine-camp-fire-activity';
 import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark-kit';
-import { buildTowerLandmark, type TowerBellMotion } from './landmark-tower';
-import { buildTavernLandmark } from './landmark-tavern';
+import { buildTowerLandmark, setClocktowerDuskLighting, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
+import { updateTowerTime } from './clocktower-face';
+import { createDailyTowerChime } from './town-clocktower-time';
+import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
 import type { IcePalaceRace } from './ice-palace-race';
+import type { CastleIceSlideLanding, createCastleIceSlideActivity } from './ice-palace-slide';
 import { createIcePalaceCrown } from './ice-palace-crown';
 import './ice-palace-crown.css';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
@@ -27,6 +33,9 @@ import { addDistrictHousing } from './district-layout';
 import { sharedHomeLayer } from '../../../src/presence/shared-home-space';
 import { buildSharedHome, createSharedHomeSpots, sharedHomeHearthWarmth, sharedHomeSpawn, sharedHomeWalkable } from './landmark-shared-home';
 import { type TownHousePortal } from './town-house-portals';
+import { createHouseDoorBook, findHouseDoorLanding, houseDoorBookCopy, recordHouseDoorVisit, renderHouseDoorBook } from './town-house-door-book';
+import { prewarmHouseDoorTextures } from './town-house-door-textures';
+import './town-house-door-book.css';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { addNewYearDecor } from './town-new-year';
@@ -42,7 +51,9 @@ import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
-import { campfirePieces, createTownCampfires, findRegionalCampfires } from './town-campfires';
+import { campfirePieces, createTownCampfires, findRegionalCampfires, pineCampfireId } from './town-campfires';
+import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
+import { createLongHallRelay, longHallRelayStamp } from './long-hall-relay';
 import { createLandingFeedback } from './landing-feedback';
 import { createLandingSnow } from './landing-snow';
 import { buildMuseumLandmark } from './landmark-museum';
@@ -73,10 +84,13 @@ import { createTownMailActivity, playPostChime } from './town-mail-activity';
 import { UNLOCK_AT } from './town-mail-store';
 import { createRiddleActivity } from './town-riddle-activity';
 import { createStageActivity } from './stage-activity';
+import { stageProgram } from './stage-choreography';
 import { createMarketActivity } from './market-activity';
-import { createMarketFairActivity } from './market-fair';
+import { createMarketFairActivity, marketStalls, marketTastingStamp } from './market-fair';
+import { createMarketResidentStationLookup } from './market-resident-stations';
+import { createMarketVenueActivities } from './market-venue-activities';
 import { createIceActivity } from './ice-activity';
-import { createIceFishingActivity, iceFishingStation } from './ice-fishing-activity';
+import { createIceFishingActivity, iceFishingCatalogueStamp, iceFishingStation } from './ice-fishing-activity';
 import { createLakeSkatingActivity } from './lake-skating-activity';
 import { isLakeSkateIce, lakeSkateGates, lakeSkateStation } from './lake-skate-course';
 import { createLakeSkateMotion } from './lake-skate-motion';
@@ -91,7 +105,8 @@ import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy 
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { createMascotFollower, type MascotFollowPoint } from './mascot-follow';
 import { addTownRailWayfinding } from './town-rail-wayfinding';
-import { createTownNpcActivity } from './town-npc';
+import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
+import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
@@ -118,8 +133,10 @@ import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale } from './town-snow-cover';
 import { createTownSnowField } from './town-snow-field';
+import { createPlazaInformationActivity } from './plaza-information-activity';
+import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
-import { createSledRide } from './sled-ride';
+import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
 import { createSledAnimation } from './sled-animation';
 import { createSledDrift } from './sled-drift';
@@ -186,6 +203,10 @@ const sledRacks = [
 const sledVisuals = createTownSledVisuals(scene, sledRacks);
 const sledAnimation = createSledAnimation((east, north) => grid.heightAt(east, north));
 const sledDrift = createSledDrift();
+const sledWallCollider = createSledWallCollider(
+  (gx, gy) => teamFight.wallColumnAt(gx, gy),
+  (gx, gy, speed) => presence.sendSnowfightSledSmash(gx, gy, speed),
+);
 const sledRide = createSledRide({
   height: sledGroundAt,
   surface(sx, nn, y) {
@@ -194,19 +215,16 @@ const sledRide = createSledRide({
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
   },
-  blocked: (sx, nn, y) => {
-    if (obstructed(sx, nn, y)) return true;
-    // 雪墙交叉（车道 B）：墙列按本地镜像挡橇，橇体低于墙顶才算撞上。
-    // 一层墙且速度 >6 m/s 不挡——高速撞穿，销毁由服务端按报告裁定（见 sledSmash 报告处）；
-    // 其余（厚墙、或一层墙低速）一律按障碍走既有撞毁/翻橇规则。
+  blocked: obstructed,
+  wallBlocked: (sx, nn, y) => {
     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
-    if (!column || y >= column.ground + column.height * .5) return false;
-    return !(column.height === 1 && sledRide.speed() > 6);
+    return !!column && y < column.ground + column.height * .5;
   },
+  wallImpact: sledWallCollider.collide,
   snow: (sx, nn, y, snowYaw, count, effect) => sledVisuals.puff(sx, nn, y, snowYaw, count, effect),
   stopped: () => announceActivity('雪橇停稳了，找个下坡再出发'),
+  smoothFlight: () => announceActivity('漂亮'),
 });
-let sledWallCellKey = ''; // 雪橇当前所在墙格（撞穿报告按格进入沿触发，见移动分支）
 const sledTrackView = createSledTrackView(scene, sledGroundAt);
 const grandPrix = createGrandPrix();
 const sledStatus = element<HTMLOutputElement>('sled-status');
@@ -225,7 +243,6 @@ presence.onGrandPrixResult(result => {
 function leaveSled() {
   sledRide.leave();
   sledDrift.reset();
-  sledWallCellKey = '';
 }
 const previousStationEye = new Vector3();
 let stationViewStillSince = Infinity;
@@ -256,12 +273,15 @@ function stationViewCamera() {
 scene.add(railway.group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
-const scenery = addScenery(landscape, grid);
+const pineCamp = buildPineCamp(grid);
+landscape.add(pineCamp.group);
+const scenery = addScenery(landscape, grid, pineCamp.keepClear);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
-  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius));
+  districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
 const forest = addForestDensity(landscape, grid,
-  (east, north, radius) => districts.keepClear(east, north, radius) || streetscape.occupied(east, north, radius),
+  (east, north, radius) => districts.keepClear(east, north, radius) ||
+    streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
 const snowButton = element<HTMLButtonElement>('snow');
@@ -386,7 +406,7 @@ type Model = { id: string; file: string; colliders: Box[]; floors?: Box[]; ramps
 const architecture = new Map<string, Group>();
 const festivalText = element('festival-status');
 const rehearse = element<HTMLButtonElement>('rehearse');
-const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles);
+const festival = createFestival(scene, message => { festivalText.textContent = message; }, announceSnowballTitles, grid.heightAt);
 const actionButton = element<HTMLButtonElement>('world-action');
 const assetBase = new URL('./town-blockout/buildings/', document.baseURI);
 function validBox({ min, max }: Box) {
@@ -496,8 +516,12 @@ const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
 scene.add(tigerPine);
 let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
-let streetsRequested = false;
+let extensionStreetsLoad: Promise<void> | undefined;
 let homeReturn: TownHousePortal | undefined;
+let houseDoorTravel = false;
+let houseDoorLandingCheck: { entry: TownHousePortal; target: TownHousePortal } | undefined;
+const homeDoors = new Map<string, TownHousePortal>();
+const blockedHouseDoors = new Set<string>();
 let sharedHome: ReturnType<typeof buildSharedHome> | undefined;
 let sharedHomeGeometry: WalkGeometry | undefined;
 
@@ -522,7 +546,8 @@ function geometry() {
       }
     }
   }
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine];
+  index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
+  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -554,12 +579,13 @@ function prepareLandmarks(east: number, north: number, overview: boolean) {
     (overview || Math.hypot(east - origin[0], north - origin[1]) < 148));
   if (!plot) return;
   requestedPlots.add(plot.id);
-  const palaceModule = plot.id === 'ice-castle' ? import('./ice-palace-landmark-activity') : undefined;
+  const palaceModule = plot.id === 'ice-castle'
+    ? Promise.all([import('./ice-palace-landmark-activity'), import('./ice-palace-slide')]) : undefined;
   Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
-    if (palace) registerIcePalaceActivities(group, palace.createIcePalaceLandmarkActivity);
+    if (palace) registerIcePalaceActivities(group, palace[0].createIcePalaceLandmarkActivity, palace[1].createCastleIceSlideActivity);
   }).catch(error => {
     requestedPlots.delete(plot.id);
     console.error(`Loading ${plot.id}`, error);
@@ -569,6 +595,7 @@ async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
   const models: Model[] = await response.json();
+  if (models.length === 0) return;
   const loader = new GLTFLoader();
   const results = await Promise.allSettled(models.map(async model => {
     const plot = layout.plots.find(item => item.id === model.id);
@@ -626,6 +653,20 @@ const eye = 1.65;
 const keys = new Set<string>();
 const touchSprintButton = element<HTMLButtonElement>('touch-sprint');
 const touchWalk = createTouchWalk(element('touch-walk'), touchSprintButton);
+const walkSprintLabel = touchSprintButton.textContent;
+let sledSpace = false;
+let steeredWithSpace = false;
+let touchSledDrift: { pointer: number; since: number } | undefined;
+touchSprintButton.addEventListener('pointerdown', event => {
+  if (sledRide.active() && event.pointerType === 'touch') {
+    touchSledDrift = { pointer: event.pointerId, since: performance.now() };
+  }
+});
+for (const eventType of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+  touchSprintButton.addEventListener(eventType, event => {
+    if (touchSledDrift?.pointer === event.pointerId) touchSledDrift = undefined;
+  });
+}
 const viewportControls = createViewportControls({
   fullscreenButton: element<HTMLButtonElement>('fullscreen-toggle'),
   chatPanel: element('town-chat'),
@@ -658,6 +699,8 @@ let forwardPressedAt = -Infinity;
 let doubleForward = false;
 function stopTravel() {
   keys.clear();
+  sledSpace = steeredWithSpace = false;
+  touchSledDrift = undefined;
   forwardPressedAt = -Infinity;
   doubleForward = false;
   touchWalk.reset();
@@ -684,6 +727,8 @@ let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
 let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
+let palaceSlide: ReturnType<typeof createCastleIceSlideActivity> | undefined;
+let palaceSlideGround: number | undefined;
 let rideYawOffset = 0;
 let ridePitch = 0;
 const lookAhead = new Vector3();
@@ -762,8 +807,23 @@ function leaveRide() {
   pitch = 0;
   return true;
 }
-function leaveSeat() {
+function landPalaceSlide(landing: CastleIceSlideLanding) {
+  ({ x, n, ground, yaw } = landing);
+  airHeight = undefined;
+  riseSpeed = pitch = 0;
+  resetMovement();
+}
+function leaveSeat(resetSlide = false) {
   if (!seated) return;
+  if (palaceSlide?.active()) {
+    if (resetSlide) palaceSlide.reset();
+    else {
+      const landing = palaceSlide.cancel();
+      if (!landing) return;
+      landPalaceSlide(landing);
+    }
+  }
+  palaceSlideGround = undefined;
   seated = undefined;
   stopTravel();
   hotSpringSoak.leave();
@@ -803,6 +863,13 @@ function showLightCount({ lit, total }: { lit: number; total: number }) {
 const townLights = createTownLights({ ...activityContext, announce: announceActivity }, grid, showLightCount);
 showLightCount(townLights.getProgress());
 lightsButton.onclick = townLights.openBook;
+let towerDusk = false;
+function setTowerDusk(enabled: boolean) {
+  if (towerDusk === enabled) return;
+  towerDusk = enabled;
+  townLights.setDusk(enabled);
+  setClocktowerDuskLighting(tower, enabled);
+}
 const mascotFrustum = new Frustum();
 const mascotViewProjection = new Matrix4();
 const mascotBounds = new Sphere(new Vector3(), .54);
@@ -852,11 +919,19 @@ const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
   () => { drinkingPoseUntil = performance.now() + 2500; },
 );
-const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
-const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt);
+const lakeSkating = createLakeSkatingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt, () => nightMode);
+const regionalCarry = createRegionalCarry();
+const iceFishing = createIceFishingActivity({ ...activityContext, announce: announceActivity }, grid.heightAt,
+  () => collectRegionalStamp(iceFishingCatalogueStamp.id), regionalCarry.collectFish);
 const marketFair = createMarketFairActivity(
   { ...activityContext, announce: announceActivity },
-  { camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink },
+  {
+    camera, player: () => ({ x, n, walking }), onHotDrink: warmFromDrink,
+    marketPassport: {
+      collect: () => passport.collectExtension(marketTastingStamp.id),
+      collected: () => passport.hasExtension(marketTastingStamp.id),
+    },
+  },
 );
 function nearbyActivity<T extends TownActivity>(create: (context: TownActivityContext) => T): T {
   const activity = create({
@@ -870,6 +945,7 @@ function nearbyActivity<T extends TownActivity>(create: (context: TownActivityCo
   return activity;
 }
 const stageActivity = nearbyActivity(createStageActivity);
+const wishActivity = nearbyActivity(createWishActivity);
 let icePalaceActivity: ReturnType<typeof createIcePalaceLandmarkActivity> | undefined;
 const icePalaceCrown = createIcePalaceCrown(document.body);
 let icePalaceSelfCrowned = false;
@@ -878,7 +954,7 @@ function palaceThroneSeat() {
 }
 const activities: TownActivity[] = [
   nearbyActivity(createPostActivity), stageActivity, nearbyActivity(createMarketActivity),
-  nearbyActivity(createIceActivity), nearbyActivity(createWishActivity), nearbyActivity(createRestActivity),
+  nearbyActivity(createIceActivity), wishActivity, nearbyActivity(createRestActivity),
 ];
 function announceActivity(message: string, gold = false) {
   activityStatus.textContent = message;
@@ -889,7 +965,7 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
-presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed), {
+presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed, grid.heightAt), {
   ageSeconds, clockMs: () => performance.now(),
 }));
 const plazaPhoto = createPlazaGroupPhoto({
@@ -957,6 +1033,8 @@ activitySpots.push(...sledRacks.map(rack => ({
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
+    if (homeDoors.has(door.id)) continue;
+    homeDoors.set(door.id, door);
     activitySpots.push({
       x: door.x, n: door.n, ground: door.ground, range: 1.6, label: '进入屋舍空间',
       available: () => !homeReturn,
@@ -973,11 +1051,13 @@ function enterSharedHome(door: TownHousePortal) {
     scene.add(sharedHome);
     activitySpots.push(...createSharedHomeSpots({ ...activityContext, announce: announceActivity }, leaveSharedHome, filename => {
       photoFilename = filename;
-    }, sharedHome));
+    }, sharedHome, openHouseDoorBook));
   }
   lakeSkating.stop();
   resetMovement();
   homeReturn = door;
+  recordHouseDoorVisit(door.id);
+  void prepareExtensionStreets();
   sharedHome.visible = true;
   camera.layers.set(sharedHomeLayer);
   ({ x, n, ground, yaw } = sharedHomeSpawn);
@@ -987,6 +1067,142 @@ function enterSharedHome(door: TownHousePortal) {
   fadeHousePortal();
   announceActivity('屋舍空间 · 从原门口返回');
 }
+function prepareExtensionStreets() {
+  return extensionStreetsLoad ??= import('./extension-streets').then(({ buildExtensionStreets }) => {
+    extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
+    scene.add(extensionStreets.group);
+    walkGeometry = geometry();
+    activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
+    registerHomeDoors(extensionStreets.housePortals);
+    const dogMailbox = extensionStreets.dogMailbox;
+    if (dogMailbox) {
+      activitySpots.push(zodiacSites.mount(extensionStreets.group, dogMailbox.charm),
+        createZodiacDogPostcard(dogMailbox, activityContext));
+    }
+  }).catch(error => {
+    extensionStreetsLoad = undefined;
+    console.error('Loading extension streets', error);
+  });
+}
+
+async function openHouseDoorBook() {
+  const entry = homeReturn;
+  if (!entry || houseDoorTravel) return;
+  const panel = openPlace(houseDoorBookCopy.title, houseDoorBookCopy.introduction);
+  const loading = document.createElement('p');
+  loading.textContent = '正在登记各区屋门…';
+  panel.append(loading);
+  await prepareExtensionStreets();
+  if (homeReturn !== entry || !placeCard.open || !loading.isConnected) return;
+  if (!extensionStreets) {
+    loading.textContent = '屋门清单暂未登记齐，请关册后重试。';
+    return;
+  }
+  const anchors = [
+    ...layout.plots.map(({ door: [x, n] }, i) => ({ label: plotLabels[i], x, n })),
+    ...marketStalls.map(({ kind, east, north }) => ({ label: kind + '摊', x: east, n: north })),
+    ...townNpcDoorAnchors,
+  ];
+  renderHouseDoorBook(panel, createHouseDoorBook([...homeDoors.values()], anchors), entry, blockedHouseDoors,
+    target => void exitThroughHouseDoor(target));
+}
+
+function houseDoorOccupied(east: number, north: number, feet: number) {
+  return presence.getSnowballPeers().some(peer => Math.abs(peer.height - feet) < bodyHeight &&
+    Math.hypot(east - peer.east, north - peer.north) < bodyRadius * 2);
+}
+
+function availableHouseDoorGround(east: number, north: number) {
+  const feet = dryTownLandingHeight(east, north, undefined, true);
+  return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+}
+
+async function prewarmHouseDoorExit(entry: TownHousePortal, target: TownHousePortal, conceal: Animation) {
+  const landing = findHouseDoorLanding(target, availableHouseDoorGround);
+  if (!landing) return;
+  // The prediction only chooses textures. Landing is revalidated when the door actually opens.
+  const destination = new Vector3(landing.x, landing.ground + eye, -landing.n);
+  await prewarmHouseDoorTextures(renderer, scene, camera, destination, target.exitYaw,
+    () => homeReturn === entry && houseDoorTravel && conceal.playState === 'running');
+}
+
+function leaveToRecordedDoor(entry: TownHousePortal, target: TownHousePortal) {
+  blockedHouseDoors.add(target.id);
+  announceActivity(houseDoorBookCopy.blocked);
+  const landing = findNearestLegalSpawn(entry, (east, north) => {
+    const feet = dryTownLandingHeight(east, north, entry.ground);
+    return feet === undefined || houseDoorOccupied(east, north, feet) ? undefined : feet;
+  });
+  if (!landing) {
+    homeReturn = entry;
+    ({ x, n, ground, yaw } = sharedHomeSpawn);
+    camera.layers.set(sharedHomeLayer);
+    if (sharedHome) sharedHome.visible = true;
+    return;
+  }
+  ({ x, n, ground } = landing);
+  yaw = entry.exitYaw;
+}
+
+async function exitThroughHouseDoor(target: TownHousePortal) {
+  const entry = homeReturn;
+  if (!entry || houseDoorTravel) return;
+  houseDoorTravel = true;
+  resetMovement();
+  placeCard.close();
+  const fade = reduceSnowEffects.matches ? undefined : document.createElement('div');
+  try {
+    if (fade) {
+      fade.className = 'house-door-fade';
+      document.body.append(fade);
+      const conceal = fade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+      void prewarmHouseDoorExit(entry, target, conceal).catch(() => {});
+      await conceal.finished.catch(() => {});
+    }
+    // A timed ceremony can move a visitor out of the shared room while the DOM fades.
+    if (homeReturn !== entry) return;
+    homeReturn = undefined;
+    const landing = findHouseDoorLanding(target, availableHouseDoorGround);
+    if (landing) {
+      ({ x, n, ground } = landing);
+      yaw = target.exitYaw;
+      blockedHouseDoors.delete(target.id);
+      houseDoorLandingCheck = { entry, target };
+    } else {
+      leaveToRecordedDoor(entry, target);
+    }
+    if (!homeReturn) {
+      camera.layers.set(0);
+      if (sharedHome) sharedHome.visible = false;
+    }
+    pitch = 0;
+    airHeight = undefined;
+    riseSpeed = 0;
+    if (fade) {
+      const reveal = fade.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'forwards' });
+      await reveal.finished.catch(() => {});
+    } else if (landing) {
+      await new Promise<void>(resolve => window.setTimeout(resolve, 200));
+    }
+  } finally {
+    fade?.remove();
+    houseDoorLandingCheck = undefined;
+    houseDoorTravel = false;
+  }
+}
+
+function checkHouseDoorLanding() {
+  const check = houseDoorLandingCheck;
+  if (!check || !houseDoorOccupied(x, n, ground)) return;
+  // The already established AOI only delivers exterior peers as the player re-enters the town.
+  const landing = findHouseDoorLanding(check.target, availableHouseDoorGround);
+  if (landing) ({ x, n, ground } = landing);
+  else {
+    leaveToRecordedDoor(check.entry, check.target);
+    houseDoorLandingCheck = undefined;
+  }
+}
+
 function fadeHousePortal() {
   if (!reduceSnowEffects.matches) renderer.domElement.animate(
     [{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: 'ease-out' },
@@ -1038,6 +1254,7 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   announce: announceActivity,
 });
 ceremonyFrost.mountSettings(element('town-panel-controls'));
+festival.mountAudioSettings(element('town-panel-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const railOvernightBroadcast = createRailOvernightBroadcast();
@@ -1047,6 +1264,8 @@ const cameraBeforeBellShake = new Quaternion();
 let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
+const dailyTowerChime = createDailyTowerChime();
+let overtureMidnight: number | undefined;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
   onFrostBaseline: ceremonyFrost.setBaseline,
@@ -1105,7 +1324,9 @@ let snowHold: { source: 'mouse' | 'touch'; started: number } | undefined;
 let snowAction: 'gather' | 'aim' | undefined;
 let gatherTime = 0;
 const gatherRayEnd = new Vector3();
-const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false };
+const plazaSnowSupply = createPlazaSnowSupply();
+const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false,
+  supply: undefined as PlazaSnowSupplySite | undefined };
 let formalSnowFight = false;
 let enteredSnowFight = false;
 let snowOnHead = 0;
@@ -1318,6 +1539,7 @@ const teamFight = createTeamSnowfight({
   },
   snowDepthLevel: () => snowCover.depth().level,
   canScoop: () => aimsAtNearbySnow(),
+  freeBuildAvailable: presence.freeSnowWallsAvailable,
 });
 
 function updateSnowballSession(id: number | null) {
@@ -1395,8 +1617,11 @@ function aimsAtNearbySnow() {
     snow = Math.abs(height - at.y) < .18 && !roofed(x, n, ground) &&
       !townWater.at(at.x, north) && !roofed(at.x, north, height) && snowCover.canGather(at.x, north, height);
   }
-  Object.assign(gatherCheck, { x, n, ground, yaw, pitch, snow });
-  return snow;
+  const aimedSupply = plazaSnowSupply.aimed(tossOrigin, gatherRayEnd, grid.heightAt, hit);
+  const supply = aimedSupply && !roofed(x, n, ground) && !townWater.at(aimedSupply.east, aimedSupply.north) &&
+    !roofed(aimedSupply.east, aimedSupply.north, grid.heightAt(aimedSupply.east, aimedSupply.north)) ? aimedSupply : undefined;
+  Object.assign(gatherCheck, { x, n, ground, yaw, pitch, snow: snow || !!supply, supply });
+  return gatherCheck.snow;
 }
 function aimSnowball() {
   const flat = Math.cos(pitch);
@@ -1420,12 +1645,15 @@ function beginSnowAction(source: 'mouse' | 'touch') {
   gatherCheck.x = NaN;
   if (source === 'mouse') updateHeldSnowAction(0);
 }
+function freeWallPlacementArmed() {
+  return !teamFight.active() && teamFight.canBuild() && teamFight.buildMode() && teamFight.material() > 0;
+}
 function finishSnowAction(source: 'mouse' | 'touch') {
   if (!snowHold || snowHold.source !== source) return;
-  const fire = moveAllowed() && !aimsAtNearbySnow() && waterAtFeet()?.mode !== 'swim';
+  const fire = moveAllowed() && (freeWallPlacementArmed() || !aimsAtNearbySnow()) && waterAtFeet()?.mode !== 'swim';
   cancelSnowAction(source);
   if (!fire) return;
-  if (teamFight.buildMode() && teamFight.active()) {
+  if (teamFight.buildMode() && teamFight.canBuild()) {
     teamFight.tryPlace();
     return;
   }
@@ -1444,6 +1672,7 @@ function updateHeldSnowAction(dt: number) {
     return;
   }
   if (snowHold.source === 'touch' && performance.now() - snowHold.started < touchHoldMilliseconds) return;
+  if (freeWallPlacementArmed()) return;
   if (aimsAtNearbySnow()) {
     snowAction = 'gather';
     snowballs.hideAim();
@@ -1454,7 +1683,7 @@ function updateHeldSnowAction(dt: number) {
     gatherTime += dt;
     if (gatherTime >= gatherSeconds) {
       gatherTime -= gatherSeconds;
-      snowballs.gather(snowCover.depth().servings);
+      plazaSnowSupply.gather(snowballs, snowCover.depth().servings, gatherCheck.supply);
       teamFight.onGatherTick();
     }
   } else {
@@ -1471,7 +1700,7 @@ const touchSnowball = {
   start: () => beginSnowAction('touch'),
   finish(milliseconds: number) {
     if (!snowHold || snowHold.source !== 'touch') return false;
-    if (milliseconds < touchHoldMilliseconds) {
+    if (milliseconds < touchHoldMilliseconds && !freeWallPlacementArmed()) {
       cancelSnowAction('touch');
       return false;
     }
@@ -1563,7 +1792,7 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp], riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
@@ -1571,6 +1800,18 @@ function showStampCount() {
   passportButton.textContent = `纪念戳册 ${collected}/${total}`;
 }
 showStampCount();
+function collectRegionalStamp(id: string) {
+  if (passport.collectExtension(id)) showStampCount();
+}
+const longHallRelayStatus = element<HTMLOutputElement>('long-hall-relay-status');
+const longHallRelay = createLongHallRelay(
+  architecture.get('long-hall')!, { announce: announceActivity }, {
+    award: () => collectRegionalStamp(longHallRelayStamp.id),
+    status: text => { longHallRelayStatus.textContent = text; },
+  },
+);
+activities.push(longHallRelay);
+activitySpots.push(...longHallRelay.spots);
 passportButton.onclick = () => {
   passport.open();
   showStampCount();
@@ -1680,6 +1921,16 @@ activitySpots.push(
     announceActivity('表盘层 · 黄铜指针与传动齿轮');
   }),
   towerBellSpot,
+  localSpot(tower, [-2.12, .3125, 4.12], 1.25, '查看登塔图', () => {
+    const diagram = tower.localToWorld(new Vector3(-3.52, 2.43, 4.81));
+    activityContext.face(diagram.x, -diagram.z, diagram.y);
+    announceActivity('登塔 · 表盘层看齿轮，钟层拉绳，瞭望台取景。');
+  }),
+  localSpot(tower, [-11.9, .3125, -3.75], 1.3, '查看钟机展陈', () => {
+    const gearWall = tower.localToWorld(new Vector3(-11.9, 1.77, -5.51));
+    activityContext.face(gearWall.x, -gearWall.z, gearWall.y);
+    announceActivity('钟机展陈 · 这组齿轮把钟摆节拍传到指针。');
+  }),
   localSpot(tower, towerStops.lookout, 1.3, '保存钟楼取景', () => {
     const [, deck, opening] = towerStops.lookout;
     const center = tower.localToWorld(new Vector3(0, deck, opening));
@@ -1696,7 +1947,8 @@ function canStandAtActivity(east: number, north: number, feet: number) {
   return walkable(east, north) && !obstructed(east, north, feet);
 }
 
-function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity) {
+function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity,
+  createSlide: typeof createCastleIceSlideActivity) {
   const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
     onlineThroneOwned: presence.onlineThroneOwned,
@@ -1711,7 +1963,8 @@ function registerIcePalaceActivities(group: Group, createActivity: typeof create
     playerName: presence.playerName,
   });
   icePalaceActivity = activity;
-  activitySpots.push(...activity.spots);
+  palaceSlide = createSlide(group, { ...activityContext, announce: announceActivity }, canStandAtActivity);
+  activitySpots.push(...activity.spots, ...palaceSlide.spots);
   activities.push({
     ...activity,
     update: dt => activity.step(dt, walking && !boardingGround && !homeReturn
@@ -1780,7 +2033,7 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
-  if (!walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -1789,6 +2042,9 @@ function currentAction() {
   }
   if (seated) {
     if (seated.tavern && (tavernActivity.carryAction() || seatedTavernNpc())) return tavernSeatAction;
+    if (isAtPineSeat(seated) && isPineStoryTime(ceremonyClock.now(), !nightMode)) {
+      return { label: '听松林火塘故事会', run: pineFireActivities.openStory };
+    }
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   }
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -1857,6 +2113,7 @@ function refreshLockHint() {
   else help.textContent = walkDragHelp;
 }
 function mode(next: boolean) {
+  if (houseDoorTravel) return false;
   if (homeReturn) {
     leaveSeat();
     leaveSharedHome();
@@ -1864,7 +2121,7 @@ function mode(next: boolean) {
   }
   lakeSkating.stop();
   if (!leaveRide()) return false;
-  leaveSeat();
+  leaveSeat(true);
   resetMovement();
   activityStatus.textContent = '';
   if (next) {
@@ -1926,7 +2183,7 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
 function skatesOnIce() {
@@ -1934,6 +2191,7 @@ function skatesOnIce() {
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
 }
 function turnView(horizontal: number, vertical: number) {
+  if (horizontal || vertical) ceremonyLook = undefined;
   if (boardingGround) {
     rideYawOffset += horizontal;
     ridePitch = Math.max(-1.42, Math.min(1.42, ridePitch + vertical));
@@ -2026,8 +2284,10 @@ addEventListener('keydown', e => {
   if (moveAllowed() && e.code === 'Space') {
     if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
-      if (sledRide.active()) sledRide.jump(3.2);
-      else requestJump();
+      if (sledRide.active()) {
+        sledSpace = true;
+        steeredWithSpace = keys.has('KeyA') || keys.has('ArrowLeft') || keys.has('KeyD') || keys.has('ArrowRight');
+      } else requestJump();
     }
     return;
   }
@@ -2042,6 +2302,11 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => {
+  if (e.code === 'Space' && sledSpace) {
+    sledSpace = false;
+    // Keep a tap as a jump. Space used with steering stays a ground control.
+    if (!steeredWithSpace && sledRide.active() && moveAllowed()) sledRide.jump(3.2);
+  }
   keys.delete(e.code);
   if (!forwardHeld()) doubleForward = false;
 });
@@ -2074,7 +2339,7 @@ function walkable(x: number, n: number) {
 }
 function outdoorWalkable(x: number, n: number) {
   const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
-  return terrainPassable && !scenery.blocked(x, n) && !districts.blocked(x, n) &&
+  return terrainPassable && !scenery.blocked(x, n) && !scenery.plazaCoverBlocks(x, n, bodyRadius) && !districts.blocked(x, n) &&
     !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
 const bodyHeight = 1.8;
@@ -2083,7 +2348,9 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
-  if (homeReturn) return sharedHomeSpawn.ground;
+  return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+}
+function outdoorSurfaceAt(east: number, north: number) {
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function snowCleared(east: number, north: number, feet: number) {
@@ -2170,10 +2437,12 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
   });
 }
 
-function supportAt(east: number, north: number, limit: number, solidLimit = -Infinity, radius = bodyRadius) {
+function supportAt(
+  east: number, north: number, limit: number, solidLimit = -Infinity, radius = bodyRadius,
+  surface = surfaceAt(east, north), { floors, ramps, colliders } = geometryAt(east, north),
+) {
   const z = -north;
-  let height = surfaceAt(east, north);
-  const { floors, ramps, colliders } = geometryAt(east, north);
+  let height = surface;
   for (const floor of floors) {
     if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
   }
@@ -2192,22 +2461,24 @@ function supportAt(east: number, north: number, limit: number, solidLimit = -Inf
   return height;
 }
 
-function obstructed(east: number, north: number, feet: number) {
+function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
-  const { colliders, floors } = geometryAt(east, north);
   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
     activities.some(activity => activity.blocked?.(east, north, feet)) ||
     colliders.some(intersects) || floors.some(intersects);
 }
 
-function dryTownLandingHeight(east: number, north: number, heightHint?: number) {
+function dryTownLandingHeight(east: number, north: number, heightHint?: number, outdoors = false) {
+  const canStand = outdoors ? outdoorWalkable : walkable;
   if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
-    north > worldBounds.depth - bodyRadius || !walkable(east, north)) return undefined;
+    north > worldBounds.depth - bodyRadius || !canStand(east, north)) return undefined;
   if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
-  const base = heightHint ?? surfaceAt(east, north);
-  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
-  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet)) return undefined;
+  const surface = outdoors ? outdoorSurfaceAt(east, north) : surfaceAt(east, north);
+  const geometry = outdoors ? outdoorGeometryAt(east, north) : geometryAt(east, north);
+  const base = heightHint ?? surface;
+  const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon, bodyRadius, surface, geometry);
+  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry)) return undefined;
   return Number.isFinite(feet) ? feet : undefined;
 }
 
@@ -2320,20 +2591,87 @@ for (const stop of railway.stops) {
   });
 }
 
-const campfireSites = findRegionalCampfires((east, north, height) => {
+function campfireGround(east: number, north: number, height?: number) {
   if (bridgeAt(east, north) || isLakeSkateIce(east, north) || townWater.at(east, north)) return;
-  const base = height ?? grid.heightAt(east, north);
+  const base = height ?? pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
   const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
   if (Math.abs(feet - base) > (height === undefined ? .30 : .14) ||
       !canStandAtActivity(east, north, feet) || roofed(east, north, feet) ||
       activitySpots.some(spot => Math.abs(spot.ground - feet) < .65 &&
         (spot.x - east) ** 2 + (spot.n - north) ** 2 < .85 ** 2)) return;
   return feet;
-});
-const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites);
+}
+const campfireSites = findRegionalCampfires(campfireGround, layout.plaza.bounds, { pineCamp: true });
+const pineFire = campfireSites.find(site => site.id === pineCampfireId);
+const forestChopSites = findForestChopSites(campfireSites, campfireGround);
+const forestCampfire = createForestCampfire(scene, { announce: announceActivity }, forestChopSites,
+  { isNight: () => nightMode, pineCamp: pineFire });
+const outdoorCampfires = createTownCampfires(scene, activityContext, campfireSites, forestCampfire.flames);
 scenery.setCampfirePieces(campfirePieces(campfireSites));
-activities.push(outdoorCampfires);
-activitySpots.push(...outdoorCampfires.spots);
+
+function isAtPineSeat(seat: TownSeat) {
+  return pineFire?.seats.some(site => site.x === seat.x && site.n === seat.n && site.ground + 1.475 === seat.eyeY) ?? false;
+}
+
+const pineFireActivities = createPineFireActivities({ open: activityContext.open, announce: announceActivity }, regionalCarry, {
+  lighted: () => forestCampfire.pineCampState().fuel > 0,
+  warmFromRoast: warmFromDrink,
+  storyHint: () => pineCampActivity.storyHint(),
+  leaveSeat,
+});
+const pineCampActivity = createPineCampActivity({ open: activityContext.open, announce: announceActivity }, {
+  heightAt(east, north) {
+    const base = pineCamp.fireGroundAt(east, north) ?? grid.heightAt(east, north);
+    return supportAt(east, north, base + stepHeight, base + surfaceEpsilon);
+  },
+  canStand: canStandAtActivity,
+  rollingAt() {
+    if (!walking || homeReturn || seated || sledRide.active() || railway.riding ||
+        boardingGround || airHeight !== undefined) return;
+    const exposed = isExposedSnowAt(grid, x, n, ground, snowCleared);
+    const snow = !exposed ? 'other' : snowCover.depthAt(x, n, ground, snowCleared) >= .6 ? 'deep' : 'shallow';
+    return { x, n, snow };
+  },
+  setFormation: pineCamp.setFormation,
+  setTreasureTrailVisible: pineCamp.setTreasureTrailVisible,
+  openGrill: pineFire ? pineFireActivities.openGrill : undefined,
+});
+activities.push(outdoorCampfires, forestCampfire, pineCampActivity, { spots: [], update: pineFireActivities.update });
+activitySpots.push(...outdoorCampfires.spots, ...forestCampfire.spots, ...pineCampActivity.spots);
+const marketResidentLookup = createMarketResidentStationLookup({
+  market: () => architecture.get('market-stalls'),
+  fairSpots: marketFair.spots,
+  standableGround: dryTownLandingHeight,
+});
+activitySpots.push(...createMarketVenueActivities(
+  architecture.get('market-stalls'), activityContext, dryTownLandingHeight,
+  filename => { photoFilename = filename; },
+));
+const plazaResidentGathering = createPlazaResidentGathering(canStandAtActivity, grid.heightAt);
+activitySpots.push(...registerTownResidentStations(npcActivity, {
+  plazaGathering: plazaResidentGathering,
+  campfires: campfireSites,
+  canStand: canStandAtActivity,
+  isNight: () => nightMode,
+  forestChop: () => forestCampfire.spots.find(spot => spot.label === '篝火旁劈柴'),
+  mainFishing: () => iceFishing.spots[0],
+  palaceProgress: () => icePalaceActivity?.state(),
+  marketStall: marketResidentLookup,
+  canCollect: zodiac.canCollect,
+}));
+
+const plazaInformation = createPlazaInformationActivity(showLiveRailSchedule, {
+  clock: ceremonyClock,
+  train: () => railway.timetable('coaster-station'),
+  roster: presence.townRoster,
+  stage: () => {
+    const state = stageActivity.getShowState();
+    return state.playing ? stageProgram.find(({ id }) => id === state.act)?.announcement : undefined;
+  },
+  formalSnowFight: () => nightMode && snowCover.depth().level >= 1,
+  latestWish: wishActivity.latestWish,
+}, grid.heightAt, canStandAtActivity);
+activitySpots.push(...plazaInformation.spots);
 
 function atRailwayPlatform() {
   return walking && !homeReturn && (railway.riding || railway.stops.some(stop =>
@@ -2361,6 +2699,7 @@ mode(startInMuseum);
 let presenceSkateSpeed = 0;
 let previousPoseSession: number | null = null;
 let ceremonyArrivalPose: { value: TownAvatarPose; until: number } | undefined;
+let ceremonyLook: { began: number; deadline: number; yaw: number; pitch: number } | undefined;
 
 function arriveAtCeremony(event: CeremonyArrival, now: number) {
   const landing = ceremonyArrivalAt(event.slot, event.edge);
@@ -2384,7 +2723,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   railway.cancelRide();
   boardingGround = undefined;
   lastRailStopShown = undefined;
-  leaveSeat();
+  leaveSeat(true);
   lakeSkating.stop();
   plazaPhoto.leaveForCeremony();
   if (placeCard.open) placeCard.close();
@@ -2405,6 +2744,11 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
     : [stage.origin[0], stage.origin[1], stage.origin[2] + 15];
   yaw = Math.atan2(faceEast - x, faceNorth - n);
   pitch = Math.atan2(faceHeight - ground - eye, Math.hypot(faceEast - x, faceNorth - n));
+  const worldNow = ceremonyClock.now();
+  const midnight = ceremonyMidnight(ceremonyEveYear(worldNow, ceremonyClock.utcOffsetMinutes), ceremonyClock.utcOffsetMinutes);
+  ceremonyLook = !reduceSnowEffects.matches && worldNow < midnight
+    ? { began: worldNow, deadline: midnight, yaw: Math.atan2(Math.sin(yaw), Math.cos(yaw)), pitch }
+    : undefined;
   faceFrom(x, n, ground + eye, yaw, pitch);
   presence.sample(walking, x, n, ground, yaw);
   if (!event.edge && !reduceSnowEffects.matches) {
@@ -2422,11 +2766,34 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   const startEast = x, startNorth = n;
+  if (ceremonyLook) {
+    if (!lookAllowed() || keys.size || seated || boardingGround) ceremonyLook = undefined;
+    if (ceremonyLook) {
+      const { began, deadline, yaw: initialYaw, pitch: initialPitch } = ceremonyLook;
+      const elapsed = ceremonyClock.now();
+      if (elapsed > deadline + 2000) ceremonyLook = undefined;
+      else {
+        const t = Math.min(1, Math.max(0, (elapsed - began) / (deadline - began)));
+        const amount = t * t * (3 - 2 * t);
+        yaw = initialYaw * (1 - amount);
+        pitch = initialPitch + (Math.PI / 10 - initialPitch) * amount;
+        if (t === 1) ceremonyLook = undefined;
+      }
+    }
+  }
   movementStepMs = 0;
   landingFeedback.update(frameSeconds);
   landingSnow.update(frameSeconds);
   const beacon = architecture.get('lighthouse')?.userData.beaconPivot as Object3D | undefined;
   railway.update(dt);
+  const slide = palaceSlide?.step(dt, Boolean(seated));
+  if (slide?.kind === 'riding') {
+    seated = { ...slide.seat, pitch: slide.pitch };
+    palaceSlideGround = slide.ground;
+  } else if (slide?.kind === 'land') {
+    leaveSeat();
+    landPalaceSlide(slide.landing);
+  }
   if (boardingGround) {
     const stopped = railway.currentStop;
     if (stopped && stopped.id !== lastRailStopShown) {
@@ -2482,14 +2849,17 @@ renderer.setAnimationLoop(now => {
         if (sledRide.active() || sledRide.recovering()) {
           snowMoveScale = chillMoveScale = 1;
           lakeSkateMotion.reset();
-          if (!sledRide.active()) sledWallCellKey = '';
           if (sledRide.active()) {
             const beforeX = x, beforeN = n;
+            if (sledSpace && Math.abs(right) > .1) steeredWithSpace = true;
             const driftState = sledDrift.update(townPhysicsDelta, {
               grounded: !sledRide.airborne(), speed: sledRide.speed(),
               turn: right, lateral: sledRide.lateral(),
+              engaged: sledRide.drifting() && (forward < -.1 || sledSpace ||
+                (touchSledDrift !== undefined && now - touchSledDrift.since >= touchHoldMilliseconds)),
             });
-            sledRide.step(townPhysicsDelta, { forward, turn: right }, driftState.boost);
+            sledRide.step(townPhysicsDelta, { forward, turn: right, drift: sledSpace ||
+              (touchSledDrift !== undefined && now - touchSledDrift.since >= touchHoldMilliseconds) }, driftState.boost);
             const spot = sledRide.spot;
             x = spot.x;
             n = spot.n;
@@ -2498,20 +2868,7 @@ renderer.setAnimationLoop(now => {
             yaw = spot.yaw;
             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
               Math.hypot(x - beforeX, n - beforeN) > .05) {
-              snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55);
-            }
-            if (sledRide.active()) {
-              // 雪墙撞穿报告（车道 B）：进入新的一层墙格、速度 >6、橇体低于墙顶 →
-              // 报服务端裁定销毁；本地不预毁，墙块以服务端 WALL_CLEAR 广播为准消失。
-              const smashGx = wallCellOf(x), smashGy = wallCellOf(n);
-              const smashKey = `${smashGx},${smashGy}`;
-              if (smashKey !== sledWallCellKey) {
-                sledWallCellKey = smashKey;
-                const column = teamFight.wallColumnAt(smashGx, smashGy);
-                if (column?.height === 1 && sledRide.speed() > 6 && spot.y < column.ground + .5) {
-                  presence.sendSnowfightSledSmash(smashGx, smashGy, Math.ceil(sledRide.speed()));
-                }
-              }
+              snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55, sledRide.drifting());
             }
             if (!sledRide.active()) sledDrift.reset();
           }
@@ -2571,13 +2928,13 @@ renderer.setAnimationLoop(now => {
   if (ceremonyArrivalPose && now >= ceremonyArrivalPose.until) ceremonyArrivalPose = undefined;
   const activityPose = walking && landingFeedback.pose() === 'prone'
     ? effectiveTownAvatarPose(false, false, false, true, 0)
-    : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active());
+    : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
-    boardingGround ? camera.position.y - eye : throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground,
+    boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
     boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? yaw,
     walking && !museumOverlay(),
   );
@@ -2589,6 +2946,7 @@ renderer.setAnimationLoop(now => {
   const sledFrame = sledAnimation.step(dt, {
     mounted: sledRide.active(), east: x, north: n, height: airHeight ?? ground, yaw,
     speed: sledRide.speed(), turn: sledRide.turnRate(), braking: sledRide.braking(), airborne: sledRide.airborne(),
+    drifting: sledRide.drifting(),
   });
   const sledDisplay = sledRide.active() ? sledRide.spot : sledRide.parked();
   if (sledDisplay) {
@@ -2607,6 +2965,8 @@ renderer.setAnimationLoop(now => {
       (sledDrift.drifting() ? ` · 漂移充能 ${Math.round(sledDrift.charge() * 100)}%`
         : sledDrift.boosting() ? ' · 漂移加速' : '')
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
+  const sprintLabel = sledRide.active() ? '漂移' : walkSprintLabel;
+  if (touchSprintButton.textContent !== sprintLabel) touchSprintButton.textContent = sprintLabel;
   const gpStatus = walking
     ? grandPrix.update(x, n, { sledding: sledRide.active(), skating: skatesOnIce() && presenceSkateSpeed > .5 })
     : '';
@@ -2620,6 +2980,7 @@ renderer.setAnimationLoop(now => {
     renderGrandPrixBoard();
   }
   updateMascotFollower(dt, Math.hypot(x - startEast, n - startNorth) / Math.max(dt, .001));
+  checkHouseDoorLanding();
   const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
   widePanorama = wideView;
   const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
@@ -2652,24 +3013,10 @@ renderer.setAnimationLoop(now => {
     Math.abs(camera.position.y - grid.heightAt(site.x, site.n)) < 18);
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
   if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+  updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
   if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z, !walking);
-  if (!homeReturn && !streetsRequested && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
-    streetsRequested = true;
-    import('./extension-streets').then(({ buildExtensionStreets }) => {
-      extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
-      scene.add(extensionStreets.group);
-      walkGeometry = geometry();
-      activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
-      registerHomeDoors(extensionStreets.housePortals);
-      const dogMailbox = extensionStreets.dogMailbox;
-      if (dogMailbox) {
-        activitySpots.push(zodiacSites.mount(extensionStreets.group, dogMailbox.charm),
-          createZodiacDogPostcard(dogMailbox, activityContext));
-      }
-    }).catch(error => {
-      streetsRequested = false;
-      console.error('Loading extension streets', error);
-    });
+  if (!homeReturn && !extensionStreetsLoad && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
+    void prepareExtensionStreets();
   }
   extensionStreets?.update(camera, wideView);
   zodiacSites.update(camera.position, !homeReturn && !wideView);
@@ -2677,6 +3024,7 @@ renderer.setAnimationLoop(now => {
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
   outdoorCampfires.updateFlames(dt, camera.position.x, -camera.position.z, Boolean(homeReturn));
+  scenery.updatePlazaSnowSupply(plazaSnowSupply.heightScale, camera.position.x, -camera.position.z);
   const museum = architecture.get('memorial');
   const smallLabels = museum?.userData.smallLabels as Mesh[] | undefined;
   if (smallLabels) for (const label of smallLabels) label.visible = !wideView;
@@ -2700,7 +3048,37 @@ renderer.setAnimationLoop(now => {
   }
   personalFirecrackers.update();
   const ceremonyState = ceremony.update();
-  festival.update(dt);
+  const offset = ceremonyClock.utcOffsetMinutes;
+  const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
+  updateTowerTime(tower, ceremonyState.now, ceremonyState.secondsToMidnight, ceremonyState.phase === 'climax');
+  const dailyChime = dailyTowerChime(ceremonyState.now, ceremonyState.phase);
+  const ordinaryBellHours = ceremonyState.phase === 'ordinary';
+  plazaResidentGathering.tick(ceremonyState.now, ordinaryBellHours);
+  if (!ordinaryBellHours) setTowerDusk(false);
+  if (dailyChime) {
+    const { cue, audible } = dailyChime;
+    if (audible) {
+      handleCeremonyCue(cue);
+      marketFair.refresh();
+      plazaResidentGathering.start(cue.at, cue.hour, campfireSites);
+      if (cue.hour === 17 || cue.hour === 18) setTowerDusk(true);
+      else if (cue.hour === 7) setTowerDusk(false);
+    } else {
+      bellMotion.strike(.65);
+      nextHourlyBell = cue.at + 2020;
+      hourlyBellsRemaining = cue.strikes - 1;
+    }
+  }
+  let ceremonyElapsed: number | undefined;
+  if (ceremonyState.phase !== 'ordinary') {
+    ceremonyElapsed = (ceremonyState.now - midnight) / 1000;
+    if (ceremonyState.phase === 'approach' && overtureMidnight !== midnight) {
+      overtureMidnight = midnight;
+      festival.launchOverture(midnight - 600_000, ceremonyClock.now);
+    }
+  }
+  const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
+  festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
   const weather = townSnowWeatherForFrame(ceremonyState);
   const effectiveSnowIntensity = weather.intensity;
@@ -2738,9 +3116,9 @@ renderer.setAnimationLoop(now => {
   let coldDepth = 0;
   if (walking && !indoors && !boardingGround && airHeight === undefined && !isLakeSkateIce(shedEast, shedNorth)) {
     if (!seated && waterAtFeet()) coldSurface = 'water';
-    else if (!nightMode || scenery.litAt(shedEast, shedNorth, shedFeet) || townLights.litAt(shedEast, shedNorth, shedFeet)) {
+    else if (scenery.litAt(shedEast, shedNorth, shedFeet) || townLights.litAt(shedEast, shedNorth, shedFeet)) {
       coldSurface = 'lamp';
-    } else if (effectiveSnowIntensity >= 2 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
+    } else if (effectiveSnowIntensity >= 1 && isExposedSnowAt(grid, shedEast, shedNorth, shedFeet, districts.sweptAt)) {
       coldSurface = 'dark-snow';
       coldDepth = snowCover.depthAt(shedEast, shedNorth, shedFeet, districts.sweptAt);
     }
@@ -2795,6 +3173,9 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) hitFeedback.apply(camera);
     const feedbackMs = profileTown ? performance.now() - startedFeedback : 0;
     const batchesStartedAt = profileTown ? performance.now() : 0;
+    const insideTavern = walking && !homeReturn && !boardingGround &&
+      tavernInteriorContains(tavern, seated?.x ?? x, seated?.n ?? n, airHeight ?? ground);
+    updateTavernInteriorVisibility(tavern, (groupPhotoFrame ? plazaCamera : camera).position, insideTavern);
     const staticViewRoots = cullStaticView || warmAerial || warmStationView ? [landscape, detailedBridges,
       ...(trackViewRoot ? [trackViewRoot] : []), ...(extensionStreets ? [extensionStreets.group] : []),
       ...architecture.values()] : [];

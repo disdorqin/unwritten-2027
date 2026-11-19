@@ -127,13 +127,149 @@ export function buildVillageLandmark(plot: TownPlot) {
     add(snow, x - w / 3, h + 2.5, z - d / 4, .76, .15, .8);
     if (!walkIn) solids.push(bounds(x, 0, z, w, h, d));
   }
+  function buildExpandedTheater() {
+    const deckWidth = 17.9, deckDepth = 13.4, deckTop = .52;
+    const front = -deckDepth / 2;
+    const stone = '#777780', deck = '#906349';
+    const deckBottom = .4;
+    const stairDepth = plot.footprint[1] / 2 + front;
+    const stairZ = front - stairDepth / 2;
+    const stairTop = .28;
+
+    add(brick, 0, deckBottom / 2, 0, deckWidth, deckBottom, deckDepth);
+    add(wood, 0, (deckBottom + deckTop) / 2, 0, deckWidth, deckTop - deckBottom, deckDepth);
+    for (let i = 0, left = -deckWidth / 2; left < deckWidth / 2 - 1e-6; i++, left += .5) {
+      const width = Math.min(.5, deckWidth / 2 - left);
+      add(i % 3 ? deck : wood, left + width / 2, deckTop - .008, 0, width - .018, .016, deckDepth - .032);
+    }
+    floors.push(
+      bounds(0, .05, stairZ, 7, stairTop - .05, stairDepth),
+      bounds(0, deckBottom, 0, deckWidth, deckTop - deckBottom, deckDepth),
+    );
+
+    // The skirt faces sit just outside the stone base, with gold on the exposed edges.
+    const wingBackZ = -3.9;
+    const sideSkirtDepth = wingBackZ - front;
+    const sideSkirtZ = front + sideSkirtDepth / 2;
+    add(stone, 0, .073, -front - .058, deckWidth - .24, .146, .12);
+    add(red, 0, deckTop / 2, front + .054, deckWidth, deckTop, .12);
+    for (const side of [-1, 1]) {
+      const edge = side * (deckWidth / 2 - .058);
+      add(stone, edge, .073, 0, .12, .146, deckDepth);
+      add(red, edge + side * .004, deckTop / 2, sideSkirtZ, .12, deckTop, sideSkirtDepth);
+      add(gold, edge + side * .013, .121, sideSkirtZ, .12, .05, sideSkirtDepth);
+      for (let block = 0; block < 4; block++) {
+        const x = side * (deckWidth / 2 - .24 - block * .18);
+        add(gold, x, .143 + block * .063, front + .013, .20, .073, .048);
+      }
+    }
+    add(gold, 0, .121, front + .010, deckWidth - .04, .05, .042);
+    add(wood, 0, stairTop / 2, stairZ, 7, stairTop, stairDepth);
+    const carpetBack = 3.9;
+    add(red, 0, deckTop + .008, (front + carpetBack) / 2, 3, .016, carpetBack - front);
+    add(red, 0, (deckTop + stairTop) / 2, front - .006, 3, deckTop - stairTop, .012);
+    add(red, 0, stairTop + .008, stairZ, 3, .016, stairDepth);
+    for (const edge of [-1.46, 1.46]) {
+      add(gold, edge, deckTop + .015, (front + carpetBack) / 2, .04, .014, carpetBack - front);
+    }
+
+    const frontColumns = [-8.52, -3, 3, 8.52];
+    const postTop = 7.3, frontPostZ = -4.7;
+    for (const [x, z] of [...frontColumns.map(x => [x, frontPostZ]), [-7.5, 5.6], [7.5, 5.6]]) {
+      add(beam, x, postTop / 2, z, .75, postTop, .72);
+      add(stone, x, .68, z, .91, .32, .85);
+      add(red, x, (postTop + .84 - .35) / 2, z, .89, postTop - .84 - .35, .85);
+      add(gold, x, postTop - .20, z, .93, .38, .98);
+      for (const y of [1.04, 6.51]) add(gold, x, y, z, .91, .09, .89);
+      solids.push(bounds(x, .5, z, .92, postTop - .5, .86));
+    }
+    add(beam, 0, 6.94, frontPostZ - .35, 17.9, .5, .66);
+    add(red, 0, 7.16, frontPostZ - .48, 17.5, .21, .48);
+    add(gold, 0, 6.71, frontPostZ - .69, 17.55, .055, .15);
+    add(beam, 0, 7.07, 5.6, 16.18, .42, .45);
+    for (const side of [-1, 1]) {
+      add(beam, side * 7.88, 7.07, .45, .52, .42, 10.5);
+      for (const x of [3, 8.52]) {
+        for (const offset of [-1, 1]) {
+          add(red, side * (x + offset * .34), 7.27, frontPostZ - .43, .42, .17, .62);
+          add(gold, side * (x + offset * .50), 7.38, frontPostZ - .48, .21, .08, .57);
+        }
+      }
+    }
+
+    // The lower four bands hip into the end walls. The upper four keep the gabled ridge span.
+    const tierHeight = .31, tierCount = 8, ridgeTop = 9.80;
+    const roofWidth = plot.footprint[0], roofDepth = Math.abs(front) * 2 + stairDepth;
+    for (let tier = 0; tier < tierCount; tier++) {
+      const top = postTop + (tier + 1) * tierHeight;
+      const width = roofWidth - Math.min(tier, tierCount / 2) * .94;
+      const depth = roofDepth * (tierCount - tier) / tierCount;
+      const y = top - tierHeight / 2;
+      add(roof, 0, y, 0, width, tierHeight, depth);
+      const snowHeight = Math.min(.058, ridgeTop - top);
+      add(snow, 0, top + snowHeight / 2, 0, width - .16, snowHeight, depth - .12);
+      for (const face of [-1, 1]) {
+        add(tier === 0 ? beam : roof, 0, y - .031, face * (depth / 2 - .075), width - .12, .12, .15);
+        // The hip ends carry small exposed trim steps below the main ridge.
+        if (tier < tierCount / 2) {
+          add(beam, face * (width / 2 - .09), y - .08, 0, .18, .09, depth - .22);
+          for (const slope of [-1, 1]) {
+            add(gold, face * (width / 2 - .12), y - .046, slope * (depth / 2 - .13), .24, .08, .25);
+          }
+        }
+      }
+    }
+    for (const side of [-1, 1]) {
+      const end = side * ((roofWidth - 4 * .94) / 2 - .51);
+      add(roof, end, ridgeTop - .10, 0, .96, .20, .73);
+      add(snow, end + side * .12, ridgeTop - .035, 0, .70, .07, .52);
+      add(gold, end + side * .31, ridgeTop - .016, 0, .31, .032, .42);
+    }
+
+    // The rear set and diagonal wings carry the separate painted scenery.
+    solid(beam, 0, deckTop + 4.04 / 2, 6.25, 16.0, 4.04, .30);
+    for (const side of [-1, 1]) {
+      const wingSteps = 10, wingFlare = 1.3;
+      const wingRun = wingFlare / Math.tan(Math.PI / 6);
+      for (let step = 0; step < wingSteps; step++) {
+        const along = step / (wingSteps - 1);
+        const x = side * (7.50 + wingFlare * along);
+        const z = wingBackZ - wingRun * along;
+        solid(step % 2 ? wood : beam, x, deckTop + 3.2 / 2, z, .26, 3.2, .25);
+        add(stone, x, deckTop + .09, z, .29, .18, .25);
+        add(red, x, deckTop + 3.16, z, .29, .08, .25);
+      }
+
+      const railX = side * 5.85, railZ = front + .55, railWidth = 2.52, railHeight = .55;
+      solid(wood, railX, deckTop + railHeight - .065, railZ, railWidth, .13, .13);
+      for (const end of [-1, 1]) {
+        solid(red, railX + end * (railWidth / 2 - .075), deckTop + railHeight / 2, railZ, .15, railHeight, .15);
+      }
+      const lampX = railX + side * (railWidth / 2 - .075);
+      add(beam, lampX, 1.43, railZ, .07, .31, .07);
+      add(gold, lampX, 1.61, railZ, .44, .09, .44);
+      add(window, lampX, 1.87, railZ, .38, .42, .38);
+      add(red, lampX, 2.12, railZ, .36, .11, .36);
+
+      const drum = side * 5.55;
+      for (const dx of [-.39, .39]) add(beam, drum + dx, .82, 1.72, .12, .6, .75);
+      add(beam, drum, .91, 1.72, .98, .1, .88);
+      add(red, drum, 1.21, 1.72, 1.02, .55, .9);
+      add(deck, drum, 1.51, 1.72, 1.06, .11, .94);
+      for (const dx of [-.4, -.2, 0, .2, .4]) add(gold, drum + dx, 1.31, 1.25, .055, .06, .05);
+      solids.push({ min: [drum - .53, .52, 1.25], max: [drum + .53, 1.57, 2.19] });
+    }
+    addCommunityTheaterDetails(group, add, floors, ramps, plot.origin[0], plot.origin[1]);
+  }
+
   if (plot.id === 'cabins') {
     cabin(-9, -1, 7.3, 10, 3.4, '#8a5541');
     cabin(1, -4, 7.5, 9, 3.7, '#785647');
     cabin(10, 2.2, 7.5, 8.5, 3.2, '#975745', true);
+  } else if (plot.origin[0] === 238 && plot.origin[1] === 140) {
+    buildExpandedTheater();
   } else {
-    const expandedTheater = plot.origin[0] === 238 && plot.origin[1] === 140;
-    const roofWidth = expandedTheater ? 18 : 18.7;
+    const roofWidth = 18.7;
     add(brick, 0, .2, 0, 17.5, .4, 11.5);
     add(wood, 0, .43, 0, 17.1, .18, 11.1);
     for (let x = -8.25, i = 0; x < 8.55; x += .5, i++) {
@@ -147,10 +283,10 @@ export function buildVillageLandmark(plot: TownPlot) {
     );
     for (const side of [-1, 1]) {
       for (const z of [-4.7, 4.7]) {
-        const x = side * (expandedTheater && z < 0 ? 8.52 : 7.5);
+        const x = side * 7.5;
         add(beam, x, 3.3, z, .75, 5.6, .72);
         add(red, x, 3.35, z, .89, 5, .85);
-        add(gold, x, 5.65, z, expandedTheater ? .92 : 1, .35, 1);
+        add(gold, x, 5.65, z, 1, .35, 1);
         add(window, x, 4.5, z - .55, .5, .55, .52);
         solids.push({ min: [x - .46, .5, z - .43], max: [x + .46, 5.9, z + .43] });
       }
@@ -194,9 +330,6 @@ export function buildVillageLandmark(plot: TownPlot) {
     }
     add(wood, 0, .14, -6.2, 7, .28, 1.6);
     add(gold, 0, .274, -6.93, 6.92, .045, .08);
-    if (expandedTheater) {
-      addCommunityTheaterDetails(group, add, floors, ramps, plot.origin[0], plot.origin[1]);
-    }
   }
 
   const geometry = new BoxGeometry();
@@ -229,6 +362,6 @@ export function villageHousePortals(group: Group, heightAt: (x: number, n: numbe
   return stands.map(([localX, localZ], index) => {
     const point = group.localToWorld(new Vector3(localX, 0, localZ));
     const x = point.x, n = -point.z;
-    return { id: `village:${index}`, x, n, ground: heightAt(x, n), exitYaw: Math.atan2(forward.x, -forward.z) };
+    return { id: `village:${index}`, zone: 'forest', x, n, ground: heightAt(x, n), exitYaw: Math.atan2(forward.x, -forward.z) };
   });
 }

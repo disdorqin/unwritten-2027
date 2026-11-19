@@ -6,8 +6,8 @@
   opacity: 0;
   transition: opacity 420ms ease;
 }
-.tavern-drink-vignette[data-level="1"][data-still="true"] { opacity: .22; }
-.tavern-drink-vignette[data-level="2"] { opacity: .55; }
+.tavern-drink-vignette[data-level="1"] { opacity: .30; }
+.tavern-drink-vignette[data-level="2"] { opacity: .60; }
 .tavern-drink-vignette[data-level="3"] { opacity: .85; }
 
 .tavern-drink-cup {

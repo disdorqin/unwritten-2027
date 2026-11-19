@@ -76,7 +76,7 @@ test('unreleased sub-threshold charge decays after the grace window; reset clear
   assert.equal(drift.boosting(), false);
 });
 
-test('boost through sled motion never exceeds the 17 m/s hard cap and beats no-boost', () => {
+test('boost through sled motion never exceeds the hard cap and beats no-boost', () => {
   const ground = { grade: 0, surface: 0, deepSnow: false };
   const boosted = createSledMotion();
   const plain = createSledMotion();

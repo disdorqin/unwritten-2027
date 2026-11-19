@@ -203,6 +203,11 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     }
   }
 
+  // Slate cap and drip edge run below the standing gable on both eaves.
+  for (const side of [-1, 1]) {
+    box('slateLight', side * 7.57, eave - .035, 0, .33, .19, 15.65);
+    box('slate', side * 7.70, eave - .146, 0, .09, .105, 15.65);
+  }
   // B13 shows a snow-covered standing gable with tile courses and two chimneys.
   for (let course = 0; course < 16; course++) {
     const x = (course + .5) * .475;
@@ -271,6 +276,17 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     box('timberWarm', x, 1.64, front + .12, .24, 3.28, .32);
     box('timber', x, 3.59, 7.73, .24, .37, .41);
     lantern(x * 1.31, 2.68, front + .61, true);
+    // Both leaves sit open against the returns of the existing 2.5 m opening.
+    const leafX = Math.sign(x) * (doorWidth / 2 + .12);
+    const leafZ = front - doorWidth / 4;
+    box('timber', leafX, 1.57, leafZ, .12, 2.51, doorWidth / 2);
+    for (const offset of [-.36, 0, .36]) {
+      box('timberWarm', leafX - Math.sign(x) * .064, 1.57, leafZ + offset, .018, 2.34, .323);
+    }
+    for (const offset of [-.11, .11]) {
+      box('brass', leafX - Math.sign(x) * .086, 1.41 + offset, leafZ - .38, .050, .041, .20);
+      box('brass', leafX - Math.sign(x) * .086, 1.41, leafZ - .38 + offset, .050, .20, .041);
+    }
   }
   box('timberWarm', 0, 3.27, front + .15, 3.24, .31, .31);
   box('timber', 0, 3.93, 7.61, 4.18, .24, .71);
@@ -426,6 +442,15 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   }
   parcel(-5.8, mezzanine, -4.72, .61);
   parcel(-5.9, mezzanine, -5.5, .62);
+  for (const [x, y, z] of [[4.14, ground, -6.45], [-4.91, mezzanine, -6.45]]) {
+    for (const edge of [-.62, .62]) box('timber', x + edge, y + .64, z, .095, 1.28, .54);
+    for (const shelf of [.19, .63, 1.16]) {
+      box('timberWarm', x, y + shelf, z, 1.28, .085, .57);
+      parcel(x - .30, y + shelf + .0425, z, .38);
+      parcel(x + .25, y + shelf + .0425, z - .07, .43);
+    }
+    colliders.push(bounds([x, y + .64, z], [1.28, 1.28, .57]));
+  }
   for (let z = -4; z <= 5; z += 4.5) {
     for (const x of [-3.37, 3.37]) {
       box('timber', x, 6.22, z, .065, 2.4, .065);

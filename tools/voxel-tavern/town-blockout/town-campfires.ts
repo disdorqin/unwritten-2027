@@ -9,13 +9,39 @@ import { memorialTimeboxAnnex } from './town-mail-sites';
 import { roadCorridorKeepClear } from './road-clearance';
 
 export const fireWarmthRadius = 3;
-export const maxCampfireSites = 8;
+export const maxCampfireSites = 9;
+export const pineCampfireId = 'pine-camp';
 export const campfirePartsPerSite = 44;
 const fireParticles = 48;
+const smokeParticles = 8;
 const forestAngle = .12;
+
+export type CampfireForestOptions = {
+  level(): 0 | 1 | 2;
+  onForestSeat?(): void;
+  pineLevel?(): 0 | 1 | 2;
+  villageSmoke?: { x: number; n: number; height: number; scale(): number };
+};
+
+const forestFlames = [
+  { count: 24, size: .78, rise: .62, glow: .6 },
+  { count: 36, size: 1, rise: 1, glow: .88 },
+  { count: fireParticles, size: 1.28, rise: 1.35, glow: 1.14 },
+] as const;
 type Surface = { x: number; n: number; ground: number };
 type Style = 'stone' | 'bucket' | 'brazier';
-type Seed = { id: string; label: string; style: Style; origin: readonly [number, number]; facing: number; ground?: number };
+type Seed = {
+  id: string;
+  label: string;
+  style: Style;
+  origin: readonly [number, number];
+  facing: number;
+  ground?: number;
+  fixed?: boolean;
+  spread?: number;
+  ring?: readonly number[];
+  woodPile?: readonly [number, number];
+};
 type CheckGround = (east: number, north: number, fixedHeight?: number) => number | undefined;
 export type CampfirePiece = {
   at: [x: number, y: number, z: number];
@@ -25,7 +51,6 @@ export type CampfirePiece = {
 };
 
 const castleSouth = railPlatforms.find(({ id }) => id === 'ice-castle')!;
-// Plaza P-16 / P-24 / P-25 attach to the same builder after B2 fixes the ground plan.
 const regionalSites: readonly Seed[] = [
   { id: 'forest', label: '森林篝火', style: 'stone', origin: [104, 400], facing: forestAngle },
   { id: 'lakeside', label: '冰湖岸边火桶', style: 'bucket', origin: [iceFishingStation.x, 97.65], facing: Math.PI },
@@ -34,6 +59,19 @@ const regionalSites: readonly Seed[] = [
   { id: 'memorial', label: '新区时光信箱火盆', style: 'brazier', origin: [memorialTimeboxAnnex.x, memorialTimeboxAnnex.n + 2.72], facing: Math.PI / 2 },
   { id: 'market', label: '年集坐食区火炉', style: 'brazier', origin: [163, 90], facing: Math.PI },
 ];
+const expandedPlaza = [161, 152, 251, 212] as const;
+const plazaSites: readonly Seed[] = [
+  { id: 'plaza-brazier-a', label: '广场火盆甲', style: 'brazier', origin: [238, 205], facing: 0, fixed: true, spread: 2.05 },
+  { id: 'plaza-brazier-b', label: '广场火盆乙', style: 'brazier', origin: [240, 173], facing: 0, fixed: true, spread: 2.05 },
+  { id: 'plaza-campfire', label: '广场篝火', style: 'stone', origin: [178, 162], facing: 0, fixed: true,
+    ring: [0, Math.PI / 2, Math.PI, -Math.PI / 2], woodPile: [-1.50, -1.35] },
+];
+const pineCampSeed: Seed = {
+  id: pineCampfireId, label: '松林火塘', style: 'stone', origin: [418, 225], facing: -Math.PI / 2, fixed: true,
+  ring: [0, Math.PI / 3, -Math.PI / 3, 2 * Math.PI / 3, -2 * Math.PI / 3, Math.PI],
+  woodPile: [-1.50, -1.35],
+};
+const fixedOffset = [[0, 0]] as const;
 const siteOffsets = [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [1.2, 1.2], [-1.2, 1.2], [1.2, -1.2], [-1.2, -1.2]] as const;
 const regionalOffsets = [...siteOffsets, ...[2, 3.5, 5, 6.5, 8, 10, 12, 14, 16, 18, 20, 22].flatMap(radius =>
   Array.from({ length: 16 }, (_, index) => {
@@ -46,14 +84,22 @@ export type CampfireSite = Surface & {
   label: string;
   style: Style;
   seats: readonly (Surface & { yaw: number; approach: Surface })[];
+  woodPile?: Surface;
 };
 
-export function findRegionalCampfires(groundAt: CheckGround): CampfireSite[] {
+export function findRegionalCampfires(
+  groundAt: CheckGround, plazaBounds?: readonly number[], options?: { pineCamp?: boolean },
+): CampfireSite[] {
+  const usePlaza = plazaBounds?.length === expandedPlaza.length &&
+    expandedPlaza.every((edge, index) => plazaBounds[index] === edge);
+  const seeds = [...regionalSites];
+  if (usePlaza) seeds.push(...plazaSites);
+  if (options?.pineCamp) seeds.push(pineCampSeed);
   const fires: CampfireSite[] = [];
-  for (const seed of regionalSites) {
-    const spread = seed.style === 'stone' ? 2.15 : 1.65;
-    const ring = seed.style === 'stone' ? [-1.13, -.40, .40, 1.13] : [-.97, 0, .97];
-    const offsets = seed.id === 'forest' || seed.id === 'lakeside' ? regionalOffsets : siteOffsets;
+  for (const seed of seeds) {
+    const spread = seed.spread ?? (seed.style === 'stone' ? 2.15 : 1.65);
+    const ring = seed.ring ?? (seed.style === 'stone' ? [-1.13, -.40, .40, 1.13] : [-.97, 0, .97]);
+    const offsets = seed.fixed ? fixedOffset : seed.id === 'forest' || seed.id === 'lakeside' ? regionalOffsets : siteOffsets;
     for (const [dx, dn] of offsets) {
       const x = seed.origin[0] + dx;
       const n = seed.origin[1] + dn;
@@ -82,8 +128,17 @@ export function findRegionalCampfires(groundAt: CheckGround): CampfireSite[] {
             approach: { x: approachX, n: approachN, ground: approachGround } });
         }
       }
-      if (seats.length < 2) continue;
-      fires.push({ id: seed.id, label: seed.label, style: seed.style, x, n, ground: feet, seats });
+      if (seats.length < (seed.id === pineCampfireId ? ring.length : 2)) continue;
+      let woodPile: Surface | undefined;
+      if (seed.woodPile) {
+        const pileX = x + seed.woodPile[0], pileN = n + seed.woodPile[1];
+        const ground = groundAt(pileX, pileN);
+        if (ground === undefined || Math.abs(ground - feet) > .20 ||
+            roadCorridorKeepClear(pileX, pileN, .72)) continue;
+        woodPile = { x: pileX, n: pileN, ground };
+      }
+      fires.push({ id: seed.id, label: seed.label, style: seed.style, x, n, ground: feet, seats,
+        ...(woodPile ? { woodPile } : {}) });
       break;
     }
   }
@@ -129,6 +184,16 @@ export function campfirePieces(fires: readonly CampfireSite[]) {
       addSeat(-.19, .20, 0, .11, .40, .31, '#67505a');
       addSeat(.19, .20, 0, .11, .40, .31, '#67505a');
     }
+    if (fire.woodPile) {
+      const { x, n, ground } = fire.woodPile;
+      pieces.push({ at: [x, ground + .05, -n], scale: [.86, .10, .64], tint: '#453b3b' });
+      for (const [index, shift] of [-.18, .02, .20, -.09, .09].entries()) {
+        const y = index < 3 ? .18 : .32;
+        pieces.push({ at: [x, ground + y, -n + shift], scale: [.73, .14, .15],
+          tint: index % 2 ? '#a97e58' : '#79583f' });
+        pieces.push({ at: [x - .37, ground + y, -n + shift], scale: [.026, .11, .12], tint: '#c0966c' });
+      }
+    }
   }
   return pieces;
 }
@@ -137,8 +202,10 @@ export function createTownCampfires(
   scene: Scene,
   context: Pick<TownActivityContext, 'sit'>,
   sites: readonly CampfireSite[],
+  forest?: CampfireForestOptions,
 ): TownActivity & { warmAt: (east: number, north: number, feet: number) => boolean; updateFlames: (dt: number, east: number, north: number, indoors: boolean) => void } {
-  const capacity = sites.length * (fireParticles + 1);
+  const villageSmoke = forest?.villageSmoke;
+  const capacity = sites.length * (fireParticles + 1) + (villageSmoke ? smokeParticles : 0);
   const positions = new Float32Array(capacity * 3);
   const styles = new Float32Array(capacity * 3);
   const position = new BufferAttribute(positions, 3).setUsage(DynamicDrawUsage);
@@ -164,7 +231,8 @@ export function createTownCampfires(
         vec2 p = gl_PointCoord - .5;
         float r = length(p);
         float alpha = (1. - smoothstep(.05, .50, r)) * vFireStyle.y;
-        vec3 color = mix(vec3(1., .14, .026), vec3(1., .80, .36), vFireStyle.z);
+        vec3 color = vFireStyle.z < 0. ? vec3(.57, .65, .74)
+          : mix(vec3(1., .14, .026), vec3(1., .80, .36), vFireStyle.z);
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -180,20 +248,26 @@ export function createTownCampfires(
     spots: sites.flatMap(site => site.seats.map(seat => ({
       ...seat.approach, range: .47,
       label: `在${site.label}旁坐下`,
-      run: () => context.sit({ x: seat.x, n: seat.n, eyeY: seat.ground + 1.475, yaw: seat.yaw }),
+      run() {
+        context.sit({ x: seat.x, n: seat.n, eyeY: seat.ground + 1.475, yaw: seat.yaw });
+        if (site.id === 'forest') forest?.onForestSeat?.();
+      },
     }))),
     blocked(east, north, feet) {
       return sites.some(site => {
         if (Math.abs(site.ground - feet) >= .95) return false;
         const distanceSquared = (east - site.x) ** 2 + (north - site.n) ** 2;
+        const pile = site.woodPile;
         return distanceSquared < (site.style === 'stone' ? 1 : .81) ** 2 ||
+          (pile !== undefined && feet < pile.ground + .45 && feet + 1.8 > pile.ground &&
+            (east - pile.x) ** 2 + (north - pile.n) ** 2 < .72 ** 2) ||
           (distanceSquared < 2.76 ** 2 && site.seats.some(seat => feet < seat.ground + .5 &&
             feet + 1.8 > seat.ground && (east - seat.x) ** 2 + (north - seat.n) ** 2 < .61 ** 2));
       });
     },
     warmAt: (east, north, feet) => nearCampfire(sites, east, north, feet),
     updateFlames(dt, east, north, indoors) {
-      flames.visible = !indoors && sites.length > 0;
+      flames.visible = !indoors && (sites.length > 0 || villageSmoke !== undefined);
       if (!flames.visible) return;
       elapsed += dt;
       if (elapsed < next) return;
@@ -211,15 +285,27 @@ export function createTownCampfires(
       for (const [index, site] of sites.entries()) {
         const isStone = site.style === 'stone';
         const y = site.ground + (isStone ? .31 : .59);
-        emit(site.x, y + .07, -site.n, isStone ? 1.88 : 1.35, .31, .26);
+        const level = site.id === 'forest' ? forest?.level() : site.id === pineCampfireId ? forest?.pineLevel?.() : undefined;
+        const profile = level === undefined ? undefined : forestFlames[level];
+        const glow = profile?.glow ?? 1;
+        emit(site.x, y + .07, -site.n, (isStone ? 1.88 : 1.35) * glow, .31 * glow, .26);
         if ((site.x - east) ** 2 + (site.n - north) ** 2 > 40 ** 2) continue;
-        for (let i = 0; i < fireParticles; i++) {
+        for (let i = 0; i < (profile?.count ?? fireParticles); i++) {
           const life = (elapsed * (.57 + i % 8 * .068) + i * .618034 + index * .26) % 1;
           const theta = i * 2.39996 + elapsed * .22;
           const spread = (1 - life * .67) * (isStone ? .32 : .19) * (.62 + .38 * Math.sin(i * 1.718));
-          const rise = life * (isStone ? .95 : .70);
+          const rise = life * (isStone ? .95 : .70) * (profile?.rise ?? 1);
           emit(site.x + Math.cos(theta) * spread, y + rise, -site.n + Math.sin(theta) * spread,
-            .145 * (1 - life * .74), .82 * (1 - life), (1 - life) ** 2);
+            .145 * (1 - life * .74) * (profile?.size ?? 1), .82 * (1 - life), (1 - life) ** 2);
+        }
+      }
+      if (villageSmoke && (villageSmoke.x - east) ** 2 + (villageSmoke.n - north) ** 2 <= 40 ** 2) {
+        const scale = villageSmoke.scale();
+        const until = scale > 1 ? smokeParticles : smokeParticles / 2;
+        for (let i = 0; i < until; i++) {
+          const life = (elapsed * .27 + i / until) % 1;
+          emit(villageSmoke.x + Math.sin(i * 2.4 + elapsed) * .24 * life, villageSmoke.height + life * 2.2 * scale,
+            -villageSmoke.n + .37 * life, (.20 + life * .49) * scale, .20 * (1 - life), -1);
         }
       }
       geometry.setDrawRange(0, point);

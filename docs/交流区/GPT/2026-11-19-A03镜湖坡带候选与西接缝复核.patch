@@ -1,0 +1,226 @@
+diff --git a/tests/town-blockout-mirror-f2-slope-review.test.ts b/tests/town-blockout-mirror-f2-slope-review.test.ts
+new file mode 100644
+index 0000000..9514700
+--- /dev/null
++++ b/tests/town-blockout-mirror-f2-slope-review.test.ts
+@@ -0,0 +1,93 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group, Raycaster, Vector3 } from 'three';
++import { isMirrorLakeIce, mirrorLake } from '../src/shared/mirror-lake';
++import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit';
++import { createMirrorF2Slope, mirrorF2RoadAt } from '../tools/voxel-tavern/town-blockout/mirror-lake-f2-slope';
++import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
++import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway';
++
++// This is a review fixture and never a selected alignment or a frozen design.
++const profile = { halfWidth: 1, rowStep: 1, stages: [
++  { runFraction: .4, riseFraction: .5 },
++  { runFraction: .6, riseFraction: .5 },
++] };
++const terrain = createTerrainGrid();
++
++test('the staged F2 review surface meets the legacy shoulder without sampling road or strict ice', () => {
++  const candidate = createMirrorF2Slope(terrain.heightAt, profile);
++  try {
++    const north = 210;
++    const { centerEast, shoulderEast } = mirrorF2RoadAt(north);
++    const roadHeight = terrain.heightAt(centerEast, north);
++    const shoulderHeight = terrain.heightAt(shoulderEast, north);
++    const start = 73.7736380844118;
++    assert.ok(Math.abs(roadHeight - 16.509804) < 1e-6);
++    assert.equal(candidate.heightAt(centerEast, north), undefined);
++    assert.equal(candidate.heightAt(shoulderEast + .001, north), undefined);
++    assert.equal(candidate.heightAt(shoulderEast, north), shoulderHeight);
++    assert.equal(candidate.heightAt(start, north), mirrorLake.height);
++    assert.ok(isMirrorLakeIce(start - .001, north));
++    assert.equal(candidate.heightAt(start - .001, north), undefined);
++    assert.ok(terrain.heightAt(start, north) - mirrorLake.height > 10);
++    assert.equal(candidate.heightAt(shoulderEast - 1, 212), undefined);
++
++    const count = Math.ceil((shoulderEast - start) / .08);
++    const values = Array.from({ length: count + 1 }, (_, index) =>
++      candidate.heightAt(start + (shoulderEast - start) * index / count, north)!);
++    const maxRise = Math.max(...values.slice(1).map((value, index) => value - values[index]));
++    assert.ok(values.slice(1).every((value, index) => value >= values[index]));
++    assert.ok(maxRise < .43);
++    assert.ok(values.filter(value => Math.abs(value - (shoulderHeight + mirrorLake.height) / 2) < 1e-12).length > 1);
++    console.log(JSON.stringify({ north, centerEast, roadHeight, shoulderEast, shoulderHeight,
++      start, originalIceRimTerrain: terrain.heightAt(start, north), samples: values.length, maxRise }));
++  } finally {
++    candidate.dispose();
++  }
++});
++
++test('F2 mesh and local collision sampler coincide, clear existing rail and release independently', () => {
++  const railway = createTownRailway(terrain, () => Date.UTC(2026, 10, 19));
++  const rail = readWalkGeometry(railway.group);
++  const candidate = createMirrorF2Slope(terrain.heightAt, profile);
++  const scene = new Group();
++  scene.add(candidate.mesh);
++  candidate.mesh.updateMatrixWorld(true);
++  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
++  const points = candidate.mesh.geometry.attributes.position;
++  const triangles = candidate.mesh.geometry.index!;
++  let maximumHeightDifference = 0, railContacts = 0, nearestRailPoint = Infinity;
++  const vertex = (index: number) => new Vector3().fromBufferAttribute(points, triangles.getX(index));
++  for (let i = 0; i < triangles.count; i += 3) {
++    const a = vertex(i), b = vertex(i + 1), c = vertex(i + 2);
++    // Include interior points on every rendered triangle.
++    for (let u = 1; u <= 7; u++) for (let v = 1; v <= 8 - u; v++) {
++      const point = a.clone().addScaledVector(b.clone().sub(a), u / 9).addScaledVector(c.clone().sub(a), v / 9);
++      const height = candidate.heightAt(point.x, -point.z);
++      assert.ok(height !== undefined);
++      ray.ray.origin.set(point.x, 35, point.z);
++      const hit = ray.intersectObject(candidate.mesh)[0];
++      assert.ok(hit);
++      maximumHeightDifference = Math.max(maximumHeightDifference, Math.abs(hit.point.y - height));
++      for (const { min, max } of [...rail.colliders, ...rail.floors]) {
++        const radius = Math.hypot(Math.max(min[0] - point.x, point.x - max[0], 0),
++          Math.max(min[2] - point.z, point.z - max[2], 0));
++        if (radius < .27 && height + .025 < max[1] && height + 1.95 > min[1]) railContacts++;
++      }
++      for (const p of railway.route.points) nearestRailPoint = Math.min(nearestRailPoint,
++        Math.hypot(p.x - point.x, p.z - point.z));
++    }
++  }
++  assert.equal(railContacts, 0);
++  assert.ok(maximumHeightDifference < .00001);
++  let disposed = 0;
++  candidate.mesh.geometry.addEventListener('dispose', () => disposed++);
++  candidate.mesh.material.addEventListener('dispose', () => disposed++);
++  candidate.dispose();
++  candidate.dispose();
++  assert.equal(scene.children.length, 0);
++  assert.equal(disposed, 2);
++  assert.equal(candidate.heightAt(78, 210), undefined);
++  console.log(JSON.stringify({ vertices: points.count, triangles: triangles.count / 3,
++    faceSamples: triangles.count / 3 * 28, maximumHeightDifference, railContacts, nearestRailPoint, disposed }));
++});
+diff --git a/tools/voxel-tavern/town-blockout/mirror-lake-f2-slope.ts b/tools/voxel-tavern/town-blockout/mirror-lake-f2-slope.ts
+new file mode 100644
+index 0000000..8e4203d
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/mirror-lake-f2-slope.ts
+@@ -0,0 +1,121 @@
++import { BufferGeometry, Float32BufferAttribute, Mesh, MeshLambertMaterial } from 'three';
++import { mirrorLake, mirrorLakeIceInset } from '../../../src/shared/mirror-lake';
++import layout from './layout.json';
++
++type HeightAt = (east: number, north: number) => number;
++type Stage = { runFraction: number; riseFraction: number };
++type Profile = { stages: readonly Stage[]; halfWidth: number; rowStep: number };
++type Vertex = { east: number; north: number; height: number };
++
++// The archived F2 route follows this latitude. Its relocated fishing stake
++// belongs to the splitter's drawing and is independent of the slope.
++const f2North = 210;
++const westLoop = layout.roads.find(road => road.id === 'west-loop')!;
++const interpolate = (left: number, right: number, ratio: number) => left + (right - left) * ratio;
++
++export function mirrorF2RoadAt(north: number) {
++  const index = westLoop.points.findIndex(([, n]) => n <= north);
++  if (index < 1) throw new RangeError('F2 must meet the existing west-loop segment.');
++  const [east0, north0] = westLoop.points[index - 1];
++  const [east1, north1] = westLoop.points[index];
++  const gradient = (east1 - east0) / (north1 - north0);
++  const centerEast = east0 + (north - north0) * gradient;
++  return { centerEast, shoulderEast: centerEast - westLoop.width / 2 * Math.hypot(1, gradient) };
++}
++
++function eastIceRim(north: number) {
++  const [cx, cn] = mirrorLake.center;
++  const [rx, rn] = mirrorLake.radius;
++  return cx + rx * Math.sqrt((1 - mirrorLakeIceInset / rn) ** 2 - ((north - cn) / rn) ** 2);
++}
++
++/**
++ * Isolated review surface. The host would give this sampler precedence over
++ * the old terrain only inside the block and restore the old terrain on exit.
++ * Width and intermediate stages are caller inputs, with no production preset.
++ */
++export function createMirrorF2Slope(groundHeight: HeightAt, profile: Profile) {
++  const { stages, halfWidth, rowStep } = profile;
++  if (!(halfWidth > 0 && halfWidth <= 3 && rowStep > 0 && Number.isFinite(rowStep)) ||
++      stages.length === 0 || stages.some(({ runFraction, riseFraction }, index) =>
++        !(runFraction > (stages[index - 1]?.runFraction ?? 0) && runFraction < 1 &&
++          riseFraction >= (stages[index - 1]?.riseFraction ?? 0) && riseFraction <= 1))) {
++    throw new RangeError('Invalid F2 slope review profile.');
++  }
++  const south = f2North - halfWidth;
++  const north = f2North + halfWidth;
++  // Place the uphill break east of the entire strict ice rim. A flat toe
++  // follows the rim so it does not move the ice criterion or the fishing stakes.
++  const riseStart = eastIceRim(Math.max(south, mirrorLake.center[1]));
++  const rowCount = Math.ceil((north - south) / rowStep);
++  const breakpoints = [{ runFraction: 0, riseFraction: 0 }, ...stages, { runFraction: 1, riseFraction: 1 }];
++  const rows = Array.from({ length: rowCount + 1 }, (_, index) => {
++    const rowNorth = interpolate(south, north, index / rowCount);
++    const { shoulderEast } = mirrorF2RoadAt(rowNorth);
++    const shoulderHeight = groundHeight(shoulderEast, rowNorth);
++    const rim = eastIceRim(rowNorth);
++    if (!Number.isFinite(rim) || !(riseStart < shoulderEast && shoulderHeight > mirrorLake.height)) {
++      throw new RangeError('F2 slope has no usable ice-to-shoulder span.');
++    }
++    return [
++      { east: rim, north: rowNorth, height: mirrorLake.height },
++      ...breakpoints.map(({ runFraction, riseFraction }) => ({
++        east: interpolate(riseStart, shoulderEast, runFraction), north: rowNorth,
++        height: interpolate(mirrorLake.height, shoulderHeight, riseFraction),
++      })),
++    ];
++  });
++  const columns = rows[0].length;
++  const geometry = new BufferGeometry();
++  geometry.setAttribute('position', new Float32BufferAttribute(rows.flatMap(row =>
++    row.flatMap(({ east, north, height }) => [east, height, -north])), 3));
++  const triangles: number[] = [];
++  for (let row = 0; row < rowCount; row++) for (let column = 0; column < columns - 1; column++) {
++    const a = row * columns + column;
++    const b = a + columns;
++    if (rows[row][column].east < rows[row][column + 1].east) triangles.push(a, a + 1, b);
++    if (rows[row + 1][column].east < rows[row + 1][column + 1].east) triangles.push(a + 1, b + 1, b);
++  }
++  geometry.setIndex(triangles);
++  geometry.computeVertexNormals();
++  const material = new MeshLambertMaterial({ color: '#becbd4' });
++  const mesh = new Mesh(geometry, material);
++  mesh.name = 'mirror-lake-f2-slope-review';
++  let disposed = false;
++
++  function heightAt(east: number, atNorth: number) {
++    if (disposed || !Number.isFinite(east) || !Number.isFinite(atNorth) ||
++        atNorth < south || atNorth > north || east < eastIceRim(atNorth) ||
++        east > mirrorF2RoadAt(atNorth).shoulderEast) return;
++    const rowPosition = (atNorth - south) / (north - south) * rowCount;
++    const rowIndex = Math.min(Math.floor(rowPosition), rowCount - 1);
++    const fraction = rowPosition - rowIndex;
++    const lower = rows[rowIndex];
++    const upper = rows[rowIndex + 1];
++    const at = (a: Vertex, b: Vertex) => ({
++      east: interpolate(a.east, b.east, fraction),
++      height: interpolate(a.height, b.height, fraction),
++    });
++    for (let column = 0; column < columns - 1; column++) {
++      const left = at(lower[column], upper[column]);
++      const right = at(lower[column + 1], upper[column + 1]);
++      if (east > right.east) continue;
++      const diagonal = at(lower[column + 1], upper[column]);
++      const [start, end] = east <= diagonal.east ? [left, diagonal] : [diagonal, right];
++      if (end.east <= start.east) return start.height;
++      const t = Math.min(1, Math.max(0, (east - start.east) / (end.east - start.east)));
++      return interpolate(start.height, end.height, t);
++    }
++    return;
++  }
++  return {
++    mesh, heightAt,
++    dispose() {
++      if (disposed) return;
++      disposed = true;
++      mesh.removeFromParent();
++      geometry.dispose();
++      material.dispose();
++    },
++  };
++}

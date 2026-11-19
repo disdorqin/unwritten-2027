@@ -1,0 +1,269 @@
+diff --git a/src/presence/bell-game.ts b/src/presence/bell-game.ts
+index d2ea0c4..4ab8e5d 100644
+--- a/src/presence/bell-game.ts
++++ b/src/presence/bell-game.ts
+@@ -3,0 +4,2 @@
++import { mirrorLake, mirrorLakeIceInset } from '../shared/mirror-lake.js';
++
+@@ -4,0 +7 @@ export const bellMatchMs = 360_000;
++export const iceChaseMatchMs = 180_000;
+@@ -11,0 +15 @@ export const bellDropRollMetres = 2;
++const bellDropMarginMetres = 1;
+@@ -52 +56,3 @@ export type BellState = {
+-export function createBellMatch(now: number, config: BellConfig = defaultBellConfig): BellState {
++export function createBellMatch(
++  now: number, config: BellConfig = defaultBellConfig, spawn: BellPoint = bellSpawn,
++): BellState {
+@@ -57 +63 @@ export function createBellMatch(now: number, config: BellConfig = defaultBellCon
+-    loose: { ...bellSpawn },
++    loose: { ...spawn },
+@@ -147,0 +154,18 @@ export function applyBellTouch(state: BellState, claimantId: number, now: number
++function clampPlazaBellDrop(point: BellPoint): BellPoint {
++  return {
++    east: Math.min(bellVenue.maxEast - bellDropMarginMetres, Math.max(bellVenue.minEast + bellDropMarginMetres, point.east)),
++    north: Math.min(bellVenue.maxNorth - bellDropMarginMetres, Math.max(bellVenue.minNorth + bellDropMarginMetres, point.north)),
++  };
++}
++
++/** 湖面沿同一掉铃留边口径，落点限制在冰面内；避免铃滚出后无人可以取回。 */
++export function clampIceChaseBellDrop(point: BellPoint): BellPoint {
++  const [cx, cn] = mirrorLake.center;
++  const [rx, rn] = mirrorLake.radius;
++  // Match the terrain's open-ice predicate, then apply the existing 1 m drop clearance.
++  const iceRadius = (rn - mirrorLakeIceInset) / rn;
++  const east = point.east - cx, north = point.north - cn;
++  const limit = Math.max(1, Math.hypot(east / (rx * iceRadius - bellDropMarginMetres), north / (rn * iceRadius - bellDropMarginMetres)));
++  return { east: cx + east / limit, north: cn + north / limit };
++}
++
+@@ -151,0 +176 @@ export function dropBell(
++  constrain: (point: BellPoint) => BellPoint = clampPlazaBellDrop,
+@@ -156,4 +181,4 @@ export function dropBell(
+-  const loose = {
+-    east: Math.min(bellVenue.maxEast - 1, Math.max(bellVenue.minEast + 1, from.east + (length ? dirEast / length * roll : 0))),
+-    north: Math.min(bellVenue.maxNorth - 1, Math.max(bellVenue.minNorth + 1, from.north + (length ? dirNorth / length * roll : 0))),
+-  };
++  const loose = constrain({
++    east: from.east + (length ? dirEast / length * roll : 0),
++    north: from.north + (length ? dirNorth / length * roll : 0),
++  });
+diff --git a/src/presence/server.ts b/src/presence/server.ts
+index 2b1d237..366880d 100644
+--- a/src/presence/server.ts
++++ b/src/presence/server.ts
+@@ -39 +39 @@ import {
+-  inBellVenue, tryBellTouch, type BellConfig, type BellState, type BellStateEvent,
++  clampIceChaseBellDrop, iceChaseMatchMs, inBellVenue, tryBellTouch, type BellConfig, type BellState, type BellStateEvent,
+@@ -40,0 +41 @@ import {
++import { isMirrorLakeIce } from '../shared/mirror-lake.js';
+@@ -201,0 +203 @@ export async function createPresenceServer(options: Options = {}) {
++  const iceChaseConfig: BellConfig = { ...bellConfig, matchMs: iceChaseMatchMs };
+@@ -202,0 +205 @@ export async function createPresenceServer(options: Options = {}) {
++  let iceChase = false;
+@@ -479,2 +482,4 @@ export async function createPresenceServer(options: Options = {}) {
+-    const position = peer.record;
+-    if (!position || !inBellVenue({ east: position.east / 100, north: position.north / 100 })) {
++    const record = peer.record;
++    const point = record && { east: record.east / 100, north: record.north / 100 };
++    const onLake = point !== undefined && isMirrorLakeIce(point.east, point.north);
++    if (!point || (!onLake && !inBellVenue(point))) {
+@@ -484 +489,3 @@ export async function createPresenceServer(options: Options = {}) {
+-    bell = createBellMatch(Date.now(), bellConfig);
++    iceChase = onLake;
++    const wallNow = Date.now();
++    bell = iceChase ? createBellMatch(wallNow, iceChaseConfig, point) : createBellMatch(wallNow, bellConfig);
+@@ -492,0 +500,3 @@ export async function createPresenceServer(options: Options = {}) {
++    const wallNow = Date.now();
++    const point = { east: peer.record.east / 100, north: peer.record.north / 100 };
++    if (iceChase && (wallNow >= bell.endsAt || !isMirrorLakeIce(point.east, point.north))) return;
+@@ -494,2 +504 @@ export async function createPresenceServer(options: Options = {}) {
+-    const result = tryBellTouch(bell, peer.id,
+-      { east: peer.record.east / 100, north: peer.record.north / 100 },
++    const result = tryBellTouch(bell, peer.id, point,
+@@ -497 +506 @@ export async function createPresenceServer(options: Options = {}) {
+-      Date.now(), bellConfig);
++      wallNow, iceChase ? iceChaseConfig : bellConfig);
+@@ -500 +509 @@ export async function createPresenceServer(options: Options = {}) {
+-    applyBellTouch(bell, peer.id, Date.now());
++    applyBellTouch(bell, peer.id, wallNow);
+@@ -505,0 +515,2 @@ export async function createPresenceServer(options: Options = {}) {
++    const wallNow = Date.now();
++    if (iceChase && wallNow >= bell.endsAt) return;
+@@ -508 +519,2 @@ export async function createPresenceServer(options: Options = {}) {
+-      dirEast, dirNorth, Date.now(), bellConfig, pickupDelayMs);
++      dirEast, dirNorth, wallNow, iceChase ? iceChaseConfig : bellConfig, pickupDelayMs,
++      iceChase ? clampIceChaseBellDrop : undefined);
+@@ -514 +526,2 @@ export async function createPresenceServer(options: Options = {}) {
+-    const due = bellTitleDue(bell, wallNow, bellAnnounced, bellConfig);
++    const bellTime = iceChase ? Math.min(wallNow, bell.endsAt) : wallNow;
++    const due = bellTitleDue(bell, bellTime, bellAnnounced, iceChase ? iceChaseConfig : bellConfig);
+@@ -521 +534 @@ export async function createPresenceServer(options: Options = {}) {
+-      endBellMatch(bell, wallNow);
++      endBellMatch(bell, bellTime);
+@@ -523 +536 @@ export async function createPresenceServer(options: Options = {}) {
+-      const standings = bellStandings(bell, wallNow)
++      const standings = bellStandings(bell, bellTime)
+@@ -1116,0 +1130,3 @@ export async function createPresenceServer(options: Options = {}) {
++    if (iceChase && bell?.holderId === peer.id && !isMirrorLakeIce(record.east / 100, record.north / 100)) {
++      dropHeldBell(peer, 0, 0);
++    }
+diff --git a/tests/server/bell.test.ts b/tests/server/bell.test.ts
+index 5ac00fa..1836e9b 100644
+--- a/tests/server/bell.test.ts
++++ b/tests/server/bell.test.ts
+@@ -10 +10,2 @@ import {
+-import type { BellEndEvent, BellStateEvent, BellTitleEvent } from '../../src/presence/bell-game.js';
++import { defaultBellConfig, type BellEndEvent, type BellStateEvent, type BellTitleEvent } from '../../src/presence/bell-game.js';
++import { isMirrorLakeIce, mirrorLake } from '../../src/shared/mirror-lake.js';
+@@ -74,2 +75,2 @@ const bellConfig = {
+-async function fixture(context: TestContext) {
+-  const server = await createPresenceServer({ host: '127.0.0.1', port: 0, bellConfig });
++async function fixture(context: TestContext, config = bellConfig) {
++  const server = await createPresenceServer({ host: '127.0.0.1', port: 0, bellConfig: config });
+@@ -191,0 +193,70 @@ test('bell match runs start, pickup, steal, snowball drop, pickup window, titles
++
++test('Mirror Lake chase keeps the existing touch radius and grace, drops at the shore and ends at 180 s over two sockets',
++  { timeout: 10_000 }, async context => {
++    let wallNow = Date.now();
++    context.mock.method(Date, 'now', () => wallNow);
++    const { join } = await fixture(context, { ...defaultBellConfig, titleMs: [...defaultBellConfig.titleMs] });
++    const host = await join('追逐甲');
++    const chaser = await join('追逐乙');
++    const [east, north] = mirrorLake.center;
++    const height = mirrorLake.height;
++    const start = { type: 'event', kind: 'bell-start' };
++    const touch = { type: 'event', kind: 'bell-touch' };
++    const begin = wallNow;
++
++    host.pose(east, north, height);
++    chaser.pose(east + 1.3, north, height);
++    await delay(80);
++    host.send(start);
++    const started = await host.text.next(stateWith(state => state.loose?.east === east));
++    assert.deepEqual(started.loose, { east, north });
++    assert.equal(started.endsAt - begin, 180_000);
++    await chaser.text.next(stateWith(state => state.endsAt === started.endsAt));
++
++    host.send(touch);
++    await chaser.text.next(stateWith(state => state.holder?.id === host.id));
++    wallNow = begin + 999;
++    const beforeRange = host.text.total(isBellState);
++    chaser.send(touch);
++    await delay(80);
++    assert.equal(host.text.total(isBellState), beforeRange, '999 ms is still protected');
++
++    wallNow++;
++    chaser.pose(east + 1.31, north, height);
++    await delay(80);
++    chaser.send(touch);
++    await delay(80);
++    assert.equal(host.text.total(isBellState), beforeRange, '1.31 m is out of range');
++
++    chaser.pose(east + 1.3, north, height);
++    await delay(80);
++    chaser.send(touch);
++    const steal = await host.text.next(stateWith(state => state.holder?.id === chaser.id));
++    assert.deepEqual(steal.totals, [[host.id, 1_000]]);
++
++    wallNow = begin + 2_000;
++    chaser.pose(east + mirrorLake.radius[0] - 1, north, height);
++    await delay(80);
++    assert.ok(isMirrorLakeIce(east + mirrorLake.radius[0] - 1, north));
++    assert.equal(host.text.total(isBellState), beforeRange + 1, 'still on ice');
++    chaser.pose(east + mirrorLake.radius[0], north, height);
++    const dropped = await host.text.next(stateWith(state => state.holder === null && state.loose !== null));
++    assert.equal(dropped.pickableAt - wallNow, 1_000);
++    assert.ok(isMirrorLakeIce(dropped.loose!.east, dropped.loose!.north));
++    assert.deepEqual(dropped.totals, [[host.id, 1_000], [chaser.id, 1_000]]);
++
++    wallNow = dropped.pickableAt;
++    const afterDrop = host.text.total(isBellState);
++    chaser.send(touch);
++    await delay(80);
++    assert.equal(host.text.total(isBellState), afterDrop, 'shoreline claimant within radius cannot retrieve the bell');
++    host.pose(dropped.loose!.east, dropped.loose!.north, height);
++    await delay(80);
++    host.send(touch);
++    await chaser.text.next(stateWith(state => state.holder?.id === host.id));
++
++    wallNow = started.endsAt + 5;
++    const settled = await chaser.text.next(value => 'kind' in value && value.kind === 'bell-end') as BellEndEvent;
++    assert.deepEqual(settled.standings.map(row => [row.id, row.ms]), [[host.id, 178_000], [chaser.id, 1_000]]);
++    context.diagnostic(`round ${started.endsAt - begin} ms; shore drop ${dropped.loose!.east.toFixed(4)},${dropped.loose!.north.toFixed(4)}; pickup +${dropped.pickableAt - (begin + 2_000)} ms; totals ${settled.standings.map(row => row.ms).join('/')}`);
++  });
+diff --git a/tools/Dockerfile.town-presence b/tools/Dockerfile.town-presence
+index c048b40..7ec18d0 100644
+--- a/tools/Dockerfile.town-presence
++++ b/tools/Dockerfile.town-presence
+@@ -5,0 +6 @@ COPY src/presence/ ./src/presence/
++COPY src/shared/mirror-lake.ts ./src/shared/mirror-lake.ts
+@@ -20,0 +22 @@ COPY --from=build /app/dist/server/presence/ ./dist/server/presence/
++COPY --from=build /app/dist/server/shared/mirror-lake.js ./dist/server/shared/mirror-lake.js
+diff --git a/tools/Dockerfile.town-presence.dockerignore b/tools/Dockerfile.town-presence.dockerignore
+index 016ac34..431bbb8 100644
+--- a/tools/Dockerfile.town-presence.dockerignore
++++ b/tools/Dockerfile.town-presence.dockerignore
+@@ -4,0 +5,2 @@
++!src/shared/
++!src/shared/mirror-lake.ts
+diff --git a/tools/voxel-tavern/town-blockout/town-bell.ts b/tools/voxel-tavern/town-blockout/town-bell.ts
+index 6591ff0..68ee42b 100644
+--- a/tools/voxel-tavern/town-blockout/town-bell.ts
++++ b/tools/voxel-tavern/town-blockout/town-bell.ts
+@@ -8,0 +9 @@ import {
++import { isMirrorLakeIce } from '../../../src/shared/mirror-lake';
+@@ -19 +20 @@ type BellPresence = {
+-  sendBellTouch: () => unknown;
++  sendBellTouch: (flushPosition?: boolean) => unknown;
+@@ -139,0 +141 @@ export function createTownBellGame(deps: TownBellDeps) {
++  let iceChase = false;
+@@ -188,0 +191 @@ export function createTownBellGame(deps: TownBellDeps) {
++      const label = iceChase ? '冰上追逐' : '抢铃铛';
+@@ -190,2 +193,2 @@ export function createTownBellGame(deps: TownBellDeps) {
+-        ? `抢铃铛结算 · ${event.winner.name} 持铃 ${formatClock(event.winner.ms)} 夺冠`
+-        : '抢铃铛结算 · 本局无人持铃', true);
++        ? `${label}结算 · ${event.winner.name} 持铃 ${formatClock(event.winner.ms)} 夺冠`
++        : `${label}结算 · 本局无人持铃`, true);
+@@ -198,2 +201,7 @@ export function createTownBellGame(deps: TownBellDeps) {
+-    if (event.phase === 'running' && previous?.phase !== 'running') {
+-      deps.announce('抢铃铛开始 · 铃在广场徽记处，先到先得！');
++    if (event.phase === 'running' && previous?.endsAt !== event.endsAt) iceChase = false;
++    // A plaza holder may leave the plaza. Only a loose bell identifies the venue.
++    if (event.phase === 'running' && event.loose) iceChase = isMirrorLakeIce(event.loose.east, event.loose.north);
++    if (event.phase === 'running' && previous?.endsAt !== event.endsAt) {
++      deps.announce(iceChase
++        ? '冰上追逐开始 · 铃在冰面，先到先得！'
++        : '抢铃铛开始 · 铃在广场徽记处，先到先得！');
+@@ -243,0 +252,5 @@ export function createTownBellGame(deps: TownBellDeps) {
++    if (!running) {
++      const { east, north } = deps.localPosition();
++      const label = isMirrorLakeIce(east, north) ? '冰上追逐 · 开局' : '抢铃铛 · 开局';
++      if (startButton!.textContent !== label) startButton!.textContent = label;
++    }
+@@ -341 +354,2 @@ export function createTownBellGame(deps: TownBellDeps) {
+-        if (Math.hypot(local.east - target.east, local.north - target.north) <= bellStealRadius) {
++        if ((!iceChase || isMirrorLakeIce(local.east, local.north)) &&
++            Math.hypot(local.east - target.east, local.north - target.north) <= bellStealRadius) {
+@@ -343 +357 @@ export function createTownBellGame(deps: TownBellDeps) {
+-          presence.sendBellTouch();
++          presence.sendBellTouch(iceChase);
+@@ -362 +376,2 @@ export function createTownBellGame(deps: TownBellDeps) {
+-      status!.textContent = `抢铃铛 ${formatClock(state.endsAt - now)} · ${holderText} · 我 ${formatClock(mine)}${topText}`;
++      const label = iceChase ? '冰上追逐' : '抢铃铛';
++      status!.textContent = `${label} ${formatClock(state.endsAt - now)} · ${holderText} · 我 ${formatClock(mine)}${topText}`;
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+index 27ac80e..9e1d3ba 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -897,2 +897,9 @@ export function createTownPresence(
+-    sendBellTouch() {
+-      return sendEvent(JSON.stringify({ type: 'event', kind: 'bell-touch' }));
++    sendBellTouch(flushPosition = false) {
++      if (flushPosition) {
++        // A gliding player can move out of touch range before the next regular pose sample.
++        remaining = 0;
++        sendPose(0);
++      }
++      const sent = sendEvent(JSON.stringify({ type: 'event', kind: 'bell-touch' }));
++      if (sent && flushPosition && poll) void flushPoll(poll);
++      return sent;

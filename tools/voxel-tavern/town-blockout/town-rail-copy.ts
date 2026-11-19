@@ -27,12 +27,12 @@ export function createRailOvernightBroadcast() {
 
 const railDestinationGuide = {
   'coaster-station': {
-    activity: '候车、环镇观景',
-    route: '在站台时刻牌查看下一班。去站厅可搭一站，在火车站前站下车。',
+    activity: '雪橇、环镇观景',
+    route: '站台东侧有雪橇架。想环镇观景，可以在时刻牌查看发车时间。去站厅请搭一站，在火车站前站下车。',
   },
   'railway-station': {
     activity: '车票盖章、查班次',
-    route: '从站台往东下楼，沿灯走到站厅。售票窗在西侧，时刻表在东侧。',
+    route: '从站台往东下楼，沿灯路进站厅南门。到西侧售票窗盖车票戳，西墙看总台，东侧查实时班次。',
   },
   'forest-station': {
     activity: '林间木屋、雪路散步',
@@ -40,16 +40,21 @@ const railDestinationGuide = {
   },
   'lake-station': {
     activity: '滑冰、冰钓',
-    route: '从北侧台阶离开站台，向冰湖南口走，从南岸下到冰面。',
+    route: '从北侧台阶离站，沿雪路去冰湖南岸。到东侧换鞋点可自由滑行或沿金灯门计时，到西侧钓位可抛竿。',
   },
   'ice-castle': {
     activity: '王座就座、取景',
-    route: '沿北向接驳道前行，顺着灯路走到城堡西门。',
+    route: '向北下台阶，再沿灯路往西绕到城堡西门。进大厅可在王座就座或保存取景。',
   },
   'hot-spring': {
     activity: `室外四池泡汤\n${hotSpringPools.map(({ name }) => name).join('、')}`,
-    route: '向东下台阶，沿铺石转向北，到浴场西门。',
+    route: '向东下台阶，沿铺石转向北，从浴场西门进四池区。到池边选一池入水回暖。',
   },
+  'north-ridge-station': { activity: '山腰观景', route: '北岭山腰线' },
+  'mirror-lake-station': { activity: '镜湖西岸', route: '西岸下车，镜湖在东侧。' },
+  market: { activity: '年节集市', route: '从西侧木阶离站，沿步道进入集市。' },
+  plaza: { activity: '广场、社戏台', route: '从西侧木阶离站，沿步道走到广场东沿。' },
+  memorial: { activity: '纪念馆', route: '从东侧木阶离站，接东北路走到纪念馆。' },
 } satisfies Record<TownRailStopId, { activity: string; route: string }>;
 
 const guideStops = railPlatforms.map(({ id, label }) => ({ label, ...railDestinationGuide[id] }));
@@ -84,7 +89,7 @@ export function railHallCopy(railway: Railway, now: number) {
   const location = state.atStop ? `停靠${state.atStop.label}，即将开往${state.nextStop.label}。` :
     `正开往${state.nextStop.label}，距${state.nextStop.label}约 ${Math.ceil(state.nextMetres)} 米。`;
   return [
-    `全线六站（顺环）：${railway.stops.map(stop => stop.label).join(' → ')} → 回${TOWN_STATION_NAME}`,
+    `全线 ${railway.stops.length} 站（顺环）：${railway.stops.map(stop => stop.label).join(' → ')} → 回${TOWN_STATION_NAME}`,
     `${rule(railway)} · 小镇开放期间循环运行，没有末班车`,
     `列车现在：${location}`,
     state.atPlatform ? '火车站前站：列车停靠中 · 请抓紧上下车' : `下一班到火车站前站：约 ${railSecondsText(state.seconds)}`,

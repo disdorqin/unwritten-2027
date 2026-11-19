@@ -1,0 +1,308 @@
+diff --git a/tests/town-blockout-mirror-lake-zone-sample.test.ts b/tests/town-blockout-mirror-lake-zone-sample.test.ts
+new file mode 100644
+index 0000000..7258aea
+--- /dev/null
++++ b/tests/town-blockout-mirror-lake-zone-sample.test.ts
+@@ -0,0 +1,95 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { isMirrorLakeIce, mirrorLake } from '../src/shared/mirror-lake';
++import { mirrorEastEntries, mirrorFishingSites, mirrorFishingOccupancyRadius } from '../tools/voxel-tavern/town-blockout/mirror-lake-site';
++import {
++  buildMirrorLakeZoneSample, eastOpportunity, ellipseLoop, mirrorIslandNominalRadius,
++  mirrorScoreCenterSpacing, northSouthIceChord, signedIceClearance,
++  surveyMirrorShoreLanterns, surveyMirrorZoneLayout, type MirrorZoneLayout,
++} from '../tools/voxel-tavern/town-blockout/mirror-lake-zone-sample';
++import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
++
++const grid = createTerrainGrid();
++const [east, north] = mirrorLake.center;
++const halfInterval = mirrorScoreCenterSpacing / 2;
++const skating: MirrorZoneLayout['skateLines'] = [
++  ellipseLoop(mirrorLake.center, [12, 40], 96),
++  ellipseLoop(mirrorLake.center, [10, 40], 96),
++];
++
++// Geometry probes only. These measurements do not register positions in the game.
++const plane: MirrorZoneLayout = {
++  fishing: [[27, 185], [30, 160], [30, 210]],
++  westShorePavilionProbe: [22, 207],
++  skateLines: skating,
++  scoreCenters: [[68, north - halfInterval], [68, north + halfInterval]],
++  prize: [68, north],
++  island: { center: [east, north + halfInterval], radius: mirrorIslandNominalRadius },
++};
++
++test('a 44 m pair fits east-facing longitudinal ice, while whole-east transverse placement cannot', t => {
++  const eastCapacity = eastOpportunity();
++  assert.ok(eastCapacity.eastHalfWidth < mirrorScoreCenterSpacing);
++  assert.ok(eastCapacity.eastHalfWidth * 2 > mirrorScoreCenterSpacing);
++  assert.ok(Math.abs(northSouthIceChord(eastCapacity.furthestEast) - 44) < 1e-6);
++  const sweep = Array.from({ length: 7 }, (_, i) => 62 + 2 * i).map(x => ({
++    x, chord: northSouthIceChord(x), circleRadiusToIce: signedIceClearance([x, north + halfInterval]),
++  }));
++  const offset = mirrorIslandNominalRadius;
++  const shifted: MirrorZoneLayout = {
++    ...plane,
++    scoreCenters: [[68, north - halfInterval + offset], [68, north + halfInterval + offset]],
++    prize: [68, north + offset],
++  };
++  for (const layout of [plane, shifted]) {
++    const survey = surveyMirrorZoneLayout(layout);
++    assert.equal(survey.scoreSpacing, mirrorScoreCenterSpacing);
++    for (const [x, n] of [...layout.scoreCenters, layout.prize]) {
++      assert.ok(x > east && isMirrorLakeIce(x, n));
++      assert.equal(grid.groundHeightAt(x, n), mirrorLake.height);
++      assert.equal(grid.surfaces[n * grid.gridWidth + x], 4);
++    }
++    assert.ok(survey.scoreCenterGaps.every(gap => gap.iceEdge > 0 && gap.skateLine > 0 && gap.islandEdge > 0));
++    t.diagnostic(JSON.stringify({ scoreCenters: layout.scoreCenters, prize: layout.prize,
++      prizeCrossingLineGap: Math.abs(layout.prize[1] - north), circleClearances: survey.scoreCenterGaps }));
++  }
++  t.diagnostic(JSON.stringify({ eastCapacity, sweep }));
++});
++
++test('the three western fishing probes fit the ice and the nominal island clears both skating lines', t => {
++  const legacy = mirrorFishingSites.map(({ id, x, n }) => ({ id, point: [x, n], westOfCenter: x < east }));
++  assert.deepEqual(legacy.filter(site => site.westOfCenter).map(site => site.id), ['F6']);
++  const lake = surveyMirrorZoneLayout(plane);
++  assert.ok(lake.islandIceGap > 0);
++  assert.ok(lake.islandSkateGaps.every(gap => gap > 0));
++  assert.ok(lake.skateIceGaps.every(gap => gap > 0));
++  for (const site of plane.fishing) {
++    assert.ok(signedIceClearance(site) > mirrorFishingOccupancyRadius);
++    assert.equal(grid.groundHeightAt(...site), mirrorLake.height);
++  }
++  const westBeforeAdjustment = [
++    [mirrorFishingSites[5].x, mirrorFishingSites[5].n],
++    [2 * east - mirrorFishingSites[2].x, mirrorFishingSites[2].n],
++    [2 * east - mirrorFishingSites[1].x, mirrorFishingSites[1].n],
++  ] as const;
++  t.diagnostic(JSON.stringify({ legacy, trialWest: plane.fishing, beforeAdjustment: westBeforeAdjustment.map(site =>
++    ({ site, radiusMargin: signedIceClearance(site) - mirrorFishingOccupancyRadius })),
++  afterAdjustment: lake.fishing.map(site => ({ radiusMargin: site.iceEdge - mirrorFishingOccupancyRadius,
++    skateMargin: site.skateLine - mirrorFishingOccupancyRadius })), island: plane.island, islandIceGap: lake.islandIceGap,
++  islandSkateGaps: lake.islandSkateGaps, skateIceGaps: lake.skateIceGaps }));
++});
++
++test('the independent sample batches four-zone overlays while all three east approaches remain open', t => {
++  const shore = surveyMirrorShoreLanterns();
++  const sample = buildMirrorLakeZoneSample(plane, grid.groundHeightAt);
++  assert.equal(sample.group.children.length, 1);
++  assert.equal(sample.triangles, 12 * sample.instances);
++  for (const { roadX, iceX, north: n } of mirrorEastEntries) {
++    for (let x = iceX; x <= roadX; x += .1) assert.ok(canEnter(x, n));
++  }
++  sample.dispose();
++  assert.equal(sample.group.children.length, 0);
++  t.diagnostic(JSON.stringify({ meshBatches: 1, boxes: sample.instances, tris: sample.triangles, shoreMetres: shore.length,
++    lanterns: shore.lanterns.length, seamGap: shore.closingGap, pavilionProbe: plane.westShorePavilionProbe,
++    pavilionProbeY: grid.groundHeightAt(...plane.westShorePavilionProbe) }));
++});
+diff --git a/tools/voxel-tavern/town-blockout/mirror-lake-zone-sample.ts b/tools/voxel-tavern/town-blockout/mirror-lake-zone-sample.ts
+new file mode 100644
+index 0000000..6ffa208
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/mirror-lake-zone-sample.ts
+@@ -0,0 +1,201 @@
++import { BoxGeometry, Color, Group, InstancedMesh, MeshBasicMaterial, Object3D } from 'three';
++import { isMirrorLakeIce, mirrorLake, mirrorLakeIceInset } from '../../../src/shared/mirror-lake';
++
++export type LakePoint = readonly [east: number, north: number];
++export type MirrorZoneLayout = {
++  fishing: readonly LakePoint[];
++  westShorePavilionProbe: LakePoint;
++  skateLines: readonly [readonly LakePoint[], readonly LakePoint[]];
++  scoreCenters: readonly [LakePoint, LakePoint];
++  prize: LakePoint;
++  island: { center: LakePoint; radius: number };
++};
++
++const [cx, cn] = mirrorLake.center;
++const [rx, rn] = mirrorLake.radius;
++const iceScale = 1 - mirrorLakeIceInset / rn;
++const probeCount = 8192;
++export const mirrorScoreCenterSpacing = 44;
++export const mirrorIslandNominalRadius = 6;
++export const mirrorLanternSpacing = 15;
++
++export function ellipseLoop(center: LakePoint, radii: LakePoint, count: number): LakePoint[] {
++  const [east, north] = center;
++  const [ax, an] = radii;
++  return Array.from({ length: count }, (_, index) => {
++    const theta = index * Math.PI * 2 / count;
++    return [east + ax * Math.cos(theta), north + an * Math.sin(theta)];
++  });
++}
++
++function distance(a: LakePoint, b: LakePoint) {
++  return Math.hypot(a[0] - b[0], a[1] - b[1]);
++}
++
++function distanceToLoop(point: LakePoint, loop: readonly LakePoint[]) {
++  let best = Infinity;
++  for (const [index, a] of loop.entries()) {
++    const b = loop[(index + 1) % loop.length];
++    const dx = b[0] - a[0], dn = b[1] - a[1];
++    const px = point[0] - a[0], pn = point[1] - a[1];
++    const ratio = Math.min(1, Math.max(0, (px * dx + pn * dn) / (dx * dx + dn * dn)));
++    best = Math.min(best, Math.hypot(px - ratio * dx, pn - ratio * dn));
++  }
++  return best;
++}
++
++const iceEdge = ellipseLoop(mirrorLake.center, [rx * iceScale, rn * iceScale], probeCount);
++
++export function signedIceClearance(point: LakePoint) {
++  return distanceToLoop(point, iceEdge) * (isMirrorLakeIce(...point) ? 1 : -1);
++}
++
++export function northSouthIceChord(east: number) {
++  const remaining = iceScale ** 2 - ((east - cx) / rx) ** 2;
++  return 2 * rn * Math.sqrt(Math.max(0, remaining));
++}
++
++export function eastOpportunity(spacing = mirrorScoreCenterSpacing) {
++  const half = spacing / 2;
++  const remaining = iceScale ** 2 - (half / rn) ** 2;
++  return { eastHalfWidth: rx * iceScale, furthestEast: cx + rx * Math.sqrt(Math.max(remaining, 0)) };
++}
++
++export function surveyMirrorZoneLayout(layout: MirrorZoneLayout) {
++  const { skateLines, island, fishing, scoreCenters, prize } = layout;
++  return {
++    scoreSpacing: distance(...scoreCenters),
++    scoreCenterGaps: scoreCenters.map(center => ({
++      iceEdge: signedIceClearance(center),
++      skateLine: Math.min(...skateLines.map(line => distanceToLoop(center, line))),
++      islandEdge: distance(center, island.center) - island.radius,
++    })),
++    prizeIceGap: signedIceClearance(prize),
++    islandIceGap: signedIceClearance(island.center) - island.radius,
++    islandSkateGaps: skateLines.map(line => distanceToLoop(island.center, line) - island.radius),
++    fishing: fishing.map(point => ({
++      iceEdge: signedIceClearance(point),
++      skateLine: Math.min(...skateLines.map(line => distanceToLoop(point, line))),
++    })),
++    skateIceGaps: skateLines.map(line => Math.min(...line.map(signedIceClearance))),
++  };
++}
++
++// Place lamps by arc length on the approved shoreline ellipse. The last segment
++// back to the anchor is measured separately; it does not redefine the spacing.
++export function surveyMirrorShoreLanterns() {
++  const shore = ellipseLoop(mirrorLake.center, mirrorLake.radius, probeCount);
++  const lanterns: LakePoint[] = [shore[0]];
++  let length = 0;
++  let next = mirrorLanternSpacing;
++  shore.forEach((start, index) => {
++    const end = shore[(index + 1) % shore.length];
++    const segment = distance(start, end);
++    if (length + segment >= next) {
++      const fraction = (next - length) / segment;
++      lanterns.push([start[0] + (end[0] - start[0]) * fraction, start[1] + (end[1] - start[1]) * fraction]);
++      next += mirrorLanternSpacing;
++    }
++    length += segment;
++  });
++  return { lanterns, length, closingGap: length - mirrorLanternSpacing * (lanterns.length - 1) };
++}
++
++type Tile = { point: LakePoint; y: number; width: number; height: number; depth: number; color: string; yaw?: number };
++
++/** Isolation-only four-zone sample. The caller supplies survey geometry, not live destinations. */
++export function buildMirrorLakeZoneSample(layout: MirrorZoneLayout, heightAt: (east: number, north: number) => number) {
++  const group = new Group();
++  group.name = 'Mirror Lake four-zone survey';
++  const tiles: Tile[] = [];
++  const iceY = mirrorLake.height;
++  function mark(point: LakePoint, width: number, depth: number, color: string, y = iceY + .03, height = .03, yaw = 0) {
++    tiles.push({ point, y, width, height, depth, color, yaw });
++  }
++
++  // Equal-width colour bands are illustrative only. No terrain or production shader is modified.
++  for (let n = cn - rn; n <= cn + rn; n++) for (let e = cx - rx; e <= cx + rx; e++) {
++    const point: LakePoint = [e, n];
++    if (!isMirrorLakeIce(...point)) continue;
++    const radial = Math.hypot((e - cx) / rx, (n - cn) / rn);
++    const tint = radial < iceScale / 3 ? '#3f859b' : radial < 2 * iceScale / 3 ? '#7dafc7' : '#deeff3';
++    mark(point, 1, 1, tint, iceY, .03);
++  }
++
++  // Each visible overlay is a flat box in the same sample batch.
++  const fractureAngles = [-.63, -.33, .37, .78];
++  fractureAngles.forEach((angle, index) => {
++    const point: LakePoint = [cx + Math.cos(angle) * 13, cn + (index - 1.5) * 15];
++    if (isMirrorLakeIce(...point)) mark(point, 2.9, .09, '#c9e4ec', iceY + .024, .011, angle);
++  });
++  layout.skateLines.forEach((line, i) => line.forEach(point =>
++    mark(point, .26, .26, i === 0 ? '#b4f4ff' : '#f7efd6')));
++  const shore = surveyMirrorShoreLanterns();
++  shore.lanterns.forEach(point => {
++    const y = heightAt(...point);
++    mark(point, .17, .17, '#60464b', y + .76, 1.52);
++    mark(point, .39, .36, '#ba4849', y + 1.68, .25);
++  });
++
++  const [pavilionEast, pavilionNorth] = layout.westShorePavilionProbe;
++  const pavilionY = heightAt(pavilionEast, pavilionNorth);
++  mark(layout.westShorePavilionProbe, 2.1, 1.5, '#8e7060', pavilionY + .12, .24);
++  mark(layout.westShorePavilionProbe, 2.25, 1.65, '#c5dde7', pavilionY + 1.26, .13);
++  for (const [east, north] of layout.fishing) {
++    mark([east, north], 1.05, .84, '#183f52', iceY + .04);
++    const offset = (north - cn) / rn;
++    const bank = cx - rx * Math.sqrt(Math.max(0, 1 - offset * offset));
++    for (const delta of [-.32, 0, .32]) {
++      const stem: LakePoint = [bank - .4, north + delta];
++      mark(stem, .09, .09, '#897b56', heightAt(...stem) + .22, .44);
++    }
++  }
++
++  // Display the whole-metre capacity of these provisional centers. The approved
++  // rules provide a center interval and leave the playable ring radii unspecified.
++  const { scoreCenterGaps } = surveyMirrorZoneLayout(layout);
++  const capacity = Math.min(...scoreCenterGaps.flatMap(gap => [gap.iceEdge, gap.skateLine, gap.islandEdge]));
++  const probeRadius = Math.floor(Math.max(0, capacity));
++  layout.scoreCenters.forEach(point => {
++    mark(point, 1.15, 1.15, '#edbe71', iceY + .045);
++    if (probeRadius > 0) ellipseLoop(point, [probeRadius, probeRadius], 64).forEach(marker =>
++      mark(marker, .25, .25, '#edbe71', iceY + .038));
++  });
++  mark(layout.prize, .95, .95, '#a7664a', iceY + .26, .50);
++  const island = layout.island;
++  const [east, north] = island.center;
++  for (let n = north - island.radius; n <= north + island.radius; n++) {
++    for (let e = east - island.radius; e <= east + island.radius; e++) {
++      if (distance([e, n], island.center) <= island.radius) mark([e, n], 1, 1, '#daedf5', iceY + .11, .20);
++    }
++  }
++  mark(island.center, .94, .70, '#b8e0ed', iceY + .68, .91);
++  mark([east, north + .43], .44, .42, '#d4f3fc', iceY + 1.15, .42);
++
++  const geometry = new BoxGeometry(1, 1, 1);
++  const material = new MeshBasicMaterial();
++  const mesh = new InstancedMesh(geometry, material, tiles.length);
++  mesh.name = 'Mirror Lake survey flat boxes';
++  const shape = new Object3D();
++  const color = new Color();
++  tiles.forEach(({ point, y, width, height, depth, color: tint, yaw = 0 }, index) => {
++    shape.position.set(point[0], y, -point[1]);
++    shape.scale.set(width, height, depth);
++    shape.rotation.y = yaw;
++    shape.updateMatrix();
++    mesh.setMatrixAt(index, shape.matrix);
++    mesh.setColorAt(index, color.set(tint));
++  });
++  mesh.computeBoundingSphere();
++  group.add(mesh);
++  return {
++    group, instances: mesh.count, triangles: mesh.count * geometry.index!.count / 3,
++    dispose() {
++      group.removeFromParent();
++      group.clear();
++      mesh.dispose();
++      geometry.dispose();
++      material.dispose();
++    },
++  };
++}

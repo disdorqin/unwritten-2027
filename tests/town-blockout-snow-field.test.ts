@@ -9,7 +9,8 @@ const grid = createTerrainGrid();
 const wild = [8, 31, grid.heightAt(8, 31)] as const;
 const courtyard = [159, 230, grid.heightAt(159, 230)] as const;
 const roadEdge = [458, 70, grid.heightAt(458, 70)] as const;
-const plazaEdge = [191, 169, grid.heightAt(191, 169)] as const;
+const [plazaWest, plazaSouth] = layout.plaza.bounds;
+const plazaEdge = [plazaWest, plazaSouth, grid.heightAt(plazaWest, plazaSouth)] as const;
 const heavy = { targetCover: 1, pilingRate: 1.25 };
 const light = { targetCover: .18, pilingRate: .25 };
 
