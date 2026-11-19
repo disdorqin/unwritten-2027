@@ -1,13 +1,15 @@
 import { Quaternion, type PerspectiveCamera } from 'three';
 
 const storageKey = 'unwritten:tavern-dizziness:v1';
-const unitMillis = 45_000;
+const unitMillis = 60_000;
 const sipMillis = 480;
 const emptyCupMillis = 220;
 const waveCycle = 2_400;
 const breathCycle = 11_000;
 const breathMillis = 300;
 const radians = Math.PI / 180;
+const maximumSwayDegrees = 3.5;
+const swayDegrees = [[0, 0], [1.2, .35], [2, .5], [3.2, .8]] as const;
 
 type DrinkLevel = 0 | 1 | 2 | 3;
 
@@ -166,20 +168,16 @@ export function createTavernDrinkEffects() {
     tiltedCamera = camera;
     savedOrientation.copy(camera.quaternion);
     const wave = (now - swayStartedAt) * (2 * Math.PI / waveCycle);
-    if (level === 1) {
-      camera.rotateZ(.4 * radians * Math.sin(wave));
-      return;
-    }
+    const [roll, yaw] = swayDegrees[level];
     const walkScale = level === 2 && moving ? 1.5 : 1;
-    const roll = level === 2 ? .9 : 1.3;
-    camera.rotateY(.20 * radians * walkScale * Math.sin(wave * .62 + .6));
-    camera.rotateZ(roll * radians * walkScale * Math.sin(wave));
+    camera.rotateY(Math.min(maximumSwayDegrees, yaw * walkScale) * radians * Math.sin(wave * .62 + .6));
+    camera.rotateZ(Math.min(maximumSwayDegrees, roll * walkScale) * radians * Math.sin(wave));
     if (level !== 3) return;
     const sinceFull = now - breathStartedAt;
     const breath = sinceFull % breathCycle;
     if (sinceFull >= breathCycle && breath < breathMillis) {
       savedFov = camera.fov;
-      camera.fov += .32 * Math.sin(Math.PI * breath / breathMillis);
+      camera.fov += .6 * Math.sin(Math.PI * breath / breathMillis);
       camera.updateProjectionMatrix();
       changedFov = true;
     }

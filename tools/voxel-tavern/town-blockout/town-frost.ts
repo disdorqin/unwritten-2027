@@ -1,19 +1,41 @@
 // 原冻纹基线继续由仪式曲线驱动。寒意设计 v1 把个人暴露与基线取较高值，
 // 两条通道共用该等级。移动系数仅由 viewer 在着地步行分支消费。
 import type { CeremonyState, FrostLevel } from './town-ceremony';
+import { bridgeAt, gridStep, isWater, type createTerrainGrid } from './terrain';
+import { bridgeMouthKeepClear } from './road-clearance';
+import { extensionRoadClearance, extensionStreetClearance } from './town-extension';
+
+type FrostGround = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt' | 'gridWidth' | 'gridDepth' | 'surfaces'>;
+
+export function isExposedSnowAt(
+  grid: FrostGround, x: number, north: number, ground: number,
+  isCleared?: (x: number, north: number, ground: number) => boolean,
+) {
+  const col = Math.round(x / gridStep);
+  const row = Math.round(north / gridStep);
+  if (col < 0 || col >= grid.gridWidth || row < 0 || row >= grid.gridDepth) return false;
+  const surface = grid.surfaces[row * grid.gridWidth + col];
+  return (surface === 0 || surface === 3) &&
+    !bridgeAt(x, north) && !isWater(x, north) && Math.abs(ground - grid.heightAt(x, north)) <= .18 &&
+    !bridgeMouthKeepClear(x, north, 0) && !extensionRoadClearance(x, north, 0) &&
+    !extensionStreetClearance(x, north, 0) && !isCleared?.(x, north, ground);
+}
 
 export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
 export type FrostExposure = 'none' | 'dark-snow' | 'lamp' | 'water';
 const naturalThawRate = 1 / 120;
 const exposureRate = 1 / 270;
+// 清晰区与模糊程度随冻纹等级插值。
+const maskClear = [100, 70, 58, 40] as const;
+const blurByLevel = [0, 1.2, 2.6, 4.8] as const;
 export const wetColdMultiplier = 2;
 
-/** 每级的表现参数（设计 §4.1）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
+/** 每级的表现参数（设计 §4.1，数值经 3.0 H1 加强）：band = 霜带约占屏宽比例，tint = 冷色片不透明度。 */
 export const frostLevelStyles: Record<FrostLevel, { opacity: number; band: number; tint: number; breath: boolean }> = {
   0: { opacity: 0, band: 0, tint: 0, breath: false },
-  1: { opacity: .25, band: .06, tint: 0, breath: false },
-  2: { opacity: .5, band: .12, tint: .08, breath: false },
-  3: { opacity: .75, band: .22, tint: .14, breath: true },
+  1: { opacity: .45, band: .12, tint: .06, breath: false },
+  2: { opacity: .65, band: .20, tint: .13, breath: false },
+  3: { opacity: .90, band: .34, tint: .22, breath: true },
 };
 
 /** 回暖速率：1 级 / 20 秒（设计 §4.2）。 */
@@ -40,14 +62,12 @@ export function sampleFrostStyle(personal: number) {
   const mix = clampLevel(personal) - low;
   const a = frostLevelStyles[low];
   const b = frostLevelStyles[high];
-  const maskClear = [100, 83, 73, 62];
-  const blur = [0, 0, 1.15, 3.2];
   return {
     opacity: a.opacity + (b.opacity - a.opacity) * mix,
     band: a.band + (b.band - a.band) * mix,
     tint: a.tint + (b.tint - a.tint) * mix,
     clearPercent: maskClear[low] + (maskClear[high] - maskClear[low]) * mix,
-    blur: blur[low] + (blur[high] - blur[low]) * mix,
+    blur: blurByLevel[low] + (blurByLevel[high] - blurByLevel[low]) * mix,
     breath: personal > 2.5,
     level: (Math.round(clampLevel(personal)) as FrostLevel),
   };
@@ -58,7 +78,7 @@ export interface FrostTracker {
   baseline(): FrostLevel;
   setWarmth(source: WarmthSource, active: boolean): void;
   drinkHot(): void;
-  setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number): void;
+  setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number, sledding?: boolean): void;
   exposure(): number;
   walkingScale(enabled?: boolean): number;
   warming(): boolean;
@@ -74,6 +94,7 @@ export function createFrostTracker(): FrostTracker {
   let baselinePersonal = 0;
   let exposure = 0;
   let exposureGrowth = 0;
+  let sledding = false;
   let naturallyThaws = true;
   let warmRate = 0;
   let relief = false;
@@ -98,21 +119,29 @@ export function createFrostTracker(): FrostTracker {
       exposure = Math.max(0, exposure - 1);
       setWarmth('hot-drink', true);
     },
-    setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1) {
+    setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1, sleddingActive = false) {
       const surface = input === true ? 'dark-snow' : input === false ? 'none' : input;
-      const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(1, intensity)) : 1;
+      const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(0, intensity)) : 0;
       relief = ceremonyRelief;
-      naturallyThaws = surface === 'lamp' || (surface !== 'water' && snowIntensity < 2);
-      const snowPressure = surface === 'dark-snow' && snowIntensity >= 2 ? (snowIntensity - 1) * (depth >= .6 ? 1.5 : 1) : 0;
+      // 3.0 H1 雪橇豁免：乘坐雪橇时寒意不涨反退——累积入口按姿态门控，
+      // 雪面与水面压力一律清零，update() 侧再按自然消退速率回落（见下）。
+      sledding = sleddingActive === true;
+      naturallyThaws = surface === 'lamp' || surface === 'none';
+      const snowPressure = surface === 'dark-snow' && snowIntensity >= 1
+        ? (1.35 + (snowIntensity - 1) * .45) * (depth >= .6 ? 1.5 : 1)
+        : 0;
       const wetPressure = surface === 'water' ? Math.max(1, snowIntensity - 1) * wetColdMultiplier : 0;
       exposureGrowth = (snowPressure + wetPressure) * exposureRate * (relief ? .5 : 1) *
         (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1);
+      if (sledding) exposureGrowth = 0;
     },
     exposure: () => exposure,
     walkingScale(enabled = true) {
       if (!enabled) return 1;
       const level = displayLevel();
-      return level === 3 && !relief ? .80 : level >= 2 ? .90 : 1;
+      if (level === 3) return relief ? .90 : .65;
+      if (level === 2) return relief ? .90 : .88;
+      return level === 1 ? .95 : 1;
     },
     warming: () => warmth.size > 0,
     update(dtSeconds: number) {
@@ -126,7 +155,8 @@ export function createFrostTracker(): FrostTracker {
         if (baselinePersonal < goal) baselinePersonal = Math.min(goal, baselinePersonal + step);
         else if (baselinePersonal > goal) baselinePersonal = Math.max(goal, baselinePersonal - step);
       }
-      const rate = warmRate > 0 ? -warmRate : naturallyThaws ? -naturalThawRate : exposureGrowth;
+      // 雪橇豁免的「反退」：无回暖源时也按自然消退速率回落（与灯下消退同速）。
+      const rate = warmRate > 0 ? -warmRate : (naturallyThaws || sledding) ? -naturalThawRate : exposureGrowth;
       exposure = clampLevel(exposure + rate * dt);
       return personal();
     },
@@ -163,6 +193,7 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   let fireRecovery = false;
   let fireActive = false;
   let lastPaint = '';
+  let lastReduced = false;
 
   function paintOpacity(node: HTMLElement | null, value: number) {
     if (!node) return;
@@ -172,6 +203,7 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
 
   function render() {
     const reduced = options.reducedMotion?.matches === true;
+    lastReduced = reduced;
     const style = sampleFrostStyle(visibleLevel);
     const blur = enabled ? Math.round(style.blur * 10) / 10 : 0;
     const clear = Math.round(style.clearPercent * 2) / 2;
@@ -234,6 +266,7 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
       const previousLevel = tracker.displayLevel();
       const target = tracker.update(dtSeconds);
       const wasVisible = visibleLevel;
+      const previousFilm = meltFilm;
       const dt = Number.isFinite(dtSeconds) ? Math.max(0, dtSeconds) : 0;
       // Keep the immediate hot-drink effect in the tracker while visibly melting the view.
       visibleLevel = target >= visibleLevel ? target : Math.max(target, visibleLevel - dt * 2.75);
@@ -246,7 +279,7 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
         fireRecovery = false;
         if (enabled) options.announce?.('身上暖和过来了。');
       }
-      render();
+      if (wasVisible !== visibleLevel || previousFilm !== meltFilm || lastReduced !== (options.reducedMotion?.matches === true)) render();
     },
     tracker,
   };

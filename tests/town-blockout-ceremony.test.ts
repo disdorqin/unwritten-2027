@@ -321,32 +321,32 @@ test('frost tracker: any single warmth source is enough, floor is level 0', () =
   assert.ok(Math.abs(tracker.update(20) - 1) < 1e-9);
 });
 
-test('frost exposure follows the snow curve, full depth pressure and calm-weather decay', () => {
+test('frost exposure follows snow strength and full depth pressure, and recedes on cleared roads', () => {
   const tracker = createFrostTracker();
   tracker.update(600);
   assert.equal(tracker.exposure(), 0);
   tracker.setExposure(3, 0, true, false);
-  assert.equal(tracker.update(135), 1);
-  assert.equal(tracker.walkingScale(), 1);
-  assert.equal(tracker.update(135), 2);
+  assert.ok(Math.abs(tracker.update(120) - 1) < 1e-9);
+  assert.equal(tracker.walkingScale(), .95);
+  assert.ok(Math.abs(tracker.update(120) - 2) < 1e-9);
 
-  tracker.setExposure(1.9, 0, true, false);
-  assert.equal(tracker.update(120), 1);
+  tracker.setExposure(1, 0, true, false);
+  assert.ok(Math.abs(tracker.update(100) - 2.5) < 1e-9);
   tracker.setExposure(4, 0, false, false);
-  assert.equal(tracker.update(90), 1);
+  assert.ok(Math.abs(tracker.update(120) - 1.5) < 1e-9);
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.update(90), 2);
+  assert.ok(Math.abs(tracker.update(50) - 2) < 1e-9);
 
   tracker.setExposure(3, .6, true, false);
-  assert.equal(tracker.update(90), 3);
-  assert.equal(tracker.walkingScale(), .8);
+  assert.ok(Math.abs(tracker.update(80) - 3) < 1e-9);
+  assert.equal(tracker.walkingScale(), .65);
 });
 
 test('fastest warmth source lowers exposure while the old ceremony baseline keeps its rate', () => {
   const tracker = createFrostTracker();
   tracker.setBaseline(3);
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.update(270), 3);
+  assert.equal(tracker.update(300), 3);
   tracker.setWarmth('interior', true);
   tracker.setWarmth('onsen', true);
   tracker.setWarmth('fire-source', true);
@@ -355,7 +355,7 @@ test('fastest warmth source lowers exposure while the old ceremony baseline keep
   tracker.setWarmth('fire-source', false);
   tracker.setWarmth('onsen', false);
   tracker.setWarmth('interior', false);
-  tracker.update(270);
+  tracker.update(300);
   assert.equal(tracker.exposure(), 3);
 
   tracker.drinkHot();
@@ -368,7 +368,7 @@ test('fastest warmth source lowers exposure while the old ceremony baseline keep
   for (const [source, seconds] of [['fire-source', 15], ['onsen', 24], ['interior', 30]] as const) {
     const fresh = createFrostTracker();
     fresh.setExposure(4, 0, true, false);
-    fresh.update(270);
+    fresh.update(300);
     fresh.setWarmth(source, true);
     assert.equal(fresh.update(seconds), 0, source);
   }
@@ -383,27 +383,27 @@ test('ceremony relief halves pressure and caps L3 walking drag without changing 
   assert.equal(hasFrostCeremonyRelief(ceremonyStateAt(atJan(0, 30))), false);
 
   tracker.setExposure(4, 0, true, relieved);
-  assert.equal(tracker.update(180), 1);
+  assert.ok(Math.abs(tracker.update(200) - 1) < 1e-9);
   tracker.setBaseline(3);
   tracker.update(60);
   assert.equal(tracker.displayLevel(), 3);
   assert.equal(tracker.walkingScale(), .9);
 
   tracker.setExposure(4, 0, true, false);
-  assert.equal(tracker.walkingScale(), .8);
+  assert.equal(tracker.walkingScale(), .65);
   assert.equal(tracker.walkingScale(false), 1);
   assert.equal(tracker.displayLevel(), 3);
-  assert.ok(Math.abs(.62 * tracker.walkingScale() - .496) < 1e-10);
+  assert.ok(Math.abs(.62 * tracker.walkingScale() - .403) < 1e-10);
 });
 
 test('frost level styles match the design bands', () => {
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].opacity),
-    [0, .25, .5, .75],
+    [0, .45, .65, .90],
   );
   assert.deepEqual(
     [0, 1, 2, 3].map(level => frostLevelStyles[level as 0 | 1 | 2 | 3].band),
-    [0, .06, .12, .22],
+    [0, .12, .20, .34],
   );
   assert.equal(frostLevelStyles[3].breath, true);
   assert.equal(frostLevelStyles[2].breath, false);
