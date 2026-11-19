@@ -79,6 +79,35 @@ test('a continuous solo route leads through the stone shore and crouch slot to t
   }
 });
 
+test('the crouching footprint clears the slope and collapse join', () => {
+  const spec = fixture();
+  const radius = spec.walker.radius;
+  const crouch = spec.walker.crouchingHeight;
+  const minimumHeight = crouch + 2 * radius * spec.gallery.drop / spec.gallery.length;
+  const entry = spec.pool.length + spec.shoreLength + spec.gallery.length - radius;
+
+  for (const length of [.01, spec.collapse.length]) {
+    const collapse = { ...spec.collapse, length };
+    assert.throws(() => createUndergroundMineLayout({
+      ...spec, collapse: { ...collapse, height: 1.12 },
+    }), /cannot fit/);
+    const layout = createUndergroundMineLayout({
+      ...spec, collapse: { ...collapse, height: minimumHeight },
+    });
+    for (const z of [entry, entry + length / 2, entry + length]) {
+      assert.equal(layout.queryPassage(0, z, radius, crouch)?.requiresCrouch, true);
+      assert.equal(layout.queryPassage(0, z, radius, spec.walker.standingHeight), undefined);
+    }
+  }
+
+  const gallery = { ...spec.gallery, length: .2, drop: .03 };
+  const layout = createUndergroundMineLayout({
+    ...spec, gallery, collapse: { ...spec.collapse, length: .01, height: 1.14 },
+  });
+  const shortGalleryEntry = spec.pool.length + spec.shoreLength + gallery.length - radius;
+  assert.ok(layout.queryPassage(0, shortGalleryEntry, radius, crouch));
+});
+
 test('unwalkable dimensions and an unassigned camp side are rejected instead of filled with defaults', () => {
   const valid = fixture();
   assert.throws(() => createUndergroundMineLayout({ ...valid, shoreLength: 1 }), RangeError);

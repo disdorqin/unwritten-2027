@@ -42,13 +42,15 @@ function validate(spec: UndergroundMineSpec) {
   const shoreGrade = pool.depth / shoreLength;
   const galleryGrade = gallery.drop / gallery.length;
   const slopedClearance = Math.max(shoreGrade, galleryGrade) * diameter;
+  // At first contact the leading edge is under the slot while the trailing edge is on the slope.
+  const collapseApproachRise = Math.min(gallery.drop, galleryGrade * diameter);
   if (Math.min(pool.width, collapse.width, undergroundMineGalleryWidth) <= diameter ||
       pool.length <= diameter || camp.length <= diameter ||
       walker.crouchingHeight >= walker.standingHeight ||
       collapse.width >= undergroundMineGalleryWidth ||
       collapse.height < walker.crouchingHeight || collapse.height >= walker.standingHeight ||
       walker.standingHeight + slopedClearance > undergroundMineGalleryHeight ||
-      walker.crouchingHeight + galleryGrade * walker.radius > collapse.height ||
+      walker.crouchingHeight + collapseApproachRise > collapse.height ||
       gallery.railGauge <= gallery.railWidth ||
       gallery.railGauge + gallery.railWidth >= undergroundMineGalleryWidth ||
       shoreGrade > walker.maxGrade || galleryGrade > walker.maxGrade) {
@@ -194,14 +196,16 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
       lowestCeiling = Math.min(lowestCeiling, Math.min(near, far) + span.height);
     }
     const clearance = lowestCeiling - highestFloor;
-    if (clearance < bodyHeight) return;
+    // Allow rounding when the sloped floor and the slot ceiling just fit the walker.
+    const usableClearance = clearance + 1e-9;
+    if (usableClearance < bodyHeight) return;
     const y = floorAt(center, z);
     return {
       zone: center.zone,
       floor: y,
       clearance,
       waterDepth: center === poolSpan || center === shore ? Math.max(0, level - y) : 0,
-      requiresCrouch: clearance < walker.standingHeight,
+      requiresCrouch: usableClearance < walker.standingHeight,
       encounter: false,
     };
   }

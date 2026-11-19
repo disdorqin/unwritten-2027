@@ -77,6 +77,40 @@ test('a pending first fall survives reload and only its verified pool landing se
   assert.deepEqual(restored.requestCageRide('opener', 'up'), { kind: 'ride-cage', direction: 'up' });
 });
 
+test('first-fall landing can be retried after reconnect and a failed save', () => {
+  const { entry, saved, options } = fixture();
+  entry.openWell('opener');
+  assert.equal(entry.confirmDepthCrossing('opener', above, below)?.mode, 'survival');
+  assert.equal(saved.length, 2);
+
+  let writable = false;
+  const reconnected = createUndergroundEntry({
+    ...options,
+    initial: saved[1],
+    save(snapshot) {
+      if (!writable) throw new Error('storage unavailable');
+      options.save(snapshot);
+    },
+  });
+  assert.equal(reconnected.modeOf('opener'), 'survival');
+  assert.ok(reconnected.pendingFirstFall('opener'));
+  assert.throws(() => reconnected.confirmFirstFallLanding('opener', firstFallLanding), /storage unavailable/);
+  assert.deepEqual(reconnected.snapshot(), saved[1]);
+  assert.deepEqual(reconnected.sceneState().cageAvailable, { down: false, up: false });
+  assert.equal(saved.length, 2);
+
+  writable = true;
+  assert.deepEqual(reconnected.confirmFirstFallLanding('opener', firstFallLanding), {
+    kind: 'first-fall-landed', fallDamage: 0,
+  });
+  assert.equal(saved.length, 3);
+  const restored = createUndergroundEntry({ ...options, initial: saved[2] });
+  assert.deepEqual(restored.sceneState().cageAvailable, { down: true, up: true });
+  assert.equal(restored.pendingFirstFall('opener'), undefined);
+  assert.equal(restored.confirmFirstFallLanding('opener', firstFallLanding), undefined);
+  assert.equal(saved.length, 3);
+});
+
 test('only confirmed movement through the configured depth line changes mode', () => {
   const crossings: [UndergroundEntryPoint, string][] = [];
   const { entry, saved } = fixture({
