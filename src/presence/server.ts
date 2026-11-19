@@ -18,7 +18,7 @@ import {
   ceremonyLandingAnnouncement, ceremonyLandingLeadMs, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
 } from './ceremony-arrival.js';
 import {
-  inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
+  inPlazaPhotoRequestZone, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
   type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from './plaza-photo.js';
 
@@ -320,7 +320,7 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     const person = photoPerson(peer);
-    if (!person || !inPlazaPhotoArc(person.east, person.north, person.height)) {
+    if (!person || !inPlazaPhotoRequestZone(person.east, person.north, person.height)) {
       send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'position' }));
       return;
     }

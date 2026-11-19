@@ -2,16 +2,15 @@ import type { Group } from 'three';
 import type { Box, Ramp } from './landmark-kit';
 import { addOpaqueMuseumLabels } from './museum-label-atlas';
 import { createMuseumLabelCanvas } from './museum-label-canvas';
+import { plazaPhotoStand } from '../../../src/presence/plaza-photo';
 
-const tierRun = .875;
-const tierRise = .35;
-const standSouth = 162;
+const { run: tierRun, rise: tierRise, south: standSouth } = plazaPhotoStand;
 
 export const theaterPhotoPositions = Array.from({ length: 48 }, (_, index) => {
   const row = Math.floor(index / 12);
   const col = index % 12;
-  return { east: 224 + (col - 5.5) * 1.28,
-    north: standSouth + (row + .5) * tierRun, height: 12 + (row + 1) * tierRise };
+  return { east: plazaPhotoStand.centreEast + (col - 5.5) * 1.28,
+    north: standSouth + (row + .5) * tierRun, height: plazaPhotoStand.base + (row + 1) * tierRise };
 });
 
 type PieceAdder = (color: string, x: number, y: number, z: number, w: number, h: number, d: number) => void;
