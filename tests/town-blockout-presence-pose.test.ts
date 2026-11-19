@@ -16,6 +16,17 @@ test('online activity pose follows layered priority and a half-metre skate thres
   for (const v of [undefined, null, -1, 1.5, 6, 255, '1', NaN]) assert.equal(isTownAvatarPose(v), false);
 });
 
+test('pose 7 is sledding: valid, ranked below riding, with no root offset; pose 6 stays invalid', () => {
+  assert.equal(isTownAvatarPose(7), true);
+  assert.equal(isTownAvatarPose(6), false);
+  assert.equal(effectiveTownAvatarPose(false, false, false, false, 0, true), 7);
+  assert.equal(effectiveTownAvatarPose(false, false, false, true, 8, true), 7);
+  assert.equal(effectiveTownAvatarPose(false, false, true, false, 0, true), 5);
+  assert.equal(effectiveTownAvatarPose(false, true, false, false, 0, true), 2);
+  assert.equal(effectiveTownAvatarPose(true, false, false, false, 0, true), 4);
+  assert.equal(avatarRootOffset(7), 0);
+});
+
 test('shared avatar instances lower seats, spread soaking arms, and raise a drink', () => {
   const avatar = (part: number, pose: 0 | 1 | 2 | 3 | 4 | 5, gait = 0, throwPitch = 0) => {
     const out = new Float32Array(16);

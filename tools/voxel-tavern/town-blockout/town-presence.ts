@@ -27,6 +27,7 @@ import {
   pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
+import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -85,6 +86,7 @@ function presenceName() {
 
 export function createTownPresence(
   scene: Scene, camera: PerspectiveCamera, announce: (message: string) => void, onChatFocus: () => void = () => {},
+  heightAt: (east: number, north: number) => number = () => 0,
 ) {
   const getName = presenceName();
   const chat = createTownChat(sendChat, onChatFocus);
@@ -123,6 +125,7 @@ export function createTownPresence(
   let onSnowfightWallEvent: ((event: SnowfightRelayEvent) => void) | undefined;
   let onSnowfightState: ((state: SnowfightState) => void) | undefined;
   let onSnowfightRejected: ((reason: string) => void) | undefined;
+  let onGrandPrixResult: ((result: GrandPrixResult) => void) | undefined;
   let onTestFireworks: ((seed: number, ageSeconds: number) => void) | undefined;
   let joinedId: number | null = null;
   let joinedName: string | undefined;
@@ -377,7 +380,7 @@ export function createTownPresence(
       let message: {
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
-        fireworks?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
+        fireworks?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -439,6 +442,11 @@ export function createTownPresence(
         return;
       }
       if (haveId && message.type === 'event') {
+        if (message.kind === 'grand-prix') {
+          const result = { id: String(message.id ?? ''), name: message.name, totalMs: message.totalMs, at: message.at };
+          if (isGrandPrixResult(result)) onGrandPrixResult?.(result);
+          return;
+        }
         if (message.kind === 'ceremony-arrival') {
           const arrival = readCeremonyArrival(message);
           if (arrival) {
@@ -688,7 +696,7 @@ export function createTownPresence(
       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },
     renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
-      avatars ??= createPresenceAvatars(scene, camera);
+      avatars ??= createPresenceAvatars(scene, camera, heightAt);
       avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
     },
     selfId: () => joinedId,
@@ -716,6 +724,8 @@ export function createTownPresence(
       if (actor) actor.throwGestureStarted = performance.now();
     },
     onSnowballEvent(handler: (event: SnowballRelayEvent) => void) { onSnowballEvent = handler; },
+    sendGrandPrixResult: (totalMs: number) => sendEvent(JSON.stringify({ type: 'event', kind: 'grand-prix', totalMs })),
+    onGrandPrixResult(handler: (result: GrandPrixResult) => void) { onGrandPrixResult = handler; },
     onTestFireworks(handler: (seed: number, ageSeconds: number) => void) { onTestFireworks = handler; },
     riderSlot: () => (Math.max(1, joinedId ?? 1) - 1) % 12,
     onFireworks(handler: (seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) {
@@ -770,7 +780,7 @@ export function createTownPresence(
       syncActivityPoses();
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
-      avatars ??= createPresenceAvatars(scene, camera);
+      avatars ??= createPresenceAvatars(scene, camera, heightAt);
       avatars.setHighlight(bellHolderId);
       const now = performance.now();
       renderList.length = 0;

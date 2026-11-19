@@ -32,6 +32,8 @@ type Control = {
   scope?: string;
   text?: string;
   pose?: number;
+  totalMs?: number;
+  at?: number;
   sentAt?: number;
   from?: number;
   theme?: string;
@@ -770,4 +772,38 @@ test("test fireworks stays off by default even with five joined and an elapsed d
   time = testFireworksDwellMs + testFireworksNoticeMs;
   await pause();
   assert.ok(clients.every(client => !client.text.pending().some(message => message.type === "event")));
+});
+
+test("presence relays sledding pose 7, rejects reserved pose 6, and relays validated grand-prix results", { timeout: 7000 }, async context => {
+  const { join } = await fixture(context);
+  const [sender, observer] = await Promise.all([join("雪橇手"), join("观赛者")]);
+  sender.socket.send(encodePose(pose));
+  observer.socket.send(encodePose({ ...pose, east: 2100 }));
+  await delay(30);
+
+  const sledPose = observer.text.next(message => message.type === "pose" && message.id === sender.id);
+  sender.socket.send(JSON.stringify({ type: "pose", pose: 7 }));
+  assert.equal((await sledPose).pose, 7);
+
+  sender.socket.send(JSON.stringify({ type: "pose", pose: 6 }));
+  await delay(60);
+  assert.ok(!observer.text.pending().some(message => message.type === "pose" && message.pose === 6));
+  assert.equal(sender.socket.readyState, WebSocket.OPEN);
+
+  const ownEcho = sender.text.next(message => message.type === "event" && message.kind === "grand-prix");
+  const relayed = observer.text.next(message => message.type === "event" && message.kind === "grand-prix");
+  sender.socket.send(JSON.stringify({ type: "event", kind: "grand-prix", totalMs: 240_000 }));
+  const [echo, relay] = await Promise.all([ownEcho, relayed]);
+  for (const frame of [echo, relay]) {
+    assert.equal(frame.id, sender.id);
+    assert.equal(frame.name, "雪橇手");
+    assert.equal(frame.totalMs, 240_000);
+    assert.equal(typeof frame.at, "number");
+  }
+
+  sender.socket.send(JSON.stringify({ type: "event", kind: "grand-prix", totalMs: 10 }));
+  sender.socket.send(JSON.stringify({ type: "event", kind: "grand-prix", totalMs: 240_000.5 }));
+  await delay(60);
+  assert.ok(!observer.text.pending().some(message => message.kind === "grand-prix"));
+  assert.equal(sender.socket.readyState, WebSocket.OPEN);
 });
