@@ -40,9 +40,10 @@ export function createOrbitalReview(show: (view: ExpansionView) => void) {
     'starport-airlock': pointOf(rooms.ports.starport.approach),
     'core-airlock': pointOf(rooms.ports.coreVault.approach),
   };
+  const unlocked = new Set<OrbitalGate>();
   const host: OrbitalGateHost = {
     // Preview switches stand in for the production unlock record. This host is only used by the review page.
-    isOpen: () => unlocked,
+    isOpen: gate => unlocked.has(gate),
     isAtOpening(endpoint, pose) {
       const point = approaches[endpoint];
       return Math.hypot(pose.east - point.east, pose.north - point.north, pose.height - point.height) <= .75;
@@ -55,7 +56,6 @@ export function createOrbitalReview(show: (view: ExpansionView) => void) {
   };
 
   let state: OrbitalGateState = landing['starport-ground'];
-  let unlocked = false;
   let last = '试验门默认关闭。';
   let cockpit = false;
 
@@ -88,11 +88,17 @@ export function createOrbitalReview(show: (view: ExpansionView) => void) {
   function render() {
     if (state.site !== 'airlock') {
       const gate = state.site;
+      const gateOpen = unlocked.has(gate);
       show({
         group: ground, target: new THREE.Vector3(0, .65, 0), span: 7, location: gateLabel[gate] + ' · 局部外门夹具',
         status: last,
         actions: [
-          [unlocked ? '锁定试验门' : '打开试验门旗标', () => { unlocked = !unlocked; last = unlocked ? '试验门从宿主旗标开启。' : '试验门已关闭。'; render(); }],
+          [gateOpen ? '锁定试验门' : '打开试验门旗标', () => {
+            if (gateOpen) unlocked.delete(gate);
+            else unlocked.add(gate);
+            last = gateOpen ? '试验门已关闭。' : '试验门从宿主旗标开启。';
+            render();
+          }],
           ['经当前门进入气闸', () => travel(gate, 'enter')],
           ['选取另一外门夹具', () => { state = landing[gate === 'starport' ? 'core-ground' : 'starport-ground']; last = '已切换独立外门夹具。'; render(); }],
         ],
