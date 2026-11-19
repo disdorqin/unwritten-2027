@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { createServer, type RequestListener } from 'node:http';
+import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import {
-  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
+  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, POLL_JOIN_PATH, POLL_LEAVE_PATH,
+  POLL_PATH, POLL_SESSION_TIMEOUT_MS, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
 import {
@@ -35,14 +36,23 @@ type Options = {
   ceremonyStartAt?: number;
 };
 
+type PollFrame = { t: 'text'; d: string } | { t: 'bin'; d: Uint8Array };
+
 type Peer = {
-  socket: WebSocket;
+  transport: 'ws' | 'poll';
+  socket?: WebSocket;
+  /** 轮询通道的待发队列（WS 通道为空）；快照帧只保留最新一帧。 */
+  outbox: PollFrame[];
+  outboxBytes: number;
+  /** 轮询会话令牌与最近一次轮询时刻（now() 时钟）。 */
+  session?: string;
+  lastPollAt: number;
   id: number;
   name?: string;
   record?: PresenceRecord;
   version: number;
   visible: { id: number; version: number }[];
-  joinTimer: ReturnType<typeof setTimeout>;
+  joinTimer?: ReturnType<typeof setTimeout>;
   alive: boolean;
   tokens: number;
   tokenAt: number;
@@ -72,6 +82,9 @@ const throwRate = 4;
 const throwBurst = 6;
 const throwWindowMs = 3000;
 const eventFloodPerSecond = 128;
+const pollOutboxLimitBytes = 512 * 1024;
+const pollBodyLimitBytes = 64 * 1024;
+const pollEventsPerRequest = 64;
 const eventVisibleLimits = [MAX_VISIBLE, 40, 32] as const;
 const fallbackLoadTier = { minOnline: 49, radius: 48, hz: 2.5 } as const;
 
@@ -110,8 +123,16 @@ export async function createPresenceServer(options: Options = {}) {
   const northLimit = metresToLimit(options.depth ?? TOWN_BOUNDS.depth);
   const heightLimit = metresToLimit(options.height ?? TOWN_BOUNDS.height);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
-  const http = createServer(options.requestListener ?? ((_req, res) => { res.writeHead(404).end(); }));
+  const fallbackListener: RequestListener = (_req, res) => { res.writeHead(404).end(); };
+  const http = createServer((req, res) => {
+    if (req.url === POLL_JOIN_PATH || req.url === POLL_PATH || req.url === POLL_LEAVE_PATH) {
+      void handlePoll(req, res);
+      return;
+    }
+    (options.requestListener ?? fallbackListener)(req, res);
+  });
   const peers = new Map<number, Peer>();
+  const pollSessions = new Map<string, Peer>();
   const ceremonyStartAt = options.ceremonyStartAt ?? townCeremonyMidnight;
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
@@ -129,10 +150,146 @@ export async function createPresenceServer(options: Options = {}) {
   let stop: Promise<void> | undefined;
 
   function send(peer: Peer, data: string | Uint8Array) {
-    if (peer.socket.readyState !== WebSocket.OPEN || peer.socket.bufferedAmount > backlogLimit) return false;
-    peer.socket.send(data);
-    egress.record(now(), typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength);
+    const bytes = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
+    if (peer.transport === 'poll') {
+      // 快照是状态而非事件：队列里只保留最新一帧，慢轮询者不会积压旧位置。
+      if (typeof data !== 'string' && data[0] !== SNOWBALL_EVENT_PREFIX) {
+        const stale = peer.outbox.findIndex(frame => frame.t === 'bin' && frame.d[0] !== SNOWBALL_EVENT_PREFIX);
+        if (stale >= 0) {
+          peer.outboxBytes -= (peer.outbox[stale] as { d: Uint8Array }).d.byteLength;
+          peer.outbox.splice(stale, 1);
+        }
+      }
+      if (peer.outboxBytes + bytes > pollOutboxLimitBytes) return false;
+      peer.outbox.push(typeof data === 'string' ? { t: 'text', d: data } : { t: 'bin', d: data });
+      peer.outboxBytes += bytes;
+      egress.record(now(), bytes);
+      return true;
+    }
+    const socket = peer.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > backlogLimit) return false;
+    socket.send(data);
+    egress.record(now(), bytes);
     return true;
+  }
+
+  /** 协议错误时断开该对等端：WS 关连接（1008），轮询直接回收会话。 */
+  function failPeer(peer: Peer) {
+    if (peer.transport === 'ws') peer.socket?.close(1008);
+    else remove(peer);
+  }
+
+  /** 对等端主动离开（leave 消息）：与 failPeer 同路，只是 WS 侧用普通关闭。 */
+  function closePeer(peer: Peer) {
+    if (peer.transport === 'ws') peer.socket?.close();
+    else remove(peer);
+  }
+
+  function drainOutbox(peer: Peer) {
+    const messages = peer.outbox.map(frame => frame.t === 'text'
+      ? { t: 'text', d: frame.d }
+      : { t: 'bin', d: Buffer.from(frame.d).toString('base64') });
+    peer.outbox = [];
+    peer.outboxBytes = 0;
+    return messages;
+  }
+
+  function createPeer(transport: 'ws' | 'poll', socket?: WebSocket): Peer {
+    while (peers.has(nextId)) nextId = nextId % 65535 + 1;
+    const id = nextId;
+    nextId = nextId % 65535 + 1;
+    const t = now();
+    const peer: Peer = {
+      transport, socket, id, visible: [], version: 0, alive: true, tokens: rateBurst,
+      tokenAt: t, outbox: [], outboxBytes: 0, lastPollAt: t,
+      throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
+      floodAt: t, floodCount: 0, pendingThrows: new Map(),
+      nextClockSample: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
+    };
+    peers.set(id, peer);
+    return peer;
+  }
+
+  function readBody(req: IncomingMessage): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on('data', chunk => {
+        size += (chunk as Buffer).byteLength;
+        if (size > pollBodyLimitBytes) { reject(new Error('body too large')); req.destroy(); return; }
+        chunks.push(chunk as Buffer);
+      });
+      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      req.on('error', reject);
+    });
+  }
+
+  /**
+   * S3 备用通道端点（与 WS 共用 peers 与全部接收逻辑，只是传输换成 HTTP 往返）：
+   * - POST /presence/poll/join {name} → {session, id, messages}（messages 为入队帧：text 原文 / bin base64）
+   * - POST /presence/poll（头 x-presence-session）{state?: base64(12B), events?: [{t,d}]} → {messages}
+   * - POST /presence/poll/leave（头 x-presence-session）→ {}
+   */
+  async function handlePoll(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, payload: unknown) => {
+      res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(payload));
+    };
+    if (req.method !== 'POST') { reply(405, { error: 'method' }); return; }
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const source = new URL(origin);
+        if ((source.protocol !== 'https:' && source.protocol !== 'http:') || source.host !== req.headers.host) {
+          reply(403, { error: 'origin' });
+          return;
+        }
+      } catch { reply(403, { error: 'origin' }); return; }
+    }
+    let body: { name?: unknown; state?: unknown; events?: unknown };
+    try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
+    catch { reply(400, { error: 'body' }); return; }
+
+    if (req.url === POLL_JOIN_PATH) {
+      if (closing || peers.size >= MAX_SESSIONS) { reply(503, { error: 'full' }); return; }
+      const peer = createPeer('poll');
+      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name }), 'utf8'));
+      if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
+      const session = randomBytes(16).toString('hex');
+      peer.session = session;
+      pollSessions.set(session, peer);
+      reply(200, { session, id: peer.id, messages: drainOutbox(peer) });
+      return;
+    }
+
+    const token = req.headers['x-presence-session'];
+    const peer = typeof token === 'string' ? pollSessions.get(token) : undefined;
+    if (!peer || !peers.has(peer.id)) { reply(401, { error: 'session' }); return; }
+    peer.lastPollAt = now();
+
+    if (req.url === POLL_LEAVE_PATH) {
+      remove(peer);
+      reply(200, {});
+      return;
+    }
+    if (typeof body.state === 'string') {
+      const bytes = Buffer.from(body.state, 'base64');
+      if (bytes.byteLength === RECORD_BYTES) receiveState(peer, bytes);
+      if (!peers.has(peer.id)) { reply(410, { error: 'gone' }); return; }
+    }
+    if (Array.isArray(body.events)) {
+      for (const item of body.events.slice(0, pollEventsPerRequest)) {
+        if (!peers.has(peer.id)) break;
+        const frame = item as { t?: unknown; d?: unknown };
+        if (frame.t === 'text' && typeof frame.d === 'string') {
+          receiveText(peer, Buffer.from(frame.d, 'utf8'));
+        } else if (frame.t === 'bin' && typeof frame.d === 'string') {
+          const bytes = Buffer.from(frame.d, 'base64');
+          if (bytes.byteLength > 0 && bytes[0] === SNOWBALL_EVENT_PREFIX) receiveSnowball(peer, bytes);
+        }
+      }
+    }
+    if (!peers.has(peer.id)) { reply(410, { error: 'gone' }); return; }
+    reply(200, { messages: drainOutbox(peer) });
   }
 
   function broadcast(data: string, exclude?: Peer) {
@@ -185,12 +342,12 @@ export async function createPresenceServer(options: Options = {}) {
       peer.floodCount = 0;
     }
     if (++peer.floodCount <= eventFloodPerSecond) return true;
-    peer.socket.close(1008);
+    failPeer(peer);
     return false;
   }
 
   function receiveSnowball(peer: Peer, bytes: Uint8Array) {
-    if (!peer.name) { peer.socket.close(1008); return; }
+    if (!peer.name) { failPeer(peer); return; }
     const time = now();
     if (!allowEvent(peer, time)) return;
     const event = decodeSnowballClientEvent(bytes);
@@ -247,6 +404,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    if (peer.session) pollSessions.delete(peer.session);
     ceremonyWaiting.delete(peer);
     clearTimeout(peer.joinTimer);
     if (!peer.name) return;
@@ -335,9 +493,9 @@ export async function createPresenceServer(options: Options = {}) {
   function receiveText(peer: Peer, bytes: Uint8Array) {
     let message: unknown;
     try { message = JSON.parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')); }
-    catch { peer.socket.close(1008); return; }
+    catch { failPeer(peer); return; }
     if (!message || typeof message !== 'object' || !('type' in message)) {
-      peer.socket.close(1008);
+      failPeer(peer);
       return;
     }
     if (message.type === 'event' && 'kind' in message && message.kind === 'fireworks' && peer.name) {
@@ -347,7 +505,7 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'leave' && peer.name) {
-      peer.socket.close();
+      closePeer(peer);
       return;
     }
     if (message.type === 'chat' && peer.name) {
@@ -379,11 +537,11 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type !== 'join' || peer.name || !('name' in message)) {
-      peer.socket.close(1008);
+      failPeer(peer);
       return;
     }
     const name = validName(message.name);
-    if (!name) { peer.socket.close(1008); return; }
+    if (!name) { failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
     const joinedAt = Date.now();
@@ -402,7 +560,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function receiveState(peer: Peer, bytes: Uint8Array) {
     const record = readRecord(bytes);
-    if (!peer.name || !record) { peer.socket.close(1008); return; }
+    if (!peer.name || !record) { failPeer(peer); return; }
     const time = now();
     peer.tokens = Math.min(rateBurst, peer.tokens + (time - peer.tokenAt) * BASE_TIER.hz / 1000);
     peer.tokenAt = time;
@@ -477,23 +635,13 @@ export async function createPresenceServer(options: Options = {}) {
     }
     if (closing || peers.size >= MAX_SESSIONS) { refuse(socket, '503 Service Unavailable'); return; }
     wss.handleUpgrade(req, socket, head, ws => {
-      while (peers.has(nextId)) nextId = nextId % 65535 + 1;
-      const id = nextId;
-      nextId = nextId % 65535 + 1;
-      const t = now();
-      const peer: Peer = {
-        socket: ws, id, visible: [], version: 0, alive: true, tokens: rateBurst,
-        tokenAt: t, joinTimer: setTimeout(() => ws.close(1008), 5000),
-        throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
-        floodAt: t, floodCount: 0, pendingThrows: new Map(),
-        nextClockSample: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
-      };
-      peers.set(id, peer);
+      const peer = createPeer('ws', ws);
+      peer.joinTimer = setTimeout(() => ws.close(1008), 5000);
       ws.on('error', () => { remove(peer); ws.terminate(); });
       ws.on('close', () => remove(peer));
       ws.on('pong', () => { peer.alive = true; });
       ws.on('message', (data, binary) => {
-        if (!peers.has(id)) return;
+        if (!peers.has(peer.id)) return;
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
@@ -511,6 +659,10 @@ export async function createPresenceServer(options: Options = {}) {
   });
   const tick = setInterval(() => {
     const time = now();
+    // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
+    for (const peer of [...peers.values()]) {
+      if (peer.transport === 'poll' && time - peer.lastPollAt > POLL_SESSION_TIMEOUT_MS) remove(peer);
+    }
     updateFireworks(time);
     const wallNow = Date.now();
     updateCeremony(wallNow);
@@ -532,10 +684,12 @@ export async function createPresenceServer(options: Options = {}) {
   }, 10);
   const heartbeat = setInterval(() => {
     for (const peer of peers.values()) {
-      if (!peer.alive) { peer.socket.terminate(); continue; }
-      if (peer.socket.readyState === WebSocket.OPEN) {
+      const socket = peer.socket;
+      if (!socket) continue;
+      if (!peer.alive) { socket.terminate(); continue; }
+      if (socket.readyState === WebSocket.OPEN) {
         peer.alive = false;
-        peer.socket.ping();
+        socket.ping();
         egress.record(now(), 0);
       }
     }
@@ -551,7 +705,7 @@ export async function createPresenceServer(options: Options = {}) {
       clearInterval(heartbeat);
       for (const peer of peers.values()) {
         clearTimeout(peer.joinTimer);
-        peer.socket.terminate();
+        peer.socket?.terminate();
       }
       wss.close();
       stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
