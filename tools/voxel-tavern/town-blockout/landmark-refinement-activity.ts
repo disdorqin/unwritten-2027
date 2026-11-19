@@ -1,6 +1,5 @@
 import { Vector3, type Group } from 'three';
 import type { buildExtensionStreets } from './extension-streets';
-import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { iceThrone } from './landmark-ice-castle';
 import type { railwayStationStops } from './landmark-station';
 import { stationSignCopy } from './station-sign-copy';
@@ -61,7 +60,6 @@ export function createIceThroneSpots(
   canStand: TownStand, savePhoto: (filename: string) => void,
 ): TownActivitySpot[] {
   const throne = group.userData.throne as typeof iceThrone;
-  const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const stand = worldPoint(group, throne.stand);
   const seat = worldPoint(group, throne.seat);
   const photo = worldPoint(group, throne.photo);
@@ -71,7 +69,6 @@ export function createIceThroneSpots(
       x: stand.x, n: -stand.z, ground: stand.y, range: .95, label: '在冰城堡王座就座',
       run() {
         context.sit({ x: seat.x, n: -seat.z, eyeY: seat.y, yaw: -Math.PI / 2 });
-        refinement?.enthrone();
       },
     },
     {

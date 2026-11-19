@@ -21,7 +21,7 @@ export const extensionRoads: Road[] = [
 export const extensionPlots: Plot[] = [
   { id: 'railway-station', origin: [526, 329, 26], footprint: [58, 34] },
   { id: 'hot-spring', origin: [548, 158, 15], footprint: [48, 32] },
-  { id: 'ice-castle', origin: [484, 72, 12], footprint: [48, 38] },
+  { id: 'ice-castle', origin: [...icePalaceSite.buildingOrigin], footprint: [48, 38] },
   { id: 'coaster-station', origin: [478, 224, 19], footprint: [28, 48] },
 ];
 

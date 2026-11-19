@@ -3,6 +3,7 @@ import { playIcePalaceBell } from '../tower-chime';
 import { createIcePalaceActivity, type IcePalaceDoor, type IcePalacePoint } from './ice-palace-activity';
 import { icePalaceDoorBounds, icePalaceInteriorAnchors } from './ice-palace-expansion';
 import { icePalaceForecourtGrotto } from './ice-palace-forecourt';
+import { createIcePalaceSnowballRules } from './ice-palace-snowball';
 import { createIcePalaceTowerRace } from './ice-palace-race';
 import type { TownActivityContext } from './town-activity';
 
@@ -86,5 +87,5 @@ export function createIcePalaceLandmarkActivity(
     });
   }
   updateVisuals(activity.state());
-  return activity;
+  return { ...activity, snowballRules: createIcePalaceSnowballRules(castle) };
 }

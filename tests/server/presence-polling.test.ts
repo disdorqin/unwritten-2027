@@ -10,7 +10,8 @@ import {
   decodeSnowballEvents, encodeSnowballHit, encodeSnowballThrow, type SnowballRelayEvent,
 } from "../../src/presence/snowball-events.js";
 
-type TextFrame = { type?: string; id?: number; name?: string; self?: boolean; text?: string; scope?: string; pose?: number };
+type TextFrame = { type?: string; id?: number; name?: string; self?: boolean; text?: string; scope?: string; pose?: number;
+  kind?: string; message?: string; crowned?: boolean };
 type WireMessage = { t: string; d: string };
 
 function makeRecord(east: number, north: number, height: number, seq: number): Buffer {
@@ -158,6 +159,65 @@ test("snowball throw and hit confirmation travel over the polling channel", asyn
   await b.poll(binEventBody(encodeSnowballHit({ ballId: 7, throwerId: a.id, zone: "torso" })));
   await a.waitFor("hit relay", () =>
     a.snowballEvents().some(event => event.kind === "hit" && event.confirmerId === b.id && event.ballId === 7));
+});
+
+test("throne authority sends a sticky crown and one announcement across both transports", async t => {
+  let time = 100;
+  const { server, base } = await startServer(t, { now: () => time, connectionLog: () => {} });
+  const first = new PollClient(base);
+  await first.join("甲");
+  await first.poll({ ...stateBody(502.96, 76.92, 13.07, 1), ...textEventBody({ type: "pose", pose: 1 }) });
+
+  const socket = new WebSocket(`ws://127.0.0.1:${server.address().port}/presence`);
+  t.after(() => socket.close());
+  const texts: TextFrame[] = [];
+  socket.on("message", (bytes, binary) => {
+    if (!binary) texts.push(JSON.parse(bytes.toString()) as TextFrame);
+  });
+  await new Promise<void>((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+  socket.send(JSON.stringify({ type: "join", name: "乙" }));
+  socket.send(makeRecord(502.96, 76.92, 13.07, 1));
+  socket.send(JSON.stringify({ type: "pose", pose: 1 }));
+  const observer = new PollClient(base);
+  await observer.join("远岸");
+  await observer.poll(stateBody(220, 188, 12, 1));
+
+  time = 3099;
+  await delay(35);
+  await first.poll();
+  assert.equal(first.texts.some(frame => frame.crowned), false);
+  time = 3100;
+  await first.waitFor("first contender crowned", () =>
+    first.texts.some(frame => frame.type === "pose" && frame.id === first.id && frame.crowned === true));
+  const announced = (frame: TextFrame) => frame.kind === "announce" && frame.message === "甲 登临冰雪王座";
+  await observer.waitFor("out-of-range crown broadcast", () => observer.texts.some(announced));
+  assert.equal(observer.texts.filter(announced).length, 1);
+  assert.equal(texts.some(frame => frame.id !== first.id && frame.crowned), false);
+
+  const rejoined = new PollClient(base);
+  await rejoined.join("迟到");
+  assert.equal(rejoined.texts.some(frame => frame.type === "join" && frame.id === first.id && frame.crowned), true);
+  socket.send(makeRecord(500.9, 76.92, 12.57, 2));
+  socket.send(JSON.stringify({ type: "pose", pose: 0 }));
+  for (const ballId of [10, 11, 12]) {
+    socket.send(encodeSnowballThrow({
+      ballId, east: 500.9, north: 76.92, height: 14.05, dirX: 1, dirY: 0, dirZ: 0,
+    }));
+    const throwArrived = () => first.snowballEvents().find(event => event.kind === "throw" && event.ballId === ballId);
+    await first.waitFor("ball reaches the crowned peer", () => Boolean(throwArrived()));
+    const throwEvent = throwArrived();
+    assert.ok(throwEvent && throwEvent.kind === "throw");
+    const report = binEventBody(encodeSnowballHit({ ballId, throwerId: throwEvent.throwerId, zone: "torso" }));
+    await first.poll(report);
+    await first.poll(report);
+  }
+  const cleared = (frame: TextFrame) => frame.kind === "announce" && frame.message === "冰雪之主退位，王座空悬";
+  await observer.waitFor("out-of-range abdication broadcast", () => observer.texts.some(cleared));
+  assert.equal(observer.texts.filter(cleared).length, 1);
+  assert.equal(first.texts.filter(frame => frame.type === "pose" && frame.id === first.id && frame.crowned === false).length, 1);
 });
 
 test("poll and WebSocket clients share one world state", async t => {

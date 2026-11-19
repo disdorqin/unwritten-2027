@@ -121,6 +121,8 @@ export function createTownPresence(
   let rejectFirecracker: ((seed: number, position: boolean) => void) | undefined;
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   let bellSupported = false;
+  let iceThroneSupported = false;
+  let crownedId: number | null = null;
   const bellEvents: BellEvent[] = [];
   let onBellEvent: ((event: BellEvent) => void) | undefined;
   let bellHolderId: number | null = null;
@@ -350,6 +352,8 @@ export function createTownPresence(
     resetOwnerSession();
     joinedId = null;
     joinedName = undefined;
+    crownedId = null;
+    if (graceful) iceThroneSupported = false;
     serverEpochOffset = undefined;
     snowballEvents.length = 0;
     snowfightWallEvents.length = 0;
@@ -410,7 +414,7 @@ export function createTownPresence(
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
-        nonce?: string; accepted?: boolean;
+        nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -530,7 +534,11 @@ export function createTownPresence(
             socketJoined = true;
             if (poll) promoteFromPoll();
           }
-          if (joinedId !== id) resetOwnerSession();
+          if (joinedId !== id) {
+            resetOwnerSession();
+            crownedId = null;
+          }
+          iceThroneSupported = message.iceThrone === true;
           haveId = true;
           link.joined(roster.size + 1);
           joinedId = id;
@@ -555,14 +563,20 @@ export function createTownPresence(
           lastPosition = lastHeightYaw = -1;
           moving = false;
           remaining = 0;
-        } else if (!roster.has(id) && roster.size < 64) {
-          roster.set(id, message.name);
+        } else if (roster.has(id) || roster.size < 64) {
+          if (message.crowned === true) crownedId = id;
           if (isTownAvatarPose(message.pose)) pendingActivityPoses.set(id, message.pose);
-          announce(`${message.name} 进镇了`);
+          if (!roster.has(id)) {
+            roster.set(id, message.name);
+            announce(`${message.name} 进镇了`);
+          }
         }
-      } else if (message.type === 'pose' && roster.has(id) && isTownAvatarPose(message.pose)) {
-        pendingActivityPoses.set(id, message.pose);
+      } else if (message.type === 'pose' && (id === joinedId || roster.has(id)) && isTownAvatarPose(message.pose)) {
+        if (message.crowned === true) crownedId = id;
+        else if (message.crowned === false && crownedId === id) crownedId = null;
+        if (id !== joinedId) pendingActivityPoses.set(id, message.pose);
       } else if (message.type === 'leave') {
+        if (crownedId === id) crownedId = null;
         const name = roster.get(id);
         pendingActivityPoses.delete(id);
         remoteActivityPoses.delete(id);
@@ -826,6 +840,8 @@ export function createTownPresence(
     },
     selfId: () => joinedId,
     playerName: () => joinedName ?? getName(),
+    onlineThroneOwned: () => iceThroneSupported ? crownedId !== null && crownedId === joinedId : undefined,
+    remoteCrown: () => crownedId === null ? undefined : renderList.find(actor => actor.id === crownedId),
     setActivityPose(pose: TownAvatarPose) { activityPose = pose; },
     chatFocused: chat.focused,
     snowballName: (id: number) => joinedId === id ? joinedName : roster.get(id),

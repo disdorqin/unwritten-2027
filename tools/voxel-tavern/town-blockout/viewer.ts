@@ -11,6 +11,8 @@ import { buildTavernLandmark } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
 import type { IcePalaceRace } from './ice-palace-race';
+import { createIcePalaceCrown } from './ice-palace-crown';
+import './ice-palace-crown.css';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark, marketOxSite } from './landmark-market';
@@ -869,6 +871,11 @@ function nearbyActivity<T extends TownActivity>(create: (context: TownActivityCo
 }
 const stageActivity = nearbyActivity(createStageActivity);
 let icePalaceActivity: ReturnType<typeof createIcePalaceLandmarkActivity> | undefined;
+const icePalaceCrown = createIcePalaceCrown(document.body);
+let icePalaceSelfCrowned = false;
+function palaceThroneSeat() {
+  return seated && icePalaceActivity?.snowballRules.atThrone(seated) ? seated : undefined;
+}
 const activities: TownActivity[] = [
   nearbyActivity(createPostActivity), stageActivity, nearbyActivity(createMarketActivity),
   nearbyActivity(createIceActivity), nearbyActivity(createWishActivity), nearbyActivity(createRestActivity),
@@ -1133,6 +1140,7 @@ const remoteTargetPool = Array.from({ length: 48 }, (): TownSnowballTarget => ({
 }));
 const remoteSnowballNames = new Map<string, string>();
 const recentSnowballHits = new Map<number, number>();
+const palaceSnowballOrigins = new Map<number, { at: Vector3; expires: number }>();
 const remoteSnowballOrigin = new Vector3();
 const remoteSnowballDirection = new Vector3();
 let snowballSessionId: number | null = null;
@@ -1177,7 +1185,8 @@ function outdoorLaunch(origin: Vector3, by: string) {
     const actor = targetById.get(by);
     if (actor) return !roofed(actor.x, -actor.z, actor.y);
   }
-  return !roofed(origin.x, -origin.z, origin.y - eye + .08);
+  return !roofed(origin.x, -origin.z, origin.y - eye + .08) ||
+    (by === 'local' && icePalaceActivity?.snowballRules.canRelay(origin) === true);
 }
 function showSnowballScore({ ammo, hits, combo }: SnowballState) {
   const depth = snowCover.depth();
@@ -1195,7 +1204,10 @@ function showSnowballScore({ ammo, hits, combo }: SnowballState) {
   }
 }
 const sweepSnowball = createSnowballSweep({
-  geometryAt,
+  geometryAt(east, north) {
+    const cell = geometryAt(east, north);
+    return homeReturn ? cell : icePalaceActivity?.snowballRules.projectileGeometry(cell) ?? cell;
+  },
   surfaceHeight(east, north) {
     const height = grid.heightAt(east, north);
     if (height >= waterHeight) return height;
@@ -1211,6 +1223,15 @@ const sweepSnowball = createSnowballSweep({
   targets: snowballTargets,
   scoreAt: target => !target.id.startsWith('wall:') && !roofed(target.x, -target.z, target.y),
 });
+function canConfirmSnowballHit(indoorBall?: { at: Vector3; expires: number }) {
+  if (!indoorBall) return moveAllowed() && !roofed(playerTarget.x, -playerTarget.z, playerTarget.y);
+  if (indoorBall.expires <= performance.now()) return false;
+  const throneSeat = palaceThroneSeat();
+  if (!moveAllowed() && !(throneSeat && lookAllowed() && !plazaPhoto.locked())) return false;
+  return icePalaceActivity?.snowballRules.canConfirm(indoorBall.at, {
+    x: playerTarget.x, n: -playerTarget.z, ground: playerTarget.y,
+  }, throneSeat) === true;
+}
 function showSnowballHit(streak: number, targetName: string) {
   if (!walking) return;
   if (!formalSnowFight || ![3, 5, 8].includes(streak)) {
@@ -1251,8 +1272,12 @@ const snowballs = createTownSnowballFight({
           }
         }
       }
-      if (event.shotBy === 'remote' && target === playerTarget && event.zone &&
-        event.ballId !== undefined && moveAllowed() && !roofed(playerTarget.x, -playerTarget.z, playerTarget.y)) {
+      const remoteThrower = event.shotBy === 'remote' ? Number(event.thrower.slice(2)) : undefined;
+      const shotKey = remoteThrower !== undefined && event.ballId !== undefined ? remoteThrower * 65536 + event.ballId : undefined;
+      const indoorBall = shotKey === undefined ? undefined : palaceSnowballOrigins.get(shotKey);
+      if (indoorBall && shotKey !== undefined) palaceSnowballOrigins.delete(shotKey);
+      if (remoteThrower !== undefined && target === playerTarget && event.zone && event.ballId !== undefined &&
+          canConfirmSnowballHit(indoorBall)) {
         target.onHit(event.velocity.x, event.velocity.z);
         hitFeedback.hit(event.zone);
         if (teamFight.active()) {
@@ -1260,7 +1285,7 @@ const snowballs = createTownSnowballFight({
           snowStaggerTime = Math.max(snowStaggerTime, .3);
         }
         snowballs.clearCombo();
-        presence.sendSnowballHit({ ballId: event.ballId, throwerId: Number(event.thrower.slice(2)), zone: event.zone });
+        presence.sendSnowballHit({ ballId: event.ballId, throwerId: remoteThrower, zone: event.zone });
       } else if (event.scored) {
         target?.onHit(event.velocity.x, event.velocity.z);
         if (target === playerTarget && moveAllowed()) {
@@ -1299,6 +1324,7 @@ function updateSnowballSession(id: number | null) {
   if (id === snowballSessionId) return;
   snowballSessionId = id;
   recentSnowballHits.clear();
+  palaceSnowballOrigins.clear();
   remoteSnowballNames.clear();
   snowballBoard.clearRemoteScores();
   snowballs.clearRemote();
@@ -1322,6 +1348,14 @@ presence.onSnowballEvent(event => {
     remoteSnowballOrigin.set(event.east, event.height, -event.north);
     remoteSnowballDirection.set(event.dirX, event.dirY, event.dirZ);
     if (snowballs.throwRemote(remoteSnowballOrigin, remoteSnowballDirection, thrower, event.ballId)) {
+      if (icePalaceActivity?.snowballRules.canRelay(remoteSnowballOrigin)) {
+        const now = performance.now();
+        for (const [key, { expires }] of palaceSnowballOrigins) {
+          if (expires > now) break;
+          palaceSnowballOrigins.delete(key);
+        }
+        palaceSnowballOrigins.set(event.throwerId * 65536 + event.ballId, { at: remoteSnowballOrigin.clone(), expires: now + 3000 });
+      }
       snowballBoard.recordThrow(thrower);
       presence.animateSnowballThrow(event.throwerId);
     }
@@ -1464,9 +1498,11 @@ function updateSnowFight(dt: number) {
   }
   if (!formal) enteredSnowFight = false;
 
-  playerTarget.x = x;
-  playerTarget.y = active ? airHeight ?? ground : -10000;
-  playerTarget.z = -n;
+  const throneSeat = palaceThroneSeat();
+  playerTarget.x = throneSeat?.x ?? x;
+  playerTarget.y = throneSeat && lookAllowed() && !plazaPhoto.locked()
+    ? throneSeat.eyeY - .98 : active ? airHeight ?? ground : -10000;
+  playerTarget.z = -(throneSeat?.n ?? n);
   updateSnowballSession(presence.selfId());
   let remoteCount = 0;
   for (const peer of presence.getSnowballPeers()) {
@@ -1661,7 +1697,13 @@ function canStandAtActivity(east: number, north: number, feet: number) {
 }
 
 function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity) {
+  const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
+    onlineThroneOwned: presence.onlineThroneOwned,
+    stateChanged(state) {
+      if (state.crowned && !icePalaceSelfCrowned) refinement?.enthrone();
+      icePalaceSelfCrowned = state.crowned;
+    },
     canStand: canStandAtActivity,
     warmFromDrink,
     onToast: duration => { drinkingPoseUntil = performance.now() + duration; },
@@ -2531,14 +2573,16 @@ renderer.setAnimationLoop(now => {
     ? effectiveTownAvatarPose(false, false, false, true, 0)
     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
+  const throneSeat = palaceThroneSeat();
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
-    boardingGround ? camera.position.y - eye : airHeight ?? ground,
+    boardingGround ? camera.position.y - eye : throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground,
     boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? yaw,
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.
   sledRide.finishFrame(dt, x, n);

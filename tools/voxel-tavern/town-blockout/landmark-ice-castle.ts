@@ -36,7 +36,7 @@ type IceDetail = 'frame' | 'crown' | 'core';
 
 export const iceThrone = {
   stand: [17.98, .57, -4.92],
-  seat: [18.96, 1.07 + .98, -4.92],
+  seat: icePalaceInteriorAnchors.throneSeat,
   photo: [17.46, .35, -6.15],
   hallDoor: [7.2, 2.15, 0],
 } as const;

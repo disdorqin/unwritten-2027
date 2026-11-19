@@ -13,6 +13,8 @@ import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
+import { createIceThroneAuthority } from './ice-throne-authority.js';
+import { isIcePalaceThroneRecord } from './ice-throne-site.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
@@ -175,6 +177,17 @@ export async function createPresenceServer(options: Options = {}) {
   });
   const peers = new Map<number, Peer>();
   const pollSessions = new Map<string, Peer>();
+  let crownOwner: number | null = null;
+  const iceThrone = createIceThroneAuthority(({ ownerId, message }) => {
+    const oldOwner = crownOwner;
+    crownOwner = ownerId;
+    for (const id of [oldOwner, ownerId]) {
+      if (id === null) continue;
+      const actor = peers.get(id);
+      if (actor) broadcast(poseMessage(actor, true));
+    }
+    broadcast(JSON.stringify({ type: 'event', kind: 'announce', message }));
+  });
   const ceremonyStartAt = options.ceremonyStartAt ?? townCeremonyMidnight;
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
@@ -541,6 +554,7 @@ export async function createPresenceServer(options: Options = {}) {
       const pending = thrower?.pendingThrows.get(event.ballId);
       if (!thrower || !pending || pending.expiresAt <= time || pending.confirmed || !pending.recipients.has(peer)) return;
       pending.confirmed = true;
+      iceThrone.confirmedHit(time, peer.id, event.throwerId, event.ballId);
       const relay = encodeSnowballRelay({ ...event, confirmerId: peer.id });
       send(thrower, relay);
       for (const recipient of pending.recipients) send(recipient, relay);
@@ -734,12 +748,26 @@ export async function createPresenceServer(options: Options = {}) {
     else for (const recipient of relevantPeers(peer, 40, MAX_SESSIONS, true)) send(recipient, relay);
   }
 
+  function poseMessage(actor: { id: number; pose: number }, crownChanged = false) {
+    const crowned = actor.id === crownOwner;
+    return JSON.stringify({
+      type: 'pose', id: actor.id, pose: actor.pose,
+      ...(crowned || crownChanged ? { crowned } : {}),
+    });
+  }
+
+  function observeIceThrone(peer: Peer, time: number) {
+    if (!peer.record || !peer.name) return;
+    iceThrone.observe(time, peer.id, peer.name, peer.pose === 1 && isIcePalaceThroneRecord(peer.record));
+  }
+
   function receivePose(peer: Peer, pose: unknown) {
     // Pose 7 (sledding) is valid; pose 6 stays reserved and is rejected.
     if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 7 || pose === 6 ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
-    const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });
+    observeIceThrone(peer, now());
+    const relay = poseMessage(peer);
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) send(recipient, relay);
   }
 
@@ -766,6 +794,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (peer.session) pollSessions.delete(peer.session);
     connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
     snowMatch.removePlayer(peer.id);
+    iceThrone.remove(now(), peer.id);
     ceremonyWaiting.delete(peer);
     // 持铃人离镇：铃原地掉落、立即拾取，不让对局卡死。
     if (bell?.phase === 'running' && bell.holderId === peer.id) dropHeldBell(peer, 0, 0, 0);
@@ -1003,12 +1032,12 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, firecrackers: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, firecrackers: true, iceThrone: true }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
     for (const other of peers.values()) {
-      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
+      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose, ...(other.id === crownOwner ? { crowned: true } : {}) }));
     }
     issueOwnerChallenge(peer);
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
@@ -1057,6 +1086,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (peer.record?.seq === record.seq) return;
     peer.record = record;
     peer.version++;
+    observeIceThrone(peer, time);
   }
 
   function sendSnapshots() {
@@ -1105,7 +1135,7 @@ export async function createPresenceServer(options: Options = {}) {
       if (send(peer, writeSnapshot(visible.map(other => other.record!)))) {
         // The returning peer may have cached another pose before it moved beyond interest.
         for (const other of visible) if (other.id !== MASCOT_ACTOR_ID && !peer.visible.some(previous => previous.id === other.id)) {
-          send(peer, JSON.stringify({ type: 'pose', id: other.id, pose: other.pose }));
+          send(peer, poseMessage(other));
         }
         peer.visible = visible.map(other => ({ id: other.id, version: other.version }));
       }
@@ -1163,6 +1193,7 @@ export async function createPresenceServer(options: Options = {}) {
       }
     }
     updateFireworks(time);
+    iceThrone.tick(time);
     const wallNow = Date.now();
     updateCeremony(wallNow);
     updateBell(wallNow);
