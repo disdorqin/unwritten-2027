@@ -83,20 +83,44 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
     return candidate.gateContact(from, to, r2SledFootRadius);
   }
 
-  function sledWorld(host: R2Host, effects: RideEffects) {
-    function portMatches(port: TransferPort, name: Port, east: number, north: number) {
-      const seam = port.surfaceAt(east, north, r2SledFootRadius);
-      if (seam === undefined || Math.abs(seam - anchors[name].height) > surfaceTolerance) return false;
-      const tangent = tangentAt(anchors[name]);
-      const outward = name === 'entry' ? -1 : 1;
-      const neighbour = port.surfaceAt(east + tangent.east * gradeProbeMetres * outward,
-        north + tangent.north * gradeProbeMetres * outward, r2SledFootRadius);
-      if (neighbour === undefined) return false;
-      // The stock ride launches for drops over .43 m across its 1.5 m grade probe.
-      const drop = (seam - neighbour) * outward;
-      return drop >= -surfaceTolerance && drop <= maximumProbeDrop;
-    }
+  function portProfile(port: TransferPort, name: Port, east: number, north: number, survey = false) {
+    const seamHeight = port.surfaceAt(east, north, r2SledFootRadius);
+    const aligned = seamHeight !== undefined && Math.abs(seamHeight - anchors[name].height) <= surfaceTolerance;
+    const tangent = tangentAt(anchors[name]);
+    const outward = name === 'entry' ? -1 : 1;
+    const probeEast = east + tangent.east * gradeProbeMetres * outward;
+    const probeNorth = north + tangent.north * gradeProbeMetres * outward;
+    const probeHeight = aligned || survey ? port.surfaceAt(probeEast, probeNorth, r2SledFootRadius) : undefined;
+    const drop = seamHeight !== undefined && probeHeight !== undefined ? (seamHeight - probeHeight) * outward : undefined;
+    // The stock ride launches for drops over .43 m across its 1.5 m grade probe.
+    const supported = aligned && drop !== undefined && drop >= -surfaceTolerance && drop <= maximumProbeDrop;
+    return { seamHeight, probe: { east: probeEast, north: probeNorth, height: probeHeight }, drop, supported };
+  }
 
+  /** Sample adjoining support and seam collisions without requesting a transfer grant. */
+  function surveyPort(name: Port, port: TransferPort) {
+    const anchor = anchors[name], tangent = tangentAt(anchor);
+    const steps = Math.ceil(halfNetWidth / .05);
+    const bands: Array<{ minimum: number; maximum: number }> = [];
+    let previousClear = false;
+    const samples = Array.from({ length: steps * 2 + 1 }, (_, index) => {
+      const lateral = (index - steps) * halfNetWidth / steps;
+      const east = anchor.east - tangent.north * lateral;
+      const north = anchor.north + tangent.east * lateral;
+      const profile = portProfile(port, name, east, north, true);
+      const blocked = port.blocked?.({ x: east, n: north, y: anchor.height }, r2SledFootRadius);
+      const clear = profile.supported && blocked !== true;
+      if (clear) {
+        if (previousClear) bands.at(-1)!.maximum = lateral;
+        else bands.push({ minimum: lateral, maximum: lateral });
+      }
+      previousClear = clear;
+      return { lateral, seam: { east, north, height: anchor.height }, ...profile, blocked, clear };
+    });
+    return { samples, bands, spacing: halfNetWidth / steps, footRadius: r2SledFootRadius, collisionChecked: !!port.blocked };
+  }
+
+  function sledWorld(host: R2Host, effects: RideEffects) {
     function worldSupport(east: number, north: number) {
       const foot = locateFoot(east, north);
       if (!foot) return;
@@ -107,7 +131,7 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
       const eastAtSeam = anchor.east - tangent.north * foot.offset;
       const northAtSeam = anchor.north + tangent.east * foot.offset;
       // The 1.5 m physics probe must also stop at a missing or displaced port.
-      if (!portMatches(port, foot.part, eastAtSeam, northAtSeam)) return;
+      if (!portProfile(port, foot.part, eastAtSeam, northAtSeam).supported) return;
       const height = port.surfaceAt(east, north, r2SledFootRadius);
       if (height === undefined || !Number.isFinite(height)) return;
       return { height, part: foot.part };
@@ -124,7 +148,7 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
       const port = host[transfer.port];
       if (!port) return false;
       const { east, north, height } = transfer.point;
-      return portMatches(port, transfer.port, east, north) &&
+      return portProfile(port, transfer.port, east, north).supported &&
         port.blocked?.({ x: east, n: north, y: height }, r2SledFootRadius) !== true && port.permitsTransfer(transfer);
     }
 
@@ -149,5 +173,5 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
     } satisfies RideWorld & { canTraverse(from: Foot, to: Foot): boolean };
   }
 
-  return { track, halfNetWidth, supportAt, crossing, gateContact, sledWorld };
+  return { track, halfNetWidth, supportAt, crossing, gateContact, sledWorld, surveyPort };
 }

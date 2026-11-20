@@ -93,6 +93,40 @@ test('R2 transitions require a grounded downhill sweep, both measured supports a
   }
 });
 
+test('R2 port survey records the official seam, downhill probe and asymmetric clearance without granting entry', () => {
+  const survey = adapter.surveyPort('exit', {
+    ...fixturePort('exit'),
+    blocked: ({ x }, radius) => {
+      assert.equal(radius, .36);
+      return x < 320 || x > 321;
+    },
+    permitsTransfer: () => assert.fail('A survey must not request a host grant'),
+  });
+  assert.equal(survey.collisionChecked, true);
+  assert.equal(survey.samples.length, 71);
+  assert.ok(survey.spacing < .05);
+  const middle = survey.samples[35]!;
+  assert.equal(middle.seam.east, 320);
+  assert.equal(middle.seam.north, 270);
+  assert.ok(Math.abs(middle.seam.height - 18) < 1e-10);
+  assert.equal(middle.seamHeight, middle.seam.height);
+  assert.equal(middle.probe.north, 268.5);
+  assert.ok(Math.abs(middle.drop! - .1905) < 1e-10 && middle.clear);
+  assert.deepEqual(survey.bands, [{ minimum: 0, maximum: survey.samples[55]!.lateral }]);
+  assert.equal(survey.samples[34]!.blocked, true);
+
+  const memorial = adapter.surveyPort('exit', { ...fixturePort('exit'), surfaceAt: () => 30.65 });
+  assert.equal(memorial.collisionChecked, false);
+  assert.deepEqual(memorial.bands, []);
+  assert.equal(memorial.samples[35]!.seamHeight, 30.65);
+  assert.equal(memorial.samples[35]!.probe.height, 30.65);
+  assert.equal(memorial.samples[35]!.clear, false);
+  const missing = adapter.surveyPort('entry', { ...fixturePort('entry'), surfaceAt: () => undefined });
+  assert.deepEqual(missing.bands, []);
+  assert.deepEqual(missing.samples[35]!.seam, { east: 440, north: 520, height: 140 });
+  assert.equal(missing.samples[35]!.seamHeight, undefined);
+});
+
 test('actual stock ride runs the R2 hinge downhill and rejects swept uphill approach at both rails', () => {
   let contacts = 0;
   const world = adapter.sledWorld({ exit: fixturePort('exit') }, { ...effects, onGateImpact() { contacts++; } });
