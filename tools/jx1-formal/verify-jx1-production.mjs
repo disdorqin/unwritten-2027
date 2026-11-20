@@ -23,18 +23,22 @@ const sample = page => page.evaluate(() => window.__jx1ProductionProof.sample())
 const observe = (page, method, value) => page.evaluate(([method, value]) => window.__jx1ProductionProof[method](value), [method, value]);
 const control = (page, action) => page.locator(`${menu} [data-market-home-action='${action}']`);
 
-async function frame(page, expected = {}, limit = timeout) {
-  return (await page.waitForFunction(expected => {
+function waitForFrame(page, expected, limit) {
+  return page.waitForFunction(expected => {
     const pose = window.__jx1ProductionProof?.sample();
     if (!pose?.lastFrame?.calls || !pose?.lastFrame?.triangles || !pose.walking || pose.travelling) return;
     if (pose.frames <= (expected.after ?? 0)) return;
-    for (const key of ['mask', 'home', 'menuId', 'dialogOpen', 'canvasFocused', 'canMove', 'segmentRejected']) {
+    for (const key of ['mask', 'home', 'menuId', 'dialogOpen', 'canvasFocused', 'canMove', 'segmentRejected', 'segmentReached']) {
       if (key in expected && pose[key] !== expected[key]) return;
     }
     if (expected.action && !pose.action.includes(expected.action)) return;
     if (expected.near && Math.hypot(pose.east - expected.near.east, pose.north - expected.near.north) > expected.tolerance) return;
     return pose;
-  }, expected, { timeout: limit })).jsonValue();
+  }, expected, { timeout: limit });
+}
+
+async function frame(page, expected = {}, limit = timeout) {
+  return (await waitForFrame(page, expected, limit)).jsonValue();
 }
 
 let sessionCount = 0;
@@ -160,20 +164,28 @@ async function moveTo(session, target, options = {}) {
   const tolerance = target.tolerance ?? .22;
   if (!options.block && distance(before, target) <= tolerance) return { before, after: before, moves: [], length: 0 };
   await observe(page, 'aim', target);
-  await observe(page, 'startSegment');
+  await observe(page, 'startSegment', options.block ? undefined : { ...target, tolerance });
   let end;
   let observed;
   let moves;
   try {
     end = await beginForward(session);
+    const expected = { after: before.frames, home: before.home, mask: before.mask };
+    let observation;
     if (options.block) {
-      observed = await frame(page, {
-        after: before.frames, home: before.home, mask: before.mask, segmentRejected: true,
-      }, target.timeout ?? 12_000);
+      observation = await waitForFrame(page, { ...expected, segmentRejected: true }, target.timeout ?? 12_000);
     } else {
-      observed = await frame(page, {
-        after: before.frames, home: before.home, mask: before.mask, near: target, tolerance,
-      }, target.timeout ?? 20_000);
+      // Software WebGL can spend over a second on a frame, with at most two native walking steps per frame.
+      const limit = target.timeout ?? Math.max(timeout, Math.ceil(distance(before, target) * 10_000));
+      observation = await waitForFrame(page, { ...expected, segmentReached: true }, limit);
+    }
+    const release = end;
+    end = undefined;
+    try {
+      await release();
+      observed = await observation.jsonValue();
+    } finally {
+      await observation.dispose();
     }
   } finally {
     try { if (end) await end(); } finally { moves = await observe(page, 'endSegment'); }
@@ -185,7 +197,11 @@ async function moveTo(session, target, options = {}) {
   if (options.block) {
     assert.ok(rejected.length > 0, 'The attempted wall approach had no rejected production movement');
     assert.ok(distance(observed, target) > tolerance, 'The player reached a point on the wrong side of the adjacent wall');
-  } else assert.deepEqual(rejected, [], 'The surveyed passable route collided');
+  } else {
+    assert.deepEqual(rejected, [], 'The surveyed passable route collided');
+    assert.ok(accepted.some(move => distance(move.after, target) <= tolerance),
+      'No accepted production step reached the surveyed waypoint');
+  }
   for (const move of accepted) {
     assert.equal(move.before.air, null, 'Movement started airborne');
     assert.equal(move.after.air, null, 'Movement lost continuous support');

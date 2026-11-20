@@ -10,6 +10,9 @@ const probe = `
 let jx1Frame = 0;
 let jx1LastFrame: Record<string, number> | undefined;
 let jx1Segment: Record<string, unknown>[] | undefined;
+type Jx1SegmentTarget = { east: number; north: number; tolerance: number };
+let jx1SegmentTarget: Jx1SegmentTarget | undefined;
+let jx1SegmentReached = false;
 function jx1Pose() { return { east: x, north: n, ground, yaw, air: airHeight ?? null }; }
 function jx1Supports() {
   const geometry = geometryAt(x, n);
@@ -38,6 +41,9 @@ function tryMove(nextX: number, nextN: number) {
   const after = jx1Pose();
   jx1Segment.push({ frame: jx1Frame, before, after, nextX, nextN, accepted,
     ...(accepted && after.air === null ? { support: jx1Supports() } : {}) });
+  const target = jx1SegmentTarget;
+  if (accepted && target && !jx1SegmentReached &&
+      Math.hypot(after.east - target.east, after.north - target.north) <= target.tolerance) jx1SegmentReached = true;
   return accepted;
 }
 if (${guard}) {
@@ -87,10 +93,22 @@ if (${guard}) {
       if (!moveAllowed()) throw new Error('Cannot aim while movement is unavailable');
       turnView(Math.atan2(east - x, north - n) - yaw, -pitch);
     },
-    startSegment: () => { if (jx1Segment) throw new Error('Movement already monitored'); jx1Segment = []; },
-    endSegment: () => { const frames = jx1Segment; jx1Segment = undefined; return frames; },
+    startSegment: (target?: Jx1SegmentTarget) => {
+      if (jx1Segment) throw new Error('Movement already monitored');
+      jx1Segment = [];
+      jx1SegmentTarget = target;
+      jx1SegmentReached = false;
+    },
+    endSegment: () => {
+      const frames = jx1Segment;
+      jx1Segment = undefined;
+      jx1SegmentTarget = undefined;
+      jx1SegmentReached = false;
+      return frames;
+    },
     events: () => events.slice(),
     sample: () => ({ ...jx1Pose(), frames: jx1Frame, lastFrame: jx1LastFrame,
+      segmentReached: jx1SegmentReached,
       segmentRejected: Boolean(jx1Segment?.some(move => move.accepted === false)),
       mask: camera.layers.mask, home: homeReturn?.id ?? null, walking, travelling: houseDoorTravel,
       canMove: moveAllowed(), canvasFocused: document.activeElement === renderer.domElement,
