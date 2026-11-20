@@ -1,0 +1,290 @@
+diff --git a/tests/town-blockout-sled-racks.test.ts b/tests/town-blockout-sled-racks.test.ts
+new file mode 100644
+index 00000000..e913190a
+--- /dev/null
++++ b/tests/town-blockout-sled-racks.test.ts
+@@ -0,0 +1,86 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
++import { createTownSledVisuals, sledParts } from '../tools/voxel-tavern/town-blockout/sled-visuals';
++import { canEnter, createTerrainGrid, isWater, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
++import { resolveTownSledRacks, townSledRackMissingSites } from '../tools/voxel-tavern/town-blockout/town-sled-racks';
++import {
++  createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
++} from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
++import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++
++test('sled rack configurations resolve on the surveyed town, west approach and summit surfaces', () => {
++  const terrain = createTerrainGrid();
++  const crater = mountWestCraterRoad(worldBounds.depth, north => terrain.heightAt(0, north));
++  const town = resolveTownSledRacks('town', (east, north) => {
++    if (east < 0) return crater.heightAt(east, north);
++    if (canEnter(east, north) && !isWater(east, north)) return terrain.heightAt(east, north);
++  }, crater.lip);
++  let now = Date.UTC(2026, 0, 1);
++  const cloud = createZa22CloudRoute({ now: () => now, nightOpen: () => true, enterOrExit() {}, view() {} });
++  cloud.action(za22StationApproach)?.run();
++  cloud.update(za22StationApproach);
++  assert.equal(cloud.riding(), true);
++  now += createZa22NorthRidgeLine(26).legMs + 1;
++  cloud.update(za22StationApproach);
++  assert.ok(cloud.assembly());
++  const summit = resolveTownSledRacks('summit', (east, north) => {
++    const y = cloud.surfaceAt(east, north, .27);
++    return y !== undefined && !cloud.blocked(east, north, y, .27, 1.8) ? y : undefined;
++  });
++  assert.deepEqual(town.map(({ id }) => id), [
++    'plaza', 'cable-base', 'mirror-lake', 'pine-chop', 'station', 'tavern', 'ice-palace', 'crater-mouth',
++    'north-slope', 'memorial', 'market',
++  ]);
++  assert.deepEqual(summit.map(({ id, y }) => [id, y]), [['mountain-gate', 347], ['cloud-terrace', 347]]);
++  assert.equal(summit[0].x, 295.5);
++  for (const { id, x, n } of town) {
++    if (id !== 'crater-mouth') continue;
++    assert.equal(permitsMeteorCraterStep({ east: 0, north: n }, { east: x, north: n }, false), true);
++  }
++  assert.deepEqual(townSledRackMissingSites, ['old-home', 'town-hall']);
++});
++
++test('racks skip their primary pad if the vehicle footprint has no safe support', () => {
++  const blockedPrimary = resolveTownSledRacks('summit', (east, north) => {
++    if (Math.hypot(east - 333, north - 660.6) < .3) return;
++    return za22CloudSurfaceAt(east, north);
++  });
++  const terrace = blockedPrimary.find(({ id }) => id === 'cloud-terrace');
++  assert.equal(terrace?.x, 331);
++  const noFooting = resolveTownSledRacks('summit', () => 12 + Number.NaN);
++  assert.deepEqual(noFooting, []);
++});
++
++test('a taken sled can park away from the rack with its original rack poles intact', () => {
++  const scene = new Scene();
++  const first = { id: 'a', x: 30, n: 42, y: 8, yaw: 0 };
++  const second = { id: 'b', x: 39, n: 42, y: 8, yaw: 0 };
++  const visuals = createTownSledVisuals(scene, [first, second]);
++  const racks = scene.getObjectByName('town-sled-racks') as InstancedMesh;
++  const matrices = () => Array.from({ length: racks.count }, (_, index) => {
++    const matrix = new Matrix4();
++    racks.getMatrixAt(index, matrix);
++    return matrix;
++  });
++  const before = matrices();
++  assert.equal(before.length, 2 * (4 + sledParts.length));
++
++  visuals.setRackVehicle('a');
++  const afterTake = matrices();
++  assert.equal(afterTake.length, before.length - sledParts.length);
++  assert.deepEqual(afterTake.slice(0, 4), before.slice(0, 4));
++  assert.deepEqual(afterTake.slice(4), before.slice(4 + sledParts.length));
++
++  const parked = { x: 90, n: 87, y: 12, yaw: Math.PI / 2 };
++  visuals.setRackVehicle('a', parked);
++  const afterPark = matrices();
++  assert.equal(afterPark.length, before.length);
++  assert.deepEqual(afterPark.slice(0, 4), before.slice(0, 4));
++  assert.deepEqual(afterPark.slice(4 + sledParts.length), before.slice(4 + sledParts.length));
++  const runner = new Vector3().setFromMatrixPosition(afterPark[4]);
++  assert.ok(Math.hypot(runner.x - parked.x, runner.z + parked.n) < 1);
++  assert.ok(runner.y > parked.y);
++  visuals.setRackVehicle('a');
++  assert.deepEqual(matrices(), afterTake);
++});
+diff --git a/tools/voxel-tavern/town-blockout/sled-visuals.ts b/tools/voxel-tavern/town-blockout/sled-visuals.ts
+index 327b58bb..b8b0b5fa 100644
+--- a/tools/voxel-tavern/town-blockout/sled-visuals.ts
++++ b/tools/voxel-tavern/town-blockout/sled-visuals.ts
+@@ -25,9 +25,10 @@ export const sledParts: readonly SledPart[] = [
+ ];
+ export const remoteSledParts = sledParts.filter((_, index) => index < 2 || index === 4 || index === 5 || index >= 8);
+
+-type Rack = { x: number; n: number; y: number; yaw: number };
++type SledSpot = { x: number; n: number; y: number; yaw: number };
++export type SledRack = SledSpot & { id?: string };
+
+-export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
++export function createTownSledVisuals(scene: Scene, racks: readonly SledRack[]) {
+   const geometry = new BoxGeometry();
+   const material = new MeshLambertMaterial();
+   const sled = new InstancedMesh(geometry, material, sledParts.length + firstPersonParts.length);
+@@ -35,6 +36,7 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
+   sled.frustumCulled = false;
+   sled.instanceMatrix.setUsage(DynamicDrawUsage);
+   const rackMesh = new InstancedMesh(geometry, material, racks.length * (4 + 2 * sledParts.length));
++  rackMesh.instanceMatrix.setUsage(DynamicDrawUsage);
+   sled.name = 'town-local-sled';
+   rackMesh.name = 'town-sled-racks';
+   sled.visible = false;
+@@ -62,17 +64,36 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
+     [[0, .66, -.36], [1.68, .14, .14], '#9b6239'],
+     [[0, .45, -.36], [.44, .22, .12], '#a74241'],
+   ];
+-  let rackIndex = 0;
+-  for (const rack of racks) {
+-    rackRoot.position.set(rack.x, rack.y, -rack.n);
+-    rackRoot.rotation.y = Math.PI - rack.yaw;
+-    rackRoot.updateMatrix();
+-    for (const pole of poles) placePart(rackMesh, rackIndex++, pole);
+-    for (const offset of [-.42, .42]) {
+-      for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition, offset, .62);
++  const rackVehicles = new Map<string, SledSpot | undefined>();
++  for (const rack of racks) if (rack.id) rackVehicles.set(rack.id, rack);
++  function refreshRacks() {
++    let rackIndex = 0;
++    function placeAt(spot: SledSpot) {
++      rackRoot.position.set(spot.x, spot.y, -spot.n);
++      rackRoot.rotation.y = Math.PI - spot.yaw;
++      rackRoot.updateMatrix();
+     }
++    for (const rack of racks) {
++      placeAt(rack);
++      for (const pole of poles) placePart(rackMesh, rackIndex++, pole);
++      if (!rack.id) {
++        for (const offset of [-.42, .42]) {
++          for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition, offset, .62);
++        }
++        continue;
++      }
++      const vehicle = rackVehicles.get(rack.id);
++      if (vehicle) {
++        placeAt(vehicle);
++        for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition);
++      }
++    }
++    rackMesh.count = rackIndex;
++    rackMesh.instanceMatrix.needsUpdate = true;
++    if (rackMesh.instanceColor) rackMesh.instanceColor.needsUpdate = true;
++    rackMesh.computeBoundingSphere();
+   }
+-  rackMesh.computeBoundingSphere();
++  refreshRacks();
+
+   const count = 600;
+   const positions = new Float32Array(count * 3);
+@@ -134,6 +155,11 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
+     }
+   }
+   return {
++    setRackVehicle(id: string, spot?: SledSpot) {
++      if (!rackVehicles.has(id)) return;
++      rackVehicles.set(id, spot && { ...spot });
++      refreshRacks();
++    },
+     setPose(x: number, n: number, y: number, heading: number, roll = 0, pitch = 0, rider?: SledAnimationFrame) {
+       sled.position.set(x, y, -n);
+       sled.rotation.set(pitch, Math.PI - heading, roll, 'YXZ');
+diff --git a/tools/voxel-tavern/town-blockout/town-sled-racks.ts b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+new file mode 100644
+index 00000000..58c08c2f
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+@@ -0,0 +1,109 @@
++import { mirrorLakeSignedDistance } from '../../../src/shared/mirror-lake';
++import { icePalaceSite } from './ice-palace-site';
++import { roadCorridorKeepClear } from './road-clearance';
++import type { SledRack } from './sled-visuals';
++import { layout } from './terrain';
++import { extensionPlots } from './town-extension';
++import { pineCampSites } from './town-pine-camp';
++import { za22StationApproach } from './town-za22-cloud-route';
++import { craterWestSurvey } from './town-za22-crater-road';
++import { za22GateSeamNorth } from './town-za22-mountain-gate';
++
++export type SledRackDomain = 'town' | 'summit';
++type Pad = readonly [east: number, north: number, yaw: number];
++type Site = Readonly<{ id: string; domain: SledRackDomain; pads: readonly Pad[] }>;
++type DryFooting = (east: number, north: number) => number | undefined;
++type CraterLip = Readonly<{ east: number; north: number }>;
++
++const west = -Math.PI / 2;
++const east = Math.PI / 2;
++const south = Math.PI;
++const tavernDoor = layout.plots.find(plot => plot.id === 'tavern')!.door;
++const [stationEast, stationNorth] = extensionPlots.find(plot => plot.id === 'railway-station')!.origin;
++const [palaceEndEast, palaceEndNorth] = icePalaceSite.stationTrail.at(-1)!;
++const [pineFireEast, pineFireNorth] = pineCampSites.fire;
++
++export const townSledRackSites: readonly Site[] = [
++  { id: 'plaza', domain: 'town', pads: [[234, 174, 0], [236, 174, 0], [232, 174, 0]] },
++  { id: 'cable-base', domain: 'town', pads: [
++    [za22StationApproach.east + 2.4, za22StationApproach.north - 1.15, south],
++    [za22StationApproach.east + 3.2, za22StationApproach.north - 2.1, south],
++    [za22StationApproach.east - 3.1, za22StationApproach.north - 1.65, south],
++  ] },
++  { id: 'mirror-lake', domain: 'town', pads: [[22, 174, 0], [24, 172, 0], [23, 169, 0], [32, 155, 0]] },
++  { id: 'pine-chop', domain: 'town', pads: [
++    [pineFireEast - 13.5, pineFireNorth + .5, south], [pineFireEast - 13.5, pineFireNorth + 1, south],
++    [pineFireEast - 14.5, pineFireNorth + .5, south],
++  ] },
++  { id: 'station', domain: 'town', pads: [
++    [stationEast + 6.5, stationNorth - 12, south],
++    [stationEast - 6.5, stationNorth - 12, south],
++    [stationEast + 12, stationNorth - 14, south],
++  ] },
++  { id: 'tavern', domain: 'town', pads: [
++    [tavernDoor[0] - 4, tavernDoor[1] - 2, south], [tavernDoor[0] + 4, tavernDoor[1] - 2, south],
++    [tavernDoor[0] - 5, tavernDoor[1] - 3.5, south],
++  ] },
++  { id: 'ice-palace', domain: 'town', pads: [
++    [palaceEndEast + 4, palaceEndNorth - 1, 0], [palaceEndEast + 4, palaceEndNorth + 1, 0],
++    [palaceEndEast + 1, palaceEndNorth - 4, 0], [palaceEndEast + 3, palaceEndNorth - 3, 0],
++  ] },
++  { id: 'mountain-gate', domain: 'summit', pads: [
++    [295.5, za22GateSeamNorth - 3.55, east], [304.5, za22GateSeamNorth - 3.55, west],
++    [305.5, za22GateSeamNorth - 3.55, west],
++  ] },
++  { id: 'cloud-terrace', domain: 'summit', pads: [[333, 660.6, west], [331, 660.5, west], [329, 660.5, west]] },
++];
++
++export const townSledRackMissingSites = ['old-home', 'town-hall'] as const;
++export const townSledRackLegacySites: readonly Site[] = [
++  { id: 'north-slope', domain: 'town', pads: [[378, 303, south]] },
++  { id: 'memorial', domain: 'town', pads: [[347.5, 255, 0], [348, 255, 0], [348.5, 255, 0]] },
++  { id: 'market', domain: 'town', pads: [[150.5, 90, 0], [151.5, 90.5, 0], [151, 90, 0]] },
++];
++
++// A full rack footprint is checked for a dry, level surface before an entity is made available.
++const footprint = Array.from({ length: 8 }, (_, index) => {
++  const angle = index * Math.PI / 4;
++  return [Math.cos(angle), Math.sin(angle)] as const;
++});
++const radius = 1.05;
++const heightDelta = .22;
++
++function footing(pad: Pad, sample: DryFooting) {
++  const [x, n] = pad;
++  const y = sample(x, n);
++  if (y === undefined || !Number.isFinite(y)) return;
++  const safe = footprint.every(([dx, dn]) => {
++    const edge = sample(x + dx * radius, n + dn * radius);
++    return edge !== undefined && Number.isFinite(edge) && Math.abs(edge - y) <= heightDelta;
++  });
++  if (safe) return y;
++}
++
++export function resolveTownSledRacks(
++  domain: SledRackDomain,
++  sample: DryFooting,
++  craterLip?: CraterLip,
++): (SledRack & { id: string })[] {
++  const sites = townSledRackSites.filter(site => site.domain === domain);
++  if (domain === 'town' && craterLip) {
++    const { east: lipEast, north: lipNorth } = craterLip;
++    sites.push({ id: 'crater-mouth', domain, pads: [
++      [lipEast + 7, lipNorth - 4.5, west], [lipEast + 9, lipNorth - 4.5, west],
++      [lipEast + 7, lipNorth + 4.5, west],
++    ] });
++  }
++  if (domain === 'town') sites.push(...townSledRackLegacySites);
++  return sites.flatMap(({ id, pads }) => {
++    for (const pad of pads) {
++      const [x, n, yaw] = pad;
++      if ((id === 'mirror-lake' && mirrorLakeSignedDistance(x, n) < radius) ||
++          (id !== 'plaza' && id !== 'north-slope' && domain === 'town' && x >= 0 && roadCorridorKeepClear(x, n, radius)) ||
++          (id === 'crater-mouth' && x < craterWestSurvey.west + radius)) continue;
++      const y = footing(pad, sample);
++      if (y !== undefined) return [{ id, x, n, y, yaw }];
++    }
++    return [];
++  });
++}
