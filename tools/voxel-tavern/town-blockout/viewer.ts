@@ -41,6 +41,8 @@ import { prewarmHouseDoorTextures } from './town-house-door-textures';
 import './town-house-door-book.css';
 import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
+import { mountZa32StreetProps } from './town-za32-street-props';
+import { mountTownFillNorth } from './town-fill-north';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
@@ -537,6 +539,12 @@ const scenery = addScenery(landscape, grid, pineCamp.keepClear);
 const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
+// Zone-1 self-mount (代挂, campaign order 2026-11-21): ZA-32 wave-2 props +
+// blank-fill package 1 (north band + forest district). Window A's public
+// batch was held by the ZA-30 diagnosis; mounting registered as 代挂.
+const za32StreetProps = mountZa32StreetProps(landscape, (east, north) => grid.heightAt(east, north));
+const townFillNorth = mountTownFillNorth(landscape, (east, north) => grid.heightAt(east, north));
+void za32StreetProps; void townFillNorth;
 const forest = addForestDensity(landscape, grid,
   (east, north, radius) => districts.keepClear(east, north, radius) ||
     streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
