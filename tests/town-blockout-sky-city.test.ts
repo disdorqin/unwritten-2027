@@ -224,6 +224,28 @@ test('an actual glide lands on the city and its floors lead into the dormitory a
   city.dispose();
 });
 
+test('a walking move cannot cross the crystal court or locked gate between clear endpoints', t => {
+  const city = mountSkyCity(new Group());
+  t.after(() => city.dispose());
+  city.show('full');
+  const model = city.footModel()!;
+  const [gateX, gateY, gateZ] = model.gate;
+  const paths = [
+    [{ x: -8, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }],
+    [{ x: gateX - 2.5, y: gateY, z: gateZ }, { x: gateX + 2.5, y: gateY, z: gateZ }],
+  ];
+  for (const [start, end] of paths) {
+    assert.deepEqual(model.step(start, start.x, start.z), start);
+    assert.deepEqual(model.step(end, end.x, end.z), end);
+    assert.equal(model.step(start, end.x, end.z), undefined);
+    assert.equal(model.step(end, start.x, start.z), undefined);
+  }
+  const start = { x: 0, y: 0, z: 10 };
+  assert.deepEqual(model.step(start, 0, 15), { x: 0, y: 0, z: 15 });
+  assert.equal(model.step(start, Infinity, 15), undefined);
+  assert.equal(model.step(start, Number.MAX_VALUE, 15), undefined);
+});
+
 test('flight below the translated island crosses the projected runway without touching down', t => {
   const site = createSkyCitySite({ east: 0, north: -100, height: 880 });
   const city = mountSkyCity(new Group());

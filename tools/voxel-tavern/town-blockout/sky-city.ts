@@ -32,9 +32,20 @@ function buildCity() {
   }
 
   function step(foot: SkyCityFoot, x: number, z: number): SkyCityFoot | undefined {
-    if (!island.supports(x, z, footRadius)) return;
-    const y = tower.supportAt(x, z, foot.y) ?? 0;
-    if (Math.abs(y - foot.y) > stepHeight || obstructs(x, z, y, footRadius)) return;
+    const distance = Math.hypot(x - foot.x, z - foot.z);
+    // Check the path between clear endpoints so a long movement cannot skip a wall or unsupported floor.
+    const samples = Math.max(1, Math.ceil(distance / (footRadius / 2)));
+    if (!Number.isFinite(samples) || !Number.isFinite(foot.y)) return;
+    let y = foot.y;
+    for (let index = 1; index <= samples; index++) {
+      const fraction = index / samples;
+      const sampleX = (1 - fraction) * foot.x + fraction * x;
+      const sampleZ = (1 - fraction) * foot.z + fraction * z;
+      if (!island.supports(sampleX, sampleZ, footRadius)) return;
+      const support = tower.supportAt(sampleX, sampleZ, y) ?? 0;
+      if (Math.abs(support - y) > stepHeight || obstructs(sampleX, sampleZ, support, footRadius)) return;
+      y = support;
+    }
     return { x, y, z };
   }
 
