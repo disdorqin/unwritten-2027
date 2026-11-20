@@ -299,7 +299,7 @@ async function checkMascotPatrol() {
 
   const pen = mascotPatrolSites.pen;
   const approach = mascotWhiteoutReturnPaths.plazaSun;
-  await follow(page, evidence, approach.slice(0, -2), 'mascot-pen-approach');
+  await follow(page, evidence, [westShore[0], [192, 195], ...approach.slice(0, -2)], 'mascot-pen-approach');
   await reach(mascotPatrolSites.penEntrance, 'mascot-pen-gate-in');
   await reach(pen, 'mascot-pen-foot-in');
   await face(page, evidence, -Math.PI / 2);
