@@ -70,3 +70,35 @@ test('the station refuses duplicate or cross-domain socket registration', () => 
     ...sockets, stoke: { ...sockets.stoke, point: { ...sockets.stoke.point, layer: 'another' } },
   } }), /same confirmed domain/);
 });
+
+test('heating stoke is routed only after F-2 enables it and an accepted foot reaches the bellows', () => {
+  const { options, calls, move } = fixture();
+  let acceptsHeatingStoke = false;
+  const forge = createUndergroundWarriorForge({
+    ...options, readForge: () => ({ phase: 'heating', revision: 6, acceptsHeatingStoke }),
+  });
+  const command = { playerId: 'smith', requestId: 'refuel', action: 'stoke' } as const;
+  move(sockets.stoke.point);
+  assert.deepEqual(forge.interact(command), { kind: 'unavailable', phase: 'heating' });
+  acceptsHeatingStoke = true;
+  move(sockets.place.point);
+  assert.equal(forge.interact(command).kind, 'unreachable');
+  move(sockets.stoke.point);
+  assert.deepEqual(forge.interact(command), { kind: 'submitted', result: 'accepted' });
+  assert.deepEqual(calls, [{ ...command, forgeId: 'fixture-forge', socketId: 'bellows', expectedRevision: 6 }]);
+});
+
+test('a known authority receipt can be returned after its action has moved the furnace to a new phase', () => {
+  const { options, calls, move } = fixture();
+  const forge = createUndergroundWarriorForge<'accepted' | 'replayed' | 'invalid'>({
+    ...options, readForge: () => ({ phase: 'heating', revision: 7 }),
+    receipt: (player, request, action) => player === 'smith' && request === 'ignition'
+      ? (action === 'stoke' ? 'replayed' : 'invalid') : undefined,
+  });
+  const command = { playerId: 'smith', requestId: 'ignition', action: 'stoke' } as const;
+  assert.equal(forge.interact(command).kind, 'unreachable');
+  assert.deepEqual(forge.interact({ ...command, action: 'place' }), { kind: 'submitted', result: 'invalid' });
+  move(sockets.stoke.point);
+  assert.deepEqual(forge.interact(command), { kind: 'submitted', result: 'replayed' });
+  assert.deepEqual(calls, []);
+});

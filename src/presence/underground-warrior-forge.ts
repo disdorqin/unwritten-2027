@@ -4,7 +4,11 @@ type ForgeAction = 'place' | 'stoke' | 'collect';
 type ForgePhase = 'materials' | 'ready' | 'heating' | 'outlet';
 type ForgeSocket = Readonly<{ id: string; point: UndergroundSurvivalPoint }>;
 type ForgeCommand = Readonly<{ playerId: string; requestId: string; action: ForgeAction }>;
-type ForgeSnapshot = Readonly<{ phase: ForgePhase; revision: number }>;
+type ForgeSnapshot = Readonly<{
+  phase: ForgePhase;
+  revision: number;
+  acceptsHeatingStoke?: boolean;
+}>;
 type AcceptedForgeCommand = ForgeCommand & Readonly<{
   forgeId: string;
   socketId: string;
@@ -18,6 +22,7 @@ type Options<Result> = Readonly<{
   canReach(foot: UndergroundSurvivalPoint, socket: ForgeSocket): boolean;
   readForge(forgeId: string): ForgeSnapshot;
   // F-2 owns revision checks, request replay and the atomic inventory transaction.
+  receipt?(playerId: string, requestId: string, action: ForgeAction): Result | undefined;
   submit(command: AcceptedForgeCommand): Result;
 }>;
 
@@ -42,8 +47,13 @@ export function createUndergroundWarriorForge<Result>(options: Options<Result>) 
       const socket = sockets[action];
       const foot = options.readAcceptedFoot(playerId);
       if (!foot || foot.layer !== layer || !options.canReach(foot, socket)) return { kind: 'unreachable' } as const;
+      const replay = options.receipt?.(playerId, requestId, action);
+      if (replay !== undefined) return { kind: 'submitted', result: replay } as const;
       const current = options.readForge(forgeId);
-      if (current.phase !== phaseByAction[action]) return { kind: 'unavailable', phase: current.phase } as const;
+      const canRefuel = action === 'stoke' && current.phase === 'heating' && current.acceptsHeatingStoke === true;
+      if (current.phase !== phaseByAction[action] && !canRefuel) {
+        return { kind: 'unavailable', phase: current.phase } as const;
+      }
       const result = options.submit({ playerId, requestId, action, forgeId, socketId: socket.id, expectedRevision: current.revision });
       return { kind: 'submitted', result } as const;
     },

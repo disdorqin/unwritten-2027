@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Mesh, MeshStandardMaterial } from 'three';
 import { createWarriorForgeHall } from '../tools/voxel-tavern/town-blockout/underground-warrior-forge-hall.ts';
 
 test('the rear main street and forge share a level door approach and three reachable interaction feet', () => {
@@ -21,6 +22,50 @@ test('the rear main street and forge share a level door approach and three reach
     assert.equal(hall.floorHeightAt(142, 15), undefined);
     assert.ok(hall.group.getObjectByName('forge-mouth'));
     assert.ok(hall.colliders.length > 10);
+  } finally {
+    hall.dispose();
+  }
+});
+
+test('the physical gauge shows supplied heat and bands only while a valid snapshot is present', () => {
+  const hall = createWarriorForgeHall();
+  try {
+    const gauge = hall.group.getObjectByName('forge-heat-gauge');
+    assert.ok(gauge);
+    assert.equal(gauge.visible, false);
+    const readPiece = (name: string) => {
+      const mesh = gauge.getObjectByName(`forge-heat-${name}`);
+      assert.ok(mesh instanceof Mesh && mesh.material instanceof MeshStandardMaterial);
+      return { mesh, material: mesh.material };
+    };
+    const { mesh: cold, material: coldMaterial } = readPiece('cold');
+    const { mesh: working, material: workingMaterial } = readPiece('working');
+    const { mesh: hot, material: hotMaterial } = readPiece('hot');
+    const { mesh: pointer, material: pointerMaterial } = readPiece('indicator');
+    const mouth = hall.group.getObjectByName('forge-mouth');
+    const bounds = { min: .2, max: .7 };
+    hall.updateHeat({ ...bounds, level: .1 });
+    assert.equal(gauge.visible, true);
+    assert.ok(Math.abs(cold.scale.x / working.scale.x - .4) < 1e-12);
+    assert.ok(pointer.position.x < working.position.x);
+    assert.ok(pointerMaterial.emissive.equals(coldMaterial.color));
+
+    hall.updateHeat({ ...bounds, level: .45 });
+    assert.ok(Math.abs(pointer.position.x - working.position.x) < 1e-12);
+    assert.ok(pointerMaterial.emissive.equals(workingMaterial.color));
+
+    hall.updateHeat({ ...bounds, level: 1.5 });
+    assert.ok(Math.abs(pointer.position.x - hot.position.x - hot.scale.x / 2) < 1e-12);
+    assert.ok(pointerMaterial.emissive.equals(hotMaterial.color));
+
+    hall.updateHeat({ ...bounds, level: NaN });
+    assert.equal(gauge.visible, false);
+    hall.updateHeat({ min: 0, max: 1, level: .5 });
+    assert.equal(cold.visible, false);
+    assert.equal(hot.visible, false);
+    hall.updateHeat(undefined);
+    assert.equal(gauge.visible, false);
+    assert.equal(mouth?.visible, true);
   } finally {
     hall.dispose();
   }

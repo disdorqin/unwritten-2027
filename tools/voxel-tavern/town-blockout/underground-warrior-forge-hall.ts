@@ -2,6 +2,8 @@ import { BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight } from 'thre
 
 type Position = Readonly<{ east: number; north: number; height: number }>;
 type Solid = Readonly<{ e: number; n: number; y: number; width: number; depth: number; height: number }>;
+/** Normalized authority values; min and max delimit the safe firing band. */
+type ForgeHeat = Readonly<{ level: number; min: number; max: number }>;
 
 /** Untransformed U-10-local site. The shared host places it in the final underground domain. */
 export const warriorForgeHallSite = { east: 142, north: 4.9, height: -165 } as const;
@@ -48,6 +50,55 @@ export function createWarriorForgeHall(site: Position = warriorForgeHallSite) {
   light.position.set(2, 1.42, -6.48);
   group.add(light);
 
+  const gauge = new Group();
+  gauge.name = 'forge-heat-gauge';
+  gauge.position.set(2, 1.64, -6.55);
+  gauge.visible = false;
+  group.add(gauge);
+  const gaugeWidth = 1.52;
+  const cold = new MeshStandardMaterial({ color: 0x5078a5, emissive: 0x182c52 });
+  const working = new MeshStandardMaterial({ color: 0xb58b3d, emissive: 0x68451b });
+  const hot = new MeshStandardMaterial({ color: 0xab4b43, emissive: 0x681711 });
+  const pointer = new MeshStandardMaterial({ color: 0xffeacd, emissive: 0xffd7ac, emissiveIntensity: .65 });
+
+  function gaugePiece(name: string, width: number, height: number, depth: number, z: number,
+      material: MeshStandardMaterial) {
+    const mesh = new Mesh(shape, material);
+    mesh.name = name;
+    mesh.position.z = z;
+    mesh.scale.set(width, height, depth);
+    gauge.add(mesh);
+    return mesh;
+  }
+  gaugePiece('forge-heat-frame', gaugeWidth + .16, .28, .06, 0, iron);
+  const coldBand = gaugePiece('forge-heat-cold', 1, .15, .015, .04, cold);
+  const workingBand = gaugePiece('forge-heat-working', 1, .15, .015, .04, working);
+  const hotBand = gaugePiece('forge-heat-hot', 1, .15, .015, .04, hot);
+  const indicator = gaugePiece('forge-heat-indicator', .115, .115, .05, .072, pointer);
+  indicator.rotation.z = Math.PI / 4;
+
+  function setBand(band: Mesh, from: number, to: number) {
+    band.visible = from < to;
+    band.scale.x = gaugeWidth * (to - from);
+    band.position.x = gaugeWidth * ((from + to) / 2 - .5);
+  }
+
+  function updateHeat(fire: ForgeHeat | undefined) {
+    if (!fire || !Number.isFinite(fire.level) || !Number.isFinite(fire.min) || !Number.isFinite(fire.max) ||
+        fire.min < 0 || fire.max > 1 || fire.min >= fire.max) {
+      gauge.visible = false;
+      return;
+    }
+    const { level, min, max } = fire;
+    setBand(coldBand, 0, min);
+    setBand(workingBand, min, max);
+    setBand(hotBand, max, 1);
+    indicator.position.x = gaugeWidth * (Math.max(0, Math.min(1, level)) - .5);
+    const band = level < min ? cold : level > max ? hot : working;
+    pointer.emissive.copy(band.color);
+    gauge.visible = true;
+  }
+
   function absolute(e: number, n: number): Position {
     return { east: site.east + e, north: site.north + n, height: site.height };
   }
@@ -66,7 +117,7 @@ export function createWarriorForgeHall(site: Position = warriorForgeHallSite) {
     ) < radius);
   }
   return {
-    group, entry, stand, floorHeightAt, canStand,
+    group, entry, stand, floorHeightAt, canStand, updateHeat,
     colliders: solids.map(box => ({
       min: [site.east + box.e - box.width / 2, site.height + box.y, -site.north - box.n - box.depth / 2],
       max: [site.east + box.e + box.width / 2, site.height + box.y + box.height, -site.north - box.n + box.depth / 2],
@@ -74,7 +125,7 @@ export function createWarriorForgeHall(site: Position = warriorForgeHallSite) {
     dispose() {
       group.removeFromParent();
       shape.dispose();
-      for (const material of [stone, paving, brick, iron, ember]) material.dispose();
+      for (const material of [stone, paving, brick, iron, ember, cold, working, hot, pointer]) material.dispose();
     },
   };
 }
