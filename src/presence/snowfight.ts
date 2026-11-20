@@ -100,6 +100,15 @@ function rectEdgeDistance(east: number, north: number, rect: readonly number[]):
   return Math.hypot(dx, dn);
 }
 
+function wallBlocksRoad(east: number, north: number) {
+  const near = (seg: readonly number[]) => segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE;
+  return PLAZA_WEST_ROADS.some(near) || ROAD_SEGMENTS.some(near);
+}
+
+function wallBlocksDoor(east: number, north: number) {
+  return DOOR_POINTS.some(([x, n]) => Math.hypot(east - x, north - n) < 1.6);
+}
+
 /** 墙基座中心点分类：返回拒放类别，undefined 表示可堆。净空口径：禁堆区外扩 WALL_CLEARANCE。 */
 export function classifyWallSite(east: number, north: number): WallSiteRejection | undefined {
   if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 || east > TOWN_BOUNDS.width || north > TOWN_BOUNDS.depth) return 'bounds';
@@ -112,32 +121,32 @@ export function classifyWallSite(east: number, north: number): WallSiteRejection
     if (along <= halfLength + WALL_CLEARANCE && lateral <= 2.5 + WALL_CLEARANCE) return 'platform';
   }
   for (const seg of RAIL_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'rail';
-  for (const seg of PLAZA_WEST_ROADS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
-  for (const seg of ROAD_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
+  if (wallBlocksRoad(east, north)) return 'road';
   for (let i = 1; i < RIVER_POINTS.length; i++) {
     const seg = [RIVER_POINTS[i - 1][0], RIVER_POINTS[i - 1][1], RIVER_POINTS[i][0], RIVER_POINTS[i][1]];
     if (segmentDistance(east, north, seg) < 2 + WALL_CLEARANCE) return 'river';
   }
-  for (const door of DOOR_POINTS) {
-    if (Math.hypot(east - door[0], north - door[1]) < 1.6) return 'door';
-  }
+  if (wallBlocksDoor(east, north)) return 'door';
   if (inRect(east, north, SHARED_HOME_RECT)) return 'interior';
   for (const rect of INTERIOR_RECTS) if (inRect(east, north, rect)) return 'interior';
   for (const rect of INTERIOR_RECTS) if (rectEdgeDistance(east, north, rect) < WALL_CLEARANCE + .2) return 'door';
   return undefined;
 }
 
-/** 自由堆砌只禁水面、铁路正线与建筑内。比赛沿用上面的场地限制。 */
+/** 自由堆砌给门口、道路和桥面让路，比赛另有场地限制。 */
 export function classifyFreeWallSite(east: number, north: number): WallSiteRejection | undefined {
   if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 ||
       east > TOWN_BOUNDS.width || north > TOWN_BOUNDS.depth) return 'bounds';
   if (inRect(east, north, PALACE_SECRET_RECT)) return 'secret';
   if (inRect(east, north, SHARED_HOME_RECT) || FREE_INTERIOR_RECTS.some(rect => inRect(east, north, rect))) return 'interior';
   if (RAIL_SEGMENTS.some(seg => segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE)) return 'rail';
+  if (wallBlocksRoad(east, north)) return 'road';
+  if (wallBlocksDoor(east, north) ||
+    FREE_INTERIOR_RECTS.some(rect => rectEdgeDistance(east, north, rect) < WALL_CLEARANCE + .2)) return 'door';
   // Match terrain.ts riverX/isWater and the dry bridge decks in layout.json.
   const bridges = [[298, 253, 279], [192, 278, 304], [149, 276, 302], [100, 269, 295]];
   const bridge = bridges.some(([row, west, right]) => Math.abs(north - row) <= 4 && east >= west && east <= right);
-  if (bridge) return undefined;
+  if (bridge) return 'road';
   const inlet = east >= 287 && east <= 305 && Math.abs(north - (76 - (east - 287) / 2)) < 4;
   if (inlet) return 'river';
   for (let i = 1; i < RIVER_POINTS.length; i++) {
@@ -165,6 +174,8 @@ export class SnowWallField {
   private columns = new Map<string, WallBlock[]>();
   private total = 0;
 
+  constructor(private readonly maxLayers = WALL_MAX_LAYERS) {}
+
   private key(gx: number, gy: number) { return `${gx},${gy}`; }
 
   get size() { return this.total; }
@@ -180,7 +191,7 @@ export class SnowWallField {
   place(gx: number, gy: number, ownerId: number, team: SnowWallTeam, now: number):
     { block: WallBlock; cleared: WallBlock[] } | { reason: 'stack' | 'cap' } {
     const key = this.key(gx, gy);
-    if (this.height(gx, gy) >= WALL_MAX_LAYERS) return { reason: 'stack' };
+    if (this.height(gx, gy) >= this.maxLayers) return { reason: 'stack' };
     const cleared = this.total >= WALL_TOWN_CAP ? this.evictOldestFree() : [];
     if (this.total >= WALL_TOWN_CAP) return { reason: 'cap' };
     const column = this.columns.get(key) ?? [];

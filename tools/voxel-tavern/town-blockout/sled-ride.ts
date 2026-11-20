@@ -71,67 +71,85 @@ type SledWorld = {
   smoothFlight?(): void;
 };
 type Spot = { x: number; n: number; y: number; yaw: number };
-type SledControls = { forward: number; turn: number; drift?: boolean };
+type SledControls = { forward: number; turn: number; drift?: boolean; brake?: boolean };
 
 export function createSledRide(world: SledWorld) {
   const motion = createSledMotion();
   const spot: Spot = { x: 0, n: 0, y: 0, yaw: 0 };
+  const lastGrounded: Spot = { ...spot };
   let active = false;
-  let parked: (Spot & { east: number; north: number; speed: number }) | undefined;
+  let parked: Readonly<Spot> | undefined;
   let recovery = 0, recoveryDuration = 0, rollTurns = 0;
   let snowTime = 0, curbCooldown = 0, wasStalled = false;
   let landingCompression = 0, flightSeconds = 0;
   let braking = false, turnRate = 0, deepSnow = false;
 
-  function mount(x: number, n: number, y: number, yaw: number) {
-    if (active || recovery > 0 || world.blocked(x, n, y) || world.wallBlocked?.(x, n, y)) return false;
+  function canMountAt({ x, n, y }: Pick<Spot, 'x' | 'n' | 'y'>) {
+    return !world.blocked(x, n, y) && !world.wallBlocked?.(x, n, y);
+  }
+
+  function mountAt({ x, n, y, yaw }: Spot) {
     Object.assign(spot, { x, n, y, yaw });
+    Object.assign(lastGrounded, spot);
     motion.reset(yaw);
     active = true;
     parked = undefined;
+    recovery = recoveryDuration = rollTurns = landingCompression = 0;
     snowTime = curbCooldown = turnRate = flightSeconds = 0;
     braking = deepSnow = false;
     wasStalled = false;
     return true;
   }
 
-  function makeParked(factor: number) {
-    const released = {
-      ...spot, y: world.height(spot.x, spot.n), east: motion.state.east * factor,
-      north: motion.state.north * factor, speed: motion.state.speed * factor,
-    };
-    parked = released;
-    return released;
+  function mount(x: number, n: number, y: number, yaw: number) {
+    const start = { x, n, y, yaw };
+    return !active && !parked && canMountAt(start) && mountAt(start);
+  }
+
+  function canRemount(x: number, n: number, y: number) {
+    return !!parked && Math.hypot(parked.x - x, parked.n - n) <= 2.4 &&
+      Math.abs(parked.y - y) <= .55 && canMountAt(parked);
+  }
+
+  function remount(x: number, n: number, y: number) {
+    return !!parked && canRemount(x, n, y) && mountAt(parked);
+  }
+
+  function canRelocateMounted(x: number, n: number, y: number) {
+    return active && Number.isFinite(x) && Number.isFinite(n) && Number.isFinite(y) &&
+      y === world.height(x, n) && canMountAt({ x, n, y });
+  }
+
+  function relocateMounted(x: number, n: number, y: number, yaw: number) {
+    return Number.isFinite(yaw) && canRelocateMounted(x, n, y) && mountAt({ x, n, y, yaw });
   }
 
   function leave() {
     if (!active) return false;
-    const speed = motion.state.speed;
-    makeParked(.85);
+    if (motion.state.airborne) {
+      const support = { ...spot, y: world.height(spot.x, spot.n) };
+      Object.assign(spot, canMountAt(support) ? support : lastGrounded);
+    }
+    parked = { ...spot };
     active = false;
-    recovery = recoveryDuration = speed > 10 ? .4 : 0;
-    rollTurns = 0;
+    recovery = recoveryDuration = rollTurns = landingCompression = 0;
     motion.reset(spot.yaw);
     return true;
   }
 
-  function crash(speed: number, reboundEast = false, reboundNorth = false) {
+  function crash(speed: number) {
     const tumble = sledCrashKind(speed) === 'tumble';
-    const released = makeParked(tumble ? .80 : 0);
-    if (tumble) {
-      if (reboundEast) released.east *= -1;
-      if (reboundNorth) released.north *= -1;
-      if (reboundEast || reboundNorth) released.yaw = Math.atan2(released.east, released.north);
-    }
     world.snow(spot.x, spot.n, spot.y, spot.yaw, tumble ? 34 : 15);
-    active = false;
+    spot.y = world.height(spot.x, spot.n);
     recovery = recoveryDuration = tumble ? 1.25 : .65;
     rollTurns = tumble ? 2 : 0;
+    snowTime = curbCooldown = turnRate = flightSeconds = 0;
+    braking = false;
     motion.reset(spot.yaw);
   }
 
   function step(dt: number, controls: SledControls, boost = 0) {
-    if (!active || dt <= 0) return;
+    if (!active || recovery > 0 || dt <= 0) return;
     const state = motion.state;
     const incomingSpeed = state.speed;
     const from = world.height(spot.x, spot.n);
@@ -146,9 +164,10 @@ export function createSledRide(world: SledWorld) {
       const recent = world.height(spot.x - de * .6, spot.n - dn * .6);
       motion.takeOff((from - recent) * state.speed / .6);
     }
-    braking = controls.forward < -.1;
+    const drive = controls.brake ? { ...controls, forward: -1 } : controls;
+    braking = drive.forward < -.1;
     deepSnow = surface.deepSnow;
-    const next = motion.step(dt, controls, { ...surface, grade }, boost);
+    const next = motion.step(dt, drive, { ...surface, grade }, controls.brake ? 0 : boost);
     turnRate = sledYawDelta(spot.yaw, next.heading) / dt;
     spot.yaw = next.heading;
     if (next.uphillStalled && !wasStalled) world.stopped();
@@ -171,10 +190,7 @@ export function createSledRide(world: SledWorld) {
     flightSeconds = next.airborne ? flightSeconds + dt : 0;
     const nextY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
     if (world.blocked(x, n, nextY)) {
-      const eastBlocked = world.blocked(x, spot.n, nextY);
-      const northBlocked = world.blocked(spot.x, n, nextY);
-      // A diagonal corner with both individual steps clear rebounds on both axes.
-      crash(next.speed, eastBlocked || !northBlocked, northBlocked || !eastBlocked);
+      crash(next.speed);
       return;
     }
     const impact = world.wallImpact?.(spot, { x, n, y: nextY, yaw: spot.yaw }, incomingSpeed);
@@ -195,6 +211,7 @@ export function createSledRide(world: SledWorld) {
       if (landing === 'spill') { crash(0); return; }
       if (landing === 'hard') landingCompression = Math.min(.17, impact * .012);
     }
+    if (!next.airborne && !world.wallBlocked?.(x, n, nextY)) Object.assign(lastGrounded, spot);
     const sideSpray = next.drifting || braking;
     const mist = next.airborne ? 0 : sledSnowAmount(next.speed, sideSpray, Math.abs(curbRise));
     snowTime = mist ? snowTime + dt : 0;
@@ -207,29 +224,13 @@ export function createSledRide(world: SledWorld) {
     }
   }
 
-  function finishFrame(dt: number, playerX: number, playerN: number) {
+  function finishFrame(dt: number, _playerX?: number, _playerN?: number) {
     recovery = Math.max(0, recovery - dt);
     landingCompression *= Math.exp(-12 * dt);
-    const display = parked;
-    if (!display) return;
-    if (Math.hypot(display.x - playerX, display.n - playerN) > 25) { parked = undefined; return; }
-    if (display.speed < .05) {
-      display.speed = 0;
-      return;
-    }
-    const x = display.x + display.east * dt;
-    const n = display.n + display.north * dt;
-    const y = world.height(x, n);
-    if (world.blocked(x, n, y) || world.wallBlocked?.(x, n, y) || Math.abs(y - display.y) > .3) { display.speed = 0; return; }
-    Object.assign(display, { x, n, y });
-    const speed = display.speed;
-    display.speed = Math.max(0, speed - dt * 4.5);
-    display.east *= display.speed / speed;
-    display.north *= display.speed / speed;
   }
 
   return {
-    spot, mount, leave, step, finishFrame,
+    spot, mount, leave, canRemount, remount, canRelocateMounted, relocateMounted, step, finishFrame,
     interrupt() {
       if (active) leave();
       recovery = recoveryDuration = rollTurns = landingCompression = 0;
@@ -247,6 +248,6 @@ export function createSledRide(world: SledWorld) {
     faceDown: () => recovery > 0 && recoveryDuration >= .65 && !rollTurns ? Math.sin(Math.PI * recovery / recoveryDuration) : 0,
     roll() { return recovery > 0 && rollTurns ? 2 * Math.PI * rollTurns * (1 - recovery / recoveryDuration) : 0; },
     compression() { return recovery > 0 && !rollTurns ? .4 * Math.min(1, recovery * 4) : landingCompression; },
-    jump(speed: number) { if (active && !motion.state.airborne) motion.takeOff(speed); },
+    jump(speed: number) { if (active && recovery === 0 && !motion.state.airborne) motion.takeOff(speed); },
   };
 }

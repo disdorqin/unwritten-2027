@@ -1,0 +1,88 @@
+name: Verify ZA-22 live routes
+
+on:
+  push:
+    branches:
+      - town-verify-za22-station
+      - town-verify-za22-cloud
+      - town-verify-za22-gate
+      - town-verify-za22-crater
+  workflow_dispatch:
+    inputs:
+      segment:
+        description: Route to walk from the production spawn
+        type: choice
+        required: true
+        default: cloud
+        options: [station, cloud, gate, crater, all]
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SELECTED_SEGMENT: ${{ inputs.segment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install verified browser tooling
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build production Web and Presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/za22-live"
+          mkdir -p "$out"
+          git rev-parse HEAD | tee "$out/source-commit.txt"
+          git rev-parse HEAD^{tree} | tee "$out/source-tree.txt"
+          npm run typecheck 2>&1 | tee "$out/typecheck.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
+            -f tools/Dockerfile.town-preview -t za22-web . 2>&1 | tee "$out/town-preview-build.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
+            -f tools/Dockerfile.town-presence -t za22-presence . 2>&1 | tee "$out/presence-build.log"
+      - name: Walk from the production birth point
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/za22-live"
+          url=http://127.0.0.1:38100
+          segment="${SELECTED_SEGMENT:-${GITHUB_REF_NAME#town-verify-za22-}}"
+          cleanup() {
+            docker logs za22-web > "$out/town-preview.log" 2>&1 || true
+            docker logs za22-presence > "$out/presence.log" 2>&1 || true
+            docker rm -f za22-web za22-presence > /dev/null 2>&1 || true
+            docker network rm za22 > /dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create za22
+          # Use the real authoritative night scheduler. The approved testing clock
+          # reaches the beacon in 30 seconds. The browser never changes server or player state.
+          dawn="$(node -p 'Date.now() - 390000')"
+          docker run -d --name za22-presence --network za22 --network-alias presence \
+            -e PRESENCE_MOUNTAIN_PORT=8091 \
+            -e PRESENCE_WEST_PORT=8092 \
+            -e "TOWN_NIGHT_DAWN_EPOCH=$dawn" \
+            -e 'TOWN_NIGHT_OFFSETS_AFTER_DUSK=[60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000]' \
+            za22-presence
+          docker run -d --name za22-web --network za22 \
+            -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 za22-web
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
+            --max-time 4 "$url/healthz" | tee "$out/healthz.txt"
+          test "$(cat "$out/healthz.txt")" = "town-preview $GITHUB_SHA"
+          node tools/verify-za22-live.mjs "$url" "$out" "$segment"
+      - name: Upload route evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: za22-live-walk
+          path: ${{ runner.temp }}/za22-live
+          if-no-files-found: warn

@@ -10,6 +10,44 @@ type XZ = readonly [x: number, z: number];
 type Stop = 'dial' | 'bell' | 'lookout';
 type Waypoint = { target: XZ; stop?: Stop };
 
+test('the clocktower plaza apron and south arch support plain walking both ways', () => {
+  const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
+  const [east, north, altitude] = plot.origin;
+  const tower = buildTowerLandmark(plot);
+  tower.position.set(east, altitude, -north);
+  const { colliders, floors } = readWalkGeometry(tower);
+  const solids = [...colliders, ...floors];
+  const grid = createTerrainGrid();
+  const bodyRadius = .27;
+  const stepHeight = .43;
+  const northbound = Array.from({ length: 272 }, (_, index) => (21140 + index * 3) / 100);
+  const roundTrip = [...northbound, ...northbound.slice(0, -1).reverse()];
+
+  for (const x of [225.7, 226, 226.3]) {
+    let ground = grid.heightAt(x, roundTrip[0]);
+    for (const n of roundTrip) {
+      const overlaps = ({ min, max }: Box) => Math.hypot(
+        Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0),
+      ) < bodyRadius;
+      let next = grid.heightAt(x, n);
+      for (const floor of floors) {
+        if (floor.max[1] <= ground + stepHeight && overlaps(floor)) next = Math.max(next, floor.max[1]);
+      }
+      for (const solid of colliders) {
+        if (solid.max[1] <= ground + .03 && overlaps(solid)) next = Math.max(next, solid.max[1]);
+      }
+      const point = `E${x}/N${n}, ${ground} → ${next}`;
+      assert.ok(canEnter(x, n) && Math.abs(next - ground) <= stepHeight, point);
+      assert.equal(solids.some(box => overlaps(box) &&
+        next + .025 < box.max[1] && next + 1.775 > box.min[1]), false, point);
+      // N213 is on the flush apron. The physical arch and steps are farther north.
+      if (n >= 212 && n <= 215.7) assert.equal(next, altitude, point);
+      ground = next;
+    }
+    assert.equal(ground, altitude);
+  }
+});
+
 test('enlarged clocktower can be climbed and descended through all three activity stops', () => {
   const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
   const [east, north, altitude] = plot.origin;

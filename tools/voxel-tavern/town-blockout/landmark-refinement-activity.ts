@@ -33,6 +33,7 @@ export function createRailwayStationSpots(
   const ticket = worldPoint(group, stops.ticketCounter);
   const board = worldPoint(group, stops.timetable);
   const guide = worldPoint(group, stops.guide);
+  const cableGate = worldPoint(group, stops.cableGate);
   const spots: TownActivitySpot[] = [
     {
       x: ticket.x, n: -ticket.z, ground: ticket.y, range: 1.35, label: '车票盖章',
@@ -50,6 +51,12 @@ export function createRailwayStationSpots(
     {
       x: guide.x, n: -guide.z, ground: guide.y, range: 1.35, label: `查看${railHallGuide.title}`,
       run: () => { context.open(railHallGuide.title, railHallGuide.description); },
+    },
+    {
+      x: cableGate.x, n: -cableGate.z, ground: cableGate.y, range: 1.55, label: '查看缆车站老闸',
+      run() {
+        context.open('北岭缆车', '山脚站 → 半山站 → 云海台。老闸目前关闭。');
+      },
     },
   ];
   return spots.filter(({ x, n, ground }) => canStand(x, n, ground));
@@ -93,3 +100,4 @@ export function createCourtyardSeatSpots(
   }
   return spots;
 }
+

@@ -14,6 +14,7 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
+import { createTownPresenceNight } from './town-presence-night';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
@@ -33,6 +34,12 @@ import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
 } from '../../../src/shared/summit-passport';
+import {
+  isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath,
+} from '../../../src/shared/za22-mountain-domain';
+import {
+  isWestPresenceFoot, westPresenceEastOrigin, westPresenceHeightOrigin, westPresencePath,
+} from '../../../src/shared/za22-west-domain';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -99,6 +106,7 @@ export function createTownPresence(
   const status = document.getElementById('town-presence-status');
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
+  const townNight = createTownPresenceNight(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
@@ -156,6 +164,7 @@ export function createTownPresence(
   let joinedName: string | undefined;
   let serverEpochOffset: number | undefined;
   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
+  let avatarScene = scene;
   let socket: WebSocket | undefined;
   /** 当前 WS 尝试是否已完成入镇（用于区分「静默探测失败」与「在线掉线」）。 */
   let socketJoined = false;
@@ -173,6 +182,11 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
+  let domain: 'town' | 'mountain' | 'west' = 'town';
+  function presencePath(path: string) {
+    if (domain === 'town') return path;
+    return (domain === 'mountain' ? mountainPresencePath : westPresencePath) + path.slice('/presence'.length);
+  }
   let show = false;
   let haveId = false;
   let insideSharedHome = false;
@@ -245,7 +259,7 @@ export function createTownPresence(
     if (!active) return;
     window.clearInterval(active.timer);
     if (sendLeave && active.session) {
-      void fetch(POLL_LEAVE_URL, {
+      void fetch(presencePath(POLL_LEAVE_URL), {
         method: 'POST', headers: { 'x-presence-session': active.session }, keepalive: true,
       }).catch(() => { /* 离线离开时服务端会按轮询超时回收会话。 */ });
     }
@@ -273,7 +287,7 @@ export function createTownPresence(
 
   async function pollJoin(channel: PollChannel): Promise<boolean> {
     try {
-      const response = await fetch(POLL_JOIN_URL, {
+      const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: getName() }),
       });
@@ -307,7 +321,7 @@ export function createTownPresence(
     const events = channel.outEvents;
     channel.outEvents = [];
     try {
-      const response = await fetch(POLL_URL, {
+      const response = await fetch(presencePath(POLL_URL), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
         body: buildPollBody(state, events),
@@ -317,6 +331,7 @@ export function createTownPresence(
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
+        townNight.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
           stopPoll(false);
           retryPollLater();
@@ -324,7 +339,8 @@ export function createTownPresence(
         return;
       }
       if (!response.ok) throw new Error('poll failed');
-      feedPollMessages(await response.json());
+      const payload: unknown = await response.json();
+      if (poll === channel) feedPollMessages(payload);
     } catch {
       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
       if (poll === channel) requeuePollEvents(channel.outEvents, events);
@@ -355,6 +371,7 @@ export function createTownPresence(
     socket = undefined;
     socketJoined = false;
     haveId = false;
+    townNight.disconnect();
     resetOwnerSession();
     joinedId = null;
     joinedName = undefined;
@@ -396,6 +413,21 @@ export function createTownPresence(
     }
   }
 
+  function switchDomain(next: typeof domain, nextScene = scene) {
+    if (domain === next) return;
+    resetRetry();
+    disconnect(true);
+    domain = next;
+    avatarScene = nextScene;
+    avatars?.setScene(avatarScene);
+    lastPosition = lastHeightYaw = -1;
+    remaining = 0;
+    if (inTown) {
+      link.enterTown();
+      scheduleConnection();
+    }
+  }
+
   function scheduleCeremonyArrival() {
     window.clearTimeout(ceremonyArrivalTimer);
     if (!ceremonyArrival || !onCeremonyArrival) return;
@@ -422,9 +454,17 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
+        townNightWindow?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
+          if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
+          else townNight.acceptBeacon(message);
+        }
+        return;
+      }
       if (message.type === 'event' && message.kind === 'summit-passport-result') {
         const reply = haveId && summitPassportSupported && readSummitPassportReply(message);
         if (reply) onSummitPassport?.(reply);
@@ -566,8 +606,9 @@ export function createTownPresence(
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
             clock.accept(message.epochMs);
-            if (photoSupported) nextClockSample = 0;
+            if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
+          townNight.join(message.epochMs, message.townNightWindow);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
             resetRetry();
@@ -626,7 +667,10 @@ export function createTownPresence(
     const stamp = ++epoch;
     const time = performance.now();
     let mascotSeen = false;
-    const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
+    const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
+      const east = localEast + (domain === 'west' ? westPresenceEastOrigin : 0);
+      const north = localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0);
+      const height = localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0);
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       if (id === MASCOT_ACTOR_ID) {
         mascotSeen = true;
@@ -651,7 +695,7 @@ export function createTownPresence(
   function connect() {
     try {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${location.host}/presence`);
+      const ws = new WebSocket(`${protocol}//${location.host}${presencePath('/presence')}`);
       socket = ws;
       socketJoined = false;
       // 备用通道在跑时这是后台探测：不把 HUD 翻回「连接中」，探测成功才切回。
@@ -679,7 +723,15 @@ export function createTownPresence(
     const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
     if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
     remaining = remaining > -interval ? remaining + interval : interval;
-    writePresencePose(local, seq, outgoing);
+    if (domain === 'mountain') {
+      if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
+      writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
+    } else if (domain === 'west') {
+      if (!isWestPresenceFoot(local.east, local.north, local.height)) return;
+      writePresencePose({
+        ...local, east: local.east - westPresenceEastOrigin, height: local.height - westPresenceHeightOrigin,
+      }, seq, outgoing);
+    } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
     const changed = position !== lastPosition || heightYaw !== lastHeightYaw;
@@ -715,7 +767,7 @@ export function createTownPresence(
   }
 
   function samplePhotoClock() {
-    if (!photoSupported || !haveId) return;
+    if (!haveId || (!photoSupported && !townNight.state())) return;
     const sentAt = performance.now();
     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
     clockRequest = sentAt;
@@ -811,6 +863,18 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    getTownNightWindow: townNight.state,
+    townNightConnectedAt: townNight.connectedAt,
+    onTownNightBeacon: townNight.onBeacon,
+    northRidgeNightOpen: () => townNight.state()?.canEnterRestricted === true,
+    setMountainDomain(enabled: boolean, mountainScene?: Scene) {
+      if (enabled) switchDomain('mountain', mountainScene);
+      else if (domain === 'mountain') switchDomain('town');
+    },
+    setWestDomain(enabled: boolean) {
+      if (enabled && domain !== 'mountain') switchDomain('west');
+      else if (!enabled && domain === 'west') switchDomain('town');
+    },
     summitPassportAvailable: () => haveId && summitPassportSupported,
     requestSummitPassport(action: SummitPassportAction) {
       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
@@ -854,7 +918,7 @@ export function createTownPresence(
       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },
     renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
+      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
       avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
     },
     selfId: () => joinedId,
@@ -948,12 +1012,13 @@ export function createTownPresence(
     },
     update(dt: number) {
       if (!socket && !poll) return;
+      townNight.tick();
       sendPose(dt);
       samplePhotoClock();
       syncActivityPoses();
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
+      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
       avatars.setHighlight(bellHolderId);
       const now = performance.now();
       renderList.length = 0;

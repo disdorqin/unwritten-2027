@@ -6,28 +6,13 @@ import {
   SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyFreeWallSite, classifyWallSite,
   wallCellCentre, wallCellOf, type SnowfightTeam,
 } from '../../../src/presence/snowfight';
+import { snowWallBuildLayers, snowWallCost, type SnowballStock } from '../../../src/shared/snow-stock';
 import type { createTownPresence, SnowfightState } from './town-presence';
 import type { TownSnowballTarget } from './town-snow-target';
 import { createSnowfightAudio } from './snowfight-audio';
 import { particleDensityScale, scaledParticleCount } from './town-quality';
 
-export const MATERIAL_CAP = 40;
 export const DIG_CAP = 96;
-
-export class MaterialBank {
-  amount = 0;
-  constructor(private readonly cap = MATERIAL_CAP) {}
-  add(n: number): number {
-    const before = this.amount;
-    this.amount = Math.min(this.cap, this.amount + Math.max(0, Math.floor(n)));
-    return this.amount - before;
-  }
-  take(n: number): boolean {
-    if (this.amount < n) return false;
-    this.amount -= n;
-    return true;
-  }
-}
 
 /** 本地挖坑（纯表现）：深雪区掏雪留下浅坑，深雪回补（H2）落地后由统一场接管。 */
 export class DigField {
@@ -68,13 +53,16 @@ const REJECT_MESSAGES: Record<string, string> = {
   secret: '密室重地，不能堆墙',
   river: '河里堆不住墙',
   bounds: '这里堆不了墙',
-  stack: '最高四层，堆不上了',
+  stack: '最高三层，堆不上了',
   cap: '全镇雪墙已达上限',
+  pending: '等这一块雪墙确认',
+  rate: '缓一缓再堆',
 };
 
 export function createTeamSnowfight(options: {
   scene: Scene;
   presence: Presence;
+  stock: SnowballStock;
   heightAt(east: number, north: number): number;
   announce(message: string): void;
   playerPose(): { east: number; north: number };
@@ -83,9 +71,8 @@ export function createTeamSnowfight(options: {
   canScoop(): boolean;
   freeBuildAvailable?(): boolean;
 }) {
-  const { scene, presence, heightAt, announce } = options;
+  const { scene, presence, stock, heightAt, announce } = options;
   const audio = createSnowfightAudio();
-  const material = new MaterialBank();
   const digs = new DigField();
   const walls = new Map<string, WallView>();
   const groundCache = new Map<string, number>();
@@ -95,6 +82,7 @@ export function createTeamSnowfight(options: {
   let state: SnowfightState | undefined;
   let stateAt = 0;
   let buildMode = false;
+  let pendingWall: { gx: number; gy: number; ownerId: number; settle(accepted: boolean): void } | undefined;
   let explainedFreeBuild = false;
   let lastRejectAt = 0;
   let prevPhase: string | undefined;
@@ -313,9 +301,10 @@ export function createTeamSnowfight(options: {
     if (state?.phase === 'build' && team !== undefined && !buildHalfAllows(team, east)) return 'half';
     const site = active() ? classifyWallSite(east, north) : classifyFreeWallSite(east, north);
     if (site) return site;
-    if (columnHeight(gx, gy) >= WALL_MAX_LAYERS) return 'stack';
+    if (columnHeight(gx, gy) >= snowWallBuildLayers) return 'stack';
     if (active() && walls.size >= WALL_TOWN_CAP && ![...walls.values()].some(wall => wall.team === 2)) return 'cap';
-    if (material.amount < 1) return 'empty';
+    if (pendingWall) return 'pending';
+    if (stock.available() < snowWallCost) return 'empty';
     return undefined;
   }
 
@@ -323,10 +312,11 @@ export function createTeamSnowfight(options: {
     const now = performance.now();
     if (now - lastRejectAt < 1200) return;
     lastRejectAt = now;
-    announce(reason === 'empty' ? '雪料不够，先长按掏雪攒料' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
+    announce(reason === 'empty' ? '堆一块墙要 3 个雪团' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
   }
 
   function tryPlace(): boolean {
+    if (!buildMode) return false;
     const cell = aimCell();
     if (!cell) return false;
     const rejection = placeRejection(cell.gx, cell.gy);
@@ -334,8 +324,25 @@ export function createTeamSnowfight(options: {
       noteReject(rejection);
       return true; // 吞掉这次释放：不掷雪球
     }
-    presence.sendSnowfightPlace(cell.gx, cell.gy);
+    const ownerId = presence.selfId();
+    if (ownerId === null) return false;
+    const settle = stock.reserveWall();
+    if (!settle) return false;
+    pendingWall = { gx: cell.gx, gy: cell.gy, ownerId, settle };
+    if (!presence.sendSnowfightPlace(cell.gx, cell.gy)) finishWall(false);
     return true;
+  }
+
+  function finishWall(accepted: boolean) {
+    const request = pendingWall;
+    pendingWall = undefined;
+    request?.settle(accepted);
+  }
+
+  function setBuildMode(enabled: boolean) {
+    buildMode = enabled && canBuild();
+    updateHud();
+    return buildMode;
   }
 
   function updateHud() {
@@ -346,11 +353,11 @@ export function createTeamSnowfight(options: {
       buildButton.hidden = !buildingAvailable;
       buildButton.textContent = buildMode ? '堆墙中 · 点此收起' : '堆墙';
       buildButton.setAttribute('aria-pressed', String(buildMode));
-      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && material.amount > 0 ? '2px solid #9fe8ff' : '';
+      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && stock.available() >= snowWallCost ? '2px solid #9fe8ff' : '';
     }
     if (materialOut) {
       materialOut.hidden = !buildingAvailable;
-      const text = `雪料 ${material.amount}`;
+      const text = `雪团 ${stock.amount()}`;
       if (buildingAvailable && materialOut.textContent !== text) materialOut.textContent = text;
     }
     if (panel) panel.hidden = !active() && state?.phase !== 'done';
@@ -398,7 +405,10 @@ export function createTeamSnowfight(options: {
     if (captured) audio.capture();
     updateHud();
   });
-  presence.onSnowfightRejected(reason => noteReject(reason));
+  presence.onSnowfightRejected(reason => {
+    finishWall(false);
+    noteReject(reason);
+  });
   presence.onSnowfightWallEvent(event => {
     if (event.kind === 'wall-set') {
       const k = key(event.gx, event.gy, event.layer);
@@ -409,9 +419,9 @@ export function createTeamSnowfight(options: {
         ground: groundAt(event.gx, event.gy),
       });
       refreshWalls();
-      const me = presence.selfId();
-      if (!existed && me !== null && event.ownerId === me) {
-        material.take(1);
+      const request = pendingWall;
+      if (!existed && request && event.ownerId === request.ownerId && event.gx === request.gx && event.gy === request.gy) {
+        finishWall(true);
         audio.place();
       } else if (existed && previous && event.hp < previous.hp) {
         audio.crack();
@@ -435,17 +445,11 @@ export function createTeamSnowfight(options: {
   if (startButton) startButton.onclick = () => {
     if (presence.requestSnowfightStart()) audio.start();
   };
-  if (buildButton) buildButton.onclick = () => {
-    if (!canBuild()) return;
-    buildMode = !buildMode;
-    if (buildMode && material.amount < 1) announce('雪料为零：对准近处雪地长按掏雪攒料');
-    updateHud();
-  };
-
   return {
     active,
     canBuild,
     buildMode: () => buildMode,
+    setBuildMode,
     tryPlace,
     wallTargets: () => targets,
     /** 本地镜像中的墙列（雪橇交叉判定用）：无墙返回 undefined；ground 为该列基座地面高。 */
@@ -455,21 +459,17 @@ export function createTeamSnowfight(options: {
       const base = walls.get(key(gx, gy, 0));
       return { height, ground: base ? base.ground : groundAt(gx, gy) };
     },
-    material: () => material.amount,
+    material: stock.amount,
     onGatherTick() {
-      if (!canBuild()) return;
-      const previous = material.amount;
       const level = options.snowDepthLevel();
       if (level >= 2) {
-        if (material.add(2) > 0) {
-          const poseNow = options.playerPose();
-          digs.dig(poseNow.east, poseNow.north);
-          refreshDigs();
-        }
-      } else material.add(1);
-      if (!explainedFreeBuild && mayBuildFree() && previous < 1 && material.amount > 0) {
+        const poseNow = options.playerPose();
+        digs.dig(poseNow.east, poseNow.north);
+        refreshDigs();
+      }
+      if (!explainedFreeBuild && mayBuildFree() && stock.available() >= snowWallCost) {
         explainedFreeBuild = true;
-        announce('雪料够了，点『堆墙』可以垒掩体');
+        announce('按 B 或点「堆墙」进入堆墙模式');
       }
       updateHud();
     },
@@ -499,6 +499,7 @@ export function createTeamSnowfight(options: {
       );
     },
     update(dt: number) {
+      if (pendingWall && (presence.selfId() !== pendingWall.ownerId || !presence.snowfightAvailable())) finishWall(false);
       // 虚影预览
       if (buildMode && canBuild()) {
         const cell = aimCell();
