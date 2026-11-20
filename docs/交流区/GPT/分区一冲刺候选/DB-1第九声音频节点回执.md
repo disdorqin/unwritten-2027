@@ -6,7 +6,7 @@
 
 - 第九声复用现役塔钟的低阶泛音，经 1200 Hz 低通和 6 秒衰减的独立混响，尾音下坠 50 cents。WebAudio 按外部调度的时刻播放，HRTF 使用宿主换算后的听者坐标，西侧偏上须在实际摄像机/监听器姿态复验。宿主明确传入响度和湿声比，测试中的 −8 dB、0.3 是节点验证输入。
 - 既有普通塔钟继续走原播放函数，节点回归验证每声六个原泛音、不加下坠、不改 2.020 秒间隔。普通整点八加一、共同时钟、迟到不回播、极光只抑第九声和零点排除由已审 `town-hook-one.ts` 规划器复跑。
-- 定向实际 **19/19**，`npm run typecheck` 通过，`git diff --check` 通过。命令 `node --import tsx --test tests/town-blockout-ninth-bell.test.ts tests/town-blockout-hook-one.test.ts tests/town-blockout-clocktower-function.test.ts`。新增两例为 WebAudio 参数及连接的记录型夹具，听感和实机声源方位尚待验。
+- 三个文件共 **19/19 个 Node 测试用例**（原钟楼与规划器 17 个，新增音频 2 个；新增文件 18 处断言），`npm run typecheck` 通过，`git diff --check` 通过。命令 `node --import tsx --test tests/town-blockout-ninth-bell.test.ts tests/town-blockout-hook-one.test.ts tests/town-blockout-clocktower-function.test.ts`。新增两例为 WebAudio 参数及连接的记录型夹具，听感和实机声源方位尚待验。
 
 ## 生产接线剩余
 
