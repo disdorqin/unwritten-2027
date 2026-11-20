@@ -1,0 +1,39 @@
+name: Verify underground crystal mimic
+
+on:
+  push:
+    branches: [lane-c]
+    paths:
+      - '.github/workflows/verify-underground-crystal-mimic.yml'
+      - 'tools/voxel-tavern/town-blockout/underground-crystal-mimic.ts'
+      - 'tools/fixtures/underground-crystal-mimic-review.ts'
+      - 'tools/verify-underground-crystal-mimic.mjs'
+      - 'src/presence/underground-crystal-bat.ts'
+      - 'tests/town-blockout-underground-crystal-mimic.test.ts'
+      - 'tests/server/underground-crystal-bat.test.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: git fetch --no-tags origin 25ff93454c93777d16583cdac1de9f36b9c277ba
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+      - run: node --import tsx --test tests/town-blockout-underground-crystal-mimic.test.ts tests/server/underground-crystal-bat.test.ts
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - run: node tools/verify-underground-crystal-mimic.mjs "${{ runner.temp }}/u3-crystal"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: underground-crystal-mimic-browser
+          path: ${{ runner.temp }}/u3-crystal
