@@ -122,6 +122,51 @@ test('the mine gate needs the accepted winch foot and a cleared section, then st
   assert.equal(gate.state(), 'open');
 });
 
+test('the registered crystal return switch opens the same gate without reclearing the mine', () => {
+  const winch = { domainId: 'mine', east: 0, north: 0, height: -91, horizontalReach: 1.1, verticalReach: .2 };
+  const crystalSwitch = { ...winch, domainId: 'crystal-cave', height: -140 };
+  let foot = { ...crystalSwitch, playerId };
+  let time = 100;
+  let clearChecks = 0;
+  const options = {
+    winch,
+    now: () => time,
+    revealMs: 400,
+    encounter: { isSectionCleared() { clearChecks++; return false; } },
+    readAcceptedFoot: () => foot,
+  };
+  assert.equal(createUndergroundMineGate(options).openFromCrystal(playerId), 'unreachable');
+  assert.throws(() => createUndergroundMineGate({ ...options, crystalSwitch: winch }), /distinct/);
+  const gate = createUndergroundMineGate({ ...options, crystalSwitch });
+
+  foot = { ...winch, playerId };
+  assert.equal(gate.openFromCrystal(playerId), 'unreachable');
+  assert.equal(gate.openFromMine(playerId), 'uncleared');
+  assert.equal(clearChecks, 1);
+  foot = { ...crystalSwitch, height: -139.7, playerId };
+  assert.equal(gate.openFromCrystal(playerId), 'unreachable');
+  foot = { ...crystalSwitch, east: 1.2, playerId };
+  assert.equal(gate.openFromCrystal(playerId), 'unreachable');
+  foot = { ...crystalSwitch, playerId };
+  assert.equal(gate.openFromCrystal('other'), 'unreachable');
+  assert.equal(gate.state(), 'closed');
+
+  time = NaN;
+  assert.equal(gate.openFromCrystal(playerId), 'clock-unavailable');
+  assert.equal(gate.state(), 'closed');
+  time = 100;
+  assert.equal(gate.openFromCrystal(playerId), 'ajar');
+  time = 499;
+  assert.equal(gate.openFromCrystal(playerId), 'ajar');
+  foot = { ...winch, playerId };
+  assert.equal(gate.openFromMine(playerId), 'ajar');
+  time = 500;
+  assert.equal(gate.openFromMine(playerId), 'open');
+  foot = { ...crystalSwitch, playerId };
+  assert.equal(gate.openFromCrystal(playerId), 'open');
+  assert.equal(clearChecks, 1);
+});
+
 test('a failed survival write retries the same encounter tick without advancing or charging damage twice', () => {
   const f = fixture([{ ...spawn, id: 'skeleton', species: 'skeleton-miner', habitat: 'workface' }]);
   f.setAccepted({ section: 'mine', player: { room, at: point, action: 'mine' } });
