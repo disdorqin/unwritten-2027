@@ -49,7 +49,12 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
 test('the mounted eastbound strip supports a full takeoff roll behind the retained registration monument', () => {
   const epoch = Date.UTC(2026, 0, 1);
   let now = epoch;
-  const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
+  const inspected: Array<{ title: string; message: string }> = [];
+  const cloud = createZa22CloudRoute({
+    now: () => now,
+    enterOrExit() {},
+    view(title, message) { inspected.push({ title, message }); },
+  });
   cloud.action(za22StationApproach)?.run();
   cloud.update(za22StationApproach);
   const { legMs } = createZa22NorthRidgeLine(26);
@@ -91,10 +96,21 @@ test('the mounted eastbound strip supports a full takeoff roll behind the retain
     assert.equal(cloud.blocked(306, 662, 347, .27, 1.8), true);
     assert.equal(cloud.surfaceAt(306, 659, .27), 347);
     assert.equal(cloud.blocked(306, 659, 347, .27, 1.8), false);
+    assert.equal(cloud.action(point(324, 659)), undefined);
+    assert.equal(cloud.action(point(327.75, 657)), undefined);
+    const inspect = cloud.action(point(324, 655));
+    assert.equal(inspect?.label, '查看星港坪装配和起飞线');
+    inspect?.run();
+    assert.equal(inspected.length, 1);
+    assert.equal(inspected[0]?.title, '星港坪');
+    assert.match(inspected[0]?.message ?? '', /向东滑跑/);
     assert.deepEqual(surveyAircraftRunway(runway, world), { ok: true, length: 41, heading: Math.PI / 2, checkedMetres: 41 });
-    assert.equal(surveyAircraftRunway({ ...runway, start: runway.end, end: runway.start }, world).ok, false);
+    const reverse = { ...runway, start: runway.end, end: runway.start };
+    assert.equal(surveyAircraftRunway(reverse, world).ok, false);
     const flight = createAircraftFlight(world, createFlightThrust(600));
     assert.equal(flight.launchRunway(false, runway.start, runway), false);
+    assert.equal(flight.launchRunway(true, reverse.start, reverse), false);
+    assert.equal(flight.snapshot(), undefined);
     assert.equal(flight.launchRunway(true, runway.start, runway), true);
     assert.equal(flight.snapshot()?.phase, 'rolling');
     for (let second = 0; second < 10; second++) flight.advance(1, { throttle: 'full' });
