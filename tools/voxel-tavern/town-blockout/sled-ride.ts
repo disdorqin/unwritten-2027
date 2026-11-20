@@ -65,6 +65,7 @@ type SledWorld = {
   surface(x: number, n: number, y: number): { surface: number; deepSnow: boolean };
   blocked(x: number, n: number, y: number): boolean;
   canTraverse?(from: Readonly<SledPoint>, to: Readonly<SledPoint>): boolean;
+  canReachParked?(from: Readonly<SledPoint>, to: Readonly<SledPoint>): boolean;
   wallBlocked?(x: number, n: number, y: number): boolean;
   wallImpact?(from: Spot, to: Spot, speed: number): WallReport | undefined;
   snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
@@ -109,8 +110,18 @@ export function createSledRide(world: SledWorld) {
   }
 
   function canRemount(x: number, n: number, y: number) {
-    return !!parked && Math.hypot(parked.x - x, parked.n - n) <= 2.4 &&
-      Math.abs(parked.y - y) <= .55 && canMountAt(parked);
+    if (!parked) return false;
+    const dx = parked.x - x, dn = parked.n - n, dy = parked.y - y;
+    const distance = Math.hypot(dx, dn);
+    if (!(distance <= 2.4 && Math.abs(dy) <= .55) || !canMountAt(parked)) return false;
+    if (world.canReachParked?.({ x, n, y }, parked) === false) return false;
+    // Check the short boarding path through fences and snow walls as well as the seat.
+    const segments = Math.ceil(distance / .15);
+    for (let step = 1; step < segments; step++) {
+      const t = step / segments;
+      if (!canMountAt({ x: x + dx * t, n: n + dn * t, y: y + dy * t })) return false;
+    }
+    return true;
   }
 
   function remount(x: number, n: number, y: number) {
