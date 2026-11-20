@@ -1,0 +1,28 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 296ebfa..5ed3637 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -446,7 +446,6 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
+   scene.add(group);
+ }
+ for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+-addNewYearDecor(scene);
+ const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
+ const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
+ function museumToWorld(localX: number, localY: number, localZ: number) {
+@@ -1288,6 +1287,7 @@ ceremonyFrost.mountSettings(element('town-panel-controls'));
+ festival.mountAudioSettings(element('town-panel-controls'));
+ const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
+   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
++const newYearDecor = addNewYearDecor(scene, ceremonyClock.now());
+ const railOvernightBroadcast = createRailOvernightBroadcast();
+ const postUnlockTime = new Date(UNLOCK_AT).getTime();
+ setPostOpeningReady(architecture.get('post-office'), Date.now() >= postUnlockTime);
+@@ -3081,6 +3081,7 @@ renderer.setAnimationLoop(now => {
+   }
+   personalFirecrackers.update();
+   const ceremonyState = ceremony.update();
++  newYearDecor.updateOpeningBoard(ceremonyState.now);
+   const offset = ceremonyClock.utcOffsetMinutes;
+   const midnight = ceremonyMidnight(ceremonyEveYear(ceremonyState.now, offset), offset);
+   updateTowerTime(tower, ceremonyState.now, ceremonyState.secondsToMidnight, ceremonyState.phase === 'climax');

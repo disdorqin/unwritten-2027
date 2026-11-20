@@ -5,13 +5,20 @@ import { layout } from './terrain';
 
 const dayMilliseconds = 86_400_000;
 const beijingOffset = 8 * 3_600_000;
-// PLAN.md specifies the opening day. Midnight in this calculation is the calendar boundary,
-// not an opening appointment. The midnight New Year's ceremony has its own schedule.
-const openingDay = Date.UTC(2026, 11, 31);
+// The opening night handbook sets 20:00 Beijing time, four hours before the ceremony.
+export const townOpeningAt = Date.UTC(2026, 11, 31, 12);
+const openingDay = Math.floor((townOpeningAt + beijingOffset) / dayMilliseconds) * dayMilliseconds;
 
 export function daysUntilTownOpening(now: number) {
   const beijingDay = Math.floor((now + beijingOffset) / dayMilliseconds) * dayMilliseconds;
   return (openingDay - beijingDay) / dayMilliseconds;
+}
+
+function openingBoardText(now: number) {
+  const days = daysUntilTownOpening(now);
+  if (days > 0) return `还有 ${days} 天`;
+  if (days < 0) return '雪镇纪念';
+  return now < townOpeningAt ? '今日 20:00 开镇' : '今日开镇';
 }
 
 const scriptFont = '"KaiTi", "STKaiti", "Noto Serif CJK SC", "Microsoft YaHei", serif';
@@ -53,7 +60,7 @@ function couplet(text: string) {
   return canvas;
 }
 
-function paintOpeningBoard(canvas: HTMLCanvasElement, days: number) {
+function paintOpeningBoard(canvas: HTMLCanvasElement, text: string) {
   const ink = canvas.getContext('2d')!;
   const paper = ink.createLinearGradient(0, 0, 0, canvas.height);
   paper.addColorStop(0, '#581f2c');
@@ -73,13 +80,13 @@ function paintOpeningBoard(canvas: HTMLCanvasElement, days: number) {
   ink.textBaseline = 'middle';
   ink.fillStyle = '#f5ca8a';
   ink.font = `bold 29px ${labelFont}`;
-  ink.fillText('开镇日 · 2026.12.31', 256, 55);
+  ink.fillText('开镇日 · 2026.12.31 20:00', 256, 55);
   ink.fillStyle = '#ffe8ad';
   ink.font = `bold 57px ${labelFont}`;
-  ink.fillText(days > 0 ? `还有 ${days} 天` : days === 0 ? '今日开镇' : '雪镇纪念', 256, 116, 410);
+  ink.fillText(text, 256, 116, 410);
 }
 
-export function addNewYearDecor(parent: Object3D) {
+export function addNewYearDecor(parent: Object3D, initialEpochMs?: number) {
   const signs = new Group();
   signs.name = 'New Year doorway couplets and opening date';
   parent.add(signs);
@@ -106,19 +113,31 @@ export function addNewYearDecor(parent: Object3D) {
     add(source, workshop.origin, [-7.56, 2.55, 2.12 * side], .40, 1.83, -Math.PI / 2);
   }
   add(board, tower.origin, [0, 7.42, 6.858], 4.10, 1.33);
-  paintOpeningBoard(board, daysUntilTownOpening(Date.now()));
+  const initialTime = initialEpochMs ?? Date.now();
+  let rendered = openingBoardText(initialTime);
+  paintOpeningBoard(board, rendered);
   const refresh = addOpaqueMuseumLabels(items, []);
-  const update = () => {
-    const now = Date.now();
-    const beijingTime = now + beijingOffset;
+  function updateOpeningBoard(now: number) {
+    if (!Number.isFinite(now)) return;
+    const text = openingBoardText(now);
+    if (text === rendered) return;
+    rendered = text;
+    paintOpeningBoard(board, text);
+    refresh(board);
+  }
+
+  // Older hosts can still use the board without passing their own clock into the scene.
+  function scheduleLocalUpdate(now: number) {
     const days = daysUntilTownOpening(now);
     if (days < 0) return;
+    const midnight = (Math.floor((now + beijingOffset) / dayMilliseconds) + 1) * dayMilliseconds - beijingOffset;
+    const boundary = days === 0 && now < townOpeningAt ? townOpeningAt : midnight;
     window.setTimeout(() => {
-      paintOpeningBoard(board, daysUntilTownOpening(Date.now()));
-      refresh(board);
-      update();
-    }, dayMilliseconds - beijingTime % dayMilliseconds + 100);
-  };
-  update();
-  return signs;
+      const next = Date.now();
+      updateOpeningBoard(next);
+      scheduleLocalUpdate(next);
+    }, boundary - now);
+  }
+  if (initialEpochMs === undefined) scheduleLocalUpdate(initialTime);
+  return Object.assign(signs, { updateOpeningBoard });
 }
