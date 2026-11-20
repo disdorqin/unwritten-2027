@@ -1,0 +1,144 @@
+{
+  "sha": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "model": {
+    "hz": 120,
+    "seconds": 60,
+    "surface": "normal snow",
+    "sprint": 11.3,
+    "sledSoftSpeed": 43.2,
+    "sledMaximumSpeed": 45.2
+  },
+  "terminals": [
+    {
+      "slopePercent": 0,
+      "target": 22.6,
+      "terminal": 22.6,
+      "delta": 0,
+      "peak": 22.6,
+      "distance": 1189.4859139036587
+    },
+    {
+      "slopePercent": 10,
+      "target": 22.6,
+      "terminal": 21.352242548586762,
+      "delta": -1.2477574514132392,
+      "peak": 21.352242548586762,
+      "distance": 1017.5305266969918
+    },
+    {
+      "slopePercent": 20,
+      "target": 33.900000000000006,
+      "terminal": 35.73318021951125,
+      "delta": 1.8331802195112417,
+      "peak": 35.73318021951125,
+      "distance": 1796.2972283826753
+    },
+    {
+      "slopePercent": 30,
+      "target": 45.2,
+      "terminal": 45.2,
+      "delta": 0,
+      "peak": 45.2,
+      "distance": 2369.912721249769
+    }
+  ],
+  "drift": [
+    {
+      "initial": 33.900000000000006,
+      "slopePercent": 20,
+      "peakSlipDegrees": 35,
+      "finalSpeed": 34.11067647842777
+    },
+    {
+      "initial": 45.2,
+      "slopePercent": 20,
+      "peakSlipDegrees": 35,
+      "finalSpeed": 44.06355291453577
+    }
+  ],
+  "wall": [
+    {
+      "speed": 7.99,
+      "byte": 7,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 0
+    },
+    {
+      "speed": 8,
+      "byte": 8,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 1
+    },
+    {
+      "speed": 15,
+      "byte": 15,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 2
+    },
+    {
+      "speed": 22,
+      "byte": 22,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 2
+    },
+    {
+      "speed": 22.01,
+      "byte": 23,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 4
+    },
+    {
+      "speed": 45,
+      "byte": 45,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 4
+    },
+    {
+      "speed": 45.2,
+      "byte": 46,
+      "allowedByUpperBound": true,
+      "layersBeforeServerValidation": 4
+    },
+    {
+      "speed": 47,
+      "byte": 47,
+      "allowedByUpperBound": false,
+      "layersBeforeServerValidation": 4
+    }
+  ],
+  "sledWallMaximumReportSpeed": 46,
+  "worldBounds": {
+    "width": 640,
+    "depth": 540
+  },
+  "anchors": [
+    {
+      "label": "R2 模型起点",
+      "east": 440,
+      "north": 520,
+      "releaseCanEnter": true,
+      "releaseYClamped": 7.922041416168213,
+      "northRidge350Y": 140
+    },
+    {
+      "label": "山脚南轴",
+      "east": 320,
+      "north": 270,
+      "releaseCanEnter": true,
+      "releaseYClamped": 25,
+      "northRidge350Y": 18
+    },
+    {
+      "label": "前山顶站参考",
+      "east": 336,
+      "north": 640,
+      "releaseCanEnter": false,
+      "releaseYClamped": 8.645833015441895,
+      "northRidge350Y": 347
+    }
+  ],
+  "existingLongHallRoute": {
+    "points": 12,
+    "maxNorth": 303
+  }
+}
