@@ -7,7 +7,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [checkoutArg = '.', outputArg = 'zb16-town-sled-evidence', mode] = process.argv.slice(2);
-assert.ok(!mode || mode === '--build-only', 'Third argument must be --build-only');
+assert.ok(!mode || mode === '--build-only' || mode === '--airborne-exit',
+  'Third argument must be --build-only or --airborne-exit');
 const checkout = path.resolve(checkoutArg);
 const output = path.resolve(outputArg);
 const require = createRequire(path.join(checkout, 'package.json'));
@@ -24,36 +25,44 @@ function instrument(source) {
   assert.equal(source.split(access).length, 2, 'Expected one sled observer anchor');
   assert.equal(source.split(interact).length, 2, 'Expected one real world-action route');
   return source.replace(access, `
-let zb16NoteSledAction: ((label: string | undefined) => void) | undefined;
+let zb16ObserveSledAction: ((label: string | undefined, run: () => void) => void) | undefined;
 if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.1' &&
     new URLSearchParams(location.search).has('zb16TownSled')) {
   let staged = false, frame = 0, drawCalls = 0;
-  let mountedOnce = false, released = false, surpriseDismount = false;
+  let wasMounted = false, released = false, surpriseDismount = false, jumped = false;
   const inputs: Record<string, unknown>[] = [];
-  const actions: { label: string; state: ReturnType<typeof pose> }[] = [];
+  const actions: { label: string; before: ReturnType<typeof pose>; state: ReturnType<typeof pose> }[] = [];
   const tumbles: ReturnType<typeof pose>[] = [];
   function pose() {
     const parked = sledRide.parked();
     return { x, n, ground, yaw, frame, drawCalls, walking, canMove: moveAllowed(),
-      active: sledRide.active(), recovery: sledRide.recovering(), roll: sledRide.roll(), speed: sledRide.speed(),
+      active: sledRide.active(), airborne: sledRide.airborne(), recovery: sledRide.recovering(),
+      roll: sledRide.roll(), speed: sledRide.speed(), sledGround: sledGroundAt(sledRide.spot.x, sledRide.spot.n),
       sled: { ...sledRide.spot }, parked: parked ? { ...parked } : null,
       rackDistance: Math.min(...sledRacks.map(rack => Math.hypot(rack.x - x, rack.n - n))),
       action: currentAction()?.label, surpriseDismount };
   }
-  zb16NoteSledAction = label => {
-    if (label === '下橇') released = true;
-    if (label === '乘雪橇' || label === '下橇' || label === '重新上橇') actions.push({ label, state: pose() });
+  zb16ObserveSledAction = (label, run) => {
+    if (label !== '乘雪橇' && label !== '下橇' && label !== '重新上橇') { run(); return; }
+    const before = pose();
+    run();
+    const state = pose();
+    if (before.active === state.active) return;
+    released = !state.active;
+    actions.push({ label, before, state });
   };
   renderer.domElement.addEventListener('town-frame-profile', event => {
     frame++;
     drawCalls = (event as CustomEvent).detail.calls;
-    if (sledRide.active()) mountedOnce = true;
-    if (mountedOnce && !released && !sledRide.active()) surpriseDismount = true;
+    if (wasMounted && !released && !sledRide.active()) surpriseDismount = true;
+    wasMounted = sledRide.active();
     if (sledRide.recovering() && Math.abs(sledRide.roll()) > .03 && tumbles.length < 120) tumbles.push(pose());
   });
   for (const kind of ['keydown', 'keyup']) document.addEventListener(kind, event => {
-    if (event instanceof KeyboardEvent && ['KeyE', 'KeyW', 'KeyS'].includes(event.code) && !event.repeat)
-      inputs.push({ kind, key: event.code, trusted: event.isTrusted });
+    if (event instanceof KeyboardEvent && ['KeyE', 'KeyW', 'KeyS'].includes(event.code) && !event.repeat) {
+      inputs.push({ kind, key: event.code, trusted: event.isTrusted, airborne: sledRide.airborne(),
+        active: sledRide.active(), frame });
+    }
   }, true);
   Object.defineProperty(window, '__zb16TownSled', { value: {
     stage() {
@@ -70,13 +79,21 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
       walkPrevious.copy(walkRender);
       renderer.domElement.focus({ preventScroll: true });
     },
+    testJump() {
+      if (jumped || actions.length !== 3 || !sledRide.active() || sledRide.airborne() || sledRide.recovering()) {
+        throw new Error('Finish the native tumble and first reboard before testing an airborne exit');
+      }
+      jumped = true;
+      sledRide.jump(8);
+    },
     read() { return { ...pose(), inputs: inputs.slice(), actions: actions.slice(), tumbles: tumbles.slice() }; },
   } });
 }
 ${access}`).replace(interact, `function interact() {
   const action = currentAction();
-  action?.run();
-  zb16NoteSledAction?.(action?.label);`);
+  const run = () => { action?.run(); };
+  if (zb16ObserveSledAction) zb16ObserveSledAction(action?.label, run);
+  else run();`);
 }
 
 async function wait(page, predicate, arg, limit = timeout) {
@@ -92,11 +109,32 @@ async function holdKey(page, key, task) {
   try { return await task(); } finally { await page.keyboard.up(key); }
 }
 
+async function walkAwayAndReboard(page, parked, actionIndex) {
+  const walkedAway = await holdKey(page, 's', () => wait(page, () => {
+    const s = window.__zb16TownSled.read();
+    return s.parked && Math.hypot(s.x - s.parked.x, s.n - s.parked.n) > 2.65 &&
+      s.action !== '重新上橇' && s;
+  }, undefined, travelTimeout));
+  await holdKey(page, 'w', () => wait(page, () => window.__zb16TownSled.read().action === '重新上橇',
+    undefined, travelTimeout));
+  await page.keyboard.press('e');
+  const remounted = await wait(page, index => {
+    const s = window.__zb16TownSled.read();
+    return s.active && !s.parked && s.actions[index]?.label === '重新上橇' && s;
+  }, actionIndex);
+  const reboard = remounted.actions[actionIndex];
+  assert.deepEqual(reboard.before.parked, parked.parked);
+  assert.deepEqual(reboard.state.sled, parked.parked);
+  assert.equal(remounted.surpriseDismount, false);
+  return { walkedAway, remounted };
+}
+
 await mkdir(output, { recursive: true });
 const temp = await mkdtemp(path.join(tmpdir(), 'zb16-town-sled-'));
 const dist = path.join(temp, 'dist');
-const evidence = { status: 'building', candidate: {}, errors: [], connectionLogs: [],
-  scope: 'real town and inputs after one native landing at the existing rack; no test-triggered crash' };
+const scope = 'real town and inputs after one native landing at the existing rack; no test-triggered crash';
+const evidence = { status: 'building', candidate: {}, errors: [], consoleErrors: [], networkErrors: [], connectionLogs: [],
+  scope: mode === '--airborne-exit' ? `${scope}. The second exit starts with a rehearsal-only call to the real sled jump.` : scope };
 let server, browser, page;
 try {
   for (const file of ['tools/voxel-tavern/town-blockout/viewer.ts', 'tools/voxel-tavern/town-blockout/sled-ride.ts'])
@@ -109,11 +147,21 @@ try {
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE_PATH, args: swiftShader });
     page = await browser.newPage({ viewport: { width: 1000, height: 650 }, deviceScaleFactor: 1 });
     page.on('pageerror', error => evidence.errors.push(error.message));
+    page.on('console', message => {
+      if (message.type() === 'error') evidence.consoleErrors.push(message.text());
+    });
+    page.on('requestfailed', request => {
+      evidence.networkErrors.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`);
+    });
+    page.on('response', response => {
+      if (response.status() >= 400) evidence.networkErrors.push(`${response.status()} ${response.url()}`);
+    });
     evidence.status = 'entering';
     const response = await page.goto(`${service.url}/town-blockout.html?profile&zb16TownSled`, { timeout, waitUntil: 'domcontentloaded' });
     assert.equal(response?.status(), 200);
     await wait(page, () => Boolean(window.__zb16TownSled));
-    await page.locator('#jump').selectOption({ label: '东北纪念馆' });
+    const historicalDestination = page.locator('#jump');
+    if (await historicalDestination.isVisible()) await historicalDestination.selectOption({ label: '东北纪念馆' });
     evidence.entrance = await wait(page, () => {
       const s = window.__zb16TownSled.read();
       return s.walking && s.canMove && s.drawCalls > 0 && s;
@@ -146,27 +194,40 @@ try {
       const s = window.__zb16TownSled.read();
       return !s.active && s.parked && s.actions.some(a => a.label === '下橇') && s;
     });
+    assert.equal(evidence.parked.actions[1].before.airborne, false);
     assert.ok(evidence.parked.rackDistance > 2.4);
-    evidence.status = 'walking away on foot';
-    evidence.walkedAway = await holdKey(page, 's', () => wait(page, () => {
-      const s = window.__zb16TownSled.read();
-      return s.parked && Math.hypot(s.x - s.parked.x, s.n - s.parked.n) > 2.65 &&
-        s.action !== '重新上橇' && s;
-    }, undefined, travelTimeout));
-    evidence.status = 'approaching the same sled';
-    await holdKey(page, 'w', () => wait(page, () => window.__zb16TownSled.read().action === '重新上橇',
-      undefined, travelTimeout));
-    await page.keyboard.press('e');
-    evidence.remounted = await wait(page, () => {
-      const s = window.__zb16TownSled.read();
-      return s.active && !s.parked && s.actions.some(a => a.label === '重新上橇') && s;
-    });
-    const remountPose = evidence.remounted.actions.find(a => a.label === '重新上橇').state.sled;
-    assert.equal(distance(remountPose, evidence.parked.parked), 0);
-    assert.equal(remountPose.yaw, evidence.parked.parked.yaw);
+    evidence.status = 'walking away and reboarding the same sled on foot';
+    ({ walkedAway: evidence.walkedAway, remounted: evidence.remounted } = await walkAwayAndReboard(page, evidence.parked, 2));
     assert.deepEqual(evidence.remounted.actions.map(a => a.label), ['乘雪橇', '下橇', '重新上橇']);
     for (const key of ['KeyE', 'KeyW', 'KeyS']) assert.ok(evidence.remounted.inputs.some(e => e.key === key && e.trusted));
+
+    if (mode === '--airborne-exit') {
+      evidence.status = 'leaving the sled with a real key during a rehearsal jump';
+      await page.evaluate(() => window.__zb16TownSled.testJump());
+      evidence.airborne = await wait(page, () => {
+        const s = window.__zb16TownSled.read();
+        return s.active && s.airborne && s.sled.y - s.sledGround > .25 && s.action === '下橇' && s;
+      }, undefined, 3_000);
+      await page.keyboard.press('e');
+      evidence.airborneParked = await wait(page, () => {
+        const s = window.__zb16TownSled.read();
+        return !s.active && s.parked && s.actions[3]?.label === '下橇' && s;
+      });
+      const exit = evidence.airborneParked.actions[3];
+      assert.ok(exit.before.airborne && exit.before.sled.y > exit.before.sledGround);
+      assert.equal(exit.state.airborne, false);
+      assert.equal(exit.state.parked.y, exit.state.sledGround);
+      assert.ok(evidence.airborneParked.inputs.slice(evidence.airborne.inputs.length).some(input =>
+        input.key === 'KeyE' && input.trusted && input.active && input.airborne));
+
+      evidence.status = 'reboarding the sled parked after the airborne exit';
+      evidence.airborneReboard = await walkAwayAndReboard(page, evidence.airborneParked, 4);
+      assert.deepEqual(evidence.airborneReboard.remounted.actions.map(a => a.label),
+        ['乘雪橇', '下橇', '重新上橇', '下橇', '重新上橇']);
+    }
     assert.deepEqual(evidence.errors, []);
+    assert.deepEqual(evidence.consoleErrors, []);
+    assert.deepEqual(evidence.networkErrors, []);
     evidence.status = 'passed';
   }
 } catch (error) {
