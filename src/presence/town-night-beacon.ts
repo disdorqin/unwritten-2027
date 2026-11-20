@@ -1,4 +1,4 @@
-import type { TownNightBeaconFrame } from '../shared/town-night-beacon.js';
+import { thirteenthBellCatalogueEntry, type TownNightBeaconFrame } from '../shared/town-night-beacon.js';
 import type { createTownNightWindow, TownNightWindowState } from '../shared/town-night-window.js';
 
 type TownNightWindow = ReturnType<typeof createTownNightWindow>;
@@ -21,7 +21,7 @@ export function createTownNightBeaconHost(window: TownNightWindow, broadcast: (c
 const milestones = { hear: 1, watch: 2, verify: 3 } as const;
 export type TownNightWitnessStep = keyof typeof milestones;
 export type TownNightWitnessProgress = 0 | typeof milestones[TownNightWitnessStep];
-export const thirteenthBellCatalogueEntry = Object.freeze({ id: 'thirteenth-bell', title: '第十三声' } as const);
+export { thirteenthBellCatalogueEntry };
 
 type TownNightWitnessHost<Session, Evidence> = Readonly<{
   window: Pick<TownNightWindow, 'snapshot'>;

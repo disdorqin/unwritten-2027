@@ -4,6 +4,8 @@ const barSeconds = 4;
 const lookahead = .50;
 const plainsCutoff = 3900;
 const roomCutoff = 1150;
+const ambientWindLevel = .012;
+const weatherWindLevel = .036;
 
 const score = [
   { low: [50, 57], lead: [69, 71, 74, 71], strings: [62, 69, 74] },
@@ -23,6 +25,7 @@ type AudioGraph<T extends BaseAudioContext = BaseAudioContext> = {
   room: BiquadFilterNode;
   master: GainNode;
   percussion: GainNode;
+  windLevel: GainNode;
   noise: AudioBuffer;
   padVoice: PeriodicWave;
   fluteVoice: PeriodicWave;
@@ -76,13 +79,13 @@ function makeGraph<T extends BaseAudioContext>(context: T, indoor: boolean): Aud
   color.frequency.value = 360;
   color.Q.value = .38;
   const windLevel = context.createGain();
-  windLevel.gain.value = .012;
+  windLevel.gain.value = ambientWindLevel;
   wind.connect(color).connect(windLevel).connect(bed);
   wind.start();
 
   const padVoice = context.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, .12, .035]));
   const fluteVoice = context.createPeriodicWave(new Float32Array(4), new Float32Array([0, 1, .22, .085]));
-  return { context, bed, room, master, percussion, noise, padVoice, fluteVoice };
+  return { context, bed, room, master, percussion, windLevel, noise, padVoice, fluteVoice };
 }
 
 function pad(graph: AudioGraph, at: number, note: number, index: number) {
@@ -214,6 +217,7 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
   let nextTime = 0;
   let entered = false;
   let inRoom = false;
+  let windStrength = 0;
 
   function schedule() {
     timer = undefined;
@@ -234,6 +238,7 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
     graph.master.gain.setTargetAtTime(settings.muted ? 0 : settings.volume / 100 * (inRoom ? .82 : 1), at, .075);
     graph.room.frequency.setTargetAtTime(inRoom ? roomCutoff : plainsCutoff, at, .16);
     graph.percussion.gain.setTargetAtTime(inRoom ? 0 : 1, at, .09);
+    graph.windLevel.gain.setTargetAtTime(ambientWindLevel + (inRoom ? 0 : weatherWindLevel * windStrength), at, .35);
     if ((settings.muted || settings.volume === 0) && timer !== undefined) {
       window.clearTimeout(timer);
       timer = undefined;
@@ -297,6 +302,13 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
     setIndoor(indoor: boolean) {
       if (inRoom === indoor) return;
       inRoom = indoor;
+      updateOutput();
+    },
+    setWindStrength(strength: number) {
+      if (!Number.isFinite(strength)) return;
+      const next = Math.max(0, Math.min(1, strength));
+      if (windStrength === next) return;
+      windStrength = next;
       updateOutput();
     },
   };

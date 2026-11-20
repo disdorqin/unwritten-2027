@@ -1,3 +1,5 @@
+export const thirteenthBellCatalogueEntry = Object.freeze({ id: 'thirteenth-bell', title: '第十三声' } as const);
+
 export type TownNightBeaconFrame = Readonly<{
   type: 'event';
   kind: 'town-night-beacon';

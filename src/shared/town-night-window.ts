@@ -20,6 +20,12 @@ function isEpoch(value: number) {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
+/** Ordinary day phase from the authoritative calendar origin. */
+export function isOrdinaryTownNight(now: number, dawnEpoch: number): boolean | undefined {
+  if (!Number.isFinite(now) || !isEpoch(dawnEpoch) || now < dawnEpoch) return;
+  return (now - dawnEpoch) % townDayMs >= townDaylightMs;
+}
+
 /** Supply the approved drift table. The host can substitute its real-time New Year's Eve schedule. */
 export function createOrdinaryTownNightSchedule({ dawnEpoch, beaconOffsetsAfterDusk, cueFreshnessMs }: OrdinaryTownNightOptions) {
   const offsets = [...beaconOffsetsAfterDusk];

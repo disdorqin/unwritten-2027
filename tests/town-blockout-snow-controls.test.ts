@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mountTownMobileControls } from '../tools/voxel-tavern/town-blockout/town-mobile-controls.js';
 import { createTownSnowControls } from '../tools/voxel-tavern/town-blockout/town-snow-controls.js';
 
-function setup() {
+function setup(gatheringScale = 1) {
   let now = 0;
   let amount = 48;
   let build = false;
@@ -14,6 +14,7 @@ function setup() {
     canUseSnow: () => flags.playing,
     canGather: () => flags.snowTarget && amount < 50,
     gather() { amount++; actions.push('gather'); },
+    gatheringScale: () => gatheringScale,
     canInteract: () => flags.interact,
     interact() { actions.push('interact'); },
     throwSnowball() { actions.push('throw'); },
@@ -96,6 +97,19 @@ test('E held without a target only gathers up to 50, including in wall mode', ()
   assert.equal(amount(), 50);
   assert.equal(controls.gatherProgress(), undefined);
   assert.deepEqual(actions, ['mode-on', 'gather', 'gather']);
+});
+
+test('whiteout speeds the shovel stroke while preserving the interaction hold threshold', () => {
+  const { controls, advance, actions, amount } = setup(1.5);
+  controls.keyDown('KeyE', false);
+  advance(149);
+  assert.equal(controls.gatherProgress(), undefined);
+  advance(531);
+  assert.equal(amount(), 48);
+  advance(10);
+  assert.equal(amount(), 49);
+  controls.keyUp('KeyE');
+  assert.deepEqual(actions, ['gather']);
 });
 
 test('emerging interaction targets block collection and clear an unfinished shovel stroke', () => {

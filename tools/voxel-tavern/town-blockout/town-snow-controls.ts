@@ -5,6 +5,7 @@ type SnowControlHost = {
   canUseSnow(): boolean;
   canGather(): boolean;
   gather(): void;
+  gatheringScale?(): number;
   canInteract(): boolean;
   interact(): void;
   throwSnowball(): void;
@@ -84,7 +85,8 @@ export function createTownSnowControls(host: SnowControlHost) {
         return;
       }
       if (!Number.isFinite(dt) || dt <= 0) return;
-      gatherElapsed += Math.min(dt, heldSeconds);
+      const scale = host.gatheringScale?.() ?? 1;
+      gatherElapsed += Math.min(dt, heldSeconds) * scale;
       if (gatherElapsed >= snowGatherSeconds) {
         gatherElapsed %= snowGatherSeconds;
         host.gather();

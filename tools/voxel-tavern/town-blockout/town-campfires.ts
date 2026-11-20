@@ -170,6 +170,18 @@ export function nearCampfire(fires: readonly CampfireSite[], east: number, north
     (east - site.x) ** 2 + (north - site.n) ** 2 <= fireWarmthRadius ** 2);
 }
 
+export function nearestCampfireDistance(
+  fires: readonly CampfireSite[], east: number, north: number, feet: number,
+  isLit?: (site: CampfireSite) => boolean,
+) {
+  let squaredDistance = Infinity;
+  for (const site of fires) {
+    if (Math.abs(site.ground - feet) > 1.25 || isLit?.(site) === false) continue;
+    squaredDistance = Math.min(squaredDistance, (east - site.x) ** 2 + (north - site.n) ** 2);
+  }
+  return Math.sqrt(squaredDistance);
+}
+
 export function campfirePieces(fires: readonly CampfireSite[]) {
   const pieces: CampfirePiece[] = [];
   for (const fire of fires) {

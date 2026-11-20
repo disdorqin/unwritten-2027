@@ -1,4 +1,8 @@
 import type { CeremonyState } from './town-ceremony';
+import {
+  townOutdoorWeatherEffects, townOutdoorWhiteoutFirePoolMeters, type TownOutdoorWeather,
+} from '../../../src/shared/town-outdoor-weather';
+import { townWeatherExposureFor, type TownWeatherArea } from './town-weather-exposure';
 
 const minuteMs = 60_000;
 const weatherSlotCount = 64;
@@ -21,6 +25,10 @@ const profiles = {
   heavy: { intensity: 4, fogNear: 112, fogFar: 620, pilingRate: 1.25, targetCover: 1 },
 };
 const weights = [['light', 47], ['medium', 42], ['heavy', 11]] as const;
+const outdoorSnowTiers: Record<TownOutdoorWeather, TownSnowTier> = {
+  'clear-snow': 'light', wind: 'medium', whiteout: 'heavy',
+};
+const firePoolRadius = townOutdoorWhiteoutFirePoolMeters;
 
 function makeSchedule() {
   let seed = 0x20270101;
@@ -65,6 +73,28 @@ function sampleProfile(tier: TownSnowTier, nextTier: TownSnowTier, progress: num
     intensity: interpolate(from.intensity, to.intensity),
     fogNear: interpolate(from.fogNear, to.fogNear), fogFar: interpolate(from.fogFar, to.fogFar),
     pilingRate: interpolate(from.pilingRate, to.pilingRate), targetCover: interpolate(from.targetCover, to.targetCover),
+  };
+}
+
+export function townSnowWeatherForOutdoorState(
+  state: TownOutdoorWeather,
+  area: TownWeatherArea,
+  nightFogFar = Infinity,
+  litFireDistance = Infinity,
+) {
+  const tier = outdoorSnowTiers[state];
+  const snow = sampleProfile(tier, tier, 0);
+  const visibility = townOutdoorWeatherEffects[state].visibilityMeters;
+  const fogLimit = Math.min(snow.fogFar, nightFogFar);
+  if (visibility === null) {
+    return { ...snow, fogNear: Math.min(snow.fogNear, fogLimit * .95), fogFar: fogLimit, skyColor: undefined };
+  }
+  // Built-in scene fog can keep the foreground clear around a lit fire in
+  // one draw. Let the near plane recede at the edge of its eight-metre pool.
+  const fireNear = firePoolRadius * Math.min(1, Math.max(0, (firePoolRadius - litFireDistance) / 2));
+  return {
+    ...snow, fogNear: fireNear, fogFar: Math.max(fireNear + .1, Math.min(fogLimit, visibility / townWeatherExposureFor(area))),
+    skyColor: '#d8e2e9',
   };
 }
 

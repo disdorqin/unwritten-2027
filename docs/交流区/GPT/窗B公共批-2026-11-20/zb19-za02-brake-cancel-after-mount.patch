@@ -1,0 +1,70 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 105c44e26b3bb9a798a06f716b24151fced744e9..bdcc6972faf4902eae5c87c1b7bf80215c314a69 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -268,6 +268,7 @@ presence.onGrandPrixResult(result => {
+   renderGrandPrixBoard();
+ });
+ function leaveSled() {
++  cancelSledBrake();
+   sledRide.leave();
+   sledDrift.reset();
+ }
+@@ -681,6 +682,9 @@ const touchSprintButton = element<HTMLButtonElement>('touch-sprint');
+ const touchWalk = createTouchWalk(element('touch-walk'), touchSprintButton);
+ let sledBrakeHeld = false;
+ let touchSledBrakeHeld = false;
++function cancelSledBrake() {
++  sledBrakeHeld = touchSledBrakeHeld = false;
++}
+ createViewportControls({
+   fullscreenButton: element<HTMLButtonElement>('fullscreen-toggle'),
+   chatPanel: element('town-chat'),
+@@ -713,7 +717,7 @@ let forwardPressedAt = -Infinity;
+ let doubleForward = false;
+ function stopTravel() {
+   keys.clear();
+-  sledBrakeHeld = touchSledBrakeHeld = false;
++  cancelSledBrake();
+   forwardPressedAt = -Infinity;
+   doubleForward = false;
+   touchWalk.reset();
+@@ -864,6 +868,7 @@ const tavernDrinkEffects = createTavernDrinkEffects();
+ tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+ const townBgm = createTownBgm(festival.getAudioContext);
+ const townSettings = element<HTMLDialogElement>('town-settings');
++element('town-panel-toggle').addEventListener('click', cancelSledBrake);
+ townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
+ let nextBgmRoomCheck = 0;
+ const hotSpringSoak = createHotSpringSoak(
+@@ -2139,7 +2144,10 @@ const desktopLook = createDesktopLook(renderer.domElement, lookAllowed, turnView
+   onLockChange(nowLocked) {
+     lookLocked = nowLocked;
+     if (nowLocked) lockFailure = undefined;
+-    else lastUnlockAt = Date.now();
++    else {
++      lastUnlockAt = Date.now();
++      sledBrakeHeld = false;
++    }
+     refreshLockHint();
+   },
+ });
+@@ -2208,7 +2216,7 @@ addEventListener('keydown', e => {
+   if (moveAllowed() && e.code === 'Space') {
+     if (sledRide.active()) {
+       e.preventDefault();
+-      sledBrakeHeld = true;
++      if (!e.repeat) sledBrakeHeld = true;
+     } else if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
+       e.preventDefault();
+       requestJump();
+@@ -2241,6 +2249,9 @@ addEventListener('keyup', e => {
+   if (!forwardHeld()) doubleForward = false;
+ });
+ addEventListener('blur', resetMovement);
++document.addEventListener('visibilitychange', () => {
++  if (document.hidden) cancelSledBrake();
++});
+ let fittedWidth = 0;
+ let fittedHeight = 0;
+ function fitRenderer() {

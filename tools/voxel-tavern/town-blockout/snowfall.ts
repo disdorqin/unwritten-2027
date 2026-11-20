@@ -1,11 +1,17 @@
 import { BufferAttribute, BufferGeometry, PerspectiveCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
 
-const count = 1_580;
-const foregroundCount = 530;
-const stormCount = count;
+const baseCount = 1_580;
+const baseForegroundCount = 530;
 const stormFade = .11;
+const densityScales = { desktop: 1, compact: .65, low: .4 } as const;
+const maxWindSpeed = 12;
 
-export function createSnowfall(scene: Scene) {
+export type TownSnowfallDensity = keyof typeof densityScales;
+
+export function createSnowfall(scene: Scene, density: TownSnowfallDensity = 'desktop') {
+  const count = Math.round(baseCount * densityScales[density]);
+  const foregroundCount = Math.round(baseForegroundCount * densityScales[density]);
+  const stormCount = count;
   const seeds = new Float32Array((count + stormCount) * 3);
   const flakes = new Float32Array((count + stormCount) * 4);
   let seed = 352811;
@@ -31,6 +37,8 @@ export function createSnowfall(scene: Scene) {
     uniforms: {
       time: { value: 0 },
       storm: { value: 0 },
+      windVelocity: { value: new Vector2() },
+      windOffset: { value: new Vector2() },
       elevationMode: { value: 0 },
       viewportHeight: { value: 640 },
       pixelRatio: { value: 1 },
@@ -39,6 +47,8 @@ export function createSnowfall(scene: Scene) {
       attribute vec4 flake;
       uniform float time;
       uniform float storm;
+      uniform vec2 windVelocity;
+      uniform vec2 windOffset;
       uniform float elevationMode;
       uniform float viewportHeight;
       uniform float pixelRatio;
@@ -54,7 +64,8 @@ export function createSnowfall(scene: Scene) {
         float flutter = time * mix(.85, 2.0, flake.z) + phase;
         vec3 wind = vec3(mix(.9, 2.7, flake.z), -mix(2.7, 4.7, flake.y), mix(.28, .8, flake.z));
         wind *= mix(1., 2.2, elevationMode);
-        vec3 drift = time * wind + vec3(sin(flutter), 0., cos(flutter * .72)) * .72;
+        vec3 drift = time * wind + vec3(windOffset.x, 0., windOffset.y)
+          + vec3(sin(flutter), 0., cos(flutter * .72)) * .72;
         // Wrap a world-aligned field around the viewer without attaching snow to the camera.
         vec3 local = mod((position - .5) * volume + drift - cameraPosition + volume * .5, volume) - volume * .5;
         vec4 viewPosition = viewMatrix * vec4(cameraPosition + local, 1.);
@@ -64,7 +75,8 @@ export function createSnowfall(scene: Scene) {
         float nearFade = smoothstep(.85, 2.6, distanceFromEye);
         float visible = smoothstep(flake.w, flake.w + ${stormFade}, storm);
         opacity = mix(.9, .63, background) * boundary * nearFade * mix(.69, 1., flake.y) * visible;
-        tilt = .36 + .23 * sin(flutter * 1.42);
+        float viewedWind = (viewMatrix * vec4(windVelocity.x, 0., windVelocity.y, 0.)).x;
+        tilt = .36 + .23 * sin(flutter * 1.42) + viewedWind * .045;
         float diameter = mix(.062, .144, flake.z) * mix(1., 3.05, elevationMode);
         diameter *= mix(1., 1.65, background) * mix(1., 1.12, storm);
         float pixels = .5 * diameter * projectionMatrix[1][1] * viewportHeight / max(.1, -viewPosition.z);
@@ -102,13 +114,19 @@ export function createSnowfall(scene: Scene) {
   };
   scene.add(particles);
   let active = true;
+  const wind = material.uniforms.windVelocity.value as Vector2;
+  const drift = material.uniforms.windOffset.value as Vector2;
 
   return {
     update(_camera: PerspectiveCamera, dt: number, walking: boolean, sheltered = false) {
       particles.visible = active && !sheltered;
       material.uniforms.elevationMode.value = walking ? 0 : 1;
       // Integrate speed into time so changing the weather never teleports existing snow.
-      if (active) material.uniforms.time.value += dt * (1 + material.uniforms.storm.value * .42);
+      if (active) {
+        material.uniforms.time.value += dt * (1 + material.uniforms.storm.value * .42);
+        // Integrate the shared wind as well so turns do not teleport the field.
+        drift.addScaledVector(wind, dt);
+      }
     },
     setIntensity(intensity: number) {
       if (!Number.isFinite(intensity)) return;
@@ -116,6 +134,11 @@ export function createSnowfall(scene: Scene) {
       if (storm === material.uniforms.storm.value) return;
       material.uniforms.storm.value = storm;
       geometry.setDrawRange(0, count + Math.min(stormCount, Math.ceil(storm / (1 - stormFade) * stormCount)));
+    },
+    setWind(east: number, north: number, strength: number) {
+      if (!Number.isFinite(east) || !Number.isFinite(north) || !Number.isFinite(strength)) return;
+      const speed = Math.min(1, Math.max(0, strength)) * maxWindSpeed;
+      wind.set(east * speed, -north * speed);
     },
     setEnabled(enabled: boolean) { active = enabled; },
     enabled() { return active; },
