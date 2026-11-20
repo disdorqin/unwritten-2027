@@ -95,6 +95,7 @@ function servePreview(ports, commit) {
     }
     const pathname = decodeURIComponent(new URL(incoming.url, 'http://127.0.0.1').pathname);
     if (pathname === '/healthz') { outgoing.end(`town-preview ${commit}`); return; }
+    if (pathname === '/favicon.ico' && !existsSync(join(web, 'favicon.ico'))) { outgoing.writeHead(204).end(); return; }
     const root = pathname.startsWith('/models/') ? join(repo, 'public') : web;
     const file = resolve(root, pathname === '/' ? 'town-blockout.html' : pathname.slice(1));
     if (!file.startsWith(root + sep)) { outgoing.writeHead(404).end(); return; }

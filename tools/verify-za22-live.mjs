@@ -51,7 +51,7 @@ async function openTown(name) {
   report.paths.push(evidence);
   page.on('pageerror', error => { if (measuring) report.pageErrors.push(String(error)); });
   page.on('console', message => {
-    if (measuring && message.type() === 'error') report.consoleErrors.push(message.text());
+    if (measuring && message.type() === 'error') report.consoleErrors.push({ text: message.text(), url: message.location().url });
   });
   page.on('requestfailed', request => {
     if (measuring) report.requestFailures.push({ url: request.url(), error: request.failure()?.errorText });
@@ -134,14 +134,26 @@ async function face(page, evidence, desired) {
   for (let attempt = 0; attempt < 16; ++attempt) {
     const before = await waitForWire(page, evidence);
     const delta = yawDistance(before.yaw, desired);
-    if (Math.abs(delta) <= .005) return;
+    if (Math.abs(delta) <= .009) return;
     const dx = Math.max(-maxDrag, Math.min(maxDrag, Math.round(delta / .003)));
-    await page.mouse.move(dragX, dragY);
+    const anchor = await page.evaluate(({ width, height, dx, attempt }) => {
+      const canvas = document.querySelector('#scene canvas');
+      const candidates = [[.48, .51], [.41, .37], [.40, .61], [.56, .45], [.37, .48]];
+      for (let index = 0; index < candidates.length; ++index) {
+        const [cx, cy] = candidates[(index + attempt) % candidates.length];
+        const x = Math.round(width * cx), y = Math.round(height * cy);
+        if (x + dx > 0 && x + dx < width && document.elementFromPoint(x, y) === canvas) return { x, y };
+      }
+    }, { width, height, dx, attempt });
+    assert.ok(anchor, 'The canvas needs an unobstructed native mouse target');
+    await page.mouse.move(anchor.x, anchor.y);
     await page.mouse.down();
-    try { await page.mouse.move(dragX + dx, dragY, { steps: Math.max(2, Math.ceil(Math.abs(dx) / 55)) }); }
+    try { await page.mouse.move(anchor.x + dx, anchor.y, { steps: Math.max(2, Math.ceil(Math.abs(dx) / 55)) }); }
     finally { await page.mouse.up(); }
-    const expected = before.yaw + dx * .003;
-    await waitForWire(page, evidence, current => current && Math.abs(yawDistance(current.yaw, expected)) < .014);
+    // Sample the actual view. Native pointer coordinates may be rounded at a fractional raster scale.
+    const until = Date.now() + 800;
+    while (evidence.poses.at(-1)?.seq === before.seq && Date.now() < until) await page.waitForTimeout(30);
+    await page.waitForTimeout(120);
   }
   assert.fail(`Native mouse drag could not face ${desired}`);
 }
