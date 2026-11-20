@@ -1,6 +1,4 @@
-export type StreetInfillKind =
-  | 'lantern' | 'fence' | 'firewood' | 'sign' | 'fir' | 'lanternFir'
-  | 'bench' | 'stall' | 'well' | 'dryingRack' | 'snowman';
+export type StreetInfillKind = 'lantern' | 'fence' | 'firewood' | 'sign' | 'lanternFir' | 'snowman';
 
 export type StreetInfillPoint = readonly [
   kind: StreetInfillKind, east: number, north: number, heading?: number,
@@ -42,17 +40,51 @@ export const streetInfill: readonly StreetInfillCluster[] = [
       ['lantern', 518.5, 310, Math.PI / 2],
     ],
   },
+  // ZA-32 second wave (zone-1 self-build): old-town street clusters.
+  // Every point was picked from a clearance scan of the assembled town
+  // (fence = largest reserve radius) and is asserted by the house-portals
+  // test: all configured clusters must survive door/road clearance.
   {
-    id: 'market-south-loop',
+    id: 'cabins-approach',
     points: [
-      ['well', 191, 90],
-      ['dryingRack', 193, 93, .20],
-      ['lantern', 195, 90, Math.PI / 2],
-      ['firewood', 197, 88],
-      ['stall', 200, 90, .23],
-      ['bench', 201.75, 93.25, .23],
-      ['lantern', 205, 90, Math.PI / 2],
-      ['fir', 198, 94],
+      ['lantern', 94, 246, Math.PI / 2],
+      ['firewood', 118, 254, .4],
+      ['fence', 120, 258, Math.PI / 2],
+      ['sign', 114, 260, .5],
+    ],
+  },
+  {
+    id: 'workshop-corner',
+    points: [
+      ['lantern', 106, 100, 0],
+      ['fence', 106, 108, 0],
+      ['firewood', 108, 124, .3],
+      ['sign', 110, 130, .4],
+    ],
+  },
+  {
+    id: 'stage-south',
+    points: [
+      ['lantern', 226, 150, Math.PI],
+      ['firewood', 230, 150, .2],
+      ['sign', 234, 150, .35],
+    ],
+  },
+  {
+    id: 'post-office-street',
+    points: [
+      ['lantern', 254, 198, Math.PI / 2],
+      ['fence', 268, 198, Math.PI / 2],
+      ['firewood', 276, 186, .3],
+      ['sign', 280, 198, .6],
+    ],
+  },
+  {
+    id: 'glasshouse-road',
+    points: [
+      ['lantern', 382, 86, 0],
+      ['snowman', 382, 96, Math.PI],
+      ['firewood', 382, 100, .5],
     ],
   },
 ];
