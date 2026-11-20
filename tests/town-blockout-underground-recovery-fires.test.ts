@@ -5,6 +5,7 @@ import {
   createUndergroundRecoveryFirePresentation, readUndergroundRecoveryFireReferences,
   type UndergroundRecoveryFireSite,
 } from '../tools/voxel-tavern/town-blockout/underground-recovery-fires.ts';
+import { warriorSquarePlan } from '../tools/voxel-tavern/town-blockout/underground-warrior-square.ts';
 
 const camp: UndergroundRecoveryFireSite = {
   fire: { id: 'test-camp', point: { layer: 'mine', east: -2.5, north: 40, height: -91 },
@@ -17,11 +18,11 @@ const cold: UndergroundRecoveryFireSite = {
 };
 const toScene = ({ east, north, height }: typeof camp.fire.point) => [east + 5, height + 100, -north] as const;
 
-test('the mine, cave and palace reserves retain their original frames and city still exposes its missing centre', () => {
+test('the layer reserves retain their original frames and defer missing anchors', () => {
   const mineRecovery = [-2.5, -91, 40] as const;
   const fireReserve = { east: -2.6, north: 100.8, height: -2.4 };
   const references = readUndergroundRecoveryFireReferences({
-    camp: { recovery: mineRecovery }, palace: { fireReserve }, cave: {
+    camp: { recovery: mineRecovery }, warrior: warriorSquarePlan, palace: { fireReserve }, cave: {
       hallFirePad: [-9.8, 37.5], poolFirePad: [6.6, 62.4],
       floorAt: (east, north) => east === -9.8 && north === 37.5 ? -1.152 : undefined,
     },
@@ -29,9 +30,12 @@ test('the mine, cave and palace reserves retain their original frames and city s
   assert.deepEqual(references.mineCamp, { depth: -90, tone: 'warm', frame: 'mine-local-xyz', position: mineRecovery });
   assert.deepEqual(references.crystalHall.position, { east: -9.8, north: 37.5, height: -1.152 });
   assert.equal(references.crystalPool.position, undefined);
-  assert.deepEqual(references.warriorSquare, { depth: -165, tone: 'cold', missing: 'statue-base-fire-reserve' });
+  assert.deepEqual(references.warriorSquare, { depth: -165, tone: 'cold', frame: 'warrior-local-eny',
+    position: warriorSquarePlan.fireReserve });
   assert.deepEqual(references.palaceForecourt.position, fireReserve);
   assert.equal(readUndergroundRecoveryFireReferences().mineCamp.position, undefined);
+  assert.deepEqual(readUndergroundRecoveryFireReferences().warriorSquare,
+    { depth: -165, tone: 'cold', missing: 'statue-base-fire-reserve' });
 });
 
 test('rings use the registered radii and only highlight a confirmed fire in its own layer', t => {

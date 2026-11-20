@@ -10,11 +10,12 @@ type FireTone = 'warm' | 'cold';
 type GeometryReferences = Readonly<{
   camp?: { recovery: ScenePosition };
   cave?: { hallFirePad: CavePad; poolFirePad: CavePad; floorAt(east: number, north: number): number | undefined };
+  warrior?: { fireReserve: LocalPoint };
   palace?: { fireReserve: LocalPoint };
 }>;
 
 /** Read the authored reserves in their original frames. The host supplies world placement and ranges. */
-export function readUndergroundRecoveryFireReferences({ camp, cave, palace }: GeometryReferences = {}) {
+export function readUndergroundRecoveryFireReferences({ camp, cave, warrior, palace }: GeometryReferences = {}) {
   function cavePoint(pad?: CavePad) {
     if (!pad) return;
     const [east, north] = pad;
@@ -25,7 +26,9 @@ export function readUndergroundRecoveryFireReferences({ camp, cave, palace }: Ge
     mineCamp: { depth: -90, tone: 'warm', frame: 'mine-local-xyz', position: camp?.recovery },
     crystalHall: { depth: -140, tone: 'warm', frame: 'cave-local-eny', position: cavePoint(cave?.hallFirePad) },
     crystalPool: { depth: -140, tone: 'warm', frame: 'cave-local-eny', position: cavePoint(cave?.poolFirePad) },
-    warriorSquare: { depth: -165, tone: 'cold', missing: 'statue-base-fire-reserve' },
+    warriorSquare: warrior
+      ? { depth: -165, tone: 'cold', frame: 'warrior-local-eny', position: warrior.fireReserve }
+      : { depth: -165, tone: 'cold', missing: 'statue-base-fire-reserve' },
     palaceForecourt: { depth: -190, tone: 'warm', frame: 'palace-local-eny', position: palace?.fireReserve },
   } as const;
 }
