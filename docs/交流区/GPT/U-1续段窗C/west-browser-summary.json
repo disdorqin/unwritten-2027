@@ -1,0 +1,167 @@
+{
+  "originalSHA256": "0156d917f30e7e91ada9255a538698e6183cbf1cfbf5d178fe288e5a727e1e93",
+  "browser": "153.0.8010.0",
+  "pins": {
+    "crater": "7d0ce8c",
+    "craterBlob": "4db1f757dbda686725c0e087b8d0f5e4d9d1042b",
+    "west": "8bd26fa",
+    "westBlob": "fe575655c4c8d0162553f1b89ae4076c7c4198ee",
+    "entryBlob": "bcc0b59110f46d3ecd109bd457027e555783b355",
+    "wellModelExtract": "d15b1c51f3e0ded63a53fda786e1b7ddc8449086188e944cb118b9f9f40e32ba"
+  },
+  "plan": "west-north +22° isolated fixture; local keyboard guide, not a deployed movement controller",
+  "stats": {
+    "opens": 1,
+    "lastOpen": "opened",
+    "mode": "peace",
+    "scene": {
+      "coverVisible": false,
+      "shaftVisible": true,
+      "cageAvailable": {
+        "down": false,
+        "up": false
+      }
+    },
+    "well": {
+      "kind": "open",
+      "openedBy": "west-route-browser-fixture",
+      "firstFallPending": true
+    },
+    "shaftClearance": 15.166666666666666,
+    "sourceTriangles": 28421,
+    "slideTriangles": 302,
+    "gravelTriangles": 83
+  },
+  "summary": {
+    "acceptedDown": 202,
+    "acceptedBackOnGravel": 15,
+    "blockedReverse": 1,
+    "dropMetres": 35,
+    "maxRise": 0.0019212114376587763,
+    "maxStep": 0.3766683840564653,
+    "maxOriginalDiff": 0.000001554328882491518,
+    "maxRenderedDiff": 2.4868995751603507E-14,
+    "minDryCentreGap": 1.465422712353221,
+    "lastAcceptedBackChainage": 35.17500000000001,
+    "firstRejectedBackChainage": 34.98666666666668,
+    "identical": true
+  },
+  "frames": {
+    "west-overview.png": {
+      "view": "overview",
+      "fixture": {
+        "coverVisible": true,
+        "shaftVisible": false,
+        "cageAvailable": {
+          "down": false,
+          "up": false
+        }
+      },
+      "mode": "peace",
+      "counts": {
+        "cover": 13,
+        "shaft": 0
+      },
+      "wellRay": {
+        "hit": "crater-well-rubble",
+        "y": -34.77000000476837
+      },
+      "drawCalls": 26,
+      "glError": 0,
+      "sha256": "b84ec6d40c659bc88a192084c2e834b06b549e38592c7f3579195d3c149e57f2"
+    },
+    "well-covered.png": {
+      "view": "well",
+      "fixture": {
+        "coverVisible": true,
+        "shaftVisible": false,
+        "cageAvailable": {
+          "down": false,
+          "up": false
+        }
+      },
+      "mode": "peace",
+      "counts": {
+        "cover": 13,
+        "shaft": 0
+      },
+      "wellRay": {
+        "hit": "crater-well-rubble",
+        "y": -34.77000000476837
+      },
+      "drawCalls": 23,
+      "glError": 0,
+      "sha256": "4c1e1a006042eea1d5a059325560acb278899f6106fbc070065e0e566bcaf83a"
+    },
+    "west-dry-gravel-covered.png": {
+      "view": "gravel",
+      "fixture": {
+        "coverVisible": true,
+        "shaftVisible": false,
+        "cageAvailable": {
+          "down": false,
+          "up": false
+        }
+      },
+      "mode": "peace",
+      "counts": {
+        "cover": 8,
+        "shaft": 0
+      },
+      "wellRay": {
+        "hit": "crater-well-rubble",
+        "y": -34.77000000476837
+      },
+      "drawCalls": 12,
+      "glError": 0,
+      "sha256": "e24448b6e198b701f4c8eb351cf9ef4ad8dd671a95d7cfe09492ee61aa146b36"
+    },
+    "well-open.png": {
+      "view": "well",
+      "fixture": {
+        "coverVisible": false,
+        "shaftVisible": true,
+        "cageAvailable": {
+          "down": false,
+          "up": false
+        }
+      },
+      "mode": "peace",
+      "counts": {
+        "cover": 0,
+        "shaft": 2
+      },
+      "wellRay": {
+        "hit": "shaft",
+        "y": -39.440000001341105
+      },
+      "drawCalls": 12,
+      "glError": 0,
+      "sha256": "98ea4a68caf72f05dd55db792d2f9d54e54f9d0123b9bf525a51f5a75d9dadb9"
+    },
+    "west-dry-gravel-open.png": {
+      "view": "gravel",
+      "fixture": {
+        "coverVisible": false,
+        "shaftVisible": true,
+        "cageAvailable": {
+          "down": false,
+          "up": false
+        }
+      },
+      "mode": "peace",
+      "counts": {
+        "cover": 0,
+        "shaft": 2
+      },
+      "wellRay": {
+        "hit": "shaft",
+        "y": -39.440000001341105
+      },
+      "drawCalls": 6,
+      "glError": 0,
+      "sha256": "d8ff83bcf691c4766dcc12df2d8d36a031a968744713eb0e5ec08d0f9886be27"
+    }
+  },
+  "errors": []
+}
