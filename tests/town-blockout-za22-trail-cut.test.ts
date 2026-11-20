@@ -53,7 +53,9 @@ test('the default ZA-22 route mounts the P-3 cut and foot surface and releases t
   assert.ok(plaza !== undefined && tread !== undefined && Math.abs(plaza - tread) < .005);
   assert.equal(cloud.walkingSurfaceAt(300, summitAssemblyAnchor.north + handoffNorth, radius), plaza);
   for (const [east, north] of [[300, 715.74], [332.51267977, 725.21044575], [639.992384, 797.022799]] as const) {
-    const height = assembly.trailSurfaceAt(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, radius);
+    const height: number | undefined = assembly.trailSurfaceAt(
+      east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, radius,
+    );
     assert.ok(height !== undefined);
     assert.equal(cloud.walkingSurfaceAt(east, north, radius), height);
     assert.equal(cloud.surfaceAt(east, north, radius), undefined);
