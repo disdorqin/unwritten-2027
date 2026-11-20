@@ -16,6 +16,7 @@
     h1 { margin: 0 0 .4rem; font-size: 1.1rem; }
     p { margin: .3rem 0 0; }
     #flight-reading { display: block; margin-top: .5rem; font-variant-numeric: tabular-nums; }
+    #ring-reading:not([hidden]) { display: block; margin-top: .3rem; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -27,6 +28,7 @@
     <p>起飞后 W/S 俯冲与抬头，A/D 转向。</p>
     <p id="flight-status" role="status">在绝顶小屋登记。</p>
     <output id="flight-reading" aria-live="off"></output>
+    <output id="ring-reading" aria-live="off" hidden></output>
   </main>
   <script type="module" src="./town-blockout/main-summit-snow-wing-review.ts"></script>
 </body>

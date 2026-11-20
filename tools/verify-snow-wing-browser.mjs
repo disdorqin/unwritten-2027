@@ -6,8 +6,10 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [checkoutPath, outputPath] = process.argv.slice(2);
-assert.ok(checkoutPath && outputPath, 'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output>');
+const [checkoutPath, outputPath, mode] = process.argv.slice(2);
+assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings'),
+  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings]');
+const withRings = mode === '--rings';
 const checkout = path.resolve(checkoutPath);
 const output = path.resolve(outputPath);
 const viteRoot = path.join(checkout, 'tools/voxel-tavern');
@@ -158,7 +160,8 @@ async function main() {
   p.on('response', response => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
-  const response = await p.goto(`http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1`, {
+  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}`;
+  const response = await p.goto(reviewUrl, {
     waitUntil: 'domcontentloaded', timeout: timeLeft(30_000),
   });
   assert.equal(response?.status(), 200);
@@ -166,6 +169,8 @@ async function main() {
   assert.deepEqual(initial.position, { east: 62.5, north: 1006, height: 800 });
   assert.equal(initial.flightTimeScale, 12);
   assert.ok(!initial.claimed && !initial.registration.snowWingEligible && !initial.wing.visible);
+  if (withRings) assert.deepEqual(initial.rings?.passed ?? [], []);
+  else assert.equal(initial.rings ?? null, null);
   const outside = await lodgeInteraction('out-of-reach');
   assert.ok(!outside.registration.snowWingEligible && !outside.claimed);
   await walkNorth(1013.55);
@@ -188,7 +193,8 @@ async function main() {
   const duplicate = await lodgeInteraction('already-claimed');
   assert.ok(duplicate.claimed);
   assert.deepEqual(duplicate.position, claimed.position);
-  await walkFromRackToRegistry();
+  const readyToLaunch = await walkFromRackToRegistry();
+  if (withRings) assert.deepEqual(readyToLaunch.rings?.passed ?? [], [], 'Ground travel must not count as flying through a ring');
 
   const lift = await hold('w', () => watch(() => {
     const s = window.__snowWingReview.getState();
@@ -199,6 +205,19 @@ async function main() {
   assert.ok(lift.launchProbe.pathClear && lift.launchProbe.drop >= 15);
   assert.equal(lift.wing.name, 'snow-wing');
   assert.ok(lift.wing.width >= 3.79);
+  let ringEvidence;
+  if (withRings) {
+    assert.equal(lift.rings?.count, 3);
+    assert.deepEqual(lift.rings.passed, [], 'No ring is passed at takeoff');
+    await watch(() => {
+      const { rings } = window.__snowWingReview.getState();
+      return rings?.draws > 0 && rings.passed.length < 2;
+    });
+    const visible = await capture('f1-glide-rings');
+    assert.ok(visible.rings.draws > 0 && visible.rings.passed.length < 2,
+      'The ring screenshot must show the course before passing the second ring');
+    ringEvidence = { visible };
+  }
   const steady = await watch(() => {
     const s = window.__snowWingReview.getState();
     return s.flight?.phase === 'glide' && s.flight.speed === 15 && s.wing.draws === 1;
@@ -208,6 +227,14 @@ async function main() {
     (steady.flight.height - straight.flight.height);
   assert.ok(Math.abs(ratio - 6) < 1e-7, 'Neutral browser flight did not retain the 6:1 glide ratio');
   await capture('f1-steady-glide');
+  if (ringEvidence) {
+    const completed = await watch(() => {
+      const s = window.__snowWingReview.getState();
+      return s.flight?.phase === 'glide' && s.rings?.passed.length === 3;
+    });
+    assert.deepEqual(completed.rings.passed, ['ring-1', 'ring-2', 'ring-3']);
+    ringEvidence.completed = completed;
+  }
 
   const banked = await hold('a', async () => {
     await watch(() => window.__snowWingReview.getState().flight.bank <= -.5);
@@ -244,9 +271,10 @@ async function main() {
   assert.equal(landed.flight.touchdown, 'soft');
   assert.equal(landed.flight.usesBothHands, false);
   assert.ok(landed.claimed && landed.registration.snowWingEligible);
+  if (ringEvidence) assert.deepEqual(landed.rings.passed, ringEvidence.completed.rings.passed);
   assert.deepEqual(errors, [], 'The snow-wing preview reported a browser or resource error');
   return { initial, outside, unregisteredRack, denied, registered, deskRepeat, claimed, duplicate,
-    lift, steady, straight, ratio, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed };
+    lift, steady, straight, ratio, ringEvidence, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed };
 }
 
 await mkdir(output, { recursive: true });
@@ -269,10 +297,12 @@ try {
   const evidence = {
     head: git('rev-parse', 'HEAD'), browserVersion, viewport, pins, screenshots, walkthrough, errors, teardownErrors, failure,
     stateAtFailure, elapsedMs: Math.round(performance.now() - started), passed: !failure && teardownErrors.length === 0,
-    fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys walk from outside through the lodge to the registry and wing rack. Flight uses the 12× evidence clock and a flat terrain fallback outside P-1.',
+    fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys walk from outside through the lodge to the registry and wing rack. Flight uses the 12× evidence clock and a flat terrain fallback outside P-1.' +
+      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : ''),
   };
   await writeFile(path.join(output, 'snow-wing-browser-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify({ passed: evidence.passed, elapsedMs: evidence.elapsedMs, screenshots: screenshots.length,
-    ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, errors, teardownErrors, failure }));
+    ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, rings: walkthrough?.ringEvidence?.completed.rings.passed,
+    errors, teardownErrors, failure }));
   if (!failure) assert.deepEqual(teardownErrors, [], 'A fixture process failed to close cleanly');
 }
