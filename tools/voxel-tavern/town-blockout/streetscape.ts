@@ -207,8 +207,9 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     part('rock', x + fx * .34, y + 1.97, n + fn * .34, [.16, .14, .16], '#f10');
   }
 
+  const benchRadius = 1.7;
   function bench(x: number, n: number, direction: number) {
-    if (!reserve(x, n, 1.7)) return;
+    if (!reserve(x, n, benchRadius)) return;
     const y = grid.heightAt(x, n);
     const point = (u: number, v = 0) => [x + u * Math.cos(direction) - v * Math.sin(direction), n + u * Math.sin(direction) + v * Math.cos(direction)] as const;
     for (const u of [-.88, .88]) {
@@ -436,12 +437,17 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
   const legacyFootprints = footprints.length;
   const infillPlaced = new Map<string, StreetInfillKind[]>();
   const infillSize = {
-    lantern: [.55, .22], fence: [1.4, .58], firewood: [.8, .55], sign: [.76, .24], lanternFir: [1.65, .36],
+    lantern: [.55, .22], fence: [1.4, .58], firewood: [.8, .55], sign: [.76, .24],
+    fir: [1.65, .36], lanternFir: [1.65, .36], stall: [1.65, .92], well: [1.28, .95], dryingRack: [1.35, .52],
   } as const;
 
   function addInfill(kind: StreetInfillKind, x: number, n: number, yaw: number) {
     if (kind === 'snowman') {
       if (!extensionStreetClearance(x, n, 1.25)) snowman(x, n, yaw);
+      return;
+    }
+    if (kind === 'bench') {
+      if (!extensionStreetClearance(x, n, benchRadius)) bench(x, n, yaw);
       return;
     }
     const [radius, collision] = infillSize[kind];
@@ -452,6 +458,7 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
       box(x + dx * u - dn * v, y + h, n + dn * u + dx * v, size, tint, yaw);
 
     switch (kind) {
+      case 'fir':
       case 'lanternFir':
         block(0, .67, 0, [.24, 1.34, .26], timber);
         for (const [tier, width] of [2.22, 1.63, 1.02, .55].entries()) {
@@ -459,8 +466,10 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
           block(0, height, 0, [width, .58, width * .86], tier % 2 ? '#395b53' : '#36534e');
           block(0, height + .33, 0, [width * .91, .10, width * .76], snow);
         }
-        lantern(x - dx * .82, y + 1.36, n - dn * .82, .34);
-        lantern(x + dx * .65, y + 1.85, n + dn * .65, .31);
+        if (kind === 'lanternFir') {
+          lantern(x - dx * .82, y + 1.36, n - dn * .82, .34);
+          lantern(x + dx * .65, y + 1.85, n + dn * .65, .31);
+        }
         break;
       case 'lantern':
         block(0, .13, 0, [.48, .26, .48], stone);
@@ -485,11 +494,35 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
         }
         block(0, .69, 0, [.84, .09, .72], snow);
         break;
+      case 'stall':
+        for (const u of [-.88, .88]) for (const v of [-.63, .63]) {
+          block(u, 1.03, v, [.13, 2.18, .13], timber);
+        }
+        block(0, .78, -.07, [1.9, .14, 1.0], wood);
+        block(0, .49, -.52, [1.8, .43, .11], timber);
+        for (const u of [-.75, -.25, .25, .75]) {
+          block(u, 2.17, 0, [.50, .13, 1.54], Math.abs(u) > .5 ? red : '#d6ac79');
+        }
+        block(0, 2.31, .25, [1.99, .10, .69], snow);
+        break;
       case 'sign':
         block(0, .9, 0, [.14, 1.80, .14], timber);
         block(.25, 1.50, 0, [.88, .30, .12], wood);
         block(.47, 1.50, -.08, [.14, .14, .045], gold);
         block(.25, 1.68, 0, [.88, .09, .16], snow);
+        break;
+      case 'well':
+        part('pillar', x, y + .34, n, [1.78, .68, 1.78], stone, yaw);
+        part('pillar', x, y + .69, n, [1.92, .13, 1.92], '#8191a1', yaw);
+        part('pillar', x, y + .76, n, [1.40, .037, 1.40], '#293b4d', yaw);
+        for (const u of [-.72, .72]) block(u, .94, 0, [.14, 1.88, .14], timber);
+        block(0, 1.91, 0, [1.58, .14, .13], wood);
+        break;
+      case 'dryingRack':
+        for (const u of [-1.04, 1.04]) block(u, .89, 0, [.13, 1.78, .14], timber);
+        block(0, 1.61, 0, [2.16, .08, .09], wood);
+        block(-.54, 1.33, 0, [.42, .47, .07], '#cbbfb0');
+        block(.28, 1.25, 0, [.67, .61, .07], '#8d4a45');
         break;
     }
   }
