@@ -1,0 +1,83 @@
+name: Verify ZB-20 ground weather in the little town
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-zb20-town-weather.yml'
+      - 'tools/verify-zb20-town-weather.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  town-ground-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      TOWN_RUNTIME_COMMIT: b610f75ef0234b51061b621a4693d12e363c06ca
+      B_WEATHER_COMMIT: 332ddee8e8af46ab28084f2be267b65ab1cf6d94
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: proof
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.TOWN_RUNTIME_COMMIT }}
+          persist-credentials: false
+          path: town
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.B_WEATHER_COMMIT }}
+          persist-credentials: false
+          path: handoff
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Assemble the pinned town, unified inputs, and weather
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C town rev-parse HEAD)" = "$TOWN_RUNTIME_COMMIT"
+          test "$(git -C handoff rev-parse HEAD)" = "$B_WEATHER_COMMIT"
+          output="$RUNNER_TEMP/zb20-town-weather"
+          mkdir -p "$output"
+          public="../handoff/docs/交流区/GPT/窗B公共批-2026-11-20"
+          for patch in zb15-wall-rules-on-9dd569b.patch zb15-server-on-9dd569b.patch \
+            zb16-sled-state-on-9dd569b.patch zb19-sled-brake-leaf-on-9dd569b.patch \
+            zb19-za02-mount-on-b610f75.patch zb19-za02-brake-cancel-after-mount.patch \
+            zb20-weather-client-on-b610f75.patch zb20-weather-transport-on-b610f75.patch \
+            zb20-weather-viewer-after-zb19-on-b610f75.patch; do
+            git -C town apply --check --whitespace=error "$public/$patch"
+            git -C town apply --whitespace=error "$public/$patch"
+          done
+          for file in src/shared/{snow-stock,town-outdoor-weather,town-night-window}.ts \
+            src/presence/town-outdoor-weather.ts \
+            tools/voxel-tavern/town-blockout/{town-snowball,plaza-snow-supply,town-snow-controls,town-mobile-controls}.ts \
+            tools/voxel-tavern/town-blockout/town-mobile-controls.css; do
+            cp "handoff/$file" "town/$file"
+          done
+          viewer=$(git -C town hash-object tools/voxel-tavern/town-blockout/viewer.ts)
+          test "$viewer" = 5431bca8251eb3719bc9ccf9f5fd13320d272b9b
+          printf 'A %s\nB %s\nviewer %s\n' "$TOWN_RUNTIME_COMMIT" "$B_WEATHER_COMMIT" "$viewer" > "$output/commits.txt"
+      - name: Install locked runtime dependencies and Chromium
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ci --prefix tools/voxel-tavern --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Observe actual presence-driven weather transitions
+        shell: bash
+        run: node proof/tools/verify-zb20-town-weather.mjs town "$RUNNER_TEMP/zb20-town-weather"
+      - name: Archive weather evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zb20-town-weather
+          path: ${{ runner.temp }}/zb20-town-weather
+          retention-days: 14
+          if-no-files-found: warn
