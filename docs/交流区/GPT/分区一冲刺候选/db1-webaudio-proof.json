@@ -1,0 +1,62 @@
+{
+  "chromium": "146.0.7680.178",
+  "sourceSha256": "68fa83d11261f49c238cd947cb9a011272832f4eeeef93ba83604854dd2be2db",
+  "sampleRate": 48000,
+  "westAtLeft": {
+    "onsetFromCallMs": 450.6875,
+    "foreground": [
+      0.02687849552413551,
+      0.017611218412205365
+    ],
+    "earlyTail": [
+      0.000056006013361681253,
+      0.000037270496664573225
+    ],
+    "lateTail": [
+      3.97922117052493e-7,
+      2.651553311965359e-7
+    ],
+    "finalSilence": [
+      0,
+      0
+    ]
+  },
+  "westAtRight": {
+    "onsetFromCallMs": 450.6875,
+    "foreground": [
+      0.017611218412205365,
+      0.02687849552413551
+    ],
+    "earlyTail": [
+      0.000037270496664573225,
+      0.000056006013361681253
+    ],
+    "lateTail": [
+      2.651553311965359e-7,
+      3.97922117052493e-7
+    ],
+    "finalSilence": [
+      0,
+      0
+    ]
+  },
+  "westAtLeftDryOnly": {
+    "onsetFromCallMs": 450.6875,
+    "foreground": [
+      0.04195636093174983,
+      0.027811441267658915
+    ],
+    "earlyTail": [
+      0,
+      0
+    ],
+    "lateTail": [
+      0,
+      0
+    ],
+    "finalSilence": [
+      0,
+      0
+    ]
+  }
+}
