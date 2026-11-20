@@ -2,18 +2,13 @@ import {
   BoxGeometry, Color, Group, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Shape,
   ShapeGeometry, type BufferGeometry,
 } from 'three';
-import { starportAssemblyParts, type StarportAssemblyPart } from '../../../src/shared/starport-assembly';
+import { fittedStarportAssemblyLayout, starportAssemblyParts, type StarportAssemblyPart } from '../../../src/shared/starport-assembly';
 import { createFlightBoosterVisual, createSnowWingVisual } from './flight-equipment-visuals';
 
-type Socket = Readonly<{ x: number; y: number; z: number }>;
 type Plate = readonly [x: number, y: number, z: number, w: number, h: number, d: number, color: string, rotation?: number];
 type Point = readonly [number, number];
 
-const socketCenters = {
-  'snow-wing': { x: -1.9, y: 1.28, z: .32 },
-  booster: { x: 0, y: 1.28, z: .32 },
-  'navigation-core': { x: 1.9, y: 1.28, z: .32 },
-} as const satisfies Record<StarportAssemblyPart, Socket>;
+const socketCenters = fittedStarportAssemblyLayout.sockets;
 
 const silhouettes = {
   'snow-wing': [[-.78, -.16], [-.69, .09], [-.42, .20], [-.16, .26], [-.12, .34],

@@ -3,7 +3,9 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { createAircraftFlight, surveyAircraftRunway, type AircraftPoint } from '../src/shared/aircraft-flight.ts';
 import { createFlightThrust } from '../src/shared/flight-thrust.ts';
-import { createStarportAssembly, starportAssemblyParts, type StarportAssemblyState } from '../src/shared/starport-assembly.ts';
+import {
+  createFittedStarportAssemblySite, createStarportAssembly, starportAssemblyParts, type StarportAssemblyState,
+} from '../src/shared/starport-assembly.ts';
 import {
   createOrdinaryTownNightSchedule, createTownNightWindow, townDayMs, townLayerOverlapMs,
 } from '../src/shared/town-night-window.ts';
@@ -205,7 +207,14 @@ test('ZD-03 the fitted rack requires its front side at request and commit for in
   let feet = rear;
   let feetAtCommit: AircraftPoint | undefined;
   let profile: StarportAssemblyState = { revision: 0, carried: starportAssemblyParts, installed: [], ignited: false };
-  const assembly = createStarportAssembly(model.site, {
+  const site = createFittedStarportAssemblySite(anchor);
+  assert.deepEqual(site.sockets, {
+    'snow-wing': { east: 322.1, north: 656.68, height: 347 },
+    booster: { east: 324, north: 656.68, height: 347 },
+    'navigation-core': { east: 325.9, north: 656.68, height: 347 },
+  });
+  assert.deepEqual(site.ignitionPoint, { east: 324, north: 656.64, height: 347 });
+  const assembly = createStarportAssembly(site, {
     read: () => profile,
     pose: () => feet,
     readIgnition: () => ({ keyOne: true, layersOverlap: true }),

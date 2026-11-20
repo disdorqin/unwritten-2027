@@ -1,7 +1,8 @@
 import { BoxGeometry, Mesh, MeshLambertMaterial, Ray, Vector3, type Object3D } from 'three';
 import type { AircraftPoint } from '../../../src/shared/aircraft-flight';
 import {
-  starportAssemblyParts, type StarportAssemblyPart, type StarportAssemblySite, type StarportAssemblyState,
+  createFittedStarportAssemblySite, fittedStarportAssemblyLayout, starportAssemblyParts,
+  type StarportAssemblyPart, type StarportAssemblyState,
 } from '../../../src/shared/starport-assembly';
 import { buildStarportAssemblyRack } from './starport-assembly-rack';
 
@@ -9,7 +10,6 @@ type Target = StarportAssemblyPart | 'ignition';
 const targetNames = [...starportAssemblyParts, 'ignition'] as const;
 const sightRadius = .32;
 const sightDistance = 4.5;
-const rackReach = 2.12;
 
 /** World-aligned bounds for the fitted rack, with sockets facing south (+Z). */
 export function starportAssemblyEnvelopeAt(anchor: AircraftPoint) {
@@ -44,21 +44,9 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     'snow-wing': worldPoint(rack.sockets['snow-wing']),
     booster: worldPoint(rack.sockets.booster),
     'navigation-core': worldPoint(rack.sockets['navigation-core']),
-    ignition: worldPoint({ x: 0, y: 2.04, z: .36 }),
+    ignition: worldPoint(fittedStarportAssemblyLayout.ignition),
   });
-  const floor = (point: AircraftPoint) => ({ ...point, height: anchor.height });
-  // Each fitting faces south. A valid oblique approach still starts on that side of its face.
-  const approachable = (feet: AircraftPoint, target: AircraftPoint) => feet.north < target.north;
-  const site = {
-    sockets: {
-      'snow-wing': floor(targets['snow-wing']),
-      booster: floor(targets.booster),
-      'navigation-core': floor(targets['navigation-core']),
-    },
-    ignitionPoint: floor(targets.ignition),
-    reach: rackReach,
-    approachable,
-  } satisfies StarportAssemblySite;
+  const site = createFittedStarportAssemblySite(anchor);
   const hitTargets = targetNames.map(target => {
     const { east, north, height } = targets[target];
     return { target, point: new Vector3(east, height, -north) };
@@ -77,7 +65,7 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     let selected: Target | null = null;
     for (const { target, point } of hitTargets) {
       offset.subVectors(point, sight.origin);
-      if (!approachable(feet, targets[target]) || offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
+      if (!site.approachable(feet, targets[target]) || offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
       const miss = sight.distanceSqToPoint(point);
       if (miss > sightRadius ** 2 || miss >= closest) continue;
       closest = miss;
