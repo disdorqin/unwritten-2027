@@ -1,0 +1,52 @@
+{
+  "source": "isolated real Chromium feature fixture",
+  "empty": {
+    "held": null,
+    "sitting": false,
+    "heldCupVisible": false,
+    "drawCalls": 1,
+    "tris": 12,
+    "announcement": ""
+  },
+  "emptySeat": {
+    "held": null,
+    "sitting": true,
+    "heldCupVisible": false,
+    "drawCalls": 1,
+    "tris": 12,
+    "announcement": ""
+  },
+  "standingHeld": {
+    "held": "fireplace-apple",
+    "sitting": false,
+    "heldCupVisible": false,
+    "drawCalls": 1,
+    "tris": 12,
+    "announcement": "端起了「炉火苹果」，找个地方可以喝一口。"
+  },
+  "sittingHeld": {
+    "held": "fireplace-apple",
+    "sitting": true,
+    "heldCupVisible": true,
+    "drawCalls": 2,
+    "tris": 120,
+    "announcement": "端起了「炉火苹果」，找个地方可以喝一口。"
+  },
+  "stoodUp": {
+    "held": "fireplace-apple",
+    "sitting": false,
+    "heldCupVisible": false,
+    "drawCalls": 1,
+    "tris": 12,
+    "announcement": "端起了「炉火苹果」，找个地方可以喝一口。"
+  },
+  "consumed": {
+    "held": null,
+    "sitting": true,
+    "heldCupVisible": false,
+    "drawCalls": 1,
+    "tris": 12,
+    "announcement": "喝了一口「炉火苹果」"
+  },
+  "errors": []
+}
