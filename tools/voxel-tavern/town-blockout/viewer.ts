@@ -209,7 +209,7 @@ const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
   nightOpen: () => presence.northRidgeNightOpen(),
   enterOrExit(terminal, at) {
-    presence.setMountainDomain(terminal === 'summit');
+    presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
     x = at.east;
     n = at.north;
     ground = at.height;
@@ -2817,6 +2817,12 @@ function renderCloudRoute(frameSeconds: number) {
   museumMapButton.hidden = true;
   refreshWorldAction();
   renderer.render(cloudRoute.scene, camera);
+  if (profileTown) {
+    renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
+      frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles, cameraY: camera.position.y,
+    } }));
+  }
 }
 
 renderer.setAnimationLoop(now => {

@@ -39,6 +39,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
   heightAt: (east: number, north: number) => number = () => 0): {
   render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, view?: PerspectiveCamera, showNames?: boolean): void;
   clear(): void;
+  setScene(owner: Scene): void;
   setHighlight(id: number | null): void;
 } {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
@@ -287,6 +288,9 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
 
   return {
     render, clear,
+    setScene(owner) {
+      if (mesh.parent !== owner) owner.add(mesh, sledMesh);
+    },
     setHighlight(id: number | null) { highlightId = id; },
   };
 }

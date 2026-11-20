@@ -160,6 +160,7 @@ export function createTownPresence(
   let joinedName: string | undefined;
   let serverEpochOffset: number | undefined;
   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
+  let avatarScene = scene;
   let socket: WebSocket | undefined;
   /** 当前 WS 尝试是否已完成入镇（用于区分「静默探测失败」与「在线掉线」）。 */
   let socketJoined = false;
@@ -861,11 +862,13 @@ export function createTownPresence(
     serverNow: clock.now,
     readNightWindow,
     northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
-    setMountainDomain(enabled: boolean) {
+    setMountainDomain(enabled: boolean, mountainScene?: Scene) {
       if (mountainDomain === enabled) return;
       resetRetry();
       disconnect(true);
       mountainDomain = enabled;
+      avatarScene = enabled && mountainScene ? mountainScene : scene;
+      avatars?.setScene(avatarScene);
       lastPosition = lastHeightYaw = -1;
       remaining = 0;
       if (inTown) {
@@ -916,7 +919,7 @@ export function createTownPresence(
       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },
     renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
+      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
       avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
     },
     selfId: () => joinedId,
@@ -1015,7 +1018,7 @@ export function createTownPresence(
       syncActivityPoses();
       drainEvents();
       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
+      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
       avatars.setHighlight(bellHolderId);
       const now = performance.now();
       renderList.length = 0;

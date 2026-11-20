@@ -21,13 +21,19 @@ const westShore = [
 ];
 const cloudStop = [336, 640];
 const cloudRunway = [[336, 657], [326.82, 657]];
-const crater = [[-12, 159], [-40, 159], [-67, 159]];
+const crater = [[-12, 159], [-40, 159], [-67, 159], [-71, 159]];
 const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683], [307.25, 683]];
-const viewport = { width: 1160, height: 720 };
+const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
+assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
+const viewport = { width, height };
+const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? .25);
+assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
+const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
+const maxDrag = Math.round(width * .34);
 const tau = 2 * Math.PI;
 const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
 const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
-const report = { url: url.href, segment, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const report = { url: url.href, segment, viewport, quality: 'smooth', paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 
 await mkdir(output, { recursive: true });
 let browser;
@@ -35,7 +41,7 @@ let lastPage;
 let measuring = true;
 
 async function openTown(name) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, locale: 'zh-CN' });
+  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
@@ -54,15 +60,16 @@ async function openTown(name) {
     const socketPath = new URL(socket.url()).pathname;
     if (!socketPath.startsWith('/presence')) return;
     const mountain = socketPath.startsWith('/presence-mountain');
+    const west = socketPath.startsWith('/presence-west');
     evidence.sockets.push(socket.url());
     socket.on('framesent', ({ payload }) => {
       if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
       evidence.poses.push({
         ms: Date.now(),
-        east: payload.readUInt16LE(2) / 100,
+        east: payload.readUInt16LE(2) / 100 - (west ? 240 : 0),
         north: payload.readUInt16LE(4) / 100 + (mountain ? 540 : 0),
-        area: mountain ? 'mountain' : 'town',
-        height: payload.readUInt16LE(6) / 100,
+        area: mountain ? 'mountain' : west ? 'west' : 'town',
+        height: payload.readUInt16LE(6) / 100 - (west ? 64 : 0),
         yaw: payload.readUInt16LE(8) * tau / 65536,
         seq: payload.readUInt16LE(10),
       });
@@ -72,6 +79,8 @@ async function openTown(name) {
     // Use the production drag fallback for consistent native mouse input in headless Chromium.
     // Only the browser API is made unavailable. All movement still runs through the viewer.
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
+    // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
+    localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
     document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
@@ -85,9 +94,10 @@ async function openTown(name) {
   const start = await readPose(page);
   assert.ok(Math.hypot(start.east - spawn[0], start.north - spawn[1]) < .3, JSON.stringify(start));
   assert.ok(Math.abs(start.height - 12) < .3, JSON.stringify(start));
-  await page.locator('#scene canvas').click({ position: { x: 440, y: 335 } });
+  await page.locator('#scene canvas').click({ position: { x: Math.round(width * .35), y: dragY } });
   await waitForWire(page, evidence);
   evidence.checkpoints.push({ label: 'spawn', ...start, wire: evidence.poses.at(-1) });
+  console.log(JSON.stringify({ phase: 'spawn', east: start.east, north: start.north, y: start.height }));
   return { page, evidence };
 }
 
@@ -112,14 +122,14 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
 }
 
 async function face(page, evidence, desired) {
-  for (let attempt = 0; attempt < 7; ++attempt) {
+  for (let attempt = 0; attempt < 16; ++attempt) {
     const before = await waitForWire(page, evidence);
     const delta = yawDistance(before.yaw, desired);
     if (Math.abs(delta) <= .005) return;
-    const dx = Math.max(-340, Math.min(340, Math.round(delta / .003)));
-    await page.mouse.move(500, 335);
+    const dx = Math.max(-maxDrag, Math.min(maxDrag, Math.round(delta / .003)));
+    await page.mouse.move(dragX, dragY);
     await page.mouse.down();
-    try { await page.mouse.move(500 + dx, 335, { steps: Math.max(2, Math.ceil(Math.abs(dx) / 55)) }); }
+    try { await page.mouse.move(dragX + dx, dragY, { steps: Math.max(2, Math.ceil(Math.abs(dx) / 55)) }); }
     finally { await page.mouse.up(); }
     const expected = before.yaw + dx * .003;
     await waitForWire(page, evidence, current => current && Math.abs(yawDistance(current.yaw, expected)) < .014);
@@ -137,6 +147,7 @@ async function walkTo(page, evidence, target, label) {
     const distance = Math.hypot(dx, dn);
     if (distance <= .46) {
       evidence.checkpoints.push({ label, target, ...from, wire: evidence.poses.at(-1) });
+      console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
     const desired = Math.atan2(dx, dn);
@@ -157,7 +168,7 @@ async function walkTo(page, evidence, target, label) {
         const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
         return forward >= distance;
       }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
-      { timeout: Math.ceil(12_000 + (distance / 1.55) * 1000) });
+      { timeout: Math.ceil(30_000 + distance * 1000) });
     } catch (error) {
       const stopped = await readPose(page);
       throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}`, { cause: error });
@@ -209,7 +220,7 @@ try {
       await card(page, '北岭缆车');
       await snapshot(page, evidence, 'station');
     } else {
-      await action(page, '乘缆车一线前往云海台', 180_000);
+      await action(page, '乘缆车一线前往云海台', 620_000);
       await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
         null, { timeout: 135_000 });
       await snapshot(page, evidence, 'cable-boarding');
@@ -251,9 +262,24 @@ try {
     await follow(page, evidence, crater, 'crater');
     await face(page, evidence, -Math.PI / 2);
     const rim = await readPose(page);
-    assert.ok(rim.east < -66.5 && Math.abs(rim.north - 159) < .5 && Math.abs(rim.height - 10.7773) < .5,
+    assert.ok(rim.east < -70.55 && Math.abs(rim.north - 159) < .5 && Math.abs(rim.height - 10.7773) < .5,
       JSON.stringify(rim));
-    await snapshot(page, evidence, 'crater');
+    await snapshot(page, evidence, 'crater-entrance');
+    await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -70.55);
+    const gateWindow = await page.waitForFunction(async () => {
+      const response = await fetch('/presence/night-window', { cache: 'no-store' });
+      if (!response.ok) return false;
+      const state = await response.json();
+      return state.canEnterRestricted && state.morningBellAt - state.now > 15_000 ? state : false;
+    }, null, { polling: 600, timeout: 620_000 });
+    evidence.craterWindow = await gateWindow.jsonValue();
+    await gateWindow.dispose();
+    await walkTo(page, evidence, [-72.1, 159], 'crater-crossed-lip');
+    await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -71.8);
+    await face(page, evidence, -Math.PI / 2);
+    await snapshot(page, evidence, 'crater-inside');
+    await walkTo(page, evidence, [-67, 159], 'crater-return');
+    await snapshot(page, evidence, 'crater-return');
   }
   assert.equal(report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length, 0);
 } catch (error) {
