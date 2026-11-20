@@ -154,17 +154,19 @@ export function createR2EngineeringCandidate() {
     return (east - gate.east) * gateEast + (north - gate.north) * gateNorth;
   }
 
-  function gateContact(from: Spot, to: Spot) {
+  function gateContact(from: Spot, to: Spot, footRadius = sledRadius) {
+    if (![from.x, from.n, from.y, to.x, to.n, to.y, footRadius].every(Number.isFinite) ||
+        footRadius < 0 || footRadius > track.widthMetres / 2) return;
     // The hinge opens downhill. The uphill face catches the swept front of
     // the sled before its center reaches the gate plane.
-    const before = gateDistance(from.x, from.n) - sledRadius;
-    const after = gateDistance(to.x, to.n) - sledRadius;
+    const before = gateDistance(from.x, from.n) - footRadius;
+    const after = gateDistance(to.x, to.n) - footRadius;
     if (before < 0 || after >= 0) return;
     const fraction = before / (before - after);
     const lateral = (from.n + (to.n - from.n) * fraction - gate.north) * gateEast -
       (from.x + (to.x - from.x) * fraction - gate.east) * gateNorth;
     const elevation = from.y + (to.y - from.y) * fraction;
-    if (Math.abs(lateral) > railOffset || elevation < gate.height - .2 || elevation > gate.height + gateHeight) return;
+    if (Math.abs(lateral) > track.widthMetres / 2 - footRadius + 1e-6 || elevation < gate.height - .2 || elevation > gate.height + gateHeight) return;
     return { lateral, elevation };
   }
 
