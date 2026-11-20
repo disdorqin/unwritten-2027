@@ -60,6 +60,30 @@ function playScreech(context: BaseAudioContext, output: AudioNode) {
   };
 }
 
+function playWaterFilm(context: BaseAudioContext, output: AudioNode) {
+  const duration = .65;
+  const at = context.currentTime;
+  const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
+  const samples = buffer.getChannelData(0);
+  let seed = 7189;
+  let filtered = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const t = i / samples.length;
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    filtered += (.21 - t * .17) * (seed / 2147483648 - 1 - filtered);
+    samples[i] = filtered * Math.sin(Math.PI * t) ** 2 * .065;
+  }
+
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(output);
+  source.onended = () => source.disconnect();
+  source.start(at);
+  return () => {
+    if (context.currentTime < at + duration) source.stop();
+  };
+}
+
 /** Attach to the existing scene frame loop and feed it the current lift presentation sample. */
 export function createUndergroundLiftCinematicEffects({
   parent, cameraMotion, getAudioContext, audioOutput, onSkip, reducedMotion,
@@ -92,6 +116,8 @@ export function createUndergroundLiftCinematicEffects({
   let previousOpacity = 0;
   let previousColor = '';
   let stopAudio: (() => void) | undefined;
+  let stopWaterFilm: (() => void) | undefined;
+  let waterFilmTripId: number | undefined;
   let disposed = false;
   let lastFocus: HTMLElement | undefined;
 
@@ -115,8 +141,21 @@ export function createUndergroundLiftCinematicEffects({
     skipButton.hidden = !available;
   }
 
+  function playOnHostBus(play: typeof playScreech) {
+    try {
+      const context = getAudioContext?.();
+      if (context?.state === 'running') {
+        const output = audioOutput?.(context) ?? context.destination;
+        if (output.context === context) return play(context, output);
+      }
+    } catch { /* An unavailable audio output must not hold the descent. */ }
+  }
+
   function requestSkip() {
-    if (previous?.canSkip && !disposed) onSkip();
+    if (!previous?.canSkip || disposed) return;
+    stopWaterFilm?.();
+    stopWaterFilm = undefined;
+    onSkip();
   }
   skipButton.addEventListener('click', requestSkip);
 
@@ -125,21 +164,25 @@ export function createUndergroundLiftCinematicEffects({
     skipButton,
     present(frame: UndergroundLiftCinematicFrame | undefined, elapsedSeconds: number) {
       if (disposed || (!frame && !previous)) return;
-      const changed = previous?.tripId !== frame?.tripId || previous?.phase !== frame?.phase;
+      const tripChanged = previous?.tripId !== frame?.tripId;
+      const changed = tripChanged || previous?.phase !== frame?.phase;
       previous = frame;
       const reduced = prefersReducedMotion();
+      if (tripChanged || frame?.skipped) {
+        stopWaterFilm?.();
+        stopWaterFilm = undefined;
+      }
       if (changed) {
         stopAudio?.();
-        stopAudio = undefined;
+        stopAudio = frame?.phase === 'screech' ? playOnHostBus(playScreech) : undefined;
         overlay.dataset.phase = frame?.phase ?? '';
-        if (frame?.phase === 'screech') {
-          try {
-            const context = getAudioContext?.();
-            if (context?.state === 'running') {
-              const output = audioOutput?.(context) ?? context.destination;
-              if (output.context === context) stopAudio = playScreech(context, output);
-            }
-          } catch { /* An unavailable audio output must not hold the descent. */ }
+      }
+      if (frame?.waterFilm && frame.tripId !== waterFilmTripId) {
+        waterFilmTripId = frame.tripId;
+        stopWaterFilm = playOnHostBus(playWaterFilm);
+        if (stopWaterFilm) {
+          stopAudio?.();
+          stopAudio = undefined;
         }
       }
       setSkip(frame?.canSkip === true);
@@ -173,6 +216,7 @@ export function createUndergroundLiftCinematicEffects({
       if (disposed) return;
       disposed = true;
       stopAudio?.();
+      stopWaterFilm?.();
       setSkip(false);
       skipButton.removeEventListener('click', requestSkip);
       overlay.remove();

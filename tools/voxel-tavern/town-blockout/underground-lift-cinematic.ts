@@ -9,6 +9,7 @@ export type UndergroundLiftCinematicFrame = Readonly<{
   blackout: boolean;
   canSkip: boolean;
   skipped: boolean;
+  waterFilm?: true;
 }>;
 
 type Descent = Readonly<{ id: number; first: boolean; departedAt: number; travelMs: number }>;
@@ -23,6 +24,7 @@ type ActiveDescent = {
 
 const wakeMs = 1150;
 const sitUpMs = 950;
+const waterFilmLeadMs = 1500;
 
 function progress(elapsed: number, start: number, end: number) {
   return Math.min(1, Math.max(0, (elapsed - start) / (end - start)));
@@ -73,9 +75,14 @@ export function createUndergroundLiftCinematic() {
       amount = progress(now - acceptedAt, wakeMs, wakeMs + sitUpMs);
     }
     const blackout = phase === 'blackout';
+    const remaining = descent.travelMs - (now - descent.departedAt);
+    // Mark the midpoint of the final fall without affecting the accepted landing.
+    const crossesWaterFilm = acceptedAt === undefined && !skipped && remaining > 0 &&
+      remaining <= Math.min(waterFilmLeadMs, descent.travelMs / 2);
     return {
       tripId: descent.id, phase, progress: amount, sway, blackout, skipped,
       canSkip: descent.first && !skipped && (blackout || phase === 'waking' || phase === 'sitting'),
+      ...(crossesWaterFilm ? { waterFilm: true } : {}),
     };
   }
 

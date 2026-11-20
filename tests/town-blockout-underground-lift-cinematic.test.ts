@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createUndergroundLiftCinematic } from '../tools/voxel-tavern/town-blockout/underground-lift-cinematic';
+import { createUndergroundLiftCinematicEffects } from '../tools/voxel-tavern/town-blockout/underground-lift-cinematic-effects';
 
 const first = { id: 1, first: true, departedAt: 1000, travelMs: 10_000 } as const;
 const repeat = { id: 2, first: false, departedAt: 30_000, travelMs: 20_000 } as const;
@@ -77,6 +78,69 @@ test('repeat uses a short visual finish with the original physical trip duration
   assert.equal(cinema.beginHandoff(repeat.id), true);
   assert.equal(cinema.acceptLanding(repeat.id, 50_000), true);
   assert.equal(cinema.sample(50_000)?.phase, 'complete');
+});
+
+test('both downward trips share a single water-film cue before landing, and skip leaves the blackout locked', () => {
+  const cinema = createUndergroundLiftCinematic();
+  assert.equal(cinema.start(first, 1000), true);
+  assert.equal(cinema.sample(9499)?.waterFilm, undefined);
+  assert.equal(cinema.sample(9500)?.waterFilm, true);
+  const firstBlackout = cinema.sample(9800)!;
+  assert.equal(firstBlackout.waterFilm, true);
+  assert.equal(cinema.skip(first.id), true);
+  assert.equal(cinema.sample(9900)?.waterFilm, undefined);
+  assert.equal(cinema.confirmBlackout(first.id), true);
+  assert.equal(cinema.beginHandoff(first.id), false);
+  assert.equal(cinema.sample(11_000)?.phase, 'blackout');
+  assert.equal(cinema.beginHandoff(first.id), true);
+  assert.equal(cinema.acceptLanding(first.id, 11_000), true);
+  assert.equal(cinema.sample(11_000)?.phase, 'complete');
+  assert.equal(cinema.start(repeat, 30_000), true);
+  assert.equal(cinema.sample(48_499)?.waterFilm, undefined);
+  assert.equal(cinema.sample(48_500)?.waterFilm, true);
+  const repeatBlackout = cinema.sample(49_200)!;
+  assert.equal(repeatBlackout.waterFilm, true);
+  assert.equal(cinema.sample(50_000)?.waterFilm, undefined);
+  assert.equal(cinema.start({ ...repeat, id: 3 }, 50_000), false);
+
+  const played: Array<{ destination?: object; stopped: boolean }> = [];
+  const samples = new Float32Array(65);
+  const context = {
+    state: 'running', currentTime: 0, sampleRate: 100,
+    createBuffer() { return { getChannelData: () => samples }; },
+    createBufferSource() {
+      const record: (typeof played)[number] = { stopped: false };
+      return {
+        connect(destination: object) { record.destination = destination; },
+        start() { played.push(record); },
+        stop() { record.stopped = true; },
+      };
+    },
+  };
+  const output = { context };
+  const makeElement = () => ({
+    hidden: false, dataset: {}, style: {},
+    append() {}, setAttribute() {}, remove() {}, addEventListener() {}, removeEventListener() {},
+  });
+  const parent = { ...makeElement(), ownerDocument: { createElement: makeElement } } as unknown as HTMLElement;
+  const effects = createUndergroundLiftCinematicEffects({
+    parent, cameraMotion: () => {}, onSkip: () => {}, reducedMotion: () => true,
+    getAudioContext: () => context as unknown as BaseAudioContext, audioOutput: () => output as unknown as AudioNode,
+  });
+
+  effects.present(firstBlackout, 8.8);
+  effects.present(firstBlackout, 9);
+  assert.equal(played.length, 1);
+  assert.equal(played[0].destination, output);
+  assert.equal(Math.abs(samples[0]), 0);
+  assert.ok(samples.some(value => Math.abs(value) > .001));
+  effects.present({ ...firstBlackout, waterFilm: undefined, skipped: true }, 9.1);
+  assert.equal(played[0].stopped, true);
+  effects.present(repeatBlackout, 19.2);
+  effects.present(repeatBlackout, 19.4);
+  assert.equal(played.length, 2);
+  effects.dispose();
+  assert.equal(played[1].stopped, true);
 });
 
 test('late snapshots never replay earlier effects or reopen completed and cancelled descents', () => {
