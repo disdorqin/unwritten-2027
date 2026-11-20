@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InstancedMesh, MeshBasicMaterial, Scene, Vector3 } from 'three';
+import { Scene, Vector3, type InstancedMesh } from 'three';
 import { layout } from '../tools/voxel-tavern/town-blockout/terrain';
 import { createTavernStory, type TavernHotWineReceipt } from '../tools/voxel-tavern/town-blockout/tavern-story';
 import { mountTavernAncestorGlimpse } from '../tools/voxel-tavern/town-blockout/tavern-ancestor-glimpse';
@@ -78,9 +78,9 @@ test('the glimpse is one unlabelled, non-colliding batch on the existing seats a
   let now = 100;
   const glimpse = mountTavernAncestorGlimpse(scene, tavern, () => now);
   assert.equal(scene.children.length, 1);
-  const visual = scene.children[0];
-  assert.ok(visual instanceof InstancedMesh);
-  assert.ok(visual.material instanceof MeshBasicMaterial);
+  const visual = scene.children[0] as InstancedMesh;
+  assert.equal(visual?.isInstancedMesh, true);
+  assert.ok(!Array.isArray(visual.material) && 'isMeshBasicMaterial' in visual.material && visual.material.isMeshBasicMaterial);
   assert.equal(visual.visible, false);
   assert.equal(visual.userData.colliders, undefined);
   assert.equal(visual.material.depthWrite, false);
