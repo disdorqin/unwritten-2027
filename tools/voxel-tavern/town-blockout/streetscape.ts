@@ -418,9 +418,15 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
 
   const legacyFootprints = footprints.length;
   const infillPlaced = new Map<string, StreetInfillKind[]>();
-  const infillSize = { lantern: [.55, .22], fence: [1.4, .58], firewood: [.8, .55], sign: [.76, .24] } as const;
+  const infillSize = {
+    lantern: [.55, .22], fence: [1.4, .58], firewood: [.8, .55], sign: [.76, .24], lanternFir: [1.65, .36],
+  } as const;
 
   function addInfill(kind: StreetInfillKind, x: number, n: number, yaw: number) {
+    if (kind === 'snowman') {
+      if (!extensionStreetClearance(x, n, 1.25)) snowman(x, n, yaw);
+      return;
+    }
     const [radius, collision] = infillSize[kind];
     if (extensionStreetClearance(x, n, radius) || !reserve(x, n, radius, collision)) return;
     const y = grid.heightAt(x, n);
@@ -429,6 +435,16 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
       box(x + dx * u - dn * v, y + h, n + dn * u + dx * v, size, tint, yaw);
 
     switch (kind) {
+      case 'lanternFir':
+        block(0, .67, 0, [.24, 1.34, .26], timber);
+        for (const [tier, width] of [2.22, 1.63, 1.02, .55].entries()) {
+          const height = 1.04 + tier * .47;
+          block(0, height, 0, [width, .58, width * .86], tier % 2 ? '#395b53' : '#36534e');
+          block(0, height + .33, 0, [width * .91, .10, width * .76], snow);
+        }
+        lantern(x - dx * .82, y + 1.36, n - dn * .82, .34);
+        lantern(x + dx * .65, y + 1.85, n + dn * .65, .31);
+        break;
       case 'lantern':
         block(0, .13, 0, [.48, .26, .48], stone);
         block(0, 1.34, 0, [.15, 2.68, .15], timber);
