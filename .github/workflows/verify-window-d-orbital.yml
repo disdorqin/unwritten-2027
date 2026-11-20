@@ -1,0 +1,63 @@
+name: Verify Window D orbital deck and R3-58 status
+
+on:
+  push:
+    branches: [town-verify-window-d-orbital-20261120]
+
+permissions:
+  contents: read
+
+jobs:
+  orbital:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ORBITAL_PIN: 5c7e7e7ffa256fba91aff0f785085ce0921b3cf5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify the source and install locked dependencies
+        id: install
+        run: |
+          test "$(git rev-parse HEAD^)" = "$ORBITAL_PIN"
+          git diff --exit-code "$ORBITAL_PIN" HEAD -- . ':(exclude).github/workflows/verify-window-d-orbital.yml'
+          npm ci --ignore-scripts --no-audit --no-fund
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            printf 'CHROMIUM_PATH=%s\nCHROMIUM_EXECUTABLE=%s\n' "$browser" "$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
+          mkdir -p "$RUNNER_TEMP/orbital"
+          printf '%s\n' "$ORBITAL_PIN" > "$RUNNER_TEMP/orbital/source-commit.txt"
+      - name: Check both S-2 gates and all five cabins
+        run: node --import tsx --test --test-concurrency=2 tests/town-blockout-orbital*.test.ts tests/server/orbital-gates.test.ts
+      - name: Walk the five cabins and sight the console nameplate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: timeout --signal=TERM --kill-after=10s 165s node tools/verify-orbital-station-browser.mjs "$RUNNER_TEMP/orbital/station"
+      - name: Exercise the physical log controls and confirm the lamp state
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          node node_modules/vite/bin/vite.js tools/voxel-tavern --host 127.0.0.1 --port 38111 --strictPort &
+          orbital_vite_pid=$!
+          trap 'kill "$orbital_vite_pid" 2>/dev/null || true' EXIT
+          orbital_url=http://127.0.0.1:38111/orbital-status-review.html
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 --max-time 3 "$orbital_url" > /dev/null
+          timeout --signal=TERM --kill-after=10s 165s node tools/verify-orbital-status-browser.mjs "$orbital_url" "$RUNNER_TEMP/orbital/status"
+      - name: Hash browser evidence
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/orbital"
+          cd "$RUNNER_TEMP/orbital"
+          find . -type f \( -name '*.png' -o -name '*.json' -o -name 'source-commit.txt' \) -print0 |
+            sort -z | xargs -0 --no-run-if-empty sha256sum > captures.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: window-d-orbital-native-5c7e7e7f
+          path: ${{ runner.temp }}/orbital
+          if-no-files-found: warn
