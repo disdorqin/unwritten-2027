@@ -1,0 +1,42 @@
+{
+  "artifact": {
+    "id": 14591415402,
+    "sizeBytes": 563392,
+    "sha256": "69d2e1170be72e831ab35f3ef017aab73840713f0b3f5ca209463acdf731c8ca",
+    "run": 44647783970
+  },
+  "release": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "browserTree": "2dff658fd664bba873f4ad62293e1f3e1f8d1174",
+  "sourceHashes": {
+    "viewer.ts": "72cc9c1d1eb946211844850a95392381c5a8871d",
+    "district-layout.ts": "29dd3ca628f775db12b8f7f719c9db5adbd133ed",
+    "district-housing.ts": "cc9223907b2f5601da2461fc39982b987caffb0e",
+    "terrain.ts": "98bcbe5eec4dc87871c4bf50ca34e370a36ca845",
+    "extension-streets.ts": "6679ecd37872158a84c5502fdf5765bd9c484dc2"
+  },
+  "localRows": 92,
+  "browserRows": 92,
+  "staticRows": 92,
+  "browserStaticExact": true,
+  "exactRows": 92,
+  "changes": [],
+  "marketIds": [
+    "old-town:137:168",
+    "old-town:158:184",
+    "old-town:179:155",
+    "old-town:173:135",
+    "old-town:156:141",
+    "old-town:94:100",
+    "old-town:137:70",
+    "old-town:188:65",
+    "old-town:217:66",
+    "old-town:234:74",
+    "old-town:186:104",
+    "old-town:206:110",
+    "old-town:228:110",
+    "old-town:246:114",
+    "old-town:246:135",
+    "old-town:220:138",
+    "old-town:197:132"
+  ]
+}

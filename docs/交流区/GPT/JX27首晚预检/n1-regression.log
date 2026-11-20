@@ -1,0 +1,21 @@
+✔ sweep finds the nearest capsule, skips the thrower and reports score eligibility (1.803982ms)
+✔ hit zone follows a character above ground and excludes practice props (0.502389ms)
+✔ sweep stops at a thin wall before a capsule and avoids false box-corner hits (0.500311ms)
+✔ chest-height grazes receive a small bonus only with a clear path to the torso (0.378455ms)
+✔ the practice marker stands ten meters from the snowman (0.137187ms)
+✔ remote replay uses the victim capsule and does not score on local simulation (18.632416ms)
+✔ remote replay caps eight balls per shooter, shares the pool, and clears on session loss (3.334631ms)
+✔ snowball sweep intersects thin geometry and misses outside expanded bounds (0.411968ms)
+✔ snowball carries launch and landing metadata, builds a combo, and stops behind a wall (6.802118ms)
+✔ fixed-power aim ring marks the same wall, terrain and person contacts as the released ball (17.767723ms)
+✔ snowball speed remains bounded and every flight expires by the range limit (13.188816ms)
+✔ snowball pool retires oldest projectile and limits catch-up work to two ticks (1.886021ms)
+✔ snow depths cap ammo and indoor impacts keep player and NPC scores unchanged (3.269836ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 814.847998
