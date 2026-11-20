@@ -43,12 +43,18 @@
     </div>
   </section>
   <main id="scene" aria-label="雪镇三维场景"></main>
-  <aside class="panel" aria-label="小镇控制">
+  <button id="town-music-toggle" class="town-hud-button" type="button" aria-label="背景音乐" aria-pressed="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9h4l5-4v14l-5-4H3z"/>
+      <path class="speaker-waves" d="M16 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/>
+      <path class="speaker-cross" d="m16 9 5 6m0-6-5 6"/>
+    </svg>
+  </button>
+  <dialog id="town-settings" class="panel" aria-labelledby="town-settings-title">
     <div class="town-panel-heading">
-      <h1>UNWRITTEN 2027</h1>
+      <h1 id="town-settings-title">小镇设置</h1>
       <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
-      <button id="town-panel-toggle" class="town-panel-toggle" type="button"
-        aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
+      <button id="town-settings-close" type="button" autofocus>关闭</button>
     </div>
     <p id="env-banner" role="note" hidden><span id="env-banner-message">当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</span> <button id="env-banner-dismiss" type="button" hidden>关闭提示</button></p>
     <div id="town-panel-controls">
@@ -85,7 +91,7 @@
         <button id="town-firecracker-bag" type="button">爆竹背包</button>
       </nav>
     </div>
-  </aside>
+  </dialog>
   <section id="town-chat" aria-label="小镇聊天" hidden>
     <button id="town-chat-toggle" type="button" aria-expanded="true">聊天<span id="town-chat-unread" aria-hidden="true" hidden></span></button>
     <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
@@ -129,6 +135,11 @@
   <button id="touch-jump" type="button" hidden>跳跃</button>
   <button id="touch-sprint" type="button" hidden aria-pressed="false">疾跑</button>
   <button id="fullscreen-toggle" type="button" hidden aria-pressed="false">全屏</button>
+  <button id="town-panel-toggle" class="town-hud-button" type="button" aria-label="小镇设置" aria-haspopup="dialog" aria-controls="town-settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M4 6h7m4 0h5M4 12h12m4 0h0M4 18h3m4 0h9M12 4v4m5 2v4M8 16v4"/>
+    </svg>
+  </button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
   <aside id="snowball-controls" aria-label="打雪仗" hidden>

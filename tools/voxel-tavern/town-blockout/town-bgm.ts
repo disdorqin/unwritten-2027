@@ -255,13 +255,10 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
     } catch { /* Unsupported or refused audio does not block entry. */ }
   }
 
-  function mountControls(parent: HTMLElement) {
+  function mountControls(parent: HTMLElement, mute: HTMLButtonElement) {
     const controls = document.createElement('div');
     controls.className = 'town-bgm-controls';
-    const mute = document.createElement('button');
-    mute.type = 'button';
-    mute.textContent = '背景音乐静音';
-    mute.setAttribute('aria-pressed', String(settings.muted));
+    mute.setAttribute('aria-pressed', String(!settings.muted));
     const label = document.createElement('label');
     label.textContent = '背景音乐音量';
     const volume = document.createElement('input');
@@ -278,14 +275,15 @@ export function createTownBgm(getAudioContext: () => AudioContext) {
     }
     mute.onclick = () => {
       settings.muted = !settings.muted;
-      mute.setAttribute('aria-pressed', String(settings.muted));
+      entered = true;
+      mute.setAttribute('aria-pressed', String(!settings.muted));
       change();
     };
     volume.oninput = () => {
       settings.volume = volume.valueAsNumber;
       change();
     };
-    controls.append(mute, label);
+    controls.append(label);
     parent.append(controls);
   }
 

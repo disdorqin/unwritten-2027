@@ -33,39 +33,26 @@
 }
 #town-presence-name-hint { display: block; margin: 2px 0 8px; }
 
-.panel .town-panel-toggle {
-  flex: none;
-  min-height: 32px;
-  padding: 4px 8px;
-  font-size: 12px;
-  white-space: nowrap;
+.town-hud-button {
+  position: fixed;
+  z-index: 5;
+  top: max(14px, env(safe-area-inset-top));
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  touch-action: manipulation;
 }
-
-.panel.town-panel-collapsed {
-  width: max-content;
-  padding: 3px;
-  border-radius: 8px;
-}
-
-.panel.town-panel-collapsed .town-panel-heading { margin: 0; }
-.panel.town-panel-collapsed h1 { display: none; }
-
-@media (max-height: 460px) {
-  .panel:not(.town-panel-collapsed) {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    top: max(8px, env(safe-area-inset-top));
-    max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
-  }
-  .panel .town-panel-heading { flex: none; margin-bottom: 4px; }
-  #town-panel-controls {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    touch-action: pan-y;
-    padding-inline-end: 4px;
-  }
+.town-hud-button svg { width: 22px; height: 22px; pointer-events: none; }
+#town-music-toggle { left: max(14px, env(safe-area-inset-left)); }
+#town-music-toggle[aria-pressed="true"] .speaker-cross,
+#town-music-toggle[aria-pressed="false"] .speaker-waves { display: none; }
+#town-panel-toggle { right: max(14px, env(safe-area-inset-right)); }
+#museum-map-button:not([hidden]) ~ #town-panel-toggle,
+#fullscreen-toggle:not([hidden]) ~ #town-panel-toggle { top: calc(max(14px, env(safe-area-inset-top)) + 52px); }
+#museum-map-button:not([hidden]) ~ #fullscreen-toggle:not([hidden]) ~ #town-panel-toggle {
+  top: calc(max(14px, env(safe-area-inset-top)) + 104px);
 }
 
 #town-chat {
@@ -93,10 +80,7 @@
 #town-chat-unread[hidden] { display: none; }
 #town-chat.town-chat-collapsed { width: max-content; padding: 6px; }
 #town-chat.town-chat-collapsed :is(#town-chat-log, #town-chat-form) { display: none; }
-/* Expanded on touch: cap the panel so its top edge never reaches the
-   top-left panel heading (status chip). Bottom stays at 145px above the
-   joystick zone; the top 68px strip stays clear, so the log shrinks
-   instead of the panel growing over the chip. */
+/* Keep the chat between the joystick and the top HUD buttons. */
 .touch-play #town-chat:not(.town-chat-collapsed):not([hidden]) {
   display: flex; flex-direction: column;
   max-height: calc(100vh - 213px); max-height: calc(100dvh - 213px);
@@ -168,15 +152,5 @@
 .town-bgm-controls label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
 .town-bgm-controls input { width: min(86px, 25vw); accent-color: #e6bf82; }
 @media (pointer: coarse) {
-  .panel .town-panel-toggle, #town-chat-form :is(input, button), .town-bgm-controls label { min-height: 44px; }
-  /* Touch top-bar slimming (3.0 M2): the panel idles to a fade (town-panel.ts
-     adds the class after a few untouched seconds) and the two secondary
-     texts — the help paragraph and the nickname hint — leave the top bar.
-     Both return the moment the panel is touched or focused. */
-  .panel { transition: opacity .6s ease; }
-  .panel.town-panel-idle { opacity: .45; }
-  .panel #help, #town-presence-name-hint { display: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .panel { transition: none; }
+  .panel button, #town-chat-form :is(input, button), .town-bgm-controls label { min-height: 44px; }
 }

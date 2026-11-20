@@ -128,8 +128,6 @@ export function createTownChat(send: (scope: TownChatScope, text: string) => boo
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('button,input,select,textarea,a,[contenteditable]')) return;
     event.preventDefault();
-    const panelToggle = document.getElementById('town-panel-toggle');
-    if (panelToggle?.getAttribute('aria-expanded') === 'false') panelToggle.click();
     input.focus();
   });
 

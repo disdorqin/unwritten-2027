@@ -854,7 +854,8 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-panel-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
-townBgm.mountControls(element('town-panel-controls'));
+const townSettings = element<HTMLDialogElement>('town-settings');
+townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(
   { sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking,
@@ -2142,10 +2143,12 @@ function visitSelectedDestination() {
 }
 rehearse.onclick = () => {
   if (!festival.active() && festival.start()) setNight(true);
+  if (townSettings.open) townSettings.close();
   renderer.domElement.focus({ preventScroll: true });
 };
 selector.onchange = event => {
   if (!visitSelectedDestination()) return;
+  if (townSettings.open) townSettings.close();
   renderer.domElement.focus({ preventScroll: true });
   if (event.isTrusted) townBgm.enter();
 };
@@ -2156,7 +2159,8 @@ const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown'
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
 function lookAllowed() {
-  return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() && !placeCard.open && !museumVisit.dialog.open;
+  return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
+    !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
 function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
 function skatesOnIce() {
@@ -2230,7 +2234,7 @@ touchJump.addEventListener('pointerdown', event => {
 });
 touchJump.addEventListener('click', requestJumpAction);
 addEventListener('keydown', e => {
-  if (placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
+  if (townSettings.open || placeCard.open || museumVisit.dialog.open || e.altKey || e.ctrlKey || e.metaKey || e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   if (museumOverlay()) {
     if (e.code === 'Escape' || (e.code === 'KeyE' && !e.repeat)) {
       e.preventDefault();
@@ -3115,7 +3119,7 @@ renderer.setAnimationLoop(now => {
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
   rehearse.disabled = festival.active();
-  const canControl = walking && !placeCard.open && !museumVisit.dialog.open;
+  const canControl = walking && !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
   touchWalk.setAllowed(moveAllowed());
   crosshair.hidden = !lookAllowed();
   touchJump.hidden = !moveAllowed() || !touchWalk.active();
