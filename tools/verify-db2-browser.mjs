@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 
@@ -41,11 +41,13 @@ async function beginRound(controls, start) {
   const shownSeconds = Number((await hud.innerText()).match(roundText)?.[1]);
   assert.ok(shownSeconds >= 50 && shownSeconds <= 60, `Unexpected opening countdown: ${shownSeconds}`);
   await wait(action).toBeHidden();
+  let nextSeconds;
   await expect.poll(async () => {
     const shown = (await hud.innerText()).match(roundText)?.[1];
-    return shown === undefined ? Number.POSITIVE_INFINITY : Number(shown);
+    nextSeconds = shown === undefined ? Number.POSITIVE_INFINITY : Number(shown);
+    return nextSeconds;
   }, { timeout: 12_000 }).toBeLessThan(shownSeconds);
-  return gestureAt;
+  return { gestureAt, shownSeconds, nextSeconds };
 }
 
 async function runContext(browser, name, options, verify) {
@@ -57,7 +59,13 @@ async function runContext(browser, name, options, verify) {
   try {
     const evidence = await verify(page);
     assert.deepEqual(pageErrors, [], 'Uncaught page errors');
-    console.log(JSON.stringify({ name, route: route.href, ...evidence }));
+    const record = { name, route: route.href, pageErrors, ...evidence };
+    const json = JSON.stringify(record, null, 2);
+    await writeFile(join(artifacts, `${name}.json`), `${json}\n`);
+    console.log(json);
+    // Keep the timed input proof independent of the software compositor.
+    await page.screenshot({ path: join(artifacts, `${name}-result.png`), timeout: 5000 })
+      .catch(error => console.warn(`${name} screenshot unavailable: ${error.message}`));
   } catch (error) {
     if (pageErrors.length) console.error(pageErrors.join('\n'));
     await page.screenshot({ path: join(artifacts, `${name}-failure.png`), timeout: 10_000 }).catch(() => {});
@@ -78,23 +86,20 @@ try {
     const controls = await openPractice(page);
     await wait(controls.action).toHaveText('E · 开始移动靶练习');
     await controls.canvas.focus();
-    const gestureAt = await beginRound(controls, () => page.keyboard.press('e'));
-    await page.screenshot({ path: join(artifacts, 'desktop-active.png'), timeout: 15_000 });
+    const { gestureAt, shownSeconds, nextSeconds } = await beginRound(controls, () => page.keyboard.press('e'));
     await expect(controls.notice).toHaveText('移动靶结算 · 命中 0', { timeout: 85_000 });
     const elapsedMs = Math.round(performance.now() - gestureAt);
     assert.ok(elapsedMs >= 59_000, `Round settled too early after ${elapsedMs} ms`);
     await wait(controls.hud).toBeHidden();
     await wait(controls.action).toBeVisible();
-    await page.screenshot({ path: join(artifacts, 'desktop-settled.png'), timeout: 15_000 });
-    return { settled: true, elapsedMs };
+    return { settled: true, elapsedMs, shownSeconds, nextSeconds, notice: await controls.notice.innerText() };
   });
   await runContext(browser, 'touch', devices['Pixel 7'], async page => {
     const controls = await openPractice(page);
     await wait(page.locator('#touch-walk')).toBeVisible();
     await wait(controls.action).toHaveText('开始移动靶练习');
-    await beginRound(controls, () => controls.action.tap());
-    await page.screenshot({ path: join(artifacts, 'touch-active.png'), timeout: 15_000 });
-    return { tapStartedRound: true };
+    const { shownSeconds, nextSeconds } = await beginRound(controls, () => controls.action.tap());
+    return { tapStartedRound: true, shownSeconds, nextSeconds };
   });
 } finally {
   await browser.close();
