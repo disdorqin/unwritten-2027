@@ -1,0 +1,42 @@
+name: Verify ZB-15 snow controls in Chromium
+
+on:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-zb15-browser-controls.yml'
+      - 'tools/verify-zb15-browser-controls.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-and-touch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install the project and pinned browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Exercise trusted keyboard, mouse, and touch input
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/verify-zb15-browser-controls.mjs | tee "$RUNNER_TEMP/zb15-controls.json"
+      - name: Archive the isolated input proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zb15-controls
+          path: ${{ runner.temp }}/zb15-controls.json
+          retention-days: 14
+          if-no-files-found: warn
