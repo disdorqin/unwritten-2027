@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from 'three';
+import { BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
 import type { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
 
@@ -71,6 +71,24 @@ export function createUndergroundCrystalGate(gate: Gate) {
   const spill = block(group, cold, 0, .006, .02, width * .93, .01, .68);
   spill.name = 'mine-crystal-gate-cold-spill';
 
+  function batchParts(parent: Group, material: MeshStandardMaterial) {
+    const parts = parent.children.filter((child): child is Mesh => child instanceof Mesh && child.material === material);
+    if (parts.length < 2) return;
+    const batch = new InstancedMesh(shape, material, parts.length);
+    for (const [index, part] of parts.entries()) {
+      part.updateMatrix();
+      batch.setMatrixAt(index, part.matrix);
+      parent.remove(part);
+    }
+    batch.computeBoundingSphere();
+    parent.add(batch);
+  }
+
+  batchParts(leaf, edge);
+  batchParts(leaf, oxide);
+  batchParts(group, iron);
+  batchParts(group, crystal);
+
   function update(stage: UndergroundMineGateStage) {
     const gap = gate.gapFor(stage);
     leaf.position.y = gap;
@@ -86,6 +104,7 @@ export function createUndergroundCrystalGate(gate: Gate) {
     group, update, winchPosition,
     dispose() {
       group.removeFromParent();
+      group.traverse(child => { if (child instanceof InstancedMesh) child.dispose(); });
       shape.dispose();
       for (const material of [iron, edge, oxide, timber, cold, crystal]) material.dispose();
     },
