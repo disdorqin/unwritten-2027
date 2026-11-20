@@ -18,6 +18,7 @@ import type { CastleIceSlideLanding, createCastleIceSlideActivity } from './ice-
 import { createIcePalaceCrown } from './ice-palace-crown';
 import './ice-palace-crown.css';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
+import { buildTownOfficeLandmark } from './landmark-town-office';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark, marketOxSite } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
@@ -633,7 +634,7 @@ const builders: Record<string, Builder> = {
     tavern.userData.colliders.push(...colliders);
     return tavern;
   },
-  clocktower: buildTowerLandmark, 'post-office': buildPostLandmark,
+  clocktower: buildTowerLandmark, 'post-office': buildPostLandmark, 'town-office': buildTownOfficeLandmark,
   memorial: buildMuseumLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
   'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
   glasshouse: buildLakesideLandmark,
