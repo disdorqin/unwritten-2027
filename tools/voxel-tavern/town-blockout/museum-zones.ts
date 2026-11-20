@@ -93,6 +93,15 @@ function zoneTwo(m: MuseumBuilder) {
   m.box('#8a8378', cartX, FLOOR + .95, cartZ - .25, .4, .18, .42, .4);
   m.box('#7a6a52', cartX + .15, FLOOR + .93, cartZ + .28, .3, .14, .34, .9);
   m.box('#7fd4c8', cartX - .18, FLOOR + .97, cartZ + .05, .1, .08, .12, 0, true);
+  // Rust that reads as rust (style order 01 self-fix): patches and a
+  // rust-water streak on the cart body, rust film strips on the rails.
+  m.box('#8a4a34', cartX + .44, FLOOR + .55, cartZ - .3, .02, .34, .4, .1);
+  m.box('#8a4a34', cartX + .44, FLOOR + .3, cartZ - .22, .02, .2, .12, .05);
+  m.box('#8a4a34', cartX - .2, FLOOR + .82, cartZ + .79, .3, .05, .02);
+  for (let z = to + 2.4; z < from - 1; z += 3.1) {
+    m.box('#8a4a34', x - .38, FLOOR + .075, z, .075, .012, .8);
+    m.box('#8a4a34', x + .38, FLOOR + .075, z + 1.2, .075, .012, .6);
+  }
   // Eight specimens on the west wall; name plates blank pending review.
   const specimens = ['#7fd4c8', '#c8ccd2', '#8a6f4d', '#6f7d72', '#9a8a70', '#5d6a7a', '#b0a58e', '#7a5a40'];
   specimens.forEach((tint, i) => {
