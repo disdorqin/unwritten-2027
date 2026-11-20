@@ -11,6 +11,7 @@ export function createTouchLook(
   viewPitch: () => number = () => 0,
   hold?: { delay: number; start(): void; finish(milliseconds: number): boolean; cancel(): void },
   sensitivity: () => number = touchLookSensitivity,
+  onTap?: (clientX: number, clientY: number) => boolean,
 ) {
   let gesture: {
     pointer: number; startX: number; startY: number; x: number; y: number; started: number; dragged: boolean;
@@ -85,9 +86,11 @@ export function createTouchLook(
     if (!gesture || event.pointerId !== gesture.pointer) return;
     if (allowed()) {
       drag(event);
-      const heldFor = event.timeStamp - gesture.started;
-      const usedHold = !gesture.holdCancelled && hold?.finish(heldFor);
-      if (!gesture.dragged && !usedHold && heldFor <= tapLimit && gesture.inZone) {
+      const { started, holdCancelled, dragged, inZone } = gesture;
+      const heldFor = event.timeStamp - started;
+      const usedHold = !holdCancelled && hold?.finish(heldFor);
+      if (!dragged && !usedHold && heldFor <= tapLimit &&
+          !onTap?.(event.clientX, event.clientY) && inZone) {
         const { yaw, pitch } = pointAngles(event.clientX, event.clientY);
         if (yaw || pitch) turn(yaw, pitch);
       }

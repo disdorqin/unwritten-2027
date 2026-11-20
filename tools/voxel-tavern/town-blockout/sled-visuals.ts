@@ -25,9 +25,10 @@ export const sledParts: readonly SledPart[] = [
 ];
 export const remoteSledParts = sledParts.filter((_, index) => index < 2 || index === 4 || index === 5 || index >= 8);
 
-type Rack = { x: number; n: number; y: number; yaw: number };
+type SledSpot = { x: number; n: number; y: number; yaw: number };
+export type SledRack = SledSpot & { id?: string };
 
-export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
+export function createTownSledVisuals(scene: Scene, racks: readonly SledRack[]) {
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial();
   const sled = new InstancedMesh(geometry, material, sledParts.length + firstPersonParts.length);
@@ -35,6 +36,7 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   sled.frustumCulled = false;
   sled.instanceMatrix.setUsage(DynamicDrawUsage);
   const rackMesh = new InstancedMesh(geometry, material, racks.length * (4 + 2 * sledParts.length));
+  rackMesh.instanceMatrix.setUsage(DynamicDrawUsage);
   sled.name = 'town-local-sled';
   rackMesh.name = 'town-sled-racks';
   sled.visible = false;
@@ -62,17 +64,36 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
     [[0, .66, -.36], [1.68, .14, .14], '#9b6239'],
     [[0, .45, -.36], [.44, .22, .12], '#a74241'],
   ];
-  let rackIndex = 0;
-  for (const rack of racks) {
-    rackRoot.position.set(rack.x, rack.y, -rack.n);
-    rackRoot.rotation.y = Math.PI - rack.yaw;
-    rackRoot.updateMatrix();
-    for (const pole of poles) placePart(rackMesh, rackIndex++, pole);
-    for (const offset of [-.42, .42]) {
-      for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition, offset, .62);
+  const rackVehicles = new Map<string, SledSpot | undefined>();
+  for (const rack of racks) if (rack.id) rackVehicles.set(rack.id, rack);
+  function refreshRacks() {
+    let rackIndex = 0;
+    function placeAt(spot: SledSpot) {
+      rackRoot.position.set(spot.x, spot.y, -spot.n);
+      rackRoot.rotation.y = Math.PI - spot.yaw;
+      rackRoot.updateMatrix();
     }
+    for (const rack of racks) {
+      placeAt(rack);
+      for (const pole of poles) placePart(rackMesh, rackIndex++, pole);
+      if (!rack.id) {
+        for (const offset of [-.42, .42]) {
+          for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition, offset, .62);
+        }
+        continue;
+      }
+      const vehicle = rackVehicles.get(rack.id);
+      if (vehicle) {
+        placeAt(vehicle);
+        for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition);
+      }
+    }
+    rackMesh.count = rackIndex;
+    rackMesh.instanceMatrix.needsUpdate = true;
+    if (rackMesh.instanceColor) rackMesh.instanceColor.needsUpdate = true;
+    rackMesh.computeBoundingSphere();
   }
-  rackMesh.computeBoundingSphere();
+  refreshRacks();
 
   const count = 600;
   const positions = new Float32Array(count * 3);
@@ -134,6 +155,11 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
     }
   }
   return {
+    setRackVehicle(id: string, spot?: SledSpot) {
+      if (!rackVehicles.has(id)) return;
+      rackVehicles.set(id, spot && { ...spot });
+      refreshRacks();
+    },
     setPose(x: number, n: number, y: number, heading: number, roll = 0, pitch = 0, rider?: SledAnimationFrame) {
       sled.position.set(x, y, -n);
       sled.rotation.set(pitch, Math.PI - heading, roll, 'YXZ');

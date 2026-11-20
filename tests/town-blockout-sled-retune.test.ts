@@ -78,7 +78,7 @@ test('a real 15% uphill can be restarted after the old stall timer and rolls bac
   };
   const rider = createSledRide(world);
   assert.ok(rider.mount(0, 0, 16, 0));
-  for (let frame = 0; frame < 240; frame++) rider.step(tick, { forward: -1, turn: 0 });
+  for (let frame = 0; frame < 240; frame++) rider.step(tick, { ...coast, brake: true });
   near(rider.spot.n, 0);
   for (let frame = 0; frame < 480; frame++) rider.step(tick, push);
   const uphillSpeed = rider.speed();

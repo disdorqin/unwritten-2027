@@ -74,6 +74,8 @@ type Options = {
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
   testFireworks?: boolean;
+  /** Enables legacy team matches in an isolated room. */
+  formalSnowfight?: boolean;
   ownerKey?: string;
   onMascotClaimRejected?: (total: number) => void;
   requestListener?: RequestListener;
@@ -747,6 +749,7 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   function requestSnowfightStart(peer: Peer) {
+    if (options.formalSnowfight !== true) return;
     const wallNow = performance.now();
     if (wallNow < peer.nextSnowfightRequest) return;
     peer.nextSnowfightRequest = wallNow + 1000;
