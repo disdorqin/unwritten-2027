@@ -1,0 +1,281 @@
+diff --git a/tests/town-blockout-tavern-hidden-story.test.ts b/tests/town-blockout-tavern-hidden-story.test.ts
+new file mode 100644
+index 0000000..8ea86e1
+--- /dev/null
++++ b/tests/town-blockout-tavern-hidden-story.test.ts
+@@ -0,0 +1,109 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { InstancedMesh, MeshBasicMaterial, Scene, Vector3 } from 'three';
++import { layout } from '../tools/voxel-tavern/town-blockout/terrain';
++import { createTavernStory, type TavernHotWineReceipt } from '../tools/voxel-tavern/town-blockout/tavern-story';
++import { mountTavernAncestorGlimpse } from '../tools/voxel-tavern/town-blockout/tavern-ancestor-glimpse';
++import { tavernSeatPlacements } from '../tools/voxel-tavern/town-blockout/tavern-seats';
++
++test('the NPC witness grants exactly one role fragment and keeps unsupplied story lines blank', () => {
++  let inTavern = true;
++  let innkeeperHasDrunk = false;
++  const values = new Map<string, string>();
++  const storage = { getItem: (key: string) => values.get(key) ?? null,
++    setItem: (key: string, value: string) => { values.set(key, value); } };
++  const host = {
++    inTavern: () => inTavern,
++    npcHasDrunk: (role: string) => role === 'waiter' || innkeeperHasDrunk,
++    canOrderHotWine: () => false,
++    orderHotWine: () => assert.fail('a lore action must not order a drink'),
++    showAncestors: () => assert.fail('a lore action must not trigger the glimpse'),
++  };
++  const story = createTavernStory(host, storage);
++  const otherTab = createTavernStory(host, storage);
++  const noLine = () => assert.fail('the unapproved fragment must have no dialogue');
++  assert.deepEqual(story.conversationActions('innkeeper', noLine), []);
++  innkeeperHasDrunk = true;
++  const hear = story.conversationActions('innkeeper', noLine)[0];
++  assert.ok(hear);
++  inTavern = false;
++  assert.equal(hear.run(), false);
++  inTavern = true;
++  innkeeperHasDrunk = false;
++  assert.equal(hear.run(), false);
++  innkeeperHasDrunk = true;
++  assert.equal(hear.run(), true);
++  assert.equal(hear.run(), false);
++  assert.equal(otherTab.conversationActions('waiter', noLine)[0]?.run(), true);
++  assert.deepEqual(createTavernStory(host, storage).journal(), [
++    { id: 'tavern-drunk-talk-innkeeper', text: '' },
++    { id: 'tavern-drunk-talk-waiter', text: '' },
++  ]);
++  assert.equal(values.size, 2);
++});
++
++test('menu viewing, leaving the room and duplicate receipts cannot present the hidden scene', () => {
++  let inTavern = true;
++  let mayOrder = true;
++  let orders = 0, glimpses = 0;
++  const story = createTavernStory({
++    inTavern: () => inTavern, npcHasDrunk: () => false, canOrderHotWine: () => mayOrder,
++    orderHotWine: () => { orders++; }, showAncestors: () => { glimpses++; },
++  });
++  const noLine = () => assert.fail('menu actions are not story copy');
++  assert.deepEqual(story.conversationActions('waiter', noLine), []);
++  const order = story.conversationActions('innkeeper', noLine)[0];
++  assert.equal(order?.label, '点一杯热酒');
++  assert.equal(glimpses, 0);
++  assert.equal(order?.run(), true);
++  mayOrder = false;
++  assert.equal(order?.run(), false);
++  assert.equal(orders, 1);
++  assert.equal(glimpses, 0);
++  const receipt = (id: string): TavernHotWineReceipt => ({ kind: 'tavern-hot-wine-consumed', id });
++  assert.equal(story.hotWineConsumed(receipt(' ')), false);
++  assert.equal(story.hotWineConsumed({ kind: 'regular-drink', id: 'sip' } as unknown as TavernHotWineReceipt), false);
++  assert.equal(story.hotWineConsumed(receipt('first')), true);
++  assert.equal(story.hotWineConsumed(receipt(' first ')), false);
++  inTavern = false;
++  assert.equal(story.hotWineConsumed(receipt('second')), false);
++  inTavern = true;
++  assert.equal(story.hotWineConsumed(receipt('second')), false);
++  assert.equal(glimpses, 1);
++});
++
++test('the glimpse is one unlabelled, non-colliding batch on the existing seats and disappears on time or exit', () => {
++  const tavern = layout.plots.find(({ id }) => id === 'tavern')!;
++  const scene = new Scene();
++  let now = 100;
++  const glimpse = mountTavernAncestorGlimpse(scene, tavern, () => now);
++  assert.equal(scene.children.length, 1);
++  const visual = scene.children[0];
++  assert.ok(visual instanceof InstancedMesh);
++  assert.ok(visual.material instanceof MeshBasicMaterial);
++  assert.equal(visual.visible, false);
++  assert.equal(visual.userData.colliders, undefined);
++  assert.equal(visual.material.depthWrite, false);
++  const seats = tavernSeatPlacements(tavern);
++  assert.equal(seats.length, 18);
++  const center = visual.boundingSphere!.center;
++  for (const { pose, seatY } of seats) {
++    assert.ok(visual.boundingSphere!.containsPoint(new Vector3(pose.x, seatY + 1.1, -pose.n)), JSON.stringify(center));
++  }
++  glimpse.reveal();
++  assert.equal(visual.visible, true);
++  now = 1_200;
++  glimpse.update(false);
++  assert.equal(visual.visible, false);
++  glimpse.update(true);
++  assert.equal(visual.visible, false);
++  glimpse.reveal();
++  now = 2_700;
++  glimpse.update(true);
++  assert.equal(visual.visible, false);
++  glimpse.dispose();
++  glimpse.dispose();
++  glimpse.reveal();
++  assert.equal(scene.children.length, 0);
++  assert.equal(visual.visible, false);
++});
+diff --git a/tools/voxel-tavern/town-blockout/tavern-ancestor-glimpse.ts b/tools/voxel-tavern/town-blockout/tavern-ancestor-glimpse.ts
+new file mode 100644
+index 0000000..511686f
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/tavern-ancestor-glimpse.ts
+@@ -0,0 +1,70 @@
++import { BoxGeometry, InstancedMesh, MeshBasicMaterial, Object3D, type Scene } from 'three';
++import type { TownPlot } from './landmark-kit';
++import { tavernSeatPlacements } from './tavern-seats';
++import { voxelPersonParts } from './town-voxel-person';
++
++const glimpseMs = 1_500;
++const seatedWaist = .60;
++// The seated visitors use the existing torso, head and arms. The stools hide the lower silhouette.
++const silhouette = voxelPersonParts.filter(([[, y]]) => y > .7);
++
++/** Local first-person presentation only. The host supplies the accepted drink moment. */
++export function mountTavernAncestorGlimpse(owner: Scene, plot: TownPlot, now = () => performance.now()) {
++  const seats = tavernSeatPlacements(plot);
++  const geometry = new BoxGeometry();
++  const material = new MeshBasicMaterial({
++    color: '#d4a675', transparent: true, opacity: 0, depthWrite: false,
++  });
++  const mesh = new InstancedMesh(geometry, material, seats.length * silhouette.length);
++  mesh.name = '未写酒馆 · 热酒幻影';
++  mesh.visible = false;
++  const pose = new Object3D();
++  let index = 0;
++  for (const { pose: seat, seatY } of seats) {
++    const cosine = Math.cos(seat.yaw), sine = Math.sin(seat.yaw);
++    for (const [[x, y, z], size] of silhouette) {
++      pose.position.set(seat.x + x * cosine + z * sine, seatY + y - seatedWaist,
++        -seat.n - x * sine + z * cosine);
++      pose.rotation.set(0, seat.yaw, 0);
++      pose.scale.set(...size);
++      pose.updateMatrix();
++      mesh.setMatrixAt(index++, pose.matrix);
++    }
++  }
++  mesh.instanceMatrix.needsUpdate = true;
++  mesh.computeBoundingSphere();
++  owner.add(mesh);
++  let beganAt: number | undefined;
++  let disposed = false;
++
++  function update(inTavern: boolean) {
++    if (disposed) return;
++    const age = beganAt === undefined ? Infinity : now() - beganAt;
++    if (!inTavern || age < 0 || age >= glimpseMs) {
++      beganAt = undefined;
++      mesh.visible = false;
++      return;
++    }
++    mesh.visible = true;
++    // Fast onset without a screen flash, then fall back into the actual room lights.
++    material.opacity = .23 * Math.min(1, (age + 80) / 180, (glimpseMs - age) / 460);
++  }
++
++  return {
++    reveal() {
++      if (disposed) return;
++      beganAt = now();
++      update(true);
++    },
++    update,
++    dispose() {
++      if (disposed) return;
++      disposed = true;
++      beganAt = undefined;
++      mesh.visible = false;
++      mesh.removeFromParent();
++      geometry.dispose();
++      material.dispose();
++    },
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/tavern-story.ts b/tools/voxel-tavern/town-blockout/tavern-story.ts
+new file mode 100644
+index 0000000..3177546
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/tavern-story.ts
+@@ -0,0 +1,84 @@
++import { browserTextStorage, type StorageAccess } from './town-text-store';
++
++export const tavernStoryRoles = ['innkeeper', 'waiter'] as const;
++export type TavernStoryRole = (typeof tavernStoryRoles)[number];
++export type TavernStoryClue = `tavern-drunk-talk-${TavernStoryRole}`;
++
++type StoryAction = Readonly<{ label: string; run(): boolean }>;
++type StoryCopy = Readonly<Partial<Record<TavernStoryClue, string>>>;
++export type TavernHotWineReceipt = Readonly<{ kind: 'tavern-hot-wine-consumed'; id: string }>;
++type TavernStoryHost = {
++  inTavern(): boolean;
++  npcHasDrunk(role: TavernStoryRole): boolean;
++  canOrderHotWine(): boolean;
++  orderHotWine(): void;
++  showAncestors(): void;
++};
++const storagePrefix = 'unwritten:tavern-drunk-talk:v1:';
++
++const clueFor = (role: TavernStoryRole): TavernStoryClue => `tavern-drunk-talk-${role}`;
++
++export function createTavernStory(host: TavernStoryHost, storage: StorageAccess | undefined = browserTextStorage(),
++  approvedCopy: StoryCopy = {}) {
++  const heard = new Set<TavernStoryClue>();
++  const presentedWine = new Set<string>();
++
++  function has(id: TavernStoryClue) {
++    if (heard.has(id)) return true;
++    try {
++      if (storage?.getItem(storagePrefix + id) === '1') {
++        heard.add(id);
++        return true;
++      }
++    } catch { /* A restricted browser can still collect the clue in this session. */ }
++    return false;
++  }
++
++  function record(id: TavernStoryClue) {
++    heard.add(id);
++    try { storage?.setItem(storagePrefix + id, '1'); }
++    catch { /* Keep the local session's discovery. */ }
++  }
++
++  function conversationActions(role: TavernStoryRole, showLine: (line: string) => void): StoryAction[] {
++    if (!host.inTavern() || !tavernStoryRoles.includes(role)) return [];
++    const id = clueFor(role);
++    const result: StoryAction[] = [];
++    if (host.npcHasDrunk(role) && !has(id)) result.push({
++      label: '听一段醉话',
++      run() {
++        if (!host.inTavern() || !host.npcHasDrunk(role) || has(id)) return false;
++        record(id);
++        const copy = approvedCopy[id]?.trim();
++        if (copy) showLine(copy);
++        return true;
++      },
++    });
++    if (role === 'innkeeper' && host.canOrderHotWine()) result.push({
++      label: '点一杯热酒',
++      run() {
++        if (!host.inTavern() || !host.canOrderHotWine()) return false;
++        host.orderHotWine();
++        return true;
++      },
++    });
++    return result;
++  }
++
++  // Read only an accepted hot-wine consumption receipt from the host. Ordinary sips,
++  // hovering over the menu and unauthenticated environmental effects must not call this.
++  function hotWineConsumed(receipt: TavernHotWineReceipt) {
++    const id = typeof receipt?.id === 'string' ? receipt.id.trim() : '';
++    if (receipt?.kind !== 'tavern-hot-wine-consumed' || !id || presentedWine.has(id)) return false;
++    presentedWine.add(id);
++    if (!host.inTavern()) return false;
++    host.showAncestors();
++    return true;
++  }
++
++  function journal() {
++    return tavernStoryRoles.map(clueFor).filter(has).map(id => ({ id, text: approvedCopy[id]?.trim() ?? '' }));
++  }
++
++  return { conversationActions, hotWineConsumed, journal };
++}
