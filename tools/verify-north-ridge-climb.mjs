@@ -87,7 +87,7 @@ try {
   const lateralBefore = await read();
   await page.keyboard.down('d');
   try {
-    await page.waitForFunction(previous => Number(document.querySelector('#climb-scene canvas')?.dataset.east) - previous > .32,
+    await page.waitForFunction(previous => previous - Number(document.querySelector('#climb-scene canvas')?.dataset.east) > .32,
       Number(lateralBefore.east), { timeout: 20_000 });
   } finally { await page.keyboard.up('d'); }
   await page.keyboard.press('e');

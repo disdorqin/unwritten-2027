@@ -108,7 +108,7 @@ test('P-14 grip, ledge-only release, fall recovery and flight/sled exclusion hol
   }
   assert.equal(climb.grip(climb.state().yaw), true);
   for (let i = 0; i < 40; i++) climb.step({ up: 0, right: 1 }, delta);
-  assert.ok(climb.state().position.east > northRidgeRockShelves[0]!.face.east + .5);
+  assert.ok(climb.state().position.east < northRidgeRockShelves[0]!.face.east - .5);
   climb.step(still, delta);
   assert.equal(climb.state().gripHands.moving, false);
   for (let i = 0; i < 50; i++) climb.step(up, delta);

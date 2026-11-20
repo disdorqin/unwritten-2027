@@ -212,7 +212,8 @@ export function createNorthRidgeClimb() {
     const inputNorm = Math.max(1, Math.hypot(up, right));
     const oldY = y;
     const nextY = clamp(y + up * verticalSpeed * Math.sin(northRidgeClimbPitchAt(y)) * dt / inputNorm, firstHeight, lastHeight);
-    const nextLane = clamp(lane + right * horizontalSpeed * dt / inputNorm, -routeLane, routeLane);
+    // The north wall is approached facing south, so the player's right points west.
+    const nextLane = clamp(lane - right * horizontalSpeed * dt / inputNorm, -routeLane, routeLane);
     const before = position;
     const after = gripPose(nextY, nextLane);
     const newIce = northRidgeIceTongues.findIndex(tongue => nextY >= tongue.from && nextY <= tongue.to);

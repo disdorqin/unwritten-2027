@@ -65,7 +65,7 @@ function updateAvatar(state: ReturnType<typeof climb.state>) {
   clothing.rotation.x = wallMode ? .16 : 0;
   avatar.updateMatrixWorld(true);
   for (const { side, arm, glove, leg, boot } of limbs) {
-    const lead = (state.gripHands.lead === 'left') === (side < 0);
+    const lead = (state.gripHands.lead === 'left') === (side > 0);
     const handStroke = wallMode && state.gripHands.moving ? Math.sin(state.gripHands.phase * Math.PI) * (lead ? .24 : -.08) : 0;
     const tremor = state.iceWarning ? .035 * Math.sin(performance.now() / 50) : 0;
     const shoulder = new Vector3(side * .31, 1.34, .02);
@@ -143,7 +143,7 @@ renderer.setAnimationLoop(now => {
   for (let i = 0; i < subdivisions; i++) {
     const state = climb.state();
     if (state.mode === 'standing' && (up || right)) {
-      climb.walkOnShelf(state.position.east + right * 1.35 * dt, state.position.north - up * 1.35 * dt);
+      climb.walkOnShelf(state.position.east - right * 1.35 * dt, state.position.north - up * 1.35 * dt);
     } else climb.step({ up, right }, dt);
     ticks++;
   }
