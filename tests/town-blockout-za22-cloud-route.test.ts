@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { surveyAircraftRunway, type AircraftWorld } from '../src/shared/aircraft-flight';
+import { createAircraftFlight, surveyAircraftRunway, type AircraftWorld } from '../src/shared/aircraft-flight';
+import { createFlightThrust } from '../src/shared/flight-thrust';
 import { createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudRunway, za22CloudSurfaceAt, za22StationApproach } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 
@@ -45,7 +46,7 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
   assert.equal(za22CloudSurfaceAt(353, 662), undefined);
 });
 
-test('the mounted eastbound strip has full takeoff clearance behind the retained registration monument', () => {
+test('the mounted eastbound strip supports a full takeoff roll behind the retained registration monument', () => {
   const epoch = Date.UTC(2026, 0, 1);
   let now = epoch;
   const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
@@ -92,6 +93,19 @@ test('the mounted eastbound strip has full takeoff clearance behind the retained
     assert.equal(cloud.blocked(306, 659, 347, .27, 1.8), false);
     assert.deepEqual(surveyAircraftRunway(runway, world), { ok: true, length: 41, heading: Math.PI / 2, checkedMetres: 41 });
     assert.equal(surveyAircraftRunway({ ...runway, start: runway.end, end: runway.start }, world).ok, false);
+    const flight = createAircraftFlight(world, createFlightThrust(600));
+    assert.equal(flight.launchRunway(false, runway.start, runway), false);
+    assert.equal(flight.launchRunway(true, runway.start, runway), true);
+    assert.equal(flight.snapshot()?.phase, 'rolling');
+    for (let second = 0; second < 10; second++) flight.advance(1, { throttle: 'full' });
+    const liftoff = flight.snapshot();
+    assert.equal(liftoff?.phase, 'airborne');
+    assert.equal(liftoff.rollMetres, 40);
+    assert.equal(liftoff.speed, 8);
+    assert.equal(liftoff.heading, Math.PI / 2);
+    assert.equal(liftoff.point.height, 347.35);
+    assert.ok(Math.abs(liftoff.point.east - 350.5) < 1e-7);
+    assert.ok(Math.abs(liftoff.elapsed - 10) < 1e-7);
   } finally {
     const landing = point(336, 640);
     cloud.action(landing)?.run();
