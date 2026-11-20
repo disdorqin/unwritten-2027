@@ -1,0 +1,105 @@
+name: Verify the P-3 tread and ZD-03 rack from the production spawn
+
+on:
+  push:
+    branches:
+      - town-verify-p3-starport-20261120
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    env:
+      ZA22_PRODUCTION_PIN: bfa3dc270d1bfdb12d0c26fab6f83f784b8ccfe1
+      # Preserve the normal HUD layout and default quality at a smaller headless raster.
+      ZA22_DEVICE_SCALE: 0.25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install verified browser tooling
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            echo "UNWRITTEN_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - name: Build production Web and Presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/za22-live"
+          mkdir -p "$out"
+          git rev-parse HEAD | tee "$out/source-commit.txt"
+          git rev-parse HEAD^{tree} | tee "$out/source-tree.txt"
+          git rev-parse "$ZA22_PRODUCTION_PIN" | tee "$out/production-pin.txt"
+          git rev-parse "$ZA22_PRODUCTION_PIN^{tree}" | tee "$out/production-tree.txt"
+          git diff --exit-code "$ZA22_PRODUCTION_PIN" HEAD -- . \
+            ':(exclude)tools/verify-za22-p3-starport.mjs' ':(exclude).github/workflows/verify-za22-p3-starport.yml'
+          npm run typecheck 2>&1 | tee "$out/typecheck.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$ZA22_PRODUCTION_PIN" \
+            -f tools/Dockerfile.town-preview -t za22-web . 2>&1 | tee "$out/town-preview-build.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$ZA22_PRODUCTION_PIN" \
+            -f tools/Dockerfile.town-presence -t za22-presence . 2>&1 | tee "$out/presence-build.log"
+      - name: Ride the cable, inspect the rack and walk the P-3 seam both ways
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/za22-live"
+          url=http://127.0.0.1:38100/
+          cleanup() {
+            docker logs za22-web > "$out/town-preview.log" 2>&1 || true
+            docker logs za22-presence > "$out/presence.log" 2>&1 || true
+            docker rm -f za22-web za22-presence > /dev/null 2>&1 || true
+            docker network rm za22 > /dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create za22
+          # An isolated test schedule keeps the real guard in its night shift for
+          # the bounded software-rendered walk while preserving the real cable clock.
+          schedule="$(node -e 'const anchor = Date.now(); console.log(JSON.stringify({
+            dawnEpoch: anchor - 390000,
+            beaconOffsetsAfterDusk: Array(12).fill(60000),
+            cueFreshnessMs: 2000,
+            specialNight: { duskAt: anchor - 1000, beaconAt: anchor + 18000,
+              cueExpiresAt: anchor + 35000, morningBellAt: anchor + 2520000 }
+          }));')"
+          printf '%s\n' "$schedule" > "$out/presence-night-schedule.json"
+          export ZA30_LOCAL_TEST_NIGHT
+          ZA30_LOCAL_TEST_NIGHT="$(node -e 'console.log(JSON.stringify(JSON.parse(process.argv[1]).specialNight))' "$schedule")"
+          docker run -d --name za22-presence --network za22 --network-alias presence \
+            -e PRESENCE_MOUNTAIN_PORT=8091 \
+            -e PRESENCE_WEST_PORT=8092 \
+            -e "TOWN_NIGHT_SCHEDULE=$schedule" \
+            -e TOWN_NIGHT_BEACON_RECEIPT=/tmp/zd01-beacon-receipt.json \
+            za22-presence
+          docker run -d --name za22-web --network za22 \
+            -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 za22-web
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
+            --max-time 4 "${url}healthz" | tee "$out/healthz.txt"
+          test "$(cat "$out/healthz.txt")" = "town-preview $ZA22_PRODUCTION_PIN"
+          node tools/verify-za22-p3-starport.mjs "$url" "$out" p3-starport
+      - name: Hash viewport captures
+        if: always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/za22-live"
+          mkdir -p "$out"
+          cd "$out"
+          find . -type f -name '*.png' -print0 | sort -z | xargs -0 --no-run-if-empty sha256sum > screenshots.sha256
+      - name: Upload route evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zd01-p3-starport-default-walk
+          path: ${{ runner.temp }}/za22-live
+          if-no-files-found: warn
