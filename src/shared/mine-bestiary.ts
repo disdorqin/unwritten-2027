@@ -37,6 +37,7 @@ export type MineEncounterHost = Readonly<{
   moveAllowed(id: string, room: string, from: Point, to: Point): boolean;
   seesPlayer(id: string, player: UndergroundPlayer): boolean;
   hearsMining(id: string, player: UndergroundPlayer): boolean;
+  /** True inside a registered campfire or cold-flame safety zone. */
   insideCampfire(room: string, point: Point): boolean;
 }>;
 
@@ -95,7 +96,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     if (actors.has(spawn.id) || !spawn.id || !spawn.room || rule.site !== spawn.habitat ||
         !Number.isFinite(spawn.at.east) || !Number.isFinite(spawn.at.north) ||
         !host.hasSpawnSite(rule.section, spawn.room, spawn.habitat, spawn.at) ||
-        (avoidsFire(spawn.species) && host.insideCampfire(spawn.room, spawn.at))) {
+        host.insideCampfire(spawn.room, spawn.at)) {
       throw new Error('An accepted underground spawn site is required.');
     }
     const key = `${spawn.species}/${spawn.room}`;
@@ -126,7 +127,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     if (rule.section !== frame.section || actor.phase === 'defeated') return;
     const sameRoom = player.room === room;
     const range = distance(actor.at, player.at);
-    const safeFire = avoidsFire(species) && host.insideCampfire(room, player.at);
+    const safeFire = host.insideCampfire(room, player.at);
 
     if (actor.phase === 'rebuild' || actor.phase === 'recover') {
       if (tick < actor.until) return;
@@ -150,7 +151,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
       if (distance(actor.at, origin) <= 1e-6) actor.phase = 'rest';
       return;
     }
-    if (safeFire) {
+    if (safeFire && avoidsFire(species)) {
       actor.phase = 'retreat';
       return;
     }

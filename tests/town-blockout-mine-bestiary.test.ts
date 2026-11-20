@@ -125,6 +125,23 @@ test('a rock snake peeks at walking, ignores crouching, bites after running vibr
   assert.equal(first().phase, 'rest');
 });
 
+test('the registered fire zone excludes every creature spawn', () => {
+  for (const species of Object.keys(mineBestiary) as MineCreature[]) {
+    assert.throws(() => setup(species, { insideCampfire: () => true }), /accepted underground spawn site/);
+  }
+});
+
+test('crossing into a fire zone during a rock snake windup prevents the bite', () => {
+  const inFire = (activeRoom: string, point: { east: number }) => activeRoom === room && point.east >= .7;
+  const { advance, first } = setup('rock-snake', { insideCampfire: inFire });
+  const inRangeInsideFire = { east: .8, north: 0 };
+  advance({ action: 'run' });
+  assert.equal(first().phase, 'windup');
+  assert.equal(advance({ at: inRangeInsideFire }).damage, 0);
+  assert.equal(advance({ at: inRangeInsideFire }).damage, 0);
+  assert.equal(first().phase, 'recover');
+});
+
 test('a rock snake investigates the local ground landing without pursuing or biting the thrower', () => {
   const { advance, first } = setup('rock-snake');
   const localLanding = { room, at: { east: 0, north: 2 } };
