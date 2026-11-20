@@ -13,7 +13,7 @@ await mkdir(output, { recursive: true });
 const requireRoot = createRequire(path.join(checkout, 'package.json'));
 const requireVite = createRequire(path.join(root, 'package.json'));
 const vite = path.resolve(path.dirname(requireVite.resolve('vite/package.json')), 'dist/node/index.js');
-const { build, createServer } = await import(pathToFileURL(vite));
+const { build, preview } = await import(pathToFileURL(vite));
 const result = { source: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim(),
   status: 'failed', errors: [], checks: [] };
 
@@ -60,10 +60,11 @@ async function walk([x, y, z], epsilon = .30) {
 
 try {
   result.step = 'build';
-  await build({ root, configFile: false, logLevel: 'warn', build: { outDir: path.join(output, 'dist'),
+  const outDir = path.join(output, 'dist');
+  await build({ root, configFile: false, logLevel: 'warn', build: { outDir,
     emptyOutDir: false, rollupOptions: { input: path.join(root, 'sky-city-review.html') } } });
-  server = await createServer({ root, configFile: false, logLevel: 'warn', server: { host: '127.0.0.1', port: 0 } });
-  await server.listen();
+  server = await preview({ root, configFile: false, logLevel: 'warn', build: { outDir },
+    preview: { host: '127.0.0.1', port: 0 } });
   const args = process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : ['--enable-unsafe-swiftshader'];
   browser = await chromium.launch({ executablePath: process.env.SKY_CITY_CHROME, args });
   page = await browser.newPage({ viewport: viewSize });
