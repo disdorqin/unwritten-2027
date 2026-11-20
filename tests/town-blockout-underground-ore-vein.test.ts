@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Group, InstancedMesh, MeshLambertMaterial, Vector3, type LineSegments } from 'three';
+import { Group, Vector3, type InstancedMesh, type LineSegments, type MeshLambertMaterial } from 'three';
 import { createUndergroundOreCoreMaterial, createUndergroundOreVein } from '../tools/voxel-tavern/town-blockout/underground-ore-vein';
 import type { UndergroundMiningTargetView } from '../src/shared/underground-mining';
 
@@ -24,10 +24,13 @@ test('ore veins and loose cores use the accepted mineral instead of the generic 
     const core = createUndergroundOreCoreMaterial(mineral);
     try {
       const cluster = vein.group.getObjectByName('ore-cluster');
-      assert.ok(cluster instanceof InstancedMesh && cluster.material instanceof MeshLambertMaterial);
-      assert.equal(cluster.geometry.type, shape);
-      assert.equal(cluster.material.color.getHexString(), veinColor);
-      assert.equal(cluster.material.emissive.getHexString(), glow);
+      assert.ok(cluster && 'isInstancedMesh' in cluster && cluster.isInstancedMesh === true);
+      const { geometry, material } = cluster as InstancedMesh;
+      assert.ok(!Array.isArray(material) && material.type === 'MeshLambertMaterial');
+      const { color, emissive } = material as MeshLambertMaterial;
+      assert.equal(geometry.type, shape);
+      assert.equal(color.getHexString(), veinColor);
+      assert.equal(emissive.getHexString(), glow);
       assert.equal(core.color.getHexString(), coreColor);
       assert.equal(core.emissive.getHexString(), glow);
     } finally {
