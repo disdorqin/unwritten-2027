@@ -1,0 +1,90 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index cdf74a9..8b6671f 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -209,9 +209,74 @@ const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSp
+   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
+ const summitSkylinePeakNdc = new Vector3();
+ let summitSkylineDraws = 0;
+-const summitSkylineMesh = createMainSummitBlock(mainSummitLayout, 347, 100).coarse;
+-// The open heightfield is seen from below while the player is still in town.
+-summitSkylineMesh.material.side = DoubleSide;
++const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
++  createMainSummitBlock(mainSummitLayout, 347, 100).coarse;
++const summitSkylineDayMaterial = summitSkylineMesh.material;
++summitSkylineDayMaterial.side = DoubleSide;
++// Town eyes see the underside of the open heightfield. A height tint keeps
++// that backlit silhouette legible during snow nights and the ceremony dim.
++const summitSkylineGeometry = summitSkylineMesh.geometry;
++const surveyedPositions = summitSkylineGeometry.getAttribute('position');
++const surveyedIndices = summitSkylineGeometry.getIndex()!;
++const skylineNearNorth = 600;
++const skylineIndices: number[] = [];
++const skylineEdges = new Map<number, [number, number]>();
++function countSkylineEdge(from: number, to: number) {
++  const key = Math.min(from, to) * surveyedPositions.count + Math.max(from, to);
++  if (!skylineEdges.delete(key)) skylineEdges.set(key, [from, to]);
++}
++for (let triangle = 0; triangle < surveyedIndices.count; triangle += 3) {
++  const a = surveyedIndices.getX(triangle);
++  const b = surveyedIndices.getX(triangle + 1);
++  const c = surveyedIndices.getX(triangle + 2);
++  // Leave the near approach to the walkable mountain scene.
++  if ([a, b, c].some(index => -surveyedPositions.getZ(index) < skylineNearNorth)) continue;
++  skylineIndices.push(a, b, c);
++  countSkylineEdge(a, b);
++  countSkylineEdge(b, c);
++  countSkylineEdge(c, a);
++}
++
++// Drop the visible perimeter below the town horizon so the higher
++// forest viewpoint sees continuous slopes behind the rail and treeline.
++const skylinePositions = Array.from(surveyedPositions.array);
++const skylineFeet = new Map<number, number>();
++function skylineFoot(vertex: number) {
++  const existing = skylineFeet.get(vertex);
++  if (existing !== undefined) return existing;
++  const index = skylinePositions.length / 3;
++  skylinePositions.push(surveyedPositions.getX(vertex), -mainSummitSpec.baseHeight, surveyedPositions.getZ(vertex));
++  skylineFeet.set(vertex, index);
++  return index;
++}
++for (const [a, b] of skylineEdges.values()) {
++  const footA = skylineFoot(a);
++  const footB = skylineFoot(b);
++  skylineIndices.push(a, footA, footB, a, footB, b);
++}
++summitSkylineGeometry.setAttribute('position', new BufferAttribute(new Float32Array(skylinePositions), 3));
++summitSkylineGeometry.setIndex(skylineIndices);
++summitSkylineGeometry.deleteAttribute('normal');
++summitSkylineGeometry.computeVertexNormals();
++summitSkylineGeometry.computeBoundingBox();
++summitSkylineGeometry.computeBoundingSphere();
++
++const skylineColors = new Float32Array(skylinePositions.length);
++const skylineShadow = new Color('#2c3648');
++const skylineStone = new Color('#8a8378');
++const skylineSnow = new Color('#e8ecf0');
++const skylineTint = new Color();
++const { baseHeight, summitHeight } = mainSummitSpec;
++for (let offset = 0; offset < skylinePositions.length; offset += 3) {
++  const heightRatio = Math.max(0, (skylinePositions[offset + 1]! - baseHeight) / (summitHeight - baseHeight));
++  const snowTint = Math.max(0, heightRatio - .75) * .48;
++  skylineTint.copy(skylineShadow)
++    .lerp(skylineStone, .08 + heightRatio * .38)
++    .lerp(skylineSnow, snowTint)
++    .toArray(skylineColors, offset);
++}
++summitSkylineGeometry.setAttribute('color', new BufferAttribute(skylineColors, 3));
++const summitSkylineNightMaterial = new MeshBasicMaterial({ side: DoubleSide, fog: false, vertexColors: true });
+ const summitSkyline = new Group();
+ summitSkyline.name = 'main-summit-world-skyline';
+ summitSkyline.position.copy(summitSkylineOrigin);
+@@ -472,6 +537,7 @@ function applyCeremonyLighting() {
+ }
+ function setNight(night: boolean) {
+   nightMode = night;
++  summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
+   const sky = night ? '#182642' : '#acc2dd';
+   (scene.background as Color).set(sky);
+   scene.fog!.color.set(sky);
