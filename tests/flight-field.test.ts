@@ -54,6 +54,11 @@ test('the sample counter requires successful checks, directional gates and retur
   const falseStart = createCloudDeckCircuit(at(0, 0), 0);
   falseStart.prepare({ assembled: true, fuelSeconds: 600, clearAirspace: true });
   assert.equal(falseStart.update({ at: at(0, 0, 355), airborne: true, elapsedMs: 1000 }).stage, 'aborted');
+  const recovered = createCloudDeckCircuit(at(0, 0), 0);
+  recovered.prepare({ assembled: true, fuelSeconds: 600, clearAirspace: true });
+  recovered.update({ at: at(0, 0), airborne: false, elapsedMs: 0 });
+  recovered.update({ at: at(0, 4, 349), airborne: true, elapsedMs: 1000 });
+  assert.equal(recovered.update({ at: at(0, 0), airborne: false, elapsedMs: 2000, recovered: true }).stage, 'aborted');
 });
 
 test('starport fuel charges one ore once only when a grounded aircraft is actually at the point', () => {
