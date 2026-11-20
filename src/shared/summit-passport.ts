@@ -8,7 +8,7 @@ export type SummitPassportProgress = Readonly<{
   snowWingEligible: boolean;
 }>;
 
-const resultCodes = ['ok', 'unavailable', 'position', 'previous-stamp'] as const;
+const resultCodes = ['ok', 'unavailable', 'position', 'previous-stamp', 'storage'] as const;
 export type SummitPassportResult = typeof resultCodes[number];
 
 export type SummitPassportReply = Readonly<{
