@@ -272,9 +272,21 @@ async function main() {
   assert.equal(landed.flight.usesBothHands, false);
   assert.ok(landed.claimed && landed.registration.snowWingEligible);
   if (ringEvidence) assert.deepEqual(landed.rings.passed, ringEvidence.completed.rings.passed);
+  const { east, north, height, heading } = landed.flight;
+  assert.deepEqual(landed.position, { east, north, height });
+  assert.equal(landed.groundHeading, heading);
+  await hold('w', () => watch(({ east, north, heading }) => {
+    const { position } = window.__snowWingReview.getState();
+    return (position.east - east) * Math.sin(heading) + (position.north - north) * Math.cos(heading) >= 1;
+  }, { east, north, heading }, 10_000));
+  const walkedAfterLanding = await capture('f1-walk-after-touchdown');
+  assert.equal(walkedAfterLanding.position.height, height);
+  assert.ok(!walkedAfterLanding.wing.visible && walkedAfterLanding.wing.draws === 0);
+  assert.deepEqual(walkedAfterLanding.flight, landed.flight);
   assert.deepEqual(errors, [], 'The snow-wing preview reported a browser or resource error');
   return { initial, outside, unregisteredRack, denied, registered, deskRepeat, claimed, duplicate,
-    lift, steady, straight, ratio, ringEvidence, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed };
+    lift, steady, straight, ratio, ringEvidence, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed,
+    walkedAfterLanding };
 }
 
 await mkdir(output, { recursive: true });

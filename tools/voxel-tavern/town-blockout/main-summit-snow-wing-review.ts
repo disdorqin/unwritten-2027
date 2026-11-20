@@ -99,7 +99,7 @@ function blocked(east: number, north: number, height: number) {
 
 function useLodge() {
   const { east, north } = landmarks.summit.registry;
-  if (flight.snapshot()) return;
+  if (flight.snapshot()?.usesBothHands) return;
   const pickup = summitWingPickupAvailability(position, claimed, registrar.snapshot());
   if (pickup !== 'out-of-reach') {
     lodgeAction = pickup;
@@ -120,7 +120,7 @@ function useLodge() {
   }
 }
 
-function walk() {
+function walk(landed: boolean) {
   groundHeading += (Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'))) * 1.65 * townPhysicsDelta;
   const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
   const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
@@ -130,9 +130,9 @@ function walk() {
   const dt = speed * townPhysicsDelta;
   const east = position.east + (Math.sin(groundHeading) * forward + Math.cos(groundHeading) * sideways) * dt;
   const north = position.north + (Math.cos(groundHeading) * forward - Math.sin(groundHeading) * sideways) * dt;
-  const height = block.heightAt(east, north);
+  const height = landed ? groundAt(east, north) : block.heightAt(east, north);
   if (height === undefined || Math.abs(height - position.height) > .43 || blocked(east, north, height)) return;
-  if (forward > 0 && north <= edgeNorth) {
+  if (forward > 0 && position.north > edgeNorth && north <= edgeNorth) {
     const edgeHeight = groundAt(east, edgeNorth);
     const drop = edgeHeight - groundAt(east, edgeNorth - 40);
     const pathClear = Array.from({ length: 81 }, (_, index) => edgeNorth - index / 2).every(n =>
@@ -160,25 +160,31 @@ function observe(air = flight.snapshot()) {
 
 function simulate() {
   const air = flight.snapshot();
-  if (!air) {
-    walk();
+  if (!air?.usesBothHands) {
+    walk(air?.phase === 'landed');
     observe();
     return;
   }
   const pitch = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
   const turn = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
   const next = flight.advance(townPhysicsDelta, { pitch, turn });
-  if (course && air.usesBothHands && next?.usesBothHands) {
+  if (course && next?.usesBothHands) {
     course.advance({ east: air.east, north: air.north, height: air.height + summitGlideRingBodyLift },
       { east: next.east, north: next.north, height: next.height + summitGlideRingBodyLift });
+  }
+  if (next?.phase === 'landed') {
+    const { east, north, height, heading } = next;
+    Object.assign(position, { east, north, height });
+    groundHeading = heading;
   }
   observe(next);
 }
 
 function display() {
   const air = flight.snapshot();
-  const point = air ?? position;
-  const heading = air?.heading ?? groundHeading;
+  const airborne = air?.usesBothHands ? air : undefined;
+  const point = airborne ?? position;
+  const heading = airborne?.heading ?? groundHeading;
   const dx = Math.sin(heading);
   const dz = -Math.cos(heading);
   wing.group.visible = air?.usesBothHands === true;
