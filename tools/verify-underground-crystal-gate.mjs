@@ -47,7 +47,10 @@ const records = {};
 const errors = [];
 try {
   await server.listen();
-  browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  browser = await chromium.launch({
+    executablePath: process.env.UNWRITTEN_CHROMIUM_EXECUTABLE,
+    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+  });
   const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });

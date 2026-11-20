@@ -27,8 +27,15 @@ jobs:
           node-version: 24
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: npx playwright install --with-deps chromium
-      - run: node tools/verify-underground-crystal-gate.mjs "${{ runner.temp }}/crystal-gate"
+      - name: Verify in Chromium
+        shell: bash
+        run: |
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            export UNWRITTEN_CHROMIUM_EXECUTABLE="$browser"
+          else
+            npx playwright install --with-deps chromium
+          fi
+          node tools/verify-underground-crystal-gate.mjs "${{ runner.temp }}/crystal-gate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
