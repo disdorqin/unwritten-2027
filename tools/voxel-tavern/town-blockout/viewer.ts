@@ -2,7 +2,6 @@ import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
   InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { buildPineCamp } from './town-pine-camp';
 import { createPineCampActivity } from './town-pine-camp-activity';
@@ -606,6 +605,7 @@ async function loadBuildings() {
   if (!response.ok || !response.headers.get('content-type')?.includes('json')) return;
   const models: Model[] = await response.json();
   if (models.length === 0) return;
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
   const loader = new GLTFLoader();
   const results = await Promise.allSettled(models.map(async model => {
     const plot = layout.plots.find(item => item.id === model.id);
