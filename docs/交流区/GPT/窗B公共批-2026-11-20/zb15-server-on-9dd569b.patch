@@ -1,0 +1,61 @@
+diff --git a/src/presence/server.ts b/src/presence/server.ts
+index 5fc4cbb5b14f7f454b4c58ebd1b8364017b0edf6..accd62680959e84bc2928424771757c01feefa07 100644
+--- a/src/presence/server.ts
++++ b/src/presence/server.ts
+@@ -16,6 +16,7 @@ import { createPresenceEgress } from './egress.js';
+ import { createIceThroneAuthority } from './ice-throne-authority.js';
+ import { isIcePalaceThroneRecord } from './ice-throne-site.js';
+ import { isSummitPassportAction } from '../shared/summit-passport.js';
++import { snowWallBuildLayers } from '../shared/snow-stock.js';
+ import {
+   createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
+ } from './summit-passport-authority.js';
+@@ -199,8 +200,7 @@ export async function createPresenceServer(options: Options = {}) {
+   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
+   const ceremonyWaiting = new Set<Peer>();
+   const snowMatch = new SnowfightMatch();
+-  const snowWalls = new SnowWallField();
+-  const wallHitSeen = new Map<string, number>();
++  const snowWalls = new SnowWallField(snowWallBuildLayers);
+   let snowStateAt = 0;
+   let snowDecayAt = 0;
+   const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
+@@ -703,7 +703,7 @@ export async function createPresenceServer(options: Options = {}) {
+     const time = now();
+     if (!allowEvent(peer, time)) return;
+     const event = decodeSnowfightClientEvent(bytes);
+-    if (!event) return;
++    if (!event || event.kind === 'wall-hit') return;
+     if (event.kind === 'place') {
+       const matchActive = snowMatch.phase === 'build' || snowMatch.phase === 'battle';
+       const team = matchActive ? snowMatch.teamOf(peer.id) : freeWallTeam;
+@@ -726,7 +726,10 @@ export async function createPresenceServer(options: Options = {}) {
+         rejectSnowfight(peer, 'phase');
+         return;
+       }
+-      if (!consume(peer.snowPlace, time, 4, 6)) return;
++      if (!consume(peer.snowPlace, time, 4, 6)) {
++        rejectSnowfight(peer, 'rate');
++        return;
++      }
+       const placed = snowWalls.place(event.gx, event.gy, peer.id, team, time);
+       if ('reason' in placed) {
+         rejectSnowfight(peer, placed.reason);
+@@ -749,17 +752,6 @@ export async function createPresenceServer(options: Options = {}) {
+       for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
+       return;
+     }
+-    const seenKey = `${event.throwerId}:${event.ballId}`;
+-    const seenAt = wallHitSeen.get(seenKey);
+-    if (seenAt !== undefined && time - seenAt < throwWindowMs) return;
+-    wallHitSeen.set(seenKey, time);
+-    if (wallHitSeen.size > 512) {
+-      for (const [key, at] of wallHitSeen) if (time - at >= throwWindowMs) wallHitSeen.delete(key);
+-    }
+-    const result = snowWalls.damage(event.gx, event.gy, event.layer, time);
+-    if (!result) return;
+-    if ('damaged' in result) broadcastBinary(encodeWallSet(result.damaged));
+-    else for (const frame of encodeWallClear(result.destroyed)) broadcastBinary(frame);
+   }
+
+   function receiveChat(peer: Peer, text: unknown, requestedScope: unknown) {

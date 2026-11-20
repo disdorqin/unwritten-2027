@@ -3,6 +3,7 @@ import {
   InstancedMesh, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, MeshBasicMaterial,
   MeshLambertMaterial, Object3D, OctahedronGeometry, Vector3, type Scene,
 } from 'three';
+import { createSnowballStock } from '../../../src/shared/snow-stock';
 
 export type SnowballState = { ammo: number; hits: number; combo: number };
 export type SnowballHitZone = 'head' | 'torso';
@@ -37,7 +38,6 @@ type SnowballOptions = {
   now?(): number;
 };
 
-const ammoLimit = 10;
 const shotLimit = 64;
 const sparkLimit = 72;
 const remoteShotLimit = 8;
@@ -196,7 +196,6 @@ export function createTownSnowballFight({
   const compactEffects = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
   let sparkCursor = 0;
   let shotId = 0;
-  let ammo = 0;
   let hits = 0;
   let combo = 0;
   let simulationTime = 0;
@@ -205,18 +204,20 @@ export function createTownSnowballFight({
   let accumulator = 0;
   let disposed = false;
 
-  function getState(): SnowballState { return { ammo, hits, combo }; }
+  const stock = createSnowballStock(() => onChange?.(getState()));
 
-  function gather(amount = 1) {
-    if (disposed || ammo >= ammoLimit || !Number.isFinite(amount) || amount < 1) return false;
-    ammo = Math.min(ammoLimit, ammo + Math.floor(amount));
-    onChange?.(getState());
-    return true;
-  }
+  function getState(): SnowballState { return { ammo: stock.amount(), hits, combo }; }
+
+  // Older host calls can still pass a weather serving count. Each shovel now gives one snowball.
+  function gather(_legacyServings?: number) { return !disposed && stock.gather(); }
 
   function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy, ballId?: number) {
     if (disposed || !thrower || !validAim(origin, direction, power)) return false;
-    if (shotBy === 'player' && (ammo === 0 || simulationTime + 1e-9 < nextThrow)) return false;
+    if (shotBy === 'player') {
+      if (stock.available() < 1 || simulationTime + 1e-9 < nextThrow) return false;
+      nextThrow = simulationTime + throwCooldown;
+      stock.spendThrow();
+    }
     let shot = shots[0];
     for (const candidate of shots) {
       if (!candidate.active) {
@@ -242,9 +243,6 @@ export function createTownSnowballFight({
       if (shot.scoreable && strength === 1 && relayPlayerThrow) {
         shot.relayed = relayPlayerThrow(shot.ballId, origin, direction);
       }
-      nextThrow = simulationTime + throwCooldown;
-      ammo--;
-      onChange?.(getState());
     }
     if (onEvent) {
       const time = now();
@@ -489,6 +487,6 @@ export function createTownSnowballFight({
     }
   }
 
-  return { gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
+  return { stock, gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
     showAim, hideAim, update, getState, dispose };
 }

@@ -1,0 +1,564 @@
+diff --git a/src/presence/snowfight.ts b/src/presence/snowfight.ts
+index 88c304746688794c7aff71046e86f9b1f6b8d691..686bfa087c69cea257747a19f1478f48a2808429 100644
+--- a/src/presence/snowfight.ts
++++ b/src/presence/snowfight.ts
+@@ -100,6 +100,15 @@ function rectEdgeDistance(east: number, north: number, rect: readonly number[]):
+   return Math.hypot(dx, dn);
+ }
+
++function wallBlocksRoad(east: number, north: number) {
++  const near = (seg: readonly number[]) => segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE;
++  return PLAZA_WEST_ROADS.some(near) || ROAD_SEGMENTS.some(near);
++}
++
++function wallBlocksDoor(east: number, north: number) {
++  return DOOR_POINTS.some(([x, n]) => Math.hypot(east - x, north - n) < 1.6);
++}
++
+ /** 墙基座中心点分类：返回拒放类别，undefined 表示可堆。净空口径：禁堆区外扩 WALL_CLEARANCE。 */
+ export function classifyWallSite(east: number, north: number): WallSiteRejection | undefined {
+   if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 || east > TOWN_BOUNDS.width || north > TOWN_BOUNDS.depth) return 'bounds';
+@@ -112,32 +121,32 @@ export function classifyWallSite(east: number, north: number): WallSiteRejection
+     if (along <= halfLength + WALL_CLEARANCE && lateral <= 2.5 + WALL_CLEARANCE) return 'platform';
+   }
+   for (const seg of RAIL_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'rail';
+-  for (const seg of PLAZA_WEST_ROADS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
+-  for (const seg of ROAD_SEGMENTS) if (segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE) return 'road';
++  if (wallBlocksRoad(east, north)) return 'road';
+   for (let i = 1; i < RIVER_POINTS.length; i++) {
+     const seg = [RIVER_POINTS[i - 1][0], RIVER_POINTS[i - 1][1], RIVER_POINTS[i][0], RIVER_POINTS[i][1]];
+     if (segmentDistance(east, north, seg) < 2 + WALL_CLEARANCE) return 'river';
+   }
+-  for (const door of DOOR_POINTS) {
+-    if (Math.hypot(east - door[0], north - door[1]) < 1.6) return 'door';
+-  }
++  if (wallBlocksDoor(east, north)) return 'door';
+   if (inRect(east, north, SHARED_HOME_RECT)) return 'interior';
+   for (const rect of INTERIOR_RECTS) if (inRect(east, north, rect)) return 'interior';
+   for (const rect of INTERIOR_RECTS) if (rectEdgeDistance(east, north, rect) < WALL_CLEARANCE + .2) return 'door';
+   return undefined;
+ }
+
+-/** 自由堆砌只禁水面、铁路正线与建筑内。比赛沿用上面的场地限制。 */
++/** 自由堆砌给门口、道路和桥面让路，比赛另有场地限制。 */
+ export function classifyFreeWallSite(east: number, north: number): WallSiteRejection | undefined {
+   if (!Number.isFinite(east) || !Number.isFinite(north) || east < 0 || north < 0 ||
+       east > TOWN_BOUNDS.width || north > TOWN_BOUNDS.depth) return 'bounds';
+   if (inRect(east, north, PALACE_SECRET_RECT)) return 'secret';
+   if (inRect(east, north, SHARED_HOME_RECT) || FREE_INTERIOR_RECTS.some(rect => inRect(east, north, rect))) return 'interior';
+   if (RAIL_SEGMENTS.some(seg => segmentDistance(east, north, seg) < seg[4] + WALL_CLEARANCE)) return 'rail';
++  if (wallBlocksRoad(east, north)) return 'road';
++  if (wallBlocksDoor(east, north) ||
++    FREE_INTERIOR_RECTS.some(rect => rectEdgeDistance(east, north, rect) < WALL_CLEARANCE + .2)) return 'door';
+   // Match terrain.ts riverX/isWater and the dry bridge decks in layout.json.
+   const bridges = [[298, 253, 279], [192, 278, 304], [149, 276, 302], [100, 269, 295]];
+   const bridge = bridges.some(([row, west, right]) => Math.abs(north - row) <= 4 && east >= west && east <= right);
+-  if (bridge) return undefined;
++  if (bridge) return 'road';
+   const inlet = east >= 287 && east <= 305 && Math.abs(north - (76 - (east - 287) / 2)) < 4;
+   if (inlet) return 'river';
+   for (let i = 1; i < RIVER_POINTS.length; i++) {
+@@ -165,6 +174,8 @@ export class SnowWallField {
+   private columns = new Map<string, WallBlock[]>();
+   private total = 0;
+
++  constructor(private readonly maxLayers = WALL_MAX_LAYERS) {}
++
+   private key(gx: number, gy: number) { return `${gx},${gy}`; }
+
+   get size() { return this.total; }
+@@ -180,7 +191,7 @@ export class SnowWallField {
+   place(gx: number, gy: number, ownerId: number, team: SnowWallTeam, now: number):
+     { block: WallBlock; cleared: WallBlock[] } | { reason: 'stack' | 'cap' } {
+     const key = this.key(gx, gy);
+-    if (this.height(gx, gy) >= WALL_MAX_LAYERS) return { reason: 'stack' };
++    if (this.height(gx, gy) >= this.maxLayers) return { reason: 'stack' };
+     const cleared = this.total >= WALL_TOWN_CAP ? this.evictOldestFree() : [];
+     if (this.total >= WALL_TOWN_CAP) return { reason: 'cap' };
+     const column = this.columns.get(key) ?? [];
+diff --git a/tests/server/snowfight.test.ts b/tests/server/snowfight.test.ts
+index 93803237380f3078f1c1bea52cd13b5b608a3aab..5e85dad00d472f362bea4b910f3d728ccd7e803c 100644
+--- a/tests/server/snowfight.test.ts
++++ b/tests/server/snowfight.test.ts
+@@ -103,7 +103,7 @@ async function fixture(context: TestContext, ceremonyStartAt?: number) {
+   return { join, sendPose };
+ }
+
+-test("snowfight: start assigns teams, place validates half and roads, three hits clear a wall",
++test("snowfight: start assigns teams, place validates half and roads, and hits leave the wall intact",
+   { timeout: 9000 }, async context => {
+     const { join, sendPose } = await fixture(context);
+     const a = await join("红队甲");
+@@ -144,31 +144,21 @@ test("snowfight: start assigns teams, place validates half and roads, three hits
+     a.socket.send(Buffer.from(encodeWallPlace(367, 407)));
+     assert.equal((await roadReject).reason, "road");
+
+-    // 三击塌墙：hp 3→2→1→WALL_CLEAR
++    // Legacy clients may still report a hit, but it cannot change wall HP or layers.
+     const hit = (ballId: number) =>
+       b.socket.send(Buffer.from(encodeWallHit({ gx: 600, gy: 500, layer: 0, ballId, throwerId: b.id })));
+-    const damaged1 = a.walls.next(events => events.some(
+-      event => event.kind === "wall-set" && event.hp === 2));
+     hit(101);
+-    await damaged1;
+-    const damaged2 = a.walls.next(events => events.some(
+-      event => event.kind === "wall-set" && event.hp === 1));
+     hit(102);
+-    await damaged2;
+-    const cleared = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
+-    hit(103);
+-    const clearEvents = await cleared;
+-    const clear = clearEvents.find(event => event.kind === "wall-clear");
+-    assert.ok(clear && clear.kind === "wall-clear");
+-    if (clear && clear.kind === "wall-clear") {
+-      assert.deepEqual(clear.blocks, [{ gx: 600, gy: 500, layer: 0 }]);
+-    }
+-
+-    // 重复 ballId 的命中报告被去重：不再有后续墙事件
+     hit(103);
+     await new Promise(resolve => setTimeout(resolve, 250));
+-    assert.ok(!a.walls.pending().flat().some(event => event.kind === "wall-set" && event.hp < 3),
+-      "duplicate wall-hit report is ignored");
++    for (const client of [a, b]) {
++      assert.ok(!client.walls.pending().flat().some(event => event.kind === "wall-clear" ||
++        event.kind === "wall-set" && event.hp < 3));
++    }
++    const next = a.walls.next(events => events.some(event =>
++      event.kind === "wall-set" && event.gx === 600 && event.gy === 500 && event.layer === 1));
++    a.socket.send(Buffer.from(encodeWallPlace(600, 500)));
++    await next;
+   });
+
+ test("snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity",
+@@ -223,7 +213,9 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
+
+     await place(600, 500, 1);
+     await place(600, 500, 2);
+-    await place(600, 500, 3);
++    const fourth = a.text.next(message => message.type === "snowfight-rejected" && message.reason === "stack");
++    a.socket.send(Buffer.from(encodeWallPlace(600, 500)));
++    assert.equal((await fourth).reason, "stack");
+     async function clearLayers(speed: number, layers: number[]) {
+       const awaits = [a, b].map(client => client.walls.next(events =>
+         events.some(event => event.kind === "wall-clear")));
+@@ -234,12 +226,12 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
+     }
+     smash(600, 500, sledWallReportSpeed(7.99));
+     await noClear();
+-    await clearLayers(8, [3]);
+-    await clearLayers(15, [1, 2]);
++    await clearLayers(8, [2]);
++    await clearLayers(15, [0, 1]);
++    await place(600, 500, 0);
+     await place(600, 500, 1);
+     await place(600, 500, 2);
+-    await place(600, 500, 3);
+-    await clearLayers(22.01, [0, 1, 2, 3]);
++    await clearLayers(22.01, [0, 1, 2]);
+
+     // 远报：B 退回广场（距格心约 94 m），同一报告被位置裁定拒绝；
+     // 回到墙边后重报同格（二层列旁的一层新格 602,500）立即生效，作为近距正对照。
+@@ -254,38 +246,39 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
+     await clearNear;
+   });
+
+-test("free wall placement keeps only outdoors water, mainline and buildings out", () => {
++test("free wall placement keeps doors and traffic approaches clear", () => {
+   const sites = [[183.75, 203.75, "road"], [238.25, 140.25, "stage"],
+     [473.75, 224.25, "platform"], [226.25, 215.25, "door"]] as const;
+   for (const [east, north, before] of sites) {
+     assert.equal(classifyWallSite(east, north), before);
+-    assert.equal(classifyFreeWallSite(east, north), undefined);
++    assert.equal(classifyFreeWallSite(east, north), before === "road" || before === "door" ? before : undefined);
+   }
+   assert.equal(classifyFreeWallSite(291, 197), "river");
+   assert.equal(classifyFreeWallSite(297, 71), "river");
+   assert.equal(classifyFreeWallSite(478, 224), "rail");
+   assert.equal(classifyFreeWallSite(226, 223), "interior");
+   assert.equal(classifyFreeWallSite(133.25, 266.25), "interior");
+-  assert.equal(classifyFreeWallSite(133.25, 272.25), undefined);
++  assert.equal(classifyFreeWallSite(133.25, 272.25), "door");
++  assert.equal(classifyFreeWallSite(133.25, 274.25), undefined);
+   assert.equal(classifyFreeWallSite(80.25, 416.25), undefined);
+   assert.equal(classifyFreeWallSite(82.25, 272.25), "interior");
+   assert.equal(classifyFreeWallSite(87.25, 266.25), undefined);
+   assert.equal(classifyFreeWallSite(484, 72), "secret");
+-  assert.equal(classifyFreeWallSite(291, 192), undefined);
++  assert.equal(classifyFreeWallSite(291, 192), "road");
+   assert.equal(classifyFreeWallSite(50, 470), undefined);
+   const speeds = [7.99, 8, 14.99, 15, 22, 22.01, 30, 45, 45.2];
+   assert.deepEqual(speeds.map(sledWallReportSpeed), [7, 8, 14, 15, 22, 23, 30, 45, 46]);
+   assert.deepEqual(speeds.map(speed => sledWallImpact(sledWallReportSpeed(speed)).layers), [0, 1, 1, 2, 2, 4, 4, 4, 4]);
+ });
+
+-test("snowfight: approved upper-band reports 45 and 46 clear all four layers", { timeout: 9000 }, async context => {
++test("snowfight: approved upper-band reports 45 and 46 clear the entire three-layer column", { timeout: 9000 }, async context => {
+   const { join, sendPose } = await fixture(context);
+   const a = await join("高档橇甲");
+   const b = await join("高档橇乙");
+   sendPose(a.socket, 320, 250, 1);
+   for (const [author, gx, speed] of [[a, 640, 45], [b, 644, 45.2]] as const) {
+     const gy = 500;
+-    for (let layer = 0; layer < 4; layer++) {
++    for (let layer = 0; layer < 3; layer++) {
+       const set = author.walls.next(events => events.some(event =>
+         event.kind === "wall-set" && event.gx === gx && event.gy === gy && event.layer === layer));
+       author.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
+@@ -296,9 +289,9 @@ test("snowfight: approved upper-band reports 45 and 46 clear all four layers", {
+     const report = sledWallReportSpeed(speed);
+     a.socket.send(Buffer.from(encodeSledSmash({ gx, gy, speed: report })));
+     for (const frame of await Promise.all(frames)) {
+-      assert.deepEqual(frame, [{ kind: "wall-clear", blocks: [0, 1, 2, 3].map(layer => ({ gx, gy, layer })) }]);
++      assert.deepEqual(frame, [{ kind: "wall-clear", blocks: [0, 1, 2].map(layer => ({ gx, gy, layer })) }]);
+     }
+-    console.log("approved sled speed, wire speed and layers cleared on both clients", speed, report, 4);
++    console.log("approved sled speed, wire speed and layers cleared on both clients", speed, report, 3);
+   }
+ });
+
+@@ -311,7 +304,10 @@ test("free snow wall server rejects occupied homes and accepts dry exterior", {
+   assert.equal((await rejected).reason, "interior");
+   assert.equal(a.walls.pending().length, 0);
+   assert.equal(b.walls.pending().length, 0);
+-  for (const [gx, gy] of [[266, 544], [160, 832]]) {
++  const door = a.text.next(message => message.type === "snowfight-rejected");
++  a.socket.send(Buffer.from(encodeWallPlace(266, 544)));
++  assert.equal((await door).reason, "door");
++  for (const [gx, gy] of [[266, 548], [160, 832]]) {
+     const frames = [a, b].map(client => client.walls.next(events =>
+       events.some(event => event.kind === "wall-set" && event.gx === gx && event.gy === gy)));
+     a.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
+diff --git a/tests/town-blockout-snowfight.test.ts b/tests/town-blockout-snowfight.test.ts
+index 7d3c18f32365d24903686531c601baee2ef7fc00..8c7e3ccc14a187eaf873478bc25aab67d4f1d9c0 100644
+--- a/tests/town-blockout-snowfight.test.ts
++++ b/tests/town-blockout-snowfight.test.ts
+@@ -1,5 +1,6 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
++import { Scene, Vector3 } from 'three';
+ import {
+   SnowWallField, SnowfightMatch, WALL_DECAY_MS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite, freeWallTeam, wallCellOf,
+ } from '../src/presence/snowfight';
+@@ -7,7 +8,8 @@ import {
+   SNOWFIGHT_SLED_SMASH, decodeSnowfightClientEvent, decodeSnowfightRelay, encodeSledSmash, encodeWallClear,
+   encodeWallHit, encodeWallPlace, encodeWallSet,
+ } from '../src/presence/snowfight-events';
+-import { DigField, MaterialBank } from '../tools/voxel-tavern/town-blockout/town-snowfight';
++import { createSnowballStock } from '../src/shared/snow-stock';
++import { createTeamSnowfight, DigField } from '../tools/voxel-tavern/town-blockout/town-snowfight';
+
+ test('wall site classifier rejects every no-build category and keeps plaza/lake/forecourt open', () => {
+   assert.equal(classifyWallSite(183.75, 203.75), 'road');
+@@ -190,13 +192,7 @@ test('free wall capacity replaces oldest neutral and match cleanup preserves neu
+   assert.equal(field.size, 399);
+ });
+
+-test('material bank caps and dig field deepens pits with a cap', () => {
+-  const bank = new MaterialBank(5);
+-  assert.equal(bank.add(3), 3);
+-  assert.equal(bank.add(10), 2, 'cap clamps the gain');
+-  assert.equal(bank.take(2), true);
+-  assert.equal(bank.amount, 3);
+-  assert.equal(bank.take(4), false);
++test('dig field deepens pits with a cap', () => {
+   const digs = new DigField(2);
+   digs.dig(300, 250);
+   const pit = digs.dig(300.2, 250.1);
+@@ -205,3 +201,75 @@ test('material bank caps and dig field deepens pits with a cap', () => {
+   digs.dig(320, 250);
+   assert.equal(digs.size, 2, 'oldest pit is evicted at the cap');
+ });
++
++test('the wall preview and confirmed placement use the same three-layer stock rules', context => {
++  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
++  Object.defineProperty(globalThis, 'document', { configurable: true, value: { getElementById: () => null } });
++  context.after(() => {
++    if (original) Object.defineProperty(globalThis, 'document', original);
++    else Reflect.deleteProperty(globalThis, 'document');
++  });
++  type Presence = Parameters<typeof createTeamSnowfight>[0]['presence'];
++  let onWall: Parameters<Presence['onSnowfightWallEvent']>[0] = () => {};
++  let onReject: Parameters<Presence['onSnowfightRejected']>[0] = () => {};
++  let self: number | null = 7;
++  let connected = true;
++  const sent: [number, number][] = [];
++  const presence = {
++    selfId: () => self,
++    snowfightAvailable: () => connected,
++    onSnowfightState() {},
++    onSnowfightRejected(callback: typeof onReject) { onReject = callback; },
++    onSnowfightWallEvent(callback: typeof onWall) { onWall = callback; },
++    sendSnowfightPlace(gx: number, gy: number) {
++      sent.push([gx, gy]);
++      return connected;
++    },
++  } as unknown as Presence;
++
++  const stock = createSnowballStock();
++  for (let i = 0; i < 12; i++) assert.ok(stock.gather());
++  const scene = new Scene();
++  const session = createTeamSnowfight({
++    scene, presence, stock, heightAt: () => 2, announce() {},
++    playerPose: () => ({ east: 320.25, north: 250.25 }),
++    aimRay: () => ({ origin: new Vector3(320.25, 3, -252.45), dir: new Vector3(0, 0, 1) }),
++    snowDepthLevel: () => 1, canScoop: () => true, freeBuildAvailable: () => true,
++  });
++  const ghost = scene.getObjectByName('Town snowfight wall ghost');
++  assert.ok(ghost);
++  assert.equal(session.tryPlace(), false);
++  assert.ok(session.setBuildMode(true));
++  session.update(0);
++  assert.ok(ghost.visible);
++  assert.ok(session.tryPlace());
++  assert.equal(stock.amount(), 12);
++  assert.equal(stock.available(), 9);
++  onReject('door');
++  assert.equal(stock.available(), 12);
++  assert.ok(session.tryPlace());
++  onWall({ kind: 'wall-set', gx: 641, gy: 500, layer: 0, hp: 3, ownerId: 7, team: 2 });
++  assert.equal(stock.amount(), 12, 'an unrelated snapshot is not a purchase receipt');
++  const receipt = { kind: 'wall-set', gx: 640, gy: 500, hp: 3, ownerId: 7, team: 2 } as const;
++  onWall({ ...receipt, layer: 0 });
++  onWall({ ...receipt, layer: 0 });
++  assert.equal(stock.amount(), 9);
++  for (const layer of [1, 2]) {
++    assert.ok(session.tryPlace());
++    onWall({ ...receipt, layer });
++  }
++  assert.equal(stock.amount(), 3);
++  assert.equal(session.wallColumnAt(640, 500)?.height, 3);
++  const sentBefore = sent.length;
++  assert.ok(session.tryPlace());
++  assert.equal(sent.length, sentBefore, 'the local fourth layer never reaches the host');
++  assert.equal(stock.amount(), 3);
++
++  onWall({ kind: 'wall-clear', blocks: [{ gx: 640, gy: 500, layer: 2 }] });
++  assert.ok(session.tryPlace());
++  assert.equal(stock.available(), 0);
++  self = null;
++  connected = false;
++  session.update(0);
++  assert.equal(stock.available(), 3, 'disconnect releases an unconfirmed wall request');
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-snowfight.ts b/tools/voxel-tavern/town-blockout/town-snowfight.ts
+index 5713e50c9c5c1ac830f787a69fc3ecb0f457f922..9c0fc0bef6340d269bb4dac8374585c31832d19e 100644
+--- a/tools/voxel-tavern/town-blockout/town-snowfight.ts
++++ b/tools/voxel-tavern/town-blockout/town-snowfight.ts
+@@ -6,29 +6,14 @@ import {
+   SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyFreeWallSite, classifyWallSite,
+   wallCellCentre, wallCellOf, type SnowfightTeam,
+ } from '../../../src/presence/snowfight';
++import { snowWallBuildLayers, snowWallCost, type SnowballStock } from '../../../src/shared/snow-stock';
+ import type { createTownPresence, SnowfightState } from './town-presence';
+ import type { TownSnowballTarget } from './town-snow-target';
+ import { createSnowfightAudio } from './snowfight-audio';
+ import { particleDensityScale, scaledParticleCount } from './town-quality';
+
+-export const MATERIAL_CAP = 40;
+ export const DIG_CAP = 96;
+
+-export class MaterialBank {
+-  amount = 0;
+-  constructor(private readonly cap = MATERIAL_CAP) {}
+-  add(n: number): number {
+-    const before = this.amount;
+-    this.amount = Math.min(this.cap, this.amount + Math.max(0, Math.floor(n)));
+-    return this.amount - before;
+-  }
+-  take(n: number): boolean {
+-    if (this.amount < n) return false;
+-    this.amount -= n;
+-    return true;
+-  }
+-}
+-
+ /** 本地挖坑（纯表现）：深雪区掏雪留下浅坑，深雪回补（H2）落地后由统一场接管。 */
+ export class DigField {
+   private pits = new Map<string, { east: number; north: number; depth: number }>();
+@@ -68,13 +53,16 @@ const REJECT_MESSAGES: Record<string, string> = {
+   secret: '密室重地，不能堆墙',
+   river: '河里堆不住墙',
+   bounds: '这里堆不了墙',
+-  stack: '最高四层，堆不上了',
++  stack: '最高三层，堆不上了',
+   cap: '全镇雪墙已达上限',
++  pending: '等这一块雪墙确认',
++  rate: '缓一缓再堆',
+ };
+
+ export function createTeamSnowfight(options: {
+   scene: Scene;
+   presence: Presence;
++  stock: SnowballStock;
+   heightAt(east: number, north: number): number;
+   announce(message: string): void;
+   playerPose(): { east: number; north: number };
+@@ -83,9 +71,8 @@ export function createTeamSnowfight(options: {
+   canScoop(): boolean;
+   freeBuildAvailable?(): boolean;
+ }) {
+-  const { scene, presence, heightAt, announce } = options;
++  const { scene, presence, stock, heightAt, announce } = options;
+   const audio = createSnowfightAudio();
+-  const material = new MaterialBank();
+   const digs = new DigField();
+   const walls = new Map<string, WallView>();
+   const groundCache = new Map<string, number>();
+@@ -95,6 +82,7 @@ export function createTeamSnowfight(options: {
+   let state: SnowfightState | undefined;
+   let stateAt = 0;
+   let buildMode = false;
++  let pendingWall: { gx: number; gy: number; ownerId: number; settle(accepted: boolean): void } | undefined;
+   let explainedFreeBuild = false;
+   let lastRejectAt = 0;
+   let prevPhase: string | undefined;
+@@ -313,9 +301,10 @@ export function createTeamSnowfight(options: {
+     if (state?.phase === 'build' && team !== undefined && !buildHalfAllows(team, east)) return 'half';
+     const site = active() ? classifyWallSite(east, north) : classifyFreeWallSite(east, north);
+     if (site) return site;
+-    if (columnHeight(gx, gy) >= WALL_MAX_LAYERS) return 'stack';
++    if (columnHeight(gx, gy) >= snowWallBuildLayers) return 'stack';
+     if (active() && walls.size >= WALL_TOWN_CAP && ![...walls.values()].some(wall => wall.team === 2)) return 'cap';
+-    if (material.amount < 1) return 'empty';
++    if (pendingWall) return 'pending';
++    if (stock.available() < snowWallCost) return 'empty';
+     return undefined;
+   }
+
+@@ -323,10 +312,11 @@ export function createTeamSnowfight(options: {
+     const now = performance.now();
+     if (now - lastRejectAt < 1200) return;
+     lastRejectAt = now;
+-    announce(reason === 'empty' ? '雪料不够，先长按掏雪攒料' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
++    announce(reason === 'empty' ? '堆一块墙要 3 个雪团' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
+   }
+
+   function tryPlace(): boolean {
++    if (!buildMode) return false;
+     const cell = aimCell();
+     if (!cell) return false;
+     const rejection = placeRejection(cell.gx, cell.gy);
+@@ -334,10 +324,27 @@ export function createTeamSnowfight(options: {
+       noteReject(rejection);
+       return true; // 吞掉这次释放：不掷雪球
+     }
+-    presence.sendSnowfightPlace(cell.gx, cell.gy);
++    const ownerId = presence.selfId();
++    if (ownerId === null) return false;
++    const settle = stock.reserveWall();
++    if (!settle) return false;
++    pendingWall = { gx: cell.gx, gy: cell.gy, ownerId, settle };
++    if (!presence.sendSnowfightPlace(cell.gx, cell.gy)) finishWall(false);
+     return true;
+   }
+
++  function finishWall(accepted: boolean) {
++    const request = pendingWall;
++    pendingWall = undefined;
++    request?.settle(accepted);
++  }
++
++  function setBuildMode(enabled: boolean) {
++    buildMode = enabled && canBuild();
++    updateHud();
++    return buildMode;
++  }
++
+   function updateHud() {
+     const buildingAvailable = canBuild();
+     if (!buildingAvailable) buildMode = false;
+@@ -346,11 +353,11 @@ export function createTeamSnowfight(options: {
+       buildButton.hidden = !buildingAvailable;
+       buildButton.textContent = buildMode ? '堆墙中 · 点此收起' : '堆墙';
+       buildButton.setAttribute('aria-pressed', String(buildMode));
+-      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && material.amount > 0 ? '2px solid #9fe8ff' : '';
++      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && stock.available() >= snowWallCost ? '2px solid #9fe8ff' : '';
+     }
+     if (materialOut) {
+       materialOut.hidden = !buildingAvailable;
+-      const text = `雪料 ${material.amount}`;
++      const text = `雪团 ${stock.amount()}`;
+       if (buildingAvailable && materialOut.textContent !== text) materialOut.textContent = text;
+     }
+     if (panel) panel.hidden = !active() && state?.phase !== 'done';
+@@ -398,7 +405,10 @@ export function createTeamSnowfight(options: {
+     if (captured) audio.capture();
+     updateHud();
+   });
+-  presence.onSnowfightRejected(reason => noteReject(reason));
++  presence.onSnowfightRejected(reason => {
++    finishWall(false);
++    noteReject(reason);
++  });
+   presence.onSnowfightWallEvent(event => {
+     if (event.kind === 'wall-set') {
+       const k = key(event.gx, event.gy, event.layer);
+@@ -409,9 +419,9 @@ export function createTeamSnowfight(options: {
+         ground: groundAt(event.gx, event.gy),
+       });
+       refreshWalls();
+-      const me = presence.selfId();
+-      if (!existed && me !== null && event.ownerId === me) {
+-        material.take(1);
++      const request = pendingWall;
++      if (!existed && request && event.ownerId === request.ownerId && event.gx === request.gx && event.gy === request.gy) {
++        finishWall(true);
+         audio.place();
+       } else if (existed && previous && event.hp < previous.hp) {
+         audio.crack();
+@@ -435,17 +445,11 @@ export function createTeamSnowfight(options: {
+   if (startButton) startButton.onclick = () => {
+     if (presence.requestSnowfightStart()) audio.start();
+   };
+-  if (buildButton) buildButton.onclick = () => {
+-    if (!canBuild()) return;
+-    buildMode = !buildMode;
+-    if (buildMode && material.amount < 1) announce('雪料为零：对准近处雪地长按掏雪攒料');
+-    updateHud();
+-  };
+-
+   return {
+     active,
+     canBuild,
+     buildMode: () => buildMode,
++    setBuildMode,
+     tryPlace,
+     wallTargets: () => targets,
+     /** 本地镜像中的墙列（雪橇交叉判定用）：无墙返回 undefined；ground 为该列基座地面高。 */
+@@ -455,21 +459,17 @@ export function createTeamSnowfight(options: {
+       const base = walls.get(key(gx, gy, 0));
+       return { height, ground: base ? base.ground : groundAt(gx, gy) };
+     },
+-    material: () => material.amount,
++    material: stock.amount,
+     onGatherTick() {
+-      if (!canBuild()) return;
+-      const previous = material.amount;
+       const level = options.snowDepthLevel();
+       if (level >= 2) {
+-        if (material.add(2) > 0) {
+-          const poseNow = options.playerPose();
+-          digs.dig(poseNow.east, poseNow.north);
+-          refreshDigs();
+-        }
+-      } else material.add(1);
+-      if (!explainedFreeBuild && mayBuildFree() && previous < 1 && material.amount > 0) {
++        const poseNow = options.playerPose();
++        digs.dig(poseNow.east, poseNow.north);
++        refreshDigs();
++      }
++      if (!explainedFreeBuild && mayBuildFree() && stock.available() >= snowWallCost) {
+         explainedFreeBuild = true;
+-        announce('雪料够了，点『堆墙』可以垒掩体');
++        announce('按 B 或点「堆墙」进入堆墙模式');
+       }
+       updateHud();
+     },
+@@ -499,6 +499,7 @@ export function createTeamSnowfight(options: {
+       );
+     },
+     update(dt: number) {
++      if (pendingWall && (presence.selfId() !== pendingWall.ownerId || !presence.snowfightAvailable())) finishWall(false);
+       // 虚影预览
+       if (buildMode && canBuild()) {
+         const cell = aimCell();

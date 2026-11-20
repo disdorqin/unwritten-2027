@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { Scene, Vector3 } from 'three';
+import { createTownSnowballFight } from '../tools/voxel-tavern/town-blockout/town-snowball';
+
+test('the projectile and walls share one stock; only a confirmed wall is charged', () => {
+  const game = createTownSnowballFight({ scene: new Scene(), sweep: () => undefined });
+  const origin = new Vector3(0, 1.6, 0);
+  const direction = new Vector3(1, 0, 0);
+  assert.ok(game.gather() && game.gather());
+  assert.equal(game.stock.reserveWall(), undefined);
+  assert.ok(game.gather());
+  const reject = game.stock.reserveWall();
+  assert.ok(reject);
+  assert.equal(game.getState().ammo, 3);
+  assert.equal(game.throwBall(origin, direction), false, 'throw may not steal the wall reserve');
+  assert.equal(game.stock.reserveWall(), undefined);
+  reject(false);
+  assert.equal(game.getState().ammo, 3);
+  assert.equal(game.throwBall(origin, new Vector3()), false);
+  assert.equal(game.getState().ammo, 3);
+  assert.ok(game.throwBall(origin, direction));
+  assert.equal(game.getState().ammo, 2);
+  assert.equal(game.throwBall(origin, direction), false, 'cooldown does not spend stock');
+  assert.equal(game.getState().ammo, 2);
+  assert.ok(game.gather());
+  const confirm = game.stock.reserveWall();
+  assert.ok(confirm);
+  confirm(true);
+  confirm(true);
+  reject(true);
+  assert.equal(game.getState().ammo, 0, 'repeated acknowledgments do not spend twice');
+  game.dispose();
+});

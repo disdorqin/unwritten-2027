@@ -1,0 +1,307 @@
+diff --git a/tools/voxel-tavern/town-blockout.html b/tools/voxel-tavern/town-blockout.html
+index d7c3a5b98082ee5d402a2b9d86c5dadd5a72020e..da8e8a7bea29d9527c9ffe56c345f58eec7747ae 100644
+--- a/tools/voxel-tavern/town-blockout.html
++++ b/tools/voxel-tavern/town-blockout.html
+@@ -136,9 +136,10 @@
+   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
+   <button id="world-action" type="button" hidden></button>
+   <aside id="snowball-controls" aria-label="打雪仗" hidden>
+-    <output id="snowball-score" aria-live="polite">雪球 0/10 · 薄雪</output>
++    <output id="snowball-score" aria-live="polite">雪团 0/50 · 薄雪</output>
+     <output id="snow-practice-status" aria-label="移动靶场计时" aria-live="off" hidden></output>
+     <progress id="snowball-action-meter" aria-label="雪球动作进度" value="0" max="1" hidden></progress>
++    <button id="snowball-primary" type="button" title="点按投掷，长按采集" hidden>雪团</button>
+     <button id="snowball-board" type="button">雪仗榜</button>
+     <button id="snowfight-start" type="button" hidden>团队雪仗</button>
+     <button id="snowfight-build" type="button" aria-pressed="false" hidden>堆墙</button>
+diff --git a/tools/voxel-tavern/town-blockout/style.css b/tools/voxel-tavern/town-blockout/style.css
+index d882ae1223f131008e097aa313c973845f34d29a..ba8f4baa75c1a19f52e38e8494f106157e6204cb 100644
+--- a/tools/voxel-tavern/town-blockout/style.css
++++ b/tools/voxel-tavern/town-blockout/style.css
+@@ -261,6 +261,7 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
+ #snowball-controls { max-width: min(220px, 56vw); }
+ #snowball-controls button { user-select: none; -webkit-touch-callout: none; }
+ #snowball-controls button { min-height: 38px; touch-action: none; }
++#snowball-controls #snowball-primary { grid-column: 1 / -1; min-height: 44px; }
+ #snowball-action-ring:not([hidden]) {
+   position: fixed; top: 50%; left: 50%; z-index: 3; width: 34px; height: 34px;
+   transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 296ebfa1c8778c858def2e6966ff0e6a986c36e5..2b279ef8413eed2f018283215c1f86a6223b85e0 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -144,6 +144,8 @@ import { createSledDrift } from './sled-drift';
+ import { createGrandPrix } from './town-grand-prix';
+ import { createSledTrackView } from './town-sled-track-view';
+ import { createTownSnowballFight, type SnowballState } from './town-snowball';
++import { bindTownSnowButtons, createTownSnowControls } from './town-snow-controls';
++import { snowResourceLimit } from '../../../src/shared/snow-stock';
+ import { createTeamSnowfight } from './town-snowfight';
+ import { createSnowballSweep } from './town-snowball-world';
+ import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget, type TownSnowballTarget } from './town-snow-target';
+@@ -737,6 +739,7 @@ function resetMovement() {
+   sledRide.interrupt();
+   sledDrift.reset();
+   stopTravel();
++  snowControls.cancel();
+   touchLook.reset();
+   desktopLook.release();
+   hitFeedback.clear();
+@@ -1265,6 +1268,7 @@ const riddleActivity = createRiddleActivity({ open: activityContext.open, announ
+ });
+ activitySpots.push(...riddleActivity.spots);
+ const snowballControls = element('snowball-controls');
++const snowPrimaryButton = element<HTMLButtonElement>('snowball-primary');
+ const snowballScore = element('snowball-score');
+ const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
+ const snowballRing = element('snowball-action-ring');
+@@ -1349,11 +1353,7 @@ function handleCeremonyCue(cue: CeremonyCue) {
+ }
+ const tossOrigin = new Vector3();
+ const tossDirection = new Vector3();
+-const gatherSeconds = .8;
+ const touchHoldMilliseconds = 150;
+-let snowHold: { source: 'mouse' | 'touch'; started: number } | undefined;
+-let snowAction: 'gather' | 'aim' | undefined;
+-let gatherTime = 0;
+ const gatherRayEnd = new Vector3();
+ const plazaSnowSupply = createPlazaSnowSupply();
+ const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false,
+@@ -1442,16 +1442,14 @@ function outdoorLaunch(origin: Vector3, by: string) {
+ }
+ function showSnowballScore({ ammo, hits, combo }: SnowballState) {
+   const depth = snowCover.depth();
+-  const text = `雪球 ${ammo}/10 · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
++  const text = `雪团 ${ammo}/${snowResourceLimit} · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
+   if (snowballScore.textContent !== text) snowballScore.textContent = text;
+-  const aiming = snowAction === 'aim' && ammo > 0;
+-  const progress = aiming ? 1 : gatherTime / gatherSeconds;
+-  snowballMeter.hidden = !aiming && (snowAction !== 'gather' || ammo >= 10);
+-  snowballRing.hidden = snowballMeter.hidden || !moveAllowed();
+-  if (!snowballMeter.hidden) {
++}
++function showSnowGatherProgress() {
++  const progress = snowControls.gatherProgress();
++  snowballMeter.hidden = snowballRing.hidden = progress === undefined;
++  if (progress !== undefined) {
+     snowballMeter.value = progress;
+-    const label = aiming ? '瞄准雪球' : '攒雪球进度';
+-    if (snowballMeter.getAttribute('aria-label') !== label) snowballMeter.setAttribute('aria-label', label);
+     snowballRing.style.setProperty('--snowball-progress', `${100 * progress}%`);
+   }
+ }
+@@ -1517,13 +1515,6 @@ const snowballs = createTownSnowballFight({
+       const target = event.targetId ? targetById.get(event.targetId) : undefined;
+       if (event.targetId?.startsWith('wall:')) {
+         teamFight.onWallImpact(event.at);
+-        if ((event.shotBy === 'player' || event.shotBy === 'remote') && event.ballId !== undefined) {
+-          const [, gx, gy, layer] = event.targetId.split(':').map(Number);
+-          const throwerId = event.shotBy === 'player' ? presence.selfId() : Number(event.thrower.slice(2));
+-          if (throwerId !== null && Number.isInteger(throwerId)) {
+-            presence.sendSnowfightWallHit({ gx, gy, layer, ballId: event.ballId, throwerId });
+-          }
+-        }
+       }
+       const remoteThrower = event.shotBy === 'remote' ? Number(event.thrower.slice(2)) : undefined;
+       const shotKey = remoteThrower !== undefined && event.ballId !== undefined ? remoteThrower * 65536 + event.ballId : undefined;
+@@ -1562,6 +1553,7 @@ const snowballs = createTownSnowballFight({
+ const teamFight = createTeamSnowfight({
+   scene,
+   presence,
++  stock: snowballs.stock,
+   heightAt: (east, north) => grid.heightAt(east, north),
+   announce: message => announceActivity(message),
+   playerPose: () => ({ east: x, north: n }),
+@@ -1660,87 +1652,31 @@ function aimSnowball() {
+   tossDirection.set(Math.sin(yaw) * flat, Math.sin(pitch), -Math.cos(yaw) * flat);
+   tossOrigin.set(x, (airHeight ?? ground) + eye - .08, -n).addScaledVector(tossDirection, .06);
+ }
+-function cancelSnowAction(source?: 'mouse' | 'touch') {
+-  if (source && snowHold?.source !== source) return;
+-  snowHold = undefined;
+-  snowAction = undefined;
+-  gatherTime = 0;
+-  snowballs.hideAim();
+-}
+-function beginSnowAction(source: 'mouse' | 'touch') {
+-  if (!moveAllowed() || snowHold || waterAtFeet()?.mode === 'swim') return;
+-  if (homeReturn) {
+-    announceActivity('屋里不兴打雪仗');
+-    return;
+-  }
+-  snowHold = { source, started: performance.now() };
+-  gatherCheck.x = NaN;
+-  if (source === 'mouse') updateHeldSnowAction(0);
+-}
+-function freeWallPlacementArmed() {
+-  return !teamFight.active() && teamFight.canBuild() && teamFight.buildMode() && teamFight.material() > 0;
+-}
+-function finishSnowAction(source: 'mouse' | 'touch') {
+-  if (!snowHold || snowHold.source !== source) return;
+-  const fire = moveAllowed() && (freeWallPlacementArmed() || !aimsAtNearbySnow()) && waterAtFeet()?.mode !== 'swim';
+-  cancelSnowAction(source);
+-  if (!fire) return;
+-  if (teamFight.buildMode() && teamFight.canBuild()) {
+-    teamFight.tryPlace();
+-    return;
+-  }
+-  if (snowballs.getState().ammo === 0) {
+-    announceActivity(source === 'touch' ? '对准近处雪地长按收雪' : '对准近处雪地，长按左键收雪');
+-    return;
+-  }
+-  aimSnowball();
+-  personalFirecrackers.cancelSparkler();
+-  snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
+-}
+-function updateHeldSnowAction(dt: number) {
+-  if (!snowHold) return;
+-  if (!moveAllowed() || waterAtFeet()?.mode === 'swim') {
+-    cancelSnowAction();
+-    return;
+-  }
+-  if (snowHold.source === 'touch' && performance.now() - snowHold.started < touchHoldMilliseconds) return;
+-  if (freeWallPlacementArmed()) return;
+-  if (aimsAtNearbySnow()) {
+-    snowAction = 'gather';
+-    snowballs.hideAim();
+-    if (snowballs.getState().ammo >= 10) {
+-      gatherTime = 0;
+-      return;
+-    }
+-    gatherTime += dt;
+-    if (gatherTime >= gatherSeconds) {
+-      gatherTime -= gatherSeconds;
+-      plazaSnowSupply.gather(snowballs, snowCover.depth().servings, gatherCheck.supply);
++const snowControls = createTownSnowControls({
++  canUseSnow: () => moveAllowed() && !homeReturn && waterAtFeet()?.mode !== 'swim',
++  canGather: () => snowballs.getState().ammo < snowResourceLimit && aimsAtNearbySnow(),
++  gather() {
++    if (plazaSnowSupply.gather(snowballs, 1, gatherCheck.supply)) {
+       teamFight.onGatherTick();
++      gatherCheck.x = NaN;
+     }
+-  } else {
+-    snowAction = 'aim';
+-    gatherTime = 0;
+-    if (snowballs.getState().ammo > 0) {
++  },
++  canInteract: () => walking && Boolean(currentAction()),
++  interact,
++  throwSnowball() {
++    if (!snowballs.getState().ammo) {
++      announceActivity(touchWalk.active() ? '对准近处雪地，长按雪团按钮采集' : '对准近处雪地，按住 E 采集');
++    } else {
+       aimSnowball();
+-      snowballs.showAim(tossOrigin, tossDirection, 1);
++      personalFirecrackers.cancelSparkler();
++      snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
+     }
+-  }
+-}
+-const touchSnowball = {
+-  delay: touchHoldMilliseconds,
+-  start: () => beginSnowAction('touch'),
+-  finish(milliseconds: number) {
+-    if (!snowHold || snowHold.source !== 'touch') return false;
+-    if (milliseconds < touchHoldMilliseconds && !freeWallPlacementArmed()) {
+-      cancelSnowAction('touch');
+-      return false;
+-    }
+-    finishSnowAction('touch');
+-    return true;
+   },
+-  cancel: () => cancelSnowAction('touch'),
+-};
++  buildMode: teamFight.buildMode,
++  setBuildMode: teamFight.setBuildMode,
++  placeWall: teamFight.tryPlace,
++});
++bindTownSnowButtons(snowControls, snowPrimaryButton, element<HTMLButtonElement>('snowfight-build'));
+ function snowballJumped() {
+   if (snowOnHead > 0 && --jumpsToShakeSnow <= 0) {
+     snowOnHead = 0;
+@@ -1781,25 +1717,25 @@ function updateSnowFight(dt: number) {
+   snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
+   teamFight.update(dt);
+   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
+-  updateHeldSnowAction(dt);
++  snowControls.update(dt);
+   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
+   if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
+   snowballPhysicsMs = snowballs.update(dt);
+   showSnowballScore(snowballs.getState());
++  showSnowGatherProgress();
+   snowballControls.hidden = !active;
++  snowPrimaryButton.hidden = !active || !touchWalk.active();
++  const snowLabel = teamFight.buildMode() ? '放雪墙' : '投雪球';
++  if (snowPrimaryButton.textContent !== snowLabel) {
++    snowPrimaryButton.textContent = snowLabel;
++    snowPrimaryButton.title = `点按${snowLabel}，长按采集`;
++  }
+ }
+ renderer.domElement.addEventListener('pointerdown', event => {
+   if (event.pointerType !== 'mouse' || event.button !== 0 ||
+       document.pointerLockElement !== renderer.domElement) return;
+-  beginSnowAction('mouse');
+-});
+-document.addEventListener('pointerup', event => {
+-  if (event.pointerType === 'mouse' && event.button === 0) finishSnowAction('mouse');
+-});
+-document.addEventListener('pointerlockchange', () => {
+-  if (document.pointerLockElement !== renderer.domElement) cancelSnowAction('mouse');
++  snowControls.primary();
+ });
+-addEventListener('blur', () => cancelSnowAction());
+
+ const stampSites = [
+   { id: 'plaza', label: '钟楼广场', hint: '从「广场南侧」沿广场向北几步。', x: 223, n: 184 },
+@@ -2128,7 +2064,7 @@ function jump() {
+   riseSpeed = 0;
+   pitch = selector.value === '雪团练习场' ? .09 : 0;
+ }
+-const walkMouseHelp = '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。';
++const walkMouseHelp = 'WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃；轻按 E 互动，按住 E 采雪，左键投掷，B 切换堆墙。';
+ const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动；点准心下方按钮可锁定鼠标视角。';
+ let lookLocked = false;
+ let lockFailure: DesktopLookLockFailure | undefined;
+@@ -2168,7 +2104,7 @@ function mode(next: boolean) {
+   overview.setAttribute('aria-pressed', String(!next));
+   walk.setAttribute('aria-pressed', String(next));
+   element('help').textContent = next
+-    ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : walkMouseHelp)
++    ? (touchWalk.active() ? '滑动转向。长按雪团按钮采集，点按投掷。点堆墙进入放墙模式。' : walkMouseHelp)
+     : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
+   if (!next) {
+     camera.position.set(540, 494, 177);
+@@ -2255,7 +2191,7 @@ lockLookButton.onclick = () => {
+ if (typeof renderer.domElement.requestPointerLock !== 'function' ||
+     /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
+ const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
+-  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, touchSnowball, touchLookSensitivity);
++  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, undefined, touchLookSensitivity);
+ const lookSensitivityInput = element<HTMLInputElement>('touch-look-sensitivity');
+ lookSensitivityInput.value = String(touchLookSensitivity());
+ lookSensitivityInput.addEventListener('input', () => setTouchLookSensitivity(Number(lookSensitivityInput.value)));
+@@ -2309,9 +2245,9 @@ addEventListener('keydown', e => {
+     desktopLook.release();
+     return;
+   }
+-  if (walking && e.code === 'KeyE' && !e.repeat && currentAction()) {
++  if (snowControls.keyDown(e.code, e.repeat)) {
+     e.preventDefault();
+-    interact();
++    return;
+   }
+   if (moveAllowed() && e.code === 'Space') {
+     if (!e.repeat && !(e.target instanceof HTMLButtonElement)) {
+@@ -2334,6 +2270,10 @@ addEventListener('keydown', e => {
+   }
+ });
+ addEventListener('keyup', e => {
++  if (snowControls.keyUp(e.code)) {
++    e.preventDefault();
++    return;
++  }
+   if (e.code === 'Space' && sledSpace) {
+     sledSpace = false;
+     // Keep a tap as a jump. Space used with steering stays a ground control.

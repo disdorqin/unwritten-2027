@@ -10,11 +10,10 @@ export type PlazaSnowSupplySite = typeof plazaSnowSupplySites[number];
 
 export const plazaSnowSupplySize = { halfWidth: .7, height: .48 } as const;
 export const plazaSnowSupplyRefillMs = 60_000;
-const supplyServings = 5;
 const depletedHeightScale = .65;
 const contactTolerance = 1e-6;
 type HeightAt = (east: number, north: number) => number;
-type SnowballStock = { gather(amount: number): boolean };
+type SnowballStock = { gather(): boolean };
 
 export function createPlazaSnowSupply(now = () => performance.now()) {
   const lastScoop = new Map<PlazaSnowSupplySite['id'], number>();
@@ -44,8 +43,8 @@ export function createPlazaSnowSupply(now = () => performance.now()) {
     return nearest;
   }
 
-  function gather(snowballs: SnowballStock, ambientServings: number, supply?: PlazaSnowSupplySite) {
-    const applied = snowballs.gather(supply ? supplyServings : ambientServings);
+  function gather(snowballs: SnowballStock, _legacyServings: number, supply?: PlazaSnowSupplySite) {
+    const applied = snowballs.gather();
     if (applied && supply) lastScoop.set(supply.id, now());
     return applied;
   }
