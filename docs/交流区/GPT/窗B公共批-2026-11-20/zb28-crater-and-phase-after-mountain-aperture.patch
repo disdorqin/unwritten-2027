@@ -1,0 +1,322 @@
+diff --git a/tests/town-blockout-za29-guard-duty.test.ts b/tests/town-blockout-za29-guard-duty.test.ts
+index 64d94c31..426edb17 100644
+--- a/tests/town-blockout-za29-guard-duty.test.ts
++++ b/tests/town-blockout-za29-guard-duty.test.ts
+@@ -1,10 +1,14 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
+ import { Group } from 'three';
++import { createTownNightWindow } from '../src/shared/town-night-window';
+ import { mountMainSummitAssembly, summitAssemblyAnchor } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
++import { createSledRide } from '../tools/voxel-tavern/town-blockout/sled-ride';
++import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
++import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+ import { mountZa22MountainGate, za22GateSeamNorth } from '../tools/voxel-tavern/town-blockout/town-za22-mountain-gate';
++import { createZa29GuardDuty, za29GuardDutyForPhase } from '../tools/voxel-tavern/town-blockout/town-za29-guard-duty';
+ import { mountZa29GuardPost } from '../tools/voxel-tavern/town-blockout/town-za29-guard-scenes';
+-import { createZa29GuardDuty } from '../tools/voxel-tavern/town-blockout/town-za29-guard-duty';
+
+ const foot = (east: number, north: number, height: number) => ({ east, north, height });
+
+@@ -49,26 +53,65 @@ test('the crater guard intervenes on the approach without fencing off the wester
+   duty.updateDuty(true);
+
+   const outside = foot(-66, 159, height);
+-  const inside = foot(-70.5, 159, height);
++  const inside = foot(-71, 159, height);
+   assert.equal(duty.blocksStep(outside, inside), true);
+   assert.equal(duty.blocksStep(approach, inside), true);
+-  assert.equal(duty.blocksStep(foot(-66, 160.7, height), foot(-70.5, 157.3, height)), true);
++  assert.equal(duty.blocksStep(foot(-66, 160.7, height), foot(-71, 157.3, height)), true);
+   assert.equal(duty.blocksStep(inside, outside), false);
+   assert.equal(duty.blocksStep(inside, foot(-72, 159, height)), false);
+-  assert.equal(duty.blocksStep(foot(-66, 153, height), foot(-70.5, 153, height)), false);
+-  assert.equal(duty.blocksStep(foot(-66, 159, height + 3), foot(-70.5, 159, height + 3)), false);
++  assert.equal(duty.blocksStep(foot(-66, 153, height), foot(-71, 153, height)), false);
++  assert.equal(duty.blocksStep(foot(-66, 159, height + 3), foot(-71, 159, height + 3)), false);
+   assert.equal(duty.action(foot(-72, 153, height)), undefined);
+   assert.deepEqual(lines, ['井口的规矩，比命大。']);
+
+   duty.observeApproach(foot(-65, 149, height));
+   duty.observeApproach(outside);
+-  assert.equal(duty.blocksStep(outside, inside), true);
++  const atFence = foot(-70.43, 159, height);
++  for (let frame = 0; frame < 4; frame++) {
++    duty.observeApproach(atFence);
++    assert.equal(duty.blocksStep(atFence, inside), true);
++  }
+   assert.equal(lines.length, 3);
+   duty.updateDuty(false);
+   assert.equal(duty.blocksStep(outside, inside), false);
+   assert.equal(duty.blocksStep(inside, outside), false);
+ });
+
++test('dusk dismisses the guards and shows the empty post before the live beacon lights its footprints', () => {
++  const schedule = { duskAt: 1000, beaconAt: 1100, cueExpiresAt: 1180, morningBellAt: 1700 };
++  let now = 999;
++  const clock = createTownNightWindow({ now: () => now, scheduleAt: () => schedule });
++  const approach = foot(300, 664.95, 347);
++  const guard = foot(302.35, 665.1, 347);
++  const outside = foot(300, 665.9, 347);
++  const inside = foot(300, 666.1, 347);
++  const lines: string[] = [];
++  const duty = createZa29GuardDuty('mountain', { guard, approach }, line => lines.push(line));
++  const display = () => {
++    const next = za29GuardDutyForPhase(clock.snapshot().phase);
++    duty.updateDuty(next.guardPresent);
++    return next;
++  };
++  const daytime = { guardPresent: true, showEmptyPost: false, showNightSigns: false };
++  assert.deepEqual(za29GuardDutyForPhase(undefined), daytime);
++  assert.deepEqual(display(), daytime);
++  assert.equal(duty.blocksStep(outside, inside), true);
++  now = schedule.duskAt;
++  assert.equal(clock.snapshot().canEnterRestricted, false);
++  assert.deepEqual(display(), { guardPresent: false, showEmptyPost: true, showNightSigns: false });
++  assert.equal(duty.action(outside), undefined);
++  assert.equal(duty.blocksStep(outside, inside), false);
++  now = schedule.beaconAt;
++  assert.ok(clock.recordBeacon(now));
++  assert.deepEqual(display(), { guardPresent: false, showEmptyPost: true, showNightSigns: true });
++  assert.equal(duty.blocksStep(outside, inside), false);
++  now = schedule.morningBellAt;
++  assert.deepEqual(display(), daytime);
++  assert.equal(duty.blocksStep(inside, outside), false);
++  assert.equal(duty.blocksStep(outside, inside), true);
++  assert.deepEqual(lines, ['吃点，吃点再走，山上风大。', '吃点，吃点再走，山上风大。']);
++});
++
+ test('the mounted mountain guard covers both legal edges and a jump at the N666 gate seam', () => {
+   const owner = new Group();
+   const assembly = mountMainSummitAssembly(owner, 0);
+@@ -76,8 +119,7 @@ test('the mounted mountain guard covers both legal edges and a jump at the N666
+   const post = mountZa29GuardPost(owner, 'mountain', (east, north) => north < za22GateSeamNorth
+     ? assembly.frontRidgeAt(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north)
+     : gate.surfaceAt(east, north, 0));
+-  const lines: string[] = [];
+-  const duty = createZa29GuardDuty('mountain', post.anchors, line => lines.push(line));
++  const duty = createZa29GuardDuty('mountain', post.anchors, () => {});
+   duty.updateDuty(true);
+   try {
+     assert.equal(za22GateSeamNorth, 666);
+@@ -87,15 +129,12 @@ test('the mounted mountain guard covers both legal edges and a jump at the N666
+       for (const height of [347, 348.26]) {
+         const from = foot(east, 665.9, height);
+         const to = foot(east, 666.1, height);
+-        assert.equal(duty.interceptsStep(from, to), true);
++        assert.equal(duty.blocksStep(from, to), true);
+         assert.equal(duty.blocksStep(to, from), false);
+       }
+     }
+     assert.equal(duty.blocksStep(foot(304, 665.9, 347), foot(304, 666.1, 347)), false);
+     assert.equal(duty.blocksStep(foot(300, 665.9, 350), foot(300, 666.1, 350)), false);
+-    assert.deepEqual(lines, []);
+-    assert.equal(duty.blocksStep(foot(300, 665.9, 347), foot(300, 666.1, 347)), true);
+-    assert.equal(lines.length, 1);
+     duty.updateDuty(false);
+     assert.equal(duty.blocksStep(foot(300, 665.9, 347), foot(300, 666.1, 347)), false);
+   } finally {
+@@ -104,3 +143,84 @@ test('the mounted mountain guard covers both legal edges and a jump at the N666
+     assembly.dispose();
+   }
+ });
++
++test('the mounted crater guard covers both sides of the surveyed fence opening without blocking adjacent terrain', () => {
++  const grid = createTerrainGrid();
++  const road = mountWestCraterRoad(worldBounds.depth, north => grid.groundHeightAt(0, north));
++  const post = mountZa29GuardPost(road.group, 'crater', road.heightAt);
++  const duty = createZa29GuardDuty('crater', post.anchors, () => {});
++  duty.updateDuty(true);
++  try {
++    const fenceEast = road.lip.east + 1;
++    const floor = post.anchors.approach.height;
++    assert.ok(Math.abs(fenceEast - -70.533516397) < .0001);
++    assert.equal(duty.blocksStep(foot(-68.3, 159, floor), foot(-68.5, 159, floor)), false);
++    for (const north of [157.21, 159, 160.79]) {
++      assert.equal(road.fenceBlocks(fenceEast, north, floor, .27), false);
++      for (const height of [floor, floor + 1.26]) {
++        const from = foot(fenceEast + .1, north, height);
++        const to = foot(fenceEast - .1, north, height);
++        assert.equal(duty.blocksStep(from, to), true);
++        assert.equal(duty.blocksStep(to, from), false);
++      }
++    }
++    assert.equal(duty.blocksStep(foot(fenceEast + .1, 153, floor), foot(fenceEast - .1, 153, floor)), false);
++    assert.equal(duty.blocksStep(foot(fenceEast + .1, 159, floor + 3), foot(fenceEast - .1, 159, floor + 3)), false);
++    duty.updateDuty(false);
++    assert.equal(duty.blocksStep(foot(fenceEast + .1, 159, floor), foot(fenceEast - .1, 159, floor)), false);
++  } finally {
++    post.dispose();
++  }
++});
++
++test('a parked sled boards from the open approach but cannot carry a player across a guard or fence', () => {
++  const grid = createTerrainGrid();
++  const road = mountWestCraterRoad(worldBounds.depth, north => grid.groundHeightAt(0, north));
++  const post = mountZa29GuardPost(road.group, 'crater', road.heightAt);
++  const lines: string[] = [];
++  const duty = createZa29GuardDuty('crater', post.anchors, line => lines.push(line));
++  const fenceEast = road.lip.east + 1;
++  const outside = fenceEast + .7, inside = fenceEast - .7;
++  const surveyedHeight = (east: number, north: number) => {
++    const height = road.heightAt(east, north);
++    assert.ok(height !== undefined);
++    return height;
++  };
++  const ride = createSledRide({
++    height: surveyedHeight,
++    surface: () => ({ surface: 0, deepSnow: false }),
++    blocked: (east, north, height) => road.fenceBlocks(east, north, height, .27),
++    canReachParked: (from, to) => !duty.interceptsStep(foot(from.x, from.n, from.y), foot(to.x, to.n, to.y)),
++    snow() {},
++    stopped() {},
++  });
++  try {
++    const level = surveyedHeight(inside, 159);
++    const playerLevel = surveyedHeight(outside, 159);
++    assert.equal(ride.mount(inside, 159, level, 0), true);
++    assert.equal(ride.leave(), true);
++
++    duty.updateDuty(true);
++    assert.equal(ride.canRemount(outside, 159, playerLevel), false);
++    assert.equal(ride.remount(outside, 159, playerLevel), false);
++    assert.deepEqual(lines, []);
++    assert.equal(ride.canRemount(inside - .5, 159, level), true);
++
++    duty.updateDuty(false);
++    assert.equal(ride.remount(outside, 159, playerLevel), true);
++    assert.deepEqual(ride.spot, { x: inside, n: 159, y: level, yaw: 0 });
++
++    const fenceNorth = 155.75;
++    const parkedHeight = surveyedHeight(inside, fenceNorth);
++    const approachHeight = surveyedHeight(outside, fenceNorth);
++    assert.equal(road.fenceBlocks(inside, fenceNorth, parkedHeight, .27), false);
++    assert.equal(road.fenceBlocks(outside, fenceNorth, approachHeight, .27), false);
++    assert.equal(road.fenceBlocks(fenceEast, fenceNorth, (parkedHeight + approachHeight) / 2, .27), true);
++    assert.equal(ride.relocateMounted(inside, fenceNorth, parkedHeight, 0), true);
++    assert.equal(ride.leave(), true);
++    assert.equal(ride.remount(outside, fenceNorth, approachHeight), false);
++    assert.deepEqual(ride.parked(), { x: inside, n: fenceNorth, y: parkedHeight, yaw: 0 });
++  } finally {
++    post.dispose();
++  }
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+index 8c4f6468..0ebf7460 100644
+--- a/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
++++ b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+@@ -1,16 +1,17 @@
++import type { TownNightWindowState } from '../../../src/shared/town-night-window';
+ import { summitAssemblyAnchor } from './main-summit-assembly';
+ import { mainSummitLayout } from './main-summit-block';
++import { meteorCraterRimRadius } from './meteor-crater';
++import { craterWestFence, craterWestSurvey } from './town-za22-crater-road';
+ import { za22GateSeamNorth } from './town-za22-mountain-gate';
++import type { Za29GuardDuty } from './town-za29-guard-scenes';
+
+ type Foot = Readonly<{ east: number; north: number; height: number }>;
+ type GuardAnchors = Readonly<{ guard: Foot; approach: Foot }>;
+
+-const mountainAperture = {
+-  east: summitAssemblyAnchor.east,
+-  north: za22GateSeamNorth,
+-  halfWidth: mainSummitLayout.gate.clearWidth / 2,
+-  heightReach: 1.4,
+-};
++const craterNorthOffset = craterWestSurvey.seamNorth - craterWestSurvey.north;
++const craterFenceEast = craterWestSurvey.east +
++  Math.sqrt(meteorCraterRimRadius ** 2 - craterNorthOffset ** 2) + craterWestFence.setback;
+
+ const guards = {
+   mountain: {
+@@ -18,19 +19,33 @@ const guards = {
+     line: '吃点，吃点再走，山上风大。',
+     east: 0,
+     north: 1,
++    aperture: { east: summitAssemblyAnchor.east, north: za22GateSeamNorth,
++      halfWidth: mainSummitLayout.gate.clearWidth / 2 },
+   },
+   crater: {
+     label: '与石九斤交谈',
+     line: '井口的规矩，比命大。',
+     east: -1,
+     north: 0,
++    aperture: { east: craterFenceEast, north: craterWestSurvey.seamNorth,
++      halfWidth: craterWestFence.railCenterOffset - craterWestFence.railHalfWidth },
+   },
+ } as const;
+
+ const guardReach = 4.5;
+ const approachReach = 3.5;
+-const passageHalfWidth = 2;
+ const levelReach = 1.25;
++const crossingHeightReach = 1.4;
++
++export function za29GuardDutyForPhase(
++  phase: TownNightWindowState['phase'] | undefined,
++): Za29GuardDuty {
++  return {
++    guardPresent: phase === undefined || phase === 'day',
++    showNightSigns: phase === 'night-window',
++    showEmptyPost: phase === 'awaiting-beacon' || phase === 'night-window',
++  };
++}
+
+ export function createZa29GuardDuty(
+   kind: keyof typeof guards,
+@@ -38,8 +53,6 @@ export function createZa29GuardDuty(
+   announce: (line: string) => void,
+ ) {
+   const post = guards[kind];
+-  const aperture = kind === 'mountain' ? mountainAperture : undefined;
+-  const approachLine = aperture ?? approach;
+   let present = false;
+   let greeted = false;
+   let stopped = false;
+@@ -55,8 +68,8 @@ export function createZa29GuardDuty(
+       Math.hypot(point.east - anchor.east, point.north - anchor.north) <= reach;
+   }
+
+-  function along(point: Foot) {
+-    return (point.east - approachLine.east) * post.east + (point.north - approachLine.north) * post.north;
++  function along(point: Foot, anchor: Pick<Foot, 'east' | 'north'>) {
++    return (point.east - anchor.east) * post.east + (point.north - anchor.north) * post.north;
+   }
+
+   const speak = () => { if (present) announce(post.line); };
+@@ -67,7 +80,7 @@ export function createZa29GuardDuty(
+   }
+
+   function observeApproach(position: Foot) {
+-    const nearApproach = present && along(position) <= 0 &&
++    const nearApproach = present && along(position, post.aperture) <= 0 &&
+       inReach(position, approach, approachReach) && inReach(position, guard, guardReach);
+     if (!nearApproach) {
+       greeted = stopped = false;
+@@ -79,18 +92,16 @@ export function createZa29GuardDuty(
+
+   function interceptsStep(from: Foot, to: Foot) {
+     if (!present) return false;
+-    const before = along(from), after = along(to);
++    const aperture = post.aperture;
++    const before = along(from, aperture), after = along(to, aperture);
+     if (before > 0 || after < 0 || after <= before) return false;
+     const mix = -before / (after - before);
+-    const crossing = {
+-      east: from.east + (to.east - from.east) * mix,
+-      north: from.north + (to.north - from.north) * mix,
+-      height: from.height + (to.height - from.height) * mix,
+-    };
+-    if (!aperture) return inReach(crossing, approach, passageHalfWidth) && inReach(crossing, guard, guardReach);
+-    // The gate width and ordinary jump envelope bound a real crossing; nearby levels stay open.
+-    const lateral = (crossing.east - aperture.east) * post.north - (crossing.north - aperture.north) * post.east;
+-    return Math.abs(lateral) <= aperture.halfWidth && Math.abs(crossing.height - approach.height) <= aperture.heightReach;
++    const east = from.east + (to.east - from.east) * mix;
++    const north = from.north + (to.north - from.north) * mix;
++    const height = from.height + (to.height - from.height) * mix;
++    const lateral = (east - aperture.east) * post.north - (north - aperture.north) * post.east;
++    // Cover the normal jump envelope at the opening and keep separate levels free.
++    return Math.abs(lateral) <= aperture.halfWidth && Math.abs(height - approach.height) <= crossingHeightReach;
+   }
+
+   function blocksStep(from: Foot, to: Foot) {
