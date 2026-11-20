@@ -68,6 +68,27 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     if (well.kind === 'open' && well.openedBy === playerId && well.firstFallPending) return firstFallOrder(playerId);
   }
 
+  function resolveDepthCrossing(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint,
+      originMode: UndergroundEntryMode = modeOf(playerId)) {
+    if (!isFinitePoint(before) || !isFinitePoint(after)) return;
+    const wasBelow = before.height < depthLine;
+    const isBelow = after.height < depthLine;
+    if (wasBelow === isBelow || originMode !== (wasBelow ? 'survival' : 'peace')) return;
+
+    const fraction = (depthLine - before.height) / (after.height - before.height);
+    const point = {
+      east: before.east + (after.east - before.east) * fraction,
+      north: before.north + (after.north - before.north) * fraction,
+      height: depthLine,
+    };
+    const direction = isBelow ? 'down' : 'up';
+    if (!isFinitePoint(point) || !options.isDepthLineCrossing(point, direction)) return;
+
+    const mode = isBelow ? 'survival' : 'peace';
+    const firstEntry = isBelow && !players.get(playerId)?.hasEntered;
+    return { direction, mode, firstEntry } as const;
+  }
+
   return {
     snapshot: () => snapshotOf(well, players),
     // R3-11: the three surface approaches stop at the crater floor.
@@ -100,24 +121,20 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     },
     // The movement authority submits consecutive positions after its physical collision checks.
     confirmDepthCrossing(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint) {
-      if (well.kind !== 'open' || !isFinitePoint(before) || !isFinitePoint(after)) return;
-      const wasBelow = before.height < depthLine;
-      const isBelow = after.height < depthLine;
-      if (wasBelow === isBelow || modeOf(playerId) !== (wasBelow ? 'survival' : 'peace')) return;
-
-      const fraction = (depthLine - before.height) / (after.height - before.height);
-      const point = {
-        east: before.east + (after.east - before.east) * fraction,
-        north: before.north + (after.north - before.north) * fraction,
-        height: depthLine,
-      };
-      const direction = isBelow ? 'down' : 'up';
-      if (!isFinitePoint(point) || !options.isDepthLineCrossing(point, direction)) return;
-
-      const mode = isBelow ? 'survival' : 'peace';
-      const firstEntry = isBelow && !players.get(playerId)?.hasEntered;
-      commit(well, { playerId, mode, hasEntered: true });
-      return { kind: 'depth-crossing', direction, mode, firstEntry } as const;
+      if (well.kind !== 'open') return;
+      const crossing = resolveDepthCrossing(playerId, before, after);
+      if (!crossing) return;
+      commit(well, { playerId, mode: crossing.mode, hasEntered: true });
+      return { kind: 'depth-crossing', ...crossing } as const;
+    },
+    // The host supplies the authorized first fall's departure and verified pool landing.
+    confirmFirstFallTransfer(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint) {
+      if (well.kind !== 'open' || !pendingFirstFall(playerId)) return;
+      // A legacy save may have committed survival mode before clearing the pending fall.
+      const crossing = resolveDepthCrossing(playerId, before, after, 'peace');
+      if (crossing?.direction !== 'down' || !options.isFirstFallPool(after)) return;
+      commit({ ...well, firstFallPending: false }, { playerId, mode: crossing.mode, hasEntered: true });
+      return { kind: 'first-fall-landed', fallDamage: 0 } as const;
     },
     // This acknowledgement is valid only for the forced first fall, at its verified pool landing.
     confirmFirstFallLanding(playerId: string, point: UndergroundEntryPoint) {

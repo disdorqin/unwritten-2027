@@ -5,7 +5,8 @@ on:
     branches: [lane-c]
     paths:
       - '.github/workflows/verify-underground-descent.yml'
-      - 'src/presence/underground-entry.ts'
+      - 'src/presence/underground-entry*.ts'
+      - 'tests/server/underground-entry*.test.ts'
       - 'src/presence/underground-lift-*.ts'
       - 'src/presence/underground-mine-gate.ts'
       - 'src/presence/underground-mine-lift.ts'
@@ -39,10 +40,10 @@ jobs:
           mine=tools/voxel-tavern/town-blockout/underground-mine-layout.ts
           test -f "$entry"
           test -f "$mine"
-          test "$(git hash-object "$entry")" = bcc0b59110f46d3ecd109bd457027e555783b355
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
+      - run: node --import tsx --test tests/server/underground-entry*.test.ts
       - run: npx playwright install --with-deps chromium
       - run: node tools/verify-underground-descent.mjs "${{ runner.temp }}/underground-descent"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

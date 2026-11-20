@@ -116,6 +116,83 @@ test('a failed file replacement preserves the last snapshot on disk and in memor
   assert.deepEqual(fs.readdirSync(directory), ['well.json']);
 });
 
+test('a restored pending first fall changes mode and opens the cage in one successful save after a failed attempt', t => {
+  const { file, directory, store, options } = fixture(t);
+  const pool = options.firstFallLanding;
+  const departure = { ...pool, height: -30 };
+  const entry = createUndergroundEntry(options);
+  assert.equal(entry.openWell('opener').kind, 'opened');
+  const bytes = fs.readFileSync(file);
+  const initial = store.load();
+  let saves = 0;
+  const restored = createUndergroundEntry({
+    ...options, initial,
+    isDepthLineCrossing: (point, direction) => direction === 'down' && point.east === pool.east &&
+      point.north === pool.north && point.height === options.depthLine,
+    isFirstFallPool: point => point.east === pool.east && point.north === pool.north && point.height === pool.height,
+    save(snapshot) {
+      saves++;
+      return store.save(snapshot);
+    },
+  });
+
+  assert.equal(restored.pendingFirstFall('opener')?.playerId, 'opener');
+  assert.equal(restored.requestCageRide('opener', 'down').kind, 'first-fall-required');
+  assert.equal(restored.confirmFirstFallTransfer('visitor', departure, pool), undefined);
+  assert.equal(restored.confirmFirstFallTransfer('opener', departure, { ...pool, height: -91 }), undefined);
+  assert.equal(saves, 0);
+
+  const replace = t.mock.method(fs, 'renameSync', () => { throw new Error('replacement failed'); });
+  syncBuiltinESMExports();
+  try {
+    assert.throws(() => restored.confirmFirstFallTransfer('opener', departure, pool), /replacement failed/);
+    assert.equal(saves, 1);
+    assert.equal(replace.mock.callCount(), 1);
+    assert.equal(restored.modeOf('opener'), 'peace');
+    assert.deepEqual(restored.snapshot(), initial);
+    assert.deepEqual(fs.readFileSync(file), bytes);
+    assert.deepEqual(fs.readdirSync(directory), ['well.json']);
+  } finally {
+    replace.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  assert.deepEqual(restored.confirmFirstFallTransfer('opener', departure, pool), {
+    kind: 'first-fall-landed', fallDamage: 0,
+  });
+  assert.equal(saves, 2);
+  assert.deepEqual(store.load(), {
+    well: { kind: 'open', openedBy: 'opener', firstFallPending: false },
+    players: [{ playerId: 'opener', mode: 'survival', hasEntered: true }],
+  });
+  assert.equal(restored.requestCageRide('opener', 'up').kind, 'ride-cage');
+  assert.equal(restored.pendingFirstFall('opener'), undefined);
+  assert.equal(restored.confirmFirstFallTransfer('opener', departure, pool), undefined);
+  assert.equal(saves, 2);
+});
+
+test('the atomic path can settle a saved legacy first fall whose crossing was already committed', t => {
+  const { store, options } = fixture(t);
+  store.save({
+    well: { kind: 'open', openedBy: 'opener', firstFallPending: true },
+    players: [{ playerId: 'opener', mode: 'survival', hasEntered: true }],
+  });
+  const pool = options.firstFallLanding;
+  const restored = createUndergroundEntry({
+    ...options, initial: store.load(),
+    isDepthLineCrossing: (point, direction) => direction === 'down' && point.east === pool.east,
+    isFirstFallPool: point => point.height === pool.height,
+  });
+  assert.equal(restored.confirmFirstFallTransfer('opener', { ...pool, east: pool.east + 3, height: -30 }, pool), undefined);
+  assert.equal(restored.pendingFirstFall('opener')?.playerId, 'opener');
+  assert.deepEqual(restored.confirmFirstFallTransfer('opener', { ...pool, height: -30 }, pool), {
+    kind: 'first-fall-landed', fallDamage: 0,
+  });
+  const final = store.load();
+  assert.equal(final?.well.kind === 'open' && final.well.firstFallPending, false);
+  assert.equal(final?.players[0]?.mode, 'survival');
+});
+
 test('malformed or unsupported saved data is reported instead of being treated as a covered well', t => {
   const { file, store } = fixture(t);
   fs.writeFileSync(file, '{"version":');

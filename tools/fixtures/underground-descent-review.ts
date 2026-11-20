@@ -2,7 +2,9 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, Mesh, MeshBasicMaterial,
   PerspectiveCamera, Scene, WebGLRenderer,
 } from 'three';
-import { createUndergroundEntry, type UndergroundEntryPoint } from '../../src/presence/underground-entry.js';
+import {
+  createUndergroundEntry, type UndergroundEntryPoint, type UndergroundEntrySnapshot,
+} from '../../src/presence/underground-entry.js';
 import { createUndergroundMineLift } from '../../src/presence/underground-mine-lift.js';
 import { createUndergroundWinchAccess, createUndergroundWinchWinding } from '../../src/presence/underground-winch.js';
 import { createUndergroundLiftDomainHandoff } from '../../src/presence/underground-lift-domain-handoff.js';
@@ -92,6 +94,10 @@ const winding = createUndergroundWinchWinding({
     ...shaft, domainId: domains['crater-floor'], horizontalReach: .9, verticalReach: .2,
   }, acceptedFoot),
 });
+const entrySnapshotKey = 'review/underground-entry';
+const savedEntry = sessionStorage.getItem(entrySnapshotKey);
+const initialEntry: UndergroundEntrySnapshot | undefined = savedEntry ? JSON.parse(savedEntry) : undefined;
+let entrySaves = 0;
 const entry = createUndergroundEntry({
   depthLine: (shaft.height + pool.height) / 2,
   firstFallLanding: pool,
@@ -99,7 +105,12 @@ const entry = createUndergroundEntry({
   canBoardCage: (id, direction) => id === playerId && scene === (direction === 'down' ? 'crater-floor' : 'mine'),
   isDepthLineCrossing: point => Math.hypot(point.east, point.north) <= 2,
   isFirstFallPool: insidePool,
-  save: () => undefined,
+  initial: initialEntry,
+  save(snapshot) {
+    sessionStorage.setItem(entrySnapshotKey, JSON.stringify(snapshot));
+    entrySaves++;
+    return undefined;
+  },
 });
 const lift = createUndergroundMineLift({
   travelMs: 20_000,
@@ -171,13 +182,19 @@ function beginDescent() {
   blackoutFrame = -1;
   audioPeak = swayPeak = flashPeak = 0;
   motion = {};
+  let firstFall = entry.pendingFirstFall(playerId);
   if (entry.sceneState().coverVisible) {
     const order = entry.openWell(playerId);
-    if (order.kind !== 'opened' || order.firstFall.fallDamage !== 0 || !insidePool(order.firstFall.destination)) {
+    if (order.kind !== 'opened') throw new Error('First descent did not receive the accepted B-01 pool order');
+    firstFall = order.firstFall;
+  }
+  if (firstFall) {
+    if (firstFall.fallDamage !== 0 || !insidePool(firstFall.destination)) {
       throw new Error('First descent did not receive the accepted B-01 pool order');
     }
     active = { id: ++sequence, first: true, departedAt: clock, travelMs: 12_000 };
   } else {
+    if (!entry.sceneState().cageAvailable.down) return;
     if (!lift.board(playerId, 'down')) throw new Error('The repeat rider lacked an actual cage boarding');
     const trip = lift.depart(playerId);
     if (!trip) throw new Error('The cage failed to depart with the accepted rider');
@@ -212,14 +229,13 @@ function allowLanding() {
     dock = 'mine';
     if (!handoff.confirmDock(trip.liftId)) throw new Error('Repeat descent ended before the physical lift dock');
   }
-  if (entry.confirmDepthCrossing(playerId, foot, pool)?.mode !== 'survival') {
-    throw new Error('The official depth-line authority refused the fixture route');
-  }
   const healthBefore = health;
   if (trip.first) {
-    const result = entry.confirmFirstFallLanding(playerId, pool);
-    if (!result || result.fallDamage !== 0) throw new Error('The original authority refused a zero-damage pool landing');
+    const result = entry.confirmFirstFallTransfer(playerId, foot, pool);
+    if (!result || result.fallDamage !== 0) throw new Error('The entry authority refused a zero-damage pool landing');
     health -= result.fallDamage;
+  } else if (entry.confirmDepthCrossing(playerId, foot, pool)?.mode !== 'survival') {
+    throw new Error('The depth-line authority refused the fixture route');
   }
   foot = { ...pool };
   scene = 'mine';
@@ -316,6 +332,7 @@ function inspect() {
     elapsed: active ? clock - active.departedAt : 0,
     scene: scene === 'mine' ? scene : 'crater', foot: { ...foot }, locked, mode: entry.modeOf(playerId),
     health, winchTurns, coverVisible: entry.sceneState().coverVisible,
+    firstFallPending: entry.pendingFirstFall(playerId) !== undefined, entrySaves,
     cageAvailable: entry.sceneState().cageAvailable.down,
     overlayOpaque: blackFrame(), blackoutFrame, skipVisible: visible(skipButton()), wakeProgress: motion.wakeProgress,
     phase: phases.at(-1)?.phase, audioPeak, swayPeak, flashPeak,

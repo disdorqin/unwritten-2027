@@ -38,7 +38,7 @@ const server = await createServer({
 });
 
 const evidence = {
-  scope: 'Chromium runs the checked-in entry authority and mine layout with the expansion disabled. The fixture advances host time explicitly and runs input, frames, audio plumbing and compositing in Chromium.',
+  scope: 'Chromium runs the checked-in entry authority and mine layout with the expansion disabled. The fixture advances host time and uses sessionStorage to replay an opener reconnect. Server file persistence is covered by the entry-store tests.',
   mineBlob,
   entryBlob,
   runs: {}, passed: false,
@@ -145,14 +145,14 @@ async function blackoutPending(page, first, shot) {
   return { beforeDock, waiting, pixels };
 }
 
-async function releaseAndWake(page, first) {
+async function releaseAndWake(page, first, lyingShot = 'pool-lying') {
   await driveUntil(page, state => state.elapsed >= state.travelMs, 'physical arrival');
   assert.equal(await page.evaluate(() => window.undergroundDescentReview.allowLanding()), true);
   await page.waitForFunction(() => window.undergroundDescentReview.inspect().scene === 'mine');
   await driveUntil(page, state => state.wakeProgress !== undefined || !state.locked, 'wake');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
   const wake = await inspect(page);
-  if (wake.phase === 'waking') await checkpoint(page, 'pool-lying');
+  if (wake.phase === 'waking') await checkpoint(page, lyingShot);
   await driveUntil(page, state => !state.locked, 'restored controls');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
   const settled = await inspect(page);
@@ -267,8 +267,40 @@ try {
   assert.ok(!phaseSequence(skipTrace.landed.settled).some(phase => ['waking', 'sitting'].includes(phase)));
   assert.deepEqual(skipErrors, []);
   await context.close();
+
+  context = await browser.newContext({ viewport: { width: 880, height: 520 } });
+  page = await context.newPage();
+  page.setDefaultTimeout(12_000);
+  const reopenedErrors = [];
+  const reopened = evidence.runs.pendingReconnect = { errors: reopenedErrors };
+  await openScene(page, url, reopenedErrors);
+  await windFirstShaft(page, false);
+  reopened.beforeReload = await inspect(page);
+  assert.equal(reopened.beforeReload.firstFallPending, true);
+  assert.equal(reopened.beforeReload.entrySaves, 1);
+  await page.reload();
+  await page.waitForFunction(() => Boolean(window.undergroundDescentReview));
+  await page.locator('main canvas').click();
+  reopened.restored = await inspect(page);
+  assert.equal(reopened.restored.scene, 'crater');
+  assert.equal(reopened.restored.mode, 'peace');
+  assert.equal(reopened.restored.coverVisible, false);
+  assert.equal(reopened.restored.firstFallPending, true);
+  assert.equal(reopened.restored.cageAvailable, false);
+  assert.equal(reopened.restored.entrySaves, 0);
+  await page.keyboard.press('e');
+  reopened.restarted = await inspect(page);
+  assert.equal(reopened.restarted.first, true);
+  assert.equal(reopened.restarted.winchTurns, 0);
+  assert.equal(reopened.restarted.entrySaves, 0);
+  reopened.black = await blackoutPending(page, true, 'reopened-first-black');
+  reopened.landed = await releaseAndWake(page, true, 'reopened-pool-lying');
+  assert.equal(reopened.landed.settled.firstFallPending, false);
+  assert.equal(reopened.landed.settled.entrySaves, 1);
+  assert.deepEqual(reopenedErrors, []);
+  await context.close();
   evidence.passed = true;
-  console.log('Underground descent: three accepted winch turns, full, repeat, native skip, blackout, zero damage, and restored movement.');
+  console.log('Underground descent: three accepted winch turns, full, repeat, native skip, pending reconnect, blackout, zero damage, and restored movement.');
 } catch (error) {
   evidence.failure = String(error);
   if (page && !page.isClosed()) {
