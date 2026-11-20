@@ -177,8 +177,9 @@ scene.background = new Color('#adc2dd');
 const weatherFog = new Fog('#adc2dd', 360, 1300);
 scene.fog = weatherFog;
 const townFar = 1400;
-const mountSummitSkyline = previewOptions.get('summitSkyline') === 'on';
-const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, mountSummitSkyline ? 2400 : townFar);
+const summitSkylineFar = 2400;
+const reportSummitSkyline = previewOptions.get('summitSkyline') === 'on';
+const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, summitSkylineFar);
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
 renderer.setSize(innerWidth, innerHeight);
@@ -196,26 +197,25 @@ const landscape = new Group();
 const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
-// One display-space transform for P-1. This is the surveyed C-01 fixture origin,
-// pending the real northern host. No gate, player coordinates or legacy bounds change here.
+// Use the surveyed mountain alignment for the town's distant skyline.
+// Walkable surfaces stay in the mountain scene.
 const summitSkylineOrigin = new Vector3(300, 0, -676);
 const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSpec.summitHeight,
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
-if (mountSummitSkyline) {
-  const summit = createMainSummitBlock(mainSummitLayout, 347, 100);
-  // The frozen coarse mesh is an open heightfield. The town can look up at it from below.
-  // Keep this preview material choice separate from the P-1 terrain used by the arriving domain.
-  summit.coarse.material.side = DoubleSide;
-  const skyline = new Group();
-  skyline.name = 'main-summit-world-skyline';
-  skyline.position.copy(summitSkylineOrigin);
-  skyline.add(summit.coarse);
-  summit.coarse.onAfterRender = (_renderer, _scene, renderedCamera) => {
+const summitSkylineMesh = createMainSummitBlock(mainSummitLayout, 347, 100).coarse;
+// The open heightfield is seen from below while the player is still in town.
+summitSkylineMesh.material.side = DoubleSide;
+const summitSkyline = new Group();
+summitSkyline.name = 'main-summit-world-skyline';
+summitSkyline.position.copy(summitSkylineOrigin);
+summitSkyline.add(summitSkylineMesh);
+scene.add(summitSkyline);
+if (reportSummitSkyline) {
+  summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
   };
-  scene.add(skyline);
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
   (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
@@ -3315,7 +3315,7 @@ renderer.setAnimationLoop(now => {
       if (profileTown) drinkEffectsMs += performance.now() - restoreStartedAt;
     }
     if (profileTown) {
-      const skylinePeak = mountSummitSkyline ? summitSkylinePeakNdc.copy(summitSkylinePeak).project(camera) : null;
+      const skylinePeak = reportSummitSkyline ? summitSkylinePeakNdc.copy(summitSkylinePeak).project(camera) : null;
       renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
         frameMs: frameSeconds * 1000, feedbackMs, drinkEffectsMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
