@@ -41,31 +41,50 @@ const cases = [
   { name: 'desktop-entry', blockedPath: entryPath },
 ];
 
+function installSceneCapture() {
+  const requestFrame = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = callback => requestFrame(time => {
+    callback(time);
+    if (!window.__jx18CaptureRequested || window.__jx18RenderedFrame) return;
+    const canvas = document.querySelector('#scene > canvas');
+    if (!canvas?.width || !canvas.height || document.body.classList.contains('town-entry-pending')) return;
+
+    // Read the viewer's WebGL drawing buffer after its frame callback, before the compositor clears it.
+    const sample = document.createElement('canvas');
+    sample.width = Math.min(160, canvas.width);
+    sample.height = Math.round(canvas.height * sample.width / canvas.width);
+    const context = sample.getContext('2d', { willReadFrequently: true });
+    context.drawImage(canvas, 0, 0, sample.width, sample.height);
+    const { data } = context.getImageData(0, 0, sample.width, sample.height);
+    const colors = new Set();
+    let opaque = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      if (data[offset + 3] < 240) continue;
+      opaque++;
+      colors.add((data[offset] >> 4) * 256 + (data[offset + 1] >> 4) * 16 + (data[offset + 2] >> 4));
+    }
+    if (colors.size <= 4 || opaque < sample.width * sample.height * 0.9) return;
+    window.__jx18RenderedFrame = {
+      width: canvas.width, height: canvas.height, sampleWidth: sample.width, sampleHeight: sample.height,
+      renderedColors: colors.size, png: sample.toDataURL('image/png').split(',')[1],
+    };
+  });
+}
+
 async function captureRenderedScene(page, name) {
-  const canvas = page.locator('#scene > canvas');
-  await expect(canvas).toBeVisible({ timeout: 90_000 });
-  // Sample the composited canvas, after WebGL has drawn the town rather than merely inserted a node.
-  let screenshot;
-  let regions;
-  await expect.poll(async () => {
-    screenshot = await page.screenshot({ timeout: 25_000, scale: 'css' });
-    regions = await page.evaluate(async encoded => {
-      const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
-      const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
-      const context = new OffscreenCanvas(16, 16).getContext('2d');
-      context.drawImage(image, image.width * 0.2, image.height * 0.25, image.width * 0.6, image.height * 0.5, 0, 0, 16, 16);
-      image.close();
-      const { data } = context.getImageData(0, 0, 16, 16);
-      const colors = new Set();
-      for (let offset = 0; offset < data.length; offset += 4) {
-        colors.add(`${data[offset] >> 4},${data[offset + 1] >> 4},${data[offset + 2] >> 4}`);
-      }
-      return colors.size;
-    }, screenshot.toString('base64'));
-    return regions;
-  }, { timeout: 30_000 }).toBeGreaterThan(4);
-  await writeFile(join(evidence, `${name}-recovered.png`), screenshot);
-  return regions;
+  await expect(page.locator('#scene > canvas')).toBeVisible({ timeout: 90_000 });
+  await page.evaluate(() => { window.__jx18CaptureRequested = true; });
+  const handle = await page.waitForFunction(() => window.__jx18RenderedFrame, undefined, {
+    polling: 250, timeout: 60_000,
+  });
+  const { png, ...frame } = await handle.jsonValue();
+  expect(frame.width).toBeGreaterThan(100);
+  expect(frame.height).toBeGreaterThan(100);
+  expect(frame.renderedColors).toBeGreaterThan(4);
+  const image = Buffer.from(png, 'base64');
+  expect(image.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  await writeFile(join(evidence, name + '-recovered.png'), image);
+  return frame;
 }
 
 async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
@@ -75,6 +94,7 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
     userAgent, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block',
   });
   const page = await context.newPage();
+  await page.addInitScript(installSceneCapture);
   page.setDefaultTimeout(20_000);
   const requested = [];
   const failed = [];
@@ -84,17 +104,23 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
     reason: request.failure()?.errorText,
   }));
   const matchesBlockedAsset = requestUrl => requestUrl.pathname === blockedPath;
+  let recoveredStatus;
+  page.on('response', response => {
+    if (matchesBlockedAsset(new URL(response.url())) && response.ok()) recoveredStatus = response.status();
+  });
   const denyAsset = route => route.abort('blockedbyclient');
   const continueButton = page.getByRole('button', { name: '继续进入', exact: true });
   const retryButton = page.getByRole('button', { name: '重试加载', exact: true });
   const entry = page.locator('#town-entry');
   const guide = page.locator('#town-entry-guide');
   const error = entry.getByRole('alert');
+  const record = { name, url, blockedPath, embeddedGuideExpected: mobile };
 
   try {
     await page.route(matchesBlockedAsset, denyAsset);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
     expect(response?.ok()).toBe(true);
+    record.userAgent = await page.evaluate(() => navigator.userAgent);
 
     if (mobile) {
       await expect(guide).toContainText('右上角菜单');
@@ -102,6 +128,7 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
       await expect(guide).toBeVisible();
       await expect(page.getByRole('button', { name: '复制链接', exact: true })).toBeVisible();
       await expect(page.locator('#scene > canvas')).toHaveCount(0);
+      record.guideVerified = true;
       await page.screenshot({ path: join(evidence, `${name}-guide.png`) });
       expect(requested).not.toContain(viewerPath);
       await continueButton.tap();
@@ -114,11 +141,10 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
     await expect(page.locator('#scene > canvas')).toHaveCount(0);
     await expect.poll(() => failed.find(request => request.path === blockedPath)?.reason)
       .toMatch(/^net::ERR_BLOCKED_BY_CLIENT(?:\.Inspector)?$/);
+    record.failure = failed.find(request => request.path === blockedPath);
     await page.screenshot({ path: join(evidence, `${name}-request-blocked.png`) });
 
     await page.unroute(matchesBlockedAsset, denyAsset);
-    const actualDelivery = page.waitForResponse(response =>
-      new URL(response.url()).pathname === blockedPath && response.ok(), { timeout: 60_000 });
     await Promise.all([
       page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame() && frame.url() === url }),
       mobile ? retryButton.tap() : retryButton.click(),
@@ -128,7 +154,8 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
       await expect(retryButton).toBeHidden();
       await continueButton.tap();
     }
-    const delivered = await actualDelivery;
+    await expect.poll(() => recoveredStatus, { timeout: 60_000 }).toBeDefined();
+    record.recoveryStatus = recoveredStatus;
     await expect(entry).toBeHidden({ timeout: 90_000 });
     expect(page.url()).toBe(url);
 
@@ -139,16 +166,15 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
       await page.getByRole('button', { name: '关闭提示', exact: true }).tap();
       await expect(banner).toBeHidden();
     }
-    const regions = await captureRenderedScene(page, name);
-    const record = { name, url, userAgent: await page.evaluate(() => navigator.userAgent), blockedPath,
-      failure: failed.find(request => request.path === blockedPath), recoveryStatus: delivered.status(), renderedColors: regions };
-    await writeFile(join(evidence, `${name}.json`), `${JSON.stringify(record, null, 2)}\n`);
-    console.log(JSON.stringify(record));
+    record.frame = await captureRenderedScene(page, name);
   } catch (error) {
-    await page.screenshot({ path: join(evidence, `${name}-unexpected.png`), timeout: 5000 }).catch(() => {});
+    record.error = error.message;
+    await page.screenshot({ path: join(evidence, name + '-unexpected.png'), timeout: 5000 }).catch(() => {});
     throw error;
   } finally {
     await context.close();
+    await writeFile(join(evidence, name + '.json'), JSON.stringify(record, null, 2) + '\n');
+    console.log(JSON.stringify(record));
   }
 }
 
@@ -164,10 +190,16 @@ try {
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
   try {
+    const failures = [];
     for (const entryCase of cases) {
-      const url = `http://127.0.0.1:${port}/town-blockout.html?jx18=${entryCase.name}`;
-      await verifyEntry(browser, url, entryCase);
+      const url = 'http://127.0.0.1:' + port + '/town-blockout.html?jx18=' + entryCase.name;
+      try {
+        await verifyEntry(browser, url, entryCase);
+      } catch (error) {
+        failures.push(new Error(entryCase.name + ': ' + error.message, { cause: error }));
+      }
     }
+    if (failures.length) throw new AggregateError(failures, 'JX-18 browser cases failed');
   } finally {
     await browser.close();
   }
