@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { boosterForgeHeatMs, createBoosterForge, type BoosterForgeProfile } from '../../src/presence/booster-forge.ts';
+import { boosterForgeHeatMs, createBoosterForge, type BoosterForgeHeatingPolicy, type BoosterForgeProfile,
+  type BoosterForgeState } from '../../src/presence/booster-forge.ts';
 import { createFlightThrust } from '../../src/shared/flight-thrust.ts';
 import { createZodiacStarStones, zodiacStarStoneIds, type ZodiacStarStoneId } from '../../src/shared/zodiac-star-stones.ts';
 
@@ -106,6 +107,107 @@ test('duplicate ring entries, unsigned recipe costs and outstanding legacy recip
   assert.throws(() => createBoosterForge({ ...options, recipe: { ...options.recipe, stardustOre: 1.5 } }), /Invalid booster forge/);
   assert.throws(() => createBoosterForge({ ...options, initial: { ...oldClean, revision: 1, owner: 'old-owner' } }),
     /explicit legacy recipe reconciliation/);
+});
+
+function controlledForge(refundRounding: BoosterForgeHeatingPolicy['refundRounding'] = 'down') {
+  let time = 100_000;
+  let rejectSave = false;
+  let durable: BoosterForgeState | undefined;
+  let profile: BoosterForgeProfile = { iceCrystalShards: 5, stardustOre: 10, boosterOwned: false, fuelSeconds: 0 };
+  const options: Parameters<typeof createBoosterForge>[0] = {
+    forgeId: 'u4-forge', socketIds: sockets, now: () => time,
+    recipe: { iceCrystalShards: 3, stardustOre: 5 },
+    heating: { durationMs: 3000, min: .25, max: .75, initialLevel: .5,
+      heatPerStoke: .375, decayPerSecond: .125, orePerStoke: 2, refundRounding },
+    readInstalledStones: () => zodiacStarStoneIds,
+    readProfile: playerId => playerId === 'owner' ? profile : undefined,
+    save(next, change, priorRevision) {
+      assert.equal(durable?.revision ?? 0, priorRevision);
+      if (rejectSave) return false;
+      if (change) {
+        assert.equal(change.playerId, 'owner');
+        assert.deepEqual(change.prior, profile);
+        profile = change.next;
+      }
+      durable = next;
+      return true;
+    },
+  };
+  let forge = createBoosterForge(options);
+  const order = (action: keyof typeof sockets, requestId = String(forge.readForge().revision)) => ({
+    playerId: 'owner', requestId, action, forgeId: options.forgeId, socketId: sockets[action],
+    expectedRevision: forge.readForge().revision,
+  });
+  for (const action of ['install-core', 'place', 'stoke'] as const) assert.equal(forge.submit(order(action)).kind, 'accepted');
+  return {
+    get forge() { return forge; }, order,
+    profile: () => profile,
+    elapse: (ms: number) => { time += ms; },
+    rejectSave: (reject: boolean) => { rejectSave = reject; },
+    restart: () => { forge = createBoosterForge({ ...options, heating: undefined, initial: durable }); },
+  };
+}
+
+test('controlled forge reports its band, charges repeat stokes once and releases one booster after the heat cycle', () => {
+  const fixture = controlledForge();
+  assert.deepEqual(fixture.forge.readForge().temperature, { level: .5, min: .25, max: .75 });
+  fixture.elapse(1000);
+  assert.equal(fixture.forge.readForge().acceptsHeatingStoke, true);
+  assert.equal(fixture.forge.readForge().heat, .375);
+  const addFuel = fixture.order('stoke', 'add-fuel');
+  assert.deepEqual(fixture.forge.submit(addFuel), { kind: 'accepted', revision: 4 });
+  assert.equal(fixture.profile().stardustOre, 3);
+  assert.equal(fixture.forge.readForge().heat, .75);
+  fixture.restart();
+  assert.deepEqual(fixture.forge.submit(addFuel), { kind: 'replayed', revision: 4 });
+  fixture.elapse(2000);
+  assert.equal(fixture.forge.advance(), undefined);
+  assert.equal(fixture.forge.readForge().phase, 'outlet');
+  assert.equal(fixture.forge.readForge().acceptsHeatingStoke, false);
+  const collect = fixture.order('collect', 'take-booster');
+  assert.equal(fixture.forge.submit(collect).kind, 'accepted');
+  assert.equal(fixture.forge.submit(collect).kind, 'replayed');
+  assert.deepEqual(fixture.profile(), { iceCrystalShards: 2, stardustOre: 3, boosterOwned: true, fuelSeconds: 0 });
+});
+
+test('a controlled forge outage settles half the reserved material once after restart or a failed save', () => {
+  const fixture = controlledForge();
+  fixture.elapse(2000);
+  assert.equal(fixture.forge.readForge().heat, .25);
+  assert.equal(fixture.forge.advance(), undefined);
+  fixture.elapse(1);
+  assert.equal(fixture.forge.readForge().outage, true);
+  assert.equal(fixture.forge.readForge().acceptsHeatingStoke, false);
+  assert.equal(fixture.forge.submit(fixture.order('stoke')).kind, 'unavailable');
+  fixture.rejectSave(true);
+  assert.deepEqual(fixture.forge.advance(), { kind: 'save-failed' });
+  assert.equal(fixture.profile().stardustOre, 5);
+  assert.equal(fixture.forge.readForge().revision, 3);
+  fixture.restart();
+  fixture.elapse(1000);
+  assert.notEqual(fixture.forge.readForge().phase, 'outlet');
+  fixture.rejectSave(false);
+  assert.deepEqual(fixture.forge.advance(), { kind: 'accepted', revision: 4, heatingFailure: 'outage' });
+  assert.deepEqual(fixture.profile(), { iceCrystalShards: 3, stardustOre: 7, boosterOwned: false, fuelSeconds: 0 });
+  fixture.restart();
+  assert.equal(fixture.forge.advance(), undefined);
+  assert.equal(fixture.forge.readForge().phase, 'materials');
+  assert.equal(fixture.forge.readForge().core, 'installed');
+});
+
+test('overheating charges the stoke and refunds the chosen half together, remembering the outcome on retry', () => {
+  const fixture = controlledForge('up');
+  const overheat = fixture.order('stoke', 'overheat');
+  fixture.rejectSave(true);
+  assert.equal(fixture.forge.submit(overheat).kind, 'save-failed');
+  assert.equal(fixture.forge.readForge().phase, 'heating');
+  assert.equal(fixture.profile().stardustOre, 5);
+  fixture.rejectSave(false);
+  assert.deepEqual(fixture.forge.submit(overheat), { kind: 'accepted', revision: 4, heatingFailure: 'overheat' });
+  fixture.restart();
+  assert.deepEqual(fixture.forge.submit(overheat), { kind: 'replayed', revision: 4, heatingFailure: 'overheat' });
+  assert.equal(fixture.forge.readForge().phase, 'materials');
+  assert.deepEqual(fixture.profile(), { iceCrystalShards: 4, stardustOre: 6, boosterOwned: false, fuelSeconds: 0 });
 });
 
 test('one fuel unit lasts 600 seconds at full and 1,200 at cruise, then returns to glide', () => {
