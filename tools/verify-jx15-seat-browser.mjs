@@ -83,6 +83,7 @@ if (jx15Enabled) {
 
 async function capture(browser, root, variant, temp) {
   const dist = join(temp, variant);
+  console.log(variant + ': build the isolated theater viewer');
   await build(root, dist, addProof);
   const logs = [];
   const { server, url } = await serve(root, dist, createRequire(join(root, 'package.json')), logs);
@@ -122,13 +123,14 @@ async function capture(browser, root, variant, temp) {
       assert.ok(frame.avatarParts > 36);
       const filename = variant + '-' + view + '.png';
       await writeFile(join(outputRoot, filename), bytes);
+      console.log(variant + ': captured ' + view + ' at Y' + frame.position[1]);
       samples.push({ ...frame, filename, sha256: createHash('sha256').update(bytes).digest('hex') });
     }
     assert.deepEqual(errors, []);
     return { samples, errors, presence: logs.filter(row => row.step === 'join' || row.step === 'session') };
   } finally {
-    await context.close();
-    await new Promise(done => server.close(done));
+    try { await context.close(); }
+    finally { await server.close(); }
   }
 }
 
