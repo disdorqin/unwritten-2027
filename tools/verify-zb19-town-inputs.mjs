@@ -26,6 +26,7 @@ function observeViewer(source) {
 if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.1' &&
     new URLSearchParams(location.search).has('zb19TownInputs')) {
   let snowStaged = false, rackStaged = false, frames = 0, updateSeconds = 0;
+  let rackAligned = false;
   let frame: { calls?: number; triangles?: number; frameMs?: number } | undefined;
   let localThrows = 0;
   const events: Record<string, unknown>[] = [];
@@ -91,6 +92,16 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
       walkCurrent.copy(walkRender);
       walkPrevious.copy(walkRender);
       renderer.domElement.focus({ preventScroll: true });
+    },
+    alignRackDownhill() {
+      if (!rackStaged || rackAligned || sledRide.active() || currentAction()?.label !== '乘雪橇' ||
+          Math.hypot(x - 378, n - 303) > .001) throw new Error('Expected the existing rack before the driving section');
+      rackAligned = true;
+      // Keep the rack location; the natural-snow ray used a different heading from the proven downhill start.
+      turnView(160 * Math.PI / 180 - yaw, -pitch);
+      storeWalkView(walkRender);
+      walkCurrent.copy(walkRender);
+      walkPrevious.copy(walkRender);
     },
     sample() {
       aimSnowball();
@@ -384,6 +395,11 @@ async function testControls(browser, dist, touch, evidence) {
       assert.equal(state.riding, false, 'Held interaction incorrectly mounted the sled');
     }
 
+    await page.evaluate(() => window.__zb19TownInputs.alignRackDownhill());
+    trace.drivingApproach = await sample(page);
+    assert.deepEqual([trace.drivingApproach.east, trace.drivingApproach.north, trace.drivingApproach.ground],
+      [trace.afterTargetHold.east, trace.afterTargetHold.north, trace.afterTargetHold.ground]);
+    assert.ok(Math.abs(trace.drivingApproach.yaw - 160 * Math.PI / 180) < 1e-6);
     trace.status = 'short interaction mounts';
     if (touch) await page.locator(actionButton).tap({ timeout });
     else await page.keyboard.press('e');
@@ -422,7 +438,7 @@ async function testControls(browser, dist, touch, evidence) {
 await mkdir(output, { recursive: true });
 const temp = await mkdtemp(path.join(tmpdir(), 'zb19-town-inputs-'));
 const dist = path.join(temp, 'dist');
-const evidence = { scope: 'A composed town and loopback presence, two native fixture landings per device before trusted input',
+const evidence = { scope: 'A composed town and loopback presence, two native fixture landings and fixed downhill rack heading per device before trusted input',
   candidate: {}, controls: {}, status: 'building' };
 let browser;
 try {
