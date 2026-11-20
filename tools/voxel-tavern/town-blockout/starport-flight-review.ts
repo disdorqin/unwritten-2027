@@ -63,7 +63,9 @@ const runway = starportFlightSite.runway;
 const runwaySurvey = surveyAircraftRunway(runway, world);
 const operations = mountStarportFieldReview(scene, fieldWorld, runwaySurvey.heading);
 let engine = createFlightThrust(fuelSecondsPerStardustOre);
-const flight = createAircraftFlight(world, { step: (...input) => engine.step(...input), snapshot: () => engine.snapshot() });
+const flight = createAircraftFlight({ ...world,
+  recoveryAt: from => operations.sites.nearest('skyline-review', from)?.pad,
+}, { step: (...input) => engine.step(...input), snapshot: () => engine.snapshot() });
 const unavailable = () => ['airborne', 'rolling', 'sliding', 'recovering'].includes(flight.snapshot()?.phase ?? '');
 const distance = (a: AircraftPoint, b: AircraftPoint) => Math.hypot(a.east - b.east, a.north - b.north, a.height - b.height);
 let loadout: AircraftLoadout = { snowWingClaimed: true, boosterOwned: true, aircraftAssembled: false };
@@ -176,7 +178,8 @@ function render(now: number) {
     }
   } else walk(dt);
   circuitElapsedMs += dt * clockRate * 1_000;
-  if (dt > 0) operations.route.update({ at: feet, airborne: air?.phase === 'airborne', elapsedMs: circuitElapsedMs });
+  if (dt > 0) operations.route.update({ at: feet, airborne: air?.phase === 'airborne', elapsedMs: circuitElapsedMs,
+    recovered: air?.phase === 'recovering' });
   operations.syncMarkers();
   const bodyY = feet.height + 1.58;
   camera.position.set(feet.east, bodyY, -feet.north);

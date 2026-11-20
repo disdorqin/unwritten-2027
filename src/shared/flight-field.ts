@@ -51,7 +51,7 @@ export function registerFlightEmergencySites(sites: readonly FlightEmergencySite
 }
 
 type CircuitGate = Readonly<{ at: FlightFieldPoint; forwardEast: number; forwardNorth: number }>;
-type CircuitSample = Readonly<{ at: FlightFieldPoint; airborne: boolean; elapsedMs: number }>;
+type CircuitSample = Readonly<{ at: FlightFieldPoint; airborne: boolean; elapsedMs: number; recovered?: boolean }>;
 
 /** Local circuit around the accepted Cloud Deck runway; no world anchor is implied. */
 export function createCloudDeckCircuit(pad: FlightFieldPoint, heading: number) {
@@ -106,7 +106,7 @@ export function createCloudDeckCircuit(pad: FlightFieldPoint, heading: number) {
     },
     update(sample: CircuitSample) {
       if (stage === 'idle' || stage === 'complete' || stage === 'aborted') return snapshot();
-      if (!isFlightFieldPoint(sample.at) || !Number.isFinite(sample.elapsedMs) || sample.elapsedMs < 0 ||
+      if (sample.recovered || !isFlightFieldPoint(sample.at) || !Number.isFinite(sample.elapsedMs) || sample.elapsedMs < 0 ||
           (previous && sample.elapsedMs <= previous.elapsedMs) || flightAirspaceAt(sample.at.height).overCeiling) {
         stage = 'aborted';
         return snapshot();
