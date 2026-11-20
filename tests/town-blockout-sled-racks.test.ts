@@ -7,7 +7,7 @@ import { resolveTownSledRacks, townSledRackMissingSites } from '../tools/voxel-t
 import {
   createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
 } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 
 test('sled rack configurations resolve on the surveyed town, west approach and summit surfaces', () => {
   const terrain = createTerrainGrid();
@@ -17,7 +17,7 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
     if (canEnter(east, north) && !isWater(east, north)) return terrain.heightAt(east, north);
   }, crater.lip);
   let now = Date.UTC(2026, 0, 1);
-  const cloud = createZa22CloudRoute({ now: () => now, nightOpen: () => true, enterOrExit() {}, view() {} });
+  const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
   cloud.action(za22StationApproach)?.run();
   cloud.update(za22StationApproach);
   assert.equal(cloud.riding(), true);
@@ -34,10 +34,9 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
   ]);
   assert.deepEqual(summit.map(({ id, y }) => [id, y]), [['mountain-gate', 347], ['cloud-terrace', 347]]);
   assert.equal(summit[0].x, 295.5);
-  for (const { id, x, n } of town) {
-    if (id !== 'crater-mouth') continue;
-    assert.equal(permitsMeteorCraterStep({ east: 0, north: n }, { east: x, north: n }, false), true);
-  }
+  const craterRack = town.find(({ id }) => id === 'crater-mouth')!;
+  assert.equal(crater.fenceBlocks(craterRack.x, craterRack.n, craterRack.y, .36), false);
+  assert.equal(crater.heightAt(craterRack.x, craterRack.n), craterRack.y);
   assert.deepEqual(townSledRackMissingSites, ['old-home', 'town-hall']);
 });
 

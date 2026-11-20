@@ -27,6 +27,8 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
 import { addTerrainMeshes } from './terrain-mesh';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { createZa22CloudRoute } from './town-za22-cloud-route';
+import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
+import { createZa29GuardDuty } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
 import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
@@ -117,6 +119,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
+import { buildMascotPen } from './landmark-mascot-pen';
 import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createLighthouseSnakeCharm } from './town-zodiac-snake';
@@ -131,7 +134,7 @@ import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-roos
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
-import { craterWestSurvey, mountWestCraterRoad, permitsMeteorCraterStep } from './town-za22-crater-road';
+import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale } from './town-snow-cover';
@@ -224,7 +227,6 @@ const presence = createTownPresence(scene, camera, announceActivity, resetMoveme
     : grid.heightAt(east, north));
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
-  nightOpen: () => presence.northRidgeNightOpen(),
   enterOrExit(terminal, at) {
     presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
     x = at.east;
@@ -241,6 +243,39 @@ const cloudRoute = createZa22CloudRoute({
   },
   view: (title, message) => { activityContext.open(title, message); },
 });
+function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
+  const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
+  return { model, duty };
+}
+type TownGuardPost = ReturnType<typeof connectGuardPost>;
+let mountainGuardPost: TownGuardPost | undefined;
+let craterGuardPost: TownGuardPost | undefined;
+
+function currentGuardDuty() {
+  if (cloudRoute.riding()) return undefined;
+  return (cloudRoute.active() ? mountainGuardPost : craterGuardPost)?.duty;
+}
+
+function updateGuardPosts() {
+  if (cloudRoute.assembly() && !mountainGuardPost) {
+    mountainGuardPost = connectGuardPost('mountain',
+      mountZa29GuardPost(cloudRoute.scene, 'mountain', (east, north) => cloudRoute.surfaceAt(east, north, 0)));
+  } else if (!cloudRoute.assembly() && mountainGuardPost) {
+    mountainGuardPost.model.dispose();
+    mountainGuardPost = undefined;
+  }
+  if (x < 100 && !cloudRoute.active() && !craterGuardPost) {
+    const road = ensureWestCraterRoad();
+    craterGuardPost = connectGuardPost('crater', mountZa29GuardPost(road.group, 'crater', road.heightAt));
+  }
+  const night = presence.getTownNightWindow()?.shift === 'night';
+  const duty = { guardPresent: !night, showNightSigns: night };
+  for (const post of [mountainGuardPost, craterGuardPost]) {
+    post?.model.setDuty(duty);
+    post?.duty.updateDuty(duty.guardPresent);
+  }
+  if (walking && moveAllowed()) currentGuardDuty()?.observeApproach({ east: x, north: n, height: ground });
+}
 const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, townFar);
 const plazaCanvasSize = new Vector2();
 const railway = createTownRailway(grid, presence.serverNow);
@@ -276,8 +311,13 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
   },
   blocked: obstructed,
-  canTraverse: (from, to) => !cloudRoute.active() ||
-    cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius),
+  canTraverse(from, to) {
+    if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius)) return false;
+    return !currentGuardDuty()?.blocksStep(
+      { east: from.x, north: from.n, height: from.y },
+      { east: to.x, north: to.n, height: to.y },
+    );
+  },
   wallBlocked: (sx, nn, y) => {
     if (cloudRoute.active()) return false;
     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
@@ -541,6 +581,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   scene.add(group);
 }
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+place({ id: 'mascot-sheep-pen', origin: [0, 0, 0] }, buildMascotPen(grid.heightAt));
 addNewYearDecor(scene);
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
@@ -2152,6 +2193,8 @@ function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
   if (airHeight !== undefined) return undefined;
+  const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+  if (guardAction) return guardAction;
   if (cloudRoute.active()) {
     if (cloudRoute.riding()) return undefined;
     const cable = cloudRoute.action({ east: x, north: n, height: ground });
@@ -2574,8 +2617,7 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
-    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
-    return !permitsMeteorCraterStep({ east: x, north: n }, { east, north }, presence.northRidgeNightOpen());
+    return ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius);
   }
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
@@ -2619,6 +2661,9 @@ function tryMove(nextX: number, nextN: number) {
   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit);
   const nextHeight = airHeight === undefined ? floor : feet;
   if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
+  if (!homeReturn && currentGuardDuty()?.blocksStep(
+    { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
+  )) return false;
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
@@ -3006,6 +3051,7 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   cloudRoute.update({ east: x, north: n, height: ground }, !sledRide.active());
+  updateGuardPosts();
   if (cloudRoute.active()) {
     renderCloudRoute(frameSeconds);
     return;
