@@ -17,6 +17,7 @@ test('the B-01 exterior and its use foot follow the surveyed world transform on 
   const floorY = rimHeight - meteorCraterDepth;
   const survey = surveyZa31CraterWinch(road);
   assert.ok(survey);
+  assert.deepEqual(road.winch?.survey, survey);
   near(survey.plinth.east, -120.7468);
   near(survey.plinth.north, 180.6050);
   near(survey.axle.height, -23.7127);
@@ -47,9 +48,11 @@ test('the B-01 exterior and its use foot follow the surveyed world transform on 
 
 test('the crank exposes a visual pivot and the casing is clear of the shaft and stone reserve', () => {
   const road = mountWestCraterRoad(540, () => 10.7773);
-  const winch = mountZa31CraterWinch(road);
+  const winch = road.winch;
   assert.ok(winch);
   const { group, survey } = winch;
+  assert.equal(group.parent, road.group);
+  assert.equal(road.group.children.filter(child => child.name === group.name).length, 1);
   const pivot = group.getObjectByName('za31-crater-winch-crank');
   assert.ok(pivot);
   const localX = pivot.localToWorld(new Vector3(1, 0, 0));
@@ -85,4 +88,5 @@ test('the crank exposes a visual pivot and the casing is clear of the shaft and 
   winch.setCrankTurns(NaN);
   near(pivot.rotation.x, -6 * Math.PI);
   assert.ok(road.group.getObjectByName('meteor-crater-sealed-well')?.visible);
+  near(road.heightAt(road.anchor.east, road.anchor.north)!, road.anchor.rimHeight - meteorCraterDepth);
 });
