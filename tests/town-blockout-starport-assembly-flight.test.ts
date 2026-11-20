@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { createAircraftFlight, surveyAircraftRunway, type AircraftPoint } from '../src/shared/aircraft-flight.ts';
 import { createFlightThrust } from '../src/shared/flight-thrust.ts';
-import { starportAssemblyParts } from '../src/shared/starport-assembly.ts';
+import { createStarportAssembly, starportAssemblyParts, type StarportAssemblyState } from '../src/shared/starport-assembly.ts';
 import {
   createOrdinaryTownNightSchedule, createTownNightWindow, townDayMs, townLayerOverlapMs,
 } from '../src/shared/town-night-window.ts';
@@ -194,4 +194,61 @@ test('ZD-03 rack targets reject rear sightlines and remain available from obliqu
     const oblique = { ...anchor, east, north: target.north - .18 };
     assert.equal(aimAt(oblique, target), name);
   }
+});
+
+test('ZD-03 the fitted rack requires its front side at request and commit for installation and ignition', async t => {
+  const anchor = { east: 324, north: 657, height: 347 };
+  const model = mountStarportAssemblySite(new Group(), anchor);
+  t.after(() => model.dispose());
+  const south = { ...anchor, north: 655 };
+  const rear = { ...anchor, north: 658.2 };
+  let feet = rear;
+  let feetAtCommit: AircraftPoint | undefined;
+  let profile: StarportAssemblyState = { revision: 0, carried: starportAssemblyParts, installed: [], ignited: false };
+  const assembly = createStarportAssembly(model.site, {
+    read: () => profile,
+    pose: () => feet,
+    readIgnition: () => ({ keyOne: true, layersOverlap: true }),
+    commit(_id, expected, next, guard) {
+      if (feetAtCommit) feet = feetAtCommit;
+      if (expected !== profile.revision || !guard()) return false;
+      profile = next;
+      return true;
+    },
+  });
+
+  for (const part of starportAssemblyParts) {
+    feet = { ...rear, east: model.site.sockets[part].east };
+    assert.equal(model.blocked(feet, .27, 1.8), false);
+    assert.equal((await assembly.place('pilot', part)).kind, 'out-of-reach');
+  }
+  const wing = model.site.sockets['snow-wing'];
+  feet = { ...anchor, east: 320.5, north: wing.north };
+  assert.equal((await assembly.place('pilot', 'snow-wing')).kind, 'out-of-reach');
+  feet = south;
+  feetAtCommit = rear;
+  assert.equal((await assembly.place('pilot', 'booster')).kind, 'conflict');
+  assert.deepEqual(await assembly.snapshot('pilot'), profile);
+  assert.equal(profile.revision, 0);
+
+  feetAtCommit = undefined;
+  feet = { ...anchor, east: 320.5, north: wing.north - .18 };
+  assert.equal((await assembly.place('pilot', 'snow-wing')).kind, 'placed');
+  for (const part of ['booster', 'navigation-core'] as const) {
+    feet = { ...south, east: model.site.sockets[part].east };
+    assert.equal((await assembly.place('pilot', part)).kind, 'placed');
+  }
+  feet = rear;
+  assert.equal((await assembly.ignite('pilot')).kind, 'out-of-reach');
+  feet = south;
+  feetAtCommit = rear;
+  assert.equal((await assembly.ignite('pilot')).kind, 'conflict');
+  assert.equal(profile.revision, 3);
+  assert.equal(profile.ignited, false);
+  feetAtCommit = undefined;
+  feet = south;
+  assert.equal((await assembly.ignite('pilot')).kind, 'ignited');
+  assert.deepEqual(await assembly.snapshot('pilot'), {
+    revision: 4, carried: [], installed: [...starportAssemblyParts], ignited: true,
+  });
 });

@@ -14,6 +14,8 @@ export type StarportAssemblySite = Readonly<{
   sockets: Readonly<Record<StarportAssemblyPart, AircraftPoint>>;
   ignitionPoint: AircraftPoint;
   reach?: number;
+  /** Optional site geometry beyond radial reach, checked against accepted feet. */
+  approachable?(feet: AircraftPoint, target: AircraftPoint): boolean;
 }>;
 
 export type StarportAssemblyHost = Readonly<{
@@ -62,7 +64,9 @@ export function createStarportAssembly(site: StarportAssemblySite, host: Starpor
 
   function inReach(playerId: string, point: AircraftPoint) {
     const feet = host.pose(playerId);
-    return isFinitePoint(feet) && Math.hypot(feet.east - point.east, feet.north - point.north, feet.height - point.height) <= reach;
+    return isFinitePoint(feet) &&
+      Math.hypot(feet.east - point.east, feet.north - point.north, feet.height - point.height) <= reach &&
+      (site.approachable?.(feet, point) ?? true);
   }
 
   async function snapshot(playerId: string): Promise<StarportAssemblyState | undefined> {
