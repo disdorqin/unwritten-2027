@@ -1,0 +1,353 @@
+diff --git a/src/presence/soul-mayor.ts b/src/presence/soul-mayor.ts
+index fe69281..2377fd0 100644
+--- a/src/presence/soul-mayor.ts
++++ b/src/presence/soul-mayor.ts
+@@ -1,4 +1,4 @@
+-import { soulMayorFloorTolerance, soulMayorTalkRange, type SoulMayorSite, type SoulMayorView } from '../shared/soul-mayor.js';
++import { isSoulMayorStage, soulMayorFloorTolerance, soulMayorTalkRange, type SoulMayorSite, type SoulMayorView } from '../shared/soul-mayor.js';
+ import { readStarStoneLocation, type StarStoneLocation } from '../shared/zodiac-star-stones.js';
+ import type { createZodiacStarStoneAuthority } from './zodiac-star-stone-authority.js';
+
+@@ -13,7 +13,7 @@ type SoulMayorHost = Readonly<{
+   /** Resolve a live connection at the authority. The key identifies the same protagonist after reconnect. */
+   profile(peer: number): Readonly<{ key: string; protagonist: boolean }> | undefined;
+   acceptedPosition(peer: number): StarStoneLocation | undefined;
+-  /** The approved encounter can follow the staging from the arrival platform to the plaza. */
++  /** Only the approved host can stage a greeting on the platform or a later offer in the plaza. */
+   encounterSite(peer: number): SoulMayorSite | undefined;
+   canTalk(peer: number, from: StarStoneLocation, site: SoulMayorSite): boolean;
+   invitations: SoulMayorInvitationStore;
+@@ -27,11 +27,11 @@ export function createSoulMayorAuthority(host: SoulMayorHost) {
+     if (!profile || profile.protagonist !== true || !profile.key) return;
+     const from = readStarStoneLocation(host.acceptedPosition(peer));
+     const configured = host.encounterSite(peer);
+-    if (!from || !configured) return;
++    if (!from || !configured || !isSoulMayorStage(configured.stage)) return;
+     const actor = readStarStoneLocation(configured.actor);
+     const talk = readStarStoneLocation(configured.talk);
+     if (!actor || !talk || actor.layer !== from.layer || talk.layer !== from.layer) return;
+-    return { profile, from, site: { actor, talk } };
++    return { profile, from, site: { stage: configured.stage, actor, talk } };
+   }
+
+   return {
+@@ -48,7 +48,7 @@ export function createSoulMayorAuthority(host: SoulMayorHost) {
+     /** A client sends the action only. Identity, coordinates and progress come from the host. */
+     receiveInvitation(peer: number): InvitationResult | 'denied' {
+       const encounter = visibleEncounter(peer);
+-      if (!encounter) return 'denied';
++      if (!encounter || encounter.site.stage !== 'plaza-invitation') return 'denied';
+       const { profile, from, site } = encounter;
+       const { east, north, height } = site.talk;
+       if (Math.abs(from.height - height) > soulMayorFloorTolerance ||
+diff --git a/src/shared/soul-mayor.ts b/src/shared/soul-mayor.ts
+index 7a3994b..6b5c584 100644
+--- a/src/shared/soul-mayor.ts
++++ b/src/shared/soul-mayor.ts
+@@ -1,6 +1,7 @@
+ import type { StarStoneLocation } from './zodiac-star-stones.js';
+
+-export type SoulMayorSite = Readonly<{ actor: StarStoneLocation; talk: StarStoneLocation }>;
++export type SoulMayorStage = 'station-greeting' | 'plaza-invitation';
++export type SoulMayorSite = Readonly<{ stage: SoulMayorStage; actor: StarStoneLocation; talk: StarStoneLocation }>;
+ export type SoulMayorView = Readonly<{
+   site: SoulMayorSite;
+   invited: boolean;
+@@ -10,5 +11,9 @@ export type SoulMayorView = Readonly<{
+ export const soulMayorTalkRange = .85;
+ export const soulMayorFloorTolerance = .55;
+
++export function isSoulMayorStage(value: unknown): value is SoulMayorStage {
++  return value === 'station-greeting' || value === 'plaza-invitation';
++}
++
+ export const livingMayorQuestion = '问问镇长';
+ export const livingMayorDeflection = '镇长？不太清楚呀，那是老一辈了，那是我们的先祖了';
+diff --git a/tests/server/soul-mayor-transport.test.ts b/tests/server/soul-mayor-transport.test.ts
+index 83aabcd..13762ee 100644
+--- a/tests/server/soul-mayor-transport.test.ts
++++ b/tests/server/soul-mayor-transport.test.ts
+@@ -66,7 +66,7 @@ test('production presence keeps the mayor private and reattaches an invitation o
+   const keysSeen: string[] = [];
+   const positions: Array<{ east: number; north: number; height: number }> = [];
+   let failSave = false;
+-  let encounter = { actor, talk };
++  let encounter = { stage: 'plaza-invitation' as const, actor, talk };
+   const stars = createZodiacStarStoneAuthority({
+     nowMs: () => 0, origin: () => undefined, playerPosition: () => undefined,
+     canPickup: () => false, canDeposit: () => false,
+@@ -107,7 +107,7 @@ test('production presence keeps the mayor private and reattaches an invitation o
+   hero.pose({ ...talk, east: 222 });
+   const offer = await waitForFrame(hero.frames, isView);
+   assert.deepEqual(offer, {
+-    type: 'event', kind: 'soul-mayor-view', view: { site: { actor, talk }, invited: false, ringCount: 0 },
++    type: 'event', kind: 'soul-mayor-view', view: { site: encounter, invited: false, ringCount: 0 },
+   });
+   assert.ok(!hero.frames.some(isResult(1)), 'an accepted presence position is required');
+   hero.send(packet(2));
+@@ -143,7 +143,7 @@ test('production presence keeps the mayor private and reattaches an invitation o
+   resumed.pose(talk);
+   const restored = await waitForFrame(resumed.frames, isView);
+   assert.deepEqual(restored.view, updated.view);
+-  encounter = { actor: { ...actor, layer: 'test-plaza' }, talk: { ...talk, layer: 'test-plaza' } };
++  encounter = { ...encounter, actor: { ...actor, layer: 'test-plaza' }, talk: { ...talk, layer: 'test-plaza' } };
+   assert.equal((await waitForFrame(resumed.frames, frame => isView(frame) && frame.view === null)).view, null);
+   assert.ok(!guest.frames.some(isMayor));
+   assert.deepEqual(keysSeen, [trustedKey]);
+diff --git a/tests/server/soul-mayor.test.ts b/tests/server/soul-mayor.test.ts
+index d8b5949..28fb522 100644
+--- a/tests/server/soul-mayor.test.ts
++++ b/tests/server/soul-mayor.test.ts
+@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { test } from 'node:test';
+ import { promisify } from 'node:util';
++import type { SoulMayorSite } from '../../src/shared/soul-mayor.ts';
+ import { createSoulMayorAuthority } from '../../src/presence/soul-mayor.ts';
+ import { createSoulMayorInvitationFileStore } from '../../src/presence/soul-mayor-invitations.ts';
+ import { createZodiacStarStoneAuthority } from '../../src/presence/zodiac-star-stone-authority.ts';
+@@ -58,7 +59,7 @@ test('authority limits delivery to a trusted protagonist on the approved layer a
+     [5, { ...talk, east: 221 }], [6, talk], [7, talk], [8, talk],
+   ]);
+   const invitations = new Set<string>();
+-  let encounter: { actor: typeof actor; talk: typeof talk } | undefined = { actor, talk };
++  let encounter: SoulMayorSite | undefined = { stage: 'station-greeting', actor, talk };
+   let failSave = false;
+   let writes = 0;
+   const stars = createZodiacStarStoneAuthority({
+@@ -88,10 +89,14 @@ test('authority limits delivery to a trusted protagonist on the approved layer a
+   assert.equal(mayor.view(2), undefined);
+   assert.equal(mayor.view(3), undefined);
+   assert.equal(mayor.view(7), undefined);
++  assert.deepEqual(mayor.view(1), { site: encounter, invited: false, ringCount: 0 });
++  assert.equal(mayor.receiveInvitation(1), 'denied', 'the station greeting never offers the plaza invitation');
++  assert.equal(writes, 0);
++  encounter = { stage: 'plaza-invitation', actor, talk };
+   for (const peer of [-1, 2, 3, 4, 5, 7, 999]) assert.equal(mayor.receiveInvitation(peer), 'denied');
+   positions.set(5, talk);
+   assert.equal(mayor.receiveInvitation(5), 'denied');
+-  assert.deepEqual(mayor.view(1), { site: { actor, talk }, invited: false, ringCount: 0 });
++  assert.deepEqual(mayor.view(1), { site: encounter, invited: false, ringCount: 0 });
+   assert.equal(stars.pickup(1, 'ox', 0), true, 'choosing not to accept never gates collection');
+   assert.equal(stars.deposit(1, 'ox', 1)?.ringCount, 1);
+   assert.equal(mayor.view(1)?.ringCount, 1);
+@@ -105,7 +110,7 @@ test('authority limits delivery to a trusted protagonist on the approved layer a
+   assert.equal(bind().view(8)?.invited, true, 'read back the committed receipt on a new connection after restart');
+   assert.equal(writes, 1);
+   const plaza = { ...talk, layer: 'test-plaza' };
+-  encounter = { actor: plaza, talk: plaza };
++  encounter = { stage: 'plaza-invitation', actor: plaza, talk: plaza };
+   assert.equal(mayor.view(8), undefined, 'changing the encounter location revokes the old platform view');
+   positions.set(8, plaza);
+   assert.equal(mayor.view(8)?.invited, true);
+diff --git a/tests/town-blockout-soul-mayor-stage.test.ts b/tests/town-blockout-soul-mayor-stage.test.ts
+new file mode 100644
+index 0000000..f75057e
+--- /dev/null
++++ b/tests/town-blockout-soul-mayor-stage.test.ts
+@@ -0,0 +1,37 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import type { SoulMayorView } from '../src/shared/soul-mayor';
++import { createTownPresenceSoulMayor } from '../tools/voxel-tavern/town-blockout/town-presence-soul-mayor';
++
++const actor = { layer: 'test-town', east: 10, north: 12, height: 2 };
++const talk = { ...actor, north: 11 };
++const greeting: SoulMayorView = { site: { stage: 'station-greeting', actor, talk }, invited: false, ringCount: 0 };
++const offer: SoulMayorView = { ...greeting, site: { ...greeting.site, stage: 'plaza-invitation' } };
++
++test('station greeting views remain visible and unsupported stages fail closed without sending an invitation', async () => {
++  const sent: string[] = [];
++  const mayor = createTownPresenceSoulMayor(event => { sent.push(event); return true; });
++  mayor.acceptView(greeting);
++  assert.deepEqual(mayor.view(), greeting);
++  await mayor.receiveInvitation();
++  mayor.acceptView({ ...greeting, site: { actor, talk } });
++  assert.equal(mayor.view(), undefined);
++  mayor.acceptView({ ...greeting, site: { ...greeting.site, stage: 'other-scene' } });
++  assert.equal(mayor.view(), undefined);
++  await mayor.receiveInvitation();
++  assert.deepEqual(sent, []);
++});
++
++test('switching an open plaza offer to a greeting settles a pending action and disables new requests', async () => {
++  const sent: string[] = [];
++  const mayor = createTownPresenceSoulMayor(event => { sent.push(event); return true; });
++  mayor.acceptView(offer);
++  const pending = mayor.receiveInvitation();
++  mayor.acceptView(greeting);
++  await pending;
++  await mayor.receiveInvitation();
++  assert.deepEqual(mayor.view(), greeting);
++  assert.deepEqual(sent.map(message => JSON.parse(message)), [
++    { type: 'event', kind: 'soul-mayor-accept-invitation', requestId: 1 },
++  ]);
++});
+diff --git a/tests/town-blockout-soul-mayor-staging.test.ts b/tests/town-blockout-soul-mayor-staging.test.ts
+index c8beda0..a3bb420 100644
+--- a/tests/town-blockout-soul-mayor-staging.test.ts
++++ b/tests/town-blockout-soul-mayor-staging.test.ts
+@@ -7,7 +7,7 @@ import { soulMayorCapacity, soulMayorWalkDetour } from '../tools/voxel-tavern/to
+
+ const actor = { layer: 'town', east: 264, north: 196.4, height: 12 };
+ const offer: SoulMayorView = {
+-  site: { actor, talk: { ...actor, north: 197.25 } }, invited: false, ringCount: 0,
++  site: { stage: 'station-greeting', actor, talk: { ...actor, north: 197.25 } }, invited: false, ringCount: 0,
+ };
+
+ test('a local living NPC bends around the approved same-floor point and keeps its authored route ends', () => {
+diff --git a/tests/town-blockout-soul-mayor-transport.test.ts b/tests/town-blockout-soul-mayor-transport.test.ts
+index 2fce7b8..811db5f 100644
+--- a/tests/town-blockout-soul-mayor-transport.test.ts
++++ b/tests/town-blockout-soul-mayor-transport.test.ts
+@@ -11,7 +11,7 @@ import {
+
+ const actor = { layer: 'town', east: 220, north: 188, height: 12 };
+ const talk = { ...actor, north: 187 };
+-const offer = { site: { actor, talk }, invited: false, ringCount: 11 };
++const offer = { site: { stage: 'plaza-invitation', actor, talk }, invited: false, ringCount: 11 } as const;
+
+ test('domain switching preserves weather, night and wire transforms while clearing private mayor state', async t => {
+   const styleHook = registerHooks({
+@@ -141,7 +141,11 @@ test('a private view is validated without deriving visibility from a local ident
+   assert.deepEqual(sent, []);
+   mayor.acceptView({ ...offer, ringCount: 13 });
+   assert.equal(mayor.view(), undefined);
+-  mayor.acceptView({ ...offer, site: { actor, talk: { ...talk, layer: 'shared-home' } } });
++  mayor.acceptView({ ...offer, site: { ...offer.site, talk: { ...talk, layer: 'shared-home' } } });
++  assert.equal(mayor.view(), undefined);
++  mayor.acceptView({ ...offer, site: { actor, talk } });
++  assert.equal(mayor.view(), undefined, 'unclassified actor views fail closed');
++  mayor.acceptView({ ...offer, site: { ...offer.site, stage: 'other-scene' } });
+   assert.equal(mayor.view(), undefined);
+   mayor.acceptView(offer);
+   assert.deepEqual(mayor.view(), offer);
+diff --git a/tests/town-blockout-soul-mayor.test.ts b/tests/town-blockout-soul-mayor.test.ts
+index d46f108..5c32af0 100644
+--- a/tests/town-blockout-soul-mayor.test.ts
++++ b/tests/town-blockout-soul-mayor.test.ts
+@@ -27,14 +27,16 @@ test('only an authorized mayor view adds an NPC batch tail and a voluntary invit
+
+   const actor = { layer: 'test-plaza', east: 220, north: 188, height: 12 };
+   const talk = { ...actor, north: 187.1 };
+-  const offer = { site: { actor, talk }, invited: false, ringCount: 11 };
++  const offer: SoulMayorView = { site: { stage: 'plaza-invitation', actor, talk }, invited: false, ringCount: 11 };
++  const greeting: SoulMayorView = { ...offer, site: { ...offer.site, stage: 'station-greeting' } };
+   let state: SoulMayorView | undefined;
+   let requests = 0;
++  let turns = 0;
+   const scene = new Scene();
+   const panel = new Element();
+   const npc = createTownNpcActivity({
+     scene, open(title, description) { assert.equal(title, '镇长'); assert.equal(description.trim(), ''); return panel as unknown as HTMLElement; },
+-    announce() { assert.fail('the invitation has no forced guide'); }, face() {}, sit() {},
++    announce() { assert.fail('the invitation has no forced guide'); }, face() { turns++; }, sit() {},
+   }, () => 12, undefined, undefined, undefined, undefined,
+     { now: () => 1_000, groundAt: () => 12, visible: () => true },
+     {
+@@ -50,6 +52,12 @@ test('only an authorized mayor view adds an NPC batch tail and a voluntary invit
+   npc.update?.(0);
+   const livingAndMascot = batch.count;
+   assert.equal(atMayor(), undefined);
++  state = greeting;
++  npc.update?.(0);
++  assert.equal(batch.count, livingAndMascot + soulMayorCapacity, 'the station greeting still renders the actor');
++  assert.equal(atMayor(), undefined);
++  assert.equal(turns, 0);
++  assert.equal(panel.children.length, 0);
+   state = offer;
+   npc.update?.(0);
+   assert.equal(batch.count, livingAndMascot + soulMayorCapacity);
+@@ -70,6 +78,11 @@ test('only an authorized mayor view adds an NPC batch tail and a voluntary invit
+   assert.equal(requests, 1);
+   assert.equal(heading.textContent, '星石收集令 · 11/12');
+   assert.equal(button.hidden, true);
++  assert.equal(turns, 1);
++  state = greeting;
++  npc.update?.(0);
++  assert.equal(closed, true, 'a private stage change closes the plaza offer even at the same coordinates');
++  assert.equal(atMayor(), undefined);
+
+   npc.registerResident('樊樵', () => ({ actor: [234, 188, 12], talk: [234, 187, 12] }));
+   npc.update?.(0);
+diff --git a/tools/voxel-tavern/town-blockout/town-presence-soul-mayor.ts b/tools/voxel-tavern/town-blockout/town-presence-soul-mayor.ts
+index ad32aee..b663b99 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence-soul-mayor.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence-soul-mayor.ts
+@@ -1,4 +1,4 @@
+-import type { SoulMayorView } from '../../../src/shared/soul-mayor.js';
++import { isSoulMayorStage, type SoulMayorView } from '../../../src/shared/soul-mayor.js';
+ import { readStarStoneLocation } from '../../../src/shared/zodiac-star-stones.js';
+
+ const invitationKind = 'soul-mayor-accept-invitation';
+@@ -9,11 +9,11 @@ function readView(raw: unknown): SoulMayorView | undefined {
+   const { site, invited, ringCount } = raw as Record<string, unknown>;
+   if (!site || typeof site !== 'object' || typeof invited !== 'boolean' ||
+       typeof ringCount !== 'number' || !Number.isInteger(ringCount) || ringCount < 0 || ringCount > 12) return;
+-  const { actor: rawActor, talk: rawTalk } = site as Record<string, unknown>;
++  const { stage, actor: rawActor, talk: rawTalk } = site as Record<string, unknown>;
+   const actor = readStarStoneLocation(rawActor);
+   const talk = readStarStoneLocation(rawTalk);
+-  if (!actor || !talk || actor.layer !== talk.layer) return;
+-  return Object.freeze({ site: Object.freeze({ actor: Object.freeze(actor), talk: Object.freeze(talk) }), invited, ringCount });
++  if (!isSoulMayorStage(stage) || !actor || !talk || actor.layer !== talk.layer) return;
++  return Object.freeze({ site: Object.freeze({ stage, actor: Object.freeze(actor), talk: Object.freeze(talk) }), invited, ringCount });
+ }
+
+ export function isSoulMayorInvitationRequest(event: string | Uint8Array) {
+@@ -37,7 +37,7 @@ export function createTownPresenceSoulMayor(send: (event: string) => boolean) {
+   return {
+     view: () => current,
+     receiveInvitation(): Promise<void> {
+-      if (!current || current.invited || pending) return Promise.resolve();
++      if (current?.site.stage !== 'plaza-invitation' || current.invited || pending) return Promise.resolve();
+       const requestId = ++lastRequest;
+       return new Promise(resolve => {
+         const timer = setTimeout(finishPending, invitationTimeoutMs);
+@@ -47,7 +47,7 @@ export function createTownPresenceSoulMayor(send: (event: string) => boolean) {
+     },
+     acceptView(raw: unknown) {
+       current = readView(raw);
+-      if (!current) finishPending();
++      if (current?.site.stage !== 'plaza-invitation') finishPending();
+     },
+     acceptResult(requestId: unknown, outcome: unknown) {
+       if (!pending || pending.requestId !== requestId ||
+diff --git a/tools/voxel-tavern/town-blockout/town-soul-mayor.ts b/tools/voxel-tavern/town-blockout/town-soul-mayor.ts
+index 7a4908a..51853d0 100644
+--- a/tools/voxel-tavern/town-blockout/town-soul-mayor.ts
++++ b/tools/voxel-tavern/town-blockout/town-soul-mayor.ts
+@@ -96,7 +96,7 @@ export function createSoulMayorActivity(
+
+   function syncPanel(view?: SoulMayorView) {
+     if (!heading?.isConnected) return;
+-    if (!view || !samePoint(openAt, view.site.talk)) {
++    if (view?.site.stage !== 'plaza-invitation' || !samePoint(openAt, view.site.talk)) {
+       heading.closest('dialog')?.close();
+       heading = undefined;
+       receive = undefined;
+@@ -112,10 +112,13 @@ export function createSoulMayorActivity(
+
+   const spot: TownActivitySpot = {
+     x: 0, n: 0, ground: 0, range: soulMayorTalkRange, label: '与镇长交谈',
+-    available: () => !!talkBefore && samePoint(talkBefore, host.view()?.site.talk),
++    available() {
++      const site = host.view()?.site;
++      return site?.stage === 'plaza-invitation' && samePoint(talkBefore, site.talk);
++    },
+     run() {
+       const view = host.view();
+-      if (!view || !samePoint(talkBefore, view.site.talk)) return;
++      if (view?.site.stage !== 'plaza-invitation' || !samePoint(talkBefore, view.site.talk)) return;
+       const { actor, talk } = view.site;
+       context.face(actor.east, actor.north, actor.height + 1.61);
+       const panel = context.open('镇长', ' ');
+@@ -126,7 +129,7 @@ export function createSoulMayorActivity(
+       receive.textContent = '接受邀请';
+       receive.onclick = async () => {
+         const current = host.view();
+-        if (pending || !current || current.invited || !samePoint(openAt, current.site.talk)) return;
++        if (pending || current?.site.stage !== 'plaza-invitation' || current.invited || !samePoint(openAt, current.site.talk)) return;
+         pending = true;
+         syncPanel(current);
+         try { await host.receiveInvitation(); }

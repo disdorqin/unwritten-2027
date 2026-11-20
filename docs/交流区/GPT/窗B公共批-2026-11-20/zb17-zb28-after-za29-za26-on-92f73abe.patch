@@ -1461,7 +1461,7 @@ index f0c3cce3..28ef5540 100644
 
    return {
 diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
-index 72413580..c30e956f 100644
+index cdf74a99..3a79bb3f 100644
 --- a/tools/voxel-tavern/town-blockout/viewer.ts
 +++ b/tools/voxel-tavern/town-blockout/viewer.ts
 @@ -28,7 +28,7 @@ import { addTerrainMeshes } from './terrain-mesh';
@@ -1491,7 +1491,7 @@ index 72413580..c30e956f 100644
  import { createSledAnimation } from './sled-animation';
  import { createSledDrift } from './sled-drift';
  import { createGrandPrix } from './town-grand-prix';
-@@ -297,8 +299,7 @@ function updateGuardPosts() {
+@@ -268,8 +270,7 @@ function updateGuardPosts() {
      const road = ensureWestCraterRoad();
      craterGuardPost = connectGuardPost('crater', mountZa29GuardPost(road.group, 'crater', road.heightAt));
    }
@@ -1501,7 +1501,7 @@ index 72413580..c30e956f 100644
    for (const post of [mountainGuardPost, craterGuardPost]) {
      post?.model.setDuty(duty);
      post?.duty.updateDuty(duty.guardPresent);
-@@ -321,7 +322,7 @@ const sledAnimation = createSledAnimation((east, north) => {
+@@ -292,7 +293,7 @@ const sledAnimation = createSledAnimation((east, north) => {
    return Number.isFinite(height) ? height : ground;
  });
  type SledRackVisuals = ReturnType<typeof createTownSledVisuals>;
@@ -1510,7 +1510,7 @@ index 72413580..c30e956f 100644
  let townSledRacks: SledRackState;
  let summitSledRacks: SledRackState | undefined;
  let setMountedRackVehicle: ((spot: { x: number; n: number; y: number; yaw: number }) => void) | undefined;
-@@ -410,15 +411,17 @@ function createSledRacks(domain: 'town' | 'summit'): SledRackState {
+@@ -381,15 +382,17 @@ function createSledRacks(domain: 'town' | 'summit'): SledRackState {
    };
    const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
    const visuals = createTownSledVisuals(domain === 'summit' ? cloudRoute.scene : scene, racks);
@@ -1529,7 +1529,7 @@ index 72413580..c30e956f 100644
        run() {
          if (sledRide.active()) return;
          ride ??= createSledRide(sledWorld);
-@@ -1078,6 +1081,13 @@ panel => openTavernDice(panel, () => {
+@@ -1048,6 +1051,13 @@ panel => openTavernDice(panel, () => {
    now: presence.serverNow,
    groundAt: mascotOutdoorGround,
    follow: () => presence.ownerFollowsMascot() && walking ? ownedMascot : presence.sampleRemoteMascot(),
@@ -1543,7 +1543,7 @@ index 72413580..c30e956f 100644
    visible(east, north, feet) {
      if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return false;
      mascotBounds.center.set(east, feet + .32, -north);
-@@ -1896,7 +1906,7 @@ function snowballJumped() {
+@@ -1866,7 +1876,7 @@ function snowballJumped() {
      announceActivity('头上的雪抖掉了');
    }
  }
@@ -1552,7 +1552,7 @@ index 72413580..c30e956f 100644
    const inPlaza = Math.abs(x - 223) < 30 && Math.abs(n - 186) < 24;
    const active = moveAllowed();
    const outdoor = active && !roofed(x, n, airHeight ?? ground);
-@@ -1930,7 +1940,9 @@ function updateSnowFight(dt: number) {
+@@ -1900,7 +1910,9 @@ function updateSnowFight(dt: number) {
    snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
    const wallPreview = canUseSnow() ? touchWalk.active() ? snowControls.touchWallPreview() : aimedSnowWall() : undefined;
    teamFight.update(dt, wallPreview);
@@ -1563,7 +1563,7 @@ index 72413580..c30e956f 100644
    snowControls.update(dt);
    if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
    if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
-@@ -1993,6 +2005,14 @@ activitySpots.push(...longHallRelay.spots);
+@@ -1963,6 +1975,14 @@ activitySpots.push(...longHallRelay.spots);
  passportButton.onclick = () => {
    passport.open();
    showStampCount();
@@ -1578,7 +1578,7 @@ index 72413580..c30e956f 100644
  };
 
  const stampGeometry = new BoxGeometry();
-@@ -2083,6 +2103,18 @@ activitySpots.push(
+@@ -2053,6 +2073,18 @@ activitySpots.push(
  const [bellX, bellDeck, bellZ] = towerStops.bell;
  const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
  const bellMotion = tower.userData.bellMotion as TowerBellMotion;
@@ -1597,7 +1597,7 @@ index 72413580..c30e956f 100644
  let bellReservedForCeremony = false;
  const towerBellSpot = localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
    if (bellReservedForCeremony) {
-@@ -2224,11 +2256,14 @@ function currentAction() {
+@@ -2194,11 +2226,14 @@ function currentAction() {
    if (sledRide.active()) return { label: '下橇', run: leaveSled };
    if (airHeight !== undefined) return undefined;
    const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
@@ -1614,7 +1614,7 @@ index 72413580..c30e956f 100644
    }
    if (boardingGround) {
      if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
-@@ -2245,6 +2280,9 @@ function currentAction() {
+@@ -2215,6 +2250,9 @@ function currentAction() {
    }
    if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
    if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
@@ -1624,7 +1624,7 @@ index 72413580..c30e956f 100644
    const local = museumPosition();
    const museumStop = museumVisit.near(local.x, local.y, local.z);
    if (museumStop) return museumStop;
-@@ -3420,8 +3458,16 @@ renderer.setAnimationLoop(now => {
+@@ -3390,8 +3428,16 @@ renderer.setAnimationLoop(now => {
      townLights.setCeremonyBand(ceremonyState.phase === 'afterglow' ? 3 : -1);
    }
    if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
