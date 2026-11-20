@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace'].includes(segment) && evidencePath,
+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket'].includes(segment) && evidencePath,
   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));

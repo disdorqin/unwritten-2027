@@ -8,7 +8,7 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
 const url = new URL('/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace'].includes(segment), segment);
+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -16,6 +16,12 @@ const station = [
   [350, 249], [382, 220], [398, 207], [410, 207], [427, 214], [445, 221], [456, 222],
   [453, 254], [473, 276], [506, 286], [526, 312], [526, 317.15], [536.8, 317.15],
 ];
+const ticketWindow = [516.1, 329.14];
+const stationTicket = [...station.slice(0, -2), [526, 313], [526, 329.14], ticketWindow];
+const ticketTitle = '永不启程的车票';
+const catalogueTitle = '等一班不来的车';
+const ticketClaim = `E · 领取${ticketTitle}`;
+const ticketCatalogue = `E · 查看图鉴 · ${catalogueTitle}`;
 const westShore = [
   [192, 180], [161, 181], [151, 156], [127, 140], [108, 114], [85, 131], [77, 164], [1, 159],
 ];
@@ -98,6 +104,11 @@ async function openTown(name) {
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
+  await enterTown(page, evidence, 'spawn');
+  return { page, evidence };
+}
+
+async function enterTown(page, evidence, label, poseCursor = 0) {
   assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
   await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
   await page.waitForFunction(pattern => {
@@ -114,10 +125,11 @@ async function openTown(name) {
   assert.ok(Math.hypot(start.east - spawn[0], start.north - spawn[1]) < .3, JSON.stringify(start));
   assert.ok(Math.abs(start.height - 12) < .3, JSON.stringify(start));
   await page.locator('#scene canvas').click({ position: { x: Math.round(width * .35), y: dragY } });
-  await waitForWire(page, evidence);
-  evidence.checkpoints.push({ label: 'spawn', ...start, wire: evidence.poses.at(-1) });
-  console.log(JSON.stringify({ phase: 'spawn', east: start.east, north: start.north, y: start.height }));
-  return { page, evidence };
+  const wire = await waitForWire(page, evidence, pose => evidence.poses.length > poseCursor &&
+    pose.area === 'town' && Math.hypot(pose.east - spawn[0], pose.north - spawn[1]) < .3 &&
+    Math.abs(pose.height - 12) < .3);
+  evidence.checkpoints.push({ label, ...start, wire });
+  console.log(JSON.stringify({ phase: label, east: start.east, north: start.north, y: start.height }));
 }
 
 async function readPose(page) {
@@ -236,6 +248,41 @@ async function snapshot(page, evidence, label) {
   evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
 }
 
+async function showTicketCard(page, evidence, actionLabel, title, description, label) {
+  const prompt = page.getByRole('button', { name: actionLabel, exact: true }).and(page.locator('#world-action'));
+  await prompt.waitFor({ timeout: 20_000 });
+  evidence.checkpoints.push({ label: `${label}-prompt`, ...await readPose(page), wire: evidence.poses.at(-1) });
+  await page.keyboard.press('e');
+  const dialog = page.locator('#place-card[open]');
+  await dialog.getByRole('heading', { name: title, exact: true }).waitFor({ timeout: 12_000 });
+  await dialog.getByText(description, { exact: true }).waitFor({ timeout: 12_000 });
+  await snapshot(page, evidence, label);
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden', timeout: 12_000 });
+}
+
+async function walkToTicketWindow(page, evidence, prefix) {
+  await follow(page, evidence, stationTicket, prefix);
+  return waitForWire(page, evidence, pose => pose?.area === 'town' &&
+    Math.hypot(pose.east - ticketWindow[0], pose.north - ticketWindow[1]) <= .5 &&
+    Math.abs(pose.height - 26.14) <= .08);
+}
+
+async function checkStationTicket() {
+  const { page, evidence } = await openTown('station-ticket');
+  evidence.ticketWindow = { target: ticketWindow, firstVisit: await walkToTicketWindow(page, evidence, 'ticket-approach') };
+  await showTicketCard(page, evidence, ticketClaim, ticketTitle,
+    `已收进扩展收集页 · ${catalogueTitle}`, 'station-ticket-collected');
+  await showTicketCard(page, evidence, ticketCatalogue, catalogueTitle, ticketTitle, 'station-ticket-catalogue');
+
+  const poseCursor = evidence.poses.length;
+  const refreshed = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 });
+  assert.equal(refreshed?.status(), 200);
+  await enterTown(page, evidence, 'station-ticket-reloaded-spawn', poseCursor);
+  evidence.ticketWindow.afterReload = await walkToTicketWindow(page, evidence, 'ticket-reloaded-approach');
+  await showTicketCard(page, evidence, ticketCatalogue, catalogueTitle, ticketTitle, 'station-ticket-persisted');
+}
+
 async function checkPalacePoint(page, evidence, id, label, point, fixture) {
   const lane = [point[0], 72];
   await walkTo(page, evidence, lane, `palace-${id}-aisle`);
@@ -276,7 +323,7 @@ try {
     args: graphicsArgs,
   });
   report.browser = browser.version();
-  if (segment !== 'crater' && segment !== 'palace') {
+  if (['station', 'cloud', 'gate', 'all'].includes(segment)) {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
@@ -320,6 +367,7 @@ try {
       }
     }
   }
+  if (segment === 'station-ticket') await checkStationTicket();
   if (segment === 'palace') {
     const { page, evidence } = await openTown('palace-geometry');
     evidence.palacePoints = [];
@@ -364,7 +412,9 @@ try {
 } finally {
   measuring = false;
   report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
-  await writeFile(join(output, segment === 'palace' ? 'za18-live-walk.json' : 'za22-live-walk.json'),
+  const filename = { palace: 'za18-live-walk.json', 'station-ticket': 'za21-live-walk.json' }[segment] ??
+    'za22-live-walk.json';
+  await writeFile(join(output, filename),
     `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
     frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
