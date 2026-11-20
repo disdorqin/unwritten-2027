@@ -18,11 +18,16 @@ const gradedMarketCounters = new Set([5, 6, 7, 13, 14, 15, 16].map(index => `mar
 const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(stall => {
   const [x, z] = marketStallLocalPoint(stall, 0, 2.6);
   const [nearX, nearZ] = marketStallLocalPoint(stall, 1.05, 2.6);
+  const northRadius = Math.abs(nearZ - z) + 1;
+  const shifted = stall.id === 'market-stall-5';
   return {
     east: marketEast + x,
     north: marketNorth - z,
     eastRadius: Math.abs(nearX - x) + 1,
-    northRadius: Math.abs(nearZ - z) + 1,
+    // Keep stall 5's old north edge and stop the new south shoulder above N104.
+    northRadius: northRadius + (shifted ? 1.25 : 0),
+    southRadius: shifted ? .75 : northRadius,
+    southBlendScale: shifted ? 2 : 1,
     level: stall.counterGround,
   };
 });
@@ -138,7 +143,8 @@ function sample(x: number, n: number) {
   elevation = mix(elevation, memorialLevel, 1 - fade(apronDistance / 5));
   for (const apron of marketCounterAprons) {
     const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
-    const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
+    const dn = Math.max(0, (apron.north - n - apron.southRadius) * apron.southBlendScale,
+      n - apron.north - apron.northRadius);
     const distance = Math.hypot(dx, dn);
     if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
   }

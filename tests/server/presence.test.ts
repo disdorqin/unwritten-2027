@@ -13,7 +13,7 @@ import {
   type SnowballRelayEvent,
 } from "../../src/presence/snowball-events.js";
 import { testFireworksAnnouncement, testFireworksDwellMs, testFireworksLeadMs, testFireworksNoticeMs } from "../../src/presence/test-fireworks.js";
-import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, plazaPhotoStand, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
+import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, plazaPhotoStand, plazaPhotoTierRise, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
@@ -459,7 +459,7 @@ test("the existing photo event admits 48 live WebSocket players at the new physi
     const row = Math.floor(index / 12);
     const east = Math.round((plazaPhotoStand.centreEast + (index % 12 - 5.5) * 1.28) * 100);
     const north = Math.round((plazaPhotoStand.south + (row + .5) * plazaPhotoStand.run) * 100);
-    const height = Math.round((plazaPhotoStand.base + (row + 1) * plazaPhotoStand.rise) * 100);
+    const height = Math.round((plazaPhotoStand.base + plazaPhotoTierRise(row)) * 100);
     client.socket.send(encodePose({ ...pose, east, north, height, sequence: 1 }));
     client.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
     return { id: client.id, name: client.name, east: east / 100, north: north / 100, height: height / 100 };
