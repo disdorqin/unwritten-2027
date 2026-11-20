@@ -25,13 +25,14 @@ function observeViewer(source) {
   return wallRules + source.replace(anchor, `
 if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.1' &&
     new URLSearchParams(location.search).has('zb19TownInputs')) {
-  let snowStaged = false, rackStaged = false, frames = 0;
-  let frame: { calls?: number; triangles?: number } | undefined;
+  let snowStaged = false, rackStaged = false, frames = 0, updateSeconds = 0;
+  let frame: { calls?: number; triangles?: number; frameMs?: number } | undefined;
   let localThrows = 0;
   const events: Record<string, unknown>[] = [];
   renderer.domElement.addEventListener('town-frame-profile', event => {
     frame = (event as CustomEvent).detail;
     frames++;
+    updateSeconds += Math.min(.25, Math.max(0, frame?.frameMs ?? 0) / 1_000);
   });
   renderer.domElement.addEventListener('town-snowball', event => {
     const { type, shotBy } = (event as CustomEvent).detail;
@@ -45,6 +46,7 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
       if (['KeyE', 'KeyB', 'KeyW', 'Space'].includes(key ?? '') || element) events.push({
         kind, key, id: element?.id || element?.tagName,
         pointer: event instanceof PointerEvent ? event.pointerType : undefined,
+        repeat: event instanceof KeyboardEvent ? event.repeat : undefined,
         trusted: event.isTrusted,
       });
     }, true);
@@ -100,7 +102,7 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
         const button = controls(id);
         return !!button && button.getClientRects().length > 0;
       };
-      return { walking, canMove: moveAllowed(), east: x, north: n, ground, yaw, pitch, frame, frames,
+      return { walking, canMove: moveAllowed(), east: x, north: n, ground, yaw, pitch, frame, frames, updateSeconds,
         stock: snowballs.getState().ammo, buildMode: teamFight.buildMode(), localThrows,
         wall: { gx, gy, layers: teamFight.wallColumnAt(gx, gy)?.height ?? 0,
           freeSiteRejection: zb19FreeSite(zb19CellCentre(gx), zb19CellCentre(gy)) ?? null,
@@ -111,6 +113,8 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
         aimedAtSnow, aimedAtSouthSupply: aimedAtSnow && gatherCheck.supply?.id === 'south',
         action: currentAction()?.label ?? null,
         riding: sledRide.active(), recovering: sledRide.recovering(), brake: sledRide.braking(), speed: sledRide.speed(),
+        airborne: airHeight !== undefined || sledRide.airborne(),
+        parked: sledRide.parked() ?? null,
         ui: { action: controls('world-action')?.textContent,
           primary: visible('snowball-primary'), wall: visible('snowfight-build'),
           jump: visible('touch-jump'), sprint: visible('touch-sprint'), brake: visible('touch-sled-brake'),
@@ -226,6 +230,29 @@ async function checkBrake(context, page, touch, trace) {
     } else {
       for (const key of ['KeyW', 'Space']) assert.ok(trace.braking.events.some(event =>
         event.kind === 'keydown' && event.key === key && event.trusted));
+      await page.keyboard.up('w');
+      trace.status = 'dismount with brake held';
+      await page.keyboard.press('e');
+      trace.brakedDismount = await observe(page, () => {
+        const state = window.__zb19TownInputs.sample();
+        return !state.riding && !state.brake && state.parked && state.action === '重新上橇' && state;
+      });
+      trace.status = 'remount before releasing Space';
+      await page.keyboard.press('e');
+      const remounted = await observe(page, () => {
+        const state = window.__zb19TownInputs.sample();
+        return state.riding && !state.parked && !state.brake && !state.airborne && state;
+      });
+      await page.keyboard.down('Space');
+      trace.repeatedSpace = await observe(page, start => {
+        const state = window.__zb19TownInputs.sample();
+        const repeated = state.events.slice(start.events).some(event =>
+          event.key === 'Space' && event.kind === 'keydown' && event.repeat && event.trusted);
+        return state.frames >= start.frames + 4 && repeated && state;
+      }, { events: remounted.events.length, frames: remounted.frames });
+      assert.equal(trace.repeatedSpace.riding, true);
+      assert.equal(trace.repeatedSpace.brake, false, 'Held Space repeated into the newly mounted sled');
+      assert.equal(trace.repeatedSpace.airborne, false, 'Riding Space should not jump');
     }
   } finally {
     if (touch) await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -261,7 +288,6 @@ async function testControls(browser, dist, touch, evidence) {
     const response = await page.goto(`${url}/town-blockout.html?profile&zb19TownInputs`, { waitUntil: 'domcontentloaded', timeout });
     assert.equal(response?.status(), 200);
     await observe(page, () => Boolean(window.__zb19TownInputs));
-    await page.locator('#jump').selectOption({ label: '雪团练习场' }, { timeout });
     await observe(page, () => {
       const s = window.__zb19TownInputs.sample();
       return s.walking && s.canMove && s.frame?.calls > 0 && s.presenceId !== null;
@@ -345,8 +371,8 @@ async function testControls(browser, dist, touch, evidence) {
     try {
       trace.duringTargetHold = await observe(page, start => {
         const state = window.__zb19TownInputs.sample();
-        return state.frames >= start + 36 && state;
-      }, trace.beforeTargetHold.frames);
+        return state.frames >= start.frames + 36 && state.updateSeconds >= start.updateSeconds + 1.6 && state;
+      }, { frames: trace.beforeTargetHold.frames, updateSeconds: trace.beforeTargetHold.updateSeconds });
     } finally {
       await releaseTarget();
     }

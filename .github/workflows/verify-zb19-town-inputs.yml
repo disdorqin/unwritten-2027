@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 20
     env:
       TOWN_RUNTIME_COMMIT: b610f75ef0234b51061b621a4693d12e363c06ca
-      B_INPUT_COMMIT: 34faee8115e3e372712976e3cf64d129f5a728c0
+      B_INPUT_COMMIT: 332ddee8e8af46ab28084f2be267b65ab1cf6d94
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -45,7 +45,8 @@ jobs:
           mkdir -p "$out"
           public="../handoff/docs/交流区/GPT/窗B公共批-2026-11-20"
           for patch in zb15-wall-rules-on-9dd569b.patch zb15-server-on-9dd569b.patch \
-            zb16-sled-state-on-9dd569b.patch zb19-sled-brake-leaf-on-9dd569b.patch zb19-za02-mount-on-b610f75.patch; do
+            zb16-sled-state-on-9dd569b.patch zb19-sled-brake-leaf-on-9dd569b.patch zb19-za02-mount-on-b610f75.patch \
+            zb19-za02-brake-cancel-after-mount.patch; do
             git -C town apply --check --whitespace=error "$public/$patch"
             git -C town apply --whitespace=error "$public/$patch"
           done
