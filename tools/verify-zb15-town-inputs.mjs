@@ -20,7 +20,8 @@ const timeout = 150_000;
 function observeViewer(source) {
   const anchor = 'function snowballJumped() {';
   assert.equal(source.split(anchor).length, 2, 'Expected one viewer fixture anchor');
-  return source.replace(anchor, `
+  const wallRules = "import { classifyFreeWallSite as zb15FreeSite, classifyWallSite as zb15TeamSite, wallCellCentre as zb15CellCentre } from '../../../src/presence/snowfight';\n";
+  return wallRules + source.replace(anchor, `
 if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.1' &&
     new URLSearchParams(location.search).has('zb15TownInputs')) {
   let staged = false;
@@ -67,7 +68,12 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
       const gy = wallCellOf(-tossOrigin.z - tossDirection.z * 2.2);
       return { walking, canMove: moveAllowed(), east: x, north: n, ground, yaw, pitch, frame,
         stock: snowballs.getState().ammo, buildMode: teamFight.buildMode(), localThrows,
-        wall: { gx, gy, layers: teamFight.wallColumnAt(gx, gy)?.height ?? 0 },
+        wall: { gx, gy, layers: teamFight.wallColumnAt(gx, gy)?.height ?? 0,
+          freeSiteRejection: zb15FreeSite(zb15CellCentre(gx), zb15CellCentre(gy)) ?? null,
+          teamSiteRejection: zb15TeamSite(zb15CellCentre(gx), zb15CellCentre(gy)) ?? null },
+        snowfight: { canBuild: teamFight.canBuild(), active: teamFight.active(),
+          available: presence.snowfightAvailable(), freeWalls: presence.freeSnowWallsAvailable() },
+        focusedTag: document.activeElement?.tagName ?? null,
         aimedAtSouthSupply: aimsAtNearbySnow() && gatherCheck.supply?.id === 'south',
         mouseLocked: document.pointerLockElement === renderer.domElement,
         presenceId: presence.selfId(), events: events.slice() };
@@ -77,14 +83,42 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
 ${anchor}`);
 }
 
-async function observe(page, predicate, argument) {
-  const handle = await page.waitForFunction(predicate, argument, { timeout });
+async function observe(page, predicate, argument, waitMs = timeout) {
+  const handle = await page.waitForFunction(predicate, argument, { timeout: waitMs });
   try { return await handle.jsonValue(); } finally { await handle.dispose(); }
 }
 
 const sample = page => page.evaluate(() => window.__zb15TownInputs.sample());
 const buildButton = '#snowfight-build';
 const snowButton = '#snowball-primary';
+
+function watchWallFrames(socket, frames) {
+  if (new URL(socket.url()).pathname !== '/presence') return;
+  function record(direction, payload) {
+    if (frames.length >= 32) return;
+    if (typeof payload === 'string') {
+      try {
+        const message = JSON.parse(payload);
+        if (message?.type === 'snowfight-rejected' && typeof message.reason === 'string') {
+          frames.push({ direction, kind: 'rejected', reason: message.reason });
+        }
+      } catch {
+        // Other presence messages are outside this trace.
+      }
+    } else if (payload[0] === 0xff) {
+      if (payload[1] === 3 && payload.length === 8) {
+        frames.push({ direction, kind: 'place', gx: payload.readUInt16LE(2), gy: payload.readUInt16LE(4) });
+      } else if (payload[1] === 5 && payload.length >= 12) {
+        frames.push({ direction, kind: 'wall-set', gx: payload.readUInt16LE(2), gy: payload.readUInt16LE(4),
+          layer: payload[6], team: payload[10] });
+      } else if (payload[1] === 6 && payload.length >= 3) {
+        frames.push({ direction, kind: 'wall-clear', count: payload[2] });
+      }
+    }
+  }
+  socket.on('framesent', ({ payload }) => record('sent', payload));
+  socket.on('framereceived', ({ payload }) => record('received', payload));
+}
 
 async function holdMobile(context, page) {
   const snow = page.locator(snowButton);
@@ -99,17 +133,21 @@ async function holdMobile(context, page) {
 
 async function testControls(browser, dist, touch, evidence) {
   const modality = touch ? 'touch' : 'desktop';
-  const trace = evidence.controls[modality] = { status: 'starting', errors: [], connectionLogs: [] };
+  const trace = evidence.controls[modality] = { status: 'starting', errors: [], connectionLogs: [], wallFrames: [] };
   const { server, url } = await serve(checkout, dist, require, trace.connectionLogs);
   let browserContext;
+  let page;
   try {
     browserContext = await browser.newContext(touch ?
       { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } :
       { viewport: { width: 1000, height: 650 }, deviceScaleFactor: 1 });
-    const page = await browserContext.newPage();
+    page = await browserContext.newPage();
     const socketUrls = [];
     page.on('pageerror', error => trace.errors.push(error.message));
-    page.on('websocket', socket => socketUrls.push(socket.url()));
+    page.on('websocket', socket => {
+      socketUrls.push(socket.url());
+      watchWallFrames(socket, trace.wallFrames);
+    });
 
     const response = await page.goto(`${url}/town-blockout.html?profile&zb15TownInputs`, { waitUntil: 'domcontentloaded', timeout });
     assert.equal(response?.status(), 200);
@@ -153,11 +191,16 @@ async function testControls(browser, dist, touch, evidence) {
     }, trace.afterHold);
     assert.equal(trace.afterThrow.wall.layers, 0);
 
-    trace.status = 'building';
+    trace.status = 'switching-build-mode';
     if (touch) await page.locator(buildButton).tap({ timeout });
     else await page.keyboard.press('b');
-    await observe(page, () => window.__zb15TownInputs.sample().buildMode);
+    trace.afterToggle = await observe(page, () => {
+      const status = window.__zb15TownInputs.sample();
+      return status.buildMode && status;
+    });
+    trace.status = 'awaiting-wall-ack';
     await primary();
+    trace.afterPlaceAttempt = await sample(page);
     trace.afterPlace = await observe(page, before => {
       const s = window.__zb15TownInputs.sample();
       return s.stock === before.stock - 3 && s.wall.gx === before.wall.gx &&
@@ -177,6 +220,13 @@ async function testControls(browser, dist, touch, evidence) {
     trace.status = 'passed';
   } catch (error) {
     trace.failure = error instanceof Error ? error.message : String(error);
+    if (page && !page.isClosed()) {
+      try {
+        trace.last = await observe(page, () => window.__zb15TownInputs?.sample(), undefined, 5_000);
+      } catch (diagnosticError) {
+        trace.lastError = diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError);
+      }
+    }
     throw error;
   } finally {
     await browserContext?.close();
@@ -201,8 +251,15 @@ try {
   if (mode !== '--build-only') {
     evidence.status = 'running';
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE_PATH, args: swiftShader });
-    await testControls(browser, dist, false, evidence);
-    await testControls(browser, dist, true, evidence);
+    const failures = [];
+    for (const touch of [false, true]) {
+      try {
+        await testControls(browser, dist, touch, evidence);
+      } catch (error) {
+        failures.push(`${touch ? 'touch' : 'desktop'}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failures.length) throw new Error(failures.join(' | '));
     evidence.status = 'passed';
   }
 } catch (error) {
