@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { Group } from 'three';
 
@@ -107,6 +108,26 @@ const builtCenterDiagnostic = districts.sites.map(({ x, n }, index) => ({
 const doorThresholdDiagnostic = doors.map(door => ({ ...door, doorDistance: distanceToRoad(door.x, door.n) }))
   .filter(({ doorDistance }) => doorDistance <= 18);
 
+const viewer = readFileSync(new URL('./voxel-tavern/town-blockout/viewer.ts', import.meta.url), 'utf8');
+const release = execFileSync('git', ['rev-parse', 'HEAD'], {
+  cwd: new URL('..', import.meta.url), encoding: 'utf8',
+}).trim();
+const registrySnapshot = {
+  release,
+  viewerSha256: createHash('sha256').update(viewer).digest('hex'),
+  road: { id: southLoop.id, width: southLoop.width, points: southLoop.points },
+  counts: { totalDoors: registry.size, oldTown: districts.housePortals.length, extension: extension.housePortals.length, decorative: cabins.length,
+    sourceCandidates: candidates.length, joined: candidates.filter(({ door }) => door).length,
+    retainedJx1: candidates.filter(({ owner }) => owner === 'JX-1').length,
+    eligibleJx2: candidates.filter(({ owner }) => owner === 'JX-2').length,
+    missing: candidates.filter(({ door }) => !door).length, market: marketIds.size },
+  candidates, builtCenterDiagnostic, doorThresholdDiagnostic, doors,
+};
+if (process.argv.includes('--registry-only')) {
+  writeFileSync(process.stdout.fd, `${JSON.stringify(registrySnapshot, null, 2)}\n`);
+  process.exit(0);
+}
+
 const collision = { colliders: [...scenery.plazaCoverBoxes], floors: [], ramps: [] };
 const geometryGroups = [...landmarks.values(), pineCamp.group, railway.group, extension.group, buildIcePlayProps(), buildTigerZodiacAnchor(grid.heightAt)];
 for (const { west, east, north, height } of layout.bridges) {
@@ -120,7 +141,6 @@ for (const component of geometryGroups.map(readWalkGeometry)) {
 const geometryAt = () => collision;
 const homeReturn = undefined;
 const activities = [];
-const viewer = readFileSync(new URL('./voxel-tavern/town-blockout/viewer.ts', import.meta.url), 'utf8');
 const functions = ['walkable', 'outdoorWalkable', 'outdoorSurfaceAt', 'surfaceAt', 'overlapsBody', 'supportAt', 'obstructed', 'dryTownLandingHeight', 'tryMove'];
 const exactFunctions = functions.map(name => {
   const result = viewer.match(new RegExp(`^function ${name}\\([\\s\\S]*?^}`, 'm'));
@@ -176,16 +196,4 @@ const roadWalk = southLoop.points.slice(1).map((end, index) => {
   return { start, end, forward: walk([start, end], .125), backward: walk([end, start], .125) };
 });
 const centerline = { forward: walk(southLoop.points, .125), backward: walk([...southLoop.points].reverse(), .125) };
-const snapshot = {
-  release: '75859a094757c5dcee8b874eef86ec37f4204907',
-  viewerSha256: createHash('sha256').update(viewer).digest('hex'),
-  road: { id: southLoop.id, width: southLoop.width, points: southLoop.points },
-  counts: { totalDoors: registry.size, oldTown: districts.housePortals.length, extension: extension.housePortals.length, decorative: cabins.length,
-    sourceCandidates: candidates.length, joined: candidates.filter(({ door }) => door).length,
-    retainedJx1: candidates.filter(({ owner }) => owner === 'JX-1').length,
-    eligibleJx2: candidates.filter(({ owner }) => owner === 'JX-2').length,
-    missing: candidates.filter(({ door }) => !door).length, market: marketIds.size },
-  candidates, builtCenterDiagnostic, doorThresholdDiagnostic,
-  roadWalk, centerline, doors,
-};
-console.log(JSON.stringify(snapshot, null, 2));
+console.log(JSON.stringify({ ...registrySnapshot, roadWalk, centerline }, null, 2));
