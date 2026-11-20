@@ -1,0 +1,36 @@
+name: Verify the underground crystal gate
+
+on:
+  push:
+    branches: [lane-c]
+    paths:
+      - '.github/workflows/verify-underground-crystal-gate.yml'
+      - 'src/presence/underground-mine-gate.ts'
+      - 'src/presence/underground-winch.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-crystal-gate.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-mine-layout.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-mine-expansion-shell.ts'
+      - 'tools/fixtures/underground-crystal-gate-review.ts'
+      - 'tools/verify-underground-crystal-gate.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - run: node tools/verify-underground-crystal-gate.mjs "${{ runner.temp }}/crystal-gate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: underground-crystal-gate-browser
+          path: ${{ runner.temp }}/crystal-gate
