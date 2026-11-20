@@ -16,8 +16,8 @@ type OrdinaryTownNightOptions = Readonly<{
   cueFreshnessMs: number;
 }>;
 
-function isEpoch(value: number) {
-  return Number.isSafeInteger(value) && value >= 0;
+function isEpoch(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 /** Ordinary day phase from the authoritative calendar origin. */
@@ -63,11 +63,11 @@ type TownNightWindowHost = Readonly<{
   saveBeacon?: (at: number) => void;
 }>;
 
-function validSchedule(schedule: TownNightSchedule | undefined): schedule is TownNightSchedule {
-  return Boolean(schedule && isEpoch(schedule.duskAt) && isEpoch(schedule.beaconAt) &&
-    isEpoch(schedule.cueExpiresAt) && isEpoch(schedule.morningBellAt) &&
-    schedule.duskAt < schedule.beaconAt && schedule.beaconAt < schedule.cueExpiresAt &&
-    schedule.cueExpiresAt <= schedule.morningBellAt);
+export function isTownNightSchedule(value: unknown): value is TownNightSchedule {
+  if (!value || typeof value !== 'object') return false;
+  const { duskAt, beaconAt, cueExpiresAt, morningBellAt } = value as Partial<TownNightSchedule>;
+  return isEpoch(duskAt) && isEpoch(beaconAt) && isEpoch(cueExpiresAt) && isEpoch(morningBellAt) &&
+    duskAt < beaconAt && beaconAt < cueExpiresAt && cueExpiresAt <= morningBellAt;
 }
 
 function windowState(now: number, schedule: TownNightSchedule | undefined, receivedAt: number | null): TownNightWindowState {
@@ -96,7 +96,7 @@ export function createTownNightWindow(host: TownNightWindowHost, restoredBeaconA
     if (!isEpoch(read)) return { now: lastClock, schedule: undefined };
     lastClock = Math.max(lastClock, read);
     const schedule = host.scheduleAt(lastClock);
-    return { now: lastClock, schedule: validSchedule(schedule) ? schedule : undefined };
+    return { now: lastClock, schedule: isTownNightSchedule(schedule) ? schedule : undefined };
   }
 
   return {

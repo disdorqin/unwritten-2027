@@ -125,10 +125,16 @@ function servePreview(ports, commit) {
   return server;
 }
 
-async function waitForPresence(url, child) {
+async function waitForPresence(port, child) {
   for (let attempt = 0; attempt < 120; ++attempt) {
     if (child.exitCode !== null) throw new Error(`Presence exited ${child.exitCode}`);
-    try { if ((await fetch(url, { signal: AbortSignal.timeout(1_000) })).ok) return; } catch {}
+    const ready = await new Promise(done => {
+      const socket = connect({ host, port, timeout: 1_000 });
+      socket.once('connect', () => { socket.destroy(); done(true); });
+      socket.once('error', () => done(false));
+      socket.once('timeout', () => { socket.destroy(); done(false); });
+    });
+    if (ready) return;
     await new Promise(done => setTimeout(done, 250));
   }
   throw new Error('Live Presence was not ready after 30 seconds');
@@ -150,10 +156,12 @@ try {
   presence = startNode([join(compiled, 'presence', 'index.js')], {
     NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
     PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
-    TOWN_NIGHT_DAWN_EPOCH: String(Date.now() - 390_000),
-    TOWN_NIGHT_OFFSETS_AFTER_DUSK: JSON.stringify(Array(12).fill(60_000)),
+    TOWN_NIGHT_SCHEDULE: JSON.stringify({
+      dawnEpoch: Date.now() - 390_000, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
+    }),
+    TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
   });
-  await waitForPresence(new URL('/presence/night-window', base), presence);
+  await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
   driver = startNode([join(repo, 'tools', 'verify-za22-live.mjs'), base, output, segment], {
     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
   });

@@ -332,7 +332,7 @@ body.museum-inspecting :is(.panel, .town-hud-button, #town-chat, #festival-statu
 #ceremony-frost > div { position: absolute; inset: 0; pointer-events: none; }
 #ceremony-frost .frost-edges {
   opacity: 0;
-  background: url('./snowball-impact-frost.webp') repeat center / min(480px, 55vw) auto;
+  background: url('./snowball-impact-frost.png') repeat center / min(480px, 55vw) auto;
   mask-image: radial-gradient(ellipse farthest-side at center, transparent var(--frost-clear, 100%), #000 104%);
 }
 #ceremony-frost .frost-tint { background: #86bbec; opacity: 0; }

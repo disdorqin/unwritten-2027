@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
+import { createTownNightWindow, type TownNightSchedule, type TownNightWindowState } from '../shared/town-night-window.js';
 import {
   BASE_TIER, CELL_METRES, MASCOT_ACTOR_ID, MAX_SESSIONS, MAX_VISIBLE, POLL_JOIN_PATH, POLL_LEAVE_PATH,
   POLL_PATH, POLL_SESSION_TIMEOUT_MS, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
@@ -31,6 +32,7 @@ import {
   encodeWallSet,
 } from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
+import { createTownNightBeaconHost } from './town-night-beacon.js';
 import {
   ceremonyLandingAnnouncement, ceremonyLandingCentre, ceremonyLandingLeadMs, ceremonyLandingOuterRadius,
   ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
@@ -47,6 +49,18 @@ import {
 /** S2 连接日志出口：每个连接事件调用一次，参数为一行完整的 JSON 文本。 */
 export type PresenceConnectionLog = (line: string) => void;
 
+export type PresenceTownNightOptions = Readonly<{
+  scheduleAt: (now: number) => TownNightSchedule | undefined;
+  restoredBeaconAt?: number | null;
+  saveBeacon?: (at: number) => void;
+  onSaveError?: (error: unknown) => void;
+}>;
+
+type TownNightFeed = Readonly<{
+  snapshot(): TownNightWindowState;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
 type Options = {
   host?: string;
   port?: number;
@@ -55,6 +69,10 @@ type Options = {
   height?: number;
   tiers?: readonly PresenceTier[];
   now?: () => number;
+  wallNow?: () => number;
+  townNight?: PresenceTownNightOptions;
+  /** Secondary rooms consume the primary town's committed frames. */
+  townNightFeed?: TownNightFeed;
   testFireworks?: boolean;
   ownerKey?: string;
   onMascotClaimRejected?: (total: number) => void;
@@ -156,6 +174,25 @@ function bytesOf(data: RawData): Uint8Array {
 export async function createPresenceServer(options: Options = {}) {
   const tiers = checkTiers(options.tiers ?? [BASE_TIER]);
   const now = options.now ?? (() => performance.now());
+  const wallNow = options.wallNow ?? Date.now;
+  const nightConfig = options.townNight;
+  if (nightConfig && options.townNightFeed) throw new Error('A presence room cannot author and follow the same night clock.');
+  const nightListeners = new Set<(frame: string) => void>();
+  const townNight = nightConfig && createTownNightBeaconHost(createTownNightWindow({
+    now: wallNow,
+    scheduleAt: nightConfig.scheduleAt,
+    saveBeacon: nightConfig.saveBeacon,
+  }, nightConfig.restoredBeaconAt), cue => publishTownNight(JSON.stringify(cue)));
+  const ownedNightFeed: TownNightFeed | undefined = townNight && {
+    snapshot: townNight.snapshot,
+    subscribe(receive) {
+      nightListeners.add(receive);
+      return () => { nightListeners.delete(receive); };
+    },
+  };
+  const nightFeed = ownedNightFeed ?? options.townNightFeed;
+  let lastTownNightWindow = townNight?.snapshot();
+  let nightErrorReported = false;
   const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
   const summitPassport = options.summitPassportHost && createSummitPassportAuthority(options.summitPassportHost);
   /**
@@ -410,8 +447,34 @@ export async function createPresenceServer(options: Options = {}) {
     for (const peer of peers.values()) if (peer !== exclude && peer.name) send(peer, data);
   }
 
+  function publishTownNight(frame: string) {
+    broadcast(frame);
+    for (const receive of nightListeners) receive(frame);
+  }
+
+  function updateTownNight() {
+    if (!townNight) return;
+    let state;
+    try {
+      state = townNight.tick();
+      nightErrorReported = false;
+    } catch (error) {
+      // A failed receipt write leaves the cue uncommitted. Retry while it is fresh.
+      if (!nightErrorReported) {
+        nightErrorReported = true;
+        if (nightConfig?.onSaveError) nightConfig.onSaveError(error);
+        else console.error('Town night beacon could not advance:', error);
+      }
+      return;
+    }
+    if (lastTownNightWindow?.phase === state.phase && lastTownNightWindow.layersOverlap === state.layersOverlap &&
+        lastTownNightWindow.beaconAt === state.beaconAt && lastTownNightWindow.morningBellAt === state.morningBellAt) return;
+    lastTownNightWindow = state;
+    publishTownNight(JSON.stringify({ type: 'event', kind: 'town-night-window', state }));
+  }
+
   function updateFireworks(time: number) {
-    const event = fireworks?.update(online, time, Date.now(), () => randomBytes(4).readUInt32LE());
+    const event = fireworks?.update(online, time, wallNow(), () => randomBytes(4).readUInt32LE());
     if (event) broadcast(JSON.stringify(event));
   }
 
@@ -847,7 +910,7 @@ export async function createPresenceServer(options: Options = {}) {
     fireworksOccupiedUntil = now + startDelayMs + fireworksShowMs;
     peer.nextPersonalFireworks = now + startDelayMs + fireworksCooldownMs;
     const event = JSON.stringify({
-      type: 'event', kind: 'fireworks', from: peer.id, seed, theme, startAt: Date.now() + startDelayMs,
+      type: 'event', kind: 'fireworks', from: peer.id, seed, theme, startAt: wallNow() + startDelayMs,
     });
     for (const recipient of peers.values()) if (recipient.name) send(recipient, event);
   }
@@ -913,7 +976,7 @@ export async function createPresenceServer(options: Options = {}) {
     const throttleNow = performance.now();
     if (throttleNow < peer.nextPhotoRequest) return;
     peer.nextPhotoRequest = throttleNow + 500;
-    const now = Date.now();
+    const now = wallNow();
     updatePhoto(now);
     if (photo) {
       send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'busy' }));
@@ -1039,7 +1102,7 @@ export async function createPresenceServer(options: Options = {}) {
       const now = performance.now();
       if (now < peer.nextClockSample) return;
       peer.nextClockSample = now + 750;
-      send(peer, JSON.stringify({ type: 'clock', sentAt: message.sentAt, epochMs: Date.now() }));
+      send(peer, JSON.stringify({ type: 'clock', sentAt: message.sentAt, epochMs: wallNow() }));
       return;
     }
     if (message.type === 'pose' && peer.name) {
@@ -1054,15 +1117,16 @@ export async function createPresenceServer(options: Options = {}) {
     if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
-    const joinedAt = Date.now();
+    const joinedAt = wallNow();
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true,
       ...(summitPassport ? { summitPassport: true } : {}),
+      townNightWindow: nightFeed?.snapshot(),
     }));
-    if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
+    if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
     for (const other of peers.values()) {
@@ -1213,6 +1277,7 @@ export async function createPresenceServer(options: Options = {}) {
       resolve();
     });
   });
+  const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
   const tick = setInterval(() => {
     const time = now();
     // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
@@ -1224,10 +1289,11 @@ export async function createPresenceServer(options: Options = {}) {
     }
     updateFireworks(time);
     iceThrone.tick(time);
-    const wallNow = Date.now();
-    updateCeremony(wallNow);
-    updateBell(wallNow);
-    if (photo) updatePhoto(wallNow);
+    const epoch = wallNow();
+    updateTownNight();
+    updateCeremony(epoch);
+    updateBell(epoch);
+    if (photo) updatePhoto(epoch);
     if (mascot && time >= mascotUntil) releaseMascot();
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;
@@ -1260,11 +1326,14 @@ export async function createPresenceServer(options: Options = {}) {
   return {
     address: () => http.address() as AddressInfo,
     stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
+    townNightFeed: ownedNightFeed,
     close() {
       if (stop) return stop;
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
+      stopFollowingNight?.();
+      nightListeners.clear();
       for (const peer of peers.values()) {
         clearTimeout(peer.joinTimer);
         peer.socket?.terminate();

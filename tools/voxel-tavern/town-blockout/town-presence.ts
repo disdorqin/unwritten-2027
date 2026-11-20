@@ -14,6 +14,7 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
+import { createTownPresenceNight } from './town-presence-night';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
@@ -34,9 +35,8 @@ import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
 } from '../../../src/shared/summit-passport';
 import {
-  isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath, townNightWindowPath,
+  isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath,
 } from '../../../src/shared/za22-mountain-domain';
-import { townLayerOverlapMs, type TownNightWindowState } from '../../../src/shared/town-night-window';
 import {
   isWestPresenceFoot, westPresenceEastOrigin, westPresenceHeightOrigin, westPresencePath,
 } from '../../../src/shared/za22-west-domain';
@@ -106,6 +106,7 @@ export function createTownPresence(
   const status = document.getElementById('town-presence-status');
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
+  const townNight = createTownPresenceNight(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
@@ -182,10 +183,6 @@ export function createTownPresence(
   let retryIndex = 0;
   let inTown = false;
   let domain: 'town' | 'mountain' | 'west' = 'town';
-  let nightWindow: (TownNightWindowState & { now: number }) | undefined;
-  let lastNightRead = -Infinity;
-  let refreshNightAfter = -Infinity;
-  let readingNight = false;
   function presencePath(path: string) {
     if (domain === 'town') return path;
     return (domain === 'mountain' ? mountainPresencePath : westPresencePath) + path.slice('/presence'.length);
@@ -199,39 +196,6 @@ export function createTownPresence(
   let lastPosition = -1;
   let lastHeightYaw = -1;
   let moving = false;
-
-  function readNightWindow() {
-    const time = performance.now();
-    if (!readingNight && time >= refreshNightAfter) {
-      readingNight = true;
-      refreshNightAfter = time + 4_000;
-      void fetch(townNightWindowPath, { cache: 'no-store' }).then(async response => {
-        if (!response.ok) return;
-        const value = await response.json() as Partial<TownNightWindowState> & { now?: number };
-        if (Number.isSafeInteger(value.now) &&
-            (value.beaconAt === null || Number.isSafeInteger(value.beaconAt)) &&
-            (value.morningBellAt === null || Number.isSafeInteger(value.morningBellAt)) &&
-            typeof value.canEnterRestricted === 'boolean' && typeof value.layersOverlap === 'boolean' &&
-            (value.phase === 'day' || value.phase === 'awaiting-beacon' || value.phase === 'night-window') &&
-            (value.shift === 'day' || value.shift === 'night') && value.chapterGatesLocked === true) {
-          nightWindow = value as TownNightWindowState & { now: number };
-          lastNightRead = time;
-        }
-      }).catch(() => { /* Keep the prior snapshot only until its freshness limit. */ }).finally(() => {
-        readingNight = false;
-      });
-    }
-    if (!nightWindow || time - lastNightRead > 8_000) return;
-    const now = nightWindow.now + time - lastNightRead;
-    const sameNight = nightWindow.morningBellAt !== null && now < nightWindow.morningBellAt;
-    return {
-      ...nightWindow,
-      now,
-      canEnterRestricted: nightWindow.canEnterRestricted && sameNight,
-      layersOverlap: nightWindow.layersOverlap && sameNight && nightWindow.beaconAt !== null &&
-        now < nightWindow.beaconAt + townLayerOverlapMs,
-    };
-  }
 
   function updateStatus() {
     if (!status) return;
@@ -367,6 +331,7 @@ export function createTownPresence(
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
+        townNight.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
           stopPoll(false);
           retryPollLater();
@@ -406,6 +371,7 @@ export function createTownPresence(
     socket = undefined;
     socketJoined = false;
     haveId = false;
+    townNight.disconnect();
     resetOwnerSession();
     joinedId = null;
     joinedName = undefined;
@@ -488,9 +454,17 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
+        townNightWindow?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
+          if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
+          else townNight.acceptBeacon(message);
+        }
+        return;
+      }
       if (message.type === 'event' && message.kind === 'summit-passport-result') {
         const reply = haveId && summitPassportSupported && readSummitPassportReply(message);
         if (reply) onSummitPassport?.(reply);
@@ -632,8 +606,9 @@ export function createTownPresence(
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
             clock.accept(message.epochMs);
-            if (photoSupported) nextClockSample = 0;
+            if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
+          townNight.join(message.epochMs, message.townNightWindow);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
             resetRetry();
@@ -792,7 +767,7 @@ export function createTownPresence(
   }
 
   function samplePhotoClock() {
-    if (!photoSupported || !haveId) return;
+    if (!haveId || (!photoSupported && !townNight.state())) return;
     const sentAt = performance.now();
     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
     clockRequest = sentAt;
@@ -888,8 +863,10 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
-    readNightWindow,
-    northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
+    getTownNightWindow: townNight.state,
+    townNightConnectedAt: townNight.connectedAt,
+    onTownNightBeacon: townNight.onBeacon,
+    northRidgeNightOpen: () => townNight.state()?.canEnterRestricted === true,
     setMountainDomain(enabled: boolean, mountainScene?: Scene) {
       if (enabled) switchDomain('mountain', mountainScene);
       else if (domain === 'mountain') switchDomain('town');
@@ -1035,6 +1012,7 @@ export function createTownPresence(
     },
     update(dt: number) {
       if (!socket && !poll) return;
+      townNight.tick();
       sendPose(dt);
       samplePhotoClock();
       syncActivityPoses();

@@ -48,6 +48,7 @@ async function openTown(name) {
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
+  let westWindow;
   report.paths.push(evidence);
   page.on('pageerror', error => { if (measuring) report.pageErrors.push(String(error)); });
   page.on('console', message => {
@@ -65,6 +66,22 @@ async function openTown(name) {
     const mountain = socketPath.startsWith('/presence-mountain');
     const west = socketPath.startsWith('/presence-west');
     evidence.sockets.push(socket.url());
+    if (west) {
+      const current = {};
+      westWindow = current;
+      socket.on('framereceived', ({ payload }) => {
+        if (typeof payload !== 'string') return;
+        const frame = JSON.parse(payload);
+        if (frame.type === 'join' && frame.self === true) {
+          current.state = frame.townNightWindow;
+          current.joinEpoch = frame.epochMs;
+          current.joinReceivedAt = Date.now();
+        } else if (frame.type === 'event' && frame.kind === 'town-night-window') {
+          current.state = frame.state;
+        }
+      });
+      socket.on('close', () => { if (westWindow === current) westWindow = undefined; });
+    }
     socket.on('framesent', ({ payload }) => {
       if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
       evidence.poses.push({
@@ -107,7 +124,7 @@ async function openTown(name) {
   await waitForWire(page, evidence);
   evidence.checkpoints.push({ label: 'spawn', ...start, wire: evidence.poses.at(-1) });
   console.log(JSON.stringify({ phase: 'spawn', east: start.east, north: start.north, y: start.height }));
-  return { page, evidence };
+  return { page, evidence, westWindow: () => westWindow };
 }
 
 async function readPose(page) {
@@ -278,7 +295,7 @@ try {
     }
   }
   if (segment === 'crater' || segment === 'all') {
-    const { page, evidence } = await openTown('crater');
+    const { page, evidence, westWindow } = await openTown('crater');
     await follow(page, evidence, westShore, 'west-shore');
     await follow(page, evidence, crater, 'crater');
     await face(page, evidence, -Math.PI / 2);
@@ -287,14 +304,19 @@ try {
       JSON.stringify(rim));
     await snapshot(page, evidence, 'crater-entrance');
     await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -70.55);
-    const gateWindow = await page.waitForFunction(async () => {
-      const response = await fetch('/presence/night-window', { cache: 'no-store' });
-      if (!response.ok) return false;
-      const state = await response.json();
-      return state.canEnterRestricted && state.morningBellAt - state.now > 15_000 ? state : false;
-    }, null, { polling: 600, timeout: 620_000 });
-    evidence.craterWindow = await gateWindow.jsonValue();
-    await gateWindow.dispose();
+    const deadline = Date.now() + 620_000;
+    while (Date.now() < deadline) {
+      const frame = westWindow();
+      if (frame?.state?.canEnterRestricted) {
+        const now = frame.joinEpoch + Date.now() - frame.joinReceivedAt;
+        if (frame.state.morningBellAt - now > 15_000) {
+          evidence.craterWindow = { ...frame.state, now };
+          break;
+        }
+      }
+      await page.waitForTimeout(600);
+    }
+    assert.ok(evidence.craterWindow, 'The west Presence room did not report an open crater window');
     await walkTo(page, evidence, [-72.1, 159], 'crater-crossed-lip');
     await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -71.8);
     await face(page, evidence, -Math.PI / 2);
