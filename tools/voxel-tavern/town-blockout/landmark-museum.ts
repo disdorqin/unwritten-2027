@@ -1,5 +1,6 @@
 import { createMuseumBuilder, type MuseumBuilder } from './museum-kit';
 import { addMuseumZones } from './museum-zones';
+import { addChronicleGallery } from './town-chronicle-landmarks';
 import { addMuseumShell } from './museum-shell';
 import { addMuseumTimeline } from './museum-timeline';
 import { addMuseumNetwork } from './museum-network';
@@ -117,6 +118,7 @@ export function buildMuseumLandmark() {
     addMuseumTimeline(m);
     addMuseumNetwork(m);
     addMuseumZones(m);
+    addChronicleGallery(m);
   });
   addMuseumTerrace(m);
   addMuseumTrim(m);

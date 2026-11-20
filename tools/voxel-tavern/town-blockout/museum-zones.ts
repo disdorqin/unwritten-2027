@@ -9,6 +9,7 @@ import type { MuseumBuilder } from './museum-kit';
 
 export const MUSEUM_MINE_TUNNEL = { x: -18.3, from: 8, to: -11 } as const;
 export const MUSEUM_SPECIMEN_COUNT = 8;
+export const MUSEUM_PAGE_SLOTS = 12;
 
 const FLOOR = .28;
 const ROCK = ['#4a3826', '#5d4630', '#3e2f20', '#54402a'];
@@ -114,8 +115,89 @@ function thresholds(m: MuseumBuilder) {
   m.box(TIMBER, x, FLOOR + 2.68, from + .1, 1.9, .16, .24);
 }
 
+function zoneThree(m: MuseumBuilder) {
+  // Restored cordon across the north band; the scene is viewable but the
+  // fence line itself cannot be crossed. Darkest zone: no lights added.
+  const fenceZ = -9.6;
+  m.solid('#6e5136', -4.2, FLOOR + .52, fenceZ, 4.4, 1.05, .12);
+  for (let x = -6.3; x <= -2.1; x += 1.05) m.box('#59402a', x, FLOOR + .58, fenceZ, .12, 1.16, .12);
+  for (const ry of [.38, .82]) m.box('#7a5c3d', -4.2, FLOOR + ry, fenceZ, 4.4, .07, .05);
+  m.box('#59483e', -4.2, FLOOR + 1.32, fenceZ + .06, 1.05, .62, .05);
+  m.label('布告', -4.2, FLOOR + 1.32, fenceZ + .1, .9, .3, 0);
+  // Luggage pile behind the cordon.
+  const pile: [number, number, number, string, number][] = [
+    [-5.3, .55, -11.3, '#765044', .15], [-4.4, .55, -11.5, '#5d4630', -.1], [-4.85, 1.05, -11.4, '#6e5136', .3],
+    [-3.5, .5, -11.2, '#44503c', .05], [-5.6, .45, -10.9, '#8a6f4d', -.25],
+  ];
+  for (const [lx, ly, lz, tint, r] of pile) m.box(tint, lx, FLOOR + ly, lz, .78, .5, .55, r);
+  m.box('#b88655', -4.4, FLOOR + .82, -11.5, .5, .04, .06);
+  // A row of empty chairs facing the hall; one blank plate for the row.
+  for (const cx of [-6.1, -5.2, -3.4, -2.5]) {
+    m.box('#6e5136', cx, FLOOR + .24, -10.7, .46, .06, .44);
+    m.box('#6e5136', cx, FLOOR + .55, -10.94, .46, .62, .06);
+    for (const [dx, dz] of [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]] as const)
+      m.box('#59402a', cx + dx, FLOOR + .12, -10.7 + dz, .06, .24, .06);
+  }
+  m.label('', -4.3, FLOOR + .5, -10.35, .8, .26, 0);
+  // The one wrong exhibit: a dark slab at the zone's east edge, leaning on
+  // a half-grade plinth. No number, no label, no light, no interaction.
+  // Face scratches are meaningless short strokes, never a sheep pattern.
+  m.solid('#6a655c', -2.0, FLOOR + .25, -10.9, 1.15, .5, .8);
+  m.box('#2e2c2c', -2.0, FLOOR + 1.28, -10.86, 1.0, 1.62, .16, .3);
+  const strokes: [number, number, number, number][] = [
+    [-.22, 1.62, .3, .05], [.08, 1.5, .2, -.04], [-.1, 1.32, .34, .03],
+    [.18, 1.18, .16, .06], [-.24, 1.05, .22, -.05], [.02, .9, .26, .04],
+  ];
+  for (const [sx, sy, sw, sr] of strokes) m.box('#8f8a80', -2.0 + sx, FLOOR + sy, -10.76, sw, .035, .02, sr);
+  m.label('第三区 · 封锁与离别', -4.2, 2.3, -8.7, 3.2, .52, 0);
+}
+
+function corridor(m: MuseumBuilder) {
+  // One lamp in the bare passage between zones three and four.
+  m.box('#59402a', -1.2, FLOOR + 1.0, -10.6, .09, 2.0, .09);
+  m.box('#e08a3c', -1.2, FLOOR + 2.05, -10.6, .17, .12, .17, 0, true);
+  m.light(-1.2, FLOOR + 2.0, -10.6, '#f7c69c', 12, 5);
+}
+
+function zoneFour(m: MuseumBuilder) {
+  // Page-grid wall on the north wall: twelve empty slots awaiting pages.
+  for (let i = 0; i < MUSEUM_PAGE_SLOTS; i++) {
+    const px = 5.9 + i * .48;
+    m.box('#573a34', px, 1.72, -12.44, .44, 1.18, .07);
+    m.box('#e8e2d2', px, 1.72, -12.39, .36, 1.06, .02);
+    m.box('#b88655', px + .14, 1.06, -12.39, .1, .07, .02);
+  }
+  m.label('页格墙', 8.55, 2.62, -12.4, 1.6, .34, 0);
+  // Guest book lectern at the zone's east exit.
+  m.solid('#5d4630', 11.3, FLOOR + .5, -9.9, .55, 1.0, .45);
+  m.box('#e8e2d2', 11.3, FLOOR + 1.06, -9.9, .44, .05, .34, .12);
+  m.box('#8a4a34', 11.3, FLOOR + 1.03, -9.9, .48, .03, .38, .12);
+  m.label('留言簿', 11.3, FLOOR + .62, -9.64, .8, .24, 0);
+  for (const lx of [6.8, 9.8]) m.light(lx, 3.1, -10.6, '#dfe9f2', 40, 10);
+  m.label('第四区 · 未写之页', 4.6, 2.4, -8.55, 3.0, .52, 0);
+}
+
+function socialMarks(m: MuseumBuilder) {
+  // JG4: three brass standing discs for the town-history route (in front
+  // of the sand table, mid-tunnel, in front of the page wall) and two
+  // photo-spot floor rings (under the meteorite, before the page wall).
+  // Zone three deliberately has no photo spot.
+  for (const [dx, dz] of [[-5.5, 9.3], [-18.3, -2.2], [7.5, -11.2]] as const)
+    m.box('#b88655', dx, FLOOR + .015, dz, .42, .03, .42, Math.PI / 4);
+  for (const [rx, rz] of [[0, 7.1], [7.5, -11.2]] as const) {
+    m.box('#b88655', rx, FLOOR + .012, rz - .55, 1.2, .024, .07);
+    m.box('#b88655', rx, FLOOR + .012, rz + .55, 1.2, .024, .07);
+    m.box('#b88655', rx - .55, FLOOR + .012, rz, .07, .024, 1.2);
+    m.box('#b88655', rx + .55, FLOOR + .012, rz, .07, .024, 1.2);
+  }
+}
+
 export function addMuseumZones(m: MuseumBuilder) {
   zoneOne(m);
   zoneTwo(m);
   thresholds(m);
+  zoneThree(m);
+  corridor(m);
+  zoneFour(m);
+  socialMarks(m);
 }
