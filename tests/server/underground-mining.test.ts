@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   createUndergroundMining, type UndergroundMiningReward, type UndergroundMiningState,
 } from '../../src/presence/underground-mining.js';
-import { createUndergroundOreDistribution } from '../../tools/voxel-tavern/town-blockout/underground-ore-distribution.js';
+import { createUndergroundOreDistribution } from '../../src/shared/underground-ore-distribution.js';
 
 const layer = 'test-mine';
 const feet = { layer, east: 9, north: 10, height: -90 };

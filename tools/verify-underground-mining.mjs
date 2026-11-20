@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { createUndergroundMining } from '../src/presence/underground-mining.ts';
-import { createUndergroundOreDistribution } from './voxel-tavern/town-blockout/underground-ore-distribution.ts';
+import { createUndergroundOreDistribution } from '../src/shared/underground-ore-distribution.ts';
 
 assert.ok(process.argv[2], 'Use: node --import tsx tools/verify-underground-mining.mjs <evidence-dir>');
 const output = resolve(process.argv[2]);

@@ -9,6 +9,9 @@ on:
       - 'tests/server/underground-mining.test.ts'
       - 'tests/town-blockout-underground-ore-vein.test.ts'
       - 'src/shared/underground-mining.ts'
+      - 'src/shared/underground-ore-distribution.ts'
+      - 'tests/town-blockout-underground-ore-distribution.test.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-ore-distribution.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mining-activity.ts'
       - 'tools/voxel-tavern/town-blockout/underground-ore-vein.ts'
       - 'tools/fixtures/underground-mining-review.ts'
@@ -30,7 +33,13 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: node --import tsx --test tests/server/underground-mining.test.ts tests/town-blockout-underground-ore-vein.test.ts
+      - run: node --import tsx --test tests/server/underground-mining.test.ts tests/town-blockout-underground-ore-distribution.test.ts tests/town-blockout-underground-ore-vein.test.ts
+      - name: Load the compiled ore registry in the presence runtime
+        shell: bash
+        run: |
+          build="$RUNNER_TEMP/mining-presence"
+          npm exec -- tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --rootDir src --outDir "$build" src/shared/underground-ore-distribution.ts src/presence/underground-mining.ts
+          node --input-type=module -e 'import { pathToFileURL } from "node:url"; const { createUndergroundOreDistribution } = await import(pathToFileURL(process.argv[1]).href); if (createUndergroundOreDistribution().layers.length !== 4) process.exitCode = 1;' "$build/shared/underground-ore-distribution.js"
       - name: Select Chromium
         shell: bash
         run: |
