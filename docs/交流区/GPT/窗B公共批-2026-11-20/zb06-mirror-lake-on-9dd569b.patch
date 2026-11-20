@@ -1,0 +1,349 @@
+diff --git a/tests/town-blockout-mirror-lake-live-routes.test.ts b/tests/town-blockout-mirror-lake-live-routes.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..60ef30ca8a4c37dcd7e88a4ee1cb77178b34d0e1
+--- /dev/null
++++ b/tests/town-blockout-mirror-lake-live-routes.test.ts
+@@ -0,0 +1,106 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group } from 'three';
++import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery';
++import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district-layout';
++import { addForestDensity } from '../tools/voxel-tavern/town-blockout/forest-density';
++import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape';
++import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway';
++import { buildPineCamp } from '../tools/voxel-tavern/town-blockout/town-pine-camp';
++import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel-tavern/town-blockout/town-extension';
++import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
++import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit';
++import { createMirrorLakeHost } from '../tools/voxel-tavern/town-blockout/mirror-lake-host';
++import { mirrorF2RoadAt } from '../tools/voxel-tavern/town-blockout/mirror-lake-f2-slope';
++
++type Point = readonly [east: number, north: number];
++const gradient = { addColorStop() {} };
++const surfaceContext = { createRadialGradient: () => gradient, fillRect() {}, strokeRect() {}, fillText() {}, drawImage() {} };
++function drawFixture<T>(run: () => T) {
++  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
++  Object.defineProperty(globalThis, 'document', { configurable: true, value: {
++    createElement: () => ({ getContext: () => surfaceContext }),
++  } });
++  try { return run(); }
++  finally {
++    if (original) Object.defineProperty(globalThis, 'document', original);
++    else Reflect.deleteProperty(globalThis, 'document');
++  }
++}
++
++const west = [[21.5, 177.1], [22.5, 177.1], [26.5, 177.1], [27.8, 175.8], [29.85, 176.1], [30.45, 177.3], [29.8, 178.65], [27.5, 179.6], [26.5, 179.8], [25.2, 180.5], [24.5, 181.5], [24.5, 182], [25.15, 181.55], [26.5, 181.4], [28.7, 181.4], [31.6, 181.3], [33.2, 179.6], [33.4, 176.8], [33.4, 173], [33.9, 170], [36.3, 168.8], [37.3, 168.3]] as const;
++const east: readonly Point[] = [
++  [mirrorF2RoadAt(210).centerEast, 210], [mirrorF2RoadAt(210.85).centerEast, 210.85],
++  [72.8, 210.85], [70.70, 209.65],
++];
++const island: readonly Point[] = [
++  [50, 195], [50, 202.1], [47.5, 203.1], [47.7, 204.6], [50, 204.9], [51.8, 205.1], [51.9, 210.9], [50, 212.4],
++];
++
++test('surveyed station, F2 road and tiger island support both directions in the town geometry', () => {
++  const grid = createTerrainGrid();
++  const roadY = grid.heightAt(mirrorF2RoadAt(210).centerEast, 210);
++  const host = createMirrorLakeHost(grid);
++  drawFixture(() => host.setMounted(true));
++  const root = new Group();
++  const railway = createTownRailway(grid, () => 0);
++  const pine = buildPineCamp(grid);
++  const scenery = drawFixture(() => addScenery(root, grid, pine.keepClear));
++  const districts = addDistrictHousing(root, grid, scenery.blocked, railway.keepClear);
++  const streets = addStreetscape(root, grid, (e, n, r) => districts.keepClear(e, n, r) ||
++    extensionRoadClearance(e, n, r) || pine.keepClear(e, n, r));
++  const forest = addForestDensity(root, grid, (e, n, r) => districts.keepClear(e, n, r) ||
++    streets.occupied(e, n, r) || pine.keepClear(e, n, r), (e, n, r) =>
++    extensionRoadClearance(e, n, r) || railway.keepClear(e, n, r) || extensionStreetClearance(e, n, r));
++  const models = [...host.collisionGroups, railway.group].map(readWalkGeometry);
++  const floors = models.flatMap(model => model.floors);
++  const solid = [...floors, ...models.flatMap(model => model.colliders)];
++  const overlaps = (e: number, n: number, { min, max }: Box) =>
++    Math.hypot(Math.max(min[0] - e, e - max[0], 0), Math.max(min[2] + n, -n - max[2], 0)) < .27;
++
++  function walk(path: readonly Point[], feet: number) {
++    let samples = 0, maxStep = 0;
++    for (const [index, [e, n]] of path.slice(1).entries()) {
++      const [a, b] = path[index];
++      const steps = Math.ceil(Math.hypot(e - a, n - b) / .08);
++      for (let step = 1; step <= steps; step++) {
++        const x = a + (e - a) * step / steps, north = b + (n - b) * step / steps;
++        const surface = host.exposedSurfaceAt(x, north) ?? grid.heightAt(x, north);
++        const next = Math.max(surface, host.supportAt(x, north, feet + .43),
++          ...floors.filter(box => box.max[1] <= feet + .43 && overlaps(x, north, box)).map(box => box.max[1]));
++        const delta = Math.abs(next - feet);
++        const context = `E${x}/N${north}; ${feet} → ${next}`;
++        assert.ok(delta <= .43 && canEnter(x, north), context);
++        assert.ok(!scenery.blocked(x, north) && !districts.blocked(x, north) && !streets.blocked(x, north) &&
++          !forest.blocked(x, north) && !railway.vehicleBlocks(x, north, next, 1.8, .27), context);
++        assert.ok(!host.blocks(x, north, next, 1.8, .025) && !solid.some(box => next + .025 < box.max[1] &&
++          next + 1.8 - .025 > box.min[1] && overlaps(x, north, box)), context);
++        feet = next;
++        samples++;
++        maxStep = Math.max(maxStep, delta);
++      }
++      if (e === 47.5 && n === 203.1) assert.equal(feet, 11.2);
++    }
++    return { feet, samples, maxStep };
++  }
++
++  try {
++    for (const [route, path, start, end, samples] of [
++      ['west', west, 16.34, 10, 528], ['east', east, roadY, 10, 221], ['island', island, 10, 11.2, 298],
++    ] as const) {
++      const out = walk(path, start), back = walk([...path].reverse(), end);
++      assert.ok(Math.abs(out.feet - end) < .001 && Math.abs(back.feet - start) < .001, route);
++      assert.equal(out.samples, samples);
++      assert.equal(back.samples, samples);
++      console.log(JSON.stringify({ route, out, back }));
++    }
++
++    // The approved old walking strip crosses under the station deck without snapping to it.
++    const low = host.supportAt(24.39, 177.1, 15);
++    const high = host.supportAt(24.39, 177.1, 17);
++    assert.ok(low > 13 && low < 15, String(low));
++    assert.equal(high, 16.34);
++    assert.ok(host.ceilingAt(24.39, 177.1, low) - low > 1.8);
++    assert.equal(host.blocks(24.39, 177.1, low, 1.8, .025), false);
++  } finally { host.dispose(); }
++});
+diff --git a/tests/town-blockout-mirror-lake-terrain-host.test.ts b/tests/town-blockout-mirror-lake-terrain-host.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..d589f072c9b6523e369be725396302c9674d2bd8
+--- /dev/null
++++ b/tests/town-blockout-mirror-lake-terrain-host.test.ts
+@@ -0,0 +1,38 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group, type Mesh } from 'three';
++import { addTerrainMeshes } from '../tools/voxel-tavern/town-blockout/terrain-mesh';
++import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
++
++test('regional terrain refresh reuses GPU attributes and restores the old tile', () => {
++  const grid = createTerrainGrid();
++  const scene = new Group();
++  const prepare = addTerrainMeshes(scene, grid);
++  const target = scene.getObjectByName('Terrain 0,128') as Mesh | undefined;
++  const remote = scene.getObjectByName('Terrain 128,128') as Mesh | undefined;
++  assert.ok(target?.isMesh);
++  assert.ok(remote?.isMesh);
++  const shared = target.geometry.getAttribute('position');
++  assert.equal(remote.geometry.getAttribute('position'), shared);
++  const start = target.geometry.drawRange.start;
++  const end = start + target.geometry.drawRange.count;
++  let vertex = start;
++  for (; vertex < end; vertex++) {
++    if (shared.getX(vertex) === 50 && shared.getZ(vertex) === -185) break;
++  }
++  assert.ok(vertex < end);
++  const index = 185 * grid.gridWidth + 50;
++  const original = grid.elevation[index];
++  const remoteVertex = remote.geometry.drawRange.start;
++  const remoteY = shared.getY(remoteVertex);
++  const bounds = { west: 50, east: 50, south: 185, north: 185 };
++  grid.elevation[index] = 10;
++  prepare.refreshRegion(bounds);
++  assert.equal(target.geometry.getAttribute('position'), shared);
++  assert.equal(shared.getY(vertex), 10);
++  assert.equal(shared.getY(remoteVertex), remoteY);
++  grid.elevation[index] = original;
++  prepare.refreshRegion(bounds);
++  assert.equal(shared.getY(vertex), original);
++  assert.equal(scene.getObjectByName('Terrain 0,128'), target);
++});
+diff --git a/tools/voxel-tavern/town-blockout/terrain-mesh.ts b/tools/voxel-tavern/town-blockout/terrain-mesh.ts
+index b2ea4e25cbed74c3dcfbb410364aeb23c488ce8a..7c1b221067e255d352b5cfc29cc8cc39e660fdae 100644
+--- a/tools/voxel-tavern/town-blockout/terrain-mesh.ts
++++ b/tools/voxel-tavern/town-blockout/terrain-mesh.ts
+@@ -35,6 +35,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+   parent.add(detailed);
+   let wideTerrain: Mesh | undefined;
+   const aerialTiles: TerrainSpan[] = [];
++  const detailedChunks: { east: number; north: number; eastEnd: number; northEnd: number; mesh: Mesh }[] = [];
+   const totalVertices = cellWidth * cellDepth * 6;
+   const positions = new BufferAttribute(new Float32Array(totalVertices * 3), 3).setUsage(DynamicDrawUsage);
+   const vertexColors = new BufferAttribute(new Float32Array(totalVertices * 3), 3).setUsage(DynamicDrawUsage);
+@@ -49,7 +50,10 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+   const previousProjection = new Matrix4();
+   let processedVertices = -1;
+
+-  function createChunk(east: number, north: number, eastEnd: number, northEnd: number, stride = 1) {
++  function createChunk(east: number, north: number, eastEnd: number, northEnd: number, stride = 1, existing?: Mesh) {
++    const startVertex = existing?.geometry.drawRange.start ?? nextVertex;
++    const initialTile = existing ? Number(existing.userData.terrainTileIndex) : aerialTiles.length;
++    let nextTile = initialTile;
+     const length = Math.ceil((eastEnd - east) / stride) * Math.ceil((northEnd - north) / stride) * 18;
+     const position = new Float32Array(length);
+     const colors = new Float32Array(length);
+@@ -104,7 +108,8 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+             bounds.min.y = Math.min(bounds.min.y, position[y]);
+             bounds.max.y = Math.max(bounds.max.y, position[y]);
+           }
+-          aerialTiles.push({ bounds, start: nextVertex + first / 3, count: (offset - first) / 3 });
++          const start = startVertex + first / 3;
++          aerialTiles[nextTile++] = { bounds, start, count: (offset - first) / 3 };
+         }
+       }
+     }
+@@ -116,7 +121,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+     geometry.computeVertexNormals();
+     geometry.computeBoundingSphere();
+     if (stride === 1) {
+-      const first = nextVertex;
++      const first = startVertex;
+       const vertices = offset / 3;
+       for (const [name, target] of Object.entries(detailAttributes)) {
+         const start = first * target.itemSize;
+@@ -127,15 +132,23 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+         geometry.setAttribute(name, target);
+       }
+       geometry.setDrawRange(first, vertices);
++      if (existing) {
++        existing.geometry.boundingSphere = geometry.boundingSphere;
++        return existing;
++      }
+       nextVertex += vertices;
+     }
+     const mesh = new Mesh(geometry, material);
+     mesh.name = `Terrain ${east * gridStep},${north * gridStep}`;
++    if (stride === 1) mesh.userData.terrainTileIndex = initialTile;
+     return mesh;
+   }
+
+   function addChunk(east: number, north: number) {
+-    detailed.add(createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth)));
++    const eastEnd = Math.min(east + terrainChunkCells, cellWidth), northEnd = Math.min(north + terrainChunkCells, cellDepth);
++    const mesh = createChunk(east, north, eastEnd, northEnd);
++    detailedChunks.push({ east, north, eastEnd, northEnd, mesh });
++    detailed.add(mesh);
+   }
+
+   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
+@@ -218,7 +231,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+     aerialIndex.needsUpdate = true;
+   }
+
+-  return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera) {
++  function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera) {
+     snowCover.value = cover;
+     detailed.visible = !wide && !(overview && camera);
+     if (aerialTerrain) aerialTerrain.visible = false;
+@@ -249,5 +262,20 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
+       addChunk(east, north);
+     }
+     if (overview && camera) renderAerialTerrain(camera);
+-  };
++  }
++
++  function refreshRegion({ west, east, south, north }: { west: number; east: number; south: number; north: number }) {
++    for (const chunk of detailedChunks) {
++      if (chunk.east * gridStep > east || chunk.eastEnd * gridStep < west ||
++          chunk.north * gridStep > north || chunk.northEnd * gridStep < south) continue;
++      createChunk(chunk.east, chunk.north, chunk.eastEnd, chunk.northEnd, 1, chunk.mesh);
++    }
++    processedVertices = -1;
++    if (wideTerrain) {
++      wideTerrain.removeFromParent();
++      wideTerrain.geometry.dispose();
++      wideTerrain = undefined;
++    }
++  }
++  return Object.assign(prepareTerrain, { refreshRegion });
+ }
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 296ebfa1c8778c858def2e6966ff0e6a986c36e5..d5826eee84e3274a8021697439d7ef3a6055c585 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -156,6 +156,9 @@ import './snowball-impact-texture.css';
+ const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
+ const previewOptions = new URLSearchParams(location.search);
+ const grid = createTerrainGrid();
++const mirrorLakeModule = previewOptions.get('mirrorLake') === 'on' ? await import('./mirror-lake-host') : undefined;
++const mirrorLakeHost = mirrorLakeModule?.createMirrorLakeHost(grid);
++mirrorLakeHost?.setMounted(true);
+ const townWater = createTownWater(grid);
+ const snowCover = createTownSnowField(grid);
+ let visualSnowCover = 0;
+@@ -183,6 +186,7 @@ const landscape = new Group();
+ const viewBatches = createTownViewBatches();
+ const viewFaces = createTownViewFaces();
+ scene.add(landscape, viewBatches.group);
++if (mirrorLakeHost) scene.add(mirrorLakeHost.group);
+ // One display-space transform for P-1. This is the surveyed C-01 fixture origin,
+ // pending the real northern host. No gate, player coordinates or legacy bounds change here.
+ const summitSkylineOrigin = new Vector3(300, 0, -676);
+@@ -574,6 +578,7 @@ function geometry() {
+   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
+   const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
+   if (extensionStreets) groups.push(extensionStreets.group);
++  if (mirrorLakeHost) groups.push(...mirrorLakeHost.collisionGroups);
+   for (const group of groups) {
+     const { colliders, floors, ramps } = readWalkGeometry(group);
+     index(colliders, (cell, box) => cell.colliders.push(box));
+@@ -583,6 +588,16 @@ function geometry() {
+   return chunks;
+ }
+ let walkGeometry = geometry();
++function setMirrorLakeMounted(mounted: boolean) {
++  if (!mirrorLakeModule || !mirrorLakeHost?.setMounted(mounted)) return false;
++  prepareTerrain.refreshRegion(mirrorLakeModule.mirrorLakeTerrainBounds);
++  walkGeometry = geometry();
++  return true;
++}
++// The isolated candidate lets the review page remove its entire local block.
++if (mirrorLakeHost) window.addEventListener('town-mirror-lake-review-unload', () => {
++  setMirrorLakeMounted(false);
++});
+ function geometryAt(east: number, north: number) {
+   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
+ }
+@@ -2219,8 +2234,8 @@ function lookAllowed() {
+ }
+ function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
+ function skatesOnIce() {
+-  return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
+-    Math.abs(ground - grid.heightAt(x, n)) <= .16;
++  return airHeight === undefined && (Boolean(!homeReturn && mirrorLakeHost?.skatingAt(x, n, ground)) ||
++    (lakeSkating.enabled() && isLakeSkateIce(x, n) && Math.abs(ground - grid.heightAt(x, n)) <= .16));
+ }
+ function turnView(horizontal: number, vertical: number) {
+   if (horizontal || vertical) ceremonyLook = undefined;
+@@ -2383,7 +2398,7 @@ function surfaceAt(east: number, north: number) {
+   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+ }
+ function outdoorSurfaceAt(east: number, north: number) {
+-  return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
++  return mirrorLakeHost?.exposedSurfaceAt(east, north) ?? townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+ }
+ function snowCleared(east: number, north: number, feet: number) {
+   return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
+@@ -2474,7 +2489,7 @@ function supportAt(
+   surface = surfaceAt(east, north), { floors, ramps, colliders } = geometryAt(east, north),
+ ) {
+   const z = -north;
+-  let height = surface;
++  let height = homeReturn ? surface : Math.max(surface, mirrorLakeHost?.supportAt(east, north, limit) ?? -Infinity);
+   for (const floor of floors) {
+     if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
+   }
+@@ -2496,7 +2511,8 @@ function supportAt(
+ function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
+   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+-  return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
++  return (!homeReturn && mirrorLakeHost?.blocks(east, north, feet, bodyHeight, surfaceEpsilon)) ||
++    railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+     activities.some(activity => activity.blocked?.(east, north, feet)) ||
+     colliders.some(intersects) || floors.some(intersects);
+ }
+@@ -2561,6 +2577,7 @@ function stepJump(dt: number) {
+     const { floors, colliders } = geometryAt(x, n);
+     floors.forEach(checkCeiling);
+     colliders.forEach(checkCeiling);
++    if (!homeReturn && mirrorLakeHost) ceiling = Math.min(ceiling, mirrorLakeHost.ceilingAt(x, n, head - surfaceEpsilon));
+     if (ceiling < next + bodyHeight) {
+       airHeight = Math.max(feet, ceiling - bodyHeight);
+       riseSpeed = 0;
