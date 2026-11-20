@@ -21,6 +21,11 @@ const summitHeight = 800;
 const interactionRadius = 1.1;
 const interactionElevation = 0.43;
 
+export function withinMainSummitRegistrationReach(position: Point, anchor: Point) {
+  return Math.abs(anchor.height - position.height) <= interactionElevation &&
+    Math.hypot(anchor.east - position.east, anchor.north - position.north) <= interactionRadius;
+}
+
 function point(east: number, north: number, height = summitHeight): Point {
   return { east, north, height };
 }
@@ -205,8 +210,7 @@ export function createMainSummitRegistration(landmarks: Landmarks = createMainSu
     action: StampAction | 'out-of-range'; changed: boolean; profile: ReturnType<typeof snapshot>;
   } {
     const actions = area === 'summit' ? summitActions : cloudActions;
-    const target = actions.find(({ anchor }) => Math.abs(anchor.height - position.height) <= interactionElevation &&
-      Math.hypot(anchor.east - position.east, anchor.north - position.north) <= interactionRadius);
+    const target = actions.find(({ anchor }) => withinMainSummitRegistrationReach(position, anchor));
     if (!target) return { action: 'out-of-range', changed: false, profile: snapshot() };
     const changed = !state[target.flag];
     state[target.flag] = true;

@@ -305,6 +305,12 @@ const presence = createTownPresence(scene, camera, announceActivity, resetMoveme
     : grid.heightAt(east, north));
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
+  cloudStamp: {
+    available: presence.summitPassportAvailable,
+    request() {
+      if (!presence.requestSummitPassport('cloud-stamp')) announceActivity('前山碑盖章暂不可用');
+    },
+  },
   enterOrExit(terminal, at) {
     presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
     x = at.east;
@@ -1202,6 +1208,14 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
+presence.onSummitPassport(reply => {
+  if (reply.action !== 'cloud-stamp') return;
+  if (reply.result === 'ok' && reply.progress.cloudStamped) {
+    announceActivity('前山碑已盖章', true);
+    return;
+  }
+  announceActivity(reply.result === 'position' ? '请走到前山碑正面再盖章' : '前山碑盖章暂未确认，请重试');
+});
 presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed, grid.heightAt), {
   ageSeconds, clockMs: () => performance.now(),
 }));
@@ -2561,7 +2575,7 @@ let previous = performance.now();
 let snowMoveScale = 1;
 let chillMoveScale = 1;
 function walkable(x: number, n: number) {
-  if (cloudRoute.active()) return cloudRoute.surfaceAt(x, n, bodyRadius) !== undefined;
+  if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(x, n, bodyRadius) !== undefined;
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
@@ -2578,7 +2592,7 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
-  if (cloudRoute.active()) return cloudRoute.surfaceAt(east, north, bodyRadius) ?? ground;
+  if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
 }
 function outdoorSurfaceAt(east: number, north: number) {
