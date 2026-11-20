@@ -1,0 +1,255 @@
+diff --git a/tests/town-blockout-tavern-mix.test.ts b/tests/town-blockout-tavern-mix.test.ts
+index 2618b78..b3f0209 100644
+--- a/tests/town-blockout-tavern-mix.test.ts
++++ b/tests/town-blockout-tavern-mix.test.ts
+@@ -1,5 +1,9 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
++import { Color, InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
++import { createTavernTableCups } from '../tools/voxel-tavern/town-blockout/tavern-table-cups.ts';
++import { createTavernSeatSpots, tavernSeatPlacements, type TavernCupRow } from '../tools/voxel-tavern/town-blockout/tavern-seats.ts';
++import { layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+ import {
+   createTavernMixBook, getTavernRecipe, tavernAddIns, tavernBases, tavernRecipes,
+ } from '../tools/voxel-tavern/town-blockout/tavern-mix-book.ts';
+@@ -75,3 +79,56 @@ test('the current page can still track a completed mix when local storage is blo
+   assert.deepEqual(book.ids(), [recipe.id]);
+   assert.equal(book.record(recipe.id), false);
+ });
++
++test('a held drink displays one cup only while sitting at a tavern table', () => {
++  const plot = layout.plots.find(({ id }) => id === 'tavern')!;
++  const placements = tavernSeatPlacements(plot);
++  assert.equal(placements.length, 18);
++  assert.equal(placements.filter(({ pose }) => pose.cupRow).length, 16);
++  const piano = placements.find(({ label }) => label === '一楼琴椅')!;
++  const bench = placements.find(({ label }) => label === '二楼阅览长凳')!;
++  assert.equal(piano.pose.cupRow, undefined);
++  assert.equal(bench.pose.cupRow, undefined);
++
++  const scene = new Scene();
++  const table = createTavernTableCups(scene);
++  const mesh = scene.children[0];
++  assert.ok(mesh instanceof InstancedMesh);
++  assert.equal(scene.children.length, 1);
++  let row: TavernCupRow | undefined;
++  const spots = createTavernSeatSpots(plot, { sit: seat => { row = seat.cupRow; } }, () => true);
++  const drink = tavernRecipes[0];
++  table.update(row, drink);
++  assert.equal(mesh.visible, false);
++  assert.equal(mesh.count, 0);
++
++  spots[0].run();
++  const anchor = placements[0].pose.cupRow!;
++  assert.deepEqual(row, anchor);
++  table.update(row, undefined);
++  assert.equal(mesh.visible, false);
++  table.update(row, drink);
++  assert.equal(mesh.visible, true);
++  assert.equal(mesh.count, 9);
++  const matrix = new Matrix4();
++  const center = new Vector3();
++  mesh.getMatrixAt(0, matrix);
++  assert.ok(center.setFromMatrixPosition(matrix).distanceTo(new Vector3(anchor.x, anchor.y + .015, -anchor.n)) < .00005);
++  const tint = new Color();
++  mesh.getColorAt(mesh.count - 1, tint);
++  assert.equal(tint.getHexString(), new Color(drink.color).getHexString());
++
++  row = undefined; // The viewer's ordinary leaveSeat clears the seat and its table anchor.
++  table.update(row, drink);
++  assert.equal(mesh.visible, false);
++  assert.equal(mesh.count, 0);
++  spots.find(({ label }) => label.includes(piano.label))!.run();
++  table.update(row, drink);
++  assert.equal(mesh.visible, false);
++  spots[0].run();
++  table.update(row, drink);
++  assert.equal(mesh.visible, true);
++  table.update(row, undefined);
++  assert.equal(mesh.visible, false);
++  assert.equal(mesh.count, 0);
++});
+diff --git a/tools/voxel-tavern/town-blockout/tavern-activity.ts b/tools/voxel-tavern/town-blockout/tavern-activity.ts
+index b12dc8c..35743d1 100644
+--- a/tools/voxel-tavern/town-blockout/tavern-activity.ts
++++ b/tools/voxel-tavern/town-blockout/tavern-activity.ts
+@@ -119,6 +119,7 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
+   return {
+     spots,
+     getMixIds: book.ids,
++    heldCup: () => held,
+     carryAction() {
+       const drink = held;
+       if (!drink || drinkFeedback?.isDrinking()) return undefined;
+diff --git a/tools/voxel-tavern/town-blockout/tavern-seats.ts b/tools/voxel-tavern/town-blockout/tavern-seats.ts
+index 8225048..ae9e3f4 100644
+--- a/tools/voxel-tavern/town-blockout/tavern-seats.ts
++++ b/tools/voxel-tavern/town-blockout/tavern-seats.ts
+@@ -1,5 +1,8 @@
+ import type { TownPlot } from './landmark-kit';
+-import type { TownActivityContext, TownActivitySpot, TownSeat } from './town-activity';
++import type { TownActivitySpot, TownSeat } from './town-activity';
++
++export type TavernCupRow = { x: number; n: number; y: number; yaw: number };
++type TavernSeat = TownSeat & { cupRow?: TavernCupRow };
+ 
+ type Point = [number, number, number];
+ type Bounds = [number, number, number, number, number, number];
+@@ -9,23 +12,25 @@ type Chair = {
+   yaw: number;
+   approach: [number, number];
+   source?: [number, number, number]; // The baked chair's east, south and heading.
++  servingEdge?: Point;
+ };
+ 
+ const north = 0;
+ const south = Math.PI;
+ const west = -Math.PI / 2;
+ const chairs: readonly Chair[] = [
+-  { label: '一楼西侧餐椅一', at: [-2.375, 3, .5625], yaw: west, approach: [-1.625, .5625], source: [-4.25, -.875, south] },
+-  { label: '一楼西侧餐椅二', at: [-3.875, 3, 1.875], yaw: north, approach: [-3.1, 1.675], source: [-3.5, 1.5, north] },
+-  { label: '一楼中央餐椅一', at: [1.875, 3, 1.0625], yaw: west, approach: [2.625, 1.0625], source: [0, -.125, south] },
+-  { label: '一楼中央餐椅二', at: [.75, 3, 2.25], yaw: north, approach: [1.52, 2.35] },
+-  { label: '一楼琴边餐椅一', at: [-2.75, 3, 2.4375], yaw: south, approach: [-1.97, 2.42], source: [-3.75, 2.875, south] },
+-  { label: '一楼琴边餐椅二', at: [-1.25, 3, 3.6875], yaw: west, approach: [-.47, 3.6875], source: [-3, 5.25, north] },
++  // Serving edges follow the tabletop strips from build-tavern.mjs, after the two relocations below.
++  { label: '一楼西侧餐椅一', at: [-2.375, 3, .5625], yaw: west, approach: [-1.625, .5625], source: [-4.25, -.875, south], servingEdge: [-3.07, 4, .69] },
++  { label: '一楼西侧餐椅二', at: [-3.875, 3, 1.875], yaw: north, approach: [-3.1, 1.675], source: [-3.5, 1.5, north], servingEdge: [-3.875, 4.0625, 1.10] },
++  { label: '一楼中央餐椅一', at: [1.875, 3, 1.0625], yaw: west, approach: [2.625, 1.0625], source: [0, -.125, south], servingEdge: [1.18, 4, 1.06] },
++  { label: '一楼中央餐椅二', at: [.75, 3, 2.25], yaw: north, approach: [1.52, 2.35], servingEdge: [.375, 4.0625, 1.48] },
++  { label: '一楼琴边餐椅一', at: [-2.75, 3, 2.4375], yaw: south, approach: [-1.97, 2.42], source: [-3.75, 2.875, south], servingEdge: [-2.75, 4.0625, 3.265] },
++  { label: '一楼琴边餐椅二', at: [-1.25, 3, 3.6875], yaw: west, approach: [-.47, 3.6875], source: [-3, 5.25, north], servingEdge: [-1.945, 4, 3.69] },
+   { label: '一楼琴椅', at: [-4.875, 3.25, 4.5], yaw: north, approach: [-4.1, 4.64], source: [-4.875, 4.625, north] },
+-  { label: '二楼阅览桌餐椅一', at: [-4.25, 8, -3.125], yaw: south, approach: [-3.5, -3.125] },
+-  { label: '二楼阅览桌餐椅二', at: [-3.5, 8, -.75], yaw: north, approach: [-2.75, -.75] },
+-  { label: '二楼靠栏餐椅一', at: [.25, 8, .875], yaw: south, approach: [1, .875] },
+-  { label: '二楼靠栏餐椅二', at: [1, 8, 3.25], yaw: north, approach: [1.75, 3.25] },
++  { label: '二楼阅览桌餐椅一', at: [-4.25, 8, -3.125], yaw: south, approach: [-3.5, -3.125], servingEdge: [-3.875, 9.0625, -2.36] },
++  { label: '二楼阅览桌餐椅二', at: [-3.5, 8, -.75], yaw: north, approach: [-2.75, -.75], servingEdge: [-3.875, 9.0625, -1.525] },
++  { label: '二楼靠栏餐椅一', at: [.25, 8, .875], yaw: south, approach: [1, .875], servingEdge: [.625, 9.0625, 1.65] },
++  { label: '二楼靠栏餐椅二', at: [1, 8, 3.25], yaw: north, approach: [1.75, 3.25], servingEdge: [.625, 9.0625, 2.48] },
+ ];
+ 
+ const stools = Array.from({ length: 6 }, (_, index) => -4.5 + index * 1.125);
+@@ -114,21 +119,24 @@ export function tavernSeatPlacements(plot: TownPlot) {
+     const [x, y, z] = transform(...point);
+     return { x: east + x, n: north - z, y: base + y };
+   }
+-  function seat(label: string, at: Point, top: number, approach: Point, yaw: number, range = .53) {
++  function seat(label: string, at: Point, top: number, approach: Point, yaw: number, range = .53, servingEdge?: Point) {
+     const { x, n, y: ground } = world(approach);
+     const seated = world([at[0], top, at[2]]);
+-    const pose: TownSeat = { x: seated.x, n: seated.n, eyeY: seated.y + eyeAboveSeat, yaw };
++    const pose: TavernSeat = { x: seated.x, n: seated.n, eyeY: seated.y + eyeAboveSeat, yaw };
++    if (servingEdge) pose.cupRow = { ...world(servingEdge), yaw };
+     return { label, x, n, ground, range, seatY: seated.y, pose };
+   }
+   return [
+-    ...stools.map((x, i) => seat(`吧台第 ${i + 1} 张吧凳`, [x, 3, barStoolZ], 3.75, [x, 3, -.21], 0, .54)),
+-    ...chairs.map(({ label, at, approach, yaw }) => seat(label, at, at[1] + .625, [approach[0], at[1], approach[1]], yaw)),
++    ...stools.map((x, i) => seat(`吧台第 ${i + 1} 张吧凳`,
++      [x, 3, barStoolZ], 3.75, [x, 3, -.21], 0, .54, [x, 4.125, -2.06])),
++    ...chairs.map(({ label, at, approach, yaw, servingEdge }) =>
++      seat(label, at, at[1] + .625, [approach[0], at[1], approach[1]], yaw, .53, servingEdge)),
+     seat('二楼阅览长凳', [-5.25, 8, 1.36], 8.75, [-3.87, 8, 1.36], Math.PI / 2, .75),
+   ];
+ }
+ 
+ export function createTavernSeatSpots(
+-  plot: TownPlot, context: Pick<TownActivityContext, 'sit'>,
++  plot: TownPlot, context: { sit(seat: TavernSeat): void },
+   canStand: (east: number, north: number, ground: number) => boolean,
+ ): TownActivitySpot[] {
+   return tavernSeatPlacements(plot)
+diff --git a/tools/voxel-tavern/town-blockout/tavern-table-cups.ts b/tools/voxel-tavern/town-blockout/tavern-table-cups.ts
+index 855fbf7..43dde96 100644
+--- a/tools/voxel-tavern/town-blockout/tavern-table-cups.ts
++++ b/tools/voxel-tavern/town-blockout/tavern-table-cups.ts
+@@ -2,21 +2,22 @@ import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMateria
+ import type { TavernRecipe } from './tavern-mix-book';
+ import type { TavernCupRow } from './tavern-seats';
+ 
+-const glaze = '#e8c9a0';
+-const ceramic = '#b87959';
++const glaze = '#a98a56';
++const ceramic = '#5d4630';
+ const parts = [
+-  [0, .013, 0, .126, .026, .123, ceramic],
+-  [-.053, .066, 0, .020, .09, .123, glaze],
+-  [.053, .066, 0, .020, .09, .123, glaze],
+-  [0, .066, -.052, .090, .09, .019, ceramic],
+-  [0, .066, .052, .090, .09, .019, glaze],
+-  [0, .082, 0, .088, .025, .084],
++  [0, .015, 0, .146, .030, .143, ceramic],
++  [-.062, .078, 0, .022, .104, .143, ceramic],
++  [.062, .078, 0, .022, .104, .143, glaze],
++  [0, .078, -.060, .104, .104, .023, ceramic],
++  [0, .078, .060, .104, .104, .023, glaze],
++  [.104, .105, 0, .063, .024, .026, glaze],
++  [.104, .049, 0, .063, .024, .026, ceramic],
++  [.134, .077, 0, .021, .071, .028, ceramic],
++  [0, .097, 0, .102, .025, .100],
+ ] as const;
+ 
+-export function createTavernTableCups(scene: Scene, limit: number) {
+-  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial({
+-    emissive: '#5b2b1b', emissiveIntensity: .31,
+-  }), limit * parts.length);
++export function createTavernTableCups(scene: Scene) {
++  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), parts.length);
+   batch.name = '酒馆 · 就座酒杯';
+   batch.instanceMatrix.setUsage(DynamicDrawUsage);
+   batch.count = 0;
+@@ -25,39 +26,31 @@ export function createTavernTableCups(scene: Scene, limit: number) {
+ 
+   const pose = new Object3D();
+   const color = new Color();
+-  const shown: TavernRecipe[] = [];
+   let current: TavernCupRow | undefined;
+-  function update(row: TavernCupRow | undefined, drinks: readonly TavernRecipe[]) {
+-    const count = row ? Math.min(limit, drinks.length) : 0;
+-    if (!count) {
++  let shownColor: string | undefined;
++  function update(row: TavernCupRow | undefined, drink: TavernRecipe | undefined) {
++    if (!row || !drink) {
+       batch.visible = false;
+       batch.count = 0;
+-      shown.length = 0;
+       current = undefined;
++      shownColor = undefined;
+       return;
+     }
+-    if (!row || (current === row && shown.length === count && shown.every((drink, index) => drink === drinks[index]))) return;
++    if (current === row && shownColor === drink.color) return;
+ 
+     current = row;
+-    shown.length = count;
++    shownColor = drink.color;
+     const cos = Math.cos(row.yaw);
+     const sin = Math.sin(row.yaw);
+     pose.rotation.y = -row.yaw;
+-    let index = 0;
+-    for (let cup = 0; cup < count; cup++) {
+-      const drink = drinks[cup];
+-      shown[cup] = drink;
+-      const offset = (cup - (limit - 1) / 2) * .20;
+-      for (const [x, y, z, w, h, d, tint] of parts) {
+-        pose.position.set(row.x + (offset + x) * cos - z * sin,
+-          row.y + y, -row.n + (offset + x) * sin + z * cos);
+-        pose.scale.set(w, h, d);
+-        pose.updateMatrix();
+-        batch.setMatrixAt(index, pose.matrix);
+-        batch.setColorAt(index++, color.set(tint ?? drink.color));
+-      }
++    for (const [index, [x, y, z, w, h, d, tint]] of parts.entries()) {
++      pose.position.set(row.x + x * cos - z * sin, row.y + y, -row.n + x * sin + z * cos);
++      pose.scale.set(w, h, d);
++      pose.updateMatrix();
++      batch.setMatrixAt(index, pose.matrix);
++      batch.setColorAt(index, color.set(tint ?? drink.color));
+     }
+-    batch.count = index;
++    batch.count = parts.length;
+     batch.instanceMatrix.needsUpdate = true;
+     batch.instanceColor!.needsUpdate = true;
+     batch.computeBoundingSphere();
