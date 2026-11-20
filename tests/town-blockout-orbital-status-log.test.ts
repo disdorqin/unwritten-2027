@@ -11,7 +11,7 @@ const confirm = { type: 'confirm', leftHeld: true, rightHeld: true } as const;
 const next = { type: 'next' } as const;
 
 test('registered S-2 ground reaches the shared hand position through the physical cockpit ramp', () => {
-  const route = [[0, -.42], [2.55, -1.44], [2.55, .1], [0, .1], [0, 5.65], [1.42, 5.65], [1.42, 8.63], [0, 8.63]];
+  const route = [[0, -.42], [2.55, -1.44], [2.55, .1], [0, .1], [0, 5.65], [1.25, 5.65], [1.25, 8.72], [0, 8.72]];
   let samples = 0;
   let previous = 0;
   for (let index = 1; index < route.length; index++) {
@@ -28,8 +28,9 @@ test('registered S-2 ground reaches the shared hand position through the physica
       samples++;
     }
   }
-  assert.equal(samples, 731);
+  assert.equal(samples, 720);
   assert.equal(previous, accepted.ground);
+  assert.deepEqual(readOrbitalLogReach({ x: 0, n: 8.72, ground: previous }, rooms.cockpit), { left: true, right: true });
   assert.deepEqual(readOrbitalLogReach(accepted, rooms.cockpit), { left: true, right: true });
 });
 
