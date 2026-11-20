@@ -1,0 +1,126 @@
+diff --git a/tests/town-blockout-snowfight.test.ts b/tests/town-blockout-snowfight.test.ts
+index 8c7e3ccc..c13ece83 100644
+--- a/tests/town-blockout-snowfight.test.ts
++++ b/tests/town-blockout-snowfight.test.ts
+@@ -1,6 +1,6 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
+-import { Scene, Vector3 } from 'three';
++import { Scene, type BoxGeometry, type InstancedMesh, type MeshBasicMaterial } from 'three';
+ import {
+   SnowWallField, SnowfightMatch, WALL_DECAY_MS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite, freeWallTeam, wallCellOf,
+ } from '../src/presence/snowfight';
+@@ -202,15 +202,19 @@ test('dig field deepens pits with a cap', () => {
+   assert.equal(digs.size, 2, 'oldest pit is evicted at the cap');
+ });
+
+-test('the wall preview and confirmed placement use the same three-layer stock rules', context => {
++test('aimed wall cells share preview, three-layer stock, and confirmed placement rules', context => {
+   const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+-  Object.defineProperty(globalThis, 'document', { configurable: true, value: { getElementById: () => null } });
++  const retiredButtons = new Map(['snowfight-start', 'snowfight-build'].map(id => [id, { hidden: false, onclick: null }]));
++  Object.defineProperty(globalThis, 'document', {
++    configurable: true, value: { getElementById: (id: string) => retiredButtons.get(id) ?? null },
++  });
+   context.after(() => {
+     if (original) Object.defineProperty(globalThis, 'document', original);
+     else Reflect.deleteProperty(globalThis, 'document');
+   });
+   type Presence = Parameters<typeof createTeamSnowfight>[0]['presence'];
+   let onWall: Parameters<Presence['onSnowfightWallEvent']>[0] = () => {};
++  let onState: Parameters<Presence['onSnowfightState']>[0] = () => {};
+   let onReject: Parameters<Presence['onSnowfightRejected']>[0] = () => {};
+   let self: number | null = 7;
+   let connected = true;
+@@ -218,7 +222,7 @@ test('the wall preview and confirmed placement use the same three-layer stock ru
+   const presence = {
+     selfId: () => self,
+     snowfightAvailable: () => connected,
+-    onSnowfightState() {},
++    onSnowfightState(callback: typeof onState) { onState = callback; },
+     onSnowfightRejected(callback: typeof onReject) { onReject = callback; },
+     onSnowfightWallEvent(callback: typeof onWall) { onWall = callback; },
+     sendSnowfightPlace(gx: number, gy: number) {
+@@ -233,21 +237,34 @@ test('the wall preview and confirmed placement use the same three-layer stock ru
+   const session = createTeamSnowfight({
+     scene, presence, stock, heightAt: () => 2, announce() {},
+     playerPose: () => ({ east: 320.25, north: 250.25 }),
+-    aimRay: () => ({ origin: new Vector3(320.25, 3, -252.45), dir: new Vector3(0, 0, 1) }),
+-    snowDepthLevel: () => 1, canScoop: () => true, freeBuildAvailable: () => true,
++    snowDepthLevel: () => 1, freeBuildAvailable: () => true,
+   });
+-  const ghost = scene.getObjectByName('Town snowfight wall ghost');
+-  assert.ok(ghost);
+-  assert.equal(session.tryPlace(), false);
+-  assert.ok(session.setBuildMode(true));
++  const ghost = scene.getObjectByName('Town snowfight wall ghost') as InstancedMesh<BoxGeometry, MeshBasicMaterial> | undefined;
++  assert.ok(ghost?.isInstancedMesh && ghost.material.isMeshBasicMaterial);
++  assert.deepEqual([...retiredButtons.values()], [{ hidden: true, onclick: null }, { hidden: true, onclick: null }]);
++  const eastCell = { gx: 640, gy: 500 };
++  const westCell = { gx: 626, gy: 500 };
++  const door = { gx: 266, gy: 544 };
++  session.update(0, door);
++  assert.equal(ghost.material.color.getHexString(), 'ff7a6b');
++  assert.ok(session.tryPlace(door));
++  assert.deepEqual(sent, []);
++  for (const cell of [westCell, eastCell]) {
++    session.update(0, cell);
++    assert.ok(ghost.visible);
++    assert.equal(ghost.material.color.getHexString(), '9fe8ff');
++  }
+   session.update(0);
+-  assert.ok(ghost.visible);
+-  assert.ok(session.tryPlace());
++  assert.equal(ghost.visible, false);
++  assert.ok(session.tryPlace(westCell));
++  assert.deepEqual(sent.pop(), [626, 500]);
++  onReject('door');
++  assert.ok(session.tryPlace(eastCell));
+   assert.equal(stock.amount(), 12);
+   assert.equal(stock.available(), 9);
+   onReject('door');
+   assert.equal(stock.available(), 12);
+-  assert.ok(session.tryPlace());
++  assert.ok(session.tryPlace(eastCell));
+   onWall({ kind: 'wall-set', gx: 641, gy: 500, layer: 0, hp: 3, ownerId: 7, team: 2 });
+   assert.equal(stock.amount(), 12, 'an unrelated snapshot is not a purchase receipt');
+   const receipt = { kind: 'wall-set', gx: 640, gy: 500, hp: 3, ownerId: 7, team: 2 } as const;
+@@ -255,21 +272,35 @@ test('the wall preview and confirmed placement use the same three-layer stock ru
+   onWall({ ...receipt, layer: 0 });
+   assert.equal(stock.amount(), 9);
+   for (const layer of [1, 2]) {
+-    assert.ok(session.tryPlace());
++    assert.ok(session.tryPlace(eastCell));
+     onWall({ ...receipt, layer });
+   }
+   assert.equal(stock.amount(), 3);
+   assert.equal(session.wallColumnAt(640, 500)?.height, 3);
+   const sentBefore = sent.length;
+-  assert.ok(session.tryPlace());
++  assert.ok(session.tryPlace(eastCell));
+   assert.equal(sent.length, sentBefore, 'the local fourth layer never reaches the host');
+   assert.equal(stock.amount(), 3);
+
+   onWall({ kind: 'wall-clear', blocks: [{ gx: 640, gy: 500, layer: 2 }] });
+-  assert.ok(session.tryPlace());
++  assert.ok(session.tryPlace(eastCell));
+   assert.equal(stock.available(), 0);
+   self = null;
+   connected = false;
+   session.update(0);
+   assert.equal(stock.available(), 3, 'disconnect releases an unconfirmed wall request');
++
++  self = 7;
++  connected = true;
++  onState({ phase: 'build', endsInMs: 6_000, scores: [0, 0], teams: [[7, 0]],
++    owners: [-1, -1, -1], activePoint: -1, captureTeam: -1, captureProgress: 0 });
++  session.update(0, eastCell);
++  assert.equal(ghost.material.color.getHexString(), 'ff7a6b', 'the formal build phase still enforces team half');
++  const beforeWrongHalf = sent.length;
++  assert.ok(session.tryPlace(eastCell));
++  assert.equal(sent.length, beforeWrongHalf);
++  session.update(0, westCell);
++  assert.equal(ghost.material.color.getHexString(), '9fe8ff');
++  assert.ok(session.tryPlace(westCell));
++  assert.deepEqual(sent.at(-1), [626, 500]);
+ });

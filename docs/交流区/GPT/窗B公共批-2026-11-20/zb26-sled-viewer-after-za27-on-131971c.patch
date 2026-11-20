@@ -15,7 +15,7 @@ index 2b35d07d..a73d0562 100644
      if (pending && !ride) {
        const from = pending;
 diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
-index 921fae33..36ff03c1 100644
+index 921fae33..d41ec293 100644
 --- a/tools/voxel-tavern/town-blockout/viewer.ts
 +++ b/tools/voxel-tavern/town-blockout/viewer.ts
 @@ -140,6 +140,7 @@ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-su
@@ -105,7 +105,7 @@ index 921fae33..36ff03c1 100644
    ({ x, n, y: ground } = parked);
    airHeight = undefined;
    riseSpeed = 0;
-@@ -314,22 +322,51 @@ function leaveSled() {
+@@ -314,22 +322,61 @@ function leaveSled() {
  }
  function alignPlayerWithSled() {
    const spot = sledRide.spot;
@@ -130,14 +130,15 @@ index 921fae33..36ff03c1 100644
 +  return sledRide.active() ? sledRide.spot.yaw : yaw;
 +}
 +function createSledRacks(domain: 'town' | 'summit'): SledRackState {
-+  const racks = resolveTownSledRacks(domain, (east, north) => {
++  const sampleFooting = (east: number, north: number) => {
 +    if (domain === 'summit') {
 +      const surface = cloudRoute.surfaceAt(east, north, sledFootRadius);
 +      if (surface === undefined || cloudRoute.blocked(east, north, surface, sledFootRadius, bodyHeight)) return;
 +      return surface;
 +    }
 +    return dryTownLandingHeight(east, north, undefined, true);
-+  }, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
++  };
++  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
 +  const visuals = createTownSledVisuals(domain === 'summit' ? cloudRoute.scene : scene, racks);
 +  const actions = racks.map(rack => {
 +    let ride: ReturnType<typeof createSledRide> | undefined;
@@ -152,7 +153,16 @@ index 921fae33..36ff03c1 100644
 +        if (sledRide.active()) return;
 +        ride ??= createSledRide(sledWorld);
 +        const parked = ride.parked() !== undefined;
-+        if (!(parked ? ride.remount(x, n, ground) : ride.mount(rack.x, rack.n, rack.y, rack.yaw))) return;
++        if (parked) {
++          if (!ride.remount(x, n, ground)) return;
++        } else {
++          // Deferred station and palace floors may have loaded since this rack was placed.
++          const feet = sampleFooting(rack.x, rack.n);
++          if (feet === undefined || !ride.mount(rack.x, rack.n, feet, rack.yaw)) {
++            announceActivity('雪橇旁暂时没有安全落脚点');
++            return;
++          }
++        }
 +        sledRide = ride;
 +        visuals.setRackVehicle(rack.id, undefined);
 +        setMountedRackVehicle = spot => visuals.setRackVehicle(rack.id, spot);
@@ -170,7 +180,7 @@ index 921fae33..36ff03c1 100644
  const previousStationEye = new Vector3();
  let stationViewStillSince = Infinity;
  const stationCullCamera = new PerspectiveCamera();
-@@ -1055,7 +1092,7 @@ const personalFirecrackers = createTownPersonalFireworks({
+@@ -1055,7 +1102,7 @@ const personalFirecrackers = createTownPersonalFireworks({
    player() {
      const protectedSpace = !walking || seated || boardingGround || museumOverlay() || waterAtFeet() || homeReturn ||
        roofed(x, n, ground) || personalFireworkRestricted(x, n, ground);
@@ -179,7 +189,7 @@ index 921fae33..36ff03c1 100644
    },
    listener: () => camera.position,
    hand(owner) {
-@@ -1089,15 +1126,6 @@ activities.unshift(tavernActivity);
+@@ -1089,15 +1136,6 @@ activities.unshift(tavernActivity);
  activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
  activities.push(marketFair);
  const activitySpots = activities.flatMap(activity => activity.spots);
@@ -195,7 +205,7 @@ index 921fae33..36ff03c1 100644
  activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
  function registerHomeDoors(doors: readonly TownHousePortal[]) {
    for (const door of doors) {
-@@ -2057,9 +2085,13 @@ function openTavernSeatActions() {
+@@ -2057,9 +2095,13 @@ function openTavernSeatActions() {
  const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
  function currentAction() {
    if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
@@ -210,7 +220,7 @@ index 921fae33..36ff03c1 100644
    if (boardingGround) {
      if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
      const stop = railway.currentStop;
-@@ -2093,8 +2125,9 @@ function currentAction() {
+@@ -2093,8 +2135,9 @@ function currentAction() {
    }
    const cable = cloudRoute.action({ east: x, north: n, height: ground });
    if (cable) return cable;
@@ -221,7 +231,7 @@ index 921fae33..36ff03c1 100644
    if (nearest) return nearest;
    if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
    return tavernActivity.carryAction();
-@@ -2439,7 +2472,7 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
+@@ -2439,7 +2482,7 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
    const edge = hotSpringSoak.dryEdge();
    const bathEdge = edge && mascotFollowGround(edge.x, edge.n, edge.ground) !== undefined ? edge : undefined;
    ownedMascot = mascotFollower.update({
@@ -230,7 +240,7 @@ index 921fae33..36ff03c1 100644
      speed: movementSpeed, indoor: Boolean(homeReturn), wet: Boolean(wetGround),
      skating: skatesOnIce(), bathing: hotSpringSoak.active(), sitting: Boolean(seated),
    }, dt, mounted, bathEdge);
-@@ -2715,6 +2748,7 @@ function showLiveRailSchedule(title: string, read: () => string) {
+@@ -2715,6 +2758,7 @@ function showLiveRailSchedule(title: string, read: () => string) {
    }, { once: true });
  }
  if (!landAtSelectedDestination()) throw new Error('小镇出生点不可用');
@@ -238,7 +248,7 @@ index 921fae33..36ff03c1 100644
  walking = true;
  element('help').textContent = touchWalk.active()
    ? '滑动转向，短按大交互键互动。瞄准雪地长按交互键采雪。投掷与堆墙有独立按钮。'
-@@ -2820,6 +2854,42 @@ function refreshPlayerControls() {
+@@ -2820,6 +2864,42 @@ function refreshPlayerControls() {
    });
  }
 
@@ -281,7 +291,7 @@ index 921fae33..36ff03c1 100644
  function renderCloudRoute(frameSeconds: number) {
    const cabin = cloudRoute.ridePoint();
    if (cabin) {
-@@ -2827,6 +2897,7 @@ function renderCloudRoute(frameSeconds: number) {
+@@ -2827,6 +2907,7 @@ function renderCloudRoute(frameSeconds: number) {
      faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
      element('position').textContent = '缆车一线 · 前山';
    } else {
@@ -289,7 +299,7 @@ index 921fae33..36ff03c1 100644
      const { forward, right, sprint } = walkingAxes();
      const speed = (sprint ? 11.3 : 7.5) / Math.max(1, Math.hypot(forward, right));
      const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
-@@ -2834,18 +2905,23 @@ function renderCloudRoute(frameSeconds: number) {
+@@ -2834,18 +2915,23 @@ function renderCloudRoute(frameSeconds: number) {
      const interpolation = walkClock.advance(frameSeconds, () => {
        walkPrevious.copy(walkCurrent);
        if (moveAllowed()) {
@@ -318,7 +328,7 @@ index 921fae33..36ff03c1 100644
    presence.update(Math.min(.25, frameSeconds));
    const enabled = moveAllowed();
    touchWalk.setAllowed(enabled);
-@@ -2866,7 +2942,7 @@ renderer.setAnimationLoop(now => {
+@@ -2866,7 +2952,7 @@ renderer.setAnimationLoop(now => {
    const frameSeconds = Math.max(0, now - previous) / 1000;
    const dt = Math.min(.25, frameSeconds);
    previous = now;
@@ -327,7 +337,7 @@ index 921fae33..36ff03c1 100644
    if (cloudRoute.active()) {
      renderCloudRoute(frameSeconds);
      return;
-@@ -2956,19 +3032,11 @@ renderer.setAnimationLoop(now => {
+@@ -2956,19 +3042,11 @@ renderer.setAnimationLoop(now => {
            lakeSkateMotion.reset();
            if (sledRide.active()) {
              const beforeX = x, beforeN = n;
@@ -348,7 +358,7 @@ index 921fae33..36ff03c1 100644
            }
          } else if (skatesOnIce() && landingFeedback.pose() === 'none') {
            snowMoveScale = chillMoveScale = 1;
-@@ -3031,36 +3099,15 @@ renderer.setAnimationLoop(now => {
+@@ -3031,36 +3109,15 @@ renderer.setAnimationLoop(now => {
      boardingGround ? camera.position.x : seated?.x ?? x,
      boardingGround ? -camera.position.z : seated?.n ?? n,
      boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),

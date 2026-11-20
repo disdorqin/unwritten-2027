@@ -1,0 +1,175 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -1,6 +1,6 @@
+ import {
+   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
+-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
++  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Raycaster, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
+ } from 'three';
+ import { addScenery } from './scenery';
+ import { buildPineCamp } from './town-pine-camp';
+@@ -1437,7 +1437,6 @@
+ }
+ const tossOrigin = new Vector3();
+ const tossDirection = new Vector3();
+-const touchHoldMilliseconds = 150;
+ const gatherRayEnd = new Vector3();
+ const plazaSnowSupply = createPlazaSnowSupply();
+ const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false,
+@@ -1640,12 +1639,7 @@
+   heightAt: (east, north) => grid.heightAt(east, north),
+   announce: message => announceActivity(message),
+   playerPose: () => ({ east: x, north: n }),
+-  aimRay: () => {
+-    aimSnowball();
+-    return { origin: tossOrigin, dir: tossDirection };
+-  },
+   snowDepthLevel: () => snowCover.depth().level,
+-  canScoop: () => aimsAtNearbySnow(),
+   freeBuildAvailable: presence.freeSnowWallsAvailable,
+ });
+
+@@ -1735,6 +1729,67 @@
+   tossDirection.set(Math.sin(yaw) * flat, Math.sin(pitch), -Math.cos(yaw) * flat);
+   tossOrigin.set(x, (airHeight ?? ground) + eye - .08, -n).addScaledVector(tossDirection, .06);
+ }
++const wallAimFrom = new Vector3();
++const wallAimTo = new Vector3();
++const touchSnowRay = new Raycaster();
++const touchSnowCoordinates = new Vector2();
++const wallAimReach = 4.5;
++
++function snowWallTarget(origin: Vector3, direction: Vector3) {
++  if (direction.y >= -.1) return;
++  wallAimFrom.copy(origin);
++  // Short segments keep the first obstruction and the terrain grade at the cursor.
++  for (let distance = 1.5; distance <= wallAimReach; distance += 1.5) {
++    wallAimTo.copy(origin).addScaledVector(direction, distance);
++    const hit = sweepSnowball(wallAimFrom, wallAimTo, 0, 'local', snowballExtras);
++    if (!hit) {
++      wallAimFrom.copy(wallAimTo);
++      continue;
++    }
++    const east = hit.at.x, north = -hit.at.z;
++    const gx = wallCellOf(east), gy = wallCellOf(north);
++    if (hit.kind === 'target') {
++      const wallKey = hit.targetId?.split(':');
++      if (wallKey?.[0] !== 'wall') return;
++      const wallX = Number(wallKey[1]), wallY = Number(wallKey[2]);
++      const wall = teamFight.wallColumnAt(wallX, wallY);
++      if (wall && hit.at.y >= wall.ground + wall.height * .5 - .09) return { gx: wallX, gy: wallY };
++      return;
++    }
++    const support = supportAt(east, north, hit.at.y + .06);
++    if (Math.abs(hit.at.y - support) <= .25) return { gx, gy };
++    return;
++  }
++}
++
++function aimedSnowWall() {
++  aimSnowball();
++  return snowWallTarget(tossOrigin, tossDirection);
++}
++
++function throwSnowball(origin: Vector3, direction: Vector3) {
++  if (!snowballs.getState().ammo) {
++    announceActivity(touchWalk.active() ? '对准近处雪地，长按交互键采集' : '对准近处雪地，按住 E 采集');
++    return;
++  }
++  personalFirecrackers.cancelSparkler();
++  snowballs.throwBall(origin, direction, 'local', 1);
++}
++
++function tapSnowTarget(clientX: number, clientY: number) {
++  if (!canUseSnow()) return false;
++  const { left, top, width, height } = renderer.domElement.getBoundingClientRect();
++  if (!width || !height) return false;
++  touchSnowCoordinates.set((clientX - left) / width * 2 - 1, 1 - (clientY - top) / height * 2);
++  camera.updateMatrixWorld();
++  touchSnowRay.setFromCamera(touchSnowCoordinates, camera);
++  const { origin, direction } = touchSnowRay.ray;
++  return snowControls.touchPrimary(snowWallTarget(origin, direction), () => {
++    tossOrigin.copy(origin).addScaledVector(direction, .06);
++    throwSnowball(tossOrigin, direction);
++  });
++}
++
+ const canUseSnow = () => moveAllowed() && !cloudRoute.active() && !sledRide.active() && !homeReturn &&
+   waterAtFeet()?.mode !== 'swim';
+ const snowControls = createTownSnowControls({
+@@ -1749,22 +1804,15 @@
+   canInteract: () => Boolean(currentAction()),
+   interact,
+   throwSnowball() {
+-    if (!snowballs.getState().ammo) {
+-      announceActivity(touchWalk.active() ? '对准近处雪地，长按交互键采集' : '对准近处雪地，按住 E 采集');
+-    } else {
+-      aimSnowball();
+-      personalFirecrackers.cancelSparkler();
+-      snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
+-    }
++    aimSnowball();
++    throwSnowball(tossOrigin, tossDirection);
+   },
+-  buildMode: teamFight.buildMode,
+-  setBuildMode: teamFight.setBuildMode,
++  wallTarget: aimedSnowWall,
+   placeWall: teamFight.tryPlace,
+ });
+ const mobileControls = mountTownMobileControls(snowControls, {
+   action: actionButton,
+   throwButton: snowPrimaryButton,
+-  wallButton: element<HTMLButtonElement>('snowfight-build'),
+   brakeButton: touchSledBrakeButton,
+   direction: element('touch-walk'),
+   jump: touchJump,
+@@ -1808,8 +1856,8 @@
+   remoteSnowballTargets.length = remoteCount;
+   snowballExtras.length = 0;
+   snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
+-  if (sledRide.active() && teamFight.buildMode()) teamFight.setBuildMode(false);
+-  teamFight.update(dt);
++  const wallPreview = canUseSnow() ? touchWalk.active() ? snowControls.touchWallPreview() : aimedSnowWall() : undefined;
++  teamFight.update(dt, wallPreview);
+   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
+   snowControls.update(dt);
+   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
+@@ -2165,8 +2213,8 @@
+   pitch = selector.value === '雪团练习场' ? .09 : 0;
+   return true;
+ }
+-const walkMouseHelp = '移动鼠标转向，WASD 行走，空格跳跃。短按 E 互动，瞄准雪地长按 E 采雪。左键投掷，B 切换堆墙。骑行时空格刹车，E 下橇。';
+-const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动；点准心下方按钮可锁定鼠标视角。';
++const walkMouseHelp = '移动鼠标转向，WASD 行走，空格跳跃。短按 E 互动，瞄准雪地长按 E 采雪。左键瞄地放墙，瞄空或瞄人投雪球。骑行时空格刹车，E 下橇。';
++const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，短按 E 互动、长按采雪。左键短点瞄地放墙，瞄空或瞄人投掷。';
+ let lookLocked = false;
+ let lockFailure: DesktopLookLockFailure | undefined;
+ let lastUnlockAt = 0;
+@@ -2267,7 +2315,7 @@
+ if (typeof renderer.domElement.requestPointerLock !== 'function' ||
+     /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
+ const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
+-  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, undefined, touchLookSensitivity);
++  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, undefined, touchLookSensitivity, tapSnowTarget);
+ const lookSensitivityInput = element<HTMLInputElement>('touch-look-sensitivity');
+ lookSensitivityInput.value = String(touchLookSensitivity());
+ lookSensitivityInput.addEventListener('input', () => setTouchLookSensitivity(Number(lookSensitivityInput.value)));
+@@ -2761,7 +2809,7 @@
+ townSledRacks = createSledRacks('town');
+ walking = true;
+ element('help').textContent = touchWalk.active()
+-  ? '滑动转向，短按大交互键互动。瞄准雪地长按交互键采雪。投掷与堆墙有独立按钮。'
++  ? '滑动转向，短按大交互键互动。瞄准雪地长按交互键采雪。点地预览，再点同一处放墙。点空处或人物投雪球。'
+   : walkDragHelp;
+ refreshLockHint();
+ let presenceSkateSpeed = 0;
+@@ -2858,8 +2906,6 @@
+     canMove: moveAllowed(),
+     driving: sledRide.active(),
+     canUseSnow: canUseSnow(),
+-    canBuild: teamFight.canBuild(),
+-    buildMode: teamFight.buildMode(),
+     action: currentAction()?.label,
+   });
+ }
