@@ -18,7 +18,6 @@ jobs:
     env:
       EXPANSION_BASELINE_SHA: 76d52afe424a7bdb8b54123187dd853e33f72a47
       EXPANSION_URL: http://127.0.0.1:4331/tools/voxel-tavern/town-expansion-review.html
-      EXPANSION_OUTPUT: ${{ runner.temp }}/s1-q1-proof
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -36,6 +35,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          EXPANSION_OUTPUT="$RUNNER_TEMP/s1-q1-proof"
+          printf 'EXPANSION_OUTPUT=%s\n' "$EXPANSION_OUTPUT" >> "$GITHUB_ENV"
           mkdir -p "$EXPANSION_OUTPUT"
           s1_patch="$GITHUB_WORKSPACE/docs/交流区/GPT/B01续段候选/s1-authority-and-ring.patch"
           printf '%s  %s\n' ccdbf842f67b6a6c2c82691f2e2e719bb69e31aeb9c9c8e6737c8090cf5fd9ca "$s1_patch" | sha256sum -c
