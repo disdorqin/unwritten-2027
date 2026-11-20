@@ -2,6 +2,7 @@ import {
   AmbientLight, BoxGeometry, BufferGeometry, Color, DirectionalLight, Fog, Group, Line, LineBasicMaterial,
   Mesh, MeshLambertMaterial, Scene, Vector3,
 } from 'three';
+import { isMountainPresenceFoot } from '../../../src/shared/za22-mountain-domain';
 import {
   mountMainSummitAssembly, summitAssemblyAnchor, supportsCloudTerrace,
 } from './main-summit-assembly';
@@ -259,14 +260,25 @@ export function createZa22CloudRoute(host: Host) {
     });
   }
 
+  function surfaceAt(east: number, north: number, radius: number) {
+    return za22CloudSurfaceAt(east, north, radius) ?? world?.gate.surfaceAt(east, north, radius);
+  }
+
+  function walkingSurfaceAt(east: number, north: number, radius: number) {
+    const existing = surfaceAt(east, north, radius);
+    if (existing !== undefined || mode !== 'summit' || !world) return existing;
+    const height = world.assembly.trailSurfaceAt(
+      east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, radius,
+    );
+    return height !== undefined && isMountainPresenceFoot(east, north, height) ? height : undefined;
+  }
+
   return {
     scene, action, update, updateView,
     active: () => mode !== 'town',
     riding: () => ride !== undefined,
     ridePoint: () => ride && line.timeline(host.now(), ride.index).at,
-    surfaceAt(east: number, north: number, radius: number) {
-      return za22CloudSurfaceAt(east, north, radius) ?? world?.gate.surfaceAt(east, north, radius);
-    },
+    surfaceAt, walkingSurfaceAt,
     acceptsStep(fromEast: number, fromNorth: number, toEast: number, toNorth: number, radius: number) {
       return world?.gate.acceptsStep(fromEast, fromNorth, toEast, toNorth, radius) ?? true;
     },

@@ -2575,7 +2575,7 @@ let previous = performance.now();
 let snowMoveScale = 1;
 let chillMoveScale = 1;
 function walkable(x: number, n: number) {
-  if (cloudRoute.active()) return cloudRoute.surfaceAt(x, n, bodyRadius) !== undefined;
+  if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(x, n, bodyRadius) !== undefined;
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
@@ -2592,7 +2592,7 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
-  if (cloudRoute.active()) return cloudRoute.surfaceAt(east, north, bodyRadius) ?? ground;
+  if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
 }
 function outdoorSurfaceAt(east: number, north: number) {
