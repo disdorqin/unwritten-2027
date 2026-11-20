@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>星港坪 · 飞行器装配</title>
+  <style>
+    :root{font-family:'Atkinson Hyperlegible Next',system-ui,sans-serif;color:#f7f0dc;background:#aabec9;color-scheme:dark}
+    *{box-sizing:border-box}body{margin:0}canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+    header,aside,#aim{position:fixed;background:#263739ee;border:1px solid #c6bf9a75;border-radius:7px;padding:11px 15px}header{top:18px;left:18px;max-width:calc(100vw - 36px)}aside{bottom:18px;left:18px;max-width:calc(100vw - 36px)}
+    h1{font-size:1.15rem;margin:0 0 8px}p{margin:6px 0;line-height:1.4;font-size:.89rem}button{font:inherit;font-size:.83rem;color:inherit;border:1px solid #c8c29f85;border-radius:4px;background:#415354;padding:5px 8px;margin:3px 4px 0 0;cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:2px solid #f4d397}
+    #cursor{position:fixed;left:50%;top:50%;height:11px;width:11px;transform:translate(-50%,-50%);color:white;pointer-events:none;text-shadow:0 0 5px #182524}#aim{position:fixed;left:50%;top:calc(50% + 21px);transform:translateX(-50%);padding:4px 9px;font-size:.83rem;white-space:nowrap;pointer-events:none}
+  </style>
+</head>
+<body>
+  <main id="scene" aria-label="云海台装配架"></main>
+  <header><h1>星港坪 · 飞行器装配</h1><p>WASD 移动，鼠标或方向键转向，E 安装或点火</p><p id="status" role="status"></p></header>
+  <aside aria-label="走查输入"><p>走查输入</p><button id="review-nav" type="button">提供导航芯</button><button id="review-key" type="button">提供讲古钥一</button><button id="review-night" type="button">设为信标首分钟</button></aside>
+  <span id="cursor" aria-hidden="true">+</span><span id="aim" hidden></span>
+  <script type="module" src="./town-blockout/starport-assembly-review.ts"></script>
+</body>
+</html>
