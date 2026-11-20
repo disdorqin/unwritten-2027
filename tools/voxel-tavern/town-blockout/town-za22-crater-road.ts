@@ -1,6 +1,6 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
-import { mountMeteorCraterSurface } from './meteor-crater-surface';
+import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 
 export const craterWestSurvey = Object.freeze({
@@ -13,6 +13,14 @@ const tileSize = 48;
 const gateRadius = meteorCraterRimRadius + .27;
 type Foot = Readonly<{ east: number; north: number }>;
 
+type WestCraterRoad = {
+  group: Group;
+  anchor: MeteorCraterWorldAnchor;
+  lip: Foot & { height: number };
+  heightAt(east: number, north: number): number | undefined;
+  fenceBlocks(east: number, north: number, height: number, radius: number): boolean;
+};
+
 function inCrater(foot: Foot) {
   return Math.hypot(foot.east - craterWestSurvey.east, foot.north - craterWestSurvey.north) < gateRadius;
 }
@@ -23,7 +31,7 @@ export function permitsMeteorCraterStep(from: Foot, to: Foot, nightOpen: boolean
 }
 
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
-export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number) {
+export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
