@@ -24,6 +24,7 @@ type Player = Readonly<{
   connected: boolean;
   lastSequence: number;
   spawnSequence: number;
+  monsterInvulnerableUntil?: number;
   down?: Down;
   spawn?: Spawn;
 }>;
@@ -55,6 +56,7 @@ export type UndergroundSurvivalOptions = Readonly<{
 }>;
 
 const downedDurationMs = 10_000;
+const monsterInvulnerabilityMs = 500;
 type Damage = Readonly<{
   sequence: number;
   kind: 'monster' | 'abyss' | 'ordinary-fall' | 'first-fall';
@@ -158,7 +160,8 @@ export function createUndergroundSurvival(options: UndergroundSurvivalOptions) {
       const layer = mode === 'survival' ? foot.point.layer : undefined;
       if (player.mode === mode && player.layer === layer) return false;
       const leaving = mode === 'peace';
-      savePlayer({ ...player, mode, layer, health: leaving ? maxHealth : player.health },
+      savePlayer({ ...player, mode, layer, health: leaving ? maxHealth : player.health,
+        monsterInvulnerableUntil: leaving ? undefined : player.monsterInvulnerableUntil },
         leaving ? { kind: 'finish-trip', playerId: id, remove: [] } : undefined);
       return true;
     },
@@ -169,10 +172,18 @@ export function createUndergroundSurvival(options: UndergroundSurvivalOptions) {
       const contact = active(id);
       if (!contact || !fresh(event.sequence, contact.player) || !Number.isFinite(event.amount) || event.amount <= 0) return false;
       const { player, foot } = contact;
-      if (event.kind === 'monster' && player.health === maxHealth && event.amount >= maxHealth) return false;
+      const monster = event.kind === 'monster';
+      if (monster && player.health === maxHealth && event.amount >= maxHealth) return false;
       const health = Math.max(0, player.health - event.amount);
-      const down = health === 0 ? { sequence: event.sequence, deadline: time() + downedDurationMs, point: { ...foot.point } } : undefined;
-      savePlayer({ ...player, health, lastSequence: event.sequence, down });
+      const now = monster || health === 0 ? time() : 0;
+      if (monster && player.monsterInvulnerableUntil !== undefined && now < player.monsterInvulnerableUntil) {
+        // This contact was resolved inside the window. A replay after expiry cannot cause damage.
+        savePlayer({ ...player, lastSequence: event.sequence });
+        return false;
+      }
+      const down = health === 0 ? { sequence: event.sequence, deadline: now + downedDurationMs, point: { ...foot.point } } : undefined;
+      savePlayer({ ...player, health, lastSequence: event.sequence, down,
+        monsterInvulnerableUntil: monster ? now + monsterInvulnerabilityMs : player.monsterInvulnerableUntil });
       return true;
     },
 
@@ -219,7 +230,7 @@ export function createUndergroundSurvival(options: UndergroundSurvivalOptions) {
       }] : state.drops;
       const ticket = player.spawnSequence + 1;
       savePlayer({ ...player, mode: 'peace', layer: undefined, health: maxHealth, down: undefined,
-        spawnSequence: ticket, spawn: { ticket, kind: 'wake', point: { ...point } },
+        monsterInvulnerableUntil: undefined, spawnSequence: ticket, spawn: { ticket, kind: 'wake', point: { ...point } },
       }, { kind: 'finish-trip', playerId: id, remove: removed }, drops);
       return true;
     },

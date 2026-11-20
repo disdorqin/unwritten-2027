@@ -94,6 +94,92 @@ test('health visibility follows confirmed entry mode and only underground combat
   assert.equal(world.status('miner').health, 100);
 });
 
+test('monster hits have a per-player 500ms window and blocked contacts cannot replay at expiry', () => {
+  const { world, enter, setTime } = fixture();
+  enter();
+  enter('friend');
+  const hit = { kind: 'monster', amount: 16 } as const;
+  setTime(1000);
+  assert.equal(world.damage('miner', { ...hit, sequence: 1 }), true);
+  assert.equal(world.damage('miner', { ...hit, sequence: 2 }), false);
+  setTime(900);
+  assert.equal(world.damage('miner', { ...hit, sequence: 3 }), false);
+  setTime(1499);
+  assert.equal(world.damage('friend', { ...hit, sequence: 1 }), true);
+  assert.equal(world.damage('miner', { kind: 'abyss', sequence: 4, amount: 5 }), true);
+  assert.equal(world.damage('miner', { ...hit, sequence: 5 }), false);
+  assert.equal(world.status('miner').health, 79);
+  setTime(1500);
+  assert.equal(world.damage('miner', { ...hit, sequence: 5 }), false);
+  assert.equal(world.damage('miner', { ...hit, sequence: 6 }), true);
+  assert.equal(world.status('miner').health, 63);
+});
+
+test('a failed save neither starts monster immunity nor consumes a blocked hit', () => {
+  const { world, enter, setTime, failWrites } = fixture();
+  enter();
+  const hit = { kind: 'monster', amount: 16 } as const;
+  const before = world.snapshot();
+  setTime(NaN);
+  assert.throws(() => world.damage('miner', { ...hit, sequence: 1 }), /Invalid authority time/);
+  assert.deepEqual(world.snapshot(), before);
+  setTime(1000);
+  failWrites(true);
+  assert.throws(() => world.damage('miner', { ...hit, sequence: 1 }), /transaction failed/);
+  assert.deepEqual(world.snapshot(), before);
+  failWrites(false);
+  setTime(1001);
+  assert.equal(world.damage('miner', { ...hit, sequence: 1 }), true);
+  const hurt = world.snapshot();
+  setTime(1500);
+  failWrites(true);
+  assert.throws(() => world.damage('miner', { ...hit, sequence: 2 }), /transaction failed/);
+  assert.deepEqual(world.snapshot(), hurt);
+  failWrites(false);
+  assert.equal(world.damage('miner', { ...hit, sequence: 2 }), false);
+  setTime(1501);
+  assert.equal(world.damage('miner', { ...hit, sequence: 2 }), false);
+  assert.equal(world.damage('miner', { ...hit, sequence: 3 }), true);
+});
+
+test('reviving within a lethal monster hit window preserves the original immunity deadline', () => {
+  const { world, enter, setTime } = fixture();
+  enter();
+  enter('friend', deathPoint);
+  const hit = { kind: 'monster', amount: 16 } as const;
+  assert.equal(world.damage('miner', { kind: 'abyss', sequence: 1, amount: 90 }), true);
+  assert.equal(world.damage('miner', { ...hit, sequence: 2 }), true);
+  assert.equal(world.status('miner').down?.deadline, 10_000);
+  setTime(100);
+  assert.equal(world.revive('friend', 'miner', 2), true);
+  assert.equal(world.status('miner').health, 50);
+  assert.equal(world.damage('miner', { ...hit, sequence: 3 }), false);
+  setTime(500);
+  assert.equal(world.damage('miner', { ...hit, sequence: 4 }), true);
+  assert.equal(world.status('miner').health, 34);
+});
+
+test('reconnect restores the saved monster deadline and an ordinary surface exit clears it', () => {
+  const f = fixture();
+  const { world, options, foot, enter, setTime, modes } = f;
+  enter();
+  const hit = { kind: 'monster', amount: 16 } as const;
+  assert.equal(world.damage('miner', { ...hit, sequence: 1 }), true);
+  const loaded = createUndergroundSurvival({ ...options, initial: f.saved() });
+  const spawn = loaded.reconnect('miner')!;
+  foot('miner', fire);
+  assert.equal(loaded.confirmSpawn('miner', spawn.ticket), true);
+  setTime(499);
+  assert.equal(loaded.damage('miner', { ...hit, sequence: 2 }), false);
+  modes.set('miner', 'peace');
+  foot('miner', plaza);
+  assert.equal(loaded.syncDepthMode('miner'), true);
+  modes.set('miner', 'survival');
+  foot('miner', fire);
+  assert.equal(loaded.syncDepthMode('miner'), true);
+  assert.equal(loaded.damage('miner', { ...hit, sequence: 3 }), true);
+});
+
 test('only registered nearby fires heal a stationary accepted foot at the supplied rate', () => {
   const { world, enter, foot, failWrites } = fixture();
   enter();

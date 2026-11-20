@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createUndergroundMineEncounter } from '../../src/presence/underground-mine-encounter.js';
 import { createUndergroundSurvival } from '../../src/presence/underground-survival.js';
+import { createUndergroundVitals } from '../../src/presence/underground-vitals.js';
 
 type Options = Parameters<typeof createUndergroundMineEncounter>[0];
 type Accepted = NonNullable<ReturnType<Options['readAcceptedEncounter']>>;
@@ -10,7 +11,7 @@ const room = 'test-mine-room';
 const point = { layer: 'test-mine', east: .6, north: 0, height: -90 };
 const spawn = { room, at: { east: 0, north: 0 } };
 
-function fixture(spawns: Options['spawns']) {
+function fixture(spawns: Options['spawns'], readVitals?: Options['readVitals']) {
   let accepted: Accepted = { section: 'mine', player: { room, at: point, action: 'quiet' } };
   let failWrites = false;
   let successfulWrites = 0;
@@ -47,6 +48,7 @@ function fixture(spawns: Options['spawns']) {
     maxHealth: 100,
     damageByBand: { light: 7, medium: 13 },
     readAcceptedEncounter: () => accepted,
+    readVitals,
   });
   return {
     encounter,
@@ -103,4 +105,27 @@ test('a failed survival write retries the same encounter tick without advancing 
   assert.deepEqual(f.advance(4), result);
   assert.equal(f.survival.status(playerId).health, 87);
   assert.equal(f.successfulWrites(), writesBeforeHit + 1);
+});
+
+test('only accepted ambient light resolves the darkness modifier on real creature damage', () => {
+  let lampLit = false;
+  const vitals = createUndergroundVitals({
+    now: () => 0,
+    readPlayer: id => id === playerId ? { at: point } : undefined,
+    readLights: () => lampLit ? [{ id: 'lamp', kind: 'mine-lamp', at: point }] : [],
+    reaches: () => true,
+    climates: { [point.layer]: { ambient: .4, degreesPerSecond: .1 } },
+    initialTemperature: .8, coldBelow: .5, warmDegreesPerSecond: .2,
+    coldWalkScale: .8, coldStrikeScale: .75, darknessDamageScale: 1.5,
+    torchRadius: 5, noiseLifetimeMs: 1000, noiseRadius: { walk: 1, run: 4, mining: 6, combat: 8 },
+  });
+  for (const lit of [false, true]) {
+    lampLit = lit;
+    const f = fixture([{ ...spawn, id: 'skeleton', species: 'skeleton-miner', habitat: 'workface' }], vitals.sample);
+    f.setAccepted({ section: 'mine', player: { room, at: point, action: 'mine' } });
+    for (let tick = 0; tick < 4; tick++) assert.equal(f.advance(tick).damage, 0);
+    const expected = lit ? 13 : 19.5;
+    assert.equal(f.advance(4).damage, expected);
+    assert.equal(f.survival.status(playerId).health, 100 - expected);
+  }
 });

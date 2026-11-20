@@ -10,6 +10,7 @@ type AcceptedEncounter = Omit<AcceptedFrame, 'mode' | 'tick' | 'player'> & Reado
 type Outcome = ReturnType<Encounter['advance']>;
 type Band = NonNullable<Outcome['damageBand']>;
 type Actors = ReturnType<Encounter['snapshot']>;
+type Vitals = Readonly<{ damageScale: number }>;
 type FrameKey = Readonly<{ playerId: string; tick: number; sequence: number }>;
 type Pending = FrameKey & Readonly<{
   actors: Actors;
@@ -27,6 +28,7 @@ type MineEncounterOptions = Readonly<{
   damageByBand: Readonly<Record<Band, number>>;
   // Only the movement and combat authority can provide an encounter sample and contact.
   readAcceptedEncounter(playerId: string): AcceptedEncounter | undefined;
+  readVitals?(playerId: string): Vitals | undefined;
 }>;
 
 function sameFrame(a: FrameKey, b: FrameKey) {
@@ -84,6 +86,11 @@ export function createUndergroundMineEncounter(options: MineEncounterOptions) {
             ![accepted.player.at.east, accepted.player.at.north].every(Number.isFinite))) {
           throw new RangeError('Invalid authority-accepted encounter pose');
         }
+        const damageScale = (accepted && options.readVitals?.(key.playerId)?.damageScale) ?? 1;
+        if (!Number.isFinite(damageScale) || damageScale < 1 ||
+            Math.max(damageByBand.light, damageByBand.medium) * damageScale >= maxHealth) {
+          throw new RangeError('Invalid underground monster damage scale');
+        }
         const result = accepted && health !== undefined
           ? encounter.advance({ ...accepted, tick: key.tick, mode: 'survival', player: { ...accepted.player, health, maxHealth } })
           : encounter.advance({ tick: key.tick, mode: 'peaceful' });
@@ -93,7 +100,7 @@ export function createUndergroundMineEncounter(options: MineEncounterOptions) {
           accepted: accepted && structuredClone(accepted),
           hit: result.hit,
           damageBand: result.damageBand,
-          amount: health !== undefined && result.damageBand ? Math.min(health, damageByBand[result.damageBand]) : 0,
+          amount: health !== undefined && result.damageBand ? Math.min(health, damageByBand[result.damageBand] * damageScale) : 0,
         };
       }
 
