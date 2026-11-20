@@ -1,0 +1,59 @@
+diff --git a/tests/town-blockout-sled-racks.test.ts b/tests/town-blockout-sled-racks.test.ts
+--- a/tests/town-blockout-sled-racks.test.ts
++++ b/tests/town-blockout-sled-racks.test.ts
+@@ -7,7 +7,7 @@
+ import {
+   createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
+ } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
+-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+
+ test('sled rack configurations resolve on the surveyed town, west approach and summit surfaces', () => {
+   const terrain = createTerrainGrid();
+@@ -17,7 +17,7 @@
+     if (canEnter(east, north) && !isWater(east, north)) return terrain.heightAt(east, north);
+   }, crater.lip);
+   let now = Date.UTC(2026, 0, 1);
+-  const cloud = createZa22CloudRoute({ now: () => now, nightOpen: () => true, enterOrExit() {}, view() {} });
++  const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
+   cloud.action(za22StationApproach)?.run();
+   cloud.update(za22StationApproach);
+   assert.equal(cloud.riding(), true);
+@@ -34,10 +34,9 @@
+   ]);
+   assert.deepEqual(summit.map(({ id, y }) => [id, y]), [['mountain-gate', 347], ['cloud-terrace', 347]]);
+   assert.equal(summit[0].x, 295.5);
+-  for (const { id, x, n } of town) {
+-    if (id !== 'crater-mouth') continue;
+-    assert.equal(permitsMeteorCraterStep({ east: 0, north: n }, { east: x, north: n }, false), true);
+-  }
++  const craterRack = town.find(({ id }) => id === 'crater-mouth')!;
++  assert.equal(crater.fenceBlocks(craterRack.x, craterRack.n, craterRack.y, .36), false);
++  assert.equal(crater.heightAt(craterRack.x, craterRack.n), craterRack.y);
+   assert.deepEqual(townSledRackMissingSites, ['old-home', 'town-hall']);
+ });
+
+diff --git a/tests/town-blockout-za29-guard-scenes.test.ts b/tests/town-blockout-za29-guard-scenes.test.ts
+--- a/tests/town-blockout-za29-guard-scenes.test.ts
++++ b/tests/town-blockout-za29-guard-scenes.test.ts
+@@ -106,7 +106,7 @@
+   const terminal = { east: 336, north: 640, height: 347 };
+   let now = epoch + 500;
+   const cloud = createZa22CloudRoute({
+-    now: () => now, nightOpen: () => true, enterOrExit() {}, view() {},
++    now: () => now, enterOrExit() {}, view() {},
+   });
+   cloud.action(za22StationApproach)!.run();
+   cloud.update(za22StationApproach);
+@@ -134,7 +134,10 @@
+     for (const [east, north] of [[312, 663.25], [308, 663.25], [304, 663.25], [300, 663.25], [300, 665.9]]) {
+       cloud.updateView({ east, north, height: 347 });
+       const meshes: Mesh[] = [];
+-      cloud.scene.traverseVisible(object => { if (object instanceof Mesh) meshes.push(object); });
++      cloud.scene.traverseVisible(object => {
++      const mesh = object as Mesh;
++      if (mesh.isMesh) meshes.push(mesh);
++    });
+       const eye = new Vector3(east, 348.62, -north);
+       const direction = aimedAt.clone().sub(eye);
+       const ray = new Raycaster(eye, direction.clone().normalize(), 0, direction.length() + .25);

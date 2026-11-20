@@ -1,0 +1,93 @@
+diff --git a/tests/town-blockout-meteor-crater-surface.test.ts b/tests/town-blockout-meteor-crater-surface.test.ts
+index 6371acd6..f718675a 100644
+--- a/tests/town-blockout-meteor-crater-surface.test.ts
++++ b/tests/town-blockout-meteor-crater-surface.test.ts
+@@ -3,7 +3,7 @@ import { test } from 'node:test';
+ import { Raycaster, Vector3 } from 'three';
+ import { meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
+ import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
+-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+ import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+
+ test('B-01 mounts its reviewed crater and closure in a measured, rotated surface frame', () => {
+@@ -59,12 +59,16 @@ test('ZA-22 west entrance physically joins the existing E0 edge and the B-01 cra
+   }
+   assert.ok(Math.abs(last - road.lip.height) < .025);
+   assert.equal(road.heightAt(-241, road.lip.north), undefined);
+-  const outside = { east: road.lip.east + 1, north: road.lip.north };
+-  const inside = { east: road.lip.east - 1, north: road.lip.north };
+-  assert.equal(road.fenceBlocks(outside.east, outside.north, road.lip.height, .27), false);
+-  assert.equal(road.fenceBlocks(outside.east, outside.north + 3.25, road.lip.height, .27), true);
+-  assert.equal(permitsMeteorCraterStep(outside, inside, false), false);
+-  assert.equal(permitsMeteorCraterStep(outside, inside, true), true);
+-  assert.equal(permitsMeteorCraterStep(inside, outside, false), true);
+-  assert.equal(permitsMeteorCraterStep(inside, inside, false), true);
++  const fenceEast = road.lip.east + 1;
++  for (const direction of [-1, 1]) {
++    const fenceNorth = road.lip.north + direction * 3.25;
++    assert.ok(road.group.children.some(child => child.position.x === fenceEast && child.position.z === -fenceNorth));
++    assert.equal(road.fenceBlocks(fenceEast, fenceNorth, road.lip.height, .27), true);
++  }
++  for (let i = -20; i <= 20; i++) {
++    const east = road.lip.east + i * .1;
++    const height = road.heightAt(east, road.lip.north);
++    assert.ok(height !== undefined, 'the open centre has continuous foot support in either direction');
++    assert.equal(road.fenceBlocks(east, road.lip.north, height, .27), false);
++  }
+ });
+diff --git a/tests/town-blockout-za22-cloud-route.test.ts b/tests/town-blockout-za22-cloud-route.test.ts
+index 056cd6be..1615930e 100644
+--- a/tests/town-blockout-za22-cloud-route.test.ts
++++ b/tests/town-blockout-za22-cloud-route.test.ts
+@@ -43,14 +43,11 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
+   assert.equal(za22CloudSurfaceAt(350, 654), undefined);
+ });
+
+-test('boarding comes only from the legal station approach and authoritative night state', () => {
+-  let night = false;
++test('boarding uses the station and the cable schedule, and pending riders can be disqualified', () => {
+   const cloud = createZa22CloudRoute({
+-    now: () => Date.UTC(2026, 0, 1) + 20_000, nightOpen: () => night,
++    now: () => Date.UTC(2026, 0, 1) + 20_000,
+     enterOrExit() { assert.fail('must not transfer'); }, view() { assert.fail('must not interact'); },
+   });
+-  assert.equal(cloud.action(za22StationApproach), undefined);
+-  night = true;
+   assert.equal(cloud.action({ ...za22StationApproach, height: 27.7 }), undefined);
+   assert.equal(cloud.action({ ...za22StationApproach, north: 320 }), undefined);
+   const board = cloud.action(za22StationApproach);
+@@ -59,8 +56,9 @@ test('boarding comes only from the legal station approach and authoritative nigh
+   cloud.update(za22StationApproach);
+   assert.match(cloud.action(za22StationApproach)?.label ?? '', /等候前山缆车/);
+   assert.ok(!cloud.active());
+-  night = false;
+-  cloud.update(za22StationApproach);
+-  night = true;
++  cloud.update(za22StationApproach, false);
++  assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
++  cloud.action(za22StationApproach)?.run();
++  cloud.update({ ...za22StationApproach, north: 320 });
+   assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
+ });
+diff --git a/tests/town-blockout-za22-mountain-gate.test.ts b/tests/town-blockout-za22-mountain-gate.test.ts
+index 4b2066cf..58e91900 100644
+--- a/tests/town-blockout-za22-mountain-gate.test.ts
++++ b/tests/town-blockout-za22-mountain-gate.test.ts
+@@ -91,7 +91,6 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
+   const { legMs } = createZa22NorthRidgeLine(26);
+   const cloud = createZa22CloudRoute({
+     now: () => now,
+-    nightOpen: () => !arrived,
+     enterOrExit(terminal, at) {
+       if (terminal === 'summit') {
+         assert.deepEqual(at, cableEnd);
+@@ -107,7 +106,7 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
+   cloud.update(za22StationApproach);
+   assert.equal(cloud.riding(), true);
+   now = epoch + Math.ceil(legMs);
+-  cloud.update(za22StationApproach);
++  cloud.update(za22StationApproach, false);
+   assert.equal(cloud.riding(), false);
+   assert.equal(arrived, true);
+   const deck = { east: 300, north: 665.9, height: 347 };
