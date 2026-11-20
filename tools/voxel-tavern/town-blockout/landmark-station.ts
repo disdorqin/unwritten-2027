@@ -21,6 +21,7 @@ export const railwayStationStops = {
   ticketCounter: stationLocalPoint([-12.7, .14, -.14]),
   timetable: stationLocalPoint([12.8, .14, -4.7]),
   guide: stationLocalPoint([-18.6, .14, 2.1]),
+  cableGate: stationLocalPoint([10.8, .14, 11.85]),
 };
 
 function stationBuilder() {
@@ -136,6 +137,37 @@ function gableRoof(b: StationBuilder, x: number, z: number, width: number, depth
   b.box(iron, x, peak + .12, z, .24, .19, depth + .21);
 }
 
+function cableGateControls(b: StationBuilder) {
+  const x = 10.8, front = 9.78;
+  b.box(iron, x, 1.42, 9.67, 1.42, 1.5, .22);
+  b.box('#566366', x, 1.43, front, 1.29, 1.36, .05);
+  b.box(stone, x, .62, 9.62, 1.55, .16, .30);
+  for (const side of [-1, 1]) {
+    for (const y of [.88, 1.96]) b.box('#a5a29a', x + side * .56, y, 9.83, .08, .08, .07);
+    b.box(dark, x + side * .23, 1.42, 9.87, .09, .38, .15);
+  }
+  b.box(iron, x, 1.47, 9.93, .42, .11, .15);
+  b.beam('#a19783', [x, 1.48, 9.96], [x + .19, 1.79, 10.17], .09);
+  b.box(dark, x + .19, 1.8, 10.17, .25, .09, .09);
+  b.sign('北岭缆车', x, 2.39, 9.69, 2.6, .52);
+
+  // Corrosion spreads from the lower seam and the exposed fasteners.
+  for (const [dx, y, width, height] of [[-.46, .91, .31, .17], [-.31, .80, .39, .13],
+    [.33, .83, .45, .15], [.53, 1.03, .16, .40], [-.52, 1.88, .25, .14], [.47, 1.87, .26, .21]]) {
+    b.box('#57332b', x + dx, y, 9.811, width, height, .014);
+    b.box('#a45532', x + dx + .02, y + .015, 9.824, width * .63, height * .54, .013);
+    b.box('#c78756', x + dx - .03, y - .02, 9.837, width * .25, height * .24, .012);
+  }
+  for (const [dx, y, length] of [[-.52, 1.75, .62], [-.46, 1.52, .35], [.52, 1.72, .47], [.43, 1.63, .31]]) {
+    b.box('#694337', x + dx, y - length / 2, 9.829, .035, length, .013);
+    b.box('#a56040', x + dx + .021, y - length * .34, 9.836, .021, length * .68, .013);
+  }
+  for (const [dx, y] of [[-.48, .96], [-.37, .83], [.20, .84], [.53, 1.11], [.48, 1.87]]) {
+    b.box('#99a5a5', x + dx, y, 9.851, .075, .046, .013);
+    b.box('#d3d6cb', x + dx - .018, y + .016, 9.855, .038, .022, .014);
+  }
+}
+
 export function buildRailwayStation() {
   const b = stationBuilder();
   // South approach reaches the original road at z=17. The concourse runs straight through to the rear portico.
@@ -186,6 +218,7 @@ export function buildRailwayStation() {
   b.sign(stationSignCopy.englishName, 0, 7.74, 9.75, 11.4, .65);
   b.sign(stationSignCopy.townSubtitle, 0, 5.3, 9.76, 10.4, .72);
   b.sign(stationSignCopy.entrance, 5.05, 4.04, 9.676, 2.05, .58);
+  cableGateControls(b);
   b.sign(stationSignCopy.exit, 0, 5.32, -7.37, 10.1, 1.09, Math.PI);
   const clockZ = 10.58;
   b.box(dark, 0, 9.59, clockZ, 3.9, 2.77, .51);
@@ -300,3 +333,4 @@ export function buildCoasterStation() {
   }
   return b.finish();
 }
+
