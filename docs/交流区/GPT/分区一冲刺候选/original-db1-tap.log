@@ -1,0 +1,126 @@
+TAP version 13
+# Subtest: the ninth uses the agreed filter, tail and pitch with explicit host mix and direction
+ok 1 - the ninth uses the agreed filter, tail and pitch with explicit host mix and direction
+  ---
+  duration_ms: 122.4304
+  type: 'test'
+  ...
+# Subtest: the existing tower voice still allocates six untuned partials per strike
+ok 2 - the existing tower voice still allocates six untuned partials per strike
+  ---
+  duration_ms: 0.3239
+  type: 'test'
+  ...
+# Subtest: the ordinary cue gives eight strikes spaced 2.020 s and one delayed ninth
+ok 3 - the ordinary cue gives eight strikes spaced 2.020 s and one delayed ninth
+  ---
+  duration_ms: 0.4901
+  type: 'test'
+  ...
+# Subtest: independent clients derive the same ninth epoch for an hour regardless of listen count
+ok 4 - independent clients derive the same ninth epoch for an hour regardless of listen count
+  ---
+  duration_ms: 620.594
+  type: 'test'
+  ...
+# Subtest: the same hour or an older hour cannot replay after clock correction
+ok 5 - the same hour or an older hour cannot replay after clock correction
+  ---
+  duration_ms: 278.8654
+  type: 'test'
+  ...
+# Subtest: late joining and attendance for a different hour cannot replay a missed cue
+ok 6 - late joining and attendance for a different hour cannot replay a missed cue
+  ---
+  duration_ms: 0.3861
+  type: 'test'
+  ...
+# Subtest: aurora preserves the normal strikes and suppresses only the ninth
+ok 7 - aurora preserves the normal strikes and suppresses only the ninth
+  ---
+  duration_ms: 0.1847
+  type: 'test'
+  ...
+# Subtest: the host supplies the third listen and the local planner claims that stage only once
+ok 8 - the host supplies the third listen and the local planner claims that stage only once
+  ---
+  duration_ms: 7.3526
+  type: 'test'
+  ...
+# Subtest: nonordinary phases and the silent ordinary midnight cannot enter this planner
+ok 9 - nonordinary phases and the silent ordinary midnight cannot enter this planner
+  ---
+  duration_ms: 0.3241
+  type: 'test'
+  ...
+# Subtest: an ordinary crossing from the production day clock produces an independent hook plan
+ok 10 - an ordinary crossing from the production day clock produces an independent hook plan
+  ---
+  duration_ms: 0.5248
+  type: 'test'
+  ...
+# Subtest: the production day clock excludes after-hours and the two unapproved ceremony phases
+ok 11 - the production day clock excludes after-hours and the two unapproved ceremony phases
+  ---
+  duration_ms: 0.1894
+  type: 'test'
+  ...
+# Subtest: audio parameters leave disputed gain and wet mix to the host
+ok 12 - audio parameters leave disputed gain and wet mix to the host
+  ---
+  duration_ms: 0.0542
+  type: 'test'
+  ...
+# Subtest: the four exterior faces mirror their geometry and the readout follows Beijing seconds and C2 zero
+ok 13 - the four exterior faces mirror their geometry and the readout follows Beijing seconds and C2 zero
+  ---
+  duration_ms: 30.5311
+  type: 'test'
+  ...
+# Subtest: a crossed ordinary Beijing hour schedules three strikes, with audio from 07 through 23 inclusive
+ok 14 - a crossed ordinary Beijing hour schedules three strikes, with audio from 07 through 23 inclusive
+  ---
+  duration_ms: 0.1728
+  type: 'test'
+  ...
+# Subtest: the ordinary bypass stays silent through standby, the three ceremony hours and afterglow
+ok 15 - the ordinary bypass stays silent through standby, the three ceremony hours and afterglow
+  ---
+  duration_ms: 0.1377
+  type: 'test'
+  ...
+# Subtest: late wakeup and joining on an hour never replay it, with a five-second crossing allowance
+ok 16 - late wakeup and joining on an hour never replay it, with a five-second crossing allowance
+  ---
+  duration_ms: 0.0612
+  type: 'test'
+  ...
+# Subtest: ordinary clock hours rotate two market residents through existing plaza anchors
+ok 17 - ordinary clock hours rotate two market residents through existing plaza anchors
+  ---
+  duration_ms: 737.183
+  type: 'test'
+  ...
+# {"participants":["贾明灯","胡六环"],"anchors":[{"actor":[238,206.37,12],"talk":[238,206.0275,12]},{"actor":[236.86990657272634,205.7744603576897,12],"talk":[237.15242992954475,205.58084526826727,12]}]}
+# Subtest: the dusk cue brightens the existing exterior lantern batch without allocating a new draw
+ok 18 - the dusk cue brightens the existing exterior lantern batch without allocating a new draw
+  ---
+  duration_ms: 18.7199
+  type: 'test'
+  ...
+# {"instances":719,"children":10}
+# Subtest: the plaza entrance leads to both wings and a continuous east stair
+ok 19 - the plaza entrance leads to both wings and a continuous east stair
+  ---
+  duration_ms: 6492.0165
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8338.5832
