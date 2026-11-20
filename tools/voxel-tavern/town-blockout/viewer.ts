@@ -109,6 +109,7 @@ import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
 import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
+import { createClocktowerStorySpots } from './clocktower-story';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
 import { createTheaterPhotoCamera } from './theater-photo-camera';
@@ -298,9 +299,18 @@ presence.onGrandPrixResult(result => {
   renderGrandPrixBoard();
 });
 function leaveSled() {
+  if (!sledRide.leave()) return;
   cancelSledBrake();
-  sledRide.leave();
   sledDrift.reset();
+  const parked = sledRide.parked();
+  if (!parked) return;
+  ({ x, n, y: ground } = parked);
+  airHeight = undefined;
+  riseSpeed = 0;
+  landingFeedback.reset();
+  storeWalkView(walkRender);
+  walkCurrent.copy(walkRender);
+  walkPrevious.copy(walkRender);
 }
 function alignPlayerWithSled() {
   const spot = sledRide.spot;
@@ -1291,9 +1301,22 @@ const riddleActivity = createRiddleActivity({ open: activityContext.open, announ
 });
 activitySpots.push(...riddleActivity.spots);
 const snowballControls = element('snowball-controls');
-const snowPrimaryButton = element<HTMLButtonElement>('snowball-primary');
 const snowballScore = element('snowball-score');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
+function ensureTownInputButton(id: string, label: string, after: HTMLElement): HTMLButtonElement {
+  const existing = document.getElementById(id);
+  if (existing instanceof HTMLButtonElement) return existing;
+  const button = document.createElement('button');
+  button.id = id;
+  button.type = 'button';
+  button.hidden = true;
+  button.textContent = label;
+  after.after(button);
+  return button;
+}
+const snowPrimaryButton = ensureTownInputButton('snowball-primary', '投雪球', snowballMeter);
+const touchSledBrakeButton = ensureTownInputButton('touch-sled-brake', '刹车', actionButton);
+touchSledBrakeButton.setAttribute('aria-pressed', 'false');
 const snowballRing = element('snowball-action-ring');
 const snowballHitMark = element('snowball-hit-mark');
 const reduceSnowEffects = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1704,7 +1727,7 @@ const mobileControls = mountTownMobileControls(snowControls, {
   action: actionButton,
   throwButton: snowPrimaryButton,
   wallButton: element<HTMLButtonElement>('snowfight-build'),
-  brakeButton: element<HTMLButtonElement>('touch-sled-brake'),
+  brakeButton: touchSledBrakeButton,
   direction: element('touch-walk'),
   jump: touchJump,
   sprint: touchSprintButton,
@@ -1886,6 +1909,10 @@ activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, z
   playPostChime(true);
 }));
 const tower = architecture.get('clocktower')!;
+activitySpots.push(...createClocktowerStorySpots(tower, activityContext, {
+  now: presence.serverNow,
+  nightWindow: presence.getTownNightWindow,
+}));
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 activitySpots.push(
   zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
@@ -2029,8 +2056,10 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
-  if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
-  if (cloudRoute.active()) return cloudRoute.action({ east: x, north: n, height: ground });
+  if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (cloudRoute.active()) return airHeight === undefined ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
+  if (sledRide.active()) return { label: '下橇', run: leaveSled };
+  if (airHeight !== undefined) return undefined;
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2044,7 +2073,6 @@ function currentAction() {
     }
     return { label: hotSpringSoak.active() ? '起身离开温泉' : '起身', run: leaveSeat };
   }
-  if (sledRide.active()) return { label: '下橇', run: leaveSled };
   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
   if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
   const local = museumPosition();
@@ -2697,13 +2725,35 @@ let previousPoseSession: number | null = null;
 let ceremonyArrivalPose: { value: TownAvatarPose; until: number } | undefined;
 let ceremonyLook: { began: number; deadline: number; yaw: number; pitch: number } | undefined;
 
+function findCeremonySledLanding(x: number, n: number) {
+  const [west, south, east, north] = layout.plaza.bounds;
+  return findNearestLegalSpawn({ x, n }, (targetX, targetN) => {
+    if (targetX < west || targetX > east || targetN < south || targetN > north) return undefined;
+    const feet = dryTownLandingHeight(targetX, targetN);
+    if (feet === undefined) return undefined;
+    const sledFeet = sledGroundAt(targetX, targetN);
+    if (Math.abs(sledFeet - feet) > surfaceEpsilon || !sledRide.canRelocateMounted(targetX, targetN, sledFeet)) return undefined;
+    return sledFeet;
+  });
+}
+
 function arriveAtCeremony(event: CeremonyArrival, now: number) {
   const landing = ceremonyArrivalAt(event.slot, event.edge);
   if (!landing) return;
   const homeBeforeArrival = homeReturn;
   homeReturn = undefined;
-  const feet = dryTownLandingHeight(landing.east, landing.north);
-  if (feet === undefined) {
+  const mounted = sledRide.active();
+  let arrival = mounted ? findCeremonySledLanding(landing.east, landing.north) : undefined;
+  if (!mounted) {
+    const feet = dryTownLandingHeight(landing.east, landing.north);
+    if (feet !== undefined) arrival = { x: landing.east, n: landing.north, ground: feet };
+  }
+  const stage = layout.plots.find(({ id }) => id === 'stage')!;
+  const [faceEast, faceNorth, faceHeight] = landing.focus === 'tree'
+    ? [208, 198, 26]
+    : [stage.origin[0], stage.origin[1], stage.origin[2] + 15];
+  const faceYaw = (east: number, north: number) => Math.atan2(faceEast - east, faceNorth - north);
+  if (!arrival || (mounted && !sledRide.relocateMounted(arrival.x, arrival.n, arrival.ground, faceYaw(arrival.x, arrival.n)))) {
     homeReturn = homeBeforeArrival;
     announceActivity('广场落脚点被挡住，请沿灯路前往广场。');
     return;
@@ -2711,7 +2761,7 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
 
   ceremonyArrivalPose = {
     value: effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(),
-      !!boardingGround, !!seated, presenceSkateSpeed),
+      !!boardingGround, !!seated, presenceSkateSpeed, mounted),
     until: now + 350,
   };
   if (sharedHome) sharedHome.visible = false;
@@ -2727,19 +2777,12 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
   museumInspection.close();
   museumLaunch.close();
   museumGuide.setActive(false);
-  sledRide.interrupt();
   resetMovement();
 
-  x = landing.east;
-  n = landing.north;
-  ground = feet;
+  ({ x, n, ground } = arrival);
   airHeight = undefined;
   riseSpeed = 0;
-  const stage = layout.plots.find(({ id }) => id === 'stage')!;
-  const [faceEast, faceNorth, faceHeight] = landing.focus === 'tree'
-    ? [208, 198, 26]
-    : [stage.origin[0], stage.origin[1], stage.origin[2] + 15];
-  yaw = Math.atan2(faceEast - x, faceNorth - n);
+  yaw = faceYaw(x, n);
   pitch = Math.atan2(faceHeight - ground - eye, Math.hypot(faceEast - x, faceNorth - n));
   const worldNow = ceremonyClock.now();
   const midnight = ceremonyMidnight(ceremonyEveYear(worldNow, ceremonyClock.utcOffsetMinutes), ceremonyClock.utcOffsetMinutes);

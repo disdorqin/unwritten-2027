@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment) && evidencePath,
+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -162,7 +162,9 @@ try {
     TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
   });
   await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
-  driver = startNode([join(repo, 'tools', 'verify-za22-live.mjs'), base, output, segment], {
+  const clock = segment === 'clock' || segment === 'clock-books';
+  driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
+    base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {
     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
   });
   await finish(driver);
