@@ -48,6 +48,7 @@ export type UndergroundSurvivalOptions = Readonly<{
   // Use the authority's clock in the same time frame as any restored deadline.
   now(): number;
   readTripOre(playerId: string): readonly Ore[];
+  // The inventory chooses how each odd trip ore stack rounds.
   chooseHalf(ore: readonly Ore[]): readonly Ore[];
   initial?: UndergroundSurvivalSnapshot;
   // Publish the snapshot and inventory change together. A recovered drop is
@@ -76,7 +77,7 @@ function oreCounts(stacks: readonly Ore[]) {
     counts.set(id, count);
   }
   if (!Number.isSafeInteger(total)) throw new RangeError('Invalid ore total');
-  return { counts, total };
+  return counts;
 }
 
 export function createUndergroundSurvival(options: UndergroundSurvivalOptions) {
@@ -220,9 +221,12 @@ export function createUndergroundSurvival(options: UndergroundSurvivalOptions) {
       const available = oreCounts(trip);
       const removed = structuredClone(options.chooseHalf(trip));
       const chosen = oreCounts(removed);
-      if (Math.abs(chosen.total * 2 - available.total) > 1 ||
-          removed.some(({ id: oreId, count }) => count > (available.counts.get(oreId) ?? 0))) {
-        throw new RangeError('The inventory must choose half of the eligible trip ore');
+      const wrongStack = [...available].some(([oreId, count]) => {
+        const loss = chosen.get(oreId) ?? 0;
+        return loss < Math.floor(count / 2) || loss > Math.ceil(count / 2);
+      });
+      if (wrongStack || removed.some(({ id: oreId }) => !available.has(oreId))) {
+        throw new RangeError('The inventory must choose half of the eligible trip ore per stack');
       }
 
       const drops = removed.length ? [...state.drops, {

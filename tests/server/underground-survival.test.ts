@@ -313,6 +313,25 @@ test('odd trip quantities follow the inventory allocation only when it chooses a
   assert.deepEqual(world.snapshot().drops[0].ore, chosen);
 });
 
+test('death validates half of each current-trip ore stack with the inventory rounding', () => {
+  let chosen: Ore = [{ id: 'stardust', count: 3 }];
+  const { world, enter, carriedThisTrip, setTime, changes } = fixture({ chooseHalf: () => chosen });
+  enter();
+  carriedThisTrip.set('miner', [{ id: 'stardust', count: 3 }, { id: 'ordinary', count: 3 }, { id: 'crystal', count: 1 }]);
+  world.damage('miner', { sequence: 1, kind: 'abyss', amount: 100 });
+  setTime(10_000);
+  assert.throws(() => world.wakeIfExpired('miner', 1), /half of the eligible trip ore per stack/);
+  chosen = [{ id: 'stardust', count: 1 }, { id: 'ordinary', count: 1 }, { id: 'prior-trip', count: 1 }];
+  assert.throws(() => world.wakeIfExpired('miner', 1), /half of the eligible trip ore per stack/);
+  assert.deepEqual(world.snapshot().drops, []);
+  assert.deepEqual(changes, []);
+
+  chosen = [{ id: 'stardust', count: 1 }, { id: 'ordinary', count: 1 }];
+  assert.equal(world.wakeIfExpired('miner', 1), true);
+  assert.deepEqual(world.snapshot().drops[0].ore, chosen);
+  assert.deepEqual(changes, [{ kind: 'finish-trip', playerId: 'miner', remove: chosen }]);
+});
+
 test('a later death creates a distinct owner bag and both survive a fresh authority', () => {
   const f = fixture();
   const { world, enter, modes, foot, carriedThisTrip, setTime, options, changes } = f;
