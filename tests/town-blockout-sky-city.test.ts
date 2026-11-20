@@ -105,3 +105,27 @@ test('an actual glide lands on the city and its floors lead into the dormitory a
   t.diagnostic(JSON.stringify({ flightSeconds: state.flight?.elapsed, spawn, gateApproach }));
   city.dispose();
 });
+
+test('flight below the translated island crosses the projected runway without touching down', t => {
+  const site = createSkyCitySite({ east: 0, north: -100, height: 880 });
+  const city = mountSkyCity(new Group());
+  t.after(() => city.dispose());
+  city.show('full');
+  const model = city.footModel()!;
+  const support = { islandFloorAt: model.floorAt, islandBlocked: model.obstructs };
+  const landing = createSkyCityLanding(site, support);
+  const aircraft = createSkyCityApproach({ site, ...support });
+  assert.ok(aircraft.launch());
+
+  let flight = aircraft.snapshot();
+  for (let step = 0; step < 1800 && flight.stage === 'flight' && !landing.onLane(flight.feet); step++) {
+    flight = aircraft.advance(1 / 60);
+  }
+  assert.ok(landing.onLane(flight.feet));
+  assert.equal(landing.surfaceAt(flight.feet.east, flight.feet.north)?.height, 880);
+  assert.equal(flight.flight?.phase, 'airborne');
+  assert.equal(flight.flight.touchdown, null);
+  assert.equal(flight.flight.recovery, null);
+  assert.ok(flight.feet.height < 800);
+  t.diagnostic(JSON.stringify(flight.feet));
+});

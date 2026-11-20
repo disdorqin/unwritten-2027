@@ -33,12 +33,14 @@ function onLandingLane(x: number, z: number) {
 
 export function createSkyCityLanding(site: SkyCitySite, { islandFloorAt, islandBlocked }: SkyCityLandingModel) {
   return {
-    surfaceAt(east: number, north: number): AircraftSurface | undefined {
+    surfaceAt(east: number, north: number, previousHeight?: number): AircraftSurface | undefined {
       const { x, z } = site.toLocal({ east, north, height: site.origin.height });
-      const height = islandFloorAt(x, z);
-      if (height === undefined || !Number.isFinite(height)) return;
+      const localHeight = islandFloorAt(x, z);
+      if (localHeight === undefined || !Number.isFinite(localHeight)) return;
+      const height = site.origin.height + localHeight;
+      if (previousHeight !== undefined && previousHeight < height) return;
       // The flight model's hard-surface rollout also fits the paved landing lane.
-      return { height: site.origin.height + height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(x, z) ? 0 : 2 };
+      return { height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(x, z) ? 0 : 2 };
     },
     onLane(at: AircraftPoint) {
       const { x, z } = site.toLocal(at);
@@ -53,17 +55,17 @@ export function createSkyCityLanding(site: SkyCitySite, { islandFloorAt, islandB
 
 export function createSkyCityApproach({ site = skyCityApproachSite, islandFloorAt, islandBlocked }: SkyCityApproachOptions) {
   const landing = createSkyCityLanding(site, { islandFloorAt, islandBlocked });
-  function surfaceAt(east: number, north: number): AircraftSurface | undefined {
+  function departureSurfaceAt(east: number, north: number): AircraftSurface | undefined {
     const departureHeight = skyCityDepartureFloorAt(east, north);
     if (departureHeight !== undefined) {
       const slopeDegrees = -north < skyCityDepartureBounds.zLip ? Math.atan(dropPerMetre) * 180 / Math.PI : 0;
       return { height: departureHeight, kind: 'snow', slopeDegrees, obstacleAhead: 0 };
     }
-    return landing.surfaceAt(east, north);
   }
 
   const world: AircraftWorld = {
-    surfaceAt,
+    surfaceAt: (east, north, _heading, previousHeight) =>
+      departureSurfaceAt(east, north) ?? landing.surfaceAt(east, north, previousHeight),
     contains(point) {
       return Math.abs(point.east) <= 400 && point.north >= -450 && point.north <= 350;
     },

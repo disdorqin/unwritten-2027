@@ -66,7 +66,8 @@ export type AircraftImpact = 'wall' | 'tree' | 'snowbank' | 'interior';
 type RecoveryReason = AircraftImpact | 'unsafe-surface' | 'water' | 'runway-blocked';
 
 export type AircraftWorld = Readonly<{
-  surfaceAt(east: number, north: number, heading: number): AircraftSurface | undefined;
+  // During approach and rollout, the previous height distinguishes stacked surfaces.
+  surfaceAt(east: number, north: number, heading: number, previousHeight?: number): AircraftSurface | undefined;
   sweep(from: AircraftPoint, to: AircraftPoint, clearance: number): AircraftImpact | undefined;
   contains(point: AircraftPoint): boolean;
   recoveryAt(from: AircraftPoint, reason: RecoveryReason): AircraftPoint | undefined;
@@ -228,9 +229,9 @@ export function createAircraftFlight(world: AircraftWorld, power: AircraftThrust
     }
     const obstacle = world.sweep(state.point, next, 1.9);
     if (obstacle) return recover(state, obstacle);
+    const floor = world.surfaceAt(next.east, next.north, state.heading, state.point.height);
     state.point = next;
     state.metres += distance;
-    const floor = world.surfaceAt(next.east, next.north, state.heading);
     if (!floor || !Number.isFinite(floor.height) || next.height > floor.height) return;
     if (floor.kind === 'water') {
       if (state.waterSkims >= 2) return recover(state, 'water');
@@ -279,7 +280,7 @@ export function createAircraftFlight(world: AircraftWorld, power: AircraftThrust
       } else {
         const distance = Math.min(state.slideLeft, state.speed * dt);
         const next = forward(state.point, state.heading, distance);
-        const floor = world.surfaceAt(next.east, next.north, state.heading);
+        const floor = world.surfaceAt(next.east, next.north, state.heading, state.point.height);
         if (!canLand(floor) || !world.contains(next) || world.sweep(state.point, next, .35)) {
           recover(state, 'unsafe-surface');
           continue;
