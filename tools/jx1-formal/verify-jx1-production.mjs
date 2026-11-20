@@ -450,29 +450,39 @@ async function runTours(browser, url, plan, tours, doors, output, evidence) {
     }
   }
   if (plan.touchTour) {
-    const tour = tours.find(tour => tour.id === plan.touchTour);
-    assert.ok(tour);
-    const session = await start(browser, url, true);
-    try {
-      await observe(session.page, 'registry');
-      await observe(session.page, 'stage', tour.start ?? tour.street[0]);
-      await tourHome(session, tour, doors.get(tour.id), output, append(tour, session));
-    } finally { await session.context.close(); }
+    await runTouchTour(browser, url, tours.find(tour => tour.id === plan.touchTour), doors, output, evidence);
   }
 }
 
-const [checkoutArg, baselineArg, planArg, outArg, option] = process.argv.slice(2);
-assert.ok(checkoutArg && baselineArg && planArg && outArg && (!option || option === '--build-only'),
-  'Usage: node verify-jx1-production.mjs CHECKOUT BASELINE_JSON PLAN_JSON OUTPUT_DIR [--build-only]');
+async function runTouchTour(browser, url, tour, doors, output, evidence) {
+  assert.ok(tour, 'Provide a surveyed full touch route');
+  const session = await start(browser, url, true);
+  try {
+    const entry = { id: tour.id, session: session.id, touch: true };
+    evidence.tours.push(entry);
+    await observe(session.page, 'registry');
+    await observe(session.page, 'stage', tour.start ?? tour.street[0]);
+    await tourHome(session, tour, doors.get(tour.id), output, entry);
+  } finally { await session.context.close(); }
+}
+
+const [checkoutArg, baselineArg, planArg, outArg, ...options] = process.argv.slice(2);
+assert.ok(checkoutArg && baselineArg && planArg && outArg && new Set(options).size === options.length &&
+    options.every(option => ['--build-only', '--touch-only'].includes(option)),
+  'Usage: node verify-jx1-production.mjs CHECKOUT BASELINE_JSON PLAN_JSON OUTPUT_DIR [--build-only] [--touch-only]');
+const touchOnly = options.includes('--touch-only');
 const checkout = path.resolve(checkoutArg);
 const output = path.resolve(outArg);
 const [baseline, plan] = await Promise.all([baselineArg, planArg].map(async file => JSON.parse(await readFile(file, 'utf8'))));
 const { doors, tours, menuDoors } = validatePlan(plan, baseline);
+const touchTour = tours.find(tour => tour.id === plan.touchTour);
+if (touchOnly) assert.ok(touchTour, '--touch-only requires a surveyed full route in plan.touchTour');
 const temporary = await mkdtemp(path.join(tmpdir(), 'jx1-production-proof-'));
 const dist = path.resolve(temporary, 'dist');
 const evidence = {
   baseline: baseline.commit, runtime: process.env.JX1_RUNTIME_COMMIT ?? null, mode: plan.mode, status: 'starting',
   probeActivation: plan.enableIds, desktop, mobile, menus: [], tours: [], connectionLogs: [],
+  ...(touchOnly ? { modality: 'touch-only', touchTour: touchTour.id } : {}),
 };
 await mkdir(output, { recursive: true });
 let server;
@@ -480,7 +490,7 @@ let browser;
 try {
   evidence.step = 'build';
   await build(checkout, dist, code => instrument(code, plan.enableIds));
-  if (option) {
+  if (options.includes('--build-only')) {
     evidence.status = 'build-only';
     console.log('JX-1 loopback probe built. Viewer source files unchanged.');
   } else {
@@ -493,40 +503,47 @@ try {
     browser = await chromium.launch({ executablePath: process.env.JX1_CHROMIUM_PATH, args: swiftShader });
     evidence.browser = browser.version();
     evidence.step = 'compare-complete-registry';
-    const session = await start(browser, started.url, false);
+    const session = await start(browser, started.url, touchOnly);
     try {
       evidence.registry = await observe(session.page, 'registry');
       evidence.comparison = compareRegistry(baseline, evidence.registry, plan.enableIds);
       assert.deepEqual(session.errors, []);
     } finally { await session.context.close(); }
-    evidence.step = 'check-original-legacy-action';
-    evidence.plainDoor = {};
-    await checkLegacy(browser, started.url, doors.get(plan.legacyDoor), evidence.plainDoor);
-    const closedMarketId = baseline.marketIds.find(id => !plan.enableIds.includes(id));
-    if (closedMarketId) {
-      evidence.step = 'check-unverified-market-door-chooser';
-      evidence.closedMarketDoor = { id: closedMarketId, modality: 'keyboard' };
-      await checkMenu(browser, started.url, closedMarketId, false, output, evidence.closedMarketDoor, false);
-    }
-    for (const id of menuDoors) {
-      evidence.step = `keyboard-menu:${id}`;
-      const result = { id, modality: 'keyboard' };
-      evidence.menus.push(result);
-      await checkMenu(browser, started.url, id, false, output, result);
+    if (!touchOnly) {
+      evidence.step = 'check-original-legacy-action';
+      evidence.plainDoor = {};
+      await checkLegacy(browser, started.url, doors.get(plan.legacyDoor), evidence.plainDoor);
+      const closedMarketId = baseline.marketIds.find(id => !plan.enableIds.includes(id));
+      if (closedMarketId) {
+        evidence.step = 'check-unverified-market-door-chooser';
+        evidence.closedMarketDoor = { id: closedMarketId, modality: 'keyboard' };
+        await checkMenu(browser, started.url, closedMarketId, false, output, evidence.closedMarketDoor, false);
+      }
+      for (const id of menuDoors) {
+        evidence.step = `keyboard-menu:${id}`;
+        const result = { id, modality: 'keyboard' };
+        evidence.menus.push(result);
+        await checkMenu(browser, started.url, id, false, output, result);
+      }
     }
     if (menuDoors.length) {
-      const id = plan.touchMenu ?? menuDoors[0];
+      const id = touchOnly ? touchTour.id : plan.touchMenu ?? menuDoors[0];
       assert.ok(plan.enableIds.includes(id));
       evidence.step = `touch-menu:${id}`;
       const result = { id, modality: 'touch' };
       evidence.menus.push(result);
       await checkMenu(browser, started.url, id, true, output, result);
     }
-    if (tours.length) {
+    if (touchOnly) {
+      evidence.step = 'full-touch-street-to-home-tour';
+      await runTouchTour(browser, started.url, touchTour, doors, output, evidence);
+      evidence.status = 'touch-walk-passed';
+      console.log(JSON.stringify({ status: evidence.status, door: touchTour.id, nativeTours: evidence.tours.length }));
+    } else if (tours.length) {
       evidence.step = 'physical-street-to-home-tours';
       await runTours(browser, started.url, plan, tours, doors, output, evidence);
     }
-    evidence.status = `${plan.mode}-passed`;
+    if (!touchOnly) evidence.status = `${plan.mode}-passed`;
     evidence.step = 'passed';
   }
 } catch (error) {
