@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Group, NearestFilter, SRGBColorSpace, Vector3, type BoxGeometry, type DataTexture,
   type Mesh, type MeshLambertMaterial } from 'three';
 import { createSkyCityApproach, createSkyCityLanding } from '../tools/voxel-tavern/town-blockout/sky-city-approach';
+import { mountSkyCityHost } from '../tools/voxel-tavern/town-blockout/sky-city-host';
 import { createSkyCitySite } from '../tools/voxel-tavern/town-blockout/sky-city-site';
 import { mountSkyCity, skyCityTier, type SkyCityFoot } from '../tools/voxel-tavern/town-blockout/sky-city';
 
@@ -109,6 +110,48 @@ test('a translated and turned site aligns the reveal silhouette, landing surface
   const gate = site.toWorld({ x, y, z });
   assert.equal(landing.blocked(gate, .28), true);
   city.dispose();
+});
+
+test('the host only exposes the island in the accepted view and hands off a settled landing in world coordinates', () => {
+  const scene = new Group();
+  const site = createSkyCitySite({ east: -318, north: 912, height: 785 }, .64);
+  const host = mountSkyCityHost(scene, site);
+  const touchdown = site.toWorld({ x: -14, y: 0, z: 36 });
+  const settled = { phase: 'landed', touchdown: 'roof', recovery: null, point: touchdown } as const;
+  const fromBelow = { ...touchdown, height: touchdown.height - 1 };
+  const feet = site.toWorld({ x: -14, y: 0, z: 35.95 });
+
+  host.update({ kind: 'ground' }, 0);
+  assert.equal(scene.children.length, 0);
+  assert.equal(host.tier(), 'hidden');
+  assert.equal(host.disembark(settled), undefined);
+  host.update({ kind: 'summit' }, 1);
+  const frame = scene.children[0]!;
+  assert.equal(frame.children.length, 1);
+  assert.equal(host.tier(), 'silhouette');
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0), undefined);
+  host.update({ kind: 'aircraft', feet: touchdown }, 2);
+  assert.equal(frame.children.length, 1);
+  assert.equal(host.tier(), 'full');
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0), undefined);
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0, fromBelow.height), undefined);
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0, touchdown.height)?.height, 785);
+  assert.equal(host.disembark({ ...settled, point: fromBelow }), undefined);
+  assert.equal(host.disembark({ ...settled, phase: 'sliding' }), undefined);
+  assert.equal(host.disembark({ ...settled, recovery: 'wall' }), undefined);
+  assert.equal(host.step(touchdown, feet.east, feet.north), undefined);
+  assert.deepEqual(host.disembark(settled), touchdown);
+  host.update({ kind: 'city' }, 3);
+  const next = host.step(touchdown, feet.east, feet.north)!;
+  assert.ok(Math.hypot(next.east - feet.east, next.north - feet.north, next.height - feet.height) < 1e-9);
+  const islandEdge = site.toWorld({ x: 0, y: 0, z: 68 });
+  assert.equal(host.step(touchdown, islandEdge.east, islandEdge.north), undefined);
+  host.update({ kind: 'ground' }, 4);
+  assert.equal(scene.children.length, 0);
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0), undefined);
+  host.dispose();
+  assert.equal(scene.children.length, 0);
+  assert.equal(host.surfaceAt(touchdown.east, touchdown.north, 0), undefined);
 });
 
 test('an actual glide lands on the city and its floors lead into the dormitory and up to a locked gate', t => {
