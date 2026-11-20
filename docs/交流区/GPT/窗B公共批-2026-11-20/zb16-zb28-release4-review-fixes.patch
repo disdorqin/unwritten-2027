@@ -1,0 +1,352 @@
+diff --git a/tests/town-blockout-presence-night.test.ts b/tests/town-blockout-presence-night.test.ts
+index acb90383..ad7f3ab3 100644
+--- a/tests/town-blockout-presence-night.test.ts
++++ b/tests/town-blockout-presence-night.test.ts
+@@ -1,6 +1,9 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
++import { createTownNightWindow } from '../src/shared/town-night-window.js';
++import type { TownNightBeaconFrame } from '../src/shared/town-night-beacon.js';
+ import { createTownPresenceNight } from '../tools/voxel-tavern/town-blockout/town-presence-night';
++import { za29GuardDutyForPhase } from '../tools/voxel-tavern/town-blockout/town-za29-guard-duty.js';
+
+ const night = {
+   phase: 'night-window', shift: 'night', canEnterRestricted: true, layersOverlap: true,
+@@ -78,3 +81,73 @@ test('a cue is discarded when its subscriber or trusted connection changes', ()
+   host.tick();
+   assert.deepEqual(heard, []);
+ });
++
++const handoffSchedule = { duskAt: 10_000, beaconAt: 70_000, cueExpiresAt: 75_000, morningBellAt: 250_000 };
++const handoffCue: TownNightBeaconFrame = {
++  type: 'event', kind: 'town-night-beacon', at: handoffSchedule.beaconAt, expiresAt: handoffSchedule.cueExpiresAt,
++};
++
++test('room handoff keeps guards off duty without carrying the old room cue into a late join', () => {
++  let now = handoffSchedule.beaconAt - 10;
++  const host = createTownNightWindow({ now: () => now, scheduleAt: () => handoffSchedule });
++  const presence = createTownPresenceNight(() => now, () => now);
++  const played: TownNightBeaconFrame[] = [];
++  presence.onBeacon(frame => played.push(frame));
++
++  presence.join(now, host.snapshot());
++  presence.acceptBeacon(handoffCue);
++  presence.disconnect('room-handoff');
++  assert.equal(presence.connectedAt(), undefined);
++  assert.equal(presence.state(), undefined);
++  assert.equal(presence.guardPhase(), 'awaiting-beacon');
++  assert.deepEqual(za29GuardDutyForPhase(presence.guardPhase()), {
++    guardPresent: false, showNightSigns: false, showEmptyPost: true,
++  });
++
++  now = handoffSchedule.beaconAt;
++  assert.ok(host.recordBeacon(now));
++  presence.tick();
++  presence.acceptBeacon(handoffCue);
++  assert.equal(presence.guardPhase(), 'awaiting-beacon');
++  assert.deepEqual(played, []);
++
++  now++;
++  presence.join(now, host.snapshot());
++  assert.equal(presence.state()?.phase, 'night-window');
++  assert.deepEqual(za29GuardDutyForPhase(presence.guardPhase()), {
++    guardPresent: false, showNightSigns: true, showEmptyPost: true,
++  });
++  presence.acceptBeacon(handoffCue);
++  assert.deepEqual(played, []);
++});
++
++test('a repeated handoff keeps the original local dawn deadline and a full disconnect clears it', () => {
++  let now = handoffSchedule.beaconAt;
++  let elapsed = 0;
++  const host = createTownNightWindow({ now: () => now, scheduleAt: () => handoffSchedule });
++  assert.ok(host.recordBeacon(now));
++  const snapshot = host.snapshot();
++  const presence = createTownPresenceNight(() => now, () => elapsed);
++
++  presence.join(now, snapshot);
++  presence.disconnect('room-handoff');
++  assert.equal(presence.state(), undefined);
++  assert.equal(presence.guardPhase(), 'night-window');
++  now = handoffSchedule.morningBellAt + 3_600_000;
++  elapsed = handoffSchedule.morningBellAt - handoffSchedule.beaconAt - 1;
++  presence.disconnect('room-handoff');
++  assert.equal(za29GuardDutyForPhase(presence.guardPhase()).guardPresent, false);
++
++  now = handoffSchedule.beaconAt - 100;
++  elapsed++;
++  assert.equal(presence.guardPhase(), undefined);
++  assert.equal(za29GuardDutyForPhase(presence.guardPhase()).guardPresent, true);
++  assert.equal(presence.state(), undefined);
++
++  now = handoffSchedule.beaconAt;
++  presence.join(now, snapshot);
++  presence.disconnect('room-handoff');
++  assert.equal(presence.guardPhase(), 'night-window');
++  presence.disconnect();
++  assert.equal(presence.guardPhase(), undefined);
++});
+diff --git a/tests/town-blockout-za29-guard-duty.test.ts b/tests/town-blockout-za29-guard-duty.test.ts
+index 5462f57a..426edb17 100644
+--- a/tests/town-blockout-za29-guard-duty.test.ts
++++ b/tests/town-blockout-za29-guard-duty.test.ts
+@@ -3,6 +3,7 @@ import { test } from 'node:test';
+ import { Group } from 'three';
+ import { createTownNightWindow } from '../src/shared/town-night-window';
+ import { mountMainSummitAssembly, summitAssemblyAnchor } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
++import { createSledRide } from '../tools/voxel-tavern/town-blockout/sled-ride';
+ import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+ import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+ import { mountZa22MountainGate, za22GateSeamNorth } from '../tools/voxel-tavern/town-blockout/town-za22-mountain-gate';
+@@ -171,3 +172,55 @@ test('the mounted crater guard covers both sides of the surveyed fence opening w
+     post.dispose();
+   }
+ });
++
++test('a parked sled boards from the open approach but cannot carry a player across a guard or fence', () => {
++  const grid = createTerrainGrid();
++  const road = mountWestCraterRoad(worldBounds.depth, north => grid.groundHeightAt(0, north));
++  const post = mountZa29GuardPost(road.group, 'crater', road.heightAt);
++  const lines: string[] = [];
++  const duty = createZa29GuardDuty('crater', post.anchors, line => lines.push(line));
++  const fenceEast = road.lip.east + 1;
++  const outside = fenceEast + .7, inside = fenceEast - .7;
++  const surveyedHeight = (east: number, north: number) => {
++    const height = road.heightAt(east, north);
++    assert.ok(height !== undefined);
++    return height;
++  };
++  const ride = createSledRide({
++    height: surveyedHeight,
++    surface: () => ({ surface: 0, deepSnow: false }),
++    blocked: (east, north, height) => road.fenceBlocks(east, north, height, .27),
++    canReachParked: (from, to) => !duty.interceptsStep(foot(from.x, from.n, from.y), foot(to.x, to.n, to.y)),
++    snow() {},
++    stopped() {},
++  });
++  try {
++    const level = surveyedHeight(inside, 159);
++    const playerLevel = surveyedHeight(outside, 159);
++    assert.equal(ride.mount(inside, 159, level, 0), true);
++    assert.equal(ride.leave(), true);
++
++    duty.updateDuty(true);
++    assert.equal(ride.canRemount(outside, 159, playerLevel), false);
++    assert.equal(ride.remount(outside, 159, playerLevel), false);
++    assert.deepEqual(lines, []);
++    assert.equal(ride.canRemount(inside - .5, 159, level), true);
++
++    duty.updateDuty(false);
++    assert.equal(ride.remount(outside, 159, playerLevel), true);
++    assert.deepEqual(ride.spot, { x: inside, n: 159, y: level, yaw: 0 });
++
++    const fenceNorth = 155.75;
++    const parkedHeight = surveyedHeight(inside, fenceNorth);
++    const approachHeight = surveyedHeight(outside, fenceNorth);
++    assert.equal(road.fenceBlocks(inside, fenceNorth, parkedHeight, .27), false);
++    assert.equal(road.fenceBlocks(outside, fenceNorth, approachHeight, .27), false);
++    assert.equal(road.fenceBlocks(fenceEast, fenceNorth, (parkedHeight + approachHeight) / 2, .27), true);
++    assert.equal(ride.relocateMounted(inside, fenceNorth, parkedHeight, 0), true);
++    assert.equal(ride.leave(), true);
++    assert.equal(ride.remount(outside, fenceNorth, approachHeight), false);
++    assert.deepEqual(ride.parked(), { x: inside, n: fenceNorth, y: parkedHeight, yaw: 0 });
++  } finally {
++    post.dispose();
++  }
++});
+diff --git a/tools/voxel-tavern/town-blockout/sled-ride.ts b/tools/voxel-tavern/town-blockout/sled-ride.ts
+index f7de7de6..c1b335f4 100644
+--- a/tools/voxel-tavern/town-blockout/sled-ride.ts
++++ b/tools/voxel-tavern/town-blockout/sled-ride.ts
+@@ -65,6 +65,7 @@ type SledWorld = {
+   surface(x: number, n: number, y: number): { surface: number; deepSnow: boolean };
+   blocked(x: number, n: number, y: number): boolean;
+   canTraverse?(from: Readonly<SledPoint>, to: Readonly<SledPoint>): boolean;
++  canReachParked?(from: Readonly<SledPoint>, to: Readonly<SledPoint>): boolean;
+   wallBlocked?(x: number, n: number, y: number): boolean;
+   wallImpact?(from: Spot, to: Spot, speed: number): WallReport | undefined;
+   snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
+@@ -109,8 +110,18 @@ export function createSledRide(world: SledWorld) {
+   }
+
+   function canRemount(x: number, n: number, y: number) {
+-    return !!parked && Math.hypot(parked.x - x, parked.n - n) <= 2.4 &&
+-      Math.abs(parked.y - y) <= .55 && canMountAt(parked);
++    if (!parked) return false;
++    const dx = parked.x - x, dn = parked.n - n, dy = parked.y - y;
++    const distance = Math.hypot(dx, dn);
++    if (!(distance <= 2.4 && Math.abs(dy) <= .55) || !canMountAt(parked)) return false;
++    if (world.canReachParked?.({ x, n, y }, parked) === false) return false;
++    // Check the short boarding path through fences and snow walls as well as the seat.
++    const segments = Math.ceil(distance / .15);
++    for (let step = 1; step < segments; step++) {
++      const t = step / segments;
++      if (!canMountAt({ x: x + dx * t, n: n + dn * t, y: y + dy * t })) return false;
++    }
++    return true;
+   }
+
+   function remount(x: number, n: number, y: number) {
+diff --git a/tools/voxel-tavern/town-blockout/town-presence-night.ts b/tools/voxel-tavern/town-blockout/town-presence-night.ts
+index 31040df9..332d33e5 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence-night.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence-night.ts
+@@ -20,12 +20,30 @@ function readWindow(value: unknown): TownNightWindowState | undefined {
+ }
+
+ /** Feed only frames from the current presence connection. Join snapshots never play a cue. */
+-export function createTownPresenceNight(serverNow: () => number) {
++export function createTownPresenceNight(serverNow: () => number, monotonicNow = () => performance.now()) {
+   let state: TownNightWindowState | undefined;
+   let connectedAt: number | undefined;
+   let pending: TownNightBeaconFrame | undefined;
+   let lastDelivered = -1;
+   let listener: ((cue: TownNightBeaconFrame) => void) | undefined;
++  let guardHandoff: {
++    phase: Exclude<TownNightWindowState['phase'], 'day'>;
++    morningBellAt: number;
++    serverAt: number;
++    monotonicAt: number;
++  } | undefined;
++
++  function guardPhase() {
++    if (state) return state.phase;
++    if (guardHandoff) {
++      // The same-town handoff keeps guard presentation stable up to the old dawn.
++      // None of its cached state is authoritative for any other consumer.
++      const elapsed = monotonicNow() - guardHandoff.monotonicAt;
++      const now = guardHandoff.serverAt + elapsed;
++      if (!Number.isFinite(now) || elapsed < 0 || now >= guardHandoff.morningBellAt) guardHandoff = undefined;
++    }
++    return guardHandoff?.phase;
++  }
+
+   function tick() {
+     if (!pending) return;
+@@ -42,9 +60,18 @@ export function createTownPresenceNight(serverNow: () => number) {
+     join(epochMs: unknown, snapshot: unknown) {
+       connectedAt = isEpoch(epochMs) && epochMs > 0 ? epochMs : undefined;
+       pending = undefined;
++      guardHandoff = undefined;
+       state = connectedAt === undefined ? undefined : readWindow(snapshot);
+     },
+-    disconnect() {
++    disconnect(transition?: 'room-handoff') {
++      if (transition !== 'room-handoff') {
++        guardHandoff = undefined;
++      } else if (state && state.phase !== 'day' && state.morningBellAt !== null) {
++        guardHandoff = {
++          phase: state.phase, morningBellAt: state.morningBellAt,
++          serverAt: serverNow(), monotonicAt: monotonicNow(),
++        };
++      }
+       connectedAt = undefined;
+       pending = undefined;
+       state = undefined;
+@@ -63,6 +90,7 @@ export function createTownPresenceNight(serverNow: () => number) {
+     },
+     tick,
+     state: () => state,
++    guardPhase,
+     connectedAt: () => connectedAt,
+     onBeacon(handler: (cue: TownNightBeaconFrame) => void) {
+       pending = undefined;
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+index 0381d801..5c2e7693 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -363,7 +363,7 @@ export function createTownPresence(
+     if (ownerPanel) ownerPanel.hidden = true;
+   }
+
+-  function disconnect(graceful: boolean) {
++  function disconnect(graceful: boolean, transition?: 'room-handoff') {
+     if (timeout !== undefined) window.clearTimeout(timeout);
+     timeout = undefined;
+     stopPoll(graceful);
+@@ -371,7 +371,7 @@ export function createTownPresence(
+     socket = undefined;
+     socketJoined = false;
+     haveId = false;
+-    townNight.disconnect();
++    townNight.disconnect(transition);
+     resetOwnerSession();
+     joinedId = null;
+     joinedName = undefined;
+@@ -416,7 +416,7 @@ export function createTownPresence(
+   function switchDomain(next: typeof domain, nextScene = scene) {
+     if (domain === next) return;
+     resetRetry();
+-    disconnect(true);
++    disconnect(true, 'room-handoff');
+     domain = next;
+     avatarScene = nextScene;
+     avatars?.setScene(avatarScene);
+@@ -864,6 +864,7 @@ export function createTownPresence(
+   return {
+     serverNow: clock.now,
+     getTownNightWindow: townNight.state,
++    getTownGuardPhase: townNight.guardPhase,
+     townNightConnectedAt: townNight.connectedAt,
+     onTownNightBeacon: townNight.onBeacon,
+     northRidgeNightOpen: () => townNight.state()?.canEnterRestricted === true,
+diff --git a/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+index 0c23d5a7..0ebf7460 100644
+--- a/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
++++ b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+@@ -90,7 +90,7 @@ export function createZa29GuardDuty(
+     }
+   }
+
+-  function blocksStep(from: Foot, to: Foot) {
++  function interceptsStep(from: Foot, to: Foot) {
+     if (!present) return false;
+     const aperture = post.aperture;
+     const before = along(from, aperture), after = along(to, aperture);
+@@ -101,7 +101,11 @@ export function createZa29GuardDuty(
+     const height = from.height + (to.height - from.height) * mix;
+     const lateral = (east - aperture.east) * post.north - (north - aperture.north) * post.east;
+     // Cover the normal jump envelope at the opening and keep separate levels free.
+-    if (Math.abs(lateral) > aperture.halfWidth || Math.abs(height - approach.height) > crossingHeightReach) return false;
++    return Math.abs(lateral) <= aperture.halfWidth && Math.abs(height - approach.height) <= crossingHeightReach;
++  }
++
++  function blocksStep(from: Foot, to: Foot) {
++    if (!interceptsStep(from, to)) return false;
+     if (!stopped) {
+       stopped = true;
+       speak();
+@@ -109,5 +113,5 @@ export function createZa29GuardDuty(
+     return true;
+   }
+
+-  return { updateDuty, action, observeApproach, blocksStep };
++  return { updateDuty, action, observeApproach, interceptsStep, blocksStep };
+ }
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 3a79bb3f..1c04e438 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -270,7 +270,7 @@ function updateGuardPosts() {
+     const road = ensureWestCraterRoad();
+     craterGuardPost = connectGuardPost('crater', mountZa29GuardPost(road.group, 'crater', road.heightAt));
+   }
+-  const duty = za29GuardDutyForPhase(presence.getTownNightWindow()?.phase);
++  const duty = za29GuardDutyForPhase(presence.getTownGuardPhase());
+   for (const post of [mountainGuardPost, craterGuardPost]) {
+     post?.model.setDuty(duty);
+     post?.duty.updateDuty(duty.guardPresent);
+@@ -319,6 +319,13 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
+       { east: to.x, north: to.n, height: to.y },
+     );
+   },
++  canReachParked(from, to) {
++    if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, bodyRadius)) return false;
++    return !currentGuardDuty()?.interceptsStep(
++      { east: from.x, north: from.n, height: from.y },
++      { east: to.x, north: to.n, height: to.y },
++    );
++  },
+   wallBlocked: (sx, nn, y) => {
+     if (cloudRoute.active()) return false;
+     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
