@@ -78,7 +78,13 @@ jobs:
           db2_preview_pid=$!
           trap 'kill "$db2_preview_pid" 2>/dev/null || true' EXIT
           curl --retry 20 --retry-connrefused --retry-delay 1 --silent --show-error --fail "$DB2_BROWSER_URL" --output /dev/null
-          node "../ci/$DB2_SCRIPT" | tee "$DB2_BROWSER_ARTIFACTS/result.log"
+          if [ "${{ matrix.proof }}" = aim ]; then
+            sudo apt-get install -y --no-install-recommends xdotool xvfb xauth
+            xvfb-run --auto-servernum --server-args='-screen 0 1280x1024x24' \
+              env DB2_BROWSER_XINPUT=1 node "../ci/$DB2_SCRIPT" | tee "$DB2_BROWSER_ARTIFACTS/result.log"
+          else
+            node "../ci/$DB2_SCRIPT" | tee "$DB2_BROWSER_ARTIFACTS/result.log"
+          fi
 
       - name: Preserve the browser evidence
         if: always()

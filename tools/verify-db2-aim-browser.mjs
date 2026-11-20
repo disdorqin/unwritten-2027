@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 
 const require = createRequire(join(process.cwd(), 'package.json'));
 const { chromium, expect } = require('@playwright/test');
@@ -11,6 +13,12 @@ const viewport = { width: 960, height: 768 };
 const start = { x: 550, y: 335 };
 const ammoNumber = text => Number(/^雪球 (\d+)\/10/.exec(text)?.[1] ?? 0);
 const shotEvent = 'town-snowball';
+const nativeMouse = process.env.DB2_BROWSER_XINPUT === '1';
+const xInput = promisify(execFile);
+
+async function systemMouse(...args) {
+  await xInput('xdotool', args.map(String), { timeout: 5000 });
+}
 
 async function observeInput(page) {
   await page.addInitScript(eventName => {
@@ -55,6 +63,8 @@ async function proveAim(page, report) {
   const pointerLocked = () => page.evaluate(() =>
     document.pointerLockElement === document.querySelector('#scene canvas'));
   const position = () => page.locator('#position').innerText({ timeout: 30_000 });
+  const holdMouse = () => nativeMouse ? systemMouse('mousedown', 1) : page.mouse.down();
+  const liftMouse = () => nativeMouse ? systemMouse('mouseup', 1) : page.mouse.up();
   async function readPracticeStand() {
     const text = await position();
     const pose = /东 ([\d.]+) m · 北 ([\d.]+) m/.exec(text);
@@ -74,7 +84,20 @@ async function proveAim(page, report) {
 
   let initial = await lockMouse();
   async function pointAt(dx, dy) {
-    await page.mouse.move(start.x + dx, start.y + dy);
+    if (nativeMouse) {
+      // Headless CDP reports zero relative motion under pointer lock. Use XTest on Xvfb.
+      for (let corrections = 0; corrections < 3; corrections++) {
+        const before = await readInput();
+        const x = dx - (before.x - initial.x);
+        const y = dy - (before.y - initial.y);
+        if (!x && !y) break;
+        await systemMouse('mousemove_relative', '--', x, y);
+        await expect.poll(async () => (await readInput()).motionSamples, { timeout: 15_000 })
+          .toBeGreaterThan(before.motionSamples);
+      }
+    } else {
+      await page.mouse.move(start.x + dx, start.y + dy);
+    }
     await expect.poll(async () => {
       const state = await readInput();
       return [state.x - initial.x, state.y - initial.y];
@@ -100,6 +123,7 @@ async function proveAim(page, report) {
   await walkUntil('s', 'north', 158.5);
   await walkUntil('d', 'east', 233);
   const supplyApproach = await position();
+  report.supplyApproach = supplyApproach;
   const pose = /东 ([\d.]+) m · 北 ([\d.]+) m/.exec(supplyApproach);
   assert.ok(pose, supplyApproach);
   const east = 233 - Number(pose[1]);
@@ -111,14 +135,14 @@ async function proveAim(page, report) {
   const snowX = Math.round(yaw / .003);
   const snowY = Math.round((.09 - pitch) / .003);
   await pointAt(snowX, snowY);
-  await page.mouse.down();
+  await holdMouse();
   try {
     await expect(meter).toHaveAttribute('aria-label', '攒雪球进度', { timeout: 30_000 });
     await expect.poll(async () => ammoNumber(await ammunition.innerText()), { timeout: 45_000 })
       .toBeGreaterThanOrEqual(6);
     report.gather = { supplyApproach, ammunition: await ammunition.innerText(), mousePixels: [snowX, snowY] };
   } finally {
-    await page.mouse.up();
+    await liftMouse();
   }
   assert.equal((await readInput()).events.length, 0, 'Gather release must leave the ammo unthrown');
 
@@ -142,12 +166,12 @@ async function proveAim(page, report) {
     if (!ammoNumber(await ammunition.innerText())) break;
     const startEventCount = (await readInput()).events.length;
     await pointAt(yawPixels, 0);
-    await page.mouse.down();
+    await holdMouse();
     try {
       await expect(meter).toHaveAttribute('aria-label', '瞄准雪球', { timeout: 8000 });
       await expect(meter).toBeVisible();
     } finally {
-      await page.mouse.up();
+      await liftMouse();
     }
 
     await page.waitForFunction(count =>
@@ -172,12 +196,15 @@ async function proveAim(page, report) {
 }
 
 await mkdir(artifacts, { recursive: true });
-const report = { url: url.href, attempts: [] };
+const report = { url: url.href, input: nativeMouse ? 'X11 XTest' : 'Playwright CDP', attempts: [] };
+if (nativeMouse) assert.ok(process.env.DISPLAY, 'The X11 input proof requires an isolated display');
+const graphicsArgs = process.env.DB2_BROWSER_HARDWARE === '1'
+  ? [] : ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+if (nativeMouse) graphicsArgs.push('--ozone-platform=x11', '--force-device-scale-factor=1');
 const browser = await chromium.launch({
-  headless: process.env.DB2_BROWSER_HEADLESS !== 'false',
+  headless: !nativeMouse && process.env.DB2_BROWSER_HEADLESS !== 'false',
   executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: process.env.DB2_BROWSER_HARDWARE === '1'
-    ? [] : ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+  args: graphicsArgs,
 });
 try {
   const page = await browser.newPage({ viewport });
@@ -191,6 +218,10 @@ try {
     throw error;
   } finally {
     report.pageErrors = pageErrors;
+    report.physicalMotion = await page.evaluate(() => {
+      const { x, y, motionSamples } = window.__db2AimProof;
+      return { x, y, motionSamples };
+    }).catch(() => undefined);
     const output = JSON.stringify(report, null, 2);
     await writeFile(join(artifacts, 'native-mouse-moving-target.json'), output + '\n');
     console.log(output);
