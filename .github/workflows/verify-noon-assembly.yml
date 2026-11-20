@@ -54,7 +54,7 @@ jobs:
             noon-assembly-presence
           docker run -d --name noon-assembly-web --network noon-assembly \
             -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 noon-assembly-web
-          curl --fail --silent --show-error --retry 15 --retry-connrefused --retry-delay 1 \
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
             --max-time 4 "$url/healthz" | tee "$out/healthz.txt"
           test "$(cat "$out/healthz.txt")" = "town-preview $GITHUB_SHA"
           node tools/verify-noon-assembly-first-frame.mjs "$url" "$out"
