@@ -50,7 +50,7 @@ async function beginRound(controls, start) {
   return { gestureAt, shownSeconds, nextSeconds };
 }
 
-async function verifyTouchRound(page) {
+async function verifyTouchRound(page, evidence) {
   await page.addInitScript(() => {
     const proof = { canvasTouches: [], throws: [] };
     Object.defineProperty(window, '__db2TouchProof', { value: proof });
@@ -70,6 +70,7 @@ async function verifyTouchRound(page) {
       });
     }, true);
   });
+  evidence.stage = 'open the touch practice route';
   const controls = await openPractice(page);
   const pad = page.locator('#touch-walk');
   const ammo = page.locator('#snowball-score');
@@ -92,6 +93,7 @@ async function verifyTouchRound(page) {
 
   const padBox = await pad.boundingBox();
   assert.ok(padBox);
+  evidence.pad = padBox;
   const padCenter = { x: padBox.x + padBox.width / 2, y: padBox.y + padBox.height / 2 };
   async function steer(dx, dy, field, threshold) {
     await touch('touchStart', padCenter);
@@ -107,43 +109,79 @@ async function verifyTouchRound(page) {
     }
   }
   // The paved practice marker has no snow. Walk to the existing southern supply pile.
+  evidence.stage = 'walk to the southern snow supply';
   await steer(0, 27, 'north', 158.5);
   await steer(27, 0, 'east', 233);
   const atSupply = await position.innerText();
   const supplyPose = parsePosition(atSupply);
   const east = 233 - supplyPose.east, north = 160 - supplyPose.north;
   const range = Math.hypot(east, north);
+  evidence.supply = { atSupply, east, north, range };
   assert.ok(north > 0 && range >= .8 && range <= 2.1, atSupply);
 
+  async function canvasGesture(dx, dy) {
+    const selection = await controls.canvas.evaluate((canvas, { dx, dy }) => {
+      const box = canvas.getBoundingClientRect();
+      const left = Math.max(0, box.left);
+      const top = Math.max(0, box.top);
+      const right = Math.min(innerWidth, box.right);
+      const bottom = Math.min(innerHeight, box.bottom);
+      // The initial touch belongs on the right half; the entire drag must stay in view.
+      const minX = Math.ceil(Math.max(box.left + box.width / 2, left, left - dx) + 1);
+      const maxX = Math.floor(Math.min(right, right - dx) - 1);
+      const minY = Math.ceil(Math.max(top, top - dy) + 1);
+      const maxY = Math.floor(Math.min(bottom, bottom - dy) - 1);
+      const search = { minX, maxX, minY, maxY };
+      if (minX > maxX || minY > maxY) return { search, blockedBy: ['drag outside visible canvas'] };
+      function sampleAxis(min, max) {
+        const count = Math.max(1, Math.ceil((max - min) / 12));
+        const middle = (min + max) / 2;
+        return Array.from({ length: count + 1 }, (_, index) => Math.round(min + (max - min) * index / count))
+          .sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
+      }
+      const blockedBy = new Set();
+      for (const y of sampleAxis(minY, maxY)) {
+        for (const x of sampleAxis(minX, maxX)) {
+          const element = document.elementFromPoint(x, y);
+          if (element === canvas) return { search, start: { x, y }, end: { x: x + dx, y: y + dy } };
+          blockedBy.add(element?.id || element?.tagName || 'no element');
+        }
+      }
+      return { search, blockedBy: [...blockedBy] };
+    }, { dx, dy });
+    evidence.gestures ??= [];
+    evidence.gestures.push({ stage: evidence.stage, dx, dy, ...selection });
+    assert.ok(selection.start && selection.end, `No free canvas touch point: ${JSON.stringify(selection)}`);
+    return selection;
+  }
+
+  evidence.stage = 'scoop with a held touch and drag';
   const box = await controls.canvas.boundingBox();
   assert.ok(box);
-  const aimPoint = { x: Math.round(box.x + box.width * .69), y: Math.round(box.y + box.height * .35) };
-  assert.equal(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, aimPoint), 'CANVAS');
   const downYaw = Math.atan2(east, north);
   const downPitch = Math.atan2(.27 - 1.57, range) - .09;
   // One deliberate hold before the drag leaves the stable 100 ms touch-look response.
   const focal = box.height / (2 * Math.tan(29 * Math.PI / 180));
   let gain = 1.4;
-  let scoopPoint;
+  let dx = 0, dy = 0;
   for (let i = 0; i < 8; i++) {
-    const dx = Math.tan(downYaw / gain) * focal;
-    const dy = -Math.tan(downPitch / gain) * focal;
+    dx = Math.tan(downYaw / gain) * focal;
+    dy = -Math.tan(downPitch / gain) * focal;
     const speed = Math.hypot(dx, dy) * 10;
     gain = 1.4 * (1 + .9 * speed / (speed + 850));
-    scoopPoint = { x: Math.round(aimPoint.x + dx), y: Math.round(aimPoint.y + dy) };
   }
-  assert.ok(scoopPoint.x >= box.x && scoopPoint.x < box.x + box.width &&
-    scoopPoint.y < box.y + box.height, 'The native down-look gesture must stay inside the viewport');
-  await touch('touchStart', aimPoint);
+  const scoop = await canvasGesture(Math.round(dx), Math.round(dy));
+  await touch('touchStart', scoop.start);
   try {
     await page.waitForTimeout(225);
-    await touch('touchMove', scoopPoint);
+    await touch('touchMove', scoop.end);
     await wait(meter).toHaveAttribute('aria-label', '攒雪球进度');
     await expect.poll(readAmmo, { timeout: 45_000 }).toBeGreaterThanOrEqual(1);
   } finally {
     await touch('touchEnd');
   }
   const gatheredAmmo = await readAmmo();
+  evidence.gatheredAmmo = gatheredAmmo;
   const afterGather = await readProof();
   assert.equal(afterGather.throws.length, 0, 'Letting go over snow must retain the ammunition');
   assert.equal(afterGather.canvasTouches[0]?.type, 'pointerdown');
@@ -152,6 +190,7 @@ async function verifyTouchRound(page) {
     event.at - afterGather.canvasTouches[0].at >= 150));
 
   const destinations = page.locator('#jump');
+  evidence.stage = 'start the round with the touch action';
   await destinations.selectOption({ label: '广场南侧' });
   await destinations.selectOption({ label: sceneLabel });
   await wait(controls.action).toHaveText('开始移动靶练习');
@@ -159,13 +198,16 @@ async function verifyTouchRound(page) {
   assert.ok(Math.abs(shooter.east - 223) <= .25 && Math.abs(shooter.north - 163) <= .75,
     `The practice start must be near E223/N163. Received E${shooter.east}/N${shooter.north}`);
   const round = await beginRound(controls, () => controls.action.tap());
+  evidence.round = { shooter, shownSeconds: round.shownSeconds, nextSeconds: round.nextSeconds };
   const startingAmmo = await readAmmo();
   assert.equal(startingAmmo, gatheredAmmo);
-  await touch('touchStart', aimPoint);
+  evidence.stage = 'aim and release a native touch throw';
+  const aim = await canvasGesture(24, 0);
+  await touch('touchStart', aim.start);
   try {
     await wait(meter).toHaveAttribute('aria-label', '瞄准雪球');
     await wait(meter).toBeVisible();
-    await touch('touchMove', { x: aimPoint.x + 24, y: aimPoint.y });
+    await touch('touchMove', aim.end);
   } finally {
     await touch('touchEnd');
   }
@@ -181,6 +223,7 @@ async function verifyTouchRound(page) {
     Math.abs(shot.origin[2] + shooter.north) < .15);
   assert.ok(Math.atan2(shot.direction[0], -shot.direction[2]) > .02, 'Touch drag must steer the actual projectile');
 
+  evidence.stage = 'wait for natural touch round settlement';
   await expect(controls.notice).toHaveText(/^移动靶结算 · 命中 [01]$/, { timeout: 85_000 });
   const elapsedMs = Math.round(performance.now() - round.gestureAt);
   assert.ok(elapsedMs >= 59_000, `Touch round settled too early after ${elapsedMs} ms`);
@@ -189,8 +232,8 @@ async function verifyTouchRound(page) {
   await session.detach();
   return {
     tapStartedRound: true, shownSeconds: round.shownSeconds, nextSeconds: round.nextSeconds,
-    gather: { atSupply, ammunition: gatheredAmmo, touches: afterGather.canvasTouches },
-    throw: { shooter, shot, touches: aimingTouches, remainingAmmo: await readAmmo() },
+    gather: { atSupply, ammunition: gatheredAmmo, touches: afterGather.canvasTouches, gesture: scoop },
+    throw: { shooter, shot, touches: aimingTouches, remainingAmmo: await readAmmo(), gesture: aim },
     settled: true, elapsedMs, notice: await controls.notice.innerText(),
   };
 }
@@ -239,7 +282,27 @@ try {
     await wait(controls.action).toBeVisible();
     return { settled: true, elapsedMs, shownSeconds, nextSeconds, notice: await controls.notice.innerText() };
   });
-  await runContext(browser, 'touch', devices['Pixel 7'], verifyTouchRound);
+  await runContext(browser, 'touch', devices['Pixel 7'], async page => {
+    const evidence = {};
+    try {
+      return await verifyTouchRound(page, evidence);
+    } catch (error) {
+      evidence.failure = error instanceof Error ? error.message : String(error);
+      evidence.browser = await page.evaluate(() => {
+        const read = id => document.getElementById(id)?.textContent ?? null;
+        const meter = document.getElementById('snowball-action-meter');
+        return {
+          position: read('position'), ammunition: read('snowball-score'), notice: read('town-activity-status'),
+          round: read('snow-practice-status'), meterLabel: meter?.getAttribute('aria-label'), meterHidden: meter?.hidden,
+          trustedInputs: window.__db2TouchProof,
+        };
+      }).catch(error => ({ failure: error.message }));
+      const json = JSON.stringify(evidence, null, 2);
+      await writeFile(join(artifacts, 'touch-failure.json'), json + '\n');
+      console.error(json);
+      throw error;
+    }
+  });
 } finally {
   await browser.close();
 }
