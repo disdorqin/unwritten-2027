@@ -80,10 +80,18 @@ try {
   assert.ok(closedBlocked.footZ < start.gateZ);
   await step('s', 4);
   await take('closed');
+  assert.deepEqual(records.closed.openingEffects, {
+    coldAir: false, fallingFrost: false, coldAirFrames: 0, frostFrames: 0,
+  });
   await step('f', 1);
   await step('e', 1);
   assert.equal((await inspect()).stage, 'ajar');
+  await page.waitForFunction(() => {
+    const { coldAirFrames, frostFrames } = window.undergroundCrystalGateReview.inspect().openingEffects;
+    return coldAirFrames > 0 && frostFrames > 0;
+  });
   await take('ajar');
+  assert.equal(records.ajar.openingEffects.coldAir, true);
   await step('w', 8);
   const ajarBlocked = await inspect();
   assert.equal(ajarBlocked.stage, 'ajar');
@@ -92,6 +100,8 @@ try {
   await step('s', 4);
   await page.waitForFunction(() => window.undergroundCrystalGateReview.inspect().stage === 'open');
   await take('open');
+  assert.equal(records.open.openingEffects.coldAir, false);
+  assert.equal(records.open.openingEffects.fallingFrost, false);
   await step('w', 14);
   const crossed = await inspect();
   assert.ok(crossed.footZ > start.gateZ + .5);

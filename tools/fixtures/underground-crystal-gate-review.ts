@@ -17,6 +17,8 @@ const mine = createUndergroundMineLayout({
 const site = mine.expansion?.gate;
 if (!site) throw new Error('The mine layout did not register the review gate');
 const visual = createUndergroundCrystalGate(site);
+const coldAir = visual.group.getObjectByName('mine-crystal-gate-cold-air')!;
+const fallingFrost = visual.group.getObjectByName('mine-crystal-gate-falling-frost')!;
 const [gateX, floor, gateZ] = site.position;
 const [winchX, winchY, winchZ] = visual.winchPosition;
 let footZ = gateZ - 3.37;
@@ -77,8 +79,12 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
 });
 let frame = 0;
-function render() {
-  visual.update(authority.state());
+let coldAirFrames = 0;
+let frostFrames = 0;
+function render(now: number) {
+  visual.update(authority.state(), now);
+  if (coldAir.visible) coldAirFrames++;
+  if (fallingFrost.visible) frostFrames++;
   camera.position.set(gateX, floor + 1.56, footZ);
   const targetHeight = Math.abs(footZ - gateZ) > 2 ? 1.7 : 1.0;
   camera.lookAt(gateX, floor + targetHeight, footZ + (footZ > gateZ ? -2 : 2));
@@ -91,6 +97,7 @@ requestAnimationFrame(render);
 Object.assign(window, { undergroundCrystalGateReview: {
   inspect: () => ({
     footZ, gateZ, cleared, stage: authority.state(), blocked, trustedKeys, status: note.value, frame,
+    openingEffects: { coldAir: coldAir.visible, fallingFrost: fallingFrost.visible, coldAirFrames, frostFrames },
     draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     webglError: renderer.getContext().getError(),
   }),

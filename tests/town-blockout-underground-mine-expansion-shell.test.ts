@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import {
+  BufferAttribute, BufferGeometry, Group, Matrix4, Mesh, MeshBasicMaterial, Raycaster, Vector3,
+  type InstancedMesh, type Points,
+} from 'three';
 import {
   createUndergroundCrystalGate, createUndergroundCrystalReturnSwitch,
 } from '../tools/voxel-tavern/town-blockout/underground-crystal-gate.js';
@@ -53,6 +56,52 @@ test('the crystal return switch reuses the gate control at the explicit crystal-
     gate.dispose();
   }
   assert.deepEqual(owner.children, []);
+});
+
+test('the accepted half-open stage leaks cold air and sheds the same batch of jamb frost once', () => {
+  const shell = createUndergroundMineExpansionShell({ ...options, crystalGate: true });
+  assert.ok(shell.gate);
+  const gate = createUndergroundCrystalGate(shell.gate);
+  const air = gate.group.getObjectByName('mine-crystal-gate-cold-air') as Points | undefined;
+  const frost = gate.group.getObjectByName('mine-crystal-gate-falling-frost') as InstancedMesh | undefined;
+  assert.ok(air?.isPoints && frost?.isInstancedMesh);
+  const positions = air.geometry.getAttribute('position');
+  const matrix = new Matrix4();
+  const chipY = () => {
+    frost.getMatrixAt(0, matrix);
+    return matrix.elements[13];
+  };
+
+  try {
+    assert.equal(positions.count, 12);
+    assert.equal(frost.count, 10);
+    assert.ok(!air.visible && !frost.visible);
+    gate.update('open', 100);
+    assert.ok(!air.visible && !frost.visible, 'an already-open snapshot does not replay the opening');
+
+    gate.update('closed', 200);
+    gate.update('ajar', 400);
+    assert.ok(air.visible && frost.visible);
+    const initialAirZ = positions.getZ(0);
+    const initialFrostY = chipY();
+    assert.ok(initialFrostY > shell.gate.height - .25);
+    gate.update('ajar', 900);
+    assert.ok(positions.getZ(0) < initialAirZ, 'air travels toward the mine side');
+    assert.ok(chipY() < initialFrostY - 1, 'frost falls from the jamb');
+
+    gate.update('open', 1_000);
+    assert.ok(!air.visible && frost.visible);
+    gate.update('open', 1_450);
+    assert.ok(!air.visible && !frost.visible, 'repeated stage snapshots do not restart the fall');
+    gate.update('closed', 1_500);
+    gate.update('ajar', 1_600);
+    assert.ok(air.visible && frost.visible);
+    assert.equal(chipY(), initialFrostY);
+    gate.update('closed', 1_610);
+    assert.ok(!air.visible && !frost.visible);
+  } finally {
+    gate.dispose();
+  }
 });
 
 test('the expansion keeps the camp footprint seam and rail route continuously walkable', () => {

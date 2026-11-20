@@ -1,4 +1,7 @@
-import { BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshStandardMaterial } from 'three';
+import {
+  BoxGeometry, BufferAttribute, BufferGeometry, DataTexture, DynamicDrawUsage, Group, InstancedMesh,
+  LinearFilter, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, PointsMaterial, Sphere, Vector3,
+} from 'three';
 import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
 import type { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
 
@@ -66,6 +69,86 @@ export function createUndergroundCrystalReturnSwitch({ position, yaw }: SwitchPo
       group.removeFromParent();
       shape.dispose();
       for (const material of Object.values(materials)) material.dispose();
+    },
+  };
+}
+
+function buildGateOpeningEffects(group: Group, box: BoxGeometry, { width, height, thickness }: Gate) {
+  const airCount = 12;
+  const fadeSize = 16;
+  const pixels = new Uint8Array(fadeSize * fadeSize * 4).fill(255);
+  for (let y = 0; y < fadeSize; y++) {
+    for (let x = 0; x < fadeSize; x++) {
+      const radius = Math.hypot((x + .5) * 2 / fadeSize - 1, (y + .5) * 2 / fadeSize - 1);
+      pixels[(y * fadeSize + x) * 4 + 3] = Math.round(255 * Math.max(0, 1 - radius) ** 2);
+    }
+  }
+  const sprite = new DataTexture(pixels, fadeSize, fadeSize);
+  sprite.magFilter = sprite.minFilter = LinearFilter;
+  sprite.needsUpdate = true;
+  const airGeometry = new BufferGeometry();
+  const positions = new BufferAttribute(new Float32Array(airCount * 3), 3).setUsage(DynamicDrawUsage);
+  airGeometry.setAttribute('position', positions);
+  airGeometry.boundingSphere = new Sphere(new Vector3(0, .15, -.6), width / 2 + 1);
+  const airMaterial = new PointsMaterial({
+    map: sprite, color: 0xb4e2e8, size: .62, opacity: .64, transparent: true, depthWrite: false,
+  });
+  const air = new Points(airGeometry, airMaterial);
+  air.name = 'mine-crystal-gate-cold-air';
+
+  const frostMaterial = new MeshBasicMaterial({ color: 0xa8dce5 });
+  const frost = new InstancedMesh(box, frostMaterial, 10);
+  frost.name = 'mine-crystal-gate-falling-frost';
+  frost.instanceMatrix.setUsage(DynamicDrawUsage);
+  frost.boundingSphere = new Sphere(new Vector3(0, height / 2, 0), Math.hypot(width / 2 + .25, height / 2 + .2, thickness));
+  const chip = new Object3D();
+  group.add(air, frost);
+
+  let lastStage: UndergroundMineGateStage = 'closed';
+  let openedAt: number | undefined;
+  return {
+    update(stage: UndergroundMineGateStage, now: number) {
+      if (stage === 'ajar' && lastStage === 'closed') openedAt = now;
+      if (stage === 'closed' || !Number.isFinite(openedAt)) openedAt = undefined;
+      lastStage = stage;
+      const elapsed = openedAt === undefined ? Infinity : Math.max(0, now - openedAt);
+      air.visible = stage === 'ajar' && Number.isFinite(elapsed);
+      frost.visible = elapsed < 1_050;
+      if (air.visible) {
+        for (let i = 0; i < airCount; i++) {
+          const travel = (elapsed / 1_450 + i % 4 / 4) % 1;
+          const center = width * .30 * (Math.floor(i / 4) - 1);
+          positions.setXYZ(
+            i, center + Math.sin(travel * Math.PI + i) * travel * .16,
+            .042 + travel * .11, thickness / 2 - travel * 1.35,
+          );
+        }
+        positions.needsUpdate = true;
+      }
+      if (frost.visible) {
+        for (let i = 0; i < frost.count; i++) {
+          const side = i < frost.count / 2 ? -1 : 1;
+          const offset = i % (frost.count / 2);
+          const age = Math.max(0, elapsed - offset * 36) / 1_000;
+          const size = .023 + .006 * (offset % 3);
+          chip.position.set(
+            side * (width / 2 + .03 + (offset % 3 - 1) * .05 + age * .04),
+            Math.max(size / 2, height - .15 - offset * .078 - 4.9 * age * age),
+            -thickness / 2 - .04 - age * .18,
+          );
+          chip.scale.set(size * 1.15, size, size * .75);
+          chip.rotation.set(i * .7 + age * 5, i * .13, i * .49 + age * 2);
+          chip.updateMatrix();
+          frost.setMatrixAt(i, chip.matrix);
+        }
+        frost.instanceMatrix.needsUpdate = true;
+      }
+    },
+    dispose() {
+      airGeometry.dispose();
+      airMaterial.dispose();
+      sprite.dispose();
+      frostMaterial.dispose();
     },
   };
 }
@@ -138,8 +221,9 @@ export function createUndergroundCrystalGate(gate: Gate) {
   batchParts(leaf, oxide);
   batchParts(group, iron);
   batchParts(group, crystal);
+  const openingEffects = buildGateOpeningEffects(group, shape, gate);
 
-  function update(stage: UndergroundMineGateStage) {
+  function update(stage: UndergroundMineGateStage, now = performance.now()) {
     const gap = gate.gapFor(stage);
     leaf.position.y = gap;
     leaf.scale.y = height - gap;
@@ -147,6 +231,7 @@ export function createUndergroundCrystalGate(gate: Gate) {
     spill.visible = gap > 0;
     cold.opacity = stage === 'open' ? .48 : .24;
     winch.update(stage);
+    openingEffects.update(stage, now);
   }
 
   update('closed');
@@ -155,6 +240,7 @@ export function createUndergroundCrystalGate(gate: Gate) {
     dispose() {
       group.removeFromParent();
       group.traverse(child => { if (child instanceof InstancedMesh) child.dispose(); });
+      openingEffects.dispose();
       shape.dispose();
       for (const material of [iron, edge, oxide, timber, cold, crystal]) material.dispose();
     },
