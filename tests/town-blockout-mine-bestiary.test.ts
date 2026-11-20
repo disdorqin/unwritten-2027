@@ -64,6 +64,85 @@ test('snow clump notices visible snow gathering, rolls and rebuilds once it hits
   assert.deepEqual(blocked.first().at, { east: 0, north: 0 });
 });
 
+function setupSnowClumps(positions: readonly (readonly [id: string, east: number, north: number, room?: string])[], reverse = false) {
+  const spawns = positions.map(([id, east, north, spawnRoom]) => ({
+    id, species: 'snow-clump', habitat: 'shallow-snow', room: spawnRoom ?? room, at: { east, north },
+  } as const));
+  const encounter = createMineBestiaryEncounter(reverse ? spawns.reverse() : spawns, {
+    ...host,
+    hasSpawnSite: () => true,
+    seesPlayer: (id) => id === 'lead',
+    insideCampfire: (mineRoom, point) => mineRoom === room && point.north >= 7,
+  });
+  function step(tick: number, player: Partial<Survival['player']> = {}, contact?: Survival['contact']) {
+    return encounter.advance({ tick, mode: 'survival', section: 'mine', contact,
+      player: { room, at: { east: 5, north: 0 }, action: 'quiet', health: 100, maxHealth: 100, ...player } });
+  }
+  const clump = (id: string) => encounter.snapshot().find(actor => actor.id === id)!;
+  return { step, clump, encounter };
+}
+
+test('the first visible snow gathering sends two local neighbours rolling at separate delays', () => {
+  const positions = [
+    ['lead', 0, 0], ['first', -.9, .8], ['second', -1, -1.1], ['later', -2.4, 0],
+    ['distant', -3.5, 0], ['other-room', .1, 0, 'next-room'],
+  ] as const;
+  const start = { action: 'scoop-snow', at: { east: 5, north: 0 } } as const;
+  for (const reverse of [false, true]) {
+    const { step, clump } = setupSnowClumps(positions, reverse);
+    for (const [tick, action] of (['walk', 'run', 'mine', 'throw-snowball'] as const).entries()) {
+      assert.equal(step(tick, { action }).damage, 0);
+      assert.equal(clump('lead').phase, 'rest');
+    }
+    step(4, start);
+    assert.equal(clump('lead').phase, 'chase');
+    for (const id of ['first', 'second', 'later', 'distant', 'other-room']) assert.equal(clump(id).phase, 'rest');
+
+    // The player sidesteps. Followers copy the old roll rather than steering toward the new point.
+    for (let tick = 5; tick <= 10; tick++) {
+      assert.equal(step(tick, { at: { east: 3, north: 5 } }).damage, 0);
+      assert.equal(clump('first').phase, tick >= 7 ? 'chase' : 'rest');
+      assert.equal(clump('second').phase, tick >= 10 ? 'chase' : 'rest');
+    }
+    assert.ok(clump('first').at.north < .8);
+    assert.ok(clump('second').at.north > -1.1);
+    for (let tick = 11; tick <= 14; tick++) step(tick, { at: { east: 3, north: 5 } });
+    for (const id of ['later', 'distant', 'other-room']) assert.equal(clump(id).phase, 'rest');
+  }
+});
+
+test('crossing snow rolls scatter both participants and leave each vulnerable to one snowball', () => {
+  const { step, clump } = setupSnowClumps([['lead', 0, 0], ['other', 3, 0]]);
+  const start = { action: 'scoop-snow', at: { east: 2, north: 0 } } as const;
+  step(0, start);
+  for (let tick = 1; tick <= 4; tick++) assert.equal(step(tick).damage, 0);
+  assert.equal(clump('other').phase, 'chase');
+  assert.equal(step(5).damage, 0);
+  assert.equal(clump('lead').phase, 'rebuild');
+  assert.equal(clump('other').phase, 'rebuild');
+  const scatterPoint = clump('other').at;
+  for (let tick = 6; tick < 35; tick++) {
+    step(tick);
+    assert.equal(clump('other').phase, 'rebuild');
+    assert.deepEqual(clump('other').at, scatterPoint);
+  }
+  step(35);
+  assert.equal(clump('other').phase, 'rest');
+  assert.equal(step(36, {}, { target: 'other', tool: 'snowball' }).hit, 'defeated');
+});
+
+test('the campfire, the room exit and peaceful mode cancel pending follow rolls', () => {
+  for (const wayOut of ['fire', 'exit', 'peace'] as const) {
+    const { step, clump, encounter } = setupSnowClumps([['lead', 0, 0], ['other', 0, 1.2]]);
+    step(0, { action: 'scoop-snow' });
+    if (wayOut === 'peace') encounter.advance({ tick: 1, mode: 'peaceful' });
+    else assert.equal(step(1, wayOut === 'fire' ? { at: { east: 5, north: 7 } } : { room: 'next-room' }).damage, 0);
+    for (let tick = 2; tick <= 10; tick++) assert.equal(step(tick).damage, 0);
+    assert.equal(clump('other').phase, 'rest');
+    assert.deepEqual(clump('other').at, { east: 0, north: 1.2 });
+  }
+});
+
 test('skeleton follows distinct mining sounds with fixed speed and stays outside the accepted campfire annulus', () => {
   const target = { east: 4, north: 0 };
   const { advance, first } = setup('skeleton-miner', { insideCampfire: (_room, p) => p.east > 3.7 });

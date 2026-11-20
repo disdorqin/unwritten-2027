@@ -67,10 +67,16 @@ const damageRank: Readonly<Record<DamageBand, number>> = { light: 1, medium: 2 }
 const inCave = new Set<Action>(['mine', 'run', 'throw-snowball', 'direct-lamp']);
 const snakeVibrationRange = 6;
 const snakeLandingProbeTicks = 8;
+// Candidate values at 10 Hz. Followers copy the original disturbance with a small positional bias.
+const snowNeighbourRange = 3.2;
+const snowFollowDelay = 3;
+const snowCollisionDistance = .45;
+type SnowRoll = Readonly<{ starts: number; target: Point }>;
 
 type Creature = {
   spawn: CreatureSpawn; at: Point; phase: Stage; until: number; hits: number; patrolTarget: Point; ringStep: number;
   probeTarget?: Point;
+  snowRoll?: SnowRoll;
 };
 
 function distance(a: Point, b: Point) {
@@ -119,6 +125,56 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     return true;
   }
 
+  function prepareSnowRolls(clumps: readonly Creature[], player: UndergroundPlayer, tick: number) {
+    if (clumps.length === 0 || player.action !== 'scoop-snow' || host.insideCampfire(player.room, player.at)) return;
+    const ready = clumps.filter(actor => !actor.snowRoll &&
+      (actor.phase === 'rest' || (actor.phase === 'rebuild' && tick >= actor.until)));
+    ready.sort((a, b) => distance(a.at, player.at) - distance(b.at, player.at) || a.spawn.id.localeCompare(b.spawn.id));
+    for (const leader of ready) {
+      if (leader.snowRoll || distance(leader.at, player.at) > 8 || !host.seesPlayer(leader.spawn.id, player)) continue;
+      leader.snowRoll = { starts: tick, target: { ...player.at } };
+      const neighbours = ready.filter(actor => !actor.snowRoll && distance(actor.at, leader.at) <= snowNeighbourRange);
+      neighbours.sort((a, b) => distance(a.at, leader.at) - distance(b.at, leader.at) || a.spawn.id.localeCompare(b.spawn.id));
+      for (const [index, actor] of neighbours.slice(0, 2).entries()) {
+        actor.snowRoll = {
+          starts: tick + snowFollowDelay * (index + 1),
+          target: {
+            east: player.at.east + (actor.at.east - leader.at.east) * .1,
+            north: player.at.north + (actor.at.north - leader.at.north) * .1,
+          },
+        };
+      }
+    }
+  }
+
+  function rebuildSnowClump(actor: Creature, tick: number) {
+    actor.phase = 'rebuild';
+    actor.until = tick + tuning['snow-clump'].recovery;
+    actor.snowRoll = undefined;
+  }
+
+  function resolveSnowCollisions(previous: ReadonlyMap<Creature, Point>, tick: number) {
+    const rolling = [...previous].filter(([actor]) => actor.phase === 'chase');
+    const scattered = new Set<Creature>();
+    for (const [index, [actor, start]] of rolling.entries()) {
+      for (const [other, otherStart] of rolling.slice(index + 1)) {
+        // Compare both rolls at the same time within this tick, including crossings between samples.
+        const east = start.east - otherStart.east;
+        const north = start.north - otherStart.north;
+        const deltaEast = actor.at.east - other.at.east - east;
+        const deltaNorth = actor.at.north - other.at.north - north;
+        const travelSquared = deltaEast ** 2 + deltaNorth ** 2;
+        const closest = travelSquared === 0 ? 0 : -(east * deltaEast + north * deltaNorth) / travelSquared;
+        if (closest <= 0) continue;
+        const time = Math.min(1, closest);
+        if (Math.hypot(east + time * deltaEast, north + time * deltaNorth) > snowCollisionDistance) continue;
+        scattered.add(actor);
+        scattered.add(other);
+      }
+    }
+    for (const actor of scattered) rebuildSnowClump(actor, tick);
+  }
+
   function runCreature(actor: Creature, frame: Extract<MineEncounterFrame, { mode: 'survival' }>, openDive: boolean): DamageBand | undefined {
     const { player, snowballLanding, tick } = frame;
     const { species, id, room, at: origin } = actor.spawn;
@@ -136,8 +192,11 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     }
     if (actor.phase === 'windup') {
       if (tick < actor.until) return;
-      actor.phase = species === 'snow-clump' ? 'rebuild' : 'recover';
-      actor.until = tick + recovery;
+      if (species === 'snow-clump') rebuildSnowClump(actor, tick);
+      else {
+        actor.phase = 'recover';
+        actor.until = tick + recovery;
+      }
       if (sameRoom && !safeFire && range <= attackRange && host.seesPlayer(id, player)) return rule.band;
       return;
     }
@@ -145,7 +204,10 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     const nearbyLanding = idleSnake && snowballLanding?.room === room &&
       distance(actor.at, snowballLanding.at) <= snakeVibrationRange ? snowballLanding.at : undefined;
     const investigatingLanding = idleSnake && (nearbyLanding !== undefined || actor.probeTarget !== undefined);
-    if (!sameRoom && species !== 'skeleton-miner' && !investigatingLanding) actor.phase = 'retreat';
+    if (!sameRoom && species !== 'skeleton-miner' && !investigatingLanding) {
+      actor.phase = 'retreat';
+      actor.snowRoll = undefined;
+    }
     const heardMining = species === 'skeleton-miner' && !safeFire && player.action === 'mine' &&
       range <= 12 && host.hearsMining(id, player);
     if (actor.phase === 'retreat' && !heardMining) {
@@ -155,6 +217,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     }
     if (safeFire && avoidsFire(species)) {
       actor.phase = 'retreat';
+      actor.snowRoll = undefined;
       return;
     }
 
@@ -194,13 +257,16 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
           move(actor, actor.probeTarget, speed / 10);
         }
       }
-    } else {
-      const rolls = species === 'snow-clump' && see && range <= 8 && player.action === 'scoop-snow';
-      const follows = species === 'zombie-miner' && ((see && range <= 8 && player.action === 'run') ||
-        (player.action === 'mine' && range <= 6 && host.hearsMining(id, player)));
-      if (rolls || follows) actor.phase = 'chase';
-      if (follows) actor.until = tick + 16;
-      if (species === 'zombie-miner' && actor.phase === 'chase' && tick >= actor.until) {
+    } else if (species === 'snow-clump') {
+      if (actor.phase === 'rest' && actor.snowRoll && tick >= actor.snowRoll.starts) actor.phase = 'chase';
+    } else if (species === 'zombie-miner') {
+      const follows = (see && range <= 8 && player.action === 'run') ||
+        (player.action === 'mine' && range <= 6 && host.hearsMining(id, player));
+      if (follows) {
+        actor.phase = 'chase';
+        actor.until = tick + 16;
+      }
+      if (actor.phase === 'chase' && tick >= actor.until) {
         actor.phase = 'retreat';
         return;
       }
@@ -221,11 +287,12 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
       actor.until = tick + windup;
       return;
     }
-    const target = species === 'skeleton-miner' ? actor.patrolTarget : player.at;
-    if (!move(actor, target, speed / 10) && species === 'snow-clump') {
-      actor.phase = 'rebuild';
-      actor.until = tick + recovery;
+    if (actor.snowRoll) {
+      const target = actor.snowRoll.target;
+      if (distance(actor.at, target) <= 1e-6 || !move(actor, target, speed / 10)) rebuildSnowClump(actor, tick);
+      return;
     }
+    move(actor, species === 'skeleton-miner' ? actor.patrolTarget : player.at, speed / 10);
   }
 
   return {
@@ -236,7 +303,10 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     advance(frame: MineEncounterFrame) {
       if (!Number.isSafeInteger(frame.tick) || frame.tick <= lastTick) throw new Error('Each encounter tick must be new.');
       lastTick = frame.tick;
-      if (frame.mode === 'peaceful') return { damage: 0, damageBand: undefined, hit: 'ignored' } as const;
+      if (frame.mode === 'peaceful') {
+        for (const actor of actors.values()) if (actor.phase === 'rest') actor.snowRoll = undefined;
+        return { damage: 0, damageBand: undefined, hit: 'ignored' } as const;
+      }
       const { player, contact, section } = frame;
       if (!Number.isFinite(player.health) || !Number.isFinite(player.maxHealth) ||
           player.health < 0 || player.maxHealth <= 0 || player.health > player.maxHealth) throw new Error('Invalid host health.');
@@ -251,6 +321,10 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
         else hit = 'damaged';
       }
 
+      const clumps = section === 'mine' ? [...actors.values()].filter(actor =>
+        actor.spawn.species === 'snow-clump' && actor.spawn.room === player.room) : [];
+      prepareSnowRolls(clumps, player, frame.tick);
+      const previousSnowPositions = new Map(clumps.map(actor => [actor, actor.at]));
       let damageBand: DamageBand | undefined;
       const divingByRoom = new Map<string, number>();
       const isDiving = (a: Creature) => a.spawn.species === 'crystal-bat' && (a.phase === 'chase' || a.phase === 'windup');
@@ -266,6 +340,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
         if (before !== isDiving(actor)) divingByRoom.set(room, count + (before ? -1 : 1));
         if (candidate && (!damageBand || damageRank[candidate] > damageRank[damageBand])) damageBand = candidate;
       }
+      resolveSnowCollisions(previousSnowPositions, frame.tick);
       return { damage: damageBand ? Math.min(player.health, player.maxHealth * mineEncounterDamageFraction[damageBand]) : 0,
         damageBand, hit } as const;
     },
