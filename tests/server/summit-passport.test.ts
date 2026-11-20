@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { WebSocket, type RawData } from 'ws';
 import { createPresenceServer } from '../../src/presence/server.js';
 import { summitPassportSites, type SummitPassportPosition } from '../../src/presence/summit-passport-authority.js';
+import { createSummitPassportFileStore } from '../../src/presence/summit-passport-store.js';
 import { readSummitPassportReply, type SummitPassportAction } from '../../src/shared/summit-passport.js';
 
 type Frame = Record<string, unknown>;
@@ -144,4 +148,86 @@ test('an ordinary presence server cannot grant P-10 progress before the domain h
   assert.equal(readSummitPassportReply({ type: 'event', kind: 'summit-passport-result', action: 'status', result: 'ok',
     progress: { ...noStamps, snowWingEligible: true },
   }), undefined);
+});
+
+test('trusted identities retain all P-10 steps across transports and restarts, without acknowledging failed writes', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'unwritten-summit-passport-'));
+  const fileStore = createSummitPassportFileStore(directory);
+  const sites = summitPassportSites(347);
+  const identities = new Map<number, string>();
+  const positions = new Map<number, SummitPassportPosition>();
+  const trustedKey = 'stable/server-profile-1';
+  let rejectWrites = false;
+  async function start() {
+    identities.clear();
+    positions.clear();
+    const durable = createSummitPassportFileStore(directory);
+    return createPresenceServer({
+      connectionLog() {},
+      summitPassportHost: {
+        cloudDeckHeight: 347,
+        resolvePosition: peer => positions.get(peer),
+        persistence: {
+          resolveProfileKey: peer => identities.get(peer),
+          store: {
+            load: durable.load,
+            async save(key, stage) {
+              if (rejectWrites) throw new Error('Injected write failure');
+              await durable.save(key, stage);
+            },
+          },
+        },
+      },
+    });
+  }
+  let server = await start();
+  t.after(async () => { await server.close(); await rm(directory, { recursive: true, force: true }); });
+  const url = () => `http://127.0.0.1:${server.address().port}`;
+  const socket = new WebSocket(`${url().replace('http:', 'ws:')}/presence`);
+  await new Promise<void>((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+  const self = receiveWs(socket, frame => frame.type === 'join' && frame.self ? frame : undefined);
+  socket.send(JSON.stringify({ type: 'join', name: '同名来客' }));
+  const actor = await self;
+  assert.equal(typeof actor.id, 'number');
+  const wsId = actor.id as number;
+  identities.set(wsId, trustedKey);
+  // P-11 candidate 272203a ends 0.88 m from the same audited P-4 front-stamp anchor.
+  positions.set(wsId, { ...sites['cloud-stamp'], east: 305.12 });
+  const stamped = receiveWs(socket, frame => readSummitPassportReply(frame));
+  socket.send(packet('cloud-stamp'));
+  assert.deepEqual((await stamped).progress, firstStamp);
+  assert.equal(await fileStore.load(trustedKey), 1, 'WS acknowledgement follows the durable front stamp.');
+  await new Promise<void>(resolve => { socket.once('close', () => resolve()); socket.close(); });
+  await server.close();
+
+  server = await start();
+  const poll = await joinPoll(url(), '换了名字');
+  identities.set(poll.id, trustedKey);
+  assert.deepEqual((await poll.poll(packet('status')))[0]?.progress, firstStamp);
+  const other = await joinPoll(url(), '换了名字');
+  const spoofed = (await other.poll(packet('status', { profileKey: trustedKey, progress: registered })))[0];
+  assert.equal(spoofed?.result, 'unavailable');
+  assert.deepEqual(spoofed?.progress, noStamps);
+
+  positions.set(poll.id, sites['summit-stamp']);
+  assert.deepEqual((await poll.poll(packet('summit-stamp')))[0]?.progress, bothStamps);
+  assert.equal(await fileStore.load(trustedKey), 2);
+  positions.set(poll.id, sites['register-summit']);
+  rejectWrites = true;
+  const failed = (await poll.poll(packet('register-summit')))[0];
+  assert.equal(failed?.result, 'storage');
+  assert.deepEqual(failed?.progress, bothStamps);
+  assert.equal(await fileStore.load(trustedKey), 2, 'No registration persists on a failed write.');
+  rejectWrites = false;
+  assert.deepEqual((await poll.poll(packet('register-summit')))[0]?.progress, registered);
+  assert.equal(await fileStore.load(trustedKey), 3);
+  const filenames = await readdir(directory);
+  assert.equal(filenames.length, 1);
+  assert.match(filenames[0]!, /^[a-f0-9]{64}\.json$/);
+  await server.close();
+
+  server = await start();
+  const returning = await joinPoll(url(), '领翼验证');
+  identities.set(returning.id, trustedKey);
+  assert.deepEqual((await returning.poll(packet('status')))[0]?.progress, registered);
 });

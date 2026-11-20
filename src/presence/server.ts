@@ -387,7 +387,8 @@ export async function createPresenceServer(options: Options = {}) {
         if (!peers.has(peer.id)) break;
         const frame = item as { t?: unknown; d?: unknown };
         if (frame.t === 'text' && typeof frame.d === 'string') {
-          receiveText(peer, Buffer.from(frame.d, 'utf8'));
+          const pending = receiveText(peer, Buffer.from(frame.d, 'utf8'));
+          if (pending) await pending;
         } else if (frame.t === 'bin' && typeof frame.d === 'string') {
           const bytes = Buffer.from(frame.d, 'base64');
           if (bytes.byteLength === RECORD_BYTES && bytes.readUInt16LE(0) === MASCOT_ACTOR_ID) {
@@ -998,8 +999,10 @@ export async function createPresenceServer(options: Options = {}) {
       if (message.kind === 'summit-passport') {
         const action = 'action' in message ? message.action : undefined;
         if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
-          const reply = summitPassport?.request(peer.id, action) ?? summitPassportUnavailable(action);
-          send(peer, JSON.stringify(reply));
+          if (summitPassport) return summitPassport.request(peer.id, action).then(reply => {
+            if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
+          });
+          send(peer, JSON.stringify(summitPassportUnavailable(action)));
         }
         return;
       }
@@ -1275,7 +1278,8 @@ export async function createPresenceServer(options: Options = {}) {
         peer.socket?.terminate();
       }
       wss.close();
-      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
+      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()))
+        .then(() => summitPassport?.flush());
       return stop;
     },
   };
