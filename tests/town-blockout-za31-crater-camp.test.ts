@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh, MeshStandardMaterial, NearestFilter, PointLight } from 'three';
+import { NearestFilter, type BufferGeometry, type Mesh, type MeshStandardMaterial, type PointLight } from 'three';
 import { createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { craterWestSurvey, mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { mountZa31CraterCamp } from '../tools/voxel-tavern/town-blockout/town-za31-crater-camp';
@@ -43,11 +43,12 @@ test('the crater camp, warm markers and cut faces use surveyed ground and stay o
 
 test('pixel materials use the approved palette and warm light pools stay local', () => {
   const camp = mountZa31CraterCamp(mountWestCraterRoad(540, () => 10.7773));
-  const meshes = camp.group.children.filter(child => child instanceof Mesh);
+  // The game and root test runner may resolve separate Three.js instances.
+  const meshes = camp.group.children.filter(child => 'isMesh' in child && child.isMesh) as Mesh<BufferGeometry, MeshStandardMaterial>[];
   assert.equal(meshes.length, 8);
   const approved = new Set([0x8a8378, 0xa98a56, 0x5d4630, 0x44503c, 0x2c3648, 0xe8ecf0, 0xe08a3c, 0x7fd4c8, 0x8a4a34]);
   for (const { material } of meshes) {
-    assert.ok(material instanceof MeshStandardMaterial);
+    assert.ok(material.isMeshStandardMaterial);
     if (!material.map) {
       assert.ok(approved.has(material.color.getHex()));
       continue;
@@ -55,13 +56,16 @@ test('pixel materials use the approved palette and warm light pools stay local',
     const { image, minFilter, magFilter } = material.map;
     assert.equal(minFilter, NearestFilter);
     assert.equal(magFilter, NearestFilter);
+    assert.ok(image && typeof image === 'object' && 'width' in image && 'height' in image && 'data' in image);
     assert.equal(image.width, 16);
     assert.equal(image.height, 16);
-    for (let i = 0; i < image.data.length; i += 4) {
-      assert.ok(approved.has(image.data[i] * 65536 + image.data[i + 1] * 256 + image.data[i + 2]));
+    const { data } = image;
+    assert.ok(data instanceof Uint8Array);
+    for (let i = 0; i < data.length; i += 4) {
+      assert.ok(approved.has(data[i] * 65536 + data[i + 1] * 256 + data[i + 2]));
     }
   }
-  const lights = camp.group.children.filter(child => child instanceof PointLight);
+  const lights = camp.group.children.filter(child => 'isPointLight' in child && child.isPointLight) as PointLight[];
   assert.equal(lights.length, 3);
   for (const light of lights) {
     assert.equal(light.color.getHex(), 0xe08a3c);
