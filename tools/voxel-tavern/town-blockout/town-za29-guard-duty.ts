@@ -1,5 +1,16 @@
+import { summitAssemblyAnchor } from './main-summit-assembly';
+import { mainSummitLayout } from './main-summit-block';
+import { za22GateSeamNorth } from './town-za22-mountain-gate';
+
 type Foot = Readonly<{ east: number; north: number; height: number }>;
 type GuardAnchors = Readonly<{ guard: Foot; approach: Foot }>;
+
+const mountainAperture = {
+  east: summitAssemblyAnchor.east,
+  north: za22GateSeamNorth,
+  halfWidth: mainSummitLayout.gate.clearWidth / 2,
+  heightReach: 1.4,
+};
 
 const guards = {
   mountain: {
@@ -27,6 +38,8 @@ export function createZa29GuardDuty(
   announce: (line: string) => void,
 ) {
   const post = guards[kind];
+  const aperture = kind === 'mountain' ? mountainAperture : undefined;
+  const approachLine = aperture ?? approach;
   let present = false;
   let greeted = false;
   let stopped = false;
@@ -43,7 +56,7 @@ export function createZa29GuardDuty(
   }
 
   function along(point: Foot) {
-    return (point.east - approach.east) * post.east + (point.north - approach.north) * post.north;
+    return (point.east - approachLine.east) * post.east + (point.north - approachLine.north) * post.north;
   }
 
   const speak = () => { if (present) announce(post.line); };
@@ -64,7 +77,7 @@ export function createZa29GuardDuty(
     }
   }
 
-  function blocksStep(from: Foot, to: Foot) {
+  function interceptsStep(from: Foot, to: Foot) {
     if (!present) return false;
     const before = along(from), after = along(to);
     if (before > 0 || after < 0 || after <= before) return false;
@@ -74,9 +87,14 @@ export function createZa29GuardDuty(
       north: from.north + (to.north - from.north) * mix,
       height: from.height + (to.height - from.height) * mix,
     };
-    // Check the real approach and guard at the swept crossing so a diagonal step
-    // cannot mask a rush, while the rest of the domain needs no guard collision.
-    if (!inReach(crossing, approach, passageHalfWidth) || !inReach(crossing, guard, guardReach)) return false;
+    if (!aperture) return inReach(crossing, approach, passageHalfWidth) && inReach(crossing, guard, guardReach);
+    // The gate width and ordinary jump envelope bound a real crossing; nearby levels stay open.
+    const lateral = (crossing.east - aperture.east) * post.north - (crossing.north - aperture.north) * post.east;
+    return Math.abs(lateral) <= aperture.halfWidth && Math.abs(crossing.height - approach.height) <= aperture.heightReach;
+  }
+
+  function blocksStep(from: Foot, to: Foot) {
+    if (!interceptsStep(from, to)) return false;
     if (!stopped) {
       stopped = true;
       speak();
@@ -84,5 +102,5 @@ export function createZa29GuardDuty(
     return true;
   }
 
-  return { updateDuty, action, observeApproach, blocksStep };
+  return { updateDuty, action, observeApproach, interceptsStep, blocksStep };
 }

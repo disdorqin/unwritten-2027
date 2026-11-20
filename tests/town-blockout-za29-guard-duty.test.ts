@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Group } from 'three';
+import { mountMainSummitAssembly, summitAssemblyAnchor } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
+import { mountZa22MountainGate, za22GateSeamNorth } from '../tools/voxel-tavern/town-blockout/town-za22-mountain-gate';
+import { mountZa29GuardPost } from '../tools/voxel-tavern/town-blockout/town-za29-guard-scenes';
 import { createZa29GuardDuty } from '../tools/voxel-tavern/town-blockout/town-za29-guard-duty';
 
 const foot = (east: number, north: number, height: number) => ({ east, north, height });
@@ -63,4 +67,40 @@ test('the crater guard intervenes on the approach without fencing off the wester
   duty.updateDuty(false);
   assert.equal(duty.blocksStep(outside, inside), false);
   assert.equal(duty.blocksStep(inside, outside), false);
+});
+
+test('the mounted mountain guard covers both legal edges and a jump at the N666 gate seam', () => {
+  const owner = new Group();
+  const assembly = mountMainSummitAssembly(owner, 0);
+  const gate = mountZa22MountainGate(assembly, { open() {} });
+  const post = mountZa29GuardPost(owner, 'mountain', (east, north) => north < za22GateSeamNorth
+    ? assembly.frontRidgeAt(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north)
+    : gate.surfaceAt(east, north, 0));
+  const lines: string[] = [];
+  const duty = createZa29GuardDuty('mountain', post.anchors, line => lines.push(line));
+  duty.updateDuty(true);
+  try {
+    assert.equal(za22GateSeamNorth, 666);
+    assert.equal(duty.blocksStep(foot(300, 664.9, 347), foot(300, 665.1, 347)), false);
+    for (const east of [298.28, 300, 301.72]) {
+      assert.equal(gate.acceptsStep(east, 665.9, east, 666.1, .27), true);
+      for (const height of [347, 348.26]) {
+        const from = foot(east, 665.9, height);
+        const to = foot(east, 666.1, height);
+        assert.equal(duty.interceptsStep(from, to), true);
+        assert.equal(duty.blocksStep(to, from), false);
+      }
+    }
+    assert.equal(duty.blocksStep(foot(304, 665.9, 347), foot(304, 666.1, 347)), false);
+    assert.equal(duty.blocksStep(foot(300, 665.9, 350), foot(300, 666.1, 350)), false);
+    assert.deepEqual(lines, []);
+    assert.equal(duty.blocksStep(foot(300, 665.9, 347), foot(300, 666.1, 347)), true);
+    assert.equal(lines.length, 1);
+    duty.updateDuty(false);
+    assert.equal(duty.blocksStep(foot(300, 665.9, 347), foot(300, 666.1, 347)), false);
+  } finally {
+    post.dispose();
+    gate.dispose();
+    assembly.dispose();
+  }
 });
