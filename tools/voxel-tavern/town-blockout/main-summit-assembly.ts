@@ -167,6 +167,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     },
     enterGate: () => block.enter(gateOwner),
     leaveGate: block.leave,
+    setFrontDetail: (visible: boolean) => { cloudRegistration.group.visible = visible; },
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },
     update: cableView.update,
     interact(east: number, north: number, height: number) {

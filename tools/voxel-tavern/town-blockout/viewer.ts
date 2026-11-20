@@ -2499,6 +2499,7 @@ function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number)
 }
 
 function tryMove(nextX: number, nextN: number) {
+  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
   const limit = feet + (airHeight === undefined ? stepHeight : surfaceEpsilon);
@@ -2786,6 +2787,7 @@ function refreshWorldAction() {
 function renderCloudRoute(frameSeconds: number) {
   const cabin = cloudRoute.ridePoint();
   if (cabin) {
+    cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
     element('position').textContent = '缆车一线 · 前山';
   } else {
@@ -2804,7 +2806,8 @@ function renderCloudRoute(frameSeconds: number) {
     });
     walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
     faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 云海台`;
+    const place = cloudRoute.updateView({ east: walkRender.x, north: -walkRender.z, height: walkRender.y - eye });
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}`;
   }
   presence.sample(!cabin && walking, x, n, airHeight ?? ground, yaw);
   presence.update(Math.min(.25, frameSeconds));
