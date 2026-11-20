@@ -10,6 +10,8 @@ on:
       - 'tools/voxel-tavern/town-blockout/underground-crystal-gate.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mine-layout.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mine-expansion-shell.ts'
+      - 'src/shared/underground-mine-layout.ts'
+      - 'src/shared/underground-mine-expansion-shell.ts'
       - 'tools/fixtures/underground-crystal-gate-review.ts'
       - 'tools/verify-underground-crystal-gate.mjs'
 

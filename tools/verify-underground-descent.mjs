@@ -18,7 +18,7 @@ function checkedInBlob(path) {
   return blob;
 }
 
-const mineBlob = checkedInBlob('tools/voxel-tavern/town-blockout/underground-mine-layout.ts');
+const mineBlob = checkedInBlob('src/shared/underground-mine-layout.ts');
 const entryBlob = checkedInBlob('src/presence/underground-entry.ts');
 const scratch = await mkdtemp(resolve(tmpdir(), 'underground-descent-'));
 await mkdir(output, { recursive: true });
