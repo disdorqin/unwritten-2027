@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { Raycaster, Vector3 } from 'three';
 import { meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 
 test('B-01 mounts its reviewed crater and closure in a measured, rotated surface frame', () => {
@@ -59,12 +59,16 @@ test('ZA-22 west entrance physically joins the existing E0 edge and the B-01 cra
   }
   assert.ok(Math.abs(last - road.lip.height) < .025);
   assert.equal(road.heightAt(-241, road.lip.north), undefined);
-  const outside = { east: road.lip.east + 1, north: road.lip.north };
-  const inside = { east: road.lip.east - 1, north: road.lip.north };
-  assert.equal(road.fenceBlocks(outside.east, outside.north, road.lip.height, .27), false);
-  assert.equal(road.fenceBlocks(outside.east, outside.north + 3.25, road.lip.height, .27), true);
-  assert.equal(permitsMeteorCraterStep(outside, inside, false), false);
-  assert.equal(permitsMeteorCraterStep(outside, inside, true), true);
-  assert.equal(permitsMeteorCraterStep(inside, outside, false), true);
-  assert.equal(permitsMeteorCraterStep(inside, inside, false), true);
+  const fenceEast = road.lip.east + 1;
+  for (const direction of [-1, 1]) {
+    const fenceNorth = road.lip.north + direction * 3.25;
+    assert.ok(road.group.children.some(child => child.position.x === fenceEast && child.position.z === -fenceNorth));
+    assert.equal(road.fenceBlocks(fenceEast, fenceNorth, road.lip.height, .27), true);
+  }
+  for (let i = -20; i <= 20; i++) {
+    const east = road.lip.east + i * .1;
+    const height = road.heightAt(east, road.lip.north);
+    assert.ok(height !== undefined, 'the open centre has continuous foot support in either direction');
+    assert.equal(road.fenceBlocks(east, road.lip.north, height, .27), false);
+  }
 });

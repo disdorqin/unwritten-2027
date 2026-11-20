@@ -43,14 +43,11 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
   assert.equal(za22CloudSurfaceAt(350, 654), undefined);
 });
 
-test('boarding comes only from the legal station approach and authoritative night state', () => {
-  let night = false;
+test('boarding uses the station and the cable schedule, and pending riders can be disqualified', () => {
   const cloud = createZa22CloudRoute({
-    now: () => Date.UTC(2026, 0, 1) + 20_000, nightOpen: () => night,
+    now: () => Date.UTC(2026, 0, 1) + 20_000,
     enterOrExit() { assert.fail('must not transfer'); }, view() { assert.fail('must not interact'); },
   });
-  assert.equal(cloud.action(za22StationApproach), undefined);
-  night = true;
   assert.equal(cloud.action({ ...za22StationApproach, height: 27.7 }), undefined);
   assert.equal(cloud.action({ ...za22StationApproach, north: 320 }), undefined);
   const board = cloud.action(za22StationApproach);
@@ -59,8 +56,9 @@ test('boarding comes only from the legal station approach and authoritative nigh
   cloud.update(za22StationApproach);
   assert.match(cloud.action(za22StationApproach)?.label ?? '', /等候前山缆车/);
   assert.ok(!cloud.active());
-  night = false;
-  cloud.update(za22StationApproach);
-  night = true;
+  cloud.update(za22StationApproach, false);
+  assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
+  cloud.action(za22StationApproach)?.run();
+  cloud.update({ ...za22StationApproach, north: 320 });
   assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
 });

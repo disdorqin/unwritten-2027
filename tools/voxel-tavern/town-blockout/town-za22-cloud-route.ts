@@ -14,7 +14,6 @@ type Terminal = 'base' | 'summit';
 type Action = { label: string; run(): void };
 type Host = {
   now(): number;
-  nightOpen(): boolean;
   enterOrExit(terminal: Terminal, at: Point): void;
   view(title: string, message: string): void;
 };
@@ -193,7 +192,7 @@ export function createZa22CloudRoute(host: Host) {
   function action(position: Point): Action | undefined {
     if (mode === 'riding') return;
     if (mode === 'town') {
-      if (!host.nightOpen() || !near(position, za22StationApproach, 1.55)) return;
+      if (!near(position, za22StationApproach, 1.55)) return;
       return pending
         ? { label: '等候前山缆车 · 取消候车', run() { pending = undefined; } }
         : { label: '乘缆车一线前往云海台', run() { pending = 'base'; } };
@@ -220,8 +219,7 @@ export function createZa22CloudRoute(host: Host) {
 
   function update(position: Point, canBoard = true) {
     const now = host.now();
-    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8)
-        || (pending === 'base' && !host.nightOpen()))) pending = undefined;
+    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8))) pending = undefined;
     if (pending && !ride) {
       const from = pending;
       const index = ([0, 1] as const).find(candidate => line.timeline(now, candidate).boarding === from);

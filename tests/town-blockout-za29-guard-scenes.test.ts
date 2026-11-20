@@ -106,7 +106,7 @@ test('ZA-29 赵满仓 is visible before the jamb and clears the real cloud appro
   const terminal = { east: 336, north: 640, height: 347 };
   let now = epoch + 500;
   const cloud = createZa22CloudRoute({
-    now: () => now, nightOpen: () => true, enterOrExit() {}, view() {},
+    now: () => now, enterOrExit() {}, view() {},
   });
   cloud.action(za22StationApproach)!.run();
   cloud.update(za22StationApproach);
@@ -134,7 +134,10 @@ test('ZA-29 赵满仓 is visible before the jamb and clears the real cloud appro
     for (const [east, north] of [[312, 663.25], [308, 663.25], [304, 663.25], [300, 663.25], [300, 665.9]]) {
       cloud.updateView({ east, north, height: 347 });
       const meshes: Mesh[] = [];
-      cloud.scene.traverseVisible(object => { if (object instanceof Mesh) meshes.push(object); });
+      cloud.scene.traverseVisible(object => {
+      const mesh = object as Mesh;
+      if (mesh.isMesh) meshes.push(mesh);
+    });
       const eye = new Vector3(east, 348.62, -north);
       const direction = aimedAt.clone().sub(eye);
       const ray = new Raycaster(eye, direction.clone().normalize(), 0, direction.length() + .25);

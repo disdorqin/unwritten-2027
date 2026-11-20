@@ -9,17 +9,6 @@ export const craterWestSurvey = Object.freeze({
 const seamBlendWidth = 24;
 const carrierHoleRadius = meteorCraterRimRadius + 2;
 const tileSize = 48;
-const gateRadius = meteorCraterRimRadius + .27;
-type Foot = Readonly<{ east: number; north: number }>;
-
-function inCrater(foot: Foot) {
-  return Math.hypot(foot.east - craterWestSurvey.east, foot.north - craterWestSurvey.north) < gateRadius;
-}
-
-/** The night window controls new entry. Standing inside and walking back remain legal. */
-export function permitsMeteorCraterStep(from: Foot, to: Foot, nightOpen: boolean) {
-  return !inCrater(to) || inCrater(from) || nightOpen;
-}
 
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
 export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number) {

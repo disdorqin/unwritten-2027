@@ -91,7 +91,6 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
   const { legMs } = createZa22NorthRidgeLine(26);
   const cloud = createZa22CloudRoute({
     now: () => now,
-    nightOpen: () => !arrived,
     enterOrExit(terminal, at) {
       if (terminal === 'summit') {
         assert.deepEqual(at, cableEnd);
@@ -107,7 +106,7 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
   cloud.update(za22StationApproach);
   assert.equal(cloud.riding(), true);
   now = epoch + Math.ceil(legMs);
-  cloud.update(za22StationApproach);
+  cloud.update(za22StationApproach, false);
   assert.equal(cloud.riding(), false);
   assert.equal(arrived, true);
   const deck = { east: 300, north: 665.9, height: 347 };
