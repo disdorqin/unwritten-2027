@@ -77,16 +77,24 @@ test('a confirmed current carrier inlays permanently and may restore the in-ring
   assert.equal(restarted.pickup('mouse', 0, 2, 1_000_000), false);
 });
 
-test('the sealed goat has no pickup point and is inlaid only after all eleven other stones', () => {
+test('the concealed goat requires all eleven stones, Xiaowei ring passage and the witnessed bell handoff', () => {
   const others = zodiacStarStoneIds.filter(id => id !== 'goat');
   const incomplete = createZodiacStarStones({ origins: {}, installed: others.slice(0, 10) });
-  assert.equal(incomplete.inlayGoatAtFinale(), false);
+  assert.equal(incomplete.recordXiaoweiResonance(true), false);
+  assert.equal(incomplete.inlayGoatAtFinale(true, true), false);
   assert.equal(state(incomplete, 'goat').phase, 'sealed');
   const ready = createZodiacStarStones({ origins: {}, installed: others });
   assert.equal(ready.ringProgress().installed.length, 11);
   assert.equal(ready.pickup('goat', 0, 1, 0), false);
-  assert.equal(ready.inlayGoatAtFinale(), true);
+  assert.equal(ready.inlayGoatAtFinale(true, true), false);
+  assert.equal(ready.recordXiaoweiResonance(false), false);
+  assert.equal(ready.recordXiaoweiResonance(true), true);
+  assert.equal(ready.recordXiaoweiResonance(true), false);
   assert.equal(ready.inlayGoatAtFinale(), false);
+  assert.equal(ready.inlayGoatAtFinale(true, false), false);
+  assert.equal(ready.inlayGoatAtFinale(false, true), false);
+  assert.equal(ready.inlayGoatAtFinale(true, true), true);
+  assert.equal(ready.inlayGoatAtFinale(true, true), false);
   assert.deepEqual(ready.ringProgress().installed, [...zodiacStarStoneIds]);
   const restored = createZodiacStarStones({ origins: {}, installed: ready.ringProgress().installed });
   assert.equal(state(restored, 'goat').phase, 'in-ring');
