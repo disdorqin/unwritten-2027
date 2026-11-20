@@ -76,6 +76,9 @@ const wingStrips = [
   [1.68, 1.90, .06, -.77, .123],
 ] as const;
 
+// Recess the trim from both cloth edges so overlapping side faces are never coplanar.
+const wingTrimInset = .002;
+
 /** An unpowered cloth wing, with a detachable ventral mounting cradle. */
 export function createSnowWingVisual() {
   const parts: VoxelPart[] = [];
@@ -103,11 +106,12 @@ export function createSnowWingVisual() {
         put(canvas[(panel + index) % canvas.length], x, y,
           trail + chord * (panel + .5) / 4, width, .048, chord / 4);
       }
-      put(index < 4 ? binding : frost, x, y + .016, lead - .019, width, .065, .064);
-      put(frost, x, y - .01, trail + .022, width, .052, .064);
+      const trimWidth = width - 2 * wingTrimInset;
+      put(index < 4 ? binding : frost, x, y + .016, lead - .019, trimWidth, .065, .064);
+      put(frost, x, y - .01, trail + .022, trimWidth, .052, .064);
       put('#a18169', side * (inner + .045), y - .032, (trail + lead) / 2,
         .058, .062, chord - .086);
-      put('#ecf4f4', side * (outer - .022), y + .025, lead - .12, .044, .036, .16);
+      put('#ecf4f4', side * (outer - .022 - wingTrimInset), y + .025, lead - .12, .044, .036, .16);
     }
 
     put(binding, side * .222, -.245, -.15, .061, .072, .52);

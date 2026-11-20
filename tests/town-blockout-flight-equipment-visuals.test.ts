@@ -71,6 +71,21 @@ test('the snow wing has a symmetric tapered cloth silhouette and separate pilot 
   t.diagnostic(`snow wing: ${batch.count} instanced voxels / ${batch.count * 12} triangles`);
 });
 
+test('the wingtip trim is recessed from the cloth side faces', t => {
+  const wing = createSnowWingVisual();
+  t.after(wing.dispose);
+  const batch = assetBatch(wing.group);
+  const probe = wing.group.position.clone();
+  for (const side of [-1, 1]) {
+    assert.ok(containsVoxel(batch, probe.set(side * 1.899, .123, -.30)));
+    // Probe the leading edge, trailing edge and raised tip trim outside the cloth volume.
+    for (const [y, z] of [[.139, .067], [.113, -.775], [.160, -.060]]) {
+      assert.ok(containsVoxel(batch, probe.set(side * 1.895, y, z)));
+      assert.equal(containsVoxel(batch, probe.set(side * 1.899, y, z)), false);
+    }
+  }
+});
+
 test('the independent booster has two rear apertures and a top socket at the actual fitting face', t => {
   const booster = createFlightBoosterVisual();
   t.after(booster.dispose);
