@@ -10,8 +10,10 @@ import {
 import { resolveOrbitalGateTravel } from '../../../src/presence/orbital-gates';
 import { createStarportFuelDispenser } from '../../../src/presence/starport-fuel';
 import { flightAirspaceAt } from '../../../src/shared/flight-field';
+import { createTownNightWindow, type TownNightSchedule } from '../../../src/shared/town-night-window';
 import { createStarportReviewWorld, mountStarportFlightSite, starportFlightSite } from './starport-flight-site';
 import { mountStarportFieldReview } from './starport-field-review';
+import { mountStarportNightRing } from './starport-night-ring';
 import { northRidgeFrame } from './north-ridge-350-terrain';
 import { flightFuelCanFullPowerMs, mountFlightFuelDisplay } from './flight-fuel-display';
 import './flight-fuel-display.css';
@@ -57,9 +59,18 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 document.querySelector('#scene')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(64, 1, .07, 1_800);
 const proofMode = new URLSearchParams(location.search).get('proof');
-const fixedClock = proofMode === 'clock';
+const nightProof = proofMode === 'night-window';
+const fixedClock = proofMode === 'clock' || nightProof;
 const proofStepMs = 100;
 const proofWalkStepMs = 25;
+// The review has no live town host. This one-night schedule belongs only to the evidence fixture.
+const reviewNightSchedule: TownNightSchedule = { duskAt: 360_000, beaconAt: 420_000,
+  cueExpiresAt: 422_000, morningBellAt: 600_000 };
+let reviewNightNow = 0;
+let trustedGateChecks = 0;
+const nightWindow = createTownNightWindow({ now: () => nightProof ? reviewNightNow : Date.now(),
+  scheduleAt: () => nightProof ? reviewNightSchedule : undefined });
+const nightRing = mountStarportNightRing(site.group, starportFlightSite.door);
 const status = document.querySelector<HTMLElement>('#status')!;
 const reading = document.querySelector<HTMLOutputElement>('#reading')!;
 const aircraftControls = document.querySelector<HTMLDivElement>('#aircraft-controls')!;
@@ -110,7 +121,7 @@ function prepareFlightFuelDisplay() {
   fuelDisplay = mountFlightFuelDisplay(aircraftControls, { remainingFullPowerMs, throttle }, scale);
 }
 
-function interact() {
+function interact(trustedKey: boolean) {
   if (flight.skipRecovery() || unavailable()) return;
   if (distance(feet, starportFlightSite.assembly) <= 1.65) {
     const result = assembleAircraftAtStarport(loadout, 'starport-assembly-pad', feet, starportFlightSite.assembly);
@@ -119,6 +130,7 @@ function interact() {
     site.craft.visible = true;
     status.textContent = '合体完成。前往铜色跑道起线。';
   } else if (distance(feet, starportFlightSite.door) <= 1.6) {
+    if (nightProof && trustedKey) trustedGateChecks++;
     const travel = resolveOrbitalGateTravel({ gate: 'starport', direction: 'enter' }, { site: 'starport',
       pose: { ...feet, yaw: heading } }, {
       isOpen: () => aircraftChapterGateOpen, isAtOpening: () => true,
@@ -140,7 +152,7 @@ window.addEventListener('keydown', event => {
   event.preventDefault();
   held.add(event.code);
   if (event.repeat) return;
-  if (event.code === 'KeyE') interact();
+  if (event.code === 'KeyE') interact(event.isTrusted);
   if (event.code === 'KeyF') {
     const available = fuel.inspect(1);
     if (available && fuel.refill(1, available.revision)) status.textContent = '补给完成。';
@@ -200,6 +212,7 @@ function advanceFrame(dt: number, clockRate = 1) {
 
 function renderFrame() {
   operations.syncMarkers();
+  nightRing.apply(nightWindow.snapshot());
   const air = flight.snapshot();
   const bodyY = feet.height + 1.58;
   camera.position.set(feet.east, bodyY, -feet.north);
@@ -251,6 +264,19 @@ if (proofMode !== null) {
       starportFlightStep() {
         advanceFrame((unavailable() ? proofStepMs : proofWalkStepMs) / 1_000);
         return readProof();
+      },
+    });
+  }
+  if (nightProof) {
+    Object.assign(window, {
+      starportNightProof: () => ({ now: reviewNightNow, schedule: reviewNightSchedule,
+        state: nightWindow.snapshot(), ring: nightRing.snapshot(), trustedGateChecks, lockResult,
+        feet: { ...feet }, door: starportFlightSite.door }),
+      starportNightClock(now: number) { reviewNightNow = now; renderFrame(); },
+      starportNightBeacon(at: number) {
+        const receipt = nightWindow.recordBeacon(at);
+        renderFrame();
+        return receipt;
       },
     });
   }
