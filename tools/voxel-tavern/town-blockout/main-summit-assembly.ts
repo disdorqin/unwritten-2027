@@ -15,6 +15,7 @@ import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
 import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
+import { mountMainSummitWreckage } from './main-summit-wreckage';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
 
@@ -120,6 +121,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const ribbon = createTrailRibbon(trail.points.filter(point => point.north > 40), block.heightAt);
   ribbon.name = 'main-summit-walkway';
   group.add(ribbon);
+  const wreckage = mountMainSummitWreckage(group, trail);
   const knots = survey.map((row): SnowBeltKnot => {
     const [east, north, heading, height] = row;
     if (row.length < 4) throw new RangeError('Invalid surveyed snow belt knot.');
@@ -152,6 +154,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
 
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    wreckageSites: wreckage.sites,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
@@ -175,6 +178,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
         : registration.interact('summit', { east, north, height });
     },
     dispose() {
+      wreckage.dispose();
       stations.dispose();
       cableView.dispose();
       cabin.dispose();
