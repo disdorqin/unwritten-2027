@@ -1,8 +1,8 @@
 diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
-index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b9dd3abf9 100644
+index fea09307..87e638c5 100644
 --- a/tools/verify-za22-live.mjs
 +++ b/tools/verify-za22-live.mjs
-@@ -2,15 +2,21 @@ import assert from 'node:assert/strict';
+@@ -2,15 +2,22 @@ import assert from 'node:assert/strict';
  import { mkdir, writeFile } from 'node:fs/promises';
  import { join } from 'node:path';
  import { chromium } from '@playwright/test';
@@ -11,13 +11,14 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
  const [origin, output, segment = 'all'] = process.argv.slice(2);
  assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 -const url = new URL('/?profile', origin);
-+const bare = ['bare', 'north', 'mountain-bare', 'crater-bare'].includes(segment);
-+const mountainDragFallback = segment === 'mountain-bare';
++const infill = segment === 'infill-bare';
++const bare = infill || ['bare', 'north', 'mountain-bare', 'crater-bare'].includes(segment);
++const bareDragFallback = infill || segment === 'mountain-bare';
 +const url = bare ? new URL(origin) : new URL('/?profile', origin);
  assert.equal(url.protocol, 'http:');
  assert.equal(url.hostname, '127.0.0.1');
 -assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
-+if (bare) assert.equal(url.href, `${url.origin}/`, 'ZA-30 requires the bare production root, with no query or hash');
++if (bare) assert.equal(url.href, `${url.origin}/`, 'Use the bare production root, with no query or hash');
 +assert.ok(bare || ['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
  
  const spawn = [223, 180];
@@ -26,7 +27,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
  const station = [
    [245, 192], [251, 192], [278, 192], [304, 192], [315, 199], [319, 230], [332, 245],
    [350, 249], [382, 220], [398, 207], [410, 207], [427, 214], [445, 221], [456, 222],
-@@ -26,7 +32,7 @@ const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683],
+@@ -26,7 +33,7 @@ const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683],
  const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
  assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
  const viewport = { width, height };
@@ -35,7 +36,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
  assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
  const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
  const maxDrag = Math.round(width * .34);
-@@ -34,9 +40,14 @@ const tau = 2 * Math.PI;
+@@ -34,9 +41,14 @@ const tau = 2 * Math.PI;
  const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
  const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
  const hardware = process.env.ZA22_HARDWARE === '1';
@@ -45,25 +46,25 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
 -const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 +const report = { url: url.href, segment, viewport, deviceScaleFactor, headless, quality: bare ? 'fresh default' : 'smooth',
 +  gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], stageFailures: [] };
-+if (bare) report.input = mountainDragFallback ? 'native mouse, production drag fallback (Pointer Lock unavailable in this context)'
++if (bare) report.input = bareDragFallback ? 'native mouse, production drag fallback (Pointer Lock unavailable in this context)'
 +  : 'native mouse, standard browser Pointer Lock';
 +if (bare && process.env.ZA30_LOCAL_TEST_NIGHT) report.localTestNight = JSON.parse(process.env.ZA30_LOCAL_TEST_NIGHT);
  
  await mkdir(output, { recursive: true });
  let browser;
-@@ -45,6 +56,11 @@ let measuring = true;
+@@ -45,6 +57,11 @@ let measuring = true;
  
  async function openTown(name) {
    const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
 +  if (bare) await context.addInitScript(observeBareTown);
-+  if (mountainDragFallback) await context.addInitScript(() => {
-+    // The standalone mountain route selects the viewer's ordinary fallback.
++  if (bareDragFallback) await context.addInitScript(() => {
++    // These routes select the viewer's ordinary fallback while keeping the bare entry.
 +    Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
 +  });
    const page = await context.newPage();
    lastPage = page;
    const evidence = { name, checkpoints: [], sockets: [], poses: [] };
-@@ -95,7 +111,7 @@ async function openTown(name) {
+@@ -95,7 +112,7 @@ async function openTown(name) {
        });
      });
    });
@@ -72,7 +73,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
      // Use the production drag fallback for consistent native mouse input in headless Chromium.
      // Only the browser API is made unavailable. All movement still runs through the viewer.
      Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
-@@ -106,11 +122,12 @@ async function openTown(name) {
+@@ -106,11 +123,12 @@ async function openTown(name) {
    const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
    assert.equal(response?.status(), 200);
    assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
@@ -88,7 +89,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
    if (!report.gpu) report.gpu = await page.evaluate(() => {
      const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
      const names = gl?.getExtension('WEBGL_debug_renderer_info');
-@@ -128,12 +145,13 @@ async function openTown(name) {
+@@ -128,12 +146,13 @@ async function openTown(name) {
  }
  
  async function readPose(page) {
@@ -105,7 +106,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
    const point = positionPattern.exec(frame.hud);
    return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
      height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100 : undefined };
-@@ -147,7 +165,46 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
+@@ -147,7 +166,46 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
    return pose;
  }
  
@@ -139,7 +140,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
 +    await page.mouse.move(anchor.x, anchor.y);
 +    await page.mouse.down();
 +    try {
-+      const steps = mountainDragFallback ? Math.max(2, Math.ceil(Math.hypot(dx, yMove) / 55)) : 1;
++      const steps = bareDragFallback ? Math.max(2, Math.ceil(Math.hypot(dx, yMove) / 55)) : 1;
 +      await page.mouse.move(anchor.x + dx, anchor.y + yMove, { steps });
 +    }
 +    finally { await page.mouse.up(); }
@@ -149,14 +150,46 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
 +}
 +
 +async function face(page, evidence, desired, pitch) {
-+  if (bare) return faceBare(page, desired, pitch);
++  if (bare && !bareDragFallback) return faceBare(page, desired, pitch);
    for (let attempt = 0; attempt < 16; ++attempt) {
      const before = await waitForWire(page, evidence);
      const delta = yawDistance(before.yaw, desired);
-@@ -243,14 +300,73 @@ async function snapshot(page, evidence, label) {
+@@ -243,14 +301,109 @@ async function snapshot(page, evidence, label) {
    evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
  }
  
++async function walkStreetInfill(page, evidence) {
++  async function sample(label, east, north) {
++    const here = await readPose(page);
++    const facing = Math.atan2(east - here.east, north - here.north);
++    await face(page, evidence, facing);
++    await waitForWire(page, evidence, wire => wire?.area === 'town' &&
++      Math.hypot(wire.east - here.east, wire.north - here.north) < .6 &&
++      Math.abs(yawDistance(wire.yaw, facing)) < .022);
++    await snapshot(page, evidence, label);
++  }
++
++  await snapshot(page, evidence, 'ordinary-spawn-smoke');
++  await follow(page, evidence, [...westShore.slice(0, 3), [155, 156.6], [157.6, 156.8]], 'plaza-verge');
++  await sample('southwest-plaza', 159.5, 161);
++  await follow(page, evidence, [[155, 156.6], ...westShore.slice(2, 5), [129, 86], [176, 74],
++    [199, 80.024], [198.5, 86], [200, 87]], 'market');
++  await sample('market-south-loop', 200, 90);
++  await follow(page, evidence, [[198.5, 86], [199, 80.024], [176, 74], [129, 86],
++    ...westShore.slice(0, 5).reverse(), spawn], 'market-return');
++  await follow(page, evidence, [...station.slice(0, 5), [317.25, 216]], 'northeast');
++  await sample('northeast-approach', 323, 212.5);
++  await follow(page, evidence, station.slice(5, 17), 'station');
++  await sample('station-approach-west', 501, 294);
++  await follow(page, evidence, station.slice(17, 20), 'station-entry');
++  await walkTo(page, evidence, station[17], 'station-forecourt-return');
++  await sample('station-approach-east', 518.5, 310);
++  await follow(page, evidence, [...station.slice(0, 17).reverse(), spawn], 'station-return');
++  await waitForWire(page, evidence, wire => wire?.area === 'town' &&
++    Math.hypot(wire.east - spawn[0], wire.north - spawn[1]) < .55 && Math.abs(wire.height - 12) < .3);
++  await snapshot(page, evidence, 'spawn-return');
++}
++
 +async function captureMainSummit(page, evidence) {
 +  await snapshot(page, evidence, 'spawn');
 +  await walkTo(page, evidence, northLook, 'north-look-position');
@@ -221,41 +254,55 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
    });
    report.browser = browser.version();
 -  if (segment !== 'crater') {
++  if (infill) await collectStage('street-infill', async () => {
++    const { page, evidence } = await openTown('street-infill');
++    await walkStreetInfill(page, evidence);
++  });
 +  if (segment === 'bare' || segment === 'north') await collectStage('north', async () => {
 +    const { page, evidence } = await openTown('north');
 +    await captureMainSummit(page, evidence);
 +  });
-+  if (!['crater', 'crater-bare', 'north'].includes(segment)) await collectStage('mountain', async () => {
++  if (!infill && !['crater', 'crater-bare', 'north'].includes(segment)) await collectStage('mountain', async () => {
      const { page, evidence } = await openTown('cable');
      await follow(page, evidence, station, 'station');
      if (segment === 'station') {
-@@ -262,18 +378,19 @@ try {
+@@ -262,18 +415,26 @@ try {
        await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
          null, { timeout: 135_000 });
        await snapshot(page, evidence, 'cable-boarding');
 -      await page.waitForFunction(() => {
-+      await page.waitForFunction(bare => {
-         const riding = document.querySelector('#position')?.textContent?.includes('缆车一线');
+-        const riding = document.querySelector('#position')?.textContent?.includes('缆车一线');
 -        const height = window.__za22Frame?.cameraY;
-+        const height = bare ? window.__za30Bare?.camera?.cameraY : window.__za22Frame?.cameraY;
-         return riding && height > 80 && height < 300;
+-        return riding && height > 80 && height < 300;
 -      }, null, { timeout: 90_000 });
-+      }, bare, { timeout: 90_000 });
-       await snapshot(page, evidence, 'cable-moving');
+-      await snapshot(page, evidence, 'cable-moving');
++      const cableProgress = await page.waitForFunction(({ bare, bareDragFallback, pattern, destination }) => {
++        const hud = document.querySelector('#position')?.textContent ?? '';
++        const height = bare ? window.__za30Bare?.camera?.cameraY : window.__za22Frame?.cameraY;
++        if (hud.includes('缆车一线') && height > 80 && height < 300) return 'moving';
++        if (!bareDragFallback) return false;
++        const pose = new RegExp(pattern).exec(hud);
++        return pose && Math.hypot(Number(pose[1]) - destination[0], Number(pose[2]) - destination[1]) < 1
++          ? 'hud-arrival' : false;
++      }, { bare, bareDragFallback, pattern: positionPattern.source, destination: cloudStop },
++      { timeout: bareDragFallback ? 210_000 : 90_000 });
++      evidence.cableProgress = await cableProgress.jsonValue();
++      await cableProgress.dispose();
++      if (evidence.cableProgress === 'moving') await snapshot(page, evidence, 'cable-moving');
  
 -      await page.waitForFunction(({ pattern, destination }) => {
-+      await page.waitForFunction(({ pattern, destination, bare }) => {
++      await page.waitForFunction(({ pattern, destination, bare, bareDragFallback }) => {
          const pose = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
 +        const cameraY = bare ? window.__za30Bare?.camera?.cameraY : window.__za22Frame?.cameraY;
          return pose && Math.hypot(Number(pose[1]) - destination[0], Number(pose[2]) - destination[1]) < 1
 -          && Math.abs((window.__za22Frame?.cameraY ?? 0) - 348.65) < .55;
 -      }, { pattern: positionPattern.source, destination: cloudStop }, { timeout: 210_000 });
-+          && Math.abs(cameraY - 348.65) < .55;
-+      }, { pattern: positionPattern.source, destination: cloudStop, bare }, { timeout: 210_000 });
++          && (bareDragFallback || Math.abs(cameraY - 348.65) < .55);
++      }, { pattern: positionPattern.source, destination: cloudStop, bare, bareDragFallback }, { timeout: 210_000 });
        await waitForWire(page, evidence, pose => pose?.area === 'mountain' && Math.abs(pose.height - 347) < .7);
        await snapshot(page, evidence, 'cloud-cable-arrival');
        if (segment === 'cloud' || segment === 'all') {
-@@ -282,19 +399,26 @@ try {
+@@ -282,19 +443,26 @@ try {
          await card(page, '星港坪');
          await snapshot(page, evidence, 'cloud-runway');
        }
@@ -286,7 +333,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
      const { page, evidence, westWindow } = await openTown('crater');
      await follow(page, evidence, westShore, 'west-shore');
      await follow(page, evidence, crater, 'crater');
-@@ -323,8 +447,9 @@ try {
+@@ -323,8 +491,9 @@ try {
      await snapshot(page, evidence, 'crater-inside');
      await walkTo(page, evidence, [-67, 159], 'crater-return');
      await snapshot(page, evidence, 'crater-return');
@@ -297,17 +344,18 @@ index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b
  } catch (error) {
    report.failure = error instanceof Error ? error.stack : String(error);
    if (lastPage && !lastPage.isClosed()) {
-@@ -337,7 +462,7 @@ try {
+@@ -337,7 +506,8 @@ try {
  } finally {
    measuring = false;
    report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
 -  await writeFile(join(output, 'za22-live-walk.json'), `${JSON.stringify(report, null, 2)}\n`);
-+  await writeFile(join(output, bare ? 'za30-bare-walk.json' : 'za22-live-walk.json'), `${JSON.stringify(report, null, 2)}\n`);
++  const reportFile = infill ? 'za28-infill-bare-walk.json' : bare ? 'za30-bare-walk.json' : 'za22-live-walk.json';
++  await writeFile(join(output, reportFile), `${JSON.stringify(report, null, 2)}\n`);
    console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
      frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
    await browser?.close();
 diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
-index 2bdfa13cece0338cd03099072b15eb42ed7bce13..4dae1fe03909ece2e2255f6c363f8542fa448e4b 100644
+index 2bdfa13c..27ceca25 100644
 --- a/tools/verify-za22-local.mjs
 +++ b/tools/verify-za22-local.mjs
 @@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
@@ -315,7 +363,7 @@ index 2bdfa13cece0338cd03099072b15eb42ed7bce13..4dae1fe03909ece2e2255f6c363f8542
  
  const [segment, evidencePath] = process.argv.slice(2);
 -assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
-+const bareRoute = ['bare', 'mountain-bare', 'crater-bare'].includes(segment);
++const bareRoute = ['bare', 'mountain-bare', 'crater-bare', 'infill-bare'].includes(segment);
 +assert.ok((bareRoute || ['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'north'].includes(segment)) && evidencePath,
    'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
  const run = promisify(execFile);
@@ -354,7 +402,7 @@ index 2bdfa13cece0338cd03099072b15eb42ed7bce13..4dae1fe03909ece2e2255f6c363f8542
  } finally {
 diff --git a/tools/verify-za30-bare-observer.mjs b/tools/verify-za30-bare-observer.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..75ffbb3ebd4641be9a2cc216c41786a7ce3d2399
+index 00000000..75ffbb3e
 --- /dev/null
 +++ b/tools/verify-za30-bare-observer.mjs
 @@ -0,0 +1,105 @@
