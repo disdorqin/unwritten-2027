@@ -1,0 +1,52 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+--- a/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
++++ b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+@@ -17,5 +17,6 @@
+ type WestCraterRoad = {
+   group: Group;
+-  anchor: MeteorCraterWorldAnchor;
++  readonly winch: ReturnType<typeof mountZa31CraterWinch>;
++  anchor: MeteorCraterWorldAnchor;
+   lip: Readonly<{ east: number; north: number }> & { height: number };
+   heightAt(east: number, north: number): number | undefined;
+@@ -120,4 +121,4 @@
+   const winch = mountZa31CraterWinch(road);
+   if (winch) group.add(winch.group);
+-  return road;
+-}
++  return { ...road, winch };
++}
+diff --git a/tests/town-blockout-za31-crater-winch.test.ts b/tests/town-blockout-za31-crater-winch.test.ts
+--- a/tests/town-blockout-za31-crater-winch.test.ts
++++ b/tests/town-blockout-za31-crater-winch.test.ts
+@@ -16,6 +16,7 @@
+   const { east, north, rimHeight } = road.anchor;
+   const floorY = rimHeight - meteorCraterDepth;
+-  const survey = surveyZa31CraterWinch(road);
+-  assert.ok(survey);
++  const survey = surveyZa31CraterWinch(road);
++  assert.ok(survey);
++  assert.deepEqual(road.winch?.survey, survey);
+   near(survey.plinth.east, -120.7468);
+   near(survey.plinth.north, 180.6050);
+@@ -48,7 +49,9 @@
+ test('the crank exposes a visual pivot and the casing is clear of the shaft and stone reserve', () => {
+   const road = mountWestCraterRoad(540, () => 10.7773);
+-  const winch = mountZa31CraterWinch(road);
+-  assert.ok(winch);
+-  const { group, survey } = winch;
++  const winch = road.winch;
++  assert.ok(winch);
++  const { group, survey } = winch;
++  assert.equal(group.parent, road.group);
++  assert.equal(road.group.children.filter(child => child.name === group.name).length, 1);
+   const pivot = group.getObjectByName('za31-crater-winch-crank');
+   assert.ok(pivot);
+@@ -85,4 +88,5 @@
+   winch.setCrankTurns(NaN);
+   near(pivot.rotation.x, -6 * Math.PI);
+-  assert.ok(road.group.getObjectByName('meteor-crater-sealed-well')?.visible);
+-});
++  assert.ok(road.group.getObjectByName('meteor-crater-sealed-well')?.visible);
++  near(road.heightAt(road.anchor.east, road.anchor.north)!, road.anchor.rimHeight - meteorCraterDepth);
++});

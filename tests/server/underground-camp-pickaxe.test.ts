@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createUndergroundCampPickaxeAuthority } from '../../src/presence/underground-camp-pickaxe.js';
 import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../src/shared/underground-camp-pickaxe.js';
 
-import { createUndergroundMineLayout } from '../../src/shared/underground-mine-layout.js';
+import { createUndergroundMineLayout } from '../../tools/voxel-tavern/town-blockout/underground-mine-layout.js';
 
 test('the camp pickaxe can be registered on the second table without loading the camp renderer', () => {
   const spec = {
@@ -97,4 +97,22 @@ test('duplicate pickaxe claims never run twice while the durable inventory opera
   assert.equal(await pending, 'granted');
   assert.equal(await make()('visitor', siteId), 'already-granted');
   assert.equal(receipts.size, 1);
+});
+
+test('an inventory save exception releases the claim so the same player can retry', async () => {
+  let attempts = 0;
+  const claim = createUndergroundCampPickaxeAuthority({
+    site,
+    readAcceptedFoot: () => accepted,
+    hasAcceptedMineArrival: () => true,
+    hasAcceptedPickaxeSight: () => true,
+    async grantToolOnce() {
+      if (++attempts === 1) throw new Error('inventory save failed');
+      return 'granted';
+    },
+  });
+
+  await assert.rejects(claim('visitor', siteId), /inventory save failed/);
+  assert.equal(await claim('visitor', siteId), 'granted');
+  assert.equal(attempts, 2);
 });
