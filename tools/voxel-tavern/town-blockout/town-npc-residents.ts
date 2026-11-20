@@ -3,6 +3,7 @@ import type { TownActivityContext, TownActivitySpot } from './town-activity';
 import { npcAddedDialogue } from './town-npc-added-dialogue';
 import { palaceStewardDialogue } from './town-npc-palace-dialogue';
 import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
+import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
 
 const costumes = {
   樊樵: { job: '守林人', palette: ['#d6aa83', '#483a2b', '#4c6850', '#b69a71', '#423a36', '#89534b', '#e1c17f', '#695b48'],
@@ -175,6 +176,7 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
   for (const [label, answer] of questions) {
     action(label, () => { speech.textContent = answer ?? residentDeflections[name]; });
   }
+  action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
   const activity = options.activity?.();
   if (activity && activity.available?.() !== false) action(activity.label, () => {
     if (activity.available?.() === false) return;

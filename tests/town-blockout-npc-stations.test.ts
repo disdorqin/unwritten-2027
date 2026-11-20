@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { livingMayorDeflection, livingMayorQuestion } from '../src/shared/soul-mayor.ts';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Color, Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
@@ -153,6 +154,7 @@ test('each resident station offers only town topics and its available activity',
     assert.deepEqual(controls.children.map(button => button.textContent), [
       '请讲讲这里的玩法', '聊聊镇民', '聊聊跨年',
       '问附近的去处', '问镇民的故事', '问镇上的节庆', '问生肖星石收集令', '问开镇传说', '问镇志讲古',
+      livingMayorQuestion,
       ...(activity ? [activity.label] : []), '道别',
     ], spot.label);
     const click = (label: string) => {
@@ -167,6 +169,7 @@ test('each resident station offers only town topics and its available activity',
     assert.equal(click('问附近的去处'), role.guides[0]);
     assert.equal(click('问镇民的故事'), role.gossip[0]);
     assert.equal(click('问镇上的节庆'), role.newYear[0]);
+    assert.equal(click(livingMayorQuestion), livingMayorDeflection);
     const deflections = protectedTopics.map(click);
     assert.equal(new Set(deflections).size, 1);
     const [reply] = deflections;

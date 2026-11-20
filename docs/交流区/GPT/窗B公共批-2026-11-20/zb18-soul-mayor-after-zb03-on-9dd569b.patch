@@ -1,0 +1,175 @@
+diff --git a/tests/town-blockout-npc-original-dialogue.test.ts b/tests/town-blockout-npc-original-dialogue.test.ts
+index 67d711b69d610910db8f4e8b890eb89fa88b18ae..51bf06b1c9337138bbe0fce8707c051b4a2b5f5a 100644
+--- a/tests/town-blockout-npc-original-dialogue.test.ts
++++ b/tests/town-blockout-npc-original-dialogue.test.ts
+@@ -1,6 +1,7 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
+ import { Scene } from 'three';
++import { livingMayorDeflection, livingMayorQuestion } from '../src/shared/soul-mayor.ts';
+ import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc.ts';
+ import * as dialogue from '../tools/voxel-tavern/town-blockout/town-npc-dialogue.ts';
+ import { houseDoorBookCopy } from '../tools/voxel-tavern/town-blockout/town-house-door-book';
+@@ -88,11 +89,14 @@ test('the original conversations retain local activity, neighbor, and festival c
+     assert.deepEqual(selector.children.map(node => [node.tagName, node.label, node.children.map(option => option.value)]), [
+       ['option', '', []],
+       ['optgroup', '地点与设施', ['activities']],
+-      ['optgroup', '镇民与日常', ['town', 'neighbors', 'new-year']],
++      ['optgroup', '镇民与日常', ['town', 'neighbors', 'new-year', 'mayor']],
+       ['optgroup', '镇史传说', ['founding', 'crater', 'mountain', 'chronicle']],
+       ['optgroup', '生肖星石', ['star-decree']],
+     ]);
+     assert.equal(ask.disabled, true);
++    selector.value = 'mayor';
++    selector.onchange();
++    assert.equal(talk.click('问一句'), livingMayorDeflection);
+     selector.value = '12';
+     selector.onchange();
+     assert.equal(ask.disabled, true);
+@@ -129,14 +133,16 @@ test('the original conversations retain local activity, neighbor, and festival c
+
+   const clerk = conversation('纪守信');
+   assert.deepEqual(clerk.tags, ['p', 'div']);
+-  assert.deepEqual(clerk.buttons.filter(label => label !== '问百门通'), ['问信箱规矩', '聊聊镇民', '道别']);
++  assert.deepEqual(clerk.buttons.filter(label => label !== '问百门通'), ['问信箱规矩', '聊聊镇民', livingMayorQuestion, '道别']);
++  assert.equal(clerk.click(livingMayorQuestion), livingMayorDeflection);
+   assert.equal(clerk.click('问百门通'), houseDoorBookCopy.clerk);
+   assert.equal(clerk.click('问信箱规矩'), dialogue.npcAuthoredDialogue.纪守信.guides[0]);
+   assert.equal(clerk.click('聊聊镇民'), dialogue.npcAuthoredDialogue.纪守信.gossip[0]);
+
+   const waiter = conversation('田小勤');
+   assert.deepEqual(waiter.tags, ['p', 'div']);
+-  assert.deepEqual(waiter.buttons, ['和田小勤摇骰子', '问问热饮', '招呼小二', '道别']);
++  assert.deepEqual(waiter.buttons, ['和田小勤摇骰子', '问问热饮', '招呼小二', livingMayorQuestion, '道别']);
++  assert.equal(waiter.click(livingMayorQuestion), livingMayorDeflection);
+   assert.equal(waiter.click('问问热饮'), tavernWaiterLines.上酒[0]);
+   assert.equal(waiter.click('招呼小二'), tavernWaiterLines.巡堂[0]);
+   waiter.click('和田小勤摇骰子');
+diff --git a/tests/town-blockout-npc-stations.test.ts b/tests/town-blockout-npc-stations.test.ts
+index 5e0f6784dc4138c334e37440b56002d3913168ce..14748d442235eb3fab0d56068408d238e57bd45a 100644
+--- a/tests/town-blockout-npc-stations.test.ts
++++ b/tests/town-blockout-npc-stations.test.ts
+@@ -1,4 +1,5 @@
+ import assert from 'node:assert/strict';
++import { livingMayorDeflection, livingMayorQuestion } from '../src/shared/soul-mayor.ts';
+ import { readFileSync } from 'node:fs';
+ import { test } from 'node:test';
+ import { Color, Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
+@@ -153,6 +154,7 @@ test('each resident station offers only town topics and its available activity',
+     assert.deepEqual(controls.children.map(button => button.textContent), [
+       '请讲讲这里的玩法', '聊聊镇民', '聊聊跨年',
+       '问附近的去处', '问镇民的故事', '问镇上的节庆', '问生肖星石收集令', '问开镇传说', '问镇志讲古',
++      livingMayorQuestion,
+       ...(activity ? [activity.label] : []), '道别',
+     ], spot.label);
+     const click = (label: string) => {
+@@ -167,6 +169,7 @@ test('each resident station offers only town topics and its available activity',
+     assert.equal(click('问附近的去处'), role.guides[0]);
+     assert.equal(click('问镇民的故事'), role.gossip[0]);
+     assert.equal(click('问镇上的节庆'), role.newYear[0]);
++    assert.equal(click(livingMayorQuestion), livingMayorDeflection);
+     const deflections = protectedTopics.map(click);
+     assert.equal(new Set(deflections).size, 1);
+     const [reply] = deflections;
+diff --git a/tools/voxel-tavern/town-blockout/town-npc-residents.ts b/tools/voxel-tavern/town-blockout/town-npc-residents.ts
+index 12eb1b2ff4caa2f48a099d3de04d7cd8ff33fb35..ab101aa10bd18e0802ea0021395a0fa2a9803e63 100644
+--- a/tools/voxel-tavern/town-blockout/town-npc-residents.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc-residents.ts
+@@ -3,6 +3,7 @@ import type { TownActivityContext, TownActivitySpot } from './town-activity';
+ import { npcAddedDialogue } from './town-npc-added-dialogue';
+ import { palaceStewardDialogue } from './town-npc-palace-dialogue';
+ import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
++import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
+
+ const costumes = {
+   樊樵: { job: '守林人', palette: ['#d6aa83', '#483a2b', '#4c6850', '#b69a71', '#423a36', '#89534b', '#e1c17f', '#695b48'],
+@@ -175,6 +176,7 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
+   for (const [label, answer] of questions) {
+     action(label, () => { speech.textContent = answer ?? residentDeflections[name]; });
+   }
++  action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
+   const activity = options.activity?.();
+   if (activity && activity.available?.() !== false) action(activity.label, () => {
+     if (activity.available?.() === false) return;
+diff --git a/tools/voxel-tavern/town-blockout/town-npc.ts b/tools/voxel-tavern/town-blockout/town-npc.ts
+index aedaa1a58159add1c8eeaf0c5f637f291c4b34e7..4367ad3df2ccdee61a389439258dd61f04ddc55f 100644
+--- a/tools/voxel-tavern/town-blockout/town-npc.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc.ts
+@@ -10,6 +10,8 @@ import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './
+ import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+
+ import { houseDoorBookCopy } from './town-house-door-book';
++import { createSoulMayorActivity, soulMayorCapacity, type SoulMayorClient } from './town-soul-mayor';
++import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
+
+ const memorialClerkName = '纪守信';
+ export const memorialClerkHome = [419.25, 334.1] as const;
+@@ -179,6 +181,7 @@ export function createTownNpcActivity(
+   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
+   playTavernDice?: (panel: HTMLElement) => void,
+   mascot?: TownMascotOptions,
++  soulMayorHost?: SoulMayorClient,
+ ): TownActivity & {
+   registerResident: ReturnType<typeof createTownResidentController>['register'];
+   snowballTargets: readonly TownSnowballTarget[];
+@@ -195,7 +198,7 @@ export function createTownNpcActivity(
+   const heldStart = hatStart + roles.length * snowHat.length;
+   const residentStart = heldStart + roles.length;
+   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
+-    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0));
++    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0) + (soulMayorHost ? soulMayorCapacity : 0));
+   villagers.name = 'town-npc-shared-skins';
+   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
+   // Positions change during short walks, so keep one inexpensive batch alive for the town.
+@@ -270,6 +273,9 @@ export function createTownNpcActivity(
+   const residents = createTownResidentController(villagers, residentStart, context, visit,
+     () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
+   const updateMascot = mascot && addMascotToNpcBatch(villagers, residentStart, mascot);
++  const soulMayor = soulMayorHost && createSoulMayorActivity(villagers, context, soulMayorHost);
++  let soulMayorStart = villagers.count;
++  if (soulMayor) spots.push(soulMayor.spot);
+
+   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
+     const spot = spots[index];
+@@ -413,7 +419,9 @@ export function createTownNpcActivity(
+     const deflect = () => dialogue.smallTalk[0];
+     const groups = [
+       { label: '地点与设施', topics: [places] },
+-      { label: '镇民与日常', topics: [town, neighbors, festival] },
++      { label: '镇民与日常', topics: [town, neighbors, festival,
++        { id: 'mayor', label: livingMayorQuestion, reply: () => livingMayorDeflection },
++      ] },
+       { label: '镇史传说', topics: [
+         { id: 'founding', label: '能讲讲开镇的传说吗？', reply: deflect },
+         { id: 'crater', label: '镇外那个坑有什么传说？', reply: deflect },
+@@ -478,6 +486,7 @@ export function createTownNpcActivity(
+     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
+     action('问百门通', () => { speech.textContent = houseDoorBookCopy.clerk; });
+     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
++    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
+     const clue = zodiacHints?.(memorialClerkName)?.[0];
+     if (clue) action('问生肖线索', () => { speech.textContent = clue; });
+     action('道别', () => { panel.closest('dialog')?.close(); });
+@@ -504,6 +513,7 @@ export function createTownNpcActivity(
+       speech.textContent = tavernWaiterLines.上酒[pours++ % tavernWaiterLines.上酒.length];
+     });
+     action('招呼小二', () => { speech.textContent = tavernWaiterLines.巡堂[rounds++ % 2]; });
++    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
+     action('道别', () => {
+       panel.closest('dialog')?.close();
+       context.announce(tavernWaiterLines.送客[visitsBefore % tavernWaiterLines.送客.length]);
+@@ -579,9 +589,14 @@ export function createTownNpcActivity(
+     snowballTargets,
+     updateSnowFight,
+     update(dt) {
++      if (soulMayor && villagers.count !== residents.instanceEnd()) villagers.count = soulMayorStart;
+       residents.update();
+       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
+       let changed = updateMascot?.(residents.instanceEnd()) ?? false;
++      if (soulMayor) {
++        soulMayorStart = villagers.count;
++        changed = soulMayor.update(soulMayorStart) || changed;
++      }
+       for (let i = 0; i < roles.length; i++) {
+         const { name, home, stroll, indoorFloor } = roles[i];
+         const flinch = flinches[i];

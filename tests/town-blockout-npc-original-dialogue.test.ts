@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene } from 'three';
+import { livingMayorDeflection, livingMayorQuestion } from '../src/shared/soul-mayor.ts';
 import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc.ts';
 import * as dialogue from '../tools/voxel-tavern/town-blockout/town-npc-dialogue.ts';
 import { tavernWaiterLines } from '../tools/voxel-tavern/town-blockout/tavern-waiter.ts';
@@ -87,11 +88,14 @@ test('the original conversations retain local activity, neighbor, and festival c
     assert.deepEqual(selector.children.map(node => [node.tagName, node.label, node.children.map(option => option.value)]), [
       ['option', '', []],
       ['optgroup', '地点与设施', ['activities']],
-      ['optgroup', '镇民与日常', ['town', 'neighbors', 'new-year']],
+      ['optgroup', '镇民与日常', ['town', 'neighbors', 'new-year', 'mayor']],
       ['optgroup', '镇史传说', ['founding', 'crater', 'mountain', 'chronicle']],
       ['optgroup', '生肖星石', ['star-decree']],
     ]);
     assert.equal(ask.disabled, true);
+    selector.value = 'mayor';
+    selector.onchange();
+    assert.equal(talk.click('问一句'), livingMayorDeflection);
     selector.value = '12';
     selector.onchange();
     assert.equal(ask.disabled, true);
@@ -126,13 +130,15 @@ test('the original conversations retain local activity, neighbor, and festival c
 
   const clerk = conversation('纪守信');
   assert.deepEqual(clerk.tags, ['p', 'div']);
-  assert.deepEqual(clerk.buttons.filter(label => label !== '问百门通'), ['问信箱规矩', '聊聊镇民', '道别']);
+  assert.deepEqual(clerk.buttons.filter(label => label !== '问百门通'), ['问信箱规矩', '聊聊镇民', livingMayorQuestion, '道别']);
+  assert.equal(clerk.click(livingMayorQuestion), livingMayorDeflection);
   assert.equal(clerk.click('问信箱规矩'), dialogue.npcAuthoredDialogue.纪守信.guides[0]);
   assert.equal(clerk.click('聊聊镇民'), dialogue.npcAuthoredDialogue.纪守信.gossip[0]);
 
   const waiter = conversation('田小勤');
   assert.deepEqual(waiter.tags, ['p', 'div']);
-  assert.deepEqual(waiter.buttons, ['和田小勤摇骰子', '问问热饮', '招呼小二', '道别']);
+  assert.deepEqual(waiter.buttons, ['和田小勤摇骰子', '问问热饮', '招呼小二', livingMayorQuestion, '道别']);
+  assert.equal(waiter.click(livingMayorQuestion), livingMayorDeflection);
   assert.equal(waiter.click('问问热饮'), tavernWaiterLines.上酒[0]);
   assert.equal(waiter.click('招呼小二'), tavernWaiterLines.巡堂[0]);
   waiter.click('和田小勤摇骰子');

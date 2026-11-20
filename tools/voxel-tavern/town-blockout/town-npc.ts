@@ -8,6 +8,8 @@ import { npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod,
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
 import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+import { createSoulMayorActivity, soulMayorCapacity, type SoulMayorClient } from './town-soul-mayor';
+import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
 
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
@@ -175,6 +177,7 @@ export function createTownNpcActivity(
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
   mascot?: TownMascotOptions,
+  soulMayorHost?: SoulMayorClient,
 ): TownActivity & {
   registerResident: ReturnType<typeof createTownResidentController>['register'];
   snowballTargets: readonly TownSnowballTarget[];
@@ -191,7 +194,7 @@ export function createTownNpcActivity(
   const heldStart = hatStart + roles.length * snowHat.length;
   const residentStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0));
+    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0) + (soulMayorHost ? soulMayorCapacity : 0));
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -266,6 +269,9 @@ export function createTownNpcActivity(
   const residents = createTownResidentController(villagers, residentStart, context, visit,
     () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
   const updateMascot = mascot && addMascotToNpcBatch(villagers, residentStart, mascot);
+  const soulMayor = soulMayorHost && createSoulMayorActivity(villagers, context, soulMayorHost);
+  let soulMayorStart = villagers.count;
+  if (soulMayor) spots.push(soulMayor.spot);
 
   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
@@ -409,7 +415,9 @@ export function createTownNpcActivity(
     const deflect = () => dialogue.smallTalk[0];
     const groups = [
       { label: '地点与设施', topics: [places] },
-      { label: '镇民与日常', topics: [town, neighbors, festival] },
+      { label: '镇民与日常', topics: [town, neighbors, festival,
+        { id: 'mayor', label: livingMayorQuestion, reply: () => livingMayorDeflection },
+      ] },
       { label: '镇史传说', topics: [
         { id: 'founding', label: '能讲讲开镇的传说吗？', reply: deflect },
         { id: 'crater', label: '镇外那个坑有什么传说？', reply: deflect },
@@ -472,6 +480,7 @@ export function createTownNpcActivity(
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
+    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
     const clue = zodiacHints?.(memorialClerkName)?.[0];
     if (clue) action('问生肖线索', () => { speech.textContent = clue; });
     action('道别', () => { panel.closest('dialog')?.close(); });
@@ -498,6 +507,7 @@ export function createTownNpcActivity(
       speech.textContent = tavernWaiterLines.上酒[pours++ % tavernWaiterLines.上酒.length];
     });
     action('招呼小二', () => { speech.textContent = tavernWaiterLines.巡堂[rounds++ % 2]; });
+    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
     action('道别', () => {
       panel.closest('dialog')?.close();
       context.announce(tavernWaiterLines.送客[visitsBefore % tavernWaiterLines.送客.length]);
@@ -573,9 +583,14 @@ export function createTownNpcActivity(
     snowballTargets,
     updateSnowFight,
     update(dt) {
+      if (soulMayor && villagers.count !== residents.instanceEnd()) villagers.count = soulMayorStart;
       residents.update();
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = updateMascot?.(residents.instanceEnd()) ?? false;
+      if (soulMayor) {
+        soulMayorStart = villagers.count;
+        changed = soulMayor.update(soulMayorStart) || changed;
+      }
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];
