@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh, MeshStandardMaterial, NearestFilter, Vector3 } from 'three';
+import { NearestFilter, Vector3, type BufferGeometry, type Mesh, type MeshStandardMaterial } from 'three';
 import { meteorCraterDepth, meteorCraterRimRadius } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { mountZa31CraterWinch, surveyZa31CraterWinch } from '../tools/voxel-tavern/town-blockout/town-za31-crater-winch';
@@ -65,16 +65,17 @@ test('the crank exposes a visual pivot and the casing is clear of the shaft and 
     const vertex = new Vector3();
     let triangles = 0;
     group.traverse(object => {
-      if (!(object instanceof Mesh)) return;
-      assert.ok(object.material instanceof MeshStandardMaterial);
-      assert.equal(object.material.map?.minFilter, NearestFilter);
-      assert.equal(object.material.map?.magFilter, NearestFilter);
-      const pos = object.geometry.getAttribute('position');
+      const mesh = object as Mesh<BufferGeometry, MeshStandardMaterial>;
+      if (!mesh.isMesh) return;
+      assert.ok(mesh.material.isMeshStandardMaterial);
+      assert.equal(mesh.material.map?.minFilter, NearestFilter);
+      assert.equal(mesh.material.map?.magFilter, NearestFilter);
+      const pos = mesh.geometry.getAttribute('position');
       triangles += pos.count / 3;
-      object.updateWorldMatrix(true, false);
+      mesh.updateWorldMatrix(true, false);
       const stone = survey.snakeStoneReservation;
       for (let i = 0; i < pos.count; i++) {
-        vertex.fromBufferAttribute(pos, i).applyMatrix4(object.matrixWorld);
+        vertex.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
         assert.ok(Math.hypot(vertex.x - road.anchor.east, -vertex.z - road.anchor.north) > coverRadius);
         assert.ok(Math.hypot(vertex.x - stone.east, -vertex.z - stone.north) > stone.radius);
         assert.ok(Math.hypot(vertex.x - survey.useFoot.east, -vertex.z - survey.useFoot.north) > bodyRadius);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Box3, InstancedMesh, Matrix4, Mesh, NearestFilter, Raycaster, Vector3 } from 'three';
+import { Box3, Matrix4, NearestFilter, Raycaster, Vector3, type BufferGeometry, type InstancedMesh, type MeshStandardMaterial } from 'three';
 import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -18,12 +18,16 @@ test('ZA-31 notices dress the occupied fence flanks and leave the surveyed ingre
   guard.setDuty({ guardPresent: true, showNightSigns: false });
   road.group.updateMatrixWorld(true);
   try {
-    const fence = entrance.getObjectByName('za31-crater-fence-timbers');
-    assert.ok(fence instanceof InstancedMesh);
+    const fence = entrance.getObjectByName('za31-crater-fence-timbers') as InstancedMesh<BufferGeometry, MeshStandardMaterial> | undefined;
+    assert.ok(fence?.isInstancedMesh);
     assert.equal(fence.count, 10);
-    assert.equal(fence.material.map.image.width, 16);
-    assert.equal(fence.material.map.magFilter, NearestFilter);
-    assert.equal(fence.material.map.minFilter, NearestFilter);
+    const map = fence.material.map;
+    assert.ok(map);
+    const { image } = map;
+    assert.ok(image && typeof image === 'object' && 'width' in image);
+    assert.equal(image.width, 16);
+    assert.equal(map.magFilter, NearestFilter);
+    assert.equal(map.minFilter, NearestFilter);
     const transform = new Matrix4();
     fence.geometry.computeBoundingBox();
     const timberBounds = Array.from({ length: fence.count }, (_, i) => {
@@ -63,7 +67,7 @@ test('ZA-31 notices dress the occupied fence flanks and leave the surveyed ingre
     const eye = new Vector3(road.lip.east + 4, road.lip.height + 1.65, -road.lip.north);
     for (const [name, title] of [['warning', '坑沿松动'], ['closure-notice', '封矿告示']]) {
       const sign = entrance.getObjectByName(`za31-crater-${name}`);
-      assert.ok(sign instanceof Mesh);
+      assert.ok(sign && 'isMesh' in sign && sign.isMesh);
       assert.equal(sign.userData.text[0], title);
       const towards = sign.getWorldPosition(new Vector3()).sub(eye);
       const [firstHit] = new Raycaster(eye, towards.clone().normalize(), 0, towards.length() + .02)
