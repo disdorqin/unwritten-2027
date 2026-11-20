@@ -1,7 +1,7 @@
+import { auditFirstFallDepths, createExpansionAnchorTransform, type ExpansionAnchorPose as Pose } from './expansion-anchors.js';
 import type { UndergroundWinchUsePoint } from './underground-winch.js';
 
 type Point = Readonly<{ east: number; north: number; height: number }>;
-type Pose = Point & Readonly<{ yaw: number }>;
 type DomainPoint = Point & Readonly<{ domainId: string }>;
 type Crater = Readonly<{
   domainId: string;
@@ -25,9 +25,6 @@ type ShaftRegistration = Readonly<{
 }>;
 
 type RegistrationPort = Readonly<{
-  /** The approved B-01 anchor module. */
-  createExpansionAnchorTransform(fixture: Pose, live: Pose): { toWorld(point: Pose): Pose };
-  auditFirstFallDepths(crossingHeight: number, landingHeight: number): readonly unknown[];
   /** The mounted collision and domain host, reading its registered geometry. */
   supportsFoot(role: 'shaft' | 'winch' | 'mine-pool', foot: DomainPoint): boolean;
   /** Check that the registered shaft connects these two loaded rooms at this crossing. */
@@ -44,12 +41,6 @@ function finitePose(pose: Pose | undefined) {
 
 function validDomain(domain: string) {
   return typeof domain === 'string' && domain.length > 0 && domain.trim() === domain;
-}
-
-function sameRim(mapped: Pose, live: Pose) {
-  const turn = mapped.yaw - live.yaw;
-  return Math.hypot(mapped.east - live.east, mapped.north - live.north, mapped.height - live.height) <= 1e-6 &&
-    Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) <= 1e-6;
 }
 
 /** Resolve surveyed placement only. Entry authority still owns crossing, the well save and arrival cues. */
@@ -69,16 +60,18 @@ export function resolveUndergroundShaftRegistration(survey: ShaftSurvey, port: R
     return { kind: 'invalid-points' } as const;
   }
 
-  const transform = port.createExpansionAnchorTransform(fixtureRim, liveRimPose);
-  const shaft = transform.toWorld(fixtureShaftFoot);
-  const lever = transform.toWorld(fixtureWinch);
-  const mappedRim = transform.toWorld(fixtureRim);
-  if (![shaft, lever, mappedRim].every(finitePose) || !sameRim(mappedRim, liveRimPose)) {
+  const transform = createExpansionAnchorTransform(fixtureRim, liveRimPose);
+  let shaft: Pose;
+  let lever: Pose;
+  try {
+    shaft = transform.toWorld(fixtureShaftFoot);
+    lever = transform.toWorld(fixtureWinch);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
     return { kind: 'invalid-transform' } as const;
   }
-  if (!Number.isFinite(depthLine) || mineLanding.height >= depthLine ||
-      depthLine >= Math.min(shaft.height, lever.height) ||
-      port.auditFirstFallDepths(depthLine, mineLanding.height).length > 0) {
+  if (depthLine >= Math.min(shaft.height, lever.height) ||
+      auditFirstFallDepths(depthLine, mineLanding.height).length > 0) {
     return { kind: 'invalid-depth' } as const;
   }
 

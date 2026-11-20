@@ -24,19 +24,6 @@ const survey = {
 
 function host(overrides: Partial<Port> = {}): Port {
   return {
-    createExpansionAnchorTransform(fixture, live) {
-      assert.deepEqual(fixture, fixtureRim);
-      assert.deepEqual(live, worldRim);
-      return { toWorld(point) {
-        if (point.east === 0 && point.height === 0) return worldRim;
-        if (point.east === 0 && point.height === -35) return { ...shaftFoot, yaw };
-        assert.equal(point.east, fixtureWinch.east);
-        return { ...winch, yaw };
-      } };
-    },
-    auditFirstFallDepths(_crossing, landing) {
-      return landing === -90 ? [] : ['unapproved datum'];
-    },
     supportsFoot: () => true,
     acceptsShaftHandoff: () => true,
     ...overrides,
@@ -61,21 +48,23 @@ test('resolves the west shaft and winch through B-01 while preserving the regist
   assert.deepEqual(roles, ['shaft', 'winch', 'mine-pool']);
 });
 
-test('absent survey inputs never reach the transform or invent a shaft crossing', () => {
-  const port = host({ createExpansionAnchorTransform: () => assert.fail('registration incomplete') });
+test('absent survey inputs never reach the host or invent a shaft crossing', () => {
+  const port = host({ supportsFoot: () => assert.fail('registration incomplete') });
   for (const key of Object.keys(survey) as (keyof Survey)[]) {
     assert.deepEqual(resolveUndergroundShaftRegistration({ ...survey, [key]: undefined }, port), { kind: 'unregistered' });
   }
 });
 
-test('domains, finite registration, rim alignment and the independent depth line fail closed', () => {
+test('domains, non-finite transforms and the independent depth line fail closed', () => {
   assert.deepEqual(resolveUndergroundShaftRegistration({ ...survey, mineLanding: { ...mineLanding, domainId: 'west' } }, host()),
     { kind: 'invalid-domains' });
   assert.deepEqual(resolveUndergroundShaftRegistration({ ...survey, fixtureWinch: { ...fixtureWinch, verticalReach: NaN } }, host()),
     { kind: 'invalid-points' });
-  assert.deepEqual(resolveUndergroundShaftRegistration(survey, host({
-    createExpansionAnchorTransform: () => ({ toWorld: point => point }),
-  })), { kind: 'invalid-transform' });
+  assert.deepEqual(resolveUndergroundShaftRegistration({
+    ...survey,
+    crater: { ...survey.crater, fixtureRim: { ...fixtureRim, east: -Number.MAX_VALUE } },
+    fixtureShaftFoot: { ...fixtureShaftFoot, east: Number.MAX_VALUE },
+  }, host()), { kind: 'invalid-transform' });
   for (const depthLine of [Infinity, -90, pitHeight, 0]) {
     assert.deepEqual(resolveUndergroundShaftRegistration({ ...survey, depthLine }, host()), { kind: 'invalid-depth' });
   }
