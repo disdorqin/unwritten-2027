@@ -48,7 +48,7 @@ async function captureRenderedScene(page, name) {
   let screenshot;
   let regions;
   await expect.poll(async () => {
-    screenshot = await canvas.screenshot({ timeout: 15_000 });
+    screenshot = await page.screenshot({ timeout: 25_000, scale: 'css' });
     regions = await page.evaluate(async encoded => {
       const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
       const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
