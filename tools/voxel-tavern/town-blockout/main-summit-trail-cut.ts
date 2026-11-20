@@ -1,7 +1,8 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 
 type Point = Readonly<{ x: number; z: number }>;
-type Vertex = Point & Readonly<{ y: number }>;
+type Normal = readonly [number, number, number];
+type Vertex = Point & Readonly<{ y: number; normal?: Normal }>;
 type Bounds = { minX: number; maxX: number; minZ: number; maxZ: number };
 type Boundary = { from: Vertex; to: Vertex; key: string };
 type Triangle = {
@@ -9,6 +10,7 @@ type Triangle = {
   edges: readonly Boundary[];
   bounds: Bounds;
   heightAt(point: Point): number;
+  normalAt?(point: Point): Normal;
   orientation: number;
 };
 
@@ -39,12 +41,14 @@ function overlaps(a: Bounds, b: Bounds) {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minZ <= b.maxZ && a.maxZ >= b.minZ;
 }
 
-function trianglesOf(geometry: BufferGeometry) {
+function trianglesOf(geometry: BufferGeometry, preserveNormals = false) {
   const position = geometry.getAttribute('position');
+  const normal = preserveNormals ? geometry.getAttribute('normal') : undefined;
   const index = geometry.getIndex();
   if (!position || !index) throw new TypeError('P-3 cuts require indexed terrain and tread meshes.');
   const vertices = Array.from({ length: position.count }, (_, i): Vertex => ({
     x: position.getX(i), z: position.getZ(i), y: position.getY(i),
+    normal: normal && [normal.getX(i), normal.getY(i), normal.getZ(i)],
   }));
   const triangles: Triangle[] = [];
   for (let i = 0; i < index.count; i += 3) {
@@ -54,6 +58,7 @@ function trianglesOf(geometry: BufferGeometry) {
     // The existing tread side faces have zero area when projected onto X/Z.
     if (Math.abs(area) <= tolerance) continue;
     const polygon = [a, b, c] as const;
+    const [na, nb, nc] = [a.normal, b.normal, c.normal];
     triangles.push({
       vertices: polygon, bounds: boundsOf(polygon), orientation: Math.sign(area),
       edges: polygon.map((from, edge) => {
@@ -64,6 +69,17 @@ function trianglesOf(geometry: BufferGeometry) {
       heightAt(point) {
         return a.y + (b.y - a.y) * cross(a, point, c) / area + (c.y - a.y) * cross(a, b, point) / area;
       },
+      normalAt: na && nb && nc ? point => {
+        const wb = cross(a, point, c) / area;
+        const wc = cross(a, b, point) / area;
+        const wa = 1 - wb - wc;
+        // Keep the original linear normal field across any smaller surface triangles.
+        return [
+          na[0] * wa + nb[0] * wb + nc[0] * wc,
+          na[1] * wa + nb[1] * wb + nc[1] * wc,
+          na[2] * wa + nb[2] * wb + nc[2] * wc,
+        ];
+      } : undefined,
     });
   }
   return triangles;
@@ -95,7 +111,8 @@ function areaOf(polygon: readonly Point[]) {
 }
 
 type Plane = (point: Point) => number;
-type Surface = { polygon: readonly Point[]; heightAt: Plane; isCut: boolean };
+type Surface = { polygon: readonly Point[]; heightAt: Plane; normalAt?: Triangle['normalAt']; isCut: boolean };
+type SurfaceLayer = 'terrain' | 'floor' | 'bank';
 
 function intersect(polygon: readonly Point[], sides: readonly Plane[]) {
   return sides.reduce<readonly Point[]>((region, side) => clip(region, side), polygon);
@@ -195,7 +212,7 @@ function exposedBankSpans(a: Point, b: Point, owner: Triangle, nearby: readonly 
 
 /** Carve only the region where the original terrain would cover the rendered P-3 tread. */
 export function buildMainSummitTrailCut(coarse: BufferGeometry, ribbon: BufferGeometry) {
-  const terrain = trianglesOf(coarse);
+  const terrain = trianglesOf(coarse, true);
   const tread = trianglesOf(ribbon);
   const cells = new Map<string, Triangle[]>();
   const edgeUses = new Map<string, number>();
@@ -211,24 +228,28 @@ export function buildMainSummitTrailCut(coarse: BufferGeometry, ribbon: BufferGe
   const positions: number[] = [];
   const indices: number[] = [];
   const emitted = new Map<string, number>();
+  const sourceNormals = new Map<number, Normal>();
   const lowered = new Set<number>();
   const surfaces: Surface[] = [];
   let refinedTriangles = 0;
 
-  function vertex(point: Point, y: number) {
+  function vertex(point: Point, y: number, layer: SurfaceLayer, normalAt?: Triangle['normalAt']) {
     const x = Math.fround(point.x), z = Math.fround(point.z), height = Math.fround(y);
-    const key = `${x}:${height}:${z}`;
+    // Keep a hard shading edge where the surfaces meet at identical positions.
+    const key = `${layer}:${x}:${height}:${z}`;
     const existing = emitted.get(key);
     if (existing !== undefined) return existing;
     const index = positions.length / 3;
     positions.push(x, height, z);
     emitted.set(key, index);
+    if (normalAt) sourceNormals.set(index, normalAt(point));
     return index;
   }
 
   function surfaceTriangle(a: Point, b: Point, c: Point, surface: Surface) {
     if (Math.abs(cross(a, b, c)) <= tolerance) return;
-    const corners = [a, b, c].map(point => vertex(point, surface.heightAt(point)));
+    const layer = surface.isCut ? 'floor' : 'terrain';
+    const corners = [a, b, c].map(point => vertex(point, surface.heightAt(point), layer, surface.normalAt));
     if (new Set(corners).size !== 3) return;
     indices.push(...corners);
     if (surface.isCut) corners.forEach(corner => lowered.add(corner));
@@ -244,8 +265,10 @@ export function buildMainSummitTrailCut(coarse: BufferGeometry, ribbon: BufferGe
       for (const [first, last] of exposedBankSpans(a, b, cut, nearby)) {
         const start = interpolate(a, b, first), end = interpolate(a, b, last);
         if (Math.hypot(start.x - end.x, start.z - end.z) <= tolerance) continue;
-        const topA = vertex(start, original.heightAt(start)), topB = vertex(end, original.heightAt(end));
-        const bottomA = vertex(start, cut.heightAt(start) - cutClearance), bottomB = vertex(end, cut.heightAt(end) - cutClearance);
+        const topA = vertex(start, original.heightAt(start), 'bank');
+        const topB = vertex(end, original.heightAt(end), 'bank');
+        const bottomA = vertex(start, cut.heightAt(start) - cutClearance, 'bank');
+        const bottomB = vertex(end, cut.heightAt(end) - cutClearance, 'bank');
         // Original face winding follows the contour; the bank faces into the cut.
         if (topA !== bottomA) indices.push(topA, topB, bottomA);
         if (topB !== bottomB) indices.push(bottomA, topB, bottomB);
@@ -275,7 +298,9 @@ export function buildMainSummitTrailCut(coarse: BufferGeometry, ribbon: BufferGe
       remaining = subtract(remaining, cut);
     }
     if (cuts.length) refinedTriangles++;
-    for (const polygon of remaining) surfaces.push({ polygon, heightAt: original.heightAt, isCut: false });
+    for (const polygon of remaining) {
+      surfaces.push({ polygon, heightAt: original.heightAt, normalAt: original.normalAt, isCut: false });
+    }
   }
 
   const splits = sharedEdges(surfaces);
@@ -302,6 +327,8 @@ export function buildMainSummitTrailCut(coarse: BufferGeometry, ribbon: BufferGe
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  const normals = geometry.getAttribute('normal');
+  for (const [index, normal] of sourceNormals) normals.setXYZ(index, ...normal);
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return { geometry, refinedTriangles, loweredVertices: lowered.size };

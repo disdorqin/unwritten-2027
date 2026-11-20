@@ -19,9 +19,11 @@ permissions:
 jobs:
   route:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 32
     env:
       SELECTED_SEGMENT: ${{ inputs.segment }}
+      # Preserve the normal HUD layout and default quality at a smaller headless raster.
+      ZA22_DEVICE_SCALE: 0.25
     steps:
       - uses: actions/checkout@v4
         with:

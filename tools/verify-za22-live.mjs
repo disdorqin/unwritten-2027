@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from '@playwright/test';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
@@ -19,6 +20,9 @@ const station = [
   [350, 249], [382, 220], [398, 207], [410, 207], [427, 214], [445, 221], [456, 222],
   [453, 254], [473, 276], [506, 286], [526, 312], [526, 317.15], [536.8, 317.15],
 ];
+// Use the surveyed center of the open plaza, then the northeast road mouth.
+// Short axis-aligned legs give the headless walk independent progress checks.
+const bareStation = [[235.8, 180], [242, 180], [242, 192], ...station.slice(1)];
 const westShore = [
   [192, 180], [161, 181], [151, 156], [127, 140], [108, 114], [85, 131], [77, 164], [1, 159],
 ];
@@ -220,6 +224,34 @@ async function face(page, evidence, desired) {
   assert.fail(`Native mouse drag could not face ${desired}`);
 }
 
+async function waitForBareWalk(evidence, from, east, north) {
+  const dx = east - from.east, dn = north - from.north;
+  const distance = Math.hypot(dx, dn);
+  const started = Date.now();
+  const deadline = started + 30_000 + distance * 8_000;
+  let lastProgress = started;
+  let furthest = 0;
+
+  // Headless software rendering can take seconds per frame. Keep waiting only
+  // while real input is producing new position frames along this leg.
+  while (Date.now() < deadline) {
+    const wire = evidence.poses.at(-1);
+    if (wire && wire.ms >= started) {
+      const projected = ((wire.east - from.east) * dx + (wire.north - from.north) * dn) / distance;
+      if (Math.hypot(wire.east - east, wire.north - north) <= .32 || projected >= distance) return;
+      if (projected > furthest + .05) {
+        furthest = projected;
+        lastProgress = wire.ms;
+      }
+    }
+    if (Date.now() - lastProgress > 20_000) {
+      throw new Error(`No forward position progress for 20 seconds after ${furthest.toFixed(2)} m`);
+    }
+    await delay(80);
+  }
+  throw new Error(`Reached the walking time limit after ${furthest.toFixed(2)} m of ${distance.toFixed(2)} m`);
+}
+
 async function walkTo(page, evidence, target, label) {
   const [east, north] = target;
   let after = await readPose(page);
@@ -243,7 +275,8 @@ async function walkTo(page, evidence, target, label) {
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
-      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance }) => {
+      if (bare) await waitForBareWalk(evidence, from, east, north);
+      else await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance }) => {
         const point = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
         if (!point) return false;
         const x = Number(point[1]), n = Number(point[2]);
@@ -254,7 +287,8 @@ async function walkTo(page, evidence, target, label) {
       { timeout: Math.ceil(30_000 + distance * 1000) });
     } catch (error) {
       const stopped = await readPose(page);
-      throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}`, { cause: error });
+      throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}. ${error.message}`,
+        { cause: error });
     } finally {
       await page.keyboard.up(key);
       if (fast) await page.keyboard.up('Shift');
@@ -305,7 +339,7 @@ try {
   report.browser = browser.version();
   if (segment !== 'crater') {
     const { page, evidence } = await openTown('cable');
-    await follow(page, evidence, station, 'station');
+    await follow(page, evidence, bare ? bareStation : station, 'station');
     if (segment === 'station') {
       await action(page, '老闸');
       await card(page, '北岭缆车');
