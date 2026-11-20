@@ -1,0 +1,67 @@
+name: Verify JX-15 rear-seat height and matched views
+
+on:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-jx15-seat-browser.yml'
+      - 'tools/verify-jx15-seat-browser.mjs'
+      - 'tools/fixtures/jx15-rear-seat.patch'
+
+permissions:
+  contents: read
+
+jobs:
+  matched-views:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JX15_BASE: 75859a094757c5dcee8b874eef86ec37f4204907
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: ci
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.JX15_BASE }}
+          persist-credentials: false
+          path: baseline
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.JX15_BASE }}
+          persist-credentials: false
+          path: candidate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install exact source dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tree in baseline candidate; do
+            test "$(git -C "$tree" rev-parse HEAD)" = "$JX15_BASE"
+            npm ci --prefix "$tree" --ignore-scripts --no-audit --no-fund
+            npm ci --prefix "$tree/tools/voxel-tavern" --ignore-scripts --no-audit --no-fund
+          done
+          (cd baseline && npx playwright install --with-deps chromium)
+      - name: Apply the reviewed rear-seat changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jx15"
+          git -C candidate apply --check --whitespace=error ../ci/tools/fixtures/jx15-rear-seat.patch
+          git -C candidate apply --whitespace=error ../ci/tools/fixtures/jx15-rear-seat.patch
+          git -C candidate diff --check
+          sha256sum ci/tools/fixtures/jx15-rear-seat.patch > "$RUNNER_TEMP/jx15/patch-sha256.txt"
+          git -C candidate diff --stat > "$RUNNER_TEMP/jx15/candidate-files.txt"
+      - name: Capture matched production-scene frames and rear-seat views
+        shell: bash
+        run: node ci/tools/verify-jx15-seat-browser.mjs baseline candidate "$RUNNER_TEMP/jx15"
+      - name: Archive the matched camera evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jx15-seat-browser-proof
+          path: ${{ runner.temp }}/jx15
+          retention-days: 14

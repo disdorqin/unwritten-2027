@@ -1,0 +1,13 @@
+diff --git a/tools/voxel-tavern/town-blockout/market-stall-layout.ts b/tools/voxel-tavern/town-blockout/market-stall-layout.ts
+index 26cc608..22f1004 100644
+--- a/tools/voxel-tavern/town-blockout/market-stall-layout.ts
++++ b/tools/voxel-tavern/town-blockout/market-stall-layout.ts
+@@ -35,7 +35,7 @@ const stalls: readonly Stall[] = [
+   [4.25, -4.95, 6.7, '#8a312d', '吃食', 'main', south, 10],
+   [12.4, -4.6, 6.55, '#2e6a67', '热饮', 'main', south, 10],
+   [0, -11.9, 7.2, '#95702c', '杂货', 'main', south, 10.08],
+-  [23.5, -4.6, 4.9, '#8a312d', '吃食', 'east', south, 9.12],
++  [23.5, -3.35, 4.9, '#8a312d', '吃食', 'east', south, 9.12],
+   // Keep the two outer counters north of the existing housing collision at N108.5.
+   [30.5, -7, 4.9, '#593f7c', '布匹/围巾', 'east', south, 9.51],
+   [37.5, -7, 4.9, '#95702c', '杂货', 'east', south, 9.83],
