@@ -122,6 +122,57 @@ test('the mine gate needs the accepted winch foot and a cleared section, then st
   assert.equal(gate.state(), 'open');
 });
 
+test('gate traversal uses the fully open leaf and a registered, supported landing in either direction', () => {
+  const winch = { domainId: 'mine', east: 0, north: 0, height: -91, horizontalReach: 1.1, verticalReach: .2 };
+  const crystal = { domainId: 'crystal-cave', east: 7, north: 5, height: -140, yaw: Math.PI };
+  const mine = { domainId: 'mine', east: 0, north: 2, height: -91, yaw: 0 };
+  let time = 100;
+  let supported = true;
+  let foot = { ...winch, playerId };
+  const options = {
+    winch,
+    revealMs: 400,
+    now: () => time,
+    encounter: { isSectionCleared: () => true },
+    readAcceptedFoot: () => foot,
+  };
+  const passage = {
+    mine, crystal,
+    isAtThreshold: (side: string, from: { north: number }) => from.north === (side === 'mine' ? 1 : 4),
+    supportsLanding: () => supported,
+  };
+  const gate = createUndergroundMineGate({ ...options, passage });
+  const unregistered = createUndergroundMineGate(options);
+  assert.throws(() => createUndergroundMineGate({ ...options, passage: { ...passage, crystal: { ...crystal, yaw: NaN } } }),
+    /registered mine and crystal domains/);
+  assert.throws(() => createUndergroundMineGate({ ...options, passage: { ...passage, crystal: mine } }),
+    /registered mine and crystal domains/);
+
+  assert.equal(gate.openFromMine(playerId), 'ajar');
+  assert.equal(unregistered.openFromMine(playerId), 'ajar');
+  foot = { ...foot, north: 1 };
+  assert.equal(gate.resolveTraversal(playerId), undefined);
+  time = 500;
+  assert.equal(unregistered.resolveTraversal(playerId), undefined);
+  assert.equal(gate.resolveTraversal('spectator'), undefined);
+  assert.equal(gate.resolveTraversal(playerId)?.landing.domainId, crystal.domainId);
+  assert.deepEqual(gate.resolveTraversal(playerId), { playerId, fromDomainId: 'mine', landing: crystal });
+  const proposal = gate.resolveTraversal(playerId);
+  assert.ok(proposal);
+  proposal.landing.east = 99;
+  assert.equal(gate.resolveTraversal(playerId)?.landing.east, 7);
+
+  supported = false;
+  assert.equal(gate.resolveTraversal(playerId), undefined);
+  supported = true;
+  foot = { ...foot, ...crystal };
+  assert.equal(gate.resolveTraversal(playerId), undefined);
+  foot = { ...foot, north: 4 };
+  assert.deepEqual(gate.resolveTraversal(playerId), { playerId, fromDomainId: 'crystal-cave', landing: mine });
+  foot = { ...foot, domainId: 'other-floor' };
+  assert.equal(gate.resolveTraversal(playerId), undefined);
+});
+
 test('the registered crystal return switch opens the same gate without reclearing the mine', () => {
   const winch = { domainId: 'mine', east: 0, north: 0, height: -91, horizontalReach: 1.1, verticalReach: .2 };
   const crystalSwitch = { ...winch, domainId: 'crystal-cave', height: -140 };
