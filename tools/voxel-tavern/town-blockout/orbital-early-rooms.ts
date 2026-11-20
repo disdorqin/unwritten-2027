@@ -3,6 +3,8 @@ import {
   Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Points, PointsMaterial,
   RingGeometry, type Material,
 } from 'three';
+import { createTownChronicleDoorRing } from './town-chronicle-door-ring.js';
+import { buildOrbitalStatusWall } from './orbital-airlock-nameplate.js';
 
 export type OrbitalRoomPoint = Readonly<{ x: number; n: number; ground: number }>;
 export type OrbitalRoomArrival = OrbitalRoomPoint & Readonly<{ yaw: number }>;
@@ -130,12 +132,9 @@ export function createOrbitalEarlyRooms({ scale = 1 }: { scale?: number } = {}) 
     box(door, dark, 0, 1.25, 0, 1.86, 2.5, .22).name = 'closed-door-surface';
     for (const post of [-1, 1]) box(door, rib, post * .96, 1.25, -.08, .2, 2.5, .25);
     box(door, rib, 0, 2.52, -.08, 2.12, .18, .25);
-    for (const [inner, outer] of [[.59, .65], [.48, .51]] as const) {
-      const ring = new Mesh(new RingGeometry(inner, outer, 48), brass);
-      ring.name = 'town-chronicle-ring';
-      ring.position.set(0, 1.43, .14);
-      door.add(ring);
-    }
+    const ring = createTownChronicleDoorRing(.55, .65);
+    ring.position.set(0, 1.43, .14);
+    door.add(ring);
     airlockGroup.add(door);
     obstacle('door-frame', side * 5.35, -.35, .14, 1.06);
     box(airlockGroup, rib, side * 4.55, 2.69, -.27, .12, .12, 6.75);
@@ -143,8 +142,7 @@ export function createOrbitalEarlyRooms({ scale = 1 }: { scale?: number } = {}) 
     box(airlockGroup, warm, side * 4.04, 2.54, -.27, .06, .05, 2.35);
   }
 
-  const panel = box(airlockGroup, dark, 0, 1.51, -3.68, 4.45, 1.74, .29);
-  panel.name = 'orbital-status-wall';
+  airlockGroup.add(buildOrbitalStatusWall(dark));
   obstacle('status-panel', 0, -3.65, 2.225, .17);
   for (let column = 0; column < 6; column++) {
     for (let row = 0; row < 3; row++) {
@@ -174,6 +172,7 @@ export function createOrbitalEarlyRooms({ scale = 1 }: { scale?: number } = {}) 
       box(station, key === 1 && i === 0 ? brass : rib, (key % 3 - 1) * .21, .96,
         key < 3 ? -.13 : .09, .13, .04, .13);
     }
+    bridgeGroup.add(station);
     obstacle('console', x, n, .66, .54);
     const rail = box(bridgeGroup, blue, i * 1.83, 3.67, 11.39, 1.55, .06, .09);
     rail.name = 'cockpit-window-rail';

@@ -4,6 +4,7 @@ import {
   type OrbitalGateHost, type OrbitalGatePose, type OrbitalGateState,
 } from '../../../src/presence/orbital-gates.js';
 import { createOrbitalEarlyRooms } from './orbital-early-rooms.js';
+import { mountOrbitalStatusDisplay } from './orbital-status-display.js';
 import type { ExpansionView } from './town-expansion-review-renderer.js';
 
 const gateLabel = { starport: '星港太空门', core: '地宫核心舱门' } as const;
@@ -11,6 +12,7 @@ const fixtureGround: OrbitalGatePose = { east: 0, north: 0, height: 0, yaw: 0 };
 
 export function createOrbitalReview(show: (view: ExpansionView) => void) {
   const rooms = createOrbitalEarlyRooms();
+  mountOrbitalStatusDisplay(rooms.group);
   rooms.group.traverse(object => {
     if (object.name === 'orbital-cutaway-shell') object.visible = false;
   });
