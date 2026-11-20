@@ -1,0 +1,231 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-npc.ts b/tools/voxel-tavern/town-blockout/town-npc.ts
+--- a/tools/voxel-tavern/town-blockout/town-npc.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc.ts
+@@ -6,7 +6,7 @@
+ import { npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod,
+   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
+ import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
+-import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
++import { addMascotToNpcBatch, townMascotParts, type TownMascotLookTarget, type TownMascotOptions } from './town-mascot';
+ import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+
+ import { houseDoorBookCopy } from './town-house-door-book';
+@@ -172,6 +172,7 @@
+ const guideDefaults = new Set<TownNpcGuide>(['seating', 'stage', 'postcard', 'wishes', 'ice', 'lantern']);
+ const savedVisitKey = 'unwritten:town-npc-visits';
+
++type TownNpcFirstHearing = Readonly<{ livingPaused: boolean; mascotLookAt?: TownMascotLookTarget }>;
+
+ export function createTownNpcActivity(
+   context: TownActivityContext,
+@@ -185,6 +186,7 @@
+ ): TownActivity & {
+   registerResident: ReturnType<typeof createTownResidentController>['register'];
+   snowballTargets: readonly TownSnowballTarget[];
++  update(dt: number, firstHearing?: TownNpcFirstHearing): void;
+   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
+ } {
+   const actorParts = roles.map(({ name }) => [...parts, ...costumes[name]]);
+@@ -588,16 +590,17 @@
+     registerResident: residents.register,
+     snowballTargets,
+     updateSnowFight,
+-    update(dt) {
++    update(dt: number, firstHearing?: TownNpcFirstHearing) {
+       if (soulMayor && villagers.count !== residents.instanceEnd()) villagers.count = soulMayorStart;
+-      residents.update();
++      const livingPaused = firstHearing?.livingPaused === true;
++      if (!livingPaused) residents.update();
+       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
+-      let changed = updateMascot?.(residents.instanceEnd()) ?? false;
++      let changed = updateMascot?.(residents.instanceEnd(), firstHearing?.mascotLookAt) ?? false;
+       if (soulMayor) {
+         soulMayorStart = villagers.count;
+         changed = soulMayor.update(soulMayorStart) || changed;
+       }
+-      for (let i = 0; i < roles.length; i++) {
++      for (let i = 0; !livingPaused && i < roles.length; i++) {
+         const { name, home, stroll, indoorFloor } = roles[i];
+         const flinch = flinches[i];
+         const reacting = flinch.remaining > 0;
+diff --git a/tools/voxel-tavern/town-blockout/town-mascot.ts b/tools/voxel-tavern/town-blockout/town-mascot.ts
+--- a/tools/voxel-tavern/town-blockout/town-mascot.ts
++++ b/tools/voxel-tavern/town-blockout/town-mascot.ts
+@@ -11,6 +11,7 @@
+   expression?: 'eye' | 'glint';
+ };
+ type GroundAt = (east: number, north: number) => number | undefined;
++export type TownMascotLookTarget = Readonly<{ x: number; y: number; z: number }>;
+
+ const wool = '#fff1d9', shadedWool = '#dfc6a4', gold = '#e9aa3d';
+ const scarf = '#ad3645', hoof = '#302b35', eye = '#191b23';
+@@ -253,9 +254,10 @@
+   let planned = false;
+   let lastTick = NaN, lastStart = initialStart, shown = false;
+   let lastPhase: TownMascotFinaleFrame['phase'] | undefined;
++  let lastLookAt: TownMascotLookTarget | undefined;
+   const updateBell = options.bell && trackMascotBell(options.bell);
+
+-  return function update(start = initialStart) {
++  return function update(start = initialStart, lookAt?: TownMascotLookTarget) {
+     if (!finale && !planned) {
+       patrol = makeMascotPatrol(options.groundAt);
+       planned = true;
+@@ -291,7 +293,7 @@
+     }
+     const count = start + townMascotParts.length;
+     const repack = lastStart !== start || batch.count !== count;
+-    if (shown && tick === lastTick && phase === lastPhase && !repack) return false;
++    if (shown && tick === lastTick && phase === lastPhase && lookAt === lastLookAt && !repack) return false;
+     // Station changes repack the shared tail, so restore the mascot's palette even on the same tick.
+     if (repack) {
+       townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
+@@ -302,6 +304,7 @@
+     lastStart = start;
+     lastTick = tick;
+     lastPhase = phase;
++    lastLookAt = lookAt;
+     const seconds = tick / 1000;
+     const idlePhase = seconds % 60;
+     const rest = 'seated' in point && point.seated ? 1
+@@ -315,16 +318,27 @@
+     root.position.set(point.x, ground + .020, -point.n);
+     root.rotation.set(0, point.yaw, 0);
+     root.updateMatrix();
++    let lookPitch: number | undefined;
++    let lookYaw: number | undefined;
++    if (lookAt && Number.isFinite(lookAt.x) && Number.isFinite(lookAt.y) && Number.isFinite(lookAt.z)) {
++      const east = lookAt.x - point.x;
++      const south = lookAt.z + point.n;
++      const yawDelta = Math.atan2(east, south) - point.yaw;
++      const headY = root.position.y + pivots[head][1];
++      lookYaw = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, Math.atan2(Math.sin(yawDelta), Math.cos(yawDelta))));
++      lookPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 6, -Math.atan2(lookAt.y - headY, Math.hypot(east, south))));
++    }
+     for (const [joint, pivot] of pivots.entries()) {
+       const hindLeg = joint >= frontLeftLeg + 2;
+       const bodyDrop = joint < frontLeftLeg ? bounce - rest * (joint === tail ? .042 : .033) : -rest * (hindLeg ? .041 : .025);
+       pose.position.set(pivot[0], pivot[1] + bodyDrop, pivot[2]);
+-      const pitch = joint === head ? (grazing ? Math.PI / 10 : .11 * rest)
++      const pitch = joint === head ? lookPitch ?? (grazing ? Math.PI / 10 : .11 * rest)
+         : joint === bell ? -.11 * step
+         : joint >= frontLeftLeg ? step * (joint === frontLeftLeg || joint === frontLeftLeg + 3 ? .36 : -.36) +
+           rest * (hindLeg ? -.67 : .40) : 0;
+-      const yaw = joint === tail ? Math.sin(seconds * (point.speed ? 9 : 5.027)) * .21 * (1 - rest * .62) : 0;
+-      pose.rotation.set(pitch, yaw, 0);
++      const yaw = joint === head ? lookYaw ?? 0
++        : joint === tail ? Math.sin(seconds * (point.speed ? 9 : 5.027)) * .21 * (1 - rest * .62) : 0;
++      pose.rotation.set(pitch, yaw, 0, 'YXZ');
+       pose.updateMatrix();
+       animated[joint].multiplyMatrices(root.matrix, pose.matrix);
+     }
+diff --git a/tests/town-blockout-first-beacon-staging.test.ts b/tests/town-blockout-first-beacon-staging.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/town-blockout-first-beacon-staging.test.ts
+@@ -0,0 +1,105 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
++import type { SoulMayorView } from '../src/shared/soul-mayor';
++import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower';
++import { createTownFirstBeacon } from '../tools/voxel-tavern/town-blockout/town-first-beacon';
++import { townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
++import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
++import { soulMayorCapacity } from '../tools/voxel-tavern/town-blockout/town-soul-mayor';
++import { layout } from '../tools/voxel-tavern/town-blockout/terrain';
++
++test('the first hearing freezes living pose and station updates while turning only the local mascot head', () => {
++  const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
++  const tower = buildTowerLandmark(plot);
++  tower.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
++  const [bellX, bellY, bellZ] = tower.userData.stops.bell;
++  const towerBell = tower.localToWorld(new Vector3(bellX, bellY + 1.8, bellZ));
++  let now = 900_000;
++  let saved: string | null = null;
++  let stationEast = 225;
++  let mayor: SoulMayorView | undefined = {
++    invited: false,
++    ringCount: 11,
++    site: {
++      actor: { layer: 'town', east: 220, north: 188, height: 12 },
++      talk: { layer: 'town', east: 220, north: 187.1, height: 12 },
++    },
++  };
++  const scene = new Scene();
++  const npc = createTownNpcActivity({
++    scene, face() {}, sit() {}, announce() { assert.fail('staging is silent'); },
++    open() { assert.fail('staging never opens a panel'); },
++  }, () => 12, undefined, undefined, undefined, undefined, {
++    now: () => now, groundAt: () => 12, visible: () => true,
++    follow: () => ({ x: 223, n: 180, ground: 12, yaw: -2.6, speed: 0 }),
++  }, {
++    view: () => mayor, async receiveInvitation() { assert.fail('the mayor remains voluntary'); },
++  });
++  const resident = npc.registerResident('樊樵', () => ({
++    actor: [stationEast, 190, 12], talk: [stationEast, 189, 12],
++  }));
++  const batch = scene.children[0] as InstancedMesh;
++  const firstHearing = createTownFirstBeacon({
++    serverNow: () => now,
++    connectedAt: () => 899_900,
++    playAudibleTowerCue: () => true,
++    storage: { getItem: () => saved, setItem: (_key, value) => { saved = value; } },
++  });
++  function update(dt: number) {
++    const sample = firstHearing.sampleScene();
++    npc.update(dt, sample && {
++      livingPaused: sample.livingPaused,
++      mascotLookAt: sample.mascotLooksAtTower ? towerBell : undefined,
++    });
++  }
++  function matrix(index: number) {
++    const value = new Matrix4();
++    batch.getMatrixAt(index, value);
++    return value;
++  }
++  function pose() {
++    const actor = npc.snowballTargets[0];
++    return [actor.x, actor.y, actor.z];
++  }
++
++  update(11);
++  const livingBefore = pose();
++  const population = batch.count;
++  const mascotStart = population - soulMayorCapacity - townMascotParts.length;
++  const mascotEye = mascotStart + townMascotParts.findIndex(part => part.expression === 'eye');
++  const body = matrix(mascotStart);
++  const head = matrix(mascotEye);
++  const mayorMatrix = matrix(population - 1);
++  stationEast = 227;
++  firstHearing.ringTower({ type: 'event', kind: 'town-night-beacon', at: now, expiresAt: now + 2_000 });
++  update(.16);
++  assert.deepEqual(pose(), livingBefore);
++  assert.equal(resident.x, 225);
++  assert.equal(batch.count, population);
++  assert.ok(matrix(mascotStart).equals(body), 'look carries no root-pose or body change on the same sim tick');
++  assert.ok(matrix(population - 1).equals(mayorMatrix));
++  const desired = towerBell.clone().sub(new Vector3().setFromMatrixPosition(head)).normalize();
++  const before = new Vector3(0, 0, 1).transformDirection(head);
++  const turned = new Vector3(0, 0, 1).transformDirection(matrix(mascotEye));
++  assert.ok(turned.y > before.y && turned.dot(desired) > before.dot(desired));
++
++  now += 449;
++  mayor = undefined;
++  update(.29);
++  assert.deepEqual(pose(), livingBefore);
++  assert.equal(resident.x, 225);
++  assert.equal(batch.count, population - soulMayorCapacity, 'private mayor visibility continues updating');
++  now++;
++  update(.05);
++  assert.notDeepEqual(pose(), livingBefore);
++  assert.equal(resident.x, 227);
++
++  now = 901_499;
++  update(0);
++  assert.ok(new Vector3(0, 0, 1).transformDirection(matrix(mascotEye)).y > .25);
++  now++;
++  update(0);
++  assert.ok(Math.abs(new Vector3(0, 0, 1).transformDirection(matrix(mascotEye)).y) < .15);
++  assert.equal(scene.children.length, 1, 'the existing combined render batch is the only draw source');
++});
