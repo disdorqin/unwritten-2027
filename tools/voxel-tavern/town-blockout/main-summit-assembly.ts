@@ -17,6 +17,7 @@ import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
 import { createMainSummitTrail, mainSummitTrailSpec, type MainSummitTrailPoint } from './main-summit-trail';
+import { buildMainSummitTrailCut } from './main-summit-trail-cut';
 import { mountMainSummitWreckage } from './main-summit-wreckage';
 import { mountMainSummitWingRack } from './main-summit-wing-rack';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
@@ -128,6 +129,8 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   // dip south of the plaza edge and still belong to the same ribbon.
   const ribbon = createTrailRibbon(trail.points.slice(1), block.heightAt);
   ribbon.name = 'main-summit-walkway';
+  const trailTerrain = buildMainSummitTrailCut(block.coarse.geometry, ribbon.geometry).geometry;
+  block.coarse.geometry = trailTerrain;
   group.add(ribbon);
   const wreckage = mountMainSummitWreckage(group, trail);
   const knots = survey.map((row): SnowBeltKnot => {
@@ -212,6 +215,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
       });
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
+      trailTerrain.dispose();
       block.dispose();
       group.removeFromParent();
       group.clear();
