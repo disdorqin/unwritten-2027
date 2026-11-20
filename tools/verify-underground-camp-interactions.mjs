@@ -58,7 +58,7 @@ try {
   await page.evaluate(() => window.addEventListener('keydown', event => {
     window.lastCampReviewKey = { code: event.code, key: event.key, repeat: event.repeat,
       altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
-      target: event.target?.tagName, prevented: event.defaultPrevented };
+      target: event.target?.tagName, prevented: event.defaultPrevented, trusted: event.isTrusted };
   }));
   const go = id => page.evaluate(id => window.campInteractionsProbe.go(id), id);
   const inspect = () => page.evaluate(() => window.campInteractionsProbe.inspect());
@@ -136,11 +136,59 @@ try {
   await go('dorm-five-detail');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.screenshot({ path: resolve(output, 'dorm-five.png') });
-  assert.deepEqual([...errors, ...cleared.errors], []);
+
+  await page.evaluate(() => window.campInteractionsProbe.headlamp(true));
+  const enter = id => page.evaluate(id => window.campInteractionsProbe.enterPickaxe(id), id);
+  await enter('review-a');
+  await prompt('捡起旧铁镐');
+  const aimed = (await inspect()).pickaxe;
+  assert.equal(aimed.firstHit, 'mine-camp-old-pickaxe');
+  assert.equal(aimed.visible, true);
+  assert.equal(aimed.foot[1], -91);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await page.screenshot({ path: resolve(output, 'old-pickaxe-aimed.png') });
+  await page.evaluate(() => window.campInteractionsProbe.aimAtPickaxe(false));
+  const away = (await inspect()).pickaxe;
+  assert.notEqual(away.firstHit, 'mine-camp-old-pickaxe');
+  assert.ok(!(await hint.textContent()).includes('捡起旧铁镐'));
+  await page.keyboard.press('e');
+  assert.deepEqual((await inspect()).pickaxe.attemptedProfiles, []);
+
+  await page.evaluate(() => window.campInteractionsProbe.aimAtPickaxe(true));
+  await prompt('捡起旧铁镐');
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => !window.campInteractionsProbe.inspect().pickaxe.visible);
+  const picked = (await inspect()).pickaxe;
+  assert.deepEqual(picked.receipts, ['review-a']);
+  assert.deepEqual(picked.notices, ['review-a']);
+  const key = await page.evaluate(() => window.lastCampReviewKey);
+  assert.equal(key.code, 'KeyE');
+  assert.equal(key.trusted, true);
+  assert.equal(key.prevented, true);
+
+  await enter('review-a');
+  const reentry = (await inspect()).pickaxe;
+  assert.equal(reentry.visible, false);
+  assert.ok(!(await hint.textContent()).includes('捡起旧铁镐'));
+  await page.keyboard.press('e');
+  assert.deepEqual((await inspect()).pickaxe.attemptedProfiles, ['review-a']);
+  await enter('review-b');
+  await prompt('捡起旧铁镐');
+  assert.equal((await inspect()).pickaxe.visible, true);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => !window.campInteractionsProbe.inspect().pickaxe.visible);
+  const second = (await inspect()).pickaxe;
+  assert.deepEqual(second.receipts, ['review-a', 'review-b']);
+  assert.deepEqual(second.notices, second.receipts);
+  assert.deepEqual(second.attemptedProfiles, second.receipts);
+  assert.deepEqual([...errors, ...(await inspect()).errors], []);
   const evidence = { browser: browser.version(), mineBlob: expectedMineBlob, beds, relics: bowl.relics,
-    offered, lighting, cleared, errors };
+    offered, lighting, cleared, pickaxe: {
+      scope: 'Registered aim and accepted footing in the original mine. Inventory persistence is a fixture port shared by two sequential profiles.',
+      aimed, away, picked, key, reentry, second,
+    }, errors };
   await writeFile(resolve(output, 'camp-interactions.json'), JSON.stringify(evidence, null, 2) + '\n');
-  console.log('Camp interactions: six native seat cycles, one relic, three offerings and two guide lights.');
+  console.log('Camp interactions: six seat cycles, one relic, three offerings, two guide lights, and a sight-gated pickaxe grant per profile.');
 } finally {
   try { await browser?.close(); } finally {
     await server.close();
