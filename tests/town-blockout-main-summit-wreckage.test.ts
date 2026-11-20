@@ -170,6 +170,12 @@ test('ZD-07 resolves visible fragment faces from the three existing stands with 
   blocker.position.copy(assembly.group.worldToLocal(first.ray.at(.5, new Vector3())));
   assembly.group.add(blocker);
   assert.equal(assembly.aimWreckage(first), null);
+  blocker.material.transparent = true;
+  blocker.material.opacity = .5;
+  assert.equal(assembly.aimWreckage(first), null);
+  blocker.material.visible = false;
+  assert.equal(assembly.aimWreckage(first)?.id, assembly.wreckageSites[0]!.id);
+  blocker.material.visible = true;
   blocker.visible = false;
   assert.equal(assembly.aimWreckage(first)?.id, assembly.wreckageSites[0]!.id);
   blocker.removeFromParent();
