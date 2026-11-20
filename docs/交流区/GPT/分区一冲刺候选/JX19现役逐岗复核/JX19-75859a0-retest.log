@@ -1,0 +1,69 @@
+✔ the four exterior faces mirror their geometry and the readout follows Beijing seconds and C2 zero (336.19589ms)
+✔ a crossed ordinary Beijing hour schedules three strikes, with audio from 07 through 23 inclusive (0.681012ms)
+✔ the ordinary bypass stays silent through standby, the three ceremony hours and afterglow (1.259804ms)
+✔ late wakeup and joining on an hour never replay it, with a five-second crossing allowance (0.616445ms)
+✔ ordinary clock hours rotate two market residents through existing plaza anchors (3857.939845ms)
+ℹ {"participants":["贾明灯","胡六环"],"anchors":[{"actor":[238,206.37,12],"talk":[238,206.0275,12]},{"actor":[236.86990657272634,205.7744603576897,12],"talk":[237.15242992954475,205.58084526826727,12]}]}
+✔ the dusk cue brightens the existing exterior lantern batch without allocating a new draw (85.070862ms)
+ℹ {"instances":719,"children":10}
+✔ the plaza entrance leads to both wings and a continuous east stair (6906.967264ms)
+✔ expanded wings have 0.45 m perimeter walls and six usable full-size real sashes (254.28813ms)
+ℹ 6 sash spots and real opens, 54 measured opening points, both rear walls z [-7,-6.55]; sash sweep raw near edge z=5.77070 versus loft z=5.60.
+✔ west wing continues from the hall to the mezzanine exhibit without a height jump (290.945867ms)
+ℹ west route 547 × ≤0.08 m, last feet 16.9 m.
+✔ east wing reaches the mezzanine and the 2.2 m ridge platform with 2 m stair headroom (237.039232ms)
+ℹ headroom raw x=14.45,z=4.48, feet Y=14.9375: 6.50450 m
+ℹ headroom raw x=14.45,z=-4.48, feet Y=17.5625: 3.87950 m
+ℹ headroom raw x=10.2,z=-4.48, feet Y=19.53125: 3.35000 m
+ℹ headroom raw x=7.4,z=-4.48, feet Y=20.1875: no overhead collider
+ℹ headroom raw x=7.4,z=-0.9, feet Y=22.6875: no overhead collider
+ℹ east mezzanine: 548 steps to 16.9 m; ridge: 826 steps to 23.5375 m.
+✔ both three-metre ramp centres cross the wing front continuously (167.414871ms)
+ℹ x=-15.5: 139 steps, crest Y=12.315, max step 0.08186 m, net headroom 1.83626 m.
+ℹ x=15.5: 139 steps, crest Y=12.315, max step 0.08186 m, net headroom 1.83626 m.
+✔ east ridge platform connects around the pier to the fourth tower stop and back down (279.503671ms)
+ℹ entry to fourth deck: 934 steps, feet Y=23, net headroom 2.25000 m; full return 1339 steps to feet Y=12.3125.
+✔ fourth stop has a visible south opening and the tower keeps its measured height (204.843368ms)
+ℹ 9 unobstructed facade sightlines; door width 1.125 m, rendered clear height 2.9375 m.
+✔ both chop spots and their prop footprints are clear against the production map (1344.459526ms)
+✔ five rhythm strikes store wood from two sites and sitting at night records the party once (8.194935ms)
+✔ three stages and village chimney growth reuse one particle pool with unchanged warmth radius (3.871751ms)
+✔ pine fire adds a ninth site with six warm seats and leaves the eight accepted sites unchanged (9.320343ms)
+ℹ fixture: 8→9 fires, pine adds 45 pieces, 279/396 used, 6 warm seats, 1 particle batch
+✔ pine chopping and feeding a supported site reuse five strikes while keeping old fuel separate (467.745207ms)
+ℹ pine site {"id":"pine-camp","x":416.5,"n":229,"ground":20.68010139465332,"props":{"x":415.05,"n":229,"ground":20.714629650115967}}; ground delta 0.034528
+ℹ house east 415.925, north 224.080; signed east offsets spot 0.575, prop -0.875; minimum north isolation beyond .27m house radius 4.650m
+ℹ prop west ground sample at 414.330/229: 20.728423
+ℹ round 1: hits 1–4 → 0 wood, hit 5 → 1 wood
+ℹ after adding wood: {"wood":0,"fuel":1,"level":0}
+ℹ round 2: hits 1–4 → 0 wood, hit 5 → 1 wood
+ℹ after adding wood: {"wood":0,"fuel":2,"level":0}
+ℹ round 3: hits 1–4 → 0 wood, hit 5 → 1 wood
+ℹ after adding wood: {"wood":0,"fuel":3,"level":0}
+ℹ round 4: hits 1–4 → 0 wood, hit 5 → 1 wood
+ℹ after adding wood: {"wood":0,"fuel":4,"level":2}
+ℹ fixture: fourth strike no wood, fifth strike +1; four feeds unlock night stage, original camp fuel unchanged
+✔ the three vendors wait for the exact booths and matching live interaction registrations (29.202811ms)
+✔ vendor E prompts stay separate from the fair spots and use a registered vendor activity if present (16.596677ms)
+✔ resident hotspots fail closed until their stations work, share a batch, and move one lakeside actor (5685.52114ms)
+✔ the 25 Qin lines match the manuscript and clue gates do not expose the obsolete bridge or future goat (1.585887ms)
+✔ resident station visibility and 小未 repack the same batch without replacing each other (10.363408ms)
+✔ both M3 northeast roads retain pedestrian headroom below the built track (495.1399ms)
+ℹ {"center":[275,192],"checked":2604,"railOverhead":482,"minimum":2.1539379587037164}
+ℹ {"center":[336,246],"checked":2669,"railOverhead":1678,"minimum":2.0630080780540325}
+✔ tour railway encircles the original town, makes both river crossings and clears the snow (115.590909ms)
+ℹ {"maximumGradePercent":22.6088043761089,"routeLength":2069.4293861322944,"stops":11}
+✔ raised railway leaves walking headroom and supports both banks of the bath road (1586.632935ms)
+✔ a carriage blocks its physical body but leaves the boarding pad open (49.437358ms)
+✔ old and new loop platforms board and receive riders only while stopped (36.761288ms)
+✔ absolute train time is shared by newcomers, riders and spectators (198.113564ms)
+✔ moving exit lands beside the shared track without moving the other rider (93.226907ms)
+ℹ moving exit landed 1.78 m from the coach
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12238.163205

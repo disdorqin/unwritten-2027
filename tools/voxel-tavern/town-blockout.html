@@ -6,10 +6,42 @@
   <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
-  <script type="module" src="./town-blockout/town-panel.ts"></script>
-  <script type="module" src="./town-blockout/viewer.ts"></script>
+  <link rel="stylesheet" href="./town-blockout/town-entry.css">
+  <script>
+    // Keep a recovery path when the entry module itself cannot be fetched.
+    addEventListener('error', event => {
+      const moduleFailure = event.target instanceof HTMLScriptElement && event.target.type === 'module';
+      const startupError = event.target === window && event instanceof ErrorEvent;
+      if (!moduleFailure && !startupError) return;
+      const showFailure = () => {
+        if (!document.body.classList.contains('town-entry-pending')) return;
+        document.getElementById('town-entry-loading').hidden = true;
+        document.getElementById('town-entry-error').hidden = false;
+        document.getElementById('town-entry-retry').hidden = false;
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showFailure, { once: true });
+      } else showFailure();
+    }, true);
+  </script>
+  <script type="module" src="./town-blockout/town-entry.ts"></script>
 </head>
-<body>
+<body class="town-entry-pending">
+  <section id="town-entry" aria-labelledby="town-entry-title">
+    <div class="town-entry-content">
+      <h1 id="town-entry-title">进入未写镇</h1>
+      <p id="town-entry-loading" role="status">正在加载小镇…</p>
+      <p id="town-entry-guide" hidden>内置浏览器可能限制转向。请点右上角菜单，选择「在浏览器中打开」，也可以继续进入并拖动转向。</p>
+      <p id="town-entry-error" role="alert" hidden>小镇没有加载成功。请重试，或在系统浏览器中打开。</p>
+      <div class="town-entry-actions">
+        <button type="button" id="town-entry-copy" hidden>复制链接</button>
+        <button type="button" id="town-entry-continue" hidden>继续进入</button>
+        <button type="button" id="town-entry-retry" onclick="location.reload()" hidden>重试加载</button>
+      </div>
+      <input id="town-entry-link" aria-label="小镇链接" readonly hidden>
+      <output id="town-entry-copy-status" role="status" hidden></output>
+    </div>
+  </section>
   <main id="scene" aria-label="雪镇三维场景"></main>
   <aside class="panel" aria-label="小镇控制">
     <div class="town-panel-heading">
@@ -18,7 +50,7 @@
       <button id="town-panel-toggle" class="town-panel-toggle" type="button"
         aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
     </div>
-    <p id="env-banner" role="note" hidden>当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</p>
+    <p id="env-banner" role="note" hidden><span id="env-banner-message">当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</span> <button id="env-banner-dismiss" type="button" hidden>关闭提示</button></p>
     <div id="town-panel-controls">
       <label class="town-presence-name">昵称
         <input id="town-presence-name" type="text" maxlength="48" placeholder="留空使用游客名"
@@ -105,6 +137,7 @@
   <button id="world-action" type="button" hidden></button>
   <aside id="snowball-controls" aria-label="打雪仗" hidden>
     <output id="snowball-score" aria-live="polite">雪球 0/10 · 薄雪</output>
+    <output id="snow-practice-status" aria-label="移动靶场计时" aria-live="off" hidden></output>
     <progress id="snowball-action-meter" aria-label="雪球动作进度" value="0" max="1" hidden></progress>
     <button id="snowball-board" type="button">雪仗榜</button>
     <button id="snowfight-start" type="button" hidden>团队雪仗</button>

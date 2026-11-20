@@ -1,0 +1,78 @@
+{
+  "context": "radial diagnostic-only samples of the intact preview mesh",
+  "triangles": 28421,
+  "routes": [
+    {
+      "direction": "west",
+      "north": 0,
+      "denseSamples": 1401,
+      "startHeight": 0,
+      "endHeight": -34.999809,
+      "peakAbsoluteGradePercent": 200.001503,
+      "steepestDestEast": -32.1,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.376669,
+      "nativeEdgesOverStepHeight": 0
+    },
+    {
+      "direction": "west",
+      "north": -0.27,
+      "denseSamples": 1401,
+      "startHeight": 0,
+      "endHeight": -34.997579,
+      "peakAbsoluteGradePercent": 199.998167,
+      "steepestDestEast": -32.1,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.376663,
+      "nativeEdgesOverStepHeight": 0
+    },
+    {
+      "direction": "west",
+      "north": 0.27,
+      "denseSamples": 1401,
+      "startHeight": 0,
+      "endHeight": -34.99737,
+      "peakAbsoluteGradePercent": 200.001503,
+      "steepestDestEast": -32.225,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.376669,
+      "nativeEdgesOverStepHeight": 0
+    },
+    {
+      "direction": "east",
+      "north": 0,
+      "denseSamples": 1401,
+      "startHeight": -0.924176,
+      "endHeight": -34.999504,
+      "peakAbsoluteGradePercent": 506.44852,
+      "steepestDestEast": 32.475,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.953811,
+      "nativeEdgesOverStepHeight": 30
+    },
+    {
+      "direction": "east",
+      "north": -0.27,
+      "denseSamples": 1401,
+      "startHeight": -0.914611,
+      "endHeight": -34.997196,
+      "peakAbsoluteGradePercent": 498.973914,
+      "steepestDestEast": 32.3,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.939734,
+      "nativeEdgesOverStepHeight": 30
+    },
+    {
+      "direction": "east",
+      "north": 0.27,
+      "denseSamples": 1401,
+      "startHeight": -0.933741,
+      "endHeight": -34.997142,
+      "peakAbsoluteGradePercent": 513.134808,
+      "steepestDestEast": 32.6,
+      "uphillEdgesOverTolerance": 0,
+      "largestNativeStep": 0.953873,
+      "nativeEdgesOverStepHeight": 30
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+✔ late firework entry omits launched shells and keeps authored shot order and absolute clock (4.353218ms)
+✔ an on-time observer retains every authored field and the score can retry when renderer is occupied (0.827931ms)
+✔ expired score cannot revive after clock correction (0.312254ms)
+✔ an active authored ceremony skips the old shell and finishes on the authoritative clock (28.493847ms)
+✔ ceremony slots fit both plaza bounds and meet the 1.2m clearance at full capacity (2087.055439ms)
+✔ ceremony arrival decode refuses malformed or unknown slots (1.494712ms)
+✔ ceremony clocks: local provider and reserved server provider offset (0.251721ms)
+✔ the shared rehearsal calendar plays the countdown and midnight in UTC+08:00 (0.903137ms)
+✔ ceremony eve year resolves the right cycle around midnight (0.245045ms)
+✔ ceremony phases follow the design timeline (0.703484ms)
+✔ snow intensity curve: tiers, 10-minute ramps, post-midnight falloff (1.586493ms)
+✔ frost baseline follows the shared ceremony curve and decays fast after midnight (0.261971ms)
+✔ dim level: 60% from 23:50, 30% for the final ten seconds, restored at midnight (0.213614ms)
+✔ cue table for the whole evening matches the design cue sheet (1.533541ms)
+✔ director fires each cue once, in order, across the midnight boundary (1.862416ms)
+✔ director state during countdown and late join without replay (0.72369ms)
+✔ director reports frost baseline changes through the hook (0.487787ms)
+✔ director initializes weather and dimming hooks before emitting changes (1.055651ms)
+✔ frost tracker: instant sync on first update, then 1 level per 20 s both ways (0.58903ms)
+✔ frost tracker: any single warmth source is enough, floor is level 0 (0.368901ms)
+✔ frost exposure follows snow strength and full depth pressure, and recedes on cleared roads (0.354795ms)
+✔ fastest warmth source lowers exposure while the old ceremony baseline keeps its rate (0.410675ms)
+✔ ceremony relief halves pressure and caps L3 walking drag without changing the visible level (0.303768ms)
+✔ frost level styles match the design bands (0.160216ms)
+✔ a clock correction cannot replay ceremony cues already delivered by the director (0.275358ms)
+✔ the new stand admits every physical tier and only the apron may launch without joining (1.808894ms)
+✔ one authoritative roster is sorted and capped, with malformed or duplicate names packets rejected (3.733687ms)
+✔ a missing shared lineup unlocks movement without another animation frame (6.159409ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2974.782008

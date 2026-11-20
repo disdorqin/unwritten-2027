@@ -1,0 +1,361 @@
+diff --git a/tests/town-blockout-moving-range.test.ts b/tests/town-blockout-moving-range.test.ts
+new file mode 100644
+index 0000000..676dce4
+--- /dev/null
++++ b/tests/town-blockout-moving-range.test.ts
+@@ -0,0 +1,175 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
++import { createSnowPracticeTarget, snowPracticeStand, snowPracticeTarget } from '../tools/voxel-tavern/town-blockout/town-snow-target';
++import { createTownSnowballFight, type SnowballEvent } from '../tools/voxel-tavern/town-blockout/town-snowball';
++import { createSnowballSweep } from '../tools/voxel-tavern/town-blockout/town-snowball-world';
++import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain';
++import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance';
++import { ceremonyEdgeLandings, ceremonyMainLandings } from '../src/presence/ceremony-arrival';
++
++const { heightAt } = createTerrainGrid();
++const [east, north] = snowPracticeTarget;
++const [standEast, standNorth] = snowPracticeStand;
++const ground = heightAt(east, north);
++const cells = { colliders: [], floors: [] };
++
++function setup() {
++  const scene = new Scene();
++  let clock = 0;
++  const status: string[] = [];
++  const notices: string[] = [];
++  const targetActivity = createSnowPracticeTarget(scene, heightAt, {
++    now: () => clock,
++    status: text => status.push(text),
++    announce: text => notices.push(text),
++  });
++  const [target] = targetActivity.snowballTargets;
++  const [spot] = targetActivity.spots;
++  const hit = createSnowballSweep({
++    targets: targetActivity.snowballTargets,
++    geometryAt: () => cells,
++    occupiedAt: () => false,
++    surfaceHeight: heightAt,
++  });
++  return {
++    scene, clock: (time: number) => { clock = time; }, status, notices, targetActivity, target, spot, hit,
++  };
++}
++
++test('the moving snowman shares one mesh, a registered hit box and its normal walking collision', t => {
++  const { scene, clock, targetActivity, target, spot, hit } = setup();
++  const model = scene.getObjectByName('town-snow-practice-target') as InstancedMesh;
++
++  assert.equal(target.id, 'snow-practice');
++  assert.equal(target.shape, 'box');
++  assert.deepEqual([spot.x, spot.n, spot.ground], [standEast, standNorth, 12]);
++  assert.equal(scene.children.length, 1);
++  assert.equal(model.isInstancedMesh, true);
++  assert.equal(model.count, 22);
++  assert.equal(model.count * model.geometry.index!.count / 3, 264);
++
++  spot.run();
++  clock(1250);
++  targetActivity.updateRound();
++  assert.ok(Math.abs(target.x - (east + target.radius * 2)) < 1e-9);
++  assert.equal(model.position.x + east, target.x);
++  assert.equal(target.y, 12);
++  assert.equal(targetActivity.blocked?.(target.x, north, ground), true);
++  assert.equal(targetActivity.blocked?.(east, north, ground), false);
++  const through = (x: number) => hit(new Vector3(x, ground + 1, -standNorth),
++    new Vector3(x, ground + 1, -north - 1), .115, 'local');
++  assert.equal(through(east), undefined);
++  assert.equal(through(target.x)?.targetId, target.id);
++
++  let min: number = east;
++  let max: number = east;
++  let clearance = Infinity;
++  const landings = [...ceremonyMainLandings, ...ceremonyEdgeLandings];
++  for (let time = 1250; time < 60_000; time += 10) {
++    clock(time);
++    targetActivity.updateRound();
++    min = Math.min(min, target.x);
++    max = Math.max(max, target.x);
++    assert.equal(target.y, ground);
++    assert.equal(roadCorridorKeepClear(target.x, north, .85), false);
++    for (const slot of landings) {
++      clearance = Math.min(clearance, Math.hypot(target.x - slot.east, north - slot.north));
++    }
++  }
++  assert.ok(clearance > .85 + .27);
++  t.diagnostic(`靶中心 E${min.toFixed(2)}–${max.toFixed(2)}/N${north}/Y${ground}，最近仪式点 ${clearance.toFixed(3)} m，1 组实例 / 264 tris`);
++});
++
++test('a 60s trial counts each owned hit once against the existing snowball step and resets to practice', t => {
++  const { scene, clock, targetActivity, target, spot, hit, status, notices } = setup();
++  let time = 0;
++  let lastImpact: SnowballEvent | undefined;
++  const game = createTownSnowballFight({
++    scene,
++    sweep: (from, to, radius, thrower) => hit(from, to, radius, thrower),
++    onEvent(event) {
++      if (event.type === 'impact') lastImpact = event;
++      targetActivity.onSnowballEvent(event);
++    },
++  });
++  const spawn = (offset = 0) => new Vector3(target.x + offset, ground + 1, -north + 1);
++  const toward = new Vector3(0, 0, -1);
++  function advance(frames: number) {
++    for (let i = 0; i < frames; i++) {
++      clock(time += 1000 / 60);
++      targetActivity.updateRound();
++      game.update(1 / 60);
++    }
++  }
++
++  game.gather(5);
++  assert.equal(game.throwBall(spawn(), toward, 'local', 1), true);
++  spot.run();
++  assert.equal(spot.available?.(), false);
++  assert.match(status.at(-1)!, /60 秒 · 命中 0/);
++  advance(18);
++  assert.equal(lastImpact?.type === 'impact' && lastImpact.targetId, target.id);
++  assert.match(status.at(-1)!, /命中 0/);
++
++  assert.equal(game.throwBall(spawn(), toward, 'local', 1), true);
++  advance(18);
++  assert.equal(lastImpact?.type === 'impact' && lastImpact.targetId, target.id);
++  assert.match(status.at(-1)!, /命中 1/);
++  targetActivity.onSnowballEvent(lastImpact!);
++  assert.match(status.at(-1)!, /命中 1/);
++
++  assert.equal(game.throwNpc(spawn(), toward, 'npc:fixture', 1), true);
++  assert.equal(game.throwBall(spawn(3), toward, 'local', 1), true);
++  advance(18);
++  assert.match(status.at(-1)!, /命中 1/);
++  clock(time = 59_999);
++  targetActivity.updateRound();
++  assert.match(status.at(-1)!, /1 秒 · 命中 1/);
++
++  assert.equal(game.throwBall(spawn(), toward, 'local', 1), true);
++  clock(60_000);
++  game.update(1 / 60);
++  assert.equal(lastImpact?.type === 'impact' && lastImpact.targetId, target.id);
++  targetActivity.updateRound();
++  targetActivity.updateRound();
++  assert.deepEqual(notices, ['移动靶结算 · 命中 1']);
++  assert.equal(status.at(-1), '');
++  assert.equal(spot.available?.(), true);
++  assert.deepEqual([target.x, target.z], [east, -north]);
++
++  spot.run();
++  assert.match(status.at(-1)!, /60 秒 · 命中 0/);
++  t.diagnostic('阈值 59,999 ms 仍在局内 / 60,000 ms 只结算一次；旧球、重复事件、NPC、偏离靶点及超时命中均 0 分');
++  game.dispose();
++});
++
++test('the standing snowman keeps its original hit box and rebound between rounds', () => {
++  const { scene, clock, targetActivity, target, hit, spot } = setup();
++  const model = scene.getObjectByName('town-snow-practice-target') as InstancedMesh;
++  const rest = new Matrix4();
++  const rebound = new Matrix4();
++  const settled = new Matrix4();
++  model.getMatrixAt(0, rest);
++
++  assert.deepEqual([target.x, target.y, target.z, target.radius, target.height], [east, 12, -north, .58, 2.35]);
++  assert.equal(targetActivity.blocked?.(east, north, ground), true);
++  const contact = hit(new Vector3(east, ground + 1, -standNorth), new Vector3(east, ground + 1, -north - 1), .115, 'local');
++  assert.equal(contact?.targetId, target.id);
++  target.onHit(1, 0);
++  targetActivity.update?.(.17);
++  model.getMatrixAt(0, rebound);
++  assert.notDeepEqual(rebound.elements, rest.elements);
++  targetActivity.update?.(.17);
++  model.getMatrixAt(0, settled);
++  assert.deepEqual(settled.elements, rest.elements);
++
++  spot.run();
++  clock(1250);
++  targetActivity.updateRound();
++  clock(60_000);
++  targetActivity.updateRound();
++  assert.deepEqual([target.x, target.y, target.z], [east, 12, -north]);
++  assert.equal(model.position.x, 0);
++  assert.equal(targetActivity.blocked?.(east, north, ground), true);
++});
+diff --git a/tools/voxel-tavern/town-blockout.html b/tools/voxel-tavern/town-blockout.html
+index 394bd20..bb82049 100644
+--- a/tools/voxel-tavern/town-blockout.html
++++ b/tools/voxel-tavern/town-blockout.html
+@@ -105,6 +105,7 @@
+   <button id="world-action" type="button" hidden></button>
+   <aside id="snowball-controls" aria-label="打雪仗" hidden>
+     <output id="snowball-score" aria-live="polite">雪球 0/10 · 薄雪</output>
++    <output id="snow-practice-status" aria-label="移动靶场计时" aria-live="off" hidden></output>
+     <progress id="snowball-action-meter" aria-label="雪球动作进度" value="0" max="1" hidden></progress>
+     <button id="snowball-board" type="button">雪仗榜</button>
+     <button id="snowfight-start" type="button" hidden>团队雪仗</button>
+diff --git a/tools/voxel-tavern/town-blockout/style.css b/tools/voxel-tavern/town-blockout/style.css
+index f8a2bfd..d882ae1 100644
+--- a/tools/voxel-tavern/town-blockout/style.css
++++ b/tools/voxel-tavern/town-blockout/style.css
+@@ -255,7 +255,7 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
+   display: grid; gap: 5px;
+   padding: 7px; border: 1px solid #6d819d; border-radius: 10px; background: #101a2beb;
+ }
+-#snowball-score { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
++:is(#snowball-score, #snow-practice-status) { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
+ #snowball-board { grid-column: 1 / -1; }
+ #snowball-action-meter { grid-column: 1 / -1; width: 100%; height: 9px; accent-color: #efc786; }
+ #snowball-controls { max-width: min(220px, 56vw); }
+diff --git a/tools/voxel-tavern/town-blockout/town-snow-target.ts b/tools/voxel-tavern/town-blockout/town-snow-target.ts
+index 90d25d8..31b2c99 100644
+--- a/tools/voxel-tavern/town-blockout/town-snow-target.ts
++++ b/tools/voxel-tavern/town-blockout/town-snow-target.ts
+@@ -1,5 +1,6 @@
+ import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, Vector3, type Scene } from 'three';
+ import type { TownActivity } from './town-activity';
++import { snowballSpeed, type SnowballEvent } from './town-snowball';
+ 
+ export type TownSnowballTarget = {
+   id: string;
+@@ -16,8 +17,22 @@ export type TownSnowballTarget = {
+ export const snowPracticeStand = [223, 163] as const;
+ export const snowPracticeTarget = [223, 173] as const;
+ 
+-export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number, north: number) => number):
+-  TownActivity & { snowballTargets: readonly TownSnowballTarget[] } {
++const practiceRoundMs = 60_000;
++const practiceTargetClearance = .85;
++
++type PracticeRoundOptions = {
++  status(text: string): void;
++  announce(text: string): void;
++  now?(): number;
++};
++
++export function createSnowPracticeTarget(
++  scene: Scene, heightAt: (east: number, north: number) => number, options?: PracticeRoundOptions,
++): TownActivity & {
++  snowballTargets: readonly TownSnowballTarget[];
++  updateRound(): void;
++  onSnowballEvent(event: SnowballEvent): void;
++} {
+   const [east, north] = snowPracticeTarget;
+   const ground = heightAt(east, north);
+   // The profile is shared by a single instance batch. Details face the snowy practice lane.
+@@ -95,10 +110,80 @@ export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number,
+     },
+   };
+ 
++  const [standEast, standNorth] = snowPracticeStand;
++  const standDistance = Math.hypot(east - standEast, north - standNorth);
++  const periodMs = 4 * Math.PI * standDistance / snowballSpeed(1) * 1000;
++  const roundCycles = Math.floor(practiceRoundMs / periodMs);
++  const amplitude = target.radius * 2;
++  const now = options?.now ?? (() => performance.now());
++  let round: { endAt: number; hits: number; launches: Set<number> } | undefined;
++  let displayed = '';
++
++  function paint(text: string) {
++    if (displayed === text) return;
++    displayed = text;
++    options?.status(text);
++  }
++
++  function paintRound(time: number) {
++    if (!round) return;
++    paint(`移动靶场 · ${Math.ceil((round.endAt - time) / 1000)} 秒 · 命中 ${round.hits}`);
++  }
++
++  function startRound() {
++    if (round) return;
++    const time = now();
++    round = { endAt: time + practiceRoundMs, hits: 0, launches: new Set() };
++    paintRound(time);
++  }
++
++  function moveTarget(offset: number) {
++    target.x = east + offset;
++    target.y = offset ? heightAt(target.x, north) : ground;
++    model.position.set(offset, target.y - ground, 0);
++  }
++
++  function updateRound() {
++    if (!round) return;
++    const time = now();
++    if (time >= round.endAt) {
++      const { hits } = round;
++      round = undefined;
++      moveTarget(0);
++      paint('');
++      options?.announce(`移动靶结算 · 命中 ${hits}`);
++      return;
++    }
++    const progress = 1 - (round.endAt - time) / practiceRoundMs;
++    moveTarget(Math.sin(progress * 2 * Math.PI * roundCycles) * amplitude);
++    paintRound(time);
++  }
++
++  function onSnowballEvent(event: SnowballEvent) {
++    if (!round || event.shotBy !== 'player' || event.thrower !== 'local') return;
++    const time = now();
++    if (time >= round.endAt) return;
++    if (event.type === 'throw') {
++      if (event.scoreable) round.launches.add(event.id);
++      return;
++    }
++    if (!round.launches.delete(event.id) || event.type !== 'impact' ||
++        !event.scored || event.targetId !== target.id) return;
++    round.hits++;
++    paintRound(time);
++  }
++
+   return {
+-    spots: [],
++    spots: options ? [{
++      x: standEast, n: standNorth, ground: heightAt(standEast, standNorth),
++      range: practiceTargetClearance, label: '开始移动靶练习', available: () => !round, run: startRound,
++    }] : [],
+     snowballTargets: [target],
+-    blocked(x, n, feet) { return feet < ground + 2.35 && Math.hypot(x - east, n - north) < .85; },
++    updateRound,
++    onSnowballEvent,
++    blocked(x, n, feet) {
++      return feet < target.y + target.height && Math.hypot(x - target.x, n + target.z) < practiceTargetClearance;
++    },
+     update(dt) {
+       if (!remaining) return;
+       remaining = Math.max(0, remaining - dt);
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 72cc9c1..a33645a 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -907,7 +907,14 @@ panel => openTavernDice(panel, () => {
+     return mascotFrustum.intersectsSphere(mascotBounds);
+   },
+ });
+-const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
++const practiceStatus = element<HTMLOutputElement>('snow-practice-status');
++const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt, {
++  status(text) {
++    practiceStatus.textContent = text;
++    practiceStatus.hidden = !text;
++  },
++  announce: announceActivity,
++});
+ let drinkingPoseUntil = 0;
+ let warmDrinkUntil = 0;
+ let nextBathTeaAt = 0;
+@@ -1476,6 +1483,7 @@ const snowballs = createTownSnowballFight({
+   canScoreAtLaunch: outdoorLaunch,
+   onChange: showSnowballScore,
+   onEvent(event) {
++    practiceTarget.onSnowballEvent(event);
+     if (event.type === 'throw') {
+       if (event.scoreable) snowballBoard.recordThrow(event.thrower);
+       if (event.shotBy === 'remote') teamFight.onThrowHeard(event.origin);
+@@ -2765,6 +2773,7 @@ renderer.setAnimationLoop(now => {
+   const frameSeconds = Math.max(0, now - previous) / 1000;
+   const dt = Math.min(.25, frameSeconds);
+   previous = now;
++  practiceTarget.updateRound();
+   const startEast = x, startNorth = n;
+   if (ceremonyLook) {
+     if (!lookAllowed() || keys.size || seated || boardingGround) ceremonyLook = undefined;

@@ -1,0 +1,3837 @@
+{
+  "sha": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "originalTable": "260eae1dbdd8b96d979a566bc6be17c6e264f0f2",
+  "tableBlob": "df3dec065ae186b190aa5f92a693052267f817e9",
+  "three": "183",
+  "blobs": {
+    "district-layout.ts": "29dd3ca628f775db12b8f7f719c9db5adbd133ed",
+    "district-housing.ts": "cc9223907b2f5601da2461fc39982b987caffb0e",
+    "viewer.ts": "72cc9c1d1eb946211844850a95392381c5a8871d"
+  },
+  "summary": {
+    "houses": 52,
+    "zoneCounts": {
+      "forest": 11,
+      "memorial": 5,
+      "market": 17,
+      "lakeside": 10,
+      "central": 9
+    },
+    "oldIdsMissing": [],
+    "newIds": [],
+    "oldTableChangedRows": [
+      {
+        "id": "old-town:117:202",
+        "changes": [
+          "foundation",
+          "direction",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:101:184",
+        "changes": [
+          "foundation",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:105:152",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:364:207",
+        "changes": [
+          "foundation",
+          "direction",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:137:168",
+        "changes": [
+          "foundation",
+          "direction",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:158:184",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "theater plaza"
+      },
+      {
+        "id": "old-town:179:155",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "theater plaza"
+      },
+      {
+        "id": "old-town:173:135",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:156:141",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:137:70",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:186:104",
+        "changes": [
+          "foundation",
+          "direction",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:206:110",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:228:110",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:246:114",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:246:135",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "theater plaza"
+      },
+      {
+        "id": "old-town:220:138",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:197:132",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      },
+      {
+        "id": "old-town:349:184",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:351:144",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:358:163",
+        "changes": [
+          "foundation",
+          "centres"
+        ],
+        "relocation": "central rail corridor"
+      },
+      {
+        "id": "old-town:200:151",
+        "changes": [
+          "foundation",
+          "batch",
+          "centres"
+        ],
+        "relocation": "theater plaza"
+      },
+      {
+        "id": "old-town:262:180",
+        "changes": [
+          "foundation",
+          "direction",
+          "batch",
+          "centres"
+        ],
+        "relocation": "original lot under theater plaza bounds"
+      }
+    ],
+    "relocating": {
+      "central rail corridor": 9,
+      "theater plaza": 4,
+      "original lot under theater plaza bounds": 9
+    },
+    "batchesChanged": 11,
+    "directionsChanged": 13,
+    "addedLanternOnlyBatches": 0,
+    "singleLamp": [
+      "old-town:202:247",
+      "old-town:249:264"
+    ],
+    "lampBodies": 102,
+    "uniquelyAssignedBodies": 102,
+    "lightPanels": 102,
+    "uniquelyAssignedPanels": 102,
+    "detail": {
+      "gridCells": [
+        "Old town housing 0,1",
+        "Old town housing 0,2",
+        "Old town housing 1,0",
+        "Old town housing 1,1",
+        "Old town housing 1,2",
+        "Old town housing 1,3",
+        "Old town housing 2,0",
+        "Old town housing 2,1",
+        "Old town housing 2,2",
+        "Old town housing 3,1",
+        "Old town housing 3,2",
+        "Old town housing 4,0",
+        "Old town housing 4,1",
+        "Old town housing 4,2"
+      ],
+      "coloredInstancedMeshes": 28,
+      "geometryObjects": 1,
+      "materialObjects": 2,
+      "instances": 12043
+    },
+    "overview": {
+      "gridCells": [
+        "Old town housing overview"
+      ],
+      "coloredInstancedMeshes": 2,
+      "geometryObjects": 1,
+      "materialObjects": 2,
+      "instances": 12043
+    }
+  },
+  "tree": {
+    "frozenDesignEN": [
+      118,
+      88
+    ],
+    "referenceSource": "0ee7c738227f0ccd45ebe4dd5985cab78ee2d164",
+    "sceneGroupEN": [
+      201.4,
+      210.65
+    ],
+    "existingPlazaInteractionEN": [
+      201.5,
+      207
+    ],
+    "releasePlazaSceneAnchorEN": [
+      201.4,
+      210.65
+    ],
+    "releasePlazaTrunkOffsetXYZ": [
+      -2.25,
+      1.42,
+      -0.16
+    ],
+    "compiledViewerWishActivityMounts": 1,
+    "releaseWishSourceBlob": "f45121f44875900ecb745b89c7d05e991cf4aba0",
+    "historicWishSourceBlob": "f45121f44875900ecb745b89c7d05e991cf4aba0"
+  },
+  "rows": [
+    {
+      "id": "old-town:133:266",
+      "zone": "森林",
+      "foundation": [
+        133,
+        266
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            127.925,
+            267.405,
+            26.633
+          ],
+          "panel": [
+            127.785,
+            267.405,
+            26.633
+          ],
+          "solidInstance": 50,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            127.925,
+            264.595,
+            26.633
+          ],
+          "panel": [
+            127.785,
+            264.595,
+            26.633
+          ],
+          "solidInstance": 61,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 1,
+        "id": "old-town:133:266",
+        "zone": "森林",
+        "foundation": [
+          133,
+          266
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            127.925,
+            267.405,
+            26.633
+          ],
+          [
+            127.925,
+            264.595,
+            26.633
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:149:281",
+      "zone": "森林",
+      "foundation": [
+        149,
+        281
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            150.405,
+            286.7,
+            26.522
+          ],
+          "panel": [
+            150.405,
+            286.84,
+            26.522
+          ],
+          "solidInstance": 301,
+          "glowInstance": 20
+        },
+        {
+          "body": [
+            147.595,
+            286.7,
+            26.522
+          ],
+          "panel": [
+            147.595,
+            286.84,
+            26.522
+          ],
+          "solidInstance": 310,
+          "glowInstance": 22
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 2,
+        "id": "old-town:149:281",
+        "zone": "森林",
+        "foundation": [
+          149,
+          281
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            150.405,
+            286.7,
+            26.522
+          ],
+          [
+            147.595,
+            286.7,
+            26.522
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:172:282",
+      "zone": "森林",
+      "foundation": [
+        172,
+        282
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            173.405,
+            288.325,
+            22.702
+          ],
+          "panel": [
+            173.405,
+            288.465,
+            22.702
+          ],
+          "solidInstance": 556,
+          "glowInstance": 32
+        },
+        {
+          "body": [
+            170.595,
+            288.325,
+            22.702
+          ],
+          "panel": [
+            170.595,
+            288.465,
+            22.702
+          ],
+          "solidInstance": 566,
+          "glowInstance": 34
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 3,
+        "id": "old-town:172:282",
+        "zone": "森林",
+        "foundation": [
+          172,
+          282
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            173.405,
+            288.325,
+            22.702
+          ],
+          [
+            170.595,
+            288.325,
+            22.702
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:191:282",
+      "zone": "森林",
+      "foundation": [
+        191,
+        282
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            192.405,
+            286.45,
+            19.62
+          ],
+          "panel": [
+            192.405,
+            286.59,
+            19.62
+          ],
+          "solidInstance": 893,
+          "glowInstance": 45
+        },
+        {
+          "body": [
+            189.595,
+            286.45,
+            19.62
+          ],
+          "panel": [
+            189.595,
+            286.59,
+            19.62
+          ],
+          "solidInstance": 904,
+          "glowInstance": 47
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 4,
+        "id": "old-town:191:282",
+        "zone": "森林",
+        "foundation": [
+          191,
+          282
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            192.405,
+            286.45,
+            19.62
+          ],
+          [
+            189.595,
+            286.45,
+            19.62
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:216:280",
+      "zone": "森林",
+      "foundation": [
+        216,
+        280
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            217.405,
+            285.075,
+            17.455
+          ],
+          "panel": [
+            217.405,
+            285.215,
+            17.455
+          ],
+          "solidInstance": 40,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            214.595,
+            285.075,
+            17.455
+          ],
+          "panel": [
+            214.595,
+            285.215,
+            17.455
+          ],
+          "solidInstance": 49,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 5,
+        "id": "old-town:216:280",
+        "zone": "森林",
+        "foundation": [
+          216,
+          280
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            217.405,
+            285.075,
+            17.455
+          ],
+          [
+            214.595,
+            285.075,
+            17.455
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:117:202",
+      "zone": "森林",
+      "foundation": [
+        117,
+        202
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            112.55,
+            203.405,
+            21.088
+          ],
+          "panel": [
+            112.41,
+            203.405,
+            21.088
+          ],
+          "solidInstance": 1167,
+          "glowInstance": 58
+        },
+        {
+          "body": [
+            112.55,
+            200.595,
+            21.088
+          ],
+          "panel": [
+            112.41,
+            200.595,
+            21.088
+          ],
+          "solidInstance": 1177,
+          "glowInstance": 60
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 6,
+        "id": "old-town:117:202",
+        "zone": "森林",
+        "foundation": [
+          115.5,
+          220
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            116.905,
+            224.45,
+            24.393
+          ],
+          [
+            114.095,
+            224.45,
+            24.393
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:101:184",
+      "zone": "森林",
+      "foundation": [
+        101,
+        184
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            95.925,
+            185.405,
+            20.422
+          ],
+          "panel": [
+            95.785,
+            185.405,
+            20.422
+          ],
+          "solidInstance": 50,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            95.925,
+            182.595,
+            20.422
+          ],
+          "panel": [
+            95.785,
+            182.595,
+            20.422
+          ],
+          "solidInstance": 61,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 7,
+        "id": "old-town:101:184",
+        "zone": "森林",
+        "foundation": [
+          89.5,
+          166.5
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            84.425,
+            167.905,
+            17.875
+          ],
+          [
+            84.425,
+            165.095,
+            17.875
+          ]
+        ],
+        "batch": "Old town housing 0,1"
+      }
+    },
+    {
+      "id": "old-town:105:152",
+      "zone": "森林",
+      "foundation": [
+        105,
+        152
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            99.3,
+            153.405,
+            17.052
+          ],
+          "panel": [
+            99.16,
+            153.405,
+            17.052
+          ],
+          "solidInstance": 323,
+          "glowInstance": 20
+        },
+        {
+          "body": [
+            99.3,
+            150.595,
+            17.052
+          ],
+          "panel": [
+            99.16,
+            150.595,
+            17.052
+          ],
+          "solidInstance": 332,
+          "glowInstance": 22
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 8,
+        "id": "old-town:105:152",
+        "zone": "森林",
+        "foundation": [
+          68.25,
+          183.5
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            73.95,
+            182.095,
+            20.494
+          ],
+          [
+            73.95,
+            184.905,
+            20.494
+          ]
+        ],
+        "batch": "Old town housing 0,1"
+      }
+    },
+    {
+      "id": "old-town:70:229",
+      "zone": "森林",
+      "foundation": [
+        70,
+        229
+      ],
+      "direction": "东",
+      "batch": "Old town housing 0,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            74.45,
+            227.595,
+            23.963
+          ],
+          "panel": [
+            74.59,
+            227.595,
+            23.963
+          ],
+          "solidInstance": 45,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            74.45,
+            230.405,
+            23.963
+          ],
+          "panel": [
+            74.59,
+            230.405,
+            23.963
+          ],
+          "solidInstance": 55,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 9,
+        "id": "old-town:70:229",
+        "zone": "森林",
+        "foundation": [
+          70,
+          229
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            74.45,
+            227.595,
+            23.963
+          ],
+          [
+            74.45,
+            230.405,
+            23.963
+          ]
+        ],
+        "batch": "Old town housing 0,2"
+      }
+    },
+    {
+      "id": "old-town:172:323",
+      "zone": "森林",
+      "foundation": [
+        172,
+        323
+      ],
+      "direction": "南",
+      "batch": "Old town housing 1,3",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            170.595,
+            317.925,
+            25.499
+          ],
+          "panel": [
+            170.595,
+            317.785,
+            25.499
+          ],
+          "solidInstance": 50,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            173.405,
+            317.925,
+            25.499
+          ],
+          "panel": [
+            173.405,
+            317.785,
+            25.499
+          ],
+          "solidInstance": 61,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 10,
+        "id": "old-town:172:323",
+        "zone": "森林",
+        "foundation": [
+          172,
+          323
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            170.595,
+            317.925,
+            25.499
+          ],
+          [
+            173.405,
+            317.925,
+            25.499
+          ]
+        ],
+        "batch": "Old town housing 1,3"
+      }
+    },
+    {
+      "id": "old-town:191:325",
+      "zone": "森林",
+      "foundation": [
+        191,
+        325
+      ],
+      "direction": "南",
+      "batch": "Old town housing 1,3",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            189.595,
+            319.3,
+            21.125
+          ],
+          "panel": [
+            189.595,
+            319.16,
+            21.125
+          ],
+          "solidInstance": 323,
+          "glowInstance": 20
+        },
+        {
+          "body": [
+            192.405,
+            319.3,
+            21.125
+          ],
+          "panel": [
+            192.405,
+            319.16,
+            21.125
+          ],
+          "solidInstance": 332,
+          "glowInstance": 22
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 11,
+        "id": "old-town:191:325",
+        "zone": "森林",
+        "foundation": [
+          191,
+          325
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            189.595,
+            319.3,
+            21.125
+          ],
+          [
+            192.405,
+            319.3,
+            21.125
+          ]
+        ],
+        "batch": "Old town housing 1,3"
+      }
+    },
+    {
+      "id": "old-town:364:207",
+      "zone": "纪念馆",
+      "foundation": [
+        368,
+        207
+      ],
+      "direction": "东",
+      "batch": "Old town housing 3,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            372.45,
+            205.595,
+            20.461
+          ],
+          "panel": [
+            372.59,
+            205.595,
+            20.461
+          ],
+          "solidInstance": 30,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            372.45,
+            208.405,
+            20.461
+          ],
+          "panel": [
+            372.59,
+            208.405,
+            20.461
+          ],
+          "solidInstance": 37,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "direction",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 12,
+        "id": "old-town:364:207",
+        "zone": "纪念馆",
+        "foundation": [
+          364,
+          207
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            365.405,
+            211.45,
+            19.735
+          ],
+          [
+            362.595,
+            211.45,
+            19.735
+          ]
+        ],
+        "batch": "Old town housing 3,2"
+      }
+    },
+    {
+      "id": "old-town:391:234",
+      "zone": "纪念馆",
+      "foundation": [
+        391,
+        234
+      ],
+      "direction": "南",
+      "batch": "Old town housing 4,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            389.595,
+            228.3,
+            26.484
+          ],
+          "panel": [
+            389.595,
+            228.161,
+            26.484
+          ],
+          "solidInstance": 40,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            392.405,
+            228.3,
+            26.484
+          ],
+          "panel": [
+            392.405,
+            228.161,
+            26.484
+          ],
+          "solidInstance": 49,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 13,
+        "id": "old-town:391:234",
+        "zone": "纪念馆",
+        "foundation": [
+          391,
+          234
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            389.595,
+            228.3,
+            26.484
+          ],
+          [
+            392.405,
+            228.3,
+            26.484
+          ]
+        ],
+        "batch": "Old town housing 4,2"
+      }
+    },
+    {
+      "id": "old-town:410:219",
+      "zone": "纪念馆",
+      "foundation": [
+        410,
+        219
+      ],
+      "direction": "西",
+      "batch": "Old town housing 4,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            403.675,
+            220.405,
+            22.652
+          ],
+          "panel": [
+            403.535,
+            220.405,
+            22.652
+          ],
+          "solidInstance": 152,
+          "glowInstance": 23
+        },
+        {
+          "body": [
+            403.675,
+            217.595,
+            22.652
+          ],
+          "panel": [
+            403.535,
+            217.595,
+            22.652
+          ],
+          "solidInstance": 162,
+          "glowInstance": 25
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 14,
+        "id": "old-town:410:219",
+        "zone": "纪念馆",
+        "foundation": [
+          410,
+          219
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            403.675,
+            220.405,
+            22.652
+          ],
+          [
+            403.675,
+            217.595,
+            22.652
+          ]
+        ],
+        "batch": "Old town housing 4,2"
+      }
+    },
+    {
+      "id": "old-town:414:190",
+      "zone": "纪念馆",
+      "foundation": [
+        414,
+        190
+      ],
+      "direction": "西",
+      "batch": "Old town housing 4,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            409.55,
+            191.405,
+            17.327
+          ],
+          "panel": [
+            409.41,
+            191.405,
+            17.327
+          ],
+          "solidInstance": 30,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            409.55,
+            188.595,
+            17.327
+          ],
+          "panel": [
+            409.41,
+            188.595,
+            17.327
+          ],
+          "solidInstance": 37,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 15,
+        "id": "old-town:414:190",
+        "zone": "纪念馆",
+        "foundation": [
+          414,
+          190
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            409.55,
+            191.405,
+            17.327
+          ],
+          [
+            409.55,
+            188.595,
+            17.327
+          ]
+        ],
+        "batch": "Old town housing 4,1"
+      }
+    },
+    {
+      "id": "old-town:406:165",
+      "zone": "纪念馆",
+      "foundation": [
+        406,
+        165
+      ],
+      "direction": "西",
+      "batch": "Old town housing 4,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            400.925,
+            166.405,
+            13.528
+          ],
+          "panel": [
+            400.785,
+            166.405,
+            13.528
+          ],
+          "solidInstance": 117,
+          "glowInstance": 22
+        },
+        {
+          "body": [
+            400.925,
+            163.595,
+            13.528
+          ],
+          "panel": [
+            400.785,
+            163.595,
+            13.528
+          ],
+          "solidInstance": 126,
+          "glowInstance": 24
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 16,
+        "id": "old-town:406:165",
+        "zone": "纪念馆",
+        "foundation": [
+          406,
+          165
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            400.925,
+            166.405,
+            13.528
+          ],
+          [
+            400.925,
+            163.595,
+            13.528
+          ]
+        ],
+        "batch": "Old town housing 4,1"
+      }
+    },
+    {
+      "id": "old-town:137:168",
+      "zone": "集市",
+      "foundation": [
+        137,
+        168
+      ],
+      "direction": "东",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            141.45,
+            166.595,
+            18.049
+          ],
+          "panel": [
+            141.589,
+            166.595,
+            18.049
+          ],
+          "solidInstance": 593,
+          "glowInstance": 32
+        },
+        {
+          "body": [
+            141.45,
+            169.405,
+            18.049
+          ],
+          "panel": [
+            141.589,
+            169.405,
+            18.049
+          ],
+          "solidInstance": 604,
+          "glowInstance": 34
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 17,
+        "id": "old-town:137:168",
+        "zone": "集市",
+        "foundation": [
+          180.25,
+          120
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            175.8,
+            121.405,
+            13.201
+          ],
+          [
+            175.8,
+            118.595,
+            13.201
+          ]
+        ],
+        "batch": "Old town housing 1,1"
+      }
+    },
+    {
+      "id": "old-town:158:184",
+      "zone": "集市",
+      "foundation": [
+        160,
+        130
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            161.405,
+            135.075,
+            14.746
+          ],
+          "panel": [
+            161.405,
+            135.214,
+            14.746
+          ],
+          "solidInstance": 775,
+          "glowInstance": 47
+        },
+        {
+          "body": [
+            158.595,
+            135.075,
+            14.746
+          ],
+          "panel": [
+            158.595,
+            135.214,
+            14.746
+          ],
+          "solidInstance": 784,
+          "glowInstance": 49
+        }
+      ],
+      "relocation": "theater plaza",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 18,
+        "id": "old-town:158:184",
+        "zone": "集市",
+        "foundation": [
+          192.75,
+          118.5
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            191.345,
+            113.425,
+            12.619
+          ],
+          [
+            194.155,
+            113.425,
+            12.619
+          ]
+        ],
+        "batch": "Old town housing 2,1"
+      }
+    },
+    {
+      "id": "old-town:179:155",
+      "zone": "集市",
+      "foundation": [
+        146.5,
+        129.5
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            147.905,
+            135.2,
+            14.615
+          ],
+          "panel": [
+            147.905,
+            135.339,
+            14.615
+          ],
+          "solidInstance": 942,
+          "glowInstance": 62
+        },
+        {
+          "body": [
+            145.095,
+            135.2,
+            14.615
+          ],
+          "panel": [
+            145.095,
+            135.339,
+            14.615
+          ],
+          "solidInstance": 952,
+          "glowInstance": 64
+        }
+      ],
+      "relocation": "theater plaza",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 19,
+        "id": "old-town:179:155",
+        "zone": "集市",
+        "foundation": [
+          203.5,
+          95.75
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            202.095,
+            90.05,
+            12.969
+          ],
+          [
+            204.905,
+            90.05,
+            12.969
+          ]
+        ],
+        "batch": "Old town housing 2,0"
+      }
+    },
+    {
+      "id": "old-town:173:135",
+      "zone": "集市",
+      "foundation": [
+        173,
+        135
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            166.675,
+            136.405,
+            14.765
+          ],
+          "panel": [
+            166.536,
+            136.405,
+            14.765
+          ],
+          "solidInstance": 1157,
+          "glowInstance": 77
+        },
+        {
+          "body": [
+            166.675,
+            133.595,
+            14.765
+          ],
+          "panel": [
+            166.536,
+            133.595,
+            14.765
+          ],
+          "solidInstance": 1168,
+          "glowInstance": 79
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 20,
+        "id": "old-town:173:135",
+        "zone": "集市",
+        "foundation": [
+          182,
+          91
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            180.595,
+            84.675,
+            11.968
+          ],
+          [
+            183.405,
+            84.675,
+            11.968
+          ]
+        ],
+        "batch": "Old town housing 1,0"
+      }
+    },
+    {
+      "id": "old-town:156:141",
+      "zone": "集市",
+      "foundation": [
+        156,
+        141
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            157.405,
+            145.45,
+            14.931
+          ],
+          "panel": [
+            157.405,
+            145.589,
+            14.931
+          ],
+          "solidInstance": 1339,
+          "glowInstance": 92
+        },
+        {
+          "body": [
+            154.595,
+            145.45,
+            14.931
+          ],
+          "panel": [
+            154.595,
+            145.589,
+            14.931
+          ],
+          "solidInstance": 1348,
+          "glowInstance": 94
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 21,
+        "id": "old-town:156:141",
+        "zone": "集市",
+        "foundation": [
+          107,
+          93
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            111.45,
+            91.595,
+            12.561
+          ],
+          [
+            111.45,
+            94.405,
+            12.561
+          ]
+        ],
+        "batch": "Old town housing 1,0"
+      }
+    },
+    {
+      "id": "old-town:94:100",
+      "zone": "集市",
+      "foundation": [
+        94,
+        100
+      ],
+      "direction": "北",
+      "batch": "Old town housing 0,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            95.405,
+            104.45,
+            12.28
+          ],
+          "panel": [
+            95.405,
+            104.59,
+            12.28
+          ],
+          "solidInstance": 45,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            92.595,
+            104.45,
+            12.28
+          ],
+          "panel": [
+            92.595,
+            104.59,
+            12.28
+          ],
+          "solidInstance": 55,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 22,
+        "id": "old-town:94:100",
+        "zone": "集市",
+        "foundation": [
+          94,
+          100
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            95.405,
+            104.45,
+            12.28
+          ],
+          [
+            92.595,
+            104.45,
+            12.28
+          ]
+        ],
+        "batch": "Old town housing 0,1"
+      }
+    },
+    {
+      "id": "old-town:137:70",
+      "zone": "集市",
+      "foundation": [
+        136,
+        71
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,0",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            137.405,
+            76.7,
+            11.566
+          ],
+          "panel": [
+            137.405,
+            76.84,
+            11.566
+          ],
+          "solidInstance": 50,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            134.595,
+            76.7,
+            11.566
+          ],
+          "panel": [
+            134.595,
+            76.84,
+            11.566
+          ],
+          "solidInstance": 61,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 23,
+        "id": "old-town:137:70",
+        "zone": "集市",
+        "foundation": [
+          137,
+          70
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            138.405,
+            75.7,
+            11.509
+          ],
+          [
+            135.595,
+            75.7,
+            11.509
+          ]
+        ],
+        "batch": "Old town housing 1,0"
+      }
+    },
+    {
+      "id": "old-town:188:65",
+      "zone": "集市",
+      "foundation": [
+        188,
+        65
+      ],
+      "direction": "北",
+      "batch": "Old town housing 1,0",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            189.405,
+            69.45,
+            12.269
+          ],
+          "panel": [
+            189.405,
+            69.59,
+            12.269
+          ],
+          "solidInstance": 230,
+          "glowInstance": 22
+        },
+        {
+          "body": [
+            186.595,
+            69.45,
+            12.269
+          ],
+          "panel": [
+            186.595,
+            69.59,
+            12.269
+          ],
+          "solidInstance": 239,
+          "glowInstance": 24
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 24,
+        "id": "old-town:188:65",
+        "zone": "集市",
+        "foundation": [
+          188,
+          65
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            189.405,
+            69.45,
+            12.269
+          ],
+          [
+            186.595,
+            69.45,
+            12.269
+          ]
+        ],
+        "batch": "Old town housing 1,0"
+      }
+    },
+    {
+      "id": "old-town:217:66",
+      "zone": "集市",
+      "foundation": [
+        217,
+        66
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,0",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            218.405,
+            71.7,
+            10.855
+          ],
+          "panel": [
+            218.405,
+            71.84,
+            10.855
+          ],
+          "solidInstance": 45,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            215.595,
+            71.7,
+            10.855
+          ],
+          "panel": [
+            215.595,
+            71.84,
+            10.855
+          ],
+          "solidInstance": 55,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 25,
+        "id": "old-town:217:66",
+        "zone": "集市",
+        "foundation": [
+          217,
+          66
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            218.405,
+            71.7,
+            10.855
+          ],
+          [
+            215.595,
+            71.7,
+            10.855
+          ]
+        ],
+        "batch": "Old town housing 2,0"
+      }
+    },
+    {
+      "id": "old-town:234:74",
+      "zone": "集市",
+      "foundation": [
+        234,
+        74
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,0",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            235.405,
+            80.325,
+            12.219
+          ],
+          "panel": [
+            235.405,
+            80.465,
+            12.219
+          ],
+          "solidInstance": 264,
+          "glowInstance": 22
+        },
+        {
+          "body": [
+            232.595,
+            80.325,
+            12.219
+          ],
+          "panel": [
+            232.595,
+            80.465,
+            12.219
+          ],
+          "solidInstance": 275,
+          "glowInstance": 24
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 26,
+        "id": "old-town:234:74",
+        "zone": "集市",
+        "foundation": [
+          234,
+          74
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            235.405,
+            80.325,
+            12.219
+          ],
+          [
+            232.595,
+            80.325,
+            12.219
+          ]
+        ],
+        "batch": "Old town housing 2,0"
+      }
+    },
+    {
+      "id": "old-town:186:104",
+      "zone": "集市",
+      "foundation": [
+        181,
+        112
+      ],
+      "direction": "西",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            175.925,
+            113.405,
+            12.686
+          ],
+          "panel": [
+            175.786,
+            113.405,
+            12.686
+          ],
+          "solidInstance": 1503,
+          "glowInstance": 107
+        },
+        {
+          "body": [
+            175.925,
+            110.595,
+            12.686
+          ],
+          "panel": [
+            175.786,
+            110.595,
+            12.686
+          ],
+          "solidInstance": 1512,
+          "glowInstance": 109
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "direction",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 27,
+        "id": "old-town:186:104",
+        "zone": "集市",
+        "foundation": [
+          186,
+          104
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            184.595,
+            98.925,
+            12.603
+          ],
+          [
+            187.405,
+            98.925,
+            12.603
+          ]
+        ],
+        "batch": "Old town housing 1,1"
+      }
+    },
+    {
+      "id": "old-town:206:110",
+      "zone": "集市",
+      "foundation": [
+        210.5,
+        101.5
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            209.095,
+            95.8,
+            12.974
+          ],
+          "panel": [
+            209.095,
+            95.66,
+            12.974
+          ],
+          "solidInstance": 45,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            211.905,
+            95.8,
+            12.974
+          ],
+          "panel": [
+            211.905,
+            95.66,
+            12.974
+          ],
+          "solidInstance": 55,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 28,
+        "id": "old-town:206:110",
+        "zone": "集市",
+        "foundation": [
+          206,
+          110
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            204.595,
+            104.3,
+            13.008
+          ],
+          [
+            207.405,
+            104.3,
+            13.008
+          ]
+        ],
+        "batch": "Old town housing 2,1"
+      }
+    },
+    {
+      "id": "old-town:228:110",
+      "zone": "集市",
+      "foundation": [
+        229.5,
+        105.5
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            228.095,
+            99.175,
+            11.934
+          ],
+          "panel": [
+            228.095,
+            99.035,
+            11.934
+          ],
+          "solidInstance": 264,
+          "glowInstance": 22
+        },
+        {
+          "body": [
+            230.905,
+            99.175,
+            11.934
+          ],
+          "panel": [
+            230.905,
+            99.035,
+            11.934
+          ],
+          "solidInstance": 275,
+          "glowInstance": 24
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 29,
+        "id": "old-town:228:110",
+        "zone": "集市",
+        "foundation": [
+          228,
+          110
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            226.595,
+            103.675,
+            12.099
+          ],
+          [
+            229.405,
+            103.675,
+            12.099
+          ]
+        ],
+        "batch": "Old town housing 2,1"
+      }
+    },
+    {
+      "id": "old-town:246:114",
+      "zone": "集市",
+      "foundation": [
+        246.5,
+        111.5
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            245.095,
+            107.05,
+            11.326
+          ],
+          "panel": [
+            245.095,
+            106.91,
+            11.326
+          ],
+          "solidInstance": 446,
+          "glowInstance": 37
+        },
+        {
+          "body": [
+            247.905,
+            107.05,
+            11.326
+          ],
+          "panel": [
+            247.905,
+            106.91,
+            11.326
+          ],
+          "solidInstance": 455,
+          "glowInstance": 39
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 30,
+        "id": "old-town:246:114",
+        "zone": "集市",
+        "foundation": [
+          246,
+          114
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            244.595,
+            109.55,
+            11.608
+          ],
+          [
+            247.405,
+            109.55,
+            11.608
+          ]
+        ],
+        "batch": "Old town housing 2,1"
+      }
+    },
+    {
+      "id": "old-town:246:135",
+      "zone": "集市",
+      "foundation": [
+        146,
+        199
+      ],
+      "direction": "东",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            151.075,
+            197.595,
+            20.701
+          ],
+          "panel": [
+            151.214,
+            197.595,
+            20.701
+          ],
+          "solidInstance": 1499,
+          "glowInstance": 71
+        },
+        {
+          "body": [
+            151.075,
+            200.405,
+            20.701
+          ],
+          "panel": [
+            151.214,
+            200.405,
+            20.701
+          ],
+          "solidInstance": 1509,
+          "glowInstance": 73
+        }
+      ],
+      "relocation": "theater plaza",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 31,
+        "id": "old-town:246:135",
+        "zone": "集市",
+        "foundation": [
+          261,
+          120
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            259.595,
+            114.925,
+            12.088
+          ],
+          [
+            262.405,
+            114.925,
+            12.088
+          ]
+        ],
+        "batch": "Old town housing 2,1"
+      }
+    },
+    {
+      "id": "old-town:220:138",
+      "zone": "集市",
+      "foundation": [
+        220,
+        138
+      ],
+      "direction": "东",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            225.7,
+            136.595,
+            13.809
+          ],
+          "panel": [
+            225.839,
+            136.595,
+            13.809
+          ],
+          "solidInstance": 618,
+          "glowInstance": 52
+        },
+        {
+          "body": [
+            225.7,
+            139.405,
+            13.809
+          ],
+          "panel": [
+            225.839,
+            139.405,
+            13.809
+          ],
+          "solidInstance": 629,
+          "glowInstance": 54
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 32,
+        "id": "old-town:220:138",
+        "zone": "集市",
+        "foundation": [
+          250.5,
+          79.5
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            251.905,
+            85.2,
+            12.452
+          ],
+          [
+            249.095,
+            85.2,
+            12.452
+          ]
+        ],
+        "batch": "Old town housing 2,0"
+      }
+    },
+    {
+      "id": "old-town:197:132",
+      "zone": "集市",
+      "foundation": [
+        197,
+        132
+      ],
+      "direction": "东",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            203.325,
+            130.595,
+            12.32
+          ],
+          "panel": [
+            203.464,
+            130.595,
+            12.32
+          ],
+          "solidInstance": 796,
+          "glowInstance": 67
+        },
+        {
+          "body": [
+            203.325,
+            133.405,
+            12.32
+          ],
+          "panel": [
+            203.464,
+            133.405,
+            12.32
+          ],
+          "solidInstance": 805,
+          "glowInstance": 69
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 33,
+        "id": "old-town:197:132",
+        "zone": "集市",
+        "foundation": [
+          173,
+          63
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            174.405,
+            69.325,
+            12.605
+          ],
+          [
+            171.595,
+            69.325,
+            12.605
+          ]
+        ],
+        "batch": "Old town housing 1,0"
+      }
+    },
+    {
+      "id": "old-town:331:172",
+      "zone": "湖畔",
+      "foundation": [
+        331,
+        172
+      ],
+      "direction": "北",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            332.405,
+            176.45,
+            13.638
+          ],
+          "panel": [
+            332.405,
+            176.589,
+            13.638
+          ],
+          "solidInstance": 30,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            329.595,
+            176.45,
+            13.638
+          ],
+          "panel": [
+            329.595,
+            176.589,
+            13.638
+          ],
+          "solidInstance": 37,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 34,
+        "id": "old-town:331:172",
+        "zone": "湖畔",
+        "foundation": [
+          331,
+          172
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            332.405,
+            176.45,
+            13.638
+          ],
+          [
+            329.595,
+            176.45,
+            13.638
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:349:184",
+      "zone": "湖畔",
+      "foundation": [
+        347.5,
+        184
+      ],
+      "direction": "西",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            342.425,
+            185.405,
+            15.311
+          ],
+          "panel": [
+            342.285,
+            185.405,
+            15.311
+          ],
+          "solidInstance": 204,
+          "glowInstance": 19
+        },
+        {
+          "body": [
+            342.425,
+            182.595,
+            15.311
+          ],
+          "panel": [
+            342.285,
+            182.595,
+            15.311
+          ],
+          "solidInstance": 214,
+          "glowInstance": 21
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 35,
+        "id": "old-town:349:184",
+        "zone": "湖畔",
+        "foundation": [
+          349,
+          184
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            343.925,
+            185.405,
+            15.351
+          ],
+          [
+            343.925,
+            182.595,
+            15.351
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:375:177",
+      "zone": "湖畔",
+      "foundation": [
+        375,
+        177
+      ],
+      "direction": "东",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            380.7,
+            175.595,
+            15.385
+          ],
+          "panel": [
+            380.84,
+            175.595,
+            15.385
+          ],
+          "solidInstance": 394,
+          "glowInstance": 32
+        },
+        {
+          "body": [
+            380.7,
+            178.405,
+            15.385
+          ],
+          "panel": [
+            380.84,
+            178.405,
+            15.385
+          ],
+          "solidInstance": 403,
+          "glowInstance": 34
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 36,
+        "id": "old-town:375:177",
+        "zone": "湖畔",
+        "foundation": [
+          375,
+          177
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            380.7,
+            175.595,
+            15.385
+          ],
+          [
+            380.7,
+            178.405,
+            15.385
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:351:144",
+      "zone": "湖畔",
+      "foundation": [
+        361,
+        143
+      ],
+      "direction": "东",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            365.45,
+            141.595,
+            12.117
+          ],
+          "panel": [
+            365.59,
+            141.595,
+            12.117
+          ],
+          "solidInstance": 620,
+          "glowInstance": 45
+        },
+        {
+          "body": [
+            365.45,
+            144.405,
+            12.117
+          ],
+          "panel": [
+            365.59,
+            144.405,
+            12.117
+          ],
+          "solidInstance": 627,
+          "glowInstance": 47
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 37,
+        "id": "old-town:351:144",
+        "zone": "湖畔",
+        "foundation": [
+          351,
+          144
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            355.45,
+            142.595,
+            12.242
+          ],
+          [
+            355.45,
+            145.405,
+            12.242
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:337:130",
+      "zone": "湖畔",
+      "foundation": [
+        337,
+        130
+      ],
+      "direction": "西",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            331.925,
+            131.405,
+            12.743
+          ],
+          "panel": [
+            331.785,
+            131.405,
+            12.743
+          ],
+          "solidInstance": 812,
+          "glowInstance": 57
+        },
+        {
+          "body": [
+            331.925,
+            128.595,
+            12.743
+          ],
+          "panel": [
+            331.785,
+            128.595,
+            12.743
+          ],
+          "solidInstance": 822,
+          "glowInstance": 59
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 38,
+        "id": "old-town:337:130",
+        "zone": "湖畔",
+        "foundation": [
+          337,
+          130
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            331.925,
+            131.405,
+            12.743
+          ],
+          [
+            331.925,
+            128.595,
+            12.743
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:410:119",
+      "zone": "湖畔",
+      "foundation": [
+        410,
+        119
+      ],
+      "direction": "西",
+      "batch": "Old town housing 4,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            404.925,
+            120.405,
+            12.377
+          ],
+          "panel": [
+            404.785,
+            120.405,
+            12.377
+          ],
+          "solidInstance": 224,
+          "glowInstance": 38
+        },
+        {
+          "body": [
+            404.925,
+            117.595,
+            12.377
+          ],
+          "panel": [
+            404.785,
+            117.595,
+            12.377
+          ],
+          "solidInstance": 233,
+          "glowInstance": 40
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 39,
+        "id": "old-town:410:119",
+        "zone": "湖畔",
+        "foundation": [
+          410,
+          119
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            404.925,
+            120.405,
+            12.377
+          ],
+          [
+            404.925,
+            117.595,
+            12.377
+          ]
+        ],
+        "batch": "Old town housing 4,1"
+      }
+    },
+    {
+      "id": "old-town:422:101",
+      "zone": "湖畔",
+      "foundation": [
+        422,
+        101
+      ],
+      "direction": "西",
+      "batch": "Old town housing 4,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            416.3,
+            102.405,
+            11.674
+          ],
+          "panel": [
+            416.16,
+            102.405,
+            11.674
+          ],
+          "solidInstance": 456,
+          "glowInstance": 51
+        },
+        {
+          "body": [
+            416.3,
+            99.595,
+            11.674
+          ],
+          "panel": [
+            416.16,
+            99.595,
+            11.674
+          ],
+          "solidInstance": 463,
+          "glowInstance": 53
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 40,
+        "id": "old-town:422:101",
+        "zone": "湖畔",
+        "foundation": [
+          422,
+          101
+        ],
+        "direction": "西",
+        "count": 2,
+        "centers": [
+          [
+            416.3,
+            102.405,
+            11.674
+          ],
+          [
+            416.3,
+            99.595,
+            11.674
+          ]
+        ],
+        "batch": "Old town housing 4,1"
+      }
+    },
+    {
+      "id": "old-town:405:51",
+      "zone": "湖畔",
+      "foundation": [
+        405,
+        51
+      ],
+      "direction": "北",
+      "batch": "Old town housing 4,0",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            406.405,
+            55.45,
+            11.759
+          ],
+          "panel": [
+            406.405,
+            55.59,
+            11.759
+          ],
+          "solidInstance": 45,
+          "glowInstance": 7
+        },
+        {
+          "body": [
+            403.595,
+            55.45,
+            11.759
+          ],
+          "panel": [
+            403.595,
+            55.59,
+            11.759
+          ],
+          "solidInstance": 55,
+          "glowInstance": 9
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 41,
+        "id": "old-town:405:51",
+        "zone": "湖畔",
+        "foundation": [
+          405,
+          51
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            406.405,
+            55.45,
+            11.759
+          ],
+          [
+            403.595,
+            55.45,
+            11.759
+          ]
+        ],
+        "batch": "Old town housing 4,0"
+      }
+    },
+    {
+      "id": "old-town:329:155",
+      "zone": "湖畔",
+      "foundation": [
+        329,
+        155
+      ],
+      "direction": "南",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            327.595,
+            149.925,
+            12.518
+          ],
+          "panel": [
+            327.595,
+            149.786,
+            12.518
+          ],
+          "solidInstance": 1014,
+          "glowInstance": 70
+        },
+        {
+          "body": [
+            330.405,
+            149.925,
+            12.518
+          ],
+          "panel": [
+            330.405,
+            149.786,
+            12.518
+          ],
+          "solidInstance": 1023,
+          "glowInstance": 72
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 42,
+        "id": "old-town:329:155",
+        "zone": "湖畔",
+        "foundation": [
+          329,
+          155
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            327.595,
+            149.925,
+            12.518
+          ],
+          [
+            330.405,
+            149.925,
+            12.518
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:358:163",
+      "zone": "湖畔",
+      "foundation": [
+        365,
+        160.5
+      ],
+      "direction": "东",
+      "batch": "Old town housing 3,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            370.7,
+            159.095,
+            14.437
+          ],
+          "panel": [
+            370.84,
+            159.095,
+            14.437
+          ],
+          "solidInstance": 1252,
+          "glowInstance": 83
+        },
+        {
+          "body": [
+            370.7,
+            161.905,
+            14.437
+          ],
+          "panel": [
+            370.84,
+            161.905,
+            14.437
+          ],
+          "solidInstance": 1259,
+          "glowInstance": 85
+        }
+      ],
+      "relocation": "central rail corridor",
+      "changed": [
+        "foundation",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 43,
+        "id": "old-town:358:163",
+        "zone": "湖畔",
+        "foundation": [
+          358,
+          163
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            363.7,
+            161.595,
+            14.702
+          ],
+          [
+            363.7,
+            164.405,
+            14.702
+          ]
+        ],
+        "batch": "Old town housing 3,1"
+      }
+    },
+    {
+      "id": "old-town:200:151",
+      "zone": "中央",
+      "foundation": [
+        147,
+        182.5
+      ],
+      "direction": "东",
+      "batch": "Old town housing 1,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            152.385,
+            176.76,
+            18.803
+          ],
+          "panel": [
+            152.529,
+            176.76,
+            18.803
+          ],
+          "solidInstance": 1984,
+          "glowInstance": 133
+        },
+        {
+          "body": [
+            152.385,
+            188.24,
+            18.803
+          ],
+          "panel": [
+            152.529,
+            188.24,
+            18.803
+          ],
+          "solidInstance": 1990,
+          "glowInstance": 134
+        }
+      ],
+      "relocation": "theater plaza",
+      "changed": [
+        "foundation",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 44,
+        "id": "old-town:200:151",
+        "zone": "中央",
+        "foundation": [
+          198.5,
+          223
+        ],
+        "direction": "东",
+        "count": 2,
+        "centers": [
+          [
+            203.885,
+            217.26,
+            18.288
+          ],
+          [
+            203.885,
+            228.74,
+            18.288
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:262:180",
+      "zone": "中央",
+      "foundation": [
+        262,
+        180
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,1",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            263.982,
+            183.798,
+            14.797
+          ],
+          "panel": [
+            263.982,
+            183.992,
+            14.797
+          ],
+          "solidInstance": 1083,
+          "glowInstance": 80
+        },
+        {
+          "body": [
+            260.018,
+            183.798,
+            14.797
+          ],
+          "panel": [
+            260.018,
+            183.992,
+            14.797
+          ],
+          "solidInstance": 1157,
+          "glowInstance": 84
+        }
+      ],
+      "relocation": "original lot under theater plaza bounds",
+      "changed": [
+        "foundation",
+        "direction",
+        "batch",
+        "centres"
+      ],
+      "old": {
+        "ordinal": 45,
+        "id": "old-town:262:180",
+        "zone": "中央",
+        "foundation": [
+          269.5,
+          241.5
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            267.518,
+            237.702,
+            17.296
+          ],
+          [
+            271.482,
+            237.702,
+            17.296
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:264:228",
+      "zone": "中央",
+      "foundation": [
+        264,
+        228
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            259.441,
+            223.24,
+            16.381
+          ],
+          "panel": [
+            259.441,
+            223.096,
+            16.381
+          ],
+          "solidInstance": 538,
+          "glowInstance": 33
+        },
+        {
+          "body": [
+            268.559,
+            223.24,
+            16.381
+          ],
+          "panel": [
+            268.559,
+            223.096,
+            16.381
+          ],
+          "solidInstance": 544,
+          "glowInstance": 34
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 46,
+        "id": "old-town:264:228",
+        "zone": "中央",
+        "foundation": [
+          264,
+          228
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            259.441,
+            223.24,
+            16.381
+          ],
+          [
+            268.559,
+            223.24,
+            16.381
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:253:243",
+      "zone": "中央",
+      "foundation": [
+        253,
+        243
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            250.528,
+            239.552,
+            16.607
+          ],
+          "panel": [
+            250.528,
+            239.359,
+            16.607
+          ],
+          "solidInstance": 727,
+          "glowInstance": 40
+        },
+        {
+          "body": [
+            255.472,
+            239.552,
+            16.607
+          ],
+          "panel": [
+            255.472,
+            239.359,
+            16.607
+          ],
+          "solidInstance": 812,
+          "glowInstance": 44
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 47,
+        "id": "old-town:253:243",
+        "zone": "中央",
+        "foundation": [
+          253,
+          243
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            250.528,
+            239.552,
+            16.607
+          ],
+          [
+            255.472,
+            239.552,
+            16.607
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:221:251",
+      "zone": "中央",
+      "foundation": [
+        221,
+        251
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            215.26,
+            244.365,
+            16.683
+          ],
+          "panel": [
+            215.26,
+            244.221,
+            16.683
+          ],
+          "solidInstance": 1165,
+          "glowInstance": 65
+        },
+        {
+          "body": [
+            226.74,
+            244.365,
+            16.683
+          ],
+          "panel": [
+            226.74,
+            244.221,
+            16.683
+          ],
+          "solidInstance": 1171,
+          "glowInstance": 66
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 48,
+        "id": "old-town:221:251",
+        "zone": "中央",
+        "foundation": [
+          221,
+          251
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            215.26,
+            244.365,
+            16.683
+          ],
+          [
+            226.74,
+            244.365,
+            16.683
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:202:247",
+      "zone": "中央",
+      "foundation": [
+        202,
+        247
+      ],
+      "direction": "南",
+      "batch": "Old town housing 2,2",
+      "count": 1,
+      "lamps": [
+        {
+          "body": [
+            204.852,
+            242.46,
+            18.96
+          ],
+          "panel": [
+            204.852,
+            242.294,
+            18.96
+          ],
+          "solidInstance": 1324,
+          "glowInstance": 70
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 49,
+        "id": "old-town:202:247",
+        "zone": "中央",
+        "foundation": [
+          202,
+          247
+        ],
+        "direction": "南",
+        "count": 1,
+        "centers": [
+          [
+            204.852,
+            242.46,
+            18.96
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:179:248",
+      "zone": "中央",
+      "foundation": [
+        179,
+        248
+      ],
+      "direction": "南",
+      "batch": "Old town housing 1,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            174.441,
+            241.99,
+            20.544
+          ],
+          "panel": [
+            174.441,
+            241.846,
+            20.544
+          ],
+          "solidInstance": 1946,
+          "glowInstance": 97
+        },
+        {
+          "body": [
+            183.559,
+            241.99,
+            20.544
+          ],
+          "panel": [
+            183.559,
+            241.846,
+            20.544
+          ],
+          "solidInstance": 1952,
+          "glowInstance": 98
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 50,
+        "id": "old-town:179:248",
+        "zone": "中央",
+        "foundation": [
+          179,
+          248
+        ],
+        "direction": "南",
+        "count": 2,
+        "centers": [
+          [
+            174.441,
+            241.99,
+            20.544
+          ],
+          [
+            183.559,
+            241.99,
+            20.544
+          ]
+        ],
+        "batch": "Old town housing 1,2"
+      }
+    },
+    {
+      "id": "old-town:249:264",
+      "zone": "中央",
+      "foundation": [
+        249,
+        264
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,2",
+      "count": 1,
+      "lamps": [
+        {
+          "body": [
+            246.148,
+            269.79,
+            16.831
+          ],
+          "panel": [
+            246.148,
+            269.957,
+            16.831
+          ],
+          "solidInstance": 1558,
+          "glowInstance": 89
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 51,
+        "id": "old-town:249:264",
+        "zone": "中央",
+        "foundation": [
+          249,
+          264
+        ],
+        "direction": "北",
+        "count": 1,
+        "centers": [
+          [
+            246.148,
+            269.79,
+            16.831
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    },
+    {
+      "id": "old-town:199:262",
+      "zone": "中央",
+      "foundation": [
+        199,
+        262
+      ],
+      "direction": "北",
+      "batch": "Old town housing 2,2",
+      "count": 2,
+      "lamps": [
+        {
+          "body": [
+            200.982,
+            265.798,
+            18.658
+          ],
+          "panel": [
+            200.982,
+            265.991,
+            18.658
+          ],
+          "solidInstance": 1830,
+          "glowInstance": 108
+        },
+        {
+          "body": [
+            197.018,
+            265.798,
+            18.658
+          ],
+          "panel": [
+            197.018,
+            265.991,
+            18.658
+          ],
+          "solidInstance": 1906,
+          "glowInstance": 112
+        }
+      ],
+      "relocation": null,
+      "changed": [],
+      "old": {
+        "ordinal": 52,
+        "id": "old-town:199:262",
+        "zone": "中央",
+        "foundation": [
+          199,
+          262
+        ],
+        "direction": "北",
+        "count": 2,
+        "centers": [
+          [
+            200.982,
+            265.798,
+            18.658
+          ],
+          [
+            197.018,
+            265.798,
+            18.658
+          ]
+        ],
+        "batch": "Old town housing 2,2"
+      }
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+diff --git a/tests/town-blockout-ninth-bell.test.ts b/tests/town-blockout-ninth-bell.test.ts
+new file mode 100644
+index 0000000..d4d8771
+--- /dev/null
++++ b/tests/town-blockout-ninth-bell.test.ts
+@@ -0,0 +1,63 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { playOrdinaryNinthBell, playTowerBell } from '../tools/voxel-tavern/tower-chime';
++
++function audioFixture() {
++  const nodes: ReturnType<typeof node>[] = [];
++  const buffers: number[] = [];
++  function param() {
++    const values: [number, number][] = [];
++    function add(value: number, at: number) { values.push([value, at]); }
++    return { value: 0, values, setValueAtTime: add, linearRampToValueAtTime: add, exponentialRampToValueAtTime: add };
++  }
++  function node(kind: string) {
++    return { kind, type: '', panningModel: '', rolloffFactor: 1, frequency: param(), detune: param(), gain: param(),
++      positionX: param(), positionY: param(), positionZ: param(), offset: param(), startAt: 0, stopAt: 0,
++      disconnected: false, onended: undefined as (() => void) | undefined,
++      start(at: number) { this.startAt = at; }, stop(at: number) { this.stopAt = at; },
++      connect<T>(destination: T) { return destination; }, disconnect() { this.disconnected = true; } };
++  }
++  function create(kind: string) { const result = node(kind); nodes.push(result); return result; }
++  const ctx = { state: 'running', currentTime: 10, sampleRate: 8_000, destination: node('destination'),
++    createOscillator: () => create('oscillator'), createGain: () => create('gain'),
++    createBiquadFilter: () => create('filter'), createPanner: () => create('panner'),
++    createConvolver: () => create('convolver'), createConstantSource: () => create('cleanup'),
++    createBuffer(_channels: number, length: number) {
++      buffers.push(length);
++      return { getChannelData: () => new Float32Array(length) };
++    } };
++  return { ctx, audio: ctx as unknown as AudioContext, nodes, buffers };
++}
++
++test('the ninth uses the agreed filter, tail and pitch with explicit host mix and direction', () => {
++  const { audio, nodes, buffers } = audioFixture();
++  playOrdinaryNinthBell(audio, 2, { sourceInListenerSpace: [-1, .5, -.25], gainDb: -8, wetMix: .3 });
++  const [filter, panner, dry, wet] = nodes;
++  assert.deepEqual([filter.type, filter.frequency.value], ['lowpass', 1200]);
++  assert.deepEqual([panner.panningModel, panner.positionX.value, panner.positionY.value, panner.positionZ.value],
++    ['HRTF', -1, .5, -.25]);
++  assert.deepEqual([dry.gain.value, wet.gain.value], [.7, .3]);
++  assert.deepEqual(buffers, [48_000]);
++  const tones = nodes.filter(node => node.kind === 'oscillator');
++  assert.equal(tones.length, 3);
++  for (const tone of tones) {
++    assert.equal(tone.startAt, 12.045);
++    assert.equal(tone.detune.values[1][0], -50);
++  }
++  const cleanup = nodes.at(-1)!;
++  assert.equal(cleanup.kind, 'cleanup');
++  assert.ok(cleanup.stopAt >= Math.max(...tones.map(tone => tone.stopAt)) + 6);
++  cleanup.onended?.();
++  assert.ok(nodes.filter(node => node.kind !== 'oscillator').slice(0, 5).every(node => node.disconnected));
++  playOrdinaryNinthBell(audio, 3, { sourceInListenerSpace: [-1, .5, -.25], gainDb: -8, wetMix: .3 });
++  assert.deepEqual(buffers, [48_000]);
++});
++
++test('the existing tower voice still allocates six untuned partials per strike', () => {
++  const { audio, nodes } = audioFixture();
++  playTowerBell(audio, 'small', 20, 3);
++  const tones = nodes.filter(node => node.kind === 'oscillator');
++  assert.equal(tones.length, 18);
++  assert.deepEqual([...new Set(tones.map(tone => tone.startAt))], [10.045, 12.065, 14.085]);
++  assert.ok(tones.every(tone => tone.detune.values.length === 0));
++});
+diff --git a/tools/voxel-tavern/tower-chime.ts b/tools/voxel-tavern/tower-chime.ts
+index 97cdf6c..90b99af 100644
+--- a/tools/voxel-tavern/tower-chime.ts
++++ b/tools/voxel-tavern/tower-chime.ts
+@@ -1,3 +1,5 @@
++import { ordinaryNinthSound } from './town-blockout/town-hook-one';
++
+ const chimeNotes = [329.63, 261.63, 293.66, 196, 196, 293.66, 329.63, 261.63];
+ const partials = [[.50, .23, 3.9], [1, .31, 4.8], [1.196, .16, 3.6], [1.495, .086, 2.8], [2.002, .14, 1.8], [2.482, .048, 1.1]] as const;
+ export const towerChimeDuration = 34_000;
+@@ -5,11 +7,15 @@ const strikeSpacing = 2.02;
+ const bellFrequency = 164.81;
+ 
+ function playBellTone(context: AudioContext, output: AudioNode, time: number, frequency: number, weight: number,
+-  decay = 1, onComplete?: () => void) {
+-  for (const [ratio, level, length] of partials) {
++  decay = 1, onComplete?: () => void, sound?: { partialCount: number; tailDetuneCents: number }) {
++  for (const [ratio, level, length] of sound ? partials.slice(0, sound.partialCount) : partials) {
+     const tone = context.createOscillator();
+     const gain = context.createGain();
+     tone.frequency.value = frequency * ratio;
++    if (sound) {
++      tone.detune.setValueAtTime(0, time);
++      tone.detune.linearRampToValueAtTime(sound.tailDetuneCents, time + length * decay);
++    }
+     gain.gain.setValueAtTime(.0001, time);
+     gain.gain.exponentialRampToValueAtTime(weight * level, time + .022);
+     gain.gain.exponentialRampToValueAtTime(.0001, time + length * decay);
+@@ -20,6 +26,65 @@ function playBellTone(context: AudioContext, output: AudioNode, time: number, fr
+   }
+ }
+ 
++type NinthBellSound = {
++  sourceInListenerSpace: readonly [number, number, number];
++  gainDb: number;
++  wetMix: number;
++};
++
++const ninthBellImpulses = new WeakMap<AudioContext, AudioBuffer>();
++
++/** Play an externally scheduled ninth strike using the ordinary tower voice. */
++export function playOrdinaryNinthBell(context: AudioContext, delaySeconds: number, sound: NinthBellSound) {
++  const [x, y, z] = sound.sourceInListenerSpace;
++  if (context.state !== 'running' || ![delaySeconds, x, y, z, sound.gainDb, sound.wetMix].every(Number.isFinite) ||
++    delaySeconds < 0 || Math.hypot(x, y, z) === 0 || sound.gainDb > 0 || sound.wetMix < 0 || sound.wetMix > 1) return;
++  const { lowpassHz, tailSeconds, tailDetuneCents } = ordinaryNinthSound;
++
++  const filter = context.createBiquadFilter();
++  filter.type = 'lowpass';
++  filter.frequency.value = lowpassHz;
++  const panner = context.createPanner();
++  panner.panningModel = 'HRTF';
++  panner.rolloffFactor = 0;
++  panner.positionX.value = x;
++  panner.positionY.value = y;
++  panner.positionZ.value = z;
++  const dry = context.createGain();
++  const wet = context.createGain();
++  dry.gain.value = 1 - sound.wetMix;
++  wet.gain.value = sound.wetMix;
++  const convolution = context.createConvolver();
++  let impulse = ninthBellImpulses.get(context);
++  if (!impulse) {
++    impulse = context.createBuffer(1, Math.ceil(tailSeconds * context.sampleRate), context.sampleRate);
++    const samples = impulse.getChannelData(0);
++    let seed = 7319;
++    for (let i = 0; i < samples.length; i++) {
++      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
++      samples[i] = (seed / 2147483648 - 1) * Math.pow(.001, i / samples.length);
++    }
++    ninthBellImpulses.set(context, impulse);
++  }
++  convolution.buffer = impulse;
++  filter.connect(dry).connect(panner);
++  filter.connect(convolution).connect(wet).connect(panner);
++  panner.connect(context.destination);
++
++  const at = context.currentTime + .045 + delaySeconds;
++  playBellTone(context, filter, at, bellFrequency, .36 * Math.pow(10, sound.gainDb / 20), 1, undefined,
++    { partialCount: 3, tailDetuneCents });
++  // Use the audio clock so a suspended tab cannot trim the convolution tail.
++  const cleanup = context.createConstantSource();
++  cleanup.offset.value = 0;
++  cleanup.connect(context.destination);
++  cleanup.onended = () => {
++    for (const node of [filter, convolution, dry, wet, panner, cleanup]) node.disconnect();
++  };
++  cleanup.start(at);
++  cleanup.stop(at + partials[1][2] + tailSeconds + .03);
++}
++
+ export function playTowerChime(context: AudioContext, elapsedMs: number, strikes: number) {
+   if (context.state !== 'running') return;
+   const start = context.currentTime + .045;

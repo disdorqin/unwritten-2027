@@ -1,0 +1,172 @@
+{
+  "release": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "wireBytes": 12,
+  "bounds": {
+    "width": 640,
+    "depth": 540,
+    "height": 655.35
+  },
+  "results": [
+    {
+      "label": "published-plaza-spawn",
+      "input": [
+        223,
+        180,
+        12
+      ],
+      "encoded": [
+        223,
+        180,
+        12
+      ],
+      "websocket": [
+        223,
+        180,
+        12
+      ],
+      "polling": [
+        223,
+        180,
+        12
+      ]
+    },
+    {
+      "label": "p10-front-stele-candidate",
+      "input": [
+        306,
+        659,
+        347
+      ],
+      "encoded": [
+        306,
+        655.35,
+        347
+      ],
+      "websocket": [
+        306,
+        540,
+        347
+      ],
+      "polling": [
+        306,
+        540,
+        347
+      ]
+    },
+    {
+      "label": "p10-upper-stele-candidate",
+      "input": [
+        50,
+        998,
+        800
+      ],
+      "encoded": [
+        50,
+        655.35,
+        655.35
+      ],
+      "websocket": [
+        50,
+        540,
+        655.35
+      ],
+      "polling": [
+        50,
+        540,
+        655.35
+      ]
+    },
+    {
+      "label": "p10-upper-registrar-candidate",
+      "input": [
+        62.5,
+        1014,
+        800
+      ],
+      "encoded": [
+        62.5,
+        655.35,
+        655.35
+      ],
+      "websocket": [
+        62.5,
+        540,
+        655.35
+      ],
+      "polling": [
+        62.5,
+        540,
+        655.35
+      ]
+    },
+    {
+      "label": "crater-relative-floor-codec-probe",
+      "input": [
+        80,
+        120,
+        -35
+      ],
+      "encoded": [
+        80,
+        120,
+        0
+      ],
+      "websocket": [
+        80,
+        120,
+        0
+      ],
+      "polling": [
+        80,
+        120,
+        0
+      ]
+    },
+    {
+      "label": "mine-level-codec-probe",
+      "input": [
+        80,
+        120,
+        -90
+      ],
+      "encoded": [
+        80,
+        120,
+        0
+      ],
+      "websocket": [
+        80,
+        120,
+        0
+      ],
+      "polling": [
+        80,
+        120,
+        0
+      ]
+    },
+    {
+      "label": "palace-level-codec-probe",
+      "input": [
+        80,
+        120,
+        -190
+      ],
+      "encoded": [
+        80,
+        120,
+        0
+      ],
+      "websocket": [
+        80,
+        120,
+        0
+      ],
+      "polling": [
+        80,
+        120,
+        0
+      ]
+    }
+  ]
+}

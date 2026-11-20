@@ -1,0 +1,10 @@
+{
+  "buildSha": null,
+  "routeSha": null,
+  "gateId": null,
+  "upperRoute": null,
+  "lowerRoute": null,
+  "collisionId": null,
+  "bottomId": null,
+  "seamOffsets": []
+}

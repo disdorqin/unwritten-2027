@@ -1,0 +1,10 @@
+{
+  "name": "desktop",
+  "route": "http://127.0.0.1:4173/town-blockout.html",
+  "pageErrors": [],
+  "settled": true,
+  "elapsedMs": 60781,
+  "shownSeconds": 60,
+  "nextSeconds": 59,
+  "notice": "移动靶结算 · 命中 0"
+}

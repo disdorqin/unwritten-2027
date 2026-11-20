@@ -1,0 +1,37 @@
+{
+  "snapshot": "2966d9f",
+  "vertices": 7808,
+  "triangles": 14848,
+  "lines": [
+    {
+      "offset": 0,
+      "hits": 1500,
+      "firstHit": 1,
+      "lastHit": 1500,
+      "edgeCount": 1499,
+      "edgesAbove10Percent": 14,
+      "peakPercent": "15.307450",
+      "maxError": "0.254775039"
+    },
+    {
+      "offset": -0.27,
+      "hits": 1501,
+      "firstHit": 0,
+      "lastHit": 1500,
+      "edgeCount": 1500,
+      "edgesAbove10Percent": 23,
+      "peakPercent": "15.970910",
+      "maxError": "0.293789778"
+    },
+    {
+      "offset": 0.27,
+      "hits": 1489,
+      "firstHit": 12,
+      "lastHit": 1500,
+      "edgeCount": 1488,
+      "edgesAbove10Percent": 5,
+      "peakPercent": "11.476324",
+      "maxError": "0.409076072"
+    }
+  ]
+}

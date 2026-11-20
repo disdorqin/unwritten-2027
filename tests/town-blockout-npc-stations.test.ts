@@ -7,6 +7,7 @@ import type { CampfireSite } from '../tools/voxel-tavern/town-blockout/town-camp
 import { lighthouseSnakeClue } from '../tools/voxel-tavern/town-blockout/town-zodiac';
 import { mascotHome, townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
 import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
+import { npcAddedDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-added-dialogue';
 import { palaceStewardDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-palace-dialogue';
 import { residentZodiacClues } from '../tools/voxel-tavern/town-blockout/town-npc-residents';
 import { registerTownResidentStations, palaceStewardGuides, townResidentStations } from '../tools/voxel-tavern/town-blockout/town-npc-stations';
@@ -78,7 +79,7 @@ test('resident hotspots fail closed until their stations work, share a batch, an
   assert.equal(scene.children.length, 1);
 });
 
-test('the 25 Qin lines match the manuscript and clue gates do not expose the obsolete bridge or future goat', () => {
+test('the 19 Qin town lines match the manuscript and clue gates protect hidden progression', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC补供稿二-汤守礼仪官戏台联-v1.md', import.meta.url), 'utf8');
   const lines = [...source.matchAll(/^- \[秦知礼 · [^\]]+\] (.*)$/gm)].map(([, value]) =>
     value.trim().replace(/\[(挡回式·门控口径|挡回|可答)\]$/, ''));
@@ -86,8 +87,8 @@ test('the 25 Qin lines match the manuscript and clue gates do not expose the obs
   assert.equal(lines.length, 25);
   assert.deepEqual([
     ...Object.values(role.familiar).flat(), ...role.guides, ...role.clues, ...role.newYear,
-    ...role.questions.host.map(row => row.text), ...role.questions.outside.map(row => row.text), ...role.gossip,
-  ], lines);
+    ...role.gossip,
+  ], [...lines.slice(0, 18), lines.at(-1)]);
   assert.ok(residentZodiacClues('翁寒江', () => true).every(line => !line.includes('桥洞')));
   assert.deepEqual(residentZodiacClues('翁寒江', id => id === 'snake'), [lighthouseSnakeClue]);
   assert.deepEqual(residentZodiacClues('秦知礼', () => true), [role.clues[0]]);
@@ -96,6 +97,61 @@ test('the 25 Qin lines match the manuscript and clue gates do not expose the obs
   assert.equal(palaceStewardGuides(initial)[0], 0);
   assert.equal(palaceStewardGuides({ ...initial, key: true })[0], 4);
   assert.equal(palaceStewardGuides({ ...initial, key: true, throneRoom: true, gallery: true, mirrorCache: true })[0], 3);
+});
+
+test('three resident menus retain authored town dialogue and omit the withdrawn personal questions', t => {
+  class Element {
+    children: Element[] = [];
+    textContent = '';
+    onclick?: () => void;
+    constructor(readonly tagName: string) {}
+    append(...nodes: Element[]) { this.children.push(...nodes); }
+    setAttribute() {}
+  }
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true, value: { createElement: (tagName: string) => new Element(tagName) },
+  });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'document', original);
+    else Reflect.deleteProperty(globalThis, 'document');
+  });
+
+  const grid = createTerrainGrid();
+  let panel = new Element('section');
+  const npc = createTownNpcActivity({
+    scene: new Scene(),
+    open: () => { panel = new Element('section'); return panel as unknown as HTMLElement; },
+    announce() {}, face() {}, sit() {},
+  }, grid.heightAt);
+  const forest = fire('forest', 122.47759, 407.65367, grid.heightAt(122.47759, 407.65367));
+  const lake = fire('lakeside', 337, 109.65, grid.heightAt(337, 109.65));
+  const [woodcutter, fisherman, steward] = registerTownResidentStations(npc, {
+    campfires: [forest, lake], canStand: () => true, isNight: () => false,
+    forestChop: () => feature('篝火旁劈柴'), mainFishing: () => feature('冰湖冰钓'),
+    palaceProgress: () => ({ key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false }),
+  });
+  const cases = [
+    [woodcutter, npcAddedDialogue.樊樵], [fisherman, npcAddedDialogue.翁寒江], [steward, palaceStewardDialogue],
+  ] as const;
+  for (const [spot, role] of cases) {
+    assert.equal(spot.available?.(), true, spot.label);
+    spot.run();
+    const [speech, controls] = panel.children;
+    assert.deepEqual(panel.children.map(child => child.tagName), ['p', 'div']);
+    assert.ok(controls.children.every(child => child.tagName === 'button'));
+    const ask = (label: string) => {
+      const button = controls.children.find(child => child.textContent === label);
+      assert.ok(button?.onclick, `${spot.label}: ${label}`);
+      button.onclick();
+      return speech.textContent;
+    };
+    assert.equal(ask('聊聊镇民'), role.gossip[0]);
+    assert.equal(ask('聊聊跨年'), role.newYear[0]);
+    for (const label of ['问镇长近况', '问联系方式', '问你们怎么认识']) {
+      assert.ok(!controls.children.some(child => child.textContent === label));
+    }
+  }
 });
 
 test('resident station visibility and 小未 repack the same batch without replacing each other', () => {

@@ -1,0 +1,64 @@
+name: Verify staged summit posts and clouds
+
+on:
+  push:
+    branches: [town-review-p5-p8-20261120]
+    paths:
+      - .github/workflows/verify-p5-p8.yml
+      - p8-cloud-preview.html
+      - tests/town-blockout-main-summit*.test.ts
+      - tools/**
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [P-5, P-8]
+    name: Review ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked dependencies and Chromium
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify geometry and capture the summit review
+        shell: bash
+        env:
+          REVIEW_PACKAGE: ${{ matrix.package }}
+          OUTPUT: ${{ runner.temp }}/summit-evidence
+        run: |
+          mkdir -p "$OUTPUT"
+          if [ "$REVIEW_PACKAGE" = P-5 ]; then
+            npx tsc --noEmit --strict --skipLibCheck --resolveJsonModule --esModuleInterop --target ES2022 --module ESNext --moduleResolution Bundler tools/voxel-tavern/town-blockout/main-summit-posts-review.ts
+            node --import tsx --test tests/town-blockout-main-summit-posts.test.ts | tee "$OUTPUT/directed-tests.txt"
+            timeout --signal=TERM --kill-after=10s 300s node tools/verify-main-summit-posts-browser.mjs . "$OUTPUT"
+          else
+            npx tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler tools/voxel-tavern/town-blockout/preview-main-summit-clouds.ts
+            node --import tsx --test tests/town-blockout-main-summit-cloud-layer.test.ts tests/town-blockout-main-summit.test.ts | tee "$OUTPUT/directed-tests.txt"
+            node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173 --strictPort &
+            vite_pid=$!
+            trap 'kill "$vite_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 25); do
+              curl --silent --fail http://127.0.0.1:5173/p8-cloud-preview.html >/dev/null && break
+              sleep 1
+            done
+            curl --silent --fail http://127.0.0.1:5173/p8-cloud-preview.html >/dev/null
+            timeout --signal=TERM --kill-after=10s 180s node tools/verify-main-summit-clouds-browser.mjs --base http://127.0.0.1:5173 --out "$OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: summit-staged-${{ matrix.package }}
+          path: ${{ runner.temp }}/summit-evidence

@@ -1,0 +1,166 @@
+diff --git a/tests/town-blockout-orbital-s2.test.ts b/tests/town-blockout-orbital-s2.test.ts
+new file mode 100644
+index 0000000..53c3295
+--- /dev/null
++++ b/tests/town-blockout-orbital-s2.test.ts
+@@ -0,0 +1,61 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Box3, Mesh, MeshStandardMaterial } from 'three';
++import { createOrbitalEarlyRooms } from '../tools/voxel-tavern/town-blockout/orbital-early-rooms';
++
++test('the airlock nameplate and muted ship emblem share the existing opaque wall batch', () => {
++  const { group, collisions } = createOrbitalEarlyRooms();
++  const wall = group.getObjectByName('orbital-status-wall');
++  assert.ok(wall instanceof Mesh && wall.material instanceof MeshStandardMaterial);
++  assert.equal(wall.material.vertexColors, true);
++  assert.equal(wall.material.emissive.getHex(), 0);
++  assert.deepEqual(wall.userData.nameplate, {
++    text: '未央号', motif: 'half-moon-and-descending-arc', y: 2.62, north: -3.776,
++  });
++  const bounds = new Box3().setFromObject(wall);
++  assert.ok(bounds.max.y > 2.75 && bounds.max.y < 2.95);
++  assert.ok(bounds.min.z > 3.5);
++  assert.ok(Math.abs(bounds.max.z - 3.825) < 1e-6);
++  const equalCounts = { red: 0, green: 0, wall: 0 };
++  group.traverse(node => {
++    if (node.name === 'status-red') equalCounts.red++;
++    if (['status-teleport', 'status-life-support'].includes(node.name)) equalCounts.green++;
++    if (node.name === 'orbital-status-wall') equalCounts.wall++;
++    if (/^orbital-.*frame$/.test(node.name)) assert.equal(node.userData.nameplate, undefined);
++  });
++  assert.deepEqual(equalCounts, { red: 16, green: 2, wall: 1 });
++  assert.deepEqual(collisions.find(collider => collider.kind === 'status-panel'),
++    { kind: 'status-panel', minX: -2.225, maxX: 2.225, minN: -3.82, maxN: -3.48 });
++});
++
++test('both accepted airlock landings reach both log hand stations and return on the same standing path', t => {
++  const { ports, cockpit, floorHeightAt, isWalkable } = createOrbitalEarlyRooms();
++  let measured = 0;
++  let maxStep = 0;
++  for (const { arrival } of Object.values(ports)) {
++    for (const hand of [cockpit.leftHand, cockpit.rightHand]) {
++      const points = [arrival, { x: hand.x, n: arrival.n }, hand];
++      for (const route of [points, [...points].reverse()]) {
++        let previous = floorHeightAt(route[0]!.x, route[0]!.n)!;
++        for (const [index, point] of route.entries()) {
++          if (!index) continue;
++          const from = route[index - 1]!;
++          const count = Math.ceil(Math.hypot(point.x - from.x, point.n - from.n) / .05);
++          for (let step = 0; step <= count; step++) {
++            const x = from.x + (point.x - from.x) * step / count;
++            const n = from.n + (point.n - from.n) * step / count;
++            const ground = floorHeightAt(x, n);
++            assert.ok(ground !== undefined && isWalkable(x, n, .27), JSON.stringify({ x, n }));
++            maxStep = Math.max(maxStep, Math.abs(ground - previous));
++            previous = ground;
++            measured++;
++          }
++        }
++      }
++    }
++  }
++  assert.equal(cockpit.log.text, '');
++  assert.equal(measured, 2072);
++  assert.ok(maxStep <= .43);
++  t.diagnostic(JSON.stringify({ directions: 8, measured, maxStep }));
++});
+diff --git a/tools/voxel-tavern/town-blockout/orbital-airlock-nameplate.ts b/tools/voxel-tavern/town-blockout/orbital-airlock-nameplate.ts
+new file mode 100644
+index 0000000..a98d772
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/orbital-airlock-nameplate.ts
+@@ -0,0 +1,71 @@
++import { BoxGeometry, BufferAttribute, Color, Mesh, type MeshStandardMaterial } from 'three';
++import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
++
++const glyphs = [
++  [
++    '....#....', '.#######.', '....#....', '#########', '...###...',
++    '..#.#.#..', '.#..#..#.', '#...#...#', '....#....',
++  ],
++  [
++    '....#....', '..#####..', '..#.#.#..', '..#.#.#..', '#########',
++    '...#.#...', '..#...#..', '.#.....#.', '#.......#',
++  ],
++  [
++    '..#####..', '..#...#..', '..#####..', '.........', '#########',
++    '...#.....', '..#####..', '......#..', '....##...',
++  ],
++] as const;
++const crescent = ['....###', '..####.', '.###...', '.##....', '.##....', '..##...', '...####'] as const;
++const fallingArc = ['##......', '..##....', '....#...', '.....#..', '......##'] as const;
++
++const statusCenter = { x: 0, y: 1.51, z: 3.68 };
++const plateHeight = .34;
++const plateCenter = { x: 0, y: 2.62, z: 3.776 };
++
++export function buildOrbitalStatusWall(baseMaterial: MeshStandardMaterial) {
++  const parts: BoxGeometry[] = [];
++  function part(color: Color, x: number, y: number, z: number, w: number, h: number, d: number) {
++    const geometry = new BoxGeometry(w, h, d).translate(x - statusCenter.x, y - statusCenter.y, z - statusCenter.z);
++    const colors = new Float32Array(geometry.getAttribute('position').count * 3);
++    for (let index = 0; index < colors.length; index += 3) color.toArray(colors, index);
++    geometry.setAttribute('color', new BufferAttribute(colors, 3));
++    parts.push(geometry);
++  }
++
++  const edge = new Color(0x62717c);
++  const backing = new Color(0x2e3944);
++  const letters = new Color(0xbccbd4);
++  const coldSilver = new Color(0xd4ecf6);
++  const strokeDepth = .006;
++  const front = plateCenter.z - .036;
++  part(baseMaterial.color, statusCenter.x, statusCenter.y, statusCenter.z, 4.45, 1.74, .29);
++  part(edge, plateCenter.x, plateCenter.y, plateCenter.z, 1.48, plateHeight, .052);
++  part(backing, plateCenter.x, plateCenter.y, plateCenter.z - .029, 1.43, plateHeight - .04, .012);
++
++  function paint(rows: readonly string[], faceX: number, top: number, cell: number, color: Color) {
++    for (const [row, pixels] of rows.entries()) {
++      for (const stroke of pixels.matchAll(/#+/g)) {
++        const cells = stroke[0].length;
++        const column = stroke.index + (cells - 1) / 2;
++        // The plaque faces the room. Its right edge is negative world X from inside.
++        part(color, -(faceX + column * cell), top - row * cell, front, cells * cell, cell, strokeDepth);
++      }
++    }
++  }
++
++  paint(crescent, -.60, 2.713, .022, coldSilver);
++  paint(fallingArc, -.46, 2.64, .017, coldSilver);
++  for (const [index, glyph] of glyphs.entries()) paint(glyph, -.17 + index * .243, 2.704, .021, letters);
++
++  const geometry = mergeGeometries(parts);
++  for (const entry of parts) entry.dispose();
++  if (!geometry) throw new Error('The orbital wall and plaque must share one opaque geometry.');
++  const material = baseMaterial.clone();
++  material.color.set(0xffffff);
++  material.vertexColors = true;
++  const mesh = new Mesh(geometry, material);
++  mesh.name = 'orbital-status-wall';
++  mesh.position.set(statusCenter.x, statusCenter.y, statusCenter.z);
++  mesh.userData.nameplate = { text: '未央号', motif: 'half-moon-and-descending-arc', y: plateCenter.y, north: -plateCenter.z };
++  return mesh;
++}
+diff --git a/tools/voxel-tavern/town-blockout/orbital-early-rooms.ts b/tools/voxel-tavern/town-blockout/orbital-early-rooms.ts
+index 55fa44e..0577e91 100644
+--- a/tools/voxel-tavern/town-blockout/orbital-early-rooms.ts
++++ b/tools/voxel-tavern/town-blockout/orbital-early-rooms.ts
+@@ -4,6 +4,7 @@ import {
+   RingGeometry, type Material,
+ } from 'three';
+ import { createTownChronicleDoorRing } from './town-chronicle-door-ring.js';
++import { buildOrbitalStatusWall } from './orbital-airlock-nameplate.js';
+ 
+ export type OrbitalRoomPoint = Readonly<{ x: number; n: number; ground: number }>;
+ export type OrbitalRoomArrival = OrbitalRoomPoint & Readonly<{ yaw: number }>;
+@@ -141,8 +142,7 @@ export function createOrbitalEarlyRooms({ scale = 1 }: { scale?: number } = {})
+     box(airlockGroup, warm, side * 4.04, 2.54, -.27, .06, .05, 2.35);
+   }
+ 
+-  const panel = box(airlockGroup, dark, 0, 1.51, -3.68, 4.45, 1.74, .29);
+-  panel.name = 'orbital-status-wall';
++  airlockGroup.add(buildOrbitalStatusWall(dark));
+   obstacle('status-panel', 0, -3.65, 2.225, .17);
+   for (let column = 0; column < 6; column++) {
+     for (let row = 0; row < 3; row++) {

@@ -1,0 +1,907 @@
+{
+  "baseline": "2dff658fd664bba873f4ad62293e1f3e1f8d1174",
+  "door": {
+    "id": "old-town:186:104",
+    "zone": "market",
+    "x": 174.905,
+    "n": 112,
+    "ground": 9.418671293258667,
+    "exitYaw": -1.5707963267948968
+  },
+  "route": [
+    {
+      "interval": 0.05,
+      "maxStep": 0.3060550353527045,
+      "samples": 1054,
+      "knots": [
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 115.45,
+            "ground": 10.582034,
+            "tolerance": 0.13,
+            "action": "查看木工台"
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 115.45,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        }
+      ]
+    },
+    {
+      "interval": 0.125,
+      "maxStep": 0.30544413682993543,
+      "samples": 424,
+      "knots": [
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 115.45,
+            "ground": 10.582034,
+            "tolerance": 0.13,
+            "action": "查看木工台"
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 115.45,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        }
+      ]
+    },
+    {
+      "interval": 0.18833333333333335,
+      "maxStep": 0.3050165078639999,
+      "samples": 290,
+      "knots": [
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 115.45,
+            "ground": 10.582034,
+            "tolerance": 0.13,
+            "action": "查看木工台"
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 115.45,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 180.0221,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 180.0221,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.105,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.12
+          },
+          "actual": {
+            "x": 177.105,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 177.005,
+            "north": 112,
+            "ground": 10.582034,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 177.005,
+            "n": 112,
+            "ground": 10.582033833503724
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 174.905,
+            "north": 112,
+            "ground": 9.418671,
+            "tolerance": 0.1
+          },
+          "actual": {
+            "x": 174.905,
+            "n": 112,
+            "ground": 9.418671293258667
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 112,
+            "ground": 9.839105129241943,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 112,
+            "ground": 9.839105129241943
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 108,
+            "ground": 9.776435136795044,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 108,
+            "ground": 9.776435136795044
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 104,
+            "ground": 9.735431671142578,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 104,
+            "ground": 9.735431671142578
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 100,
+            "ground": 9.7193284034729,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 100,
+            "ground": 9.7193284034729
+          }
+        },
+        {
+          "expected": {
+            "east": 173.25,
+            "north": 96,
+            "ground": 9.729403495788574,
+            "tolerance": 0.13
+          },
+          "actual": {
+            "x": 173.25,
+            "n": 96,
+            "ground": 9.729403495788574
+          }
+        }
+      ]
+    }
+  ],
+  "tasting": {
+    "spot": {
+      "x": 177.5,
+      "n": 105.75,
+      "ground": 9.12,
+      "range": 2.4,
+      "id": "market-stall-5",
+      "label": "试吃吃食"
+    },
+    "exactCenter": {
+      "terrain": 9.119999885559082,
+      "surface": 9.119999885559082,
+      "hint": 9.12,
+      "candidateSupport": 9.119999885559082,
+      "heightDelta": -1.1444091718715299e-7,
+      "nativeLanding": null,
+      "withoutHint": null,
+      "walkable": true,
+      "rawPass": true,
+      "obstruction": true,
+      "water": null,
+      "rails": false,
+      "gates": {
+        "scenery": false,
+        "cover": false,
+        "district": false,
+        "forest": false,
+        "streetscape": false
+      },
+      "marketCollision": []
+    },
+    "reachableWithinActivityRange": 25,
+    "nearestClearStand": {
+      "east": 176,
+      "north": 105.75,
+      "ground": 9.119999885559082,
+      "distance": 1.5,
+      "visit": {
+        "samples": 90,
+        "maxStep": 0.018558883666997872
+      },
+      "return": {
+        "samples": 90,
+        "maxStep": 0.018558883666997872
+      }
+    },
+    "ledger": {
+      "served": true,
+      "count": 1
+    }
+  }
+}

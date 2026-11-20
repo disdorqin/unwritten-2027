@@ -7,13 +7,17 @@ import { WebSocket } from "ws";
 import { createPresenceServer } from "../../src/presence/server.js";
 import { MASCOT_ACTOR_ID } from "../../src/presence/protocol.js";
 import { createRehearsalClockEndpoint } from "../../src/presence/rehearsal-clock.js";
-import { ceremonyLandingAnnouncement } from "../../src/presence/ceremony-arrival.js";
+import { ceremonyArrivalAt, ceremonyLandingAnnouncement, readCeremonyArrival, townCeremonyMidnight } from "../../src/presence/ceremony-arrival.js";
+import { makeCeremonyScores, showFlightSeconds } from "../../tools/voxel-tavern/town-blockout/celebration-fireworks-score.js";
+import { createCeremonyFireworksDispatch } from "../../tools/voxel-tavern/town-blockout/ceremony-fireworks-clock.js";
+import { createCeremonyDirector, type CeremonyCue } from "../../tools/voxel-tavern/town-blockout/town-ceremony.js";
+import { createTownPresenceClock } from "../../tools/voxel-tavern/town-blockout/town-presence-clock.js";
 import {
   decodeSnowballClientEvent, decodeSnowballEvents, encodeSnowballHit, encodeSnowballRelay, encodeSnowballThrow,
   type SnowballRelayEvent,
 } from "../../src/presence/snowball-events.js";
 import { testFireworksAnnouncement, testFireworksDwellMs, testFireworksLeadMs, testFireworksNoticeMs } from "../../src/presence/test-fireworks.js";
-import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, plazaPhotoStand, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
+import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, plazaPhotoStand, plazaPhotoTierRise, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
@@ -263,6 +267,96 @@ test("presence joins beyond the first ten minutes without sending a ceremony arr
   assert.ok(!client.text.pending().some(message => message.kind === "ceremony-arrival"));
 });
 
+test("JX-11 follows the four shared midnight beats without altering arrival or the fireworks score", { timeout: 5000 }, async context => {
+  const midnight = townCeremonyMidnight;
+  const begin = midnight - 480_001;
+  let wallTime = begin;
+  let monotonicTime = 0;
+  context.mock.method(Date, "now", () => wallTime);
+  const { join } = await fixture(context, { ceremonyStartAt: midnight, connectionLog() {} });
+  const { scores } = makeCeremonyScores(() => 12);
+  const devices = await Promise.all([7500, -12_000].map(async skew => {
+    const client = await join(skew > 0 ? "快钟" : "慢钟");
+    assert.equal(client.epochMs, begin);
+    const clock = createTownPresenceClock(() => wallTime + skew, () => monotonicTime);
+    assert.notEqual(clock.now(), begin);
+    clock.accept(client.epochMs!);
+    const dispatch = createCeremonyFireworksDispatch(showFlightSeconds);
+    const cues: CeremonyCue[] = [];
+    const launches: number[] = [];
+    const director = createCeremonyDirector({ now: clock.now, utcOffsetMinutes: 480 }, {
+      onCue(cue) {
+        cues.push(cue);
+        if (cue.type === "fireworks-main") {
+          assert.ok(dispatch(scores[cue.type], cue.at, begin, clock.now, (table, playback) => {
+            launches.push(playback.startAt + Math.round((table.bursts[0].time - showFlightSeconds) * 1000));
+            return true;
+          }));
+        }
+      },
+    });
+    assert.equal(director.update().watchStarVisible, false);
+    return { client, clock, director, cues, launches };
+  }));
+
+  function advance(delta: number, visible: boolean) {
+    const previous = wallTime;
+    wallTime = midnight + delta;
+    monotonicTime += Math.max(0, wallTime - previous);
+    for (const { clock, director } of devices) {
+      if (wallTime < previous) clock.accept(wallTime);
+      assert.equal(clock.now(), wallTime);
+      assert.equal(director.update().watchStarVisible, visible);
+    }
+  }
+
+  advance(-480_000, true);
+  advance(-10_001, true);
+  assert.ok(devices.every(({ client }) => !client.text.pending().some(message => message.kind === "ceremony-arrival")));
+  advance(-10_000, true);
+  const arrivals = await Promise.all(devices.map(async ({ client }) => {
+    const notice = await client.text.next(message => message.kind === "announce");
+    assert.equal(notice.message, ceremonyLandingAnnouncement);
+    const arrival = readCeremonyArrival(await client.text.next(message => message.kind === "ceremony-arrival"));
+    assert.ok(arrival);
+    assert.equal(arrival.edge, false);
+    assert.equal(arrival.startAt, midnight);
+    assert.ok(ceremonyArrivalAt(arrival.slot, false));
+    return arrival;
+  }));
+  assert.equal(new Set(arrivals.map(({ slot }) => slot)).size, 2);
+
+  advance(0, true);
+  advance(999, true);
+  assert.ok(devices.every(({ launches }) => launches.length === 0));
+  advance(1000, true);
+  advance(60_000, true);
+  const late = await join("迟到");
+  const lateArrival = readCeremonyArrival(await late.text.next(message => message.kind === "ceremony-arrival"));
+  assert.equal(lateArrival?.edge, true);
+  const replayed: CeremonyCue[] = [];
+  const reconnect = createCeremonyDirector({ now: () => wallTime, utcOffsetMinutes: 480 }, { onCue: cue => replayed.push(cue) });
+  assert.equal(reconnect.update().watchStarVisible, true);
+  assert.deepEqual(replayed, []);
+
+  advance(539_999, true);
+  advance(540_000, false);
+  advance(539_999, true);
+  advance(540_001, false);
+  const observations = devices.map(({ cues, launches }, index) => {
+    const star = cues.filter(cue => cue.type === "watch-star-rise" || cue.type === "watch-star-set");
+    const bells = cues.filter(cue => cue.type === "grand-strike");
+    assert.deepEqual(star.map(cue => cue.at), [midnight - 480_000, midnight + 540_000]);
+    assert.deepEqual(bells.map(cue => cue.at - midnight), Array.from({ length: 12 }, (_, i) => i * 2020));
+    assert.deepEqual(launches, [midnight + 1000]);
+    return { starRise: star[0].at, arrival: arrivals[index].startAt, firstBell: bells[0].at,
+      firstLaunch: launches[0], starSet: star[1].at, slot: arrivals[index].slot };
+  });
+  assert.deepEqual(Object.values(scores).map(score => score.bursts.length), [54, 28, 20]);
+  assert.equal(observations[0].arrival, observations[1].arrival);
+  context.diagnostic(JSON.stringify({ rehearsal: "loopback", observations, lateEdge: lateArrival?.edge }));
+});
+
 const pose: Pose = { east: 2000, north: 2000, height: 500, yaw: 40_000, sequence: 1 };
 
 test("public fireworks publish one identical timed event and reject an early or distant start", { timeout: 7000 }, async context => {
@@ -459,7 +553,7 @@ test("the existing photo event admits 48 live WebSocket players at the new physi
     const row = Math.floor(index / 12);
     const east = Math.round((plazaPhotoStand.centreEast + (index % 12 - 5.5) * 1.28) * 100);
     const north = Math.round((plazaPhotoStand.south + (row + .5) * plazaPhotoStand.run) * 100);
-    const height = Math.round((plazaPhotoStand.base + (row + 1) * plazaPhotoStand.rise) * 100);
+    const height = Math.round((plazaPhotoStand.base + plazaPhotoTierRise(row)) * 100);
     client.socket.send(encodePose({ ...pose, east, north, height, sequence: 1 }));
     client.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
     return { id: client.id, name: client.name, east: east / 100, north: north / 100, height: height / 100 };

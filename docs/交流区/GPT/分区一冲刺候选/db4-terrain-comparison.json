@@ -1,0 +1,21 @@
+{
+  "source": "75859a0",
+  "three": "183",
+  "meshes": 46,
+  "checkedBuffers": 172,
+  "before": {
+    "chunks": 33,
+    "triangles": 270336,
+    "uploads": 4,
+    "bytes": 76723200
+  },
+  "after": {
+    "chunks": 33,
+    "triangles": 270336,
+    "uploads": 132,
+    "bytes": 30007296
+  },
+  "reduction": 0.6088888888888889,
+  "aerialIndices": 679824,
+  "panoramaVertices": 231120
+}

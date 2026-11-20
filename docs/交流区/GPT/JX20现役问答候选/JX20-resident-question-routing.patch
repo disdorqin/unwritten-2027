@@ -1,0 +1,153 @@
+diff --git a/tests/town-blockout-npc-stations.test.ts b/tests/town-blockout-npc-stations.test.ts
+index e9ea5793770dafe6d97cf4e2fead3eb1299dc62e..a4a7d5a4c784eb2a637544a9c5f94bb723da08f9 100644
+--- a/tests/town-blockout-npc-stations.test.ts
++++ b/tests/town-blockout-npc-stations.test.ts
+@@ -7,6 +7,8 @@ import type { CampfireSite } from '../tools/voxel-tavern/town-blockout/town-camp
+ import { lighthouseSnakeClue } from '../tools/voxel-tavern/town-blockout/town-zodiac';
+ import { mascotHome, townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
+ import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
++import { npcAddedDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-added-dialogue';
++import { answerAuthoredNpcQuestion } from '../tools/voxel-tavern/town-blockout/town-npc-dialogue';
+ import { palaceStewardDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-palace-dialogue';
+ import { residentZodiacClues } from '../tools/voxel-tavern/town-blockout/town-npc-residents';
+ import { registerTownResidentStations, palaceStewardGuides, townResidentStations } from '../tools/voxel-tavern/town-blockout/town-npc-stations';
+@@ -98,6 +100,76 @@ test('the 25 Qin lines match the manuscript and clue gates do not expose the obs
+   assert.equal(palaceStewardGuides({ ...initial, key: true, throneRoom: true, gallery: true, mirrorCache: true })[0], 3);
+ });
+ 
++test('resident question buttons pass through exact authored hits and in-character refusals at three hosts', t => {
++  class Element {
++    children: Element[] = [];
++    textContent = '';
++    onclick?: () => void;
++    constructor(readonly tagName: string) {}
++    append(...nodes: Element[]) { this.children.push(...nodes); }
++    setAttribute() {}
++  }
++  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
++  Object.defineProperty(globalThis, 'document', {
++    configurable: true, value: { createElement: (tagName: string) => new Element(tagName) },
++  });
++  t.after(() => {
++    if (original) Object.defineProperty(globalThis, 'document', original);
++    else Reflect.deleteProperty(globalThis, 'document');
++  });
++
++  const grid = createTerrainGrid();
++  let panel = new Element('section');
++  const npc = createTownNpcActivity({
++    scene: new Scene(),
++    open: () => { panel = new Element('section'); return panel as unknown as HTMLElement; },
++    announce() {}, face() {}, sit() {},
++  }, grid.heightAt);
++  const forest = fire('forest', 122.47759, 407.65367, grid.heightAt(122.47759, 407.65367));
++  const lake = fire('lakeside', 337, 109.65, grid.heightAt(337, 109.65));
++  const [woodcutter, fisherman, steward] = registerTownResidentStations(npc, {
++    campfires: [forest, lake], canStand: () => true, isNight: () => false,
++    forestChop: () => feature('篝火旁劈柴'), mainFishing: () => feature('冰湖冰钓'),
++    palaceProgress: () => ({ key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false }),
++  });
++  const cases = [
++    [woodcutter, npcAddedDialogue.樊樵], [fisherman, npcAddedDialogue.翁寒江], [steward, palaceStewardDialogue],
++  ] as const;
++  for (const [spot, role] of cases) {
++    assert.equal(spot.available?.(), true, spot.label);
++    spot.run();
++    const [speech, controls] = panel.children;
++    assert.deepEqual(panel.children.map(child => child.tagName), ['p', 'div']);
++    assert.ok(controls.children.every(child => child.tagName === 'button'));
++    const ask = (label: string) => {
++      const button = controls.children.find(child => child.textContent === label);
++      assert.ok(button?.onclick, `${spot.label}: ${label}`);
++      button.onclick();
++      return speech.textContent;
++    };
++    assert.equal(ask('问镇长近况'), role.questions.host[1].text);
++    assert.equal(ask('问联系方式'), role.questions.outside[0].text);
++    assert.equal(ask('问联系方式'), role.questions.outside[0].text);
++  }
++});
++
++test('unknown question IDs and unapproved answer slots never publish injected answer text', () => {
++  const questions = npcAddedDialogue.樊樵.questions;
++  const fallback = { kind: 'refusal', text: questions.host[0].text };
++  assert.deepEqual(answerAuthoredNpcQuestion(questions, 'unregistered-topic'), fallback);
++  assert.deepEqual(answerAuthoredNpcQuestion(questions, 'current-work'), {
++    kind: 'fact', text: questions.host[1].text,
++  });
++  const unapproved = { verdict: '可答', text: 'test-source-marker' } as const;
++  assert.deepEqual(answerAuthoredNpcQuestion({
++    host: questions.host, outside: [unapproved, questions.outside[1]],
++  }, 'contact'), fallback);
++  assert.deepEqual(answerAuthoredNpcQuestion({
++    host: [questions.host[0], questions.host[2]], outside: [],
++  }, 'current-work'), { kind: 'refusal', text: questions.host[2].text });
++  assert.equal(answerAuthoredNpcQuestion({ host: [unapproved], outside: [] }, 'unregistered-topic'), undefined);
++});
++
+ test('resident station visibility and 小未 repack the same batch without replacing each other', () => {
+   const scene = new Scene();
+   let shown = true;
+diff --git a/tools/voxel-tavern/town-blockout/town-npc-dialogue.ts b/tools/voxel-tavern/town-blockout/town-npc-dialogue.ts
+index a2d9cd928303c751fa14e26e1c47b254e4c9ea18..e45ce42cb49f87f1528b196e5276caae7f7b17dc 100644
+--- a/tools/voxel-tavern/town-blockout/town-npc-dialogue.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc-dialogue.ts
+@@ -21,6 +21,30 @@ export const npcScript: Readonly<Record<NpcName, RoleScript>> = script;
+ // Authored dialogue can be ready before actors or their activity sites are installed.
+ export const npcAuthoredDialogue = { ...npcScript, ...npcAddedDialogue } as const;
+ 
++export const npcAuthoredQuestionTopics = [
++  { id: 'familiarity', label: '问你们怎么认识', section: 'host', index: 0, fact: false },
++  { id: 'current-work', label: '问镇长近况', section: 'host', index: 1, fact: true },
++  { id: 'character', label: '问镇长为人', section: 'host', index: 2, fact: false },
++  { id: 'introduction', label: '听一句介绍', section: 'host', index: 3, fact: true },
++  { id: 'contact', label: '问联系方式', section: 'outside', index: 0, fact: false },
++  { id: 'residence', label: '问住处', section: 'outside', index: 1, fact: false },
++] as const;
++
++type AuthoredQuestion = Readonly<{ verdict: '可答' | '挡回'; text: string }>;
++type AuthoredQuestions = Readonly<Record<'host' | 'outside', readonly AuthoredQuestion[]>>;
++
++export function answerAuthoredNpcQuestion(questions: AuthoredQuestions, id: unknown): {
++  kind: 'fact' | 'refusal';
++  text: string;
++} | undefined {
++  const topic = npcAuthoredQuestionTopics.find(option => option.id === id);
++  const row = topic && questions[topic.section][topic.index];
++  if (row?.text && row.verdict === '挡回') return { kind: 'refusal', text: row.text };
++  if (row?.text && topic?.fact && row.verdict === '可答') return { kind: 'fact', text: row.text };
++  const fallback = questions.host[0];
++  if (fallback?.text && fallback.verdict === '挡回') return { kind: 'refusal', text: fallback.text };
++}
++
+ export type TownNpcGuide = 'seating' | 'stage' | 'postcard' | 'wishes' | 'ice' |
+   'lantern' | 'mixing' | 'spring' | 'castle' | 'rail' | 'bell';
+ type ExpandedRole = {
+diff --git a/tools/voxel-tavern/town-blockout/town-npc-residents.ts b/tools/voxel-tavern/town-blockout/town-npc-residents.ts
+index e54aa401b07dda51cece7db7220701226da568fd..9dff5674c0e939271a6677b469f8dfd7871dfddf 100644
+--- a/tools/voxel-tavern/town-blockout/town-npc-residents.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc-residents.ts
+@@ -1,6 +1,7 @@
+ import { Color, Object3D, type InstancedMesh } from 'three';
+ import type { TownActivityContext, TownActivitySpot } from './town-activity';
+ import { npcAddedDialogue } from './town-npc-added-dialogue';
++import { answerAuthoredNpcQuestion, npcAuthoredQuestionTopics } from './town-npc-dialogue';
+ import { palaceStewardDialogue } from './town-npc-palace-dialogue';
+ import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
+ 
+@@ -152,9 +153,12 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
+   rotate('问生肖线索', options.clues?.() ?? (name === '秦知礼' ? [palaceStewardDialogue.clues[0]] : []));
+   rotate('聊聊镇民', role.gossip);
+   rotate('聊聊跨年', role.newYear);
+-  const questions = ['问你们怎么认识', '问镇长近况', '问镇长为人', '听一句介绍', '问联系方式', '问住处'];
+-  [...role.questions.host, ...role.questions.outside].forEach(({ text }, index) =>
+-    action(questions[index], () => { speech.textContent = text; }));
++  for (const { id, label } of npcAuthoredQuestionTopics) {
++    action(label, () => {
++      const answer = answerAuthoredNpcQuestion(role.questions, id);
++      if (answer) speech.textContent = answer.text;
++    });
++  }
+   const activity = options.activity?.();
+   if (activity && activity.available?.() !== false) action(activity.label, () => {
+     if (activity.available?.() === false) return;

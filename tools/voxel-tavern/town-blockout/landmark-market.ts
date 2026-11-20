@@ -156,15 +156,57 @@ export function makeSign(text: string, width: number, height: number, x: number,
   return sign;
 }
 
-function furnishBench(s: Workshop, x: number, z: number, direction = 1) {
-  const { put } = s;
+function furnishBench({ put }: Workshop, x: number, z: number) {
   for (const dx of [-.98, .98]) for (const dz of [-.37, .37]) put(wood[0], x + dx, .61, z + dz, .19, 1.22, .19);
   put(wood[3], x, 1.23, z, 2.47, .2, 1.12);
+}
+
+function layOutBenchTools({ put }: Workshop, x: number, z: number, direction: number) {
   put(darkRed, x - .45, 1.35, z, .6, .045, .88);
   put('#e8d1aa', x - .38, 1.38, z, .45, .037, .55);
   put(gold, x + .56, 1.43, z + .2 * direction, .32, .14, .32, 'cylinder');
   put(amber, x + .56, 1.59, z + .2 * direction, .26, .26, .26, 'round', true);
   for (let i = 0; i < 4; i++) put('#a78655', x - .15 + i * .13, 1.35, z - .22, .051, .053, .53);
+}
+
+function furnishGuildRooms(s: Workshop) {
+  const { put } = s;
+
+  // Mark the rooms overhead and underfoot so the existing aisles stay open.
+  put(wood[2], -5.51, 4.47, -.42, 6.18, .22, .27);
+  for (const x of [-7.65, -5.51, -3.37]) {
+    put(wood[0], x, 4.18, -.42, .12, .38, .19);
+    put(gold, x, 3.98, -.42, .17, .06, .23);
+  }
+  put('#755143', -5.49, .155, -2.35, 5.76, .01, 2.72);
+  put(darkRed, -5.49, .155, 2.19, 5.76, .01, 3.16);
+  put(gold, -5.49, .163, 3.70, 5.63, .008, .055);
+  lantern(s, -5.49, 3.65, -2.30, .46, '#e16f30');
+  lantern(s, -5.49, 3.65, 2.20, .46, '#e16f30');
+
+  // Rear room: prepare frames and fill the packing tray on the two existing benches.
+  put(trim, -6.98, 1.36, -2.4, 1.24, .055, .69);
+  put('#e8d1aa', -7.27, 1.40, -2.42, .47, .025, .55);
+  for (const x of [-7.02, -6.92, -6.82, -6.72]) put('#a78655', x, 1.42, -2.37, .05, .06, .46);
+  put(wood[0], -3.86, 1.39, -2.4, 1.54, .12, .74);
+  for (const x of [-4.36, -3.86, -3.36]) {
+    put(red, x, 1.58, -2.4, .34, .28, .34, 'round');
+    put(gold, x, 1.73, -2.4, .19, .04, .19, 'cylinder');
+  }
+
+  // Front room: display finished lanterns beside the accounts desk and wrapping supplies.
+  for (const x of [-7.87, -5.97]) put(wood[2], x, 1.79, 1.6, .1, .92, .12);
+  put(wood[2], -6.92, 2.25, 1.6, 2, .10, .15);
+  lantern(s, -7.34, 1.82, 1.60, .38);
+  lantern(s, -6.50, 1.82, 1.60, .38, '#e16f30');
+  put(darkRed, -4.24, 1.37, 1.63, .69, .08, .60);
+  put('#e8d1aa', -4.24, 1.42, 1.63, .60, .028, .51);
+  put(trim, -4.24, 1.44, 1.63, .024, .015, .47);
+  put(wood[0], -3.34, 1.41, 1.62, .72, .16, .63);
+  for (const x of [-3.53, -3.35, -3.17]) {
+    put('#dec09c', x, 1.61, 1.62, .12, .29, .12, 'cylinder');
+    put(darkRed, x, 1.61, 1.62, .128, .048, .128, 'cylinder');
+  }
 }
 
 // Positions use the unrotated workshop frame; the building and all its stages face west together.
@@ -174,6 +216,71 @@ export const workshopMonkeySteps = [
   [6.92, 2.03, -1.08],
   [5.40, 2.72, -1.08],
 ] as const;
+function dressGuildExterior({ put }: Workshop, rear: number) {
+  // Repeat the lantern frame motif on the porch beam, outside the four window bays.
+  for (const x of [-6.91, -3.70, 3.70, 6.91]) {
+    put(trim, x, 4.46, 7.67, 1.50, .24, .075);
+    for (const step of [-2, -1, 0, 1, 2]) {
+      put(step === 0 ? gold : wood[3], x + step * .22,
+        4.41 + (2 - Math.abs(step)) * .045, 7.715, .146, .070, .034);
+    }
+    for (const side of [-1, 1]) {
+      put(gold, x + side * .66, 4.46, 7.716, .065, .082, .036);
+    }
+  }
+
+  for (const side of [-1, 1]) {
+    for (const z of [-5.30, -1.70, 2.55]) {
+      put(wood[2], side * 8.95, 4.56, z, .31, .15, .50);
+      put(wood[3], side * 9.00, 4.70, z, .39, .15, .66);
+    }
+    put(wood[3], side * 4.22, 4.72, rear - .31, 6.60, .095, .065);
+    for (const x of [1.55, 4.22, 6.89]) {
+      put(gold, side * x, 4.72, rear - .353, .095, .052, .038);
+    }
+  }
+}
+
+function furnishGuildForecourt({ put }: Workshop) {
+  const floor = .15;
+  const z = 6.62;
+  const cisternX = -6.10;
+  const firewoodX = 6.10;
+  put(stone[2], cisternX, floor + .055, z, .60, .11, .60, 'cylinder');
+  put('#756759', cisternX, floor + .30, z, .56, .46, .56, 'cylinder');
+  put('#4b5f68', cisternX, floor + .54, z, .60, .10, .60, 'cylinder');
+  put('#91b5c3', cisternX, floor + .593, z, .47, .026, .47, 'cylinder');
+  put('#d6e7e8', cisternX - .10, floor + .609, z + .04, .15, .013, .19);
+
+  put(trim, firewoodX, floor + .045, z, .68, .09, .60);
+  for (const [row, offsets] of [[0, [-.22, 0, .22]], [1, [-.13, .13]]] as const) {
+    for (const dx of offsets) {
+      const y = floor + .177 + row * .17;
+      const x = firewoodX + dx;
+      put(wood[row], x, y, z, .17, .17, .55);
+      put('#bb8753', x, y, z + .275, .145, .14, .035);
+    }
+  }
+  put(trim, firewoodX - .29, floor + .22, z, .045, .35, .51);
+  put(trim, firewoodX + .29, floor + .22, z, .045, .35, .51);
+
+  // A lantern emblem distinguishes the hanging guild pennant from the central nameplate.
+  const pennantX = 6.15;
+  for (const offset of [-.28, .28]) put(trim, pennantX + offset, 4.23, 7.74, .08, .14, .28);
+  put(trim, pennantX, 4.16, 7.86, .76, .075, .12);
+  put(darkRed, pennantX, 3.79, 7.90, .58, .68, .055);
+  put(darkRed, pennantX - .17, 3.415, 7.90, .24, .10, .055);
+  put(darkRed, pennantX + .17, 3.415, 7.90, .24, .10, .055);
+  put(gold, pennantX, 3.83, 7.935, .31, .26, .023);
+  put(red, pennantX, 3.83, 7.95, .19, .18, .018);
+  put(gold, pennantX, 3.63, 7.94, .052, .16, .026);
+
+  return [
+    collision(cisternX, floor, z, .60, .62, .60),
+    collision(firewoodX, floor, z, .68, .44, .60),
+  ];
+}
+
 function buildGuild() {
   const s = createWorkshop();
   const { put } = s;
@@ -221,8 +328,12 @@ function buildGuild() {
       put(wood[0], x, sashY + edge * (sashHeight / 2 + .07), front + .23, sashWidth + .27, .14, .32);
     }
     window(s, x, rear - .21, 2.83, 2.49, .21, 1.62);
-    furnishBench(s, x, -2.4, x > 0 ? 1 : -1);
-    furnishBench(s, x, 1.6, x > 0 ? -1 : 1);
+    furnishBench(s, x, -2.4);
+    furnishBench(s, x, 1.6);
+    if (x > 0) {
+      layOutBenchTools(s, x, -2.4, 1);
+      layOutBenchTools(s, x, 1.6, -1);
+    }
   }
   put(trim, 0, 5.05, front, width + .32, .45, .62);
   put(trim, 0, 4.47, 7.37, width + .8, .43, .57);
@@ -250,6 +361,9 @@ function buildGuild() {
   put(stone[0], -5.6, 8.52, -2.53, .94, .28, .97);
   put(snow[0], -5.6, 8.71, -2.53, .92, .15, .97);
 
+  furnishGuildRooms(s);
+  dressGuildExterior(s, rear);
+  const forecourtColliders = furnishGuildForecourt(s);
   const stands: Vector[] = [];
   put(trim, 0, 2.9, rear + .28, 15.25, .18, .21);
   put(wood[2], 0, 1.85, rear + .21, 15.18, 1.85, .12);
@@ -305,6 +419,7 @@ function buildGuild() {
       collision(x, head, front, 6.38, 4.95 - head, .38),
     ]),
     ...facadeWindows.flatMap(x => [-2.4, 1.6].map(z => collision(x, 0, z, 2.47, 1.33, 1.12))),
+    ...forecourtColliders,
   ];
   for (const x of facadeWindows) {
     addTownWindow(building, {
