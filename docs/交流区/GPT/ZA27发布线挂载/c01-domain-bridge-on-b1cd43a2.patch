@@ -1,0 +1,246 @@
+diff --git a/tools/verify-c01-domain-bridge.mjs b/tools/verify-c01-domain-bridge.mjs
+new file mode 100644
+index 00000000..192c1629
+--- /dev/null
++++ b/tools/verify-c01-domain-bridge.mjs
+@@ -0,0 +1,240 @@
++// node --import tsx tools/verify-c01-domain-bridge.mjs
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import { createServer } from 'node:http';
++import { registerHooks } from 'node:module';
++import { connect } from 'node:net';
++import { setTimeout as delay } from 'node:timers/promises';
++import { PerspectiveCamera, Scene } from 'three';
++import { WebSocket } from 'ws';
++import { createPresenceServer } from '../src/presence/server.ts';
++import { mountainPresenceBounds, mountainPresenceNorthOrigin, mountainPresencePath } from '../src/shared/za22-mountain-domain.ts';
++import { visitPresenceSnapshot, writePresencePose } from './voxel-tavern/town-blockout/town-presence-motion.ts';
++import { createZa22CloudRoute, createZa22NorthRidgeLine, za22StationApproach } from './voxel-tavern/town-blockout/town-za22-cloud-route.ts';
++import { summitAssemblyAnchor } from './voxel-tavern/town-blockout/main-summit-assembly.ts';
++import { za22GateSeamNorth } from './voxel-tavern/town-blockout/town-za22-mountain-gate.ts';
++
++// The real client only needs these DOM surfaces to expose its pose state in Node.
++registerHooks({ load(url, context, nextLoad) {
++  if (url.endsWith('.css')) return { format: 'module', source: '', shortCircuit: true };
++  return nextLoad(url, context);
++} });
++const { createTownPresence } = await import('./voxel-tavern/town-blockout/town-presence.ts');
++const element = () => ({ append() {}, setAttribute() {}, getContext: () => null, style: {}, classList: { toggle() {} } });
++globalThis.document = {
++  visibilityState: 'visible', body: element(), createElement: element,
++  getElementById: () => null, querySelector: () => null, addEventListener() {},
++};
++globalThis.window = { innerWidth: 960, innerHeight: 540, addEventListener() {}, setTimeout, clearTimeout, setInterval, clearInterval };
++globalThis.localStorage = { getItem: () => 'C01旅客' };
++
++const host = '127.0.0.1';
++const mainPath = '/presence';
++const summit = { east: 336, north: 640, height: 347, yaw: 0 };
++const gate = { east: 300, north: 666, height: 347, yaw: 0 };
++const base = { ...za22StationApproach, yaw: 0 };
++assert.deepEqual([summitAssemblyAnchor.east, za22GateSeamNorth], [gate.east, gate.north], 'P-1 gate survey moved');
++const sockets = [];
++const tunnels = new Set();
++const rooms = [];
++const openedPaths = [];
++let hold;
++let traveller;
++let proxy;
++
++function readSnapshot(bytes) {
++  const entries = [];
++  if (bytes instanceof ArrayBuffer) visitPresenceSnapshot(bytes, (id, east, north, height, yaw, seq) => {
++    entries.push({ id, east, north, height, yaw, seq });
++  });
++  return entries;
++}
++
++class ObservedSocket {
++  static OPEN = WebSocket.OPEN;
++  constructor(url) {
++    this.path = new URL(url).pathname;
++    openedPaths.push(this.path);
++    this.wire = new WebSocket(url);
++    sockets.push(this.wire);
++    for (const type of ['open', 'error', 'close']) this.wire.addEventListener(type, event => this[`on${type}`]?.(event));
++    this.wire.addEventListener('message', event => {
++      if (hold?.path === this.path && !hold.deliver) {
++        const captured = readSnapshot(event.data).find(frame => frame.seq === hold.seq && frame.id === hold.id);
++        if (captured) {
++          hold.frame = captured;
++          hold.deliver = () => this.onmessage(event);
++          return;
++        }
++      }
++      this.onmessage?.(event);
++    });
++  }
++  get readyState() { return this.wire.readyState; }
++  get bufferedAmount() { return this.wire.bufferedAmount; }
++  set binaryType(value) { this.wire.binaryType = value; }
++  send(data) { this.wire.send(data); }
++  close() { this.wire.close(); }
++}
++globalThis.WebSocket = ObservedSocket;
++
++async function until(read, label) {
++  for (let attempt = 0; attempt < 125; attempt++) {
++    traveller?.update(.125);
++    const result = read();
++    if (result !== undefined && result !== null && result !== false) return result;
++    await delay(20);
++  }
++  assert.fail(label);
++}
++
++async function witness(path, name) {
++  const socket = new WebSocket(`ws://${location.host}${path}`);
++  sockets.push(socket);
++  socket.binaryType = 'arraybuffer';
++  const messages = [], frames = [];
++  socket.addEventListener('message', ({ data }) => {
++    if (typeof data === 'string') messages.push(JSON.parse(data));
++    else frames.push(...readSnapshot(data));
++  });
++  await once(socket, 'open');
++  socket.send(JSON.stringify({ type: 'join', name }));
++  const { id } = await until(() => messages.find(message => message.type === 'join' && message.self), `Missing self join for ${name}`);
++  return { id, name, messages, frames, report(point, seq) {
++    const frame = new DataView(new ArrayBuffer(12));
++    writePresencePose(point, seq, frame);
++    socket.send(frame.buffer);
++  } };
++}
++
++function wirePoint(point, path) {
++  return { ...point, north: point.north - (path === mountainPresencePath ? mountainPresenceNorthOrigin : 0) };
++}
++
++const at = (value, point) => Math.abs(value.east - point.east) < .011
++  && Math.abs(value.north - point.north) < .011 && Math.abs(value.height - point.height) < .011;
++const observed = watch => until(() => traveller.getSnowballPeers().find(peer => peer.id === watch.id && peer.name === watch.name),
++  `The client did not see ${watch.name}`);
++
++try {
++  const town = await createPresenceServer({ host, port: 0, ceremonyStartAt: 0, connectionLog() {} });
++  rooms.push(town);
++  const mountain = await createPresenceServer({ host, port: 0, ...mountainPresenceBounds, ceremonyStartAt: 0, connectionLog() {} });
++  rooms.push(mountain);
++  proxy = createServer((_request, response) => response.writeHead(404).end());
++  proxy.on('upgrade', (request, downstream, head) => {
++    // Mirror the two Caddy routes, including the mountain prefix stripping.
++    const room = request.url === mainPath ? town : request.url === mountainPresencePath ? mountain : undefined;
++    if (!room) { downstream.destroy(); return; }
++    const upstream = connect(room.address().port, host, () => {
++      const headers = [`GET ${mainPath} HTTP/1.1`];
++      for (let i = 0; i < request.rawHeaders.length; i += 2) headers.push(`${request.rawHeaders[i]}: ${request.rawHeaders[i + 1]}`);
++      upstream.write(headers.join('\r\n') + '\r\n\r\n');
++      if (head.length) upstream.write(head);
++      downstream.pipe(upstream).pipe(downstream);
++    });
++    for (const socket of [upstream, downstream]) tunnels.add(socket);
++    upstream.on('error', () => downstream.destroy());
++    downstream.on('error', () => upstream.destroy());
++    downstream.on('close', () => { tunnels.delete(downstream); upstream.destroy(); });
++    upstream.on('close', () => { tunnels.delete(upstream); downstream.destroy(); });
++  });
++  proxy.listen(0, host);
++  await once(proxy, 'listening');
++  globalThis.location = new URL(`http://${host}:${proxy.address().port}/`);
++  const townWatch = await witness(mainPath, 'C01镇见证');
++  const mountainWatch = await witness(mountainPresencePath, 'C01山见证');
++  assert.equal(townWatch.id, mountainWatch.id, 'Independent rooms must exercise the same numeric peer ID');
++  const townStand = { ...base, east: base.east + 1 };
++  const mountainStand = { ...summit, east: summit.east + 1 };
++  townWatch.report(wirePoint(townStand, mainPath), 1);
++  mountainWatch.report(wirePoint(mountainStand, mountainPresencePath), 1);
++
++  traveller = createTownPresence(new Scene(), new PerspectiveCamera(), () => {});
++  let foot = base, now = Date.UTC(2026, 0, 1), night = true;
++  const arrivals = [];
++  const bridges = [];
++  const line = createZa22NorthRidgeLine(26);
++  const route = createZa22CloudRoute({
++    now: () => now,
++    nightOpen: () => night,
++    enterOrExit(terminal, point) {
++      traveller.setMountainDomain(terminal === 'summit', route.scene);
++      foot = { ...point, yaw: 0 };
++      arrivals.push({ terminal, ...foot });
++    },
++    view() {},
++  });
++  const sample = () => traveller.sample(!route.riding(), foot.east, foot.north, foot.height, foot.yaw);
++  async function ride(next, departed) {
++    const action = route.action(foot);
++    assert.ok(action, 'No cable action at the surveyed terminal');
++    const departedId = traveller.selfId();
++    action.run();
++    route.update(foot);
++    assert.equal(route.riding(), true);
++    sample();
++    assert.equal(traveller.selfId(), null, 'Cabin must retire the connection');
++    const leave = await until(() => departed.messages.find(entry => entry.type === 'leave' && entry.id === departedId), 'No leave on the source room');
++    const sourcePath = departed === townWatch ? mainPath : mountainPresencePath;
++    assert.equal(openedPaths.at(-1), sourcePath, 'Cabin unexpectedly joined another room');
++    now = line.timeline(now, 0).arrivalAt;
++    route.update(foot);
++    assert.equal(arrivals.at(-1).terminal, next);
++    sample();
++    const targetId = await until(() => traveller.selfId(), `No self join after ${next}`);
++    bridges.push({ sourcePath, leave, targetPath: openedPaths.at(-1), targetId });
++    return targetId;
++  }
++  async function holdPose(watch, path, point, seq) {
++    hold = { path, id: watch.id, seq };
++    watch.report(wirePoint(point, path), seq);
++    await until(() => hold.deliver, `No captured source snapshot on ${path}`);
++    return hold;
++  }
++  async function rejectLate(captured, watch, stand) {
++    const before = await observed(watch);
++    assert.ok(at(before, stand), 'Wrong target frame before the delayed delivery');
++    captured.deliver();
++    hold = undefined;
++    await delay(160);
++    traveller.update(.125);
++    const after = await observed(watch);
++    assert.ok(at(after, stand), 'Delayed old-domain frame contaminated the current room');
++    return { source: captured.path, target: openedPaths.at(-1), held: captured.frame, retained: {
++      id: after.id, name: after.name, east: after.east, north: after.north, height: after.height,
++    } };
++  }
++
++  sample();
++  await until(() => traveller.selfId(), 'No initial town self join');
++  assert.ok(at(await observed(townWatch), townStand));
++  const townOldFrame = await holdPose(townWatch, mainPath, { ...townStand, north: base.north + 1 }, 41);
++  const mountainId = await ride('summit', townWatch);
++  const summitWire = await until(() => mountainWatch.frames.find(frame =>
++    frame.id === mountainId && at(frame, wirePoint(summit, mountainPresencePath))), 'No summit world-to-wire match');
++  const uphill = await rejectLate(townOldFrame, mountainWatch, mountainStand);
++
++  foot = gate;
++  sample();
++  const gateWire = await until(() => mountainWatch.frames.find(frame =>
++    frame.id === mountainId && at(frame, wirePoint(gate, mountainPresencePath))), 'No mountain gate wire match');
++  foot = summit;
++  sample();
++  assert.ok(at(await observed(mountainWatch), mountainStand));
++  const mountainOldFrame = await holdPose(mountainWatch, mountainPresencePath, { ...mountainStand, north: summit.north + 1 }, 42);
++  night = false;
++  const townId = await ride('base', mountainWatch);
++  const baseWire = await until(() => townWatch.frames.find(frame =>
++    frame.id === townId && at(frame, base)), 'No base world-to-wire match');
++  const downhill = await rejectLate(mountainOldFrame, townWatch, { ...townStand, north: base.north + 1 });
++  assert.deepEqual(openedPaths, [mainPath, mountainPresencePath, mainPath]);
++  console.log(JSON.stringify({ openedPaths, bridges, arrivals, nightClosedBeforeReturn: !night,
++    observedWire: { summit: summitWire, gate: gateWire, base: baseWire }, delayedCallbacks: { uphill, downhill } }, null, 2));
++} finally {
++  traveller?.sample(false, 0, 0, 0, 0);
++  for (const socket of sockets) socket.terminate();
++  for (const stream of tunnels) stream.destroy();
++  if (proxy?.listening) await new Promise(resolve => proxy.close(resolve));
++  await Promise.all(rooms.map(room => room.close()));
++}
