@@ -47,6 +47,8 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     ignition: worldPoint({ x: 0, y: 2.04, z: .36 }),
   });
   const floor = (point: AircraftPoint) => ({ ...point, height: anchor.height });
+  // Each fitting faces south. A valid oblique approach still starts on that side of its face.
+  const approachable = (feet: AircraftPoint, target: AircraftPoint) => feet.north < target.north;
   const site = {
     sockets: {
       'snow-wing': floor(targets['snow-wing']),
@@ -55,6 +57,7 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     },
     ignitionPoint: floor(targets.ignition),
     reach: rackReach,
+    approachable,
   } satisfies StarportAssemblySite;
   const hitTargets = targetNames.map(target => {
     const { east, north, height } = targets[target];
@@ -74,8 +77,7 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     let selected: Target | null = null;
     for (const { target, point } of hitTargets) {
       offset.subVectors(point, sight.origin);
-      // Each fitting faces +Z. The eye must be in front of its face, including at oblique angles.
-      if (offset.z >= 0 || offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
+      if (!approachable(feet, targets[target]) || offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
       const miss = sight.distanceSqToPoint(point);
       if (miss > sightRadius ** 2 || miss >= closest) continue;
       closest = miss;
