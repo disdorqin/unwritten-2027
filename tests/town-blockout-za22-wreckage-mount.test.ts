@@ -90,6 +90,12 @@ test('ZA-22 boards into the three surveyed wreckage models and releases them on 
   blocker.position.copy(owner.worldToLocal(firstSightline.ray.at(.5, new Vector3())));
   owner.add(blocker);
   assert.equal(assembly.aimWreckage(firstSightline), null);
+  blocker.material.transparent = true;
+  blocker.material.opacity = .5;
+  assert.equal(assembly.aimWreckage(firstSightline), null);
+  blocker.material.visible = false;
+  assert.equal(assembly.aimWreckage(firstSightline)?.id, assembly.wreckageSites[0]!.id);
+  blocker.material.visible = true;
   blocker.visible = false;
   assert.equal(assembly.aimWreckage(firstSightline)?.id, assembly.wreckageSites[0]!.id);
   blocker.removeFromParent();
