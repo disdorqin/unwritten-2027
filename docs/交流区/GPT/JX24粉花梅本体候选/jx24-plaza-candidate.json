@@ -1,0 +1,45 @@
+{
+  "visualsHash": "18bdac7b582b1116c04a032ffedef4e72943bdd950bf84b7e404dfbeda82288f",
+  "landmark": {
+    "x": 201.5,
+    "n": 207,
+    "ground": 12,
+    "range": 2.15,
+    "label": "写匿名祝福"
+  },
+  "before": "测试存档 1",
+  "after": "候选保存回归",
+  "reads": [
+    "unwritten:town-blessings"
+  ],
+  "writes": [
+    {
+      "key": "unwritten:town-blessings",
+      "count": 20,
+      "first": "候选保存回归",
+      "last": "测试存档 19"
+    }
+  ],
+  "events": [
+    [
+      "face",
+      [
+        202.34,
+        210.65,
+        13.48
+      ]
+    ],
+    [
+      "announce",
+      "祝福墙添了一张新卡片"
+    ]
+  ],
+  "dialogs": [
+    [
+      "匿名祝福墙",
+      "给雪夜小镇留一句话。祝福在这台设备的当前浏览器内保存。"
+    ]
+  ],
+  "blockedOldTrunk": true,
+  "blockedNewAnchor": false
+}

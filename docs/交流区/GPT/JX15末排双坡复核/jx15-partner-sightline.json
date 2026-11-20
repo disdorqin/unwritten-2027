@@ -1,0 +1,193 @@
+{
+  "phase": "candidate",
+  "clearanceModel": "three scene raycasts against the production trim and 36 production seated avatars",
+  "eye": {
+    "east": 224.64,
+    "north": 165.0625,
+    "height": 14.729999999999999,
+    "relativeToRearFloor": 1.03
+  },
+  "clear": 20,
+  "points": [
+    {
+      "target": {
+        "east": 234,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.765212028157972
+    },
+    {
+      "target": {
+        "east": 233.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.544683755922982
+    },
+    {
+      "target": {
+        "east": 233,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.33406085080677
+    },
+    {
+      "target": {
+        "east": 232.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.13365418235439
+    },
+    {
+      "target": {
+        "east": 232,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.943771729085206
+    },
+    {
+      "target": {
+        "east": 231.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.764716816235364
+    },
+    {
+      "target": {
+        "east": 231,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.596786238232877
+    },
+    {
+      "target": {
+        "east": 230.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.440268282740007
+    },
+    {
+      "target": {
+        "east": 230,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.295440677520645
+    },
+    {
+      "target": {
+        "east": 229.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.162568485759596
+    },
+    {
+      "target": {
+        "east": 242,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 25.395945133976287
+    },
+    {
+      "target": {
+        "east": 242.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 25.740319134359233
+    },
+    {
+      "target": {
+        "east": 243,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 26.0897303364041
+    },
+    {
+      "target": {
+        "east": 243.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 26.443979067281177
+    },
+    {
+      "target": {
+        "east": 244,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 26.802873517446304
+    },
+    {
+      "target": {
+        "east": 244.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 27.16622956301702
+    },
+    {
+      "target": {
+        "east": 245,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 27.533870569641202
+    },
+    {
+      "target": {
+        "east": 245.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 27.905627181947807
+    },
+    {
+      "target": {
+        "east": 246,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 28.28133710217523
+    },
+    {
+      "target": {
+        "east": 246.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 28.66084486111286
+    }
+  ]
+}
