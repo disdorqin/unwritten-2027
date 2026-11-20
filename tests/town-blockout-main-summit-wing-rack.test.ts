@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Box3, Group, Vector3, type InstancedMesh } from 'three';
+import { summitWingPickupAvailability } from '../src/shared/summit-wing-pickup';
 import { createSnowWingVisual } from '../tools/voxel-tavern/town-blockout/flight-equipment-visuals';
 import { createMainSummitBlock, mainSummitLayout } from '../tools/voxel-tavern/town-blockout/main-summit-block';
 import {
@@ -11,6 +12,17 @@ import { mountMainSummitWingRack, summitWingRackStand } from '../tools/voxel-tav
 const playerRadius = .27;
 const standingHeight = 1.8;
 const landmarks = createMainSummitRegistrationLandmarks();
+
+test('authoritative pickup checks the same surveyed rack position before eligibility and ownership', () => {
+  const stand = summitWingRackStand;
+  const registered = { snowWingEligible: true };
+  assert.equal(summitWingPickupAvailability(stand, false, { snowWingEligible: false }), 'need-registration');
+  assert.equal(summitWingPickupAvailability(stand, false, registered), 'available');
+  assert.equal(summitWingPickupAvailability(stand, true, registered), 'already-claimed');
+  assert.equal(summitWingPickupAvailability(landmarks.summit.registry, false, registered), 'out-of-reach');
+  assert.equal(summitWingPickupAvailability({ ...stand, height: 347 }, true, registered), 'out-of-reach');
+  assert.equal(summitWingPickupAvailability({ ...stand, east: NaN }, false, registered), 'out-of-reach');
+});
 
 test('the cabin door, P-4 registry and snow-wing rack stay reachable on the summit floor', t => {
   const scene = new Group();

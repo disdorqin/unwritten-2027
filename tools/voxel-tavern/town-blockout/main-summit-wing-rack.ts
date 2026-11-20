@@ -1,10 +1,10 @@
 import { Box3, BoxGeometry, Group, Mesh, MeshLambertMaterial } from 'three';
+import { isWithinSummitWingRackReach, summitWingRackStand } from '../../../src/shared/summit-wing-pickup';
 import { createSnowWingVisual } from './flight-equipment-visuals';
 
-type Point = { east: number; north: number; height: number };
 type Size = readonly [width: number, height: number, depth: number];
 
-export const summitWingRackStand = { east: 66.62, north: 1016.10, height: 800 } as const;
+export { summitWingRackStand };
 
 export function mountMainSummitWingRack(owner: Group) {
   const group = new Group();
@@ -69,10 +69,7 @@ export function mountMainSummitWingRack(owner: Group) {
   return {
     group,
     stand: summitWingRackStand,
-    canReach(pose: Point) {
-      return Math.abs(pose.height - floor) <= .43 &&
-        Math.hypot(pose.east - summitWingRackStand.east, pose.north - mid) <= .72;
-    },
+    canReach: isWithinSummitWingRackReach,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       return frameColliders.some(box => intersectsBody(box, east, north, feet, radius, bodyHeight)) ||
         (wing.group.visible && intersectsBody(wingCollider, east, north, feet, radius, bodyHeight));

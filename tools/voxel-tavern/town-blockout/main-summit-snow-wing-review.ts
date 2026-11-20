@@ -2,7 +2,8 @@ import {
   AmbientLight, Color, DirectionalLight, Fog, Group, Mesh, MeshLambertMaterial, PerspectiveCamera,
   PlaneGeometry, Scene, WebGLRenderer,
 } from 'three';
-import { claimSnowWing, createSnowWingFlight, snowWingSpec } from '../../../src/shared/snow-wing';
+import { createSnowWingFlight, snowWingSpec } from '../../../src/shared/snow-wing';
+import { summitWingPickupAvailability } from '../../../src/shared/summit-wing-pickup';
 import { createSnowWingVisual } from './flight-equipment-visuals';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
@@ -99,15 +100,15 @@ function blocked(east: number, north: number, height: number) {
 function useLodge() {
   const { east, north } = landmarks.summit.registry;
   if (flight.snapshot()) return;
-  if (rack.canReach(position)) {
-    if (claimed) lodgeAction = 'already-claimed';
-    else if (claimSnowWing(claimed, 'summit-lodge', registrar.snapshot())) {
+  const pickup = summitWingPickupAvailability(position, claimed, registrar.snapshot());
+  if (pickup !== 'out-of-reach') {
+    lodgeAction = pickup;
+    if (pickup === 'available') {
       claimed = true;
       rack.setClaimed(true);
       lodgeAction = 'claimed';
       status.textContent = '已领雪翼。走出小屋，向南越过雪崖。';
-    } else {
-      lodgeAction = 'need-registration';
+    } else if (pickup === 'need-registration') {
       status.textContent = '先到登记台登记，再到翼架领翼。';
     }
   } else if (Math.hypot(position.east - east, position.north - north) <= 1.1) {
