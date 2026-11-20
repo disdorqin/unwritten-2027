@@ -4,9 +4,12 @@ import {
 } from 'three';
 import { sledMaximumSpeed } from '../../../src/shared/sled-speed';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
+import { mainSummitCloudSpec } from './main-summit-cloud-layer';
 import { createMainSummitSledRoute } from './main-summit-sled-route';
 import { createSummitSledReplay } from './main-summit-sled-replay';
 import { createMainSummitTrail } from './main-summit-trail';
+import { createMainSummitTrailChimeAudio } from './main-summit-trail-chime-audio';
+import { mountMainSummitTrailChimes } from './main-summit-trail-chimes';
 import { mountMainSummitWreckage } from './main-summit-wreckage';
 
 type Point = { east: number; north: number; height: number };
@@ -62,7 +65,15 @@ function makeWalkClock(points: readonly Point[]) {
     return { east: a.east + (b.east - a.east) * fraction, north: a.north + (b.north - a.north) * fraction,
       height: a.height + (b.height - a.height) * fraction };
   }
-  return { length, sample };
+  function distanceAtHeight(height: number) {
+    const index = points.findIndex(point => point.height >= height);
+    if (index < 1) throw new RangeError('The surveyed walk does not cross the cloud altitude.');
+    const previous = points[index - 1]!;
+    const next = points[index]!;
+    const distance = chainage[index - 1]!;
+    return distance + (chainage[index]! - distance) * (height - previous.height) / (next.height - previous.height);
+  }
+  return { length, sample, distanceAtHeight };
 }
 
 function buildRibbon(owner: Group, points: readonly Point[], halfWidth: number, material: MeshLambertMaterial,
@@ -106,15 +117,26 @@ const sledInfrastructure = new Group();
 domain.add(walkInfrastructure, sledInfrastructure);
 buildRibbon(walkInfrastructure, trail.points, 1.5, trailMaterial, terrain.heightAt);
 const wreckage = mountMainSummitWreckage(walkInfrastructure, trail);
+const walkBells = mountMainSummitTrailChimes(walkInfrastructure, {
+  sample: walkClock.sample, groundAt: terrain.heightAt,
+  startMetres: walkClock.distanceAtHeight(mainSummitCloudSpec.bottom),
+  endMetres: walkClock.distanceAtHeight(mainSummitCloudSpec.top),
+});
 // The lower host is a route review fixture. Its bench only represents the isolated track.
 buildRibbon(sledInfrastructure, sledRoute.points, 2.1, sledMaterial, (_east, _north, height) => height - 0.7);
+const [, sledCloudBand] = sledRoute.arcs;
+const sledBells = mountMainSummitTrailChimes(sledInfrastructure, {
+  sample: sledRoute.sampleAtDistance, startMetres: sledCloudBand!.startMetres, endMetres: sledCloudBand!.endMetres,
+});
+const bellAudio = createMainSummitTrailChimeAudio();
+let bellSite: (typeof walkBells.sites)[number] | undefined;
 const posts = new BoxGeometry(0.19, 2.5, 0.19);
 const flag = new BoxGeometry(0.65, 0.6, 0.09);
 const wood = new MeshLambertMaterial({ color: '#674c46' });
 const red = new MeshLambertMaterial({ color: '#ab262b' });
 for (const arc of sledRoute.arcs) {
-  const spacing = arc.id === 'through-cloud' ? 24 : 90;
-  for (let distance = arc.startMetres; distance < arc.endMetres; distance += spacing) {
+  if (arc.id === 'through-cloud') continue;
+  for (let distance = arc.startMetres; distance < arc.endMetres; distance += 90) {
     const point = sledRoute.sampleAtDistance(distance);
     const next = sledRoute.sampleAtDistance(distance + 1);
     const east = next.east - point.east, north = next.north - point.north;
@@ -155,6 +177,7 @@ for (const site of wreckage.sites) {
 }
 for (const control of controls) {
   control.addEventListener('click', () => {
+    void bellAudio.unlockAudio();
     mode = control.dataset.p3Action === 'wreckage' ? 'wreckage' : control.dataset.p3Action === 'walk' ? 'walk' : 'sled-ready';
     for (const button of controls) button.setAttribute('aria-pressed', String(button === control));
     wreckageChoices.hidden = mode !== 'wreckage';
@@ -169,6 +192,7 @@ for (const control of controls) {
   });
 }
 addEventListener('keydown', event => {
+  if (!event.repeat && (event.code === 'KeyW' || event.code === 'KeyE')) void bellAudio.unlockAudio();
   if (event.code === 'KeyW') forwards = true;
   if (event.code === 'KeyE' && mode === 'sled-ready') {
     mode = 'sled';
@@ -191,6 +215,7 @@ function snapshot() {
       section: sled.stage, speed: sled.speed, maxSpeed: replay.maximumSpeed(), cap: sledMaximumSpeed,
       elapsedMs: sled.elapsedSeconds * 1000, finished: mode === 'sled-finished' },
     render: { draws: renderer.info.render.calls, triangles: renderer.info.render.triangles },
+    chime: { site: bellSite ?? null, ...bellAudio.snapshot() },
   };
 }
 
@@ -204,7 +229,12 @@ function draw() {
   const to = sample(Math.min(length, station + 5));
   const look = new Vector3(to.east - from.east, 0, from.north - to.north).normalize();
   const walking = mode === 'walk' || mode === 'wreckage';
-  const fogged = !walking && sled.section === 'through-cloud';
+  const onCloudWalk = mode === 'walk' && position.height >= mainSummitCloudSpec.bottom &&
+    position.height <= mainSummitCloudSpec.top;
+  const onCloudSled = mode === 'sled' && sled.section === 'through-cloud';
+  const fogged = onCloudWalk || onCloudSled;
+  const bells = onCloudWalk ? walkBells.sites : onCloudSled ? sledBells.sites : [];
+  bellSite = bells.find(site => site.metres >= station);
   walkInfrastructure.visible = walking;
   sledInfrastructure.visible = !walking;
   terrain.coarse.visible = walking;
@@ -215,6 +245,9 @@ function draw() {
     const model = wreckageSite.model;
     camera.lookAt(model.east, model.height + .16, -model.north);
   } else camera.lookAt(camera.position.clone().add(look).add(new Vector3(0, -0.13, 0)));
+  if (bellSite) {
+    bellAudio.update({ ...position, height: camera.position.y, heading: Math.atan2(look.x, -look.z) }, bellSite);
+  } else bellAudio.update();
   renderer.render(scene, camera);
 }
 
@@ -238,7 +271,13 @@ function advance(elapsedMs: number, paint = true) {
 }
 
 Object.assign(window, { p3: { snapshot, advance } });
-addEventListener('pagehide', event => { if (!event.persisted) wreckage.dispose(); });
+addEventListener('pagehide', event => {
+  if (event.persisted) return;
+  bellAudio.dispose();
+  walkBells.dispose();
+  sledBells.dispose();
+  wreckage.dispose();
+});
 draw();
 if (new URL(location.href).searchParams.get('proof') !== '1') {
   let last = performance.now();
