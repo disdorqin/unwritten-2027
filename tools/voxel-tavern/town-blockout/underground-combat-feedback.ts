@@ -16,17 +16,21 @@ type PlayerHurt = Readonly<{ kind: 'player-hurt'; damage: number; weight: Underg
 export type UndergroundCombatCue = ConfirmedStamp & (CreatureHit | PlayerHurt);
 type ConfirmedImpactCue = ConfirmedStamp & (Extract<CreatureHit, { hitsLost: number }> | PlayerHurt);
 
+export type UndergroundCreatureHitEffect = Readonly<{
+  family: HitFamily;
+  holdMs: number;
+  flashMs: number;
+  stagger: 'small' | 'medium';
+  /** Additional target-only recoil after the common impact hold. */
+  extraStaggerMs: number;
+}>;
+
 type Options = Readonly<{
   parent: HTMLElement;
   project?(point: UndergroundMiningPoint): Readonly<{ x: number; y: number }> | undefined;
   getAudioContext?(): BaseAudioContext | undefined;
   audioOutput?(context: BaseAudioContext): AudioNode;
-  showCreatureHit?(cue: ConfirmedStamp & Extract<CreatureHit, { hitsLost: number }>, effect: Readonly<{
-    family: HitFamily;
-    holdMs: number;
-    flashMs: number;
-    stagger: 'small' | 'medium';
-  }>): void;
+  showCreatureHit?(cue: ConfirmedStamp & Extract<CreatureHit, { hitsLost: number }>, effect: UndergroundCreatureHitEffect): void;
   /** Resolve the source and eligible body in the current host, then use normal collision checks. */
   onKnockback?(cue: ConfirmedImpactCue, weight: UndergroundKnockbackWeight): void;
   clear?(): void;
@@ -182,7 +186,8 @@ export function mountUndergroundCombatFeedback(options: Options) {
         slot.element.hidden = true;
       }
       options.showCreatureHit?.(cue, {
-        family, holdMs: hitStopMs, flashMs: hitFlashMs, stagger: family === 'ice' ? 'small' : 'medium',
+        family, holdMs: hitStopMs, flashMs: hitFlashMs,
+        stagger: family === 'ice' ? 'small' : 'medium', extraStaggerMs: family === 'ice' ? 80 : 0,
       });
       options.onKnockback?.(cue, family === 'ice' ? 'light' : 'medium');
       play(family);

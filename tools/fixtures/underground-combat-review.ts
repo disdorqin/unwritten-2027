@@ -1,8 +1,12 @@
 import {
-  BoxGeometry, Color, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
+  BoxGeometry, Color, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Scene, Vector2, Vector3,
+  WebGLRenderer,
   type Object3D,
 } from 'three';
-import { mountUndergroundCombatFeedback, type UndergroundCombatCue } from '../voxel-tavern/town-blockout/underground-combat-feedback';
+import { createUndergroundCombatDebris } from '../voxel-tavern/town-blockout/underground-combat-debris';
+import {
+  mountUndergroundCombatFeedback, type UndergroundCombatCue, type UndergroundCreatureHitEffect,
+} from '../voxel-tavern/town-blockout/underground-combat-feedback';
 import { applyUndergroundKnockback } from '../voxel-tavern/town-blockout/underground-knockback';
 
 const layer = 'review-mine';
@@ -38,12 +42,13 @@ const targets = Actors.map(actor => {
   scene.add(mesh);
   return mesh;
 });
-const spark = new Mesh(new BoxGeometry(.12, .12, .12), new MeshBasicMaterial({ color: '#fff2c7' }));
-spark.visible = false;
-scene.add(spark);
+const debris = createUndergroundCombatDebris();
+scene.add(debris.object);
+const firstDebris = new Matrix4();
+const firstDebrisPosition = new Vector3();
 const events: { code: string; trusted: boolean }[] = [];
 const receipts: UndergroundCombatCue[] = [];
-const effects: { id: string; family: string; holdMs: number; flashMs: number; stagger: string }[] = [];
+const effects: Array<{ id: string } & UndergroundCreatureHitEffect> = [];
 type KnockbackOptions = Parameters<typeof applyUndergroundKnockback>[0];
 type Foot = NonNullable<ReturnType<KnockbackOptions['readFoot']>>;
 type Weight = KnockbackOptions['weight'];
@@ -57,7 +62,7 @@ const ray = new Raycaster();
 let clock = 0;
 let heldTool: 'pickaxe' | 'snowball' = 'pickaxe';
 let activeLayer = layer;
-let flash: { id: string; until: number } | undefined;
+const reactions = new Map<string, { flashUntil: number; recoilUntil: number }>();
 let last: UndergroundCombatCue | undefined;
 let acceptedImpact: { cue: UndergroundCombatCue; from: Foot } | undefined;
 let sent = 0;
@@ -110,9 +115,11 @@ const feedback = mountUndergroundCombatFeedback({
   },
   showCreatureHit(cue, effect) {
     effects.push({ id: cue.targetId, ...effect });
-    flash = { id: cue.targetId, until: clock + effect.flashMs };
-    spark.position.set(cue.at.east + .12, cue.at.height + .28, -cue.at.north + .08);
-    spark.visible = true;
+    reactions.set(cue.targetId, {
+      flashUntil: clock + effect.flashMs,
+      recoilUntil: clock + effect.holdMs + effect.extraStaggerMs,
+    });
+    debris.burst(effect.family, { x: cue.at.east, y: cue.at.height + .18, z: -cue.at.north }, clock);
   },
   onKnockback(cue, weight) {
     if (acceptedImpact?.cue !== cue) throw new Error('Missing host-resolved source of accepted impact');
@@ -122,8 +129,8 @@ const feedback = mountUndergroundCombatFeedback({
     pushSubject(subject, object, acceptedImpact.from, weight);
   },
   clear() {
-    flash = undefined;
-    spark.visible = false;
+    reactions.clear();
+    debris.clear();
   },
 });
 feedback.setLayer(layer);
@@ -200,12 +207,15 @@ window.addEventListener('keydown', event => {
 function render() {
   const { held, screenX, screenY } = feedback.sample(clock);
   for (const [index, target] of targets.entries()) {
-    const flashOn = flash?.id === target.name && clock < flash.until;
+    const reaction = reactions.get(target.name);
+    const flashOn = reaction && clock < reaction.flashUntil;
+    const recoiling = reaction && clock < reaction.recoilUntil;
     target.material.color.set(flashOn ? '#ffffff' : Actors[index].color);
-    // Freeze only the individual impact visual. Steering and local time keep running.
-    target.rotation.y = held.has(target.name) ? 0 : .04;
+    // Only the impacted actor's presentation stops. Input and local time keep running.
+    if (!held.has(target.name)) target.rotation.y = recoiling ? -.16 : .04;
+    if (reaction && !flashOn && !recoiling) reactions.delete(target.name);
   }
-  spark.visible = !!flash && clock < flash.until;
+  debris.sample(clock);
   renderer.domElement.style.transform = screenX || screenY ? `translate(${screenX}px, ${screenY}px)` : '';
   if (analyser) {
     analyser.getFloatTimeDomainData(audioWave);
@@ -244,10 +254,14 @@ Object.assign(window, { undergroundCombatProbe: {
     const rim = feedback.overlay.querySelector<HTMLElement>('[data-underground-combat-hurt]')!;
     const numbers = Array.from(feedback.overlay.querySelectorAll<HTMLElement>('[data-underground-combat-damage]'))
       .filter(node => !node.hidden).map(node => ({ text: node.textContent, transform: node.style.transform }));
+    if (debris.object.count) debris.object.getMatrixAt(0, firstDebris);
     return {
       clock, sent, activeLayer, aimed: aimedAt(), heldTool, pending, events, receipts, effects, impacts,
       audioPeak, held: [...pose.held.entries()], shake: [pose.screenX, pose.screenY], rim: Number(rim.style.opacity),
-      numbers, spark: spark.visible, drawCalls: renderer.info.render.calls, view: camera.quaternion.toArray(),
+      numbers, debrisCount: debris.object.count,
+      firstDebris: debris.object.count ? firstDebrisPosition.setFromMatrixPosition(firstDebris).toArray() : null,
+      targetTurns: targets.map(target => target.rotation.y),
+      drawCalls: renderer.info.render.calls, view: camera.quaternion.toArray(),
       foot: readFoot(camera), footZ: camera.position.z, transform: renderer.domElement.style.transform,
       colors: targets.map(target => target.material.color.getHexString()),
       overlayPointerEvents: feedback.overlay.style.pointerEvents,

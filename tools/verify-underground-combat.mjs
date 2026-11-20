@@ -158,28 +158,43 @@ try {
   assert.deepEqual(wrong.effects, []);
   assert.deepEqual(wrong.numbers, []);
   assert.deepEqual(wrong.impacts, []);
+  assert.equal(wrong.debrisCount, 0);
   assert.equal(wrong.audioPeak, 0);
   await page.keyboard.press('Digit2');
   await click(2);
   await page.waitForFunction(() => window.undergroundCombatProbe.inspect().audioPeak > .002);
   const ice = await inspect();
   assert.equal(ice.receipts.at(-1).outcome, 'defeated');
-  assert.deepEqual(ice.effects.at(-1), { id: 'clump', family: 'ice', holdMs: 40, flashMs: 110, stagger: 'small' });
+  assert.deepEqual(ice.effects.at(-1), {
+    id: 'clump', family: 'ice', holdMs: 40, flashMs: 110, stagger: 'small', extraStaggerMs: 80,
+  });
   assert.deepEqual(ice.held.map(([id]) => id), ['clump']);
   assert.equal(ice.numbers[0].text, '1');
   assert.match(ice.numbers[0].transform, /translate\(.+px, .+px\)/);
   assert.equal(ice.colors[0], 'ffffff');
-  assert.equal(ice.spark, true);
+  assert.equal(ice.debrisCount, 6);
+  assert.ok(ice.firstDebris);
   assert.equal(ice.impacts.length, 1);
   verifyFreeImpact(ice.impacts[0], 'clump', 'light', .22, requests[1].from);
   await page.screenshot({ path: resolve(output, 'ice-hit.png') });
   await advancePresentation(39);
   assert.equal((await inspect()).held.length, 1);
   await advancePresentation(1);
-  assert.equal((await inspect()).held.length, 0);
+  const thawed = await inspect();
+  assert.deepEqual(thawed.held, []);
+  assert.notEqual(thawed.targetTurns[0], ice.targetTurns[0]);
+  assert.equal(thawed.targetTurns[1], ice.targetTurns[1]);
+  assert.notDeepEqual(thawed.firstDebris, ice.firstDebris);
   await advancePresentation(70);
-  assert.equal((await inspect()).spark, false);
-  await advancePresentation(530);
+  const afterFlash = await inspect();
+  assert.notEqual(afterFlash.colors[0], 'ffffff');
+  assert.equal(afterFlash.targetTurns[0], thawed.targetTurns[0]);
+  assert.equal(afterFlash.debrisCount, 6);
+  await advancePresentation(10);
+  assert.equal((await inspect()).targetTurns[0], ice.targetTurns[0]);
+  await advancePresentation(120);
+  assert.equal((await inspect()).debrisCount, 0);
+  await advancePresentation(400);
   assert.deepEqual((await inspect()).numbers, []);
   assert.equal(await page.evaluate(() => window.undergroundCombatProbe.replay()), false);
   assert.equal((await inspect()).impacts.length, 1);
@@ -195,9 +210,12 @@ try {
   await page.waitForFunction(() => window.undergroundCombatProbe.inspect().audioPeak > .002);
   const metal = await inspect();
   assert.equal(metal.receipts.at(-1).outcome, 'damaged');
-  assert.deepEqual(metal.effects.at(-1), { id: 'skeleton', family: 'metal', holdMs: 40, flashMs: 110, stagger: 'medium' });
+  assert.deepEqual(metal.effects.at(-1), {
+    id: 'skeleton', family: 'metal', holdMs: 40, flashMs: 110, stagger: 'medium', extraStaggerMs: 0,
+  });
   assert.equal(metal.colors[1], 'ffffff');
   assert.equal(metal.numbers[0].text, '1');
+  assert.equal(metal.debrisCount, 5);
   assert.equal(metal.impacts.length, 2);
   verifyFreeImpact(metal.impacts[1], 'skeleton', 'medium', .46, requests[2].from);
   await page.screenshot({ path: resolve(output, 'metal-hit.png') });
@@ -206,6 +224,9 @@ try {
   await page.waitForFunction(() => window.undergroundCombatProbe.inspect().sent === 4);
   await advancePresentation(40);
   const hurt = await inspect();
+  assert.deepEqual(hurt.held, []);
+  assert.equal(hurt.targetTurns[1], metal.targetTurns[1]);
+  assert.notDeepEqual(hurt.firstDebris, metal.firstDebris);
   assert.equal(hurt.receipts.at(-1).damage, 16);
   assert.equal(requests.at(-1).health, 84);
   assert.ok(hurt.rim > 0 && Math.hypot(...hurt.shake) > 0);
@@ -235,7 +256,8 @@ try {
   assert.equal(cleared.rim, 0);
   assert.deepEqual(cleared.numbers, []);
   assert.deepEqual(cleared.held, []);
-  assert.equal(cleared.spark, false);
+  assert.equal(cleared.debrisCount, 0);
+  assert.equal(cleared.firstDebris, null);
   await page.evaluate(() => window.undergroundCombatProbe.setLayer('review-mine'));
   assert.equal(await page.evaluate(() => window.undergroundCombatProbe.replay()), false);
   assert.equal((await inspect()).impacts.length, 3);
@@ -252,9 +274,9 @@ try {
 
   await writeFile(resolve(output, 'combat-review.json'), JSON.stringify({
     scope: 'Original encounter and survival authority. Local room collision, presentation clock and WebGL actors are fixtures. The heavy wall impact is staged separately.',
-    browser: browser.version(), requests, wrong, ice, metal, hurt, steered, reduced, cleared, heavy, errors,
+    browser: browser.version(), requests, wrong, ice, thawed, afterFlash, metal, hurt, steered, reduced, cleared, heavy, errors,
   }, null, 2) + '\n');
-  console.log('U-14: Chromium confirmed both counter effects, 40 ms holds, nonblocking received-hit feedback and wall-clipped knockback.');
+  console.log('U-14: Chromium confirmed distinct debris, common 40 ms holds, ice-only recoil, uninterrupted steering and wall-clipped knockback.');
 } catch (error) {
   await writeFile(resolve(output, 'failure.json'), JSON.stringify({
     error: String(error), requests, errors, health: survival.status(playerId).health,
