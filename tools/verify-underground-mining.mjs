@@ -102,6 +102,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 720, height: 480 } });
   page.setDefaultTimeout(12_000);
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
   page.on('response', response => { if (response.status() >= 400) errors.push(response.url()); });
   await page.goto(`http://127.0.0.1:${address.port}/u8-review`);
   await page.waitForFunction(() => window.undergroundMiningProbe?.inspect().drawings > 0);
@@ -120,11 +122,15 @@ try {
   assert.equal(first.ray, oreId);
   assert.equal(first.hits, 0);
   assert.equal(first.cluster, true);
+  assert.equal(first.knockbacks, 0);
   await page.screenshot({ path: resolve(output, 'vein.png') });
   await configure({ held: 'other' });
   assert.equal((await hit(1)).hits, 0);
   await configure({ held: 'pickaxe', layer: 'test-crystal' });
-  assert.equal((await hit(2)).hits, 0);
+  const rejected = await hit(2);
+  assert.equal(rejected.hits, 0);
+  assert.equal(rejected.knockbacks, 0);
+  assert.deepEqual(rejected.foot, first.foot);
   assert.deepEqual(requests.slice(0, 2).map(request => request.accepted), [false, false]);
   await configure({ layer });
   await page.evaluate(() => window.undergroundMiningProbe.localTool(false));
@@ -144,6 +150,17 @@ try {
     assert.equal(state.cracks, count < 3);
     assert.equal(state.scar, count === 3);
     assert.equal(state.cores.length, count === 3 ? 1 : 0);
+    assert.deepEqual(state.cameraOrientation, first.cameraOrientation);
+    assert.equal(state.knockbacks, count === 3 ? 1 : 0);
+    if (count === 3) {
+      assert.deepEqual(state.lastKnockback, { distance: .86, blocked: false });
+      assert.ok(Math.abs(state.foot.north - first.foot.north + .86) < 1e-9);
+      assert.equal(state.foot.east, first.foot.east);
+      assert.equal(state.foot.height, first.foot.height);
+    } else {
+      assert.equal(state.lastKnockback, undefined);
+      assert.deepEqual(state.foot, first.foot);
+    }
     if (count === 1) await page.screenshot({ path: resolve(output, 'cracked.png') });
     if (count === 3) await page.screenshot({ path: resolve(output, 'scar-and-core.png') });
     strikes.push(state);
@@ -156,6 +173,8 @@ try {
   const pickup = await inspect();
   assert.equal(pickup.backpack, 5);
   assert.equal(pickup.trustedPicks, 1);
+  assert.equal(pickup.knockbacks, 1);
+  assert.deepEqual(pickup.foot, strikes.at(-1).foot);
   await page.keyboard.press('e');
   assert.equal((await inspect()).sent, 6);
   assert.equal((await inspect()).backpack, 5);
@@ -166,12 +185,13 @@ try {
   const changedLayer = await inspect();
   assert.equal(changedLayer.scar, false);
   assert.equal(changedLayer.cluster, false);
+  assert.equal(changedLayer.knockbacks, 1);
   assert.deepEqual(changedLayer.cores, []);
   assert.deepEqual(errors, []);
   await writeFile(resolve(output, 'mining-review.json'), JSON.stringify({
     browser: browser.version(), marker, first, strikes, pickup, changedLayer, rewards, requests, errors,
   }, null, 2) + '\n');
-  console.log('U-8: actual Chromium left-click x3 and E, authority rejections, one core, and a real rock scar.');
+  console.log('U-8/U-14: actual Chromium left-click x3 and E, one ore core and one 0.86 m final-strike knockback.');
 } catch (error) {
   await writeFile(resolve(output, 'failure.json'), JSON.stringify({
     error: String(error), requests, errors, rewards, state: mining.snapshot(),

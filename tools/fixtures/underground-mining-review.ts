@@ -1,8 +1,9 @@
 import {
-  AmbientLight, BoxGeometry, Color, Group, HemisphereLight, IcosahedronGeometry, Mesh, MeshLambertMaterial,
+  AmbientLight, Box3, BoxGeometry, Color, Group, HemisphereLight, IcosahedronGeometry, Mesh, MeshLambertMaterial,
   PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import type { UndergroundMiningCore, UndergroundMiningReceipt, UndergroundMiningTargetView } from '../../src/shared/underground-mining';
+import { applyUndergroundKnockback } from '../voxel-tavern/town-blockout/underground-knockback';
 import { mountUndergroundMiningActivity } from '../voxel-tavern/town-blockout/underground-mining-activity';
 import { createUndergroundOreVein } from '../voxel-tavern/town-blockout/underground-ore-vein';
 
@@ -21,16 +22,20 @@ function block(size: [number, number, number], xyz: [number, number, number], co
   const mesh = new Mesh(new BoxGeometry(...size), new MeshLambertMaterial({ color, flatShading: true }));
   mesh.position.set(...xyz);
   scene.add(mesh);
+  return new Box3().setFromObject(mesh);
 }
-block([5, .20, 6], [0, -90.10, 1.2], '#5b4a42');
-block([5, 3, .22], [0, -88.5, .89], '#685b56');
-block([.24, 3, 5], [-2.45, -88.5, 3.35], '#534a49');
-block([.24, 3, 5], [2.45, -88.5, 3.35], '#534a49');
+const floor = block([5, .20, 6], [0, -90.10, 1.2], '#5b4a42');
+const walls = [
+  block([5, 3, .22], [0, -88.5, .89], '#685b56'),
+  block([.24, 3, 5], [-2.45, -88.5, 3.35], '#534a49'),
+  block([.24, 3, 5], [2.45, -88.5, 3.35], '#534a49'),
+];
+const walker = { radius: .27, height: 1.8 };
 
 const centre = new Vector2(0, 0);
 const ray = new Raycaster();
 const veins = new Map<string, ReturnType<typeof createUndergroundOreVein>>();
-const cores = new Map<string, Mesh>();
+const cores = new Map<string, Mesh<IcosahedronGeometry, MeshLambertMaterial>>();
 const rendered = new Map<string, UndergroundMiningTargetView>();
 const targetFocus = new Vector3(0, -89.3, 1.033);
 const coreFocus = new Vector3(0, -89.89, 1.55);
@@ -43,7 +48,21 @@ let sounds = 0;
 let backpack = 0;
 let trustedClicks = 0;
 let trustedPicks = 0;
+let knockbacks = 0;
+let lastKnockback: ReturnType<typeof applyUndergroundKnockback>;
 let lastRay: string | undefined;
+
+function tryStep(east: number, north: number) {
+  const z = -north;
+  const { radius, height } = walker;
+  if (east - radius < floor.min.x || east + radius > floor.max.x ||
+      z - radius < floor.min.z || z + radius > floor.max.z) return false;
+  if (walls.some(wall => wall.max.y > floor.max.y && wall.min.y < floor.max.y + height &&
+      Math.hypot(Math.max(wall.min.x - east, east - wall.max.x, 0),
+        Math.max(wall.min.z - z, z - wall.max.z, 0)) <= radius)) return false;
+  camera.position.set(east, camera.position.y, z);
+  return true;
+}
 
 function aimed() {
   scene.updateMatrixWorld(true);
@@ -114,7 +133,20 @@ const activities = mountUndergroundMiningActivity({
     mesh.material.dispose();
     cores.delete(id);
   },
-  onStrike() { sounds++; },
+  onStrike({ target, core }) {
+    sounds++;
+    if (target.kind !== 'ore' || !target.open || target.hits !== target.strikes || core?.at.layer !== shownLayer) return;
+    const result = applyUndergroundKnockback({
+      from: target.at,
+      weight: 'heavy',
+      readFoot: () => ({ layer: shownLayer, east: camera.position.x, north: -camera.position.z }),
+      tryMove: next => tryStep(next.east, next.north),
+    });
+    if (result) {
+      knockbacks++;
+      lastKnockback = result;
+    }
+  },
 });
 
 renderer.domElement.addEventListener('pointerdown', event => {
@@ -155,6 +187,8 @@ Object.assign(window, { undergroundMiningProbe: {
       scar: vein?.group.getObjectByName('ore-scar')?.visible ?? false,
       cores: [...cores.keys()], drawings: renderer.info.render.calls,
       isVeinGroup: vein?.group instanceof Group,
+      foot: { east: camera.position.x, north: -camera.position.z, height: floor.max.y },
+      cameraOrientation: camera.quaternion.toArray(), knockbacks, lastKnockback,
     };
   },
 } });

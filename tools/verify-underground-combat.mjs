@@ -65,9 +65,12 @@ function hit(target, tool) {
   const hitsLost = previous.remainingHits - actor.remainingHits;
   const site = sites[target];
   return {
-    layer, sequence: tick + 1, kind: 'creature-hit', outcome: result.hit, targetId: target, tool,
-    at: { layer, ...site.at, height: site.height },
-    ...(result.hit === 'wrong-tool' ? {} : { hitsLost }),
+    cue: {
+      layer, sequence: tick + 1, kind: 'creature-hit', outcome: result.hit, targetId: target, tool,
+      at: { layer, ...site.at, height: site.height },
+      ...(result.hit === 'wrong-tool' ? {} : { hitsLost }),
+    },
+    from: { layer, east: feet.east, north: feet.north },
   };
 }
 
@@ -79,7 +82,12 @@ function incomingHurt() {
   assert.equal(results.filter(item => item.damage > 0).length, 1);
   assert.equal(result.damage, 16);
   assert.equal(survival.status(playerId).health, healthBefore - result.damage);
-  return { layer, sequence: tick + 1, kind: 'player-hurt', damage: result.damage, weight: result.damageBand };
+  const sources = encounter.snapshot().filter(actor => actor.phase !== 'defeated' && actor.room === room);
+  assert.deepEqual(sources.map(actor => actor.id), ['skeleton']);
+  return {
+    cue: { layer, sequence: tick + 1, kind: 'player-hurt', damage: result.damage, weight: result.damageBand },
+    from: { layer, ...sources[0].at },
+  };
 }
 
 const server = await createServer({
@@ -101,9 +109,9 @@ const server = await createServer({
           res.writeHead(400).end('{}');
           return;
         }
-        const cue = req.url === '/hit' ? hit(parameters.target, parameters.tool) : incomingHurt();
-        requests.push({ cue, health: survival.status(playerId).health });
-        res.end(JSON.stringify(cue));
+        const impact = req.url === '/hit' ? hit(parameters.target, parameters.tool) : incomingHurt();
+        requests.push({ ...impact, health: survival.status(playerId).health });
+        res.end(JSON.stringify(impact));
       })().catch(error => { console.error(error); res.writeHead(500).end('{}'); });
     });
   } }],
@@ -112,6 +120,16 @@ const server = await createServer({
 
 let browser;
 const errors = [];
+const distanceBetween = (from, to) => Math.hypot(to.east - from.east, to.north - from.north);
+function verifyFreeImpact(report, subject, weight, distance, from) {
+  assert.equal(report.subject, subject);
+  assert.equal(report.weight, weight);
+  assert.deepEqual(report.from, from);
+  assert.equal(report.blocked, false);
+  assert.ok(Math.abs(report.distance - distance) < 1e-9);
+  assert.ok(Math.abs(distanceBetween(report.before, report.after) - distance) < 1e-9);
+  assert.ok(Math.abs(distanceBetween(from, report.after) - distanceBetween(from, report.before) - distance) < 1e-9);
+}
 try {
   await server.listen();
   const address = server.httpServer?.address();
@@ -121,6 +139,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 720, height: 480 } });
   page.setDefaultTimeout(12_000);
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   page.on('requestfailed', request => errors.push(request.url()));
   page.on('response', response => { if (response.status() >= 400) errors.push(response.url()); });
   await page.goto(`http://127.0.0.1:${address.port}/u14-review`);
@@ -138,6 +157,7 @@ try {
   assert.equal(wrong.receipts.at(-1).outcome, 'wrong-tool');
   assert.deepEqual(wrong.effects, []);
   assert.deepEqual(wrong.numbers, []);
+  assert.deepEqual(wrong.impacts, []);
   assert.equal(wrong.audioPeak, 0);
   await page.keyboard.press('Digit2');
   await click(2);
@@ -150,6 +170,8 @@ try {
   assert.match(ice.numbers[0].transform, /translate\(.+px, .+px\)/);
   assert.equal(ice.colors[0], 'ffffff');
   assert.equal(ice.spark, true);
+  assert.equal(ice.impacts.length, 1);
+  verifyFreeImpact(ice.impacts[0], 'clump', 'light', .22, requests[1].from);
   await page.screenshot({ path: resolve(output, 'ice-hit.png') });
   await advancePresentation(39);
   assert.equal((await inspect()).held.length, 1);
@@ -160,6 +182,7 @@ try {
   await advancePresentation(530);
   assert.deepEqual((await inspect()).numbers, []);
   assert.equal(await page.evaluate(() => window.undergroundCombatProbe.replay()), false);
+  assert.equal((await inspect()).impacts.length, 1);
 
   await page.waitForTimeout(220);
   await page.evaluate(() => {
@@ -175,6 +198,8 @@ try {
   assert.deepEqual(metal.effects.at(-1), { id: 'skeleton', family: 'metal', holdMs: 40, flashMs: 110, stagger: 'medium' });
   assert.equal(metal.colors[1], 'ffffff');
   assert.equal(metal.numbers[0].text, '1');
+  assert.equal(metal.impacts.length, 2);
+  verifyFreeImpact(metal.impacts[1], 'skeleton', 'medium', .46, requests[2].from);
   await page.screenshot({ path: resolve(output, 'metal-hit.png') });
 
   await page.keyboard.press('w');
@@ -187,6 +212,9 @@ try {
   assert.match(hurt.transform, /^translate\(/);
   assert.equal(hurt.overlayPointerEvents, 'none');
   assert.deepEqual(hurt.view, metal.view);
+  assert.equal(hurt.impacts.length, 3);
+  verifyFreeImpact(hurt.impacts[2], 'player', 'medium', .46, requests[3].from);
+  assert.deepEqual(hurt.foot, hurt.impacts[2].after);
   await page.screenshot({ path: resolve(output, 'player-hurt.png') });
   await page.keyboard.press('w');
   await page.keyboard.press('ArrowLeft');
@@ -210,13 +238,23 @@ try {
   assert.equal(cleared.spark, false);
   await page.evaluate(() => window.undergroundCombatProbe.setLayer('review-mine'));
   assert.equal(await page.evaluate(() => window.undergroundCombatProbe.replay()), false);
+  assert.equal((await inspect()).impacts.length, 3);
+  const heavy = await page.evaluate(() => window.undergroundCombatProbe.heavyAgainstWall());
+  assert.equal(heavy.report.weight, 'heavy');
+  assert.equal(heavy.report.blocked, true);
+  assert.ok(heavy.report.distance > 0 && heavy.report.distance < .86);
+  assert.ok(Math.abs(heavy.report.distance - distanceBetween(heavy.report.before, heavy.report.after)) < 1e-9);
+  assert.equal(heavy.report.before.north, heavy.report.after.north);
+  assert.ok(heavy.report.after.east + heavy.bodyRadius <= heavy.wallInnerEast);
+  assert.ok(heavy.wallInnerEast - heavy.bodyRadius - heavy.report.after.east < .05);
+  await page.screenshot({ path: resolve(output, 'heavy-wall.png') });
   assert.deepEqual(errors, []);
 
   await writeFile(resolve(output, 'combat-review.json'), JSON.stringify({
-    scope: 'Original encounter and survival authority. Controlled local room, presentation clock and WebGL actors are fixtures.',
-    browser: browser.version(), requests, wrong, ice, metal, hurt, steered, reduced, cleared, errors,
+    scope: 'Original encounter and survival authority. Local room collision, presentation clock and WebGL actors are fixtures. The heavy wall impact is staged separately.',
+    browser: browser.version(), requests, wrong, ice, metal, hurt, steered, reduced, cleared, heavy, errors,
   }, null, 2) + '\n');
-  console.log('U-14: Chromium confirmed both counter effects, 40 ms impact holds, and nonblocking received-hit feedback.');
+  console.log('U-14: Chromium confirmed both counter effects, 40 ms holds, nonblocking received-hit feedback and wall-clipped knockback.');
 } catch (error) {
   await writeFile(resolve(output, 'failure.json'), JSON.stringify({
     error: String(error), requests, errors, health: survival.status(playerId).health,
