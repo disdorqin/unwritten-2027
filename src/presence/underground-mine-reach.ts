@@ -1,6 +1,3 @@
-import {
-  Box3, BufferGeometry, DoubleSide, Float32BufferAttribute, Mesh, MeshBasicMaterial, Raycaster, Vector3,
-} from 'three';
 import type { UndergroundMineGateStage } from './underground-mine-gate.js';
 import type { UndergroundSurvivalPoint } from './underground-survival.js';
 
@@ -20,6 +17,57 @@ type MineGeometry = Readonly<{
 }>;
 const edgeTolerance = .0001;
 
+function hitsRock(rock: Float32Array, start: MineLocal, [dx, dy, dz]: MineLocal, far: number) {
+  // Each set of nine coordinates is one double-sided rock triangle.
+  for (let i = 0; i + 8 < rock.length; i += 9) {
+    const ax = rock[i]!, ay = rock[i + 1]!, az = rock[i + 2]!;
+    const abX = rock[i + 3]! - ax, abY = rock[i + 4]! - ay, abZ = rock[i + 5]! - az;
+    const acX = rock[i + 6]! - ax, acY = rock[i + 7]! - ay, acZ = rock[i + 8]! - az;
+    const crossX = dy * acZ - dz * acY;
+    const crossY = dz * acX - dx * acZ;
+    const crossZ = dx * acY - dy * acX;
+    const determinant = abX * crossX + abY * crossY + abZ * crossZ;
+    if (determinant === 0) continue;
+    const offsetX = start[0] - ax, offsetY = start[1] - ay, offsetZ = start[2] - az;
+    const u = (offsetX * crossX + offsetY * crossY + offsetZ * crossZ) / determinant;
+    if (u < 0 || u > 1) continue;
+    const normalX = offsetY * abZ - offsetZ * abY;
+    const normalY = offsetZ * abX - offsetX * abZ;
+    const normalZ = offsetX * abY - offsetY * abX;
+    const v = (dx * normalX + dy * normalY + dz * normalZ) / determinant;
+    if (v < 0 || u + v > 1) continue;
+    const distance = (acX * normalX + acY * normalY + acZ * normalZ) / determinant;
+    if (distance >= edgeTolerance && distance <= far) return true;
+  }
+  return false;
+}
+
+function hitsGate(gate: MineGate, stage: UndergroundMineGateStage, start: MineLocal, direction: MineLocal, far: number) {
+  const gap = gate.gapFor(stage);
+  if (gap >= gate.height) return false;
+  const [x, floor, z] = gate.position;
+  const minimum = [x - gate.width / 2, floor + gap, z - gate.thickness / 2] as const;
+  const maximum = [x + gate.width / 2, floor + gate.height, z + gate.thickness / 2] as const;
+  let entry = -Infinity;
+  let exit = Infinity;
+  for (const axis of [0, 1, 2] as const) {
+    const origin = start[axis];
+    const step = direction[axis];
+    if (step === 0) {
+      if (origin < minimum[axis] || origin > maximum[axis]) return false;
+      continue;
+    }
+    const a = (minimum[axis] - origin) / step;
+    const b = (maximum[axis] - origin) / step;
+    entry = Math.max(entry, Math.min(a, b));
+    exit = Math.min(exit, Math.max(a, b));
+    if (entry > exit) return false;
+  }
+  // Clip the first forward surface. For a start inside the leaf this is the exit.
+  const distance = entry >= 0 ? entry : exit;
+  return distance >= edgeTolerance && distance <= far;
+}
+
 /** Use the installed mine's rock faces and live gate leaf for vitals light and sound reach. */
 export function createUndergroundMineReach({ layer, mine, toLocal, readGateStage }: Readonly<{
   layer: string;
@@ -28,19 +76,8 @@ export function createUndergroundMineReach({ layer, mine, toLocal, readGateStage
   readGateStage?(): UndergroundMineGateStage;
 }>) {
   if (!layer.trim()) throw new RangeError('Mine reach needs an installed underground layer');
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(mine.mesh.rock, 3));
-  geometry.computeBoundingSphere();
-  const material = new MeshBasicMaterial({ side: DoubleSide });
-  const occluder = new Mesh(geometry, material);
-  const ray = new Raycaster();
-  const start = new Vector3();
-  const direction = new Vector3();
-  const hits: ReturnType<Raycaster['intersectObject']> = [];
+  let rock: Float32Array | undefined = new Float32Array(mine.mesh.rock);
   const gate = mine.expansion?.gate;
-  const leafBounds = new Box3();
-  const leafHit = new Vector3();
-  let disposed = false;
 
   function locate(point: UndergroundSurvivalPoint, gateStage: UndergroundMineGateStage) {
     if (point.layer !== layer || ![point.east, point.north, point.height].every(Number.isFinite)) return;
@@ -53,45 +90,21 @@ export function createUndergroundMineReach({ layer, mine, toLocal, readGateStage
     }
   }
 
-  function hitsGate(stage: UndergroundMineGateStage) {
-    if (!gate) return false;
-    const gap = gate.gapFor(stage);
-    if (gap >= gate.height) return false;
-    const [x, floor, z] = gate.position;
-    leafBounds.min.set(x - gate.width / 2, floor + gap, z - gate.thickness / 2);
-    leafBounds.max.set(x + gate.width / 2, floor + gate.height, z + gate.thickness / 2);
-    const hit = ray.ray.intersectBox(leafBounds, leafHit);
-    if (!hit) return false;
-    const distance = hit.distanceTo(start);
-    return distance >= ray.near && distance <= ray.far;
-  }
-
   return {
     reaches(from: UndergroundSurvivalPoint, to: UndergroundSurvivalPoint): boolean {
-      if (disposed) return false;
-      const gateStage = readGateStage?.() ?? 'closed';
-      const a = locate(from, gateStage);
+      if (!rock) return false;
+      const stage = readGateStage?.() ?? 'closed';
+      const a = locate(from, stage);
       if (!a) return false;
-      start.fromArray(a);
-      const b = locate(to, gateStage);
+      const b = locate(to, stage);
       if (!b) return false;
-      direction.fromArray(b).sub(start);
-      const distance = direction.length();
+      const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+      const distance = Math.hypot(dx, dy, dz);
       if (distance <= edgeTolerance * 2) return true;
-      ray.set(start, direction.divideScalar(distance));
-      ray.near = edgeTolerance;
-      ray.far = distance - edgeTolerance;
-      if (hitsGate(gateStage)) return false;
-      hits.length = 0;
-      ray.intersectObject(occluder, false, hits);
-      return hits.length === 0;
+      const direction: MineLocal = [dx / distance, dy / distance, dz / distance];
+      const far = distance - edgeTolerance;
+      return !(gate && hitsGate(gate, stage, a, direction, far)) && !hitsRock(rock, a, direction, far);
     },
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      hits.length = 0;
-      geometry.dispose();
-      material.dispose();
-    },
+    dispose() { rock = undefined; },
   };
 }

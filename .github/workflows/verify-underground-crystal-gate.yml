@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/verify-underground-crystal-gate.yml'
       - 'src/presence/underground-mine-gate.ts'
+      - 'src/presence/underground-mine-reach.ts'
+      - 'tests/town-blockout-underground-mine-reach.test.ts'
       - 'src/presence/underground-winch.ts'
       - 'tools/voxel-tavern/town-blockout/underground-crystal-gate.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mine-layout.ts'
@@ -29,6 +31,13 @@ jobs:
           node-version: 24
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
+      - run: node --import tsx --test tests/town-blockout-underground-mine-reach.test.ts
+      - name: Load the mine reach module without browser dependencies
+        shell: bash
+        run: |
+          build="$RUNNER_TEMP/mine-presence"
+          npm exec -- tsc --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck --rootDir src --outDir "$build" src/presence/underground-mine-reach.ts src/shared/underground-mine-layout.ts
+          node --input-type=module -e 'import { pathToFileURL } from "node:url"; for (const path of process.argv.slice(1)) await import(pathToFileURL(path).href);' "$build/presence/underground-mine-reach.js" "$build/shared/underground-mine-layout.js"
       - name: Verify in Chromium
         shell: bash
         run: |

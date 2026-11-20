@@ -48,6 +48,32 @@ test('mine reach follows the opened aperture while its shoulder and the legacy c
   }
 });
 
+test('rock surfaces include triangle seams and vertices and clip just the ray endpoints', () => {
+  const sight = createUndergroundMineReach({
+    layer, toLocal,
+    mine: {
+      mesh: {
+        rock: new Float32Array([
+          0, -90, 0, 0, -88, 0, 0, -88, 2,
+          0, -90, 0, 0, -88, 2, 0, -90, 2,
+        ]),
+      },
+      queryPassage: () => ({ floor: -90, clearance: 2 }),
+    },
+  });
+  for (const [height, depth] of [[-89, 1], [-88, 2]] as const) {
+    assert.equal(sight.reaches(point(-1, height, depth), point(1, height, depth)), false);
+    assert.equal(sight.reaches(point(1, height, depth), point(-1, height, depth)), false);
+  }
+  assert.equal(sight.reaches(point(-.00005, -89, 1), point(1, -89, 1)), true);
+  assert.equal(sight.reaches(point(1, -89, 1), point(-.00005, -89, 1)), true);
+  assert.equal(sight.reaches(point(-.0002, -89, 1), point(1, -89, 1)), false);
+  assert.equal(sight.reaches(point(0, -89, 1), { ...point(0, -89, 1), layer: 'crystal' }), false);
+  sight.dispose();
+  sight.dispose();
+  assert.equal(sight.reaches(point(1, -89, 1), point(1, -89, 1)), false);
+});
+
 test('mine reach respects the low collapse rock even with both endpoints in the same gallery', () => {
   const sight = mineReach(true);
   try {
