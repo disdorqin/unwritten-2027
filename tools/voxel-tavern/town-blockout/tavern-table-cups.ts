@@ -2,21 +2,22 @@ import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMateria
 import type { TavernRecipe } from './tavern-mix-book';
 import type { TavernCupRow } from './tavern-seats';
 
-const glaze = '#e8c9a0';
-const ceramic = '#b87959';
+const glaze = '#a98a56';
+const ceramic = '#5d4630';
 const parts = [
-  [0, .013, 0, .126, .026, .123, ceramic],
-  [-.053, .066, 0, .020, .09, .123, glaze],
-  [.053, .066, 0, .020, .09, .123, glaze],
-  [0, .066, -.052, .090, .09, .019, ceramic],
-  [0, .066, .052, .090, .09, .019, glaze],
-  [0, .082, 0, .088, .025, .084],
+  [0, .015, 0, .146, .030, .143, ceramic],
+  [-.062, .078, 0, .022, .104, .143, ceramic],
+  [.062, .078, 0, .022, .104, .143, glaze],
+  [0, .078, -.060, .104, .104, .023, ceramic],
+  [0, .078, .060, .104, .104, .023, glaze],
+  [.104, .105, 0, .063, .024, .026, glaze],
+  [.104, .049, 0, .063, .024, .026, ceramic],
+  [.134, .077, 0, .021, .071, .028, ceramic],
+  [0, .097, 0, .102, .025, .100],
 ] as const;
 
-export function createTavernTableCups(scene: Scene, limit: number) {
-  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial({
-    emissive: '#5b2b1b', emissiveIntensity: .31,
-  }), limit * parts.length);
+export function createTavernTableCups(scene: Scene) {
+  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), parts.length);
   batch.name = '酒馆 · 就座酒杯';
   batch.instanceMatrix.setUsage(DynamicDrawUsage);
   batch.count = 0;
@@ -25,39 +26,31 @@ export function createTavernTableCups(scene: Scene, limit: number) {
 
   const pose = new Object3D();
   const color = new Color();
-  const shown: TavernRecipe[] = [];
   let current: TavernCupRow | undefined;
-  function update(row: TavernCupRow | undefined, drinks: readonly TavernRecipe[]) {
-    const count = row ? Math.min(limit, drinks.length) : 0;
-    if (!count) {
+  let shownColor: string | undefined;
+  function update(row: TavernCupRow | undefined, drink: TavernRecipe | undefined) {
+    if (!row || !drink) {
       batch.visible = false;
       batch.count = 0;
-      shown.length = 0;
       current = undefined;
+      shownColor = undefined;
       return;
     }
-    if (!row || (current === row && shown.length === count && shown.every((drink, index) => drink === drinks[index]))) return;
+    if (current === row && shownColor === drink.color) return;
 
     current = row;
-    shown.length = count;
+    shownColor = drink.color;
     const cos = Math.cos(row.yaw);
     const sin = Math.sin(row.yaw);
     pose.rotation.y = -row.yaw;
-    let index = 0;
-    for (let cup = 0; cup < count; cup++) {
-      const drink = drinks[cup];
-      shown[cup] = drink;
-      const offset = (cup - (limit - 1) / 2) * .20;
-      for (const [x, y, z, w, h, d, tint] of parts) {
-        pose.position.set(row.x + (offset + x) * cos - z * sin,
-          row.y + y, -row.n + (offset + x) * sin + z * cos);
-        pose.scale.set(w, h, d);
-        pose.updateMatrix();
-        batch.setMatrixAt(index, pose.matrix);
-        batch.setColorAt(index++, color.set(tint ?? drink.color));
-      }
+    for (const [index, [x, y, z, w, h, d, tint]] of parts.entries()) {
+      pose.position.set(row.x + x * cos - z * sin, row.y + y, -row.n + x * sin + z * cos);
+      pose.scale.set(w, h, d);
+      pose.updateMatrix();
+      batch.setMatrixAt(index, pose.matrix);
+      batch.setColorAt(index, color.set(tint ?? drink.color));
     }
-    batch.count = index;
+    batch.count = parts.length;
     batch.instanceMatrix.needsUpdate = true;
     batch.instanceColor!.needsUpdate = true;
     batch.computeBoundingSphere();

@@ -18,6 +18,7 @@ import type { CastleIceSlideLanding, createCastleIceSlideActivity } from './ice-
 import { createIcePalaceCrown } from './ice-palace-crown';
 import './ice-palace-crown.css';
 import { buildPostLandmark, setPostOpeningReady } from './landmark-post';
+import { buildTownOfficeLandmark } from './landmark-town-office';
 import { buildCultureLandmark } from './landmark-culture';
 import { buildMarketLandmark, marketOxSite } from './landmark-market';
 import { buildIcePlayProps, buildLakesideLandmark } from './landmark-lakeside';
@@ -76,7 +77,8 @@ import { museumHorizontalScale } from './museum-scale';
 import { nearestTownActivity, type TownActivity, type TownActivityContext, type TownActivitySpot, type TownSeat } from './town-activity';
 import { createTavernActivity } from './tavern-activity';
 import { createTavernDrinkEffects } from './tavern-drink-effects';
-import { createTavernSeatSpots } from './tavern-seats';
+import { createTavernSeatSpots, type TavernCupRow } from './tavern-seats';
+import { createTavernTableCups } from './tavern-table-cups';
 import { buildTavernWarmShed, createTavernWarmShedSpots, inTavernWarmShed, nearTavernWarmShedFire } from './tavern-warm-shed';
 import './tavern-mix-panel.css';
 import { openTavernDice } from './tavern-dice';
@@ -633,7 +635,7 @@ const builders: Record<string, Builder> = {
     tavern.userData.colliders.push(...colliders);
     return tavern;
   },
-  clocktower: buildTowerLandmark, 'post-office': buildPostLandmark,
+  clocktower: buildTowerLandmark, 'post-office': buildPostLandmark, 'town-office': buildTownOfficeLandmark,
   memorial: buildMuseumLandmark, 'long-hall': buildCultureLandmark, cabins: buildVillageLandmark,
   'lantern-workshop': buildMarketLandmark, 'market-stalls': buildMarketLandmark,
   glasshouse: buildLakesideLandmark,
@@ -951,7 +953,7 @@ let airHeight: number | undefined;
 let riseSpeed = 0;
 let boardingGround: { x: number; n: number; ground: number; yaw: number } | undefined;
 let lastRailStopShown: TownRailStopId | undefined;
-let seated: (TownSeat & { pitch: number; tavern?: true }) | undefined;
+let seated: (TownSeat & { pitch: number; tavern?: true; cupRow?: TavernCupRow }) | undefined;
 let palaceSlide: ReturnType<typeof createCastleIceSlideActivity> | undefined;
 let palaceSlideGround: number | undefined;
 let rideYawOffset = 0;
@@ -1149,6 +1151,7 @@ function warmFromDrink() {
   warmDrinkUntil = performance.now() + 45_000;
   ceremonyFrost.drinkHot();
 }
+const tavernTableCups = createTavernTableCups(scene);
 const tavernActivity = createTavernActivity(
   { ...activityContext, announce: announceActivity }, tavernDrinkEffects, warmFromDrink,
   () => { drinkingPoseUntil = performance.now() + 2500; },
@@ -2813,7 +2816,10 @@ if (tavernPlot) {
   activitySpots.push(...createTavernSeatSpots(tavernPlot, {
     sit(seat) {
       activityContext.sit(seat);
-      if (seated) seated.tavern = true;
+      if (seated) {
+        seated.tavern = true;
+        seated.cupRow = seat.cupRow;
+      }
     },
   }, canStandAtActivity));
   activitySpots.push(...createTavernWarmShedSpots(tavernPlot, grid.heightAt,
@@ -3469,6 +3475,7 @@ renderer.setAnimationLoop(now => {
   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
   updateSnowFight(dt);
   for (const activity of activities) activity.update?.(frameSeconds);
+  tavernTableCups.update(seated?.cupRow, tavernActivity.heldCup());
   rehearse.disabled = festival.active();
   const canControl = walking && !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
   touchWalk.setAllowed(moveAllowed());

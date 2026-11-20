@@ -147,6 +147,33 @@ test('manual exit parks one sled at its route position and remounts that same sl
   assert.ok(ride.spot.n > n);
 });
 
+test('a parked sled can only be remounted by a clear boarding path', () => {
+  const barrier = (east: number) => Math.abs(east) < .16;
+  const routes = [
+    { blocked: barrier },
+    { wallBlocked: barrier },
+    { canReachParked: (from: { x: number }, to: { x: number }) => from.x * to.x > 0 },
+  ];
+  for (const route of routes) {
+    const ride = createSledRide({
+      height: () => 12,
+      surface: () => ({ surface: 1, deepSnow: false }),
+      blocked: () => false,
+      snow() {},
+      stopped() {},
+      ...route,
+    });
+    const parked = { x: .9, n: 0, y: 12, yaw: .2 };
+    assert.equal(ride.mount(parked.x, parked.n, parked.y, parked.yaw), true);
+    assert.equal(ride.leave(), true);
+    assert.equal(ride.canRemount(-.9, 0, 12), false);
+    assert.equal(ride.remount(-.9, 0, 12), false);
+    assert.deepEqual(ride.parked(), parked);
+    assert.equal(ride.remount(1.6, 0, 12), true);
+    assert.deepEqual(ride.spot, parked);
+  }
+});
+
 test('holding the dedicated brake overrides W, uses the existing brake pose, and never takes off', () => {
   const world = {
     height: () => 12,

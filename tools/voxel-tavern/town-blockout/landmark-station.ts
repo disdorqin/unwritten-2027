@@ -1,3 +1,4 @@
+import { DataTexture, Mesh, MeshLambertMaterial, NearestFilter, PlaneGeometry, SRGBColorSpace, type Group } from 'three';
 import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
 import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
@@ -15,6 +16,7 @@ const iron = '#303b40';
 const brass = '#c19456';
 const snow = '#dce7f0';
 const glow = '#eaa852';
+const platformSnow = '#e8ecf0';
 
 const stationLocalPoint = ([x, y, z]: Point): Point => [x / museumHorizontalScale, y, z / museumHorizontalScale];
 export const railwayStationStops = {
@@ -28,6 +30,7 @@ const busTicketWindowEast = -9.9;
 const busPlatformSpeakerEast = 17;
 const busPlatformSpeakerHeight = 4.19;
 const busPlatformSpeakerDepth = -13.4;
+const platformWaitingSignEast = 11.25;
 
 export const busStationHiddenStops = {
   ticket: stationLocalPoint([busTicketWindowEast, .14, -.14]),
@@ -79,6 +82,33 @@ function busStationSpeaker(b: StationBuilder) {
   for (const dy of [-.14, -.07, 0, .07, .14]) {
     b.box(iron, x, y + dy, z + .282, .41, .022, .018);
   }
+}
+
+function mountWornWaitingSignFrame(station: Group) {
+  const width = 192, height = 24;
+  const paint = [169, 138, 86];
+  const wood = [93, 70, 48];
+  const bare = [138, 131, 120];
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const fleck = (Math.imul(x + 17, 73856093) ^ Math.imul(y + 13, 19349663)) >>> 0;
+      const peel = y < 4 && (x < 19 || x > 141 && x < 162) || y > 20 && x > 172;
+      const color = peel && fleck % 5 !== 0 ? bare : fleck % 7 === 0 ? wood : paint;
+      pixels.set(color, 4 * (y * width + x));
+      pixels[4 * (y * width + x) + 3] = 255;
+    }
+  }
+  const map = new DataTexture(pixels, width, height);
+  map.colorSpace = SRGBColorSpace;
+  map.minFilter = map.magFilter = NearestFilter;
+  map.needsUpdate = true;
+  // Replace the visible finish on the backing, behind the approved legible notice.
+  const [x, y, z] = stationLocalPoint([platformWaitingSignEast, 2.82, -14.991]);
+  const cladding = new Mesh(new PlaneGeometry(7.68 / museumHorizontalScale, .83), new MeshLambertMaterial({ map }));
+  cladding.name = 'Worn platform waiting sign frame';
+  cladding.position.set(x, y, z);
+  station.add(cladding);
 }
 
 function walkSurface(b: StationBuilder, paint: string, x: number, top: number, z: number, w: number, d: number) {
@@ -266,13 +296,18 @@ export function buildRailwayStation() {
   }
   b.box(brass, 0, 5.6, -16.09, 51.4, .09, .15);
   b.box('#ebc163', 0, .15, -16.02, 51.4, .026, .16);
-  for (const [x, text] of [[-11.25, stationSignCopy.platformSafety], [11.25, stationSignCopy.waiting]] as const) {
+  for (const [x, text] of [[-11.25, stationSignCopy.platformSafety], [platformWaitingSignEast, stationSignCopy.waiting]] as const) {
     b.box(dark, x, 2.82, -15.21, 7.68, .83, .43);
     b.sign(text, x, 2.82, -14.985, 7.34, .73);
   }
   for (const x of [-19, -11.3, 0, 11.3, 19]) lamp(b, x, 5.35, -13.4);
   for (const x of [-17, 17]) bench(b, x, -9.2, .14, 5.8, -1);
-  for (const x of [-17, 17]) b.box(snow, x - 1.78, .755, -9.2, 1.87, .048, .49);
+  for (const [x, outer] of [[-17, -1], [17, 1]] as const) {
+    // The ends nearest the walkway have been cleared. The snow stays on the seat.
+    b.box(platformSnow, x + outer * 1.94, .757, -9.23, 1.54, .052, .52);
+    b.box(platformSnow, x + outer * .90, .749, -9.30, .58, .035, .35);
+    b.box(platformSnow, x + outer * .49, .743, -9.35, .27, .023, .17);
+  }
   busStationSpeaker(b);
 
   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
@@ -302,6 +337,7 @@ export function buildRailwayStation() {
     lamp(b, x, 3.48, 13.5);
   }
   const station = b.finish(true);
+  mountWornWaitingSignFrame(station);
   const notice = stationBuilder();
   notice.sign(railOvernightCopy, 12.8, 2.64, -6.58, 8.3, .55);
   const overnightBoard = notice.finish();

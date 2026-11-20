@@ -8,6 +8,7 @@ import {
 import { createNorthRidgeCableClock } from './north-ridge-cable-clock';
 import { createNorthRidge350Block, northRidgeCableAnchors, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { mountZa22MountainGate, za22GateSeamNorth } from './town-za22-mountain-gate';
+import { mountStarportAssemblySite } from './starport-assembly-site';
 
 type Point = Readonly<{ east: number; north: number; height: number }>;
 type Terminal = 'base' | 'summit';
@@ -24,7 +25,7 @@ const terminalDwell = 8_000;
 const roofClearance = 3.5;
 const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
 const assemblyBench = { east: 324, north: 657, width: 3.9, depth: 1.8, top: .87 };
-const benchVisitor = { east: 326.82, north: 657, height: 347 };
+const benchVisitor = { east: 324, north: 655, height: 347 };
 const fullEpoch = Date.UTC(2026, 0, 1);
 const distance = (a: Point, b: Point) => Math.hypot(b.east - a.east, b.north - a.north, b.height - a.height);
 const mix = (a: number, b: number, f: number) => a + (b - a) * f;
@@ -162,22 +163,21 @@ export function createZa22CloudRoute(host: Host) {
     for (const x of [run.start, run.end]) {
       box(front, brass, x, run.north, za22CloudSurfaceAt(x, run.north) ?? 347, .20, run.width, .045);
     }
-    for (const dx of [-1.55, 1.55]) box(front, iron, assemblyBench.east + dx, assemblyBench.north, 347.36, .22, 1.45, .72);
-    box(front, wood, assemblyBench.east, assemblyBench.north, 347.78, assemblyBench.width, assemblyBench.depth, .18);
-    box(front, brass, assemblyBench.east, assemblyBench.north, 347.89, 2.35, .85, .05);
+    const starport = mountStarportAssemblySite(front, { east: assemblyBench.east, north: assemblyBench.north, height: 347 });
     for (let north = 641; north <= 663; north += 2) {
       box(front, iron, 336, north, sampleNorthRidge350(336, north), .64, .36, .043);
     }
     for (let east = 302; east < 336; east += 2) {
       box(front, iron, east, 663.25, sampleNorthRidge350(east, 663.25), .36, .64, .043);
     }
-    return { owner, terrain, assembly, gate, cabins, front, boxGeometry, materials: [iron, brass, wood] };
+    return { owner, terrain, assembly, gate, cabins, front, starport, boxGeometry, materials: [iron, brass, wood] };
   }
 
   function disposeMountain() {
     if (!world) return;
     world.gate.dispose();
     world.assembly.dispose();
+    world.starport.dispose();
     world.terrain.dispose();
     world.boxGeometry.dispose();
     world.materials.forEach(material => material.dispose());
@@ -259,9 +259,7 @@ export function createZa22CloudRoute(host: Host) {
     assembly: () => world?.assembly,
     front: () => world?.front,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
-      if (Math.abs(east - assemblyBench.east) < assemblyBench.width / 2 + radius &&
-          Math.abs(north - assemblyBench.north) < assemblyBench.depth / 2 + radius &&
-          feet < 347 + assemblyBench.top - .025) return true;
+      if (world?.starport.blocked({ east, north, height: feet }, radius, bodyHeight)) return true;
       return world?.assembly.blocked(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, feet, radius, bodyHeight) ?? false;
     },
   };

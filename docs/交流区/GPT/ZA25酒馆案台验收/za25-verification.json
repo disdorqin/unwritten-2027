@@ -1,0 +1,66 @@
+{
+  "pass": true,
+  "baseline": "9a39267df6b612c9a63a1ae399af9850da912e4f",
+  "tree": "cf2dc0759cd3291bc2df81a8a52583e5ddee7857",
+  "pickup": "d97debc2",
+  "action": "Original navigation menu for 酒馆 from the default no-query birth, then six continuous native keyboard moves. No further relocation.",
+  "rawHarness": {
+    "file": "za25-live.json",
+    "sha256": "3f2840505972d5f0f3993089d46d5399c78ae47a07cbdf09bb366503bedeeba1",
+    "proceduralFailure": "The harness expected at least 14 key events. The actual route needed six complete trusted keydown/keyup pairs, manually and mechanically verified in order."
+  },
+  "browser": "153.0.8010.0",
+  "birth": [
+    223,
+    180
+  ],
+  "landing": [
+    159,
+    219.5
+  ],
+  "standing": {
+    "at": 1795189750792,
+    "east": 156.34,
+    "north": 234.66,
+    "height": 16.9,
+    "yaw": 0,
+    "seq": 106
+  },
+  "nativeKeyPairs": 6,
+  "positions": 108,
+  "walkPositions": 106,
+  "walkMetres": 26.32,
+  "maxAdjacentHorizontalMetres": 0.71,
+  "sockets": [
+    {
+      "url": "ws://127.0.0.1:18525/presence",
+      "join": true,
+      "received": 3
+    }
+  ],
+  "slots": 8,
+  "runtimeErrors": 0,
+  "consoleErrors": 0,
+  "failedRequests": 0,
+  "httpErrors": 0,
+  "canvas": {
+    "width": 480,
+    "height": 296,
+    "timestamp": 105190.1,
+    "source": "WebGL2 default framebuffer after render",
+    "manualReview": "Two rows of four distinct empty brass slot outlines visible; the original bottle shelf is behind the bench.",
+    "pngSha256": "14c499f6cf17b76793074aad4792b9308bdd8993bb774ee0f21f074767d448cb",
+    "webp": {
+      "file": "za25-empty-craft-bench.webp",
+      "sha256": "afb0dfbe430992e35a867bc0becd9c67f656fba3dffb72eaca477bc3883d051d",
+      "lossless": true,
+      "decodedPixelsVerified": true
+    }
+  },
+  "remaining": [
+    "private old-home host",
+    "material-count production adapter",
+    "hold-E crafting and take",
+    "full walk from the town birth without using the menu"
+  ]
+}

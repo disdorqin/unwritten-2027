@@ -6,6 +6,10 @@ import { gunzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import type { TownPlot } from './landmark-kit';
 import { addTownWindow, type TownWindow } from './town-window';
 import source from './tavern-voxel-source';
+import {
+  relocateTavernCraftCask, tavernCraftBenchBox, tavernCraftBenchParts, tavernCraftBenchStand,
+  tavernCraftCaskBoxes, tavernCraftMaterials, type TavernCraftBench, type TavernCraftMaterial, type TavernCraftPart,
+} from './tavern-craft-bench';
 import { relocateTavernFurniture, tavernFurnitureColliders, tavernModelToPlot } from './tavern-seats';
 
 export { tavernModelToPlot };
@@ -13,10 +17,9 @@ export { tavernModelToPlot };
 type Vec3 = [number, number, number];
 export type TavernRoosterSill = { window: TownWindow; sill: Vec3; approach: Vec3 };
 type Box = [number, number, number, number, number, number];
-type Part = { m: string; b: Box };
 type TavernSource = {
   palette: Record<string, string>;
-  catalogue: Part[][];
+  catalogue: TavernCraftPart[][];
   voxels: [number, number, number, number][];
 };
 
@@ -85,7 +88,7 @@ const lightSources: { position: Vec3; radius: number; strength: number }[] = [
   { position: [0, 6.25, 7.5], radius: 9, strength: 1.35 }, // Porch
 ];
 
-function lantern(parts: Part[], cx: number, cy: number, cz: number, size: number) {
+function lantern(parts: TavernCraftPart[], cx: number, cy: number, cz: number, size: number) {
   const add = (m: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
     parts.push({ m, b: [x, y, z, x + w, y + h, z + d] });
   };
@@ -125,14 +128,14 @@ function bakedSash(m: string, b: Box) {
 function buildParts() {
   const zipped = Uint8Array.from(atob(source), char => char.charCodeAt(0));
   const data: TavernSource = JSON.parse(strFromU8(gunzipSync(zipped)));
-  const parts: Part[] = [];
+  const parts: TavernCraftPart[] = [];
   const colors: Record<string, string> = { ...data.palette, ...panels, snow: '#c3d2e1' };
   for (const [x, y, z, id] of data.voxels) {
     for (const { m, b } of data.catalogue[id - 2]) {
       const bounds = relocateTavernFurniture(m, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
       if (bakedSash(m, bounds)) continue;
       const roof = m === 'roof' ? 'blueRoof' : m === 'roofShadow' ? 'blueRoofDark' : m === 'roofGlaze' ? 'blueRoofLight' : m;
-      parts.push({ m: roof, b: bounds });
+      parts.push({ m: roof, b: relocateTavernCraftCask(m, bounds) });
       // B09 calls for red siding. Keep the original interior plaster and exposed timber.
       if (m === 'plaster' && y < 12) {
         const [x0, y0, z0, x1, y1, z1] = bounds;
@@ -182,6 +185,7 @@ function buildParts() {
     if (step % 2 === 0) add('wood', 5.6875, y, z, .125, 1, .125);
     add('wood', 5.6875, y + .875, z, .125, .125, .375);
   }
+  parts.push(...tavernCraftBenchParts());
   return { parts, colors };
 }
 
@@ -266,14 +270,32 @@ export function buildTavernLandmark(plot: TownPlot) {
       } satisfies TavernRoosterSill;
     }
   }
+  const stock = new Map(tavernCraftMaterials.map(slot => {
+    const display = new Group();
+    display.name = `酒馆案台 · ${slot}`;
+    display.visible = false;
+    near.add(display);
+    return [slot, display];
+  }));
+  group.userData.craftBench = {
+    stand: transform(...tavernCraftBenchStand),
+    setCounts(counts) {
+      for (const [slot, display] of stock) {
+        const count = counts[slot] ?? 0;
+        display.visible = Number.isFinite(count) && count >= 1;
+      }
+    },
+  } satisfies TavernCraftBench;
   const materialBuffers = new Map<string, {
+    m: string; slot?: TavernCraftMaterial;
     positions: number[]; normals: number[]; uv: number[]; lighting: number[]; shellIndices: number[];
   }>();
-  for (const { m, b } of parts) {
-    let buffers = materialBuffers.get(m);
+  for (const { m, b, slot } of parts) {
+    const key = slot ? `${m}:${slot}` : m;
+    let buffers = materialBuffers.get(key);
     if (!buffers) {
-      buffers = { positions: [], normals: [], uv: [], lighting: [], shellIndices: [] };
-      materialBuffers.set(m, buffers);
+      buffers = { m, slot, positions: [], normals: [], uv: [], lighting: [], shellIndices: [] };
+      materialBuffers.set(key, buffers);
     }
     const firstVertex = buffers.positions.length / 3;
     if (!isInteriorPart(b)) {
@@ -301,15 +323,24 @@ export function buildTavernLandmark(plot: TownPlot) {
       }
     }
   }
-  for (const [name, { positions, normals, uv, lighting, shellIndices }] of materialBuffers) {
+  const materials = new Map<string, MeshLambertMaterial>();
+  for (const { m: name, slot, positions, normals, uv, lighting, shellIndices } of materialBuffers.values()) {
     const geometry = new BufferGeometry()
       .setAttribute('position', new Float32BufferAttribute(positions, 3))
       .setAttribute('normal', new Float32BufferAttribute(normals, 3))
       .setAttribute('uv', new Float32BufferAttribute(uv, 2))
       .setAttribute('color', new Float32BufferAttribute(lighting, 3));
-    const material = makeMaterial(name, colors[name]);
+    let material = materials.get(name);
+    if (!material) {
+      material = makeMaterial(name, colors[name]);
+      materials.set(name, material);
+    }
     const mesh = new Mesh(geometry, material);
     mesh.name = `酒馆 · ${name}`;
+    if (slot) {
+      stock.get(slot)!.add(mesh);
+      continue;
+    }
     if (shellIndices.length === geometry.getAttribute('position').count) {
       group.add(mesh);
       continue;
@@ -337,7 +368,7 @@ export function buildTavernLandmark(plot: TownPlot) {
     [3.875, 8, -2, 4, 9.125, 5],
     [-5.88, 8, -4.8, -.88, 11, -4.22],
     [-4.75, 8, -2.5, -3, 9, -1.375], [-.25, 8, 1.5, 1.5, 9, 2.625],
-    ...tavernFurnitureColliders,
+    ...tavernFurnitureColliders, tavernCraftBenchBox, ...tavernCraftCaskBoxes,
   ];
   const floorBoxes: Box[] = [
     [-7, 2, -6, 7, 3, 8], [-7, 7, -6, 4, 8, 6], [4, 7, -6, 7, 8, -3],

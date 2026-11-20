@@ -17,7 +17,7 @@ import {
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import type { TownSeat } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { isSharedHomePosition, sharedHomeLayer } from '../src/presence/shared-home-space.ts';
-import type { InstancedMesh } from 'three';
+import { Matrix4, Raycaster, Vector3, type InstancedMesh } from 'three';
 
 test('shared home has one enclosed floor and two untextured drawing batches', () => {
   const room = buildSharedHome();
@@ -35,6 +35,56 @@ test('shared home has one enclosed floor and two untextured drawing batches', ()
   assert.ok(colliders.length > 20);
   assert.equal(isSharedHomePosition(sharedHomeSpawn.x, sharedHomeSpawn.n, sharedHomeSpawn.ground), true);
   assert.equal(isSharedHomePosition(sharedHomeSpawn.x, sharedHomeSpawn.n, 15), false);
+});
+
+test('the bedside lamp is lit on its cabinet and independent of the desk lamp', () => {
+  const room = buildSharedHome();
+  const [solid, glow] = room.children as InstancedMesh[];
+  const matrix = new Matrix4();
+  const isOnCabinet = (mesh: InstancedMesh, index: number) => {
+    mesh.getMatrixAt(index, matrix);
+    const [x, , z] = matrix.elements.slice(12, 15);
+    return Math.abs(x - 4.85) < .001 && Math.abs(z + 1.18) < .001;
+  };
+  const shade = Array.from({ length: glow.count }, (_, index) => index).filter(index => isOnCabinet(glow, index));
+  assert.equal(shade.length, 1);
+  const shadeColor = glow.instanceColor!.array.slice(3 * shade[0], 3 * shade[0] + 3);
+  assert.equal(room.toggleDeskLamp(), false);
+  assert.deepEqual(glow.instanceColor!.array.slice(3 * shade[0], 3 * shade[0] + 3), shadeColor);
+
+  assert.ok(Array.from({ length: solid.count }, (_, index) => isOnCabinet(solid, index) &&
+    Math.abs(matrix.elements[13] - matrix.elements[5] / 2 - .63) < .001).includes(true));
+});
+
+test('four photo frames are visible from inside the room, with the largest one centered', () => {
+  const room = buildSharedHome();
+  const [solid] = room.children as InstancedMesh[];
+  const matrix = new Matrix4();
+  const mats = [];
+  for (let i = 0; i < solid.count; i++) {
+    solid.getMatrixAt(i, matrix);
+    const [x, y, z] = matrix.elements.slice(12, 15);
+    if (Math.abs(x - 6.738) > .001 || Math.abs(matrix.elements[0] - .044) > .001) continue;
+    mats.push({ i, x, y, z, area: matrix.elements[5] * matrix.elements[10] });
+  }
+  assert.equal(mats.length, 4);
+  const [main, ...others] = mats.sort((a, b) => b.area - a.area);
+  assert.ok(others.every(frame => main.area > frame.area));
+  assert.ok(others.some(frame => frame.z < main.z));
+  assert.ok(others.some(frame => frame.z > main.z));
+  assert.ok(others.some(frame => frame.y < main.y && frame.z === main.z));
+
+  room.updateMatrixWorld(true);
+  const eye = room.position.clone().add(new Vector3(4.95, 1.65, .80));
+  const ray = new Raycaster();
+  ray.layers.set(sharedHomeLayer);
+  for (const frame of mats) {
+    const center = room.position.clone().add(new Vector3(frame.x, frame.y, frame.z));
+    ray.set(eye, center.sub(eye).normalize());
+    const hit = ray.intersectObjects(room.children)[0];
+    assert.equal(hit?.object, solid);
+    assert.equal(hit?.instanceId, frame.i);
+  }
 });
 
 test('the entrance connects to every seat, hearth, photograph and exit on walkable floor', () => {

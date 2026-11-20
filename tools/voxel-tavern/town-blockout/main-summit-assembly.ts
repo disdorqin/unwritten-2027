@@ -14,7 +14,8 @@ import {
 import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-belt';
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
-import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
+import { createMainSummitTrail, mainSummitTrailSpec, type MainSummitTrailPoint } from './main-summit-trail';
+import { buildMainSummitTrailCut } from './main-summit-trail-cut';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
 
@@ -71,7 +72,7 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
     const before = points[Math.max(0, i - 1)]!;
     const after = points[Math.min(points.length - 1, i + 1)]!;
     const de = after.east - before.east, dn = after.north - before.north;
-    const scale = 1.5 / Math.hypot(de, dn);
+    const scale = mainSummitTrailSpec.width / 2 / Math.hypot(de, dn);
     for (const side of [-1, 1]) {
       const e = point.east - side * dn * scale, n = point.north + side * de * scale;
       positions.push(e, point.height + .07, -n, e, groundAt(e, n) ?? point.height - .4, -n);
@@ -117,8 +118,11 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   cloudRegistration.group.position.set(-summitAssemblyAnchor.east, 0, summitAssemblyAnchor.north);
 
   const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
-  const ribbon = createTrailRibbon(trail.points.filter(point => point.north > 40), block.heightAt);
+  // Keep the surveyed plaza join and the later turns that dip below its north edge.
+  const ribbon = createTrailRibbon(trail.points.slice(1), block.heightAt);
   ribbon.name = 'main-summit-walkway';
+  const trailTerrain = buildMainSummitTrailCut(block.coarse.geometry, ribbon.geometry).geometry;
+  block.coarse.geometry = trailTerrain;
   group.add(ribbon);
   const knots = survey.map((row): SnowBeltKnot => {
     const [east, north, heading, height] = row;
@@ -192,6 +196,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
       });
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
+      trailTerrain.dispose();
       block.dispose();
       group.removeFromParent();
       group.clear();

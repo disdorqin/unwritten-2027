@@ -4,9 +4,9 @@ import { chronicleEntryDate, readTownChronicleViews, type TownChronicleViews } f
 export const mainChronicleStone = { east: 422.6, north: 333.85, name: '未写镇大事记碑' } as const;
 export const stationChronicleStone = { x: 19.45, z: -6.36, height: .14, name: '站厅大事记碑' } as const;
 export const museumChronicleStops = {
-  founding: [-5.5, .28, -11.04],
-  excerpts: [5.5, .28, -11.04],
-  book: [0, .28, -9.37],
+  founding: [-9.9, .28, -11.9],
+  excerpts: [-6.5, .28, -11.9],
+  book: [-8.2, .28, -12.2],
 } as const;
 
 type Face = 'main' | 'station' | 'excerpts' | 'founding';
@@ -60,19 +60,22 @@ export function createChronicleFace(kind: Face) {
 }
 
 export function addChronicleGallery(m: MuseumBuilder) {
-  for (const [kind, x] of [['founding', -5.5], ['excerpts', 5.5]] as const) {
-    m.box('#5b3732', x, 2.05, -13.33, 4.34, 1.56, .18);
-    m.box('#b88655', x, 2.84, -13.33, 4.56, .095, .24);
-    m.chronicleFace(createChronicleFace(kind), x, 2.05, -13.224, 4.18, 1.43);
+  // Zone-four north wall (ZA-06 relocation): faces flank the chronicle
+  // cabinet, clear of the timeline rear cabinets on the same wall.
+  for (const [kind, x] of [['founding', -9.9], ['excerpts', -6.5]] as const) {
+    m.box('#5b3732', x, 2.05, -13.42, 2.2, 1.0, .18);
+    m.box('#b88655', x, 2.62, -13.42, 2.36, .08, .24);
+    m.chronicleFace(createChronicleFace(kind), x, 2.05, -13.31, 2.04, .71);
   }
 
-  const z = -10.58;
-  m.solid('#573a34', 0, .72, z, 1.62, .88, 1.13);
-  m.box('#91704c', 0, 1.16, z, 1.72, .066, 1.23);
-  m.box('#ead5a7', 0, 1.242, z, .68, .112, .49);
-  for (const y of [1.18, 1.304]) m.box('#6d3531', 0, y, z, .73, .025, .545);
-  m.box('#503332', -.353, 1.242, z, .067, .153, .545);
-  m.box('#d8ac6a', 0, 1.319, z, .39, .008, .043);
-  m.box('#d8ac6a', 0, 1.319, z, .044, .008, .25);
-  m.label('未写镇镇志', 0, .91, z + .574, 1.35, .29, 0, { background: '#553334', color: '#ffe2a2' });
+  const z = -12.95;
+  m.light(-8.2, 3.0, -11.9, '#ffe9c4', 25, 8);
+  m.solid('#573a34', -8.2, .72, z, 1.62, .88, 1.13);
+  m.box('#91704c', -8.2, 1.16, z, 1.72, .066, 1.23);
+  m.box('#ead5a7', -8.2, 1.242, z, .68, .112, .49);
+  for (const y of [1.18, 1.304]) m.box('#6d3531', -8.2, y, z, .73, .025, .545);
+  m.box('#503332', -8.553, 1.242, z, .067, .153, .545);
+  m.box('#d8ac6a', -8.2, 1.319, z, .39, .008, .043);
+  m.box('#d8ac6a', -8.2, 1.319, z, .044, .008, .25);
+  m.label('未写镇镇志', -8.2, .91, z + .574, 1.35, .29, 0, { background: '#553334', color: '#ffe2a2' });
 }

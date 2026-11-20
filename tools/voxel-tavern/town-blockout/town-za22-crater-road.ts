@@ -16,6 +16,7 @@ const tileSize = 48;
 
 type WestCraterRoad = {
   group: Group;
+  readonly winch: ReturnType<typeof mountZa31CraterWinch>;
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
@@ -119,5 +120,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(rim.group, camp.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
-  return road;
+  return { ...road, winch };
 }
