@@ -74,6 +74,15 @@ test('stardust rejects unsupported coordinates, unconfirmed or wrong-zone bands 
   assert.throws(validate({ ...stardust, amount: 3 }), /First stardust/);
 });
 
+test('R3-10 rejects legacy meteor iron placements in the underground side passage', () => {
+  const sidePassage = { ...waterline, region: 'mining-side-passage' };
+  const legacyPoint = { id: 'legacy-iron', anchorId: sidePassage.id, depth: -90, position: [102, 207, -90],
+    amount: 1, mineral: 'meteor-iron', grade: 'deposit' } as const;
+  assert.throws(() => createUndergroundOreDistribution({
+    anchors: [sidePassage], points: [legacyPoint as unknown as UndergroundOrePoint],
+  }), /outside its confirmed underground anchor/);
+});
+
 test('stable IDs and locations are unique and only one 1–2-piece first find can be registered', () => {
   const validate = (otherPoint: UndergroundOrePoint) => () => createUndergroundOreDistribution({
     anchors: [waterline], fallTraceBands: [fallTrace], points: [stardust, otherPoint],

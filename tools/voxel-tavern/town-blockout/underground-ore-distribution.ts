@@ -3,7 +3,7 @@ import { flightFuelCanFullPowerMs } from './flight-fuel-display';
 export const undergroundOreDepths = [-90, -140, -165, -190] as const;
 export type UndergroundOreDepth = typeof undergroundOreDepths[number];
 export type UndergroundOrePosition = readonly [east: number, north: number, height: number];
-const minerals = ['ordinary-ore', 'meteor-iron', 'stardust',
+const minerals = ['ordinary-ore', 'stardust',
   'ordinary-ice-crystal', 'amethyst-cluster', 'blue-crystal', 'moonstone'] as const;
 type Mineral = typeof minerals[number];
 
@@ -118,9 +118,6 @@ export function createUndergroundOreDistribution({ anchors = [], fallTraceBands 
     }
     if (point.depth === -140 && anchor.region === 'dark-passage') {
       throw new RangeError('The crystal cave dark passage has no mining points: ' + point.id);
-    }
-    if (point.depth === -90 && point.mineral === 'meteor-iron' && anchor.region !== 'mining-side-passage') {
-      throw new RangeError('First-mine meteor iron belongs to the side-passage seam: ' + point.id);
     }
     if (point.mineral === 'stardust') {
       const band = bandsById.get(point.fallTraceBandId);

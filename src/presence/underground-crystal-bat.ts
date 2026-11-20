@@ -13,12 +13,9 @@ const recoveryMs = 5_000;
 
 /** Encounter rules. The cave host supplies accepted activity, projectile contacts and the dive path. */
 export function createUndergroundCrystalBat(variant: Variant) {
-  const maxHits = variant === 'pool-elite' ? 3 : 1;
-  let hitsLeft = maxHits;
   let phase: Phase = 'roost';
   let deadline: number | null = null;
   let lastAt = -Infinity;
-  const acceptedHits = new Set<string>();
 
   function acceptTime(now: number): boolean {
     if (!Number.isFinite(now) || now < lastAt) return false;
@@ -31,7 +28,7 @@ export function createUndergroundCrystalBat(variant: Variant) {
   }
 
   return {
-    read() { return { phase, hitsLeft, deadline }; },
+    read() { return { phase, hitsLeft: phase === 'defeated' ? 0 : 1, deadline }; },
     tick(now: number) { acceptTime(now); },
     observe(activity: Activity, now: number) {
       if (!acceptTime(now) || phase !== 'roost') return false;
@@ -51,21 +48,18 @@ export function createUndergroundCrystalBat(variant: Variant) {
       return true;
     },
     impact(id: string, tool: 'snowball' | 'pickaxe', now: number) {
-      if (!acceptTime(now) || phase === 'defeated' || tool !== 'snowball' || !id || acceptedHits.has(id)) {
+      if (!acceptTime(now) || phase === 'defeated' || tool !== 'snowball' || !id.trim()) {
         return { kind: 'ignored' } as const;
       }
-      acceptedHits.add(id);
-      hitsLeft--;
-      if (hitsLeft > 0) return { kind: 'hit', hitsLeft } as const;
       phase = 'defeated';
       deadline = null;
+      // R3-09 and R3-23 retain a one-hit bat and a larger yield of ordinary moonstone.
       return variant === 'pool-elite'
-        ? { kind: 'defeated', effect: 'crystal-dust', loot: 'full-moonstone-ore' } as const
+        ? { kind: 'defeated', effect: 'crystal-dust', loot: { mineral: 'moonstone', yield: 'large' } } as const
         : { kind: 'defeated', effect: 'crystal-dust' } as const;
     },
     returnToRoost(now: number) {
       if (!acceptTime(now) || phase === 'defeated') return false;
-      hitsLeft = maxHits;
       phase = 'roost';
       deadline = null;
       return true;

@@ -34,20 +34,17 @@ test('common bats shatter once on one snowball and a pickaxe does not count', ()
   assert.equal(bat.returnToRoost(7), false);
 });
 
-test('pool elite ignores generic noise, heals on a living return, and awards a single whole ore', () => {
+test('pool elite keeps its separate wake cue and one snowball drops ordinary moonstone once per encounter', () => {
   const elite = createUndergroundCrystalBat('pool-elite');
   assert.equal(elite.observe({ ...quiet, noise: 'mine' }, 0), false);
   assert.equal(elite.observe({ ...quiet, minedAtPool: true }, 50), true);
-  assert.deepEqual(elite.impact('s1', 'snowball', 51), { kind: 'hit', hitsLeft: 2 });
+  assert.deepEqual(elite.impact('p1', 'pickaxe', 51), { kind: 'ignored' });
   assert.equal(elite.returnToRoost(52), true);
-  assert.equal(elite.read().hitsLeft, 3);
+  assert.equal(elite.read().hitsLeft, 1);
   assert.equal(elite.observe({ ...quiet, enteredPool: true }, 53), true);
   assert.deepEqual(elite.impact('stale', 'snowball', 52), { kind: 'ignored' });
+  const result = { kind: 'defeated', effect: 'crystal-dust', loot: { mineral: 'moonstone', yield: 'large' } };
+  assert.deepEqual(elite.impact('s1', 'snowball', 53), result);
   assert.deepEqual(elite.impact('s1', 'snowball', 53), { kind: 'ignored' });
-  assert.deepEqual(elite.impact('s2', 'snowball', 54), { kind: 'hit', hitsLeft: 2 });
-  assert.deepEqual(elite.impact('s2', 'snowball', 54), { kind: 'ignored' });
-  assert.deepEqual(elite.impact('s3', 'snowball', 55), { kind: 'hit', hitsLeft: 1 });
-  assert.deepEqual(elite.impact('s4', 'snowball', 56),
-    { kind: 'defeated', effect: 'crystal-dust', loot: 'full-moonstone-ore' });
-  assert.deepEqual(elite.impact('s5', 'snowball', 57), { kind: 'ignored' });
+  assert.deepEqual(createUndergroundCrystalBat('pool-elite').impact('s2', 'snowball', 56), result);
 });
