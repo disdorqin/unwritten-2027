@@ -5,11 +5,15 @@ on:
     branches: [lane-c]
     paths:
       - '.github/workflows/verify-underground-descent.yml'
+      - 'src/presence/underground-entry.ts'
       - 'src/presence/underground-lift-*.ts'
+      - 'src/presence/underground-mine-gate.ts'
       - 'src/presence/underground-mine-lift.ts'
       - 'src/shared/underground-descent*.ts'
       - 'tools/voxel-tavern/town-blockout/underground-descent*.ts'
-      - 'tools/voxel-tavern/town-blockout/underground-lift-cinematic*.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-lift-*.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-mine-layout.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-mine-expansion-shell.ts'
       - 'tools/fixtures/underground-descent-review.ts'
       - 'tools/verify-underground-descent.mjs'
   workflow_dispatch:
@@ -26,21 +30,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - name: Mount the original entry authority and mine in the verifier
+      - name: Check the entry authority and current mine layout
         shell: bash
         run: |
           set -euo pipefail
-          base=1da54e9ea448f772457153a37bdd0a3d3e27d54f
-          git fetch --no-tags origin "$base"
           entry=src/presence/underground-entry.ts
           mine=tools/voxel-tavern/town-blockout/underground-mine-layout.ts
-          for file in "$entry" "$mine"; do
-            if [ ! -f "$file" ]; then
-              git show "$base:$file" > "$file"
-            fi
-          done
+          test -f "$entry"
+          test -f "$mine"
           test "$(git hash-object "$entry")" = bcc0b59110f46d3ecd109bd457027e555783b355
-          test "$(git hash-object "$mine")" = 1f1ab0da6785b1df3ab3112870940f5b7f3a6921
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck

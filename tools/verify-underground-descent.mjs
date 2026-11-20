@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -9,6 +10,16 @@ import { createServer } from 'vite';
 assert.ok(process.argv[2], 'Use: node tools/verify-underground-descent.mjs <evidence-dir>');
 const output = resolve(process.argv[2]);
 const repo = fileURLToPath(new URL('../', import.meta.url));
+const git = args => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+
+function checkedInBlob(path) {
+  const blob = git(['rev-parse', '--verify', `HEAD:${path}`]);
+  assert.equal(git(['hash-object', '--', path]), blob, `Run the verifier with the checked-in ${path}`);
+  return blob;
+}
+
+const mineBlob = checkedInBlob('tools/voxel-tavern/town-blockout/underground-mine-layout.ts');
+const entryBlob = checkedInBlob('src/presence/underground-entry.ts');
 const scratch = await mkdtemp(resolve(tmpdir(), 'underground-descent-'));
 await mkdir(output, { recursive: true });
 const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><link rel="icon" href="data:,">
@@ -27,9 +38,9 @@ const server = await createServer({
 });
 
 const evidence = {
-  scope: 'Chromium with original entry authority and mine mesh in a dedicated fixture. Host time is advanced explicitly; input, frames, audio plumbing and compositing run in Chromium.',
-  mineBlob: '1f1ab0da6785b1df3ab3112870940f5b7f3a6921',
-  entryBlob: 'bcc0b59110f46d3ecd109bd457027e555783b355',
+  scope: 'Chromium runs the checked-in entry authority and mine layout with the expansion disabled. The fixture advances host time explicitly and runs input, frames, audio plumbing and compositing in Chromium.',
+  mineBlob,
+  entryBlob,
   runs: {}, passed: false,
 };
 let browser;
