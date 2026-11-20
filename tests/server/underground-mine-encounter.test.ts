@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createUndergroundMineEncounter } from '../../src/presence/underground-mine-encounter.js';
+import { createUndergroundMineGate } from '../../src/presence/underground-mine-gate.js';
 import { createUndergroundSurvival } from '../../src/presence/underground-survival.js';
 import { createUndergroundVitals } from '../../src/presence/underground-vitals.js';
 
@@ -80,6 +81,45 @@ test('defeating the final assigned creature permits gate passage in that same ac
   assert.equal(f.encounter.isSectionCleared('mine'), true);
   assert.equal(f.encounter.isSectionCleared('crystal-cave'), false);
   assert.deepEqual(f.advance(1), lastHit);
+});
+
+test('the mine gate needs the accepted winch foot and a cleared section, then stays open for the run', () => {
+  const { encounter, setAccepted, advance } = fixture([
+    { ...spawn, id: 'clump', species: 'snow-clump', habitat: 'shallow-snow' },
+  ]);
+  const winch = { domainId: point.layer, east: 0, north: 0, height: -91, horizontalReach: 1.1, verticalReach: .2 };
+  let foot = { ...winch, playerId };
+  let time = 100;
+  const revealMs = 400;
+  const gate = createUndergroundMineGate({
+    encounter, winch, revealMs, now: () => time,
+    readAcceptedFoot: id => id === playerId ? foot : undefined,
+  });
+  assert.equal(gate.state(), 'closed');
+  assert.equal(gate.openFromMine(playerId), 'uncleared');
+
+  setAccepted({ section: 'mine', player: { room, at: point, action: 'quiet' },
+    contact: { target: 'clump', tool: 'snowball' } });
+  assert.equal(advance(0).sectionCleared, true);
+  assert.equal(gate.openFromMine('other'), 'unreachable');
+  foot = { ...foot, domainId: 'test-crystal-cave' };
+  assert.equal(gate.openFromMine(playerId), 'unreachable');
+  foot = { ...foot, domainId: point.layer, east: 1.2 };
+  assert.equal(gate.openFromMine(playerId), 'unreachable');
+  foot = { ...foot, east: 0 };
+
+  time = Infinity;
+  assert.equal(gate.openFromMine(playerId), 'clock-unavailable');
+  assert.equal(gate.state(), 'closed');
+  time = 100;
+  assert.equal(gate.openFromMine(playerId), 'ajar');
+  time = 499;
+  assert.equal(gate.openFromMine(playerId), 'ajar');
+  time = 500;
+  foot = { ...foot, domainId: 'test-crystal-cave' };
+  assert.equal(gate.state(), 'open');
+  time = 0;
+  assert.equal(gate.state(), 'open');
 });
 
 test('a failed survival write retries the same encounter tick without advancing or charging damage twice', () => {
