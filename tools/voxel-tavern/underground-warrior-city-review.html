@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>勇士城建筑群走查</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1d2430; color: #f1f5f7; font: 15px system-ui, sans-serif; }
+    canvas { position: fixed; inset: 0; display: block; }
+    main { position: fixed; z-index: 1; margin: 16px; padding: 12px; max-width: calc(100% - 32px); background: #131d2beb; border: 1px solid #6b828b; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    button { color: inherit; background: #293b47; padding: 5px 8px; border: 1px solid #758b93; }
+    button[aria-pressed="true"] { background: #d1e5eb; color: #152028; }
+    p { margin: 8px 0 0; }
+    output { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>勇士城建筑群走查</h1>
+    <nav aria-label="走查起点">
+      <button type="button" data-view="street" aria-pressed="true">城门</button>
+      <button type="button" data-view="house" aria-pressed="false">石屋</button>
+      <button type="button" data-view="market" aria-pressed="false">拱廊</button>
+      <button type="button" data-view="wall" aria-pressed="false">登墙梯</button>
+    </nav>
+    <p>W/A/S/D 走动，←/→ 转向，E 朝城墙后段。</p>
+    <p><output id="position"></output></p>
+  </main>
+  <script type="module" src="./town-blockout/underground-warrior-city-review.ts"></script>
+</body>
+</html>

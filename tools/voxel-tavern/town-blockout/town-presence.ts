@@ -30,6 +30,9 @@ import {
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
 import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
+import {
+  readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
+} from '../../../src/shared/summit-passport';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -109,6 +112,8 @@ export function createTownPresence(
   let mascotSeq = 0;
   let nextMascotSample = 0;
   let photoSupported = false;
+  let summitPassportSupported = false;
+  let onSummitPassport: ((reply: SummitPassportReply) => void) | undefined;
   let clockRequest: number | undefined;
   let nextClockSample = Infinity;
   let showPhoto: ((notice: PlazaPhotoNotice) => void) | undefined;
@@ -367,6 +372,7 @@ export function createTownPresence(
     ceremonyArrivalTimer = undefined;
     chat.setConnected(false);
     photoSupported = false;
+    summitPassportSupported = false;
     fireworksSupported = firecrackersSupported = false;
     bellSupported = false;
     bellEvents.length = 0;
@@ -415,10 +421,15 @@ export function createTownPresence(
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
-        nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean;
+        nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && message.kind === 'summit-passport-result') {
+        const reply = haveId && summitPassportSupported && readSummitPassportReply(message);
+        if (reply) onSummitPassport?.(reply);
+        return;
+      }
       if (haveId && message.type === 'owner-challenge') {
         if (typeof message.nonce === 'string' && /^[0-9a-f]{48}$/.test(message.nonce)) {
           ownerNonce = message.nonce;
@@ -549,6 +560,7 @@ export function createTownPresence(
           freeSnowWallsSupported = (message as { freeSnowWalls?: unknown }).freeSnowWalls === true;
           firecrackersSupported = message.firecrackers === true;
           photoSupported = message.plazaPhoto === true;
+          summitPassportSupported = message.summitPassport === true;
           joinedName = message.name;
           chat.setConnected(true);
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
@@ -799,6 +811,11 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    summitPassportAvailable: () => haveId && summitPassportSupported,
+    requestSummitPassport(action: SummitPassportAction) {
+      return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
+    },
+    onSummitPassport(handler: (reply: SummitPassportReply) => void) { onSummitPassport = handler; },
     onCeremonyArrival(handler: (landing: CeremonyArrival) => void) {
       onCeremonyArrival = handler;
       if (ceremonyArrival) scheduleCeremonyArrival();
