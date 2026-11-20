@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 主峰整簇走查</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; color: #edf4fa; background: #273342; }
+    body { margin: 0; min-height: 100vh; }
+    #scene { position: fixed; inset: 0; }
+    #scene canvas { display: block; }
+    main { position: relative; width: fit-content; max-width: calc(100% - 3rem); margin: 1rem; padding: .85rem 1rem; border: 1px solid #b9c7d466; border-radius: .6rem; background: #1c293be8; }
+    h1 { font-size: 1.1rem; margin: 0 0 .6rem; }
+    nav { display: flex; flex-wrap: wrap; gap: .35rem; }
+    button { padding: .35rem .6rem; border: 1px solid #a5bfd48a; border-radius: .25rem; background: #30455e; color: inherit; font: inherit; }
+    button[aria-pressed="true"] { background: #d9e9f6; color: #1c293b; }
+    button:disabled { opacity: .5; }
+    button:focus-visible { outline: 2px solid #a8d5fa; outline-offset: 2px; }
+    p { margin: .65rem 0 0; }
+    #position { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div id="scene" aria-hidden="true"></div>
+  <main>
+    <h1>主峰整簇走查</h1>
+    <nav aria-label="试览角度与场景控制">
+      <button id="gate" type="button" aria-pressed="true">山门</button>
+      <button id="cloud-station" type="button">云海台缆车一线顶站</button>
+      <button id="view-cluster" type="button" aria-pressed="false">绝顶</button>
+      <button id="view-north" type="button" aria-pressed="false">北</button>
+      <button id="view-east" type="button" aria-pressed="false">东</button>
+      <button id="view-south" type="button" aria-pressed="false">南</button>
+      <button id="view-west" type="button" aria-pressed="false">西</button>
+      <button id="remount" type="button" disabled>再挂门体</button>
+      <button id="dispose" type="button">释放试览</button>
+    </nav>
+    <p>W/S 前进与返回，A/D 左右移动。由行前坪走回外坪会卸载门体。</p>
+    <p><output id="position"></output></p>
+    <p id="status" role="status">正在加载总装候选。</p>
+  </main>
+  <script type="module" src="./town-blockout/main-summit-review.ts"></script>
+</body>
+</html>
