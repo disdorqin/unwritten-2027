@@ -112,7 +112,8 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
     await expect(retryButton).toBeVisible();
     await expect(guide).toBeHidden();
     await expect(page.locator('#scene > canvas')).toHaveCount(0);
-    await expect.poll(() => failed).toContainEqual({ path: blockedPath, reason: 'net::ERR_BLOCKED_BY_CLIENT' });
+    await expect.poll(() => failed.find(request => request.path === blockedPath)?.reason)
+      .toMatch(/^net::ERR_BLOCKED_BY_CLIENT(?:\.Inspector)?$/);
     await page.screenshot({ path: join(evidence, `${name}-request-blocked.png`) });
 
     await page.unroute(matchesBlockedAsset, denyAsset);
