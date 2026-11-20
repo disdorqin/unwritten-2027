@@ -21,6 +21,30 @@ export const npcScript: Readonly<Record<NpcName, RoleScript>> = script;
 // Authored dialogue can be ready before actors or their activity sites are installed.
 export const npcAuthoredDialogue = { ...npcScript, ...npcAddedDialogue } as const;
 
+export const npcAuthoredQuestionTopics = [
+  { id: 'familiarity', label: '问你们怎么认识', section: 'host', index: 0, fact: false },
+  { id: 'current-work', label: '问镇长近况', section: 'host', index: 1, fact: true },
+  { id: 'character', label: '问镇长为人', section: 'host', index: 2, fact: false },
+  { id: 'introduction', label: '听一句介绍', section: 'host', index: 3, fact: true },
+  { id: 'contact', label: '问联系方式', section: 'outside', index: 0, fact: false },
+  { id: 'residence', label: '问住处', section: 'outside', index: 1, fact: false },
+] as const;
+
+type AuthoredQuestion = Readonly<{ verdict: '可答' | '挡回'; text: string }>;
+type AuthoredQuestions = Readonly<Record<'host' | 'outside', readonly AuthoredQuestion[]>>;
+
+export function answerAuthoredNpcQuestion(questions: AuthoredQuestions, id: unknown): {
+  kind: 'fact' | 'refusal';
+  text: string;
+} | undefined {
+  const topic = npcAuthoredQuestionTopics.find(option => option.id === id);
+  const row = topic && questions[topic.section][topic.index];
+  if (row?.text && row.verdict === '挡回') return { kind: 'refusal', text: row.text };
+  if (row?.text && topic?.fact && row.verdict === '可答') return { kind: 'fact', text: row.text };
+  const fallback = questions.host[0];
+  if (fallback?.text && fallback.verdict === '挡回') return { kind: 'refusal', text: fallback.text };
+}
+
 export type TownNpcGuide = 'seating' | 'stage' | 'postcard' | 'wishes' | 'ice' |
   'lantern' | 'mixing' | 'spring' | 'castle' | 'rail' | 'bell';
 type ExpandedRole = {

@@ -1,0 +1,185 @@
+{
+  "status": "staged-walk-smoke-passed",
+  "step": "passed",
+  "comparison": {
+    "checked": 92,
+    "market": 17,
+    "legacySpots": 75
+  },
+  "mode": "staged-walk-smoke",
+  "chromium": null,
+  "archive": {
+    "run": 44672080233,
+    "artifact": 14601023822,
+    "sha256": "0284a8765e51e1c4aa4bc4e3d9062b3630e22b657ad5c7487dbfb6015b25d91c",
+    "members": [
+      "all-house-sweeps.json",
+      "door/jx1-production-proof.json",
+      "baseline.json",
+      "door/old-town-137-168-keyboard-menu.png",
+      "door/old-town-186-104-desktop-inside.png",
+      "door/old-town-186-104-keyboard-menu.png",
+      "door/old-town-186-104-touch-menu.png",
+      "patch-sha256.txt",
+      "stall-shift-registry.json",
+      "static-baseline.json",
+      "static-shifted.json"
+    ]
+  },
+  "tours": [
+    {
+      "id": "old-town:186:104",
+      "touch": false,
+      "door": {
+        "id": "old-town:186:104",
+        "zone": "market",
+        "x": 174.905,
+        "n": 112,
+        "ground": 9.418671293258667,
+        "exitYaw": -1.5707963267948968
+      },
+      "frameCounts": {
+        "start": 10,
+        "inside": 135,
+        "returned": 271
+      },
+      "traveled": {
+        "street": 17.62499999999995,
+        "ingress": 8.374999999999515,
+        "egress": 8.625000000000256,
+        "returnStreet": 17.625000000000025
+      },
+      "ingressThreshold": {
+        "frame": 103,
+        "before": {
+          "east": 176.2450225901993,
+          "north": 112.00257104145373,
+          "ground": 10.582033833503724,
+          "yaw": 1.5741793637273627,
+          "air": null
+        },
+        "after": {
+          "east": 176.3700218748913,
+          "north": 112.00214816264382,
+          "ground": 10.582033833503724,
+          "yaw": 1.5741793637273627,
+          "air": null
+        },
+        "nextX": 176.3700218748913,
+        "nextN": 112.00214816264382,
+        "accepted": true,
+        "support": {
+          "surface": 9.162091049249115,
+          "rawTerrain": 9.162091049249115,
+          "floors": [
+            {
+              "min": [
+                176.555,
+                10.412033833503724,
+                -117.3
+              ],
+              "max": [
+                185.445,
+                10.582033833503724,
+                -106.7
+              ]
+            },
+            {
+              "min": [
+                176.325,
+                10.535533833503724,
+                -119.75
+              ],
+              "max": [
+                185.675,
+                10.582033833503724,
+                -104.25
+              ]
+            },
+            {
+              "min": [
+                176.105,
+                9.028632564544678,
+                -112.65
+              ],
+              "max": [
+                176.325,
+                10.582033833503724,
+                -111.35
+              ]
+            }
+          ],
+          "ramps": [],
+          "solids": []
+        }
+      },
+      "egressThreshold": {
+        "frame": 185,
+        "before": {
+          "east": 176.39987768576327,
+          "north": 112.00242308288715,
+          "ground": 10.582033833503724,
+          "yaw": -1.5724172492209347,
+          "air": null
+        },
+        "after": {
+          "east": 176.27487784997507,
+          "north": 112.00222046767261,
+          "ground": 10.582033833503724,
+          "yaw": -1.5724172492209347,
+          "air": null
+        },
+        "nextX": 176.27487784997507,
+        "nextN": 112.00222046767261,
+        "accepted": true,
+        "support": {
+          "surface": 9.168143978281286,
+          "rawTerrain": 9.168143978281286,
+          "floors": [
+            {
+              "min": [
+                176.325,
+                10.535533833503724,
+                -119.75
+              ],
+              "max": [
+                185.675,
+                10.582033833503724,
+                -104.25
+              ]
+            },
+            {
+              "min": [
+                176.105,
+                9.028632564544678,
+                -112.65
+              ],
+              "max": [
+                176.325,
+                10.582033833503724,
+                -111.35
+              ]
+            }
+          ],
+          "ramps": [],
+          "solids": []
+        }
+      },
+      "insideScreenshot": "old-town-186-104-desktop-inside.png",
+      "objectAction": "E · 查看木工台",
+      "legCalls": {
+        "street": 141,
+        "ingress": 67,
+        "egress": 69,
+        "returnStreet": 141
+      },
+      "returned": {
+        "east": 173.249999999991,
+        "north": 96.12621499611437,
+        "ground": 9.7290000222557,
+        "mask": 1,
+        "canMove": true
+      }
+    }
+  ]
+}

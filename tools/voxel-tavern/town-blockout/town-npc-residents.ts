@@ -1,6 +1,7 @@
 import { Color, Object3D, type InstancedMesh } from 'three';
 import type { TownActivityContext, TownActivitySpot } from './town-activity';
 import { npcAddedDialogue } from './town-npc-added-dialogue';
+import { answerAuthoredNpcQuestion, npcAuthoredQuestionTopics } from './town-npc-dialogue';
 import { palaceStewardDialogue } from './town-npc-palace-dialogue';
 import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
 
@@ -152,9 +153,12 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
   rotate('问生肖线索', options.clues?.() ?? (name === '秦知礼' ? [palaceStewardDialogue.clues[0]] : []));
   rotate('聊聊镇民', role.gossip);
   rotate('聊聊跨年', role.newYear);
-  const questions = ['问你们怎么认识', '问镇长近况', '问镇长为人', '听一句介绍', '问联系方式', '问住处'];
-  [...role.questions.host, ...role.questions.outside].forEach(({ text }, index) =>
-    action(questions[index], () => { speech.textContent = text; }));
+  for (const { id, label } of npcAuthoredQuestionTopics) {
+    action(label, () => {
+      const answer = answerAuthoredNpcQuestion(role.questions, id);
+      if (answer) speech.textContent = answer.text;
+    });
+  }
   const activity = options.activity?.();
   if (activity && activity.available?.() !== false) action(activity.label, () => {
     if (activity.available?.() === false) return;
