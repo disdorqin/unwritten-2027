@@ -84,13 +84,16 @@ try {
       const nearest = angle => new THREE.Raycaster(camera.position,
         pointAt(angle).sub(camera.position).normalize()).intersectObjects([ring, door])[0]?.object.name;
       let rearSamples = 0;
+      const missingFront = [];
       for (let angle = .5; angle < 360; angle++) {
+        const front = pointAt(angle).addScaledVector(normal, 1.15);
+        if (!new THREE.Raycaster(front, normal.clone().negate()).intersectObject(ring).length) missingFront.push(angle);
         const from = pointAt(angle).addScaledVector(normal, -1.15);
         if (new THREE.Raycaster(from, normal).intersectObject(ring).length) rearSamples++;
       }
       renderer.render(scene, camera);
       return { state, position: camera.position.toArray(), center: center.toArray(), normal: normal.toArray(),
-        gapNdc: pointAt(45).project(camera).toArray(), arcHit: nearest(225), gapHit: nearest(45), rearSamples,
+        gapNdc: pointAt(45).project(camera).toArray(), arcHit: nearest(225.5), gapHit: nearest(45), missingFront, rearSamples,
         color: ring.material.color.getHexString(), roughness: ring.material.roughness,
         start: params.thetaStart * 180 / Math.PI, sweep: params.thetaLength * 180 / Math.PI,
         draws: renderer.info.render.calls, triangles: renderer.info.render.triangles };
@@ -107,6 +110,7 @@ try {
     assert.equal(result.roughness, .96);
     assert.equal(Math.round(result.start), 65);
     assert.equal(Math.round(result.sweep), 320);
+    assert.deepEqual(result.missingFront, Array.from({ length: 40 }, (_, offset) => 25.5 + offset));
     assert.equal(result.rearSamples, 0);
     assert.ok(result.draws > 0 && result.triangles > 0);
     if (side === 'front') {
