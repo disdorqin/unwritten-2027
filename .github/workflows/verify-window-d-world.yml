@@ -28,9 +28,10 @@ jobs:
           {
             git rev-parse HEAD
             npm run build
-            mapfile -t directed < <(git ls-files 'tests/*orbital*.test.ts' 'tests/*forge*.test.ts' 'tests/*flight*.test.ts' 'tests/*pig-stone*.test.ts' 'tests/server/*orbital*.test.ts' 'tests/server/*forge*.test.ts')
+            mapfile -t directed < <(git ls-files 'tests/*orbital*.test.ts' 'tests/*forge*.test.ts' 'tests/*flight*.test.ts' 'tests/*pig-stone*.test.ts' 'tests/r2-engineering-candidate.test.ts' 'tests/server/*orbital*.test.ts' 'tests/server/*forge*.test.ts')
             test "${#directed[@]}" -gt 0
             node --import tsx --test "${directed[@]}"
+            node --import tsx tools/voxel-tavern/r2-engineering/run.ts > "$RUNNER_TEMP/window-d/r2-isolated-engineering.json"
           } 2>&1 | tee "$RUNNER_TEMP/window-d/contracts.txt"
       - uses: actions/upload-artifact@v4
         if: always()

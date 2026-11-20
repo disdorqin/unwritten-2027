@@ -53,17 +53,20 @@ async function walkTo(x, n) {
     const east = x - startX, north = n - startN;
     const distance = Math.hypot(east, north);
     if (distance <= .16) {
-      footsteps.push({ target: { x, n }, x: startX, n: startN, ground: Number(state.ground), steps: Number(state.steps) });
+      footsteps.push({ target: { x, n }, x: startX, n: startN, ground: Number(state.ground),
+        steps: Number(state.steps), blocked: Number(state.blocked) });
       return state;
     }
     await aim('yaw', Math.atan2(-east, north), 'ArrowLeft', 'ArrowRight');
     const length = Math.min(1.2, distance - .07);
     await page.keyboard.down('w');
     try {
-      await page.waitForFunction(([startX, startN, length]) => {
-        const { x, n } = document.querySelector('#status-viewport').dataset;
-        return Math.hypot(Number(x) - startX, Number(n) - startN) >= length;
-      }, [startX, startN, length], { timeout: 6500 });
+      await page.waitForFunction(({ startX, startN, length, targetX, targetN, blocked }) => {
+        const data = document.querySelector('#status-viewport').dataset;
+        const east = Number(data.x), north = Number(data.n);
+        return Number(data.blocked) > blocked || Math.hypot(east - targetX, north - targetN) <= .16 ||
+          Math.hypot(east - startX, north - startN) >= length;
+      }, { startX, startN, length, targetX: x, targetN: n, blocked: Number(state.blocked) }, { timeout: 6500 });
     } finally {
       await page.keyboard.up('w');
     }
@@ -113,12 +116,13 @@ try {
   await aim('yaw', Math.atan2(Number(vent.x) - 2.95, -3.51 - Number(vent.n)), 'ArrowLeft', 'ArrowRight');
   await aim('pitch', .22, 'ArrowUp', 'ArrowDown');
   await capture('02-life-support', 'life-support', '');
-  for (const [x, n] of [[2.55, .1], [0, .1], [0, 5.65], [1.42, 5.65]]) await walkTo(x, n);
+  for (const [x, n] of [[2.55, .1], [0, .1], [0, 5.65], [1.25, 5.65]]) await walkTo(x, n);
 
-  const side = await walkTo(1.42, 8.63);
+  // Cross north of the captain's table, with space for normal keyboard coasting.
+  const side = await walkTo(1.25, 8.72);
   assert.deepEqual([side.leftReach, side.rightReach], ['false', 'true']);
   await logKeys('right-hand-position-rejects-two-hands', ['q', 'e'], '');
-  const center = await walkTo(0, 8.63);
+  const center = await walkTo(0, 8.72);
   assert.deepEqual([center.ground, center.leftReach, center.rightReach], ['0.3200', 'true', 'true']);
   assert.ok(Number(center.steps) > 0);
   await aim('yaw', 0, 'ArrowLeft', 'ArrowRight');
