@@ -2,7 +2,13 @@
     encode zstd gzip
     root * /srv
     respond /healthz "town-preview {$TOWN_RELEASE:local}" 200
-    reverse_proxy /presence* presence:8090
+    @mountain path /presence-mountain /presence-mountain/*
+    handle @mountain {
+        uri replace /presence-mountain /presence
+        reverse_proxy presence:8091
+    }
+    @townPresence path /presence /presence/*
+    reverse_proxy @townPresence presence:8090
     @entry path / /town-blockout.html
     header @entry Cache-Control "no-cache"
     rewrite / /town-blockout.html

@@ -26,6 +26,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { createZa22CloudRoute } from './town-za22-cloud-route';
 import { createTownViewBatches } from './town-view-batches';
 import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
@@ -204,6 +205,25 @@ if (mountSummitSkyline) {
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
   (east, north) => grid.heightAt(east, north));
+const cloudRoute = createZa22CloudRoute({
+  now: presence.serverNow,
+  nightOpen: () => presence.northRidgeNightOpen(),
+  enterOrExit(terminal, at) {
+    presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
+    x = at.east;
+    n = at.north;
+    ground = at.height;
+    airHeight = undefined;
+    riseSpeed = 0;
+    keys.clear();
+    walkClock.reset();
+    storeWalkView(walkCurrent);
+    walkPrevious.copy(walkCurrent);
+    yaw = 0;
+    pitch = 0;
+  },
+  view: (title, message) => { activityContext.open(title, message); },
+});
 const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, townFar);
 const plazaCanvasSize = new Vector2();
 const railway = createTownRailway(grid, presence.serverNow);
@@ -568,6 +588,7 @@ function geometry() {
 }
 let walkGeometry = geometry();
 function geometryAt(east: number, north: number) {
+  if (cloudRoute.active()) return emptyGeometry;
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
@@ -2045,6 +2066,7 @@ function openTavernSeatActions() {
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
   if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
+  if (cloudRoute.active()) return cloudRoute.action({ east: x, north: n, height: ground });
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2077,6 +2099,8 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const cable = cloudRoute.action({ east: x, north: n, height: ground });
+  if (cable) return cable;
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   if (nearest) return nearest;
   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
@@ -2162,7 +2186,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked(); }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -2311,6 +2335,7 @@ let previous = performance.now();
 let snowMoveScale = 1;
 let chillMoveScale = 1;
 function walkable(x: number, n: number) {
+  if (cloudRoute.active()) return cloudRoute.surfaceAt(x, n, bodyRadius) !== undefined;
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
@@ -2324,6 +2349,7 @@ const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
 function surfaceAt(east: number, north: number) {
+  if (cloudRoute.active()) return cloudRoute.surfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
 }
 function outdoorSurfaceAt(east: number, north: number) {
@@ -2333,7 +2359,7 @@ function snowCleared(east: number, north: number, feet: number) {
   return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
 }
 function waterAtFeet() {
-  if (homeReturn || airHeight !== undefined) return undefined;
+  if (cloudRoute.active() || homeReturn || airHeight !== undefined) return undefined;
   const water = townWater.at(x, n);
   return water && Math.abs(ground - water.ground) < .25 ? water : undefined;
 }
@@ -2438,6 +2464,7 @@ function supportAt(
 }
 
 function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
+  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
@@ -2742,10 +2769,71 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
 }
 
 presence.onCeremonyArrival(arrival => arriveAtCeremony(arrival, performance.now()));
+function walkingAxes() {
+  const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
+  const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
+  const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
+  return { forward, right, sprint };
+}
+
+function refreshWorldAction() {
+  const action = currentAction();
+  actionButton.hidden = !action;
+  const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
+  if (label !== actionButton.textContent) actionButton.textContent = label;
+}
+
+function renderCloudRoute(frameSeconds: number) {
+  const cabin = cloudRoute.ridePoint();
+  if (cabin) {
+    faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
+    element('position').textContent = '缆车一线 · 前山';
+  } else {
+    const { forward, right, sprint } = walkingAxes();
+    const speed = (sprint ? 11.3 : 7.5) / Math.max(1, Math.hypot(forward, right));
+    const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
+    const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
+    const interpolation = walkClock.advance(frameSeconds, () => {
+      walkPrevious.copy(walkCurrent);
+      if (moveAllowed()) {
+        const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
+        if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
+        stepJump(townPhysicsDelta);
+      }
+      storeWalkView(walkCurrent);
+    });
+    walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
+    faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 云海台`;
+  }
+  presence.sample(!cabin && walking, x, n, airHeight ?? ground, yaw);
+  presence.update(Math.min(.25, frameSeconds));
+  const enabled = moveAllowed();
+  touchWalk.setAllowed(enabled);
+  crosshair.hidden = !lookAllowed();
+  touchJump.hidden = !enabled || !touchWalk.active();
+  touchJump.disabled = !canJump();
+  touchSprintButton.hidden = !enabled || !touchWalk.active();
+  museumMapButton.hidden = true;
+  refreshWorldAction();
+  renderer.render(cloudRoute.scene, camera);
+  if (profileTown) {
+    renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
+      frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles, cameraY: camera.position.y,
+    } }));
+  }
+}
+
 renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
+  cloudRoute.update({ east: x, north: n, height: ground });
+  if (cloudRoute.active()) {
+    renderCloudRoute(frameSeconds);
+    return;
+  }
   practiceTarget.updateRound();
   const startEast = x, startNorth = n;
   if (ceremonyLook) {
@@ -2806,9 +2894,7 @@ renderer.setAnimationLoop(now => {
     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
     element('position').textContent = '已就座';
   } else if (walking) {
-    const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
-    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
-    const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
+    const { forward, right, sprint } = walkingAxes();
     const movementStartedAt = performance.now();
     storeWalkView(walkRender);
     if (!walkRender.equals(walkCurrent)) {
@@ -3126,10 +3212,7 @@ renderer.setAnimationLoop(now => {
   touchJump.disabled = sledRide.active() ? sledRide.airborne() : !canJump();
   touchSprintButton.hidden = !moveAllowed() || !touchWalk.active();
   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
-  const action = currentAction();
-  actionButton.hidden = !action;
-  const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
-  if (label !== actionButton.textContent) actionButton.textContent = label;
+  refreshWorldAction();
   const groupPhotoFrame = plazaPhoto.update({
     east: x, north: n, height: ground,
     active: canControl && !homeReturn && !boardingGround && airHeight === undefined && !museumOverlay(),
