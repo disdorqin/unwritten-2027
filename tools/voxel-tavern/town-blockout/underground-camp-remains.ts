@@ -2,6 +2,7 @@ import {
   BoxGeometry, CanvasTexture, Color, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
   Object3D, PlaneGeometry, SRGBColorSpace,
 } from 'three';
+import { undergroundCampDiningTables } from '../../../src/shared/underground-camp-pickaxe';
 
 type Point = readonly [x: number, y: number, z: number];
 type Span = { from: Point; to: Point; zone: string };
@@ -193,10 +194,10 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
     };
   });
 
-  const tables = [-1.32, .89].map((x, index) => {
+  const tables = undergroundCampDiningTables.x.map((x, index) => {
     const id = 'canteen-table-' + (index + 1);
-    const z = 3.13;
-    solid(id, x, 0, z, .56, .77, 3.00);
+    const { depth: z, top } = undergroundCampDiningTables;
+    solid(id, x, 0, z, .56, top, 3.00);
     for (let plank = 0; plank < 3; plank++) {
       box(id, plank === 1 ? wornWood : board, x + (plank - 1) * .18, .697, z, .176, .073, 3);
     }
@@ -212,7 +213,7 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
       for (const dz of [-1.08, 1.08]) box(bench, wood, x + dx, .01, z + dz, .16, .357, .12);
     }
     if (index === 0) box(id + '/scraped-board', '#987756', x + .105, .768, z - .65, .09, .008, .19);
-    return { id, position: at(x, .77, z) };
+    return { id, position: at(x, top, z) };
   });
 
   solid('canteen/cold-stove', -1.43, 0, 7.45, 1.03, 1.02, .80);

@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { createUndergroundMineLayout } from '@first-mine';
 import { createUndergroundCampPickaxeAuthority } from '../../src/presence/underground-camp-pickaxe';
+import { resolveUndergroundCampPickaxeSite } from '../../src/shared/underground-camp-pickaxe';
 import { createUndergroundCampOfferings } from '../voxel-tavern/town-blockout/underground-camp-offerings';
 import { mountUndergroundCampControls } from '../voxel-tavern/town-blockout/underground-camp-controls';
 import { mountUndergroundCampScene } from '../voxel-tavern/town-blockout/underground-camp-scene';
@@ -124,7 +125,9 @@ function createCampScene(): CampScene {
 
 let mounted = createCampScene();
 offerings = createUndergroundCampOfferings(mounted.camp.memorial.niches);
-const { aim, approach } = mounted.pickaxeSite;
+const registeredSite = resolveUndergroundCampPickaxeSite(mine, spec.camp);
+if (!registeredSite) throw new Error('The mine could not register the camp pickaxe');
+const { aim, approach } = registeredSite;
 const claimPickaxe = createUndergroundCampPickaxeAuthority({
   site: { domainId, east: aim[0], north: -aim[2], height: approach[1] },
   readAcceptedFoot(id) {

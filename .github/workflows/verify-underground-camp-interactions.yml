@@ -7,6 +7,9 @@ on:
       - '.github/workflows/verify-underground-camp-interactions.yml'
       - 'tools/voxel-tavern/town-blockout/underground-camp-*.ts'
       - 'tools/fixtures/underground-camp-interactions-review.ts'
+      - 'src/shared/underground-camp-pickaxe.ts'
+      - 'src/presence/underground-camp-pickaxe.ts'
+      - 'tests/server/underground-camp-pickaxe.test.ts'
       - 'tools/verify-underground-camp-interactions.mjs'
       - 'tests/town-blockout-underground-camp-*.test.ts'
   workflow_dispatch:
@@ -26,10 +29,17 @@ jobs:
       - run: git fetch --no-tags origin 2966d9f05329084b8fb9072f997f5da6e7a4586a
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
-      - run: node --import tsx --test tests/town-blockout-underground-camp-{remains,offerings,interactions}.test.ts
+      - run: node --import tsx --test tests/server/underground-camp-pickaxe.test.ts tests/town-blockout-underground-camp-{remains,offerings,interactions,scene}.test.ts
       - run: npm run typecheck
-      - run: npx playwright install --with-deps chromium
-      - run: node tools/verify-underground-camp-interactions.mjs "${{ runner.temp }}/camp-interactions"
+      - name: Verify in Chromium
+        shell: bash
+        run: |
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            export CHROMIUM_PATH="$browser"
+          else
+            npx playwright install --with-deps chromium
+          fi
+          node tools/verify-underground-camp-interactions.mjs "${{ runner.temp }}/camp-interactions"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

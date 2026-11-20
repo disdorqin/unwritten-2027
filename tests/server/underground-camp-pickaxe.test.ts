@@ -1,7 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createUndergroundCampPickaxeAuthority } from '../../src/presence/underground-camp-pickaxe.js';
-import { undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../src/shared/underground-camp-pickaxe.js';
+import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../src/shared/underground-camp-pickaxe.js';
+
+import { createUndergroundMineLayout } from '../../src/shared/underground-mine-layout.js';
+
+test('the camp pickaxe can be registered on the second table without loading the camp renderer', () => {
+  const spec = {
+    pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
+    shoreLength: 8, gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
+    collapse: { length: 3, width: 1.2, height: 1.3 },
+    walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
+  };
+  for (const side of ['right', 'left'] as const) {
+    const camp = { side, length: side === 'right' ? 10 : 14, extension: 5 };
+    const mine = createUndergroundMineLayout({ ...spec, camp });
+    const pickaxe = resolveUndergroundCampPickaxeSite(mine, camp);
+    assert.ok(pickaxe);
+    const [x, y, z] = pickaxe.approach;
+    assert.equal(x, side === 'right' ? .89 : -.89);
+    assert.equal(mine.queryPassage(x, z, .27, 1.8)?.floor, y);
+    assert.ok(Math.abs(z - (side === 'right' ? 40.04 : 42.04)) < 1e-9);
+    assert.ok(pickaxe.aim[1] > y && pickaxe.aim[2] < z);
+    assert.equal(resolveUndergroundCampPickaxeSite(mine, { ...camp, length: 9 }), undefined);
+  }
+});
 
 const site = { domainId: 'mine', east: 0, north: 0, height: -91 };
 const accepted = { ...site, playerId: 'visitor' };

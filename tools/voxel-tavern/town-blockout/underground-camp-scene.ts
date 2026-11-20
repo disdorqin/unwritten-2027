@@ -1,5 +1,5 @@
 import { BoxGeometry, Color, InstancedMesh, MeshLambertMaterial, Object3D, type Group } from 'three';
-import { undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../../src/shared/underground-camp-pickaxe';
+import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../../src/shared/underground-camp-pickaxe';
 import { createUndergroundCampInteractions } from './underground-camp-interactions';
 import { mountUndergroundCampLighting } from './underground-camp-lighting';
 import { createUndergroundCampRemains } from './underground-camp-remains';
@@ -33,9 +33,9 @@ export function mountUndergroundCampScene({ parent, actions, readLights, pickaxe
   const camp = createUndergroundCampRemains(layout);
   const lights = mountUndergroundCampLighting(camp.lighting);
   const interactions = createUndergroundCampInteractions({ ...actions, camp, walker: layout.walker });
-  const [x, tableHeight, z] = camp.dining.tables[1].position;
-  const aim: Point = [x, tableHeight + .033, z + 1.06];
-  const approach: Point = [x, tableHeight - .77, z + 1.91];
+  const pickaxeSite = resolveUndergroundCampPickaxeSite(layout.mine, layout.camp);
+  if (!pickaxeSite) throw new RangeError('The camp has no supported old pickaxe site');
+  const { aim, approach } = pickaxeSite;
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial();
   const parts = [
@@ -100,7 +100,7 @@ export function mountUndergroundCampScene({ parent, actions, readLights, pickaxe
 
   update();
   return {
-    pickaxeSite: { id: undergroundCampPickaxe.siteId, aim, approach },
+    pickaxeSite,
     camp,
     queryPassage(x: number, z: number, radius: number, height: number) {
       const passage = layout.mine.queryPassage(x, z, radius, height);
