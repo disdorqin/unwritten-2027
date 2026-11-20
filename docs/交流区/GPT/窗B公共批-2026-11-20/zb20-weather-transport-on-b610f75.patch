@@ -1,0 +1,223 @@
+diff --git a/src/presence/server.ts b/src/presence/server.ts
+index 5fc4cbb..8985bf6 100644
+--- a/src/presence/server.ts
++++ b/src/presence/server.ts
+@@ -15,2 +15,3 @@ import {
+ import { createPresenceEgress } from './egress.js';
++import { createTownOutdoorWeatherHost } from './town-outdoor-weather.js';
+ import { createIceThroneAuthority } from './ice-throne-authority.js';
+@@ -56,2 +57,8 @@ type Options = {
+   now?: () => number;
++  outdoorWeather?: {
++    dawnEpoch: number;
++    nowEpochMs?: () => number;
++    saveWarning?(at: number): void;
++    restoredWarningAt?: number;
++  };
+   testFireworks?: boolean;
+@@ -412,2 +419,10 @@ export async function createPresenceServer(options: Options = {}) {
+
++  const weatherConfig = options.outdoorWeather;
++  const outdoorWeather = weatherConfig && createTownOutdoorWeatherHost({
++    now: weatherConfig.nowEpochMs ?? Date.now,
++    dawnEpoch: weatherConfig.dawnEpoch,
++    broadcast: frame => broadcast(JSON.stringify(frame)),
++    saveWarning: weatherConfig.saveWarning,
++  }, weatherConfig.restoredWarningAt);
++
+   function updateFireworks(time: number) {
+@@ -1071,2 +1086,3 @@ export async function createPresenceServer(options: Options = {}) {
+       ...(summitPassport ? { summitPassport: true } : {}),
++      ...(outdoorWeather ? { townOutdoorWeather: outdoorWeather.snapshot() } : {}),
+     }));
+@@ -1235,2 +1251,3 @@ export async function createPresenceServer(options: Options = {}) {
+     const wallNow = Date.now();
++    outdoorWeather?.tick();
+     updateCeremony(wallNow);
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+index b52846a..cf186e0 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -14,6 +14,10 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
+ import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
+ import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
+ import { createTownPresenceClock } from './town-presence-clock';
++import {
++  readTownOutdoorWeatherCue, readTownOutdoorWeatherFrame, readTownOutdoorWeatherState,
++  type TownOutdoorWeatherCue, type TownOutdoorWeatherState,
++} from '../../../src/shared/town-outdoor-weather';
+ import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
+ import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
+ import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
+@@ -99,6 +103,8 @@ export function createTownPresence(
+   const status = document.getElementById('town-presence-status');
+   const link = createPresenceLinkStatus(() => updateStatus());
+   const clock = createTownPresenceClock();
++  let outdoorWeather: TownOutdoorWeatherState | undefined;
++  let onOutdoorWeatherWarning: ((cue: TownOutdoorWeatherCue) => void) | undefined;
+   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
+   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
+   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
+@@ -355,6 +361,7 @@ export function createTownPresence(
+     socket = undefined;
+     socketJoined = false;
+     haveId = false;
++    outdoorWeather = undefined;
+     resetOwnerSession();
+     joinedId = null;
+     joinedName = undefined;
+@@ -422,6 +429,7 @@ export function createTownPresence(
+         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
+         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
+         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
++        townOutdoorWeather?: unknown;
+       };
+       try { message = JSON.parse(data); } catch { return; }
+       if (!message) return;
+@@ -516,6 +524,16 @@ export function createTownPresence(
+         return;
+       }
+       if (haveId && message.type === 'event') {
++        if (message.kind === 'town-outdoor-weather') {
++          const frame = readTownOutdoorWeatherFrame(message);
++          if (frame && (!outdoorWeather || frame.state.startedAt >= outdoorWeather.startedAt)) outdoorWeather = frame.state;
++          return;
++        }
++        if (message.kind === 'town-outdoor-weather-warning') {
++          const cue = readTownOutdoorWeatherCue(message);
++          if (cue) onOutdoorWeatherWarning?.(cue);
++          return;
++        }
+         if (message.kind === 'grand-prix') {
+           const result = { id: String(message.id ?? ''), name: message.name, totalMs: message.totalMs, at: message.at };
+           if (isGrandPrixResult(result)) onGrandPrixResult?.(result);
+@@ -559,6 +577,7 @@ export function createTownPresence(
+           snowfightSupported = (message as { snowfight?: unknown }).snowfight === true;
+           freeSnowWallsSupported = (message as { freeSnowWalls?: unknown }).freeSnowWalls === true;
+           firecrackersSupported = message.firecrackers === true;
++          outdoorWeather = readTownOutdoorWeatherState(message.townOutdoorWeather);
+           photoSupported = message.plazaPhoto === true;
+           summitPassportSupported = message.summitPassport === true;
+           joinedName = message.name;
+@@ -566,7 +585,7 @@ export function createTownPresence(
+           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
+             serverEpochOffset = message.epochMs - performance.now();
+             clock.accept(message.epochMs);
+-            if (photoSupported) nextClockSample = 0;
++            if (photoSupported || outdoorWeather) nextClockSample = 0;
+           }
+           if (receivingFrom === 'ws') {
+             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
+@@ -714,8 +733,8 @@ export function createTownPresence(
+     catch { connectionLost(); return false; }
+   }
+
+-  function samplePhotoClock() {
+-    if (!photoSupported || !haveId) return;
++  function sampleServerClock() {
++    if (!haveId || (!photoSupported && !outdoorWeather)) return;
+     const sentAt = performance.now();
+     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
+     clockRequest = sentAt;
+@@ -811,6 +830,8 @@ export function createTownPresence(
+
+   return {
+     serverNow: clock.now,
++    outdoorWeather: () => outdoorWeather,
++    onOutdoorWeatherWarning(handler: (cue: TownOutdoorWeatherCue) => void) { onOutdoorWeatherWarning = handler; },
+     summitPassportAvailable: () => haveId && summitPassportSupported,
+     requestSummitPassport(action: SummitPassportAction) {
+       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
+@@ -949,7 +970,7 @@ export function createTownPresence(
+     update(dt: number) {
+       if (!socket && !poll) return;
+       sendPose(dt);
+-      samplePhotoClock();
++      sampleServerClock();
+       syncActivityPoses();
+       drainEvents();
+       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
+diff --git a/tests/server/town-outdoor-weather-transport.test.ts b/tests/server/town-outdoor-weather-transport.test.ts
+new file mode 100644
+index 0000000..a67c58e
+--- /dev/null
++++ b/tests/server/town-outdoor-weather-transport.test.ts
+@@ -0,0 +1,78 @@
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import { test, type TestContext } from 'node:test';
++import { setTimeout as delay } from 'node:timers/promises';
++import { WebSocket } from 'ws';
++import { createPresenceServer } from '../../src/presence/server.js';
++import { PRESENCE_PATH } from '../../src/presence/protocol.js';
++import {
++  readTownOutdoorWeatherCue, readTownOutdoorWeatherFrame, readTownOutdoorWeatherState,
++} from '../../src/shared/town-outdoor-weather.js';
++
++async function join(t: TestContext, port: number, name: string) {
++  const socket = new WebSocket(`ws://127.0.0.1:${port}${PRESENCE_PATH}`);
++  t.after(() => socket.terminate());
++  const states: NonNullable<ReturnType<typeof readTownOutdoorWeatherFrame>>[] = [];
++  const cues: NonNullable<ReturnType<typeof readTownOutdoorWeatherCue>>[] = [];
++  let resolveJoined!: (state: ReturnType<typeof readTownOutdoorWeatherState>) => void;
++  const joined = new Promise<ReturnType<typeof readTownOutdoorWeatherState>>(resolve => { resolveJoined = resolve; });
++  socket.on('message', (raw, binary) => {
++    if (binary) return;
++    const frame = JSON.parse(raw.toString());
++    if (frame.type === 'join' && frame.self) resolveJoined(readTownOutdoorWeatherState(frame.townOutdoorWeather));
++    const state = readTownOutdoorWeatherFrame(frame);
++    if (state) states.push(state);
++    const cue = readTownOutdoorWeatherCue(frame);
++    if (cue) cues.push(cue);
++  });
++  await once(socket, 'open');
++  socket.send(JSON.stringify({ type: 'join', name }));
++  return { snapshot: await joined, states, cues };
++}
++
++async function until(condition: () => boolean) {
++  for (let i = 0; i < 200; i++) {
++    if (condition()) return;
++    await delay(10);
++  }
++  assert.fail('Presence weather update timed out');
++}
++
++test('normal presence shares one forecast and phase, and reconnects with current state', { timeout: 8000 }, async t => {
++  const dawnEpoch = Date.parse('2026-11-20T00:00:00+08:00');
++  const windAt = dawnEpoch + 30 * 60_000;
++  let now = dawnEpoch;
++  const warnings: number[] = [];
++  const town = await createPresenceServer({
++    host: '127.0.0.1',
++    port: 0,
++    connectionLog() {},
++    outdoorWeather: { dawnEpoch, nowEpochMs: () => now, saveWarning: at => warnings.push(at) },
++  });
++  t.after(() => town.close());
++  const port = town.address().port;
++  const left = await join(t, port, '左侧测试');
++  const right = await join(t, port, '右侧测试');
++  assert.equal(left.snapshot?.weather, 'clear-snow');
++  assert.deepEqual(left.snapshot, right.snapshot);
++
++  now = windAt - 30_000;
++  await until(() => left.cues.length === 1 && right.cues.length === 1);
++  assert.deepEqual(left.cues, right.cues);
++  assert.deepEqual(warnings, [now]);
++  assert.equal(left.cues[0]?.expiresAt, windAt);
++  const returning = await join(t, port, '重新入镇');
++  assert.deepEqual(returning.snapshot, left.snapshot);
++
++  now = windAt;
++  await until(() => [left, right, returning].every(peer => peer.states.length === 1));
++  assert.deepEqual(left.states, right.states);
++  assert.deepEqual(left.states, returning.states);
++  assert.equal(left.states[0]?.state.weather, 'wind');
++  const late = await join(t, port, '换态后入镇');
++  assert.deepEqual(late.snapshot, left.states[0]?.state);
++  await delay(150);
++  assert.deepEqual([left, right, returning, late].map(peer => [peer.cues.length, peer.states.length]), [
++    [1, 1], [1, 1], [0, 1], [0, 0],
++  ]);
++});

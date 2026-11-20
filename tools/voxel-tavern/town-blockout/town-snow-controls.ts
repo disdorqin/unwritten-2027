@@ -33,7 +33,7 @@ export function createTownSnowControls(host: SnowControlHost) {
   }
 
   function primary() {
-    if (hold || !host.canUseSnow()) return false;
+    if (!host.canUseSnow()) return false;
     if (host.buildMode()) host.placeWall();
     else host.throwSnowball();
     return true;
@@ -44,13 +44,17 @@ export function createTownSnowControls(host: SnowControlHost) {
     return host.setBuildMode(!host.buildMode());
   }
 
+  function interact() {
+    if (!host.canInteract()) return false;
+    host.interact();
+    return true;
+  }
+
   function finish(pointer?: number) {
     if (!hold || hold.pointer !== pointer) return false;
     const shortPress = now() - hold.started < snowGatherHoldMilliseconds;
     cancel();
-    if (!shortPress) return true;
-    if (pointer !== undefined) primary();
-    else if (host.canInteract()) host.interact();
+    if (shortPress) interact();
     return true;
   }
 
@@ -65,15 +69,16 @@ export function createTownSnowControls(host: SnowControlHost) {
       return true;
     },
     keyUp(code: string) { return code === 'KeyE' && finish(); },
-    pressTouch(pointer: number) { return host.canUseSnow() && begin(pointer); },
+    pressTouch(pointer: number) { return (host.canInteract() || host.canUseSnow()) && begin(pointer); },
     releaseTouch(pointer: number) { return finish(pointer); },
     cancelTouch(pointer: number) { if (hold?.pointer === pointer) cancel(); },
     primary,
+    interact,
     toggleBuild,
     cancel,
     update(dt: number) {
       const heldSeconds = hold ? (now() - hold.started - snowGatherHoldMilliseconds) / 1000 : -1;
-      gathering = heldSeconds >= 0 && host.canUseSnow() && host.canGather();
+      gathering = heldSeconds >= 0 && host.canUseSnow() && !host.canInteract() && host.canGather();
       if (!gathering) {
         gatherElapsed = 0;
         return;
@@ -86,32 +91,5 @@ export function createTownSnowControls(host: SnowControlHost) {
       }
     },
     gatherProgress() { return gathering ? gatherElapsed / snowGatherSeconds : undefined; },
-  };
-}
-
-export function bindTownSnowButtons(
-  controls: ReturnType<typeof createTownSnowControls>,
-  snow: HTMLButtonElement,
-  build: HTMLButtonElement,
-) {
-  const listeners = new AbortController();
-  const { signal } = listeners;
-  snow.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || !controls.pressTouch(event.pointerId)) return;
-    snow.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  }, { signal });
-  snow.addEventListener('pointerup', event => {
-    if (controls.releaseTouch(event.pointerId)) event.preventDefault();
-  }, { signal });
-  snow.addEventListener('pointercancel', event => controls.cancelTouch(event.pointerId), { signal });
-  snow.addEventListener('lostpointercapture', event => controls.cancelTouch(event.pointerId), { signal });
-  // Pointer activation is fully decided by the press. Keyboard and assistive technology use click.
-  snow.addEventListener('click', event => { if (event.detail === 0) controls.primary(); }, { signal });
-  snow.addEventListener('contextmenu', event => event.preventDefault(), { signal });
-  build.addEventListener('click', () => controls.toggleBuild(), { signal });
-  return () => {
-    listeners.abort();
-    controls.cancel();
   };
 }
