@@ -1,4 +1,6 @@
-export type StreetInfillKind = 'lantern' | 'fence' | 'firewood' | 'sign' | 'lanternFir' | 'snowman';
+export type StreetInfillKind =
+  | 'lantern' | 'fence' | 'firewood' | 'sign' | 'fir' | 'lanternFir'
+  | 'bench' | 'stall' | 'well' | 'dryingRack' | 'snowman';
 
 export type StreetInfillPoint = readonly [
   kind: StreetInfillKind, east: number, north: number, heading?: number,
@@ -38,6 +40,19 @@ export const streetInfill: readonly StreetInfillCluster[] = [
       ['sign', 504.5, 298, .8],
       ['firewood', 515, 308, .45],
       ['lantern', 518.5, 310, Math.PI / 2],
+    ],
+  },
+  {
+    id: 'market-south-loop',
+    points: [
+      ['well', 191, 90],
+      ['dryingRack', 193, 93, .20],
+      ['lantern', 195, 90, Math.PI / 2],
+      ['firewood', 197, 88],
+      ['stall', 200, 90, .23],
+      ['bench', 201.75, 93.25, .23],
+      ['lantern', 205, 90, Math.PI / 2],
+      ['fir', 198, 94],
     ],
   },
   // ZA-32 second wave (zone-1 self-build): old-town street clusters.
