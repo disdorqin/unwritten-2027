@@ -8,7 +8,7 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
 const url = new URL('/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket'].includes(segment), segment);
+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -283,6 +283,38 @@ async function checkStationTicket() {
   await showTicketCard(page, evidence, ticketCatalogue, catalogueTitle, ticketTitle, 'station-ticket-persisted');
 }
 
+async function checkMascotPatrol() {
+  const { mascotDayPatrolLegs, mascotPatrolSites, mascotWhiteoutReturnPaths } =
+    await import('./voxel-tavern/town-blockout/mascot-patrol-sites.ts');
+  const { page, evidence } = await openTown('mascot-patrol-geometry');
+
+  async function reach(point, label) {
+    await walkTo(page, evidence, point, label);
+    const checkpoint = evidence.checkpoints.at(-1);
+    checkpoint.wire = await waitForWire(page, evidence, pose => pose?.area === 'town' &&
+      Math.hypot(pose.east - point[0], pose.north - point[1]) <= .55 &&
+      Math.hypot(pose.east - checkpoint.east, pose.north - checkpoint.north) <= .35 &&
+      Math.abs(pose.height - checkpoint.height) <= .1);
+  }
+
+  const pen = mascotPatrolSites.pen;
+  const approach = mascotWhiteoutReturnPaths.plazaSun;
+  await follow(page, evidence, approach.slice(0, -2), 'mascot-pen-approach');
+  await reach(mascotPatrolSites.penEntrance, 'mascot-pen-gate-in');
+  await reach(pen, 'mascot-pen-foot-in');
+  await face(page, evidence, -Math.PI / 2);
+  await snapshot(page, evidence, 'mascot-pen-entered');
+
+  const names = ['plaza', 'tavern', 'old-home', 'return'];
+  for (const [legIndex, leg] of mascotDayPatrolLegs.entries()) {
+    for (const [pointIndex, point] of leg.slice(1).entries()) {
+      await reach(point, `mascot-${names[legIndex]}-${pointIndex + 1}`);
+    }
+  }
+  await face(page, evidence, -Math.PI / 2);
+  await snapshot(page, evidence, 'mascot-pen-returned');
+}
+
 async function checkPalacePoint(page, evidence, id, label, point, fixture) {
   const lane = [point[0], 72];
   await walkTo(page, evidence, lane, `palace-${id}-aisle`);
@@ -368,6 +400,7 @@ try {
     }
   }
   if (segment === 'station-ticket') await checkStationTicket();
+  if (segment === 'mascot-patrol') await checkMascotPatrol();
   if (segment === 'palace') {
     const { page, evidence } = await openTown('palace-geometry');
     evidence.palacePoints = [];
@@ -412,8 +445,11 @@ try {
 } finally {
   measuring = false;
   report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
-  const filename = { palace: 'za18-live-walk.json', 'station-ticket': 'za21-live-walk.json' }[segment] ??
-    'za22-live-walk.json';
+  const filename = {
+    palace: 'za18-live-walk.json',
+    'station-ticket': 'za21-live-walk.json',
+    'mascot-patrol': 'za26-live-walk.json',
+  }[segment] ?? 'za22-live-walk.json';
   await writeFile(join(output, filename),
     `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,

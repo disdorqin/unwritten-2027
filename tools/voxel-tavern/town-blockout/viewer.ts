@@ -117,6 +117,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
+import { buildMascotPen } from './landmark-mascot-pen';
 import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createLighthouseSnakeCharm } from './town-zodiac-snake';
@@ -462,6 +463,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   scene.add(group);
 }
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
+place({ id: 'mascot-sheep-pen', origin: [0, 0, 0] }, buildMascotPen(grid.heightAt));
 addNewYearDecor(scene);
 const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
 const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
