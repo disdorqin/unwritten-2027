@@ -5,7 +5,8 @@ import { chromium } from 'playwright';
 
 const outputDirectory = process.argv[2] ?? '/tmp/p2-evidence';
 await mkdir(outputDirectory, { recursive: true });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH,
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage({ viewport: { width: 768, height: 432 } });
   const errors = [];
@@ -22,10 +23,13 @@ try {
   for (const [leg, from, to] of [[0, 'cloud-deck', 'summit'], [1, 'summit', 'cloud-deck']]) {
     const start = leg * clock.legMs;
     assert.equal((await time(start)).station, from);
-    await page.keyboard.press('KeyE');
-    assert.equal((await state()).rider, false);
-    for (let i = 0; i < 8; i++) await page.keyboard.press('KeyW');
-    assert.equal((await state()).progress, 1);
+    if (leg === 0) {
+      for (let i = 0; i < 4; i++) await page.keyboard.press('KeyW');
+      await page.keyboard.press('KeyE');
+      assert.equal((await state()).rider, false);
+      for (let i = 0; i < 4; i++) await page.keyboard.press('KeyW');
+    }
+    assert.equal((await state()).progress, leg === 0 ? 1 : 0);
     await page.keyboard.press('KeyE');
     assert.equal((await state()).rider, true);
     for (const [elapsed, phase] of [[0, 'departure'], [70_000, 'enter-cloud'], [100_000, 'whiteout'],
@@ -48,7 +52,6 @@ try {
     assert.equal(arrive.station, to);
     await page.keyboard.press('KeyE');
     assert.equal((await state()).rider, false);
-    for (let i = 0; i < 8; i++) await page.keyboard.press('KeyS');
     const exit = await state();
     assert.equal(exit.progress, 0);
     assert.ok(exit.drawCalls > 0);

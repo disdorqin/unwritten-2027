@@ -7,6 +7,7 @@ import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './mai
 import { createMainSummitCable } from './main-summit-cable';
 import { mountMainSummitCable } from './main-summit-cable-scene';
 import { mountMainSummitCableStations } from './main-summit-cable-stations';
+import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
@@ -16,6 +17,7 @@ import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
 import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
 import { mountMainSummitWreckage } from './main-summit-wreckage';
+import { mountMainSummitWingRack } from './main-summit-wing-rack';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
 
@@ -103,6 +105,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
 
   const cable = createMainSummitCable(epochMs, 10_000, arrivalHeight);
   const cableView = mountMainSummitCable(group, cable, block.heightAt);
+  const cableTravel = createMainSummitCableTravel(cable);
   let gateOwner = group;
   const stations = mountMainSummitCableStations(group, cable, {
     heightAt: block.heightAt,
@@ -113,6 +116,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const landmarks = createMainSummitRegistrationLandmarks(arrivalHeight);
   const registration = createMainSummitRegistration(landmarks);
   const cabin = mountMainSummitRegistration(group, landmarks, 'summit');
+  const wingRack = mountMainSummitWingRack(cabin.group);
   const cloudRegistration = mountMainSummitRegistration(group, landmarks, 'cloud-deck');
   // P-4's lower monument survey is already in the front ridge frame.
   cloudRegistration.group.position.set(-summitAssemblyAnchor.east, 0, summitAssemblyAnchor.north);
@@ -155,10 +159,12 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
     wreckageSites: wreckage.sites,
+    wingRack, cableTravel,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
+      if (!front && wingRack.blocked(east, north, feet, radius, bodyHeight)) return true;
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {
@@ -180,6 +186,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
       wreckage.dispose();
       stations.dispose();
       cableView.dispose();
+      wingRack.dispose();
       cabin.dispose();
       cloudRegistration.dispose();
       ribbon.geometry.dispose();

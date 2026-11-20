@@ -9,6 +9,7 @@ import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
 } from './main-summit-registration';
 import { townPhysicsDelta } from './town-physics-clock';
+import { mountMainSummitWingRack } from './main-summit-wing-rack';
 
 const scene = new Scene();
 scene.background = new Color('#b1c5dc');
@@ -24,6 +25,7 @@ const landmarks = createMainSummitRegistrationLandmarks(347);
 const summit = new Group();
 scene.add(summit);
 const lodge = mountMainSummitRegistration(summit, landmarks);
+const rack = mountMainSummitWingRack(lodge.group);
 const registrar = createMainSummitRegistration(landmarks);
 const wing = createSnowWingVisual();
 scene.add(wing.group);
@@ -40,19 +42,22 @@ const status = document.querySelector<HTMLElement>('#flight-status')!;
 const reading = document.querySelector<HTMLOutputElement>('#flight-reading')!;
 const vignette = document.querySelector<HTMLElement>('#vignette')!;
 const keys = new Set<string>();
-const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
+const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const proof = new URLSearchParams(location.search).get('proof') === '1';
 const flightTimeScale = proof ? 12 : 1;
 const groundAt = (east: number, north: number) => block.heightAt(east, north) ?? 0;
 const flight = createSnowWingFlight(groundAt);
-const position = { ...landmarks.summit.registry };
+const position = { ...landmarks.summit.registry, north: 1006 };
 const edgeNorth = mainSummitLayout.summit.north - mainSummitSpec.summitPlateau[1] / 2;
 const radius = .26;
 let claimed = false;
+let groundHeading = Math.PI;
+let lodgeAction = '';
 let launchProbe: { east: number; north: number; height: number; drop: number; pathClear: boolean; speed: number } | undefined;
 let lastPhase: string | undefined;
 let lastCue: string | undefined;
 let wingDraws = 0;
+let rackDraws = 0;
 let paused = false;
 let frame = 0;
 let frameId = 0;
@@ -61,8 +66,10 @@ let remainder = 0;
 const events: { kind: string; value: string; elapsed: number; height: number; speed: number }[] = [];
 const wingMesh = wing.group.getObjectByName('snow-wing-voxels')!;
 wingMesh.onAfterRender = () => { wingDraws++; };
+rack.group.getObjectByName('snow-wing-voxels')!.onAfterRender = () => { rackDraws++; };
 
 function blocked(east: number, north: number, height: number) {
+  if (rack.blocked(east, north, height, radius, 1.8)) return true;
   return lodge.colliders.some(({ min, max }) => {
     if (height + 1.8 <= min[1] || height + .03 >= max[1]) return false;
     const dx = Math.max(min[0] - east, east - max[0], 0);
@@ -73,24 +80,37 @@ function blocked(east: number, north: number, height: number) {
 
 function useLodge() {
   const { east, north } = landmarks.summit.registry;
-  if (flight.snapshot() || Math.hypot(position.east - east, position.north - north) > 1.1) return;
-  if (!registrar.snapshot().snowWingEligible) {
+  if (flight.snapshot()) return;
+  if (rack.canReach(position)) {
+    if (claimed) lodgeAction = 'already-claimed';
+    else if (claimSnowWing(claimed, 'summit-lodge', registrar.snapshot())) {
+      claimed = true;
+      rack.setClaimed(true);
+      lodgeAction = 'claimed';
+      status.textContent = '已领雪翼。走出小屋，向南越过雪崖。';
+    } else {
+      lodgeAction = 'need-registration';
+      status.textContent = '先到登记台登记，再到翼架领翼。';
+    }
+  } else if (Math.hypot(position.east - east, position.north - north) <= 1.1) {
     const action = registrar.interact('summit', position);
-    if (action.changed) status.textContent = '绝顶登记完成。再按 E 领取雪翼。';
-  } else if (!claimed) {
-    claimed = claimSnowWing(claimed, 'summit-lodge', registrar.snapshot());
-    if (claimed) status.textContent = '已领雪翼。走出小屋，向南越过雪崖。';
+    lodgeAction = action.changed ? 'registered' : 'already-registered';
+    if (!claimed) status.textContent = '绝顶已登记。到小屋东侧翼架按 E 领取。';
+  } else {
+    lodgeAction = 'out-of-reach';
   }
 }
 
 function walk() {
+  groundHeading += (Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'))) * 1.65 * townPhysicsDelta;
   const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
-  const sideways = Number(keys.has('KeyA')) - Number(keys.has('KeyD'));
+  const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
   if (!forward && !sideways) return;
   const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 11.3 : 7.5) /
     Math.hypot(forward, sideways);
-  const east = position.east + sideways * speed * townPhysicsDelta;
-  const north = position.north - forward * speed * townPhysicsDelta;
+  const dt = speed * townPhysicsDelta;
+  const east = position.east + (Math.sin(groundHeading) * forward + Math.cos(groundHeading) * sideways) * dt;
+  const north = position.north + (Math.cos(groundHeading) * forward - Math.sin(groundHeading) * sideways) * dt;
   const height = block.heightAt(east, north);
   if (height === undefined || Math.abs(height - position.height) > .43 || blocked(east, north, height)) return;
   if (forward > 0 && north <= edgeNorth) {
@@ -134,7 +154,7 @@ function simulate() {
 function display() {
   const air = flight.snapshot();
   const point = air ?? position;
-  const heading = air?.heading ?? Math.PI;
+  const heading = air?.heading ?? groundHeading;
   const dx = Math.sin(heading);
   const dz = -Math.cos(heading);
   wing.group.visible = air?.usesBothHands === true;
@@ -163,6 +183,7 @@ function display() {
     reading.value = `高度 ${air.height.toFixed(1)} m · ${air.speed.toFixed(1)} m/s · ${air.horizontalMetres.toFixed(0)} m`;
   } else reading.value = `E ${point.east.toFixed(2)} · N ${point.north.toFixed(2)} · 高度 ${point.height.toFixed(1)} m`;
   wingDraws = 0;
+  rackDraws = 0;
   renderer.render(scene, camera);
   frame++;
 }
@@ -202,6 +223,7 @@ addEventListener('blur', () => keys.clear());
 addEventListener('resize', resize);
 addEventListener('pagehide', () => {
   cancelAnimationFrame(frameId);
+  rack.dispose();
   lodge.dispose();
   wing.dispose();
   block.dispose();
@@ -212,6 +234,7 @@ addEventListener('pagehide', () => {
 
 Object.defineProperty(window, '__snowWingReview', { value: Object.freeze({ getState: () => ({
   frame, flightTimeScale, paused, claimed, registration: registrar.snapshot(), position: { ...position },
+  groundHeading, lodgeAction, rack: { stand: rack.stand, visible: !claimed, draws: rackDraws, inReach: rack.canReach(position) },
   flight: flight.snapshot(), launchProbe: launchProbe && { ...launchProbe }, events: events.map(event => ({ ...event })),
   wing: { name: wing.group.name, visible: wing.group.visible, draws: wingDraws, bank: wing.group.rotation.z,
     width: wing.bounds.max.x - wing.bounds.min.x },

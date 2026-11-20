@@ -4,8 +4,9 @@ import {
 } from 'three';
 import { createDesktopLook } from './desktop-look';
 import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './main-summit-block';
-import { createMainSummitCable, summitCableSpec } from './main-summit-cable';
+import { createMainSummitCable } from './main-summit-cable';
 import { mountMainSummitCable } from './main-summit-cable-scene';
+import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { createMainSummitCloudLayer, mainSummitCloudSpec } from './main-summit-cloud-layer';
 import { createSkyCityReveal } from './sky-city-reveal';
 import { createSkyCityRevealEffects } from './sky-city-reveal-effects';
@@ -39,6 +40,10 @@ const summit = createMainSummitBlock(mainSummitLayout, 347, 48);
 const cloud = createMainSummitCloudLayer({ bounds: mainSummitBounds, summit: mainSummitLayout.summit,
   shoulders: mainSummitLayout.shoulders, heightAt: summit.heightAt });
 const cable = createMainSummitCable(0, dwellMs, 347);
+const travel = createMainSummitCableTravel(cable);
+// The review starts during ascent. Use a ride boarded at the registered Cloud Deck approach.
+const ride = travel.attemptBoard(0, 0, cable.ropes[0].dock('cloud-deck').approach);
+if (!ride) throw new Error('Cloud Deck review ride could not board');
 const cableRoot = new Group();
 const cars = mountMainSummitCable(cableRoot, cable, summit.heightAt);
 scene.add(summit.coarse, cloud.group, cableRoot);
@@ -164,10 +169,12 @@ renderer.setAnimationLoop(now => {
   previous = now;
   const seconds = now / 1000;
   if (running) rideMs = Math.min(endMs, rideMs + dt * reviewSpeed * 1000);
-  const [{ phase, ropePoint }] = cars.update(dwellMs + Math.round(rideMs));
+  const nowMs = dwellMs + Math.round(rideMs);
+  cars.update(nowMs);
+  const { phase, feet, heading: cabinHeading, whiteout: cabinWhiteout } = travel.ridePose(nowMs, ride);
   const mountain = source === 'mountain';
-  const height = mountain ? ropePoint.height - summitCableSpec.cabinFloorBelowRope : 12;
-  const whiteout = mountain && phase === 'whiteout';
+  const height = mountain ? feet.height : 12;
+  const whiteout = mountain && cabinWhiteout;
   controls.hidden = running && whiteout;
   reticle.hidden = controls.hidden;
   startButton.hidden = !mountain || running;
@@ -177,8 +184,8 @@ renderer.setAnimationLoop(now => {
     yaw += (Number(held.has('ArrowRight')) - Number(held.has('ArrowLeft'))) * 1.75 * dt;
     pitch = Math.max(-1.12, Math.min(1.12,
       pitch + (Number(held.has('ArrowUp')) - Number(held.has('ArrowDown'))) * dt));
-    camera.position.set(ropePoint.east, height + 1.65, -ropePoint.north);
-    const heading = ropePoint.heading + yaw;
+    camera.position.set(feet.east, height + 1.65, -feet.north);
+    const heading = cabinHeading + yaw;
     aim.set(Math.sin(heading) * Math.cos(pitch), Math.sin(pitch), -Math.cos(heading) * Math.cos(pitch));
     camera.lookAt(aim.add(camera.position));
   } else {
