@@ -1,0 +1,280 @@
+From 14f777b89d233e8e565d68353e17eaf3f56a32de Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 20 Nov 2026 00:38:54 -0800
+Subject: [PATCH] Add native B13 A6 door-route hardware verification
+
+---
+ tools/verify-za22-live.mjs  | 132 +++++++++++++++++++++++++++++++++---
+ tools/verify-za22-local.mjs |  26 ++++---
+ 2 files changed, 141 insertions(+), 17 deletions(-)
+
+diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
+index 664792ce..98434c50 100644
+--- a/tools/verify-za22-live.mjs
++++ b/tools/verify-za22-live.mjs
+@@ -8,7 +8,13 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
+ const url = new URL('/?profile', origin);
+ assert.equal(url.protocol, 'http:');
+ assert.equal(url.hostname, '127.0.0.1');
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment), segment);
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol', 'b13-a6-native'].includes(segment), segment);
++const b13 = segment === 'b13-a6-native';
++const b13SourceDoor = 'district:513:366';
++const b13TargetDoor = 'district:550:412';
++const b13Landing = { east: 543.6, north: 412, height: 11.893461799621578, yaw: -Math.PI / 2 };
++const b13LimitMs = 50;
++const b13AfterRevealMs = 950;
+ 
+ const spawn = [223, 180];
+ const station = [
+@@ -39,10 +45,10 @@ const palacePoints = [
+   ['ship-fragment', '拾取船件碎片', [484.35, 77.47], [484.35, 78.47]],
+   ['solstice-altar', '行安雪礼', [485.4, 65.03], [485.4, 63.75]],
+ ];
+-const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
++const [width, height] = (process.env.ZA22_VIEWPORT ?? (b13 ? '1000x650' : '960x540')).split('x').map(Number);
+ assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
+ const viewport = { width, height };
+-const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? .25);
++const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? (b13 ? 1 : .25));
+ assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
+ const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
+ const maxDrag = Math.round(width * .34);
+@@ -50,9 +56,15 @@ const tau = 2 * Math.PI;
+ const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
+ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
+ const hardware = process.env.ZA22_HARDWARE === '1';
++if (b13) {
++  assert.ok(process.platform === 'win32' && hardware && process.env.CHROMIUM_PATH,
++    'Use the original Windows Chrome / Intel D3D11 host');
++  assert.deepEqual([width, height, deviceScaleFactor], [1000, 650, 1]);
++}
+ const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
+   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+-const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
++const quality = b13 ? 'balanced' : 'smooth';
++const report = { url: url.href, segment, viewport, quality, gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+ 
+ await mkdir(output, { recursive: true });
+ let browser;
+@@ -60,7 +72,8 @@ let lastPage;
+ let measuring = true;
+ 
+ async function openTown(name) {
+-  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
++  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',
++    ...(b13 ? { reducedMotion: 'no-preference' } : {}) });
+   const page = await context.newPage();
+   lastPage = page;
+   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
+@@ -94,14 +107,49 @@ async function openTown(name) {
+       });
+     });
+   });
+-  await page.addInitScript(() => {
++  await page.addInitScript(tier => {
+     // Use the production drag fallback for consistent native mouse input in headless Chromium.
+     // Only the browser API is made unavailable. All movement still runs through the viewer.
+     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
+     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
+-    localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
++    localStorage.setItem('unwritten.quality.tier.v1', tier);
+     document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
+-  });
++  }, quality);
++  if (b13) await page.addInitScript(({ targetDoor, afterRevealMs }) => {
++    const audit = window.__b13Native = { frames: [], clicks: [], keys: [] };
++    addEventListener('keydown', event => {
++      if (!event.repeat && ['KeyE', 'KeyD'].includes(event.code)) {
++        audit.keys.push({ code: event.code, trusted: event.isTrusted });
++      }
++    }, true);
++    addEventListener('click', event => {
++      if (!(event.target instanceof Element)
++          || event.target.closest('[data-house-door]')?.getAttribute('data-house-door') !== targetDoor) return;
++      audit.clicks.push({ trusted: event.isTrusted, at: performance.now() });
++      if (audit.clicks.length !== 1) return;
++      const fade = '.house-door-fade';
++      let sawFade = false;
++      const observer = new MutationObserver(() => {
++        if (document.querySelector(fade)) sawFade = true;
++        else if (sawFade) {
++          audit.revealedAt = performance.now();
++          observer.disconnect();
++        }
++      });
++      observer.observe(document.body, { childList: true });
++    }, true);
++    addEventListener('town-frame-profile', event => {
++      if (audit.clicks.length !== 1 || audit.finished) return;
++      const at = performance.now();
++      if (audit.revealedAt !== undefined && at > audit.revealedAt + afterRevealMs) {
++        audit.finished = true;
++        return;
++      }
++      const { frameMs, calls, triangles, cameraY, weatherTier, snowIntensity, snowCover } = event.detail;
++      const hud = document.querySelector('#position')?.textContent;
++      audit.frames.push({ at, frameMs, calls, triangles, cameraY, weatherTier, snowIntensity, snowCover, hud });
++    }, true);
++  }, { targetDoor: b13TargetDoor, afterRevealMs: b13AfterRevealMs });
+   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+   assert.equal(response?.status(), 200);
+   await enterTown(page, evidence, 'spawn');
+@@ -243,6 +291,72 @@ async function card(page, title) {
+   }, title, { timeout: 12_000 });
+ }
+ 
++async function checkB13A6Native() {
++  assert.equal(report.browser, '146.0.7680.178', 'B13 historical Chrome version');
++  const { page, evidence } = await openTown('B13 A6 native walking and door book');
++  assert.match(report.gpu?.renderer ?? '', /Intel\(R\) UHD Graphics.*0x0000A788.*Direct3D11/i);
++  const device = await page.evaluate(() => {
++    const canvas = document.querySelector('#scene canvas');
++    return { dpr: devicePixelRatio, width: innerWidth, height: innerHeight,
++      canvasWidth: canvas.width, canvasHeight: canvas.height,
++      reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches };
++  });
++  const comparableWeather = frame => frame.weatherTier === 'medium' && Math.abs(frame.snowIntensity - 2.45) < .001;
++  assert.ok(Math.abs(device.dpr - 1) < .001, JSON.stringify(device));
++  assert.deepEqual([device.width, device.height, device.canvasWidth, device.canvasHeight, device.reducedMotion],
++    [1000, 650, 1000, 650, false]);
++  assert.ok(comparableWeather(await page.evaluate(() => window.__za22Frame)), 'B13 historical weather');
++  const cold = report.b13 = {
++    source: b13SourceDoor, target: b13TargetDoor, device, limitMs: b13LimitMs, afterRevealMs: b13AfterRevealMs,
++    cache: 'Fresh browser process. The native source approach can warm exterior chunks; this does not repeat the historical staged setup.',
++  };
++  await follow(page, evidence, [...station.slice(0, 18), [519, 366], [519, 371], [513, 373], [513, 371.92]], 'b13-approach');
++  await face(page, evidence, Math.PI);
++  cold.before = await waitForWire(page, evidence, pose => pose?.area === 'town'
++    && Math.hypot(pose.east - 513, pose.north - 371.92) <= .46 && Math.abs(pose.height - 19.873635) < .25);
++  assert.equal((await readPose(page)).status, '已连接 · 1 人');
++  await action(page, '进入屋舍空间');
++  cold.inside = await waitForWire(page, evidence, pose => pose?.area === 'town'
++    && Math.hypot(pose.east - 625.18, pose.north - 493.64) < .06 && pose.height === 150);
++  await page.keyboard.down('d');
++  try {
++    await page.waitForFunction(() => {
++      const button = document.querySelector('#world-action');
++      return button && !button.hidden && button.textContent.includes('百门册');
++    }, null, { timeout: 12_000 });
++  } finally {
++    await page.keyboard.up('d');
++  }
++  await action(page, '百门册');
++  await card(page, '百门册 · 一屋通百门');
++  const book = page.locator('#place-card[open] .house-door-book');
++  const entries = book.locator('button[data-house-door]');
++  assert.equal(await entries.first().getAttribute('data-house-door'), b13SourceDoor);
++  assert.match(await entries.first().textContent(), /刚从这儿进/);
++  await book.locator('[data-house-door-zone="memorial"]').click();
++  assert.equal(await entries.count(), 14);
++  await book.locator(`button[data-house-door="${b13TargetDoor}"]`).click();
++  await page.waitForFunction(() => window.__b13Native?.finished, null, { timeout: 15_000 });
++  const { clicks, revealedAt, frames, keys } = await page.evaluate(() => window.__b13Native);
++  Object.assign(cold, { clicks, revealedAt, frames, keys });
++  assert.equal(clicks.length, 1, 'Only one exit per fresh browser');
++  assert.equal(clicks[0].trusted, true);
++  assert.deepEqual(keys.map(key => [key.code, key.trusted]), [['KeyE', true], ['KeyD', true], ['KeyE', true]]);
++  assert.ok(revealedAt > clicks[0].at && frames.length > 0 && frames.every(comparableWeather));
++  const firstExterior = frames.find(frame => frame.cameraY < 100);
++  assert.ok(firstExterior && firstExterior.at <= revealedAt, 'Exterior draw while revealing');
++  cold.landing = await waitForWire(page, evidence, pose => pose?.area === 'town'
++    && Math.hypot(pose.east - b13Landing.east, pose.north - b13Landing.north) < .05
++    && Math.abs(pose.height - b13Landing.height) < .05
++    && Math.abs(yawDistance(pose.yaw, b13Landing.yaw)) < .01);
++  assert.equal((await readPose(page)).status, '已连接 · 1 人');
++  const peakMs = Math.max(...frames.map(frame => frame.frameMs));
++  cold.summary = { frames: frames.length, peakMs, over50: frames.filter(frame => frame.frameMs > b13LimitMs).length,
++    firstExterior };
++  await snapshot(page, evidence, 'b13-native-target-after-frame-window');
++  assert.ok(peakMs <= b13LimitMs, `B13 native walk frame window peaked at ${peakMs.toFixed(1)} ms`);
++}
++
+ async function snapshot(page, evidence, label) {
+   await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
+   evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
+@@ -355,6 +469,7 @@ try {
+     args: graphicsArgs,
+   });
+   report.browser = browser.version();
++  if (b13) await checkB13A6Native();
+   if (['station', 'cloud', 'gate', 'all'].includes(segment)) {
+     const { page, evidence } = await openTown('cable');
+     await follow(page, evidence, station, 'station');
+@@ -449,6 +564,7 @@ try {
+     palace: 'za18-live-walk.json',
+     'station-ticket': 'za21-live-walk.json',
+     'mascot-patrol': 'za26-live-walk.json',
++    'b13-a6-native': 'b13-a6-native.json',
+   }[segment] ?? 'za22-live-walk.json';
+   await writeFile(join(output, filename),
+     `${JSON.stringify(report, null, 2)}\n`);
+diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
+index 5a12ff16..f88e7c62 100644
+--- a/tools/verify-za22-local.mjs
++++ b/tools/verify-za22-local.mjs
+@@ -10,26 +10,33 @@ import { fileURLToPath } from 'node:url';
+ import { promisify } from 'node:util';
+ 
+ const [segment, evidencePath] = process.argv.slice(2);
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment) && evidencePath,
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol', 'b13-a6-native'].includes(segment) && evidencePath,
+   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
+ const run = promisify(execFile);
+ const repo = fileURLToPath(new URL('../', import.meta.url));
+ const viewer = join(repo, 'tools', 'voxel-tavern');
+ const output = resolve(evidencePath);
+-await mkdir(output, { recursive: true });
+-const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
+-const web = join(temporary, 'web');
+-const compiled = join(temporary, 'server');
+ const cwdRequire = createRequire(join(repo, 'package.json'));
+ const viewerRequire = createRequire(join(viewer, 'package.json'));
+ const vite = join(dirname(viewerRequire.resolve('vite/package.json')), 'bin', 'vite.js');
+ const tsc = join(dirname(cwdRequire.resolve('typescript/package.json')), 'bin', 'tsc');
+ const hardware = process.env.ZA22_HARDWARE === '1';
++const b13 = segment === 'b13-a6-native';
++const browserMode = b13 ? 'town-rehearsal' : 'town-preview';
++const presenceEntry = b13 ? 'index-rehearsal' : 'index';
+ const installedChrome = process.platform === 'win32' ? [
+   'C:/Program Files/Google/Chrome/Application/chrome.exe',
+   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+ ].find(existsSync) : undefined;
+ const chrome = process.env.CHROMIUM_PATH || installedChrome;
++if (b13) {
++  assert.ok(process.platform === 'win32' && hardware && chrome,
++    'B13 requires the original Windows Chrome / Intel D3D11 host with ZA22_HARDWARE=1');
++}
++await mkdir(output, { recursive: true });
++const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
++const web = join(temporary, 'web');
++const compiled = join(temporary, 'server');
+ const host = '127.0.0.1';
+ const media = new Map([
+   ['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'],
+@@ -140,20 +147,21 @@ try {
+   await writeFile(join(output, 'source-commit.txt'), `${commit}\n`);
+   const tree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout;
+   await writeFile(join(output, 'source-tree.txt'), tree);
+-  await finish(startNode([vite, 'build', '--mode', 'town-preview', '--outDir', web], {}, { cwd: viewer }));
++  await finish(startNode([vite, 'build', '--mode', browserMode, '--outDir', web], {}, { cwd: viewer }));
+   await finish(startNode([tsc, '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext',
+-    '--strict', '--skipLibCheck', '--rootDir', 'src', '--outDir', compiled, 'src/presence/index.ts'], {}));
++    '--strict', '--skipLibCheck', '--rootDir', 'src', '--outDir', compiled, `src/presence/${presenceEntry}.ts`], {}));
+   const ports = { town: await freePort(), mountain: await freePort(), west: await freePort() };
+   frontend = servePreview(ports, commit);
+   const port = await usePort(frontend);
+   const base = `http://${host}:${port}`;
+-  presence = startNode([join(compiled, 'presence', 'index.js')], {
++  presence = startNode([join(compiled, 'presence', `${presenceEntry}.js`)], {
+     NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
+     PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
+     TOWN_NIGHT_DAWN_EPOCH: String(Date.now() - 390_000),
+     TOWN_NIGHT_OFFSETS_AFTER_DUSK: JSON.stringify(Array(12).fill(60_000)),
++    ...(b13 ? { TOWN_REHEARSAL_AT: '2026-11-20T14:15:00+08:00' } : {}),
+   });
+-  await waitForPresence(new URL('/presence/night-window', base), presence);
++  await waitForPresence(new URL(b13 ? '/presence/rehearsal-clock' : '/presence/night-window', base), presence);
+   const clock = segment === 'clock' || segment === 'clock-books';
+   driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
+     base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {
