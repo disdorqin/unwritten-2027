@@ -1,5 +1,5 @@
 import {
-  AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, Fog, Group,
+  AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
   InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -27,6 +27,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { createTownViewBatches } from './town-view-batches';
 import { createTownViewFaces } from './town-view-faces';
 import { addDistrictHousing } from './district-layout';
@@ -153,6 +154,7 @@ import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
+const previewOptions = new URLSearchParams(location.search);
 const grid = createTerrainGrid();
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
@@ -161,7 +163,9 @@ const scene = new Scene();
 scene.background = new Color('#adc2dd');
 const weatherFog = new Fog('#adc2dd', 360, 1300);
 scene.fog = weatherFog;
-const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, 1400);
+const townFar = 1400;
+const mountSummitSkyline = previewOptions.get('summitSkyline') === 'on';
+const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, mountSummitSkyline ? 2400 : townFar);
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
 renderer.setSize(innerWidth, innerHeight);
@@ -179,9 +183,30 @@ const landscape = new Group();
 const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
+// One display-space transform for P-1. This is the surveyed C-01 fixture origin,
+// pending the real northern host. No gate, player coordinates or legacy bounds change here.
+const summitSkylineOrigin = new Vector3(300, 0, -676);
+const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSpec.summitHeight,
+  -mainSummitLayout.summit.north).add(summitSkylineOrigin);
+const summitSkylinePeakNdc = new Vector3();
+let summitSkylineDraws = 0;
+if (mountSummitSkyline) {
+  const summit = createMainSummitBlock(mainSummitLayout, 347, 100);
+  // The frozen coarse mesh is an open heightfield. The town can look up at it from below.
+  // Keep this preview material choice separate from the P-1 terrain used by the arriving domain.
+  summit.coarse.material.side = DoubleSide;
+  const skyline = new Group();
+  skyline.name = 'main-summit-world-skyline';
+  skyline.position.copy(summitSkylineOrigin);
+  skyline.add(summit.coarse);
+  summit.coarse.onAfterRender = (_renderer, _scene, renderedCamera) => {
+    if (renderedCamera === camera) summitSkylineDraws++;
+  };
+  scene.add(skyline);
+}
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
   (east, north) => grid.heightAt(east, north));
-const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, camera.far);
+const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, townFar);
 const plazaCanvasSize = new Vector2();
 const railway = createTownRailway(grid, presence.serverNow);
 const frontRailStation = railway.stops.find(stop => stop.id === 'railway-station')!;
@@ -907,7 +932,14 @@ panel => openTavernDice(panel, () => {
     return mascotFrustum.intersectsSphere(mascotBounds);
   },
 });
-const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt);
+const practiceStatus = element<HTMLOutputElement>('snow-practice-status');
+const practiceTarget = createSnowPracticeTarget(scene, grid.heightAt, {
+  status(text) {
+    practiceStatus.textContent = text;
+    practiceStatus.hidden = !text;
+  },
+  announce: announceActivity,
+});
 let drinkingPoseUntil = 0;
 let warmDrinkUntil = 0;
 let nextBathTeaAt = 0;
@@ -1238,7 +1270,6 @@ const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
 const snowballRing = element('snowball-action-ring');
 const snowballHitMark = element('snowball-hit-mark');
 const reduceSnowEffects = matchMedia('(prefers-reduced-motion: reduce)');
-const previewOptions = new URLSearchParams(location.search);
 const hitFeedback = createSnowballHitFeedback(
   element('snowball-frost'), previewOptions.get('hitFeedback') !== 'off', reduceSnowEffects,
 );
@@ -1476,6 +1507,7 @@ const snowballs = createTownSnowballFight({
   canScoreAtLaunch: outdoorLaunch,
   onChange: showSnowballScore,
   onEvent(event) {
+    practiceTarget.onSnowballEvent(event);
     if (event.type === 'throw') {
       if (event.scoreable) snowballBoard.recordThrow(event.thrower);
       if (event.shotBy === 'remote') teamFight.onThrowHeard(event.origin);
@@ -2765,6 +2797,7 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
+  practiceTarget.updateRound();
   const startEast = x, startNorth = n;
   if (ceremonyLook) {
     if (!lookAllowed() || keys.size || seated || boardingGround) ceremonyLook = undefined;
@@ -3195,6 +3228,7 @@ renderer.setAnimationLoop(now => {
     const drinkStartedAt = profileTown ? performance.now() : 0;
     tavernDrinkEffects.apply(camera, now, walking && (x !== startEast || n !== startNorth), walking);
     let drinkEffectsMs = profileTown ? performance.now() - drinkStartedAt : 0;
+    summitSkylineDraws = 0;
     try {
       if (groupPhotoFrame) {
         createTheaterPhotoCamera(groupPhotoFrame.view, groupPhotoFrame.people, grid.heightAt, plazaCamera);
@@ -3233,12 +3267,15 @@ renderer.setAnimationLoop(now => {
       if (profileTown) drinkEffectsMs += performance.now() - restoreStartedAt;
     }
     if (profileTown) {
+      const skylinePeak = mountSummitSkyline ? summitSkylinePeakNdc.copy(summitSkylinePeak).project(camera) : null;
       renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
         frameMs: frameSeconds * 1000, feedbackMs, drinkEffectsMs,
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
+        ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
+          camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));
     }
   }

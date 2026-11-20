@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>P-8 主峰云海与旗云</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: #141f2b; color: #ecf4f9; font: 14px system-ui, sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; gap: 1rem; justify-content: space-between; padding: .7rem 1rem; align-items: baseline; }
+  header span { color: #bfccda; }
+  main { flex: 1; min-height: 320px; display: grid; place-items: stretch; }
+  canvas { display: block; width: 100%; height: 100%; }
+  footer { padding: .7rem 1rem; display: grid; gap: .6rem; }
+  nav { display: flex; flex-wrap: wrap; gap: .4rem; }
+  button { color: #edf6fc; background: #233449; border: 1px solid #57738c; border-radius: 4px; padding: .32rem .55rem; cursor: pointer; }
+  button[aria-pressed="true"] { color: #101f2c; background: #bce2f6; border-color: #bce2f6; }
+  output { color: #d0ddea; }
+</style>
+<header><strong>P-8 主峰云海与旗云</strong><span>主峰本地坐标独立预览 · 整镇挂载与天气联动待验</span></header>
+<main id="scene" aria-label="主峰地形预览"></main>
+<footer>
+  <nav aria-label="取景机位">
+    <button id="overview" data-view="overview">双肩全景</button>
+    <button id="below" data-view="below">云下 350 m</button>
+    <button id="bottom" data-view="bottom">云底 380 m</button>
+    <button id="inside" data-view="inside">云中 474 m</button>
+    <button id="top" data-view="top">云顶 560 m</button>
+    <button id="above" data-view="above">云上 650 m</button>
+    <button id="west" data-view="west">西肩 560 m</button>
+    <button id="east" data-view="east">东肩 610 m</button>
+  </nav>
+  <nav aria-label="风向和时间">
+    <button id="calm" data-wind="calm">静风</button>
+    <button id="weak" data-wind="weak">向东 4.99 m/s</button>
+    <button id="threshold" data-wind="threshold">向东 5.00 m/s</button>
+    <button id="eastward" data-wind="eastward">向东 9 m/s</button>
+    <button id="westward" data-wind="westward">向西 9 m/s</button>
+    <button id="northward" data-wind="northward">向北 9 m/s</button>
+    <button id="southward" data-wind="southward">向南 9 m/s</button>
+    <button id="drift">云流播放 / 暂停</button>
+  </nav>
+  <output id="readout" aria-live="polite"></output>
+</footer>
+<script type="module" src="/tools/voxel-tavern/town-blockout/preview-main-summit-clouds.ts"></script>
+</html>

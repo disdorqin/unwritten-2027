@@ -15,6 +15,10 @@ import {
 import { createPresenceEgress } from './egress.js';
 import { createIceThroneAuthority } from './ice-throne-authority.js';
 import { isIcePalaceThroneRecord } from './ice-throne-site.js';
+import { isSummitPassportAction } from '../shared/summit-passport.js';
+import {
+  createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
+} from './summit-passport-authority.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
 import {
@@ -56,6 +60,7 @@ type Options = {
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
   bellConfig?: Partial<BellConfig>;
+  summitPassportHost?: SummitPassportHost;
   /** S2 结构化连接日志的注入点；默认 console.log。 */
   connectionLog?: PresenceConnectionLog;
 };
@@ -151,6 +156,7 @@ export async function createPresenceServer(options: Options = {}) {
   const tiers = checkTiers(options.tiers ?? [BASE_TIER]);
   const now = options.now ?? (() => performance.now());
   const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
+  const summitPassport = options.summitPassportHost && createSummitPassportAuthority(options.summitPassportHost);
   /**
    * S2 结构化连接日志：一行一个 JSON，字段只有时间戳/传输/peer/步骤/结果码。
    * 与客户端四步故障码（PG-1/WS-2/FR-3/HB-4）对位：attempt≈页面/握手到达、
@@ -381,7 +387,8 @@ export async function createPresenceServer(options: Options = {}) {
         if (!peers.has(peer.id)) break;
         const frame = item as { t?: unknown; d?: unknown };
         if (frame.t === 'text' && typeof frame.d === 'string') {
-          receiveText(peer, Buffer.from(frame.d, 'utf8'));
+          const pending = receiveText(peer, Buffer.from(frame.d, 'utf8'));
+          if (pending) await pending;
         } else if (frame.t === 'bin' && typeof frame.d === 'string') {
           const bytes = Buffer.from(frame.d, 'base64');
           if (bytes.byteLength === RECORD_BYTES && bytes.readUInt16LE(0) === MASCOT_ACTOR_ID) {
@@ -808,6 +815,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    summitPassport?.forget(peer.id);
     if (peer.session) pollSessions.delete(peer.session);
     connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
     snowMatch.removePlayer(peer.id);
@@ -988,6 +996,16 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'summit-passport') {
+        const action = 'action' in message ? message.action : undefined;
+        if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
+          if (summitPassport) return summitPassport.request(peer.id, action).then(reply => {
+            if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
+          });
+          send(peer, JSON.stringify(summitPassportUnavailable(action)));
+        }
+        return;
+      }
       if (message.kind === 'bell-start') {
         if (allowEvent(peer, now())) requestBell(peer);
         return;
@@ -1049,7 +1067,9 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true }));
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true,
+      ...(summitPassport ? { summitPassport: true } : {}),
+    }));
     if (photo && !photo.ended && Date.now() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
@@ -1258,7 +1278,8 @@ export async function createPresenceServer(options: Options = {}) {
         peer.socket?.terminate();
       }
       wss.close();
-      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
+      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()))
+        .then(() => summitPassport?.flush());
       return stop;
     },
   };
