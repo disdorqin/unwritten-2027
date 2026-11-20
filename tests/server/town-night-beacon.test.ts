@@ -1,17 +1,39 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { WebSocket, WebSocketServer } from 'ws';
 import { createTownNightBeaconHost, createTownNightWitness, thirteenthBellCatalogueEntry,
   type TownNightWitnessProgress } from '../../src/presence/town-night-beacon.js';
 import { createTownNightBeaconReceiver, type TownNightBeaconFrame } from '../../src/shared/town-night-beacon.js';
 import { createOrdinaryTownNightSchedule, createTownNightWindow } from '../../src/shared/town-night-window.js';
+import { readTownNightOptions } from '../../src/presence/town-night-config.js';
 
 const dawnEpoch = Date.parse('2026-12-29T10:00:00+08:00');
 const scheduleAt = createOrdinaryTownNightSchedule({
   dawnEpoch, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
 });
 const schedule = scheduleAt(dawnEpoch)!;
+
+test('the presence startup configuration reloads the last committed signal from its durable receipt', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'town-night-receipt-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, 'beacon.json');
+  const json = JSON.stringify({ dawnEpoch, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000 });
+  assert.equal(readTownNightOptions(undefined, undefined), undefined);
+  assert.throws(() => readTownNightOptions(json, undefined), /together/);
+  assert.throws(() => readTownNightOptions('{"dawnEpoch":0}', path), /Invalid TOWN_NIGHT_SCHEDULE/);
+  const first = readTownNightOptions(json, path)!;
+  assert.deepEqual(first.scheduleAt(dawnEpoch), schedule);
+  assert.equal(first.restoredBeaconAt, null);
+  first.saveBeacon!(schedule.beaconAt);
+  assert.equal(readFileSync(path, 'utf8'), String(schedule.beaconAt));
+  assert.equal(readTownNightOptions(json, path)?.restoredBeaconAt, schedule.beaconAt);
+  writeFileSync(path, '-1');
+  assert.throws(() => readTownNightOptions(json, path), /Invalid town night beacon receipt/);
+});
 
 test('a single committed cue drives all scene effects with the same server timestamp', () => {
   let now = schedule.beaconAt - 1;

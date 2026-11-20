@@ -2,6 +2,8 @@
 !src/
 !src/presence/
 !src/presence/**
+!src/shared/
+!src/shared/*.ts
 **/node_modules/
 **/.env*
 **/*.key

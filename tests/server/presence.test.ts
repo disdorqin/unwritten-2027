@@ -12,6 +12,7 @@ import {
 } from "../../src/presence/snowball-events.js";
 import { testFireworksAnnouncement, testFireworksDwellMs, testFireworksLeadMs, testFireworksNoticeMs } from "../../src/presence/test-fireworks.js";
 import { plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLockMs, type PlazaPhotoPerson } from "../../src/presence/plaza-photo.js";
+import { createOrdinaryTownNightSchedule, townLayerOverlapMs, type TownNightWindowState } from "../../src/shared/town-night-window.js";
 
 const recordBytes = 12;
 const messageTimeout = 3500;
@@ -41,6 +42,10 @@ type Control = {
   edge?: boolean;
   captureAt?: number;
   people?: PlazaPhotoPerson[];
+  townNightWindow?: TownNightWindowState;
+  state?: TownNightWindowState;
+  at?: number;
+  expiresAt?: number;
 };
 
 function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) => T, accept = (_frame: Buffer) => true) {
@@ -145,7 +150,7 @@ async function fixture(context: TestContext, config: Config = {}) {
     client.socket.send(JSON.stringify({ type: "join", name }));
     const self = await joined;
     assert.equal(typeof self.id, "number");
-    return { ...client, id: self.id!, name: self.name, epochMs: self.epochMs };
+    return { ...client, id: self.id!, name: self.name, epochMs: self.epochMs, townNightWindow: self.townNightWindow };
   }
 
   return { connect, connectRaw, join, server };
@@ -178,6 +183,108 @@ test("formal/default presence does not serve the rehearsal clock", { timeout: 50
   const { server } = await fixture(context);
   const response = await fetch("http://127.0.0.1:" + server.address().port + "/presence/rehearsal-clock");
   assert.equal(response.status, 404);
+});
+
+const nightTestDawnEpoch = Date.parse("2026-11-20T10:00:00+08:00");
+const nightTestScheduleAt = createOrdinaryTownNightSchedule({
+  dawnEpoch: nightTestDawnEpoch,
+  beaconOffsetsAfterDusk: Array.from({ length: 12 }, (_, index) => 60_000 + index * 125),
+  cueFreshnessMs: 2_000,
+});
+const nightTestSchedule = nightTestScheduleAt(nightTestDawnEpoch)!;
+
+function isNightBeacon(frame: Control) {
+  return frame.type === "event" && frame.kind === "town-night-beacon";
+}
+
+function isNightWindow(frame: Control) {
+  return frame.type === "event" && frame.kind === "town-night-window";
+}
+
+test("production presence emits one town beacon and resumes the same window without replay", { timeout: 8000 }, async context => {
+  const { beaconAt, cueExpiresAt, morningBellAt } = nightTestSchedule;
+  let epoch = beaconAt - 1;
+  const receipts: number[] = [];
+  const townNight = { scheduleAt: nightTestScheduleAt, saveBeacon: (at: number) => { receipts.push(at); } };
+  const first = await fixture(context, { wallNow: () => epoch, townNight });
+  const [left, right, unjoined] = await Promise.all([first.join("甲"), first.join("乙"), first.connect()]);
+  for (const guest of [left, right]) {
+    assert.equal(guest.epochMs, epoch);
+    assert.equal(guest.townNightWindow?.phase, "awaiting-beacon");
+    assert.equal(guest.townNightWindow?.canEnterRestricted, false);
+    assert.equal(guest.townNightWindow?.beaconAt, beaconAt);
+  }
+  left.socket.send(JSON.stringify({ type: "clock", sentAt: 1 }));
+  assert.equal((await left.text.next(frame => frame.type === "clock")).epochMs, epoch);
+
+  epoch = beaconAt;
+  const cues = await Promise.all([left.text.next(isNightBeacon), right.text.next(isNightBeacon)]);
+  assert.deepEqual(receipts, [beaconAt]);
+  assert.deepEqual(cues, Array(2).fill({ type: "event", kind: "town-night-beacon", at: beaconAt, expiresAt: cueExpiresAt }));
+  const windows = await Promise.all([left.text.next(isNightWindow), right.text.next(isNightWindow)]);
+  assert.deepEqual(windows[0], windows[1]);
+  assert.equal(windows[0].state?.canEnterRestricted, true);
+  assert.equal(windows[0].state?.layersOverlap, true);
+  assert.equal(windows[0].state?.chapterGatesLocked, true);
+  assert.ok(!unjoined.text.pending().some(frame => isNightBeacon(frame) || isNightWindow(frame)));
+
+  epoch++;
+  left.socket.terminate();
+  const reconnect = await first.join("甲");
+  assert.deepEqual(reconnect.townNightWindow, windows[0].state);
+  await delay(30);
+  assert.ok(!reconnect.text.pending().some(isNightBeacon));
+  assert.ok(!right.text.pending().some(isNightBeacon));
+
+  await first.server.close();
+  const restarted = await fixture(context, {
+    wallNow: () => epoch,
+    townNight: { ...townNight, restoredBeaconAt: receipts[0] },
+  });
+  const restored = await restarted.join("甲");
+  assert.deepEqual(restored.townNightWindow, windows[0].state);
+  epoch = beaconAt + townLayerOverlapMs;
+  const overlapEnded = await restored.text.next(isNightWindow);
+  assert.equal(overlapEnded.state?.layersOverlap, false);
+  assert.equal(overlapEnded.state?.canEnterRestricted, true);
+  epoch = morningBellAt;
+  const dawn = await restored.text.next(isNightWindow);
+  assert.equal(dawn.state?.phase, "day");
+  assert.equal(dawn.state?.canEnterRestricted, false);
+  assert.ok(!restored.text.pending().some(isNightBeacon));
+  assert.deepEqual(receipts, [beaconAt]);
+});
+
+test("a receipt write failure keeps the production night window closed until retry", { timeout: 5000 }, async context => {
+  const { beaconAt } = nightTestSchedule;
+  let epoch = beaconAt - 1;
+  let failWrite = true;
+  const receiptError = new Error("receipt storage unavailable");
+  let reportError!: (error: unknown) => void;
+  const reported = new Promise(resolve => { reportError = resolve; });
+  const receipts: number[] = [];
+  const { join } = await fixture(context, {
+    wallNow: () => epoch,
+    townNight: {
+      scheduleAt: nightTestScheduleAt,
+      saveBeacon(at) {
+        if (failWrite) throw receiptError;
+        receipts.push(at);
+      },
+      onSaveError: reportError,
+    },
+  });
+  const guest = await join("夜钟听客");
+  epoch = beaconAt;
+  assert.equal(await reported, receiptError);
+  const beforeRetry = await join("夜口过客");
+  assert.equal(beforeRetry.townNightWindow?.canEnterRestricted, false);
+  assert.ok(!guest.text.pending().some(isNightBeacon));
+
+  failWrite = false;
+  assert.equal((await guest.text.next(isNightBeacon)).at, beaconAt);
+  assert.equal((await beforeRetry.text.next(isNightWindow)).state?.canEnterRestricted, true);
+  assert.deepEqual(receipts, [beaconAt]);
 });
 
 test("ceremony preassigns the shared midnight and parks late arrivals once at the edge", { timeout: 7000 }, async context => {

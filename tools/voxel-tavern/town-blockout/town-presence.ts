@@ -9,6 +9,7 @@ import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
 import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
+import { createTownPresenceNight } from './town-presence-night';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
 import {
@@ -78,6 +79,7 @@ export function createTownPresence(
   const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
   const clock = createTownPresenceClock();
+  const townNight = createTownPresenceNight(clock.now);
   let photoSupported = false;
   let clockRequest: number | undefined;
   let nextClockSample = Infinity;
@@ -206,6 +208,7 @@ export function createTownPresence(
     const active = socket;
     socket = undefined;
     haveId = false;
+    townNight.disconnect();
     joinedId = null;
     joinedName = undefined;
     serverEpochOffset = undefined;
@@ -261,9 +264,18 @@ export function createTownPresence(
         type?: string; id?: number; name?: string; self?: boolean; epochMs?: number;
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number;
+        townNightWindow?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (haveId && message.type === 'event' && message.kind === 'town-night-window') {
+        townNight.acceptWindow(message.state);
+        return;
+      }
+      if (haveId && message.type === 'event' && message.kind === 'town-night-beacon') {
+        townNight.acceptBeacon(message);
+        return;
+      }
       if (message.type === 'event' && (message.kind === 'plaza-photo-invite' || message.kind === 'plaza-photo-lineup')) {
         const notice = haveId && readPlazaPhotoNotice(message);
         if (notice) showPhoto?.(notice);
@@ -333,8 +345,9 @@ export function createTownPresence(
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
             clock.accept(message.epochMs);
-            if (photoSupported) nextClockSample = 0;
+            if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
+          townNight.join(message.epochMs, message.townNightWindow);
           resetRetry();
           if (timeout !== undefined) window.clearTimeout(timeout);
           timeout = undefined;
@@ -441,7 +454,7 @@ export function createTownPresence(
   }
 
   function samplePhotoClock() {
-    if (!photoSupported || !haveId) return;
+    if (!haveId || (!photoSupported && !townNight.state())) return;
     const sentAt = performance.now();
     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
     clockRequest = sentAt;
@@ -496,6 +509,9 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    getTownNightWindow: townNight.state,
+    townNightConnectedAt: townNight.connectedAt,
+    onTownNightBeacon: townNight.onBeacon,
     onCeremonyArrival(handler: (landing: CeremonyArrival) => void) {
       onCeremonyArrival = handler;
       if (ceremonyArrival) scheduleCeremonyArrival();
@@ -563,6 +579,7 @@ export function createTownPresence(
     },
     update(dt: number) {
       if (!socket) return;
+      townNight.tick();
       sendPose(dt);
       samplePhotoClock();
       syncActivityPoses();

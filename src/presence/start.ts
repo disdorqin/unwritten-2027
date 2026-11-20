@@ -1,4 +1,5 @@
 import { createPresenceServer } from './server.js';
+import { readTownNightOptions } from './town-night-config.js';
 import type { RequestListener } from 'node:http';
 
 export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
@@ -7,6 +8,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     port: Number(process.env.PRESENCE_PORT ?? 8090),
     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
     testFireworks: process.env.TEST_FIREWORKS === 'on',
+    townNight: readTownNightOptions(process.env.TOWN_NIGHT_SCHEDULE, process.env.TOWN_NIGHT_BEACON_RECEIPT),
     requestListener,
     ceremonyStartAt,
   });

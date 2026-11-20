@@ -3,6 +3,7 @@ WORKDIR /app
 COPY src/presence/package.json src/presence/package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund --fetch-retries=1
 COPY src/presence/ ./src/presence/
+COPY src/shared/ ./src/shared/
 ARG TOWN_REHEARSAL_BUILD=off
 RUN set -eu; \
     entry=src/presence/index.ts; \
@@ -18,6 +19,7 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules/ws/ ./node_modules/ws/
 COPY --from=build /app/dist/server/presence/ ./dist/server/presence/
+COPY --from=build /app/dist/server/shared/ ./dist/server/shared/
 USER node
 EXPOSE 8090
 CMD ["node", "dist/server/presence/index.js"]
