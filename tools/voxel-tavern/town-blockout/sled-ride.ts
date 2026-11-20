@@ -14,6 +14,7 @@ type SledControls = { forward: number; turn: number; brake?: boolean };
 export function createSledRide(world: SledWorld) {
   const motion = createSledMotion();
   const spot: Spot = { x: 0, n: 0, y: 0, yaw: 0 };
+  const lastGrounded: Spot = { ...spot };
   let active = false;
   let parked: Readonly<Spot> | undefined;
   let recovery = 0, recoveryDuration = 0, rollTurns = 0;
@@ -21,15 +22,17 @@ export function createSledRide(world: SledWorld) {
   let landingCompression = 0;
   let braking = false, turnRate = 0, deepSnow = false;
 
-  function canMountAt({ x, n, y }: Spot) {
+  function canMountAt({ x, n, y }: Pick<Spot, 'x' | 'n' | 'y'>) {
     return !world.blocked(x, n, y);
   }
 
   function mountAt({ x, n, y, yaw }: Spot) {
     Object.assign(spot, { x, n, y, yaw });
+    Object.assign(lastGrounded, spot);
     motion.reset(yaw);
     active = true;
     parked = undefined;
+    recovery = recoveryDuration = rollTurns = landingCompression = 0;
     snowTime = curbCooldown = turnRate = 0;
     braking = deepSnow = false;
     wasStalled = false;
@@ -50,8 +53,21 @@ export function createSledRide(world: SledWorld) {
     return !!parked && canRemount(x, n, y) && mountAt(parked);
   }
 
+  function canRelocateMounted(x: number, n: number, y: number) {
+    return active && Number.isFinite(x) && Number.isFinite(n) && Number.isFinite(y) &&
+      y === world.height(x, n) && canMountAt({ x, n, y });
+  }
+
+  function relocateMounted(x: number, n: number, y: number, yaw: number) {
+    return Number.isFinite(yaw) && canRelocateMounted(x, n, y) && mountAt({ x, n, y, yaw });
+  }
+
   function leave() {
     if (!active) return false;
+    if (motion.state.airborne) {
+      const support = { ...spot, y: world.height(spot.x, spot.n) };
+      Object.assign(spot, canMountAt(support) ? support : lastGrounded);
+    }
     parked = { ...spot };
     active = false;
     recovery = recoveryDuration = rollTurns = landingCompression = 0;
@@ -123,6 +139,7 @@ export function createSledRide(world: SledWorld) {
       if (landing === 'spill') { crash(0); return; }
       if (landing === 'hard') landingCompression = Math.min(.17, impact * .012);
     }
+    if (!next.airborne) Object.assign(lastGrounded, spot);
     const mist = next.airborne ? 0 : sledSnowAmount(next.speed, braking, Math.abs(curbRise));
     snowTime = mist ? snowTime + dt : 0;
     if (mist && snowTime >= .05) {
@@ -140,7 +157,7 @@ export function createSledRide(world: SledWorld) {
   }
 
   return {
-    spot, mount, leave, canRemount, remount, step, finishFrame,
+    spot, mount, leave, canRemount, remount, canRelocateMounted, relocateMounted, step, finishFrame,
     interrupt() {
       if (active) leave();
       recovery = recoveryDuration = rollTurns = landingCompression = 0;

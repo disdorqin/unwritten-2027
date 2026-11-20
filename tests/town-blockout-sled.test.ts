@@ -147,6 +147,68 @@ test('manual exit parks one sled at its route position and remounts that same sl
   assert.ok(ride.spot.n > n);
 });
 
+test('manual airborne exit parks at reachable ground support or the last grounded pose', () => {
+  const height = 12;
+  const dt = 1 / 120;
+  const push = { forward: 1, turn: 0 };
+  for (const supportBlocked of [false, true]) {
+    let blockedBeyond = Infinity;
+    const ride = createSledRide({
+      height: () => height,
+      surface: () => ({ surface: 1, deepSnow: false }),
+      blocked: (_, n, y) => n > blockedBeyond && y <= height,
+      snow() {},
+      stopped() {},
+    });
+    assert.equal(ride.mount(0, 0, height, 0), true);
+    for (let i = 0; i < 600; i++) ride.step(dt, push);
+    const groundPose = { ...ride.spot };
+    if (supportBlocked) blockedBeyond = groundPose.n + .2;
+    ride.jump(10);
+    for (let i = 0; i < 15; i++) ride.step(dt, push);
+    assert.equal(ride.airborne(), true);
+    assert.ok(ride.spot.y > height + .55);
+    assert.ok(ride.spot.n > groundPose.n + .2);
+    const expected = supportBlocked ? groundPose : { ...ride.spot, y: height };
+    assert.equal(ride.leave(), true);
+    assert.deepEqual(ride.parked(), expected);
+    assert.equal(ride.remount(expected.x + 1, expected.n, height), true);
+    assert.deepEqual(ride.spot, expected);
+    assert.equal(ride.airborne(), false);
+  }
+});
+
+test('scripted relocation clears a crash while preserving the mounted sled', () => {
+  const ride = createSledRide({
+    height: () => 12,
+    surface: () => ({ surface: 1, deepSnow: false }),
+    blocked: (x, n) => x < 10 && n > 5,
+    snow() {},
+    stopped() {},
+  });
+  assert.equal(ride.canRelocateMounted(36, 20, 12), false);
+  assert.equal(ride.mount(0, 0, 12, 0), true);
+  for (let i = 0; i < 1_200 && !ride.recovering(); i++) ride.step(1 / 120, { forward: 1, turn: 0 });
+  assert.equal(ride.recovering(), true);
+  const collision = { ...ride.spot };
+  assert.equal(ride.canRelocateMounted(0, 20, 12), false);
+  assert.equal(ride.relocateMounted(0, 20, 12, 0), false);
+  assert.equal(ride.relocateMounted(36, 20, 13, 0), false);
+  assert.equal(ride.relocateMounted(36, 20, 12, Infinity), false);
+  assert.deepEqual(ride.spot, collision);
+  assert.equal(ride.recovering(), true);
+  assert.equal(ride.canRelocateMounted(36, 20, 12), true);
+  assert.equal(ride.relocateMounted(36, 20, 12, Math.PI / 2), true);
+  assert.deepEqual(ride.spot, { x: 36, n: 20, y: 12, yaw: Math.PI / 2 });
+  assert.equal(ride.active(), true);
+  assert.equal(ride.recovering(), false);
+  assert.equal(ride.airborne(), false);
+  assert.equal(ride.parked(), undefined);
+  assert.equal(ride.speed(), 0);
+  assert.equal(ride.leave(), true);
+  assert.equal(ride.remount(37, 20, 12), true);
+});
+
 test('holding the dedicated brake overrides W, uses the existing brake pose, and never takes off', () => {
   const world = {
     height: () => 12,
