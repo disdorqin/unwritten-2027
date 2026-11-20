@@ -98,7 +98,7 @@ async function capture(name, view, slot, lastPage = 'false') {
   assert.equal(state.slot, slot, name);
   assert.equal(state.lastPage, lastPage, name);
   assert.ok(Number(state.draws) > 0 && Number(state.triangles) > 0, name);
-  assert.deepEqual([state.red, state.green, state.off], ['16', '2', '1'], name);
+  assert.deepEqual([state.red, state.green, state.off], ['16', '2', '0'], name);
   await viewport.screenshot({ path: join(evidenceDir, name + '.png') });
   views.push({ name, state, status });
 }

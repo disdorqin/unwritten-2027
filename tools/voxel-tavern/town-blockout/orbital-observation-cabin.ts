@@ -6,7 +6,7 @@ import {
 
 type Point = Readonly<{ x: number; n: number; ground: number }>;
 type Footprint = Readonly<{ minX: number; maxX: number; minN: number; maxN: number }>;
-type Solid = Footprint & Readonly<{ kind: 'wall' | 'window' | 'bench'; bottom: number; top: number }>;
+type Solid = Footprint & Readonly<{ kind: 'wall' | 'window' | 'bench' | 'star-chart-table'; bottom: number; top: number }>;
 
 // Local build dimensions. S-1's existing passage is 3.4 m wide. The S-6
 // port is expressed in the same X-east/N-north frame, without a world anchor.
@@ -141,6 +141,36 @@ export function createOrbitalObservationCabin() {
     loop.name = 'observation-faded-red-cord';
     loop.position.set(.078, 0, z);
     binoculars.add(loop);
+  }
+
+  const chartEast = -3.55;
+  const chartNorth = midN;
+  box(group, 'observation-star-chart-table', wood, chartEast, chartNorth, .86,
+    1.72, 1.16, .16, 'star-chart-table');
+  for (const east of [-.65, .65]) {
+    for (const north of [-.4, .4]) {
+      box(group, 'observation-star-chart-support', metal, chartEast + east, chartNorth + north, .39,
+        .14, .14, .78, 'star-chart-table');
+    }
+  }
+  box(group, 'observation-star-chart-face', seam, chartEast, chartNorth, .956, 1.48, .93, .038);
+  const chartStars = [[-.59, .22], [-.34, .06], [-.12, .15], [.13, -.12],
+    [.43, -.28], [.56, -.07], [-.4, -.27], [.38, .29]] as const;
+  const chartLines: number[] = [];
+  for (const [from, to] of [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [3, 7], [1, 6]] as const) {
+    for (const [east, north] of [chartStars[from], chartStars[to]]) {
+      chartLines.push(chartEast + east, .979, -(chartNorth + north));
+    }
+  }
+  const chartGeometry = new BufferGeometry().setAttribute('position', new Float32BufferAttribute(chartLines, 3));
+  geometries.add(chartGeometry);
+  const chartInk = new LineBasicMaterial({ color: '#aab4a7' });
+  materials.add(chartInk);
+  const chart = new LineSegments(chartGeometry, chartInk);
+  chart.name = 'observation-star-chart-lines';
+  group.add(chart);
+  for (const [east, north] of chartStars) {
+    box(group, 'observation-star-chart-dot', light, chartEast + east, chartNorth + north, .982, .035, .035, .009);
   }
 
   const heightMarks = [1.76, 1.59, 1.42, 1.26, 1.11, .96] as const;

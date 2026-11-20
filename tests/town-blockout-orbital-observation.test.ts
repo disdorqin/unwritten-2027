@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, type Mesh } from 'three';
+import { Group, Raycaster, Vector3, type Mesh } from 'three';
 import {
   createOrbitalObservationCabin, orbitalObservationCabinSpec,
 } from '../tools/voxel-tavern/town-blockout/orbital-observation-cabin';
@@ -37,25 +37,36 @@ test('the S-6 single-room geometry exposes a clear S-1-sized local port', () => 
   assert.ok(!cabin.isWalkable(3, .01));
   assert.ok(!cabin.isWalkable(5.17, 3.4));
   assert.ok(!cabin.isWalkable(4.49, 3.4));
+  assert.ok(cabin.isWalkable(-2.38, 3.4));
+  assert.ok(!cabin.isWalkable(-2.43, 3.4));
+  assert.ok(!cabin.isWalkable(-3.55, 3.4));
   assert.ok(!cabin.isWalkable(0, -.85, NaN));
   cabin.dispose();
   assert.equal(scene.children.length, 0);
 });
 
-test('the authored window, old marks, bench and one corded viewing prop survive a real mount', () => {
+test('the authored window, old marks, bench and star chart survive a real mount', () => {
   const cabin = createOrbitalObservationCabin();
   const names: string[] = [];
   cabin.group.traverse(child => names.push(child.name));
   for (const feature of [
     'observation-single-side-window', 'observation-old-glass-scratches', 'observation-single-long-bench',
     'observation-red-cord-binoculars', 'observation-mirror-lake', 'observation-double-ridge-silhouette',
-    'observation-distant-town-lights',
+    'observation-distant-town-lights', 'observation-star-chart-table', 'observation-star-chart-face',
+    'observation-star-chart-lines',
   ]) {
     assert.equal(names.filter(name => name === feature).length, 1, feature);
   }
   assert.equal(names.filter(name => name === 'observation-faded-red-cord').length, 3);
+  assert.equal(names.filter(name => name === 'observation-star-chart-dot').length, 8);
   assert.equal(names.filter(name => name === 'observation-height-notch').length, cabin.heightMarks.length);
   assert.ok(cabin.heightMarks.every((height, index) => index === 0 || height < cabin.heightMarks[index - 1]!));
+  cabin.group.updateMatrixWorld(true);
+  const eye = new Vector3(-2.38, 1.65, -3.4);
+  const chartFace = new Vector3(-3.55, .975, -3.4);
+  const sightline = new Raycaster(eye, chartFace.sub(eye).normalize());
+  const firstSolid = sightline.intersectObject(cabin.group, true).find(({ object }) => object.type === 'Mesh');
+  assert.equal(firstSolid?.object.name, 'observation-star-chart-face');
   const pane = cabin.group.getObjectByName('observation-single-side-window') as Mesh;
   let released = 0;
   pane.geometry.addEventListener('dispose', () => released++);
