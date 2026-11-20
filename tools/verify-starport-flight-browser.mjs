@@ -223,7 +223,7 @@ async function verifyNightWindow() {
   try {
     assert.equal((await page.goto(nightUrl.href))?.status(), 200);
     await page.waitForFunction(() => window.starportFlightProof?.().drawCalls > 0);
-    const { schedule: { duskAt, beaconAt, morningBellAt } } = await read();
+    const { schedule: { duskAt, beaconAt, cueExpiresAt, morningBellAt } } = await read();
     await moveFixed(page, 'd', 'east', east => east >= 319.9);
     await clock(duskAt - 1);
     const dark = await check('01-day', 'day', false, false);
@@ -235,6 +235,7 @@ async function verifyNightWindow() {
     nightProof.receipt = await receive(beaconAt);
     assert.equal(nightProof.receipt?.kind, 'town-night-beacon');
     assert.equal(nightProof.receipt?.at, beaconAt);
+    assert.equal(nightProof.receipt?.expiresAt, cueExpiresAt);
     assert.equal(await receive(beaconAt), undefined);
     const bright = await check('04-received-0ms', 'night-window', true, true);
     await clock(beaconAt + 59_999);
