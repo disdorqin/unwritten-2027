@@ -46,6 +46,60 @@ test('joins above the cloud, descending, transfer from ground, and replay stay q
   assert.equal(resumed.sample({ source: 'mountain', height: 581, whiteout: false, inView: true }), false);
 });
 
+test('stores only a sighting and restores it across controllers for the same profile', () => {
+  const writes: string[] = [];
+  const openProfile = (profile: string) => createSkyCityReveal(false, {
+    hasSeen: () => writes.includes(profile),
+    markSeen: () => { writes.push(profile); },
+  });
+  const { top } = mainSummitCloudSpec;
+  const rising = { source: 'mountain', height: top - 1, whiteout: false, inView: true } as const;
+  const emerged = { ...rising, height: top + 1 };
+
+  const first = openProfile('first');
+  assert.equal(first.sample({ ...rising, source: 'ground' }), false);
+  assert.equal(first.sample(rising), false);
+  assert.equal(first.sample({ ...emerged, inView: false }), false);
+  assert.deepEqual(writes, []);
+  assert.equal(first.sample(emerged), true);
+  assert.equal(first.sample(emerged), false);
+
+  const returning = openProfile('first');
+  assert.equal(returning.seen(), true);
+  assert.equal(returning.sample(rising), false);
+  assert.equal(returning.sample(emerged), false);
+  assert.deepEqual(writes, ['first']);
+
+  const second = openProfile('second');
+  assert.equal(second.seen(), false);
+  assert.equal(second.sample(rising), false);
+  assert.equal(second.sample(emerged), true);
+  assert.deepEqual(writes, ['first', 'second']);
+});
+
+test('storage failures still allow the cue once and preserve memory across scene resets', () => {
+  let reads = 0;
+  let writes = 0;
+  const unavailable = {
+    hasSeen() { reads++; throw new Error('unavailable'); },
+    markSeen() { writes++; throw new Error('unavailable'); },
+  };
+  const { top } = mainSummitCloudSpec;
+  const rising = { source: 'mountain', height: top - 1, whiteout: false, inView: true } as const;
+  const emerged = { ...rising, height: top + 1 };
+  const first = createSkyCityReveal(false, unavailable);
+  assert.equal(first.sample(rising), false);
+  assert.equal(first.sample(emerged), true);
+  assert.equal(first.sample(emerged), false);
+
+  const reset = createSkyCityReveal(first.seen(), unavailable);
+  assert.equal(reset.seen(), true);
+  assert.equal(reset.sample(rising), false);
+  assert.equal(reset.sample(emerged), false);
+  assert.equal(reads, 1);
+  assert.equal(writes, 1);
+});
+
 test('the light rises gradually even when sound is unavailable and releases cleanly', async () => {
   const observed: number[] = [];
   const effect = createSkyCityRevealEffects({ audioContext: () => undefined, onGlow: value => observed.push(value) });

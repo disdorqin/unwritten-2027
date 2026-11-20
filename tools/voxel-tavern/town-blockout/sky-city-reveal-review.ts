@@ -8,7 +8,7 @@ import { createMainSummitCable } from './main-summit-cable';
 import { mountMainSummitCable } from './main-summit-cable-scene';
 import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { createMainSummitCloudLayer, mainSummitCloudSpec } from './main-summit-cloud-layer';
-import { createSkyCityReveal } from './sky-city-reveal';
+import { createSkyCityReveal, type SkyCityDiscoveryStore } from './sky-city-reveal';
 import { createSkyCityRevealEffects } from './sky-city-reveal-effects';
 import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
 import { createSkyCitySite } from './sky-city-site';
@@ -81,13 +81,13 @@ const mountainButton = document.querySelector<HTMLButtonElement>('#review-mounta
 const reticle = document.querySelector<HTMLElement>('#reticle')!;
 const held = new Set<string>();
 
-function remembered() {
-  try { return sessionStorage.getItem(seenStorageKey) === '1'; }
-  catch { return false; }
-}
+const discovery: SkyCityDiscoveryStore = {
+  hasSeen: () => sessionStorage.getItem(seenStorageKey) === '1',
+  markSeen: () => sessionStorage.setItem(seenStorageKey, '1'),
+};
 
 let source: 'mountain' | 'ground' = 'mountain';
-let reveal = createSkyCityReveal(remembered());
+let reveal = createSkyCityReveal(false, discovery);
 let cueCount = 0;
 let rideMs = startMs;
 let running = false;
@@ -114,7 +114,7 @@ function reset(next: typeof source) {
   held.clear();
   desktopLook.release();
   effects.reset();
-  reveal = createSkyCityReveal(reveal.seen() || remembered());
+  reveal = createSkyCityReveal(reveal.seen(), discovery);
   instructions.textContent = next === 'ground' ? 'R 返回缆车。' : '主峰线路实样，岛体为走查落位。鼠标或方向键转向，E 开始。';
   renderer.domElement.focus();
 }
@@ -163,11 +163,6 @@ function looksAtIsland() {
   return true;
 }
 
-function remember() {
-  try { sessionStorage.setItem(seenStorageKey, '1'); }
-  catch { /* The active controller still remembers when storage is unavailable. */ }
-}
-
 renderer.setAnimationLoop(now => {
   const dt = Math.min(.10, (now - (previous ?? now)) / 1000);
   previous = now;
@@ -204,7 +199,6 @@ renderer.setAnimationLoop(now => {
   const inView = island.visible && looksAtIsland();
   if (reveal.sample({ source, height, whiteout, inView })) {
     cueCount++;
-    remember();
     effects.reveal(seconds);
   }
 

@@ -7,10 +7,18 @@ export type SkyCityRevealSample = Readonly<{
   inView: boolean;
 }>;
 
+/** The host binds the store to the current player's discovery state. */
+export type SkyCityDiscoveryStore = Readonly<{
+  hasSeen(): boolean;
+  markSeen(): void;
+}>;
+
 /** Read accepted world feet and the player's actual view after the cloud and camera update. */
-export function createSkyCityReveal(alreadySeen = false) {
+export function createSkyCityReveal(alreadySeen = false, discovery?: SkyCityDiscoveryStore) {
   const { bottom, top } = mainSummitCloudSpec;
   let seen = alreadySeen;
+  try { seen ||= discovery?.hasSeen() === true; }
+  catch { /* Keep the current player's in-memory state if storage is unavailable. */ }
   let inBelt = false;
   let emerged = false;
   return {
@@ -30,6 +38,8 @@ export function createSkyCityReveal(alreadySeen = false) {
       inBelt = false;
       if (!emerged || whiteout || !inView) return false;
       seen = true;
+      try { discovery?.markSeen(); }
+      catch { /* The reveal still plays once in this session. */ }
       return true;
     },
   };
