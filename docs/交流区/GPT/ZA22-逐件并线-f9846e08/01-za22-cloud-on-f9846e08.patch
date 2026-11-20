@@ -1,0 +1,1698 @@
+diff --git a/.github/workflows/verify-za22-live.yml b/.github/workflows/verify-za22-live.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..805f4b3e20b89b0ac0244f54c9a041468ed9e710
+--- /dev/null
++++ b/.github/workflows/verify-za22-live.yml
+@@ -0,0 +1,87 @@
++name: Verify ZA-22 live routes
++
++on:
++  push:
++    branches:
++      - town-verify-za22-station
++      - town-verify-za22-cloud
++      - town-verify-za22-gate
++      - town-verify-za22-crater
++  workflow_dispatch:
++    inputs:
++      segment:
++        description: Route to walk from the production spawn
++        type: choice
++        required: true
++        default: cloud
++        options: [station, cloud, gate, crater, all]
++
++permissions:
++  contents: read
++
++jobs:
++  route:
++    runs-on: ubuntu-latest
++    timeout-minutes: 18
++    env:
++      SELECTED_SEGMENT: ${{ inputs.segment }}
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          persist-credentials: false
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '24'
++      - name: Install verified browser tooling
++        run: |
++          npm ci --ignore-scripts --no-audit --no-fund
++          npx playwright install --with-deps chromium
++      - name: Build production Web and Presence
++        shell: bash
++        run: |
++          set -euo pipefail
++          out="$RUNNER_TEMP/za22-live"
++          mkdir -p "$out"
++          git rev-parse HEAD | tee "$out/source-commit.txt"
++          git rev-parse HEAD^{tree} | tee "$out/source-tree.txt"
++          npm run typecheck 2>&1 | tee "$out/typecheck.log"
++          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
++            -f tools/Dockerfile.town-preview -t za22-web . 2>&1 | tee "$out/town-preview-build.log"
++          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
++            -f tools/Dockerfile.town-presence -t za22-presence . 2>&1 | tee "$out/presence-build.log"
++      - name: Walk from the production birth point
++        shell: bash
++        run: |
++          set -euo pipefail
++          out="$RUNNER_TEMP/za22-live"
++          url=http://127.0.0.1:38100
++          segment="${SELECTED_SEGMENT:-${GITHUB_REF_NAME#town-verify-za22-}}"
++          cleanup() {
++            docker logs za22-web > "$out/town-preview.log" 2>&1 || true
++            docker logs za22-presence > "$out/presence.log" 2>&1 || true
++            docker rm -f za22-web za22-presence > /dev/null 2>&1 || true
++            docker network rm za22 > /dev/null 2>&1 || true
++          }
++          trap cleanup EXIT
++          docker network create za22
++          # Use the real authoritative night scheduler. The approved testing clock
++          # reaches the beacon in 30 seconds. The browser never changes server or player state.
++          dawn="$(node -p 'Date.now() - 390000')"
++          docker run -d --name za22-presence --network za22 --network-alias presence \
++            -e PRESENCE_MOUNTAIN_PORT=8091 \
++            -e "TOWN_NIGHT_DAWN_EPOCH=$dawn" \
++            -e 'TOWN_NIGHT_OFFSETS_AFTER_DUSK=[60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000]' \
++            za22-presence
++          docker run -d --name za22-web --network za22 \
++            -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 za22-web
++          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
++            --max-time 4 "$url/healthz" | tee "$out/healthz.txt"
++          test "$(cat "$out/healthz.txt")" = "town-preview $GITHUB_SHA"
++          node tools/verify-za22-live.mjs "$url" "$out" "$segment"
++      - name: Upload route evidence
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: za22-live-walk
++          path: ${{ runner.temp }}/za22-live
++          if-no-files-found: warn
+diff --git a/src/presence/start.ts b/src/presence/start.ts
+index 22641fa0b968f4df7b6f8a92e85b1f5f099cae6e..6717dff0d8b76b4c7cdc500777dfe3a9bf81ba2a 100644
+--- a/src/presence/start.ts
++++ b/src/presence/start.ts
+@@ -1,19 +1,48 @@
+ import { createPresenceServer } from './server.js';
+ import type { RequestListener } from 'node:http';
++import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
++import { createZa22NightWindowEndpoint } from './za22-night-window-endpoint.js';
+ 
+ export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
++  const host = process.env.PRESENCE_HOST ?? '0.0.0.0';
++  const dawn = process.env.TOWN_NIGHT_DAWN_EPOCH;
++  const offsets = process.env.TOWN_NIGHT_OFFSETS_AFTER_DUSK;
++  const night = createZa22NightWindowEndpoint(dawn && offsets ? {
++    dawnEpoch: Number(dawn),
++    offsetsAfterDusk: JSON.parse(offsets),
++  } : undefined, requestListener);
+   const server = await createPresenceServer({
+-    host: process.env.PRESENCE_HOST ?? '0.0.0.0',
++    host,
+     port: Number(process.env.PRESENCE_PORT ?? 8090),
+     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
+     testFireworks: process.env.TEST_FIREWORKS === 'on',
+     ownerKey: process.env.OWNER_KEY,
+     onMascotClaimRejected: total => console.info('Mascot actor rejected claims:', total),
+-    requestListener,
++    requestListener: night.listener,
+     ceremonyStartAt,
+   });
++  let mountain: Awaited<ReturnType<typeof createPresenceServer>> | undefined;
++  try {
++    if (process.env.PRESENCE_MOUNTAIN_PORT) {
++      mountain = await createPresenceServer({
++        host,
++        port: Number(process.env.PRESENCE_MOUNTAIN_PORT),
++        ...mountainPresenceBounds,
++        ceremonyStartAt: 0,
++      });
++    }
++  } catch (error) {
++    await server.close();
++    throw error;
++  }
++  const timer = dawn && offsets ? setInterval(night.tick, 250) : undefined;
++  timer?.unref();
+   console.log(`Town presence listening on ${server.address().port}`);
+   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => {
+-    void server.close().catch(error => { console.error(error); process.exitCode = 1; });
++    clearInterval(timer);
++    void Promise.all([server.close(), mountain?.close()]).catch(error => {
++      console.error(error);
++      process.exitCode = 1;
++    });
+   });
+ }
+diff --git a/src/presence/za22-night-window-endpoint.ts b/src/presence/za22-night-window-endpoint.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5847f9987718ec11b27ebe54b748182fc37d600e
+--- /dev/null
++++ b/src/presence/za22-night-window-endpoint.ts
+@@ -0,0 +1,40 @@
++import type { RequestListener } from 'node:http';
++import { townNightWindowPath } from '../shared/za22-mountain-domain.js';
++import { createOrdinaryTownNightSchedule, createTownNightWindow } from '../shared/town-night-window.js';
++
++export function createZa22NightWindowEndpoint(options?: {
++  dawnEpoch: number;
++  offsetsAfterDusk: readonly number[];
++  now?: () => number;
++}, fallback?: RequestListener) {
++  const now = options?.now ?? Date.now;
++  const scheduleAt = options ? createOrdinaryTownNightSchedule({
++    dawnEpoch: options.dawnEpoch,
++    beaconOffsetsAfterDusk: options.offsetsAfterDusk,
++    cueFreshnessMs: 3_000,
++  }) : () => undefined;
++  const state = createTownNightWindow({ now, scheduleAt });
++  const tick = () => {
++    const snapshot = state.snapshot();
++    if (snapshot.phase === 'awaiting-beacon' && snapshot.beaconAt !== null) state.recordBeacon(snapshot.beaconAt);
++  };
++  const listener: RequestListener = (request, response) => {
++    if (request.url !== townNightWindowPath) {
++      if (fallback) fallback(request, response);
++      else response.writeHead(404).end();
++      return;
++    }
++    if (request.method !== 'GET') {
++      response.writeHead(405, { allow: 'GET' }).end();
++      return;
++    }
++    tick();
++    const timestamp = now();
++    const snapshot = state.snapshot();
++    response.writeHead(200, {
++      'cache-control': 'no-store',
++      'content-type': 'application/json; charset=utf-8',
++    }).end(JSON.stringify({ ...snapshot, now: timestamp }));
++  };
++  return { listener, tick };
++}
+diff --git a/src/shared/town-night-window.ts b/src/shared/town-night-window.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..c48319365bb707bba1ee61516aef50dade6434bc
+--- /dev/null
++++ b/src/shared/town-night-window.ts
+@@ -0,0 +1,126 @@
++export const townDayMs = 10 * 60_000;
++export const townDaylightMs = 6 * 60_000;
++export const townLayerOverlapMs = 60_000;
++const driftDays = 12;
++
++export type TownNightSchedule = Readonly<{
++  duskAt: number;
++  beaconAt: number;
++  morningBellAt: number;
++  cueExpiresAt: number;
++}>;
++
++type OrdinaryTownNightOptions = Readonly<{
++  dawnEpoch: number;
++  beaconOffsetsAfterDusk: readonly number[];
++  cueFreshnessMs: number;
++}>;
++
++function isEpoch(value: number) {
++  return Number.isSafeInteger(value) && value >= 0;
++}
++
++/** Ordinary day phase from the authoritative calendar origin. */
++export function isOrdinaryTownNight(now: number, dawnEpoch: number): boolean | undefined {
++  if (!Number.isFinite(now) || !isEpoch(dawnEpoch) || now < dawnEpoch) return;
++  return (now - dawnEpoch) % townDayMs >= townDaylightMs;
++}
++
++/** Supply the approved drift table. The host can substitute its real-time New Year's Eve schedule. */
++export function createOrdinaryTownNightSchedule({ dawnEpoch, beaconOffsetsAfterDusk, cueFreshnessMs }: OrdinaryTownNightOptions) {
++  const offsets = [...beaconOffsetsAfterDusk];
++  const nightMs = townDayMs - townDaylightMs;
++  if (!isEpoch(dawnEpoch) || !isEpoch(cueFreshnessMs) || cueFreshnessMs === 0 || offsets.length !== driftDays ||
++      offsets.some(offset => !isEpoch(offset) || offset === 0 || offset + Math.max(townLayerOverlapMs, cueFreshnessMs) > nightMs)) {
++    throw new RangeError('Invalid town night schedule');
++  }
++  return (now: number): TownNightSchedule | undefined => {
++    if (!isEpoch(now) || now < dawnEpoch) return;
++    const day = Math.floor((now - dawnEpoch) / townDayMs);
++    const duskAt = dawnEpoch + day * townDayMs + townDaylightMs;
++    const beaconAt = duskAt + offsets[day % driftDays];
++    const morningBellAt = duskAt + nightMs;
++    if (!isEpoch(morningBellAt)) return;
++    return { duskAt, beaconAt, morningBellAt, cueExpiresAt: beaconAt + cueFreshnessMs };
++  };
++}
++
++export type TownNightWindowState = Readonly<{
++  phase: 'day' | 'awaiting-beacon' | 'night-window';
++  shift: 'day' | 'night';
++  canEnterRestricted: boolean;
++  layersOverlap: boolean;
++  chapterGatesLocked: true;
++  beaconAt: number | null;
++  morningBellAt: number | null;
++}>;
++
++type TownNightWindowHost = Readonly<{
++  /** The authoritative host clock, shared by all players in this town. */
++  now: () => number;
++  scheduleAt: (now: number) => TownNightSchedule | undefined;
++  /** Synchronously commit the latest receipt before publishing the one-shot cue. */
++  saveBeacon?: (at: number) => void;
++}>;
++
++function validSchedule(schedule: TownNightSchedule | undefined): schedule is TownNightSchedule {
++  return Boolean(schedule && isEpoch(schedule.duskAt) && isEpoch(schedule.beaconAt) &&
++    isEpoch(schedule.cueExpiresAt) && isEpoch(schedule.morningBellAt) &&
++    schedule.duskAt < schedule.beaconAt && schedule.beaconAt < schedule.cueExpiresAt &&
++    schedule.cueExpiresAt <= schedule.morningBellAt);
++}
++
++function windowState(now: number, schedule: TownNightSchedule | undefined, receivedAt: number | null): TownNightWindowState {
++  const inNight = schedule !== undefined && now >= schedule.duskAt && now < schedule.morningBellAt;
++  const open = inNight && now >= schedule.beaconAt && receivedAt === schedule.beaconAt;
++  return {
++    phase: open ? 'night-window' : inNight ? 'awaiting-beacon' : 'day',
++    shift: open ? 'night' : 'day',
++    canEnterRestricted: open,
++    layersOverlap: open && now - schedule.beaconAt < townLayerOverlapMs,
++    chapterGatesLocked: true,
++    beaconAt: schedule?.beaconAt ?? null,
++    morningBellAt: schedule?.morningBellAt ?? null,
++  };
++}
++
++/** Call once per town. Only the hosted beacon dispatcher may call recordBeacon. */
++export function createTownNightWindow(host: TownNightWindowHost, restoredBeaconAt: number | null = null) {
++  if (restoredBeaconAt !== null && !isEpoch(restoredBeaconAt)) throw new RangeError('Invalid town beacon receipt');
++  let receivedAt = restoredBeaconAt;
++  let lastClock = 0;
++  let recording = false;
++
++  function sample() {
++    const read = host.now();
++    if (!isEpoch(read)) return { now: lastClock, schedule: undefined };
++    lastClock = Math.max(lastClock, read);
++    const schedule = host.scheduleAt(lastClock);
++    return { now: lastClock, schedule: validSchedule(schedule) ? schedule : undefined };
++  }
++
++  return {
++    recordBeacon(at: number) {
++      if (recording || (receivedAt !== null && at <= receivedAt)) return;
++      const { now, schedule } = sample();
++      if (!schedule || at !== schedule.beaconAt || now < at || now >= schedule.cueExpiresAt) return;
++      recording = true;
++      try {
++        host.saveBeacon?.(at);
++        receivedAt = at;
++      } finally {
++        recording = false;
++      }
++      return { kind: 'town-night-beacon' as const, at, expiresAt: schedule.cueExpiresAt, state: windowState(now, schedule, receivedAt) };
++    },
++    /** Reconnect reads the current state without emitting a cue. */
++    snapshot() {
++      const { now, schedule } = sample();
++      return windowState(now, schedule, receivedAt);
++    },
++  };
++}
++
++export function allowsTownNightTransit(state: TownNightWindowState, direction: 'enter' | 'stay' | 'exit') {
++  return direction !== 'enter' || state.canEnterRestricted;
++}
+diff --git a/src/shared/za22-mountain-domain.ts b/src/shared/za22-mountain-domain.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..d844be0b87cf236efa7947567fd5776adaee22dc
+--- /dev/null
++++ b/src/shared/za22-mountain-domain.ts
+@@ -0,0 +1,12 @@
++// The front ridge uses the existing unsigned centimetre wire format in its own room.
++export const mountainPresencePath = '/presence-mountain';
++export const townNightWindowPath = '/presence/night-window';
++export const mountainPresenceNorthOrigin = 540;
++export const mountainPresenceBounds = Object.freeze({ width: 640, depth: 260, height: 655.35 });
++
++export function isMountainPresenceFoot(east: number, north: number, height: number) {
++  return Number.isFinite(east) && east >= 0 && east <= mountainPresenceBounds.width &&
++    Number.isFinite(north) && north >= mountainPresenceNorthOrigin &&
++    north <= mountainPresenceNorthOrigin + mountainPresenceBounds.depth &&
++    Number.isFinite(height) && height >= 0 && height <= mountainPresenceBounds.height;
++}
+diff --git a/tests/server/za22-night-window-endpoint.test.ts b/tests/server/za22-night-window-endpoint.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..c300f64a840c1835a693f57b06e9aaa7a67ba115
+--- /dev/null
++++ b/tests/server/za22-night-window-endpoint.test.ts
+@@ -0,0 +1,45 @@
++import assert from 'node:assert/strict';
++import { createServer } from 'node:http';
++import type { AddressInfo } from 'node:net';
++import { test } from 'node:test';
++import { createZa22NightWindowEndpoint } from '../../src/presence/za22-night-window-endpoint.js';
++import {
++  isMountainPresenceFoot, mountainPresenceNorthOrigin, townNightWindowPath,
++} from '../../src/shared/za22-mountain-domain.js';
++
++test('the town HTTP authority opens after the received bell and closes at morning', async t => {
++  const dawnEpoch = 2_000_000;
++  let now = dawnEpoch + 419_999;
++  const { listener, tick } = createZa22NightWindowEndpoint({
++    dawnEpoch,
++    offsetsAfterDusk: Array(12).fill(60_000),
++    now: () => now,
++  });
++  const server = createServer(listener);
++  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
++  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
++  const addr = `http://127.0.0.1:${(server.address() as AddressInfo).port}${townNightWindowPath}`;
++  assert.equal((await fetch(addr, { method: 'POST' })).status, 405);
++  const before = await fetch(addr);
++  assert.equal(before.headers.get('cache-control'), 'no-store');
++  assert.equal((await before.json()).canEnterRestricted, false);
++  now++;
++  tick();
++  const opened = await (await fetch(addr)).json();
++  assert.equal(opened.canEnterRestricted, true);
++  assert.equal(opened.beaconAt, now);
++  assert.equal(opened.chapterGatesLocked, true);
++  now += 60_000;
++  const noOverlap = await (await fetch(addr)).json();
++  assert.equal(noOverlap.layersOverlap, false);
++  assert.equal(noOverlap.canEnterRestricted, true);
++  now = dawnEpoch + 600_000;
++  assert.equal((await (await fetch(addr)).json()).canEnterRestricted, false);
++});
++
++test('mountain wire admission accepts both surveyed stops and rejects unencodable poses', () => {
++  assert.equal(isMountainPresenceFoot(336, 640, 347), true);
++  assert.equal(isMountainPresenceFoot(300, 666, 347), true);
++  assert.equal(isMountainPresenceFoot(526, mountainPresenceNorthOrigin - .01, 26), false);
++  assert.equal(isMountainPresenceFoot(300, 676, 800), false);
++});
+diff --git a/tests/town-blockout-za22-cloud-route.test.ts b/tests/town-blockout-za22-cloud-route.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..056cd6beb46d9354035d8d12c7540c8c57879655
+--- /dev/null
++++ b/tests/town-blockout-za22-cloud-route.test.ts
+@@ -0,0 +1,66 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudRunway, za22CloudSurfaceAt, za22StationApproach } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
++import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
++
++test('the front line follows three surveyed stations on one opposed-car clock', () => {
++  const line = createZa22NorthRidgeLine(26);
++  const epoch = Date.UTC(2026, 0, 1);
++  assert.deepEqual(line.pointAt(0), { east: 526, north: 329, height: 26 });
++  assert.deepEqual(line.pointAt(line.lowerMetres), { east: 440, north: 520, height: 140 });
++  assert.deepEqual(line.pointAt(line.length), { east: 336, north: 640, height: 347 });
++  assert.ok(line.length > 490 && line.length < 545, `witnessed line ${line.length} m`);
++  assert.equal(line.timeline(epoch + 500, 0).boarding, 'base');
++  assert.equal(line.timeline(epoch + 500, 1).boarding, 'summit');
++  assert.equal(line.timeline(epoch + 8001, 0).boarding, undefined);
++  for (let time = 8000; time < line.legMs; time += 100) {
++    const upward = line.timeline(epoch + time, 0);
++    const downward = line.timeline(epoch + time, 1);
++    assert.equal(upward.direction, 'up');
++    assert.equal(downward.direction, 'down');
++    assert.equal(upward.arrivalAt, epoch + line.legMs);
++  }
++  assert.ok(line.points.slice(1, -1).every(point => point.height >= sampleNorthRidge350(point.east, point.north)));
++  assert.equal(line.timeline(epoch + line.legMs, 0).boarding, 'summit');
++  assert.equal(line.timeline(epoch + line.legMs, 1).boarding, 'base');
++});
++
++test('the shared front floor reaches the surveyed cloud connection and the runway without a step', () => {
++  const path = [[336, 640], [336, 663.25], [300, 663.25], [300, 665.9]] as const;
++  for (let part = 1; part < path.length; part++) {
++    const a = path[part - 1]!, b = path[part]!;
++    const steps = Math.ceil(Math.hypot(a[0] - b[0], a[1] - b[1]) / .09);
++    for (let i = 0; i <= steps; i++) {
++      const f = i / steps;
++      assert.equal(za22CloudSurfaceAt(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), 347);
++    }
++  }
++  for (let east = za22CloudRunway.end; east <= za22CloudRunway.start; east += .25) {
++    assert.equal(za22CloudSurfaceAt(east, za22CloudRunway.north + 2.2), 347);
++    assert.equal(za22CloudSurfaceAt(east, za22CloudRunway.north - 2.2), 347);
++  }
++  assert.equal(za22CloudSurfaceAt(300, 666), undefined);
++  assert.equal(za22CloudSurfaceAt(350, 654), undefined);
++});
++
++test('boarding comes only from the legal station approach and authoritative night state', () => {
++  let night = false;
++  const cloud = createZa22CloudRoute({
++    now: () => Date.UTC(2026, 0, 1) + 20_000, nightOpen: () => night,
++    enterOrExit() { assert.fail('must not transfer'); }, view() { assert.fail('must not interact'); },
++  });
++  assert.equal(cloud.action(za22StationApproach), undefined);
++  night = true;
++  assert.equal(cloud.action({ ...za22StationApproach, height: 27.7 }), undefined);
++  assert.equal(cloud.action({ ...za22StationApproach, north: 320 }), undefined);
++  const board = cloud.action(za22StationApproach);
++  assert.equal(board?.label, '乘缆车一线前往云海台');
++  board?.run();
++  cloud.update(za22StationApproach);
++  assert.match(cloud.action(za22StationApproach)?.label ?? '', /等候前山缆车/);
++  assert.ok(!cloud.active());
++  night = false;
++  cloud.update(za22StationApproach);
++  night = true;
++  assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
++});
+diff --git a/tools/Caddyfile.town-preview b/tools/Caddyfile.town-preview
+index 00a56610b365de4b6446664345b57741b52528f7..e8f0db49c112ae5ecff1941904f3e030c3e097b1 100644
+--- a/tools/Caddyfile.town-preview
++++ b/tools/Caddyfile.town-preview
+@@ -2,7 +2,13 @@
+     encode zstd gzip
+     root * /srv
+     respond /healthz "town-preview {$TOWN_RELEASE:local}" 200
+-    reverse_proxy /presence* presence:8090
++    @mountain path /presence-mountain /presence-mountain/*
++    handle @mountain {
++        uri replace /presence-mountain /presence
++        reverse_proxy presence:8091
++    }
++    @townPresence path /presence /presence/*
++    reverse_proxy @townPresence presence:8090
+     @entry path / /town-blockout.html
+     header @entry Cache-Control "no-cache"
+     rewrite / /town-blockout.html
+diff --git a/tools/Dockerfile.town-preview b/tools/Dockerfile.town-preview
+index 6b71fd3d34f189bd58b091fe616bc94f55688038..1b6c3436e389a2859f1e14f10bc217e5a47e8b28 100644
+--- a/tools/Dockerfile.town-preview
++++ b/tools/Dockerfile.town-preview
+@@ -4,6 +4,7 @@ COPY tools/voxel-tavern/package.json tools/voxel-tavern/package-lock.json ./
+ # The preview uses published builds; the upstream protocol's installer requires pnpm in its own source repo.
+ RUN npm ci --ignore-scripts --no-audit --no-fund
+ COPY docs/p0-layout-draft.json /app/docs/p0-layout-draft.json
++COPY tools/fixtures/main-summit-snow-belt-survey.json /app/tools/fixtures/main-summit-snow-belt-survey.json
+ COPY tools/voxel-tavern/ ./
+ COPY src/presence/ /app/src/presence/
+ COPY src/shared/ /app/src/shared/
+diff --git a/tools/Dockerfile.town-preview.dockerignore b/tools/Dockerfile.town-preview.dockerignore
+index a0ac37ed46402cd54e1de348ef077fddae5e9556..31198c52184d521c33745a0f8b125d7cb76e0240 100644
+--- a/tools/Dockerfile.town-preview.dockerignore
++++ b/tools/Dockerfile.town-preview.dockerignore
+@@ -13,6 +13,8 @@
+ !src/shared/*.ts
+ !tools/
+ !tools/Caddyfile.town-preview
++!tools/fixtures/
++!tools/fixtures/main-summit-snow-belt-survey.json
+ !tools/voxel-tavern/
+ !tools/voxel-tavern/package.json
+ !tools/voxel-tavern/package-lock.json
+diff --git a/tools/compose.town-preview.yaml b/tools/compose.town-preview.yaml
+index 616c979ded8f24477b4be939a485dbb0edd6e640..75b892d5a97d0e800a973b895da9537abed8b5cd 100644
+--- a/tools/compose.town-preview.yaml
++++ b/tools/compose.town-preview.yaml
+@@ -33,12 +33,16 @@ services:
+     environment:
+       PRESENCE_HOST: "0.0.0.0"
+       PRESENCE_PORT: "8090"
++      PRESENCE_MOUNTAIN_PORT: "8091"
++      TOWN_NIGHT_DAWN_EPOCH: "${TOWN_NIGHT_DAWN_EPOCH:-}"
++      TOWN_NIGHT_OFFSETS_AFTER_DUSK: "${TOWN_NIGHT_OFFSETS_AFTER_DUSK:-}"
+       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
+       TEST_FIREWORKS: "${TEST_FIREWORKS:-off}"
+       TOWN_REHEARSAL_AT: "${TOWN_REHEARSAL_AT:-}"
+       OWNER_KEY: "${OWNER_KEY:-}"
+     expose:
+       - "8090"
++      - "8091"
+     logging:
+       driver: json-file
+       options:
+diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..65602e91a7ba0677ffec991fce528da7ee40149e
+--- /dev/null
++++ b/tools/verify-za22-live.mjs
+@@ -0,0 +1,322 @@
++import assert from 'node:assert/strict';
++import { mkdir, writeFile } from 'node:fs/promises';
++import { join } from 'node:path';
++import { chromium } from '@playwright/test';
++
++const [origin, output, segment = 'all'] = process.argv.slice(2);
++assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
++const url = new URL('/?profile', origin);
++assert.equal(url.protocol, 'http:');
++assert.equal(url.hostname, '127.0.0.1');
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
++
++const spawn = [223, 180];
++const station = [
++  [245, 192], [251, 192], [278, 192], [304, 192], [315, 199], [319, 230], [332, 245],
++  [350, 249], [382, 220], [398, 207], [410, 207], [427, 214], [445, 221], [456, 222],
++  [453, 254], [473, 276], [506, 286], [526, 312], [526, 317.15], [536.8, 317.15],
++];
++const westShore = [
++  [192, 180], [161, 181], [151, 156], [127, 140], [108, 114], [85, 131], [77, 164], [1, 159],
++];
++const cloudStop = [336, 640];
++const cloudRunway = [[336, 657], [326.82, 657]];
++const crater = [[-12, 159], [-40, 159], [-67, 159], [-71, 159]];
++const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683], [307.25, 683]];
++const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
++assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
++const viewport = { width, height };
++const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? .25);
++assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
++const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
++const maxDrag = Math.round(width * .34);
++const tau = 2 * Math.PI;
++const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
++const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
++const hardware = process.env.ZA22_HARDWARE === '1';
++const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
++  : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
++const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
++
++await mkdir(output, { recursive: true });
++let browser;
++let lastPage;
++let measuring = true;
++
++async function openTown(name) {
++  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
++  const page = await context.newPage();
++  lastPage = page;
++  const evidence = { name, checkpoints: [], sockets: [], poses: [] };
++  report.paths.push(evidence);
++  page.on('pageerror', error => { if (measuring) report.pageErrors.push(String(error)); });
++  page.on('console', message => {
++    if (measuring && message.type() === 'error') report.consoleErrors.push({ text: message.text(), url: message.location().url });
++  });
++  page.on('requestfailed', request => {
++    if (measuring) report.requestFailures.push({ url: request.url(), error: request.failure()?.errorText });
++  });
++  page.on('response', response => {
++    if (measuring && response.status() >= 400) report.httpErrors.push({ url: response.url(), status: response.status() });
++  });
++  page.on('websocket', socket => {
++    const socketPath = new URL(socket.url()).pathname;
++    if (!socketPath.startsWith('/presence')) return;
++    const mountain = socketPath.startsWith('/presence-mountain');
++    const west = socketPath.startsWith('/presence-west');
++    evidence.sockets.push(socket.url());
++    socket.on('framesent', ({ payload }) => {
++      if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
++      evidence.poses.push({
++        ms: Date.now(),
++        east: payload.readUInt16LE(2) / 100 - (west ? 240 : 0),
++        north: payload.readUInt16LE(4) / 100 + (mountain ? 540 : 0),
++        area: mountain ? 'mountain' : west ? 'west' : 'town',
++        height: payload.readUInt16LE(6) / 100 - (west ? 64 : 0),
++        yaw: payload.readUInt16LE(8) * tau / 65536,
++        seq: payload.readUInt16LE(10),
++      });
++    });
++  });
++  await page.addInitScript(() => {
++    // Use the production drag fallback for consistent native mouse input in headless Chromium.
++    // Only the browser API is made unavailable. All movement still runs through the viewer.
++    Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
++    // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
++    localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
++    document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
++  });
++  const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
++  assert.equal(response?.status(), 200);
++  assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
++  await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
++  await page.waitForFunction(pattern => {
++    const hud = document.querySelector('#position')?.textContent ?? '';
++    return new RegExp(pattern).test(hud) && window.__za22Frame?.calls > 0;
++  }, positionPattern.source, { timeout: 90_000 });
++  if (!report.gpu) report.gpu = await page.evaluate(() => {
++    const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
++    const names = gl?.getExtension('WEBGL_debug_renderer_info');
++    return names ? { vendor: gl.getParameter(names.UNMASKED_VENDOR_WEBGL),
++      renderer: gl.getParameter(names.UNMASKED_RENDERER_WEBGL) } : null;
++  });
++  const start = await readPose(page);
++  assert.ok(Math.hypot(start.east - spawn[0], start.north - spawn[1]) < .3, JSON.stringify(start));
++  assert.ok(Math.abs(start.height - 12) < .3, JSON.stringify(start));
++  await page.locator('#scene canvas').click({ position: { x: Math.round(width * .35), y: dragY } });
++  await waitForWire(page, evidence);
++  evidence.checkpoints.push({ label: 'spawn', ...start, wire: evidence.poses.at(-1) });
++  console.log(JSON.stringify({ phase: 'spawn', east: start.east, north: start.north, y: start.height }));
++  return { page, evidence };
++}
++
++async function readPose(page) {
++  const frame = await page.evaluate(() => ({
++    hud: document.querySelector('#position')?.textContent ?? '',
++    cameraY: window.__za22Frame?.cameraY,
++    action: document.querySelector('#world-action')?.textContent ?? '',
++    status: document.querySelector('#town-presence-status')?.textContent ?? '',
++  }));
++  const point = positionPattern.exec(frame.hud);
++  return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
++    height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100 : undefined };
++}
++
++async function waitForWire(page, evidence, predicate = pose => Boolean(pose), timeoutMs = 12_000) {
++  const deadline = Date.now() + timeoutMs;
++  while (!predicate(evidence.poses.at(-1)) && Date.now() < deadline) await page.waitForTimeout(35);
++  const pose = evidence.poses.at(-1);
++  assert.ok(predicate(pose), `No expected pose from the real presence socket: ${JSON.stringify(pose)}`);
++  return pose;
++}
++
++async function face(page, evidence, desired) {
++  for (let attempt = 0; attempt < 16; ++attempt) {
++    const before = await waitForWire(page, evidence);
++    const delta = yawDistance(before.yaw, desired);
++    if (Math.abs(delta) <= .009) return;
++    const dx = Math.max(-maxDrag, Math.min(maxDrag, Math.round(delta / .003)));
++    const anchor = await page.evaluate(({ width, height, dx, attempt }) => {
++      const canvas = document.querySelector('#scene canvas');
++      const candidates = [[.48, .51], [.41, .37], [.40, .61], [.56, .45], [.37, .48]];
++      for (let index = 0; index < candidates.length; ++index) {
++        const [cx, cy] = candidates[(index + attempt) % candidates.length];
++        const x = Math.round(width * cx), y = Math.round(height * cy);
++        if (x + dx > 0 && x + dx < width && document.elementFromPoint(x, y) === canvas) return { x, y };
++      }
++    }, { width, height, dx, attempt });
++    assert.ok(anchor, 'The canvas needs an unobstructed native mouse target');
++    await page.mouse.move(anchor.x, anchor.y);
++    await page.mouse.down();
++    try { await page.mouse.move(anchor.x + dx, anchor.y, { steps: Math.max(2, Math.ceil(Math.abs(dx) / 55)) }); }
++    finally { await page.mouse.up(); }
++    // Sample the actual view. Native pointer coordinates may be rounded at a fractional raster scale.
++    const until = Date.now() + 800;
++    while (evidence.poses.at(-1)?.seq === before.seq && Date.now() < until) await page.waitForTimeout(30);
++    await page.waitForTimeout(120);
++  }
++  assert.fail(`Native mouse drag could not face ${desired}`);
++}
++
++async function walkTo(page, evidence, target, label) {
++  const [east, north] = target;
++  let after = await readPose(page);
++  for (let attempt = 0; attempt < 6; ++attempt) {
++    assert.ok(Number.isFinite(after.east) && Number.isFinite(after.north), JSON.stringify(after));
++    const from = after;
++    const dx = east - from.east, dn = north - from.north;
++    const distance = Math.hypot(dx, dn);
++    if (distance <= .46) {
++      evidence.checkpoints.push({ label, target, ...from, wire: evidence.poses.at(-1) });
++      console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
++      return;
++    }
++    const desired = Math.atan2(dx, dn);
++    await face(page, evidence, desired);
++    // For small final corrections use the slow backward movement, avoiding double-W sprint.
++    const backwards = distance < 1.4;
++    if (backwards) await face(page, evidence, desired + Math.PI);
++    const key = backwards ? 's' : 'w';
++    const fast = distance > 9;
++    if (fast) await page.keyboard.down('Shift');
++    await page.keyboard.down(key);
++    try {
++      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance }) => {
++        const point = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
++        if (!point) return false;
++        const x = Number(point[1]), n = Number(point[2]);
++        if (Math.hypot(x - east, n - north) <= .32) return true;
++        const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
++        return forward >= distance;
++      }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
++      { timeout: Math.ceil(30_000 + distance * 1000) });
++    } catch (error) {
++      const stopped = await readPose(page);
++      throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}`, { cause: error });
++    } finally {
++      await page.keyboard.up(key);
++      if (fast) await page.keyboard.up('Shift');
++    }
++    after = await readPose(page);
++  }
++  assert.fail(`Native walking did not settle at ${label}: ${JSON.stringify(after)}`);
++}
++
++async function follow(page, evidence, knots, prefix) {
++  for (const [index, target] of knots.entries()) await walkTo(page, evidence, target, `${prefix}-${index + 1}`);
++}
++
++async function action(page, label, timeout = 20_000) {
++  await page.waitForFunction(text => {
++    const button = document.querySelector('#world-action');
++    return button && !button.hidden && button.textContent.includes(text);
++  }, label, { timeout });
++  await page.keyboard.press('e');
++}
++
++async function card(page, title) {
++  await page.waitForFunction(text => {
++    const label = document.querySelector('#place-title');
++    return label?.closest('dialog')?.open && label.textContent.includes(text);
++  }, title, { timeout: 12_000 });
++}
++
++async function snapshot(page, evidence, label) {
++  await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
++  evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
++}
++
++try {
++  browser = await chromium.launch({
++    headless: true,
++    executablePath: process.env.CHROMIUM_PATH || undefined,
++    args: graphicsArgs,
++  });
++  report.browser = browser.version();
++  if (segment !== 'crater') {
++    const { page, evidence } = await openTown('cable');
++    await follow(page, evidence, station, 'station');
++    if (segment === 'station') {
++      await action(page, '老闸');
++      await card(page, '北岭缆车');
++      await snapshot(page, evidence, 'station');
++    } else {
++      await action(page, '乘缆车一线前往云海台', 620_000);
++      await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
++        null, { timeout: 135_000 });
++      await snapshot(page, evidence, 'cable-boarding');
++      await page.waitForFunction(() => {
++        const riding = document.querySelector('#position')?.textContent?.includes('缆车一线');
++        const height = window.__za22Frame?.cameraY;
++        return riding && height > 80 && height < 300;
++      }, null, { timeout: 90_000 });
++      await snapshot(page, evidence, 'cable-moving');
++
++      await page.waitForFunction(({ pattern, destination }) => {
++        const pose = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
++        return pose && Math.hypot(Number(pose[1]) - destination[0], Number(pose[2]) - destination[1]) < 1
++          && Math.abs((window.__za22Frame?.cameraY ?? 0) - 348.65) < .55;
++      }, { pattern: positionPattern.source, destination: cloudStop }, { timeout: 210_000 });
++      await waitForWire(page, evidence, pose => pose?.area === 'mountain' && Math.abs(pose.height - 347) < .7);
++      await snapshot(page, evidence, 'cloud-cable-arrival');
++      if (segment === 'cloud' || segment === 'all') {
++        await follow(page, evidence, cloudRunway, 'cloud-runway');
++        await action(page, '查看星港坪装配和起飞线');
++        await card(page, '星港坪');
++        await snapshot(page, evidence, 'cloud-runway');
++      }
++      if (segment === 'gate' || segment === 'all') {
++        if (segment === 'all') {
++          await page.keyboard.press('Escape');
++          await walkTo(page, evidence, cloudRunway[0], 'return-to-cloud-walkway');
++        }
++        await follow(page, evidence, gate, 'gate');
++        await action(page, '查看山门班次');
++        await card(page, '山门');
++        await snapshot(page, evidence, 'mountain-gate');
++      }
++    }
++  }
++  if (segment === 'crater' || segment === 'all') {
++    const { page, evidence } = await openTown('crater');
++    await follow(page, evidence, westShore, 'west-shore');
++    await follow(page, evidence, crater, 'crater');
++    await face(page, evidence, -Math.PI / 2);
++    const rim = await readPose(page);
++    assert.ok(rim.east < -70.55 && Math.abs(rim.north - 159) < .5 && Math.abs(rim.height - 10.7773) < .5,
++      JSON.stringify(rim));
++    await snapshot(page, evidence, 'crater-entrance');
++    await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -70.55);
++    const gateWindow = await page.waitForFunction(async () => {
++      const response = await fetch('/presence/night-window', { cache: 'no-store' });
++      if (!response.ok) return false;
++      const state = await response.json();
++      return state.canEnterRestricted && state.morningBellAt - state.now > 15_000 ? state : false;
++    }, null, { polling: 600, timeout: 620_000 });
++    evidence.craterWindow = await gateWindow.jsonValue();
++    await gateWindow.dispose();
++    await walkTo(page, evidence, [-72.1, 159], 'crater-crossed-lip');
++    await waitForWire(page, evidence, pose => pose?.area === 'west' && pose.east < -71.8);
++    await face(page, evidence, -Math.PI / 2);
++    await snapshot(page, evidence, 'crater-inside');
++    await walkTo(page, evidence, [-67, 159], 'crater-return');
++    await snapshot(page, evidence, 'crater-return');
++  }
++  assert.equal(report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length, 0);
++} catch (error) {
++  report.failure = error instanceof Error ? error.stack : String(error);
++  if (lastPage && !lastPage.isClosed()) {
++    try {
++      report.lastPose = await readPose(lastPage);
++      await lastPage.screenshot({ path: join(output, 'failed-position.png'), timeout: 10_000 });
++    } catch {}
++  }
++  process.exitCode = 1;
++} finally {
++  measuring = false;
++  report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
++  await writeFile(join(output, 'za22-live-walk.json'), `${JSON.stringify(report, null, 2)}\n`);
++  console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
++    frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
++  await browser?.close();
++}
+diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..5362af4e0a4c28cb74d4f2e4090c792560a47950
+--- /dev/null
++++ b/tools/verify-za22-local.mjs
+@@ -0,0 +1,166 @@
++import assert from 'node:assert/strict';
++import { execFile, spawn } from 'node:child_process';
++import { createReadStream, existsSync } from 'node:fs';
++import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
++import { createServer, request } from 'node:http';
++import { createRequire } from 'node:module';
++import { connect } from 'node:net';
++import { dirname, extname, join, resolve, sep } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { promisify } from 'node:util';
++
++const [segment, evidencePath] = process.argv.slice(2);
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment) && evidencePath,
++  'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
++const run = promisify(execFile);
++const repo = fileURLToPath(new URL('../', import.meta.url));
++const viewer = join(repo, 'tools', 'voxel-tavern');
++const output = resolve(evidencePath);
++await mkdir(output, { recursive: true });
++const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
++const web = join(temporary, 'web');
++const compiled = join(temporary, 'server');
++const cwdRequire = createRequire(join(repo, 'package.json'));
++const viewerRequire = createRequire(join(viewer, 'package.json'));
++const vite = join(dirname(viewerRequire.resolve('vite/package.json')), 'bin', 'vite.js');
++const tsc = join(dirname(cwdRequire.resolve('typescript/package.json')), 'bin', 'tsc');
++const hardware = process.env.ZA22_HARDWARE === '1';
++const installedChrome = process.platform === 'win32' ? [
++  'C:/Program Files/Google/Chrome/Application/chrome.exe',
++  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
++].find(existsSync) : undefined;
++const chrome = process.env.CHROMIUM_PATH || installedChrome;
++const host = '127.0.0.1';
++const media = new Map([
++  ['.html', 'text/html; charset=utf-8'], ['.js', 'text/javascript; charset=utf-8'],
++  ['.json', 'application/json'], ['.css', 'text/css; charset=utf-8'],
++  ['.glb', 'model/gltf-binary'], ['.png', 'image/png'], ['.webp', 'image/webp'],
++  ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.svg', 'image/svg+xml'],
++  ['.mp3', 'audio/mpeg'], ['.ogg', 'audio/ogg'], ['.wav', 'audio/wav'],
++]);
++let frontend;
++let presence;
++let driver;
++const sockets = new Set();
++
++function startNode(args, env, additional = {}) {
++  return spawn(process.execPath, args, { cwd: repo, env: { ...process.env, ...env },
++    windowsHide: true, stdio: 'inherit', ...additional });
++}
++
++function finish(child) {
++  return new Promise((done, reject) => {
++    child.once('error', reject);
++    child.once('exit', (code, signal) => code === 0 ? done() : reject(new Error(`Node exited ${code ?? signal}`)));
++  });
++}
++
++async function usePort(server) {
++  await new Promise((done, reject) => server.once('error', reject).listen(0, host, done));
++  return server.address().port;
++}
++
++async function freePort() {
++  const reservation = createServer();
++  const port = await usePort(reservation);
++  await new Promise(done => reservation.close(done));
++  return port;
++}
++
++function routePresence(url, ports) {
++  const pathname = new URL(url, 'http://127.0.0.1').pathname;
++  if (pathname === '/presence-mountain' || pathname.startsWith('/presence-mountain/'))
++    return { hostname: host, port: ports.mountain, path: url.replace(/^\/presence-mountain/, '/presence') };
++  if (pathname === '/presence-west' || pathname.startsWith('/presence-west/'))
++    return { hostname: host, port: ports.west, path: url.replace(/^\/presence-west/, '/presence') };
++  if (pathname === '/presence' || pathname.startsWith('/presence/'))
++    return { hostname: host, port: ports.town, path: url };
++  return undefined;
++}
++
++function servePreview(ports, commit) {
++  const server = createServer((incoming, outgoing) => {
++    const route = routePresence(incoming.url, ports);
++    if (route) {
++      const forwarded = request({ ...route, method: incoming.method, headers: incoming.headers }, response => {
++        outgoing.writeHead(response.statusCode, response.headers);
++        response.pipe(outgoing);
++      });
++      forwarded.on('error', () => {
++        if (!outgoing.headersSent) outgoing.writeHead(502);
++        outgoing.end();
++      });
++      incoming.pipe(forwarded);
++      return;
++    }
++    const pathname = decodeURIComponent(new URL(incoming.url, 'http://127.0.0.1').pathname);
++    if (pathname === '/healthz') { outgoing.end(`town-preview ${commit}`); return; }
++    if (pathname === '/favicon.ico' && !existsSync(join(web, 'favicon.ico'))) { outgoing.writeHead(204).end(); return; }
++    const root = pathname.startsWith('/models/') ? join(repo, 'public') : web;
++    const file = resolve(root, pathname === '/' ? 'town-blockout.html' : pathname.slice(1));
++    if (!file.startsWith(root + sep)) { outgoing.writeHead(404).end(); return; }
++    stat(file).then(info => {
++      if (!info.isFile()) { outgoing.writeHead(404).end(); return; }
++      outgoing.writeHead(200, { 'content-type': media.get(extname(file)) ?? 'application/octet-stream',
++        'content-length': info.size });
++      if (incoming.method === 'HEAD') outgoing.end();
++      else createReadStream(file).on('error', () => outgoing.destroy()).pipe(outgoing);
++    }).catch(() => outgoing.writeHead(404).end());
++  });
++  server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
++  server.on('upgrade', (incoming, downstream, head) => {
++    const route = routePresence(incoming.url, ports);
++    if (!route) { downstream.destroy(); return; }
++    const upstream = connect(route.port, route.hostname, () => {
++      const rows = [`${incoming.method} ${route.path} HTTP/${incoming.httpVersion}`];
++      for (let i = 0; i < incoming.rawHeaders.length; i += 2)
++        rows.push(`${incoming.rawHeaders[i]}: ${incoming.rawHeaders[i + 1]}`);
++      upstream.write(rows.join('\r\n') + '\r\n\r\n');
++      if (head.length) upstream.write(head);
++      downstream.pipe(upstream).pipe(downstream);
++    });
++    upstream.on('error', () => downstream.destroy());
++    downstream.on('close', () => upstream.destroy());
++  });
++  return server;
++}
++
++async function waitForPresence(url, child) {
++  for (let attempt = 0; attempt < 120; ++attempt) {
++    if (child.exitCode !== null) throw new Error(`Presence exited ${child.exitCode}`);
++    try { if ((await fetch(url, { signal: AbortSignal.timeout(1_000) })).ok) return; } catch {}
++    await new Promise(done => setTimeout(done, 250));
++  }
++  throw new Error('Live Presence was not ready after 30 seconds');
++}
++
++try {
++  const { stdout } = await run('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true });
++  const commit = stdout.trim();
++  await writeFile(join(output, 'source-commit.txt'), `${commit}\n`);
++  const tree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout;
++  await writeFile(join(output, 'source-tree.txt'), tree);
++  await finish(startNode([vite, 'build', '--mode', 'town-preview', '--outDir', web], {}, { cwd: viewer }));
++  await finish(startNode([tsc, '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext',
++    '--strict', '--skipLibCheck', '--rootDir', 'src', '--outDir', compiled, 'src/presence/index.ts'], {}));
++  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort() };
++  frontend = servePreview(ports, commit);
++  const port = await usePort(frontend);
++  const base = `http://${host}:${port}`;
++  presence = startNode([join(compiled, 'presence', 'index.js')], {
++    NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
++    PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
++    TOWN_NIGHT_DAWN_EPOCH: String(Date.now() - 390_000),
++    TOWN_NIGHT_OFFSETS_AFTER_DUSK: JSON.stringify(Array(12).fill(60_000)),
++  });
++  await waitForPresence(new URL('/presence/night-window', base), presence);
++  driver = startNode([join(repo, 'tools', 'verify-za22-live.mjs'), base, output, segment], {
++    ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
++  });
++  await finish(driver);
++} finally {
++  for (const child of [driver, presence]) if (child?.exitCode === null) child.kill();
++  for (const socket of sockets) socket.destroy();
++  frontend?.close();
++  await rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
++}
+diff --git a/tools/voxel-tavern/town-blockout/town-presence-avatars.ts b/tools/voxel-tavern/town-blockout/town-presence-avatars.ts
+index 37fe2594be1c7ddbc5436abf47d94f5b0842c06b..1d11a229a40b8467421df12b788f8d2060741494 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence-avatars.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence-avatars.ts
+@@ -39,6 +39,7 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
+   heightAt: (east: number, north: number) => number = () => 0): {
+   render(actors: readonly PresenceAvatarActor[], readBubble?: ReadBubble, view?: PerspectiveCamera, showNames?: boolean): void;
+   clear(): void;
++  setScene(owner: Scene): void;
+   setHighlight(id: number | null): void;
+ } {
+   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), capacity * partCount);
+@@ -287,6 +288,9 @@ export function createPresenceAvatars(scene: Scene, camera: PerspectiveCamera,
+ 
+   return {
+     render, clear,
++    setScene(owner) {
++      if (mesh.parent !== owner) owner.add(mesh, sledMesh);
++    },
+     setHighlight(id: number | null) { highlightId = id; },
+   };
+ }
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+index b52846ac32b69d463fc342d74bd70645e6ce1dd0..a7c1ebbcc0cb9080947d045b865d8a844c5640e1 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -33,6 +33,10 @@ import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
+ import {
+   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
+ } from '../../../src/shared/summit-passport';
++import {
++  isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath, townNightWindowPath,
++} from '../../../src/shared/za22-mountain-domain';
++import type { TownNightWindowState } from '../../../src/shared/town-night-window';
+ 
+ type Actor = PresencePose & {
+   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
+@@ -156,6 +160,7 @@ export function createTownPresence(
+   let joinedName: string | undefined;
+   let serverEpochOffset: number | undefined;
+   let avatars: ReturnType<typeof createPresenceAvatars> | undefined;
++  let avatarScene = scene;
+   let socket: WebSocket | undefined;
+   /** 当前 WS 尝试是否已完成入镇（用于区分「静默探测失败」与「在线掉线」）。 */
+   let socketJoined = false;
+@@ -173,6 +178,12 @@ export function createTownPresence(
+   let retryAt: number | undefined;
+   let retryIndex = 0;
+   let inTown = false;
++  let mountainDomain = false;
++  let nightWindow: (TownNightWindowState & { now: number }) | undefined;
++  let lastNightRead = -Infinity;
++  let refreshNightAfter = -Infinity;
++  let readingNight = false;
++  const presencePath = (path: string) => mountainDomain ? mountainPresencePath + path.slice('/presence'.length) : path;
+   let show = false;
+   let haveId = false;
+   let insideSharedHome = false;
+@@ -183,6 +194,39 @@ export function createTownPresence(
+   let lastHeightYaw = -1;
+   let moving = false;
+ 
++  function readNightWindow() {
++    const time = performance.now();
++    if (!readingNight && time >= refreshNightAfter) {
++      readingNight = true;
++      refreshNightAfter = time + 4_000;
++      void fetch(townNightWindowPath, { cache: 'no-store' }).then(async response => {
++        if (!response.ok) return;
++        const value = await response.json() as Partial<TownNightWindowState> & { now?: number };
++        if (Number.isSafeInteger(value.now) &&
++            (value.beaconAt === null || Number.isSafeInteger(value.beaconAt)) &&
++            (value.morningBellAt === null || Number.isSafeInteger(value.morningBellAt)) &&
++            typeof value.canEnterRestricted === 'boolean' && typeof value.layersOverlap === 'boolean' &&
++            (value.phase === 'day' || value.phase === 'awaiting-beacon' || value.phase === 'night-window') &&
++            (value.shift === 'day' || value.shift === 'night') && value.chapterGatesLocked === true) {
++          nightWindow = value as TownNightWindowState & { now: number };
++          lastNightRead = time;
++        }
++      }).catch(() => { /* Keep the prior snapshot only until its freshness limit. */ }).finally(() => {
++        readingNight = false;
++      });
++    }
++    if (!nightWindow || time - lastNightRead > 8_000) return;
++    const now = nightWindow.now + time - lastNightRead;
++    const sameNight = nightWindow.morningBellAt !== null && now < nightWindow.morningBellAt;
++    return {
++      ...nightWindow,
++      now,
++      canEnterRestricted: nightWindow.canEnterRestricted && sameNight,
++      layersOverlap: nightWindow.layersOverlap && sameNight && nightWindow.beaconAt !== null &&
++        now < nightWindow.beaconAt + 60_000,
++    };
++  }
++
+   function updateStatus() {
+     if (!status) return;
+     link.setPeople(roster.size + (haveId ? 1 : 0));
+@@ -245,7 +289,7 @@ export function createTownPresence(
+     if (!active) return;
+     window.clearInterval(active.timer);
+     if (sendLeave && active.session) {
+-      void fetch(POLL_LEAVE_URL, {
++      void fetch(presencePath(POLL_LEAVE_URL), {
+         method: 'POST', headers: { 'x-presence-session': active.session }, keepalive: true,
+       }).catch(() => { /* 离线离开时服务端会按轮询超时回收会话。 */ });
+     }
+@@ -273,7 +317,7 @@ export function createTownPresence(
+ 
+   async function pollJoin(channel: PollChannel): Promise<boolean> {
+     try {
+-      const response = await fetch(POLL_JOIN_URL, {
++      const response = await fetch(presencePath(POLL_JOIN_URL), {
+         method: 'POST', headers: { 'content-type': 'application/json' },
+         body: JSON.stringify({ name: getName() }),
+       });
+@@ -307,7 +351,7 @@ export function createTownPresence(
+     const events = channel.outEvents;
+     channel.outEvents = [];
+     try {
+-      const response = await fetch(POLL_URL, {
++      const response = await fetch(presencePath(POLL_URL), {
+         method: 'POST',
+         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
+         body: buildPollBody(state, events),
+@@ -324,7 +368,8 @@ export function createTownPresence(
+         return;
+       }
+       if (!response.ok) throw new Error('poll failed');
+-      feedPollMessages(await response.json());
++      const payload: unknown = await response.json();
++      if (poll === channel) feedPollMessages(payload);
+     } catch {
+       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
+       if (poll === channel) requeuePollEvents(channel.outEvents, events);
+@@ -626,7 +671,8 @@ export function createTownPresence(
+     const stamp = ++epoch;
+     const time = performance.now();
+     let mascotSeen = false;
+-    const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
++    const valid = visitPresenceSnapshot(data, (id, east, localNorth, height, yaw, sequence) => {
++      const north = localNorth + (mountainDomain ? mountainPresenceNorthOrigin : 0);
+       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
+       if (id === MASCOT_ACTOR_ID) {
+         mascotSeen = true;
+@@ -651,7 +697,7 @@ export function createTownPresence(
+   function connect() {
+     try {
+       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+-      const ws = new WebSocket(`${protocol}//${location.host}/presence`);
++      const ws = new WebSocket(`${protocol}//${location.host}${presencePath('/presence')}`);
+       socket = ws;
+       socketJoined = false;
+       // 备用通道在跑时这是后台探测：不把 HUD 翻回「连接中」，探测成功才切回。
+@@ -679,7 +725,10 @@ export function createTownPresence(
+     const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
+     if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
+     remaining = remaining > -interval ? remaining + interval : interval;
+-    writePresencePose(local, seq, outgoing);
++    if (mountainDomain) {
++      if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
++      writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
++    } else writePresencePose(local, seq, outgoing);
+     const position = outgoing.getUint32(2, true);
+     const heightYaw = outgoing.getUint32(6, true);
+     const changed = position !== lastPosition || heightYaw !== lastHeightYaw;
+@@ -811,6 +860,22 @@ export function createTownPresence(
+ 
+   return {
+     serverNow: clock.now,
++    readNightWindow,
++    northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
++    setMountainDomain(enabled: boolean, mountainScene?: Scene) {
++      if (mountainDomain === enabled) return;
++      resetRetry();
++      disconnect(true);
++      mountainDomain = enabled;
++      avatarScene = enabled && mountainScene ? mountainScene : scene;
++      avatars?.setScene(avatarScene);
++      lastPosition = lastHeightYaw = -1;
++      remaining = 0;
++      if (inTown) {
++        link.enterTown();
++        scheduleConnection();
++      }
++    },
+     summitPassportAvailable: () => haveId && summitPassportSupported,
+     requestSummitPassport(action: SummitPassportAction) {
+       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
+@@ -854,7 +919,7 @@ export function createTownPresence(
+       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
+     },
+     renderPlazaPhoto(people: readonly PlazaPhotoPerson[], view: PerspectiveCamera, showNames: boolean) {
+-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
++      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
+       avatars.render(people.map(person => ({ ...person, yaw: Math.PI })), undefined, view, showNames);
+     },
+     selfId: () => joinedId,
+@@ -953,7 +1018,7 @@ export function createTownPresence(
+       syncActivityPoses();
+       drainEvents();
+       if (!show || !actors.size) { renderList.length = 0; avatars?.clear(); return; }
+-      avatars ??= createPresenceAvatars(scene, camera, heightAt);
++      avatars ??= createPresenceAvatars(avatarScene, camera, heightAt);
+       avatars.setHighlight(bellHolderId);
+       const now = performance.now();
+       renderList.length = 0;
+diff --git a/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts b/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..3c2b9da9ba207de989f9e6a273976b077812ba37
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts
+@@ -0,0 +1,252 @@
++import {
++  AmbientLight, BoxGeometry, BufferGeometry, Color, DirectionalLight, Fog, Group, Line, LineBasicMaterial,
++  Mesh, MeshLambertMaterial, Scene, Vector3,
++} from 'three';
++import {
++  mountMainSummitAssembly, summitAssemblyAnchor, supportsCloudTerrace,
++} from './main-summit-assembly';
++import { createNorthRidgeCableClock } from './north-ridge-cable-clock';
++import { createNorthRidge350Block, northRidgeCableAnchors, sampleNorthRidge350 } from './north-ridge-350-terrain';
++
++type Point = Readonly<{ east: number; north: number; height: number }>;
++type Terminal = 'base' | 'summit';
++type Action = { label: string; run(): void };
++type Host = {
++  now(): number;
++  nightOpen(): boolean;
++  enterOrExit(terminal: Terminal, at: Point): void;
++  view(title: string, message: string): void;
++};
++
++export const za22StationApproach = { east: 536.8, north: 317.15, height: 26.14 };
++export const za22CloudRunway = { start: 331, end: 288.5, north: 662, width: 4.4 };
++const terminalDwell = 8_000;
++const roofClearance = 3.5;
++const summitSeamNorth = 666;
++const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
++const assemblyBench = { east: 324, north: 657, width: 3.9, depth: 1.8, top: .87 };
++const benchVisitor = { east: 326.82, north: 657, height: 347 };
++const fullEpoch = Date.UTC(2026, 0, 1);
++const distance = (a: Point, b: Point) => Math.hypot(b.east - a.east, b.north - a.north, b.height - a.height);
++const mix = (a: number, b: number, f: number) => a + (b - a) * f;
++const near = (a: Point, b: Point, metres: number) =>
++  Math.abs(a.height - b.height) <= .55 && Math.hypot(a.east - b.east, a.north - b.north) <= metres;
++
++export function createZa22NorthRidgeLine(baseHeight: number) {
++  const [[baseEast, baseNorth], [midEast, midNorth]] = northRidgeCableAnchors;
++  const station = [
++    { east: baseEast, north: baseNorth, height: baseHeight },
++    { east: midEast, north: midNorth, height: 140 },
++    cloudTerminal,
++  ] as const;
++  const points: Point[] = [station[0]];
++  const measure: number[] = [0];
++  let length = 0;
++  let lowerMetres = 0;
++  for (let part = 0; part < station.length - 1; part++) {
++    const a = station[part]!, b = station[part + 1]!;
++    const steps = Math.ceil(distance(a, b) / 2);
++    for (let step = 1; step <= steps; step++) {
++      const f = step / steps;
++      const east = mix(a.east, b.east, f), north = mix(a.north, b.north, f);
++      const linear = mix(a.height, b.height, f);
++      const point = f === 1 ? b : { east, north, height: Math.max(linear,
++        sampleNorthRidge350(east, north) + roofClearance * Math.sin(Math.PI * f)) };
++      length += distance(points.at(-1)!, point);
++      points.push(point);
++      measure.push(length);
++    }
++    if (!part) lowerMetres = length;
++  }
++  const clock = createNorthRidgeCableClock(lowerMetres, length - lowerMetres, 0);
++  const legMs = terminalDwell + clock.oneWayMs;
++  const cycleMs = 2 * legMs;
++
++  function pointAt(along: number) {
++    const index = measure.findIndex(mark => mark >= along);
++    if (index <= 0) return index === 0 ? points[0]! : points.at(-1)!;
++    const a = points[index - 1]!, b = points[index]!;
++    const f = (along - measure[index - 1]!) / (measure[index]! - measure[index - 1]!);
++    return { east: mix(a.east, b.east, f), north: mix(a.north, b.north, f), height: mix(a.height, b.height, f) };
++  }
++
++  function timeline(now: number, index: 0 | 1) {
++    const phase = ((now - fullEpoch + index * legMs) % cycleMs + cycleMs) % cycleMs;
++    const descending = phase >= legMs;
++    const legPhase = descending ? phase - legMs : phase;
++    const transit = descending ? clock.oneWayMs : 0;
++    const state = clock.cabinsAt(transit + Math.max(0, legPhase - terminalDwell))[0];
++    const at = pointAt(state.distanceMetres);
++    // The opposing cars occupy parallel rope lanes, converging only at separate end stations.
++    const side = index === 0 ? -1.55 : 1.55;
++    return {
++      at: { ...at, east: at.east + side }, direction: descending ? 'down' as const : 'up' as const,
++      station: legPhase < terminalDwell ? descending ? 'summit' as const : 'base' as const : state.station,
++      boarding: legPhase < terminalDwell ? descending ? 'summit' as const : 'base' as const : undefined,
++      arrivalAt: now + legMs - legPhase,
++    };
++  }
++  return { points, pointAt, timeline, length, lowerMetres, legMs, cycleMs };
++}
++
++export function za22CloudSurfaceAt(east: number, north: number, radius = .27) {
++  const localEast = east - summitAssemblyAnchor.east;
++  const localNorth = north - summitAssemblyAnchor.north;
++  const landing = Math.abs(east - cloudTerminal.east) <= 4 - radius &&
++    Math.abs(north - cloudTerminal.north) <= 4 - radius;
++  const apron = east >= za22CloudRunway.end - 2 + radius && east <= 339 - radius && north >= 654 + radius &&
++    north <= 664.65 - radius;
++  if (north < summitSeamNorth && (landing || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
++    return sampleNorthRidge350(east, north);
++  }
++}
++
++export function createZa22CloudRoute(host: Host) {
++  const line = createZa22NorthRidgeLine(26);
++  const scene = new Scene();
++  scene.background = new Color('#aebfd2');
++  scene.fog = new Fog('#aebfd2', 170, 1400);
++  scene.add(new AmbientLight('#d6e3f2', 1.25));
++  const sunlight = new DirectionalLight('#fff4df', 1.7);
++  sunlight.position.set(-80, 120, 50);
++  scene.add(sunlight);
++  let world: ReturnType<typeof mountMountain> | undefined;
++  let mode: 'town' | 'riding' | 'summit' = 'town';
++  let pending: Terminal | undefined;
++  let ride: { index: 0 | 1; arrivalAt: number; to: Terminal } | undefined;
++
++  function mountMountain() {
++    const owner = new Group();
++    scene.add(owner);
++    const front = new Group();
++    front.name = 'za22-front-ridge-detail';
++    owner.add(front);
++    const terrain = createNorthRidge350Block(sampleNorthRidge350, 4);
++    front.add(terrain.mesh);
++    const assembly = mountMainSummitAssembly(owner, fullEpoch);
++    const iron = new MeshLambertMaterial({ color: '#4c606b' });
++    const brass = new MeshLambertMaterial({ color: '#b59669' });
++    const wood = new MeshLambertMaterial({ color: '#59483e' });
++    const boxGeometry = new BoxGeometry();
++    function box(group: Group, material: MeshLambertMaterial, east: number, north: number, height: number,
++      width: number, depth: number, tall: number) {
++      const mesh = new Mesh(boxGeometry, material);
++      mesh.position.set(east, height, -north);
++      mesh.scale.set(width, tall, depth);
++      group.add(mesh);
++    }
++    for (const index of [0, 1] as const) {
++      const shift = index === 0 ? -1.55 : 1.55;
++      const geometry = new BufferGeometry().setFromPoints(line.points.map(p => new Vector3(p.east + shift, p.height + 2.7, -p.north)));
++      front.add(new Line(geometry, new LineBasicMaterial({ color: '#445560' })));
++    }
++    const cabins = [0, 1].map(() => {
++      const cabin = new Group();
++      // The viewing bay is open between corner posts rather than covered by opaque panes.
++      for (const x of [-1, 1]) for (const n of [-1.35, 1.35]) box(cabin, iron, x, n, 1.12, .10, .10, 2.24);
++      box(cabin, wood, 0, 0, -.08, 2.2, 2.9, .16);
++      box(cabin, iron, 0, 0, 2.22, 2.2, 2.9, .16);
++      box(cabin, brass, 0, 0, 2.5, .13, .13, .42);
++      for (const side of [-1, 1]) box(cabin, wood, side, 0, .29, .10, 2.9, .58);
++      front.add(cabin);
++      return cabin;
++    });
++    for (const east of [cloudTerminal.east - 4, cloudTerminal.east + 4]) {
++      box(front, iron, east, 639, cloudTerminal.height + 1.65, .18, .20, 3.3);
++    }
++    box(front, wood, cloudTerminal.east, 639, cloudTerminal.height + 3.31, 8.45, 1.6, .16);
++    const run = za22CloudRunway;
++    for (let x = run.end + 2; x < run.start - 1; x += 4) {
++      box(front, brass, x, run.north, za22CloudSurfaceAt(x, run.north) ?? 347, 1.6, .16, .045);
++    }
++    for (const x of [run.start, run.end]) {
++      box(front, brass, x, run.north, za22CloudSurfaceAt(x, run.north) ?? 347, .20, run.width, .045);
++    }
++    for (const dx of [-1.55, 1.55]) box(front, iron, assemblyBench.east + dx, assemblyBench.north, 347.36, .22, 1.45, .72);
++    box(front, wood, assemblyBench.east, assemblyBench.north, 347.78, assemblyBench.width, assemblyBench.depth, .18);
++    box(front, brass, assemblyBench.east, assemblyBench.north, 347.89, 2.35, .85, .05);
++    for (let north = 641; north <= 663; north += 2) {
++      box(front, iron, 336, north, sampleNorthRidge350(336, north), .64, .36, .043);
++    }
++    for (let east = 302; east < 336; east += 2) {
++      box(front, iron, east, 663.25, sampleNorthRidge350(east, 663.25), .36, .64, .043);
++    }
++    return { owner, terrain, assembly, cabins, front, boxGeometry, materials: [iron, brass, wood] };
++  }
++
++  function disposeMountain() {
++    if (!world) return;
++    world.assembly.dispose();
++    world.terrain.dispose();
++    world.boxGeometry.dispose();
++    world.materials.forEach(material => material.dispose());
++    for (const child of world.front.children) if (child instanceof Line) {
++      child.geometry.dispose();
++      child.material.dispose();
++    }
++    world.owner.removeFromParent();
++    world = undefined;
++  }
++
++  function action(position: Point): Action | undefined {
++    if (mode === 'riding') return;
++    if (mode === 'town') {
++      if (!host.nightOpen() || !near(position, za22StationApproach, 1.55)) return;
++      return pending
++        ? { label: '等候前山缆车 · 取消候车', run() { pending = undefined; } }
++        : { label: '乘缆车一线前往云海台', run() { pending = 'base'; } };
++    }
++    if (near(position, cloudTerminal, 1.8)) return pending
++      ? { label: '等候返程缆车 · 取消候车', run() { pending = undefined; } }
++      : { label: '乘缆车一线返回山脚站', run() { pending = 'summit'; } };
++    if (near(position, benchVisitor, 1.45)) return {
++      label: '查看星港坪装配和起飞线',
++      run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标起飞线出坪。'); },
++    };
++  }
++
++  function update(position: Point) {
++    const now = host.now();
++    if (pending && (!near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8)
++        || (pending === 'base' && !host.nightOpen()))) pending = undefined;
++    if (pending && !ride) {
++      const from = pending;
++      const index = ([0, 1] as const).find(candidate => line.timeline(now, candidate).boarding === from);
++      if (index !== undefined) {
++        world ??= mountMountain();
++        pending = undefined;
++        const trip = line.timeline(now, index);
++        ride = { index, arrivalAt: trip.arrivalAt, to: from === 'base' ? 'summit' : 'base' };
++        mode = 'riding';
++      }
++    }
++    if (ride && now >= ride.arrivalAt) {
++      const to = ride.to;
++      ride = undefined;
++      mode = to === 'summit' ? 'summit' : 'town';
++      host.enterOrExit(to, to === 'summit' ? cloudTerminal : za22StationApproach);
++      if (to === 'base') disposeMountain();
++    }
++    world?.assembly.update(now);
++    world?.cabins.forEach((cabin, index) => {
++      const at = line.timeline(now, index === 0 ? 0 : 1).at;
++      cabin.position.set(at.east, at.height, -at.north);
++    });
++  }
++
++  return {
++    scene, action, update,
++    active: () => mode !== 'town',
++    riding: () => ride !== undefined,
++    ridePoint: () => ride && line.timeline(host.now(), ride.index).at,
++    surfaceAt: za22CloudSurfaceAt,
++    assembly: () => world?.assembly,
++    front: () => world?.front,
++    blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
++      if (Math.abs(east - assemblyBench.east) < assemblyBench.width / 2 + radius &&
++          Math.abs(north - assemblyBench.north) < assemblyBench.depth / 2 + radius &&
++          feet < 347 + assemblyBench.top - .025) return true;
++      return world?.assembly.blocked(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, feet, radius, bodyHeight) ?? false;
++    },
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index f4bb47c255c8664bb102449d484c758d26984f79..fed3667384e8b0580dd83f1a80f0d2cd990a0676 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -26,6 +26,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
+ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
+ import { addTerrainMeshes } from './terrain-mesh';
+ import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
++import { createZa22CloudRoute } from './town-za22-cloud-route';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -204,6 +205,25 @@ if (mountSummitSkyline) {
+ }
+ const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
+   (east, north) => grid.heightAt(east, north));
++const cloudRoute = createZa22CloudRoute({
++  now: presence.serverNow,
++  nightOpen: () => presence.northRidgeNightOpen(),
++  enterOrExit(terminal, at) {
++    presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
++    x = at.east;
++    n = at.north;
++    ground = at.height;
++    airHeight = undefined;
++    riseSpeed = 0;
++    keys.clear();
++    walkClock.reset();
++    storeWalkView(walkCurrent);
++    walkPrevious.copy(walkCurrent);
++    yaw = 0;
++    pitch = 0;
++  },
++  view: (title, message) => { activityContext.open(title, message); },
++});
+ const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, townFar);
+ const plazaCanvasSize = new Vector2();
+ const railway = createTownRailway(grid, presence.serverNow);
+@@ -568,6 +588,7 @@ function geometry() {
+ }
+ let walkGeometry = geometry();
+ function geometryAt(east: number, north: number) {
++  if (cloudRoute.active()) return emptyGeometry;
+   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
+ }
+ function outdoorGeometryAt(east: number, north: number) {
+@@ -2045,6 +2066,7 @@ function openTavernSeatActions() {
+ const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+ function currentAction() {
+   if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
++  if (cloudRoute.active()) return cloudRoute.action({ east: x, north: n, height: ground });
+   if (boardingGround) {
+     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
+     const stop = railway.currentStop;
+@@ -2077,6 +2099,8 @@ function currentAction() {
+       ridePitch = 0;
+     } };
+   }
++  const cable = cloudRoute.action({ east: x, north: n, height: ground });
++  if (cable) return cable;
+   const nearest = nearestTownActivity(activitySpots, x, n, ground);
+   if (nearest) return nearest;
+   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
+@@ -2162,7 +2186,7 @@ function lookAllowed() {
+   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
+     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
+ }
+-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !plazaPhoto.locked(); }
++function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked(); }
+ function skatesOnIce() {
+   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
+     Math.abs(ground - grid.heightAt(x, n)) <= .16;
+@@ -2311,6 +2335,7 @@ let previous = performance.now();
+ let snowMoveScale = 1;
+ let chillMoveScale = 1;
+ function walkable(x: number, n: number) {
++  if (cloudRoute.active()) return cloudRoute.surfaceAt(x, n, bodyRadius) !== undefined;
+   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
+ }
+ function outdoorWalkable(x: number, n: number) {
+@@ -2324,6 +2349,7 @@ const surfaceEpsilon = .025;
+ const gravity = 22;
+ const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
+ function surfaceAt(east: number, north: number) {
++  if (cloudRoute.active()) return cloudRoute.surfaceAt(east, north, bodyRadius) ?? ground;
+   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+ }
+ function outdoorSurfaceAt(east: number, north: number) {
+@@ -2333,7 +2359,7 @@ function snowCleared(east: number, north: number, feet: number) {
+   return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
+ }
+ function waterAtFeet() {
+-  if (homeReturn || airHeight !== undefined) return undefined;
++  if (cloudRoute.active() || homeReturn || airHeight !== undefined) return undefined;
+   const water = townWater.at(x, n);
+   return water && Math.abs(ground - water.ground) < .25 ? water : undefined;
+ }
+@@ -2438,6 +2464,7 @@ function supportAt(
+ }
+ 
+ function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
++  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+@@ -2742,10 +2769,71 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
+ }
+ 
+ presence.onCeremonyArrival(arrival => arriveAtCeremony(arrival, performance.now()));
++function walkingAxes() {
++  const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
++  const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
++  const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
++  return { forward, right, sprint };
++}
++
++function refreshWorldAction() {
++  const action = currentAction();
++  actionButton.hidden = !action;
++  const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
++  if (label !== actionButton.textContent) actionButton.textContent = label;
++}
++
++function renderCloudRoute(frameSeconds: number) {
++  const cabin = cloudRoute.ridePoint();
++  if (cabin) {
++    faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
++    element('position').textContent = '缆车一线 · 前山';
++  } else {
++    const { forward, right, sprint } = walkingAxes();
++    const speed = (sprint ? 11.3 : 7.5) / Math.max(1, Math.hypot(forward, right));
++    const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
++    const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
++    const interpolation = walkClock.advance(frameSeconds, () => {
++      walkPrevious.copy(walkCurrent);
++      if (moveAllowed()) {
++        const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
++        if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
++        stepJump(townPhysicsDelta);
++      }
++      storeWalkView(walkCurrent);
++    });
++    walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
++    faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
++    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 云海台`;
++  }
++  presence.sample(!cabin && walking, x, n, airHeight ?? ground, yaw);
++  presence.update(Math.min(.25, frameSeconds));
++  const enabled = moveAllowed();
++  touchWalk.setAllowed(enabled);
++  crosshair.hidden = !lookAllowed();
++  touchJump.hidden = !enabled || !touchWalk.active();
++  touchJump.disabled = !canJump();
++  touchSprintButton.hidden = !enabled || !touchWalk.active();
++  museumMapButton.hidden = true;
++  refreshWorldAction();
++  renderer.render(cloudRoute.scene, camera);
++  if (profileTown) {
++    renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
++      frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
++      triangles: renderer.info.render.triangles, cameraY: camera.position.y,
++    } }));
++  }
++}
++
+ renderer.setAnimationLoop(now => {
+   const frameSeconds = Math.max(0, now - previous) / 1000;
+   const dt = Math.min(.25, frameSeconds);
+   previous = now;
++  cloudRoute.update({ east: x, north: n, height: ground });
++  if (cloudRoute.active()) {
++    renderCloudRoute(frameSeconds);
++    return;
++  }
+   practiceTarget.updateRound();
+   const startEast = x, startNorth = n;
+   if (ceremonyLook) {
+@@ -2806,9 +2894,7 @@ renderer.setAnimationLoop(now => {
+     faceFrom(seated.x, seated.n, seated.eyeY, seated.yaw, seated.pitch);
+     element('position').textContent = '已就座';
+   } else if (walking) {
+-    const forward = Number(forwardHeld()) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + touchWalk.axes.forward;
+-    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + touchWalk.axes.right;
+-    const sprint = forward > .12 && (doubleForward || keys.has('ShiftLeft') || keys.has('ShiftRight') || touchWalk.sprinting);
++    const { forward, right, sprint } = walkingAxes();
+     const movementStartedAt = performance.now();
+     storeWalkView(walkRender);
+     if (!walkRender.equals(walkCurrent)) {
+@@ -3126,10 +3212,7 @@ renderer.setAnimationLoop(now => {
+   touchJump.disabled = sledRide.active() ? sledRide.airborne() : !canJump();
+   touchSprintButton.hidden = !moveAllowed() || !touchWalk.active();
+   museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+-  const action = currentAction();
+-  actionButton.hidden = !action;
+-  const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
+-  if (label !== actionButton.textContent) actionButton.textContent = label;
++  refreshWorldAction();
+   const groupPhotoFrame = plazaPhoto.update({
+     east: x, north: n, height: ground,
+     active: canControl && !homeReturn && !boardingGround && airHeight === undefined && !museumOverlay(),

@@ -1,0 +1,664 @@
+diff --git a/.github/workflows/verify-za22-live.yml b/.github/workflows/verify-za22-live.yml
+index 805f4b3e20b89b0ac0244f54c9a041468ed9e710..bd4a4dab8740eefdd795bd2c643d027a8fcda32e 100644
+--- a/.github/workflows/verify-za22-live.yml
++++ b/.github/workflows/verify-za22-live.yml
+@@ -69,6 +69,7 @@ jobs:
+           dawn="$(node -p 'Date.now() - 390000')"
+           docker run -d --name za22-presence --network za22 --network-alias presence \
+             -e PRESENCE_MOUNTAIN_PORT=8091 \
++            -e PRESENCE_WEST_PORT=8092 \
+             -e "TOWN_NIGHT_DAWN_EPOCH=$dawn" \
+             -e 'TOWN_NIGHT_OFFSETS_AFTER_DUSK=[60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000]' \
+             za22-presence
+diff --git a/src/presence/start.ts b/src/presence/start.ts
+index 6717dff0d8b76b4c7cdc500777dfe3a9bf81ba2a..bac51ba4b753b13f36efb294a99deb27c660bf04 100644
+--- a/src/presence/start.ts
++++ b/src/presence/start.ts
+@@ -2,6 +2,7 @@ import { createPresenceServer } from './server.js';
+ import type { RequestListener } from 'node:http';
+ import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
+ import { createZa22NightWindowEndpoint } from './za22-night-window-endpoint.js';
++import { westPresenceBounds } from '../shared/za22-west-domain.js';
+ 
+ export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
+   const host = process.env.PRESENCE_HOST ?? '0.0.0.0';
+@@ -21,18 +22,14 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
+     requestListener: night.listener,
+     ceremonyStartAt,
+   });
+-  let mountain: Awaited<ReturnType<typeof createPresenceServer>> | undefined;
++  const separateRooms: Awaited<ReturnType<typeof createPresenceServer>>[] = [];
+   try {
+-    if (process.env.PRESENCE_MOUNTAIN_PORT) {
+-      mountain = await createPresenceServer({
+-        host,
+-        port: Number(process.env.PRESENCE_MOUNTAIN_PORT),
+-        ...mountainPresenceBounds,
+-        ceremonyStartAt: 0,
+-      });
++    for (const [port, bounds] of [[process.env.PRESENCE_MOUNTAIN_PORT, mountainPresenceBounds],
++      [process.env.PRESENCE_WEST_PORT, westPresenceBounds]] as const) {
++      if (port) separateRooms.push(await createPresenceServer({ host, port: Number(port), ...bounds, ceremonyStartAt: 0 }));
+     }
+   } catch (error) {
+-    await server.close();
++    await Promise.allSettled([server, ...separateRooms].map(room => room.close()));
+     throw error;
+   }
+   const timer = dawn && offsets ? setInterval(night.tick, 250) : undefined;
+@@ -40,7 +37,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
+   console.log(`Town presence listening on ${server.address().port}`);
+   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => {
+     clearInterval(timer);
+-    void Promise.all([server.close(), mountain?.close()]).catch(error => {
++    void Promise.all([server, ...separateRooms].map(room => room.close())).catch(error => {
+       console.error(error);
+       process.exitCode = 1;
+     });
+diff --git a/src/shared/za22-west-domain.ts b/src/shared/za22-west-domain.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..1dd766fd2c21dfd96ffff0409ded11e053d57ce4
+--- /dev/null
++++ b/src/shared/za22-west-domain.ts
+@@ -0,0 +1,12 @@
++// B-01's western surface extension uses signed world coordinates, then translates to the existing wire frame.
++export const westPresencePath = '/presence-west';
++export const westPresenceEastOrigin = -240;
++export const westPresenceHeightOrigin = -64;
++export const westPresenceBounds = Object.freeze({ width: 240, depth: 540, height: 655.35 });
++
++export function isWestPresenceFoot(east: number, north: number, height: number) {
++  return Number.isFinite(east) && east >= westPresenceEastOrigin && east <= 0 &&
++    Number.isFinite(north) && north >= 0 && north <= westPresenceBounds.depth &&
++    Number.isFinite(height) && height >= westPresenceHeightOrigin &&
++    height <= westPresenceHeightOrigin + westPresenceBounds.height;
++}
+diff --git a/tests/town-blockout-meteor-crater-surface.test.ts b/tests/town-blockout-meteor-crater-surface.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..6371acd6df163699d8d4957227edb5e1dff63cc1
+--- /dev/null
++++ b/tests/town-blockout-meteor-crater-surface.test.ts
+@@ -0,0 +1,70 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Raycaster, Vector3 } from 'three';
++import { meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
++import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
++import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
++
++test('B-01 mounts its reviewed crater and closure in a measured, rotated surface frame', () => {
++  assert.throws(() => mountMeteorCraterSurface({ east: -110, north: 160, rimHeight: NaN, yaw: 0 }), RangeError);
++  // Survey fixture only. The point is not the live town anchor.
++  const anchor = { east: -110, north: 160, rimHeight: 14, yaw: -.41 };
++  const mounted = mountMeteorCraterSurface(anchor);
++  let previous = mounted.trailPoint(0);
++  const rim = previous;
++  assert.ok(Math.abs(rim.height - anchor.rimHeight) < .025);
++  const bearing = meteorCraterFixturePlan.mainTrail.startBearing + anchor.yaw;
++  assert.ok(Math.abs(Math.atan2(rim.east - anchor.east, rim.north - anchor.north) - bearing) < 1e-12);
++  mounted.group.updateMatrixWorld(true);
++  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
++  for (let i = 1; i <= 1500; i++) {
++    const foot = mounted.trailPoint(i / 1500);
++    const distance = Math.hypot(foot.east - previous.east, foot.north - previous.north);
++    assert.ok(Math.abs((foot.height - previous.height) / distance) <= meteorCraterFixturePlan.mainTrail.maxGrade);
++    assert.ok(foot.height <= previous.height + .001);
++    if (i % 100 === 0) {
++      ray.ray.origin.set(foot.east, anchor.rimHeight + .5, -foot.north);
++      const [visible] = ray.intersectObject(mounted.group);
++      assert.ok(visible && Math.abs(visible.point.y - foot.height) < .001, 'walk support and visible ground agree');
++    }
++    previous = foot;
++  }
++  assert.ok(Math.abs(previous.height - (anchor.rimHeight - meteorCraterDepth)) < .025);
++  assert.equal(mounted.heightAt(anchor.east, anchor.north), anchor.rimHeight - meteorCraterDepth);
++  ray.ray.origin.set(anchor.east, anchor.rimHeight + .5, -anchor.north);
++  assert.equal(ray.intersectObject(mounted.group)[0]?.object.name, 'meteor-crater-sealed-well');
++  assert.equal(mounted.heightAt(anchor.east + 90, anchor.north), undefined);
++});
++
++test('ZA-22 west entrance physically joins the existing E0 edge and the B-01 crater lip', () => {
++  const town = createTerrainGrid();
++  const road = mountWestCraterRoad(worldBounds.depth, (north) => town.groundHeightAt(0, north));
++  assert.ok(Math.abs(road.lip.east - (-120 + Math.sqrt(55 ** 2 - 26 ** 2))) < 1e-10);
++  assert.ok(Math.abs(road.lip.north - 159) < 1e-10);
++  road.group.updateMatrixWorld(true);
++  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
++  for (const north of [1, 102.25, 159, 185, 402.75, 539]) {
++    assert.equal(road.heightAt(0, north), town.groundHeightAt(0, north));
++  }
++  let last = town.heightAt(1, road.lip.north);
++  for (let e = 1; e >= road.lip.east; e -= .12) {
++    const height = e > 0 ? town.heightAt(e, road.lip.north) : road.heightAt(e, road.lip.north);
++    assert.ok(height !== undefined && Math.abs(height - last) <= .025);
++    last = height;
++    if (e < 0 && Math.round(e / .12) % 17 === 0) {
++      ray.ray.origin.set(e, last + 1, -road.lip.north);
++      assert.ok(Math.abs(ray.intersectObject(road.group)[0].point.y - last) < .001);
++    }
++  }
++  assert.ok(Math.abs(last - road.lip.height) < .025);
++  assert.equal(road.heightAt(-241, road.lip.north), undefined);
++  const outside = { east: road.lip.east + 1, north: road.lip.north };
++  const inside = { east: road.lip.east - 1, north: road.lip.north };
++  assert.equal(road.fenceBlocks(outside.east, outside.north, road.lip.height, .27), false);
++  assert.equal(road.fenceBlocks(outside.east, outside.north + 3.25, road.lip.height, .27), true);
++  assert.equal(permitsMeteorCraterStep(outside, inside, false), false);
++  assert.equal(permitsMeteorCraterStep(outside, inside, true), true);
++  assert.equal(permitsMeteorCraterStep(inside, outside, false), true);
++  assert.equal(permitsMeteorCraterStep(inside, inside, false), true);
++});
+diff --git a/tools/Caddyfile.town-preview b/tools/Caddyfile.town-preview
+index e8f0db49c112ae5ecff1941904f3e030c3e097b1..8dd20fa5c46cad9b519a03c5ecb7c9aa7de2ff38 100644
+--- a/tools/Caddyfile.town-preview
++++ b/tools/Caddyfile.town-preview
+@@ -7,6 +7,11 @@
+         uri replace /presence-mountain /presence
+         reverse_proxy presence:8091
+     }
++    @western path /presence-west /presence-west/*
++    handle @western {
++        uri replace /presence-west /presence
++        reverse_proxy presence:8092
++    }
+     @townPresence path /presence /presence/*
+     reverse_proxy @townPresence presence:8090
+     @entry path / /town-blockout.html
+diff --git a/tools/compose.town-preview.yaml b/tools/compose.town-preview.yaml
+index 75b892d5a97d0e800a973b895da9537abed8b5cd..adaf2b54a577ed77d2f8abe2d56df520d0a806f5 100644
+--- a/tools/compose.town-preview.yaml
++++ b/tools/compose.town-preview.yaml
+@@ -34,6 +34,7 @@ services:
+       PRESENCE_HOST: "0.0.0.0"
+       PRESENCE_PORT: "8090"
+       PRESENCE_MOUNTAIN_PORT: "8091"
++      PRESENCE_WEST_PORT: "8092"
+       TOWN_NIGHT_DAWN_EPOCH: "${TOWN_NIGHT_DAWN_EPOCH:-}"
+       TOWN_NIGHT_OFFSETS_AFTER_DUSK: "${TOWN_NIGHT_OFFSETS_AFTER_DUSK:-}"
+       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
+@@ -43,6 +44,7 @@ services:
+     expose:
+       - "8090"
+       - "8091"
++      - "8092"
+     logging:
+       driver: json-file
+       options:
+diff --git a/tools/voxel-tavern/town-blockout/meteor-crater-surface.ts b/tools/voxel-tavern/town-blockout/meteor-crater-surface.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..48a7628bcbcf1d2179e18f50c273b4e5e690d934
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/meteor-crater-surface.ts
+@@ -0,0 +1,78 @@
++import {
++  BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, Mesh, MeshStandardMaterial,
++} from 'three';
++import {
++  createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterRimRadius,
++} from './meteor-crater';
++
++export type MeteorCraterWorldAnchor = Readonly<{
++  east: number;
++  north: number;
++  rimHeight: number;
++  /** Clockwise radians from the live town's north to the fixture's north. */
++  yaw: number;
++}>;
++
++const crater = createMeteorCrater(meteorCraterFixturePlan);
++const shaftRadius = meteorCraterRimRadius / 30;
++const coveredRadius = shaftRadius + .03;
++
++/** Render and walk the same surveyed B-01 triangles on the ground layer. */
++export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
++  const { east, north, rimHeight, yaw } = anchor;
++  if (![east, north, rimHeight, yaw].every(Number.isFinite)) {
++    throw new RangeError('A live crater mount requires a finite B-01 anchor.');
++  }
++  const c = Math.cos(yaw), s = Math.sin(yaw);
++  const group = new Group();
++  group.name = 'meteor-crater-surface';
++  group.position.set(east, rimHeight, -north);
++  group.rotation.y = -yaw;
++
++  const surface = crater.buildPreviewSurface(shaftRadius);
++  const bowl = new BufferGeometry();
++  bowl.setAttribute('position', new BufferAttribute(surface.positions, 3));
++  bowl.setIndex(new BufferAttribute(surface.indices, 1));
++  const snow = new Color(0xc1cedc);
++  const exposedRock = new Color(0x6d6562);
++  const tone = new Color();
++  const colors = new Float32Array(surface.positions.length);
++  for (let i = 0; i < surface.positions.length; i += 3) {
++    const radial = Math.hypot(surface.positions[i], surface.positions[i + 2]);
++    const snowWeight = Math.min(1, Math.max(0, (radial - 47) / 10));
++    const grain = 0.96 + .04 * Math.sin(surface.positions[i] * 4.32 + surface.positions[i + 2] * 1.71);
++    tone.copy(exposedRock).lerp(snow, snowWeight).multiplyScalar(grain).toArray(colors, i);
++  }
++  bowl.setAttribute('color', new BufferAttribute(colors, 3));
++  bowl.computeVertexNormals();
++  const ground = new Mesh(bowl, new MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
++  ground.name = 'meteor-crater-walk-mesh';
++  group.add(ground);
++
++  // This surface mount keeps the sealed well walkable until the underground
++  // authority opens it. Do not make the neutral host grant access to the shaft.
++  const cover = new Mesh(
++    new CylinderGeometry(coveredRadius, coveredRadius, .12, 96),
++    new MeshStandardMaterial({ color: 0x544c4b, roughness: 1 }),
++  );
++  cover.name = 'meteor-crater-sealed-well';
++  cover.position.y = -meteorCraterDepth - .06;
++  group.add(cover);
++
++  function heightAt(worldEast: number, worldNorth: number) {
++    const dx = worldEast - east, dn = worldNorth - north;
++    const fixtureEast = dx * c - dn * s, fixtureNorth = dx * s + dn * c;
++    const height = surface.heightAt(fixtureEast, fixtureNorth);
++    if (height !== undefined) return rimHeight + height;
++    if (Math.hypot(fixtureEast, fixtureNorth) <= shaftRadius) return rimHeight - meteorCraterDepth;
++  }
++
++  function trailPoint(progress: number) {
++    const { east: x, north: n } = crater.mainTrailPoint(progress);
++    const worldEast = east + x * c + n * s;
++    const worldNorth = north + n * c - x * s;
++    return { east: worldEast, north: worldNorth, height: heightAt(worldEast, worldNorth)! };
++  }
++
++  return { group, heightAt, trailPoint, shaftRadius };
++}
+diff --git a/tools/voxel-tavern/town-blockout/meteor-crater.ts b/tools/voxel-tavern/town-blockout/meteor-crater.ts
+index 4db1f757dbda686725c0e087b8d0f5e4d9d1042b..0546b321d2a1b0b0d1d82a742132c77bb0f48b23 100644
+--- a/tools/voxel-tavern/town-blockout/meteor-crater.ts
++++ b/tools/voxel-tavern/town-blockout/meteor-crater.ts
+@@ -29,6 +29,16 @@ export type MeteorCraterPlan = Readonly<{
+   mainTrail: MeteorCraterTrail;
+ }>;
+ 
++/** B-01's reviewed relative shape. The enclosing town host supplies its absolute datum. */
++export const meteorCraterFixturePlan: MeteorCraterPlan = {
++  terraces: [
++    { outerRadius: 50, innerRadius: 46, depth: 7 },
++    { outerRadius: 41, innerRadius: 37, depth: 16 },
++    { outerRadius: 32, innerRadius: 27, depth: 26 },
++  ],
++  mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
++};
++
+ function positiveAngle(angle: number) {
+   const remainder = angle % fullTurn;
+   return remainder < 0 ? remainder + fullTurn : remainder;
+diff --git a/tools/voxel-tavern/town-blockout/town-expansion-review-underground.ts b/tools/voxel-tavern/town-blockout/town-expansion-review-underground.ts
+index d11e7ef8ac9bba518044593edb2ab8e77e2ff40e..7491f8d742be5eed312af48e869a985ad60246fa 100644
+--- a/tools/voxel-tavern/town-blockout/town-expansion-review-underground.ts
++++ b/tools/voxel-tavern/town-blockout/town-expansion-review-underground.ts
+@@ -1,18 +1,11 @@
+ import * as THREE from 'three';
+ import { createUndergroundEntry, type UndergroundEntryPoint } from '../../../src/presence/underground-entry.js';
+-import { createMeteorCrater, meteorCraterRimRadius, type MeteorCraterPlan } from './meteor-crater.js';
++import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater.js';
+ import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout.js';
+ import type { ExpansionView } from './town-expansion-review-renderer.js';
+ 
+ // Relative review fixtures only. Production coordinates, grade limits, and dimensions come from the host.
+-const craterPlan: MeteorCraterPlan = {
+-  terraces: [
+-    { outerRadius: 50, innerRadius: 46, depth: 7 },
+-    { outerRadius: 41, innerRadius: 37, depth: 16 },
+-    { outerRadius: 32, innerRadius: 27, depth: 26 },
+-  ],
+-  mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
+-};
++const craterPlan = meteorCraterFixturePlan;
+ const crater = createMeteorCrater(craterPlan);
+ const mineSpec: UndergroundMineSpec = {
+   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+index a7c1ebbcc0cb9080947d045b865d8a844c5640e1..7beb0323d66ad88f60144905c706cea6a1087de2 100644
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -36,7 +36,10 @@ import {
+ import {
+   isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath, townNightWindowPath,
+ } from '../../../src/shared/za22-mountain-domain';
+-import type { TownNightWindowState } from '../../../src/shared/town-night-window';
++import { townLayerOverlapMs, type TownNightWindowState } from '../../../src/shared/town-night-window';
++import {
++  isWestPresenceFoot, westPresenceEastOrigin, westPresenceHeightOrigin, westPresencePath,
++} from '../../../src/shared/za22-west-domain';
+ 
+ type Actor = PresencePose & {
+   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
+@@ -178,12 +181,15 @@ export function createTownPresence(
+   let retryAt: number | undefined;
+   let retryIndex = 0;
+   let inTown = false;
+-  let mountainDomain = false;
++  let domain: 'town' | 'mountain' | 'west' = 'town';
+   let nightWindow: (TownNightWindowState & { now: number }) | undefined;
+   let lastNightRead = -Infinity;
+   let refreshNightAfter = -Infinity;
+   let readingNight = false;
+-  const presencePath = (path: string) => mountainDomain ? mountainPresencePath + path.slice('/presence'.length) : path;
++  function presencePath(path: string) {
++    if (domain === 'town') return path;
++    return (domain === 'mountain' ? mountainPresencePath : westPresencePath) + path.slice('/presence'.length);
++  }
+   let show = false;
+   let haveId = false;
+   let insideSharedHome = false;
+@@ -223,7 +229,7 @@ export function createTownPresence(
+       now,
+       canEnterRestricted: nightWindow.canEnterRestricted && sameNight,
+       layersOverlap: nightWindow.layersOverlap && sameNight && nightWindow.beaconAt !== null &&
+-        now < nightWindow.beaconAt + 60_000,
++        now < nightWindow.beaconAt + townLayerOverlapMs,
+     };
+   }
+ 
+@@ -441,6 +447,21 @@ export function createTownPresence(
+     }
+   }
+ 
++  function switchDomain(next: typeof domain, nextScene = scene) {
++    if (domain === next) return;
++    resetRetry();
++    disconnect(true);
++    domain = next;
++    avatarScene = nextScene;
++    avatars?.setScene(avatarScene);
++    lastPosition = lastHeightYaw = -1;
++    remaining = 0;
++    if (inTown) {
++      link.enterTown();
++      scheduleConnection();
++    }
++  }
++
+   function scheduleCeremonyArrival() {
+     window.clearTimeout(ceremonyArrivalTimer);
+     if (!ceremonyArrival || !onCeremonyArrival) return;
+@@ -671,8 +692,10 @@ export function createTownPresence(
+     const stamp = ++epoch;
+     const time = performance.now();
+     let mascotSeen = false;
+-    const valid = visitPresenceSnapshot(data, (id, east, localNorth, height, yaw, sequence) => {
+-      const north = localNorth + (mountainDomain ? mountainPresenceNorthOrigin : 0);
++    const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
++      const east = localEast + (domain === 'west' ? westPresenceEastOrigin : 0);
++      const north = localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0);
++      const height = localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0);
+       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
+       if (id === MASCOT_ACTOR_ID) {
+         mascotSeen = true;
+@@ -725,9 +748,14 @@ export function createTownPresence(
+     const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
+     if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
+     remaining = remaining > -interval ? remaining + interval : interval;
+-    if (mountainDomain) {
++    if (domain === 'mountain') {
+       if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
+       writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
++    } else if (domain === 'west') {
++      if (!isWestPresenceFoot(local.east, local.north, local.height)) return;
++      writePresencePose({
++        ...local, east: local.east - westPresenceEastOrigin, height: local.height - westPresenceHeightOrigin,
++      }, seq, outgoing);
+     } else writePresencePose(local, seq, outgoing);
+     const position = outgoing.getUint32(2, true);
+     const heightYaw = outgoing.getUint32(6, true);
+@@ -863,18 +891,12 @@ export function createTownPresence(
+     readNightWindow,
+     northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
+     setMountainDomain(enabled: boolean, mountainScene?: Scene) {
+-      if (mountainDomain === enabled) return;
+-      resetRetry();
+-      disconnect(true);
+-      mountainDomain = enabled;
+-      avatarScene = enabled && mountainScene ? mountainScene : scene;
+-      avatars?.setScene(avatarScene);
+-      lastPosition = lastHeightYaw = -1;
+-      remaining = 0;
+-      if (inTown) {
+-        link.enterTown();
+-        scheduleConnection();
+-      }
++      if (enabled) switchDomain('mountain', mountainScene);
++      else if (domain === 'mountain') switchDomain('town');
++    },
++    setWestDomain(enabled: boolean) {
++      if (enabled && domain !== 'mountain') switchDomain('west');
++      else if (!enabled && domain === 'west') switchDomain('town');
+     },
+     summitPassportAvailable: () => haveId && summitPassportSupported,
+     requestSummitPassport(action: SummitPassportAction) {
+diff --git a/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..efdf650408c1a0488370a0ae34013e9f85577384
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+@@ -0,0 +1,115 @@
++import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
++import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
++import { mountMeteorCraterSurface } from './meteor-crater-surface';
++
++export const craterWestSurvey = Object.freeze({
++  west: -240, east: -120, north: 185, seamNorth: 159,
++});
++
++const seamBlendWidth = 24;
++const carrierHoleRadius = meteorCraterRimRadius + 2;
++const tileSize = 48;
++const gateRadius = meteorCraterRimRadius + .27;
++type Foot = Readonly<{ east: number; north: number }>;
++
++function inCrater(foot: Foot) {
++  return Math.hypot(foot.east - craterWestSurvey.east, foot.north - craterWestSurvey.north) < gateRadius;
++}
++
++/** The night window controls new entry. Standing inside and walking back remain legal. */
++export function permitsMeteorCraterStep(from: Foot, to: Foot, nightOpen: boolean) {
++  return !inCrater(to) || inCrater(from) || nightOpen;
++}
++
++/** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
++export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number) {
++  const survey = craterWestSurvey;
++  const rimHeight = westTownHeightAt(survey.seamNorth);
++  const northOffset = survey.seamNorth - survey.north;
++  const approachBearing = Math.atan2(Math.sqrt(meteorCraterRimRadius ** 2 - northOffset ** 2), northOffset);
++  const yaw = approachBearing - meteorCraterFixturePlan.mainTrail.startBearing;
++  const anchor = { east: survey.east, north: survey.north, rimHeight, yaw };
++  const crater = mountMeteorCraterSurface(anchor);
++  const lip = crater.trailPoint(0);
++  const group = new Group();
++  group.name = 'meteor-crater-west-road';
++  group.add(crater.group);
++
++  const tileGround = new MeshStandardMaterial({ color: 0xc1cedc, roughness: 1 });
++  const eastCount = -survey.west + 1;
++  const samples = new Float32Array(eastCount * (northLimit + 1));
++  const inside = new Uint8Array(samples.length);
++  function address(east: number, north: number) { return (east - survey.west) + north * eastCount; }
++  for (let north = 0; north <= northLimit; north++) {
++    const townHeight = westTownHeightAt(north);
++    for (let east = survey.west; east <= 0; east++) {
++      const t = Math.max(0, (east + seamBlendWidth) / seamBlendWidth);
++      const i = address(east, north);
++      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
++      inside[i] = Number(Math.hypot(east - anchor.east, north - anchor.north) < carrierHoleRadius);
++    }
++  }
++  for (let north = 0; north < northLimit; north += tileSize) {
++    for (let east = survey.west; east < 0; east += tileSize) {
++      const endN = Math.min(north + tileSize, northLimit), endE = Math.min(east + tileSize, 0);
++      const width = endE - east + 1;
++      const positions: number[] = [], indices: number[] = [];
++      for (let n = north; n <= endN; n++) {
++        for (let e = east; e <= endE; e++) {
++          const from = address(e, n);
++          positions.push(e, samples[from], -n);
++          if (e === endE || n === endN) continue;
++          const a = (e - east) + (n - north) * width;
++          const b = a + 1, c = a + width, d = c + 1;
++          if (!inside[from] && !inside[from + 1] && !inside[from + eastCount]) indices.push(a, b, c);
++          if (!inside[from + 1] && !inside[from + eastCount] && !inside[from + eastCount + 1]) indices.push(b, d, c);
++        }
++      }
++      const footprint = new BufferGeometry();
++      footprint.setAttribute('position', new Float32BufferAttribute(positions, 3));
++      footprint.setIndex(indices);
++      footprint.computeVertexNormals();
++      const mesh = new Mesh(footprint, tileGround);
++      mesh.name = 'meteor-crater-west-ground';
++      group.add(mesh);
++    }
++  }
++
++  const metal = new MeshStandardMaterial({ color: 0x73534a, roughness: 1 });
++  const leg = new BoxGeometry(.16, 2.02, .16);
++  const crossbar = new BoxGeometry(.075, .1, 2.25);
++  const fenceEast = lip.east + 1;
++  const fenceOffset = 3.25;
++  for (const side of [-1, 1]) {
++    const fenceNorth = lip.north + side * fenceOffset;
++    for (const post of [fenceNorth - 1.1, fenceNorth + 1.1]) {
++      const pillar = new Mesh(leg, metal);
++      pillar.position.set(fenceEast, lip.height + 1.01, -post);
++      group.add(pillar);
++    }
++    for (const height of [.5, 1.4]) {
++      const bar = new Mesh(crossbar, metal);
++      bar.position.set(fenceEast, lip.height + height, -fenceNorth);
++      group.add(bar);
++    }
++  }
++
++  function fenceBlocks(east: number, north: number, height: number, radius: number) {
++    return height < lip.height + 2.02 && Math.abs(east - fenceEast) < .08 + radius &&
++      Math.abs(Math.abs(north - lip.north) - fenceOffset) < 1.18 + radius;
++  }
++
++  function heightAt(east: number, north: number) {
++    if (east > 0 || east < survey.west || north < 0 || north > northLimit) return;
++    const bowl = crater.heightAt(east, north);
++    if (bowl !== undefined) return bowl;
++    const x = Math.min(-1, Math.floor(east)), n = Math.min(northLimit - 1, Math.floor(north));
++    const u = east - x, v = north - n;
++    const i = address(x, n);
++    const a = samples[i], b = samples[i + 1], c = samples[i + eastCount], d = samples[i + eastCount + 1];
++    return u + v <= 1 ? a + (b - a) * u + (c - a) * v
++      : d + (c - d) * (1 - u) + (b - d) * (1 - v);
++  }
++
++  return { group, anchor, lip, heightAt, fenceBlocks };
++}
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 13fedd9d964ce9343bf5072f5ec0d9d74c038b5f..475d9da0fa580106af0703b8e7c42e4213a7153f 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -129,6 +129,7 @@ import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-roos
+ import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
+ import { createTownLights } from './town-lights';
+ import { createTownWater, shoreJumpDepth } from './town-water';
++import { craterWestSurvey, mountWestCraterRoad, permitsMeteorCraterStep } from './town-za22-crater-road';
+ import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
+ import { findNearestLegalSpawn } from './town-spawn';
+ import { approachTownSnowScale } from './town-snow-cover';
+@@ -159,6 +160,14 @@ const townWater = createTownWater(grid);
+ const snowCover = createTownSnowField(grid);
+ let visualSnowCover = 0;
+ const scene = new Scene();
++let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
++function ensureWestCraterRoad() {
++  if (!westCraterRoad) {
++    westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
++    scene.add(westCraterRoad.group);
++  }
++  return westCraterRoad;
++}
+ scene.background = new Color('#adc2dd');
+ const weatherFog = new Fog('#adc2dd', 360, 1300);
+ scene.fog = weatherFog;
+@@ -204,7 +213,8 @@ if (mountSummitSkyline) {
+   scene.add(skyline);
+ }
+ const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
+-  (east, north) => grid.heightAt(east, north));
++  (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
++    : grid.heightAt(east, north));
+ const cloudRoute = createZa22CloudRoute({
+   now: presence.serverNow,
+   nightOpen: () => presence.northRidgeNightOpen(),
+@@ -592,6 +602,7 @@ function geometryAt(east: number, north: number) {
+   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
+ }
+ function outdoorGeometryAt(east: number, north: number) {
++  if (east < 0) return emptyGeometry;
+   const cellEast = Math.floor(east / collisionCellSize);
+   const cellNorth = Math.floor(north / collisionCellSize);
+   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
+@@ -2339,7 +2350,10 @@ function walkable(x: number, n: number) {
+   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
+ }
+ function outdoorWalkable(x: number, n: number) {
+-  const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
++  if (x < 0) return x >= craterWestSurvey.west + bodyRadius && n >= 1 && n <= worldBounds.depth - 1;
++  // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
++  const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
++  const terrainPassable = westSeam || canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
+   return terrainPassable && !scenery.blocked(x, n) && !scenery.plazaCoverBlocks(x, n, bodyRadius) && !districts.blocked(x, n) &&
+     !forest.blocked(x, n) && !streetscape.blocked(x, n);
+ }
+@@ -2353,6 +2367,7 @@ function surfaceAt(east: number, north: number) {
+   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+ }
+ function outdoorSurfaceAt(east: number, north: number) {
++  if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
+   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+ }
+ function snowCleared(east: number, north: number, feet: number) {
+@@ -2465,6 +2480,11 @@ function supportAt(
+ 
+ function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
+   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
++  if (!homeReturn && east < 0) {
++    if (!outdoorWalkable(east, north)) return true;
++    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
++    return !permitsMeteorCraterStep({ east: x, north: n }, { east, north }, presence.northRidgeNightOpen());
++  }
+   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+@@ -2474,7 +2494,8 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
+ 
+ function dryTownLandingHeight(east: number, north: number, heightHint?: number, outdoors = false) {
+   const canStand = outdoors ? outdoorWalkable : walkable;
+-  if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
++  const townWest = outdoors || !homeReturn ? craterWestSurvey.west : 0;
++  if (east < townWest + bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
+     north > worldBounds.depth - bodyRadius || !canStand(east, north)) return undefined;
+   if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
+   const surface = outdoors ? outdoorSurfaceAt(east, north) : surfaceAt(east, north);
+@@ -2999,6 +3020,7 @@ renderer.setAnimationLoop(now => {
+     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
+   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
+   const throneSeat = palaceThroneSeat();
++  presence.setWestDomain(walking && !homeReturn && x < 0);
+   presence.sample(walking,
+     boardingGround ? camera.position.x : seated?.x ?? x,
+     boardingGround ? -camera.position.z : seated?.n ?? n,
+@@ -3073,7 +3095,10 @@ renderer.setAnimationLoop(now => {
+   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
+   if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+   updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
+-  if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z);
++  if (!homeReturn) {
++    if (!cloudRoute.active() && camera.position.x < 100) ensureWestCraterRoad();
++    prepareLandmarks(camera.position.x, -camera.position.z);
++  }
+   if (!homeReturn && !extensionStreetsLoad && (camera.position.x > 320 || -camera.position.z > 275)) {
+     void prepareExtensionStreets();
+   }
