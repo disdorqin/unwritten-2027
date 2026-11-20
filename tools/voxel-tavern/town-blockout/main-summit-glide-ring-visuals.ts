@@ -6,7 +6,7 @@ import type { SummitGlideRing } from './main-summit-glide-rings';
 const rimSegments = 40;
 const opening = 1 / Math.cos(Math.PI / rimSegments);
 
-export function mountSummitGlideRingVisuals(owner: Group, rings: readonly SummitGlideRing[]) {
+export function mountSummitGlideRingVisuals(owner: Object3D, rings: readonly SummitGlideRing[]) {
   const group = new Group();
   group.name = 'main-summit-glide-rings';
 
