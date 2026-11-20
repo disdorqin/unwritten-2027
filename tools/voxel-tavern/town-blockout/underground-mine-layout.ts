@@ -1,3 +1,4 @@
+import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
 import { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
 
 export const undergroundMineDepth = -90;
@@ -9,7 +10,7 @@ export type UndergroundMineSpec = {
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
-  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean };
+  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean };
   walker: { radius: number; standingHeight: number; crouchingHeight: number; maxGrade: number };
 };
 
@@ -108,6 +109,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const expansion = campBackOpening && createUndergroundMineExpansionShell({
     ...campBackOpening,
     layerStartZ: poolSpan.start,
+    crystalGate: camp.crystalGate,
   });
   const poolLanding: Point = [0, level, pool.length / 2];
   const aperture = pool.shaftAperture;
@@ -221,11 +223,12 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   });
 
   /** Sweeps the player's footprint across joins and retains the most limiting floor and ceiling. */
-  function queryPassage(x: number, z: number, radius: number, bodyHeight: number) {
+  function queryPassage(x: number, z: number, radius: number, bodyHeight: number,
+      gateStage: UndergroundMineGateStage = 'closed') {
     if (![x, z, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight <= 0 ||
         z - radius < poolSpan.start) return;
     const touchesExpansion = expansion && z + radius >= campSpan.end;
-    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight) : undefined;
+    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight, gateStage) : undefined;
     if ((touchesExpansion || z + radius > campSpan.end) && !rear) return;
     if (rear && z - radius >= campSpan.end) return rear;
     const center = spans.find(span => z < span.end) ?? campSpan;

@@ -1,6 +1,8 @@
 import type { createUndergroundMineEncounter } from './underground-mine-encounter.js';
 import { createUndergroundWinchAccess } from './underground-winch.js';
 
+export type UndergroundMineGateStage = 'closed' | 'ajar' | 'open';
+
 type WinchRegistration = Parameters<typeof createUndergroundWinchAccess>;
 type Options = Readonly<{
   winch: WinchRegistration[0];
@@ -16,7 +18,7 @@ export function createUndergroundMineGate({ winch, readAcceptedFoot, encounter, 
   const canUseWinch = createUndergroundWinchAccess(winch, readAcceptedFoot);
   let phase: 'closed' | { opensAt: number } | 'open' = 'closed';
 
-  function state(): 'closed' | 'ajar' | 'open' {
+  function state(): UndergroundMineGateStage {
     if (typeof phase === 'string') return phase;
     const time = now();
     if (!Number.isFinite(time) || time < phase.opensAt) return 'ajar';

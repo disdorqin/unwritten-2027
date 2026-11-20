@@ -1,3 +1,5 @@
+import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
+
 type Point = readonly [x: number, y: number, z: number];
 type Surface = 'rock' | 'rail' | 'water';
 type Room = Readonly<{
@@ -15,6 +17,7 @@ type Options = Readonly<{
   openingWidth: number;
   openingHeight: number;
   layerStartZ: number;
+  crystalGate?: boolean;
 }>;
 
 const layerLength = 140;
@@ -36,6 +39,7 @@ export function createUndergroundMineExpansionShell({
   openingWidth,
   openingHeight,
   layerStartZ,
+  crystalGate = false,
 }: Options) {
   const endZ = layerStartZ + layerLength;
   const depth = endZ - seamZ;
@@ -62,10 +66,19 @@ export function createUndergroundMineExpansionShell({
   const galleryCeiling = floor + 7.2;
   const openingCeiling = floor + openingHeight;
   const waterFloor = floor - waterDepth;
+  const collarStart = crystalGate ? endZ - 1.2 : endZ;
+  const gate = crystalGate ? {
+    position: [shaftX, floor, collarStart] as Point,
+    width: openingWidth,
+    height: Math.min(openingHeight, galleryCeiling - floor),
+    thickness: .16,
+  } : undefined;
 
   const rooms: readonly Room[] = [
     { minX: openingLeft, maxX: openingRight, minZ: seamZ, maxZ: collarEnd, floor, ceiling: openingCeiling },
-    { minX: galleryLeft, maxX: galleryRight, minZ: collarEnd, maxZ: endZ, floor, ceiling: galleryCeiling },
+    { minX: galleryLeft, maxX: galleryRight, minZ: collarEnd, maxZ: collarStart, floor, ceiling: galleryCeiling },
+    ...(gate ? [{ minX: openingLeft, maxX: openingRight, minZ: collarStart, maxZ: endZ,
+      floor, ceiling: floor + gate.height }] : []),
     { minX: shaftX - 72, maxX: galleryLeft, minZ: westStart, maxZ: westEnd, floor, ceiling: floor + 6.4 },
     { minX: bounds.minX, maxX: shaftX - 72, minZ: westStart - 1.8, maxZ: westEnd + 1.8, floor, ceiling: floor + 6.8 },
     { minX: galleryRight, maxX: shaftX + 72, minZ: eastStart, maxZ: eastEnd, floor, ceiling: floor + 6.6 },
@@ -143,8 +156,15 @@ export function createUndergroundMineExpansionShell({
     encounter: false;
   }>;
 
+  function gateGap(stage: UndergroundMineGateStage) {
+    if (!gate) return 0;
+    if (stage === 'open') return gate.height;
+    return stage === 'ajar' ? Math.min(.1, gate.height) : 0;
+  }
+
   /** Sweep the same square footprint as the original mine and clip it at the old camp seam. */
-  function queryPassage(x: number, z: number, radius: number, bodyHeight: number): Passage | undefined {
+  function queryPassage(x: number, z: number, radius: number, bodyHeight: number,
+      gateStage: UndergroundMineGateStage = 'closed'): Passage | undefined {
     if (![x, z, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight <= 0) return;
     const left = x - radius;
     const right = x + radius;
@@ -152,6 +172,8 @@ export function createUndergroundMineExpansionShell({
     const end = z + radius;
     if (left < bounds.minX || right > bounds.maxX || end < seamZ || end > endZ) return;
     if (start <= seamZ && (left < openingLeft || right > openingRight || bodyHeight > openingHeight)) return;
+    const touchesGate = gate && end >= collarStart - gate.thickness / 2 && start <= collarStart + gate.thickness / 2;
+    if (touchesGate && (left < openingLeft || right > openingRight)) return;
 
     const center = rooms.find(room => x >= room.minX && x <= room.maxX &&
       Math.max(z, seamZ) >= room.minZ && z <= room.maxZ);
@@ -167,7 +189,7 @@ export function createUndergroundMineExpansionShell({
         ceiling = Math.min(ceiling, room.ceiling);
       }
     }
-    const clearance = ceiling - standingFloor;
+    const clearance = Math.min(ceiling - standingFloor, touchesGate ? gateGap(gateStage) : Infinity);
     if (bodyHeight > clearance + 1e-9) return;
     return {
       zone: 'mine-expansion',
@@ -197,6 +219,7 @@ export function createUndergroundMineExpansionShell({
     queryPassage,
     route,
     gateApproach,
+    gate: gate && { ...gate, gapFor: gateGap },
     bounds,
   };
 }
