@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
@@ -31,6 +32,17 @@ function readFlightGauge(page) {
   });
 }
 
+const stepFixedFlight = page => page.evaluate(() => window.starportFlightStep());
+async function moveFixed(page, key, axis, reached) {
+  await page.keyboard.down(key);
+  try {
+    for (let tick = 0; tick < 200; tick++) {
+      if (reached((await stepFixedFlight(page)).feet[axis])) return;
+    }
+    assert.fail(`Ground key ${key} did not reach its ${axis} waypoint`);
+  } finally { await page.keyboard.up(key); }
+}
+
 async function verifyCircuit() {
   const fixture = new URL('./fixtures/cloud-deck-circuit-keyboard.json', import.meta.url);
   const { stepMs, runs } = JSON.parse(await readFile(fixture, 'utf8'));
@@ -41,16 +53,6 @@ async function verifyCircuit() {
   const circuitUrl = new URL(url);
   circuitUrl.searchParams.set('proof', 'clock');
   const state = () => page.evaluate(() => window.starportFlightProof());
-  const step = () => page.evaluate(() => window.starportFlightStep());
-  async function move(key, axis, reached) {
-    await page.keyboard.down(key);
-    try {
-      for (let tick = 0; tick < 200; tick++) {
-        if (reached((await step()).feet[axis])) return;
-      }
-      assert.fail(`Ground key ${key} did not reach its ${axis} waypoint`);
-    } finally { await page.keyboard.up(key); }
-  }
   async function picture(name) {
     await page.evaluate(() => window.starportFlightPaint());
     assert.ok((await state()).drawCalls > 0);
@@ -59,12 +61,12 @@ async function verifyCircuit() {
   try {
     assert.equal((await page.goto(circuitUrl.href))?.status(), 200);
     await page.waitForFunction(() => window.starportFlightProof?.().drawCalls > 0);
-    await move('w', 'north', north => north >= 673.77);
+    await moveFixed(page, 'w', 'north', north => north >= 673.77);
     await page.keyboard.press('e');
     assert.equal((await state()).loadout.aircraftAssembled, true);
-    await move('s', 'north', north => north <= 671.21);
-    await move('d', 'east', east => east >= 330.79);
-    await move('s', 'north', north => north <= 662.41);
+    await moveFixed(page, 's', 'north', north => north <= 671.21);
+    await moveFixed(page, 'd', 'east', east => east >= 330.79);
+    await moveFixed(page, 's', 'north', north => north <= 662.41);
     await page.keyboard.press('q');
     const prepared = await state();
     assert.deepEqual(prepared.checklist, { 合体: true, 燃料: true, 空域: true });
@@ -100,7 +102,7 @@ async function verifyCircuit() {
         held.add(key);
       }
       for (let tick = 0; tick < ticks; tick++) {
-        const current = await step();
+        const current = await stepFixedFlight(page);
         const { point, phase, speed, heading, damage, recovery, touchdown } = current.flight;
         const { nextGate, stage } = current.circuit;
         elapsedMs += stepMs;
@@ -179,6 +181,81 @@ async function verifyCircuit() {
   }
 }
 
+async function verifyNightWindow() {
+  const nightProof = { chromium: browser.version(), errors: [], states: {} };
+  const page = await browser.newPage({ viewport: { width: 960, height: 650 } });
+  recordPageErrors(page, nightProof.errors);
+  const nightUrl = new URL(url);
+  nightUrl.searchParams.set('proof', 'night-window');
+  const read = () => page.evaluate(() => window.starportNightProof());
+  const clock = now => page.evaluate(now => window.starportNightClock(now), now);
+  const receive = at => page.evaluate(at => window.starportNightBeacon(at), at);
+
+  async function check(name, phase, open, lit) {
+    await moveFixed(page, 'w', 'north', north => north >= 673.51);
+    const before = await read();
+    const { door, feet } = before;
+    const doorRangeM = Math.hypot(feet.east - door.east, feet.north - door.north, feet.height - door.height);
+    assert.ok(doorRangeM <= 1.6);
+    await page.keyboard.press('e');
+    const result = await read();
+    assert.equal(result.trustedGateChecks, before.trustedGateChecks + 1);
+    assert.equal(result.state.phase, phase);
+    assert.equal(result.state.canEnterRestricted, open);
+    assert.equal(result.state.layersOverlap, lit);
+    assert.equal(result.ring.lit, lit);
+    assert.equal(result.state.chapterGatesLocked, true);
+    assert.equal(result.lockResult, 'locked');
+    assert.deepEqual(result.feet, feet);
+    assert.equal(await page.locator('#status').textContent(), '已锁定。');
+
+    // Back up with the same walk controls so every screenshot frames the whole ring.
+    await moveFixed(page, 's', 'north', north => north <= 673.16);
+    await page.evaluate(() => window.starportFlightPaint());
+    const { feet: cameraFeet, ring } = await read();
+    assert.equal(ring.lit, lit);
+    const image = await page.screenshot({ path: join(output, `night-window-${name}.jpg`), type: 'jpeg', quality: 84 });
+    const imageSha256 = createHash('sha256').update(image).digest('hex');
+    nightProof.states[name] = { ...result, doorRangeM, cameraFeet, imageSha256 };
+    return imageSha256;
+  }
+
+  try {
+    assert.equal((await page.goto(nightUrl.href))?.status(), 200);
+    await page.waitForFunction(() => window.starportFlightProof?.().drawCalls > 0);
+    const { schedule: { duskAt, beaconAt, morningBellAt } } = await read();
+    await moveFixed(page, 'd', 'east', east => east >= 319.9);
+    await clock(duskAt - 1);
+    const dark = await check('01-day', 'day', false, false);
+    await clock(duskAt);
+    assert.equal(await receive(beaconAt), undefined);
+    await check('02-dusk-awaiting', 'awaiting-beacon', false, false);
+    await clock(beaconAt);
+    await check('03-beacon-time-no-receipt', 'awaiting-beacon', false, false);
+    nightProof.receipt = await receive(beaconAt);
+    assert.equal(nightProof.receipt?.kind, 'town-night-beacon');
+    assert.equal(nightProof.receipt?.at, beaconAt);
+    assert.equal(await receive(beaconAt), undefined);
+    const bright = await check('04-received-0ms', 'night-window', true, true);
+    await clock(beaconAt + 59_999);
+    const lastLit = await check('05-received-59999ms', 'night-window', true, true);
+    await clock(beaconAt + 60_000);
+    const firstDark = await check('06-received-60000ms', 'night-window', true, false);
+    await clock(morningBellAt);
+    const dawn = await check('07-morning-bell', 'day', false, false);
+    assert.notEqual(bright, dark);
+    assert.notEqual(lastLit, firstDark);
+    assert.notEqual(lastLit, dawn);
+    assert.deepEqual(nightProof.errors, []);
+  } catch (error) {
+    nightProof.failure = error.stack;
+    throw error;
+  } finally {
+    await writeFile(join(output, 'starport-night-window.json'), JSON.stringify(nightProof, null, 2) + '\n');
+    await page.close();
+  }
+}
+
 try {
   const page = await browser.newPage({ viewport: { width: 960, height: 650 } });
   recordPageErrors(page, proof.errors);
@@ -237,6 +314,7 @@ try {
   assert.deepEqual(proof.errors, []);
   await page.close();
   await verifyCircuit();
+  await verifyNightWindow();
 } finally {
   await writeFile(join(output, 'starport-flight.json'), JSON.stringify(proof, null, 2) + '\n');
   await browser.close();
