@@ -1,13 +1,19 @@
 import {
   BoxGeometry, Color, CylinderGeometry, DoubleSide, ExtrudeGeometry,
   Float32BufferAttribute, Group, Mesh, MeshLambertMaterial, Shape, TorusGeometry,
-  type BufferGeometry, type Object3D, type Raycaster,
+  type BufferGeometry, type Intersection, type Object3D, type Raycaster,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createMainSummitTrail, MainSummitTrailPoint } from './main-summit-trail';
 
 type Trail = Pick<ReturnType<typeof createMainSummitTrail>, 'points' | 'sampleSurface'>;
 type Part = readonly [geometry: BufferGeometry, tint: number, x: number, y: number, z: number];
+
+function hitHasVisibleMaterial(hit: Intersection) {
+  const { material } = hit.object as Mesh;
+  const surface = Array.isArray(material) ? material[hit.face?.materialIndex ?? -1] : material;
+  return surface?.visible === true;
+}
 
 const shoulderOffset = 1.15;
 // Match the drawn tread of createTrailRibbon, above the logical walking surface.
@@ -129,7 +135,7 @@ export function mountMainSummitWreckage(owner: Group, trail: Trail) {
       if (!object.visible) return null;
     }
     group.updateWorldMatrix(true, true);
-    const hit = ray.intersectObjects(group.children.filter(mesh => mesh.visible), false)[0];
+    const hit = ray.intersectObjects(group.children.filter(mesh => mesh.visible), false).find(hitHasVisibleMaterial);
     if (!hit) return null;
 
     owner.updateWorldMatrix(true, true);
@@ -137,7 +143,8 @@ export function mountMainSummitWreckage(owner: Group, trail: Trail) {
     owner.traverseVisible(object => {
       if ((object as Mesh).isMesh && object.parent !== group) blockers.push(object);
     });
-    if (ray.intersectObjects(blockers, false).some(blocker => blocker.distance <= hit.distance)) return null;
+    if (ray.intersectObjects(blockers, false).some(blocker =>
+      blocker.distance <= hit.distance && hitHasVisibleMaterial(blocker))) return null;
     return sites.find(site => site.id === hit.object.name) ?? null;
   }
 
