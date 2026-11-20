@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
 const [checkoutArg = '.', outputArg = 'zb15-town-input-evidence', mode] = process.argv.slice(2);
@@ -78,6 +79,9 @@ if (import.meta.env.MODE === 'town-rehearsal' && location.hostname === '127.0.0.
         mouseLocked: document.pointerLockElement === renderer.domElement,
         presenceId: presence.selfId(), events: events.slice() };
     },
+    wallAt(gx: number, gy: number) {
+      return { gx, gy, layers: teamFight.wallColumnAt(gx, gy)?.height ?? 0 };
+    },
   } });
 }
 ${anchor}`);
@@ -118,6 +122,16 @@ function watchWallFrames(socket, frames) {
   }
   socket.on('framesent', ({ payload }) => record('sent', payload));
   socket.on('framereceived', ({ payload }) => record('received', payload));
+}
+
+async function waitForWallFrame(frames, start, accepts, label) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const frame = frames.slice(start).find(accepts);
+    if (frame) return frame;
+    await delay(25);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
 }
 
 async function holdMobile(context, page) {
@@ -199,13 +213,24 @@ async function testControls(browser, dist, touch, evidence) {
       return status.buildMode && status;
     });
     trace.status = 'awaiting-wall-ack';
+    const firstWallFrame = trace.wallFrames.length;
     await primary();
     trace.afterPlaceAttempt = await sample(page);
-    trace.afterPlace = await observe(page, before => {
-      const s = window.__zb15TownInputs.sample();
-      return s.stock === before.stock - 3 && s.wall.gx === before.wall.gx &&
-        s.wall.gy === before.wall.gy && s.wall.layers === before.wall.layers + 1 && s;
-    }, trace.afterThrow);
+    const request = trace.wallRequest = await waitForWallFrame(trace.wallFrames, firstWallFrame,
+      frame => frame.direction === 'sent' && frame.kind === 'place', 'the placement request after primary input');
+    const reply = trace.wallReply = await waitForWallFrame(trace.wallFrames, firstWallFrame,
+      frame => frame.direction === 'received' && (frame.kind === 'rejected' ||
+        (frame.kind === 'wall-set' && frame.gx === request.gx && frame.gy === request.gy)), 'the matching authority reply');
+    assert.equal(reply.kind, 'wall-set', reply.reason && `The server rejected the placement: ${reply.reason}`);
+    assert.equal(reply.layer, 0, 'Expected one new layer in the fresh town session');
+    // Pointer-lock input may move the aim between throwing and placing. Inspect the cell the click actually sent.
+    trace.afterPlace = await observe(page, ({ gx, gy, stock }) => {
+      const probe = window.__zb15TownInputs;
+      const state = probe.sample();
+      const placedWall = probe.wallAt(gx, gy);
+      return state.stock === stock - 3 && placedWall.layers === 1 && { ...state, placedWall };
+    }, { gx: request.gx, gy: request.gy, stock: trace.afterToggle.stock });
+    assert.equal(trace.wallFrames.slice(firstWallFrame).filter(frame => frame.direction === 'sent' && frame.kind === 'place').length, 1);
     assert.equal(trace.afterPlace.localThrows, trace.afterThrow.localThrows);
     // The game attaches layers only on real wall-set broadcasts, not on local reservation.
     const actions = trace.afterPlace.events;
