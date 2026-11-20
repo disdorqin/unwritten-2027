@@ -55,7 +55,7 @@
         "north": 68.8706,
         "ground": 9.462973026275636,
         "tolerance": 0.15,
-        "action": "细看查看布料台"
+        "action": "查看布料台"
       },
       "ingress": [
         {
@@ -169,7 +169,7 @@
         "north": 107.726,
         "ground": 9.830648254394532,
         "tolerance": 0.15,
-        "action": "细看查看布料台"
+        "action": "查看布料台"
       },
       "ingress": [
         {
@@ -289,7 +289,7 @@
         "north": 195.55,
         "ground": 18.597035888671876,
         "tolerance": 0.15,
-        "action": "细看查看茶桌"
+        "action": "查看茶桌"
       },
       "ingress": [
         {
@@ -427,7 +427,7 @@
         "north": 131.55,
         "ground": 12.661704877853394,
         "tolerance": 0.15,
-        "action": "细看查看陶器台"
+        "action": "查看陶器台"
       },
       "ingress": [
         {
