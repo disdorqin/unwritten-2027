@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, InstancedMesh, MeshLambertMaterial, Object3D, type Group } from 'three';
 import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe, type UndergroundCampPickaxeResult } from '../../../src/shared/underground-camp-pickaxe';
+import { createUndergroundCampAmbience } from './underground-camp-ambience';
 import { createUndergroundCampInteractions } from './underground-camp-interactions';
 import { mountUndergroundCampLighting } from './underground-camp-lighting';
 import { createUndergroundCampRemains } from './underground-camp-remains';
@@ -11,6 +12,7 @@ type Point = ReturnType<typeof createUndergroundCampRemains>['recovery'];
 type Options = CampOptions & {
   parent: Group;
   actions: Omit<CampActions, 'camp' | 'walker'>;
+  ambience?: Parameters<typeof createUndergroundCampAmbience>[0];
   /** Host-owned offerings. Camp lifetime and inventory follow the existing world policy. */
   readLights(): { litNicheIds: ReadonlySet<string>; extraCampLightCount: number; remainingBudget: number };
   pickaxe: {
@@ -29,10 +31,17 @@ const pickaxePrompt = {
 } as const;
 const noLights: ReadonlySet<string> = new Set();
 
-export function mountUndergroundCampScene({ parent, actions, readLights, pickaxe, ...layout }: Options) {
+export function mountUndergroundCampScene({ parent, actions, ambience, readLights, pickaxe, ...layout }: Options) {
   const camp = createUndergroundCampRemains(layout);
   const lights = mountUndergroundCampLighting(camp.lighting);
-  const interactions = createUndergroundCampInteractions({ ...actions, camp, walker: layout.walker });
+  const mix = ambience && createUndergroundCampAmbience(ambience);
+  const interactions = createUndergroundCampInteractions({
+    ...actions, camp, walker: layout.walker,
+    setSeatedAmbience(active) {
+      mix?.setSeated(active);
+      actions.setSeatedAmbience(active);
+    },
+  });
   const pickaxeSite = resolveUndergroundCampPickaxeSite(layout.mine, layout.camp);
   if (!pickaxeSite) throw new RangeError('The camp has no supported old pickaxe site');
   const { aim, approach } = pickaxeSite;
@@ -89,6 +98,7 @@ export function mountUndergroundCampScene({ parent, actions, readLights, pickaxe
     interactions.update();
     const active = footing() !== undefined;
     camp.group.visible = active;
+    mix?.setInCamp(active);
     tool.visible = active && !taken && pickaxe.available();
     if (active) {
       const { litNicheIds, extraCampLightCount, remainingBudget } = readLights();
@@ -128,6 +138,7 @@ export function mountUndergroundCampScene({ parent, actions, readLights, pickaxe
       if (disposed) return;
       disposed = true;
       interactions.cancelSeat();
+      mix?.dispose();
       lights.dispose();
       tool.removeFromParent();
       tool.dispose();

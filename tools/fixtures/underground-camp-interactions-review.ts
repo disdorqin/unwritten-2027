@@ -34,10 +34,38 @@ renderer.setSize(740, 500);
 document.querySelector('main')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(61, 740 / 500, .025, 40);
 const sound = new AudioContext();
-const roomGain = sound.createGain();
-const hearthGain = sound.createGain();
-roomGain.gain.value = 1;
-hearthGain.gain.value = .2;
+const room = sound.createStereoPanner();
+room.pan.value = -1;
+const hearth = sound.createStereoPanner();
+hearth.pan.value = 1;
+const output = sound.createGain();
+const split = sound.createChannelSplitter(2);
+output.connect(sound.destination);
+output.connect(split);
+const analysers = [sound.createAnalyser(), sound.createAnalyser()];
+for (const [channel, analyser] of analysers.entries()) {
+  analyser.fftSize = 2048;
+  split.connect(analyser, channel);
+}
+const samples = new Float32Array(2048);
+function rms(analyser: AnalyserNode) {
+  analyser.getFloatTimeDomainData(samples);
+  let energy = 0;
+  for (const sample of samples) energy += sample * sample;
+  return Math.sqrt(energy / samples.length);
+}
+renderer.domElement.addEventListener('pointerdown', () => {
+  // Distinct steady test signals isolate the actual two branches of the Web Audio graph.
+  for (const [frequency, input] of [[120, room], [240, hearth]] as const) {
+    const signal = sound.createOscillator();
+    signal.frequency.value = frequency;
+    const quiet = sound.createGain();
+    quiet.gain.value = .04;
+    signal.connect(quiet).connect(input);
+    signal.start();
+  }
+  void sound.resume();
+}, { once: true });
 const errors: string[] = [];
 const relics = new Set<string>();
 const pickaxeReceipts = new Set<string>();
@@ -75,12 +103,7 @@ const actions = {
   },
   stand() { eye = undefined; seat = undefined; rested = false; return true; },
   onRested() { rested = true; },
-  setSeatedAmbience(active: boolean) {
-    void sound.resume();
-    // Independent gains are the host ports used by this isolated browser fixture.
-    roomGain.gain.value = active ? .63 : 1;
-    hearthGain.gain.value = active ? .38 : .2;
-  },
+  setSeatedAmbience() {},
   lookAtBowl(bowl: Camp['dining']['bowl']) { looking = bowl.position; return true; },
   recordRelic(entry: Readonly<{category: string; id: string; label: string}>) {
     if (entry.category !== 'relic') throw new Error('Expected a relic field-guide entry');
@@ -104,6 +127,7 @@ const actions = {
 function createCampScene(): CampScene {
   return mountUndergroundCampScene({
     parent: campParent, mine, camp: spec.camp, walker: spec.walker, actions,
+    ambience: { room, hearth, output },
     readLights() {
       const state = offerings?.snapshot();
       return {
@@ -215,6 +239,12 @@ Object.assign(window, {
       focusCamera();
       controls.update();
     },
+    leaveCamp() {
+      foot = undefined;
+      eye = undefined;
+      seat = undefined;
+      controls.update();
+    },
     headlamp(active: boolean) { headLamp.visible = active; },
     tick(ms: number) { clock += ms; },
     clear() { offerings.clear(); },
@@ -227,7 +257,7 @@ Object.assign(window, {
       const hit = firstHit();
       return {
         seat: seat ?? null, lanterns, tookLamp, visible, relics: [...relics], errors,
-        roomGain: roomGain.gain.value, hearthGain: hearthGain.gain.value,
+        audio: { state: sound.state, room: rms(analysers[0]!), hearth: rms(analysers[1]!) },
         interaction: { rested }, ...offerings.snapshot(),
         pickaxe: {
           profile, firstHit: hit?.object.name, hitDistance: hit?.distance, foot, aim: mounted.pickaxeSite.aim,

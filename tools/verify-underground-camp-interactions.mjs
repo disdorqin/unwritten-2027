@@ -73,6 +73,22 @@ try {
     }
     assert.equal(await hint.isVisible(), true);
   };
+  await go('dorm-1');
+  await page.waitForFunction(() => {
+    const audio = window.campInteractionsProbe.inspect().audio;
+    return audio.state === 'running' && audio.room > .0275 && audio.hearth > .0055;
+  });
+  const standingAudio = (await inspect()).audio;
+  async function expectAudio(roomRange, hearthRange) {
+    await page.waitForFunction(({ baseline, roomRange, hearthRange }) => {
+      const audio = window.campInteractionsProbe.inspect().audio;
+      const room = audio.room / baseline.room;
+      const hearth = audio.hearth / baseline.hearth;
+      return room >= roomRange[0] && room <= roomRange[1] &&
+        hearth >= hearthRange[0] && hearth <= hearthRange[1];
+    }, { baseline: standingAudio, roomRange, hearthRange });
+    return (await inspect()).audio;
+  }
   const beds = [];
   for (let i = 1; i <= 6; i++) {
     const id = 'dorm-' + i;
@@ -82,7 +98,7 @@ try {
     await prompt('起身');
     const sat = await inspect();
     assert.equal(sat.seat, id);
-    assert.ok(sat.roomGain < 1 && sat.hearthGain > .2);
+    const seatedAudio = await expectAudio([.55, .74], [1.65, 2.15]);
     if (i === 1) {
       await page.evaluate(() => window.campInteractionsProbe.tick(2500));
       await page.waitForFunction(() => window.campInteractionsProbe.inspect().interaction.rested);
@@ -92,11 +108,17 @@ try {
     await prompt('床边坐下');
     const stood = await inspect();
     assert.equal(stood.seat, null);
-    assert.equal(stood.roomGain, 1);
-    assert.ok(stood.hearthGain < .21);
-    beds.push({ id, satGain: sat.roomGain, stoodGain: stood.roomGain });
+    const restoredAudio = await expectAudio([.90, 1.10], [.90, 1.10]);
+    beds.push({ id, seatedAudio, restoredAudio });
   }
+  await go('dorm-1');
+  await prompt('床边坐下');
+  await page.keyboard.press('KeyE');
+  await expectAudio([.55, .74], [1.65, 2.15]);
+  await page.evaluate(() => window.campInteractionsProbe.leaveCamp());
+  const outsideAudio = await expectAudio([0, .10], [0, .10]);
   await go('bowl');
+  const reenteredAudio = await expectAudio([.90, 1.10], [.90, 1.10]);
   await prompt('留碗');
   await page.keyboard.press('e');
   await page.waitForFunction(() => window.campInteractionsProbe.inspect().relics.length === 1);
@@ -182,7 +204,9 @@ try {
   assert.deepEqual(second.notices, second.receipts);
   assert.deepEqual(second.attemptedProfiles, second.receipts);
   assert.deepEqual([...errors, ...(await inspect()).errors], []);
-  const evidence = { browser: browser.version(), mineBlob: expectedMineBlob, beds, relics: bowl.relics,
+  const evidence = { browser: browser.version(), mineBlob: expectedMineBlob, beds,
+    audio: { scope: 'Stereo fixture signals through the actual camp mix, measured separately.', standingAudio, outsideAudio, reenteredAudio },
+    relics: bowl.relics,
     offered, lighting, cleared, pickaxe: {
       scope: 'Registered aim and accepted footing in the original mine. Inventory persistence is a fixture port shared by two sequential profiles.',
       aimed, away, picked, key, reentry, second,
