@@ -1,0 +1,149 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { createServer } from 'vite';
+
+assert.ok(process.argv[2], 'Use: node tools/verify-underground-camp-interactions.mjs <evidence-dir>');
+const output = resolve(process.argv[2]);
+const repo = fileURLToPath(new URL('../', import.meta.url));
+const mineSource = '2966d9f05329084b8fb9072f997f5da6e7a4586a:tools/voxel-tavern/town-blockout/underground-mine-layout.ts';
+const expectedMineBlob = '1f1ab0da6785b1df3ab3112870940f5b7f3a6921';
+const mine = execFileSync('git', ['show', mineSource], { cwd: repo });
+assert.equal(createHash('sha1').update(`blob ${mine.length}\0`).update(mine).digest('hex'), expectedMineBlob);
+const scratch = await mkdtemp(resolve(tmpdir(), 'camp-review-'));
+const localMine = resolve(scratch, 'first-mine.ts');
+await writeFile(localMine, mine);
+await mkdir(output, { recursive: true });
+const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><link rel="icon" href="data:,">
+<style>body{margin:0;background:#242421;color:#f0e9dc;font:16px system-ui} output{position:absolute;bottom:20px;left:24px;padding:6px;background:#242421}</style>
+<main><output></output></main><script type="module" src="/tools/fixtures/underground-camp-interactions-review.ts"></script>`;
+const server = await createServer({
+  configFile: false, root: repo, publicDir: false, cacheDir: resolve(scratch, 'vite'),
+  resolve: { alias: [
+    { find: '@first-mine', replacement: localMine },
+    { find: /^three$/, replacement: resolve(repo, 'node_modules/three/build/three.module.js') },
+  ] },
+  plugins: [{ name: 'camp-review', configureServer(vite) {
+    vite.middlewares.use('/camp-review', (_req, res) => {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(html);
+    });
+  } }],
+  server: { host: '127.0.0.1', port: 0, hmr: false, fs: { allow: [repo, scratch] } },
+});
+
+let browser;
+try {
+  await server.listen();
+  const address = server.httpServer?.address();
+  assert.ok(address && typeof address === 'object');
+  browser = await chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH,
+    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+  });
+  const page = await browser.newPage({ viewport: { width: 740, height: 500 } });
+  page.setDefaultTimeout(12_000);
+  const errors = [];
+  page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
+  page.on('requestfailed', request => errors.push(request.url()));
+  page.on('response', response => { if (response.status() >= 400) errors.push(response.url()); });
+  await page.goto(`http://127.0.0.1:${address.port}/camp-review`);
+  await page.waitForFunction(() => typeof window.campInteractionsProbe?.inspect === 'function');
+  await page.locator('canvas').click();
+  await page.evaluate(() => window.addEventListener('keydown', event => {
+    window.lastCampReviewKey = { code: event.code, key: event.key, repeat: event.repeat,
+      altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey,
+      target: event.target?.tagName, prevented: event.defaultPrevented };
+  }));
+  const go = id => page.evaluate(id => window.campInteractionsProbe.go(id), id);
+  const inspect = () => page.evaluate(() => window.campInteractionsProbe.inspect());
+  const hint = page.locator('output');
+  const prompt = async text => {
+    try {
+      await page.waitForFunction(text => document.querySelector('output').textContent.includes(text), text);
+    } catch (error) {
+      console.error('Prompt missed:', text, (await hint.textContent()), await inspect(),
+        await page.evaluate(() => window.lastCampReviewKey));
+      throw error;
+    }
+    assert.equal(await hint.isVisible(), true);
+  };
+  const beds = [];
+  for (let i = 1; i <= 6; i++) {
+    const id = 'dorm-' + i;
+    await go(id);
+    await prompt('床边坐下');
+    await page.keyboard.press('KeyE');
+    await prompt('起身');
+    const sat = await inspect();
+    assert.equal(sat.seat, id);
+    assert.ok(sat.roomGain < 1 && sat.hearthGain > .2);
+    if (i === 1) {
+      await page.evaluate(() => window.campInteractionsProbe.tick(2500));
+      await page.waitForFunction(() => window.campInteractionsProbe.inspect().interaction.rested);
+      await page.screenshot({ path: resolve(output, 'seated.png') });
+    }
+    await page.keyboard.press('KeyE');
+    await prompt('床边坐下');
+    const stood = await inspect();
+    assert.equal(stood.seat, null);
+    assert.equal(stood.roomGain, 1);
+    assert.ok(stood.hearthGain < .21);
+    beds.push({ id, satGain: sat.roomGain, stoodGain: stood.roomGain });
+  }
+  await go('bowl');
+  await prompt('留碗');
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => window.campInteractionsProbe.inspect().relics.length === 1);
+  await page.keyboard.press('e');
+  const bowl = await inspect();
+  assert.deepEqual(bowl.relics, ['mine-canteen-left-bowl:食堂的留碗']);
+  await page.screenshot({ path: resolve(output, 'left-bowl.png') });
+
+  await go('memorial');
+  const offered = [];
+  for (let count = 1; count <= 3; count++) {
+    await prompt('献一盏灯');
+    await page.keyboard.press('e');
+    await page.waitForFunction(n => window.campInteractionsProbe.inspect().tookLamp === n, count);
+    await page.waitForFunction(n => window.campInteractionsProbe.inspect().visible.length === n, count === 3 ? 5 : count + 1);
+    const state = await inspect();
+    assert.equal(state.litNicheIds.length, count);
+    assert.equal(state.extraCampLightCount, count === 3 ? 2 : 0);
+    assert.equal(state.lanterns, 3 - count);
+    assert.ok(state.visible.length <= 5);
+    offered.push(state);
+  }
+  await page.keyboard.press('e');
+  assert.equal((await inspect()).tookLamp, 3);
+  await page.evaluate(() => window.campInteractionsProbe.headlamp(false));
+  await page.waitForFunction(() => window.campInteractionsProbe.inspect().visible.length === 5);
+  const lighting = await inspect();
+  assert.equal(lighting.visible.filter(name => name.endsWith('guide/light')).length, 2);
+  await go('memorial-wide');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.screenshot({ path: resolve(output, 'three-lamps.png') });
+  await page.evaluate(() => window.campInteractionsProbe.clear());
+  await page.waitForFunction(() => window.campInteractionsProbe.inspect().visible.length === 0);
+  const cleared = await inspect();
+  assert.deepEqual(cleared.litNicheIds, []);
+  assert.equal(cleared.extraCampLightCount, 0);
+  await go('dorm-five-detail');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.screenshot({ path: resolve(output, 'dorm-five.png') });
+  assert.deepEqual([...errors, ...cleared.errors], []);
+  const evidence = { browser: browser.version(), mineBlob: expectedMineBlob, beds, relics: bowl.relics,
+    offered, lighting, cleared, errors };
+  await writeFile(resolve(output, 'camp-interactions.json'), JSON.stringify(evidence, null, 2) + '\n');
+  console.log('Camp interactions: six native seat cycles, one relic, three offerings and two guide lights.');
+} finally {
+  try { await browser?.close(); } finally {
+    await server.close();
+    await rm(scratch, { force: true, recursive: true });
+  }
+}

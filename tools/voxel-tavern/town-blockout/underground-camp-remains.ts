@@ -166,12 +166,14 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
     }
     if (trace === 'chest-and-tea') {
       const chest = id + '/tea-chest';
-      solid(chest, x + 5.29, 0, bedZ, .40, .17, .47);
-      box(chest, wood, x + 5.29, .012, bedZ, .40, .12, .47);
-      box(chest, board, x + 5.29, .132, bedZ, .42, .035, .48);
-      box(id + '/tea-mug', '#7f8978', x + 5.09, .167, bedZ + .088, .080, .078, .080);
-      box(id + '/tea-mug', '#493c31', x + 5.09, .244, bedZ + .088, .057, .006, .057);
-      box(id + '/tea-mug', '#7f8978', x + 5.09, .188, bedZ + .135, .034, .042, .025);
+      const chestX = x + 5.03;
+      const mugX = chestX - .12;
+      solid(chest, chestX, 0, bedZ, .42, .17, .48);
+      box(chest, wood, chestX, .012, bedZ, .40, .12, .47);
+      box(chest, board, chestX, .132, bedZ, .42, .035, .48);
+      box(id + '/tea-mug', '#7f8978', mugX, .167, bedZ + .088, .080, .078, .080);
+      box(id + '/tea-mug', '#493c31', mugX, .244, bedZ + .088, .057, .006, .057);
+      box(id + '/tea-mug', '#7f8978', mugX, .188, bedZ + .135, .034, .042, .025);
     }
     if (trace === 'ajar-and-empty') {
       const door = id + '/ajar-door';
@@ -296,12 +298,13 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   const dormAisle = dormShift + 3.91;
   const turned = at(dormAisle, 0, 5);
   const leftBowl = { id: 'canteen/left-bowl', position: at(-1.16, 1.056, 7.54), approach: at(-.44, 0, 7.45) };
+  const canteenTurn = at(0, 0, 7.45);
   const memorialApproach = at(monumentX, 0, 8.76);
   const route = [
     { id: 'entry', points: [[0, floor, start + radius + .02] as Point, hallSpine, recovery] },
     ...rooms.map(room => ({ id: room.id,
       points: [recovery, turned, [turned[0], floor, room.approach[2]] as Point, room.approach] })),
-    { id: 'canteen', points: [recovery, at(0, 0, 6), at(0, 0, 7.45), leftBowl.approach] },
+    { id: 'canteen', points: [recovery, at(0, 0, 6), canteenTurn, leftBowl.approach] },
     { id: 'memorial', points: [recovery, at(monumentX, 0, 7.80), memorialApproach] },
   ];
   for (const { id, points } of route) for (let index = 1; index < points.length; index++) {
@@ -318,6 +321,21 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
 
   const group = new Group();
   group.name = 'underground-mine-camp-remains';
+  // Empty mounts follow the mine transform. The host supplies active lights from its visible-light budget.
+  function lightMount<T extends { id: string; position: Point }>(anchor: T) {
+    const mount = new Group();
+    mount.name = 'camp-light/' + anchor.id;
+    mount.position.fromArray(anchor.position);
+    group.add(mount);
+    return { ...anchor, mount };
+  }
+  const offeringAnchors = niches.filter(niche => !niche.hasSpentLamp).map(({ id, position }) =>
+    lightMount({ id, position, radius: 8, tone: 'warm' } as const));
+  const guideAnchors = [
+    { id: 'hall/guide', foot: hallSpine },
+    { id: 'canteen/guide', foot: canteenTurn },
+  ].map(({ id, foot: [x, y, z] }) =>
+    lightMount({ id, position: [x, y + 2.35, z], radius: 4, tone: 'cool' } as const));
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial();
   const batch = new InstancedMesh(geometry, material, props.length);
@@ -363,12 +381,14 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   let disposed = false;
   return {
     group, props, colliders, rooms, route, recovery, queryPassage,
+    lighting: { offeringAnchors, guideAnchors },
     dining: { tables, bowl: leftBowl, stoveLit: false, sign: undergroundCampInscriptions.canteen },
     memorial: { position: at(monumentX, 1.361, 9.572), approach: memorialApproach,
       inscription: undergroundCampInscriptions.memorial, niches },
     dispose() {
       if (disposed) return;
       disposed = true;
+      for (const { mount } of [...offeringAnchors, ...guideAnchors]) mount.clear();
       group.removeFromParent();
       group.clear();
       batch.dispose();

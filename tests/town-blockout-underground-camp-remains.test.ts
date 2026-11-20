@@ -51,6 +51,30 @@ test('the six dorms show distinct belongings, repeat no inscription, and registe
   assert.deepEqual(Object.values(undergroundCampInscriptions), ['慢些吃', '慢些走']);
 });
 
+test('the fifth dorm leaves tea visible on the part of the chest outside the bed', t => {
+  for (const side of ['right', 'left'] as const) {
+    const spec = fixture(side);
+    const camp = createUndergroundCampRemains(spec);
+    t.after(camp.dispose);
+    const outward = ({ min, max }: { min: Point; max: Point }) =>
+      side === 'right' ? [min[0], max[0]] : [-max[0], -min[0]];
+    const bedFoot = Math.min(...camp.props.filter(prop => prop.id === 'dorm-5/bed').map(prop => outward(prop)[0]));
+    const [, lid] = camp.props.filter(prop => prop.id === 'dorm-5/tea-chest');
+    const [lidNear, lidFar] = outward(lid);
+    assert.ok(Math.abs((lidNear + lidFar) / 2 - bedFoot) < 1e-8);
+    const mug = camp.props.filter(prop => prop.id === 'dorm-5/tea-mug');
+    assert.equal(mug.length, 3);
+    for (const part of mug) {
+      const [near, far] = outward(part);
+      assert.ok(near > lidNear && far < bedFoot);
+      assert.ok(part.min[2] > lid.min[2] && part.max[2] < lid.max[2]);
+      assert.ok(part.min[1] >= lid.max[1]);
+    }
+    const [x, y, z] = camp.rooms[4].approach;
+    assert.equal(camp.queryPassage(x, z, spec.walker.radius, spec.walker.standingHeight)?.floor, y);
+  }
+});
+
 test('the cold kitchen contains two rows of tables with benches and the memorial leaves three sockets open', t => {
   const camp = createUndergroundCampRemains(fixture());
   t.after(camp.dispose);
@@ -69,6 +93,48 @@ test('the cold kitchen contains two rows of tables with benches and the memorial
   for (const niche of camp.memorial.niches) {
     assert.equal(niche.lit, false);
     assert.equal(camp.props.some(prop => prop.id === niche.id + '/spent-lamp'), niche.hasSpentLamp);
+  }
+});
+
+test('the host can attach camp lights at the three empty niches and two supported guide points', t => {
+  for (const side of ['right', 'left'] as const) {
+    const spec = fixture(side);
+    const camp = createUndergroundCampRemains(spec);
+    t.after(camp.dispose);
+    const { offeringAnchors, guideAnchors } = camp.lighting;
+    assert.deepEqual(offeringAnchors.map(({ id }) => id),
+      ['memorial/niche-2', 'memorial/niche-4', 'memorial/niche-6']);
+    assert.deepEqual(guideAnchors.map(({ id }) => id), ['hall/guide', 'canteen/guide']);
+    for (const { id, position, radius, tone } of offeringAnchors) {
+      const niche = camp.memorial.niches.find(niche => niche.id === id);
+      assert.ok(niche && !niche.hasSpentLamp && !niche.lit);
+      assert.deepEqual(position, niche.position);
+      assert.deepEqual([radius, tone], [8, 'warm']);
+    }
+    const footPoints = [camp.route[0].points[1], camp.route.find(row => row.id === 'canteen')!.points[2]];
+    for (const [index, { position: [x, y, z], radius, tone }] of guideAnchors.entries()) {
+      const foot = footPoints[index];
+      assert.deepEqual([x, z], [foot[0], foot[2]]);
+      const passage = camp.queryPassage(x, z, spec.walker.radius, spec.walker.standingHeight);
+      assert.ok(passage && y > passage.floor + spec.walker.standingHeight && y < passage.floor + passage.clearance);
+      assert.deepEqual([radius, tone], [4, 'cool']);
+    }
+    const mounts = [...offeringAnchors, ...guideAnchors];
+    assert.equal(mounts.length, 5);
+    for (const { position, mount } of mounts) {
+      assert.equal(mount.parent, camp.group);
+      assert.deepEqual(mount.position.toArray(), position);
+      assert.equal(mount.children.length, 0);
+    }
+    const { position, mount } = offeringAnchors[0];
+    const attached = mount.clone(false);
+    attached.position.set(0, 0, 0);
+    mount.add(attached);
+    camp.group.position.set(10, 20, 30);
+    assert.deepEqual(attached.getWorldPosition(attached.position.clone()).toArray(),
+      [10 + position[0], 20 + position[1], 30 + position[2]]);
+    camp.dispose();
+    assert.equal(attached.parent, null);
   }
 });
 
