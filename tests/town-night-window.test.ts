@@ -44,7 +44,7 @@ test('the trusted scheduled cue commits once and changes shift and entry togethe
   assert.equal(world.snapshot().canEnterRestricted, false);
   const cue = world.recordBeacon(firstNight.beaconAt);
   assert.deepEqual(cue, {
-    kind: 'town-night-beacon', at: firstNight.beaconAt,
+    kind: 'town-night-beacon', at: firstNight.beaconAt, expiresAt: firstNight.cueExpiresAt,
     state: {
       phase: 'night-window', shift: 'night', canEnterRestricted: true, layersOverlap: true,
       chapterGatesLocked: true, beaconAt: firstNight.beaconAt, morningBellAt: firstNight.morningBellAt,
