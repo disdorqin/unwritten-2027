@@ -64,7 +64,8 @@ try {
   assert.equal(response?.status(), 200);
   await page.waitForFunction(() => window.__warriorCityReview?.().frames > 2, null, { timeout: 20_000 });
   await photo('gate-entry');
-  for (const [east, id] of [[21, 'gate-lane'], [49, 'stone-houses'], [96, 'central-square'], [139, 'market-approach'], [176.5, 'descent-forecourt']]) {
+  for (const [east, id] of [[21, 'gate-lane'], [49, 'stone-houses'], [96, 'central-square'], [139, 'market-approach'],
+    [164, 'descent-gate-approach'], [176.5, 'descent-forecourt']]) {
     const at = await walk('w', 'east', east, id);
     assert.equal(at.feet, -165);
     assert.equal(at.blocked, 0);
@@ -94,6 +95,8 @@ try {
   assert.ok(stopped.east < 177 && stopped.feet === -158.7);
   stops.push({ label: 'rubble stops travel', before, after: stopped });
   await photo('collapsed-wall-end');
+  await walk('s', 'east', 171.5, 'step back to see the collapsed end and its adjoining parapets');
+  await photo('collapsed-wall-context');
   assert.deepEqual(errors, []);
 } catch (error) {
   failure = String(error);
