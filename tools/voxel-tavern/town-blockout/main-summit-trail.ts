@@ -126,6 +126,7 @@ type TrailSegment = {
 };
 
 function indexSurface(segments: readonly TrailSegment[]) {
+  const gateApproach = segments[0];
   const cells = new Map<string, TrailSegment[]>();
   const cellFor = (value: number) => Math.floor(value / indexCellMetres);
   const cellKey = (east: number, north: number) => `${east},${north}`;
@@ -147,16 +148,20 @@ function indexSurface(segments: readonly TrailSegment[]) {
     }
   }
 
-  return (east: number, north: number): number | undefined => {
-    if (!Number.isFinite(east) || !Number.isFinite(north) || north < -10) return undefined;
+  return (east: number, north: number, radius: number, includeGate: boolean): number | undefined => {
+    if (!Number.isFinite(east) || !Number.isFinite(north) || north < -10 ||
+        !Number.isFinite(radius) || radius < 0 || radius > halfWidth) return undefined;
     const candidates = cells.get(cellKey(cellFor(east), cellFor(north)));
     if (!candidates) return undefined;
 
+    const clearanceSquared = (halfWidth - radius) ** 2 + sampleTolerance;
+    let supportsFoot = false;
     let closest = halfWidthSquared + sampleTolerance;
     let edgeHeight: number | undefined;
     let weightedHeight = 0;
     let totalWeight = 0;
     for (const segment of candidates) {
+      if (!includeGate && segment === gateApproach) continue;
       const { from, span } = segment;
       const eastFromStart = east - from.east;
       const northFromStart = north - from.north;
@@ -166,6 +171,7 @@ function indexSurface(segments: readonly TrailSegment[]) {
       const distanceSquared = (eastFromStart - along * segment.east) ** 2 +
         (northFromStart - along * segment.north) ** 2;
       if (distanceSquared > halfWidthSquared + sampleTolerance) continue;
+      if (distanceSquared <= clearanceSquared) supportsFoot = true;
       const height = from.height + segment.height * along;
       if (distanceSquared <= sampleTolerance ** 2) return height;
       if (distanceSquared <= closest) {
@@ -178,6 +184,7 @@ function indexSurface(segments: readonly TrailSegment[]) {
       weightedHeight += height * weight;
       totalWeight += weight;
     }
+    if (!supportsFoot) return undefined;
     return totalWeight > 0 ? weightedHeight / totalWeight : edgeHeight;
   };
 }
@@ -212,7 +219,8 @@ export function createMainSummitTrail(groundAt: GroundSampler, cloudDeckHeight: 
     throw new RangeError(`Main summit trail does not meet P-3: ${horizontalMetres} m, grade ${maxGrade}.`);
   }
 
-  const sampleSurface = indexSurface(segments);
+  const sampleIndexedSurface = indexSurface(segments);
+  const sampleSurface = (east: number, north: number) => sampleIndexedSurface(east, north, 0, true);
   let maxCutMetres = 0;
   let maxFillMetres = 0;
   for (const segment of segments) {
@@ -248,5 +256,10 @@ export function createMainSummitTrail(groundAt: GroundSampler, cloudDeckHeight: 
     metrics: { horizontalMetres, surfaceMetres, maxGrade, maxCutMetres, maxFillMetres },
     pavilionAnchors,
     sampleSurface,
+    // The plaza supplies the approach. Require the player's standing circle
+    // to fit within at least one surveyed section of the three-metre strip.
+    sampleWalkwaySurface(east: number, north: number, radius = .27) {
+      return sampleIndexedSurface(east, north, radius, false);
+    },
   };
 }

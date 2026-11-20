@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Raycaster, Vector3, type Object3D } from 'three';
+import { summitAssemblyAnchor } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
+import { mainSummitSpec } from '../tools/voxel-tavern/town-blockout/main-summit-block';
 import {
   createZa22CloudRoute, createZa22NorthRidgeLine, za22StationApproach,
 } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 
-test('the default ZA-22 route mounts the relieved P-3 terrain and releases it after returning', () => {
+test('the default ZA-22 route mounts the P-3 cut and foot surface and releases them after returning', () => {
   const epoch = Date.UTC(2026, 0, 1);
   const line = createZa22NorthRidgeLine(26);
   let now = epoch + 500;
@@ -25,7 +27,7 @@ test('the default ZA-22 route mounts the relieved P-3 terrain and releases it af
   const cut = assembly?.block.coarse;
   // The viewer installs a different Three.js version from the test runner.
   const ribbon = cloud.scene.getObjectByName('main-summit-walkway') as unknown as Object3D | undefined;
-  assert.ok(cut && ribbon);
+  assert.ok(assembly && cut && ribbon);
   assert.ok(cut.geometry.index && cut.geometry.index.count > 1450 * 3);
   assert.ok(cut.geometry.index.count < 509_340 * 3 / 4);
   cloud.scene.updateMatrixWorld(true);
@@ -42,6 +44,12 @@ test('the default ZA-22 route mounts the relieved P-3 terrain and releases it af
   now = epoch + line.legMs + 500;
   cloud.update(za22StationApproach);
   assert.deepEqual(arrivals, ['summit']);
+  const radius = .27;
+  const [, plazaEnd] = mainSummitSpec.arrivalPlaza;
+  const handoffNorth = plazaEnd - radius - .001;
+  const plaza = cloud.surfaceAt(summitAssemblyAnchor.east, summitAssemblyAnchor.north + handoffNorth, radius);
+  const tread = assembly.trailSurfaceAt(0, handoffNorth, radius);
+  assert.ok(plaza !== undefined && tread !== undefined && Math.abs(plaza - tread) < .005);
   const terminal = { east: 336, north: 640, height: 347 };
   const returnTrip = cloud.action(terminal);
   assert.ok(returnTrip);
