@@ -37,8 +37,6 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$JX1_RUNTIME_COMMIT"
           npm ci --ignore-scripts --no-audit --no-fund
-          npm ci --prefix tools/voxel-tavern --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chromium
       - name: Record the original 92 doors and apply the two separate patches
         shell: bash
         run: |
@@ -61,6 +59,13 @@ jobs:
           node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . snapshot > "$RUNNER_TEMP/jx1-stall5/static-shifted.json"
           node ../ci/tools/jx1-stall5/compare-stall5-snapshots.mjs "$RUNNER_TEMP/jx1-stall5/static-baseline.json" "$RUNNER_TEMP/jx1-stall5/static-shifted.json" > "$RUNNER_TEMP/jx1-stall5/stall-shift-registry.json"
           node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . candidate "$RUNNER_TEMP/jx1-stall5/static-shifted.json" --require-all --known-book-five > "$RUNNER_TEMP/jx1-stall5/all-house-sweeps.json"
+      - name: Install the runtime viewer and browser dependencies
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --prefix tools/voxel-tavern --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
       - name: Walk both ways through the original 186:104 door
         shell: bash
         run: node ci/tools/jx1-formal/verify-jx1-production.mjs town "$RUNNER_TEMP/jx1-stall5/baseline.json" ci/tools/jx1-stall5/door-plan.json "$RUNNER_TEMP/jx1-stall5/door"

@@ -47,10 +47,11 @@ if (jx15Enabled) {
   sample.frustumCulled = false;
   jx15Crowd = sample;
   scene.add(sample);
-  (window as any).__jx15SeatProof = { request: null, result: null };
+  (window as any).__jx15SeatProof = { request: null, result: null, frames: 0, since: 0 };
 }
 `;
   code = replaceOnce(code, "const scene = new Scene();", "const scene = new Scene();\n" + setup);
+  code = replaceOnce(code, 'setNight(true);\ntimeOfDay.onclick', 'setNight(!jx15Enabled);\ntimeOfDay.onclick');
   code = replaceOnce(code, '  const wideView = !walking', `
   const jx15State = jx15Enabled ? (window as any).__jx15SeatProof : undefined;
   const jx15View = jx15State?.request;
@@ -64,15 +65,18 @@ if (jx15Enabled) {
   return replaceOnce(code, '} else renderer.render(scene, camera);', `} else {
         renderer.render(scene, camera);
         if (jx15View && jx15Crowd) {
-          const seat = jx15Seats[42];
-          jx15State.result = {
-            view: jx15View, position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
-            aspect: camera.aspect, fov: camera.fov, width: renderer.domElement.width, height: renderer.domElement.height,
-            seat, audience: 36, avatarParts: jx15Crowd.count,
-            draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-            png: renderer.domElement.toDataURL('image/png').split(',')[1],
-          };
-          jx15State.request = null;
+          if (!jx15State.frames++) jx15State.since = performance.now();
+          if (performance.now() - jx15State.since >= 400 && jx15State.frames >= 2 && architecture.has('stage')) {
+            const seat = jx15Seats[42];
+            jx15State.result = {
+              view: jx15View, position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
+              aspect: camera.aspect, fov: camera.fov, width: renderer.domElement.width, height: renderer.domElement.height,
+              seat, audience: 36, avatarParts: jx15Crowd.count, frames: jx15State.frames, daylight: !nightMode,
+              draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+              png: renderer.domElement.toDataURL('image/png').split(',')[1],
+            };
+            jx15State.request = null;
+          }
         }
       }`);
 }
@@ -97,6 +101,7 @@ async function capture(browser, root, variant, temp) {
       const handle = await page.evaluateHandle(async requested => {
         const state = (window).__jx15SeatProof;
         state.result = null;
+        state.frames = 0;
         state.request = requested;
         const until = performance.now() + 75_000;
         while (!state.result && performance.now() < until) {
@@ -113,6 +118,7 @@ async function capture(browser, root, variant, temp) {
       assert.ok(bytes.length > 5000 && frame.draws > 0 && frame.triangles > 0, 'Expected a drawn scene');
       assert.deepEqual([frame.width, frame.height], [viewport.width, viewport.height]);
       assert.equal(frame.audience, 36);
+      assert.ok(frame.daylight && frame.frames >= 2, 'Expected a settled daytime view');
       assert.ok(frame.avatarParts > 36);
       const filename = variant + '-' + view + '.png';
       await writeFile(join(outputRoot, filename), bytes);
@@ -144,7 +150,7 @@ try {
   assert.ok(oldSeat.position.every((value, index) => Math.abs(value - lockedEye[index]) < 1e-9));
   assert.equal(newSeat.position[0], oldSeat.position[0]);
   assert.equal(newSeat.position[2], oldSeat.position[2]);
-  assert.ok(newSeat.position[1] > oldSeat.position[1], 'Expected the raised seat eye point');
+  assert.ok(Math.abs(newSeat.position[1] - 14.73) < 1e-9, 'Expected the raised seat eye point');
   evidence.status = 'matched-browser-frames';
 } catch (error) {
   evidence.error = error.stack ?? String(error);
