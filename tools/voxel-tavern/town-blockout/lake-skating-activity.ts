@@ -45,7 +45,7 @@ export function createLakeSkatingActivity(
   deliveryStalled(): boolean;
   bestDelivery(): number | undefined;
   updateHeldBell(x: number, n: number, ground: number, yaw: number): void;
-  onPosition(x: number, n: number, dt: number, ice: boolean, groundedSkating: boolean): void;
+  onPosition(x: number, n: number, dt: number, ice: boolean, groundedSkating?: boolean): void;
   stop(): void;
 } {
   const markers = new InstancedMesh(new BoxGeometry(), new MeshBasicMaterial(), 7);
@@ -177,7 +177,7 @@ export function createLakeSkatingActivity(
     return bestBell;
   }
 
-  function onPosition(east: number, north: number, dt: number, ice: boolean, groundedSkating: boolean) {
+  function onPosition(east: number, north: number, dt: number, ice: boolean, groundedSkating = false) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     const atStation = (east - x) ** 2 + (north - n) ** 2 <= 6 ** 2;
     if (delivery.active()) {
