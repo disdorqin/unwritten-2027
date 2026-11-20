@@ -1,0 +1,735 @@
+{
+  "url": "http://127.0.0.1:18430/",
+  "build": "town-rehearsal",
+  "integration": "16b5346",
+  "tree": "ba94ec4f752e1115174522c7d68995ef0507ff8e",
+  "browser": "153.0.8010.0",
+  "menuShortcut": "酒馆",
+  "evidence": {
+    "positions": [
+      {
+        "at": 1795186442830,
+        "east": 223,
+        "north": 180,
+        "height": 12,
+        "yaw": 0.06970025204955382,
+        "seq": 0
+      },
+      {
+        "at": 1795186443419,
+        "east": 159,
+        "north": 219.5,
+        "height": 15.91,
+        "yaw": 0,
+        "seq": 1
+      },
+      {
+        "at": 1795186443520,
+        "east": 159,
+        "north": 219.88,
+        "height": 15.93,
+        "yaw": 0,
+        "seq": 2
+      },
+      {
+        "at": 1795186443564,
+        "east": 159,
+        "north": 220.63,
+        "height": 15.98,
+        "yaw": 0,
+        "seq": 3
+      },
+      {
+        "at": 1795186451108,
+        "east": 159,
+        "north": 221.01,
+        "height": 16,
+        "yaw": 0,
+        "seq": 4
+      },
+      {
+        "at": 1795186454054,
+        "east": 159,
+        "north": 221.38,
+        "height": 16.23,
+        "yaw": 0,
+        "seq": 5
+      },
+      {
+        "at": 1795186458017,
+        "east": 159,
+        "north": 221.76,
+        "height": 16.45,
+        "yaw": 0,
+        "seq": 6
+      },
+      {
+        "at": 1795186469590,
+        "east": 159,
+        "north": 222.14,
+        "height": 16.45,
+        "yaw": 0,
+        "seq": 7
+      },
+      {
+        "at": 1795186479238,
+        "east": 159,
+        "north": 222.51,
+        "height": 16.68,
+        "yaw": 0,
+        "seq": 8
+      },
+      {
+        "at": 1795186484594,
+        "east": 159,
+        "north": 222.89,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 9
+      },
+      {
+        "at": 1795186488626,
+        "east": 159,
+        "north": 223.27,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 10
+      },
+      {
+        "at": 1795186491234,
+        "east": 159,
+        "north": 223.64,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 11
+      },
+      {
+        "at": 1795186493918,
+        "east": 159,
+        "north": 224.02,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 12
+      },
+      {
+        "at": 1795186495578,
+        "east": 159,
+        "north": 224.4,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 13
+      },
+      {
+        "at": 1795186498727,
+        "east": 159,
+        "north": 224.77,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 14
+      },
+      {
+        "at": 1795186500800,
+        "east": 159,
+        "north": 225.15,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 15
+      },
+      {
+        "at": 1795186503004,
+        "east": 159,
+        "north": 225.53,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 16
+      },
+      {
+        "at": 1795186504546,
+        "east": 159,
+        "north": 226.09,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 17
+      },
+      {
+        "at": 1795186505753,
+        "east": 159,
+        "north": 226.47,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 18
+      },
+      {
+        "at": 1795186507777,
+        "east": 159,
+        "north": 226.84,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 19
+      },
+      {
+        "at": 1795186509120,
+        "east": 159,
+        "north": 227.22,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 20
+      },
+      {
+        "at": 1795186511794,
+        "east": 159,
+        "north": 227.6,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 21
+      },
+      {
+        "at": 1795186515462,
+        "east": 159,
+        "north": 227.97,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 22
+      },
+      {
+        "at": 1795186517538,
+        "east": 159,
+        "north": 228.35,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 23
+      },
+      {
+        "at": 1795186518002,
+        "east": 159,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 24
+      },
+      {
+        "at": 1795186520234,
+        "east": 158.75,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 25
+      },
+      {
+        "at": 1795186521900,
+        "east": 158.5,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 26
+      },
+      {
+        "at": 1795186523507,
+        "east": 158.25,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 27
+      },
+      {
+        "at": 1795186525177,
+        "east": 158,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 28
+      },
+      {
+        "at": 1795186526780,
+        "east": 157.75,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 29
+      },
+      {
+        "at": 1795186528406,
+        "east": 157.5,
+        "north": 228.73,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 30
+      },
+      {
+        "at": 1795186529676,
+        "east": 157.5,
+        "north": 229.1,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 31
+      },
+      {
+        "at": 1795186530840,
+        "east": 157.5,
+        "north": 229.48,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 32
+      },
+      {
+        "at": 1795186532774,
+        "east": 157.5,
+        "north": 229.86,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 33
+      },
+      {
+        "at": 1795186533038,
+        "east": 157.5,
+        "north": 230.23,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 34
+      },
+      {
+        "at": 1795186536000,
+        "east": 157.5,
+        "north": 230.61,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 35
+      },
+      {
+        "at": 1795186537355,
+        "east": 157.5,
+        "north": 230.99,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 36
+      },
+      {
+        "at": 1795186537707,
+        "east": 157.5,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 37
+      },
+      {
+        "at": 1795186538173,
+        "east": 157.25,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 38
+      },
+      {
+        "at": 1795186540254,
+        "east": 157,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 39
+      },
+      {
+        "at": 1795186540969,
+        "east": 157,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 40
+      },
+      {
+        "at": 1795186542616,
+        "east": 157,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 41
+      },
+      {
+        "at": 1795186576215,
+        "east": 156.75,
+        "north": 231.14,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 42
+      },
+      {
+        "at": 1795186576855,
+        "east": 156.63,
+        "north": 231.14,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 43
+      },
+      {
+        "at": 1795186577655,
+        "east": 156.63,
+        "north": 231.14,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 44
+      },
+      {
+        "at": 1795186589813,
+        "east": 156.88,
+        "north": 231.18,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 45
+      },
+      {
+        "at": 1795186591147,
+        "east": 157.12,
+        "north": 231.21,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 46
+      },
+      {
+        "at": 1795186592355,
+        "east": 157.37,
+        "north": 231.24,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 47
+      },
+      {
+        "at": 1795186593699,
+        "east": 157.6,
+        "north": 231.94,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 48
+      },
+      {
+        "at": 1795186594081,
+        "east": 157.6,
+        "north": 231.94,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 49
+      },
+      {
+        "at": 1795186629255,
+        "east": 157.37,
+        "north": 231.24,
+        "height": 16.9,
+        "yaw": 6.151071211822935,
+        "seq": 50
+      }
+    ],
+    "sockets": [
+      {
+        "url": "ws://127.0.0.1:18430/presence",
+        "join": true,
+        "received": 5
+      }
+    ],
+    "phases": [
+      {
+        "name": "birth",
+        "at": 1795186442613,
+        "hud": "东 223.0 m · 北 180.0 m · 行走",
+        "east": 223,
+        "north": 180,
+        "action": "E · 点亮钟楼广场迎宾灯",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 3,
+          "calls": 183,
+          "triangles": 1151516,
+          "points": 1406,
+          "lines": 0
+        }
+      },
+      {
+        "name": "ordinary tavern menu landing",
+        "at": 1795186443419,
+        "hud": "东 159.0 m · 北 219.5 m · 行走",
+        "east": 159,
+        "north": 219.5,
+        "action": "长按采雪",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 19,
+          "calls": 170,
+          "triangles": 753132,
+          "points": 1310,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186443419,
+          "east": 159,
+          "north": 219.5,
+          "height": 15.91,
+          "yaw": 0,
+          "seq": 1
+        }
+      },
+      {
+        "name": "walk through the door",
+        "at": 1795186518010,
+        "hud": "东 159.0 m · 北 228.7 m · 疾跑",
+        "east": 159,
+        "north": 228.7,
+        "action": "E · 和罗大江聊天",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 47,
+          "calls": 140,
+          "triangles": 661736,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186518002,
+          "east": 159,
+          "north": 228.73,
+          "height": 16.9,
+          "yaw": 0,
+          "seq": 24
+        }
+      },
+      {
+        "name": "walk into west aisle",
+        "at": 1795186528417,
+        "hud": "东 157.5 m · 北 228.7 m · 行走",
+        "east": 157.5,
+        "north": 228.7,
+        "action": "E · 和罗大江聊天",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 53,
+          "calls": 139,
+          "triangles": 650252,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186528406,
+          "east": 157.5,
+          "north": 228.73,
+          "height": 16.9,
+          "yaw": 0,
+          "seq": 30
+        }
+      },
+      {
+        "name": "walk to the mixer",
+        "at": 1795186537713,
+        "hud": "东 157.5 m · 北 231.2 m · 疾跑",
+        "east": 157.5,
+        "north": 231.2,
+        "action": "E · 就座 · 吧台第 4 张吧凳",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 60,
+          "calls": 133,
+          "triangles": 640472,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186537707,
+          "east": 157.5,
+          "north": 231.18,
+          "height": 16.9,
+          "yaw": 0,
+          "seq": 37
+        }
+      },
+      {
+        "name": "align between stools at the mixer",
+        "at": 1795186540257,
+        "hud": "东 157.0 m · 北 231.2 m · 行走",
+        "east": 157,
+        "north": 231.2,
+        "action": "E · 在吧台调酒",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 62,
+          "calls": 133,
+          "triangles": 640472,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186540254,
+          "east": 157,
+          "north": 231.18,
+          "height": 16.9,
+          "yaw": 0,
+          "seq": 39
+        }
+      },
+      {
+        "name": "mixed and took ordinary fireplace apple drink",
+        "at": 1795186575064,
+        "hud": "东 157.0 m · 北 231.2 m · 行走",
+        "east": 157,
+        "north": 231.2,
+        "action": "长按采雪",
+        "announce": "端起了「炉火苹果」，找个地方可以喝一口。",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 90,
+          "calls": 138,
+          "triangles": 656954,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186542616,
+          "east": 157,
+          "north": 231.18,
+          "height": 16.9,
+          "yaw": 6.151071211822935,
+          "seq": 41
+        }
+      },
+      {
+        "name": "native approach to third or fourth bar stool",
+        "at": 1795186592358,
+        "hud": "东 157.4 m · 北 231.2 m · 行走",
+        "east": 157.4,
+        "north": 231.2,
+        "action": "E · 就座 · 吧台第 4 张吧凳",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0
+        },
+        "render": {
+          "frame": 115,
+          "calls": 136,
+          "triangles": 656570,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186592355,
+          "east": 157.37,
+          "north": 231.24,
+          "height": 16.9,
+          "yaw": 6.151071211822935,
+          "seq": 47
+        }
+      },
+      {
+        "name": "seated with drink",
+        "at": 1795186593699,
+        "hud": "已就座",
+        "action": "E · 酒馆座位",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": true,
+          "count": 9,
+          "center": [
+            157.5998621775036,
+            17.967330086364214,
+            -233.05999755859375
+          ]
+        },
+        "render": {
+          "frame": 116,
+          "calls": 134,
+          "triangles": 640580,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186593699,
+          "east": 157.6,
+          "north": 231.94,
+          "height": 16.9,
+          "yaw": 0,
+          "seq": 48
+        }
+      },
+      {
+        "name": "stood up with cup removed",
+        "at": 1795186629246,
+        "hud": "东 157.4 m · 北 231.2 m · 行走",
+        "east": 157.4,
+        "north": 231.2,
+        "action": "E · 就座 · 吧台第 4 张吧凳",
+        "announce": "",
+        "status": "已连接 · 1 人",
+        "mesh": {
+          "visible": false,
+          "count": 0,
+          "center": [
+            157.5998621775036,
+            17.967330086364214,
+            -233.05999755859375
+          ]
+        },
+        "render": {
+          "frame": 126,
+          "calls": 136,
+          "triangles": 656570,
+          "points": 90,
+          "lines": 0
+        },
+        "wire": {
+          "at": 1795186629255,
+          "east": 157.37,
+          "north": 231.24,
+          "height": 16.9,
+          "yaw": 6.151071211822935,
+          "seq": 50
+        }
+      }
+    ],
+    "cupImage": {
+      "width": 223,
+      "height": 125,
+      "timestamp": 166490.3,
+      "source": "WebGL2 default framebuffer after render"
+    },
+    "standImage": {
+      "width": 223,
+      "height": 125,
+      "timestamp": 196305.7,
+      "source": "WebGL2 default framebuffer after render"
+    }
+  },
+  "errors": [],
+  "requestFailures": [],
+  "badResponses": [],
+  "elapsedMs": 205274
+}
