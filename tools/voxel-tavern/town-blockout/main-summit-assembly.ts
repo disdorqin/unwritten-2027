@@ -10,6 +10,7 @@ import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
+  withinMainSummitRegistrationReach,
 } from './main-summit-registration';
 import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-belt';
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
@@ -161,6 +162,8 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     // The host can prefer its plaza surface where it overlaps the P-1 local tread.
     trailSurfaceAt: trail.sampleWalkwaySurface,
     wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
+    atCloudStamp: (position: ReturnType<typeof summitWorldPoint>) =>
+      withinMainSummitRegistrationReach(position, landmarks.cloudDeck.stampPoint),
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;

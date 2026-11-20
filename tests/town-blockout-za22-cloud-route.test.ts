@@ -150,3 +150,44 @@ test('boarding uses the station and the cable schedule, and pending riders can b
   cloud.update({ ...za22StationApproach, north: 320 });
   assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
 });
+
+test('the default mountain route offers the lower stamp at the mounted monument when authority is available', () => {
+  const epoch = Date.UTC(2026, 0, 1);
+  let now = epoch;
+  let available = true;
+  let requests = 0;
+  const cloud = createZa22CloudRoute({
+    now: () => now,
+    enterOrExit(terminal) { assert.equal(terminal, 'summit'); },
+    view() { assert.fail('stamping must use the passport transport'); },
+    cloudStamp: { available: () => available, request() { requests++; } },
+  });
+  const height = cloud.surfaceAt(306, 659, .27);
+  assert.equal(height, 347);
+  const stamp = { east: 306, north: 659, height };
+  assert.equal(cloud.action(stamp), undefined);
+  cloud.action(za22StationApproach)?.run();
+  cloud.update(za22StationApproach);
+  assert.ok(cloud.riding());
+  assert.equal(cloud.action(stamp), undefined);
+  now += createZa22NorthRidgeLine(26).legMs;
+  cloud.update(stamp);
+  assert.ok(cloud.active() && !cloud.riding());
+  assert.equal(cloud.blocked(stamp.east, stamp.north, stamp.height, .27, 1.72), false);
+  available = false;
+  assert.equal(cloud.action(stamp), undefined);
+  available = true;
+  assert.equal(cloud.action({ ...stamp, height: stamp.height + .44 }), undefined);
+  assert.equal(cloud.action({ ...stamp, east: stamp.east + 1.11 }), undefined);
+  assert.equal(cloud.action({ east: 350, north: 1674, height: 800 }), undefined);
+  const action = cloud.action(stamp);
+  assert.equal(action?.label, '在前山碑盖章');
+  assert.equal(requests, 0);
+  available = false;
+  action?.run();
+  assert.equal(requests, 0);
+  available = true;
+  action?.run();
+  assert.equal(requests, 1);
+  assert.equal(cloud.assembly()?.interact(6, -17, 347).changed, true);
+});

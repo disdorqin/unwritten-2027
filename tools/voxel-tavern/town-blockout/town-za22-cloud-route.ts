@@ -17,6 +17,7 @@ type Host = {
   now(): number;
   enterOrExit(terminal: Terminal, at: Point): void;
   view(title: string, message: string): void;
+  cloudStamp?: { available(): boolean; request(): void };
 };
 
 export const za22StationApproach = { east: 536.8, north: 317.15, height: 26.14 };
@@ -211,6 +212,11 @@ export function createZa22CloudRoute(host: Host) {
     if (near(position, benchVisitor, 1.45)) return {
       label: '查看星港坪装配和起飞线',
       run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标向东滑跑出坪。'); },
+    };
+    const cloudStamp = host.cloudStamp;
+    if (cloudStamp?.available() && world?.assembly.atCloudStamp(position)) return {
+      label: '在前山碑盖章',
+      run() { if (mode === 'summit' && cloudStamp.available()) cloudStamp.request(); },
     };
     return world?.gate.action(position);
   }

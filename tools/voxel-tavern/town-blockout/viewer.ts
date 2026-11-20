@@ -305,6 +305,12 @@ const presence = createTownPresence(scene, camera, announceActivity, resetMoveme
     : grid.heightAt(east, north));
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
+  cloudStamp: {
+    available: presence.summitPassportAvailable,
+    request() {
+      if (!presence.requestSummitPassport('cloud-stamp')) announceActivity('前山碑盖章暂不可用');
+    },
+  },
   enterOrExit(terminal, at) {
     presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
     x = at.east;
@@ -1202,6 +1208,14 @@ function announceActivity(message: string, gold = false) {
     activityStatus.removeAttribute('data-gold');
   }, 4200);
 }
+presence.onSummitPassport(reply => {
+  if (reply.action !== 'cloud-stamp') return;
+  if (reply.result === 'ok' && reply.progress.cloudStamped) {
+    announceActivity('前山碑已盖章', true);
+    return;
+  }
+  announceActivity(reply.result === 'position' ? '请走到前山碑正面再盖章' : '前山碑盖章暂未确认，请重试');
+});
 presence.onTestFireworks((seed, ageSeconds) => festival.startShow(makeTestFireworksTable(seed, grid.heightAt), {
   ageSeconds, clockMs: () => performance.now(),
 }));
