@@ -1,0 +1,647 @@
+{
+  "head": "354aafb1aa1b2833ca7b4b6056f916cc13035e14",
+  "counts": {
+    "total": 92,
+    "oldTown": 52,
+    "extended": 38,
+    "village": 2
+  },
+  "plazaBounds": [
+    161,
+    152,
+    251,
+    212
+  ],
+  "audit": [
+    {
+      "id": "old-town:123:144",
+      "reason": "path",
+      "site": {
+        "x": 123,
+        "n": 144,
+        "w": 9.2,
+        "d": 10.6,
+        "angle": 1.5707963267948966,
+        "style": "shop",
+        "variant": 189
+      },
+      "footprint": {
+        "x": 123,
+        "n": 144,
+        "w": 10.6,
+        "d": 9.2,
+        "angle": 1.5707963267948966,
+        "style": "shop",
+        "variant": 189
+      },
+      "footprintRailConflict": false,
+      "rejection": {
+        "id": "old-town:123:144",
+        "zone": "market",
+        "location": [
+          123,
+          144
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "insidePublishedSouthLoopRange": false,
+      "center": {
+        "east": 123,
+        "north": 144,
+        "tile": 0,
+        "terrainHeight": 10.54597282409668,
+        "water": false,
+        "blockedByHousing": false,
+        "actualDoor": null,
+        "nearestRoad": {
+          "id": "southwest",
+          "start": [
+            151,
+            156
+          ],
+          "end": [
+            127,
+            140
+          ],
+          "distance": 5.656854249492381,
+          "halfWidth": 3.5,
+          "marginToHousingGate": 0.8068542494923805
+        },
+        "nearestSouthLoop": {
+          "id": "south-loop",
+          "start": [
+            108,
+            114
+          ],
+          "end": [
+            129,
+            86
+          ],
+          "distance": 33.54101966249685,
+          "halfWidth": 3,
+          "marginToHousingGate": 29.19101966249685
+        },
+        "nearestRailSample": 75.40641506479152,
+        "insideRailKeepClear": false
+      },
+      "gradeSpread": 2.623971462249754,
+      "samples": [
+        {
+          "east": 116.7,
+          "north": 138.4,
+          "height": 10.780129528045654,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              127,
+              140
+            ],
+            "end": [
+              108,
+              114
+            ],
+            "distance": 7.372102016308654,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 2.522102016308654
+          }
+        },
+        {
+          "east": 116.7,
+          "north": 144,
+          "height": 11.597038269042969,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              127,
+              140
+            ],
+            "end": [
+              108,
+              114
+            ],
+            "distance": 10.676194916625587,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 5.826194916625587
+          }
+        },
+        {
+          "east": 116.7,
+          "north": 149.6,
+          "height": 12.510567188262938,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 14.080127840328716,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 9.230127840328716
+          }
+        },
+        {
+          "east": 123,
+          "north": 138.4,
+          "height": 9.886595726013184,
+          "tile": 1,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": "path",
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              127,
+              140
+            ],
+            "end": [
+              108,
+              114
+            ],
+            "distance": 2.285537946083899,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -2.564462053916101
+          }
+        },
+        {
+          "east": 123,
+          "north": 144,
+          "height": 10.54597282409668,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 5.656854249492381,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 0.8068542494923805
+          }
+        },
+        {
+          "east": 123,
+          "north": 149.6,
+          "height": 12.34235382080078,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 10.206483610544211,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 5.3564836105442115
+          }
+        },
+        {
+          "east": 129.3,
+          "north": 138.4,
+          "height": 10.035576915740966,
+          "tile": 1,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": "path",
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 2.6070909222585787,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -2.2429090777414213
+          }
+        },
+        {
+          "east": 129.3,
+          "north": 144,
+          "height": 10.143268966674805,
+          "tile": 1,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": "path",
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 2.0523907260333405,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -2.7976092739666596
+          }
+        },
+        {
+          "east": 129.3,
+          "north": 149.6,
+          "height": 11.667262840270988,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southwest",
+            "start": [
+              151,
+              156
+            ],
+            "end": [
+              127,
+              140
+            ],
+            "distance": 6.711872374325261,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 1.861872374325261
+          }
+        }
+      ],
+      "nearestBuiltHouseFootprint": {
+        "site": {
+          "x": 105,
+          "n": 152,
+          "w": 13.04,
+          "d": 10.6,
+          "angle": -1.5707963267948966,
+          "style": "alpine",
+          "variant": 215
+        },
+        "door": {
+          "id": "old-town:105:152",
+          "zone": "forest",
+          "x": 98.28,
+          "n": 152,
+          "ground": 13.423988151550294,
+          "exitYaw": -1.5707963267948968
+        },
+        "distance": 12.785945408924597
+      },
+      "nearestRegisteredDoor": {
+        "door": {
+          "id": "old-town:179:155",
+          "zone": "market",
+          "x": 146.5,
+          "n": 136.22,
+          "ground": 11.560672130584717,
+          "exitYaw": 1.2246467991473532e-16
+        },
+        "distance": 24.754361231912245
+      }
+    },
+    {
+      "id": "old-town:255:161",
+      "reason": "plaza",
+      "site": {
+        "x": 255,
+        "n": 161,
+        "w": 9.2,
+        "d": 10.6,
+        "angle": 0,
+        "style": "shop",
+        "variant": 321
+      },
+      "footprint": {
+        "x": 255,
+        "n": 161,
+        "w": 9.2,
+        "d": 10.6,
+        "angle": 0,
+        "style": "shop",
+        "variant": 321
+      },
+      "footprintRailConflict": false,
+      "rejection": {
+        "id": "old-town:255:161",
+        "zone": "central",
+        "location": [
+          255,
+          161
+        ],
+        "relocated": false,
+        "overlapsPlaza": true,
+        "reason": "plaza"
+      },
+      "insidePublishedSouthLoopRange": false,
+      "center": {
+        "east": 255,
+        "north": 161,
+        "tile": 0,
+        "terrainHeight": 11.063054084777832,
+        "water": false,
+        "blockedByHousing": false,
+        "actualDoor": null,
+        "nearestRoad": {
+          "id": "southeast",
+          "start": [
+            245,
+            152
+          ],
+          "end": [
+            260,
+            155
+          ],
+          "distance": 6.864064729836442,
+          "halfWidth": 3.5,
+          "marginToHousingGate": 2.014064729836442
+        },
+        "nearestSouthLoop": {
+          "id": "south-loop",
+          "start": [
+            218,
+            85
+          ],
+          "end": [
+            269,
+            100
+          ],
+          "distance": 62.58594091327541,
+          "halfWidth": 3,
+          "marginToHousingGate": 58.23594091327541
+        },
+        "nearestRailSample": 21.31978535666146,
+        "insideRailKeepClear": false
+      },
+      "gradeSpread": 2.289009761810302,
+      "samples": [
+        {
+          "east": 249.4,
+          "north": 154.7,
+          "height": 12,
+          "tile": 2,
+          "insidePlazaGate": true,
+          "blockedByLamp": false,
+          "sampleFailure": "plaza",
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 1.7846568297574625,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -3.0653431702425378
+          }
+        },
+        {
+          "east": 249.4,
+          "north": 161,
+          "height": 12,
+          "tile": 2,
+          "insidePlazaGate": true,
+          "blockedByLamp": false,
+          "sampleFailure": "plaza",
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 7.962315086610271,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 3.112315086610271
+          }
+        },
+        {
+          "east": 249.4,
+          "north": 167.3,
+          "height": 12,
+          "tile": 2,
+          "insidePlazaGate": true,
+          "blockedByLamp": false,
+          "sampleFailure": "plaza",
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 14.13997334346308,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 9.28997334346308
+          }
+        },
+        {
+          "east": 255,
+          "north": 154.7,
+          "height": 11.32435884475708,
+          "tile": 1,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": "path",
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 0.6864064729836328,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -4.163593527016367
+          }
+        },
+        {
+          "east": 255,
+          "north": 161,
+          "height": 11.063054084777832,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 6.864064729836442,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 2.014064729836442
+          }
+        },
+        {
+          "east": 255,
+          "north": 167.3,
+          "height": 11.017555618286133,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 13.04172298668925,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 8.19172298668925
+          }
+        },
+        {
+          "east": 260.6,
+          "north": 154.7,
+          "height": 11,
+          "tile": 1,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": "path",
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              260,
+              155
+            ],
+            "end": [
+              276,
+              149
+            ],
+            "distance": 0.07022468831768101,
+            "halfWidth": 3.5,
+            "marginToHousingGate": -4.779775311682319
+          }
+        },
+        {
+          "east": 260.6,
+          "north": 161,
+          "height": 10.222558975219725,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 6.029925372672537,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 1.1799253726725367
+          }
+        },
+        {
+          "east": 260.6,
+          "north": 167.3,
+          "height": 9.710990238189698,
+          "tile": 0,
+          "insidePlazaGate": false,
+          "blockedByLamp": false,
+          "sampleFailure": null,
+          "tightestPath": {
+            "id": "southeast",
+            "start": [
+              245,
+              152
+            ],
+            "end": [
+              260,
+              155
+            ],
+            "distance": 12.314625451064288,
+            "halfWidth": 3.5,
+            "marginToHousingGate": 7.464625451064288
+          }
+        }
+      ],
+      "nearestBuiltHouseFootprint": {
+        "site": {
+          "x": 262,
+          "n": 180,
+          "w": 11.66,
+          "d": 11.85,
+          "angle": 3.141592653589793,
+          "style": "courtyard",
+          "variant": 339
+        },
+        "door": {
+          "id": "old-town:262:180",
+          "zone": "central",
+          "x": 262,
+          "n": 187.345,
+          "ground": 11.720522108078002,
+          "exitYaw": 1.2246467991473532e-16
+        },
+        "distance": 13.127243617759213
+      },
+      "nearestRegisteredDoor": {
+        "door": {
+          "id": "old-town:262:180",
+          "zone": "central",
+          "x": 262,
+          "n": 187.345,
+          "ground": 11.720522108078002,
+          "exitYaw": 1.2246467991473532e-16
+        },
+        "distance": 27.259109027992825
+      }
+    }
+  ]
+}
