@@ -1,5 +1,6 @@
 import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, MeshLambertMaterial, Object3D, Vector3, type Scene } from 'three';
 import type { TownActivity } from './town-activity';
+import { snowballSpeed, type SnowballEvent } from './town-snowball';
 
 export type TownSnowballTarget = {
   id: string;
@@ -16,8 +17,22 @@ export type TownSnowballTarget = {
 export const snowPracticeStand = [223, 163] as const;
 export const snowPracticeTarget = [223, 173] as const;
 
-export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number, north: number) => number):
-  TownActivity & { snowballTargets: readonly TownSnowballTarget[] } {
+const practiceRoundMs = 60_000;
+const practiceTargetClearance = .85;
+
+type PracticeRoundOptions = {
+  status(text: string): void;
+  announce(text: string): void;
+  now?(): number;
+};
+
+export function createSnowPracticeTarget(
+  scene: Scene, heightAt: (east: number, north: number) => number, options?: PracticeRoundOptions,
+): TownActivity & {
+  snowballTargets: readonly TownSnowballTarget[];
+  updateRound(): void;
+  onSnowballEvent(event: SnowballEvent): void;
+} {
   const [east, north] = snowPracticeTarget;
   const ground = heightAt(east, north);
   // The profile is shared by a single instance batch. Details face the snowy practice lane.
@@ -95,10 +110,80 @@ export function createSnowPracticeTarget(scene: Scene, heightAt: (east: number, 
     },
   };
 
+  const [standEast, standNorth] = snowPracticeStand;
+  const standDistance = Math.hypot(east - standEast, north - standNorth);
+  const periodMs = 4 * Math.PI * standDistance / snowballSpeed(1) * 1000;
+  const roundCycles = Math.floor(practiceRoundMs / periodMs);
+  const amplitude = target.radius * 2;
+  const now = options?.now ?? (() => performance.now());
+  let round: { endAt: number; hits: number; launches: Set<number> } | undefined;
+  let displayed = '';
+
+  function paint(text: string) {
+    if (displayed === text) return;
+    displayed = text;
+    options?.status(text);
+  }
+
+  function paintRound(time: number) {
+    if (!round) return;
+    paint(`移动靶场 · ${Math.ceil((round.endAt - time) / 1000)} 秒 · 命中 ${round.hits}`);
+  }
+
+  function startRound() {
+    if (round) return;
+    const time = now();
+    round = { endAt: time + practiceRoundMs, hits: 0, launches: new Set() };
+    paintRound(time);
+  }
+
+  function moveTarget(offset: number) {
+    target.x = east + offset;
+    target.y = offset ? heightAt(target.x, north) : ground;
+    model.position.set(offset, target.y - ground, 0);
+  }
+
+  function updateRound() {
+    if (!round) return;
+    const time = now();
+    if (time >= round.endAt) {
+      const { hits } = round;
+      round = undefined;
+      moveTarget(0);
+      paint('');
+      options?.announce(`移动靶结算 · 命中 ${hits}`);
+      return;
+    }
+    const progress = 1 - (round.endAt - time) / practiceRoundMs;
+    moveTarget(Math.sin(progress * 2 * Math.PI * roundCycles) * amplitude);
+    paintRound(time);
+  }
+
+  function onSnowballEvent(event: SnowballEvent) {
+    if (!round || event.shotBy !== 'player' || event.thrower !== 'local') return;
+    const time = now();
+    if (time >= round.endAt) return;
+    if (event.type === 'throw') {
+      if (event.scoreable) round.launches.add(event.id);
+      return;
+    }
+    if (!round.launches.delete(event.id) || event.type !== 'impact' ||
+        !event.scored || event.targetId !== target.id) return;
+    round.hits++;
+    paintRound(time);
+  }
+
   return {
-    spots: [],
+    spots: options ? [{
+      x: standEast, n: standNorth, ground: heightAt(standEast, standNorth),
+      range: practiceTargetClearance, label: '开始移动靶练习', available: () => !round, run: startRound,
+    }] : [],
     snowballTargets: [target],
-    blocked(x, n, feet) { return feet < ground + 2.35 && Math.hypot(x - east, n - north) < .85; },
+    updateRound,
+    onSnowballEvent,
+    blocked(x, n, feet) {
+      return feet < target.y + target.height && Math.hypot(x - target.x, n + target.z) < practiceTargetClearance;
+    },
     update(dt) {
       if (!remaining) return;
       remaining = Math.max(0, remaining - dt);

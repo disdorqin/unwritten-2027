@@ -1,0 +1,67 @@
+name: Verify noon assembly
+
+on:
+  push:
+    branches: [town-review-noon-assembly-20261120]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  town:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser tooling
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build release images
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/noon-assembly"
+          mkdir -p "$out"
+          git rev-parse HEAD | tee "$out/source-commit.txt"
+          git rev-parse HEAD^{tree} | tee "$out/source-tree.txt"
+          npm run typecheck 2>&1 | tee "$out/typecheck.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
+            -f tools/Dockerfile.town-preview -t noon-assembly-web . 2>&1 | tee "$out/town-preview-build.log"
+          docker build --progress plain --build-arg "TOWN_RELEASE=$GITHUB_SHA" \
+            -f tools/Dockerfile.town-presence -t noon-assembly-presence . 2>&1 | tee "$out/presence-build.log"
+      - name: Run the production first-frame smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/noon-assembly"
+          url=http://127.0.0.1:38100
+          cleanup() {
+            docker logs noon-assembly-web > "$out/town-preview.log" 2>&1 || true
+            docker logs noon-assembly-presence > "$out/presence.log" 2>&1 || true
+            docker rm -f noon-assembly-web noon-assembly-presence > /dev/null 2>&1 || true
+            docker network rm noon-assembly > /dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create noon-assembly
+          docker run -d --name noon-assembly-presence --network noon-assembly --network-alias presence \
+            noon-assembly-presence
+          docker run -d --name noon-assembly-web --network noon-assembly \
+            -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 noon-assembly-web
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
+            --max-time 4 "$url/healthz" | tee "$out/healthz.txt"
+          test "$(cat "$out/healthz.txt")" = "town-preview $GITHUB_SHA"
+          node tools/verify-noon-assembly-first-frame.mjs "$url" "$out"
+      - name: Upload first-frame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: noon-assembly-first-frame
+          path: ${{ runner.temp }}/noon-assembly
+          if-no-files-found: warn

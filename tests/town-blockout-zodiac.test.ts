@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { PerspectiveCamera, Raycaster, Vector3, type Group } from 'three';
+import { InstancedMesh, Matrix4, PerspectiveCamera, Raycaster, Vector3, type Group } from 'three';
 import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain';
 import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower';
 import { buildLakesideLandmark } from '../tools/voxel-tavern/town-blockout/landmark-lakeside';
-import { buildMarketLandmark, workshopMonkeySteps } from '../tools/voxel-tavern/town-blockout/landmark-market';
+import { buildMarketLandmark, workshopMonkeySteps, type WorkshopRiddleWall } from '../tools/voxel-tavern/town-blockout/landmark-market';
 import { buildHotSpring } from '../tools/voxel-tavern/town-blockout/landmark-hot-spring';
 import { readWalkGeometry, type Box } from '../tools/voxel-tavern/town-blockout/landmark-kit';
 import { extensionPlots } from '../tools/voxel-tavern/town-blockout/town-extension';
@@ -193,11 +193,45 @@ test('the workshop crates and existing bench admit the monkey climb continuously
     else Reflect.deleteProperty(globalThis, 'document');
   }
   workshop.position.set(126, 10, -115);
+  assert.equal(workshop.rotation.y, -Math.PI / 2);
+  const wall = workshop.userData.riddleWall as WorkshopRiddleWall;
+  assert.deepEqual(wall.stands, Array.from({ length: 10 }, (_, index) => [-6.75 + index * 1.5, .15, -4.7]));
+  wall.update(0, new Set());
+  const matrix = new Matrix4();
+  const centre = new Vector3();
+  const exterior = [
+    [-3.70, 4.46, 7.67], [3.70, 4.46, 7.67],
+    [-8.95, 4.56, -5.30], [8.95, 4.56, -5.30],
+    [-4.22, 4.72, -6.76], [4.22, 4.72, -6.76],
+    [-6.20, .759, 6.66], [6.10, .195, 6.62], [6.15, 3.79, 7.90],
+  ].map(([x, y, z]) => new Vector3(x, y, z));
+  const matched = new Set<Vector3>();
+  for (const child of workshop.children) {
+    if (!(child instanceof InstancedMesh) || child.geometry.type !== 'BoxGeometry') continue;
+    for (let index = 0; index < child.count; index++) {
+      child.getMatrixAt(index, matrix);
+      centre.setFromMatrixPosition(matrix);
+      for (const point of exterior) {
+        if (centre.distanceToSquared(point) < 1e-8) matched.add(point);
+      }
+    }
+  }
+  assert.equal(matched.size, exterior.length, 'the trim and forecourt details survive with zero active riddles');
+  wall.update(6, new Set());
+
   const terrain = createTerrainGrid();
   const zodiac = createZodiacProgress(['monkey']);
   const batch = createTownZodiacSites(zodiac, () => {});
   const spot = batch.mount(workshop, lanternWorkshopMonkeySite);
   const { colliders, floors } = readWalkGeometry(workshop);
+  assert.equal(colliders.length, 47);
+  assert.equal(floors.length, 8);
+  const forecourtBounds = colliders.slice(-2).map(({ min, max }) =>
+    [min, max].map(point => point.map(value => Number(value.toFixed(3)))));
+  assert.deepEqual(forecourtBounds, [
+    [[119.08, 10.15, -121.40], [119.68, 10.77, -120.80]],
+    [[119.08, 10.15, -109.24], [119.68, 10.59, -108.56]],
+  ]);
   const obstacles = [...colliders, ...floors];
   const localToWorld = (point: readonly [number, number, number]) => workshop.localToWorld(new Vector3(...point));
   const overlaps = (box: Box, vector: Vector3) =>

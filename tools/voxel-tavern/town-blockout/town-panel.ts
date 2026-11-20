@@ -1,4 +1,5 @@
 const storageKey = 'unwritten.town-panel.collapsed.v1';
+export {};
 const toggle = document.querySelector<HTMLButtonElement>('#town-panel-toggle')!;
 const controls = document.getElementById('town-panel-controls')!;
 const panel = toggle.closest('.panel')!;
