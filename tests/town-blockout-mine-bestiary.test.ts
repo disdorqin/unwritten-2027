@@ -88,6 +88,25 @@ test('skeleton follows distinct mining sounds with fixed speed and stays outside
   assert.ok(Math.abs(firstStep - .17) < 1e-8 && Math.abs(patrol.first().at.east - .34) < 1e-8);
 });
 
+test('a skeleton loses a dark quiet miner at the last heard point and follows only a new mining sound', () => {
+  const target = { east: 4, north: 0 };
+  const { advance, first } = setup('skeleton-miner', { seesPlayer: () => false });
+  advance({ at: target, action: 'mine' });
+  for (let step = 0; step < 6; step++) assert.equal(advance({ at: target, action: 'quiet' }).damage, 0);
+  assert.equal(first().phase, 'retreat');
+  assert.equal(first().at.east, 1);
+  advance({ at: target, action: 'run' });
+  assert.equal(first().phase, 'retreat');
+  assert.ok(Math.abs(first().at.east - .83) < 1e-8);
+
+  advance({ at: target, action: 'mine' });
+  assert.equal(first().phase, 'chase');
+  assert.ok(Math.abs(first().at.east - 1) < 1e-8);
+  for (let step = 0; step < 24; step++) assert.equal(advance({ at: target, action: 'quiet' }).damage, 0);
+  assert.deepEqual(first().at, { east: 0, north: 0 });
+  assert.equal(first().phase, 'rest');
+});
+
 test('zombie cues a medium attack after a longer warning, but walking away or reaching the camp fire prevents it', () => {
   const { advance, first } = setup('zombie-miner');
   advance({ action: 'walk' });

@@ -146,7 +146,9 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
       distance(actor.at, snowballLanding.at) <= snakeVibrationRange ? snowballLanding.at : undefined;
     const investigatingLanding = idleSnake && (nearbyLanding !== undefined || actor.probeTarget !== undefined);
     if (!sameRoom && species !== 'skeleton-miner' && !investigatingLanding) actor.phase = 'retreat';
-    if (actor.phase === 'retreat') {
+    const heardMining = species === 'skeleton-miner' && !safeFire && player.action === 'mine' &&
+      range <= 12 && host.hearsMining(id, player);
+    if (actor.phase === 'retreat' && !heardMining) {
       move(actor, origin, speed / 10);
       if (distance(actor.at, origin) <= 1e-6) actor.phase = 'rest';
       return;
@@ -158,9 +160,14 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
 
     const see = sameRoom && host.seesPlayer(id, player);
     if (species === 'skeleton-miner') {
-      if (player.action === 'mine' && host.hearsMining(id, player) && distance(actor.at, player.at) <= 12) {
-        actor.patrolTarget = advancePoint(actor.patrolTarget, player.at, 1);
+      if (heardMining) {
+        const previousTarget = actor.phase === 'retreat' ? actor.at : actor.patrolTarget;
+        actor.patrolTarget = advancePoint(previousTarget, player.at, 1);
         actor.phase = 'chase';
+      } else if (actor.phase === 'chase' && !see && distance(actor.at, actor.patrolTarget) <= 1e-6) {
+        actor.patrolTarget = origin;
+        actor.phase = 'retreat';
+        return;
       }
     } else if (species === 'crystal-bat') {
       if (actor.phase === 'rest' && sameRoom && distance(origin, player.at) <= 6 && inCave.has(player.action)) {

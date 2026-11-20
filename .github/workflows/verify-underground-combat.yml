@@ -8,6 +8,7 @@ on:
       - 'src/presence/underground-mine-encounter.ts'
       - 'src/presence/underground-survival.ts'
       - 'src/shared/mine-bestiary.ts'
+      - 'tests/town-blockout-mine-bestiary.test.ts'
       - 'tools/voxel-tavern/town-blockout/underground-combat-feedback.ts'
       - 'tools/voxel-tavern/town-blockout/underground-combat-debris.ts'
       - 'tools/voxel-tavern/town-blockout/underground-knockback.ts'
@@ -30,7 +31,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: node --import tsx --test tests/town-blockout-underground-combat-feedback.test.ts tests/town-blockout-underground-knockback.test.ts tests/server/underground-mine-encounter.test.ts
+      - run: node --import tsx --test tests/town-blockout-mine-bestiary.test.ts tests/town-blockout-underground-combat-feedback.test.ts tests/town-blockout-underground-knockback.test.ts tests/server/underground-mine-encounter.test.ts
       - name: Verify in Chromium
         shell: bash
         run: |
