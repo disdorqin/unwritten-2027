@@ -22,7 +22,7 @@ async function systemMouse(...args) {
 
 async function observeInput(page) {
   await page.addInitScript(eventName => {
-    const proof = { x: 0, y: 0, motionSamples: 0, events: [] };
+    const proof = { x: 0, y: 0, motionSamples: 0, buttons: [], events: [] };
     Object.defineProperty(window, '__db2AimProof', { value: proof });
     document.addEventListener('mousemove', event => {
       if (!event.isTrusted || document.pointerLockElement?.tagName !== 'CANVAS') return;
@@ -30,6 +30,13 @@ async function observeInput(page) {
       proof.y += event.movementY;
       proof.motionSamples++;
     }, true);
+    for (const type of ['pointerdown', 'pointerup']) {
+      document.addEventListener(type, event => {
+        if (event.isTrusted && event.pointerType === 'mouse' && event.button === 0) {
+          proof.buttons.push({ type, at: performance.now(), locked: document.pointerLockElement?.tagName === 'CANVAS' });
+        }
+      }, true);
+    }
     document.addEventListener(eventName, event => {
       if (event.target?.tagName !== 'CANVAS') return;
       const { id, type, thrower, shotBy, scoreable, scored, targetId, origin, dir, at, zone } = event.detail;
@@ -164,7 +171,10 @@ async function proveAim(page, report) {
   for (const yawPixels of [0, 32, -32, 0, -32, 32, 0, 32, -32]) {
     await expect(round).toBeVisible();
     if (!ammoNumber(await ammunition.innerText())) break;
-    const startEventCount = (await readInput()).events.length;
+    const before = await readInput();
+    const beforeAmmo = ammoNumber(await ammunition.innerText());
+    const attempt = { yawPixels, beforeAmmo };
+    report.attempts.push(attempt);
     await pointAt(yawPixels, 0);
     await holdMouse();
     try {
@@ -174,19 +184,30 @@ async function proveAim(page, report) {
       await liftMouse();
     }
 
-    await page.waitForFunction(count =>
-      window.__db2AimProof.events.slice(count).some(event => event.type !== 'throw'),
-    startEventCount, { timeout: 11_000, polling: 100 });
-    const events = (await readInput()).events.slice(startEventCount);
-    const launch = events.find(event => event.type === 'throw');
-    const terminal = events.find(event => event.type !== 'throw' && event.id === launch?.id);
-    report.attempts.push({ yawPixels, launch, terminal, round: await round.innerText() });
-    assert.equal(launch?.scoreable, true, 'A native release should yield an eligible outdoor throw');
-    assert.equal(terminal?.id, launch.id);
+    let launch;
+    try {
+      await expect.poll(async () => {
+        launch = (await readInput()).events.slice(before.events.length).find(event => event.type === 'throw');
+        return launch?.id;
+      }, { timeout: 12_000 }).toBeDefined();
+      attempt.launch = launch;
+      await expect.poll(async () => ammoNumber(await ammunition.innerText())).toBe(beforeAmmo - 1);
+    } finally {
+      attempt.buttons = (await readInput()).buttons.slice(before.buttons.length);
+      attempt.afterAmmo = await ammunition.innerText();
+      attempt.round = await round.innerText();
+    }
+    assert.equal(launch.scoreable, true, 'A native release should yield an eligible outdoor throw');
     // The HUD rounds to 0.1 m and the real muzzle is 0.06 m ahead of the eye.
     assert.ok(Math.abs(launch.origin[0] - launchStand.east) < .12);
     assert.ok(Math.abs(launch.origin[2] + launchStand.north) < .12);
     assert.ok(Math.abs(Math.atan2(launch.direction[0], -launch.direction[2]) - yawPixels * .003) < .0031);
+    // The game advances at most two physics ticks per rendered frame. Keep launch
+    // evidence even when software rendering takes longer to deliver the terminal contact.
+    const terminal = await page.waitForFunction(id => window.__db2AimProof.events.find(event =>
+      event.id === id && event.type !== 'throw'), launch.id, { timeout: 26_000, polling: 100 })
+      .then(handle => handle.jsonValue());
+    attempt.terminal = terminal;
     if (terminal.type !== 'impact' || terminal.targetId !== 'snow-practice' || terminal.scored !== true) continue;
     await expect(round).toHaveText(/^移动靶场 · \d+ 秒 · 命中 1$/);
     report.hit = { id: launch.id, impact: terminal.at, zone: terminal.zone, round: await round.innerText() };
@@ -219,8 +240,8 @@ try {
   } finally {
     report.pageErrors = pageErrors;
     report.physicalMotion = await page.evaluate(() => {
-      const { x, y, motionSamples } = window.__db2AimProof;
-      return { x, y, motionSamples };
+      const { x, y, motionSamples, buttons, events } = window.__db2AimProof;
+      return { x, y, motionSamples, buttons, events };
     }).catch(() => undefined);
     const output = JSON.stringify(report, null, 2);
     await writeFile(join(artifacts, 'native-mouse-moving-target.json'), output + '\n');
