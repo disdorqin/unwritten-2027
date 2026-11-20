@@ -42,7 +42,6 @@ async function proveAim(page, report) {
   await page.locator('#quality-tier').selectOption('smooth');
   await page.locator('#jump').selectOption({ label: '雪团练习场' });
   await expect(page.locator('#walk')).toHaveAttribute('aria-pressed', 'true', { timeout: 45_000 });
-  await expect(page.locator('#position')).toContainText('东 223.0 m · 北 163.0 m');
   const canvas = page.locator('#scene canvas');
   const action = page.locator('#world-action');
   const ammunition = page.locator('#snowball-score');
@@ -56,6 +55,17 @@ async function proveAim(page, report) {
   const pointerLocked = () => page.evaluate(() =>
     document.pointerLockElement === document.querySelector('#scene canvas'));
   const position = () => page.locator('#position').innerText({ timeout: 30_000 });
+  async function readPracticeStand() {
+    const text = await position();
+    const pose = /东 ([\d.]+) m · 北 ([\d.]+) m/.exec(text);
+    assert.ok(pose, text);
+    const east = Number(pose[1]);
+    const north = Number(pose[2]);
+    // The host may safely adjust the jump landing within the real action radius.
+    assert.ok(Math.hypot(east - 223, north - 163) <= .85, text);
+    return { east, north, position: text };
+  }
+  report.firstStand = await readPracticeStand();
   async function lockMouse() {
     await page.mouse.click(start.x, start.y);
     await expect.poll(pointerLocked, { timeout: 12_000 }).toBe(true);
@@ -117,10 +127,10 @@ async function proveAim(page, report) {
   const destinations = page.locator('#jump');
   await destinations.selectOption({ label: '广场南侧' });
   await destinations.selectOption({ label: '雪团练习场' });
-  await expect(page.locator('#position')).toContainText('东 223.0 m · 北 163.0 m', { timeout: 30_000 });
   await expect.poll(async () => ammoNumber(await ammunition.innerText()), { timeout: 30_000 })
     .toBeGreaterThanOrEqual(6);
   await expect(action).toHaveText('E · 开始移动靶练习', { timeout: 30_000 });
+  const launchStand = report.launchStand = await readPracticeStand();
   await page.waitForTimeout(1550); // Chromium guards immediate pointer-lock reentry after Escape.
   initial = await lockMouse();
 
@@ -149,8 +159,9 @@ async function proveAim(page, report) {
     report.attempts.push({ yawPixels, launch, terminal, round: await round.innerText() });
     assert.equal(launch?.scoreable, true, 'A native release should yield an eligible outdoor throw');
     assert.equal(terminal?.id, launch.id);
-    assert.ok(Math.abs(launch.origin[0] - 223) < .1);
-    assert.ok(Math.abs(launch.origin[2] + 163) < .1);
+    // The HUD rounds to 0.1 m and the real muzzle is 0.06 m ahead of the eye.
+    assert.ok(Math.abs(launch.origin[0] - launchStand.east) < .12);
+    assert.ok(Math.abs(launch.origin[2] + launchStand.north) < .12);
     assert.ok(Math.abs(Math.atan2(launch.direction[0], -launch.direction[2]) - yawPixels * .003) < .0031);
     if (terminal.type !== 'impact' || terminal.targetId !== 'snow-practice' || terminal.scored !== true) continue;
     await expect(round).toHaveText(/^移动靶场 · \d+ 秒 · 命中 1$/);
