@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 北岭岩壁走查</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 1rem 1.25rem; background: #101c27; color: #d8e9f2; font: 16px/1.4 system-ui, sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; }
+    h1 { font-size: 1.45rem; margin: 0 0 .4rem; }
+    p { color: #b6c9d5; margin: 0 0 .85rem; }
+    #climb-scene { width: 100%; min-height: 18rem; height: min(76vh, 650px); overflow: hidden; border: 1px solid #70838e; border-radius: .38rem; position: relative; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; outline-offset: -2px; }
+    output { position: absolute; bottom: .7rem; left: .7rem; padding: .32rem .65rem; border-radius: .25rem; background: #101c27ea; color: white; font-size: .91rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>北岭岩壁走查</h1>
+    <p>E 抓墙或下到岩台，WASD 攀移。冰面上手套打滑时停两秒。G 和 R 检查滑翔、雪橇的动作门，Q 退出。</p>
+    <div id="climb-scene"><output id="climb-location" role="status"></output></div>
+  </main>
+  <script type="module" src="./town-blockout/north-ridge-climb-review.ts"></script>
+</body>
+</html>
