@@ -7,6 +7,7 @@ on:
       - '.github/workflows/verify-underground-mining.yml'
       - 'src/presence/underground-mining.ts'
       - 'tests/server/underground-mining.test.ts'
+      - 'tests/town-blockout-underground-ore-vein.test.ts'
       - 'src/shared/underground-mining.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mining-activity.ts'
       - 'tools/voxel-tavern/town-blockout/underground-ore-vein.ts'
@@ -29,7 +30,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: node --import tsx --test tests/server/underground-mining.test.ts
+      - run: node --import tsx --test tests/server/underground-mining.test.ts tests/town-blockout-underground-ore-vein.test.ts
       - name: Select Chromium
         shell: bash
         run: |

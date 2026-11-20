@@ -1,8 +1,41 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Group, Vector3, type InstancedMesh, type LineSegments } from 'three';
-import { createUndergroundOreVein } from '../tools/voxel-tavern/town-blockout/underground-ore-vein';
+import { Group, InstancedMesh, MeshLambertMaterial, Vector3, type LineSegments } from 'three';
+import { createUndergroundOreCoreMaterial, createUndergroundOreVein } from '../tools/voxel-tavern/town-blockout/underground-ore-vein';
 import type { UndergroundMiningTargetView } from '../src/shared/underground-mining';
+
+test('ore veins and loose cores use the accepted mineral instead of the generic rock palette', () => {
+  const palettes = [
+    ['ordinary-ore', '80614b', '9a805c', '000000', 'IcosahedronGeometry'],
+    ['stardust', 'a97849', 'a97849', '8a481f', 'CylinderGeometry'],
+    ['blue-crystal', '758da8', '758da8', '203756', 'CylinderGeometry'],
+    ['ordinary-ice-crystal', 'd5e4e1', 'd5e4e1', '334946', 'CylinderGeometry'],
+    ['amethyst-cluster', '9979ad', '9979ad', '422651', 'CylinderGeometry'],
+    ['moonstone', 'e0dcce', 'e0dcce', '000000', 'IcosahedronGeometry'],
+  ] as const;
+
+  for (const [mineral, veinColor, coreColor, glow, shape] of palettes) {
+    const target: UndergroundMiningTargetView = {
+      id: mineral, kind: 'ore', mineral, at: { layer: 'test-mine', east: 2, north: 3, height: -90 },
+      surface: 'rock', strikes: 3, hits: 0, open: false,
+    };
+    const vein = createUndergroundOreVein({ id: target.id, face: new Vector3(2, -90, -3),
+      normal: new Vector3(0, 0, 1), ore: target });
+    const core = createUndergroundOreCoreMaterial(mineral);
+    try {
+      const cluster = vein.group.getObjectByName('ore-cluster');
+      assert.ok(cluster instanceof InstancedMesh && cluster.material instanceof MeshLambertMaterial);
+      assert.equal(cluster.geometry.type, shape);
+      assert.equal(cluster.material.color.getHexString(), veinColor);
+      assert.equal(cluster.material.emissive.getHexString(), glow);
+      assert.equal(core.color.getHexString(), coreColor);
+      assert.equal(core.emissive.getHexString(), glow);
+    } finally {
+      vein.dispose();
+      core.dispose();
+    }
+  }
+});
 
 test('an embedded vein gains cracks, leaves a scar, and regrows on the same registered wall', () => {
   const face = new Vector3(24, -90, -37);

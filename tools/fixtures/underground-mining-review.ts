@@ -5,7 +5,7 @@ import {
 import type { UndergroundMiningCore, UndergroundMiningReceipt, UndergroundMiningTargetView } from '../../src/shared/underground-mining';
 import { applyUndergroundKnockback } from '../voxel-tavern/town-blockout/underground-knockback';
 import { mountUndergroundMiningActivity } from '../voxel-tavern/town-blockout/underground-mining-activity';
-import { createUndergroundOreVein } from '../voxel-tavern/town-blockout/underground-ore-vein';
+import { createUndergroundOreCoreMaterial, createUndergroundOreVein } from '../voxel-tavern/town-blockout/underground-ore-vein';
 
 type Intent = { action: 'strike' | 'pickup'; targetId: string };
 type Snapshot = { targets: UndergroundMiningTargetView[]; cores: UndergroundMiningCore[] };
@@ -103,11 +103,12 @@ const activities = mountUndergroundMiningActivity({
     void pending.catch(error => setTimeout(() => { throw error; }));
   },
   showTarget(target) {
+    if (target.kind !== 'ore') return;
     let vein = veins.get(target.id);
     if (!vein) {
       vein = createUndergroundOreVein({
         id: target.id, face: new Vector3(target.at.east, target.at.height, -target.at.north + .033),
-        normal: new Vector3(0, 0, 1), ore: 'ordinary',
+        normal: new Vector3(0, 0, 1), ore: target,
       });
       vein.group.userData.miningId = target.id;
       veins.set(target.id, vein);
@@ -119,7 +120,7 @@ const activities = mountUndergroundMiningActivity({
   hideTarget(id) { veins.get(id)?.dispose(); veins.delete(id); rendered.delete(id); },
   showCore(core) {
     if (cores.has(core.id)) return;
-    const mesh = new Mesh(new IcosahedronGeometry(.15), new MeshLambertMaterial({ color: '#9a805c' }));
+    const mesh = new Mesh(new IcosahedronGeometry(.15), createUndergroundOreCoreMaterial(core.mineral));
     mesh.position.set(core.at.east, core.at.height + .11, -core.at.north);
     mesh.userData.miningId = core.id;
     cores.set(core.id, mesh);

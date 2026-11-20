@@ -8,6 +8,9 @@ const oreTints = {
   stardust: { stone: '#a97849', glow: '#8a481f', crystal: true },
   ordinary: { stone: '#80614b', glow: '#000000', crystal: false },
   crystal: { stone: '#758da8', glow: '#203756', crystal: true },
+  white: { stone: '#d5e4e1', glow: '#334946', crystal: true },
+  amethyst: { stone: '#9979ad', glow: '#422651', crystal: true },
+  moonstone: { stone: '#e0dcce', glow: '#000000', crystal: false },
 } as const;
 
 type Options = Readonly<{
@@ -15,8 +18,26 @@ type Options = Readonly<{
   /** World-space rock face and its outward normal, supplied by the registered site. */
   face: Vector3;
   normal: Vector3;
-  ore: keyof typeof oreTints;
+  /** Pass the accepted target to use its mineral, or an explicit palette for standalone models. */
+  ore: keyof typeof oreTints | Pick<UndergroundMiningTargetView, 'mineral'>;
 }>;
+
+function tintForMineral(mineral?: string) {
+  switch (mineral) {
+    case 'stardust': return oreTints.stardust;
+    case 'blue-crystal': return oreTints.crystal;
+    case 'ordinary-ice-crystal': return oreTints.white;
+    case 'amethyst-cluster': return oreTints.amethyst;
+    case 'moonstone': return oreTints.moonstone;
+    default: return oreTints.ordinary;
+  }
+}
+
+export function createUndergroundOreCoreMaterial(mineral: string) {
+  const tint = tintForMineral(mineral);
+  return new MeshLambertMaterial({ color: tint === oreTints.ordinary ? '#9a805c' : tint.stone,
+    emissive: tint.glow, emissiveIntensity: .25 });
+}
 
 // One batched cluster. The local Z axis points out of the rock after placement.
 const nodules = [
@@ -39,7 +60,7 @@ export function createUndergroundOreVein({ id, face, normal, ore }: Options) {
   if (!id || ![...face.toArray(), ...normal.toArray()].every(Number.isFinite) || normal.lengthSq() === 0) {
     throw new RangeError('A mining vein needs a registered rock-face position and normal');
   }
-  const tint = oreTints[ore];
+  const tint = typeof ore === 'string' ? oreTints[ore] : tintForMineral(ore.mineral);
   const group = new Group();
   group.name = 'ore-vein:' + id;
   group.position.copy(face);
