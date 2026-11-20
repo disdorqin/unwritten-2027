@@ -1,0 +1,235 @@
+diff --git a/tests/town-blockout-first-beacon-staging.test.ts b/tests/town-blockout-first-beacon-staging.test.ts
+new file mode 100644
+index 0000000..f7e6604
+--- /dev/null
++++ b/tests/town-blockout-first-beacon-staging.test.ts
+@@ -0,0 +1,69 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
++import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower';
++import { townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
++import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
++import { layout } from '../tools/voxel-tavern/town-blockout/terrain';
++
++test('a first-hearing sample pauses living updates and turns only the local mascot head toward the actual tower', () => {
++  const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
++  const tower = buildTowerLandmark(plot);
++  tower.position.set(plot.origin[0], plot.origin[2], -plot.origin[1]);
++  const [bellX, bellY, bellZ] = tower.userData.stops.bell;
++  const towerBell = tower.localToWorld(new Vector3(bellX, bellY + 1.8, bellZ));
++  let now = 900_000;
++  let stationEast = 225;
++  const scene = new Scene();
++  const npc = createTownNpcActivity({
++    scene, face() {}, sit() {}, announce() { assert.fail('staging is silent'); },
++    open() { assert.fail('staging opens no panel'); },
++  }, () => 12, undefined, undefined, undefined, undefined, {
++    now: () => now, groundAt: () => 12, visible: () => true,
++    follow: () => ({ x: 223, n: 180, ground: 12, yaw: -2.6, speed: 0 }),
++  });
++  const resident = npc.registerResident('樊樵', () => ({
++    actor: [stationEast, 190, 12], talk: [stationEast, 189, 12],
++  }));
++  const batch = scene.children[0] as InstancedMesh;
++  function matrix(index: number) {
++    const value = new Matrix4();
++    batch.getMatrixAt(index, value);
++    return value;
++  }
++  function pose() {
++    const actor = npc.snowballTargets[0];
++    return [actor.x, actor.y, actor.z];
++  }
++
++  npc.update(11);
++  const population = batch.count;
++  const livingBefore = pose();
++  const mascotStart = population - townMascotParts.length;
++  const mascotEye = mascotStart + townMascotParts.findIndex(part => part.expression === 'eye');
++  const body = matrix(mascotStart);
++  const head = matrix(mascotEye);
++  stationEast = 227;
++
++  npc.update(.45, { livingPaused: true, mascotLookAt: towerBell });
++  assert.deepEqual(pose(), livingBefore);
++  assert.equal(resident.x, 225);
++  assert.equal(batch.count, population);
++  assert.ok(matrix(mascotStart).equals(body));
++  const desired = towerBell.clone().sub(new Vector3().setFromMatrixPosition(head)).normalize();
++  const before = new Vector3(0, 0, 1).transformDirection(head);
++  const turned = new Vector3(0, 0, 1).transformDirection(matrix(mascotEye));
++  assert.ok(turned.y > before.y && turned.dot(desired) > before.dot(desired));
++
++  now += 450;
++  npc.update(.05, { livingPaused: false, mascotLookAt: towerBell });
++  assert.notDeepEqual(pose(), livingBefore);
++  assert.equal(resident.x, 227);
++  now += 1_049;
++  npc.update(0, { livingPaused: false, mascotLookAt: towerBell });
++  assert.ok(new Vector3(0, 0, 1).transformDirection(matrix(mascotEye)).y > .25);
++  now++;
++  npc.update(0);
++  assert.ok(Math.abs(new Vector3(0, 0, 1).transformDirection(matrix(mascotEye)).y) < .15);
++  assert.equal(scene.children.length, 1);
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-mascot.ts b/tools/voxel-tavern/town-blockout/town-mascot.ts
+index 9b1d130..fd90616 100644
+--- a/tools/voxel-tavern/town-blockout/town-mascot.ts
++++ b/tools/voxel-tavern/town-blockout/town-mascot.ts
+@@ -11,6 +11,7 @@ type Part = {
+   expression?: 'eye' | 'glint';
+ };
+ type GroundAt = (east: number, north: number) => number | undefined;
++export type TownMascotLookTarget = Readonly<{ x: number; y: number; z: number }>;
+
+ const wool = '#fff1d9', shadedWool = '#dfc6a4', gold = '#e9aa3d';
+ const scarf = '#ad3645', hoof = '#302b35', eye = '#191b23';
+@@ -175,8 +176,9 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+   let patrol: MascotPatrol;
+   let planned = false;
+   let lastTick = NaN, lastStart = initialStart, shown = false;
++  let lastLookAt: TownMascotLookTarget | undefined;
+
+-  return function update(start = initialStart) {
++  return function update(start = initialStart, lookAt?: TownMascotLookTarget) {
+     if (!planned) {
+       patrol = makeMascotPatrol(options.groundAt);
+       planned = true;
+@@ -196,7 +198,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+     }
+     const count = start + townMascotParts.length;
+     const repack = lastStart !== start || batch.count !== count;
+-    if (shown && tick === lastTick && !repack) return false;
++    if (shown && tick === lastTick && lookAt === lastLookAt && !repack) return false;
+     // Station changes repack the shared tail, so restore the mascot's palette even on the same tick.
+     if (repack) {
+       townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
+@@ -206,6 +208,7 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+     batch.count = count;
+     lastStart = start;
+     lastTick = tick;
++    lastLookAt = lookAt;
+     const seconds = tick / 1000;
+     const idlePhase = seconds % 60;
+     const rest = 'seated' in point && point.seated ? 1
+@@ -219,16 +222,27 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number,
+     root.position.set(point.x, ground + .020, -point.n);
+     root.rotation.set(0, point.yaw, 0);
+     root.updateMatrix();
++    let lookPitch: number | undefined;
++    let lookYaw: number | undefined;
++    if (lookAt && Number.isFinite(lookAt.x) && Number.isFinite(lookAt.y) && Number.isFinite(lookAt.z)) {
++      const east = lookAt.x - point.x;
++      const south = lookAt.z + point.n;
++      const yawDelta = Math.atan2(east, south) - point.yaw;
++      const headY = root.position.y + pivots[head][1];
++      lookYaw = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, Math.atan2(Math.sin(yawDelta), Math.cos(yawDelta))));
++      lookPitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 6, -Math.atan2(lookAt.y - headY, Math.hypot(east, south))));
++    }
+     for (const [joint, pivot] of pivots.entries()) {
+       const hindLeg = joint >= frontLeftLeg + 2;
+       const bodyDrop = joint < frontLeftLeg ? bounce - rest * (joint === tail ? .042 : .033) : -rest * (hindLeg ? .041 : .025);
+       pose.position.set(pivot[0], pivot[1] + bodyDrop, pivot[2]);
+-      const pitch = joint === head ? (grazing ? Math.PI / 10 : .11 * rest)
++      const pitch = joint === head ? lookPitch ?? (grazing ? Math.PI / 10 : .11 * rest)
+         : joint === bell ? -.11 * step
+         : joint >= frontLeftLeg ? step * (joint === frontLeftLeg || joint === frontLeftLeg + 3 ? .36 : -.36) +
+           rest * (hindLeg ? -.67 : .40) : 0;
+-      const yaw = joint === tail ? Math.sin(seconds * (point.speed ? 9 : 5.027)) * .21 * (1 - rest * .62) : 0;
+-      pose.rotation.set(pitch, yaw, 0);
++      const yaw = joint === head ? lookYaw ?? 0
++        : joint === tail ? Math.sin(seconds * (point.speed ? 9 : 5.027)) * .21 * (1 - rest * .62) : 0;
++      pose.rotation.set(pitch, yaw, 0, 'YXZ');
+       pose.updateMatrix();
+       animated[joint].multiplyMatrices(root.matrix, pose.matrix);
+     }
+diff --git a/tools/voxel-tavern/town-blockout/town-npc.ts b/tools/voxel-tavern/town-blockout/town-npc.ts
+index ac968d1..e45b7e5 100644
+--- a/tools/voxel-tavern/town-blockout/town-npc.ts
++++ b/tools/voxel-tavern/town-blockout/town-npc.ts
+@@ -6,7 +6,7 @@ import { snowballGravity, snowballSpeed } from './town-snowball';
+ import { npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod,
+   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
+ import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
+-import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
++import { addMascotToNpcBatch, townMascotParts, type TownMascotLookTarget, type TownMascotOptions } from './town-mascot';
+ import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
+
+ import { houseDoorBookCopy } from './town-house-door-book';
+@@ -170,6 +170,7 @@ const costumes: Readonly<Record<ActorName, readonly Part[]>> = {
+ const guideDefaults = new Set<TownNpcGuide>(['seating', 'stage', 'postcard', 'wishes', 'ice', 'lantern']);
+ const savedVisitKey = 'unwritten:town-npc-visits';
+
++type TownNpcFirstHearing = Readonly<{ livingPaused: boolean; mascotLookAt?: TownMascotLookTarget }>;
+
+ export function createTownNpcActivity(
+   context: TownActivityContext,
+@@ -182,6 +183,7 @@ export function createTownNpcActivity(
+ ): TownActivity & {
+   registerResident: ReturnType<typeof createTownResidentController>['register'];
+   snowballTargets: readonly TownSnowballTarget[];
++  update(dt: number, firstHearing?: TownNpcFirstHearing): void;
+   updateSnowFight(dt: number, enabled: boolean, player: TownSnowballTarget | undefined, throwSnowball: NpcSnowballThrow): void;
+ } {
+   const actorParts = roles.map(({ name }) => [...parts, ...costumes[name]]);
+@@ -531,11 +533,12 @@ export function createTownNpcActivity(
+     registerResident: residents.register,
+     snowballTargets,
+     updateSnowFight,
+-    update(dt) {
+-      residents.update();
++    update(dt: number, firstHearing?: TownNpcFirstHearing) {
++      const livingPaused = firstHearing?.livingPaused === true;
++      if (!livingPaused) residents.update();
+       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
+-      let changed = updateMascot?.(residents.instanceEnd()) ?? false;
+-      for (let i = 0; i < roles.length; i++) {
++      let changed = updateMascot?.(residents.instanceEnd(), firstHearing?.mascotLookAt) ?? false;
++      for (let i = 0; !livingPaused && i < roles.length; i++) {
+         const { name, home, stroll, indoorFloor } = roles[i];
+         const flinch = flinches[i];
+         const reacting = flinch.remaining > 0;
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 1b4a49c..da1a56c 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -1827,7 +1827,7 @@ function snowballJumped() {
+     announceActivity('头上的雪抖掉了');
+   }
+ }
+-function updateSnowFight(dt: number) {
++function updateSnowFight(dt: number, livingPaused: boolean) {
+   const inPlaza = Math.abs(x - 223) < 30 && Math.abs(n - 186) < 24;
+   const active = moveAllowed();
+   const outdoor = active && !roofed(x, n, airHeight ?? ground);
+@@ -1861,7 +1861,9 @@ function updateSnowFight(dt: number) {
+   snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
+   const wallPreview = canUseSnow() ? touchWalk.active() ? snowControls.touchWallPreview() : aimedSnowWall() : undefined;
+   teamFight.update(dt, wallPreview);
+-  npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
++  if (!livingPaused) {
++    npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
++  }
+   snowControls.update(dt);
+   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
+   if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
+@@ -3364,8 +3366,16 @@ renderer.setAnimationLoop(now => {
+     townLights.setCeremonyBand(ceremonyState.phase === 'afterglow' ? 3 : -1);
+   }
+   if (walking && (x - 126) ** 2 + (n - 115) ** 2 < 400) riddleActivity.syncNearby();
+-  updateSnowFight(dt);
+-  for (const activity of activities) activity.update?.(frameSeconds);
++  const firstHearing = firstThirteenthBell.sampleScene();
++  updateSnowFight(dt, firstHearing?.livingPaused === true);
++  for (const activity of activities) {
++    if (activity === npcActivity && firstHearing) {
++      npcActivity.update(frameSeconds, {
++        livingPaused: firstHearing.livingPaused,
++        mascotLookAt: firstHearing.mascotLooksAtTower ? towerBellPosition : undefined,
++      });
++    } else activity.update?.(frameSeconds);
++  }
+   rehearse.disabled = festival.active();
+   const canControl = walking && !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
+   touchWalk.setAllowed(moveAllowed());

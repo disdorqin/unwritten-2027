@@ -1,0 +1,299 @@
+diff --git a/tests/town-blockout-first-beacon.test.ts b/tests/town-blockout-first-beacon.test.ts
+new file mode 100644
+index 0000000..e785b67
+--- /dev/null
++++ b/tests/town-blockout-first-beacon.test.ts
+@@ -0,0 +1,145 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import {
++  createTownNightBeaconReceiver,
++  thirteenthBellCatalogueEntry,
++  type TownNightBeaconFrame,
++} from '../src/shared/town-night-beacon.js';
++import { playTowerBell } from '../tools/voxel-tavern/tower-chime.js';
++import { createTownFirstBeacon } from '../tools/voxel-tavern/town-blockout/town-first-beacon.js';
++import type { StorageAccess } from '../tools/voxel-tavern/town-blockout/town-text-store.js';
++
++const dayMs = 600_000;
++function beacon(at: number): TownNightBeaconFrame {
++  return { type: 'event', kind: 'town-night-beacon', at, expiresAt: at + 2_000 };
++}
++function browserStorage() {
++  const items = new Map<string, string>();
++  return {
++    getItem: key => items.get(key) ?? null,
++    setItem: (key, value) => { items.set(key, value); },
++  } satisfies StorageAccess;
++}
++
++test('an audible first cue pauses the living together, holds the mascot look briefly and adds one silent row', () => {
++  const cue = beacon(dayMs);
++  const storage = browserStorage();
++  let now = cue.at + 13;
++  const joinedAt = cue.at - 1_000;
++  let sounds = 0;
++  const make = () => createTownFirstBeacon({
++    storage, connectedAt: () => joinedAt, serverNow: () => now,
++    playAudibleTowerCue() { sounds++; return true; },
++  });
++  const first = make();
++  const receive = createTownNightBeaconReceiver({ ringTower: first.ringTower });
++  assert.equal(first.catalogueEntry(), undefined);
++  assert.equal(first.sampleScene(), undefined);
++  receive(cue, now);
++  receive(cue, now);
++  assert.equal(sounds, 1);
++  assert.deepEqual(first.sampleScene(), { livingPaused: true, mascotLooksAtTower: true });
++  assert.equal(first.catalogueEntry(), thirteenthBellCatalogueEntry);
++  now += 450;
++  assert.deepEqual(first.sampleScene(), { livingPaused: false, mascotLooksAtTower: true });
++  now += 1_050;
++  assert.equal(first.sampleScene(), undefined);
++
++  const reopened = make();
++  assert.equal(reopened.catalogueEntry(), thirteenthBellCatalogueEntry);
++  assert.equal(reopened.sampleScene(), undefined);
++  now = cue.at + dayMs + 20;
++  createTownNightBeaconReceiver({ ringTower: reopened.ringTower })(beacon(cue.at + dayMs), now);
++  assert.equal(sounds, 2);
++  assert.equal(reopened.sampleScene(), undefined);
++  assert.equal(reopened.catalogueEntry(), thirteenthBellCatalogueEntry);
++});
++
++test('a suspended audio page leaves the first hearing to a future live cue', () => {
++  let now = dayMs;
++  let context: AudioContext = { state: 'suspended' } as AudioContext;
++  let strikes = 0;
++  const first = createTownFirstBeacon({
++    storage: browserStorage(), connectedAt: () => 10, serverNow: () => now,
++    playAudibleTowerCue: () => playTowerBell(context, 'grand', 20),
++  });
++  const receive = createTownNightBeaconReceiver({ ringTower: first.ringTower });
++  receive(beacon(now), now);
++  assert.equal(first.sampleScene(), undefined);
++  assert.equal(first.catalogueEntry(), undefined);
++
++  const gain = {
++    gain: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} },
++    connect() { return this; }, disconnect() {},
++  };
++  const filter = { frequency: { value: 0 }, type: '', connect: () => gain };
++  context = {
++    state: 'running', currentTime: 0, destination: {},
++    createBiquadFilter: () => filter, createGain: () => gain,
++    createOscillator: () => ({ frequency: { value: 0 }, connect: () => gain, start() { strikes++; }, stop() {} }),
++  } as unknown as AudioContext;
++  receive(beacon(now), now);
++  assert.equal(strikes, 0);
++  now += dayMs;
++  receive(beacon(now), now);
++  assert.ok(strikes > 0);
++  assert.equal(first.catalogueEntry(), thirteenthBellCatalogueEntry);
++});
++
++test('welcome snapshots, expired cues and a connection established after the live edge consume nothing', () => {
++  const firstNight = beacon(dayMs);
++  const storage = browserStorage();
++  let now = firstNight.at + 100;
++  let connectedAt: number | undefined = now;
++  let plays = 0;
++  function freshScene() {
++    const first = createTownFirstBeacon({
++      storage, serverNow: () => now, connectedAt: () => connectedAt,
++      playAudibleTowerCue() { plays++; return true; },
++    });
++    return { first, receive: createTownNightBeaconReceiver({ ringTower: first.ringTower }) };
++  }
++  const { first, receive } = freshScene();
++  receive({ type: 'welcome', phase: 'night-window', beaconAt: firstNight.at }, now);
++  receive(firstNight, now);
++  now = firstNight.expiresAt;
++  connectedAt = firstNight.at - 1;
++  receive(firstNight, now);
++  assert.equal(plays, 0);
++  assert.equal(first.sampleScene(), undefined);
++  assert.equal(first.catalogueEntry(), undefined);
++
++  const secondNight = beacon(firstNight.at + dayMs);
++  now = secondNight.at + 1;
++  connectedAt = undefined;
++  const disconnected = freshScene();
++  disconnected.receive(secondNight, now);
++  assert.equal(disconnected.first.catalogueEntry(), undefined);
++  assert.equal(plays, 0);
++  connectedAt = secondNight.at - 5_000;
++  const observing = freshScene();
++  observing.receive(secondNight, now);
++  assert.equal(plays, 1);
++  assert.equal(observing.first.catalogueEntry(), thirteenthBellCatalogueEntry);
++});
++
++test('a throwing audio effect preserves other beacon effects and leaves the first hearing open', () => {
++  let now = dayMs;
++  const fakeAudioFailure = new Error('codec unavailable');
++  const first = createTownFirstBeacon({
++    storage: browserStorage(), connectedAt: () => 10, serverNow: () => now,
++    playAudibleTowerCue() { if (now === dayMs) throw fakeAudioFailure; return true; },
++  });
++  let stations = 0;
++  const receive = createTownNightBeaconReceiver({
++    ringTower: first.ringTower,
++    stationBroadcast() { stations++; },
++  });
++  assert.deepEqual(receive(beacon(now), now)?.failures, [fakeAudioFailure]);
++  assert.equal(stations, 1);
++  assert.equal(first.catalogueEntry(), undefined);
++  now += dayMs;
++  receive(beacon(now), now);
++  assert.equal(stations, 2);
++  assert.equal(first.catalogueEntry(), thirteenthBellCatalogueEntry);
++});
+diff --git a/tools/voxel-tavern/tower-chime.ts b/tools/voxel-tavern/tower-chime.ts
+index 97cdf6c..f9f603c 100644
+--- a/tools/voxel-tavern/tower-chime.ts
++++ b/tools/voxel-tavern/tower-chime.ts
+@@ -41,9 +41,9 @@ export function playIcePalaceBell(context: AudioContext, note: 'low' | 'mid' | '
+
+ export type TowerBellVoice = 'small' | 'tick' | 'grand';
+
+-/** A single source at the tower; callers supply their current listener distance. */
++/** A single source at the tower. Returns true when the sound was scheduled. */
+ export function playTowerBell(context: AudioContext, voice: TowerBellVoice, distance: number, strikes = 1) {
+-  if (context.state !== 'running' || strikes < 1) return;
++  if (context.state !== 'running' || !Number.isFinite(strikes) || strikes < 1) return false;
+   const grand = voice === 'grand';
+   const range = grand ? 400 : 95;
+   const meters = Number.isFinite(distance) ? Math.max(0, distance) : 0;
+@@ -65,6 +65,8 @@ export function playTowerBell(context: AudioContext, voice: TowerBellVoice, dist
+     if (grand) playBellTone(context, filter, time, bellFrequency / 2, .14, decay, onComplete);
+   }
+
++  return true;
++
+   function disconnect() {
+     filter.disconnect();
+     gain.disconnect();
+diff --git a/tools/voxel-tavern/town-blockout/festival.ts b/tools/voxel-tavern/town-blockout/festival.ts
+index c232dd4..35affd1 100644
+--- a/tools/voxel-tavern/town-blockout/festival.ts
++++ b/tools/voxel-tavern/town-blockout/festival.ts
+@@ -352,6 +352,10 @@ export function createFestival(
+     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
+       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
+     },
++    playThirteenthBell(distance: number) {
++      if (!audio || !Number.isFinite(distance) || distance < 0) return false;
++      return playTowerBell(audio, 'small', distance);
++    },
+     launchCeremony(cue: CeremonyFireworksCue, startAt: number, clockMs: () => number) {
+       const program = ceremonyPrograms[cue];
+       return Boolean(ceremonyFits && program && launchTimedCeremony(program, startAt, clockMs));
+diff --git a/tools/voxel-tavern/town-blockout/town-first-beacon.ts b/tools/voxel-tavern/town-blockout/town-first-beacon.ts
+new file mode 100644
+index 0000000..cdd2717
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-first-beacon.ts
+@@ -0,0 +1,57 @@
++import { thirteenthBellCatalogueEntry, type TownNightBeaconFrame } from '../../../src/shared/town-night-beacon.js';
++import { browserTextStorage, type StorageAccess } from './town-text-store';
++
++const receiptKey = 'unwritten:2027-town-first-thirteenth-bell';
++const livingPauseMs = 450;
++const mascotLookMs = 1_500;
++
++function readReceipt(storage: StorageAccess | undefined) {
++  try { return storage?.getItem(receiptKey) === 'heard'; }
++  catch { return false; }
++}
++
++type FirstBeaconOptions = Readonly<{
++  serverNow: () => number;
++  /** The current live session's authoritative join time. Undefined while disconnected. */
++  connectedAt: () => number | undefined;
++  /** The scene confirms that this live cue passed its audibility checks and scheduled the sound. */
++  playAudibleTowerCue: (cue: TownNightBeaconFrame) => boolean;
++  storage?: StorageAccess;
++}>;
++
++/** One per local player. Supply ringTower to the existing live beacon receiver. */
++export function createTownFirstBeacon(options: FirstBeaconOptions) {
++  const storage = options.storage ?? browserTextStorage();
++  let heard = readReceipt(storage);
++  let reactionStartedAt: number | undefined;
++
++  return {
++    ringTower(cue: TownNightBeaconFrame) {
++      const connectedAt = options.connectedAt();
++      const now = options.serverNow();
++      if (connectedAt === undefined || !Number.isFinite(connectedAt) || connectedAt < 0 || connectedAt > cue.at ||
++          !Number.isFinite(now) || now < cue.at || now >= cue.expiresAt) return;
++      if (options.playAudibleTowerCue(cue) !== true) return;
++
++      if (heard || readReceipt(storage)) return;
++      heard = true;
++      reactionStartedAt = now;
++      try { storage?.setItem(receiptKey, 'heard'); }
++      catch { /* Keep the first hearing through reconnects in this page. */ }
++    },
++
++    /** Read once per scene frame and apply the same pause flag to all living actors. */
++    sampleScene() {
++      const now = options.serverNow();
++      if (reactionStartedAt === undefined || !Number.isFinite(now)) return;
++      const age = now - reactionStartedAt;
++      if (age < 0 || age >= mascotLookMs) return;
++      return { livingPaused: age < livingPauseMs, mascotLooksAtTower: true } as const;
++    },
++
++    /** Read while opening or rendering the existing catalogue. No UI event is generated. */
++    catalogueEntry() {
++      if (heard || readReceipt(storage)) return thirteenthBellCatalogueEntry;
++    },
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 1d05817..1b4a49c 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -109,6 +109,8 @@ import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
+ import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
+ import { npcAuthoredDialogue } from './town-npc-dialogue';
+ import { createTownPresence } from './town-presence';
++import { createTownNightBeaconReceiver } from '../../../src/shared/town-night-beacon';
++import { createTownFirstBeacon } from './town-first-beacon';
+ import { createClocktowerStorySpots } from './clocktower-story';
+ import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+ import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
+@@ -1922,6 +1924,14 @@ activitySpots.push(...longHallRelay.spots);
+ passportButton.onclick = () => {
+   passport.open();
+   showStampCount();
++  const entry = firstThirteenthBell.catalogueEntry();
++  const extensionList = activityPanel.querySelector('.passport-extensions > ul');
++  if (entry && extensionList) {
++    const row = document.createElement('li');
++    row.dataset.catalogueEntry = entry.id;
++    row.textContent = entry.title;
++    extensionList.append(row);
++  }
+ };
+
+ const stampGeometry = new BoxGeometry();
+@@ -2012,6 +2022,16 @@ activitySpots.push(
+ const [bellX, bellDeck, bellZ] = towerStops.bell;
+ const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
+ const bellMotion = tower.userData.bellMotion as TowerBellMotion;
++const firstThirteenthBell = createTownFirstBeacon({
++  serverNow: presence.serverNow,
++  connectedAt: presence.townNightConnectedAt,
++  playAudibleTowerCue: () => walking && !homeReturn && festival.playThirteenthBell(bellDistance()),
++});
++const receiveThirteenthBell = createTownNightBeaconReceiver({
++  ringTower: firstThirteenthBell.ringTower,
++  swingPendulum: () => bellMotion.strike(.65),
++});
++presence.onTownNightBeacon(cue => receiveThirteenthBell(cue, presence.serverNow()));
+ let bellReservedForCeremony = false;
+ const towerBellSpot = localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
+   if (bellReservedForCeremony) {

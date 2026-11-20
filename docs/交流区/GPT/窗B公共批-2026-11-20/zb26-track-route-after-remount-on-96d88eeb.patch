@@ -1,0 +1,347 @@
+diff --git a/tests/town-blockout-grand-prix.test.ts b/tests/town-blockout-grand-prix.test.ts
+index 476aee6..3da4422 100644
+--- a/tests/town-blockout-grand-prix.test.ts
++++ b/tests/town-blockout-grand-prix.test.ts
+@@ -4,6 +4,8 @@ import { test } from 'node:test';
+ import {
+   createGrandPrix, grandPrixCheckpoints, grandPrixProgressKey,
+ } from '../tools/voxel-tavern/town-blockout/town-grand-prix.ts';
++import { longHallSledRoute } from '../tools/voxel-tavern/town-blockout/sled-route';
++import { townSledRackLegacySites } from '../tools/voxel-tavern/town-blockout/town-sled-racks';
+
+ function memoryStorage() {
+   const map = new Map<string, string>();
+@@ -22,6 +24,12 @@ const at = (index: number) => {
+   return [point.x, point.n] as const;
+ };
+
++test('the four sled checkpoints stay on the surveyed route and share the rack start', () => {
++  assert.deepEqual([0, 1, 2, 3].map(at), [0, 5, 8, 11].map(index => longHallSledRoute[index]));
++  const startRack = townSledRackLegacySites.find(site => site.id === 'north-slope');
++  assert.deepEqual(startRack?.pads[0]?.slice(0, 2), at(0));
++});
++
+ test('the rehearsal page contains each sled and Grand Prix HUD output', () => {
+   const html = readFileSync(new URL('../tools/voxel-tavern/town-blockout.html', import.meta.url), 'utf8');
+   for (const id of ['sled-status', 'grand-prix-status', 'grand-prix-board']) {
+diff --git a/tests/town-blockout-sled-animation.test.ts b/tests/town-blockout-sled-animation.test.ts
+index d1ed340..ed4f3b9 100644
+--- a/tests/town-blockout-sled-animation.test.ts
++++ b/tests/town-blockout-sled-animation.test.ts
+@@ -4,6 +4,8 @@ import { Matrix4, Scene } from 'three';
+ import { createRemoteSledCues, createSledAnimation, sledSnowAmount } from '../tools/voxel-tavern/town-blockout/sled-animation';
+ import { createSledRiderMatrices, writeSledRiderPart } from '../tools/voxel-tavern/town-blockout/sled-rider-pose';
+ import { createSledTracks, sledTrackCapacity } from '../tools/voxel-tavern/town-blockout/sled-tracks';
++import { createSledTrackView } from '../tools/voxel-tavern/town-blockout/town-sled-track-view';
++import { createTownSnowField } from '../tools/voxel-tavern/town-blockout/town-snow-field';
+ import { voxelPersonParts } from '../tools/voxel-tavern/town-blockout/town-voxel-person';
+
+ const cue = { mounted: true, east: 0, north: 0, height: 12, yaw: 0,
+@@ -109,3 +111,33 @@ test('the two-rail trail is one draw, overwrites the oldest slot and disappears
+   assert.equal(tracks.count, 0);
+   assert.equal(mesh.visible, false);
+ });
++
++test('the live snow field draws one shared two-rail mesh and retains tracks past the legacy timer', () => {
++  const heightAt = () => 12;
++  const field = createTownSnowField({ gridWidth: 1, gridDepth: 1, surfaces: new Uint8Array(1), heightAt });
++  const production = new Scene();
++  const live = createSledTrackView(production, heightAt);
++  const legacy = new Scene();
++  const short = createSledTracks(legacy, heightAt);
++  short.mark(0, 60, true);
++  short.mark(.7, 60, true);
++  field.addTrack(0, 60, .7, 60, 1);
++  live.sync(field, 0);
++  const legacyMesh = legacy.children[0] as import('three').Mesh;
++  assert.deepEqual(production.children, [live.mesh]);
++  assert.equal(live.mesh.geometry.drawRange.count, 12);
++  for (const attribute of ['position', 'color']) {
++    const liveAttribute = live.mesh.geometry.getAttribute(attribute);
++    const legacyAttribute = legacyMesh.geometry.getAttribute(attribute);
++    const end = 12 * liveAttribute.itemSize;
++    assert.deepEqual(liveAttribute.array.slice(0, end), legacyAttribute.array.slice(0, end));
++  }
++  short.update(21);
++  field.update(21, true);
++  live.sync(field, 21);
++  assert.equal(legacyMesh.visible, false);
++  assert.equal(live.mesh.visible, true);
++  field.update(280, true);
++  live.sync(field, 301);
++  assert.equal(live.mesh.visible, false);
++});
+diff --git a/tools/voxel-tavern/town-blockout/sled-route.ts b/tools/voxel-tavern/town-blockout/sled-route.ts
+index 0c4ac36..57d931d 100644
+--- a/tools/voxel-tavern/town-blockout/sled-route.ts
++++ b/tools/voxel-tavern/town-blockout/sled-route.ts
+@@ -4,3 +4,9 @@ export const longHallSledRoute = [
+ ] as const;
+
+ export const longHallSledStart = longHallSledRoute[0];
++export const longHallSledCheckpoints = {
++  start: longHallSledStart,
++  memorial: longHallSledRoute[5],
++  bridge: longHallSledRoute[8],
++  finish: longHallSledRoute[11],
++} as const;
+diff --git a/tools/voxel-tavern/town-blockout/sled-tracks.ts b/tools/voxel-tavern/town-blockout/sled-tracks.ts
+index dc7a5cc..a963565 100644
+--- a/tools/voxel-tavern/town-blockout/sled-tracks.ts
++++ b/tools/voxel-tavern/town-blockout/sled-tracks.ts
+@@ -6,30 +6,55 @@ const verticesPerSlot = 12;
+ const spine = [-1, 1, -1, 1, 1, -1];
+ const ends = [0, 0, 1, 0, 1, 1];
+
+-export function createSledTracks(scene: Scene, ground: (x: number, n: number) => number) {
++type TrackSegment = Readonly<{ x1: number; n1: number; x2: number; n2: number }>;
++type TrackSide = readonly [east: number, north: number];
++
++export function createSledTrackRibbon(scene: Scene, capacity: number, name: string, ground: (x: number, n: number) => number) {
+   const geometry = new BufferGeometry();
+-  const position = new BufferAttribute(new Float32Array(sledTrackCapacity * verticesPerSlot * 3), 3).setUsage(DynamicDrawUsage);
+-  const color = new BufferAttribute(new Float32Array(sledTrackCapacity * verticesPerSlot * 4), 4).setUsage(DynamicDrawUsage);
++  const position = new BufferAttribute(new Float32Array(capacity * verticesPerSlot * 3), 3).setUsage(DynamicDrawUsage);
++  const color = new BufferAttribute(new Float32Array(capacity * verticesPerSlot * 4), 4).setUsage(DynamicDrawUsage);
+   geometry.setAttribute('position', position);
+   geometry.setAttribute('color', color);
+   const mesh = new Mesh(geometry, new MeshBasicMaterial({
+     vertexColors: true, transparent: true, depthWrite: false, toneMapped: false,
+     polygonOffset: true, polygonOffsetFactor: -2,
+   }));
+-  mesh.name = 'town-sled-tracks';
++  mesh.name = name;
+   mesh.frustumCulled = false;
+   mesh.visible = false;
+   scene.add(mesh);
++
++  return {
++    mesh,
++    setDrawSlots(count: number) { geometry.setDrawRange(0, count * verticesPerSlot); },
++    setOpacity(slot: number, opacity: number) {
++      for (let i = 0; i < verticesPerSlot; i++) color.setW(slot * verticesPerSlot + i, opacity);
++    },
++    upload() { position.needsUpdate = color.needsUpdate = true; },
++    uploadColors() { color.needsUpdate = true; },
++    writeSegment(slot: number, { x1, n1, x2, n2 }: TrackSegment, deepSnow: boolean, opacity: number,
++      startSide: TrackSide, endSide = startSide) {
++      const shade = deepSnow ? .29 : .43;
++      for (const rail of [-1, 1]) for (let i = 0; i < 6; i++) {
++        const offset = rail * .29 + spine[i] * (deepSnow ? .047 : .034);
++        const [sideEast, sideNorth] = ends[i] ? endSide : startSide;
++        const x = (ends[i] ? x2 : x1) + sideEast * offset;
++        const n = (ends[i] ? n2 : n1) + sideNorth * offset;
++        const vertex = slot * verticesPerSlot + (rail === -1 ? 0 : 6) + i;
++        position.setXYZ(vertex, x, ground(x, n) + .028, -n);
++        color.setXYZW(vertex, shade * .79, shade * .90, shade, opacity);
++      }
++    },
++  };
++}
++
++export function createSledTracks(scene: Scene, ground: (x: number, n: number) => number) {
++  const ribbon = createSledTrackRibbon(scene, sledTrackCapacity, 'town-sled-tracks', ground);
+   const expiry = new Float64Array(sledTrackCapacity);
+   const strength = new Float32Array(sledTrackCapacity);
+   let now = 0, head = 0, used = 0, count = 0, nextFade = 0;
+   let previous: { x: number; n: number } | undefined;
+
+-  function alpha(slot: number, opacity: number) {
+-    for (let i = 0; i < verticesPerSlot; i++) {
+-      color.setW(slot * verticesPerSlot + i, opacity);
+-    }
+-  }
+   function mark(x: number, n: number, deepSnow: boolean) {
+     if (!previous) { previous = { x, n }; return; }
+     const east = x - previous.x, north = n - previous.n, distance = Math.hypot(east, north);
+@@ -37,24 +62,16 @@ export function createSledTracks(scene: Scene, ground: (x: number, n: number) =>
+     const start = previous;
+     previous = { x, n };
+     if (distance > 2) return;
+-    const sideEast = north / distance, sideNorth = -east / distance;
+     const slot = head++ % sledTrackCapacity;
+     used = Math.min(sledTrackCapacity, used + 1);
+     if (!expiry[slot]) count++;
+     expiry[slot] = now + sledTrackLife;
+     strength[slot] = deepSnow ? .52 : .30;
+-    const shade = deepSnow ? .29 : .43;
+-    for (const rail of [-1, 1]) for (let i = 0; i < 6; i++) {
+-      const offset = rail * .29 + spine[i] * (deepSnow ? .047 : .034);
+-      const px = start.x + east * ends[i] + sideEast * offset;
+-      const pn = start.n + north * ends[i] + sideNorth * offset;
+-      const vertex = slot * verticesPerSlot + (rail === -1 ? 0 : 6) + i;
+-      position.setXYZ(vertex, px, ground(px, pn) + .028, -pn);
+-      color.setXYZW(vertex, shade * .79, shade * .90, shade, strength[slot]);
+-    }
+-    geometry.setDrawRange(0, used * verticesPerSlot);
+-    position.needsUpdate = color.needsUpdate = true;
+-    mesh.visible = true;
++    ribbon.writeSegment(slot, { x1: start.x, n1: start.n, x2: x, n2: n }, deepSnow, strength[slot],
++      [north / distance, -east / distance]);
++    ribbon.setDrawSlots(used);
++    ribbon.upload();
++    ribbon.mesh.visible = true;
+   }
+
+   function update(dt: number) {
+@@ -66,12 +83,12 @@ export function createSledTracks(scene: Scene, ground: (x: number, n: number) =>
+       if (!expiry[slot]) continue;
+       const remaining = expiry[slot] - now;
+       if (remaining > 2) continue;
+-      alpha(slot, Math.max(0, remaining / 2) * strength[slot]);
++      ribbon.setOpacity(slot, Math.max(0, remaining / 2) * strength[slot]);
+       changed = true;
+       if (remaining <= 0) { expiry[slot] = 0; count--; }
+     }
+-    if (changed) color.needsUpdate = true;
+-    mesh.visible = count > 0;
++    if (changed) ribbon.uploadColors();
++    ribbon.mesh.visible = count > 0;
+   }
+
+   return { mark, update, breakPath() { previous = undefined; }, get count() { return count; } };
+diff --git a/tools/voxel-tavern/town-blockout/town-grand-prix.ts b/tools/voxel-tavern/town-blockout/town-grand-prix.ts
+index 3f21956..b79f5c9 100644
+--- a/tools/voxel-tavern/town-blockout/town-grand-prix.ts
++++ b/tools/voxel-tavern/town-blockout/town-grand-prix.ts
+@@ -3,6 +3,7 @@
+ // presence 的 grand-prix 事件喂入 recordResult（服务器只中继，校验在两端）。
+ // 检查点必须按序、且当前赛段与检查点要求一致才推进（错段/乱序不计）。
+ import { lakeSkateGates } from './lake-skate-course';
++import { longHallSledCheckpoints } from './sled-route';
+
+ export const grandPrixProgressKey = 'unwritten.grand-prix.v1';
+ export const grandPrixMinTotalMs = 45_000;
+@@ -11,13 +12,15 @@ export const grandPrixMaxTotalMs = 1_800_000;
+ export type GrandPrixLeg = 'sled' | 'skate' | 'foot';
+ export type GrandPrixMode = { sledding: boolean; skating: boolean };
+
++const { start, memorial, bridge, finish } = longHallSledCheckpoints;
++
+ export const grandPrixCheckpoints: readonly {
+   id: string; label: string; x: number; n: number; radius: number; leg: GrandPrixLeg;
+ }[] = [
+-  { id: 'start', label: '北坡顶出发', x: 378, n: 303, radius: 3, leg: 'sled' },
+-  { id: 'memorial', label: '纪念馆东', x: 332, n: 245, radius: 3.5, leg: 'sled' },
+-  { id: 'bridge', label: '中央桥面', x: 304, n: 192, radius: 3.5, leg: 'sled' },
+-  { id: 'sled-finish', label: '雪橇终点', x: 231, n: 192, radius: 3, leg: 'sled' },
++  { id: 'start', label: '北坡顶出发', x: start[0], n: start[1], radius: 3, leg: 'sled' },
++  { id: 'memorial', label: '纪念馆东', x: memorial[0], n: memorial[1], radius: 3.5, leg: 'sled' },
++  { id: 'bridge', label: '中央桥面', x: bridge[0], n: bridge[1], radius: 3.5, leg: 'sled' },
++  { id: 'sled-finish', label: '雪橇终点', x: finish[0], n: finish[1], radius: 3, leg: 'sled' },
+   { id: 'skate-1', label: '冰湖一门', x: lakeSkateGates[0].x, n: lakeSkateGates[0].n, radius: 2.5, leg: 'skate' },
+   { id: 'skate-2', label: '冰湖二门', x: lakeSkateGates[2].x, n: lakeSkateGates[2].n, radius: 2.5, leg: 'skate' },
+   { id: 'skate-3', label: '冰湖三门', x: lakeSkateGates[4].x, n: lakeSkateGates[4].n, radius: 2.5, leg: 'skate' },
+diff --git a/tools/voxel-tavern/town-blockout/town-sled-racks.ts b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+index d165cd5..73b9fe6 100644
+--- a/tools/voxel-tavern/town-blockout/town-sled-racks.ts
++++ b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+@@ -1,9 +1,10 @@
+ import { mirrorLakeSignedDistance } from '../../../src/shared/mirror-lake';
+ import { icePalaceSite } from './ice-palace-site';
+ import { roadCorridorKeepClear } from './road-clearance';
++import { longHallSledStart } from './sled-route';
+ import type { SledRack } from './sled-visuals';
+-import { nearestTownActivity, type TownActivitySpot } from './town-activity';
+ import { layout } from './terrain';
++import { nearestTownActivity, type TownActivitySpot } from './town-activity';
+ import { extensionPlots } from './town-extension';
+ import { pineCampSites } from './town-pine-camp';
+ import { za22StationApproach } from './town-za22-cloud-route';
+@@ -65,7 +66,7 @@ export const townSledRackSites: readonly Site[] = [
+
+ export const townSledRackMissingSites = ['old-home', 'town-hall'] as const;
+ export const townSledRackLegacySites: readonly Site[] = [
+-  { id: 'north-slope', domain: 'town', pads: [[378, 303, south]] },
++  { id: 'north-slope', domain: 'town', pads: [[...longHallSledStart, south]] },
+   { id: 'memorial', domain: 'town', pads: [[347.5, 255, 0], [348, 255, 0], [348.5, 255, 0]] },
+   { id: 'market', domain: 'town', pads: [[150.5, 90, 0], [151.5, 90.5, 0], [151, 90, 0]] },
+ ];
+diff --git a/tools/voxel-tavern/town-blockout/town-sled-track-view.ts b/tools/voxel-tavern/town-blockout/town-sled-track-view.ts
+index 5f8d813..01c168a 100644
+--- a/tools/voxel-tavern/town-blockout/town-sled-track-view.ts
++++ b/tools/voxel-tavern/town-blockout/town-sled-track-view.ts
+@@ -1,14 +1,10 @@
+ // 3.0 D2 长雪痕渲染：数据来自 H2 积雪统一场（town-snow-field 的雪痕登记），
+-// 本模块只负责把登记段画成双轨缎带（几何口径沿用 B3b sled-tracks：每段 12 顶点、
+-// 轨距 ±.29 m、顶点色带 alpha）。留存/积盖/上限全部由场决定，这里不计时。
+-import { BufferAttribute, BufferGeometry, DynamicDrawUsage, Mesh, MeshBasicMaterial, type Scene } from 'three';
++// 留存、积盖和容量由积雪场决定，双轨绘制与短雪痕共用。
++import type { Scene } from 'three';
++import { createSledTrackRibbon } from './sled-tracks';
+ import { snowFieldTrackCapacity, type TownSnowField } from './town-snow-field';
+
+-const verticesPerSlot = 12;
+-const spine = [-1, 1, -1, 1, 1, -1];
+-const ends = [0, 0, 1, 0, 1, 1];
+-
+-function joinedNormal(east: number, north: number, adjoiningEast: number, adjoiningNorth: number) {
++function joinedNormal(east: number, north: number, adjoiningEast: number, adjoiningNorth: number): readonly [number, number] {
+   const length = Math.hypot(adjoiningEast, adjoiningNorth);
+   if (!length) return [east, north];
+   const dx = east + adjoiningNorth / length, dn = north - adjoiningEast / length;
+@@ -17,21 +13,7 @@ function joinedNormal(east: number, north: number, adjoiningEast: number, adjoin
+ }
+
+ export function createSledTrackView(scene: Scene, ground: (x: number, n: number) => number) {
+-  const geometry = new BufferGeometry();
+-  const position = new BufferAttribute(new Float32Array(snowFieldTrackCapacity * verticesPerSlot * 3), 3)
+-    .setUsage(DynamicDrawUsage);
+-  const color = new BufferAttribute(new Float32Array(snowFieldTrackCapacity * verticesPerSlot * 4), 4)
+-    .setUsage(DynamicDrawUsage);
+-  geometry.setAttribute('position', position);
+-  geometry.setAttribute('color', color);
+-  const mesh = new Mesh(geometry, new MeshBasicMaterial({
+-    vertexColors: true, transparent: true, depthWrite: false, toneMapped: false,
+-    polygonOffset: true, polygonOffsetFactor: -2,
+-  }));
+-  mesh.name = 'town-sled-tracks-field';
+-  mesh.frustumCulled = false;
+-  mesh.visible = false;
+-  scene.add(mesh);
++  const ribbon = createSledTrackRibbon(scene, snowFieldTrackCapacity, 'town-sled-tracks-field', ground);
+   let lastCount = -1;
+   let lastSync = -Infinity;
+
+@@ -48,32 +30,23 @@ export function createSledTrackView(scene: Scene, ground: (x: number, n: number)
+         const east = segment.x2 - segment.x1, north = segment.n2 - segment.n1;
+         const distance = Math.hypot(east, north) || 1;
+         const sideEast = north / distance, sideNorth = -east / distance;
+-        let startEast = sideEast, startNorth = sideNorth, endEast = sideEast, endNorth = sideNorth;
++        const side = [sideEast, sideNorth] as const;
++        let startSide = side, endSide = side;
+         const before = segments[slot - 1], after = segments[slot + 1];
+         if (before && (segment.drifting || before.drifting) && before.x2 === segment.x1 && before.n2 === segment.n1) {
+-          [startEast, startNorth] = joinedNormal(sideEast, sideNorth, before.x2 - before.x1, before.n2 - before.n1);
++          startSide = joinedNormal(sideEast, sideNorth, before.x2 - before.x1, before.n2 - before.n1);
+         }
+         if (after && (segment.drifting || after.drifting) && segment.x2 === after.x1 && segment.n2 === after.n1) {
+-          [endEast, endNorth] = joinedNormal(sideEast, sideNorth, after.x2 - after.x1, after.n2 - after.n1);
++          endSide = joinedNormal(sideEast, sideNorth, after.x2 - after.x1, after.n2 - after.n1);
+         }
+         const deep = segment.strength >= .8;
+-        const shade = deep ? .29 : .43;
+-        const opacity = segment.alpha * .52;
+-        for (const rail of [-1, 1]) for (let i = 0; i < 6; i++) {
+-          const offset = rail * .29 + spine[i] * (deep ? .047 : .034);
+-          const px = segment.x1 + east * ends[i] + (ends[i] ? endEast : startEast) * offset;
+-          const pn = segment.n1 + north * ends[i] + (ends[i] ? endNorth : startNorth) * offset;
+-          const vertex = slot * verticesPerSlot + (rail === -1 ? 0 : 6) + i;
+-          position.setXYZ(vertex, px, ground(px, pn) + .028, -pn);
+-          color.setXYZW(vertex, shade * .79, shade * .90, shade, opacity);
+-        }
++        ribbon.writeSegment(slot, segment, deep, segment.alpha * .52, startSide, endSide);
+       }
+-      geometry.setDrawRange(0, segments.length * verticesPerSlot);
+-      position.needsUpdate = true;
+-      color.needsUpdate = true;
+-      mesh.visible = segments.length > 0;
++      ribbon.setDrawSlots(segments.length);
++      ribbon.upload();
++      ribbon.mesh.visible = segments.length > 0;
+     },
+-    mesh,
++    mesh: ribbon.mesh,
+   };
+ }
+
