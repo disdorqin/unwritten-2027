@@ -3,7 +3,7 @@ import {
 } from 'three';
 
 type Point = { east: number; north: number };
-type Sign = Point & { label: string; facing: 'south' | 'east'; width: number };
+type Sign = Point & { label: string; facing: 'south' | 'north' | 'east'; width: number };
 type SignVolume = Point & { height: number; width: number; depth: number; rise: number };
 type FloorAt = (east: number, north: number, radius: number) => number | undefined;
 
@@ -31,8 +31,8 @@ function signFootprints(sign: Sign) {
   return [
     { width: postHalfWidth * 2, depth: postHalfWidth * 2, base: 0, rise: postHeight },
     {
-      width: sign.facing === 'south' ? sign.width : .08,
-      depth: sign.facing === 'south' ? .08 : sign.width,
+      width: sign.facing === 'east' ? .08 : sign.width,
+      depth: sign.facing === 'east' ? sign.width : .08,
       base: postHeight - .08,
       rise: .42,
     },
@@ -69,7 +69,7 @@ export function createMainSummitApproach(config: MainSummitApproachConfig) {
     { label: '主峰山门 ↑', east: terminal.east + 1.35, north: terminal.north + 1.15, facing: 'south', width: 1.35 },
     { label: '主峰山门', east: gateApproach.east - 2.3, north: gateApproach.north + .4, facing: 'east', width: 1.2 },
     { label: '前山登记碑', east: stampStop.east + stampSide * 1.2, north: stampStop.north - 1.25,
-      facing: 'south', width: 1.2 },
+      facing: 'north', width: 1.2 },
   ];
 
   function survey({ floorAt, blocked }: WalkSurface) {
@@ -141,13 +141,14 @@ export function mountMainSummitApproachSigns(owner: Group, approach: ReturnType<
   group.name = 'main-summit-approach-signs';
   const wood = new MeshLambertMaterial({ color: '#68462e' });
   const panel = new MeshLambertMaterial({ color: '#26343c' });
+  const headings = { south: 0, north: Math.PI, east: Math.PI / 2 };
   const disposePanels: Array<() => void> = [];
   const boxes = approach.signs.flatMap((sign, index) => {
     const height = elevations[index]!;
     const frame = new Group();
     frame.name = sign.label;
     frame.position.set(sign.east, height, -sign.north);
-    frame.rotation.y = sign.facing === 'south' ? 0 : Math.PI / 2;
+    frame.rotation.y = headings[sign.facing];
     group.add(frame);
     const post = new Mesh(new BoxGeometry(postHalfWidth * 2, postHeight, postHalfWidth * 2), wood);
     post.position.y = postHeight / 2;
