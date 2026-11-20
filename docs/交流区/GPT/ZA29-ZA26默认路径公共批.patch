@@ -1,0 +1,512 @@
+diff --git a/tests/town-blockout-meteor-crater-surface.test.ts b/tests/town-blockout-meteor-crater-surface.test.ts
+index 6371acd..f718675 100644
+--- a/tests/town-blockout-meteor-crater-surface.test.ts
++++ b/tests/town-blockout-meteor-crater-surface.test.ts
+@@ -3,7 +3,7 @@ import { test } from 'node:test';
+ import { Raycaster, Vector3 } from 'three';
+ import { meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
+ import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
+-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+ import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+ 
+ test('B-01 mounts its reviewed crater and closure in a measured, rotated surface frame', () => {
+@@ -59,12 +59,16 @@ test('ZA-22 west entrance physically joins the existing E0 edge and the B-01 cra
+   }
+   assert.ok(Math.abs(last - road.lip.height) < .025);
+   assert.equal(road.heightAt(-241, road.lip.north), undefined);
+-  const outside = { east: road.lip.east + 1, north: road.lip.north };
+-  const inside = { east: road.lip.east - 1, north: road.lip.north };
+-  assert.equal(road.fenceBlocks(outside.east, outside.north, road.lip.height, .27), false);
+-  assert.equal(road.fenceBlocks(outside.east, outside.north + 3.25, road.lip.height, .27), true);
+-  assert.equal(permitsMeteorCraterStep(outside, inside, false), false);
+-  assert.equal(permitsMeteorCraterStep(outside, inside, true), true);
+-  assert.equal(permitsMeteorCraterStep(inside, outside, false), true);
+-  assert.equal(permitsMeteorCraterStep(inside, inside, false), true);
++  const fenceEast = road.lip.east + 1;
++  for (const direction of [-1, 1]) {
++    const fenceNorth = road.lip.north + direction * 3.25;
++    assert.ok(road.group.children.some(child => child.position.x === fenceEast && child.position.z === -fenceNorth));
++    assert.equal(road.fenceBlocks(fenceEast, fenceNorth, road.lip.height, .27), true);
++  }
++  for (let i = -20; i <= 20; i++) {
++    const east = road.lip.east + i * .1;
++    const height = road.heightAt(east, road.lip.north);
++    assert.ok(height !== undefined, 'the open centre has continuous foot support in either direction');
++    assert.equal(road.fenceBlocks(east, road.lip.north, height, .27), false);
++  }
+ });
+diff --git a/tests/town-blockout-sled-racks.test.ts b/tests/town-blockout-sled-racks.test.ts
+index e913190..afa169f 100644
+--- a/tests/town-blockout-sled-racks.test.ts
++++ b/tests/town-blockout-sled-racks.test.ts
+@@ -7,7 +7,7 @@ import { resolveTownSledRacks, townSledRackMissingSites } from '../tools/voxel-t
+ import {
+   createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
+ } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
+-import { mountWestCraterRoad, permitsMeteorCraterStep } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
++import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+ 
+ test('sled rack configurations resolve on the surveyed town, west approach and summit surfaces', () => {
+   const terrain = createTerrainGrid();
+@@ -17,7 +17,7 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
+     if (canEnter(east, north) && !isWater(east, north)) return terrain.heightAt(east, north);
+   }, crater.lip);
+   let now = Date.UTC(2026, 0, 1);
+-  const cloud = createZa22CloudRoute({ now: () => now, nightOpen: () => true, enterOrExit() {}, view() {} });
++  const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
+   cloud.action(za22StationApproach)?.run();
+   cloud.update(za22StationApproach);
+   assert.equal(cloud.riding(), true);
+@@ -34,10 +34,9 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
+   ]);
+   assert.deepEqual(summit.map(({ id, y }) => [id, y]), [['mountain-gate', 347], ['cloud-terrace', 347]]);
+   assert.equal(summit[0].x, 295.5);
+-  for (const { id, x, n } of town) {
+-    if (id !== 'crater-mouth') continue;
+-    assert.equal(permitsMeteorCraterStep({ east: 0, north: n }, { east: x, north: n }, false), true);
+-  }
++  const craterRack = town.find(({ id }) => id === 'crater-mouth')!;
++  assert.equal(crater.fenceBlocks(craterRack.x, craterRack.n, craterRack.y, .36), false);
++  assert.equal(crater.heightAt(craterRack.x, craterRack.n), craterRack.y);
+   assert.deepEqual(townSledRackMissingSites, ['old-home', 'town-hall']);
+ });
+ 
+diff --git a/tests/town-blockout-za22-cloud-route.test.ts b/tests/town-blockout-za22-cloud-route.test.ts
+index 056cd6b..1615930 100644
+--- a/tests/town-blockout-za22-cloud-route.test.ts
++++ b/tests/town-blockout-za22-cloud-route.test.ts
+@@ -43,14 +43,11 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
+   assert.equal(za22CloudSurfaceAt(350, 654), undefined);
+ });
+ 
+-test('boarding comes only from the legal station approach and authoritative night state', () => {
+-  let night = false;
++test('boarding uses the station and the cable schedule, and pending riders can be disqualified', () => {
+   const cloud = createZa22CloudRoute({
+-    now: () => Date.UTC(2026, 0, 1) + 20_000, nightOpen: () => night,
++    now: () => Date.UTC(2026, 0, 1) + 20_000,
+     enterOrExit() { assert.fail('must not transfer'); }, view() { assert.fail('must not interact'); },
+   });
+-  assert.equal(cloud.action(za22StationApproach), undefined);
+-  night = true;
+   assert.equal(cloud.action({ ...za22StationApproach, height: 27.7 }), undefined);
+   assert.equal(cloud.action({ ...za22StationApproach, north: 320 }), undefined);
+   const board = cloud.action(za22StationApproach);
+@@ -59,8 +56,9 @@ test('boarding comes only from the legal station approach and authoritative nigh
+   cloud.update(za22StationApproach);
+   assert.match(cloud.action(za22StationApproach)?.label ?? '', /等候前山缆车/);
+   assert.ok(!cloud.active());
+-  night = false;
+-  cloud.update(za22StationApproach);
+-  night = true;
++  cloud.update(za22StationApproach, false);
++  assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
++  cloud.action(za22StationApproach)?.run();
++  cloud.update({ ...za22StationApproach, north: 320 });
+   assert.equal(cloud.action(za22StationApproach)?.label, '乘缆车一线前往云海台');
+ });
+diff --git a/tests/town-blockout-za22-mountain-gate.test.ts b/tests/town-blockout-za22-mountain-gate.test.ts
+index 4b2066c..58e9190 100644
+--- a/tests/town-blockout-za22-mountain-gate.test.ts
++++ b/tests/town-blockout-za22-mountain-gate.test.ts
+@@ -91,7 +91,6 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
+   const { legMs } = createZa22NorthRidgeLine(26);
+   const cloud = createZa22CloudRoute({
+     now: () => now,
+-    nightOpen: () => !arrived,
+     enterOrExit(terminal, at) {
+       if (terminal === 'summit') {
+         assert.deepEqual(at, cableEnd);
+@@ -107,7 +106,7 @@ test('ZA-22 switches the active arrival surfaces and gate action on the live cab
+   cloud.update(za22StationApproach);
+   assert.equal(cloud.riding(), true);
+   now = epoch + Math.ceil(legMs);
+-  cloud.update(za22StationApproach);
++  cloud.update(za22StationApproach, false);
+   assert.equal(cloud.riding(), false);
+   assert.equal(arrived, true);
+   const deck = { east: 300, north: 665.9, height: 347 };
+diff --git a/tests/town-blockout-za29-guard-duty.test.ts b/tests/town-blockout-za29-guard-duty.test.ts
+new file mode 100644
+index 0000000..1af5ff5
+--- /dev/null
++++ b/tests/town-blockout-za29-guard-duty.test.ts
+@@ -0,0 +1,66 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createZa29GuardDuty } from '../tools/voxel-tavern/town-blockout/town-za29-guard-duty';
++
++const foot = (east: number, north: number, height: number) => ({ east, north, height });
++
++test('a mounted and on-duty mountain guard warns, talks and stops a crossing of the real approach', () => {
++  const approach = foot(300, 664.95, 347);
++  const guard = foot(302.35, 665.1, 347);
++  const outside = foot(300, 663.25, 347);
++  const inside = foot(300, 666.1, 347);
++  const lines: string[] = [];
++  const duty = createZa29GuardDuty('mountain', { guard, approach }, line => lines.push(line));
++
++  assert.equal(duty.action(outside), undefined);
++  assert.equal(duty.blocksStep(outside, inside), false);
++  duty.observeApproach(outside);
++  assert.deepEqual(lines, []);
++
++  duty.updateDuty(true);
++  duty.observeApproach(outside);
++  duty.observeApproach(outside);
++  assert.deepEqual(lines, ['吃点，吃点再走，山上风大。']);
++  const action = duty.action(outside);
++  assert.equal(action?.label, '与赵满仓交谈');
++  action?.run();
++  assert.equal(duty.blocksStep(outside, inside), true);
++  assert.equal(duty.blocksStep(outside, inside), true);
++  assert.equal(lines.length, 3);
++  assert.equal(duty.blocksStep(inside, outside), false);
++
++  duty.updateDuty(false);
++  action?.run();
++  assert.equal(duty.action(outside), undefined);
++  assert.equal(duty.blocksStep(outside, inside), false);
++  assert.equal(lines.length, 3);
++});
++
++test('the crater guard intervenes on the approach without fencing off the western domain', () => {
++  const height = 10.7773;
++  const approach = foot(-68.4, 159, height);
++  const guard = foot(-68.4, 161.1, height);
++  const lines: string[] = [];
++  const duty = createZa29GuardDuty('crater', { guard, approach }, line => lines.push(line));
++  duty.updateDuty(true);
++
++  const outside = foot(-66, 159, height);
++  const inside = foot(-70.5, 159, height);
++  assert.equal(duty.blocksStep(outside, inside), true);
++  assert.equal(duty.blocksStep(approach, inside), true);
++  assert.equal(duty.blocksStep(foot(-66, 160.7, height), foot(-70.5, 157.3, height)), true);
++  assert.equal(duty.blocksStep(inside, outside), false);
++  assert.equal(duty.blocksStep(inside, foot(-72, 159, height)), false);
++  assert.equal(duty.blocksStep(foot(-66, 153, height), foot(-70.5, 153, height)), false);
++  assert.equal(duty.blocksStep(foot(-66, 159, height + 3), foot(-70.5, 159, height + 3)), false);
++  assert.equal(duty.action(foot(-72, 153, height)), undefined);
++  assert.deepEqual(lines, ['井口的规矩，比命大。']);
++
++  duty.observeApproach(foot(-65, 149, height));
++  duty.observeApproach(outside);
++  assert.equal(duty.blocksStep(outside, inside), true);
++  assert.equal(lines.length, 3);
++  duty.updateDuty(false);
++  assert.equal(duty.blocksStep(outside, inside), false);
++  assert.equal(duty.blocksStep(inside, outside), false);
++});
+diff --git a/tests/town-blockout-za29-guard-scenes.test.ts b/tests/town-blockout-za29-guard-scenes.test.ts
+index 8b04def..f94eb7d 100644
+--- a/tests/town-blockout-za29-guard-scenes.test.ts
++++ b/tests/town-blockout-za29-guard-scenes.test.ts
+@@ -106,7 +106,7 @@ test('ZA-29 赵满仓 is visible before the jamb and clears the real cloud appro
+   const terminal = { east: 336, north: 640, height: 347 };
+   let now = epoch + 500;
+   const cloud = createZa22CloudRoute({
+-    now: () => now, nightOpen: () => true, enterOrExit() {}, view() {},
++    now: () => now, enterOrExit() {}, view() {},
+   });
+   cloud.action(za22StationApproach)!.run();
+   cloud.update(za22StationApproach);
+@@ -134,7 +134,10 @@ test('ZA-29 赵满仓 is visible before the jamb and clears the real cloud appro
+     for (const [east, north] of [[312, 663.25], [308, 663.25], [304, 663.25], [300, 663.25], [300, 665.9]]) {
+       cloud.updateView({ east, north, height: 347 });
+       const meshes: Mesh[] = [];
+-      cloud.scene.traverseVisible(object => { if (object instanceof Mesh) meshes.push(object); });
++      cloud.scene.traverseVisible(object => {
++      const mesh = object as Mesh;
++      if (mesh.isMesh) meshes.push(mesh);
++    });
+       const eye = new Vector3(east, 348.62, -north);
+       const direction = aimedAt.clone().sub(eye);
+       const ray = new Raycaster(eye, direction.clone().normalize(), 0, direction.length() + .25);
+diff --git a/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts b/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts
+index a73d056..0d44b0b 100644
+--- a/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts
++++ b/tools/voxel-tavern/town-blockout/town-za22-cloud-route.ts
+@@ -14,7 +14,6 @@ type Terminal = 'base' | 'summit';
+ type Action = { label: string; run(): void };
+ type Host = {
+   now(): number;
+-  nightOpen(): boolean;
+   enterOrExit(terminal: Terminal, at: Point): void;
+   view(title: string, message: string): void;
+ };
+@@ -193,7 +192,7 @@ export function createZa22CloudRoute(host: Host) {
+   function action(position: Point): Action | undefined {
+     if (mode === 'riding') return;
+     if (mode === 'town') {
+-      if (!host.nightOpen() || !near(position, za22StationApproach, 1.55)) return;
++      if (!near(position, za22StationApproach, 1.55)) return;
+       return pending
+         ? { label: '等候前山缆车 · 取消候车', run() { pending = undefined; } }
+         : { label: '乘缆车一线前往云海台', run() { pending = 'base'; } };
+@@ -220,8 +219,7 @@ export function createZa22CloudRoute(host: Host) {
+ 
+   function update(position: Point, canBoard = true) {
+     const now = host.now();
+-    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8)
+-        || (pending === 'base' && !host.nightOpen()))) pending = undefined;
++    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8))) pending = undefined;
+     if (pending && !ride) {
+       const from = pending;
+       const index = ([0, 1] as const).find(candidate => line.timeline(now, candidate).boarding === from);
+diff --git a/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+index efdf650..4fbb097 100644
+--- a/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
++++ b/tools/voxel-tavern/town-blockout/town-za22-crater-road.ts
+@@ -9,17 +9,6 @@ export const craterWestSurvey = Object.freeze({
+ const seamBlendWidth = 24;
+ const carrierHoleRadius = meteorCraterRimRadius + 2;
+ const tileSize = 48;
+-const gateRadius = meteorCraterRimRadius + .27;
+-type Foot = Readonly<{ east: number; north: number }>;
+-
+-function inCrater(foot: Foot) {
+-  return Math.hypot(foot.east - craterWestSurvey.east, foot.north - craterWestSurvey.north) < gateRadius;
+-}
+-
+-/** The night window controls new entry. Standing inside and walking back remain legal. */
+-export function permitsMeteorCraterStep(from: Foot, to: Foot, nightOpen: boolean) {
+-  return !inCrater(to) || inCrater(from) || nightOpen;
+-}
+ 
+ /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
+ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number) {
+diff --git a/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+new file mode 100644
+index 0000000..7ebd104
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-za29-guard-duty.ts
+@@ -0,0 +1,88 @@
++type Foot = Readonly<{ east: number; north: number; height: number }>;
++type GuardAnchors = Readonly<{ guard: Foot; approach: Foot }>;
++
++const guards = {
++  mountain: {
++    label: '与赵满仓交谈',
++    line: '吃点，吃点再走，山上风大。',
++    east: 0,
++    north: 1,
++  },
++  crater: {
++    label: '与石九斤交谈',
++    line: '井口的规矩，比命大。',
++    east: -1,
++    north: 0,
++  },
++} as const;
++
++const guardReach = 4.5;
++const approachReach = 3.5;
++const passageHalfWidth = 2;
++const levelReach = 1.25;
++
++export function createZa29GuardDuty(
++  kind: keyof typeof guards,
++  { guard, approach }: GuardAnchors,
++  announce: (line: string) => void,
++) {
++  const post = guards[kind];
++  let present = false;
++  let greeted = false;
++  let stopped = false;
++
++  function updateDuty(guardPresent: boolean) {
++    if (present === guardPresent) return;
++    present = guardPresent;
++    greeted = stopped = false;
++  }
++
++  function inReach(point: Foot, anchor: Foot, reach: number) {
++    return Math.abs(point.height - anchor.height) <= levelReach &&
++      Math.hypot(point.east - anchor.east, point.north - anchor.north) <= reach;
++  }
++
++  function along(point: Foot) {
++    return (point.east - approach.east) * post.east + (point.north - approach.north) * post.north;
++  }
++
++  const speak = () => { if (present) announce(post.line); };
++  const conversation = { label: post.label, run: speak };
++
++  function action(position: Foot) {
++    if (present && inReach(position, guard, guardReach)) return conversation;
++  }
++
++  function observeApproach(position: Foot) {
++    const nearApproach = present && along(position) <= 0 &&
++      inReach(position, approach, approachReach) && inReach(position, guard, guardReach);
++    if (!nearApproach) {
++      greeted = stopped = false;
++    } else if (!greeted) {
++      greeted = true;
++      speak();
++    }
++  }
++
++  function blocksStep(from: Foot, to: Foot) {
++    if (!present) return false;
++    const before = along(from), after = along(to);
++    if (before > 0 || after < 0 || after <= before) return false;
++    const mix = -before / (after - before);
++    const crossing = {
++      east: from.east + (to.east - from.east) * mix,
++      north: from.north + (to.north - from.north) * mix,
++      height: from.height + (to.height - from.height) * mix,
++    };
++    // Check the real approach and guard at the swept crossing so a diagonal step
++    // cannot mask a rush, while the rest of the domain needs no guard collision.
++    if (!inReach(crossing, approach, passageHalfWidth) || !inReach(crossing, guard, guardReach)) return false;
++    if (!stopped) {
++      stopped = true;
++      speak();
++    }
++    return true;
++  }
++
++  return { updateDuty, action, observeApproach, blocksStep };
++}
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 1d05817..cdf74a9 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -27,6 +27,8 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
+ import { addTerrainMeshes } from './terrain-mesh';
+ import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+ import { createZa22CloudRoute } from './town-za22-cloud-route';
++import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
++import { createZa29GuardDuty } from './town-za29-guard-duty';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -117,6 +119,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
+ import './plaza-group-photo.css';
+ import { downloadTownCanvas } from './town-photo-download';
+ import { createTownPassport } from './town-passport';
++import { buildMascotPen } from './landmark-mascot-pen';
+ import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
+ import { createZodiacProgress, postMousePosition } from './town-zodiac';
+ import { createLighthouseSnakeCharm } from './town-zodiac-snake';
+@@ -131,7 +134,7 @@ import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-roos
+ import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
+ import { createTownLights } from './town-lights';
+ import { createTownWater, shoreJumpDepth } from './town-water';
+-import { craterWestSurvey, mountWestCraterRoad, permitsMeteorCraterStep } from './town-za22-crater-road';
++import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
+ import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
+ import { findNearestLegalSpawn } from './town-spawn';
+ import { approachTownSnowScale } from './town-snow-cover';
+@@ -224,7 +227,6 @@ const presence = createTownPresence(scene, camera, announceActivity, resetMoveme
+     : grid.heightAt(east, north));
+ const cloudRoute = createZa22CloudRoute({
+   now: presence.serverNow,
+-  nightOpen: () => presence.northRidgeNightOpen(),
+   enterOrExit(terminal, at) {
+     presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
+     x = at.east;
+@@ -241,6 +243,39 @@ const cloudRoute = createZa22CloudRoute({
+   },
+   view: (title, message) => { activityContext.open(title, message); },
+ });
++function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
++  const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
++  return { model, duty };
++}
++type TownGuardPost = ReturnType<typeof connectGuardPost>;
++let mountainGuardPost: TownGuardPost | undefined;
++let craterGuardPost: TownGuardPost | undefined;
++
++function currentGuardDuty() {
++  if (cloudRoute.riding()) return undefined;
++  return (cloudRoute.active() ? mountainGuardPost : craterGuardPost)?.duty;
++}
++
++function updateGuardPosts() {
++  if (cloudRoute.assembly() && !mountainGuardPost) {
++    mountainGuardPost = connectGuardPost('mountain',
++      mountZa29GuardPost(cloudRoute.scene, 'mountain', (east, north) => cloudRoute.surfaceAt(east, north, 0)));
++  } else if (!cloudRoute.assembly() && mountainGuardPost) {
++    mountainGuardPost.model.dispose();
++    mountainGuardPost = undefined;
++  }
++  if (x < 100 && !cloudRoute.active() && !craterGuardPost) {
++    const road = ensureWestCraterRoad();
++    craterGuardPost = connectGuardPost('crater', mountZa29GuardPost(road.group, 'crater', road.heightAt));
++  }
++  const night = presence.getTownNightWindow()?.shift === 'night';
++  const duty = { guardPresent: !night, showNightSigns: night };
++  for (const post of [mountainGuardPost, craterGuardPost]) {
++    post?.model.setDuty(duty);
++    post?.duty.updateDuty(duty.guardPresent);
++  }
++  if (walking && moveAllowed()) currentGuardDuty()?.observeApproach({ east: x, north: n, height: ground });
++}
+ const plazaCamera = new PerspectiveCamera(60, 16 / 9, camera.near, townFar);
+ const plazaCanvasSize = new Vector2();
+ const railway = createTownRailway(grid, presence.serverNow);
+@@ -276,8 +311,13 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
+     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
+   },
+   blocked: obstructed,
+-  canTraverse: (from, to) => !cloudRoute.active() ||
+-    cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius),
++  canTraverse(from, to) {
++    if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius)) return false;
++    return !currentGuardDuty()?.blocksStep(
++      { east: from.x, north: from.n, height: from.y },
++      { east: to.x, north: to.n, height: to.y },
++    );
++  },
+   wallBlocked: (sx, nn, y) => {
+     if (cloudRoute.active()) return false;
+     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
+@@ -541,6 +581,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
+   scene.add(group);
+ }
+ for (const plot of layout.plots) place(plot, builders[plot.id](plot));
++place({ id: 'mascot-sheep-pen', origin: [0, 0, 0] }, buildMascotPen(grid.heightAt));
+ addNewYearDecor(scene);
+ const museumPlot = layout.plots.find(plot => plot.id === 'memorial')!;
+ const [museumEast, museumNorth, museumHeight] = museumPlot.origin;
+@@ -2152,6 +2193,8 @@ function currentAction() {
+   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
+   if (sledRide.active()) return { label: '下橇', run: leaveSled };
+   if (airHeight !== undefined) return undefined;
++  const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
++  if (guardAction) return guardAction;
+   if (cloudRoute.active()) {
+     if (cloudRoute.riding()) return undefined;
+     const cable = cloudRoute.action({ east: x, north: n, height: ground });
+@@ -2574,8 +2617,7 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
+   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+   if (!homeReturn && east < 0) {
+     if (!outdoorWalkable(east, north)) return true;
+-    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
+-    return !permitsMeteorCraterStep({ east: x, north: n }, { east, north }, presence.northRidgeNightOpen());
++    return ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius);
+   }
+   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+@@ -2619,6 +2661,9 @@ function tryMove(nextX: number, nextN: number) {
+   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit);
+   const nextHeight = airHeight === undefined ? floor : feet;
+   if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
++  if (!homeReturn && currentGuardDuty()?.blocksStep(
++    { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
++  )) return false;
+   [x, n] = [nextX, nextN];
+   if (airHeight === undefined) {
+     if (ground - nextHeight > stepHeight) {
+@@ -3006,6 +3051,7 @@ renderer.setAnimationLoop(now => {
+   const dt = Math.min(.25, frameSeconds);
+   previous = now;
+   cloudRoute.update({ east: x, north: n, height: ground }, !sledRide.active());
++  updateGuardPosts();
+   if (cloudRoute.active()) {
+     renderCloudRoute(frameSeconds);
+     return;
