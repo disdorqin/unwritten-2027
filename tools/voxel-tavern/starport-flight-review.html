@@ -13,6 +13,7 @@
     h1 { margin: 0 0 .4rem; font-size: 1.1rem; }
     p { margin: .35rem 0; }
     output { display: block; font-variant-numeric: tabular-nums; }
+    #aircraft-controls { margin-top: .6rem; }
   </style>
 </head>
 <body>
@@ -23,6 +24,7 @@
     <p>飞行 W/S 俯冲或抬头，A/D 转向。1 / 2 / 3 选择关档、巡航或全推。</p>
     <p id="status" role="status">沿木台走到合体台前。</p>
     <output id="reading" aria-live="off"></output>
+    <div id="aircraft-controls" hidden></div>
   </main>
   <script type="module" src="./town-blockout/starport-flight-review.ts"></script>
 </body>

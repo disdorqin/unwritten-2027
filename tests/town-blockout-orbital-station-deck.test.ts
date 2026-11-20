@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh, type MeshBasicMaterial } from 'three';
+import { Mesh, Raycaster, Vector3, type MeshBasicMaterial } from 'three';
 import { orbitalAnchorIds } from '../src/presence/orbital-anchor-registry.ts';
 import { createOrbitalStationDeck } from '../tools/voxel-tavern/town-blockout/orbital-station-deck.ts';
 
@@ -86,6 +86,63 @@ test('the approved living and observation assets and S-2 airlock survive the dec
     assert.equal(lamps.filter(name => name === 'status-red').length, 16);
     assert.equal(lamps.filter(name => name === 'status-teleport').length, 1);
     assert.equal(lamps.filter(name => name === 'status-life-support').length, 1);
+  } finally {
+    deck.dispose();
+  }
+});
+
+
+test('the observation bench starts from a supported footpoint and its window restores the first frame after one loop', () => {
+  const deck = createOrbitalStationDeck();
+  try {
+    const lookout = deck.observation;
+    assert.equal(deck.roomAt(lookout.approach.x, lookout.approach.n), 'observation');
+    assert.ok(deck.isWalkable(lookout.approach.x, lookout.approach.n));
+    assert.ok(lookout.canSitAt(lookout.approach));
+    assert.ok(!lookout.canSitAt(deck.start));
+    assert.ok(!lookout.canSitAt(deck.rooms.living));
+    assert.ok(!lookout.canSitAt(deck.rooms.observation), 'the ordinary viewpoint still requires walking to the seat');
+    assert.ok(!lookout.canSitAt({ ...lookout.approach, ground: 2 }));
+    assert.ok(!deck.isWalkable(lookout.seat.x, lookout.seat.n), 'the fixture still blocks walking');
+    assert.equal(lookout.seat.ground, .5);
+    assert.equal(lookout.cycleSeconds, 24);
+    const start = lookout.readWindowCycle();
+    lookout.setWindowCycle(lookout.cycleSeconds / 4);
+    const quartile = lookout.readWindowCycle();
+    assert.ok(quartile.limbEast > start.limbEast);
+    assert.ok(quartile.peaksEast > start.peaksEast);
+    assert.ok(quartile.lakeGlint > start.lakeGlint);
+    assert.ok(quartile.townGlow < start.townGlow);
+    lookout.setWindowCycle(lookout.cycleSeconds);
+    assert.deepEqual(lookout.readWindowCycle(), start);
+    assert.deepEqual(deck.teleport.readState().anchors.map(anchor => anchor.lit), [false, false, false, false]);
+  } finally {
+    deck.dispose();
+  }
+});
+
+test('the combined cockpit plaque has a full backing and can be read from the side-door arrival', () => {
+  const deck = createOrbitalStationDeck();
+  try {
+    const { cockpitNameplate: plate, group } = deck;
+    group.updateMatrixWorld(true);
+    const cockpit = group.getObjectByName('orbital-cockpit')!;
+    assert.equal(plate.n, 7.9);
+    const depthFace = plate.x + plate.depth / 2 - .002;
+    for (const north of [plate.n - plate.width / 2 + .012, plate.n, plate.n + plate.width / 2 - .012]) {
+      for (const height of [plate.y - plate.height / 2 + .012, plate.y, plate.y + plate.height / 2 - .012]) {
+        const ray = new Raycaster(new Vector3(depthFace, height, -north), new Vector3(1, 0, 0), 0, .006);
+        assert.equal(ray.intersectObject(cockpit, true)[0]?.object.name, 'orbital-east-bulkhead');
+      }
+    }
+    const arrival = deck.rooms.cockpit;
+    assert.ok(deck.isWalkable(5.4, arrival.n), 'the side doorway was not blocked by the plaque');
+    const eye = new Vector3(arrival.x, arrival.ground + 1.65, -arrival.n);
+    const lookAt = new Vector3(plate.x, plate.y, -plate.n).sub(eye).normalize();
+    assert.equal(new Raycaster(eye, lookAt).intersectObject(group, true)[0]?.object.name,
+      'orbital-sign-cockpit-nameplate');
+    assert.equal(group.getObjectByName('orbital-sign-airlock-nameplate'), undefined);
+    assert.ok(group.getObjectByName('orbital-status-wall')?.userData.nameplate);
   } finally {
     deck.dispose();
   }

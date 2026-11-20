@@ -1,4 +1,4 @@
-import { BoxGeometry, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BoxGeometry, Group, Mesh, MeshLambertMaterial, type Object3D } from 'three';
 import type { AircraftPoint, AircraftRunway, AircraftSurface, AircraftWorld } from '../../../src/shared/aircraft-flight';
 import { createFlightBoosterVisual, createSnowWingVisual, flightEquipmentMounts } from './flight-equipment-visuals';
 import { northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
@@ -88,7 +88,7 @@ export function createStarportReviewWorld() {
 }
 
 /** The original F-7 parts share their published socket without changing either asset. */
-export function mountStarportFlightSite(owner: Group) {
+export function mountStarportFlightSite(owner: Object3D) {
   const group = new Group();
   group.name = 'starport-flight-site';
   owner.add(group);

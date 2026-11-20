@@ -1,6 +1,7 @@
 import { AmbientLight, BoxGeometry, Color, DirectionalLight, Fog, Mesh, MeshStandardMaterial, PerspectiveCamera,
   PointLight, RingGeometry, Scene, WebGLRenderer } from 'three';
 import { createBoosterForge, type BoosterForgeProfile, type BoosterForgeState } from '../../../src/presence/booster-forge';
+import { createZodiacStarStones, zodiacStarStoneIds } from '../../../src/shared/zodiac-star-stones';
 import { createFlightBoosterVisual } from './flight-equipment-visuals';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { createUndergroundWarriorCity } from './underground-warrior-city';
@@ -18,11 +19,14 @@ scene.add(key);
 
 const block = new BoxGeometry();
 const material = (color: number, emissive = 0) => new MeshStandardMaterial({ color, emissive });
-const iron = new Mesh(block, material(0x576574));
+const ice = new Mesh(block, material(0xa7deef, 0x386577));
 const dust = new Mesh(block, material(0xeca93c, 0xa66427));
-iron.position.set(139.76, -164.1, -10);
+ice.position.set(139.76, -164.1, -10);
 dust.position.set(140.24, -164.1, -10);
-for (const mesh of [iron, dust]) mesh.scale.set(.27, .18, .22);
+for (const mesh of [ice, dust]) mesh.scale.set(.27, .18, .22);
+const coreStone = new Mesh(block, material(0x81aeb1, 0x487676));
+coreStone.position.set(144.42, -164.48, -11.17);
+coreStone.scale.set(.22, .27, .22);
 const ring = new Mesh(new RingGeometry(.39, .44, 32), material(0xf1b754, 0xc98f3c));
 ring.rotation.x = -Math.PI / 2;
 ring.position.set(140, -164.193, -10);
@@ -34,24 +38,36 @@ light.position.set(144, -163.6, -11.18);
 const visual = createFlightBoosterVisual();
 visual.group.scale.setScalar(.63);
 visual.group.rotation.y = Math.PI;
-scene.add(iron, dust, ring, heat, light, visual.group);
+scene.add(ice, dust, coreStone, ring, heat, light, visual.group);
 
-const savedKey = 'warrior-forge-review:v1';
-const playerId = 'warrior-forge-review';
+const savedKey = 'warrior-forge-review:v2';
+const reviewOptions = new URLSearchParams(location.search);
+const playerId = reviewOptions.get('role') === 'installer' ? 'forge-installer' : 'forge-crafter';
 const forgeId = 'warrior-city-forge';
-const sockets = { place: 'stone-table', stoke: 'bellows', collect: 'outlet', fuel: 'outlet' } as const;
-type Save = { forge?: BoosterForgeState; profile: BoosterForgeProfile };
-let saved: Save = { profile: { meteorIron: 1, stardustOre: 2, boosterOwned: false, fuelSeconds: 0 } };
+const sockets = { 'install-core': 'core-stand', place: 'stone-table', stoke: 'bellows', collect: 'outlet', fuel: 'outlet' } as const;
+// The stand-alone proof boots two authoritative ring snapshots and a test recipe, without touching the public town.
+const installed = reviewOptions.get('stars') === '11' ? zodiacStarStoneIds.filter(id => id !== 'goat') : zodiacStarStoneIds;
+const townRing = createZodiacStarStones({ origins: {}, installed });
+const fixtureRecipe = { iceCrystalShards: 1, stardustOre: 1 } as const;
+type Save = { forge?: BoosterForgeState; profiles: Record<string, BoosterForgeProfile> };
+const initialProfile: BoosterForgeProfile = { iceCrystalShards: 1, stardustOre: 2, boosterOwned: false, fuelSeconds: 0 };
+let saved: Save = { profiles: { [playerId]: initialProfile } };
 try {
   const value = localStorage.getItem(savedKey);
   if (value) saved = JSON.parse(value) as Save;
 } catch {} // The browser fixture can still be viewed without storage.
+const profile = () => saved.profiles[playerId] ?? initialProfile;
 const forge = createBoosterForge({
   forgeId, socketIds: sockets, now: () => Date.now(), initial: saved.forge,
-  readProfile: id => id === playerId ? saved.profile : undefined,
-  save(state, change) {
-    if (change && change.prior !== saved.profile && JSON.stringify(change.prior) !== JSON.stringify(saved.profile)) return false;
-    const next = { forge: state, profile: change?.next ?? saved.profile };
+  recipe: fixtureRecipe, readInstalledStones: () => townRing.ringProgress().installed,
+  readProfile: id => id === playerId ? profile() : undefined,
+  save(state, change, priorRevision) {
+    const value = localStorage.getItem(savedKey);
+    const latest = value ? JSON.parse(value) as Save : saved;
+    if ((latest.forge?.revision ?? 0) !== priorRevision) return false;
+    if (change && JSON.stringify(change.prior) !== JSON.stringify(latest.profiles[change.playerId] ?? initialProfile)) return false;
+    const profiles = change ? { ...latest.profiles, [change.playerId]: change.next } : latest.profiles;
+    const next = { forge: state, profiles };
     localStorage.setItem(savedKey, JSON.stringify(next));
     saved = next;
     return true;
@@ -89,8 +105,10 @@ function standingNear(socket: typeof hall.stand.place) {
 
 function interact(fuel: boolean) {
   const state = forge.readForge();
-  const name = fuel ? 'fuel' : state.phase === 'materials' ? 'place' : state.phase === 'ready' ? 'stoke' : 'collect';
-  if (!standingNear(hall.stand[name === 'fuel' ? 'collect' : name])) {
+  const atCore = standingNear(hall.stand.collect);
+  const name = fuel ? 'fuel' : state.core === 'formed' && atCore ? 'install-core' :
+    state.phase === 'materials' ? 'place' : state.phase === 'ready' ? 'stoke' : 'collect';
+  if (!standingNear(hall.stand[name === 'fuel' || name === 'install-core' ? 'collect' : name])) {
     actionResult = '靠近对应的材台、风箱或炉口。';
     return;
   }
@@ -100,6 +118,7 @@ function interact(fuel: boolean) {
   const result = forge.submit({ playerId, requestId: crypto.randomUUID(), action: name,
     forgeId, socketId: sockets[name], expectedRevision: state.revision });
   actionResult = result.kind === 'accepted' ? '' : result.kind === 'owned' ? '助推器已在包内。' :
+    result.kind === 'core-required' ? '尚未安放全镇炉芯。' :
     result.kind === 'materials-missing' ? '材料不足。' : result.kind === 'save-failed' ? '存档未写入，可重试。' : '炉位暂不可用。';
 }
 
@@ -150,7 +169,7 @@ let priorPhase = '';
 function draw(now: number) {
   clock.advance(Math.min((now - previous) / 1000, .1), step);
   previous = now;
-  const { phase, heat: progress } = forge.readForge();
+  const { phase, heat: progress, core } = forge.readForge();
   const placed = phase === 'ready';
   const firing = phase === 'heating' || phase === 'outlet';
   if (phase === 'outlet' && phase !== priorPhase) outletStarted = now;
@@ -158,16 +177,18 @@ function draw(now: number) {
   if (slot > lastHeat && slot > 0) lowNote();
   priorPhase = phase;
   lastHeat = slot;
-  iron.visible = dust.visible = ring.visible = placed;
+  ice.visible = dust.visible = ring.visible = placed;
+  coreStone.visible = core === 'installed';
   heat.visible = firing;
   heat.scale.y = .16 + progress * .56;
   light.intensity = firing ? 22 + 19 * progress : 0;
   light.color.set(firing ? 0xffe9c3 : 0xff8c48);
   visual.group.visible = phase === 'outlet';
   visual.group.position.set(144, -164.04, -11.49 + .67 * Math.min(1, (now - outletStarted) / 650));
-  const { meteorIron, stardustOre, boosterOwned, fuelSeconds } = saved.profile;
-  inventory.value = `陨铁 ${meteorIron} · 星尘矿 ${stardustOre} · 助推器 ${boosterOwned ? '已入包' : '未取得'} · 全推余量 ${fuelSeconds} 秒`;
-  action.value = actionResult || (phase === 'outlet' ? 'E 取下助推器 · R 补粉' :
+  const { iceCrystalShards, stardustOre, boosterOwned, fuelSeconds } = profile();
+  inventory.value = `冰晶片 ${iceCrystalShards} · 星尘矿 ${stardustOre} · 助推器 ${boosterOwned ? '已入包' : '未取得'} · 全推余量 ${fuelSeconds} 秒`;
+  action.value = actionResult || (core === 'formed' ? 'E 在炉口安放原石' : core === 'unformed' ? '全镇炉芯未就绪' :
+    phase === 'outlet' ? 'E 取下助推器 · R 补粉' :
     phase === 'ready' ? 'E 拉动风箱' : phase === 'heating' ? `火候 ${Math.floor(progress * 4)} / 4` : 'E 在石台交料');
   camera.position.set(east, feet + 1.64, -north);
   camera.lookAt(east + Math.sin(yaw), feet + 1.44, -north - Math.cos(yaw));
@@ -191,11 +212,12 @@ addEventListener('pagehide', () => {
   visual.dispose();
   block.dispose();
   ring.geometry.dispose();
-  for (const mesh of [iron, dust, heat, ring]) mesh.material.dispose();
+  for (const mesh of [ice, dust, coreStone, heat, ring]) mesh.material.dispose();
   void audio?.close();
   renderer.dispose();
 }, { once: true });
 Object.defineProperty(window, '__warriorForgeProof', { value: () => ({ east, north, feet, frames, accepted, blocked,
-  ...forge.readForge(), profile: { ...saved.profile }, materialBlocks: iron.visible && dust.visible, outlet: visual.group.visible }) });
+  ...forge.readForge(), playerId, inRing: townRing.ringProgress().installed, fixtureRecipe, profile: { ...profile() },
+  coreVisible: coreStone.visible, result: actionResult, materialBlocks: ice.visible && dust.visible, outlet: visual.group.visible }) });
 resize();
 animation = requestAnimationFrame(draw);

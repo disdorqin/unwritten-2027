@@ -41,8 +41,9 @@ export const orbitalCabinSignPlacements = [
     x: 1.05, n: -3.526, y: 2.18, yaw: Math.PI, width: .46, height: .166, depth: .031 },
 ] as const;
 type Placement = typeof orbitalCabinSignPlacements[number];
+type SignageOptions = { existingAirlockPlaque?: boolean; cockpitNameplateNorth?: number };
 
-function buildSign(placement: Placement, material: MeshStandardMaterial) {
+function buildSign(placement: Placement, material: MeshStandardMaterial, north: number) {
   const { width, height, depth } = placement;
   const parts: BoxGeometry[] = [];
   const silver = new Color(0xd4ecf6);
@@ -92,21 +93,25 @@ function buildSign(placement: Placement, material: MeshStandardMaterial) {
   if (!geometry) throw new Error('The cabin sign requires one opaque geometry.');
   const mesh = new Mesh(geometry, material);
   mesh.name = `orbital-sign-${placement.id}`;
-  mesh.position.set(placement.x, placement.y, -placement.n);
+  mesh.position.set(placement.x, placement.y, -north);
   mesh.rotation.y = placement.yaw;
-  mesh.userData.sign = { ...placement, motif: placement.kind === 'nameplate' ? motif : undefined };
+  mesh.userData.sign = { ...placement, n: north, motif: placement.kind === 'nameplate' ? motif : undefined };
   return mesh;
 }
 
 /** Detached, display-only indoor assets. Nothing in this set mounts on an exterior gate. */
-export function createOrbitalCabinSignage({ existingAirlockPlaque = false }: { existingAirlockPlaque?: boolean } = {}) {
+export function createOrbitalCabinSignage({ existingAirlockPlaque = false, cockpitNameplateNorth }: SignageOptions = {}) {
+  if (cockpitNameplateNorth !== undefined && !Number.isFinite(cockpitNameplateNorth)) {
+    throw new RangeError('Cockpit nameplate north must be finite.');
+  }
   const group = new Group();
   group.name = 'orbital-cabin-signage';
   const material = new MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: .82, metalness: .22 });
   const inventory = orbitalCabinSignPlacements.map(placement => {
     const inherited = existingAirlockPlaque && placement.id === 'airlock-nameplate';
-    if (!inherited) group.add(buildSign(placement, material));
-    return { ...placement, origin: inherited ? 's2-wall' : 's11-sign' };
+    const north = placement.id === 'cockpit-nameplate' ? cockpitNameplateNorth ?? placement.n : placement.n;
+    if (!inherited) group.add(buildSign(placement, material, north));
+    return { ...placement, n: north, origin: inherited ? 's2-wall' : 's11-sign' };
   });
   let disposed = false;
   return {
@@ -123,7 +128,7 @@ export function createOrbitalCabinSignage({ existingAirlockPlaque = false }: { e
 }
 
 /** The isolated S-2 wall has its own integrated plaque. Reuse it rather than layering copies. */
-export function mountOrbitalCabinSignage(roomHost: Group) {
+export function mountOrbitalCabinSignage(roomHost: Group, options: Pick<SignageOptions, 'cockpitNameplateNorth'> = {}) {
   const wall = roomHost.getObjectByName('orbital-status-wall');
   if (!wall || !roomHost.getObjectByName('orbital-airlock') || !roomHost.getObjectByName('orbital-cockpit') ||
       roomHost.getObjectByName('orbital-cabin-signage')) throw new RangeError('Expected a bare two-room orbital host.');
@@ -131,7 +136,7 @@ export function mountOrbitalCabinSignage(roomHost: Group) {
   if (existing && (existing.text !== shipName || existing.motif !== motif)) {
     throw new RangeError('The existing airlock plaque must match the S-2 motif and name.');
   }
-  const signs = createOrbitalCabinSignage({ existingAirlockPlaque: Boolean(existing) });
+  const signs = createOrbitalCabinSignage({ ...options, existingAirlockPlaque: Boolean(existing) });
   roomHost.add(signs.group);
   return signs;
 }

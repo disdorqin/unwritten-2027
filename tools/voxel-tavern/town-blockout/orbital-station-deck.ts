@@ -1,7 +1,7 @@
 import { BoxGeometry, Group, HemisphereLight, Mesh, MeshStandardMaterial, Points, type Material } from 'three';
 import { createOrbitalEarlyRooms, type OrbitalRoomPoint } from './orbital-early-rooms.js';
 import { createOrbitalLivingCabin } from './orbital-living-cabin.js';
-import { createOrbitalObservationCabin } from './orbital-observation-cabin.js';
+import { createOrbitalObservationCabin, orbitalObservationCycleSeconds } from './orbital-observation-cabin.js';
 import { createOrbitalTeleportCabin } from './orbital-teleport-cabin.js';
 import { mountOrbitalCabinSignage } from './orbital-cabin-signage.js';
 import { mountOrbitalStatusDisplay } from './orbital-status-display.js';
@@ -30,7 +30,9 @@ export function createOrbitalStationDeck() {
   const group = new Group();
   group.name = 'orbital-station-deck';
   const early = createOrbitalEarlyRooms();
-  const signage = mountOrbitalCabinSignage(early.group);
+  // This combined deck cuts a side opening into the bulkhead that holds the old isolated plate.
+  const signage = mountOrbitalCabinSignage(early.group, { cockpitNameplateNorth: 7.90 });
+  const cockpitNameplate = signage.inventory.find(sign => sign.id === 'cockpit-nameplate')!;
   const status = mountOrbitalStatusDisplay(early.group);
   const living = createOrbitalLivingCabin();
   const observation = createOrbitalObservationCabin();
@@ -191,6 +193,9 @@ export function createOrbitalStationDeck() {
     observation: at(corridor.west - observation.viewPoint.n, observationDoor + observation.viewPoint.x),
     teleport: at(teleportDoor + teleport.console.x, corridor.north + teleport.console.n, teleport.console.ground),
   } satisfies Record<OrbitalStationRoom, OrbitalRoomPoint>;
+  const worldObservation = ({ x, n, ground }: OrbitalRoomPoint) => at(corridor.west - n, observationDoor + x, ground);
+  const observationSeat = worldObservation(observation.seat);
+  const observationApproach = worldObservation(observation.seatApproach);
   const start = early.ports.starport.arrival;
   const tourRoute = [start, at(0, -.35), rooms.airlock, at(0, airlockDoor.north), at(8.4, airlockDoor.north),
     at(9.5, livingDoor), rooms.living, at(9.5, livingDoor), at(9.5, cockpitDoor.north), rooms.cockpit,
@@ -198,7 +203,15 @@ export function createOrbitalStationDeck() {
     at(4.3, observationDoor), at(9.1, observationDoor), rooms.teleport];
   let disposed = false;
   return {
-    group, rooms, start, tourRoute, floorHeightAt, roomAt, isWalkable, status,
+    group, rooms, start, tourRoute, floorHeightAt, roomAt, isWalkable, status, cockpitNameplate,
+    observation: {
+      seat: observationSeat, approach: observationApproach, cycleSeconds: orbitalObservationCycleSeconds,
+      setWindowCycle: observation.setWindowCycle, readWindowCycle: observation.readWindowCycle,
+      canSitAt({ x, n, ground }: OrbitalRoomPoint) {
+        return roomAt(x, n) === 'observation' && ground === observationApproach.ground &&
+          Math.hypot(x - observationApproach.x, n - observationApproach.n) <= .58 && isWalkable(x, n);
+      },
+    },
     teleport: { ...teleport, console: rooms.teleport },
     dispose() {
       if (disposed) return;

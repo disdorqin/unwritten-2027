@@ -1,0 +1,55 @@
+.flight-fuel-display {
+  display: grid;
+  gap: 0.55rem;
+  width: min(100%, 17rem);
+  box-sizing: border-box;
+  padding: 0.8rem 1rem;
+  border: 1px solid #456371;
+  border-radius: 0.6rem;
+  background: #13232d;
+  color: #e0edf0;
+  font: 0.9rem/1.3 "Noto Sans SC", system-ui, sans-serif;
+}
+
+.flight-fuel-heading,
+.flight-fuel-details {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.flight-fuel-display output,
+.flight-fuel-display strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.flight-fuel-display meter {
+  width: 100%;
+  height: 0.65rem;
+}
+
+.flight-fuel-display meter::-webkit-meter-bar {
+  background: #2e4451;
+  border: 0;
+  border-radius: 0.25rem;
+}
+
+.flight-fuel-display meter::-webkit-meter-optimum-value {
+  background: #9bd6cc;
+  border-radius: 0.25rem;
+}
+
+.flight-fuel-display meter::-moz-meter-bar {
+  background: #9bd6cc;
+  border-radius: 0.25rem;
+}
+
+.flight-fuel-details {
+  min-height: 1.25em;
+  color: #bbccd5;
+}
+
+.flight-fuel-details [role="status"] {
+  color: #ecd198;
+}
