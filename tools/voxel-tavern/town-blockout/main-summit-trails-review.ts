@@ -7,9 +7,10 @@ import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitSledRoute } from './main-summit-sled-route';
 import { createSummitSledReplay } from './main-summit-sled-replay';
 import { createMainSummitTrail } from './main-summit-trail';
+import { mountMainSummitWreckage } from './main-summit-wreckage';
 
 type Point = { east: number; north: number; height: number };
-type Mode = 'walk' | 'sled-ready' | 'sled' | 'sled-finished';
+type Mode = 'walk' | 'wreckage' | 'sled-ready' | 'sled' | 'sled-finished';
 
 const cloudDeckFloor = 347;
 const terrain = createMainSummitBlock(mainSummitLayout, cloudDeckFloor, 8);
@@ -104,6 +105,7 @@ const walkInfrastructure = new Group();
 const sledInfrastructure = new Group();
 domain.add(walkInfrastructure, sledInfrastructure);
 buildRibbon(walkInfrastructure, trail.points, 1.5, trailMaterial, terrain.heightAt);
+const wreckage = mountMainSummitWreckage(walkInfrastructure, trail);
 // The lower host is a route review fixture. Its bench only represents the isolated track.
 buildRibbon(sledInfrastructure, sledRoute.points, 2.1, sledMaterial, (_east, _north, height) => height - 0.7);
 const posts = new BoxGeometry(0.19, 2.5, 0.19);
@@ -128,20 +130,42 @@ for (const arc of sledRoute.arcs) {
 
 const controls = [...document.querySelectorAll<HTMLButtonElement>('[data-p3-action]')];
 const instructions = document.querySelector<HTMLDivElement>('#instructions')!;
+const wreckageChoices = document.querySelector<HTMLDivElement>('#wreckage-sites')!;
+let wreckageSite = wreckage.sites[0]!;
 let mode: Mode = 'walk';
 let walkDistance = 0;
 let forwards = false;
 const walkSpeed = 4.2;
 
+function selectWreckage(site: typeof wreckageSite) {
+  wreckageSite = site;
+  for (const button of wreckageChoices.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.site === site.id));
+  }
+  instructions.textContent = site.label;
+  draw();
+}
+for (const site of wreckage.sites) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.dataset.site = site.id;
+  button.textContent = site.label;
+  button.onclick = () => selectWreckage(site);
+  wreckageChoices.append(button);
+}
 for (const control of controls) {
   control.addEventListener('click', () => {
-    mode = control.dataset.p3Action === 'walk' ? 'walk' : 'sled-ready';
+    mode = control.dataset.p3Action === 'wreckage' ? 'wreckage' : control.dataset.p3Action === 'walk' ? 'walk' : 'sled-ready';
     for (const button of controls) button.setAttribute('aria-pressed', String(button === control));
+    wreckageChoices.hidden = mode !== 'wreckage';
     forwards = false;
     walkDistance = 0;
     replay = createSummitSledReplay(sledRoute);
-    instructions.textContent = mode === 'walk' ? '按 W 沿步道前进' : '按 E 启动雪橇';
-    draw();
+    if (mode === 'wreckage') selectWreckage(wreckageSite);
+    else {
+      instructions.textContent = mode === 'walk' ? '按 W 沿步道前进' : '按 E 启动雪橇';
+      draw();
+    }
   });
 }
 addEventListener('keydown', event => {
@@ -157,10 +181,10 @@ addEventListener('blur', () => { forwards = false; });
 
 function snapshot() {
   const sled = replay.snapshot();
-  const position = mode === 'walk' ? walkClock.sample(walkDistance)
+  const position = mode === 'wreckage' ? wreckageSite.stand : mode === 'walk' ? walkClock.sample(walkDistance)
     : { east: sled.east, north: sled.north, height: sled.height };
   return {
-    mode, position,
+    mode, position, wreckageSite: mode === 'wreckage' ? wreckageSite.id : null,
     walk: { distance: walkDistance, totalDistance: walkClock.length, maxGrade: trail.metrics.maxGrade,
       pavilionAnchors: trail.pavilionAnchors },
     sled: { distance: sled.distanceMetres, totalDistance: replay.totalDistanceMetres,
@@ -179,14 +203,18 @@ function draw() {
   const from = sample(Math.max(0, station - 2));
   const to = sample(Math.min(length, station + 5));
   const look = new Vector3(to.east - from.east, 0, from.north - to.north).normalize();
-  const fogged = mode !== 'walk' && sled.section === 'through-cloud';
-  walkInfrastructure.visible = mode === 'walk';
-  sledInfrastructure.visible = mode !== 'walk';
-  terrain.coarse.visible = mode === 'walk';
+  const walking = mode === 'walk' || mode === 'wreckage';
+  const fogged = !walking && sled.section === 'through-cloud';
+  walkInfrastructure.visible = walking;
+  sledInfrastructure.visible = !walking;
+  terrain.coarse.visible = walking;
   scene.background = fogged ? cloud : daylight;
   scene.fog = new FogExp2(fogged ? cloud : daylight, fogged ? 0.028 : 0.0009);
-  camera.position.set(position.east, position.height + (mode === 'walk' ? 1.65 : 1.17), -position.north);
-  camera.lookAt(camera.position.clone().add(look).add(new Vector3(0, -0.13, 0)));
+  camera.position.set(position.east, position.height + (walking ? 1.65 : 1.17), -position.north);
+  if (mode === 'wreckage') {
+    const model = wreckageSite.model;
+    camera.lookAt(model.east, model.height + .16, -model.north);
+  } else camera.lookAt(camera.position.clone().add(look).add(new Vector3(0, -0.13, 0)));
   renderer.render(scene, camera);
 }
 
@@ -210,6 +238,7 @@ function advance(elapsedMs: number, paint = true) {
 }
 
 Object.assign(window, { p3: { snapshot, advance } });
+addEventListener('pagehide', event => { if (!event.persisted) wreckage.dispose(); });
 draw();
 if (new URL(location.href).searchParams.get('proof') !== '1') {
   let last = performance.now();

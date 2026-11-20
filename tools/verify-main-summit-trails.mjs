@@ -77,9 +77,9 @@ function summarizePath(samples) {
 
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, args: [
-    '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-  ] });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.P3_CHROME,
+    args: process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] :
+      ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   report.browser = browser.version();
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
   await page.route('**/favicon.ico', route => route.fulfill({ status: 204, body: '' }));
@@ -142,6 +142,22 @@ try {
       return samples;
     }, { kind, stepMs, steps, endDistance, section });
   }
+
+  await page.locator('[data-p3-action="wreckage"]').click();
+  const fragmentButtons = await page.locator('#wreckage-sites [data-site]').all();
+  assert.equal(fragmentButtons.length, 3);
+  const fragments = [];
+  for (const button of fragmentButtons) {
+    await button.click();
+    const { mode, wreckageSite, position } = await state();
+    assert.equal(mode, 'wreckage');
+    assert.equal(wreckageSite, await button.getAttribute('data-site'));
+    assert.ok(position.height > 347 && position.height < 800);
+    await takeScreenshot(`wreckage-${wreckageSite}`);
+    fragments.push({ id: wreckageSite, position });
+  }
+  assert.equal(new Set(fragments.map(fragment => fragment.id)).size, 3);
+  report.wreckage = fragments;
 
   await page.locator('[data-p3-action="walk"]').click();
   const walkStart = await state();

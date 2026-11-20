@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <title>未写镇 · 主峰步道与雪橇线路</title>
 <style>
   html, body { margin: 0; overflow: hidden; background: #bdcedc; font: 15px system-ui, sans-serif }
@@ -14,7 +15,9 @@
 <nav aria-label="路线">
   <button type="button" data-p3-action="walk" aria-pressed="true">盘山步道</button>
   <button type="button" data-p3-action="sled" aria-pressed="false">雪橇线路样场</button>
+  <button type="button" data-p3-action="wreckage" aria-pressed="false">山坡船件</button>
 </nav>
+<div id="wreckage-sites" hidden style="position:fixed;z-index:1;top:60px;left:12px;background:#213142ee;border-radius:6px"></div>
 <div id="instructions">按 W 沿步道前进</div>
 <script type="module" src="./town-blockout/main-summit-trails-review.ts"></script>
 </html>
