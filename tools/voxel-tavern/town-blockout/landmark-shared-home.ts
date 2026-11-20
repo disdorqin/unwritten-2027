@@ -406,12 +406,29 @@ export function buildSharedHome(): SharedHome {
     put(artX + .074, 2.11 - height * .5, -.82 + i * .238, .03, height, .19, i % 2 ? '#d3ac77' : '#ad786b');
   }
   for (const z of [-.99, 1.03]) put(artX + .07, 1.56, z, .039, 1.45, .076, '#d3ac77');
-  const galleryX = 1.80;
-  put(galleryX, 1.26, 5.64, 2.08, 1.17, .11, timber);
-  put(galleryX, 1.35, 5.567, 1.89, 1.00, .07, '#af8a64');
+  const postcardBoardX = 1.80;
+  put(postcardBoardX, 1.26, 5.64, 2.08, 1.17, .11, timber);
+  put(postcardBoardX, 1.35, 5.567, 1.89, 1.00, .07, '#af8a64');
   for (const [dx, y] of [[-.67, 1.52], [-.25, 1.66], [.20, 1.46], [.66, 1.73]]) {
-    put(galleryX + dx, y, 5.518, .32, .22, .032, '#f0dfbc');
-    put(galleryX + dx, y + .17, 5.499, .058, .04, .022, '#a66160');
+    put(postcardBoardX + dx, y, 5.518, .32, .22, .032, '#f0dfbc');
+    put(postcardBoardX + dx, y + .17, 5.499, .058, .04, .022, '#a66160');
+  }
+
+  // The east wall has a large central frame for the midnight group photo.
+  const photoFrames = [
+    { z: .75, y: 1.77, span: 1.40, height: .90, rim: brass },
+    { z: -.45, y: 1.96, span: .66, height: .52, rim: timber },
+    { z: 1.95, y: 1.96, span: .66, height: .52, rim: timber },
+    { z: .75, y: 1.20, span: .74, height: .43, rim: timber },
+  ];
+  const rimWidth = .055;
+  for (const { z, y, span, height, rim } of photoFrames) {
+    put(6.738, y, z, .044, height, span, '#bfab8d');
+    for (const offset of [-1, 1]) {
+      put(6.710, y + (offset > 0 ? height - rimWidth : 0), z, .062, rimWidth, span, rim);
+      put(6.710, y + rimWidth, z + offset * (span - rimWidth) / 2,
+        .062, height - 2 * rimWidth, rimWidth, rim);
+    }
   }
 
   for (const [x, z] of [[-5.45, -5.61], [5.14, -5.63], [3.94, 5.64]]) {
