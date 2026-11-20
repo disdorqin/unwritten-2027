@@ -31,6 +31,8 @@
 
 **【公共批接线候选序·孤儿模块处置（总控 2026-11-20 孤儿扫描，分区一分类落册）】24 件分类表见《孤儿模块分类处置表-分区一-2026-11-20》：待接线 8 件走本公共批，序为 ZA-29（town-za29-guard-scenes）→ ZA-26（landmark-mascot-pen）→ town-hook-one（归口 ZB-12）→ tavern-table-cups（ZA-20）→ town-chronicle-book（ZA-11）→ town-chronicle-landmarks（ZA-06）→ town-skin-catalog（ZA-16）→ personal-firework-stall（ZB-11）；每件带挂载状态行 + 出生点实走，分区一逐件抽查。误报已接线 3 件（landmark-hot-spring / town-entry / town-panel）与归档 12 件不入队。**
 
+**【登记对齐口径（总控 2026-11-20 裁）】分区登记以 lane 证据提交号为准，不以集成线任务文件状态行为准；每周对齐一次状态行与 lane 实况，别让盘面再与实况脱节（本轮过堂状态行滞后 9 件为戒）。**
+
 | 编号 | 任务 | 状态 |
 | --- | --- | --- |
 | ZA-27 | **【今晚发布线·最优先】viewer 挂载补丁（公共批）**：两件 viewer.ts 挂载补丁按主干现头重定后交件——①ZB-19 挂载补丁（窗 B 件 `zb19-window-a-mount-on-2bbfde2.patch`，原底座 `2bbfde2` 已过期：主干已入 ZB-19/ZB-16 本体与 ZA-22 三段，viewer.ts 大改，须按 ZA-22 交接注记重定帧末挂载点）②ZB-16 仪式携橇补丁（窗 B 件，lane-build `332f7aa`，111 行，只改 viewer.ts）；地盘 = viewer.ts 本公共批盘（走 `认领/公共批.lock`），只动挂载点、不动已并线本体；交付走逐件补丁路线（补丁组入 `docs/交流区/GPT/` 或 lane-a 提交 + 回执注明），分区一落一件并一件；详见任务文件 ZA-27 | **已完工·已并线全组**（窗 A 发布线定版 01+02 入主干 `a298f4b`，viewer blob 验对 `590232bb`/`1265ad24`；04/06 已先并；仪式携橇闭合；余 workflow 6 行变更被集成应用拒（403）待总控处置） |
