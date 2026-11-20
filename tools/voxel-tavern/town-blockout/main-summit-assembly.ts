@@ -16,7 +16,7 @@ import {
 import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-belt';
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
-import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
+import { createMainSummitTrail, mainSummitTrailSpec, type MainSummitTrailPoint } from './main-summit-trail';
 import { mountMainSummitWreckage } from './main-summit-wreckage';
 import { mountMainSummitWingRack } from './main-summit-wing-rack';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
@@ -75,7 +75,7 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
     const before = points[Math.max(0, i - 1)]!;
     const after = points[Math.min(points.length - 1, i + 1)]!;
     const de = after.east - before.east, dn = after.north - before.north;
-    const scale = 1.5 / Math.hypot(de, dn);
+    const scale = mainSummitTrailSpec.width / 2 / Math.hypot(de, dn);
     for (const side of [-1, 1]) {
       const e = point.east - side * dn * scale, n = point.north + side * de * scale;
       positions.push(e, point.height + .07, -n, e, groundAt(e, n) ?? point.height - .4, -n);
@@ -124,7 +124,9 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   cloudRegistration.group.position.set(-summitAssemblyAnchor.east, 0, summitAssemblyAnchor.north);
 
   const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
-  const ribbon = createTrailRibbon(trail.points.filter(point => point.north > 40), block.heightAt);
+  // Only the first survey point is inside the gate. Later switchbacks can
+  // dip south of the plaza edge and still belong to the same ribbon.
+  const ribbon = createTrailRibbon(trail.points.slice(1), block.heightAt);
   ribbon.name = 'main-summit-walkway';
   group.add(ribbon);
   const wreckage = mountMainSummitWreckage(group, trail);
@@ -160,6 +162,9 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
 
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    // P-1 local coordinates. The host prefers its plaza surface in the
+    // overlap and this cut/fill tread before bare ground outside the plaza.
+    trailSurfaceAt: trail.sampleWalkwaySurface,
     wreckageSites: wreckage.sites,
     wingRack, cableTravel, outlook,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
