@@ -8,8 +8,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const checkout = fileURLToPath(new URL('../', import.meta.url));
 const root = path.join(checkout, 'tools', 'voxel-tavern');
-const output = process.argv[2] && path.resolve(process.argv[2]);
-assert.ok(output, 'Usage: node tools/verify-starport-assembly-flight-browser.mjs OUTPUT');
+const [outputDirectory, reviewOption] = process.argv.slice(2);
+const output = outputDirectory && path.resolve(outputDirectory);
+assert.ok(output && (!reviewOption || reviewOption === '--rack-views'),
+  'Usage: node tools/verify-starport-assembly-flight-browser.mjs OUTPUT [--rack-views]');
+const rackViews = reviewOption === '--rack-views';
 await mkdir(output, { recursive: true });
 const requireRoot = createRequire(path.join(checkout, 'package.json'));
 const requireVite = createRequire(path.join(root, 'package.json'));
@@ -86,17 +89,43 @@ async function walkAxis(axis, target) {
   assert.ok(Math.abs((await state()).feet[axis] - target) <= .15, `Walk missed ${axis} ${target}`);
 }
 
-async function aimAt(slot) {
-  const target = (await state()).assembly.targets[slot];
-  await walkAxis('east', target.east);
+async function lookAt(target) {
   const { feet } = await state();
   const east = target.east - feet.east;
   const north = target.north - feet.north;
+  const distance = Math.hypot(east, north);
   await align('heading', Math.atan2(east, north));
-  await align('pitch', Math.atan2(target.height - feet.height - eyeHeight, Math.hypot(east, north)));
+  await align('pitch', Math.atan2(target.height - feet.height - eyeHeight, distance));
+  return distance;
+}
+
+async function aimAt(slot) {
+  const target = (await state()).assembly.targets[slot];
+  await walkAxis('east', target.east);
+  const distance = await lookAt(target);
   const aimed = await state();
   assert.equal(aimed.assembly.aimed, slot, `Native look did not select ${slot}`);
-  assert.ok(Math.hypot(east, north) <= 2.12, `Player is beyond the accepted reach of ${slot}`);
+  assert.ok(distance <= 2.12, `Player is beyond the accepted reach of ${slot}`);
+}
+
+async function captureEmptyRack(initial) {
+  const center = initial.assembly.targets.booster;
+  await walkAxis('north', 669.6);
+  await walkAxis('east', center.east);
+  const frontalDistance = await lookAt(center);
+  const frontal = await snapshot('00-empty-rack-frontal', true);
+  assert.deepEqual(frontal.assembly.profile, initial.assembly.profile);
+
+  await walkAxis('east', center.east - 2.9);
+  await walkAxis('north', center.north - 3.55);
+  const obliqueDistance = await lookAt({ ...center, east: center.east - .25 });
+  const oblique = await snapshot('00-empty-rack-oblique', true);
+  assert.deepEqual(oblique.assembly.profile, initial.assembly.profile);
+  assert.ok(obliqueDistance < frontalDistance && Math.abs(wrap(oblique.heading - frontal.heading)) > .5);
+
+  await walkAxis('east', initial.feet.east);
+  await walkAxis('north', initial.feet.north);
+  await align('pitch', initial.pitch);
 }
 
 async function interact(slot, kind) {
@@ -222,6 +251,11 @@ try {
   assert.deepEqual([...initial.assembly.profile.carried].sort(), [...parts].sort());
   assert.equal(initial.assembly.profile.ignited, false);
   assert.equal(initial.loadout.aircraftAssembled, false);
+  if (rackViews) {
+    report.step = 'capture empty rack views for art review';
+    await captureEmptyRack(initial);
+    report.step = 'walk to the mounted three-slot rack';
+  }
   await walkAxis('north', 673.77);
   await aimAt('ignition');
   assert.deepEqual(await interact('ignition', 'incomplete'), initial.assembly.profile);
