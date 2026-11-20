@@ -1,0 +1,36 @@
+name: Verify underground combat feedback
+
+on:
+  push:
+    branches: [lane-c]
+    paths:
+      - '.github/workflows/verify-underground-combat.yml'
+      - 'src/presence/underground-mine-encounter.ts'
+      - 'src/presence/underground-survival.ts'
+      - 'src/shared/mine-bestiary.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-combat-feedback.ts'
+      - 'tools/fixtures/underground-combat-review.ts'
+      - 'tools/verify-underground-combat.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node --import tsx --test tests/town-blockout-underground-combat-feedback.test.ts tests/server/underground-mine-encounter.test.ts
+      - run: npx playwright install --with-deps chromium
+      - run: node --import tsx tools/verify-underground-combat.mjs "${{ runner.temp }}/combat-review"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: underground-combat-browser
+          path: ${{ runner.temp }}/combat-review
