@@ -43,6 +43,7 @@ import { addForestDensity } from './forest-density';
 import { addStreetscape } from './streetscape';
 import { mountZa32StreetProps } from './town-za32-street-props';
 import { mountTownFillNorth } from './town-fill-north';
+import { mountTownFillEast } from './town-fill-east';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
@@ -544,6 +545,8 @@ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
 // batch was held by the ZA-30 diagnosis; mounting registered as 代挂.
 const za32StreetProps = mountZa32StreetProps(landscape, (east, north) => grid.heightAt(east, north));
 const townFillNorth = mountTownFillNorth(landscape, (east, north) => grid.heightAt(east, north));
+const townFillEast = mountTownFillEast(landscape, (east, north) => grid.heightAt(east, north));
+void townFillEast;
 void za32StreetProps; void townFillNorth;
 const forest = addForestDensity(landscape, grid,
   (east, north, radius) => districts.keepClear(east, north, radius) ||
