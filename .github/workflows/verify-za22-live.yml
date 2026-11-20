@@ -1,20 +1,17 @@
-name: Verify ZA-22 live routes
+name: Verify ZD-01 default mountain entry
 
 on:
   push:
     branches:
-      - town-verify-za22-station
-      - town-verify-za22-cloud
-      - town-verify-za22-gate
-      - town-verify-za22-crater
+      - town-verify-zd01-current-guard-20261120
   workflow_dispatch:
     inputs:
       segment:
         description: Route to walk from the production spawn
         type: choice
         required: true
-        default: cloud
-        options: [station, cloud, gate, crater, all]
+        default: gate
+        options: [gate]
 
 permissions:
   contents: read
@@ -22,9 +19,11 @@ permissions:
 jobs:
   route:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 32
     env:
       SELECTED_SEGMENT: ${{ inputs.segment }}
+      # Preserve the normal HUD layout and default quality at a smaller headless raster.
+      ZA22_DEVICE_SCALE: 0.25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +34,11 @@ jobs:
       - name: Install verified browser tooling
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            echo "UNWRITTEN_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
       - name: Build production Web and Presence
         shell: bash
         run: |
@@ -54,8 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/za22-live"
-          url=http://127.0.0.1:38100
-          segment="${SELECTED_SEGMENT:-${GITHUB_REF_NAME#town-verify-za22-}}"
+          url=http://127.0.0.1:38100/
+          segment="${SELECTED_SEGMENT:-gate}"
           cleanup() {
             docker logs za22-web > "$out/town-preview.log" 2>&1 || true
             docker logs za22-presence > "$out/presence.log" 2>&1 || true
@@ -64,25 +67,39 @@ jobs:
           }
           trap cleanup EXIT
           docker network create za22
-          # Use the real authoritative night scheduler. The approved testing clock
-          # reaches the beacon in 30 seconds. The browser never changes server or player state.
-          dawn="$(node -p 'Date.now() - 390000')"
+          # The software-rendered walk took 13 minutes to reach the station.
+          # Keep the real server window open across the whole bounded browser job.
+          schedule="$(node -e 'const anchor = Date.now(); console.log(JSON.stringify({
+            dawnEpoch: anchor - 390000, beaconOffsetsAfterDusk: Array(12).fill(60000), cueFreshnessMs: 2000,
+            specialNight: { duskAt: anchor - 1000, beaconAt: anchor + 18000, cueExpiresAt: anchor + 35000, morningBellAt: anchor + 2100000 }
+          }));')"
+          printf '%s\n' "$schedule" > "$out/presence-night-schedule.json"
+          export ZA30_LOCAL_TEST_NIGHT
+          ZA30_LOCAL_TEST_NIGHT="$(node -e 'console.log(JSON.stringify(JSON.parse(process.argv[1]).specialNight))' "$schedule")"
           docker run -d --name za22-presence --network za22 --network-alias presence \
             -e PRESENCE_MOUNTAIN_PORT=8091 \
             -e PRESENCE_WEST_PORT=8092 \
-            -e "TOWN_NIGHT_DAWN_EPOCH=$dawn" \
-            -e 'TOWN_NIGHT_OFFSETS_AFTER_DUSK=[60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000]' \
+            -e "TOWN_NIGHT_SCHEDULE=$schedule" \
+            -e TOWN_NIGHT_BEACON_RECEIPT=/tmp/zd01-beacon-receipt.json \
             za22-presence
           docker run -d --name za22-web --network za22 \
             -e TOWN_PREVIEW_SITE=:80 -p 127.0.0.1:38100:80 za22-web
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
-            --max-time 4 "$url/healthz" | tee "$out/healthz.txt"
+            --max-time 4 "${url}healthz" | tee "$out/healthz.txt"
           test "$(cat "$out/healthz.txt")" = "town-preview $GITHUB_SHA"
           node tools/verify-za22-live.mjs "$url" "$out" "$segment"
+      - name: Hash viewport captures
+        if: always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/za22-live"
+          mkdir -p "$out"
+          cd "$out"
+          find . -type f -name '*.png' -print0 | sort -z | xargs -0 --no-run-if-empty sha256sum > screenshots.sha256
       - name: Upload route evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: za22-live-walk
+          name: zd01-default-mountain-walk
           path: ${{ runner.temp }}/za22-live
           if-no-files-found: warn
