@@ -1,0 +1,130 @@
+From 94c414cfaca00905df6b60fc5a16a2348744b4df Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 20 Nov 2026 01:17:03 -0800
+Subject: [PATCH] Verify the native shared-home round trip and local portrait
+ download
+
+---
+ tools/verify-za22-live.mjs  | 59 +++++++++++++++++++++++++++++++++++--
+ tools/verify-za22-local.mjs |  2 +-
+ 2 files changed, 57 insertions(+), 4 deletions(-)
+
+diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
+index 664792ce..f6f8927a 100644
+--- a/tools/verify-za22-live.mjs
++++ b/tools/verify-za22-live.mjs
+@@ -1,5 +1,5 @@
+ import assert from 'node:assert/strict';
+-import { mkdir, writeFile } from 'node:fs/promises';
++import { mkdir, readFile, writeFile } from 'node:fs/promises';
+ import { join } from 'node:path';
+ import { chromium } from '@playwright/test';
+ 
+@@ -8,7 +8,7 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
+ const url = new URL('/?profile', origin);
+ assert.equal(url.protocol, 'http:');
+ assert.equal(url.hostname, '127.0.0.1');
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment), segment);
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol', 'home-loop'].includes(segment), segment);
+ 
+ const spawn = [223, 180];
+ const station = [
+@@ -211,7 +211,7 @@ async function walkTo(page, evidence, target, label) {
+         const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
+         return forward >= distance;
+       }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
+-      { timeout: Math.ceil(30_000 + distance * 1000) });
++      { timeout: Math.ceil(30_000 + distance * (segment === 'home-loop' ? 7000 : 1000)) });
+     } catch (error) {
+       const stopped = await readPose(page);
+       throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}`, { cause: error });
+@@ -248,6 +248,57 @@ async function snapshot(page, evidence, label) {
+   evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
+ }
+ 
++async function checkSharedHome() {
++  const { sharedHomeOrigin, isSharedHomePosition } = await import('../src/presence/shared-home-space.ts');
++  const inside = pose => Boolean(pose && isSharedHomePosition(pose.east, pose.north, pose.height));
++  const roomPoint = (x, z) => [sharedHomeOrigin.east + x, sharedHomeOrigin.north - z];
++  // A surveyed public portal in the existing 92-door book, separate from the SN5 house.
++  const doorway = [153.095, 182.5];
++  const { page, evidence } = await openTown('old-town:200:151');
++  await follow(page, evidence, [...westShore.slice(0, 2), [156, 181.8], doorway], 'house-approach');
++  await face(page, evidence, -Math.PI / 2);
++  await action(page, '进入屋舍空间');
++  await waitForWire(page, evidence, inside);
++  const entry = await readPose(page);
++  assert.ok(inside(entry), JSON.stringify(entry));
++  await snapshot(page, evidence, 'home-entered');
++
++  await walkTo(page, evidence, roomPoint(.15, 1.95), 'home-portrait-spot');
++  const [download] = await Promise.all([
++    page.waitForEvent('download', { timeout: 30_000 }),
++    action(page, '保存屋舍照片'),
++  ]);
++  assert.equal(download.suggestedFilename(), 'UNWRITTEN-2027-shared-home.png');
++  const file = join(output, download.suggestedFilename());
++  await download.saveAs(file);
++  const png = await readFile(file);
++  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
++  evidence.download = { filename: download.suggestedFilename(), bytes: png.length };
++
++  await follow(page, evidence, [roomPoint(.15, 1.64), roomPoint(4.95, 1.64), roomPoint(4.95, .80)], 'home-frame-wall');
++  await face(page, evidence, Math.PI / 2);
++  await snapshot(page, evidence, 'home-four-frames');
++  await follow(page, evidence, [
++    roomPoint(4.95, 1.64), roomPoint(1.45, 1.64), roomPoint(1.45, -3.99), roomPoint(3.35, -3.99),
++  ], 'home-desk-lamp');
++  await action(page, '开关台灯');
++  await page.getByText('窗边的台灯熄了。', { exact: true }).waitFor({ timeout: 8_000 });
++  await action(page, '开关台灯');
++  await page.getByText('给屋舍留了一盏灯。', { exact: true }).waitFor({ timeout: 8_000 });
++  await follow(page, evidence, [
++    roomPoint(1.45, -3.99), roomPoint(1.45, 3.75), roomPoint(-.82, 3.75), roomPoint(-.82, 5.33),
++  ], 'home-exit-walk');
++  await face(page, evidence, Math.PI);
++  await action(page, '返回来时的屋门');
++  const atDoor = pose => Boolean(pose && !inside(pose) && Math.hypot(
++    pose.east - doorway[0], pose.north - doorway[1],
++  ) < .8);
++  await waitForWire(page, evidence, atDoor);
++  const returned = await readPose(page);
++  assert.ok(atDoor(returned), JSON.stringify(returned));
++  await snapshot(page, evidence, 'home-returned-to-original-door');
++}
++
+ async function showTicketCard(page, evidence, actionLabel, title, description, label) {
+   const prompt = page.getByRole('button', { name: actionLabel, exact: true }).and(page.locator('#world-action'));
+   await prompt.waitFor({ timeout: 20_000 });
+@@ -401,6 +452,7 @@ try {
+   }
+   if (segment === 'station-ticket') await checkStationTicket();
+   if (segment === 'mascot-patrol') await checkMascotPatrol();
++  if (segment === 'home-loop') await checkSharedHome();
+   if (segment === 'palace') {
+     const { page, evidence } = await openTown('palace-geometry');
+     evidence.palacePoints = [];
+@@ -449,6 +501,7 @@ try {
+     palace: 'za18-live-walk.json',
+     'station-ticket': 'za21-live-walk.json',
+     'mascot-patrol': 'za26-live-walk.json',
++    'home-loop': 'za04-live-walk.json',
+   }[segment] ?? 'za22-live-walk.json';
+   await writeFile(join(output, filename),
+     `${JSON.stringify(report, null, 2)}\n`);
+diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
+index 5a12ff16..9b18bdd6 100644
+--- a/tools/verify-za22-local.mjs
++++ b/tools/verify-za22-local.mjs
+@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
+ import { promisify } from 'node:util';
+ 
+ const [segment, evidencePath] = process.argv.slice(2);
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment) && evidencePath,
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol', 'home-loop'].includes(segment) && evidencePath,
+   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
+ const run = promisify(execFile);
+ const repo = fileURLToPath(new URL('../', import.meta.url));
+-- 
+2.56.1
+
