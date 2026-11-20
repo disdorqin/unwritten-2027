@@ -109,6 +109,7 @@ import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
 import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
 import { npcAuthoredDialogue } from './town-npc-dialogue';
 import { createTownPresence } from './town-presence';
+import { createClocktowerStorySpots } from './clocktower-story';
 import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
 import { createTheaterPhotoCamera } from './theater-photo-camera';
@@ -1933,6 +1934,10 @@ activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, z
   playPostChime(true);
 }));
 const tower = architecture.get('clocktower')!;
+activitySpots.push(...createClocktowerStorySpots(tower, activityContext, {
+  now: presence.serverNow,
+  nightWindow: presence.readNightWindow,
+}));
 const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
 activitySpots.push(
   zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
