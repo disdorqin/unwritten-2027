@@ -1,0 +1,785 @@
+From c991e908bb95bc68670b25d0a92b471c2dc12a20 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 20 Nov 2026 00:30:43 -0800
+Subject: [PATCH] ZA-19: mount the clocktower scene on unified night authority
+
+---
+ tests/town-blockout-clocktower-story.test.ts  | 141 ++++++++
+ tests/town-blockout-tower.test.ts             |  38 ++
+ tools/verify-za19-clock-live.mjs              | 340 ++++++++++++++++++
+ tools/verify-za22-local.mjs                   |   6 +-
+ .../town-blockout/clocktower-story.ts         | 133 +++++++
+ .../town-blockout/landmark-tower.ts           |   4 +
+ tools/voxel-tavern/town-blockout/viewer.ts    |   5 +
+ 7 files changed, 665 insertions(+), 2 deletions(-)
+ create mode 100644 tests/town-blockout-clocktower-story.test.ts
+ create mode 100644 tools/verify-za19-clock-live.mjs
+ create mode 100644 tools/voxel-tavern/town-blockout/clocktower-story.ts
+
+diff --git a/tests/town-blockout-clocktower-story.test.ts b/tests/town-blockout-clocktower-story.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..88bd7d87a752d1615bb5877cd87505e910e70f5b
+--- /dev/null
++++ b/tests/town-blockout-clocktower-story.test.ts
+@@ -0,0 +1,141 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { Matrix4, Raycaster, Vector3, type InstancedMesh } from 'three';
++import { buildTowerLandmark } from '../tools/voxel-tavern/town-blockout/landmark-tower.ts';
++import { createClocktowerStorySpots, readClocktowerNightLedger } from '../tools/voxel-tavern/town-blockout/clocktower-story.ts';
++import { nearestTownActivity, type TownActivitySpot } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
++import { towerDragonSite } from '../tools/voxel-tavern/town-blockout/town-zodiac-sites.ts';
++import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
++import { canEnter, createTerrainGrid, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
++
++const epoch = Date.UTC(2026, 10, 20, 6);
++const beaconAt = epoch + 75_000, morningBellAt = epoch + 250_000;
++const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
++
++test('all 28 casting cells have an unobstructed view from the reached belfry side', () => {
++  const tower = buildTowerLandmark(plot);
++  const [east, north, height] = plot.origin;
++  const { bell } = tower.userData.stops as { bell: [number, number, number] };
++  tower.position.set(east, height, -north);
++  tower.updateMatrixWorld(true);
++  const moving = tower.getObjectByName('Clocktower moving bell') as InstancedMesh;
++  const observer = new Vector3(east - 1, height + bell[1] + 1.65, -north + .9);
++  const instance = new Matrix4();
++  const cells: number[] = [];
++  for (let i = 0; i < moving.count; i++) {
++    moving.getMatrixAt(i, instance);
++    const { x, z } = new Vector3().setFromMatrixScale(instance);
++    if (Math.abs(x - 1 / 32) > 1e-6 || Math.abs(z - .026) > 1e-6) continue;
++    cells.push(i);
++    const center = moving.localToWorld(new Vector3().setFromMatrixPosition(instance));
++    const nearest = new Raycaster(observer, center.sub(observer).normalize()).intersectObject(tower)[0];
++    assert.ok(nearest?.object === moving && nearest.instanceId === i, `hidden casting cell ${i}`);
++  }
++  assert.equal(cells.length, 28);
++});
++
++test('the night ledger reads the shared trusted snapshot, including fractional client clock reads', () => {
++  let time = epoch + .25;
++  let phase: 'day' | 'awaiting-beacon' | 'night-window' = 'day';
++  const host = { now: () => time, nightWindow: () => ({ phase, beaconAt, morningBellAt }) };
++  assert.deepEqual(readClocktowerNightLedger(host), {
++    bellTime: '14:01:15', morningTime: '14:04:10', openingObserved: false,
++  });
++  time = beaconAt + 400;
++  phase = 'awaiting-beacon';
++  assert.equal(readClocktowerNightLedger(host)?.openingObserved, false);
++  phase = 'night-window';
++  assert.equal(readClocktowerNightLedger(host)?.openingObserved, true);
++  time = morningBellAt;
++  assert.equal(readClocktowerNightLedger(host), undefined);
++  assert.equal(readClocktowerNightLedger({ now: () => epoch, nightWindow: () => undefined }), undefined);
++});
++
++test('reading both books and facing the watch point never write the clock or fabricate a beacon', () => {
++  const tower = buildTowerLandmark(plot);
++  const [east, north, height] = plot.origin;
++  tower.position.set(east, height, -north);
++  let panel: string[] | undefined;
++  let facing: number[] | undefined;
++  let watch = 0, nightRead = 0;
++  let ready = false;
++  const spots = createClocktowerStorySpots(tower, {
++    open: (...copy) => { panel = copy; return {} as HTMLElement; },
++    face: (...target) => { facing = target.filter(value => typeof value === 'number'); },
++  }, {
++    now: () => epoch + 20_000.25,
++    nightWindow: () => ready ? { phase: 'day', beaconAt, morningBellAt } : undefined,
++    atNightLedger: () => { nightRead++; },
++    atWatchPoint: () => { watch++; },
++  });
++  const [ordinary, night, lookout] = spots;
++  ordinary.run();
++  assert.deepEqual(panel, ['活人账', '日常报时 · 14:00:00　下一整点 · 15:00:00']);
++  night.run();
++  assert.deepEqual(panel, ['魂账', '第十三声时刻未同步。']);
++  assert.equal(nightRead, 0);
++  ready = true;
++  night.run();
++  assert.deepEqual(panel, ['魂账', '第十三声预计 · 14:01:15　晨钟 · 14:04:10']);
++  assert.equal(nightRead, 1);
++  lookout.run();
++  assert.equal(watch, 1);
++  assert.equal(facing?.[0], lookout.x);
++  assert.ok(facing![1] < lookout.n && facing![2] > lookout.ground);
++  assert.deepEqual(tower.position.toArray(), [east, height, -north]);
++});
++
++test('the repair room books are reachable by the main entrance without modifying the spiral stairs', () => {
++  const tower = buildTowerLandmark(plot);
++  const [east, north, height] = plot.origin;
++  tower.position.set(east, height, -north);
++  const [ordinary, night] = createClocktowerStorySpots(tower,
++    { open: () => ({} as HTMLElement), face() {} }, { now: () => epoch, nightWindow: () => undefined });
++  const { colliders, floors } = readWalkGeometry(tower);
++  const grid = createTerrainGrid();
++  let [x, n] = layout.plaza.spawn;
++  let currentGround = grid.heightAt(x, n);
++  const intersects = (xx: number, nn: number, { min, max }: typeof floors[number]) =>
++    Math.hypot(Math.max(min[0] - xx, xx - max[0], 0), Math.max(min[2] + nn, -nn - max[2], 0)) < .27;
++  for (const [toX, toN] of [
++    [226, 212], [226, 216], [226, 223], [218.2, 223], [218.2, ordinary.n], [ordinary.x, ordinary.n], [night.x, night.n],
++  ]) {
++    const count = Math.ceil(Math.hypot(toX - x, toN - n) / .12);
++    for (let i = 1; i <= count; i++) {
++      const xx = x + (toX - x) * i / count, nn = n + (toN - n) * i / count;
++      assert.ok(canEnter(xx, nn));
++      const base = grid.heightAt(xx, nn);
++      const nextFloor = Math.max(base, ...floors.filter(box => box.max[1] <= currentGround + .43 && intersects(xx, nn, box))
++        .map(box => box.max[1]));
++      assert.ok(Math.abs(nextFloor - currentGround) <= .43, `step at E${xx} N${nn}: ${currentGround} → ${nextFloor}`);
++      assert.ok(!colliders.some(box => nextFloor + .025 < box.max[1] && nextFloor + 1.775 > box.min[1]
++        && intersects(xx, nn, box)), `blocked at E${xx} N${nn}`);
++      currentGround = nextFloor;
++    }
++    x = toX;
++    n = toN;
++    if (x === ordinary.x) assert.equal(nearestTownActivity([ordinary, night], x, n, currentGround), ordinary);
++    if (x === night.x) assert.equal(nearestTownActivity([ordinary, night], x, n, currentGround), night);
++  }
++});
++
++test('the watch plate leaves the full dragon and photo interaction zones available', () => {
++  const tower = buildTowerLandmark(plot);
++  const [east, north, height] = plot.origin;
++  tower.position.set(east, height, -north);
++  const [, , watch] = createClocktowerStorySpots(tower,
++    { open: () => ({} as HTMLElement), face() {} }, { now: () => epoch, nightWindow: () => undefined });
++  const { lookout } = tower.userData.stops as { lookout: [number, number, number] };
++  const dragonSite = towerDragonSite(lookout);
++  const spot = ([x, y, z]: readonly [number, number, number], range: number, label: string): TownActivitySpot =>
++    ({ x: east + x, n: north - z, ground: height + y, range, label, run() {} });
++  const dragon = spot(dragonSite.stand, dragonSite.range, '拾取生肖挂件 · 龙');
++  const photo = spot(lookout, 1.3, '保存钟楼取景');
++  const activities = [watch, dragon, photo];
++  for (const action of [dragon, photo]) {
++    assert.ok(Math.hypot(watch.x - action.x, watch.n - action.n) > watch.range + action.range);
++    assert.equal(nearestTownActivity(activities, action.x, action.n, action.ground), action);
++  }
++  assert.equal(nearestTownActivity(activities, east, photo.n, photo.ground), photo);
++  assert.equal(nearestTownActivity(activities, watch.x, watch.n, watch.ground), watch);
++});
+diff --git a/tests/town-blockout-tower.test.ts b/tests/town-blockout-tower.test.ts
+index 4323de8b3bd4149ffd70d70490536f180837915b..fb595f0a282bc344b29bce6badf2e8a4234c419d 100644
+--- a/tests/town-blockout-tower.test.ts
++++ b/tests/town-blockout-tower.test.ts
+@@ -10,6 +10,44 @@ type XZ = readonly [x: number, z: number];
+ type Stop = 'dial' | 'bell' | 'lookout';
+ type Waypoint = { target: XZ; stop?: Stop };
+ 
++test('the clocktower plaza apron and south arch support plain walking both ways', () => {
++  const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
++  const [east, north, altitude] = plot.origin;
++  const tower = buildTowerLandmark(plot);
++  tower.position.set(east, altitude, -north);
++  const { colliders, floors } = readWalkGeometry(tower);
++  const solids = [...colliders, ...floors];
++  const grid = createTerrainGrid();
++  const bodyRadius = .27;
++  const stepHeight = .43;
++  const northbound = Array.from({ length: 272 }, (_, index) => (21140 + index * 3) / 100);
++  const roundTrip = [...northbound, ...northbound.slice(0, -1).reverse()];
++
++  for (const x of [225.7, 226, 226.3]) {
++    let ground = grid.heightAt(x, roundTrip[0]);
++    for (const n of roundTrip) {
++      const overlaps = ({ min, max }: Box) => Math.hypot(
++        Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0),
++      ) < bodyRadius;
++      let next = grid.heightAt(x, n);
++      for (const floor of floors) {
++        if (floor.max[1] <= ground + stepHeight && overlaps(floor)) next = Math.max(next, floor.max[1]);
++      }
++      for (const solid of colliders) {
++        if (solid.max[1] <= ground + .03 && overlaps(solid)) next = Math.max(next, solid.max[1]);
++      }
++      const point = `E${x}/N${n}, ${ground} → ${next}`;
++      assert.ok(canEnter(x, n) && Math.abs(next - ground) <= stepHeight, point);
++      assert.equal(solids.some(box => overlaps(box) &&
++        next + .025 < box.max[1] && next + 1.775 > box.min[1]), false, point);
++      // N213 is on the flush apron. The physical arch and steps are farther north.
++      if (n >= 212 && n <= 215.7) assert.equal(next, altitude, point);
++      ground = next;
++    }
++    assert.equal(ground, altitude);
++  }
++});
++
+ test('enlarged clocktower can be climbed and descended through all three activity stops', () => {
+   const plot = layout.plots.find(({ id }) => id === 'clocktower')!;
+   const [east, north, altitude] = plot.origin;
+diff --git a/tools/verify-za19-clock-live.mjs b/tools/verify-za19-clock-live.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7f3acb02a17951e6dc3b56051822a34807eb351
+--- /dev/null
++++ b/tools/verify-za19-clock-live.mjs
+@@ -0,0 +1,340 @@
++import assert from 'node:assert/strict';
++import { createHash } from 'node:crypto';
++import { mkdir, writeFile } from 'node:fs/promises';
++import { join } from 'node:path';
++import { chromium } from '@playwright/test';
++
++const [origin, output, stage = 'all'] = process.argv.slice(2);
++assert.ok(origin && output, 'Supply a production-preview loopback URL and an evidence directory');
++assert.ok(['all', 'books'].includes(stage));
++const url = new URL('/?profile', origin);
++assert.equal(url.protocol, 'http:');
++assert.equal(url.hostname, '127.0.0.1');
++
++const viewport = { width: 960, height: 570 };
++const deviceScaleFactor = Number(process.env.ZA19_DPR ?? 1);
++assert.ok(deviceScaleFactor >= .25 && deviceScaleFactor <= 2);
++const hudPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
++const turn = 2 * Math.PI;
++const angleTo = (from, to) => ((to - from + Math.PI) % turn + turn) % turn - Math.PI;
++const books = [[214.09, 219.38], [214.66, 219.38]];
++const hall = [[226, 212], [226, 216], [226, 223], [218.2, 223], [218.2, 219.38]];
++const ordinaryStart = [223, 180];
++// This follows the existing spiral route established by tests/town-blockout-tower.test.ts.
++const local = (x, z) => [226 + x, 223 - z];
++const corners = [[3.21875, 3.21875], [3.21875, -3.21875], [-3.21875, -3.21875], [-3.21875, 3.21875]];
++const lookout = local(-.48, 1.29);
++const serverTime = new Intl.DateTimeFormat('en-GB', {
++  timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
++});
++const report = {
++  url: url.href, stage, viewport, deviceScaleFactor, checkpoints: [], wirePoses: [], nightSamples: [], books: [], captures: [],
++  pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [],
++};
++await mkdir(output, { recursive: true });
++
++let browser;
++let page;
++let measuring = true;
++let sequence = 0;
++let movementId = 0;
++
++async function readPose() {
++  const reading = await page.evaluate(() => ({
++    hud: document.querySelector('#position')?.textContent ?? '',
++    action: document.querySelector('#world-action')?.textContent ?? '',
++    status: document.querySelector('#town-presence-status')?.textContent ?? '',
++    cameraY: window.__za19Frame?.cameraY,
++    calls: window.__za19Frame?.calls,
++    triangles: window.__za19Frame?.triangles,
++  }));
++  const point = hudPattern.exec(reading.hud);
++  return {
++    ...reading, east: point ? Number(point[1]) : NaN, north: point ? Number(point[2]) : NaN,
++    ground: Number.isFinite(reading.cameraY) ? reading.cameraY - 1.65 : NaN,
++  };
++}
++
++async function waitForWire(predicate = pose => Boolean(pose), timeout = 16_000) {
++  const deadline = Date.now() + timeout;
++  while (!predicate(report.wirePoses.at(-1)) && Date.now() < deadline) await page.waitForTimeout(35);
++  const pose = report.wirePoses.at(-1);
++  assert.ok(predicate(pose), `No matching pose on the live Presence socket: ${JSON.stringify(pose)}`);
++  return pose;
++}
++
++async function drag(dx, dy = 0, attempt = 0) {
++  const anchor = await page.evaluate(({ dx, dy, attempt }) => {
++    const canvas = document.querySelector('#scene canvas');
++    const points = [[.48, .51], [.41, .37], [.40, .61], [.56, .45], [.37, .48]];
++    for (let i = 0; i < points.length; i++) {
++      const [fx, fy] = points[(i + attempt) % points.length];
++      const x = Math.round(innerWidth * fx), y = Math.round(innerHeight * fy);
++      if (x + dx > 0 && x + dx < innerWidth && y + dy > 0 && y + dy < innerHeight &&
++        document.elementFromPoint(x, y) === canvas) return { x, y };
++    }
++  }, { dx, dy, attempt });
++  assert.ok(anchor, 'No unobstructed pointer target on the scene canvas');
++  await page.mouse.move(anchor.x, anchor.y);
++  await page.mouse.down();
++  try {
++    await page.mouse.move(anchor.x + dx, anchor.y + dy, { steps: Math.max(2, Math.ceil(Math.hypot(dx, dy) / 55)) });
++  } finally {
++    await page.mouse.up();
++  }
++}
++
++async function face(yaw) {
++  for (let attempt = 0; attempt < 16; attempt++) {
++    const first = await waitForWire();
++    const delta = angleTo(first.yaw, yaw);
++    if (Math.abs(delta) <= .006) return;
++    const dx = Math.max(-350, Math.min(350, Math.round(delta / .003)));
++    await drag(dx, 0, attempt);
++    const until = Date.now() + 800;
++    while (report.wirePoses.at(-1)?.seq === first.seq && Date.now() < until) await page.waitForTimeout(30);
++    await page.waitForTimeout(120);
++  }
++  assert.fail(`Native mouse drag could not face ${yaw}`);
++}
++
++async function walk(target, label, tolerance = .24) {
++  const [east, north] = target;
++  for (let attempt = 0; attempt < 9; attempt++) {
++    const from = await readPose();
++    const dx = east - from.east, dn = north - from.north;
++    const distance = Math.hypot(dx, dn);
++    assert.ok(Number.isFinite(distance), JSON.stringify(from));
++    if (distance <= tolerance) {
++      report.checkpoints.push({ label, target, ...from, wire: report.wirePoses.at(-1) });
++      return from;
++    }
++    // Backward walking gives a slow correction without triggering the double-W sprint.
++    const backwards = distance < 1.5;
++    await face(Math.atan2(dx, dn) + (backwards ? Math.PI : 0));
++    const key = backwards ? 's' : 'w';
++    await page.keyboard.down(key);
++    try {
++      const reached = await page.waitForFunction(({ id, pattern, from, east, north, dx, dn, distance, tolerance }) => {
++        const point = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
++        if (!point) return false;
++        const x = Number(point[1]), n = Number(point[2]);
++        const advance = ((x - from.east) * dx + (n - from.north) * dn) / distance;
++        if (Math.hypot(x - east, n - north) <= tolerance || advance >= distance) return 'arrived';
++        // Use the actual HUD movement heartbeat to distinguish a blocked route from slow rendering.
++        const now = performance.now();
++        const tracked = window.__za19Travel;
++        if (tracked?.id !== id || advance > tracked.advance + .06) window.__za19Travel = { id, advance, started: now };
++        else if (now - tracked.started > 18_000) return 'blocked';
++        return false;
++      }, { id: ++movementId, pattern: hudPattern.source, from, east, north, dx, dn, distance, tolerance: tolerance * .75 },
++      { timeout: 23_000 + Math.ceil(distance * 13_000) });
++      assert.equal(await reached.jsonValue(), 'arrived');
++    } catch (error) {
++      throw new Error(`Native walk stopped before ${label}: ${JSON.stringify(await readPose())}`, { cause: error });
++    } finally {
++      await page.keyboard.up(key);
++    }
++  }
++  assert.fail(`Native walk did not settle at ${label}: ${JSON.stringify(await readPose())}`);
++}
++
++async function follow(points, prefix) {
++  for (const [index, point] of points.entries()) await walk(point, `${prefix}-${index + 1}`);
++}
++
++async function action(label) {
++  await page.waitForFunction(label => {
++    const hint = document.querySelector('#world-action');
++    return hint && !hint.hidden && hint.textContent.includes(label);
++  }, label, { timeout: 15_000 });
++  await page.keyboard.press('e');
++}
++
++async function readBook(title) {
++  await action(`翻看${title}`);
++  await page.waitForFunction(title => {
++    const heading = document.querySelector('#place-title');
++    return heading?.closest('dialog')?.open && heading.textContent.trim() === title;
++  }, title, { timeout: 12_000 });
++  return { title, text: (await page.locator('#place-text').textContent())?.trim(), ...await readPose() };
++}
++
++async function capture(label) {
++  const reading = await readPose();
++  assert.ok(reading.calls > 0 && reading.triangles > 0, JSON.stringify(reading));
++  const filename = `${label}.png`;
++  const png = await page.screenshot({ path: join(output, filename), timeout: 45_000 });
++  report.captures.push({ filename, sha256: createHash('sha256').update(png).digest('hex'), ...reading });
++}
++
++async function openTown() {
++  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
++  page = await context.newPage();
++  page.on('pageerror', error => { if (measuring) report.pageErrors.push(String(error)); });
++  page.on('console', message => {
++    if (measuring && message.type() === 'error') report.consoleErrors.push(message.text());
++  });
++  page.on('requestfailed', request => {
++    if (measuring) report.requestFailures.push({ url: request.url(), error: request.failure()?.errorText });
++  });
++  page.on('response', response => {
++    if (measuring && response.status() >= 400) report.httpErrors.push({ url: response.url(), status: response.status() });
++  });
++  page.on('websocket', socket => {
++    if (new URL(socket.url()).pathname !== '/presence') return;
++    let serverEpochMs;
++    socket.on('framereceived', ({ payload }) => {
++      if (!measuring || typeof payload !== 'string') return;
++      let frame;
++      try { frame = JSON.parse(payload); } catch { return; }
++      if (!frame || typeof frame !== 'object') return;
++      if (frame.type === 'join' && frame.self === true && Number.isSafeInteger(frame.epochMs)) {
++        serverEpochMs = frame.epochMs;
++        if (frame.townNightWindow) report.nightSamples.push({ seq: ++sequence, source: 'join',
++          serverEpochMs, snapshot: frame.townNightWindow });
++      } else if (frame.type === 'clock' && Number.isSafeInteger(frame.epochMs)) {
++        serverEpochMs = frame.epochMs;
++      } else if (frame.type === 'event' && frame.kind === 'town-night-window' && frame.state && serverEpochMs !== undefined) {
++        report.nightSamples.push({ seq: ++sequence, source: frame.kind, serverEpochMs, snapshot: frame.state });
++      }
++    });
++    socket.on('framesent', ({ payload }) => {
++      if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
++      report.wirePoses.push({
++        east: payload.readUInt16LE(2) / 100, north: payload.readUInt16LE(4) / 100,
++        height: payload.readUInt16LE(6) / 100, yaw: payload.readUInt16LE(8) * turn / 65536,
++        seq: payload.readUInt16LE(10),
++      });
++    });
++  });
++  await page.addInitScript(() => {
++    // Exercise the shipping mouse-drag fallback in headless Chromium.
++    Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
++    document.addEventListener('town-frame-profile', event => { window.__za19Frame = event.detail; }, true);
++  });
++  const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
++  assert.equal(response?.status(), 200);
++  assert.equal(new URL(page.url()).pathname, '/');
++  await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
++  await page.waitForFunction(pattern => {
++    const pos = document.querySelector('#position')?.textContent ?? '';
++    return new RegExp(pattern).test(pos) && window.__za19Frame?.calls > 0;
++  }, hudPattern.source, { timeout: 90_000 });
++  const start = await readPose();
++  assert.ok(Math.hypot(start.east - ordinaryStart[0], start.north - ordinaryStart[1]) < .25, JSON.stringify(start));
++  assert.ok(Math.abs(start.ground - 12) < .15, JSON.stringify(start));
++  await page.locator('#scene canvas').click({ position: { x: 430, y: 285 } });
++  report.checkpoints.push({ label: 'ordinary-spawn', ...start, wire: await waitForWire() });
++}
++
++function scheduleShape({ snapshot, serverEpochMs }) {
++  return snapshot && ['day', 'awaiting-beacon', 'night-window'].includes(snapshot.phase) &&
++    Number.isSafeInteger(serverEpochMs) && Number.isSafeInteger(snapshot.beaconAt) &&
++    Number.isSafeInteger(snapshot.morningBellAt) && snapshot.beaconAt < snapshot.morningBellAt &&
++    serverEpochMs < snapshot.morningBellAt;
++}
++
++async function verifyBooks() {
++  await follow(hall, 'hall');
++  await walk(books[0], 'daily-ledger', .19);
++  const ordinary = await readBook('活人账');
++  assert.ok(Math.abs(ordinary.ground - 12.3125) < .15, JSON.stringify(ordinary));
++  const pattern = /^日常报时 · (\d\d):00:00　下一整点 · (\d\d):00:00$/;
++  const parsed = pattern.exec(ordinary.text);
++  assert.ok(parsed && (Number(parsed[1]) + 1) % 24 === Number(parsed[2]), ordinary.text);
++  report.books.push(ordinary);
++  await capture('01-local-clock-ledger');
++  await page.keyboard.press('Escape');
++  await walk(books[1], 'night-ledger', .19);
++  let night;
++  // Reopen through native input if the Presence connection is replacing its night state.
++  for (let attempt = 0; attempt < 3; attempt++) {
++    night = await readBook('魂账');
++    if (!night.text.includes('未同步')) break;
++    await page.keyboard.press('Escape');
++    await page.waitForTimeout(4_200);
++  }
++  const schedules = report.nightSamples.filter(scheduleShape);
++  assert.ok(schedules.length, 'Presence sent no configured night schedule');
++  const authoritative = schedules.toReversed().find(({ snapshot }) => {
++    const { beaconAt, morningBellAt } = snapshot;
++    return night.text.includes(serverTime.format(beaconAt)) && night.text.includes(serverTime.format(morningBellAt));
++  });
++  assert.ok(authoritative, `Displayed ledger did not match a live authority read: ${night.text}`);
++  assert.ok(Math.abs(night.ground - 12.3125) < .15, JSON.stringify(night));
++  const plannedHour = Number(serverTime.format(authoritative.serverEpochMs).slice(0, 2));
++  assert.ok([plannedHour, (plannedHour + 23) % 24].includes(Number(parsed[1])),
++    'Daily ledger does not follow the same server hour');
++  report.books.push({ ...night, authoritative });
++  await capture('02-authoritative-night-ledger');
++  await page.keyboard.press('Escape');
++}
++
++async function verifyLookout() {
++  await follow([[218.2, 219.38], [218.2, 223], [226, 223], local(0, 3.2), local(...corners[0])], 'spiral-entry');
++  for (let flight = 1; flight <= 31; flight++) {
++    const corner = local(...corners[flight % 4]);
++    await walk(corner, `spiral-flight-${flight}`);
++    if (flight === 27) {
++      const side = [local(-1.625, 3.21875), local(-1.625, .9), local(-1, .9)];
++      await follow(side, 'belfry-branch');
++      const approach = await readPose();
++      assert.ok(Math.abs(approach.ground - 96.71875) < .55, JSON.stringify(approach));
++      const casting = [225.87, 224.39, approach.ground + 3.44];
++      await face(Math.atan2(casting[0] - approach.east, casting[1] - approach.north));
++      const pitch = Math.atan2(casting[2] - approach.cameraY, Math.hypot(casting[0] - approach.east, casting[1] - approach.north));
++      const dy = Math.round(-pitch / .003);
++      const partial = Math.round(dy / 2);
++      await drag(0, partial);
++      await drag(0, dy - partial);
++      await capture('03-bell-interior-casting');
++      await drag(0, -partial);
++      await drag(0, partial - dy);
++      await follow([...side].reverse().slice(1).concat([corner]), 'belfry-return');
++    }
++  }
++  await follow([local(-1.4375, 2.8125), local(-1.4375, -2.59375), local(1.03125, -2.59375),
++    local(1.03125, 1.30), local(0, 1.30)], 'spire-stairs');
++  await walk(lookout, 'watch-plate', .10);
++  const before = await readPose();
++  assert.ok(Math.abs(before.ground - 118.8125) < .20, JSON.stringify(before));
++  await action('在塔顶守夜');
++  await waitForWire(pose => pose && Math.abs(angleTo(pose.yaw, Math.PI)) < .08);
++  const after = await readPose();
++  assert.ok(Math.hypot(after.east - before.east, after.north - before.north, after.ground - before.ground) < .15,
++    'The watch interaction moved the player');
++  assert.equal(await page.locator('#place-title').evaluate(node => node.closest('dialog').open), false);
++  await capture('04-native-watch-point');
++}
++
++try {
++  browser = await chromium.launch({
++    headless: true,
++    executablePath: process.env.CHROMIUM_PATH || undefined,
++    args: process.env.ZA22_HARDWARE === '1' && process.platform === 'win32'
++      ? ['--use-gl=angle', '--use-angle=d3d11']
++      : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
++  });
++  report.browser = browser.version();
++  await openTown();
++  await verifyBooks();
++  if (stage === 'all') await verifyLookout();
++  assert.equal(report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length, 0);
++} catch (error) {
++  report.failure = error instanceof Error ? error.stack : String(error);
++  if (page && !page.isClosed()) {
++    try {
++      report.lastPose = await readPose();
++      await page.screenshot({ path: join(output, 'failed-position.png'), timeout: 12_000 });
++    } catch {}
++  }
++  process.exitCode = 1;
++} finally {
++  measuring = false;
++  report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
++  await writeFile(join(output, 'za19-clock-live.json'), `${JSON.stringify(report, null, 2)}\n`);
++  console.log(JSON.stringify({ stage, checkpoints: report.checkpoints.length, books: report.books.length,
++    frames: report.wirePoses.length, captures: report.captures.length, errors: report.errors, failure: report.failure }));
++  await browser?.close();
++}
+diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
+index 493ac6621ed7a692c513ed4080d93a55b3ff7521..2bdfa13cece0338cd03099072b15eb42ed7bce13 100644
+--- a/tools/verify-za22-local.mjs
++++ b/tools/verify-za22-local.mjs
+@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
+ import { promisify } from 'node:util';
+ 
+ const [segment, evidencePath] = process.argv.slice(2);
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment) && evidencePath,
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
+   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
+ const run = promisify(execFile);
+ const repo = fileURLToPath(new URL('../', import.meta.url));
+@@ -162,7 +162,9 @@ try {
+     TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
+   });
+   await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
+-  driver = startNode([join(repo, 'tools', 'verify-za22-live.mjs'), base, output, segment], {
++  const clock = segment === 'clock' || segment === 'clock-books';
++  driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
++    base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {
+     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
+   });
+   await finish(driver);
+diff --git a/tools/voxel-tavern/town-blockout/clocktower-story.ts b/tools/voxel-tavern/town-blockout/clocktower-story.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5efec4c17bfccd3214cb6323a22ce0cb354c0d94
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/clocktower-story.ts
+@@ -0,0 +1,133 @@
++import { Vector3, type Group } from 'three';
++import { towerTime } from './town-clocktower-time';
++import type { TownActivityContext, TownActivitySpot } from './town-activity';
++
++type Point = readonly [east: number, height: number, south: number];
++type Box = (kind: string, x: number, y: number, z: number, width: number, height: number, depth: number) => void;
++type NightClock = Readonly<{
++  phase: 'day' | 'awaiting-beacon' | 'night-window';
++  beaconAt: number | null;
++  morningBellAt: number | null;
++}>;
++export type ClocktowerStoryHost = Readonly<{
++  now(): number;
++  nightWindow(): NightClock | undefined;
++  atWatchPoint?(): void;
++  atNightLedger?(): void;
++}>;
++
++const floor = .3125;
++const deskHeight = floor + .91;
++const books = [
++  { title: '活人账', x: -11.91, color: 'teal' },
++  { title: '魂账', x: -11.34, color: 'oxblood' },
++] as const;
++export const clocktowerRepairApproaches = books.map(({ x }) => [x, floor, 3.62] as const);
++
++/** Uses the existing ground-level west wing repair bench and its floor envelope. */
++export function addClocktowerRepairBooks(box: Box) {
++  for (const { x, color } of books) {
++    box(color, x - .22, deskHeight, 2.48, .44, .036, .30);
++    box('ivory', x - .20, deskHeight + .036, 2.49, .40, .045, .28);
++    box(color, x - .22, deskHeight + .081, 2.48, .44, .03, .30);
++    box('brass', x - .10, deskHeight + .111, 2.64, .20, .006, .038);
++  }
++}
++
++// The half moon and the falling arc match the two motifs on the ship nameplate.
++const crescent = ['....###', '..####.', '.###...', '.##....', '.##....', '..##...', '...####'] as const;
++const fallingArc = ['##......', '..##....', '....#...', '.....#..', '......##'] as const;
++type BellBand = readonly [rise: number, radius: number, height: number, color: string];
++const cell = 1 / 32;
++const ringSlice = .125;
++const bellLip = .1875;
++
++/** Cast the mark into the hollow far side so it rides the existing bell axle. */
++export function addClocktowerBellCasting(box: Box, base: number, profile: readonly BellBand[]) {
++  for (const [rows, east, top] of [[crescent, -.31, .75], [fallingArc, -.037, .67]] as const) {
++    for (const [row, pixels] of rows.entries()) {
++      const y = top - row * cell;
++      const band = profile.find(([rise, , height]) => y >= rise && y + cell <= rise + height);
++      if (!band) continue;
++      const radius = band[1];
++      const inner = radius - bellLip;
++      for (const [column, pixel] of [...pixels].entries()) {
++        if (pixel !== '#') continue;
++        const x = east + column * cell;
++        // Calculate the inner face of the same stepped ring used for the bell shell.
++        for (let z = -radius; z < 0; z += ringSlice) {
++          const radial = z + ringSlice / 2;
++          const innerEdge = Math.round(Math.sqrt(Math.max(0, inner ** 2 - radial ** 2)) / cell) * cell;
++          if (Math.abs(x + cell / 2) < innerEdge) {
++            box('copperDark', x, base + y, z - .008, cell, cell, .026);
++            break;
++          }
++        }
++      }
++    }
++  }
++}
++
++export const clocktowerWatchApproach = (height: number): Point => [-.48, height, 1.29];
++
++/** A recessed tread plate beside the existing lookout, clear of the stair landing. */
++export function addClocktowerWatchPlate(box: Box, height: number) {
++  const [x, , z] = clocktowerWatchApproach(height);
++  box('copperDark', x - .31, height, z - .20, .62, cell / 4, .40);
++  for (const [width, depth, dx, dz] of [
++    [.62, cell, -.31, -.20], [.62, cell, -.31, .20 - cell],
++    [cell, .40, -.31, -.20], [cell, .40, .31 - cell, -.20],
++  ]) box('brass', x + dx, height + cell / 4, z + dz, width, cell / 4, depth);
++}
++
++const format = (ms: number) => towerTime(ms, null, false).plate;
++
++export function readClocktowerNightLedger(host: ClocktowerStoryHost) {
++  const now = host.now();
++  const schedule = host.nightWindow();
++  if (schedule === undefined || !Number.isFinite(now)) return;
++  const { beaconAt: beacon, morningBellAt: morning } = schedule;
++  if (typeof beacon !== 'number' || typeof morning !== 'number' ||
++    !Number.isSafeInteger(beacon) || !Number.isSafeInteger(morning) || beacon < 0 || beacon >= morning || now >= morning) return;
++  return {
++    bellTime: format(beacon),
++    morningTime: format(morning),
++    openingObserved: schedule.phase === 'night-window' && now >= beacon,
++  };
++}
++
++export function createClocktowerStorySpots(tower: Group, context: Pick<TownActivityContext, 'open' | 'face'>,
++  host: ClocktowerStoryHost): TownActivitySpot[] {
++  const { lookout } = tower.userData.stops as { lookout: Point };
++  const spot = (at: Point, range: number, label: string, run: () => void): TownActivitySpot => {
++    const point = tower.localToWorld(new Vector3(...at));
++    return { x: point.x, n: -point.z, ground: point.y, range, label, run };
++  };
++  const [ordinary, night] = books;
++  const [ordinaryApproach, nightApproach] = clocktowerRepairApproaches;
++  const watch = clocktowerWatchApproach(lookout[1]);
++  return [
++    spot(ordinaryApproach, .65, '翻看活人账', () => {
++      const current = host.now();
++      const hour = 3_600_000;
++      const lastHour = Math.floor(current / hour) * hour;
++      context.open(ordinary.title, Number.isFinite(current)
++        ? `日常报时 · ${format(lastHour)}　下一整点 · ${format(lastHour + hour)}`
++        : '日常报时时刻未同步。');
++    }),
++    spot(nightApproach, .65, '翻看魂账', () => {
++      const reading = readClocktowerNightLedger(host);
++      if (!reading) {
++        context.open(night.title, '第十三声时刻未同步。');
++        return;
++      }
++      context.open(night.title, `第十三声${reading.openingObserved ? ' · ' : '预计 · '}${reading.bellTime}　晨钟 · ${reading.morningTime}`);
++      host.atNightLedger?.();
++    }),
++    spot(watch, .17, '在塔顶守夜', () => {
++      const sight = tower.localToWorld(new Vector3(watch[0], watch[1] + 1.58, 5));
++      context.face(sight.x, -sight.z, sight.y);
++      host.atWatchPoint?.();
++    }),
++  ];
++}
+diff --git a/tools/voxel-tavern/town-blockout/landmark-tower.ts b/tools/voxel-tavern/town-blockout/landmark-tower.ts
+index b919016488780ddaf5a2f5e36dbfeabfaed55ce5..be08683e47bdef552285ab1973f2cc7b0af4b89c 100644
+--- a/tools/voxel-tavern/town-blockout/landmark-tower.ts
++++ b/tools/voxel-tavern/town-blockout/landmark-tower.ts
+@@ -4,6 +4,7 @@ import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Me
+ import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
+ import type { Ramp, TownPlot } from './landmark-kit';
+ import { attachTowerTime, clockBoardDimensions } from './clocktower-face';
++import { addClocktowerBellCasting, addClocktowerRepairBooks, addClocktowerWatchPlate } from './clocktower-story';
+ import { buildTowerWingRoof, buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing, towerEastBridge, towerWingRoofCourse } from './clocktower-wings';
+ 
+ type Vec3 = [number, number, number];
+@@ -534,6 +535,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
+   const wingKit = { box, solid, deck, guard, stair: stairs, gear, lamp: (x: number, y: number, z: number) => lamp(box, x, y, z, .62) };
+   parts = wingParts[0];
+   furnishWestTowerWing(wingKit);
++  addClocktowerRepairBooks(box);
+   parts = wingParts[1];
+   furnishEastTowerWing(wingKit);
+ 
+@@ -588,6 +590,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
+   parts = interiorParts;
+   // A small lookout instrument sits by the existing west rail, leaving the approach clear.
+   box('oak', -1.46, lookoutY, 1.49, .15, .83, .17);
++  addClocktowerWatchPlate(box, lookoutY);
+   box('brass', -1.57, lookoutY + .80, 1.30, .35, .24, .55);
+   box('copperDark', -1.53, lookoutY + .83, 1.83, .28, .18, .11);
+   // Bell emblem on the lookout rail, kept separate from the photo action.
+@@ -688,6 +691,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
+     const a = i * Math.PI / 20;
+     box('brass', snap(Math.sin(a) * 1.661), bellBase + .3125, snap(Math.cos(a) * 1.661), unit32, .09375, unit32);
+   }
++  addClocktowerBellCasting(box, bellBase, profile);
+   parts = clapperParts;
+   box('iron', -.09375, bellBase - .1875, -.09375, .1875, 3.5, .1875);
+   box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 1265ad244628235ff064f2226726a92e3eefced6..921fae33fe4aa4f3397ef365f3c6dfec14ae1861 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -109,6 +109,7 @@ import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
+ import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
+ import { npcAuthoredDialogue } from './town-npc-dialogue';
+ import { createTownPresence } from './town-presence';
++import { createClocktowerStorySpots } from './clocktower-story';
+ import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+ import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
+ import { createTheaterPhotoCamera } from './theater-photo-camera';
+@@ -1908,6 +1909,10 @@ activitySpots.push(createLighthouseSnakeCharm(architecture.get('lighthouse')!, z
+   playPostChime(true);
+ }));
+ const tower = architecture.get('clocktower')!;
++activitySpots.push(...createClocktowerStorySpots(tower, activityContext, {
++  now: presence.serverNow,
++  nightWindow: presence.getTownNightWindow,
++}));
+ const towerStops = tower.userData.stops as Record<'dial' | 'bell' | 'lookout', [number, number, number]>;
+ activitySpots.push(
+   zodiacSites.mount(architecture.get('market-stalls')!, marketOxSite),
+-- 
+2.56.1
+
