@@ -2992,8 +2992,6 @@ renderer.setAnimationLoop(now => {
   outdoorCampfires.updateFlames(dt, camera.position.x, -camera.position.z, Boolean(homeReturn));
   scenery.updatePlazaSnowSupply(plazaSnowSupply.heightScale, camera.position.x, -camera.position.z);
   const museum = architecture.get('memorial');
-  const smallLabels = museum?.userData.smallLabels as Mesh[] | undefined;
-  if (smallLabels) for (const label of smallLabels) label.visible = !wideView;
   const interior = museum?.userData.detailInterior as Group | undefined;
   if (interior && museum) {
     interior.visible = Math.abs(camera.position.x - museumEast) < 48 &&
