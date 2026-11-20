@@ -1,0 +1,23 @@
+export type StreetInfillKind = 'lantern' | 'fence' | 'firewood' | 'sign';
+
+export type StreetInfillPoint = readonly [
+  kind: StreetInfillKind, east: number, north: number, heading?: number,
+];
+
+export type StreetInfillCluster = {
+  id: string;
+  points: readonly StreetInfillPoint[];
+};
+
+export const streetInfill: readonly StreetInfillCluster[] = [
+  {
+    id: 'southwest-plaza',
+    points: [
+      ['lantern', 159.5, 163, Math.PI],
+      ['firewood', 159.5, 161, Math.PI / 2],
+      ['sign', 157.5, 159, .35],
+      ['lantern', 159.5, 158.8, Math.PI],
+      ['fence', 159.5, 156.5, Math.PI / 2],
+    ],
+  },
+];

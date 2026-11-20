@@ -9,6 +9,7 @@ import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmar
 import { buildVillageLandmark, villageHousePortals } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
 import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
 import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
+import { streetInfill } from '../tools/voxel-tavern/town-blockout/streetscape-infill.ts';
 import { canEnter, createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
@@ -72,6 +73,11 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   const district = addDistrictHousing(landscape, grid, scenery.blocked, track.keepClear);
   const streetscape = addStreetscape(landscape, grid, (x, n, r) =>
     district.keepClear(x, n, r) || extensionRoadClearance(x, n, r));
+  assert.deepEqual(
+    [...streetscape.infillPlaced],
+    streetInfill.map(({ id, points }) => [id, points.map(([kind]) => kind)]),
+    'all configured streetscape clusters survive door and road clearance',
+  );
   const forest = addForestDensity(landscape, grid,
     (x, n, r) => district.keepClear(x, n, r) || streetscape.occupied(x, n, r),
     (x, n, r) => extensionRoadClearance(x, n, r) || track.keepClear(x, n, r) || extensionStreetClearance(x, n, r));
