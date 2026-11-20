@@ -9,7 +9,7 @@ type SledWorld = {
   stopped(): void;
 };
 type Spot = { x: number; n: number; y: number; yaw: number };
-type SledControls = { forward: number; turn: number };
+type SledControls = { forward: number; turn: number; brake?: boolean };
 
 export function createSledRide(world: SledWorld) {
   const motion = createSledMotion();
@@ -85,9 +85,10 @@ export function createSledRide(world: SledWorld) {
       const recent = world.height(spot.x - de * .6, spot.n - dn * .6);
       motion.takeOff((from - recent) * state.speed / .6);
     }
-    braking = controls.forward < -.1;
+    const drive = controls.brake ? { ...controls, forward: -1 } : controls;
+    braking = drive.forward < -.1;
     deepSnow = surface.deepSnow;
-    const next = motion.step(dt, controls, { ...surface, grade });
+    const next = motion.step(dt, drive, { ...surface, grade });
     turnRate = sledYawDelta(spot.yaw, next.heading) / dt;
     spot.yaw = next.heading;
     if (next.uphillStalled && !wasStalled) world.stopped();
