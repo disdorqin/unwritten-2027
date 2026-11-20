@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createUndergroundMineReach } from '../src/presence/underground-mine-reach.ts';
-import type { UndergroundSurvivalPoint } from '../src/presence/underground-survival.ts';
+import { createUndergroundSurvival, type UndergroundSurvivalPoint } from '../src/presence/underground-survival.ts';
 import { createUndergroundVitals } from '../src/presence/underground-vitals.ts';
 import { createUndergroundMineLayout } from '../tools/voxel-tavern/town-blockout/underground-mine-layout.ts';
 
@@ -115,6 +115,55 @@ test('U-13 fire warmth, danger and mining sound follow the U-15 rock even within
     assert.equal(sample().temperature, .25);
     assert.equal(sample().walkScale, .7);
     assert.equal(sample().strikeSpeedScale, .5);
+  } finally {
+    sight.dispose();
+  }
+});
+
+test('U-13 accepted fire checks heal only stationary players with a clear path to a fixed fire', () => {
+  const sight = mineReach(true);
+  try {
+    const fire = { id: 'campfire', at: shoulderFrom, kind: 'campfire' } as const;
+    const coldFlame = { id: 'cold-flame', at: point(3.6, -89.4, 44.6), kind: 'cold-flame' } as const;
+    const torch = { id: 'torch', at: shoulderTo, kind: 'torch', expiresAt: 5000 } as const;
+    let foot = mouthTo;
+    let standingStill = false;
+    const vitals = createUndergroundVitals({
+      now: () => 1000,
+      readPlayer: () => ({ at: foot }),
+      readLights: () => [torch, coldFlame, fire],
+      reaches: sight.reaches,
+      climates: { mine: { ambient: .25, degreesPerSecond: .25 } },
+      initialTemperature: .5, coldBelow: .5, warmDegreesPerSecond: .5,
+      coldWalkScale: .7, coldStrikeScale: .5, darknessDamageScale: 1.4, torchRadius: 5,
+      noiseLifetimeMs: 800, noiseRadius: { walk: 1, run: 6, mining: 10, combat: 12 },
+    });
+    const survival = createUndergroundSurvival({
+      maxHealth: 100, reconnectFromZeroHealth: 20, defaultWakePoint: { ...mouthFrom, layer: 'town', height: 2 },
+      fires: [coldFlame, fire].map(({ id, at }) => ({ id, point: at, healPerSecond: 20 })),
+      readBoundBed: () => undefined, readEntryMode: () => 'survival',
+      readAcceptedFoot: playerId => ({ playerId, point: foot, standingStill, fireId: vitals.fireAt(foot) }),
+      areTeammates: () => false, canReach: sight.reaches, now: () => 1000,
+      readTripOre: () => [], chooseHalf: () => [], save: () => undefined,
+    });
+    assert.equal(survival.syncDepthMode('miner'), true);
+    assert.equal(survival.damage('miner', { sequence: 1, kind: 'monster', amount: 30 }), true);
+    assert.equal(sight.reaches(coldFlame.at, foot), true);
+    assert.equal(vitals.sample('miner')?.worldLights[0]?.id, torch.id);
+    assert.equal(vitals.fireAt(foot), fire.id);
+    assert.equal(survival.healAtFire('miner', 2, 500), false);
+
+    standingStill = true;
+    foot = shoulderTo;
+    assert.ok(Math.hypot(foot.east - fire.at.east, foot.north - fire.at.north) < 8);
+    assert.equal(vitals.sample('miner')?.environmentLit, true);
+    assert.equal(vitals.fireAt(foot), undefined);
+    assert.equal(survival.healAtFire('miner', 2, 500), false);
+    assert.equal(survival.status('miner').health, 70);
+
+    foot = mouthTo;
+    assert.equal(survival.healAtFire('miner', 2, 500), true);
+    assert.equal(survival.status('miner').health, 80);
   } finally {
     sight.dispose();
   }

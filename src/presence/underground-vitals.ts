@@ -59,7 +59,7 @@ export function createUndergroundVitals(settings: Settings) {
 
   function readLight(at: Point, time: number) {
     return settings.readLights(at.layer).flatMap(light => {
-      if (!validPoint(light.at) || light.at.layer !== at.layer) return [];
+      if (!light.id || !validPoint(light.at) || light.at.layer !== at.layer) return [];
       const separation = distance(at, light.at);
       const radius = light.kind === 'torch' ? torchRadius : ambientRadius[light.kind];
       if (light.kind === 'torch' && (!Number.isFinite(light.expiresAt) || light.expiresAt <= time)) return [];
@@ -68,7 +68,22 @@ export function createUndergroundVitals(settings: Settings) {
     });
   }
 
+  function nearestFire(lights: ReturnType<typeof readLight>) {
+    let nearest: (typeof lights)[number] | undefined;
+    for (const candidate of lights) {
+      if (candidate.light.kind !== 'campfire' && candidate.light.kind !== 'cold-flame') continue;
+      if (!nearest || candidate.separation < nearest.separation) nearest = candidate;
+    }
+    return nearest?.light.id;
+  }
+
   return {
+    /** Share one reachable fire with recovery and encounter hosts, without sampling body temperature. */
+    fireAt(at: Point): string | undefined {
+      if (!validPoint(at) || !climates.has(at.layer)) return;
+      return nearestFire(readLight(at, now()));
+    },
+
     sample(id: string) {
       const time = now();
       const player = settings.readPlayer(id);
@@ -79,7 +94,7 @@ export function createUndergroundVitals(settings: Settings) {
         return;
       }
       const lights = readLight(player.at, time);
-      const safe = lights.some(({ light }) => light.kind === 'campfire' || light.kind === 'cold-flame');
+      const safe = nearestFire(lights) !== undefined;
       let temperature = initialTemperature;
       if (body) {
         const delta = body.target - body.temperature;
