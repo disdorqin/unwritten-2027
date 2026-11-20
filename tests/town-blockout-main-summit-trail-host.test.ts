@@ -70,12 +70,13 @@ test('P-3 local excavation clears the buried tread and keeps the surrounding mou
   assembly.group.updateMatrixWorld(true);
 
   const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
-  function hitHeight(object: Object3D, east: number, north: number) {
+  function hitSurface(object: Object3D, east: number, north: number) {
     ray.ray.origin.set(east, 900, -north);
     const hit = ray.intersectObject(object, false)[0];
     assert.ok(hit !== undefined, `missing surface at E${east}/N${north}`);
-    return hit.point.y;
+    return hit;
   }
+  const hitHeight = (object: Object3D, east: number, north: number) => hitSurface(object, east, north).point.y;
 
   let previousOcclusions = 0;
   let deepest = { east: 0, north: 0, depth: 0 };
@@ -107,16 +108,45 @@ test('P-3 local excavation clears the buried tread and keeps the surrounding mou
     assert.ok(hitHeight(cut as unknown as Object3D, world.east, world.north) <= tread + .005);
   }
 
-  for (const [east, north] of [[-900, 30], [-720, 825], [0, 3], [1010, 1700], [220, 1300]]) {
-    const world = summitWorldPoint(east!, north!, 0);
-    const before = hitHeight(original.coarse as unknown as Object3D, east!, north!);
-    const after = hitHeight(cut as unknown as Object3D, world.east, world.north);
-    assert.ok(Math.abs(after - before) < .001);
+  function compareSurface(east: number, north: number) {
+    const world = summitWorldPoint(east, north, 0);
+    return {
+      before: hitSurface(original.coarse as unknown as Object3D, east, north),
+      after: hitSurface(cut as unknown as Object3D, world.east, world.north),
+    };
   }
+  function assertPreservedNormal({ before, after }: ReturnType<typeof compareSurface>) {
+    assert.ok(before.normal && after.normal && before.normal.distanceTo(after.normal) < 1e-6,
+      `changed terrain normal at E${before.point.x}/N${-before.point.z}`);
+  }
+  for (const [east, north] of [[-900, 30], [-720, 825], [0, 3], [1010, 1700], [220, 1300]] as const) {
+    const surface = compareSurface(east, north);
+    assert.ok(Math.abs(surface.after.point.y - surface.before.point.y) < .001);
+    assertPreservedNormal(surface);
+  }
+  let preservedBesideCut = 0;
   for (let offset = -6; offset <= 6; offset += .25) {
-    const world = summitWorldPoint(deepest.east, deepest.north + offset, 0);
-    const before = hitHeight(original.coarse as unknown as Object3D, deepest.east, deepest.north + offset);
-    const after = hitHeight(cut as unknown as Object3D, world.east, world.north);
-    assert.ok(after <= before + .005, 'the cut cannot raise the adjoining terrain');
+    const surface = compareSurface(deepest.east, deepest.north + offset);
+    const difference = surface.after.point.y - surface.before.point.y;
+    assert.ok(difference <= .005, 'the cut cannot raise the adjoining terrain');
+    if (Math.abs(difference) < .001) {
+      assertPreservedNormal(surface);
+      preservedBesideCut++;
+    }
   }
+  assert.ok(preservedBesideCut > 0);
+
+  const positions = cut.geometry.getAttribute('position');
+  const normals = cut.geometry.getAttribute('normal');
+  const indices = cut.geometry.getIndex()!;
+  const vertical = (top: number, bottom: number) => positions.getX(top) === positions.getX(bottom) &&
+    positions.getZ(top) === positions.getZ(bottom) && Math.abs(positions.getY(top) - positions.getY(bottom)) > .05;
+  let banks = 0;
+  for (let i = 0; i < indices.count; i += 3) {
+    const [u, v, w] = [indices.getX(i), indices.getX(i + 1), indices.getX(i + 2)];
+    if (!vertical(u, v) && !vertical(v, w) && !vertical(w, u)) continue;
+    assert.ok([u, v, w].every(index => Math.abs(normals.getY(index)) < 1e-6));
+    banks++;
+  }
+  assert.ok(banks > 0);
 });
