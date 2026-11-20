@@ -1,0 +1,79 @@
+name: Verify JX-18 browser entry and retry
+
+on:
+  push:
+    branches: [lane-build]
+    paths:
+      - '.github/workflows/verify-jx18-entry.yml'
+      - 'tools/verify-jx18-entry-browser.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      JX18_BASE: e1931a717320edc87f223ccf0303256da2149881
+      JX18_RECEIPT: 9220f92365a3e7f5e6d830c859efe6a864c1cc05
+      JX18_PATCH: docs/交流区/GPT/分区一冲刺候选/JX18-entry-retry-candidate.patch
+      JX18_PATCH_SHA: a2a27ca328c3f9a5e59233fbf6fcf4732ee45ad5d9503b2a5979568588d4e6da
+    steps:
+      - name: Check out the browser verification script
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: ci
+          sparse-checkout: /tools/verify-jx18-entry-browser.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Check out the exact runtime baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.JX18_BASE }}
+          persist-credentials: false
+          path: town
+
+      - name: Check out the exact candidate patch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.JX18_RECEIPT }}
+          persist-credentials: false
+          path: receipt
+          sparse-checkout: /${{ env.JX18_PATCH }}
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+
+      - name: Verify the candidate and build the production preview
+        working-directory: town
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$JX18_BASE"
+          test "$(git -C ../receipt rev-parse HEAD)" = "$JX18_RECEIPT"
+          git -C ../receipt show "HEAD:$JX18_PATCH" > "$RUNNER_TEMP/jx18.patch"
+          printf '%s  %s\n' "$JX18_PATCH_SHA" "$RUNNER_TEMP/jx18.patch" | sha256sum --check --strict
+          git apply --check --whitespace=error "$RUNNER_TEMP/jx18.patch"
+          git apply --whitespace=error "$RUNNER_TEMP/jx18.patch"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/voxel-tavern run build -- --mode town-preview
+          npx playwright install --with-deps chromium
+
+      - name: Tap through embedded guidance and retry actual failed requests
+        timeout-minutes: 7
+        run: node ci/tools/verify-jx18-entry-browser.mjs town "$RUNNER_TEMP/jx18-entry"
+
+      - name: Upload Chromium screenshots and request outcomes
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jx18-entry-browser-proof
+          path: ${{ runner.temp }}/jx18-entry
+          retention-days: 14
+          if-no-files-found: warn
