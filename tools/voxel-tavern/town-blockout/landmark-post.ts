@@ -9,11 +9,14 @@ type Point = [number, number, number];
 type Solid = { min: Point; max: Point };
 type Block = { position: Point; size: Point; roll: number };
 
+const brickColors = {
+  brick1: new Color('#9a4c36'),
+  brick2: new Color('#824030'),
+  brick3: new Color('#a6573b'),
+  brick4: new Color('#b26c51'),
+};
+const brickMaterial = new MeshLambertMaterial();
 const palette: Record<string, Material> = {
-  brick1: new MeshLambertMaterial({ color: '#9a4c36' }),
-  brick2: new MeshLambertMaterial({ color: '#824030' }),
-  brick3: new MeshLambertMaterial({ color: '#a6573b' }),
-  brick4: new MeshLambertMaterial({ color: '#b26c51' }),
   mortar: new MeshLambertMaterial({ color: '#513833' }),
   stone: new MeshLambertMaterial({ color: '#818997' }),
   stoneTrim: new MeshLambertMaterial({ color: '#a1a7b5' }),
@@ -482,16 +485,36 @@ export function buildPostLandmark(_plot: TownPlot): Group {
 
   const geometry = new BoxGeometry();
   const dummy = new Object3D();
+  function placeBlock(mesh: InstancedMesh, { position, size, roll }: Block, index: number) {
+    dummy.position.set(...position);
+    dummy.scale.set(...size);
+    dummy.rotation.z = roll;
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  }
+
+  // The brick materials differed only in color. Preserve their opaque draw order
+  // inside the combined batch and keep the lighting and interactive batches separate.
+  const bricks = Object.entries(brickColors).map(([tint, color]) => {
+    const blocks = batches.get(tint) ?? [];
+    batches.delete(tint);
+    return { blocks, color };
+  });
+  const brickMesh = new InstancedMesh(geometry, brickMaterial, bricks.reduce((total, { blocks }) => total + blocks.length, 0));
+  brickMesh.name = 'Postal bricks';
+  let brickIndex = 0;
+  for (const { blocks, color } of bricks) {
+    for (const block of blocks) {
+      placeBlock(brickMesh, block, brickIndex);
+      brickMesh.setColorAt(brickIndex++, color);
+    }
+  }
+  model.add(brickMesh);
+
   for (const [tint, blocks] of batches) {
     const mesh = new InstancedMesh(geometry, palette[tint], blocks.length);
     mesh.name = 'Postal ' + tint;
-    blocks.forEach(({ position, size, roll }, index) => {
-      dummy.position.set(...position);
-      dummy.scale.set(...size);
-      dummy.rotation.z = roll;
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
-    });
+    blocks.forEach((block, index) => placeBlock(mesh, block, index));
     if (tint === 'goldLight') {
       let openingReady: boolean | undefined;
       const setReady = (ready: boolean) => {
