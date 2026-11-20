@@ -346,6 +346,15 @@ try {
       await snapshot(page, evidence, 'station');
     } else {
       await action(page, '乘缆车一线前往云海台', 620_000);
+      if (bare) {
+        const accepted = await page.waitForFunction(() => {
+          const position = document.querySelector('#position')?.textContent ?? '';
+          const action = document.querySelector('#world-action');
+          return position.includes('缆车一线') || Boolean(action && !action.hidden && action.textContent.includes('等候前山缆车'));
+        }, null, { timeout: 20_000 });
+        await accepted.dispose();
+        await snapshot(page, evidence, 'cable-request-accepted');
+      }
       await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
         null, { timeout: 135_000 });
       await snapshot(page, evidence, 'cable-boarding');

@@ -67,10 +67,11 @@ jobs:
           }
           trap cleanup EXIT
           docker network create za22
-          # Use the special-night fixture from the existing ZA-30 bare-root replay.
+          # The software-rendered walk took 13 minutes to reach the station.
+          # Keep the real server window open across the whole bounded browser job.
           schedule="$(node -e 'const anchor = Date.now(); console.log(JSON.stringify({
             dawnEpoch: anchor - 390000, beaconOffsetsAfterDusk: Array(12).fill(60000), cueFreshnessMs: 2000,
-            specialNight: { duskAt: anchor - 1000, beaconAt: anchor + 18000, cueExpiresAt: anchor + 35000, morningBellAt: anchor + 600000 }
+            specialNight: { duskAt: anchor - 1000, beaconAt: anchor + 18000, cueExpiresAt: anchor + 35000, morningBellAt: anchor + 2100000 }
           }));')"
           printf '%s\n' "$schedule" > "$out/presence-night-schedule.json"
           export ZA30_LOCAL_TEST_NIGHT
