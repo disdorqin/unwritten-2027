@@ -29,4 +29,15 @@ export const streetInfill: readonly StreetInfillCluster[] = [
       ['snowman', 350, 240.5, Math.PI],
     ],
   },
+  {
+    id: 'station-approach',
+    points: [
+      ['lantern', 485, 287.5, Math.PI / 2],
+      ['firewood', 496, 293, .3],
+      ['fence', 501, 294, .4],
+      ['sign', 504.5, 298, .8],
+      ['firewood', 515, 308, .45],
+      ['lantern', 518.5, 310, Math.PI / 2],
+    ],
+  },
 ];

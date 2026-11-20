@@ -3,11 +3,11 @@ import {
   InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, SphereGeometry, Vector3,
   type Material,
 } from 'three';
-import { bridgeAt, isWater, layout, riverX, waterHeight, type createTerrainGrid } from './terrain';
+import { bridgeAt, isWater, layout, riverX, waterHeight, worldBounds, type createTerrainGrid } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addTavernStreetBanner } from './market-stall-banners';
 import { streetInfill, type StreetInfillKind } from './streetscape-infill';
-import { extensionStreetClearance } from './town-extension';
+import { districtParcels, extensionPlots, extensionStreetClearance } from './town-extension';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Dimensions = [width: number, height: number, depth: number];
@@ -56,9 +56,26 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     return keepClear(x, n, radius) || roadCorridorKeepClear(x, n, radius);
   }
 
-  function reserve(x: number, n: number, radius: number, colliderRadius = 0) {
-    if (!Number.isFinite(x + n) || x < 2 + radius || x > layout.width - 2 - radius
-      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || protectedArea(x, n, radius)
+  function infillProtectedArea(x: number, n: number, radius: number) {
+    if (extensionStreetClearance(x, n, radius)) return true;
+    const oldMargin = 8 + radius;
+    if (x <= layout.width - oldMargin && n <= layout.depth - oldMargin) return protectedArea(x, n, radius);
+    // The older occupancy callback protects the whole expansion as outside its lots.
+    if (roadCorridorKeepClear(x, n, radius)) return true;
+    for (const { origin: [east, north], footprint: [width, depth] } of extensionPlots) {
+      if (Math.abs(x - east) < width / 2 + radius && Math.abs(n - north) < depth / 2 + radius) return true;
+    }
+    for (const parcels of Object.values(districtParcels)) for (const [east, north, width, depth] of parcels) {
+      if (Math.hypot(x - east, n - north) < Math.hypot(width, depth) / 2 + radius) return true;
+    }
+    return false;
+  }
+
+  function reserve(x: number, n: number, radius: number, colliderRadius = 0, infill = false) {
+    const bounds = infill ? worldBounds : layout;
+    if (!Number.isFinite(x + n) || x < 2 + radius || x > bounds.width - 2 - radius
+      || n < 2 + radius || n > bounds.depth - 2 - radius || isWater(x, n)
+      || (infill ? infillProtectedArea(x, n, radius) : protectedArea(x, n, radius))
       || grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 4
       || footprints.some(other => Math.hypot(x - other.x, n - other.n) < radius + other.radius)) return false;
     footprints.push({ x, n, radius });
@@ -428,7 +445,7 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
       return;
     }
     const [radius, collision] = infillSize[kind];
-    if (extensionStreetClearance(x, n, radius) || !reserve(x, n, radius, collision)) return;
+    if (!reserve(x, n, radius, collision, true)) return;
     const y = grid.heightAt(x, n);
     const dx = Math.cos(yaw), dn = Math.sin(yaw);
     const block = (u: number, h: number, v: number, size: Dimensions, tint: string) =>
