@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>飞行器燃料计量</title>
+  <link rel="stylesheet" href="./town-blockout/flight-fuel-display.css">
+  <style>
+    body { margin: 1rem; background: #0c1720; color: #e0edf0; font: 1rem system-ui, sans-serif; }
+    .samples { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
+    button { padding: 0.35rem 0.65rem; font: inherit; }
+  </style>
+</head>
+<body>
+  <main aria-label="燃料计量预览">
+    <div id="aircraft-controls"></div>
+    <div class="samples">
+      <button id="full">满罐</button>
+      <button id="half">半罐</button>
+      <button id="low">余量低</button>
+      <button id="empty">空罐</button>
+    </div>
+  </main>
+  <script type="module">
+    import { flightFuelCanFullPowerMs, mountFlightFuelDisplay } from './town-blockout/flight-fuel-display.ts';
+
+    const samples = {
+      full: { remainingFullPowerMs: flightFuelCanFullPowerMs, throttle: 'full' },
+      half: { remainingFullPowerMs: flightFuelCanFullPowerMs / 2, throttle: 'cruise' },
+      low: { remainingFullPowerMs: flightFuelCanFullPowerMs / 10, throttle: 'cruise' },
+      empty: { remainingFullPowerMs: 0, throttle: 'off' },
+    };
+    const display = mountFlightFuelDisplay(document.querySelector('#aircraft-controls'), samples.full);
+    for (const [id, sample] of Object.entries(samples)) {
+      document.getElementById(id).addEventListener('click', () => display.update(sample));
+    }
+  </script>
+</body>
+</html>
