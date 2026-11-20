@@ -1,0 +1,130 @@
+diff --git a/src/presence/server.ts b/src/presence/server.ts
+index 4a3f5b66..7e8195af 100644
+--- a/src/presence/server.ts
++++ b/src/presence/server.ts
+@@ -74,6 +74,8 @@ type Options = {
+   /** Secondary rooms consume the primary town's committed frames. */
+   townNightFeed?: TownNightFeed;
+   testFireworks?: boolean;
++  /** Enables legacy team matches in an isolated room. */
++  formalSnowfight?: boolean;
+   ownerKey?: string;
+   onMascotClaimRejected?: (total: number) => void;
+   requestListener?: RequestListener;
+@@ -747,6 +749,7 @@ export async function createPresenceServer(options: Options = {}) {
+   }
+
+   function requestSnowfightStart(peer: Peer) {
++    if (options.formalSnowfight !== true) return;
+     const wallNow = performance.now();
+     if (wallNow < peer.nextSnowfightRequest) return;
+     peer.nextSnowfightRequest = wallNow + 1000;
+diff --git a/tests/server/snowfight.test.ts b/tests/server/snowfight.test.ts
+index 5e85dad0..2bc16983 100644
+--- a/tests/server/snowfight.test.ts
++++ b/tests/server/snowfight.test.ts
+@@ -66,9 +66,10 @@ function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) =>
+   };
+ }
+
+-async function fixture(context: TestContext, ceremonyStartAt?: number) {
+-  const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ceremonyStartAt });
+-  const url = "ws://127.0.0.1:" + server.address().port + "/presence";
++async function fixture(context: TestContext, options: { ceremonyStartAt?: number; formalSnowfight?: boolean } = {}) {
++  const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ...options });
++  const address = "127.0.0.1:" + server.address().port;
++  const url = `ws://${address}/presence`;
+   const sockets: WebSocket[] = [];
+   context.after(async () => {
+     for (const socket of sockets) socket.terminate();
+@@ -100,12 +101,12 @@ async function fixture(context: TestContext, ceremonyStartAt?: number) {
+     socket.send(bytes);
+   }
+
+-  return { join, sendPose };
++  return { join, sendPose, base: `http://${address}/presence/poll` };
+ }
+
+ test("snowfight: start assigns teams, place validates half and roads, and hits leave the wall intact",
+   { timeout: 9000 }, async context => {
+-    const { join, sendPose } = await fixture(context);
++    const { join, sendPose } = await fixture(context, { formalSnowfight: true });
+     const a = await join("红队甲");
+     const b = await join("金队乙");
+     sendPose(a.socket, 224, 188, 1);
+@@ -163,7 +164,7 @@ test("snowfight: start assigns teams, place validates half and roads, and hits l
+
+ test("snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity",
+   { timeout: 9000 }, async context => {
+-    const { join, sendPose } = await fixture(context);
++    const { join, sendPose } = await fixture(context, { formalSnowfight: true });
+     const a = await join("红队甲");
+     const b = await join("金队乙");
+     sendPose(a.socket, 224, 188, 1);
+@@ -317,12 +318,65 @@ test("free snow wall server rejects occupied homes and accepts dry exterior", {
+   }
+ });
+
++test("public snow walls stay free under legacy start requests on WebSocket and HTTP polling", { timeout: 9000 }, async context => {
++  const { base, join } = await fixture(context);
++  const author = await join("自由雪墙甲");
++  const observer = await join("自由雪墙乙");
++  const legacyStart = JSON.stringify({ type: "event", kind: "snowfight-start" });
++  const west = { gx: 626, gy: 500 };
++  const east = { gx: 800, gy: 500 };
++  const freeWall = (cell: typeof west, ownerId: number) =>
++    ({ kind: "wall-set", ...cell, layer: 0, hp: 3, ownerId, team: 2 });
++  const isAt = (events: SnowfightRelayEvent[], cell: typeof west) => events.some(event =>
++    event.kind === "wall-set" && event.gx === cell.gx && event.gy === cell.gy);
++
++  author.socket.send(legacyStart);
++  for (const cell of [west, east]) {
++    const frames = [author, observer].map(client => client.walls.next(events => isAt(events, cell)));
++    author.socket.send(encodeWallPlace(cell.gx, cell.gy));
++    for (const frame of await Promise.all(frames)) assert.deepEqual(frame, [freeWall(cell, author.id)]);
++  }
++  assert.ok(!author.text.pending().some(message => message.type === "snowfight"));
++  assert.ok(!observer.text.pending().some(message => message.type === "snowfight"));
++  for (const [gx, gy, reason] of [[266, 544, "door"], [367, 407, "road"]] as const) {
++    const rejected = author.text.next(message => message.type === "snowfight-rejected");
++    author.socket.send(encodeWallPlace(gx, gy));
++    assert.equal((await rejected).reason, reason);
++  }
++  assert.equal(author.walls.pending().flat().length, 0);
++  assert.equal(observer.walls.pending().flat().length, 0);
++
++  type PollMessage = { t: string; d: string };
++  const wallsOf = (messages: PollMessage[]) => messages.flatMap(message =>
++    message.t === "bin" ? decodeSnowfightRelay(Buffer.from(message.d, "base64")) ?? [] : []);
++  const joined = await fetch(`${base}/join`, {
++    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "晚到轮询" }),
++  });
++  assert.equal(joined.status, 200);
++  const poll = await joined.json() as { id: number; session: string; messages: PollMessage[] };
++  assert.deepEqual(wallsOf(poll.messages), [freeWall(west, author.id), freeWall(east, author.id)]);
++  const lake = { gx: 790, gy: 132 };
++  const broadcasts = [author, observer].map(client => client.walls.next(events => isAt(events, lake)));
++  const response = await fetch(base, {
++    method: "POST", headers: { "content-type": "application/json", "x-presence-session": poll.session },
++    body: JSON.stringify({ events: [
++      { t: "text", d: legacyStart },
++      { t: "bin", d: Buffer.from(encodeWallPlace(lake.gx, lake.gy)).toString("base64") },
++    ] }),
++  });
++  assert.equal(response.status, 200);
++  const placed = await response.json() as { messages: PollMessage[] };
++  assert.deepEqual(wallsOf(placed.messages), [freeWall(lake, poll.id)]);
++  for (const frame of await Promise.all(broadcasts)) assert.deepEqual(frame, [freeWall(lake, poll.id)]);
++  assert.ok(!placed.messages.some(message => message.t === "text" && JSON.parse(message.d).type === "snowfight"));
++});
++
+ test("free snow walls relay three authored layers, survive joining, and clear before ceremony arrival",
+   { timeout: 9000 }, async context => {
+     let epoch = Date.now();
+     context.mock.method(Date, "now", () => epoch);
+     const startAt = epoch + 20_000;
+-    const { join } = await fixture(context, startAt);
++    const { join } = await fixture(context, { ceremonyStartAt: startAt });
+     const a = await join("雪墙作者");
+     const b = await join("雪墙访客");
+     const outside = { gx: 640, gy: 500 };
