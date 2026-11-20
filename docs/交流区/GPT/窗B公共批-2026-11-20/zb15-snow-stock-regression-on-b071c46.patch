@@ -1,0 +1,157 @@
+diff --git a/tests/town-blockout-plaza-snow-supply.test.ts b/tests/town-blockout-plaza-snow-supply.test.ts
+index f976d97b..aecb9165 100644
+--- a/tests/town-blockout-plaza-snow-supply.test.ts
++++ b/tests/town-blockout-plaza-snow-supply.test.ts
+@@ -1,6 +1,7 @@
+ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
+ import { Scene, Vector3 } from 'three';
++import { snowResourceLimit } from '../src/shared/snow-stock.ts';
+ import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
+ import {
+   createPlazaSnowSupply, plazaSnowSupplyRefillMs, plazaSnowSupplySites, type PlazaSnowSupplySite,
+@@ -55,34 +56,39 @@ test('P23 ray target is mapped to the three authored coordinates and respects ne
+   assert.equal(supply.aimed(from, to, grid.heightAt, wall), undefined);
+ });
+
+-test('authorized supply gathers award five while ambient weather servings and the ten-ball cap remain intact', () => {
++test('ordinary and authored scoops both add one at every snow depth and share a fifty-ball limit', () => {
+   const cover = createTownSnowCover(grid);
+   cover.setIntensity(4);
+   const supply = createPlazaSnowSupply(() => 0);
+   const sweep = sceneSweep();
++  assert.equal(snowResourceLimit, 50);
+
+   for (const [index, ambient] of [3, 4, 5].entries()) {
+     assert.equal(cover.depth().servings, ambient);
+     const ordinary = createAmmo();
+-    assert.ok(supply.gather(ordinary, cover.depth().servings));
+-    assert.equal(ordinary.getState().ammo, ambient);
++    assert.ok(supply.gather(ordinary, ambient));
++    assert.equal(ordinary.getState().ammo, 1);
++    ordinary.dispose();
+     for (const site of plazaSnowSupplySites) {
+       const { from, to } = gatherRay(site);
+       const target = supply.aimed(from, to, grid.heightAt, sweep(from, to, 0, 'local'));
+       assert.equal(target, site);
+       const game = createAmmo();
+-      assert.ok(supply.gather(game, cover.depth().servings, target));
+-      assert.equal(game.getState().ammo, 5);
+-      assert.ok(game.gather(3));
+-      assert.ok(supply.gather(game, cover.depth().servings, target));
+-      assert.equal(game.getState().ammo, 10);
+-      assert.equal(supply.gather(game, cover.depth().servings, target), false);
++      assert.ok(supply.gather(game, ambient, target));
++      assert.equal(game.getState().ammo, 1);
++      for (let amount = 1; amount < snowResourceLimit - 1; amount++) assert.ok(supply.gather(game, ambient));
++      assert.equal(game.getState().ammo, snowResourceLimit - 1);
++      assert.ok(supply.gather(game, ambient, target));
++      assert.equal(game.getState().ammo, snowResourceLimit);
++      assert.equal(supply.gather(game, ambient, target), false);
++      assert.equal(game.getState().ammo, snowResourceLimit);
++      game.dispose();
+     }
+     if (index < 2) cover.update(22, true);
+   }
+ });
+
+-test('a successful dig shrinks only its local pile and restores height in sixty seconds after the last dig', () => {
++test('a full stock leaves the pile untouched and it refills sixty seconds after the last successful dig', () => {
+   let now = 0;
+   const supply = createPlazaSnowSupply(() => now);
+   const [west, north] = plazaSnowSupplySites;
+@@ -94,11 +100,22 @@ test('a successful dig shrinks only its local pile and restores height in sixty
+   now += 1000;
+   assert.ok(supply.gather(game, 3, west));
+   assert.equal(supply.heightScale(west), .65);
++  for (let amount = 2; amount < snowResourceLimit; amount++) assert.ok(supply.gather(game, 3));
+   now += 30_000;
+   assert.equal(supply.gather(game, 3, west), false);
++  assert.equal(game.getState().ammo, snowResourceLimit);
+   assert.ok(Math.abs(supply.heightScale(west) - .825) < 1e-9);
+   now = 1000 + plazaSnowSupplyRefillMs - 1;
+   assert.ok(supply.heightScale(west) < 1);
+   now++;
+   assert.equal(supply.heightScale(west), 1);
++
++  const ray = gatherRay(west);
++  assert.ok(game.throwBall(ray.from, ray.to.clone().sub(ray.from)));
++  assert.equal(game.getState().ammo, snowResourceLimit - 1);
++  assert.ok(supply.gather(game, 3, west));
++  assert.equal(game.getState().ammo, snowResourceLimit);
++  assert.equal(supply.heightScale(west), .65);
++  assert.equal(supply.heightScale(north), 1);
++  game.dispose();
+ });
+diff --git a/tests/town-blockout-snowball.test.ts b/tests/town-blockout-snowball.test.ts
+index 596695ac..f311c28b 100644
+--- a/tests/town-blockout-snowball.test.ts
++++ b/tests/town-blockout-snowball.test.ts
+@@ -1,6 +1,7 @@
+ import assert from 'node:assert/strict';
+ import { createRequire } from 'node:module';
+ import { test } from 'node:test';
++import { snowResourceLimit } from '../src/shared/snow-stock.ts';
+ import {
+   createTownSnowballFight, snowballGravity, snowballRange, snowballSegmentBox, snowballSpeed, type SnowballEvent,
+ } from '../tools/voxel-tavern/town-blockout/town-snowball.ts';
+@@ -102,16 +103,16 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
+   const sparkMesh = scene.getObjectByName('Town snowball impacts');
+   assert.ok(sparkMesh && !sparkMesh.visible);
+   assert.equal(game.throwBall(origin, direction), false);
+-  for (let i = 0; i < 10; i++) assert.ok(game.gather());
++  for (let i = 0; i < snowResourceLimit; i++) assert.ok(game.gather());
+   assert.equal(game.gather(), false);
+   assert.equal(game.throwBall(origin, new Vector3()), false);
+-  assert.equal(game.getState().ammo, 10);
++  assert.equal(game.getState().ammo, snowResourceLimit);
+
+   assert.ok(game.throwBall(origin, direction, 'guest'));
+   assert.equal(game.throwBall(origin, direction, 'guest'), false);
+   step(20);
+   assert.ok(sparkMesh.visible);
+-  assert.deepEqual(game.getState(), { ammo: 9, hits: 1, combo: 1 });
++  assert.deepEqual(game.getState(), { ammo: snowResourceLimit - 1, hits: 1, combo: 1 });
+   const [launch, impact] = events;
+   assert.equal(launch.type, 'throw');
+   assert.equal(impact.type, 'impact');
+@@ -134,7 +135,7 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
+   wall = true;
+   assert.ok(game.throwBall(origin, direction));
+   step(20);
+-  assert.deepEqual(game.getState(), { ammo: 7, hits: 2, combo: 0 });
++  assert.deepEqual(game.getState(), { ammo: snowResourceLimit - 3, hits: 2, combo: 0 });
+   const last = events.at(-1);
+   assert.ok(last?.type === 'impact' && last.kind === 'world' && last.at.x < 3);
+   step(65);
+@@ -233,7 +234,7 @@ test('snowball pool retires oldest projectile and limits catch-up work to two ti
+   game.dispose();
+ });
+
+-test('snow depths cap ammo and indoor impacts keep player and NPC scores unchanged', () => {
++test('legacy snow servings each yield one ball and indoor impacts keep player and NPC scores unchanged', () => {
+   const scene = new Scene();
+   const events: SnowballEvent[] = [];
+   const from = new Vector3(0, 1.7, 0);
+@@ -247,8 +248,10 @@ test('snow depths cap ammo and indoor impacts keep player and NPC scores unchang
+     },
+   });
+   const step = () => { for (let i = 0; i < 16; i++) game.update(1 / 60); };
+-  assert.ok(game.gather(3) && game.gather(4) && game.gather(5));
+-  assert.equal(game.getState().ammo, 10);
++  for (const [index, servings] of [3, 4, 5, 3].entries()) {
++    assert.ok(game.gather(servings));
++    assert.equal(game.getState().ammo, index + 1);
++  }
+   assert.ok(game.throwBall(from, direction, 'local', 0));
+   step();
+   assert.equal(game.getState().hits, 0);
+@@ -275,7 +278,7 @@ test('snow depths cap ammo and indoor impacts keep player and NPC scores unchang
+   targetOutdoors = true;
+   assert.ok(game.throwNpc(from, direction, 'npc', 1));
+   step();
+-  assert.deepEqual(game.getState(), { ammo: 6, hits: 1, combo: 0 });
++  assert.deepEqual(game.getState(), { ammo: 0, hits: 1, combo: 0 });
+   const last = events.at(-1);
+   assert.ok(last?.type === 'impact' && last.shotBy === 'npc' && last.scored && last.target === 'local-player');
+   game.dispose();
