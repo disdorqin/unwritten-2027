@@ -32,19 +32,25 @@ function onLandingLane(x: number, z: number) {
 }
 
 export function createSkyCityLanding(site: SkyCitySite, { islandFloorAt, islandBlocked }: SkyCityLandingModel) {
+  function surfaceAt(east: number, north: number, previousHeight?: number): AircraftSurface | undefined {
+    const { x, z } = site.toLocal({ east, north, height: site.origin.height });
+    const localHeight = islandFloorAt(x, z);
+    if (localHeight === undefined || !Number.isFinite(localHeight)) return;
+    const height = site.origin.height + localHeight;
+    if (previousHeight !== undefined && previousHeight < height) return;
+    // The flight model's hard-surface rollout also fits the paved landing lane.
+    return { height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(x, z) ? 0 : 2 };
+  }
+
   return {
-    surfaceAt(east: number, north: number, previousHeight?: number): AircraftSurface | undefined {
-      const { x, z } = site.toLocal({ east, north, height: site.origin.height });
-      const localHeight = islandFloorAt(x, z);
-      if (localHeight === undefined || !Number.isFinite(localHeight)) return;
-      const height = site.origin.height + localHeight;
-      if (previousHeight !== undefined && previousHeight < height) return;
-      // The flight model's hard-surface rollout also fits the paved landing lane.
-      return { height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(x, z) ? 0 : 2 };
-    },
+    surfaceAt,
     onLane(at: AircraftPoint) {
       const { x, z } = site.toLocal(at);
       return onLandingLane(x, z);
+    },
+    canDisembark(at: AircraftPoint) {
+      const floor = surfaceAt(at.east, at.north);
+      return floor?.obstacleAhead === 0 && Math.abs(at.height - floor.height) <= .025;
     },
     blocked(at: AircraftPoint, clearance: number) {
       const { x, y, z } = site.toLocal(at);
@@ -109,7 +115,7 @@ export function createSkyCityApproach({ site = skyCityApproachSite, islandFloorA
     feet = next.point;
     heading = next.heading;
     if (next.phase === 'landed') {
-      stage = !next.recovery && next.touchdown === 'roof' && landing.onLane(feet) ? 'walking' : 'departure';
+      stage = !next.recovery && next.touchdown === 'roof' && landing.canDisembark(feet) ? 'walking' : 'departure';
       if (stage === 'departure') heading = 0;
     }
     return snapshot();

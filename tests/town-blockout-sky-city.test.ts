@@ -53,9 +53,14 @@ test('a translated and turned site aligns the reveal silhouette, landing surface
   assert.ok(localLane.distanceTo(new Vector3(local.x, local.y, local.z)) < 1e-9);
   assert.ok(landing.onLane(lane));
   assert.deepEqual(landing.surfaceAt(lane.east, lane.north), { height: lane.height, kind: 'roof', slopeDegrees: 0, obstacleAhead: 0 });
+  assert.equal(landing.canDisembark(lane), true);
+  assert.equal(landing.canDisembark({ ...lane, height: lane.height - .01 }), true);
+  assert.equal(landing.canDisembark({ ...lane, height: lane.height - 40 }), false);
+  assert.equal(landing.canDisembark({ ...lane, height: lane.height + .1 }), false);
   assert.equal(landing.blocked(lane, .35), false);
   const offLane = site.toWorld({ x: -13, y: 0, z: -18 });
   assert.equal(landing.onLane(offLane), false);
+  assert.equal(landing.canDisembark(offLane), false);
   assert.equal(landing.surfaceAt(offLane.east, offLane.north)?.obstacleAhead, 2);
   assert.equal(landing.surfaceAt(localLane.x, -localLane.z), undefined);
 
@@ -122,6 +127,7 @@ test('flight below the translated island crosses the projected runway without to
     flight = aircraft.advance(1 / 60);
   }
   assert.ok(landing.onLane(flight.feet));
+  assert.equal(landing.canDisembark(flight.feet), false);
   assert.equal(landing.surfaceAt(flight.feet.east, flight.feet.north)?.height, 880);
   assert.equal(flight.flight?.phase, 'airborne');
   assert.equal(flight.flight.touchdown, null);
