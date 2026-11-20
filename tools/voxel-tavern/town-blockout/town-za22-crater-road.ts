@@ -1,6 +1,10 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
-import { mountMeteorCraterSurface } from './meteor-crater-surface';
+import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
+import { mountZa31CraterCamp } from './town-za31-crater-camp';
+import { buildZa31CraterRim } from './town-za31-crater-rim';
+import { mountZa31CraterWinch } from './town-za31-crater-winch';
+import { mountZa31CraterEntrance } from './za31-crater-entrance';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -10,8 +14,16 @@ const seamBlendWidth = 24;
 const carrierHoleRadius = meteorCraterRimRadius + 2;
 const tileSize = 48;
 
+type WestCraterRoad = {
+  group: Group;
+  anchor: MeteorCraterWorldAnchor;
+  lip: Readonly<{ east: number; north: number }> & { height: number };
+  heightAt(east: number, north: number): number | undefined;
+  fenceBlocks(east: number, north: number, height: number, radius: number): boolean;
+};
+
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
-export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number) {
+export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
@@ -100,5 +112,12 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       : d + (c - d) * (1 - u) + (b - d) * (1 - v);
   }
 
-  return { group, anchor, lip, heightAt, fenceBlocks };
+  const road = { group, anchor, lip, heightAt, fenceBlocks };
+  mountZa31CraterEntrance(road);
+  const camp = mountZa31CraterCamp(road);
+  const rim = buildZa31CraterRim(road, camp.placements);
+  group.add(rim.group, camp.group);
+  const winch = mountZa31CraterWinch(road);
+  if (winch) group.add(winch.group);
+  return road;
 }
