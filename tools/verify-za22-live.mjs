@@ -33,7 +33,10 @@ const maxDrag = Math.round(width * .34);
 const tau = 2 * Math.PI;
 const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
 const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
-const report = { url: url.href, segment, viewport, quality: 'smooth', paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const hardware = process.env.ZA22_HARDWARE === '1';
+const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
+  : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 
 await mkdir(output, { recursive: true });
 let browser;
@@ -91,6 +94,12 @@ async function openTown(name) {
     const hud = document.querySelector('#position')?.textContent ?? '';
     return new RegExp(pattern).test(hud) && window.__za22Frame?.calls > 0;
   }, positionPattern.source, { timeout: 90_000 });
+  if (!report.gpu) report.gpu = await page.evaluate(() => {
+    const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
+    const names = gl?.getExtension('WEBGL_debug_renderer_info');
+    return names ? { vendor: gl.getParameter(names.UNMASKED_VENDOR_WEBGL),
+      renderer: gl.getParameter(names.UNMASKED_RENDERER_WEBGL) } : null;
+  });
   const start = await readPose(page);
   assert.ok(Math.hypot(start.east - spawn[0], start.north - spawn[1]) < .3, JSON.stringify(start));
   assert.ok(Math.abs(start.height - 12) < .3, JSON.stringify(start));
@@ -209,7 +218,7 @@ try {
   browser = await chromium.launch({
     headless: true,
     executablePath: process.env.CHROMIUM_PATH || undefined,
-    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    args: graphicsArgs,
   });
   report.browser = browser.version();
   if (segment !== 'crater') {
