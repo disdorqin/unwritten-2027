@@ -22,6 +22,8 @@ test('only the authorized warrior-city viewer sees the crowd while the cold flam
     crowd.dispose();
     square.dispose();
   });
+  const soup = square.group.getObjectByName('warrior-cook-soup');
+  assert.equal(soup?.visible, true);
   assert.equal(crowd.group.visible, false);
   crowd.sync({ layer });
   assert.equal(crowd.group.visible, false);
@@ -31,6 +33,7 @@ test('only the authorized warrior-city viewer sees the crowd while the cold flam
   assert.equal(crowd.group.visible, false);
   crowd.sync({ layer, soulSightGranted: true });
   assert.equal(crowd.group.visible, true);
+  assert.equal(soup?.visible, true);
   crowd.sync({ soulSightGranted: true });
   assert.equal(crowd.group.visible, false);
   assert.equal(square.group.visible, true);

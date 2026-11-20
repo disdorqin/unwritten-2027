@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { BoxGeometry, InstancedMesh, MeshLambertMaterial } from 'three';
+import { Box3, Raycaster, Vector3, type BoxGeometry, type InstancedMesh, type MeshLambertMaterial } from 'three';
 import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit';
 import { createWarriorSquare, warriorSquarePlan } from '../tools/voxel-tavern/town-blockout/underground-warrior-square';
 
@@ -31,6 +31,25 @@ test('the east-fallen statue and its low cold-flame groove stay outside the main
   const stone = square.group.getObjectByName('warrior-statue-shadow');
   assert.ok(stone && 'isInstancedMesh' in stone);
   assert.equal((stone as InstancedMesh<BoxGeometry, MeshLambertMaterial>).material.emissive.getHex(), 0);
+});
+
+test('the cook’s soup rests on the cold-flame lip beside the existing recovery stand', t => {
+  const square = createWarriorSquare();
+  t.after(square.dispose);
+  const soup = square.group.getObjectByName('warrior-cook-soup') as InstancedMesh | undefined;
+  assert.ok(soup?.isInstancedMesh);
+  assert.ok(soup.instanceColor);
+  square.group.updateMatrixWorld(true);
+  const bounds = new Box3().setFromObject(soup);
+  const { east, north, height } = square.fireReserve;
+  const position = soup.getWorldPosition(new Vector3());
+  assert.ok(position.distanceTo(new Vector3(east, height, -north)) < .75);
+  assert.ok(square.colliders.some(({ min, max }) =>
+    min[0]! < position.x && position.x < max[0]! &&
+    min[2]! < position.z && position.z < max[2]! &&
+    Math.abs(max[1]! - bounds.min.y) < 1e-6));
+  const down = new Raycaster(new Vector3(position.x, bounds.max.y + 1, position.z), new Vector3(0, -1, 0));
+  assert.deepEqual(down.intersectObject(soup), []);
 });
 
 test('the recovery stand and the rooster approach both stay clear of the statue', t => {

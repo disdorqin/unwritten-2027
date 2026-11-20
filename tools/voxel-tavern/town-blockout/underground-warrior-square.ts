@@ -17,6 +17,21 @@ const palette = {
 } as const;
 type Stone = keyof typeof palette;
 type XYZ = readonly [number, number, number];
+type SoupPart = readonly [offset: XYZ, size: XYZ, color: string];
+const soupParts: readonly SoupPart[] = [
+  [[0, .013, 0], [.112, .026, .105], '#6f483f'],
+  [[0, .034, 0], [.158, .028, .148], '#845748'],
+  [[-.083, .061, 0], [.04, .046, .158], '#9e6d53'],
+  [[.083, .061, 0], [.04, .046, .158], '#9e6d53'],
+  [[0, .061, -.081], [.178, .046, .038], '#bd8864'],
+  [[0, .061, .081], [.178, .046, .038], '#bd8864'],
+  [[0, .058, 0], [.127, .016, .124], '#b17d41'],
+  [[-.027, .069, .018], [.026, .009, .022], '#d8b66e'],
+  [[.034, .068, -.032], [.019, .009, .020], '#8c8957'],
+  [[.008, .112, .005], [.015, .026, .016], '#827d70'],
+  [[-.008, .135, .006], [.018, .020, .013], '#8a8270'],
+  [[-.019, .157, .004], [.013, .018, .011], '#766f63'],
+];
 
 export function createWarriorSquare() {
   const { statue, fireReserve, fireSlot, fireTone } = warriorSquarePlan;
@@ -48,6 +63,14 @@ export function createWarriorSquare() {
       new Quaternion().setFromUnitVectors(up, axis.normalize()));
   }
 
+  const outerLip = { radius: 2.60, height: .23, width: .22, thickness: .31, depth: .54 };
+  // This gap in the flame clusters faces the approach, on the lip above the existing recovery stand.
+  const soupAngle = 22 * Math.PI / 16;
+  const soupPosition = new Vector3(
+    Math.cos(soupAngle) * outerLip.radius, outerLip.height + outerLip.thickness / 2,
+    Math.sin(soupAngle) * outerLip.radius,
+  );
+
   // The groove is a low stone ring around the separate statue plinth, with a dark floor and two lips.
   part('fracture', [0, .24, 0], [3.86, .48, 2.86], true);
   part('wall', [0, .70, 0], [3.61, .44, 2.64], true);
@@ -57,7 +80,8 @@ export function createWarriorSquare() {
     const point = (distance: number, height: number): XYZ => [Math.cos(angle) * distance, height, Math.sin(angle) * distance];
     const turn = new Quaternion().setFromAxisAngle(up, -angle);
     part('fracture', point(2.32, .13), [.70, .24, .51], true, turn);
-    part(index % 4 ? 'wall' : 'grey', point(2.60, .23), [.22, .31, .54], true, turn);
+    part(index % 4 ? 'wall' : 'grey', point(outerLip.radius, outerLip.height),
+      [outerLip.width, outerLip.thickness, outerLip.depth], true, turn);
     part('face', point(2.07, .22), [.14, .26, .44], true, turn);
     if (index % 4 === 0 || index % 4 === 1) {
       const rise = .26 + (index * 7 % 9) * .027;
@@ -123,6 +147,20 @@ export function createWarriorSquare() {
     mesh.computeBoundingSphere();
     group.add(mesh);
   }
+
+  // Qin Nuan's bowl is scenery at the existing cold flame. Recovery stays with the registered fire.
+  const soupMaterial = new MeshLambertMaterial({ emissive: '#433221', emissiveIntensity: .21 });
+  const soup = new InstancedMesh(geometry, soupMaterial, soupParts.length);
+  soup.name = 'warrior-cook-soup';
+  soup.position.copy(soupPosition);
+  soup.rotation.y = -soupAngle;
+  soup.raycast = () => {};
+  for (const [index, [offset, size, color]] of soupParts.entries()) {
+    soup.setMatrixAt(index, new Matrix4().compose(new Vector3(...offset), new Quaternion(), new Vector3(...size)));
+    soup.setColorAt(index, new Color(color));
+  }
+  soup.computeBoundingSphere();
+  group.add(soup);
 
   let disposed = false;
   return {
