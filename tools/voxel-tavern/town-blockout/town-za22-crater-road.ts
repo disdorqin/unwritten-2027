@@ -3,6 +3,7 @@ import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater'
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { mountZa31CraterCamp } from './town-za31-crater-camp';
 import { buildZa31CraterRim } from './town-za31-crater-rim';
+import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 
 export const craterWestSurvey = Object.freeze({
@@ -127,5 +128,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const camp = mountZa31CraterCamp(road);
   const rim = buildZa31CraterRim(road, camp.placements);
   group.add(rim.group, camp.group);
+  const winch = mountZa31CraterWinch(road);
+  if (winch) group.add(winch.group);
   return road;
 }
