@@ -19,7 +19,7 @@ if (!site) throw new Error('The mine layout did not register the review gate');
 const visual = createUndergroundCrystalGate(site);
 const [gateX, floor, gateZ] = site.position;
 const [winchX, winchY, winchZ] = visual.winchPosition;
-let footZ = gateZ - 2.65;
+let footZ = gateZ - 3.37;
 let cleared = false;
 let blocked = 0;
 let trustedKeys = 0;
@@ -44,7 +44,8 @@ document.querySelector('main')!.append(renderer.domElement);
 scene.add(visual.group, new AmbientLight(0xced9e6, 1.15));
 const lamp = new DirectionalLight(0xffd0a1, 1.9);
 lamp.position.set(gateX - 2, floor + 3, gateZ - 3);
-scene.add(lamp);
+lamp.target.position.set(gateX, floor + 1.55, gateZ);
+scene.add(lamp, lamp.target);
 const palette = { rock: 0x6c665f, rail: 0x655a51, water: 0x46636d };
 for (const [surface, color] of Object.entries(palette) as [keyof typeof palette, number][]) {
   const geometry = new BufferGeometry();
@@ -79,7 +80,8 @@ let frame = 0;
 function render() {
   visual.update(authority.state());
   camera.position.set(gateX, floor + 1.56, footZ);
-  camera.lookAt(gateX, floor + 1.0, footZ + (footZ > gateZ ? -2 : 2));
+  const targetHeight = Math.abs(footZ - gateZ) > 2 ? 1.7 : 1.0;
+  camera.lookAt(gateX, floor + targetHeight, footZ + (footZ > gateZ ? -2 : 2));
   renderer.render(scene, camera);
   frame++;
   requestAnimationFrame(render);

@@ -65,12 +65,13 @@ try {
     records[label] = await inspect();
     assert.equal(records[label].webglError, 0);
     assert.ok(records[label].draws > 0);
-    await page.screenshot({ path: resolve(out, label + '.png') });
+    await page.screenshot({ path: resolve(out, label + '.png'), style: 'aside { visibility: hidden }' });
   };
   const start = await inspect();
+  await take('overview');
   await step('e', 1);
   assert.equal((await inspect()).status, '请靠近绞盘');
-  await step('w', 14);
+  await step('w', 20);
   await step('e', 1);
   assert.equal((await inspect()).status, '先完成矿一清段');
   await step('w', 8);
@@ -100,7 +101,7 @@ try {
   assert.ok(returned.footZ < start.gateZ - .5);
   assert.ok(Math.abs(returned.footZ - records.open.footZ) < .001);
   assert.equal(returned.blocked, ajarBlocked.blocked);
-  assert.equal(returned.trustedKeys, 70);
+  assert.equal(returned.trustedKeys, 76);
   assert.deepEqual(errors, []);
   const evidence = { chromium: browser.version(), start, closedBlocked, ajarBlocked, crossed, returned, records, errors };
   await writeFile(resolve(out, 'walk.json'), JSON.stringify(evidence, null, 2));
