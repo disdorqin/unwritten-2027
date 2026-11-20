@@ -22,7 +22,7 @@ const entry = 'main-summit-trails-review.html';
 const viewport = { width: 800, height: 520 };
 const report = {
   source: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim(),
-  status: 'failed', viewport, input: 'Native mouse click to enable audio and select sled; KeyE mounts.',
+  status: 'failed', viewport, input: 'Native clicks enable audio and change modes. Hold W to walk and press E to mount.',
   errors: [], checks: [], screenshots: [],
 };
 let server, browser, page, outDir;
@@ -32,13 +32,23 @@ const advance = ms => page.evaluate(duration => window.p3.advance(duration), ms)
 
 function quiet(state, rings) {
   assert.equal(state.chime.site, null, 'No chime source should target an inactive route section');
-  assert.equal(state.chime.playing, false, 'Audio must stop outside the active cloud ride');
-  assert.equal(state.chime.rings, rings, 'No new chime should ring outside the active cloud ride');
+  assert.equal(state.chime.playing, false, 'Audio must stop outside active cloud travel');
+  assert.equal(state.chime.rings, rings, 'No new chime should ring outside active cloud travel');
+}
+
+function audible(state, distance, previousRings) {
+  const { ready, playing, rings, site } = state.chime;
+  assert.equal(ready, true);
+  assert.ok(playing && rings > previousRings, 'An unlocked browser should play a new chime');
+  assert.ok(site && [site.east, site.north, site.height, site.metres].every(Number.isFinite));
+  assert.ok(state.position.height >= 380 && state.position.height <= 560);
+  assert.ok(site.height >= 380 && site.height <= 562, 'The bell hangs just above its cloud-trail anchor');
+  assert.ok(site.metres > distance, 'The active chime should be ahead along the route');
 }
 
 function record(label, state) {
-  const { mode, position, sled, chime, render } = state;
-  report.checks.push({ label, mode, position, sled, chime, render });
+  const { mode, position, walk, sled, chime, render } = state;
+  report.checks.push({ label, mode, position, walkDistance: walk.distance, sled, chime, render });
 }
 
 async function shot(filename, state) {
@@ -47,12 +57,16 @@ async function shot(filename, state) {
   report.screenshots.push(filename);
 }
 
-async function beginRide(rings) {
+async function selectSled(rings) {
   await page.locator('[data-p3-action="sled"]').click();
-  await page.waitForFunction(() => window.p3.snapshot().chime.ready, null, { timeout: 10_000 });
   const ready = await snapshot();
   assert.equal(ready.mode, 'sled-ready');
+  assert.equal(ready.chime.ready, true);
   quiet(ready, rings);
+  return ready;
+}
+
+async function beginRide(rings) {
   await page.keyboard.press('KeyE');
   const start = await snapshot();
   assert.equal(start.mode, 'sled');
@@ -60,6 +74,25 @@ async function beginRide(rings) {
   assert.ok(start.position.height > 560);
   quiet(start, rings);
   return start;
+}
+
+async function walkIntoCloud(rings) {
+  await page.keyboard.down('KeyW');
+  try {
+    for (let step = 0; step < 2; step++) {
+      const below = await advance(45_000);
+      assert.equal(below.mode, 'walk');
+      assert.ok(below.walk.distance > 0 && below.position.height < 380);
+      quiet(below, rings);
+    }
+    let current = await advance(25_000);
+    for (let step = 0; step < 25 && !current.chime.playing; step++) current = await advance(400);
+    assert.equal(current.mode, 'walk');
+    audible(current, current.walk.distance, rings);
+    return current;
+  } finally {
+    await page.keyboard.up('KeyW');
+  }
 }
 
 async function findRinging(start) {
@@ -70,12 +103,7 @@ async function findRinging(start) {
     if (current.sled.section !== 'through-cloud') {
       quiet(current, start.chime.rings);
     } else if (current.chime.playing && current.chime.rings > start.chime.rings) {
-      const { site } = current.chime;
-      assert.equal(current.chime.ready, true);
-      assert.ok(site && [site.east, site.north, site.height, site.metres].every(Number.isFinite));
-      assert.ok(current.position.height >= 380 && current.position.height <= 560);
-      assert.ok(site.height >= 380 && site.height <= 560);
-      assert.ok(site.metres > current.sled.distance, 'The active chime should be ahead of the rider');
+      audible(current, current.sled.distance, start.chime.rings);
       return current;
     }
   }
@@ -110,10 +138,22 @@ try {
   await page.waitForFunction(() => window.p3?.snapshot().chime, null, { timeout: 15_000 });
   const initial = await snapshot();
   assert.equal(initial.mode, 'walk');
+  assert.equal(initial.chime.ready, false, 'The page should wait for a native gesture before enabling audio');
   quiet(initial, 0);
   record('initial walk is quiet', initial);
-  const start = await beginRide(0);
-  record('audio is unlocked and upper trail is quiet', start);
+
+  report.step = 'walk into the cloud with native W';
+  await page.locator('[data-p3-action="walk"]').click();
+  await page.waitForFunction(() => window.p3.snapshot().chime.ready, null, { timeout: 10_000 });
+  const walking = await walkIntoCloud(initial.chime.rings);
+  record('in-cloud chime plays ahead of the walker', walking);
+  const ready = await selectSled(walking.chime.rings);
+  record('switching to the sled stops the walk chime', ready);
+
+  // AudioContext time runs independently of the accelerated proof clock.
+  await wait(3_300);
+  const start = await beginRide(ready.chime.rings);
+  record('upper sled trail is quiet', start);
 
   report.step = 'audible source ahead in the cloud';
   const ringing = await findRinging(start);
@@ -135,9 +175,9 @@ try {
   quiet(await advance(2_000), exit.chime.rings);
 
   report.step = 'mode switch stops a currently playing chime';
-  // AudioContext time runs independently of the accelerated sled proof clock.
   await wait(3_300);
-  const secondRing = await findRinging(await beginRide(exit.chime.rings));
+  const secondReady = await selectSled(exit.chime.rings);
+  const secondRing = await findRinging(await beginRide(secondReady.chime.rings));
   record('chime plays again on a new ride', secondRing);
   await page.locator('[data-p3-action="walk"]').click();
   const walk = await snapshot();

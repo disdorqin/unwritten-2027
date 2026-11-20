@@ -6,6 +6,7 @@ type Route = {
   startMetres: number;
   endMetres: number;
   groundAt?(east: number, north: number): number | undefined;
+  treadAt?(east: number, north: number): number | undefined;
 };
 
 const spacingMetres = 24;
@@ -13,7 +14,7 @@ const shoulderOffset = 2.25;
 const bellOffset = .44;
 const bellLift = 1.44;
 
-export function mountMainSummitTrailChimes(owner: Group, { sample, startMetres, endMetres, groundAt }: Route) {
+export function mountMainSummitTrailChimes(owner: Group, { sample, startMetres, endMetres, groundAt, treadAt }: Route) {
   if (!Number.isFinite(startMetres) || !Number.isFinite(endMetres) || endMetres < startMetres) {
     throw new RangeError('The summit trail chimes need a finite interval in route order.');
   }
@@ -22,16 +23,28 @@ export function mountMainSummitTrailChimes(owner: Group, { sample, startMetres, 
   const posts: (Point & { yaw: number })[] = [];
   for (let metres = startMetres; metres < endMetres; metres += spacingMetres) {
     const centre = sample(metres);
-    const before = sample(Math.max(startMetres, metres - 1));
     const after = sample(Math.min(endMetres, metres + 1));
-    const de = after.east - before.east;
-    const dn = after.north - before.north;
+    const de = after.east - centre.east;
+    const dn = after.north - centre.north;
     const span = Math.hypot(de, dn);
     if (!(span > 0) || !Number.isFinite(span)) throw new RangeError('A summit trail chime needs a route tangent.');
 
     // Match the existing sled flags' side of the route. Local +X points away from the tread.
-    const sideEast = -dn / span;
-    const sideNorth = de / span;
+    let sideEast = -dn / span;
+    let sideNorth = de / span;
+    if (treadAt) {
+      // Probe the timber base through the outer edge of the flag, including both tread arms at a hairpin.
+      const clear = (sign: number) => [-.105, 0, .25, .50, .73].every(lateral =>
+        [-.105, 0, .105].every(tangent => treadAt(
+          centre.east + sign * sideEast * (shoulderOffset + lateral) + sideNorth * tangent,
+          centre.north + sign * sideNorth * (shoulderOffset + lateral) - sideEast * tangent,
+        ) === undefined));
+      if (!clear(1)) {
+        if (!clear(-1)) throw new RangeError(`Neither surveyed trail shoulder clears the chime at ${metres} m.`);
+        sideEast = -sideEast;
+        sideNorth = -sideNorth;
+      }
+    }
     const east = centre.east + sideEast * shoulderOffset;
     const north = centre.north + sideNorth * shoulderOffset;
     const height = groundAt?.(east, north) ?? centre.height;
@@ -84,10 +97,13 @@ export function mountMainSummitTrailChimes(owner: Group, { sample, startMetres, 
     post.add(bell);
   }
   owner.add(group);
+  let disposed = false;
 
   return {
     group, sites,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       group.removeFromParent();
       group.clear();
       box.dispose();

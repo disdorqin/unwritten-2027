@@ -118,7 +118,7 @@ domain.add(walkInfrastructure, sledInfrastructure);
 buildRibbon(walkInfrastructure, trail.points, 1.5, trailMaterial, terrain.heightAt);
 const wreckage = mountMainSummitWreckage(walkInfrastructure, trail);
 const walkBells = mountMainSummitTrailChimes(walkInfrastructure, {
-  sample: walkClock.sample, groundAt: terrain.heightAt,
+  sample: walkClock.sample, groundAt: terrain.heightAt, treadAt: trail.sampleSurface,
   startMetres: walkClock.distanceAtHeight(mainSummitCloudSpec.bottom),
   endMetres: walkClock.distanceAtHeight(mainSummitCloudSpec.top),
 });

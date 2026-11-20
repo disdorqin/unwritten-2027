@@ -53,7 +53,7 @@ test('ZD-01 cloud-belt flags and bells follow both P-3 routes with the sound at 
   const cloud = sled.arcs.find(arc => arc.id === 'through-cloud');
   assert.ok(cloud);
   const routes: readonly { options: SurveyOptions; walking: boolean }[] = [
-    { options: { ...walkSurvey(trail.points), groundAt: terrain.heightAt }, walking: true },
+    { options: { ...walkSurvey(trail.points), groundAt: terrain.heightAt, treadAt: trail.sampleSurface }, walking: true },
     { options: { sample: sled.sampleAtDistance, startMetres: cloud.startMetres, endMetres: cloud.endMetres }, walking: false },
   ];
 
@@ -68,6 +68,7 @@ test('ZD-01 cloud-belt flags and bells follow both P-3 routes with the sound at 
     ));
 
     const releases = new Map<BufferGeometry | Material, number>();
+    const oppositeShoulder: number[] = [];
     chimes.group.updateWorldMatrix(true, true);
     for (const [index, site] of chimes.sites.entries()) {
       const post = chimes.group.children[index];
@@ -80,37 +81,40 @@ test('ZD-01 cloud-belt flags and bells follow both P-3 routes with the sound at 
       assert.ok(bronze.material.color.r > bronze.material.color.g && bronze.material.color.g > bronze.material.color.b);
 
       const center = sample(site.metres);
-      const next = sample(site.metres + 1);
-      const de = next.east - center.east;
-      const dn = next.north - center.north;
-      const span = Math.hypot(de, dn);
-      const e = -dn / span;
-      const n = de / span;
+      const after = sample(Math.min(endMetres, site.metres + 1));
+      const de = after.east - center.east;
+      const dn = after.north - center.north;
       assert.ok(center.height >= 380 - 1e-7 && center.height <= 560 + 1e-7);
       const postBase = post.getWorldPosition(new Vector3());
-      close(postBase.x, center.east + 2.25 * e, 'Post east offset from route');
-      close(-postBase.z, center.north + 2.25 * n, 'Post north offset from route');
+      const sideEast = postBase.x - center.east;
+      const sideNorth = -postBase.z - center.north;
+      close(Math.hypot(sideEast, sideNorth), 2.25, 'Post distance from route');
+      close(de * sideEast + dn * sideNorth, 0, 'Post offset is perpendicular to route');
+      if (de * sideNorth - dn * sideEast < 0) oppositeShoulder.push(index);
       close(postBase.y, options.groundAt?.(postBase.x, -postBase.z) ?? center.height, 'Post base elevation');
       const origin = bell.getWorldPosition(new Vector3());
-      close(origin.x, postBase.x + .44 * e, 'Bell east offset from post');
-      close(-origin.z, -postBase.z + .44 * n, 'Bell north offset from post');
+      close(origin.x, postBase.x + .44 * sideEast / 2.25, 'Bell east offset from post');
+      close(-origin.z, -postBase.z + .44 * sideNorth / 2.25, 'Bell north offset from post');
       close(origin.y, postBase.y + 1.44, 'Bell elevation from post');
       close(site.east, origin.x, 'Sound source matches mounted bell east');
       close(site.north, -origin.z, 'Sound source matches mounted bell north');
       close(site.height, origin.y, 'Sound source matches mounted bell elevation');
-
-      if (walking) {
-        const bounds = new Box3().setFromObject(post);
-        for (const east of [bounds.min.x, postBase.x, bounds.max.x]) {
-          for (const north of [-bounds.max.z, -postBase.z, -bounds.min.z]) {
-            assert.equal(trail.sampleSurface(east, north), undefined, `Post at ${site.metres} m clears the 3 m tread`);
-          }
-        }
-      }
+      close(bronze.getWorldPosition(new Vector3()).distanceTo(origin), 0, 'Visible bronze is at the sound source');
 
       post.traverse(object => {
         const mesh = object as Mesh;
         if (!mesh.isMesh) return;
+        if (walking) {
+          const positions = mesh.geometry.getAttribute('position');
+          const { min, max } = new Box3().setFromObject(mesh);
+          const vertex = new Vector3();
+          for (let i = 0; i < positions.count; i++) {
+            mesh.localToWorld(vertex.fromBufferAttribute(positions, i));
+            const tread = trail.sampleSurface(vertex.x, -vertex.z);
+            assert.ok(tread === undefined || min.y >= tread + 1.8 || max.y <= tread,
+              `${mesh.name} at ${site.metres} m clears standing space on the 3 m tread`);
+          }
+        }
         for (const resource of [mesh.geometry, ...[mesh.material].flat()]) {
           if (releases.has(resource)) continue;
           releases.set(resource, 0);
@@ -119,6 +123,7 @@ test('ZD-01 cloud-belt flags and bells follow both P-3 routes with the sound at 
       });
     }
 
+    assert.deepEqual(oppositeShoulder, walking ? [31] : [], 'Only the walk hairpin needs the opposite shoulder');
     assert.ok(releases.size > 0);
     chimes.dispose();
     chimes.dispose();
