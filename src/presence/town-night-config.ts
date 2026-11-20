@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createOrdinaryTownNightSchedule } from '../shared/town-night-window.js';
+import { createOrdinaryTownNightSchedule, isTownNightSchedule } from '../shared/town-night-window.js';
 import type { PresenceTownNightOptions } from './server.js';
 
 function loadReceipt(path: string): number | null {
@@ -48,12 +48,22 @@ export function readTownNightOptions(schedule: string | undefined, receiptPath: 
       !('cueFreshnessMs' in config) || typeof config.cueFreshnessMs !== 'number') {
     throw new RangeError('Invalid TOWN_NIGHT_SCHEDULE');
   }
+  const specialCandidate = 'specialNight' in config ? config.specialNight : undefined;
+  const specialNight = isTownNightSchedule(specialCandidate) ? specialCandidate : undefined;
+  if (specialCandidate !== undefined && !specialNight) {
+    throw new RangeError('Invalid town night special schedule');
+  }
+  const ordinary = createOrdinaryTownNightSchedule({
+    dawnEpoch: config.dawnEpoch,
+    beaconOffsetsAfterDusk: config.beaconOffsetsAfterDusk,
+    cueFreshnessMs: config.cueFreshnessMs,
+  });
+  function scheduleAt(now: number) {
+    if (specialNight && now >= specialNight.duskAt && now < specialNight.morningBellAt) return specialNight;
+    return ordinary(now);
+  }
   return {
-    scheduleAt: createOrdinaryTownNightSchedule({
-      dawnEpoch: config.dawnEpoch,
-      beaconOffsetsAfterDusk: config.beaconOffsetsAfterDusk,
-      cueFreshnessMs: config.cueFreshnessMs,
-    }),
+    scheduleAt,
     restoredBeaconAt: loadReceipt(receiptPath),
     saveBeacon: at => saveReceipt(receiptPath, at),
     onSaveError: error => console.error('Town night beacon receipt could not be stored', error),

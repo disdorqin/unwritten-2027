@@ -21,7 +21,8 @@ test('the presence startup configuration reloads the last committed signal from 
   const directory = mkdtempSync(join(tmpdir(), 'town-night-receipt-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const path = join(directory, 'beacon.json');
-  const json = JSON.stringify({ dawnEpoch, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000 });
+  const config = { dawnEpoch, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000 };
+  const json = JSON.stringify(config);
   assert.equal(readTownNightOptions(undefined, undefined), undefined);
   assert.throws(() => readTownNightOptions(json, undefined), /together/);
   assert.throws(() => readTownNightOptions('{"dawnEpoch":0}', path), /Invalid TOWN_NIGHT_SCHEDULE/);
@@ -31,6 +32,13 @@ test('the presence startup configuration reloads the last committed signal from 
   first.saveBeacon!(schedule.beaconAt);
   assert.equal(readFileSync(path, 'utf8'), String(schedule.beaconAt));
   assert.equal(readTownNightOptions(json, path)?.restoredBeaconAt, schedule.beaconAt);
+  const specialNight = { duskAt: dawnEpoch + 30_000, beaconAt: dawnEpoch + 55_000,
+    cueExpiresAt: dawnEpoch + 61_000, morningBellAt: dawnEpoch + 145_000 };
+  const special = readTownNightOptions(JSON.stringify({ ...config, specialNight }), path)!;
+  assert.deepEqual(special.scheduleAt(specialNight.beaconAt), specialNight);
+  assert.deepEqual(special.scheduleAt(specialNight.morningBellAt), schedule);
+  assert.throws(() => readTownNightOptions(JSON.stringify({ ...config, specialNight: { ...specialNight, cueExpiresAt: false } }), path),
+    /Invalid town night special schedule/);
   writeFileSync(path, '-1');
   assert.throws(() => readTownNightOptions(json, path), /Invalid town night beacon receipt/);
 });

@@ -1,0 +1,101 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-presence.ts b/tools/voxel-tavern/town-blockout/town-presence.ts
+--- a/tools/voxel-tavern/town-blockout/town-presence.ts
++++ b/tools/voxel-tavern/town-blockout/town-presence.ts
+@@ -14,6 +14,7 @@
+ import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
+ import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
+ import { createTownPresenceClock } from './town-presence-clock';
++import { createTownPresenceNight } from './town-presence-night';
+ import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
+ import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
+ import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
+@@ -99,6 +100,7 @@
+   const status = document.getElementById('town-presence-status');
+   const link = createPresenceLinkStatus(() => updateStatus());
+   const clock = createTownPresenceClock();
++  const townNight = createTownPresenceNight(clock.now);
+   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
+   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
+   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
+@@ -317,6 +319,7 @@
+         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
+         requeuePollEvents(channel.outEvents, events);
+         channel.session = '';
++        townNight.disconnect();
+         if (!await pollJoin(channel) && poll === channel) {
+           stopPoll(false);
+           retryPollLater();
+@@ -324,7 +327,8 @@
+         return;
+       }
+       if (!response.ok) throw new Error('poll failed');
+-      feedPollMessages(await response.json());
++      const payload: unknown = await response.json();
++      if (poll === channel) feedPollMessages(payload);
+     } catch {
+       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
+       if (poll === channel) requeuePollEvents(channel.outEvents, events);
+@@ -355,6 +359,7 @@
+     socket = undefined;
+     socketJoined = false;
+     haveId = false;
++    townNight.disconnect();
+     resetOwnerSession();
+     joinedId = null;
+     joinedName = undefined;
+@@ -422,9 +427,17 @@
+         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
+         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
+         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
++        townNightWindow?: unknown; state?: unknown;
+       };
+       try { message = JSON.parse(data); } catch { return; }
+       if (!message) return;
++      if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
++        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
++          if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
++          else townNight.acceptBeacon(message);
++        }
++        return;
++      }
+       if (message.type === 'event' && message.kind === 'summit-passport-result') {
+         const reply = haveId && summitPassportSupported && readSummitPassportReply(message);
+         if (reply) onSummitPassport?.(reply);
+@@ -566,8 +579,9 @@
+           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
+             serverEpochOffset = message.epochMs - performance.now();
+             clock.accept(message.epochMs);
+-            if (photoSupported) nextClockSample = 0;
++            if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
+           }
++          townNight.join(message.epochMs, message.townNightWindow);
+           if (receivingFrom === 'ws') {
+             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
+             resetRetry();
+@@ -715,7 +729,7 @@
+   }
+
+   function samplePhotoClock() {
+-    if (!photoSupported || !haveId) return;
++    if (!haveId || (!photoSupported && !townNight.state())) return;
+     const sentAt = performance.now();
+     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
+     clockRequest = sentAt;
+@@ -811,6 +825,9 @@
+
+   return {
+     serverNow: clock.now,
++    getTownNightWindow: townNight.state,
++    townNightConnectedAt: townNight.connectedAt,
++    onTownNightBeacon: townNight.onBeacon,
+     summitPassportAvailable: () => haveId && summitPassportSupported,
+     requestSummitPassport(action: SummitPassportAction) {
+       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
+@@ -948,6 +965,7 @@
+     },
+     update(dt: number) {
+       if (!socket && !poll) return;
++      townNight.tick();
+       sendPose(dt);
+       samplePhotoClock();
+       syncActivityPoses();
