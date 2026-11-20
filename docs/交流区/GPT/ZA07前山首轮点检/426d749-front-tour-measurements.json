@@ -1,0 +1,254 @@
+{
+  "reference": "426d749",
+  "stations": [
+    {
+      "east": 526,
+      "north": 329,
+      "height": 26
+    },
+    {
+      "east": 440,
+      "north": 520,
+      "height": 140
+    },
+    {
+      "east": 336,
+      "north": 640,
+      "height": 347
+    }
+  ],
+  "line": {
+    "lowerMetres": 242.91674548761992,
+    "upperMetres": 277.12576998228906,
+    "length": 520.042515469909,
+    "travelWithMidStopSeconds": 114.0085030939818,
+    "endDwellSeconds": 8,
+    "legSeconds": 122.0085030939818,
+    "middleDwellSeconds": 10,
+    "middleRiding": true,
+    "middleAction": null,
+    "middleUpStartSeconds": 56.583349097523985,
+    "middleDownStartSeconds": 63.42515399645781,
+    "carLaneSeparation": 3.099104037890811
+  },
+  "baseLabel": "乘缆车一线前往云海台",
+  "returnLabel": "乘缆车一线返回山脚站",
+  "transfers": [
+    {
+      "terminal": "summit",
+      "at": {
+        "east": 336,
+        "north": 640,
+        "height": 347
+      }
+    },
+    {
+      "terminal": "base",
+      "at": {
+        "east": 536.8,
+        "north": 317.15,
+        "height": 26.14
+      }
+    }
+  ],
+  "mounted": [
+    "P-1",
+    "P-2",
+    "P-3",
+    "P-4",
+    "P-7",
+    "P-9"
+  ],
+  "existingStarportAction": "查看星港坪装配和起飞线",
+  "objects": [
+    "za22-front-ridge-detail",
+    "north-ridge-350-terrain",
+    "starport-assembly-rack",
+    "rack-frame",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "rack-worn-panel",
+    "snow-wing-socket-edge",
+    "snow-wing-socket-recess",
+    "snow-wing-socket-state",
+    "snow-wing",
+    "snow-wing-voxels",
+    "mount:leftHand",
+    "mount:rightHand",
+    "mount:boosterBay",
+    "booster-socket-edge",
+    "booster-socket-recess",
+    "booster-socket-state",
+    "booster",
+    "flight-booster",
+    "flight-booster-voxels",
+    "mount:wingSocket",
+    "mount:leftExhaust",
+    "mount:rightExhaust",
+    "navigation-core-socket-edge",
+    "navigation-core-socket-recess",
+    "navigation-core-socket-state",
+    "navigation-core",
+    "starport-ignition-panel",
+    "starport-ignition-indicator"
+  ],
+  "gate": {
+    "boardLabel": "查看山门班次",
+    "boardMessages": [
+      {
+        "title": "山门班次与登记",
+        "detail": "主峰缆车二线由云海台站通往绝顶站，单程约四分钟。登上绝顶后可到小屋登记领取雪翼。"
+      }
+    ],
+    "clearHalfWidthLimit": 1.73,
+    "radius": 0.27
+  },
+  "platform": {
+    "east": 320,
+    "north": 650,
+    "height": 350,
+    "width": 64,
+    "depth": 64,
+    "terrainSamples": 4096,
+    "supported": 1310,
+    "nonblocked": 1211,
+    "minTerrain": 347,
+    "maxTerrain": 348.9346641886435
+  },
+  "anchors": [
+    {
+      "name": "顶站落点",
+      "east": 336,
+      "north": 640,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "东行脚道",
+      "east": 336,
+      "north": 654,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "横路换向",
+      "east": 336,
+      "north": 663.25,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "门前转入",
+      "east": 300,
+      "north": 663.25,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "山门南缘",
+      "east": 300,
+      "north": 665.9,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "山门北缘",
+      "east": 300,
+      "north": 666.12,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "山门班次牌站位",
+      "east": 307.25,
+      "north": 683,
+      "terrain": 342.8871298944942,
+      "floor": 347
+    },
+    {
+      "name": "台中心",
+      "east": 320,
+      "north": 650,
+      "terrain": 350,
+      "floor": null
+    },
+    {
+      "name": "台东沿",
+      "east": 352,
+      "north": 650,
+      "terrain": 347,
+      "floor": null
+    },
+    {
+      "name": "盘山道上口",
+      "east": 312,
+      "north": 628,
+      "terrain": 347,
+      "floor": null
+    },
+    {
+      "name": "南向滑翔锚",
+      "east": 320,
+      "north": 634,
+      "terrain": 347,
+      "floor": null
+    },
+    {
+      "name": "星港坪近侧",
+      "east": 327,
+      "north": 657,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "星港坪装配互动",
+      "east": 324,
+      "north": 655,
+      "terrain": 347,
+      "floor": 347
+    },
+    {
+      "name": "现役起飞线中点",
+      "east": 309.75,
+      "north": 662,
+      "terrain": 347,
+      "floor": 347
+    }
+  ],
+  "path": {
+    "points": [
+      [
+        336,
+        640
+      ],
+      [
+        336,
+        663.25
+      ],
+      [
+        300,
+        663.25
+      ],
+      [
+        300,
+        666.12
+      ],
+      [
+        300,
+        683
+      ],
+      [
+        307.25,
+        683
+      ]
+    ],
+    "samples": 864,
+    "maxHeightStep": 0
+  }
+}
