@@ -87,6 +87,150 @@ async function captureRenderedScene(page, name) {
   return frame;
 }
 
+function installTouchLookProbe() {
+  const viewUniforms = new WeakSet();
+  const drawFramebuffers = new WeakMap();
+  const proof = window.__jx18TouchLook = { nextSequence: 0, view: null, pointers: [] };
+  for (const Context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+    if (!Context) continue;
+    const proto = Context.prototype;
+    const getUniformLocation = proto.getUniformLocation;
+    const bindFramebuffer = proto.bindFramebuffer;
+    const uniformMatrix4fv = proto.uniformMatrix4fv;
+    proto.getUniformLocation = function (program, name) {
+      const location = getUniformLocation.call(this, program, name);
+      if (location && name === 'viewMatrix') viewUniforms.add(location);
+      return location;
+    };
+    proto.bindFramebuffer = function (target, framebuffer) {
+      bindFramebuffer.call(this, target, framebuffer);
+      if (target === this.FRAMEBUFFER || target === this.DRAW_FRAMEBUFFER) drawFramebuffers.set(this, framebuffer);
+    };
+    proto.uniformMatrix4fv = function (location, transpose, value, ...range) {
+      uniformMatrix4fv.call(this, location, transpose, value, ...range);
+      if (!location || !viewUniforms.has(location) || drawFramebuffers.get(this) ||
+          !this.canvas.matches?.('#scene > canvas') ||
+          document.getElementById('walk')?.getAttribute('aria-pressed') !== 'true') return;
+      const offset = range[0] ?? 0;
+      const matrix = Array.from(value).slice(offset, offset + 16);
+      // In the inverse camera matrix, negative row Z is the world-space look direction.
+      const heading = Math.atan2(-matrix[2], matrix[10]);
+      if (Number.isFinite(heading)) proof.view = { sequence: ++proof.nextSequence, heading, matrix };
+    };
+  }
+  for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+    document.addEventListener(type, event => {
+      if (event.pointerType !== 'touch' || !event.target.matches?.('#scene > canvas')) return;
+      proof.pointers.push({ type, trusted: event.isTrusted, x: event.clientX, y: event.clientY });
+    }, true);
+  }
+}
+
+async function verifyClipboard(context, page, url) {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
+  const copy = page.getByRole('button', { name: '复制链接', exact: true });
+  const status = page.locator('#town-entry-copy-status');
+  const fallback = page.locator('#town-entry-link');
+  await copy.tap();
+  await expect(status).toHaveText('链接已复制。');
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(url);
+  await expect(fallback).toBeHidden();
+
+  // Fault injection is limited to the browser API. The entry code and user tap are unchanged.
+  await page.evaluate(() => {
+    window.__jx18ClipboardDenied = [];
+    Object.defineProperty(navigator.clipboard, 'writeText', {
+      configurable: true,
+      value(text) {
+        window.__jx18ClipboardDenied.push(text);
+        return Promise.reject(new DOMException('Forced clipboard write rejection', 'NotAllowedError'));
+      },
+    });
+  });
+  try {
+    await copy.tap();
+    await expect(status).toHaveText('请长按上方链接复制。');
+    await expect(fallback).toBeVisible();
+    await expect(fallback).toHaveValue(url);
+    await expect(fallback).toBeFocused();
+    const selected = await fallback.evaluate(input => ({
+      readOnly: input.readOnly, start: input.selectionStart, end: input.selectionEnd,
+    }));
+    expect(selected).toEqual({ readOnly: true, start: 0, end: url.length });
+    expect(await page.evaluate(() => window.__jx18ClipboardDenied)).toEqual([url]);
+    return { copied, forcedError: 'NotAllowedError', fallback: url, selected };
+  } finally {
+    await page.evaluate(() => delete navigator.clipboard.writeText);
+  }
+}
+
+async function verifyFirstPersonDrag(context, page) {
+  const walk = page.getByRole('button', { name: '第一人称', exact: true });
+  if (!await walk.isVisible()) await page.locator('#town-panel-toggle').tap();
+  await walk.tap();
+  await expect(walk).toHaveAttribute('aria-pressed', 'true');
+  const before = await (await page.waitForFunction(() => window.__jx18TouchLook.view, undefined, {
+    polling: 200, timeout: 60_000,
+  })).jsonValue();
+  const line = await page.locator('#scene > canvas').evaluate(canvas => {
+    const { left, top, width, height } = canvas.getBoundingClientRect();
+    const distance = 54;
+    for (const yFraction of [.56, .62, .68, .74, .50, .45, .80]) {
+      const y = Math.round(top + height * yFraction);
+      for (const xFraction of [.60, .66, .72, .54]) {
+        const from = Math.round(left + width * xFraction);
+        const to = from + distance;
+        if (to > left + width - 10) continue;
+        if ([from, (from + to) / 2, to].every(x => document.elementFromPoint(x, y) === canvas)) {
+          return { from, to, y };
+        }
+      }
+    }
+    throw new Error('No unobstructed horizontal drag in the right-half canvas look zone.');
+  });
+  const session = await context.newCDPSession(page);
+  async function drag(from, to, reference) {
+    const sign = Math.sign(to - from);
+    await page.evaluate(() => { window.__jx18TouchLook.pointers.length = 0; });
+    const contact = x => [{ x, y: line.y, id: 0 }];
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: contact(from) });
+    try {
+      for (let step = 1; step <= 5; step++) {
+        await session.send('Input.dispatchTouchEvent', {
+          type: 'touchMove', touchPoints: contact(Math.round(from + (to - from) * step / 5)),
+        });
+      }
+    } finally {
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    }
+    const after = await (await page.waitForFunction(({ sequence, heading, sign }) => {
+      const current = window.__jx18TouchLook.view;
+      if (!current || current.sequence <= sequence) return;
+      const change = current.heading - heading;
+      const radians = Math.atan2(Math.sin(change), Math.cos(change));
+      if (sign * radians > .035) return { ...current, radians };
+    }, { sequence: reference.sequence, heading: reference.heading, sign }, {
+      polling: 200, timeout: 30_000,
+    })).jsonValue();
+    const pointers = await page.evaluate(() => window.__jx18TouchLook.pointers);
+    expect(pointers[0]).toMatchObject({ type: 'pointerdown', trusted: true, x: from, y: line.y });
+    expect(pointers.at(-1)).toMatchObject({ type: 'pointerup', trusted: true, x: to, y: line.y });
+    expect(pointers.filter(event => event.type === 'pointermove').length).toBeGreaterThanOrEqual(2);
+    expect(pointers.every(event => event.trusted)).toBe(true);
+    return { after, pointers };
+  }
+  try {
+    const right = await drag(line.from, line.to, before);
+    const left = await drag(line.to, line.from, right.after);
+    await expect(walk).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#scene > canvas')).toBeVisible();
+    return { source: 'Chromium emulated touch; trusted PointerEvents; WebGL viewMatrix', line, before, right, left };
+  } finally {
+    await session.detach();
+  }
+}
+
 async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
   const mobile = Boolean(userAgent);
   const context = await browser.newContext({
@@ -95,6 +239,7 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
   });
   const page = await context.newPage();
   await page.addInitScript(installSceneCapture);
+  if (mobile) await page.addInitScript(installTouchLookProbe);
   page.setDefaultTimeout(20_000);
   const requested = [];
   const failed = [];
@@ -130,6 +275,7 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
       await expect(page.locator('#scene > canvas')).toHaveCount(0);
       record.guideVerified = true;
       await page.screenshot({ path: join(evidence, `${name}-guide.png`) });
+      record.clipboard = await verifyClipboard(context, page, url);
       expect(requested).not.toContain(viewerPath);
       await continueButton.tap();
     }
@@ -167,6 +313,10 @@ async function verifyEntry(browser, url, { name, userAgent, blockedPath }) {
       await expect(banner).toBeHidden();
     }
     record.frame = await captureRenderedScene(page, name);
+    if (mobile) {
+      record.touchLook = await verifyFirstPersonDrag(context, page);
+      expect(page.url()).toBe(url);
+    }
   } catch (error) {
     record.error = error.message;
     await page.screenshot({ path: join(evidence, name + '-unexpected.png'), timeout: 5000 }).catch(() => {});
@@ -187,6 +337,7 @@ try {
   const { port } = server.httpServer.address();
   const browser = await chromium.launch({
     headless: true,
+    executablePath: process.env.JX18_CHROMIUM_PATH,
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
   try {
