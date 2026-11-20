@@ -117,6 +117,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
+import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
 import { createLighthouseSnakeCharm } from './town-zodiac-snake';
 import { createTownZodiacSites } from './town-zodiac-atlas';
@@ -1836,7 +1837,8 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
 });
 const passport = createTownPassport(
   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
-  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp], riddleActivity.getProgress, zodiac,
+  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp, busStationCatalogueStamp],
+  riddleActivity.getProgress, zodiac,
 );
 const passportButton = element<HTMLButtonElement>('town-passport-button');
 function showStampCount() {
@@ -2033,6 +2035,11 @@ function registerLandmarkActivities(id: string, group: Group) {
     activitySpots.push(...createRailwayStationSpots(
       group, activityContext, railway, passport, canStandAtActivity, ceremonyClock.now, showLiveRailSchedule,
     ));
+    activitySpots.push(...createBusStationHiddenActivity(group, activityContext, passport, {
+      canStand: canStandAtActivity,
+      canBuyTicket: () => walking && !homeReturn,
+      onTicketCollected: showStampCount,
+    }).spots);
   } else if (id === 'hot-spring') {
     activitySpots.push(...hotSpringSoak.spots(group), zodiacSites.mount(group, hotSpringPigSite));
     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {

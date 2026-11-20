@@ -24,6 +24,17 @@ export const railwayStationStops = {
   cableGate: stationLocalPoint([10.8, .14, 11.85]),
 };
 
+const busTicketWindowEast = -9.9;
+const busPlatformSpeakerEast = 17;
+const busPlatformSpeakerHeight = 4.19;
+const busPlatformSpeakerDepth = -13.4;
+
+export const busStationHiddenStops = {
+  ticket: stationLocalPoint([busTicketWindowEast, .14, -.14]),
+  platform: stationLocalPoint([busPlatformSpeakerEast, .14, -11.6]),
+  speaker: stationLocalPoint([busPlatformSpeakerEast, busPlatformSpeakerHeight, busPlatformSpeakerDepth]),
+};
+
 function stationBuilder() {
   const builder = createMuseumBuilder({ mergeLabelSizes: true });
   const u = 1 / museumHorizontalScale;
@@ -46,6 +57,29 @@ function stationBuilder() {
 }
 
 type StationBuilder = ReturnType<typeof stationBuilder>;
+
+function busStationTicket(b: StationBuilder) {
+  const z = -1.71;
+  b.box('#8d673b', busTicketWindowEast, 1.505, z, .71, .05, .36);
+  b.box('#d8b374', busTicketWindowEast, 1.54, z, .71, .035, .36);
+  b.box('#efe0ad', busTicketWindowEast, 1.563, z, .68, .015, .33);
+  for (const dz of [-.10, -.025, .05, .125]) {
+    b.box('#8d673b', busTicketWindowEast + .16, 1.573, z + dz, .019, .008, .023);
+  }
+  b.box('#947044', busTicketWindowEast - .12, 1.573, z, .31, .008, .046);
+}
+
+function busStationSpeaker(b: StationBuilder) {
+  const x = busPlatformSpeakerEast;
+  const z = busPlatformSpeakerDepth;
+  b.box(iron, x, 4.93, z, .14, 1.42, .14);
+  const y = busPlatformSpeakerHeight;
+  b.box(dark, x, y, z, .60, .53, .48);
+  b.box('#737878', x, y, z + .245, .52, .45, .06);
+  for (const dy of [-.14, -.07, 0, .07, .14]) {
+    b.box(iron, x, y + dy, z + .282, .41, .022, .018);
+  }
+}
 
 function walkSurface(b: StationBuilder, paint: string, x: number, top: number, z: number, w: number, d: number) {
   b.box(paint, x, top - .18, z, w, .36, d);
@@ -238,6 +272,8 @@ export function buildRailwayStation() {
   }
   for (const x of [-19, -11.3, 0, 11.3, 19]) lamp(b, x, 5.35, -13.4);
   for (const x of [-17, 17]) bench(b, x, -9.2, .14, 5.8, -1);
+  for (const x of [-17, 17]) b.box(snow, x - 1.78, .755, -9.2, 1.87, .048, .49);
+  busStationSpeaker(b);
 
   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
@@ -248,6 +284,7 @@ export function buildRailwayStation() {
   b.sign(railHallGuide.board, -21.5, 3.1, 2.1, 5.6, 2.02, Math.PI / 2);
   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
+  busStationTicket(b);
   for (const x of [-15.5, -12.7, -9.9]) {
     b.box(dark, x, 2.62, -2.52, 2.2, 2.15, .18);
     b.box(glow, x, 2.68, -2.41, 1.85, 1.61, .12, true);
