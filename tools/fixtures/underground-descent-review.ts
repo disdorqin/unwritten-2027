@@ -122,8 +122,10 @@ const lift = createUndergroundMineLift({
     (stop === 'mine' ? insidePool(point) : point.height === shaft.height),
   readDockedStop: () => dock,
 });
+let acceptedLiftLanding: { tripId: number; foot: NonNullable<ReturnType<typeof acceptedFoot>> } | undefined;
 const handoff = createUndergroundLiftDomainHandoff({
-  lift, domains, readAcceptedFoot: acceptedFoot,
+  lift, domains,
+  readAcceptedLanding: id => acceptedLiftLanding?.foot.playerId === id ? acceptedLiftLanding : undefined,
   isAtAcceptedLanding: (stop, point) => stop === 'mine' ? insidePool(point) : point.height === shaft.height,
 });
 
@@ -239,8 +241,13 @@ function allowLanding() {
   }
   foot = { ...pool };
   scene = 'mine';
-  if (trip.liftId !== undefined && !handoff.wake(playerId, trip.liftId)) {
-    throw new Error('Repeat descent did not receive the accepted underground landing');
+  if (trip.liftId !== undefined) {
+    const landedFoot = acceptedFoot(playerId);
+    if (!landedFoot) throw new Error('The repeat rider lost its accepted foot');
+    acceptedLiftLanding = { tripId: trip.liftId, foot: landedFoot };
+    if (!handoff.wake(playerId, trip.liftId)) {
+      throw new Error('Repeat descent did not receive the accepted underground landing');
+    }
   }
   pending = undefined;
   transfers.push({ tripId: trip.id, first: trip.first, wasBlack: blackFrame(), fallDamage: 0,

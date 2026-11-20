@@ -43,7 +43,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: node --import tsx --test tests/server/underground-entry*.test.ts
+      - run: node --import tsx --test tests/server/underground-entry*.test.ts tests/server/underground-lift-domain-handoff.test.ts tests/server/underground-mine-lift.test.ts tests/server/underground-winch.test.ts
       - run: npx playwright install --with-deps chromium
       - run: node tools/verify-underground-descent.mjs "${{ runner.temp }}/underground-descent"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

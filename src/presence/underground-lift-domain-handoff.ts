@@ -3,16 +3,17 @@ import type { createUndergroundMineLift, UndergroundMineLiftTrip } from './under
 type LiftPort = Pick<ReturnType<typeof createUndergroundMineLift>, 'state' | 'confirmArrival'>;
 type Stop = UndergroundMineLiftTrip['destination'];
 type Foot = Readonly<{ playerId: string; domainId: string; east: number; north: number; height: number }>;
+type AcceptedLanding = Readonly<{ tripId: number; foot: Foot }>;
 type CueState = Readonly<{ tripId: number; stop: Stop; docked: boolean; landing?: Foot }>;
 type Options = Readonly<{
   lift: LiftPort;
   domains: Readonly<Record<Stop, string>>;
-  readAcceptedFoot(playerId: string): Foot | undefined;
+  readAcceptedLanding(playerId: string): AcceptedLanding | undefined;
   isAtAcceptedLanding(stop: Stop, foot: Foot): boolean;
 }>;
 
 /** Pass cues between the lift and the shared domain host. The host accepts movement and owns realm loading. */
-export function createUndergroundLiftDomainHandoff({ lift, domains, readAcceptedFoot, isAtAcceptedLanding }: Options) {
+export function createUndergroundLiftDomainHandoff({ lift, domains, readAcceptedLanding, isAtAcceptedLanding }: Options) {
   const domainAt = { ...domains };
   if (!domainAt.mine.trim() || !domainAt['crater-floor'].trim() || domainAt.mine === domainAt['crater-floor']) {
     throw new RangeError('A lift handoff requires distinct registered domains');
@@ -43,8 +44,10 @@ export function createUndergroundLiftDomainHandoff({ lift, domains, readAccepted
       const current = cues.get(playerId);
       if (!current?.docked || current.tripId !== tripId) return;
       if (current.landing) return { phase: 'wake', tripId, foot: { ...current.landing } } as const;
-      const foot = readAcceptedFoot(playerId);
-      if (!foot || foot.playerId !== playerId || foot.domainId !== domainAt[current.stop] ||
+      const landing = readAcceptedLanding(playerId);
+      if (!landing || landing.tripId !== tripId) return;
+      const { foot } = landing;
+      if (foot.playerId !== playerId || foot.domainId !== domainAt[current.stop] ||
           ![foot.east, foot.north, foot.height].every(Number.isFinite) || !isAtAcceptedLanding(current.stop, foot)) return;
       cues.set(playerId, { ...current, landing: { ...foot } });
       return { phase: 'wake', tripId, foot: { ...foot } } as const;
