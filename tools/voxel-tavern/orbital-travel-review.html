@@ -11,7 +11,8 @@
     h1, p { margin: 8px 0 }
     .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px }
     button { font: inherit; padding: .4rem .65rem }
-    #view { height: min(61vh, 540px); min-height: 250px; border: 1px solid #416071; background: #152433; touch-action: none }
+    #view { position: relative; height: min(61vh, 540px); min-height: 250px; border: 1px solid #416071; background: #152433; touch-action: none }
+    #travel-cover { position: absolute; inset: 0; background: #000; z-index: 1; pointer-events: none }
     canvas { display: block; height: 100%; width: 100% }
     [aria-pressed="true"] { outline: 2px solid #d0aa75 }
     output { display: block; min-height: 1.35em }
@@ -24,7 +25,7 @@
   </header>
   <main>
     <div class="controls" id="fixtures" aria-label="验收定位"></div>
-    <div id="view" aria-label="第一人称走查画面"></div>
+    <div id="view" aria-label="第一人称走查画面"><div id="travel-cover" aria-hidden="true" hidden></div></div>
     <output id="current" aria-live="polite"></output>
     <output id="result" aria-live="polite"></output>
     <div class="controls" id="hub" aria-label="传送室中枢" hidden></div>

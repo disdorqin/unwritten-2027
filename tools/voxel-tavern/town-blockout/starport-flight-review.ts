@@ -13,6 +13,8 @@ import { flightAirspaceAt } from '../../../src/shared/flight-field';
 import { createStarportReviewWorld, mountStarportFlightSite, starportFlightSite } from './starport-flight-site';
 import { mountStarportFieldReview } from './starport-field-review';
 import { northRidgeFrame } from './north-ridge-350-terrain';
+import { flightFuelCanFullPowerMs, mountFlightFuelDisplay } from './flight-fuel-display';
+import './flight-fuel-display.css';
 
 const scene = new Scene();
 scene.background = new Color('#afc5df');
@@ -54,9 +56,15 @@ const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 document.querySelector('#scene')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(64, 1, .07, 1_800);
-const proof = new URLSearchParams(location.search).has('proof');
+const proofMode = new URLSearchParams(location.search).get('proof');
+const fixedClock = proofMode === 'clock';
+const proofStepMs = 100;
+const proofWalkStepMs = 25;
 const status = document.querySelector<HTMLElement>('#status')!;
 const reading = document.querySelector<HTMLOutputElement>('#reading')!;
+const aircraftControls = document.querySelector<HTMLDivElement>('#aircraft-controls')!;
+let fuelDisplay: ReturnType<typeof mountFlightFuelDisplay> | undefined;
+let fullPowerScaleMs = flightFuelCanFullPowerMs;
 const held = new Set<string>();
 const keys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyF', 'KeyQ', 'ArrowLeft', 'ArrowRight', 'Digit1', 'Digit2', 'Digit3']);
 const runway = starportFlightSite.runway;
@@ -91,6 +99,17 @@ const fuel = createStarportFuelDispenser({ area: refuelArea, point: operations.d
   },
 });
 
+function prepareFlightFuelDisplay() {
+  const { fuelSeconds, throttle } = engine.snapshot();
+  const remainingFullPowerMs = fuelSeconds * 1_000;
+  const scale = Math.max(fullPowerScaleMs, remainingFullPowerMs);
+  if (fuelDisplay && scale === fullPowerScaleMs) return;
+  // Keep a stable reference for the current charge and any later partial refill.
+  fullPowerScaleMs = scale;
+  fuelDisplay?.dispose();
+  fuelDisplay = mountFlightFuelDisplay(aircraftControls, { remainingFullPowerMs, throttle }, scale);
+}
+
 function interact() {
   if (flight.skipRecovery() || unavailable()) return;
   if (distance(feet, starportFlightSite.assembly) <= 1.65) {
@@ -109,6 +128,7 @@ function interact() {
     status.textContent = '已锁定。';
   } else if (distance(feet, runway.start) <= 1.4) {
     if (flight.launchRunway(loadout.aircraftAssembled, feet, runway)) {
+      prepareFlightFuelDisplay();
       throttle = 'full';
       status.textContent = '滑跑。';
     } else status.textContent = '检查合体、起线与跑道净空。';
@@ -152,11 +172,7 @@ function walk(dt: number) {
 
 let lastPhase = '';
 const phases = new Set<string>();
-let previous = performance.now();
-function render(now: number) {
-  const dt = Math.max(0, Math.min(.07, (now - previous) / 1_000));
-  previous = now;
-  const clockRate = proof && flight.snapshot()?.phase === 'airborne' ? 8 : 1;
+function advanceFrame(dt: number, clockRate = 1) {
   const air = unavailable() ? flight.advance(dt * clockRate, { throttle,
     pitch: Number(held.has('KeyS')) - Number(held.has('KeyW')),
     turn: Number(held.has('KeyD')) - Number(held.has('KeyA')),
@@ -180,16 +196,26 @@ function render(now: number) {
   circuitElapsedMs += dt * clockRate * 1_000;
   if (dt > 0) operations.route.update({ at: feet, airborne: air?.phase === 'airborne', elapsedMs: circuitElapsedMs,
     recovered: air?.phase === 'recovering' });
+}
+
+function renderFrame() {
   operations.syncMarkers();
+  const air = flight.snapshot();
   const bodyY = feet.height + 1.58;
   camera.position.set(feet.east, bodyY, -feet.north);
   camera.lookAt(feet.east + Math.sin(heading) * 15, bodyY + (air?.usesBothHands ? -.7 : -.25),
     -feet.north - Math.cos(heading) * 15);
-  const telemetry = flight.snapshot();
-  reading.value = `E ${feet.east.toFixed(1)} · N ${feet.north.toFixed(1)} · ${feet.height.toFixed(1)} m · ${(telemetry?.speed ?? 0).toFixed(1)} m/s`;
-  if (air?.usesBothHands) reading.value += ` · ${flightAirspaceAt(feet.height).band} · 燃料 ${Math.ceil(engine.snapshot().fuelSeconds)} s`;
+  reading.value = `E ${feet.east.toFixed(1)} · N ${feet.north.toFixed(1)} · ${feet.height.toFixed(1)} m · ${(air?.speed ?? 0).toFixed(1)} m/s`;
+  aircraftControls.hidden = !air?.usesBothHands;
+  if (air?.usesBothHands) {
+    reading.value += ` · ${flightAirspaceAt(feet.height).band}`;
+    const { fuelSeconds, throttle } = engine.snapshot();
+    fuelDisplay?.update({ remainingFullPowerMs: fuelSeconds * 1_000, throttle });
+  }
   const circuit = operations.route.snapshot();
-  if (circuit.stage === 'airborne') reading.value += ` · 航门 ${circuit.nextGate}/${operations.route.gates.length}`;
+  if (circuit.stage === 'airborne' || circuit.stage === 'complete') {
+    reading.value += ` · 航门 ${circuit.nextGate}/${operations.route.gates.length}`;
+  }
   if (circuit.durationMs !== undefined) reading.value += ` · ${(circuit.durationMs / 1_000).toFixed(2)} s`;
   renderer.render(scene, camera);
 }
@@ -200,11 +226,32 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
-renderer.setAnimationLoop(render);
+if (fixedClock) renderFrame();
+else {
+  let previous = performance.now();
+  renderer.setAnimationLoop(now => {
+    const dt = Math.max(0, Math.min(.07, (now - previous) / 1_000));
+    previous = now;
+    const clockRate = proofMode !== null && flight.snapshot()?.phase === 'airborne' ? 8 : 1;
+    advanceFrame(dt, clockRate);
+    renderFrame();
+  });
+}
 
-if (proof) {
-  Object.assign(window, { starportFlightProof: () => ({ feet: { ...feet }, loadout, runwaySurvey, lockResult,
+if (proofMode !== null) {
+  const readProof = () => ({ feet: { ...feet }, loadout, runway, runwaySurvey, lockResult,
     flight: flight.snapshot(), phases: [...phases], drawCalls: renderer.info.render.calls,
     emergencySites: operations.sites.sites().map(({ id }) => id), checklist, circuit: operations.route.snapshot(),
-    fuel: { seconds: engine.snapshot().fuelSeconds, ore, revision: fuelRevision } }) });
+    gates: operations.route.gates, fuel: { seconds: engine.snapshot().fuelSeconds, ore, revision: fuelRevision } });
+  Object.assign(window, { starportFlightProof: readProof });
+  if (fixedClock) {
+    // The verifier controls only time. Every step reads the normal browser key handlers.
+    Object.assign(window, {
+      starportFlightPaint: renderFrame,
+      starportFlightStep() {
+        advanceFrame((unavailable() ? proofStepMs : proofWalkStepMs) / 1_000);
+        return readProof();
+      },
+    });
+  }
 }

@@ -9,10 +9,8 @@
     body { margin: 0; color: #e5ecf5; background: #101823; font: 15px/1.5 system-ui, sans-serif; }
     main { max-width: 1000px; margin: 22px auto; padding: 0 20px; }
     h1 { margin: 0 0 10px; font-size: 24px; }
-    nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-    button { padding: 6px 12px; border: 1px solid #526b76; border-radius: 4px; background: #233542; color: inherit; font: inherit; }
-    button[aria-pressed="true"] { background: #315951; }
-    #status-viewport { aspect-ratio: 16 / 9; min-height: 180px; border: 1px solid #3b4d5f; background: #151f2b; }
+    p { margin: 8px 0; }
+    #status-viewport { aspect-ratio: 16 / 9; min-height: 180px; border: 1px solid #3b4d5f; background: #151f2b; touch-action: none; }
     canvas { display: block; width: 100%; height: 100%; }
     output { display: block; margin-top: 9px; }
   </style>
@@ -20,12 +18,7 @@
 <body>
   <main>
     <h1>轨道舱状态走查</h1>
-    <nav aria-label="查看位置">
-      <button data-room="airlock" aria-pressed="true">气闸灯墙</button>
-      <button data-room="life-support" aria-pressed="false">维生通风</button>
-      <button data-room="cockpit" aria-pressed="false">驾驶舱控制台</button>
-      <button id="last-page" type="button" aria-pressed="false" hidden>检视日志末页</button>
-    </nav>
+    <p>WASD 行走，方向键或拖动视野转向。走到控制台两手位之间，同时按 Q 与 E，空格翻阅。</p>
     <div id="status-viewport"></div>
     <output id="status-line" aria-live="polite"></output>
   </main>

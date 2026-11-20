@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { orbitalAnchorIds, type OrbitalAnchorHost, type OrbitalAnchorId } from '../../../src/presence/orbital-anchor-registry.js';
-import type { OrbitalGate, OrbitalGateHost, OrbitalGatePose } from '../../../src/presence/orbital-gates.js';
+import type { OrbitalGateHost, OrbitalGatePose } from '../../../src/presence/orbital-gates.js';
 import {
   collectOrbitalAnchorVisits, orbitalDoorLockedLabel, orbitalFirstTour, readOrbitalHub, resolveOrbitalChapterDoor,
   resolveOrbitalDownlink, resolveOrbitalReturnToAirlock, resolveOrbitalTourStep,
@@ -32,18 +32,20 @@ const deckSupport = (pose: OrbitalGatePose) => deck.isWalkable(pose.east, pose.n
   Math.abs((deck.floorHeightAt(pose.east, pose.north) ?? Infinity) - pose.height) < .001;
 
 const view = document.querySelector<HTMLElement>('#view')!;
+const cover = document.querySelector<HTMLElement>('#travel-cover')!;
 const status = document.querySelector<HTMLOutputElement>('#current')!;
 const result = document.querySelector<HTMLOutputElement>('#result')!;
 const fixtures = document.querySelector<HTMLElement>('#fixtures')!;
 const hubPanel = document.querySelector<HTMLElement>('#hub')!;
-if (new URLSearchParams(location.search).has('proof')) status.dataset.route = JSON.stringify(deck.tourRoute);
+const proof = new URLSearchParams(location.search).has('proof');
+if (proof) status.dataset.route = JSON.stringify(deck.tourRoute);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 view.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x142735);
-scene.add(deck.group, new THREE.HemisphereLight(0xd9ecff, 0x3b4a50, 2.1));
+scene.add(new THREE.HemisphereLight(0xd9ecff, 0x3b4a50, 2.1));
 const light = new THREE.DirectionalLight(0xffe2af, 1.7);
 light.position.set(-4, 7, 4);
 scene.add(light);
@@ -61,7 +63,6 @@ door.position.set(0, 1.05, -doorN);
 const doorSlab = new THREE.Mesh(new THREE.BoxGeometry(1.75, 2.1, .1), new THREE.MeshStandardMaterial({ color: 0x263746 }));
 doorSlab.position.set(0, 1.05, -doorN + .06);
 ground.add(floor, pad, door, doorSlab);
-scene.add(ground);
 
 const held = new Set<string>();
 let current = groundPosition('starport', -3.5);
@@ -72,13 +73,31 @@ let completedRooms = 0;
 let yaw = current.pose.yaw;
 let pitch = 0;
 let physicalSteps = 0;
+let travelCount = 0;
+type LayerSnapshot = { domain: string; mounted: string[]; covered: boolean };
+let transfer: {
+  destination: OrbitalPosition;
+  message: string;
+  before: LayerSnapshot;
+  until?: number;
+  switched?: LayerSnapshot & { previousDetached: boolean };
+} | undefined;
 const anchorButtons = new Map<OrbitalAnchorId, HTMLButtonElement>();
+const fixtureDoorOpen = () => chapterOpen && fixture !== 'core';
+const layerFor = (domain: string) => domain === deckDomain ? deck.group : ground;
+
+function layerSnapshot(): LayerSnapshot {
+  const mounted = scene.children
+    .filter(object => object === ground || object === deck.group)
+    .map(object => String(object.userData.previewDomain));
+  return { domain: current.domain, mounted, covered: !cover.hidden };
+}
 
 function button(parent: HTMLElement, label: string, action: () => void) {
   const entry = document.createElement('button');
   entry.type = 'button';
   entry.textContent = label;
-  entry.onclick = action;
+  entry.onclick = () => { if (!transfer) action(); };
   parent.append(entry);
   return entry;
 }
@@ -89,12 +108,43 @@ function setPosition(next: OrbitalPosition) {
   pitch = 0;
   const selected = (Object.keys(localFloors) as OrbitalAnchorId[]).find(id => domainFor(id) === next.domain);
   if (selected) fixture = selected;
-  ground.position.y = next.pose.height;
-  floorMaterial.color.setHex(fixture === 'crater-bottom' || fixture === 'core' ? 0x655b60 : 0x536476);
-  ground.visible = next.domain !== deckDomain;
-  deck.group.visible = !ground.visible;
+  const layer = layerFor(next.domain);
+  (layer === ground ? deck.group : ground).removeFromParent();
+  layer.userData.previewDomain = next.domain;
+  if (layer.parent !== scene) scene.add(layer);
+  if (layer === ground) {
+    ground.position.y = next.pose.height;
+    floorMaterial.color.setHex(fixture === 'crater-bottom' || fixture === 'core' ? 0x655b60 : 0x536476);
+  }
   pad.visible = fixture !== 'core';
-  doorSlab.visible = !chapterOpen;
+  doorSlab.visible = !fixtureDoorOpen();
+  refresh();
+}
+
+function beginCoveredTravel(destination: OrbitalPosition, message: string) {
+  held.clear();
+  cover.hidden = false;
+  transfer = { destination, message, before: layerSnapshot() };
+}
+
+function advanceCoveredTravel(now: number) {
+  if (!transfer) return;
+  // Let the departure draw under the cover before replacing its scene group.
+  if (transfer.until === undefined) { transfer.until = now + 75; return; }
+  if (now < transfer.until) return;
+  if (!transfer.switched) {
+    const departing = layerFor(current.domain);
+    setPosition(transfer.destination);
+    transfer.switched = { ...layerSnapshot(), previousDetached: departing.parent === null };
+    transfer.until = now + 95;
+    return;
+  }
+  const { before, switched, message } = transfer;
+  cover.hidden = true;
+  transfer = undefined;
+  result.value = message;
+  travelCount++;
+  if (proof) status.dataset.lastTravel = JSON.stringify({ before, switched, after: layerSnapshot() });
   refresh();
 }
 
@@ -106,7 +156,7 @@ function enterFixture(next: Fixture) {
 
 button(fixtures, '试走太空章', () => {
   chapterOpen = !chapterOpen;
-  doorSlab.visible = !chapterOpen;
+  doorSlab.visible = !fixtureDoorOpen();
   refresh();
 });
 for (const id of orbitalAnchorIds) button(fixtures, '验收定位 · ' + names[id], () => enterFixture(id));
@@ -138,6 +188,11 @@ function refresh() {
   status.dataset.physicalSteps = String(physicalSteps);
   status.dataset.visited = visited.join(',');
   status.dataset.completedRooms = String(completedRooms);
+  if (proof) {
+    status.dataset.mounted = JSON.stringify(layerSnapshot().mounted);
+    status.dataset.travelCount = String(travelCount);
+    status.dataset.doorSealed = String(doorSlab.visible);
+  }
   doorButton.disabled = orbit || !atDoor(current.pose);
   for (const [id, entry] of anchorButtons) {
     entry.disabled = !display.anchors[id] || !chapterOpen;
@@ -146,36 +201,37 @@ function refresh() {
 }
 
 function downlink(id: OrbitalAnchorId) {
+  if (transfer) return;
   const travel = resolveOrbitalDownlink(id, current, visited, {
     chapterOpen, completedRooms, hubDomain: deckDomain, anchorSites, isAtHub: atHub, landingAt: key => groundPosition(key, 0),
   });
   if (!travel.ok) return;
-  setPosition(travel.position);
-  result.value = `已抵达${names[id]}。`;
+  beginCoveredTravel(travel.position, `已抵达${names[id]}。`);
 }
 
 function useDoor() {
-  if (current.domain === deckDomain || !atDoor(current.pose)) return;
-  if (fixture === 'starport' || fixture === 'core') {
-    const gate: OrbitalGate = fixture;
+  if (transfer || current.domain === deckDomain || !atDoor(current.pose)) return;
+  // This preview hosts the orbital deck only. The separate buried core remains sealed.
+  if (fixture === 'core') { result.value = orbitalDoorLockedLabel; return; }
+  if (fixture === 'starport') {
+    const gate = 'starport';
     const gateHost: OrbitalGateHost = {
-      isOpen: () => true, isAtOpening: (endpoint, pose) => endpoint === `${gate}-ground` && atDoor(pose),
+      isOpen: candidate => candidate === gate, isAtOpening: (endpoint, pose) => endpoint === `${gate}-ground` && atDoor(pose),
       landingAt: endpoint => endpoint === `${gate}-airlock` ? { site: 'airlock', pose: airlock.pose } : undefined,
       isLegalLanding: (_, pose) => deckSupport(pose),
     };
     const travel = resolveOrbitalChapterDoor({ gate, direction: 'enter' }, { site: gate, pose: current.pose }, chapterOpen,
       { firstKeyLit: chapterOpen, flyerAssembled: chapterOpen }, gateHost);
     if (!travel.ok) { result.value = travel.reason === 'locked' ? orbitalDoorLockedLabel : '门口暂不可达'; return; }
-    setPosition({ domain: deckDomain, pose: travel.state.pose });
+    beginCoveredTravel({ domain: deckDomain, pose: travel.state.pose }, '已抵达气闸舱。');
   } else {
     const travel = resolveOrbitalReturnToAirlock(fixture, current, visited, {
       chapterOpen, anchorSites, airlockDomain: deckDomain, isAtReturnDoor: (_, pose) => atDoor(pose),
       isReturnDoorOpen: () => true, airlockLanding: () => airlock, isLegalAirlockLanding: deckSupport,
     });
     if (!travel.ok) { result.value = orbitalDoorLockedLabel; return; }
-    setPosition(travel.position);
+    beginCoveredTravel(travel.position, '已抵达气闸舱。');
   }
-  result.value = '已抵达气闸舱。';
 }
 
 function move(east: number, north: number) {
@@ -189,7 +245,7 @@ function move(east: number, north: number) {
     current = position(deckDomain, east, north, height, yaw);
   } else {
     if (Math.abs(east) > 4.2 || Math.abs(north) > 4.7 ||
-        (!chapterOpen && Math.abs(east) < 1.08 && Math.abs(north - doorN) < .29)) return;
+        (!fixtureDoorOpen() && Math.abs(east) < 1.08 && Math.abs(north - doorN) < .29)) return;
     current = position(current.domain, east, north, point.height, yaw);
     const next = collectOrbitalAnchorVisits({ ...current, route: 'physical' }, visited, anchorSites);
     if (next !== visited) {
@@ -204,14 +260,14 @@ function move(east: number, north: number) {
 
 const keySet = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 window.addEventListener('keydown', event => {
-  if (keySet.has(event.code)) { event.preventDefault(); held.add(event.code); }
+  if (keySet.has(event.code)) { event.preventDefault(); if (!transfer) held.add(event.code); }
   if (event.code === 'KeyE' && !event.repeat) useDoor();
 });
 window.addEventListener('keyup', event => held.delete(event.code));
 window.addEventListener('blur', () => held.clear());
 view.addEventListener('pointerdown', event => view.setPointerCapture(event.pointerId));
 view.addEventListener('pointermove', event => {
-  if (!view.hasPointerCapture(event.pointerId)) return;
+  if (transfer || !view.hasPointerCapture(event.pointerId)) return;
   yaw -= event.movementX * .004;
   pitch = THREE.MathUtils.clamp(pitch - event.movementY * .004, -1.2, 1.2);
 });
@@ -226,7 +282,7 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.05, (now - previous) / 1000);
   previous = now;
   yaw += (Number(held.has('ArrowLeft')) - Number(held.has('ArrowRight'))) * 1.45 * dt;
-  if (status.dataset.route) status.dataset.yaw = yaw.toFixed(4);
+  if (proof) status.dataset.yaw = yaw.toFixed(4);
   const ahead = Number(held.has('KeyW') || held.has('ArrowUp')) - Number(held.has('KeyS') || held.has('ArrowDown'));
   const side = Number(held.has('KeyD')) - Number(held.has('KeyA'));
   if (ahead || side) {
@@ -237,5 +293,6 @@ renderer.setAnimationLoop(now => {
   camera.position.set(current.pose.east, current.pose.height + 1.58, -current.pose.north);
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
   renderer.render(scene, camera);
+  advanceCoveredTravel(now);
 });
 setPosition(current);

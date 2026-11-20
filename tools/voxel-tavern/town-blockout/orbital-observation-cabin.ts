@@ -16,6 +16,8 @@ export const orbitalObservationCabinSpec = {
   windowSill: 0.72, windowHead: 2.69, windowSouth: 0.38, windowNorth: 6.42,
 } as const;
 
+export const orbitalObservationCycleSeconds = 24;
+
 export function createOrbitalObservationCabin() {
   const spec = orbitalObservationCabinSpec;
   const halfWidth = spec.width / 2;
@@ -146,8 +148,7 @@ export function createOrbitalObservationCabin() {
     box(group, 'observation-height-notch', seam, -4.03 + i * .25, spec.depth - .008, y, .19, .014, .019);
   }
 
-  // Static window card for this cabin only. The shared orbit panorama,
-  // celebrations and sit/animation flows belong to S-3/S-4.
+  // S-6's window artwork remains in the cabin. The seated S-3 view moves these existing layers.
   const view = new Group();
   view.name = 'observation-town-view-card';
   view.position.set(halfWidth + .56, windowY, -midN);
@@ -174,9 +175,9 @@ export function createOrbitalObservationCabin() {
     shape.moveTo(x, y);
     for (const [east, height] of points.slice(1)) shape.lineTo(east, height);
     shape.closePath();
-    card(new ShapeGeometry(shape), color, name, 0, 0, z);
+    return card(new ShapeGeometry(shape), color, name, 0, 0, z);
   }
-  mountains([[-3.8,-.38],[-2.5,-.12],[-1.45,.34],[-.70,.08],[.05,.51],[.81,.22],[1.60,-.1],[3.8,-.58],[3.8,-1.35],[-3.8,-1.35]],
+  const peaks = mountains([[-3.8,-.38],[-2.5,-.12],[-1.45,.34],[-.70,.08],[.05,.51],[.81,.22],[1.60,-.1],[3.8,-.58],[3.8,-1.35],[-3.8,-1.35]],
     'observation-double-ridge-silhouette', '#5b717d', .035);
   const lake = card(new CircleGeometry(.67, 31), '#a7c4cf', 'observation-mirror-lake', 1.2, -.56, .047);
   lake.scale.y = .24;
@@ -188,7 +189,7 @@ export function createOrbitalObservationCabin() {
     specks.push(e - .020, y, 0, e + .020, y, 0);
   }
   lights.setAttribute('position', new Float32BufferAttribute(specks, 3));
-  const warmSpecks = new LineBasicMaterial({ color: '#ffcf84' });
+  const warmSpecks = new LineBasicMaterial({ color: '#ffcf84', transparent: true, depthWrite: false });
   geometries.add(lights);
   materials.add(warmSpecks);
   const town = new LineSegments(lights, warmSpecks);
@@ -197,6 +198,27 @@ export function createOrbitalObservationCabin() {
   view.add(town);
 
   const point = (x: number, n: number): Point => ({ x, n, ground: 0 });
+  const seat = { x: bench.position.x, n: -bench.position.z, ground: bench.position.y + bench.scale.y / 2 };
+  const seatApproach = point(seat.x - bench.scale.x / 2 - .385, seat.n);
+
+  function readWindowCycle() {
+    return { limbEast: atmosphere.position.x, peaksEast: peaks.position.x,
+      lakeGlint: lake.scale.y, townGlow: warmSpecks.opacity };
+  }
+
+  function setWindowCycle(seconds: number) {
+    if (!Number.isFinite(seconds)) return;
+    const phase = Math.max(0, Math.min(seconds / orbitalObservationCycleSeconds, 1));
+    const arc = phase === 1 ? 0 : phase * Math.PI * 2;
+    const sway = Math.sin(arc);
+    const glint = (1 - Math.cos(arc)) / 2;
+    atmosphere.position.x = snow.position.x = .20 + sway * .30;
+    peaks.position.x = sway * .12;
+    lake.position.x = 1.2 + sway * .18;
+    lake.scale.y = .24 + glint * .13;
+    town.position.x = sway * .17;
+    warmSpecks.opacity = 1 - glint * .25;
+  }
   function contains(x: number, n: number, box: Footprint) {
     return x >= box.minX && x <= box.maxX && n >= box.minN && n <= box.maxN;
   }
@@ -219,7 +241,8 @@ export function createOrbitalObservationCabin() {
   return {
     group, room, entrance,
     port: { frame: point(0, 0), approach: point(0, -.85), arrival: { ...point(0, .75), yaw: 0 } },
-    viewPoint: point(2.9, midN), bench: { footprint: solids.find(solid => solid.kind === 'bench')!, height: bench.position.y + .075 },
+    viewPoint: point(2.9, midN), bench: { footprint: solids.find(solid => solid.kind === 'bench')!, height: seat.ground },
+    seat, seatApproach, setWindowCycle, readWindowCycle,
     heightMarks, collisions: solids, floorHeightAt, isWalkable,
     dispose() {
       if (disposed) return;

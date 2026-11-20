@@ -47,13 +47,18 @@ try {
     finally { await page.keyboard.up(key); }
   }
 
-  async function look(yaw) {
+  async function look(yaw, pitch = 0) {
     const before = await state();
-    const delta = wrap(yaw - before.pose.yaw);
+    const delta = wrap(yaw - before.pose.yaw), deltaPitch = pitch - before.pose.pitch;
     if (Math.abs(delta) > before.tick * before.turnRate / 2) {
       await hold(delta > 0 ? 'ArrowRight' : 'ArrowLeft', Math.abs(delta) / before.turnRate);
     }
-    assert.ok(Math.abs(wrap((await state()).pose.yaw - yaw)) <= .013);
+    if (Math.abs(deltaPitch) > before.tick * before.turnRate / 2) {
+      await hold(deltaPitch > 0 ? 'ArrowUp' : 'ArrowDown', Math.abs(deltaPitch) / before.turnRate);
+    }
+    const after = await state();
+    assert.ok(Math.abs(wrap(after.pose.yaw - yaw)) <= .013);
+    assert.ok(Math.abs(after.pose.pitch - pitch) <= .013);
   }
 
   async function walk(target) {
@@ -82,12 +87,57 @@ try {
   const start = await state();
   assert.equal(start.room, 'airlock');
   assert.equal(start.hub.anchors.filter(anchor => anchor.lit).length, 0);
+  assert.ok(!(await page.locator('#seat').isVisible()));
+  await page.keyboard.press('KeyE');
+  assert.equal((await state()).lookout.seated, false);
   for (const point of start.tourRoute.slice(1)) {
     const current = await walk(point);
     if (current.room === 'living' && distance(point, start.rooms.living) === 0) await capture('living-installed');
+    if (current.room === 'cockpit' && distance(point, start.rooms.cockpit) === 0) {
+      const { x, n, y } = current.cockpitNameplate;
+      await look(Math.atan2(x - current.pose.x, n - current.pose.n),
+        Math.atan2(y - current.cameraY, Math.hypot(x - current.pose.x, n - current.pose.n)));
+      const hit = await page.evaluate(() => window.orbitalStationReview.centerHitName());
+      assert.equal(hit, 'orbital-sign-cockpit-nameplate');
+      const side = report.route.at(-2);
+      assert.ok(side.x > 5.4 && Math.abs(side.n - current.pose.n) < .12, 'production candidate side doorway was used');
+      report.cockpitNameplate = { ...current.cockpitNameplate, firstHit: hit, fromSideHall: side };
+      await capture('cockpit-nameplate-from-side-door');
+    }
     if (current.room === 'observation' && distance(point, start.rooms.observation) === 0) {
       await look(0);
       await capture('observation-installed');
+      const approach = await walk(current.lookout.approach);
+      assert.equal(await page.locator('#seat').innerText(), 'E 静坐');
+      const began = Date.now();
+      await page.keyboard.press('KeyE');
+      const seated = await state();
+      assert.equal(seated.lookout.seated, true);
+      assert.ok(seated.cameraY < approach.cameraY - .30);
+      assert.equal(await page.locator('#seat').innerText(), 'E 起身');
+      await capture('observation-seated');
+      const attempted = await hold('KeyW', .30);
+      assert.deepEqual(attempted.pose, seated.pose, 'sitting leaves the walking pose unchanged');
+      assert.equal(attempted.walked, seated.walked);
+      await page.waitForFunction(() => window.orbitalStationReview.snapshot().lookout.seconds >= 6);
+      const middle = await state();
+      assert.notDeepEqual(middle.lookout.frame, approach.lookout.frame);
+      assert.equal(middle.lookout.completed, false);
+      await capture('observation-window-cycle-in-motion');
+      await page.waitForFunction(() => window.orbitalStationReview.snapshot().lookout.completed, null, { timeout: 35_000 });
+      const finished = await state();
+      const elapsedMs = Date.now() - began;
+      assert.ok(elapsedMs >= finished.lookout.cycleSeconds * 1000 - 100);
+      assert.deepEqual(finished.lookout.frame, approach.lookout.frame);
+      await capture('observation-window-cycle-complete');
+      await page.keyboard.press('KeyE');
+      const stood = await state();
+      assert.equal(stood.lookout.seated, false);
+      assert.equal(stood.cameraY, approach.cameraY);
+      assert.deepEqual(stood.pose, seated.pose);
+      report.lookout = { elapsedMs, approach: approach.pose, seatedCameraY: seated.cameraY,
+        stoodCameraY: stood.cameraY, middle: middle.lookout, finished: finished.lookout };
+      await walk(start.rooms.observation);
     }
   }
   assert.deepEqual([...new Set(report.route.map(point => point.room).filter(Boolean))],
