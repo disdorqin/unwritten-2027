@@ -1,0 +1,37 @@
+name: Verify underground mining interactions
+
+on:
+  push:
+    branches: [lane-c]
+    paths:
+      - '.github/workflows/verify-underground-mining.yml'
+      - 'src/presence/underground-mining.ts'
+      - 'src/shared/underground-mining.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-mining-activity.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-ore-vein.ts'
+      - 'tools/fixtures/underground-mining-review.ts'
+      - 'tools/verify-underground-mining.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - run: node --import tsx tools/verify-underground-mining.mjs "${{ runner.temp }}/mining-review"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: underground-mining-browser
+          path: ${{ runner.temp }}/mining-review
