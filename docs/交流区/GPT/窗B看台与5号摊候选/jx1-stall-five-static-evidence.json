@@ -1,0 +1,127 @@
+{
+  "registry": {
+    "unchangedDoors": 92,
+    "unchangedOldTownSites": 52,
+    "unchangedMarketFoundationLevels": 17,
+    "changedNonlimitingTerrainSample": {
+      "id": "old-town:186:104",
+      "sample": 0,
+      "deltaY": 0.010814428329467773
+    }
+  },
+  "geometry": {
+    "stalls": 17,
+    "colliders": 187,
+    "translated": {
+      "nodes": 0,
+      "vertices": 5668,
+      "instances": 74,
+      "colliders": 8
+    },
+    "moved": {
+      "x": 177.5,
+      "n": 105.75,
+      "ground": 9.12,
+      "range": 2.4
+    }
+  },
+  "originalDoor": {
+    "portal": {
+      "id": "old-town:186:104",
+      "zone": "market",
+      "x": 174.905,
+      "n": 112,
+      "ground": 9.418671293258667,
+      "exitYaw": -1.5707963267948968
+    },
+    "summary": [
+      {
+        "interval": 0.05,
+        "samples": 1054,
+        "maxStep": 0.3060550353527045
+      },
+      {
+        "interval": 0.125,
+        "samples": 424,
+        "maxStep": 0.30544413682993543
+      },
+      {
+        "interval": 0.18833333333333335,
+        "samples": 290,
+        "maxStep": 0.3050165078639999
+      }
+    ],
+    "knownStand": {
+      "terrain": 9.418671293258667,
+      "surface": 9.418671293258667,
+      "hint": 9.418671293258667,
+      "candidateSupport": 9.418671293258667,
+      "heightDelta": 0,
+      "nativeLanding": 9.418671293258667,
+      "withoutHint": 9.418671293258667,
+      "walkable": true,
+      "rawPass": true,
+      "obstruction": false,
+      "water": null,
+      "rails": false,
+      "gates": {
+        "scenery": false,
+        "cover": false,
+        "district": false,
+        "forest": false,
+        "streetscape": false
+      },
+      "marketCollision": []
+    }
+  },
+  "tasting": {
+    "target": {
+      "x": 177.5,
+      "n": 105.75,
+      "ground": 9.12,
+      "range": 2.4,
+      "label": "\u8bd5\u5403\u5403\u98df",
+      "id": "market-stall-5"
+    },
+    "exactLanding": null,
+    "reachableCount": 9,
+    "examples": [
+      {
+        "witness": {
+          "east": 176,
+          "north": 105.75,
+          "ground": 9.119999885559082,
+          "tolerance": 0.1
+        },
+        "distance": 1.5,
+        "action": "\u8bd5\u5403\u5403\u98df",
+        "samples": 500,
+        "maxStep": 0.018558883666997872
+      },
+      {
+        "witness": {
+          "east": 175.9,
+          "north": 105.75,
+          "ground": 9.11898069381714,
+          "tolerance": 0.1
+        },
+        "distance": 1.5999999999999943,
+        "action": "\u8bd5\u5403\u5403\u98df",
+        "samples": 498,
+        "maxStep": 0.018215200636131357
+      },
+      {
+        "witness": {
+          "east": 175.8,
+          "north": 105.75,
+          "ground": 9.117961502075195,
+          "tolerance": 0.1
+        },
+        "distance": 1.6999999999999886,
+        "action": "\u8bd5\u5403\u5403\u98df",
+        "samples": 494,
+        "maxStep": 0.01820198205802015
+      }
+    ]
+  }
+}
