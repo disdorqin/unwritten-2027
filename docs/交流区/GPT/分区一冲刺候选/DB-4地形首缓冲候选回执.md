@@ -15,3 +15,5 @@ git apply --reverse --check ../DB-4-terrain-chunk-upload.patch
 ```
 
 补丁 `DB-4-terrain-chunk-upload.patch`，SHA-256 `89f8fb84b0e654946cb14f881fa289e60442fd8643ea96927df4b3e34e8418ee`。定量记录 `db4-terrain-comparison.json`，原始测试 `db4-directed-test.log`。
+
+08:46 主窗口令 `f60062d` 将本项并入窗 A 的 OPT-1。候选留作午间上线后的验收输入。`db4-terrain-browser.mjs` 为独立 WebGL 地形补测工具，已过语法与候选 Vite bundle 预检，浏览器运行和原线路 Intel/D3D11 的 50 ms 验收仍待实测。

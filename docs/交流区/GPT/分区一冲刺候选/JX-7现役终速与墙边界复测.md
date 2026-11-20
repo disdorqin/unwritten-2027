@@ -39,4 +39,4 @@ node --import tsx --test --test-concurrency=1 tests/town-blockout-sled.test.ts t
 node --import tsx --test --test-concurrency=1 --test-name-pattern='snowfight: sled smash|snowfight: approved upper-band' tests/server/snowfight.test.ts
 ```
 
-原始档为 `jx7-75859a0-speed-probe.json`、`jx7-75859a0-model-direct.log`、`jx7-75859a0-wall-ws.log`。未改产品线或推远端。
+原始档为 [终速与漂移数值](./jx7-75859a0-speed-probe.json)、[物理与骑乘测试](./JX-7物理与骑乘测试.txt)、[双 WebSocket 测试](./JX-7双WebSocket测试.txt)。本次复测采用现役产品源。
