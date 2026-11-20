@@ -69,6 +69,7 @@ test('town expansion keeps landmark origins except for the approved stage reloca
     glasshouse: [372, 96, 11],
     lighthouse: [408, 78, 12],
     stage: [238, 140, 12],
+    'town-office': [190, 227, 12],
   });
 });
 
