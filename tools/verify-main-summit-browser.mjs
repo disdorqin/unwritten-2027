@@ -39,6 +39,7 @@ const walkthroughImages = [];
 const errors = [];
 const teardownErrors = [];
 let server;
+let presence;
 let browser;
 let context;
 let page;
@@ -143,18 +144,26 @@ function assertAssembly(state) {
 }
 
 function trackBrowserErrors(page) {
-  page.on('pageerror', error => errors.push(error.message));
-  page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
-  page.on('response', response => {
+  const pageError = error => errors.push(error.message);
+  const requestFailure = request => errors.push(`${request.url()}: ${request.failure()?.errorText}`);
+  const badResponse = response => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
-  });
+  };
+  page.on('pageerror', pageError);
+  page.on('requestfailed', requestFailure);
+  page.on('response', badResponse);
+  return () => {
+    page.off('pageerror', pageError);
+    page.off('requestfailed', requestFailure);
+    page.off('response', badResponse);
+  };
 }
 
 async function townSkyline(url) {
   for (const candidate of [false, true]) {
     context = await browser.newContext({ viewport, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'zh-CN' });
     page = await context.newPage();
-    trackBrowserErrors(page);
+    const stopTracking = trackBrowserErrors(page);
     await page.addInitScript(() => {
       window.skylineProfiles = [];
       // Capture the existing mouse-drag fallback on a headless display.
@@ -196,8 +205,11 @@ async function townSkyline(url) {
       assert.ok(Math.abs(last.cameraY - views[0].frames.at(-1).cameraY) < .001, 'The town eye position shifted');
     }
     const file = `skyline-${candidate ? 'candidate' : 'baseline'}.png`;
-    await canvas.screenshot({ path: path.join(output, file), timeout: timeLeft(16_000) });
-    views.push({ candidate, viewpoint: '东侧扩建步道', file, frames });
+    const view = { candidate, viewpoint: '东侧扩建步道', frames };
+    views.push(view);
+    await page.screenshot({ path: path.join(output, file), timeout: timeLeft(35_000) });
+    view.file = file;
+    stopTracking();
     await limited('close skyline context', context.close(), timeLeft(8_000));
     context = undefined;
     page = undefined;
@@ -215,8 +227,8 @@ async function walkCloudStation() {
   walkthroughImages.push({ file: 'cloud-terminal-start.png', state: from });
 
   const bend = await walk(page, 'w', 'walk from front terminal to the terrace corner',
-    () => window.__p1Review.getState().north >= -14.5);
-  assert.ok(Math.abs(bend.east - 36) < .01 && bend.north <= -13);
+    () => window.__p1Review.getState().north >= -12.75);
+  assert.ok(Math.abs(bend.east - 36) < .01 && bend.north <= -12.27);
   const approach = await walk(page, 'a', 'walk the front terrace across to the gate center',
     () => window.__p1Review.getState().east <= .4);
   assert.ok(approach.east >= -.6 && Math.abs(approach.north - bend.north) < .001);
@@ -232,7 +244,7 @@ async function walkCloudStation() {
   const outside = await walk(page, 's', 'walk back through the gate to the terrace',
     () => window.__p1Review.getState().returned);
   assertAssembly(outside);
-  assert.ok(outside.north <= -14 && outside.north >= -15 && !outside.gateMounted);
+  assert.ok(outside.north <= -12.75 && outside.north >= -13 && !outside.gateMounted);
   assert.ok(outside.apronPresent && !outside.arrivalDetailPresent);
   assert.equal(outside.seamCrossings - from.seamCrossings, 2);
   assert.equal(outside.gateGeometryDisposals - from.gateGeometryDisposals, 3);
@@ -258,10 +270,16 @@ async function walkCloudStation() {
 
 async function main() {
   if (assembled || townOnly) sourceProvenance = verifySourceProvenance();
+  let proxy;
+  if (townOnly) {
+    const { createPresenceServer } = await import(pathToFileURL(path.join(checkout, 'src/presence/server.ts')).href);
+    presence = await limited('start loopback town presence', createPresenceServer(), timeLeft(10_000));
+    proxy = { '/presence': { target: `http://127.0.0.1:${presence.address().port}`, ws: true } };
+  }
   server = await limited('Vite initialization', createServer({
     root: viteRoot, configFile: path.join(viteRoot, 'vite.config.ts'),
     optimizeDeps: { noDiscovery: true, include: [] },
-    logLevel: 'warn', server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false },
+    logLevel: 'warn', server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false, proxy },
   }), timeLeft(20_000));
   await limited('Vite listen', server.listen(), timeLeft(15_000));
   const address = server.httpServer.address();
@@ -435,6 +453,7 @@ try {
 } finally {
   for (const [label, close] of [
     ['context', () => context?.close()], ['browser', () => browser?.close()], ['Vite', () => server?.close()],
+    ['presence', () => presence?.close()],
   ]) {
     try { await limited(`close ${label}`, Promise.resolve().then(close), 3_500); }
     catch (error) { teardownErrors.push(String(error)); }

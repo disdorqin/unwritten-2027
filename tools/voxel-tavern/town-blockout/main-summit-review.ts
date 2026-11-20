@@ -3,7 +3,8 @@ import {
   Mesh, MeshLambertMaterial, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
 } from 'three';
 import {
-  cloudTerminal, mountMainSummitAssembly, summitAssemblyAnchor, summitWorldPoint, supportsCloudTerrace,
+  cloudTerminal, cloudTerraceTurnNorth, mountMainSummitAssembly, summitAssemblyAnchor, summitWorldPoint,
+  supportsCloudTerrace,
 } from './main-summit-assembly';
 import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { northRidgeSummit } from './north-ridge-350-terrain';
@@ -73,6 +74,7 @@ const clock = createTownPhysicsClock();
 
 let view: View = 'gate';
 let east = 0, north = startNorth, feet = frontRidgeAt(east, north);
+let returnNorth = startNorth;
 let frontierReached = false, returned = false, disposed = false;
 let accepted = 0, blocked = 0, seamCrossings = 0, maxAcceptedStep = 0;
 let lastBlock: BlockReason | null = null;
@@ -250,7 +252,7 @@ function move() {
   if (nextFeet === undefined) return rejectMove('extent');
   if (Math.abs(nextFeet - feet) > stepHeight) return rejectMove('step');
   if ((gateClearance(nextEast, nextNorth, nextFeet) ?? Infinity) < 0) return rejectMove('gate');
-  if (assembly.stations.blocked(nextEast, nextNorth, nextFeet, bodyRadius, bodyHeight)) return rejectMove('gate');
+  if (assembly.blocked(nextEast, nextNorth, nextFeet, bodyRadius, bodyHeight)) return rejectMove('gate');
 
   const crossesSeam = (north < seamNorth) !== (nextNorth < seamNorth);
   if (crossesSeam) {
@@ -272,7 +274,7 @@ function move() {
   if (!frontierReached && north >= arrivalNorth) {
     frontierReached = true;
     status.textContent = '已抵达行前坪。';
-  } else if (frontierReached && !returned && north <= startNorth) {
+  } else if (frontierReached && !returned && north <= returnNorth) {
     returned = true;
     assembly.leaveGate();
     gate = undefined;
@@ -376,12 +378,13 @@ function dispose() {
 }
 
 for (const name of Object.keys(buttons) as View[]) buttons[name].onclick = () => selectView(name);
-remountButton.onclick = () => { mountGate(); selectView('gate'); };
+remountButton.onclick = () => { returnNorth = startNorth; mountGate(); selectView('gate'); };
 terminalButton.onclick = () => {
   if (north >= seamNorth) return;
   mountGate();
   east = cloudTerminal.east;
   north = cloudTerminal.north;
+  returnNorth = cloudTerraceTurnNorth;
   feet = frontRidgeAt(east, north);
   frontierReached = returned = false;
   lastBlock = null;

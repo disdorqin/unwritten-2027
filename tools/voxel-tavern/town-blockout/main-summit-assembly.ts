@@ -32,6 +32,7 @@ export const cloudTerminal = {
   east: terminalEast - summitAssemblyAnchor.east,
   north: terminalNorth - summitAssemblyAnchor.north,
 } as const;
+export const cloudTerraceTurnNorth = -12.75;
 
 export function supportsCloudTerrace(east: number, north: number, padding = 0) {
   const gateApron = Math.abs(east) <= 6 - padding && north >= -22 + padding;
@@ -152,6 +153,18 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
+    blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
+      if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
+      const front = north < seam;
+      const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
+      const boxes = front ? cloudRegistration.colliders : cabin.colliders;
+      return boxes.some(({ min, max }) => {
+        if (feet + bodyHeight - .025 <= min[1] || feet + .025 >= max[1]) return false;
+        const dx = Math.max(min[0] - position.east, position.east - max[0], 0);
+        const dz = Math.max(min[2] + position.north, -position.north - max[2], 0);
+        return Math.hypot(dx, dz) < radius;
+      });
+    },
     enterGate: () => block.enter(gateOwner),
     leaveGate: block.leave,
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },

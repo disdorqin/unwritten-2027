@@ -43,7 +43,7 @@ jobs:
       - name: Observe the peak from the normal town viewer
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         timeout-minutes: 5
-        run: timeout --signal=TERM --kill-after=6s 285s node tools/verify-main-summit-browser.mjs . /tmp/p1-town-evidence --town
+        run: timeout --signal=TERM --kill-after=6s 285s node --import tsx tools/verify-main-summit-browser.mjs . /tmp/p1-town-evidence --town
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
