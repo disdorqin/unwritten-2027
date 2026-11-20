@@ -1,0 +1,163 @@
+diff --git a/tests/town-blockout-sled-retune.test.ts b/tests/town-blockout-sled-retune.test.ts
+index d7e38e7c..487680ac 100644
+--- a/tests/town-blockout-sled-retune.test.ts
++++ b/tests/town-blockout-sled-retune.test.ts
+@@ -78,7 +78,7 @@ test('a real 15% uphill can be restarted after the old stall timer and rolls bac
+   };
+   const rider = createSledRide(world);
+   assert.ok(rider.mount(0, 0, 16, 0));
+-  for (let frame = 0; frame < 240; frame++) rider.step(tick, { forward: -1, turn: 0 });
++  for (let frame = 0; frame < 240; frame++) rider.step(tick, { ...coast, brake: true });
+   near(rider.spot.n, 0);
+   for (let frame = 0; frame < 480; frame++) rider.step(tick, push);
+   const uphillSpeed = rider.speed();
+diff --git a/tests/town-blockout-sled-reverse.test.ts b/tests/town-blockout-sled-reverse.test.ts
+new file mode 100644
+index 00000000..1b9de222
+--- /dev/null
++++ b/tests/town-blockout-sled-reverse.test.ts
+@@ -0,0 +1,144 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { sledReverseSpeed, type SledControls } from '../tools/voxel-tavern/town-blockout/sled-motion';
++import { createSledRide, createSledWallCollider } from '../tools/voxel-tavern/town-blockout/sled-ride';
++
++const tick = 1 / 120;
++const reverse = { forward: -1, turn: 0 };
++const push = { forward: 1, turn: 0 };
++const flat = {
++  height: () => 12,
++  surface: () => ({ surface: 1, deepSnow: false }),
++  blocked: () => false,
++  snow() {},
++  stopped() {},
++};
++
++function simulate(ride: ReturnType<typeof createSledRide>, controls: SledControls, seconds: number) {
++  for (let frame = 0; frame < seconds / tick; frame++) {
++    ride.step(tick, controls);
++    ride.finishFrame(tick);
++  }
++}
++
++test('S backs from rest smoothly and the existing dedicated brake holds without reversing', () => {
++  const ride = createSledRide(flat);
++  assert.ok(ride.mount(0, 0, 12, 0));
++  simulate(ride, { ...reverse, brake: true }, 1);
++  assert.equal(ride.spot.n, 0);
++  assert.equal(ride.braking(), true);
++
++  let lastNorth = ride.spot.n;
++  let lastSpeed = 0;
++  for (let frame = 0; frame < 360; frame++) {
++    ride.step(tick, reverse);
++    assert.ok(ride.spot.n < lastNorth);
++    assert.ok(ride.speed() >= lastSpeed - 1e-9);
++    assert.ok(ride.speed() <= sledReverseSpeed + 1e-9);
++    lastNorth = ride.spot.n;
++    lastSpeed = ride.speed();
++  }
++  assert.ok(lastNorth < -7);
++  assert.ok(Math.abs(lastSpeed - sledReverseSpeed) < 1e-9);
++  assert.equal(ride.braking(), false);
++});
++
++test('held S brakes forward motion before reversing and W recovers forward travel', () => {
++  const ride = createSledRide(flat);
++  assert.ok(ride.mount(0, 0, 12, 0));
++  simulate(ride, push, 3);
++  const approachSpeed = ride.speed();
++  const approachNorth = ride.spot.n;
++  ride.step(tick, reverse);
++  assert.ok(ride.speed() < approachSpeed && ride.spot.n > approachNorth);
++  assert.equal(ride.braking(), true);
++
++  let farthest = ride.spot.n;
++  for (let frame = 0; frame < 720; frame++) {
++    ride.step(tick, reverse);
++    farthest = Math.max(farthest, ride.spot.n);
++  }
++  assert.ok(ride.spot.n < farthest - 4);
++  assert.equal(ride.braking(), false);
++
++  const reverseNorth = ride.spot.n;
++  ride.step(tick, push);
++  assert.ok(ride.spot.n < reverseNorth, 'the direction change keeps physical momentum');
++  simulate(ride, push, 5);
++  assert.ok(ride.spot.n > reverseNorth + 5);
++});
++
++test('A and D steer movement left and right in reverse while the nose turns the opposite way', () => {
++  for (const turn of [-1, 1]) {
++    const ride = createSledRide(flat);
++    assert.ok(ride.mount(0, 0, 12, 0));
++    simulate(ride, reverse, 1);
++    simulate(ride, { ...reverse, turn }, .5);
++    assert.ok(ride.spot.x * turn > .2);
++    assert.ok(ride.spot.yaw * turn < -.5);
++    assert.ok(ride.spot.n < -2);
++  }
++});
++
++test('a reverse sled slides along a solid wall and can steer away without a recovery freeze', () => {
++  const wall = .25;
++  const ride = createSledRide({ ...flat, blocked: east => east > wall });
++  assert.ok(ride.mount(0, 0, 12, -Math.PI / 4));
++  simulate(ride, reverse, 2);
++  assert.ok(ride.spot.x > .22 && ride.spot.x <= wall);
++  assert.ok(ride.spot.n < -2);
++  assert.equal(ride.spot.yaw, -Math.PI / 4);
++  assert.equal(ride.recovering(), false);
++  simulate(ride, { ...reverse, turn: -1 }, 1.2);
++  assert.ok(ride.spot.x < -.1);
++  assert.ok(ride.active());
++});
++
++test('a shallow backwards curb preserves reverse momentum and a steep obstacle stops gently', () => {
++  const ride = createSledRide({ ...flat, height: (_, north) => north < -2 ? 13 : north < -.5 ? 12.15 : 12 });
++  assert.ok(ride.mount(0, 0, 12, 0));
++  simulate(ride, reverse, 1);
++  assert.ok(ride.spot.n < -.8);
++  assert.equal(ride.spot.y, 12.15);
++  assert.ok(ride.speed() > 1);
++  simulate(ride, reverse, 2);
++  assert.ok(ride.spot.n < -1.9 && ride.spot.n >= -2);
++  assert.equal(ride.speed(), 0);
++  assert.equal(ride.recovering(), false);
++});
++
++test('slow snow wall contact keeps the rider mounted and does not report a damaging impact', () => {
++  let reports = 0;
++  const collider = createSledWallCollider((gx, gy) => gx === 0 && gy === -2 ? { ground: 12, height: 3 } : undefined,
++    () => { reports++; return true; });
++  const ride = createSledRide({ ...flat, wallImpact: collider.collide });
++  assert.ok(ride.mount(.25, 0, 12, 0));
++  simulate(ride, reverse, 2);
++  assert.ok(ride.spot.n >= -.5 && ride.spot.n < -.45);
++  assert.equal(ride.spot.yaw, 0);
++  assert.equal(ride.active(), true);
++  assert.equal(ride.recovering(), false);
++  assert.equal(reports, 0);
++});
++
++test('path permissions and missing support stop forward and reverse travel at the safe edge', () => {
++  for (const direction of [push, reverse]) {
++    for (const edge of ['gate', 'no support']) {
++      const ride = createSledRide({
++        ...flat,
++        height: (_, north) => edge === 'no support' && Math.abs(north) > 1 ? NaN : 12,
++        canTraverse: (from, to) => {
++          assert.ok(Number.isFinite(from.y) && Number.isFinite(to.y));
++          return edge !== 'gate' || Math.abs(to.n) <= 1;
++        },
++      });
++      assert.ok(ride.mount(0, 0, 12, 0));
++      simulate(ride, direction, 2);
++      assert.ok(Math.abs(ride.spot.n) > .95 && Math.abs(ride.spot.n) <= 1);
++      assert.equal(ride.spot.y, 12);
++      assert.equal(ride.active(), true);
++      assert.equal(ride.recovering(), false);
++      assert.equal(ride.speed(), 0);
++    }
++  }
++});
