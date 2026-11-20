@@ -33,6 +33,10 @@ import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
 } from '../../../src/shared/summit-passport';
+import {
+  isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath, townNightWindowPath,
+} from '../../../src/shared/za22-mountain-domain';
+import type { TownNightWindowState } from '../../../src/shared/town-night-window';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -173,6 +177,12 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
+  let mountainDomain = false;
+  let nightWindow: (TownNightWindowState & { now: number }) | undefined;
+  let lastNightRead = -Infinity;
+  let refreshNightAfter = -Infinity;
+  let readingNight = false;
+  const presencePath = (path: string) => mountainDomain ? mountainPresencePath + path.slice('/presence'.length) : path;
   let show = false;
   let haveId = false;
   let insideSharedHome = false;
@@ -182,6 +192,39 @@ export function createTownPresence(
   let lastPosition = -1;
   let lastHeightYaw = -1;
   let moving = false;
+
+  function readNightWindow() {
+    const time = performance.now();
+    if (!readingNight && time >= refreshNightAfter) {
+      readingNight = true;
+      refreshNightAfter = time + 4_000;
+      void fetch(townNightWindowPath, { cache: 'no-store' }).then(async response => {
+        if (!response.ok) return;
+        const value = await response.json() as Partial<TownNightWindowState> & { now?: number };
+        if (Number.isSafeInteger(value.now) &&
+            (value.beaconAt === null || Number.isSafeInteger(value.beaconAt)) &&
+            (value.morningBellAt === null || Number.isSafeInteger(value.morningBellAt)) &&
+            typeof value.canEnterRestricted === 'boolean' && typeof value.layersOverlap === 'boolean' &&
+            (value.phase === 'day' || value.phase === 'awaiting-beacon' || value.phase === 'night-window') &&
+            (value.shift === 'day' || value.shift === 'night') && value.chapterGatesLocked === true) {
+          nightWindow = value as TownNightWindowState & { now: number };
+          lastNightRead = time;
+        }
+      }).catch(() => { /* Keep the prior snapshot only until its freshness limit. */ }).finally(() => {
+        readingNight = false;
+      });
+    }
+    if (!nightWindow || time - lastNightRead > 8_000) return;
+    const now = nightWindow.now + time - lastNightRead;
+    const sameNight = nightWindow.morningBellAt !== null && now < nightWindow.morningBellAt;
+    return {
+      ...nightWindow,
+      now,
+      canEnterRestricted: nightWindow.canEnterRestricted && sameNight,
+      layersOverlap: nightWindow.layersOverlap && sameNight && nightWindow.beaconAt !== null &&
+        now < nightWindow.beaconAt + 60_000,
+    };
+  }
 
   function updateStatus() {
     if (!status) return;
@@ -245,7 +288,7 @@ export function createTownPresence(
     if (!active) return;
     window.clearInterval(active.timer);
     if (sendLeave && active.session) {
-      void fetch(POLL_LEAVE_URL, {
+      void fetch(presencePath(POLL_LEAVE_URL), {
         method: 'POST', headers: { 'x-presence-session': active.session }, keepalive: true,
       }).catch(() => { /* 离线离开时服务端会按轮询超时回收会话。 */ });
     }
@@ -273,7 +316,7 @@ export function createTownPresence(
 
   async function pollJoin(channel: PollChannel): Promise<boolean> {
     try {
-      const response = await fetch(POLL_JOIN_URL, {
+      const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: getName() }),
       });
@@ -307,7 +350,7 @@ export function createTownPresence(
     const events = channel.outEvents;
     channel.outEvents = [];
     try {
-      const response = await fetch(POLL_URL, {
+      const response = await fetch(presencePath(POLL_URL), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
         body: buildPollBody(state, events),
@@ -324,7 +367,8 @@ export function createTownPresence(
         return;
       }
       if (!response.ok) throw new Error('poll failed');
-      feedPollMessages(await response.json());
+      const payload: unknown = await response.json();
+      if (poll === channel) feedPollMessages(payload);
     } catch {
       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
       if (poll === channel) requeuePollEvents(channel.outEvents, events);
@@ -626,7 +670,8 @@ export function createTownPresence(
     const stamp = ++epoch;
     const time = performance.now();
     let mascotSeen = false;
-    const valid = visitPresenceSnapshot(data, (id, east, north, height, yaw, sequence) => {
+    const valid = visitPresenceSnapshot(data, (id, east, localNorth, height, yaw, sequence) => {
+      const north = localNorth + (mountainDomain ? mountainPresenceNorthOrigin : 0);
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       if (id === MASCOT_ACTOR_ID) {
         mascotSeen = true;
@@ -651,7 +696,7 @@ export function createTownPresence(
   function connect() {
     try {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${location.host}/presence`);
+      const ws = new WebSocket(`${protocol}//${location.host}${presencePath('/presence')}`);
       socket = ws;
       socketJoined = false;
       // 备用通道在跑时这是后台探测：不把 HUD 翻回「连接中」，探测成功才切回。
@@ -679,7 +724,10 @@ export function createTownPresence(
     const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
     if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
     remaining = remaining > -interval ? remaining + interval : interval;
-    writePresencePose(local, seq, outgoing);
+    if (mountainDomain) {
+      if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
+      writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
+    } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
     const changed = position !== lastPosition || heightYaw !== lastHeightYaw;
@@ -811,6 +859,20 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    readNightWindow,
+    northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
+    setMountainDomain(enabled: boolean) {
+      if (mountainDomain === enabled) return;
+      resetRetry();
+      disconnect(true);
+      mountainDomain = enabled;
+      lastPosition = lastHeightYaw = -1;
+      remaining = 0;
+      if (inTown) {
+        link.enterTown();
+        scheduleConnection();
+      }
+    },
     summitPassportAvailable: () => haveId && summitPassportSupported,
     requestSummitPassport(action: SummitPassportAction) {
       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));
