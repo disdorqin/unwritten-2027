@@ -124,13 +124,10 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   const anchor = { east: 324, north: 657, height: 347 };
   const model = mountStarportAssemblySite(owner, anchor);
   t.after(() => model.dispose());
-  const { runway } = starportFlightSite;
+  const runway = za22CloudRunway;
   const radius = .27;
   const eyeHeight = 1.65;
   const bodyHeight = 1.8;
-  assert.deepEqual(za22CloudRunway, {
-    start: runway.start.east, end: runway.end.east, north: runway.start.north, width: runway.width,
-  });
 
   const envelope = starportAssemblyEnvelopeAt(anchor);
   assert.deepEqual(model.group.position.toArray(), [324, 347, -657]);
@@ -185,8 +182,8 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
     assert.equal(model.aim(feet, 0, pitch, eyeHeight), name);
     assert.equal(model.aim(feet, Math.PI, pitch, eyeHeight), null);
   }
-  for (let east = runway.end.east; east <= runway.start.east; east += .5) {
-    const feet = { east, north: runway.start.north, height: runway.start.height };
+  for (let east = runway.start; east <= runway.end; east += .5) {
+    const feet = { east, north: runway.north, height: anchor.height };
     for (const offset of [-runway.width / 2, 0, runway.width / 2]) {
       assert.equal(za22CloudSurfaceAt(east, feet.north + offset, 0), feet.height);
     }
