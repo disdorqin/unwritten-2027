@@ -6,7 +6,10 @@ import type {
 type OpeningKind = Exclude<UndergroundMiningTargetKind, 'ore'>;
 type Ore = Readonly<{
   // Use an installed marker returned by createUndergroundOreDistribution.
-  marker: Readonly<{ id: string; position: readonly [number, number, number]; mineral: string; amount: number }>;
+  marker: Readonly<{
+    id: string; position: readonly [number, number, number]; mineral: string; amount: number;
+    depth?: number; region?: string; grade?: 'scatter' | 'deposit';
+  }>;
   layer: string;
   coreAt: UndergroundMiningPoint;
   surface: 'rock' | 'crystal';
@@ -14,7 +17,7 @@ type Ore = Readonly<{
 }>;
 type Opening = Readonly<{ id: string; kind: OpeningKind; at: UndergroundMiningPoint; strikes: number }>;
 type Site = Readonly<{ id: string; at: UndergroundMiningPoint; surface: UndergroundMiningSurface; strikes: number }> & (
-  | Readonly<{ kind: 'ore'; mineral: string; amount: number; coreAt: UndergroundMiningPoint }>
+  | Readonly<{ kind: 'ore'; mineral: string; amount: number; coreAt: UndergroundMiningPoint; regrowMs: number }>
   | Readonly<{ kind: OpeningKind }>
 );
 
@@ -79,8 +82,12 @@ export function createUndergroundMining(options: Options, initial?: UndergroundM
         (surface !== 'rock' && surface !== 'crystal')) {
       throw new RangeError('Invalid ore or missing same-layer core landing: ' + marker.id);
     }
+    const slowRegrowth = marker.mineral === 'moonstone' && marker.depth === -140 &&
+      marker.region === 'moonstone-vein' && marker.grade === 'deposit';
+    const regrowMs = slowRegrowth ? options.regrowMs * 2 : options.regrowMs;
+    if (!positiveInteger(regrowMs)) throw new RangeError('Invalid regrowth interval for underground ore: ' + marker.id);
     register({ id: marker.id, kind: 'ore', mineral: marker.mineral, amount: marker.amount,
-      at: { layer, east, north, height }, coreAt, surface, strikes });
+      at: { layer, east, north, height }, coreAt, surface, strikes, regrowMs });
   }
   for (const opening of options.openings) {
     if (!Object.hasOwn(openingSurfaces, opening.kind)) throw new RangeError('Unknown underground opening: ' + opening.id);
@@ -133,7 +140,7 @@ export function createUndergroundMining(options: Options, initial?: UndergroundM
     let core: UndergroundMiningCore | undefined;
     let regrowAt: number | undefined;
     if (broke && site.kind === 'ore') {
-      regrowAt = now + options.regrowMs;
+      regrowAt = now + site.regrowMs;
       if (!Number.isSafeInteger(regrowAt)) throw new RangeError('Invalid mining regrowth deadline');
       core = { id: JSON.stringify([site.id, now]), at: { ...site.coreAt }, mineral: site.mineral, amount: site.amount };
     }

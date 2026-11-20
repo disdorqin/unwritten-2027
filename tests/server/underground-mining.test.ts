@@ -20,7 +20,7 @@ const markers = createUndergroundOreDistribution({
 type Options = Parameters<typeof createUndergroundMining>[0];
 type Action = NonNullable<ReturnType<Options['accept']>>;
 
-function setup(strikes: 3 | 4 | 5 = 3) {
+function setup(strikes: 3 | 4 | 5 = 3, ore?: Options['ore']) {
   let now = 10;
   let action: Action | undefined;
   let saved: UndergroundMiningState | undefined;
@@ -28,7 +28,7 @@ function setup(strikes: 3 | 4 | 5 = 3) {
   let commitAllowed = true;
   const rewards: UndergroundMiningReward[] = [];
   const options: Options = {
-    ore: markers.map(marker => ({ marker, coreAt, layer, surface: 'crystal', strikes })),
+    ore: ore ?? markers.map(marker => ({ marker, coreAt, layer, surface: 'crystal', strikes })),
     openings: openingKinds.map((kind, i) => ({ id: kind, kind, strikes: 2, at: { ...feet, north: 9 + .25 * i } })),
     reach: 2.5,
     regrowMs,
@@ -149,6 +149,53 @@ test('restore retains loose cores and open barriers while only ore regrows after
   const nextStrike = restored.apply('p', 12);
   assert.ok(nextStrike?.action === 'strike' && nextStrike.target.hits === 1);
   assert.deepEqual(restored.readLayer(layer).cores, [core]);
+});
+
+test('registered moonstone deposits regrow at double the host interval, including after reload', () => {
+  const crystalLayer = 'test-crystal-cave';
+  const { layers } = createUndergroundOreDistribution({
+    anchors: [
+      { id: 'hall', depth: -140, region: 'crystal-hall', evidence: 'test geometry', contains: ([east]) => east < 0 },
+      { id: 'vein', depth: -140, region: 'moonstone-vein', evidence: 'test geometry',
+        contains: ([east]) => east >= 0, distanceFromMainRoute: () => 12 },
+    ],
+    points: [
+      { id: 'blue', anchorId: 'hall', depth: -140, position: [-.5, 0, -139], mineral: 'blue-crystal', amount: 1, grade: 'scatter' },
+      { id: 'moon-scatter', anchorId: 'vein', depth: -140, position: [0, 0, -139], mineral: 'moonstone', amount: 1, grade: 'scatter' },
+      { id: 'moon-deposit', anchorId: 'vein', depth: -140, position: [.5, 0, -139], mineral: 'moonstone', amount: 2, grade: 'deposit' },
+    ],
+  });
+  const feet = { layer: crystalLayer, east: 0, north: 0, height: -140 };
+  const ore: Options['ore'] = layers[1].markers.map(marker => ({
+    marker, layer: crystalLayer, coreAt: feet, surface: 'crystal', strikes: 3,
+  }));
+  const f = setup(3, ore);
+  const brokenAt = 810;
+  const ordinaryDeadline = brokenAt + regrowMs;
+  const moonstoneDeadline = brokenAt + regrowMs * 2;
+  for (let hit = 1; hit <= 3; hit++) {
+    f.setTime(10 + (hit - 1) * 400);
+    for (const { marker } of ore) {
+      const receipt = f.request(hit, { targetId: marker.id, feet }, marker.id);
+      assert.ok(receipt?.action === 'strike');
+      assert.equal(receipt.target.regrowAt, hit < 3 ? undefined :
+        marker.id === 'moon-deposit' ? moonstoneDeadline : ordinaryDeadline);
+    }
+  }
+
+  const restored = createUndergroundMining({ ...f.options, regrowMs: regrowMs * 3 }, f.saved());
+  for (const [time, open] of [
+    [ordinaryDeadline - 1, [true, true, true]],
+    [ordinaryDeadline, [false, false, true]],
+    [moonstoneDeadline - 1, [false, false, true]],
+    [moonstoneDeadline, [false, false, false]],
+  ] as const) {
+    f.setTime(time);
+    const view = restored.readLayer(crystalLayer);
+    assert.deepEqual(view, f.mine.readLayer(crystalLayer));
+    assert.deepEqual(view.targets.map(target => target.open), open);
+    assert.equal(view.cores.length, 3);
+  }
 });
 
 test('a refused or failed commit delivers no receipt and does not consume the hit, core or inventory credit', () => {
