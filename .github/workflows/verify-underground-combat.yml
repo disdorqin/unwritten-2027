@@ -9,8 +9,11 @@ on:
       - 'src/presence/underground-survival.ts'
       - 'src/shared/mine-bestiary.ts'
       - 'tools/voxel-tavern/town-blockout/underground-combat-feedback.ts'
+      - 'tools/voxel-tavern/town-blockout/underground-knockback.ts'
       - 'tools/fixtures/underground-combat-review.ts'
       - 'tools/verify-underground-combat.mjs'
+      - 'tests/town-blockout-underground-combat-feedback.test.ts'
+      - 'tests/town-blockout-underground-knockback.test.ts'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +29,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: node --import tsx --test tests/town-blockout-underground-combat-feedback.test.ts tests/server/underground-mine-encounter.test.ts
+      - run: node --import tsx --test tests/town-blockout-underground-combat-feedback.test.ts tests/town-blockout-underground-knockback.test.ts tests/server/underground-mine-encounter.test.ts
       - run: npx playwright install --with-deps chromium
       - run: node --import tsx tools/verify-underground-combat.mjs "${{ runner.temp }}/combat-review"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

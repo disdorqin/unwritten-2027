@@ -56,7 +56,7 @@ const creature = (sequence: number, tool: 'snowball' | 'pickaxe' = 'pickaxe'): U
   tool, outcome: 'damaged', hitsLost: 1,
 });
 
-function mount() {
+function mount(onKnockback?: Parameters<typeof mountUndergroundCombatFeedback>[0]['onKnockback']) {
   let reduced = false;
   let clears = 0;
   const visuals: string[] = [];
@@ -69,6 +69,7 @@ function mount() {
     getAudioContext: () => sound.audio as unknown as BaseAudioContext,
     showCreatureHit: (cue, presentation) =>
       visuals.push([cue.targetId, presentation.family, presentation.holdMs, presentation.flashMs].join(':')),
+    onKnockback,
     clear: () => { clears++; },
     prefersReducedMotion: () => reduced,
   });
@@ -138,4 +139,29 @@ test('player hurt is a temporary screen-only cue and wrong-layer or repeated rec
   feedback.dispose();
   assert.equal(overlay.removed, true);
   assert.equal(feedback.receive(creature(4), 52), false);
+});
+
+test('only accepted same-layer hits send their ordered weight to the movement host', () => {
+  const shoves: Array<[UndergroundCombatCue, string]> = [];
+  const { feedback, reduce } = mount((cue, weight) => shoves.push([cue, weight]));
+  feedback.setLayer('mine');
+  const wrong = { ...creature(1), outcome: 'wrong-tool' } as const;
+  const snow = creature(2, 'snowball');
+  const pick = creature(3);
+  const heavy = { layer: 'mine', sequence: 2, kind: 'player-hurt', damage: 16, weight: 'heavy' } as const;
+  assert.equal(feedback.receive(wrong, 10), true);
+  assert.equal(feedback.receive(snow, 20), true);
+  assert.equal(feedback.receive(snow, 21), false);
+  assert.equal(feedback.receive(pick, 25), true);
+  reduce();
+  assert.equal(feedback.receive(heavy, 30), true);
+  assert.equal(feedback.receive(heavy, 35), false);
+  assert.equal(feedback.receive({ ...heavy, layer: 'crystal-cave', sequence: 3 }, 40), false);
+  feedback.setLayer('crystal-cave');
+  assert.equal(feedback.receive(creature(4), 50), false);
+  feedback.setLayer('mine');
+  assert.equal(feedback.receive(pick, 55), false);
+  feedback.dispose();
+  assert.equal(feedback.receive(creature(4), 60), false);
+  assert.deepEqual(shoves, [[snow, 'light'], [pick, 'medium'], [heavy, 'heavy']]);
 });

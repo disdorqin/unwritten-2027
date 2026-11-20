@@ -1,4 +1,5 @@
 import type { UndergroundMiningPoint } from '../../../src/shared/underground-mining';
+import type { UndergroundKnockbackWeight } from './underground-knockback';
 
 type HitFamily = 'ice' | 'metal';
 type ConfirmedStamp = Readonly<{ layer: string; sequence: number }>;
@@ -11,8 +12,9 @@ type CreatureHit = Readonly<{
   | Readonly<{ outcome: 'wrong-tool' }>
   | Readonly<{ outcome: 'damaged' | 'defeated'; hitsLost: number }>
 );
-type PlayerHurt = Readonly<{ kind: 'player-hurt'; damage: number; weight: 'light' | 'medium' | 'heavy' }>;
+type PlayerHurt = Readonly<{ kind: 'player-hurt'; damage: number; weight: UndergroundKnockbackWeight }>;
 export type UndergroundCombatCue = ConfirmedStamp & (CreatureHit | PlayerHurt);
+type ConfirmedImpactCue = ConfirmedStamp & (Extract<CreatureHit, { hitsLost: number }> | PlayerHurt);
 
 type Options = Readonly<{
   parent: HTMLElement;
@@ -25,6 +27,8 @@ type Options = Readonly<{
     flashMs: number;
     stagger: 'small' | 'medium';
   }>): void;
+  /** Resolve the source and eligible body in the current host, then use normal collision checks. */
+  onKnockback?(cue: ConfirmedImpactCue, weight: UndergroundKnockbackWeight): void;
   clear?(): void;
   prefersReducedMotion?(): boolean;
 }>;
@@ -163,6 +167,7 @@ export function mountUndergroundCombatFeedback(options: Options) {
 
       if (cue.kind === 'player-hurt') {
         hurt = { at: nowMs, strength: hurtStrength[cue.weight], side: -hurt.side };
+        options.onKnockback?.(cue, cue.weight);
         return true;
       }
       if (cue.outcome === 'wrong-tool') return true;
@@ -179,6 +184,7 @@ export function mountUndergroundCombatFeedback(options: Options) {
       options.showCreatureHit?.(cue, {
         family, holdMs: hitStopMs, flashMs: hitFlashMs, stagger: family === 'ice' ? 'small' : 'medium',
       });
+      options.onKnockback?.(cue, family === 'ice' ? 'light' : 'medium');
       play(family);
       return true;
     },
