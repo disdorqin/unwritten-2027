@@ -58,7 +58,7 @@ jobs:
           node --import tsx --test tests/town-blockout-house-portals.test.ts tests/town-blockout-market-{layout,fair,residents,banners,venue-activities}.test.ts
           node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . snapshot > "$RUNNER_TEMP/jx1-stall5/static-shifted.json"
           node ../ci/tools/jx1-stall5/compare-stall5-snapshots.mjs "$RUNNER_TEMP/jx1-stall5/static-baseline.json" "$RUNNER_TEMP/jx1-stall5/static-shifted.json" > "$RUNNER_TEMP/jx1-stall5/stall-shift-registry.json"
-          node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . candidate "$RUNNER_TEMP/jx1-stall5/static-shifted.json" --require-all --known-book-five > "$RUNNER_TEMP/jx1-stall5/all-house-sweeps.json"
+          node --import tsx ../ci/tools/jx1-formal/check-jx1.mts . candidate "$RUNNER_TEMP/jx1-stall5/static-baseline.json" --require-all --known-book-five > "$RUNNER_TEMP/jx1-stall5/all-house-sweeps.json"
       - name: Install the runtime viewer and browser dependencies
         working-directory: town
         shell: bash
