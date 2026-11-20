@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { NearestFilter, SRGBColorSpace, type BoxGeometry, type DataTexture, type Mesh, type MeshLambertMaterial } from 'three';
 import { createAircraftFlight, surveyAircraftRunway, type AircraftPoint } from '../src/shared/aircraft-flight.ts';
 import { createFlightThrust } from '../src/shared/flight-thrust.ts';
 import {
@@ -137,6 +138,20 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   assert.deepEqual(model.group.position.toArray(), [324, 347, -657]);
   assert.equal(model.group.parent, owner);
   assert.equal(model.aim(undefined, 0, 0, eyeHeight), null);
+  const panel = model.group.getObjectByName('rack-worn-panel') as unknown as Mesh<BoxGeometry, MeshLambertMaterial>;
+  assert.equal(panel.geometry.parameters.width, 5.82);
+  const map = panel.material.map as DataTexture;
+  assert.ok(map.isDataTexture);
+  assert.equal(map.colorSpace, SRGBColorSpace);
+  assert.equal(map.minFilter, NearestFilter);
+  assert.equal(map.magFilter, NearestFilter);
+  assert.equal(map.generateMipmaps, false);
+  const front = panel.geometry.groups[4]!;
+  const frontUV = Array.from({ length: front.count }, (_, i) =>
+    panel.geometry.attributes.uv!.getX(panel.geometry.index!.getX(front.start + i)));
+  assert.equal(Math.round((Math.max(...frontUV) - Math.min(...frontUV)) * map.image.width) + 1, 140);
+  let mapDisposals = 0;
+  map.addEventListener('dispose', () => mapDisposals++);
   for (const east of [envelope.east - envelope.width / 2, envelope.east + envelope.width / 2]) {
     for (const north of [envelope.north - envelope.depth / 2, envelope.north + envelope.depth / 2]) {
       assert.equal(apronHeight(east, north, 0), anchor.height);
@@ -168,6 +183,8 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   model.show({ installed: starportAssemblyParts, ignited: true });
   for (const part of starportAssemblyParts) assert.equal(model.group.getObjectByName(part)?.visible, true);
   model.dispose();
+  model.dispose();
+  assert.equal(mapDisposals, 1);
   assert.equal(model.group.parent, null);
   assert.equal(model.blocked(anchor, radius, bodyHeight), false);
 });
