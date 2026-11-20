@@ -1,6 +1,8 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
+import { mountZa31CraterCamp } from './town-za31-crater-camp';
+import { buildZa31CraterRim } from './town-za31-crater-rim';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 
 export const craterWestSurvey = Object.freeze({
@@ -122,5 +124,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
 
   const road = { group, anchor, lip, heightAt, fenceBlocks };
   mountZa31CraterEntrance(road);
+  const camp = mountZa31CraterCamp(road);
+  const rim = buildZa31CraterRim(road, camp.placements);
+  group.add(rim.group, camp.group);
   return road;
 }
