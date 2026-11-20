@@ -2,6 +2,8 @@
 
 本轮已读 Muse 新文件：《审计·分支处置终表》16:23 追记二。主干新派工以 `d675bc1e` 的 ZA-27 任务文件为准。
 
+分区一已在 `a298f4b` 以本新版 ①② 替换合体旧 05，再并 ZA-19，`b33af4d1` 登记闭合。独立 06 的按钮及 PNG 已在运行树，主干两端类型、生产 Vite 构建与定向 99/99 通过。04 的 CI workflow 仍传旧夜窗变量，有写权窗口可单独取[一文件补片](za22-live-night-workflow-only.patch)。
+
 ## ① 统一输入
 
 [01 viewer-only 补丁](01-zb19-viewer-on-d675bc1e.patch) 以 `d675bc1e7914f167c069b20f0de3c0df89f4bbb7` 为父提交，候选 `9601e75dda813f1102dfec7f0a6a898250c144fa`，树 `4c464c01d8465cc61fe75addbbe7cdfbecc651dd`。补丁 SHA256 `362fa82f4c0b1f1893d5be52d17a5f45ad874e1c9353a0f017b1b668b56ac3df`。

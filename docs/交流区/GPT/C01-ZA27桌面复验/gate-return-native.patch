@@ -1,0 +1,66 @@
+diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
+index 65602e9..3365deb 100644
+--- a/tools/verify-za22-live.mjs
++++ b/tools/verify-za22-live.mjs
+@@ -8,7 +8,7 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
+ const url = new URL('/?profile', origin);
+ assert.equal(url.protocol, 'http:');
+ assert.equal(url.hostname, '127.0.0.1');
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'gate-return'].includes(segment), segment);
+ 
+ const spawn = [223, 180];
+ const station = [
+@@ -265,7 +265,7 @@ try {
+         await card(page, '星港坪');
+         await snapshot(page, evidence, 'cloud-runway');
+       }
+-      if (segment === 'gate' || segment === 'all') {
++      if (segment === 'gate' || segment === 'all' || segment === 'gate-return') {
+         if (segment === 'all') {
+           await page.keyboard.press('Escape');
+           await walkTo(page, evidence, cloudRunway[0], 'return-to-cloud-walkway');
+@@ -275,6 +275,30 @@ try {
+         await card(page, '山门');
+         await snapshot(page, evidence, 'mountain-gate');
+       }
++      if (segment === 'gate-return') {
++        await page.keyboard.press('Escape');
++        await follow(page, evidence, [[300, 683], [300, 676], [300, 663.25], gate[0], cloudStop], 'return-from-gate');
++        await action(page, '乘缆车一线返回山脚站');
++        await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
++          null, { timeout: 135_000 });
++        await snapshot(page, evidence, 'cable-return-boarding');
++        await page.waitForFunction(() => {
++          const riding = document.querySelector('#position')?.textContent?.includes('缆车一线');
++          const height = window.__za22Frame?.cameraY;
++          return riding && height > 80 && height < 300;
++        }, null, { timeout: 105_000 });
++        await snapshot(page, evidence, 'cable-return-moving');
++        const landing = station.at(-1);
++        await waitForWire(page, evidence, pose => pose?.area === 'town' &&
++          Math.hypot(pose.east - landing[0], pose.north - landing[1]) < .65 &&
++          Math.abs(pose.height - 26.14) < .65, 210_000);
++        await snapshot(page, evidence, 'cable-return-town-landing');
++        await follow(page, evidence, station.slice(0, -1).reverse(), 'town-return');
++        await walkTo(page, evidence, spawn, 'return-to-spawn');
++        await waitForWire(page, evidence, pose => pose?.area === 'town' &&
++          Math.hypot(pose.east - spawn[0], pose.north - spawn[1]) < .65);
++        await snapshot(page, evidence, 'town-round-trip');
++      }
+     }
+   }
+   if (segment === 'crater' || segment === 'all') {
+diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
+index 5362af4..ad47967 100644
+--- a/tools/verify-za22-local.mjs
++++ b/tools/verify-za22-local.mjs
+@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
+ import { promisify } from 'node:util';
+ 
+ const [segment, evidencePath] = process.argv.slice(2);
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment) && evidencePath,
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'gate-return'].includes(segment) && evidencePath,
+   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
+ const run = promisify(execFile);
+ const repo = fileURLToPath(new URL('../', import.meta.url));
