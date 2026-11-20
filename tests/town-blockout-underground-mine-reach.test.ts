@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { UndergroundMineGateStage } from '../src/presence/underground-mine-gate.ts';
 import { createUndergroundMineReach } from '../src/presence/underground-mine-reach.ts';
 import { createUndergroundSurvival, type UndergroundSurvivalPoint } from '../src/presence/underground-survival.ts';
 import { createUndergroundVitals } from '../src/presence/underground-vitals.ts';
@@ -10,15 +11,15 @@ const point = (x: number, y: number, z: number): UndergroundSurvivalPoint =>
   ({ layer, east: 120 + x, north: 300 - z, height: y });
 const toLocal = (at: UndergroundSurvivalPoint) => [at.east - 120, at.height, 300 - at.north] as const;
 
-function mineReach(openBackForExpansion: boolean) {
+function mineReach(openBackForExpansion: boolean, readGateStage?: () => UndergroundMineGateStage) {
   const mine = createUndergroundMineLayout({
     pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
     shoreLength: 8, gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
     collapse: { length: 3, width: 1.2, height: 1.3 },
-    camp: { length: 10, side: 'right', extension: 5, openBackForExpansion },
+    camp: { length: 10, side: 'right', extension: 5, openBackForExpansion, crystalGate: !!readGateStage },
     walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
   });
-  return createUndergroundMineReach({ layer, mine,
+  return createUndergroundMineReach({ layer, mine, readGateStage,
     toLocal: at => at.east === 111 ? undefined : toLocal(at),
   });
 }
@@ -52,6 +53,30 @@ test('mine reach respects the low collapse rock even with both endpoints in the 
   try {
     assert.equal(sight.reaches(point(0, -89.3, 31.6), point(0, -89.3, 35.4)), false);
     assert.equal(sight.reaches(point(0, -90.4, 31.6), point(0, -90.4, 35.4)), true);
+  } finally {
+    sight.dispose();
+  }
+});
+
+test('the staged mine gate blocks standing-height rays and transmits only through its current gap', () => {
+  let stage: UndergroundMineGateStage = 'closed';
+  let reads = 0;
+  const sight = mineReach(true, () => { reads++; return stage; });
+  const before = point(0, -89.4, 138.2);
+  const after = point(0, -89.4, 139.4);
+  const lowBefore = point(0, -90.95, 138.2);
+  const lowAfter = point(0, -90.95, 139.4);
+  try {
+    for (const next of ['closed', 'ajar', 'open'] as const) {
+      stage = next;
+      assert.equal(sight.reaches(before, after), next === 'open');
+      assert.equal(sight.reaches(after, before), next === 'open');
+      assert.equal(sight.reaches(lowBefore, lowAfter), next !== 'closed');
+      assert.equal(sight.reaches(lowAfter, lowBefore), next !== 'closed');
+      assert.equal(sight.reaches(before, point(0, -89.4, 138.6)), true);
+      assert.equal(sight.reaches(shoulderFrom, shoulderTo), false);
+    }
+    assert.equal(reads, 18);
   } finally {
     sight.dispose();
   }
