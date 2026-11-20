@@ -7,6 +7,8 @@ import type { CampfireSite } from '../tools/voxel-tavern/town-blockout/town-camp
 import { lighthouseSnakeClue } from '../tools/voxel-tavern/town-blockout/town-zodiac';
 import { mascotHome, townMascotParts } from '../tools/voxel-tavern/town-blockout/town-mascot';
 import { createTownNpcActivity } from '../tools/voxel-tavern/town-blockout/town-npc';
+import { npcAddedDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-added-dialogue';
+import { answerAuthoredNpcQuestion } from '../tools/voxel-tavern/town-blockout/town-npc-dialogue';
 import { palaceStewardDialogue } from '../tools/voxel-tavern/town-blockout/town-npc-palace-dialogue';
 import { residentZodiacClues } from '../tools/voxel-tavern/town-blockout/town-npc-residents';
 import { registerTownResidentStations, palaceStewardGuides, townResidentStations } from '../tools/voxel-tavern/town-blockout/town-npc-stations';
@@ -96,6 +98,76 @@ test('the 25 Qin lines match the manuscript and clue gates do not expose the obs
   assert.equal(palaceStewardGuides(initial)[0], 0);
   assert.equal(palaceStewardGuides({ ...initial, key: true })[0], 4);
   assert.equal(palaceStewardGuides({ ...initial, key: true, throneRoom: true, gallery: true, mirrorCache: true })[0], 3);
+});
+
+test('resident question buttons pass through exact authored hits and in-character refusals at three hosts', t => {
+  class Element {
+    children: Element[] = [];
+    textContent = '';
+    onclick?: () => void;
+    constructor(readonly tagName: string) {}
+    append(...nodes: Element[]) { this.children.push(...nodes); }
+    setAttribute() {}
+  }
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true, value: { createElement: (tagName: string) => new Element(tagName) },
+  });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'document', original);
+    else Reflect.deleteProperty(globalThis, 'document');
+  });
+
+  const grid = createTerrainGrid();
+  let panel = new Element('section');
+  const npc = createTownNpcActivity({
+    scene: new Scene(),
+    open: () => { panel = new Element('section'); return panel as unknown as HTMLElement; },
+    announce() {}, face() {}, sit() {},
+  }, grid.heightAt);
+  const forest = fire('forest', 122.47759, 407.65367, grid.heightAt(122.47759, 407.65367));
+  const lake = fire('lakeside', 337, 109.65, grid.heightAt(337, 109.65));
+  const [woodcutter, fisherman, steward] = registerTownResidentStations(npc, {
+    campfires: [forest, lake], canStand: () => true, isNight: () => false,
+    forestChop: () => feature('篝火旁劈柴'), mainFishing: () => feature('冰湖冰钓'),
+    palaceProgress: () => ({ key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false }),
+  });
+  const cases = [
+    [woodcutter, npcAddedDialogue.樊樵], [fisherman, npcAddedDialogue.翁寒江], [steward, palaceStewardDialogue],
+  ] as const;
+  for (const [spot, role] of cases) {
+    assert.equal(spot.available?.(), true, spot.label);
+    spot.run();
+    const [speech, controls] = panel.children;
+    assert.deepEqual(panel.children.map(child => child.tagName), ['p', 'div']);
+    assert.ok(controls.children.every(child => child.tagName === 'button'));
+    const ask = (label: string) => {
+      const button = controls.children.find(child => child.textContent === label);
+      assert.ok(button?.onclick, `${spot.label}: ${label}`);
+      button.onclick();
+      return speech.textContent;
+    };
+    assert.equal(ask('问镇长近况'), role.questions.host[1].text);
+    assert.equal(ask('问联系方式'), role.questions.outside[0].text);
+    assert.equal(ask('问联系方式'), role.questions.outside[0].text);
+  }
+});
+
+test('unknown question IDs and unapproved answer slots never publish injected answer text', () => {
+  const questions = npcAddedDialogue.樊樵.questions;
+  const fallback = { kind: 'refusal', text: questions.host[0].text };
+  assert.deepEqual(answerAuthoredNpcQuestion(questions, 'unregistered-topic'), fallback);
+  assert.deepEqual(answerAuthoredNpcQuestion(questions, 'current-work'), {
+    kind: 'fact', text: questions.host[1].text,
+  });
+  const unapproved = { verdict: '可答', text: 'test-source-marker' } as const;
+  assert.deepEqual(answerAuthoredNpcQuestion({
+    host: questions.host, outside: [unapproved, questions.outside[1]],
+  }, 'contact'), fallback);
+  assert.deepEqual(answerAuthoredNpcQuestion({
+    host: [questions.host[0], questions.host[2]], outside: [],
+  }, 'current-work'), { kind: 'refusal', text: questions.host[2].text });
+  assert.equal(answerAuthoredNpcQuestion({ host: [unapproved], outside: [] }, 'unregistered-topic'), undefined);
 });
 
 test('resident station visibility and 小未 repack the same batch without replacing each other', () => {
