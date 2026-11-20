@@ -18,6 +18,34 @@ export type StarportAssemblySite = Readonly<{
   approachable?(feet: AircraftPoint, target: AircraftPoint): boolean;
 }>;
 
+// Local rack coordinates use +Z toward the south approach.
+export const fittedStarportAssemblyLayout = {
+  sockets: {
+    'snow-wing': { x: -1.9, y: 1.28, z: .32 },
+    booster: { x: 0, y: 1.28, z: .32 },
+    'navigation-core': { x: 1.9, y: 1.28, z: .32 },
+  },
+  ignition: { x: 0, y: 2.04, z: .36 },
+} as const;
+
+/** Server-side reach geometry for the fitted rack, without mounting its visual model. */
+export function createFittedStarportAssemblySite(anchor: AircraftPoint) {
+  const { sockets, ignition } = fittedStarportAssemblyLayout;
+  const floor = ({ x, z }: Readonly<{ x: number; z: number }>) => ({
+    east: anchor.east + x, north: anchor.north - z, height: anchor.height,
+  });
+  return {
+    sockets: {
+      'snow-wing': floor(sockets['snow-wing']),
+      booster: floor(sockets.booster),
+      'navigation-core': floor(sockets['navigation-core']),
+    },
+    ignitionPoint: floor(ignition),
+    reach: 2.12,
+    approachable: (feet: AircraftPoint, target: AircraftPoint) => feet.north < target.north,
+  } satisfies StarportAssemblySite;
+}
+
 export type StarportAssemblyHost = Readonly<{
   /** The storage key identifies this player's aircraft. The record owns both the parts and their sockets. */
   read(playerId: string): StarportAssemblyState | undefined | Promise<StarportAssemblyState | undefined>;

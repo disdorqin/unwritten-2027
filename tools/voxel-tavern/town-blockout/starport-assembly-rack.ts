@@ -2,18 +2,14 @@ import {
   BoxGeometry, Color, Group, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Shape,
   ShapeGeometry, type BufferGeometry,
 } from 'three';
-import { starportAssemblyParts, type StarportAssemblyPart } from '../../../src/shared/starport-assembly';
+import { fittedStarportAssemblyLayout, starportAssemblyParts, type StarportAssemblyPart } from '../../../src/shared/starport-assembly';
+import { createClayMetalPanel } from './clay-metal-panel';
 import { createFlightBoosterVisual, createSnowWingVisual } from './flight-equipment-visuals';
 
-type Socket = Readonly<{ x: number; y: number; z: number }>;
 type Plate = readonly [x: number, y: number, z: number, w: number, h: number, d: number, color: string, rotation?: number];
 type Point = readonly [number, number];
 
-const socketCenters = {
-  'snow-wing': { x: -1.9, y: 1.28, z: .32 },
-  booster: { x: 0, y: 1.28, z: .32 },
-  'navigation-core': { x: 1.9, y: 1.28, z: .32 },
-} as const satisfies Record<StarportAssemblyPart, Socket>;
+const socketCenters = fittedStarportAssemblyLayout.sockets;
 
 const silhouettes = {
   'snow-wing': [[-.78, -.16], [-.69, .09], [-.42, .20], [-.16, .26], [-.12, .34],
@@ -34,6 +30,9 @@ const brass = '#b98d53';
 const copper = '#d1a969';
 const inactive = '#647782';
 const seated = '#9dd9cf';
+const framePaint: Readonly<Record<string, number>> = {
+  [white]: 0x8a8378, [frost]: 0xe8ecf0, [steel]: 0x2c3648, [brass]: 0xa98a56, '#3c5660': 0x2c3648,
+};
 
 function shape(points: readonly Point[]) {
   const result = new Shape();
@@ -124,8 +123,23 @@ export function buildStarportAssemblyRack() {
   for (const dx of [-.30, -.18, -.06, .06, .18, .30]) {
     frame.push([socketCenters['navigation-core'].x + dx, .97, .30, .033, .096, .078, copper]);
   }
-  const rack = plates(geometry, material, frame, 'rack-frame');
-  group.add(rack);
+  const shortHardware: Plate[] = [];
+  const panels: Mesh<BoxGeometry, MeshLambertMaterial>[] = [];
+  for (const [index, part] of frame.entries()) {
+    const [x, y, z, width, height, depth, color, rotation = 0] = part;
+    if (Math.max(width * height, width * depth, height * depth) < 1) {
+      shortHardware.push(part);
+      continue;
+    }
+    const finish = createClayMetalPanel(width, height, depth, framePaint[color] ?? 0x8a8378, index + 210);
+    const panel = new Mesh(finish.geometry, finish.material);
+    panel.name = 'rack-worn-panel';
+    panel.position.set(x, y, z);
+    panel.rotation.z = rotation;
+    panels.push(panel);
+  }
+  const rack = plates(geometry, material, shortHardware, 'rack-frame');
+  group.add(rack, ...panels);
 
   const fittedWing = createSnowWingVisual();
   const fittedBooster = createFlightBoosterVisual();
@@ -188,6 +202,11 @@ export function buildStarportAssemblyRack() {
       chip.dispose();
       geometry.dispose();
       material.dispose();
+      for (const panel of panels) {
+        panel.geometry.dispose();
+        panel.material.map?.dispose();
+        panel.material.dispose();
+      }
       backing.dispose();
       bezel.dispose();
       for (const shapeGeometry of silhouetteGeometries) shapeGeometry.dispose();

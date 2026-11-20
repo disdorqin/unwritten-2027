@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Vector3, type Mesh } from 'three';
+import { Group, NearestFilter, SRGBColorSpace, Vector3, type BoxGeometry, type DataTexture,
+  type Mesh, type MeshLambertMaterial } from 'three';
 import { createSkyCityApproach, createSkyCityLanding } from '../tools/voxel-tavern/town-blockout/sky-city-approach';
 import { createSkyCitySite } from '../tools/voxel-tavern/town-blockout/sky-city-site';
 import { mountSkyCity, skyCityTier, type SkyCityFoot } from '../tools/voxel-tavern/town-blockout/sky-city';
@@ -25,6 +26,46 @@ test('valley has no island and the summit loads one low-detail mesh before the c
   city.show('hidden');
   assert.equal(layer.children.length, 0);
   city.dispose();
+});
+
+test('the locked gate keeps its original dimensions and releases the pixel finish with the full model', () => {
+  const city = mountSkyCity(new Group());
+  city.show('full');
+  const full = city.footModel()!;
+  const gate = full.group.getObjectByName('sky-city-locked-gate')!;
+  const slab = gate.getObjectByName('solid-door-surface') as Mesh<BoxGeometry, MeshLambertMaterial>;
+  assert.ok(slab?.isMesh);
+  const { width, height, depth } = slab.geometry.parameters;
+  assert.deepEqual([width, height, depth], [2.64, 3.35, .30]);
+  assert.equal(slab.position.y, height / 2);
+  assert.ok(gate.getObjectByName('town-chronicle-ring'));
+  assert.equal(full.obstructs(gate.position.x, gate.position.z, gate.position.y, .28), true);
+
+  const map = slab.material.map as DataTexture;
+  assert.ok(map?.isDataTexture);
+  assert.equal(map.magFilter, NearestFilter);
+  assert.equal(map.minFilter, NearestFilter);
+  assert.equal(map.generateMipmaps, false);
+  assert.equal(map.colorSpace, SRGBColorSpace);
+  const uv = slab.geometry.getAttribute('uv');
+  // BoxGeometry's last two faces are the full-width front and rear of the slab.
+  for (const face of slab.geometry.groups.slice(4)) {
+    const vertices = Array.from({ length: face.count }, (_, i) => slab.geometry.index!.getX(face.start + i));
+    const u = vertices.map(index => uv.getX(index));
+    const v = vertices.map(index => uv.getY(index));
+    assert.ok(Math.abs((Math.max(...u) - Math.min(...u)) * map.image.width + 1 - width * 24) < 1);
+    assert.ok(Math.abs((Math.max(...v) - Math.min(...v)) * map.image.height + 1 - height * 24) < 1);
+  }
+
+  let mapDisposals = 0;
+  map.addEventListener('dispose', () => { mapDisposals++; });
+  city.show('silhouette');
+  city.show('full');
+  assert.equal(city.footModel(), full);
+  assert.equal(mapDisposals, 0);
+  city.dispose();
+  city.dispose();
+  assert.equal(mapDisposals, 1);
 });
 
 test('a translated and turned site aligns the reveal silhouette, landing surface and locked gate', () => {
