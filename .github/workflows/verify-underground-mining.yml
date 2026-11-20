@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/verify-underground-mining.yml'
       - 'src/presence/underground-mining.ts'
+      - 'tests/server/underground-mining.test.ts'
       - 'src/shared/underground-mining.ts'
       - 'tools/voxel-tavern/town-blockout/underground-mining-activity.ts'
       - 'tools/voxel-tavern/town-blockout/underground-ore-vein.ts'
@@ -28,7 +29,15 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: npx playwright install --with-deps chromium
+      - run: node --import tsx --test tests/server/underground-mining.test.ts
+      - name: Select Chromium
+        shell: bash
+        run: |
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            printf 'CHROMIUM_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
       - run: node --import tsx tools/verify-underground-mining.mjs "${{ runner.temp }}/mining-review"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
