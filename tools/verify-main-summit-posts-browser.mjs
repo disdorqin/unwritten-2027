@@ -6,8 +6,10 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [checkoutArg, outputArg] = process.argv.slice(2);
-assert.ok(checkoutArg && outputArg, 'Usage: node verify-main-summit-posts-browser.mjs <checkout> <output>');
+const [checkoutArg, outputArg, mode] = process.argv.slice(2);
+assert.ok(checkoutArg && outputArg && (mode === undefined || mode === '--dispatch'),
+  'Usage: node verify-main-summit-posts-browser.mjs <checkout> <output> [--dispatch]');
+const verifyDispatch = mode === '--dispatch';
 const checkout = path.resolve(checkoutArg);
 const output = path.resolve(outputArg);
 const viteRoot = path.join(checkout, 'tools', 'voxel-tavern');
@@ -47,11 +49,21 @@ function git(args) {
 }
 
 function verifySources() {
+  const tracked = file => git(['rev-parse', 'HEAD:' + file]);
+  const evolved = new Set(['main-summit-assembly.ts', 'main-summit-cable.ts']);
   const expected = [
-    ...Object.entries(assemblySources).map(([file, blob]) => [blockout + file, blob]),
+    ...Object.entries(assemblySources).map(([file, blob]) =>
+      [blockout + file, verifyDispatch && evolved.has(file) ? tracked(blockout + file) : blob]),
     ['tools/fixtures/main-summit-snow-belt-survey.json', '95aa66e250c29e5b13ec39c3f1ea67fb10356d96'],
     [blockout + 'main-summit-approach.ts', 'dd8cae15aa91f272cf3d0b6c848812597e824bd6'],
   ];
+  if (verifyDispatch) {
+    for (const name of ['flight-equipment-visuals.ts', 'main-summit-cable-travel.ts', 'main-summit-outlook.ts',
+      'main-summit-wing-rack.ts', 'main-summit-wreckage.ts']) {
+      const file = blockout + name;
+      expected.push([file, tracked(file)]);
+    }
+  }
   const files = Object.fromEntries(expected.map(([file, blob]) => {
     const actual = git(['hash-object', file]);
     assert.equal(actual, blob, `Pinned proof source changed: ${file}`);
@@ -66,6 +78,42 @@ function verifySources() {
 
 const state = () => page.evaluate(() => window.__p5Review.getState());
 const gap = (a, b) => Math.hypot(a.east - b.east, a.north - b.north);
+
+async function assertDispatchClosed(current, available) {
+  assert.equal(current.dispatch.available, available);
+  assert.equal(current.dispatch.reading, null);
+  assert.equal(await page.locator('#dispatch-reading').isVisible(), false);
+  const action = page.locator('#dispatch-action');
+  assert.equal(await action.isVisible(), available);
+  assert.equal(await action.getAttribute('aria-expanded'), 'false');
+}
+
+async function assertDispatchOpen() {
+  const current = await state();
+  assert.equal(current.dispatch.available, true);
+  const { reading } = current.dispatch;
+  assert.ok(reading, 'E should open the dispatch reading from its visitor position.');
+  assert.ok(reading.cabinIndex === 0 || reading.cabinIndex === 1);
+  assert.equal(typeof reading.boarding, 'boolean');
+  assert.ok(Number.isFinite(reading.untilBoardingMs) && reading.untilBoardingMs >= 0);
+  assert.ok(Number.isFinite(reading.untilDepartureMs) && reading.untilDepartureMs >= 0);
+  assert.ok(reading.rideMs >= 230_000 && reading.rideMs <= 260_000);
+  if (reading.boarding) {
+    assert.equal(reading.untilBoardingMs, 0);
+    assert.ok(reading.untilDepartureMs <= 10_000);
+  } else {
+    assert.ok(reading.untilBoardingMs <= reading.rideMs);
+    assert.equal(reading.untilDepartureMs - reading.untilBoardingMs, 10_000);
+  }
+  const panel = page.locator('#dispatch-reading');
+  assert.equal(await panel.isVisible(), true);
+  const text = await panel.textContent() ?? '';
+  assert.ok(text.includes(reading.cabinIndex === 0 ? 'A 厢' : 'B 厢'));
+  assert.ok(text.includes(reading.boarding ? '正在登车' : '后可登车'));
+  assert.ok(text.includes('开往绝顶台'));
+  assert.equal(await page.locator('#dispatch-action').getAttribute('aria-expanded'), 'true');
+  return current.dispatch;
+}
 
 async function walkTo(target, [key, code]) {
   const before = await state();
@@ -93,16 +141,49 @@ async function review(id) {
   assert.ok(gap(start, route[0]) < .002);
   const result = { id, post, route, start, forward: [], reverse: [] };
   results.push(result);
+  if (verifyDispatch) {
+    await assertDispatchClosed(start, false);
+    await page.keyboard.press('e');
+    const beforeApproach = await state();
+    await assertDispatchClosed(beforeApproach, false);
+    result.dispatch = { beforeApproach: beforeApproach.dispatch };
+  }
   for (const [index, target] of route.slice(1).entries()) result.forward.push(await walkTo(target, keys[index % keys.length]));
   await page.evaluate(({ east, north }) => window.__p5Review.aim(east, north, 'KeyW', -.30), post.stand);
   result.approach = await state();
   assert.ok(result.approach.drawnParts.includes(id) && result.approach.draws > 0 && result.approach.triangles > 0);
   assert.ok(gap(result.approach, post.visitor) < .002);
+  if (verifyDispatch && id === 'dispatcher') {
+    await assertDispatchClosed(result.approach, true);
+    await page.keyboard.press('e');
+    result.dispatch.opened = await assertDispatchOpen();
+    await page.keyboard.press('e');
+    const toggledClosed = await state();
+    await assertDispatchClosed(toggledClosed, true);
+    result.dispatch.toggledClosed = toggledClosed.dispatch;
+    await page.keyboard.press('e');
+    await assertDispatchOpen();
+  } else if (verifyDispatch) {
+    await page.keyboard.press('e');
+    const atOtherPost = await state();
+    await assertDispatchClosed(atOtherPost, false);
+    result.dispatch.atOtherPost = atOtherPost.dispatch;
+  }
   result.screenshot = `p5-${id}.png`;
   await page.screenshot({ path: path.join(output, result.screenshot), timeout: 20_000 });
   for (const [index, target] of route.slice(0, -1).reverse().entries()) {
-    result.reverse.push(await walkTo(target, keys[(index + 2) % keys.length]));
+    const leg = await walkTo(target, keys[(index + 2) % keys.length]);
+    result.reverse.push(leg);
+    if (verifyDispatch && id === 'dispatcher' && !leg.after.dispatch.available && !result.dispatch.leaving) {
+      await assertDispatchClosed(leg.after, false);
+      result.dispatch.leaving = leg.after.dispatch;
+      await page.keyboard.press('e');
+      const outside = await state();
+      await assertDispatchClosed(outside, false);
+      result.dispatch.outside = outside.dispatch;
+    }
   }
+  if (verifyDispatch && id === 'dispatcher') assert.ok(result.dispatch.leaving, 'The return walk must leave the reading area.');
   result.returned = await state();
   assert.ok(gap(result.returned, start) < .002);
   assert.ok(result.returned.maxStep <= .43);
@@ -121,13 +202,22 @@ try {
   const address = server.httpServer.address();
   const executablePath = process.env.CHROMIUM_PATH ??
     (!existsSync(chromium.executablePath()) && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+  const args = process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11']
+    : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
   browser = await chromium.launch({
-    executablePath, headless: true, timeout: 20_000, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    executablePath, headless: true, timeout: 20_000, args,
   });
   browserVersion = browser.version();
   page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
   page.setDefaultTimeout(20_000);
   page.on('pageerror', error => { errors.push(String(error)); });
+  if (verifyDispatch) {
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    page.on('response', response => {
+      if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
+    });
+    page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
+  }
   await page.goto(`http://127.0.0.1:${address.port}/main-summit-posts-review.html?proof=1`, { timeout: 30_000 });
   await page.waitForFunction(() => window.__p5Review?.getState().frame > 0, undefined, { timeout: 30_000 });
   for (const id of ['gatekeeper', 'dispatcher', 'pavilion-keeper']) await review(id);
@@ -143,4 +233,5 @@ try {
   }, null, 2) + '\n');
 }
 if (failure) throw new Error(failure);
-console.log(`P-5 passed three keyboard approaches and returns in Chromium ${browserVersion}.`);
+const dispatchEvidence = verifyDispatch ? ' and the dispatcher reading' : '';
+console.log(`P-5 passed three keyboard approaches and returns${dispatchEvidence} in Chromium ${browserVersion}.`);

@@ -27,6 +27,7 @@ const worldRoot = new Group();
 scene.add(worldRoot);
 const assembly = mountMainSummitAssembly(worldRoot, Date.UTC(2026, 11, 31, 6));
 const { summit, cloudDeck } = createMainSummitRegistrationLandmarks(assembly.arrivalHeight);
+type DispatchReading = ReturnType<typeof assembly.timetableAt>;
 const approach = createMainSummitApproach({
   terminal: cloudTerminal, terraceTurnNorth: cloudTerraceTurnNorth, gateArrival: assembly.stations.gate.to,
   frontStamp: { east: cloudDeck.stampPoint.east - summitAssemblyAnchor.east,
@@ -102,6 +103,11 @@ const renderer = new WebGLRenderer({ antialias: true });
 document.body.prepend(renderer.domElement);
 const camera = new PerspectiveCamera(61, 1, .05, 2_300);
 const position = document.querySelector<HTMLOutputElement>('#position')!;
+const dispatchAction = document.querySelector<HTMLButtonElement>('#dispatch-action')!;
+const dispatchOutput = document.querySelector<HTMLOutputElement>('#dispatch-reading')!;
+const dispatcherPoint = posts.posts.find(post => post.id === 'dispatcher')!.visitor;
+let dispatchOpen = false;
+let dispatchReading: DispatchReading | null = null;
 for (const post of posts.posts) {
   posts.group.getObjectByName(post.id)!.traverse(object => {
     if (object instanceof Mesh) object.onAfterRender = () => { drawnParts.add(post.id); };
@@ -146,13 +152,49 @@ function move(seconds: number) {
 }
 
 function draw() {
+  const now = Date.now();
   const world = summitWorldPoint(east, north, feet);
   camera.position.set(world.east, feet + eyeHeight, -world.north);
   camera.lookAt(world.east + Math.sin(yaw), feet + eyeHeight + Math.tan(pitch), -world.north - Math.cos(yaw));
   drawnParts = new Set();
+  assembly.update(now);
   renderer.render(scene, camera);
   frame++;
   position.value = `E${east.toFixed(2)} N${north.toFixed(2)} Y${feet.toFixed(2)}`;
+  updateDispatch(now);
+}
+
+function canReadDispatch() {
+  return active === 'dispatcher' && Math.hypot(east - dispatcherPoint.east, north - dispatcherPoint.north) <= .9 &&
+    Math.abs(feet - dispatcherPoint.height) <= legalStep;
+}
+
+function timeText(ms: number) {
+  const seconds = Math.ceil(ms / 1_000);
+  return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+}
+
+function updateDispatch(now: number) {
+  const available = canReadDispatch();
+  if (!available) dispatchOpen = false;
+  dispatchAction.hidden = !available;
+  dispatchAction.setAttribute('aria-expanded', String(dispatchOpen));
+  dispatchReading = dispatchOpen ? assembly.timetableAt(now, 'cloud-deck') : null;
+  dispatchOutput.hidden = dispatchReading === null;
+  if (!dispatchReading) {
+    dispatchOutput.value = '';
+    return;
+  }
+  const cabin = dispatchReading.cabinIndex === 0 ? 'A 厢' : 'B 厢';
+  const status = dispatchReading.boarding ? `正在登车 · ${timeText(dispatchReading.untilDepartureMs)}后发车`
+    : `${timeText(dispatchReading.untilBoardingMs)}后可登车`;
+  dispatchOutput.value = `${cabin} · ${status} · 开往绝顶台`;
+}
+
+function toggleDispatch() {
+  if (!canReadDispatch()) return;
+  dispatchOpen = !dispatchOpen;
+  draw();
 }
 
 function aim(e: number, n: number, moveKey: Move = 'KeyW', elevation = 0) {
@@ -163,6 +205,7 @@ function aim(e: number, n: number, moveKey: Move = 'KeyW', elevation = 0) {
 
 function select(id: Case) {
   active = id;
+  dispatchOpen = false;
   const [start, next] = cases[active];
   east = start!.east; north = start!.north;
   const height = floor(east, north);
@@ -177,6 +220,7 @@ function select(id: Case) {
 
 function getState() {
   return { active, east, north, feet, frame, accepted, rejected, maxStep, walked, resets,
+    dispatch: { available: canReadDispatch(), reading: dispatchReading },
     draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, drawnParts: [...drawnParts] };
 }
 
@@ -188,6 +232,11 @@ function resize() {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (event.code === 'KeyE' && !event.repeat) {
+    event.preventDefault();
+    toggleDispatch();
+    return;
+  }
   if (!(event.code in headingOffset)) return;
   event.preventDefault();
   keys.add(event.code);
@@ -209,6 +258,7 @@ renderer.domElement.onpointermove = event => {
   draw();
 };
 for (const id of Object.keys(cases) as Case[]) document.getElementById(id)!.onclick = () => select(id);
+dispatchAction.onclick = toggleDispatch;
 
 function tick(time: number) {
   clock.advance((time - lastTime) / 1_000, () => move(townPhysicsDelta));

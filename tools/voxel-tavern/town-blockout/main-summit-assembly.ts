@@ -8,6 +8,7 @@ import { createMainSummitCable } from './main-summit-cable';
 import { mountMainSummitCable } from './main-summit-cable-scene';
 import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { createMainSummitCableTravel } from './main-summit-cable-travel';
+import { mountMainSummitOutlook } from './main-summit-outlook';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
@@ -102,6 +103,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const frontSnowAt = createFrontTerraceSnow();
   const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
   group.add(block.coarse);
+  const outlook = mountMainSummitOutlook(group, block.heightAt);
 
   const cable = createMainSummitCable(epochMs, 10_000, arrivalHeight);
   const cableView = mountMainSummitCable(group, cable, block.heightAt);
@@ -159,12 +161,13 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
     wreckageSites: wreckage.sites,
-    wingRack, cableTravel,
+    wingRack, cableTravel, outlook,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
-      if (!front && wingRack.blocked(east, north, feet, radius, bodyHeight)) return true;
+      if (!front && (wingRack.blocked(east, north, feet, radius, bodyHeight) ||
+        outlook.blocked(east, north, feet, radius, bodyHeight))) return true;
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {
@@ -178,6 +181,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     leaveGate: block.leave,
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },
     update: cableView.update,
+    timetableAt: cable.timetableAt,
     interact(east: number, north: number, height: number) {
       return north < seam ? registration.interact('cloud-deck', summitWorldPoint(east, north, height))
         : registration.interact('summit', { east, north, height });
@@ -187,6 +191,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
       stations.dispose();
       cableView.dispose();
       wingRack.dispose();
+      outlook.dispose();
       cabin.dispose();
       cloudRegistration.dispose();
       ribbon.geometry.dispose();

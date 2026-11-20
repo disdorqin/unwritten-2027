@@ -3,6 +3,7 @@ import {
   MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
+import { mountMainSummitOutlook } from './main-summit-outlook';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
 } from './main-summit-registration';
@@ -78,6 +79,8 @@ let session = createMainSummitRegistration(landmarks, readProfile());
 let area: Area = 'cloud-deck';
 let position: Position;
 let mounted: ReturnType<typeof mountMainSummitRegistration>;
+let outlook: ReturnType<typeof mountMainSummitOutlook> | undefined;
+let outlookDraws = 0;
 let arrived = false;
 let insideHut = false;
 let yaw = 0;
@@ -115,6 +118,7 @@ function draw() {
   camera.position.set(position.east, position.height + 1.62, -position.north);
   view.set(Math.sin(yaw), -0.075, -Math.cos(yaw)).add(camera.position);
   camera.lookAt(view);
+  outlookDraws = 0;
   renderer.render(scene, camera);
 }
 
@@ -127,10 +131,18 @@ function resize() {
 
 function mountArea(next: Area) {
   mounted?.dispose();
+  outlook?.dispose();
+  outlook = undefined;
   keys.clear();
   area = next;
   session = createMainSummitRegistration(landmarks, readProfile());
   mounted = mountMainSummitRegistration(objects, landmarks, area);
+  if (area === 'summit') {
+    outlook = mountMainSummitOutlook(objects, terrain.heightAt);
+    outlook.group.traverse(object => {
+      if ((object as Mesh).isMesh) object.onAfterRender = () => { outlookDraws++; };
+    });
+  }
   position = next === 'summit'
     ? { ...landmarks.summit.routes.fromTrail[0]! }
     : { ...landmarks.cloudDeck.stampPoint, north: landmarks.cloudDeck.stampPoint.north - 5 };
@@ -160,7 +172,7 @@ function move(east: number, north: number) {
   const height = floorAt(east, north);
   if (height === undefined || Math.abs(position.height - height) > stepHeight) return false;
   const z = -north;
-  const blocked = mounted.colliders.some(({ min, max }) =>
+  const blocked = outlook?.blocked(east, north, height, personRadius, personHeight) || mounted.colliders.some(({ min, max }) =>
     height < max[1] - 0.01 && height + personHeight > min[1] &&
     Math.hypot(Math.max(min[0] - east, east - max[0], 0), Math.max(min[2] - z, z - max[2], 0)) < personRadius,
   );
@@ -231,6 +243,7 @@ function snapshot() {
   return {
     area, position: { ...position }, arrived, insideHut, profile: session.snapshot(),
     action: actionAtFeet() ?? null, lastAction, mountCount, collisions,
+    yaw, outlook: outlook ? { stand: outlook.stand, draws: outlookDraws } : null,
     render: { draws: renderer.info.render.calls, triangles: renderer.info.render.triangles },
   };
 }
