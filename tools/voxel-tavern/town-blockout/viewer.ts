@@ -2,7 +2,6 @@ import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
   InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { addScenery } from './scenery';
 import { buildPineCamp } from './town-pine-camp';
@@ -366,25 +365,12 @@ const rails: Box[] = [];
 bridgeCollision.userData.colliders = rails;
 const detailedBridges = new Group();
 scene.add(detailedBridges);
-let bridgePanorama: Group | undefined;
-const bridgeMatrices = new Map([[stone, [] as Matrix4[]], [timber, [] as Matrix4[]]]);
 function bridgeBatch(material: MeshLambertMaterial, transforms: Matrix4[], name: string) {
   const batch = new InstancedMesh(bridgeGeometry, material, transforms.length);
   batch.name = name;
   transforms.forEach((matrix, index) => batch.setMatrixAt(index, matrix));
   batch.computeBoundingSphere();
   return batch;
-}
-function showWideBridges(wide: boolean) {
-  detailedBridges.visible = !wide;
-  if (!bridgePanorama && wide) {
-    bridgePanorama = new Group();
-    for (const [material, matrices] of bridgeMatrices) {
-      bridgePanorama.add(bridgeBatch(material, matrices, 'Bridge panorama'));
-    }
-    scene.add(bridgePanorama);
-  }
-  if (bridgePanorama) bridgePanorama.visible = wide;
 }
 for (const bridge of layout.bridges) {
   const parts = new Map([[stone, [] as Matrix4[]], [timber, [] as Matrix4[]]]);
@@ -408,7 +394,6 @@ for (const bridge of layout.bridges) {
   for (const x of [center - 5, center + 5]) box(x, (bridge.height + 3.5) / 2, bridge.north, 1.5, bridge.height - 3.5, 6.75, stone);
   for (const [material, transforms] of parts) {
     detailedBridges.add(bridgeBatch(material, transforms, `bridge-${bridge.id}-${material === stone ? 'stone' : 'timber'}`));
-    bridgeMatrices.get(material)!.push(...transforms);
   }
 }
 
@@ -599,9 +584,9 @@ const extensionBuilders: Record<string, () => Promise<Group>> = {
   'ice-castle': () => import('./landmark-ice-castle').then(module => module.buildIceCastle()),
 };
 const requestedPlots = new Set<string>();
-function prepareLandmarks(east: number, north: number, overview: boolean) {
+function prepareLandmarks(east: number, north: number) {
   const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) &&
-    (overview || Math.hypot(east - origin[0], north - origin[1]) < 148));
+    Math.hypot(east - origin[0], north - origin[1]) < 148);
   if (!plot) return;
   requestedPlots.add(plot.id);
   const palaceModule = plot.id === 'ice-castle'
@@ -639,12 +624,6 @@ async function loadBuildings() {
 }
 if (location.protocol !== 'file:') loadBuildings().catch(error => console.error('建筑清单读取失败', error));
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * .48;
-controls.target.set(220, 8, -195);
-const overview = element<HTMLButtonElement>('overview');
-const walk = element<HTMLButtonElement>('walk');
 const selector = element<HTMLSelectElement>('jump');
 const points = new Map<string, number[]>([
   ['广场南侧', layout.plaza.spawn],
@@ -692,7 +671,7 @@ for (const eventType of ['pointerup', 'pointercancel', 'lostpointercapture'] as 
     if (touchSledDrift?.pointer === event.pointerId) touchSledDrift = undefined;
   });
 }
-const viewportControls = createViewportControls({
+createViewportControls({
   fullscreenButton: element<HTMLButtonElement>('fullscreen-toggle'),
   chatPanel: element('town-chat'),
   chatToggle: element<HTMLButtonElement>('town-chat-toggle'),
@@ -1368,7 +1347,6 @@ let snowballWalkFactor = 1;
 let snowballPhysicsMs = 0;
 const profileTown = previewOptions.has('profile');
 const profileOriginalDraws = profileTown && previewOptions.get('viewBatches') === 'off';
-let aerialWarmFrames = 0;
 
 const playerTarget: TownSnowballTarget = {
   id: 'local', label: '你', radius: .27, height: 1.78, shape: 'capsule', x: 0, y: -10000, z: 0,
@@ -2108,8 +2086,9 @@ function interact() {
   if (!placeCard.open && !museumVisit.dialog.open) renderer.domElement.focus();
 }
 actionButton.onclick = interact;
-function jump() {
-  [x, n] = points.get(selector.value)!;
+function landAtSelectedDestination() {
+  const destination = points.get(selector.value);
+  if (!destination || !settleTownLanding(destination[0], destination[1])) return false;
   const target = layout.plots[plotLabels.indexOf(selector.value)];
   const destinations: Record<string, readonly [number, number]> = {
     '西南河畔街巷': [131, 141], '冰湖雪球场': [350, 79],
@@ -2123,10 +2102,8 @@ function jump() {
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
   yaw = Math.atan2(east - x, north - n);
-  ground = surfaceAt(x, n);
-  airHeight = undefined;
-  riseSpeed = 0;
   pitch = selector.value === '雪团练习场' ? .09 : 0;
+  return true;
 }
 const walkMouseHelp = '点击画面后移动鼠标转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动，长按左键对准近处雪地收雪，抬头瞄准后松手投掷。';
 const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动；点准心下方按钮可锁定鼠标视角。';
@@ -2144,7 +2121,7 @@ function refreshLockHint() {
     help.textContent = '刚退出鼠标锁定，请稍等一秒再点画面；这段时间可按住左键拖动转向，WASD 行走。';
   else help.textContent = walkDragHelp;
 }
-function mode(next: boolean) {
+function visitSelectedDestination() {
   if (houseDoorTravel) return false;
   if (homeReturn) {
     leaveSeat();
@@ -2156,61 +2133,25 @@ function mode(next: boolean) {
   leaveSeat(true);
   resetMovement();
   activityStatus.textContent = '';
-  if (next) {
-    jump();
-    next = settleTownLanding();
-  }
-  walking = next;
+  if (!landAtSelectedDestination()) return false;
   museumInspection.close();
   museumLaunch.close();
   museumGuide.setActive(false);
-  controls.enabled = !next;
-  overview.setAttribute('aria-pressed', String(!next));
-  walk.setAttribute('aria-pressed', String(next));
-  element('help').textContent = next
-    ? (touchWalk.active() ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。' : walkMouseHelp)
-    : (touchWalk.active() ? '拖动旋转，双指缩放。' : '拖动旋转，滚轮缩放。可前往街区或建筑入口。');
-  if (!next) {
-    camera.position.set(540, 494, 177);
-    controls.target.set(320, 20, -254);
-    controls.update();
-  }
   refreshLockHint();
   return true;
 }
-overview.onclick = () => mode(false);
-element('view-valley').onclick = () => {
-  if (!mode(false)) return;
-  camera.position.set(386, 177, 15);
-  controls.target.set(215, 24, -198);
-  controls.update();
-};
-element('view-museum').onclick = () => {
-  if (!mode(false)) return;
-  camera.position.set(museumEast - 41, museumHeight + 29, -museumNorth + 62);
-  controls.target.set(museumEast, museumHeight + 7.0, -museumNorth + 1);
-  controls.update();
-};
 rehearse.onclick = () => {
-  if (festival.active() || !mode(false) || !festival.start()) return;
-  setNight(true);
-  camera.position.set(283, 33, -108);
-  controls.target.set(225, 54, -207);
-  controls.update();
-};
-walk.onclick = event => {
-  // Native keyboard activation of an already selected mode must not revisit the selected destination.
-  if ((!walking || event.detail !== 0) && (!mode(true) || !walking)) return;
+  if (!festival.active() && festival.start()) setNight(true);
   renderer.domElement.focus({ preventScroll: true });
-  if (event.isTrusted) townBgm.enter();
-  if (event.isTrusted) viewportControls.tryEnterFullscreen();
-  desktopLook.engage();
 };
 selector.onchange = event => {
-  if (!mode(true) || !walking) return;
+  if (!visitSelectedDestination()) return;
   renderer.domElement.focus({ preventScroll: true });
   if (event.isTrusted) townBgm.enter();
 };
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (event.isTrusted && lookAllowed()) townBgm.enter();
+});
 const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const forwardKey = (code: string) => code === 'KeyW' || code === 'ArrowUp';
 const forwardHeld = () => keys.has('KeyW') || keys.has('ArrowUp');
@@ -2365,7 +2306,6 @@ if (startInMuseum) selector.value = '纪念馆入口';
 let previous = performance.now();
 let snowMoveScale = 1;
 let chillMoveScale = 1;
-let widePanorama = false;
 function walkable(x: number, n: number) {
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
@@ -2727,7 +2667,12 @@ function showLiveRailSchedule(title: string, read: () => string) {
     body.style.removeProperty('white-space');
   }, { once: true });
 }
-mode(startInMuseum);
+if (!landAtSelectedDestination()) throw new Error('小镇出生点不可用');
+walking = true;
+element('help').textContent = touchWalk.active()
+  ? '滑动转向。长按画面对准雪地收雪，手指继续按住向上划动瞄准，松手投掷。'
+  : walkDragHelp;
+refreshLockHint();
 let presenceSkateSpeed = 0;
 let previousPoseSession: number | null = null;
 let ceremonyArrivalPose: { value: TownAvatarPose; until: number } | undefined;
@@ -2950,9 +2895,6 @@ renderer.setAnimationLoop(now => {
       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
       airHeight !== undefined ? '腾空' : skatesOnIce() ? '滑冰' : sprint ? '疾跑' : '行走';
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${movement}`;
-  } else {
-    controls.update();
-    element('position').textContent = '';
   }
   if (!walking || !moveAllowed() || !skatesOnIce()) presenceSkateSpeed = 0;
   const poseSession = presence.selfId();
@@ -3014,9 +2956,6 @@ renderer.setAnimationLoop(now => {
   }
   updateMascotFollower(dt, Math.hypot(x - startEast, n - startNorth) / Math.max(dt, .001));
   checkHouseDoorLanding();
-  const wideView = !walking && camera.position.y > (widePanorama ? 232 : 248);
-  widePanorama = wideView;
-  const cullAerial = !walking && !wideView && camera.position.y > 95 && !profileOriginalDraws;
   const stationView = !profileOriginalDraws && walking && !homeReturn && !boardingGround
     && Math.abs(camera.position.x - frontRailStation.x) < 2.1
     && Math.abs(-camera.position.z - frontRailStation.n) < 10
@@ -3029,30 +2968,24 @@ renderer.setAnimationLoop(now => {
   }
   // Defer rebuilding while walking. Reuse the padded selection while standing and looking around.
   const cullStationView = now - stationViewStillSince >= 150;
-  const cullStaticView = cullAerial || cullStationView;
   const warmStationView = stationView && !cullStationView;
-  const cullCamera = cullStationView ? stationViewCamera() : cullAerial ? camera : undefined;
-  const warmAerial = wideView && !profileOriginalDraws && aerialWarmFrames++ < 60;
+  const cullCamera = cullStationView ? stationViewCamera() : undefined;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
-  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, !walking, wideView, visualSnowCover, cullCamera);
+  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, false, false, visualSnowCover, cullCamera);
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
-  forest.setPanorama(wideView);
-  districts.setPanorama(wideView);
-  showWideBridges(wideView);
-  railway.setPanorama(wideView);
-  stampMarkers.visible = !wideView && stampSites.some(site =>
+  stampMarkers.visible = stampSites.some(site =>
     Math.abs(camera.position.x - site.x) < 34 && Math.abs(camera.position.z + site.n) < 34 &&
     Math.abs(camera.position.y - grid.heightAt(site.x, site.n)) < 18);
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
-  if (towerInterior) towerInterior.visible = !wideView && Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
+  if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
-  if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z, !walking);
-  if (!homeReturn && !extensionStreetsLoad && (!walking || camera.position.x > 320 || -camera.position.z > 275)) {
+  if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z);
+  if (!homeReturn && !extensionStreetsLoad && (camera.position.x > 320 || -camera.position.z > 275)) {
     void prepareExtensionStreets();
   }
-  extensionStreets?.update(camera, wideView);
-  zodiacSites.update(camera.position, !homeReturn && !wideView);
+  extensionStreets?.update(camera, false);
+  zodiacSites.update(camera.position, !homeReturn);
   const baths = architecture.get('hot-spring');
   if (baths) baths.userData.updateSteam(dt, camera.position.distanceTo(baths.position));
   scenery.update(dt, walking, camera.position.x, camera.position.y, camera.position.z);
@@ -3209,15 +3142,15 @@ renderer.setAnimationLoop(now => {
     const insideTavern = walking && !homeReturn && !boardingGround &&
       tavernInteriorContains(tavern, seated?.x ?? x, seated?.n ?? n, airHeight ?? ground);
     updateTavernInteriorVisibility(tavern, (groupPhotoFrame ? plazaCamera : camera).position, insideTavern);
-    const staticViewRoots = cullStaticView || warmAerial || warmStationView ? [landscape, detailedBridges,
+    const staticViewRoots = cullStationView || warmStationView ? [landscape, detailedBridges,
       ...(trackViewRoot ? [trackViewRoot] : []), ...(extensionStreets ? [extensionStreets.group] : []),
       ...architecture.values()] : [];
-    if (warmAerial || warmStationView) {
+    if (warmStationView) {
       viewBatches.warm(staticViewRoots);
       viewFaces.warm(architecture.values());
     }
-    viewBatches.update(cullStaticView, cullCamera ?? camera, staticViewRoots);
-    viewFaces.update(cullStaticView, camera.position, architecture.values());
+    viewBatches.update(cullStationView, cullCamera ?? camera, staticViewRoots);
+    viewFaces.update(cullStationView, camera.position, architecture.values());
     const detailMs = profileTown ? terrainMs + performance.now() - batchesStartedAt : 0;
     const shakeAge = now - bellShakeStartedAt;
     const shakeBell = walking && shakeAge >= 0 && shakeAge < 320 && !reduceSnowEffects.matches;

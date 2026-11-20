@@ -14,7 +14,7 @@ button[aria-pressed="true"] { background: #edc48a; color: #17202e; border-color:
 label, output, #help { font-size: 12px; }
 #help { margin: 10px 0 6px; color: #c6d3e5; }
 #position:not(:empty) { display: block; }
-.festival-button, #view-museum { margin-top: 11px; }
+.festival-button { margin-top: 11px; }
 .festival-button { background: #592e3c; border-color: #ad7376; }
 .panel .town-progress { margin: 8px 0 0; padding-top: 7px; border-top: 1px solid #475572; }
 .town-progress button { color: #ffdfad; }
@@ -304,7 +304,7 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   .panel nav { gap: 4px; margin-bottom: 7px; }
   .panel button, .panel select { font-size: 12px; padding: 5px 7px; min-height: 34px; }
   .panel #position { display: none; }
-  .panel .festival-button, .panel #view-museum { margin-top: 4px; }
+  .panel .festival-button { margin-top: 4px; }
   .touch-play #museum-map-button { top: auto; bottom: max(103px, calc(env(safe-area-inset-bottom) + 55px)); min-height: 42px; }
   #museum-card { padding: 18px; }
 }

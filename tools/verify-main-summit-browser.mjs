@@ -180,8 +180,10 @@ async function townSkyline(url) {
     const canvas = page.locator('#scene canvas');
     await canvas.waitFor({ state: 'visible', timeout: timeLeft(35_000) });
     await page.locator('#jump').selectOption('东侧扩建步道', { timeout: timeLeft(18_000) });
-    await page.waitForFunction(() => document.querySelector('#walk')?.getAttribute('aria-pressed') === 'true',
-      null, { timeout: timeLeft(10_000) });
+    await page.waitForFunction(() => {
+      const coordinates = document.querySelector('#position')?.textContent?.match(/^东 ([\d.]+) m · 北 ([\d.]+) m/);
+      return coordinates && Math.hypot(Number(coordinates[1]) - 443, Number(coordinates[2]) - 221) < 12;
+    }, null, { timeout: timeLeft(10_000) });
     await page.mouse.move(917, 654);
     await page.mouse.down();
     try { await page.mouse.move(398, 547, { steps: 10 }); }
