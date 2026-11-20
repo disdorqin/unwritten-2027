@@ -5,6 +5,7 @@ import { Group, NearestFilter, SRGBColorSpace, Vector3, type BoxGeometry, type D
 import { createSkyCityApproach, createSkyCityLanding } from '../tools/voxel-tavern/town-blockout/sky-city-approach';
 import { mountSkyCityHost } from '../tools/voxel-tavern/town-blockout/sky-city-host';
 import { createSkyCitySite } from '../tools/voxel-tavern/town-blockout/sky-city-site';
+import { skyCityObservatory } from '../tools/voxel-tavern/town-blockout/sky-city-tower';
 import { mountSkyCity, skyCityTier, type SkyCityFoot } from '../tools/voxel-tavern/town-blockout/sky-city';
 
 test('valley has no island and the summit loads one low-detail mesh before the close flight view', () => {
@@ -67,6 +68,34 @@ test('the locked gate keeps its original dimensions and releases the pixel finis
   city.dispose();
   city.dispose();
   assert.equal(mapDisposals, 1);
+});
+
+test('the distant profile and full observatory share an identifiable roof signal dish', () => {
+  const layer = new Group();
+  const city = mountSkyCity(layer);
+  const { z, dishPivot } = skyCityObservatory;
+
+  function dishWidth(root: Group) {
+    const span = { west: Infinity, east: -Infinity };
+    root.traverse(object => {
+      const mesh = object as Mesh;
+      if (!mesh.isMesh) return;
+      const points = mesh.geometry.getAttribute('position');
+      for (let vertex = 0; vertex < points.count; vertex++) {
+        if (points.getY(vertex) < dishPivot - .25 || Math.abs(points.getZ(vertex) - z) > 2) continue;
+        span.west = Math.min(span.west, points.getX(vertex));
+        span.east = Math.max(span.east, points.getX(vertex));
+      }
+    });
+    return span.east - span.west;
+  }
+
+  city.show('silhouette');
+  assert.ok(dishWidth(layer.children[0] as Group) > 2.5);
+  city.show('full');
+  const tower = city.footModel()?.group.getObjectByName('sky-city-observation-tower') as Group;
+  assert.ok(dishWidth(tower) > 2.5);
+  city.dispose();
 });
 
 test('a translated and turned site aligns the reveal silhouette, landing surface and locked gate', () => {

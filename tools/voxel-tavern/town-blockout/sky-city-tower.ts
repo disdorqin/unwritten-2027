@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, Float32BufferAttribute, Group, Matrix4,
-  Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3,
+  BoxGeometry, BufferGeometry, CylinderGeometry, Float32BufferAttribute, Group, LatheGeometry, Matrix4,
+  Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, TorusGeometry, Vector2, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createClayMetalPanel } from './clay-metal-panel.js';
@@ -26,6 +26,23 @@ const bodyHeight = 1.76;
 const stepHeight = .42;
 const twoPi = 2 * Math.PI;
 const gate: Point = [0, deckY, -36.75];
+
+export const skyCityObservatory = { z: -40.2, domeBase: deckY + 3.21, dishPivot: deckY + 6.95 };
+const dishRadius = 1.47;
+const dishRim = .57;
+const dishVector = new Vector3(.24, .69, .68).normalize();
+const dishRotation = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dishVector);
+const dishOrigin = new Vector3(0, skyCityObservatory.dishPivot, skyCityObservatory.z);
+
+export function createSkyCitySignalDish(segments: number) {
+  // Curve both faces of the shell so the rim and curvature read from either side.
+  const profile = [
+    [0, -.10], [.50, -.04], [1.01, .13], [dishRadius, .46],
+    [dishRadius, dishRim], [1.01, .24], [.50, .07], [0, 0],
+  ];
+  const reflector = new LatheGeometry(profile.map(([radius, y]) => new Vector2(radius, y)), segments);
+  return reflector.applyQuaternion(dishRotation).translate(...dishOrigin.toArray());
+}
 
 function polar(radius: number, theta: number, height: number): Point {
   return [radius * Math.sin(theta), height, centerZ + radius * Math.cos(theta)];
@@ -166,15 +183,30 @@ export function buildSkyCityTower() {
   }
 
   // Observatory offices sit behind the portal facade. The top approach remains open to the sky.
-  const observatoryZ = -40.2;
+  const { z: observatoryZ, domeBase, dishPivot } = skyCityObservatory;
   add(new CylinderGeometry(3.06, 3.23, 3, 36).translate(0, deckY + 1.56, observatoryZ), ivory);
   const dome = new SphereGeometry(3.22, 36, 12, 0, twoPi, 0, Math.PI / 2);
-  dome.scale(1, .73, 1).translate(0, deckY + 3.21, observatoryZ);
+  dome.scale(1, .73, 1).translate(0, domeBase, observatoryZ);
   add(dome, chalk);
   drum(mortar, 3.30, deckY + 3.20, .24, 3.28, observatoryZ);
-  drum(bronze, .32, deckY + 5.49, .45, .62, observatoryZ);
-  beam(bronze, [0, deckY + 5.62, observatoryZ], [0, deckY + 6.58, observatoryZ], .10);
-  beam(bronze, [-.46, deckY + 6.31, observatoryZ], [.46, deckY + 6.31, observatoryZ], .095);
+  drum(bronze, .40, deckY + 5.58, .43, .64, observatoryZ);
+  drum(iron, .30, deckY + 5.97, .44, .38, observatoryZ);
+  beam(bronze, [-.52, dishPivot - .28, observatoryZ], [.52, dishPivot - .28, observatoryZ], .22);
+  for (const side of [-1, 1]) {
+    beam(iron, [side * .29, deckY + 6, observatoryZ], [side * .52, dishPivot, observatoryZ], .18, .28);
+  }
+  add(createSkyCitySignalDish(20), bronze);
+  const rim = new TorusGeometry(dishRadius, .052, 5, 20).rotateX(Math.PI / 2).translate(0, dishRim - .03, 0);
+  add(rim.applyQuaternion(dishRotation).translate(...dishOrigin.toArray()), iron);
+  const feedHeight = .98;
+  const feed = new CylinderGeometry(.10, .20, .28, 8).translate(0, feedHeight, 0);
+  add(feed.applyQuaternion(dishRotation).translate(...dishOrigin.toArray()), ivory);
+  const focus = dishOrigin.clone().addScaledVector(dishVector, feedHeight).toArray();
+  for (let index = 0; index < 3; index++) {
+    const angle = index * twoPi / 3;
+    const mount = new Vector3(dishRadius * .92 * Math.cos(angle), dishRim - .06, dishRadius * .92 * Math.sin(angle));
+    beam(iron, mount.applyQuaternion(dishRotation).add(dishOrigin).toArray(), focus, .065, .08);
+  }
 
   const door = new Group();
   door.name = 'sky-city-locked-gate';

@@ -3,6 +3,7 @@ import {
   Float32BufferAttribute, Group, Mesh, MeshBasicMaterial, Quaternion, SphereGeometry, TorusGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createSkyCitySignalDish, skyCityObservatory } from './sky-city-tower';
 
 const landLayers = [
   [54, 0, '#5a6d6b'],
@@ -99,9 +100,11 @@ export function buildSkyCitySilhouette() {
   box(17.8, 2.1, -19, 1.6, 4.2, 2.3);
   box(0, 9, -35, 7, 18, 7);
   box(0, 18, -35, 10.5, 2.2, 10.5, roof);
-  box(-3.3, 21, -35, 1.4, 5, 1.6);
-  box(3.3, 21, -35, 1.4, 5, 1.6);
-  add(new TorusGeometry(3.3, .7, 4, 8, Math.PI).translate(0, 22.7, -35), roof);
+  const { z: observatoryZ, domeBase, dishPivot } = skyCityObservatory;
+  const towerCap = new SphereGeometry(3.22, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+  add(towerCap.scale(1, .73, 1).translate(0, domeBase, observatoryZ), roof);
+  box(0, dishPivot - .57, observatoryZ, .65, 1.24, .66, '#778786');
+  add(createSkyCitySignalDish(8), '#879697');
 
   const trunk = new Vector3(1, .2, 2);
   const fork = new Vector3(0, 10, 2);
