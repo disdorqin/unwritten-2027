@@ -216,21 +216,25 @@ export function mountZa31CraterCamp(road: CraterRoad) {
     }
   }
 
+  function update(elapsedSeconds: number) {
+    for (const { lamp, intensity, phase } of lights) {
+      lamp.intensity = intensity * (1 + .075 * Math.sin(elapsedSeconds * 4.2 + phase) +
+        .045 * Math.sin(elapsedSeconds * 7.7 + phase));
+    }
+    embers.emissiveIntensity = 1.28 + .08 * Math.sin(elapsedSeconds * 5.1);
+  }
+
   for (const [material, parts] of batches) {
     const geometry = mergeGeometries(parts);
     for (const part of parts) part.dispose();
-    if (geometry) group.add(new Mesh(geometry, material));
+    if (!geometry) continue;
+    const mesh = new Mesh(geometry, material);
+    if (material === embers) {
+      // A visible ember batch updates its local lights without a global scene tick.
+      mesh.onBeforeRender = () => update(performance.now() / 1000);
+    }
+    group.add(mesh);
   }
 
-  return {
-    group,
-    placements,
-    update(elapsedSeconds: number) {
-      for (const { lamp, intensity, phase } of lights) {
-        lamp.intensity = intensity * (1 + .075 * Math.sin(elapsedSeconds * 4.2 + phase) +
-          .045 * Math.sin(elapsedSeconds * 7.7 + phase));
-      }
-      embers.emissiveIntensity = 1.28 + .08 * Math.sin(elapsedSeconds * 5.1);
-    },
-  };
+  return { group, placements, update };
 }
