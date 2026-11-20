@@ -51,6 +51,33 @@ test('body temperature cools, warms by an approved heat source, and cannot tick 
   assert.equal(f.vitals.sample('miner'), undefined);
 });
 
+test('temperature pauses when an accepted underground foot is unavailable', () => {
+  const f = setup();
+  f.move({ at: at(), hotDrink: true });
+  assert.equal(f.vitals.sample('miner')?.temperature, .65);
+  f.time(500);
+  assert.equal(f.vitals.sample('miner')?.temperature, .9);
+
+  f.move(undefined);
+  f.time(1000);
+  assert.equal(f.vitals.sample('miner'), undefined);
+  f.move({ at: at() });
+  f.time(61_000);
+  assert.equal(f.vitals.sample('miner')?.temperature, .9);
+  f.time(62_000);
+  assert.equal(f.vitals.sample('miner')?.temperature, .65);
+
+  f.move({ at: at(0, 'town') });
+  f.time(62_500);
+  assert.equal(f.vitals.sample('miner'), undefined);
+  f.lights.push({ id: 'fire', kind: 'cold-flame', at: at(0, 'core') });
+  f.move({ at: at(0, 'core') });
+  f.time(123_000);
+  assert.equal(f.vitals.sample('miner')?.temperature, .65);
+  f.time(123_500);
+  assert.equal(f.vitals.sample('miner')?.temperature, .9);
+});
+
 test('head lamp visibility is separate from danger; fire safety, ray blocking and torch expiry are layer-bound', () => {
   const f = setup();
   const sample = () => f.vitals.sample('miner')!;

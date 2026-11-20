@@ -90,7 +90,11 @@ export function createUndergroundVitals(settings: Settings) {
       const body = bodies.get(id);
       const climate = player && climates.get(player.at.layer);
       if (!player || !climate || !validPoint(player.at)) {
-        if (body) body.updatedAt = time;
+        if (body) {
+          // The previous layer or heat source cannot apply across a gap in accepted positions.
+          body.target = body.temperature;
+          body.updatedAt = time;
+        }
         return;
       }
       const lights = readLight(player.at, time);
