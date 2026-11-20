@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Mesh, MeshStandardMaterial } from 'three';
+import type { Mesh, MeshStandardMaterial } from 'three';
 import { createWarriorForgeHall } from '../tools/voxel-tavern/town-blockout/underground-warrior-forge-hall.ts';
 
 test('the rear main street and forge share a level door approach and three reachable interaction feet', () => {
@@ -35,8 +35,10 @@ test('the physical gauge shows supplied heat and bands only while a valid snapsh
     assert.equal(gauge.visible, false);
     const readPiece = (name: string) => {
       const mesh = gauge.getObjectByName(`forge-heat-${name}`);
-      assert.ok(mesh instanceof Mesh && mesh.material instanceof MeshStandardMaterial);
-      return { mesh, material: mesh.material };
+      assert.ok(mesh && 'isMesh' in mesh && mesh.isMesh === true);
+      const { material } = mesh as Mesh;
+      assert.ok(!Array.isArray(material) && material.type === 'MeshStandardMaterial');
+      return { mesh, material: material as MeshStandardMaterial };
     };
     const { mesh: cold, material: coldMaterial } = readPiece('cold');
     const { mesh: working, material: workingMaterial } = readPiece('working');
