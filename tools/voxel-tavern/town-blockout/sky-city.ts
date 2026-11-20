@@ -1,4 +1,4 @@
-import { Group, type BufferGeometry, type Material, type Mesh } from 'three';
+import { Group, type BufferGeometry, type Material, type Mesh, type Texture } from 'three';
 import { buildSkyCityBuildings } from './sky-city-buildings';
 import { buildSkyCityIsland } from './sky-city-island';
 import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
@@ -46,6 +46,7 @@ function buildCity() {
 function disposeModel(root: Group) {
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
+  const colorMaps = new Set<Texture>();
   root.traverse(object => {
     const mesh = object as Mesh;
     if (!mesh.isMesh) return;
@@ -53,7 +54,12 @@ function disposeModel(root: Group) {
     for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(material);
   });
   for (const geometry of geometries) geometry.dispose();
-  for (const material of materials) material.dispose();
+  for (const material of materials) {
+    const { map } = material as Material & { map?: Texture | null };
+    if (map) colorMaps.add(map);
+    material.dispose();
+  }
+  for (const map of colorMaps) map.dispose();
   root.removeFromParent();
 }
 

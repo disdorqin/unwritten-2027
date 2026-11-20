@@ -3,6 +3,7 @@ import {
   Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { createClayMetalPanel } from './clay-metal-panel.js';
 import { createTownChronicleDoorRing } from './town-chronicle-door-ring.js';
 
 type Point = readonly [x: number, y: number, z: number];
@@ -181,7 +182,8 @@ export function buildSkyCityTower() {
   const gateHeight = 3.35;
   const gateWidth = 2.64;
   const gateDepth = .30;
-  const slab = new Mesh(new BoxGeometry(gateWidth, gateHeight, gateDepth), shadow);
+  const gatePanel = createClayMetalPanel(gateWidth, gateHeight, gateDepth, 0x2c3648, 35);
+  const slab = new Mesh(gatePanel.geometry, gatePanel.material);
   slab.name = 'solid-door-surface';
   slab.position.y = gateHeight / 2;
   door.add(slab);
