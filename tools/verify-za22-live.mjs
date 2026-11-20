@@ -8,7 +8,7 @@ assert.ok(origin && output, 'Use the production-preview loopback URL and an evid
 const url = new URL('/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -23,6 +23,16 @@ const cloudStop = [336, 640];
 const cloudRunway = [[336, 657], [326.82, 657]];
 const crater = [[-12, 159], [-40, 159], [-67, 159], [-71, 159]];
 const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683], [307.25, 683]];
+const palaceWestDoor = [
+  [245, 180], [245, 152], [260, 155], [276, 149], [302, 149], [319, 137], [324, 103], [350, 100],
+  [374, 129], [402, 132], [445, 136], [446, 107], [447, 80], [460, 72], [462.8, 72],
+];
+const palacePoints = [
+  ['cold-lever', '拨动引寒机关', [471, 73.3], [471, 74.63]],
+  ['crystal-pillar', '采集冰晶片', [478.05, 77.43], [478.05, 78.62]],
+  ['ship-fragment', '拾取船件碎片', [484.35, 77.47], [484.35, 78.47]],
+  ['solstice-altar', '行安雪礼', [485.4, 65.03], [485.4, 63.75]],
+];
 const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
 assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
 const viewport = { width, height };
@@ -226,6 +236,39 @@ async function snapshot(page, evidence, label) {
   evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
 }
 
+async function checkPalacePoint(page, evidence, id, label, point, fixture) {
+  const lane = [point[0], 72];
+  await walkTo(page, evidence, lane, `palace-${id}-aisle`);
+  await walkTo(page, evidence, point, `palace-${id}-foot`);
+  const wire = await waitForWire(page, evidence, pose => pose?.area === 'town' &&
+    Math.hypot(pose.east - point[0], pose.north - point[1]) <= .5 && Math.abs(pose.height - 12.12) <= .07);
+  await face(page, evidence, Math.atan2(fixture[0] - wire.east, fixture[1] - wire.north));
+  const surface = () => page.evaluate(() => {
+    const button = document.querySelector('#world-action');
+    return { action: button && !button.hidden ? button.textContent.trim() : '',
+      dialogueOpen: document.querySelector('#place-card')?.open === true,
+      notice: document.querySelector('#ice-palace-pickup-notice')?.textContent?.trim() ?? '',
+      activity: document.querySelector('#town-activity-status')?.textContent?.trim() ?? '' };
+  });
+  const before = await surface();
+  assert.equal(before.dialogueOpen, false);
+  assert.equal(before.action, '', `${label}: this proof expects no eligible action before E`);
+  await page.keyboard.press('e');
+  await page.waitForTimeout(350);
+  const after = await surface();
+  const afterPose = await readPose(page);
+  assert.ok(Math.hypot(afterPose.east - point[0], afterPose.north - point[1]) <= .5,
+    `${label}: E moved the player from the palace footpoint`);
+  assert.equal(after.dialogueOpen, false);
+  assert.equal(after.action, '');
+  assert.equal(after.notice, '');
+  assert.doesNotMatch(after.activity, /冰晶片入包|获得冰晶片|船件碎片|安雪礼已完成|镜湖坚冰/);
+  evidence.palacePoints.push({ id, target: point, wire, reached: true, input: 'E',
+    authority: 'action-unavailable', before, after, afterPose });
+  await snapshot(page, evidence, `palace-${id}`);
+  await walkTo(page, evidence, lane, `palace-${id}-return`);
+}
+
 try {
   browser = await chromium.launch({
     headless: true,
@@ -233,7 +276,7 @@ try {
     args: graphicsArgs,
   });
   report.browser = browser.version();
-  if (segment !== 'crater') {
+  if (segment !== 'crater' && segment !== 'palace') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
@@ -277,6 +320,12 @@ try {
       }
     }
   }
+  if (segment === 'palace') {
+    const { page, evidence } = await openTown('palace-geometry');
+    evidence.palacePoints = [];
+    await follow(page, evidence, palaceWestDoor, 'palace-approach');
+    for (const row of palacePoints) await checkPalacePoint(page, evidence, ...row);
+  }
   if (segment === 'crater' || segment === 'all') {
     const { page, evidence } = await openTown('crater');
     await follow(page, evidence, westShore, 'west-shore');
@@ -315,7 +364,8 @@ try {
 } finally {
   measuring = false;
   report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
-  await writeFile(join(output, 'za22-live-walk.json'), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(join(output, segment === 'palace' ? 'za18-live-walk.json' : 'za22-live-walk.json'),
+    `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
     frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
   await browser?.close();
