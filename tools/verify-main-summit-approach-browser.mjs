@@ -35,10 +35,12 @@ try {
   await copyFile(path.join(repo, approach), path.join(snapshot, approach));
   await symlink(path.join(repo, 'node_modules'), path.join(snapshot, 'node_modules'), 'junction');
   await symlink(path.join(repo, tavern, 'node_modules'), path.join(snapshot, tavern, 'node_modules'), 'junction');
-  execFileSync('git', ['apply', fixture], { cwd: snapshot });
+  execFileSync('git', ['apply', '--unidiff-zero', fixture], { cwd: snapshot });
 
   const serverRoot = path.join(snapshot, tavern);
-  server = await createServer({ configFile: false, root: serverRoot, server: { host: '127.0.0.1', port: 0 } });
+  server = await createServer({
+    configFile: false, root: serverRoot, cacheDir: path.join(temp, 'vite-cache'), server: { host: '127.0.0.1', port: 0 },
+  });
   await server.listen();
   const bind = server.httpServer.address();
   assert.ok(bind && typeof bind === 'object');
@@ -105,12 +107,15 @@ try {
   assert.ok(rows.terminalReturn.maxAcceptedStep <= .43);
   assert.equal(rows.terminalReturn.blocked - rows.terminalStart.blocked, 0);
   await photo('terminal-return');
-  assert.deepEqual(errors, []);
   const reduced = Object.fromEntries(Object.entries(rows).map(([name, step]) =>
-      [name, { ...step.assembly.worldFeet, blocked: step.blocked, seamCrossings: step.seamCrossings, registration: step.assembly.registration }]));
+    [name, {
+      ...step.assembly.worldFeet, blocked: step.blocked, seamCrossings: step.seamCrossings,
+      maxAcceptedStep: step.maxAcceptedStep, registration: step.assembly.registration,
+    }]));
   const output = { assemblySha, browser: browser.version(), survey, signs, rows: reduced, errors };
   await writeFile(path.join(outputDir, 'browser.json'), JSON.stringify(output, null, 2));
   console.log(JSON.stringify(output));
+  assert.deepEqual(errors, []);
 } finally {
   try {
     await browser?.close();
