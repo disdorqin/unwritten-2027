@@ -40,6 +40,8 @@ const stillIceDelay = 10;
 const coldExposureCap = 3;
 const outdoorWalkingScales = [1, .92, .82, .75] as const;
 const outdoorThrowScales = [1, 1.25, 1.6, 1.6] as const;
+const snowballAimRadius = 2 * Math.PI / 180;
+const snowballAimPitchLimit = 1.42;
 // 清晰区与模糊程度随冻纹等级插值。
 const maskClear = [100, 70, 58, 40] as const;
 const blurByLevel = [0, 1.2, 2.6, 4.8] as const;
@@ -61,6 +63,16 @@ export const frostWarmOffset = 2;
 const exposureWarmRates: Record<WarmthSource, number> = {
   'fire-source': 1 / 5, onsen: 1 / 8, interior: 1 / 10, 'hot-drink': 1 / 10,
 };
+
+/** Uniform disc in aim angles, using the same pitch limits as the town camera. */
+export function scatterTownSnowballAim(yaw: number, pitch: number, scale: number, random: () => number = Math.random) {
+  const radius = snowballAimRadius * scale * Math.sqrt(random());
+  const bearing = 2 * Math.PI * random();
+  return {
+    yaw: yaw + radius * Math.cos(bearing),
+    pitch: Math.max(-snowballAimPitchLimit, Math.min(snowballAimPitchLimit, pitch + radius * Math.sin(bearing))),
+  };
+}
 
 export function hasFrostCeremonyRelief({ phase, now }: Pick<CeremonyState, 'phase' | 'now'>) {
   return phase === 'converge' || phase === 'approach' || phase === 'countdown' ||

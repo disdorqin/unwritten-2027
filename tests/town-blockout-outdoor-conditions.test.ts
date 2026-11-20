@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PerspectiveCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
 import { createSnowfall } from '../tools/voxel-tavern/town-blockout/snowfall';
-import { createFrostTracker, type OutdoorFrostExposure } from '../tools/voxel-tavern/town-blockout/town-frost';
+import { createFrostTracker, scatterTownSnowballAim, type OutdoorFrostExposure } from '../tools/voxel-tavern/town-blockout/town-frost';
 import { createTownTemperatureHud } from '../tools/voxel-tavern/town-blockout/town-temperature';
 import { townSnowWeatherForOutdoorState } from '../tools/voxel-tavern/town-blockout/town-weather';
 import { townAreaWindWalkingScale, townWeatherAreaAt, townWeatherExposureFor } from '../tools/voxel-tavern/town-blockout/town-weather-exposure';
@@ -56,6 +56,23 @@ test('region multiplies cold, continuous ice delay only counts past ten seconds,
   assert.ok(Math.abs(sheltered.update(90) - .8) < 1e-9);
   sheltered.setWarmth('interior', true);
   assert.ok(Math.abs(sheltered.update(8)) < 1e-9);
+});
+
+test('cold snowball scatter expands a uniform aim disc by frost level and respects the pitch limits', () => {
+  const yaw = 1.2, pitch = -.3;
+  for (const scale of [1, 1.25, 1.6]) {
+    const samples = [.25, .125].values();
+    const aim = scatterTownSnowballAim(yaw, pitch, scale, () => samples.next().value!);
+    const offset = Math.hypot(aim.yaw - yaw, aim.pitch - pitch);
+    assert.ok(Math.abs(offset - scale * Math.PI / 180) < 1e-12);
+    assert.ok(aim.yaw > yaw && aim.pitch > pitch);
+  }
+
+  const upper = [.81, .25].values();
+  const lower = [.81, .75].values();
+  assert.equal(scatterTownSnowballAim(yaw, 1.41, 1.6, () => upper.next().value!).pitch, 1.42);
+  assert.equal(scatterTownSnowballAim(yaw, -1.41, 1.6, () => lower.next().value!).pitch, -1.42);
+  assert.deepEqual(scatterTownSnowballAim(yaw, pitch, 1.6, () => 0), { yaw, pitch });
 });
 
 test('approved areas share one wind direction and produce distinct visibility distances', () => {
