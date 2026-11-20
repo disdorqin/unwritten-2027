@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { resolveUndergroundShaftRegistration } from '../../src/presence/underground-shaft-registration.js';
+import { createUndergroundWinchAccess } from '../../src/presence/underground-winch.js';
 
 type Survey = Parameters<typeof resolveUndergroundShaftRegistration>[0];
 type Port = Parameters<typeof resolveUndergroundShaftRegistration>[1];
@@ -46,6 +47,46 @@ test('resolves the west shaft and winch through B-01 while preserving the regist
   });
   assert.deepEqual(resolveUndergroundShaftRegistration(survey, port), { kind: 'ready', connection });
   assert.deepEqual(roles, ['shaft', 'winch', 'mine-pool']);
+});
+
+test('the ZA-31 surveyed foot stays in world coordinates and is independent of the shaft and axle', () => {
+  // Operation foot and axle from ZA-31 at ffff6548. Reach here is a test-host setting.
+  const liveWinchFoot = { domainId: 'west', east: -121.0879, north: 181.7391, height: -24.2227,
+    horizontalReach: .7, verticalReach: .2 };
+  const liveSurvey = { ...survey, fixtureWinch: undefined, liveWinchFoot };
+  const result = resolveUndergroundShaftRegistration(liveSurvey, host({
+    supportsFoot(role, foot) {
+      if (role === 'winch') assert.deepEqual(foot, liveWinchFoot);
+      return true;
+    },
+  }));
+  assert.equal(result.kind, 'ready');
+  if (result.kind !== 'ready') assert.fail('expected the surveyed operation foot');
+  assert.deepEqual(result.connection.shaftFoot, shaftFoot);
+  assert.deepEqual(result.connection.winch, liveWinchFoot);
+
+  let accepted = { ...liveWinchFoot, playerId: 'opener' };
+  const canUseWinch = createUndergroundWinchAccess(result.connection.winch, () => accepted);
+  assert.equal(canUseWinch('opener'), true);
+  accepted = { ...accepted, east: -120.7468, north: 180.6050, height: -23.7127 };
+  assert.equal(canUseWinch('opener'), false);
+  accepted = { ...accepted, ...shaftFoot };
+  assert.equal(canUseWinch('opener'), false);
+
+  assert.deepEqual(resolveUndergroundShaftRegistration({ ...liveSurvey, fixtureWinch }, host()),
+    { kind: 'invalid-points' });
+  assert.deepEqual(resolveUndergroundShaftRegistration({
+    ...liveSurvey, liveWinchFoot: { ...liveWinchFoot, domainId: mineLanding.domainId },
+  }, host()), { kind: 'invalid-domains' });
+  assert.deepEqual(resolveUndergroundShaftRegistration({
+    ...liveSurvey, liveWinchFoot: { ...liveWinchFoot, east: Infinity },
+  }, host()), { kind: 'invalid-points' });
+  assert.deepEqual(resolveUndergroundShaftRegistration(liveSurvey, host({ supportsFoot: role => role !== 'winch' })),
+    { kind: 'unsupported-foot' });
+  assert.deepEqual(resolveUndergroundShaftRegistration(liveSurvey, host({ acceptsShaftHandoff: () => false })),
+    { kind: 'unregistered-handoff' });
+  assert.deepEqual(resolveUndergroundShaftRegistration({ ...liveSurvey, mineLanding: undefined }, host()),
+    { kind: 'unregistered' });
 });
 
 test('absent survey inputs never reach the host or invent a shaft crossing', () => {

@@ -12,6 +12,10 @@ on:
       - 'src/presence/underground-mine-gate.ts'
       - 'src/presence/underground-mine-lift.ts'
       - 'src/presence/underground-winch.ts'
+      - 'src/presence/underground-shaft-registration.ts'
+      - 'src/presence/expansion-anchors.ts'
+      - 'tests/server/underground-shaft-registration.test.ts'
+      - 'tests/server/expansion-anchors.test.ts'
       - 'src/shared/underground-descent*.ts'
       - 'tools/voxel-tavern/town-blockout/underground-descent*.ts'
       - 'tools/voxel-tavern/town-blockout/underground-lift-*.ts'
@@ -44,7 +48,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: node --import tsx --test tests/server/underground-entry*.test.ts tests/server/underground-lift-domain-handoff.test.ts tests/server/underground-mine-lift.test.ts tests/server/underground-winch.test.ts tests/town-blockout-underground-lift-cinematic.test.ts
+      - run: node --import tsx --test tests/server/underground-entry*.test.ts tests/server/underground-lift-domain-handoff.test.ts tests/server/underground-mine-lift.test.ts tests/server/underground-winch.test.ts tests/server/underground-shaft-registration.test.ts tests/server/expansion-anchors.test.ts tests/town-blockout-underground-lift-cinematic.test.ts
       - name: Select Chromium
         shell: bash
         run: |
