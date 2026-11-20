@@ -1,4 +1,5 @@
 import { createMuseumBuilder, type MuseumBuilder } from './museum-kit';
+import { addMuseumZones } from './museum-zones';
 import { addMuseumShell } from './museum-shell';
 import { addMuseumTimeline } from './museum-timeline';
 import { addMuseumNetwork } from './museum-network';
@@ -115,6 +116,7 @@ export function buildMuseumLandmark() {
   m.detailInterior(() => {
     addMuseumTimeline(m);
     addMuseumNetwork(m);
+    addMuseumZones(m);
   });
   addMuseumTerrace(m);
   addMuseumTrim(m);
