@@ -9,6 +9,7 @@ on:
       - 'src/presence/underground-lift-*.ts'
       - 'src/presence/underground-mine-gate.ts'
       - 'src/presence/underground-mine-lift.ts'
+      - 'src/presence/underground-winch.ts'
       - 'src/shared/underground-descent*.ts'
       - 'tools/voxel-tavern/town-blockout/underground-descent*.ts'
       - 'tools/voxel-tavern/town-blockout/underground-lift-*.ts'

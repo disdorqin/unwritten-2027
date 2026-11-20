@@ -93,6 +93,40 @@ async function openScene(page, launchUrl, errors) {
   await page.locator('main canvas').click();
 }
 
+async function windFirstShaft(page, capture) {
+  await page.keyboard.press('e');
+  const tapped = await inspect(page);
+  assert.equal(tapped.coverVisible, true);
+  assert.equal(tapped.locked, false);
+  assert.equal(tapped.winchTurns, 0);
+
+  await page.keyboard.down('e');
+  for (let step = 0; step < 10; step++) await advance(page, 100);
+  const partial = await inspect(page);
+  assert.equal(partial.winchTurns, .4);
+  assert.equal(partial.coverVisible, true);
+  await page.keyboard.up('e');
+  const interrupted = await inspect(page);
+  assert.equal(interrupted.winchTurns, 0);
+  assert.equal(interrupted.events.at(-1).code, 'KeyEUp');
+  assert.equal(interrupted.events.at(-1).trusted, true);
+
+  await page.keyboard.down('e');
+  const twoTurns = await driveUntil(page, state => state.winchTurns >= 2, 'two accepted turns', 5_000);
+  assert.equal(twoTurns.winchTurns, 2);
+  assert.equal(twoTurns.coverVisible, true);
+  if (capture) await checkpoint(page, 'windlass');
+  const almost = await driveUntil(page, state => state.winchTurns >= 2.96, 'one tick before opening', 2_400);
+  assert.equal(almost.coverVisible, true);
+  assert.equal(almost.locked, false);
+  const opened = await advance(page, 100);
+  await page.keyboard.up('e');
+  assert.equal(opened.winchTurns, 3);
+  assert.equal(opened.coverVisible, false);
+  assert.equal(opened.locked, true);
+  return { tapped, partial, interrupted, twoTurns, almost, opened };
+}
+
 async function blackoutPending(page, first, shot) {
   const beforeDock = await driveUntil(page, state => state.overlayOpaque, 'the full black frame');
   if (beforeDock.elapsed < beforeDock.travelMs) assert.deepEqual(beforeDock.requests, []);
@@ -159,7 +193,7 @@ try {
   evidence.runs.fullThenRepeat = { errors };
   await openScene(page, url, errors);
 
-  await page.keyboard.press('e');
+  evidence.runs.fullThenRepeat.winch = await windFirstShaft(page, true);
   const first = await inspect(page);
   assert.equal(first.locked, true);
   assert.equal(first.first, true);
@@ -204,7 +238,7 @@ try {
   const skipErrors = [];
   const skipTrace = evidence.runs.skip = { errors: skipErrors };
   await openScene(page, url, skipErrors);
-  await page.keyboard.press('e');
+  skipTrace.winch = await windFirstShaft(page, false);
   const skip = page.locator('[data-underground-lift-skip]');
   assert.equal(await skip.isVisible(), false);
   assert.equal(await page.evaluate(() => window.undergroundDescentReview.askSkip()), false);
@@ -234,7 +268,7 @@ try {
   assert.deepEqual(skipErrors, []);
   await context.close();
   evidence.passed = true;
-  console.log('Underground descent: full, repeat, native skip, blackout handoff, zero damage, and restored movement.');
+  console.log('Underground descent: three accepted winch turns, full, repeat, native skip, blackout, zero damage, and restored movement.');
 } catch (error) {
   evidence.failure = String(error);
   if (page && !page.isClosed()) {

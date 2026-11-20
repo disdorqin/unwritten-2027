@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { createUndergroundEntry, type UndergroundEntryPoint } from '../../src/presence/underground-entry.js';
 import { createUndergroundMineLift } from '../../src/presence/underground-mine-lift.js';
+import { createUndergroundWinchAccess, createUndergroundWinchWinding } from '../../src/presence/underground-winch.js';
 import { createUndergroundLiftDomainHandoff } from '../../src/presence/underground-lift-domain-handoff.js';
 import { createUndergroundMineLayout } from '../voxel-tavern/town-blockout/underground-mine-layout.js';
 import { mountUndergroundDescent } from '../voxel-tavern/town-blockout/underground-descent.js';
@@ -57,7 +58,18 @@ for (const x of [-1, 1]) {
 for (const x of [-2, 2]) addProp(craterScene, .15, 30, 2.6, '#696b6d', x, -46, 2);
 for (let y = -30; y >= -53; y -= 2) addProp(craterScene, 3.4, .12, .14, '#9d906f', 0, y, 3);
 
+const windlass = new Group();
+windlass.position.set(-1.15, shaft.height + 1.05, 2.35);
+const crank = new Group();
+windlass.add(crank);
+addProp(windlass, .28, .36, .34, '#6b6254', 0, 0, .04);
+addProp(crank, .14, .72, .12, '#8d7d66', 0, 0, -.14);
+addProp(crank, .32, .12, .18, '#7d5441', .06, .35, -.22);
+craterScene.add(windlass);
+
 let clock = 0;
+let windingHeld = false;
+let winchTurns = 0;
 let sequence = 0;
 let frame = 0;
 let health = 100;
@@ -72,16 +84,23 @@ const waveSamples = new Float32Array(2048);
 const insidePool = (point: UndergroundEntryPoint) => point.east === pool.east &&
   point.north === pool.north && point.height === pool.height &&
   mine.queryPassage(point.east, -point.north, walker.radius, walker.standingHeight)?.zone === 'pool';
+const acceptedFoot = (id: string) => id === playerId ? { ...foot, playerId, domainId: domains[scene] } : undefined;
+const winding = createUndergroundWinchWinding({
+  now: () => clock,
+  maxSampleGapMs: 150,
+  canUseWinch: createUndergroundWinchAccess({
+    ...shaft, domainId: domains['crater-floor'], horizontalReach: .9, verticalReach: .2,
+  }, acceptedFoot),
+});
 const entry = createUndergroundEntry({
   depthLine: (shaft.height + pool.height) / 2,
   firstFallLanding: pool,
-  canUseWinch: id => id === playerId && scene === 'crater-floor' && foot.height === shaft.height,
+  canUseWinch: winding.canOpenWell,
   canBoardCage: (id, direction) => id === playerId && scene === (direction === 'down' ? 'crater-floor' : 'mine'),
   isDepthLineCrossing: point => Math.hypot(point.east, point.north) <= 2,
   isFirstFallPool: insidePool,
   save: () => undefined,
 });
-const acceptedFoot = (id: string) => id === playerId ? { ...foot, playerId, domainId: domains[scene] } : undefined;
 const lift = createUndergroundMineLift({
   travelMs: 20_000,
   riderCapacity: 1,
@@ -220,13 +239,31 @@ document.addEventListener('keydown', event => {
   if (locked) return;
   if (event.code === 'KeyE') {
     if (scene === 'mine') returnToShaft();
-    else beginDescent();
+    else if (entry.sceneState().coverVisible) {
+      windingHeld = true;
+      void getAudioContext().resume();
+      update();
+    } else beginDescent();
   } else if (event.code === 'KeyW' && scene === 'mine') {
     const north = foot.north - .24;
     const floor = mine.queryPassage(foot.east, -north, walker.radius, walker.standingHeight);
     if (floor) foot = { ...foot, north, height: floor.waterDepth ? pool.height : floor.floor };
   }
 });
+function releaseWinch() {
+  if (!windingHeld) return;
+  windingHeld = false;
+  winchTurns = 0;
+  winding.cancel(playerId);
+}
+document.addEventListener('keyup', event => {
+  if (event.code === 'KeyE' && windingHeld) {
+    events.push({ code: 'KeyEUp', trusted: event.isTrusted, at: clock });
+    releaseWinch();
+  }
+});
+addEventListener('blur', releaseWinch);
+
 document.addEventListener('click', event => {
   if (event.target instanceof Element && event.target.closest('[data-underground-lift-skip]')) {
     events.push({ code: 'skip', trusted: event.isTrusted, at: clock });
@@ -234,6 +271,15 @@ document.addEventListener('click', event => {
 }, true);
 
 function update() {
+  if (windingHeld) {
+    const sample = winding.sample(playerId);
+    if (sample.kind === 'winding' || sample.kind === 'ready') winchTurns = sample.turns;
+    if (sample.kind === 'ready') {
+      windingHeld = false;
+      beginDescent();
+      winding.cancel(playerId);
+    }
+  }
   const state = descent.update(clock);
   const phase = state?.phase ?? effects()?.dataset.phase;
   if (phase && phases.at(-1)?.phase !== phase) {
@@ -253,6 +299,7 @@ function render() {
   }
   const progress = active ? Math.min(1, (clock - active.departedAt) / active.travelMs) : 0;
   cage.position.y = shaft.height - 18 * progress;
+  crank.rotation.z = winchTurns * 2 * Math.PI;
   const posture = scene === 'mine' ? motion.wakeProgress ?? 1 : 1;
   const height = .25 + 1.39 * posture;
   camera.position.set(foot.east, (scene === 'mine' ? foot.height : cage.position.y) + height, -foot.north);
@@ -268,7 +315,8 @@ function inspect() {
     tripId: active?.id, first: active?.first, travelMs: active?.travelMs,
     elapsed: active ? clock - active.departedAt : 0,
     scene: scene === 'mine' ? scene : 'crater', foot: { ...foot }, locked, mode: entry.modeOf(playerId),
-    health, cageAvailable: entry.sceneState().cageAvailable.down,
+    health, winchTurns, coverVisible: entry.sceneState().coverVisible,
+    cageAvailable: entry.sceneState().cageAvailable.down,
     overlayOpaque: blackFrame(), blackoutFrame, skipVisible: visible(skipButton()), wakeProgress: motion.wakeProgress,
     phase: phases.at(-1)?.phase, audioPeak, swayPeak, flashPeak,
     camera: { eyeY: camera.position.y, pitch: camera.rotation.x },
