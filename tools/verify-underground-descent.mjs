@@ -183,6 +183,45 @@ async function blackoutPending(page, first, shot) {
   return { beforeDock, waiting, pixels };
 }
 
+async function rideToSurface(page, needsEmptyCage) {
+  const start = await inspect(page);
+  assert.equal(start.scene, 'mine');
+  await page.keyboard.press('e');
+  let empty;
+  if (needsEmptyCage) {
+    const called = await inspect(page);
+    assert.equal(called.lift.trip.origin, 'crater-floor');
+    assert.equal(called.lift.trip.destination, 'mine');
+    assert.deepEqual(called.lift.trip.riders, []);
+    assert.equal(called.locked, false);
+    const ready = await driveUntil(page, state => state.lift.stop === 'mine', 'empty cage at the mine');
+    assert.equal(ready.scene, 'mine');
+    assert.equal(ready.mode, 'survival');
+    assert.deepEqual(ready.foot, start.foot);
+    empty = ready.returns.at(-1);
+    assert.equal(empty.tripId, called.lift.trip.id);
+    assert.equal(empty.riders, 0);
+    assert.equal(empty.elapsed, called.lift.trip.travelMs);
+    await page.keyboard.press('e');
+  }
+  const boarding = await inspect(page);
+  assert.equal(boarding.lift.trip.direction, 'up');
+  assert.deepEqual(boarding.lift.trip.riders, ['review-player']);
+  assert.equal(boarding.locked, true);
+  const timing = boarding.lift.trip.travelMs;
+  const nearTop = await advance(page, timing - 100);
+  assert.equal(nearTop.scene, 'mine');
+  await advance(page, 100);
+  await page.waitForFunction(() => window.undergroundDescentReview.inspect().scene === 'crater');
+  const landed = await inspect(page);
+  assert.equal(landed.lift.stop, 'crater-floor');
+  assert.equal(landed.mode, 'peace');
+  assert.equal(landed.locked, false);
+  assert.equal(landed.returns.at(-1).tripId, boarding.lift.trip.id);
+  assert.equal(landed.returns.at(-1).elapsed, timing);
+  return { empty, boarding, landed };
+}
+
 async function releaseAndWake(page, first, lyingShot = 'pool-lying') {
   await driveUntil(page, state => state.elapsed >= state.travelMs, 'physical arrival');
   assert.equal(await page.evaluate(() => window.undergroundDescentReview.allowLanding()), true);
@@ -254,8 +293,7 @@ try {
   await checkpoint(page, 'pool-after-wake');
   evidence.runs.fullThenRepeat.first = { ...firstBlack, ...firstWake, waterFilm: firstWaterFilm, phases: phaseSequence(firstWake.settled) };
 
-  await page.keyboard.press('e');
-  assert.equal((await inspect(page)).scene, 'crater');
+  evidence.runs.fullThenRepeat.firstReturn = await rideToSurface(page, true);
   await page.keyboard.press('e');
   const repeat = await inspect(page);
   assert.equal(repeat.first, false);
@@ -271,6 +309,13 @@ try {
   assert.equal(repeatBlack.waiting.flashPeak, 0);
   assert.equal(repeatBlack.waiting.audioPeak, 0);
   evidence.runs.fullThenRepeat.repeat = { ...repeatBlack, ...repeatWake, waterFilm: repeatWaterFilm, phases: shortPhases };
+  const secondReturn = evidence.runs.fullThenRepeat.secondReturn = await rideToSurface(page, false);
+  await page.keyboard.press('e');
+  const next = evidence.runs.fullThenRepeat.nextBoarding = await inspect(page);
+  assert.equal(next.first, false);
+  assert.equal(next.lift.trip.origin, 'crater-floor');
+  assert.equal(next.lift.trip.destination, 'mine');
+  assert.ok(next.lift.trip.id > secondReturn.boarding.lift.trip.id);
   assert.deepEqual(errors, []);
   await context.close();
 
@@ -343,7 +388,7 @@ try {
   assert.deepEqual(reopenedErrors, []);
   await context.close();
   evidence.passed = true;
-  console.log('Underground descent: three accepted winch turns, full, repeat, native skip, pending reconnect, blackout, zero damage, and restored movement.');
+  console.log('Underground descent: three accepted winch turns, full, repeat, empty-cage call, two return rides, native skip, pending reconnect, blackout, zero damage, and restored movement.');
 } catch (error) {
   evidence.failure = String(error);
   if (page && !page.isClosed()) {

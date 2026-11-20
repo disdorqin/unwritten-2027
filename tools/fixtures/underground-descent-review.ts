@@ -135,7 +135,8 @@ const lift = createUndergroundMineLift({
   requestCageRide: entry.requestCageRide,
   readAcceptedFoot: acceptedFoot,
   isAtBoardingPlatform: (stop, point) => point.domainId === domains[stop] &&
-    (stop === 'mine' ? insidePool(point) : point.height === shaft.height),
+    (stop === 'mine' ? point.height === pool.height &&
+      Math.hypot(point.east - pool.east, point.north - pool.north) <= .5 : atShaftMouth(point)),
   readDockedStop: () => dock,
 });
 let acceptedLiftLanding: { tripId: number; foot: NonNullable<ReturnType<typeof acceptedFoot>> } | undefined;
@@ -155,6 +156,13 @@ const events: { code: string; trusted: boolean; at: number }[] = [];
 const transfers: { tripId: number; first: boolean; wasBlack: boolean; fallDamage: number;
   foot: UndergroundEntryPoint; healthBefore: number; healthAfter: number }[] = [];
 const requests: { tripId: number; frame: number; at: number }[] = [];
+const returns: { tripId: number; stop: Stop; riders: number; elapsed: number }[] = [];
+const returnCurtain = document.createElement('div');
+returnCurtain.hidden = true;
+returnCurtain.setAttribute('aria-hidden', 'true');
+Object.assign(returnCurtain.style, { position: 'fixed', inset: '0', background: '#000', zIndex: '999' });
+document.body.append(returnCurtain);
+let returningBlackFrame: number | undefined;
 let blackoutFrame = -1;
 let audioPeak = 0;
 let waterFilmPeak = 0;
@@ -231,17 +239,49 @@ function beginDescent() {
   update();
 }
 
-function returnToShaft() {
-  // This fixture covers down-cage presentation. Use the original accepted return to repeat it in the same profile.
-  if (entry.requestCageRide(playerId, 'up').kind !== 'ride-cage' ||
-      !entry.confirmDepthCrossing(playerId, foot, shaft)) {
-    throw new Error('The original return gate did not accept the depth crossing');
+function requestReturnToShaft() {
+  if (lift.callEmptyCage(playerId, 'mine')) {
+    dock = undefined;
+    return;
   }
-  foot = { ...shaft };
-  scene = 'crater-floor';
-  dock = scene;
-  active = undefined;
-  motion = {};
+  if (!lift.board(playerId, 'up')) return;
+  if (!lift.depart(playerId)) throw new Error('The cage did not depart with an accepted return rider');
+  dock = undefined;
+  locked = true;
+}
+
+function updateReturningCage() {
+  const { trip } = lift.state();
+  if (!trip || (trip.riders.length && trip.direction !== 'up') || clock - trip.departedAt < trip.travelMs) return;
+  if (trip.riders.length) {
+    if (returningBlackFrame === undefined) {
+      returningBlackFrame = frame;
+      returnCurtain.hidden = false;
+      return;
+    }
+    if (frame < returningBlackFrame + 2) return;
+  }
+  dock = trip.destination;
+  if (!handoff.confirmDock(trip.id)) throw new Error('The return or empty cage missed its physical dock');
+  if (trip.riders.length) {
+    if (!handoff.jolt(playerId, trip.id) || !entry.confirmDepthCrossing(playerId, foot, shaft)) {
+      throw new Error('The return rider did not receive this trip’s accepted depth crossing');
+    }
+    foot = { ...shaft };
+    scene = 'crater-floor';
+    const landedFoot = acceptedFoot(playerId);
+    if (!landedFoot) throw new Error('The return rider lost its accepted surface foot');
+    acceptedLiftLanding = { tripId: trip.id, foot: landedFoot };
+    if (!handoff.wake(playerId, trip.id) || !handoff.finishWake(playerId, trip.id)) {
+      throw new Error('The return rider did not receive this trip’s surface landing');
+    }
+    returnCurtain.hidden = true;
+    returningBlackFrame = undefined;
+    active = undefined;
+    motion = {};
+    locked = false;
+  }
+  returns.push({ tripId: trip.id, stop: trip.destination, riders: trip.riders.length, elapsed: clock - trip.departedAt });
 }
 
 function allowLanding() {
@@ -268,7 +308,7 @@ function allowLanding() {
     const landedFoot = acceptedFoot(playerId);
     if (!landedFoot) throw new Error('The repeat rider lost its accepted foot');
     acceptedLiftLanding = { tripId: trip.liftId, foot: landedFoot };
-    if (!handoff.wake(playerId, trip.liftId)) {
+    if (!handoff.wake(playerId, trip.liftId) || !handoff.finishWake(playerId, trip.liftId)) {
       throw new Error('Repeat descent did not receive the accepted underground landing');
     }
   }
@@ -284,7 +324,7 @@ document.addEventListener('keydown', event => {
   events.push({ code: event.code, trusted: event.isTrusted, at: clock });
   if (locked) return;
   if (event.code === 'KeyE') {
-    if (scene === 'mine') returnToShaft();
+    if (scene === 'mine') requestReturnToShaft();
     else if (entry.sceneState().coverVisible) {
       windingHeld = true;
       void getAudioContext().resume();
@@ -333,6 +373,7 @@ function update() {
       if (isFirstFallDeparture(playerId, foot)) beginDescent();
     }
   }
+  updateReturningCage();
   const state = descent.update(clock);
   const phase = state?.phase ?? effects()?.dataset.phase;
   if (phase && phases.at(-1)?.phase !== phase) {
@@ -379,6 +420,7 @@ function inspect() {
     overlayOpaque: blackFrame(), blackoutFrame, skipVisible: visible(skipButton()), wakeProgress: motion.wakeProgress,
     phase: phases.at(-1)?.phase, audioPeak, waterFilmPeak, waterFilmPlays, swayPeak, flashPeak,
     camera: { eyeY: camera.position.y, pitch: camera.rotation.x },
+    lift: lift.state(), returns: [...returns],
     phases: [...phases], events: [...events], requests: [...requests], transfers: [...transfers],
   };
 }

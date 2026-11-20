@@ -133,6 +133,41 @@ test('a fresh lift waits for the physical dock and can recover at the mine', () 
   assert.equal(trip?.destination, 'crater-floor');
 });
 
+test('a lone first-fall survivor can call the empty cage and then ride back from a confirmed dock', () => {
+  const h = setup();
+  h.feet.set('a', at('a', 'mine'));
+  h.gate('first-fall-required');
+  assert.equal(h.lift.callEmptyCage('a', 'mine'), undefined);
+  h.gate('ride-cage');
+  assert.equal(h.lift.callEmptyCage('b', 'mine'), undefined);
+  assert.equal(h.lift.board('b', 'down'), true);
+  assert.equal(h.lift.callEmptyCage('a', 'mine'), undefined);
+  assert.equal(h.lift.leave('b'), true);
+  const empty = h.lift.callEmptyCage('a', 'mine');
+  assert.ok(empty);
+  assert.deepEqual(empty.riders, []);
+  assert.equal(empty.origin, 'crater-floor');
+  assert.equal(empty.destination, 'mine');
+  assert.equal(h.lift.board('a', 'up'), false);
+  assert.equal(h.lift.callEmptyCage('a', 'mine'), undefined);
+
+  h.dock('mine');
+  h.time(25_009);
+  assert.equal(h.lift.confirmArrival(empty.id), false);
+  h.time(25_010);
+  assert.equal(h.lift.confirmArrival(empty.id), true);
+  assert.equal(h.lift.callEmptyCage('a', 'mine'), undefined);
+  assert.equal(h.lift.board('a', 'up'), true);
+  const returning = h.lift.depart('a');
+  assert.ok(returning);
+  assert.deepEqual(returning.riders, ['a']);
+  assert.equal(returning.destination, 'crater-floor');
+  h.dock('crater-floor');
+  h.time(50_010);
+  assert.equal(h.lift.confirmArrival(returning.id), true);
+  assert.equal(h.lift.board('b', 'down'), true);
+});
+
 test('travel duration and capacity require explicit design-compatible inputs', () => {
   const { options } = setup();
   assert.doesNotThrow(() => createUndergroundMineLift({ ...options, travelMs: 20_000 }));

@@ -63,6 +63,16 @@ export function createUndergroundMineLift(options: LiftOptions) {
     return decision.kind === 'ride-cage' && decision.direction === direction;
   }
 
+  function startTrip(origin: LiftStop, departedAt: number, riders: readonly string[]) {
+    const direction = directionAtStop(origin);
+    trip = {
+      id: ++sequence, origin, direction,
+      destination: direction === 'down' ? 'mine' : 'crater-floor',
+      departedAt, travelMs, riders,
+    };
+    return { ...trip, riders: [...riders] };
+  }
+
   return {
     state: () => trip ? { trip: { ...trip, riders: [...trip.riders] } } : { stop: observedStop(), riders: [...boarded] },
 
@@ -93,17 +103,19 @@ export function createUndergroundMineLift(options: LiftOptions) {
         if (!canRide(rider, direction, dock)) boarded.delete(rider);
       }
       if (!boarded.has(playerId)) return;
-      trip = {
-        id: ++sequence,
-        origin: dock,
-        destination: direction === 'down' ? 'mine' : 'crater-floor',
-        direction,
-        departedAt,
-        travelMs,
-        riders: [...boarded],
-      };
+      const departing = startTrip(dock, departedAt, [...boarded]);
       boarded.clear();
-      return { ...trip, riders: [...trip.riders] };
+      return departing;
+    },
+
+    // An accepted waiting player may bring the idle, empty cage to the other platform.
+    callEmptyCage(playerId: string, destination: LiftStop): UndergroundMineLiftTrip | undefined {
+      if (trip || boarded.size !== 0) return;
+      const dock = observedStop();
+      if (!dock || dock === destination || !canRide(playerId, directionAtStop(destination), destination)) return;
+      const departedAt = options.now();
+      if (!Number.isFinite(departedAt)) return;
+      return startTrip(dock, departedAt, []);
     },
 
     // The host reports a physical dock. Elapsed time alone never moves or lands a player.
