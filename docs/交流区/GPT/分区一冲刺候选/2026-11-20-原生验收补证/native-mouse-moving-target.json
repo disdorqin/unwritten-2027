@@ -1,0 +1,169 @@
+{
+  "url": "http://127.0.0.1:4173/town-blockout.html",
+  "input": "X11 XTest",
+  "attempts": [
+    {
+      "yawPixels": 0,
+      "beforeAmmo": 10,
+      "launch": {
+        "id": 1,
+        "type": "throw",
+        "thrower": "local",
+        "shotBy": "player",
+        "scoreable": true,
+        "origin": [
+          223,
+          13.925392712951881,
+          -162.55975716398072
+        ],
+        "direction": [
+          0,
+          0.08987854919801104,
+          -0.9959527330119943
+        ],
+        "capturedAt": 95864.30000000002
+      },
+      "buttons": [
+        {
+          "type": "pointerdown",
+          "at": 91743.80000000002,
+          "locked": true
+        },
+        {
+          "type": "pointerup",
+          "at": 95863.6,
+          "locked": true
+        }
+      ],
+      "afterAmmo": "雪球 9/10 · 薄雪 · 命中 0",
+      "round": "移动靶场 · 56 秒 · 命中 0",
+      "terminal": {
+        "id": 1,
+        "type": "impact",
+        "thrower": "local",
+        "shotBy": "player",
+        "scoreable": true,
+        "scored": true,
+        "targetId": "snow-practice",
+        "at": [
+          223,
+          13.900129624611191,
+          -172.91766558730566
+        ],
+        "capturedAt": 109364.6
+      }
+    }
+  ],
+  "firstStand": {
+    "east": 223,
+    "north": 162.5,
+    "position": "东 223.0 m · 北 162.5 m · 行走"
+  },
+  "supplyApproach": "东 233.0 m · 北 158.5 m · 行走",
+  "gather": {
+    "supplyApproach": "东 233.0 m · 北 158.5 m · 行走",
+    "ammunition": "雪球 10/10 · 薄雪 · 命中 0",
+    "mousePixels": [
+      0,
+      268
+    ]
+  },
+  "launchStand": {
+    "east": 223,
+    "north": 162.5,
+    "position": "东 223.0 m · 北 162.5 m · 行走"
+  },
+  "opened": "移动靶场 · 60 秒 · 命中 0",
+  "hit": {
+    "id": 1,
+    "impact": [
+      223,
+      13.900129624611191,
+      -172.91766558730566
+    ],
+    "round": "移动靶场 · 43 秒 · 命中 1"
+  },
+  "pageErrors": [],
+  "physicalMotion": {
+    "x": 0,
+    "y": 268,
+    "motionSamples": 3,
+    "buttons": [
+      {
+        "type": "pointerdown",
+        "at": 11196.099999999999,
+        "locked": false
+      },
+      {
+        "type": "pointerup",
+        "at": 11244.299999999996,
+        "locked": false
+      },
+      {
+        "type": "pointerdown",
+        "at": 84807.6,
+        "locked": true
+      },
+      {
+        "type": "pointerup",
+        "at": 90032.9,
+        "locked": true
+      },
+      {
+        "type": "pointerdown",
+        "at": 91712.5,
+        "locked": false
+      },
+      {
+        "type": "pointerup",
+        "at": 91712.80000000002,
+        "locked": false
+      },
+      {
+        "type": "pointerdown",
+        "at": 91743.80000000002,
+        "locked": true
+      },
+      {
+        "type": "pointerup",
+        "at": 95863.6,
+        "locked": true
+      }
+    ],
+    "events": [
+      {
+        "id": 1,
+        "type": "throw",
+        "thrower": "local",
+        "shotBy": "player",
+        "scoreable": true,
+        "origin": [
+          223,
+          13.925392712951881,
+          -162.55975716398072
+        ],
+        "direction": [
+          0,
+          0.08987854919801104,
+          -0.9959527330119943
+        ],
+        "capturedAt": 95864.30000000002
+      },
+      {
+        "id": 1,
+        "type": "impact",
+        "thrower": "local",
+        "shotBy": "player",
+        "scoreable": true,
+        "scored": true,
+        "targetId": "snow-practice",
+        "at": [
+          223,
+          13.900129624611191,
+          -172.91766558730566
+        ],
+        "capturedAt": 109364.6
+      }
+    ]
+  }
+}
