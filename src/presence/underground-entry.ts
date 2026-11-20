@@ -20,6 +20,8 @@ export type UndergroundEntryOptions = {
   canBoardCage(playerId: string, direction: UndergroundEntryDirection): boolean;
   isDepthLineCrossing(point: UndergroundEntryPoint, direction: UndergroundEntryDirection): boolean;
   isFirstFallPool(point: UndergroundEntryPoint): boolean;
+  /** The current opener entered the actual uncovered shaft from this accepted foot. */
+  isFirstFallDeparture?(playerId: string, point: UndergroundEntryPoint): boolean;
   initial?: UndergroundEntrySnapshot;
   // Commit synchronously through the world's single authority before publishing an event.
   // Throw on failure so the caller can retry the same transition.
@@ -129,7 +131,8 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     },
     // The host supplies the authorized first fall's departure and verified pool landing.
     confirmFirstFallTransfer(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint) {
-      if (well.kind !== 'open' || !pendingFirstFall(playerId)) return;
+      if (well.kind !== 'open' || !pendingFirstFall(playerId) || !isFinitePoint(before) ||
+          options.isFirstFallDeparture?.(playerId, before) !== true) return;
       // A legacy save may have committed survival mode before clearing the pending fall.
       const crossing = resolveDepthCrossing(playerId, before, after, 'peace');
       if (crossing?.direction !== 'down' || !options.isFirstFallPool(after)) return;

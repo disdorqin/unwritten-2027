@@ -127,6 +127,8 @@ test('a restored pending first fall changes mode and opens the cage in one succe
   let saves = 0;
   const restored = createUndergroundEntry({
     ...options, initial,
+    isFirstFallDeparture: (id, point) => id === 'opener' && point.east === departure.east &&
+      point.north === departure.north && point.height === departure.height,
     isDepthLineCrossing: (point, direction) => direction === 'down' && point.east === pool.east &&
       point.north === pool.north && point.height === options.depthLine,
     isFirstFallPool: point => point.east === pool.east && point.north === pool.north && point.height === pool.height,
@@ -180,6 +182,7 @@ test('the atomic path can settle a saved legacy first fall whose crossing was al
   const pool = options.firstFallLanding;
   const restored = createUndergroundEntry({
     ...options, initial: store.load(),
+    isFirstFallDeparture: (id, point) => id === 'opener' && point.east === pool.east && point.north === pool.north,
     isDepthLineCrossing: (point, direction) => direction === 'down' && point.east === pool.east,
     isFirstFallPool: point => point.height === pool.height,
   });
@@ -191,6 +194,35 @@ test('the atomic path can settle a saved legacy first fall whose crossing was al
   const final = store.load();
   assert.equal(final?.well.kind === 'open' && final.well.firstFallPending, false);
   assert.equal(final?.players[0]?.mode, 'survival');
+});
+
+test('an interpolated depth hit from the operation foot cannot substitute for accepted shaft departure', t => {
+  const { options, store } = fixture(t);
+  const pool = options.firstFallLanding;
+  const shaft = { ...pool, height: -30 };
+  const winch = { ...shaft, east: shaft.east + 3.44 };
+  const acceptedFloor = { ...shaft };
+  let committedDeparture = false;
+  let crossingChecks = 0;
+  const entry = createUndergroundEntry({
+    ...options,
+    isFirstFallDeparture: (id, point) => committedDeparture && id === 'opener' &&
+      point.east === acceptedFloor.east && point.north === acceptedFloor.north && point.height === acceptedFloor.height,
+    isDepthLineCrossing: (point, direction) => {
+      crossingChecks++;
+      return direction === 'down' && Math.abs(point.east - shaft.east) < 3;
+    },
+    isFirstFallPool: point => point.height === pool.height,
+  });
+  assert.equal(entry.openWell('opener').kind, 'opened');
+  assert.equal(entry.confirmFirstFallTransfer('opener', shaft, pool), undefined);
+  committedDeparture = true;
+  assert.equal(entry.confirmFirstFallTransfer('opener', winch, pool), undefined);
+  assert.equal(entry.confirmFirstFallTransfer('next-player', shaft, pool), undefined);
+  assert.equal(crossingChecks, 0);
+  assert.equal(store.load()?.well.kind === 'open' && entry.pendingFirstFall('opener')?.playerId, 'opener');
+  assert.equal(entry.confirmFirstFallTransfer('opener', shaft, pool)?.fallDamage, 0);
+  assert.equal(crossingChecks, 1);
 });
 
 test('malformed or unsupported saved data is reported instead of being treated as a covered well', t => {

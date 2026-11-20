@@ -123,8 +123,37 @@ async function windFirstShaft(page, capture) {
   await page.keyboard.up('e');
   assert.equal(opened.winchTurns, 3);
   assert.equal(opened.coverVisible, false);
-  assert.equal(opened.locked, true);
+  assert.equal(opened.locked, false);
+  assert.equal(opened.atShaftMouth, false);
+  assert.equal(opened.firstFallPending, true);
+  assert.deepEqual(opened.foot, almost.foot);
   return { tapped, partial, interrupted, twoTurns, almost, opened };
+}
+
+async function walkIntoShaft(page) {
+  const start = await inspect(page);
+  assert.equal(start.atShaftMouth, false);
+  assert.equal(start.firstFallPending, true);
+  await page.keyboard.press('e');
+  const fromWinch = await inspect(page);
+  assert.equal(fromWinch.tripId, undefined);
+  assert.equal(fromWinch.locked, false);
+  assert.deepEqual(fromWinch.foot, start.foot);
+
+  let stepped = fromWinch;
+  for (let step = 0; step < 20 && !stepped.locked; step++) {
+    await page.keyboard.press('w');
+    const previous = stepped;
+    stepped = await inspect(page);
+    assert.ok(stepped.foot.north < previous.foot.north);
+    assert.equal(stepped.events.at(-1).code, 'KeyW');
+    assert.equal(stepped.events.at(-1).trusted, true);
+    assert.equal(stepped.locked, stepped.atShaftMouth);
+  }
+  assert.equal(stepped.first, true);
+  assert.equal(stepped.atShaftMouth, true);
+  assert.equal(stepped.locked, true);
+  return stepped;
 }
 
 async function expectWaterFilm(page) {
@@ -203,7 +232,7 @@ try {
   await openScene(page, url, errors);
 
   evidence.runs.fullThenRepeat.winch = await windFirstShaft(page, true);
-  const first = await inspect(page);
+  const first = await walkIntoShaft(page);
   assert.equal(first.locked, true);
   assert.equal(first.first, true);
   assert.equal(first.events.at(-1).trusted, true);
@@ -252,6 +281,7 @@ try {
   const skipTrace = evidence.runs.skip = { errors: skipErrors };
   await openScene(page, url, skipErrors);
   skipTrace.winch = await windFirstShaft(page, false);
+  skipTrace.departure = await walkIntoShaft(page);
   const skip = page.locator('[data-underground-lift-skip]');
   assert.equal(await skip.isVisible(), false);
   assert.equal(await page.evaluate(() => window.undergroundDescentReview.askSkip()), false);
@@ -302,8 +332,7 @@ try {
   assert.equal(reopened.restored.firstFallPending, true);
   assert.equal(reopened.restored.cageAvailable, false);
   assert.equal(reopened.restored.entrySaves, 0);
-  await page.keyboard.press('e');
-  reopened.restarted = await inspect(page);
+  reopened.restarted = await walkIntoShaft(page);
   assert.equal(reopened.restarted.first, true);
   assert.equal(reopened.restarted.winchTurns, 0);
   assert.equal(reopened.restarted.entrySaves, 0);
