@@ -17,7 +17,7 @@ import {
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import type { TownSeat } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { isSharedHomePosition, sharedHomeLayer } from '../src/presence/shared-home-space.ts';
-import type { InstancedMesh } from 'three';
+import { Matrix4, type InstancedMesh } from 'three';
 
 test('shared home has one enclosed floor and two untextured drawing batches', () => {
   const room = buildSharedHome();
@@ -35,6 +35,25 @@ test('shared home has one enclosed floor and two untextured drawing batches', ()
   assert.ok(colliders.length > 20);
   assert.equal(isSharedHomePosition(sharedHomeSpawn.x, sharedHomeSpawn.n, sharedHomeSpawn.ground), true);
   assert.equal(isSharedHomePosition(sharedHomeSpawn.x, sharedHomeSpawn.n, 15), false);
+});
+
+test('the bedside lamp is lit on its cabinet and independent of the desk lamp', () => {
+  const room = buildSharedHome();
+  const [solid, glow] = room.children as InstancedMesh[];
+  const matrix = new Matrix4();
+  const isOnCabinet = (mesh: InstancedMesh, index: number) => {
+    mesh.getMatrixAt(index, matrix);
+    const [x, , z] = matrix.elements.slice(12, 15);
+    return Math.abs(x - 4.85) < .001 && Math.abs(z + 1.18) < .001;
+  };
+  const shade = Array.from({ length: glow.count }, (_, index) => index).filter(index => isOnCabinet(glow, index));
+  assert.equal(shade.length, 1);
+  const shadeColor = glow.instanceColor!.array.slice(3 * shade[0], 3 * shade[0] + 3);
+  assert.equal(room.toggleDeskLamp(), false);
+  assert.deepEqual(glow.instanceColor!.array.slice(3 * shade[0], 3 * shade[0] + 3), shadeColor);
+
+  assert.ok(Array.from({ length: solid.count }, (_, index) => isOnCabinet(solid, index) &&
+    Math.abs(matrix.elements[13] - matrix.elements[5] / 2 - .63) < .001).includes(true));
 });
 
 test('the entrance connects to every seat, hearth, photograph and exit on walkable floor', () => {

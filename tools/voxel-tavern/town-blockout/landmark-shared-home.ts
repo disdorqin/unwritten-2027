@@ -368,6 +368,14 @@ export function buildSharedHome(): SharedHome {
   put(4.85, 0, -1.18, .57, .63, .57, timber);
   put(4.56, .34, -1.18, .061, .06, .12, brass);
   block(4.85, 0, -1.18, .57, .63, .57);
+  put(4.85, .63, -1.18, .31, .052, .29, trim);
+  put(4.85, .682, -1.18, .073, .17, .073, brass);
+  put(4.85, .852, -1.18, .27, .17, .25, '#e7ad73', true);
+  for (const offset of [-.117, .117]) {
+    put(4.85 + offset, .852, -1.18, .038, .17, .27, dark);
+    put(4.85, .852, -1.18 + offset, .29, .028, .036, trim);
+  }
+  put(4.85, 1.022, -1.18, .23, .043, .21, brass);
 
   const shelfZ = -2.69;
   put(6.65, 0, shelfZ, .17, 2.53, 2.85, dark);
