@@ -1,4 +1,4 @@
-export type StreetInfillKind = 'lantern' | 'fence' | 'firewood' | 'sign';
+export type StreetInfillKind = 'lantern' | 'fence' | 'firewood' | 'sign' | 'lanternFir' | 'snowman';
 
 export type StreetInfillPoint = readonly [
   kind: StreetInfillKind, east: number, north: number, heading?: number,
@@ -18,6 +18,15 @@ export const streetInfill: readonly StreetInfillCluster[] = [
       ['sign', 157.5, 159, .35],
       ['lantern', 159.5, 158.8, Math.PI],
       ['fence', 159.5, 156.5, Math.PI / 2],
+    ],
+  },
+  {
+    id: 'northeast-approach',
+    points: [
+      ['lanternFir', 323, 212.5],
+      ['lantern', 326, 227, Math.PI],
+      ['sign', 338.5, 239.5, .6],
+      ['snowman', 350, 240.5, Math.PI],
     ],
   },
 ];
