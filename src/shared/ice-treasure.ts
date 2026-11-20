@@ -54,6 +54,12 @@ export function createIceTreasure<Team extends TeamId>(mode: 'round' | 'free') {
       if (mode === 'round' && score === iceTreasurePointsToWin) winner = ringTeam;
       return { score, winner };
     },
+    /** 宿主确认持铃人已离开冰场且本局采用回台处置。 */
+    returnToPedestal(player: PlayerId) {
+      if (treasure.phase !== 'carried' || treasure.player !== player) return false;
+      treasure = { phase: 'available' };
+      return true;
+    },
     /** 结算后等待调用方完成复位，避免留在圈内重复得分。 */
     resetTreasure() {
       if (winner !== undefined || treasure.phase !== 'awaiting-reset') return false;
