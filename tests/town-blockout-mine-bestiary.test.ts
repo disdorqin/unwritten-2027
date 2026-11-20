@@ -18,8 +18,8 @@ function setup(species: MineCreature, overrides: Partial<MineEncounterHost> = {}
     id: String(index), species, habitat: site, room, at: { ...origin, east: origin.east + index * 0.03 },
   })), { ...host, ...overrides });
   let tick = 0;
-  function advance(player: Partial<Survival['player']> = {}, contact?: Survival['contact']) {
-    return encounter.advance({ tick: tick++, mode: 'survival', section, contact,
+  function advance(player: Partial<Survival['player']> = {}, contact?: Survival['contact'], snowballLanding?: Survival['snowballLanding']) {
+    return encounter.advance({ tick: tick++, mode: 'survival', section, contact, snowballLanding,
       player: { at: { east: origin.east + .6, north: origin.north }, room, action: 'quiet', health: 100, maxHealth: 100, ...player } });
   }
   return { encounter, advance, first: () => encounter.snapshot()[0]! };
@@ -110,18 +110,44 @@ test('zombie cues a medium attack after a longer warning, but walking away or re
   assert.equal(escaping.first().phase, 'retreat');
 });
 
-test('a rock snake peeks at walking, ignores crouching, bites after vibration and retreats', () => {
+test('a rock snake peeks at walking, ignores crouching, bites after running vibration and retreats', () => {
   const { advance, first } = setup('rock-snake');
   advance({ action: 'crouch' });
   assert.equal(first().phase, 'rest');
   advance({ action: 'walk' });
   assert.equal(first().phase, 'peek');
-  advance({ action: 'snow-impact' });
+  assert.deepEqual(first().at, { east: 0, north: 0 });
+  advance({ action: 'run' });
   assert.equal(first().phase, 'windup');
   assert.equal(advance().damage, 0);
   assert.equal(advance().damage, 8);
   for (let step = 0; step < 8; step++) assert.equal(advance().damage, 0);
   assert.equal(first().phase, 'rest');
+});
+
+test('a rock snake investigates the local ground landing without pursuing or biting the thrower', () => {
+  const { advance, first } = setup('rock-snake');
+  const localLanding = { room, at: { east: 0, north: 2 } };
+  const thrower = { action: 'throw-snowball', at: { east: .6, north: 0 } } as const;
+  advance(thrower);
+  advance(thrower, undefined, { ...localLanding, room: 'other-mine-room' });
+  advance(thrower, undefined, { room, at: { east: 0, north: 6.01 } });
+  assert.equal(first().phase, 'rest');
+  assert.deepEqual(first().at, { east: 0, north: 0 });
+
+  assert.equal(advance(thrower, undefined, localLanding).damage, 0);
+  assert.equal(first().phase, 'peek');
+  assert.deepEqual(first().at, { east: 0, north: .36 });
+  for (let step = 0; step < 5; step++) assert.equal(advance(thrower).damage, 0);
+  assert.deepEqual(first().at, localLanding.at);
+  for (let step = 0; step < 10; step++) assert.equal(advance().damage, 0);
+  assert.equal(first().phase, 'rest');
+  assert.deepEqual(first().at, { east: 0, north: 0 });
+
+  const occludedPath = setup('rock-snake', { moveAllowed: () => false });
+  occludedPath.advance({ ...thrower, room: 'other-mine-room' }, undefined, localLanding);
+  assert.equal(occludedPath.first().phase, 'peek');
+  assert.deepEqual(occludedPath.first().at, { east: 0, north: 0 });
 });
 
 test('crystal bats circle before diving, limit concurrent dives to two and stop attacking outside the room', () => {

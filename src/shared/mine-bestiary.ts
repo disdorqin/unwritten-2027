@@ -3,7 +3,7 @@ type Counter = 'snowball' | 'pickaxe';
 type Stage = 'rest' | 'peek' | 'chase' | 'orbit' | 'windup' | 'recover' | 'retreat' | 'rebuild' | 'defeated';
 type Section = 'mine' | 'crystal-cave';
 type DamageBand = 'light' | 'medium';
-type Action = 'quiet' | 'walk' | 'crouch' | 'run' | 'scoop-snow' | 'mine' | 'snow-impact' | 'throw-snowball' | 'direct-lamp';
+type Action = 'quiet' | 'walk' | 'crouch' | 'run' | 'scoop-snow' | 'mine' | 'throw-snowball' | 'direct-lamp';
 
 /** The five inhabitants of the first two segments. U-3 owns the mimic; U-5 owns the keeper. */
 const manifest = {
@@ -46,6 +46,8 @@ export type MineEncounterFrame = Readonly<{ tick: number }> & (
       mode: 'survival'; section: Section; player: UndergroundPlayer;
       /** One already accepted tool-to-creature contact, independent of mere intent. */
       contact?: Readonly<{ target: string; tool: Counter }>;
+      /** Host-resolved snowball ground contact on this tick, independent of the thrower's pose. */
+      snowballLanding?: Readonly<{ room: string; at: Point }>;
     }>
 );
 
@@ -62,9 +64,12 @@ const tuning: Readonly<Record<MineCreature, Behavior>> = {
 export const mineEncounterDamageFraction: Readonly<Record<DamageBand, number>> = Object.freeze({ light: .08, medium: .16 });
 const damageRank: Readonly<Record<DamageBand, number>> = { light: 1, medium: 2 };
 const inCave = new Set<Action>(['mine', 'run', 'throw-snowball', 'direct-lamp']);
+const snakeVibrationRange = 6;
+const snakeLandingProbeTicks = 8;
 
 type Creature = {
   spawn: CreatureSpawn; at: Point; phase: Stage; until: number; hits: number; patrolTarget: Point; ringStep: number;
+  probeTarget?: Point;
 };
 
 function distance(a: Point, b: Point) {
@@ -114,7 +119,7 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
   }
 
   function runCreature(actor: Creature, frame: Extract<MineEncounterFrame, { mode: 'survival' }>, openDive: boolean): DamageBand | undefined {
-    const { player, tick } = frame;
+    const { player, snowballLanding, tick } = frame;
     const { species, id, room, at: origin } = actor.spawn;
     const { speed, attackRange, windup, recovery } = tuning[species];
     const rule = mineBestiary[species];
@@ -135,7 +140,11 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
       if (sameRoom && !safeFire && range <= attackRange && host.seesPlayer(id, player)) return rule.band;
       return;
     }
-    if (!sameRoom && species !== 'skeleton-miner') actor.phase = 'retreat';
+    const idleSnake = species === 'rock-snake' && (actor.phase === 'rest' || actor.phase === 'peek');
+    const nearbyLanding = idleSnake && snowballLanding?.room === room &&
+      distance(actor.at, snowballLanding.at) <= snakeVibrationRange ? snowballLanding.at : undefined;
+    const investigatingLanding = idleSnake && (nearbyLanding !== undefined || actor.probeTarget !== undefined);
+    if (!sameRoom && species !== 'skeleton-miner' && !investigatingLanding) actor.phase = 'retreat';
     if (actor.phase === 'retreat') {
       move(actor, origin, speed / 10);
       if (distance(actor.at, origin) <= 1e-6) actor.phase = 'rest';
@@ -158,11 +167,25 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
         actor.ringStep = 0;
       }
     } else if (species === 'rock-snake') {
-      if ((actor.phase === 'rest' || actor.phase === 'peek') && sameRoom && range <= 6) {
-        if (player.action === 'run' || player.action === 'snow-impact') actor.phase = 'chase';
-        else if (player.action === 'walk') { actor.phase = 'peek'; actor.until = tick + 3; }
+      if (idleSnake && sameRoom && range <= snakeVibrationRange && player.action === 'run') {
+        actor.phase = 'chase';
+        actor.probeTarget = undefined;
+      } else if (idleSnake) {
+        if (nearbyLanding) {
+          actor.phase = 'peek';
+          actor.until = tick + snakeLandingProbeTicks;
+          actor.probeTarget = { ...nearbyLanding };
+        } else if (!actor.probeTarget && sameRoom && range <= snakeVibrationRange && player.action === 'walk') {
+          actor.phase = 'peek';
+          actor.until = tick + 3;
+        }
+        if (actor.phase === 'peek' && tick >= actor.until) {
+          actor.phase = actor.probeTarget ? 'retreat' : 'rest';
+          actor.probeTarget = undefined;
+        } else if (actor.probeTarget) {
+          move(actor, actor.probeTarget, speed / 10);
+        }
       }
-      if (actor.phase === 'peek' && tick >= actor.until) actor.phase = 'rest';
     } else {
       const rolls = species === 'snow-clump' && see && range <= 8 && player.action === 'scoop-snow';
       const follows = species === 'zombie-miner' && ((see && range <= 8 && player.action === 'run') ||
