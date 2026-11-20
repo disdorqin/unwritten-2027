@@ -3,7 +3,7 @@ import type { TownActivity, TownActivityContext, TownActivitySpot } from './town
 import type { TownSnowballTarget } from './town-snow-target';
 import { voxelPersonParts as parts, type VoxelPersonPart as Part } from './town-voxel-person';
 import { snowballGravity, snowballSpeed } from './town-snowball';
-import { answerNpcQuestion, npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod, npcQuestions,
+import { npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod,
   type NpcName, type TownNpcGuide } from './town-npc-dialogue';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
@@ -379,23 +379,12 @@ export function createTownNpcActivity(
     const controls = document.createElement('div');
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:12px 0';
     const selector = document.createElement('select');
-    selector.setAttribute('aria-label', '关于张乐天的问题');
+    selector.setAttribute('aria-label', '关于小镇的问题');
     selector.style.cssText = 'width:100%;min-width:0;font:inherit;padding:7px;border-radius:6px';
     const placeholder = document.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = '选一个关于张乐天的问题';
+    placeholder.textContent = '选一个关于小镇的问题';
     selector.append(placeholder);
-    for (const { title, questions } of npcQuestions) {
-      const group = document.createElement('optgroup');
-      group.label = title;
-      for (const [id, label] of questions) {
-        const opt = document.createElement('option');
-        opt.value = String(id);
-        opt.textContent = label;
-        group.append(opt);
-      }
-      selector.append(group);
-    }
 
     function action(label: string, onClick: () => void) {
       const button = document.createElement('button');
@@ -405,20 +394,31 @@ export function createTownNpcActivity(
       controls.append(button);
       return button;
     }
-    const ask = action('问一句', () => {
-      if (selector.value) speech.textContent = answerNpcQuestion(name, Number(selector.value), period === '跨年夜').text;
-    });
-    ask.disabled = true;
-    selector.onchange = () => { ask.disabled = !selector.value; };
     const smallTalk = [...dialogue.smallTalk, ...stories.life, ...stories.weather, ...npcExpansion.通用.weather];
     const newYear = [...stories.newYear, ...npcExpansion.通用.newYear];
-    action('聊聊雪镇', () => { speech.textContent = smallTalk[turns.smallTalk++ % smallTalk.length]; });
-    action('聊聊镇民', () => { speech.textContent = stories.neighbors[turns.neighbors++ % stories.neighbors.length]; });
-    action('聊聊跨年', () => { speech.textContent = newYear[turns.newYear++ % newYear.length]; });
-    action('附近有什么好玩的？', () => {
-      const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
-      speech.textContent = guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
+    const topics = [
+      { id: 'town', label: '聊聊雪镇', reply: () => smallTalk[turns.smallTalk++ % smallTalk.length] },
+      { id: 'neighbors', label: '聊聊镇民', reply: () => stories.neighbors[turns.neighbors++ % stories.neighbors.length] },
+      { id: 'new-year', label: '聊聊跨年', reply: () => newYear[turns.newYear++ % newYear.length] },
+      { id: 'activities', label: '附近有什么好玩的？', reply: () => {
+        const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
+        return guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
+      } },
+    ];
+    const selectedTopic = () => topics.find(({ id }) => id === selector.value);
+    const ask = action('问一句', () => {
+      const topic = selectedTopic();
+      if (topic) speech.textContent = topic.reply();
     });
+    ask.disabled = true;
+    selector.onchange = () => { ask.disabled = !selectedTopic(); };
+    for (const { id, label, reply } of topics) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = label;
+      selector.append(option);
+      action(label, () => { speech.textContent = reply(); });
+    }
     const clues = zodiacHints?.(name);
     if (clues?.length) action('问生肖线索', () => { speech.textContent = clues[turns.zodiac++ % clues.length]; });
     action('道别', () => {
@@ -429,7 +429,7 @@ export function createTownNpcActivity(
   }
 
   function openMemorialClerkConversation(panel: HTMLElement, visitsBefore: number) {
-    const { familiar, guides, newYear, questions, gossip } = npcAuthoredDialogue[memorialClerkName];
+    const { familiar, guides, newYear, gossip } = npcAuthoredDialogue[memorialClerkName];
     const speech = document.createElement('p');
     speech.setAttribute('role', 'status');
     const greeting = npcPeriod(new Date(), isDaytime?.()) === '跨年夜' ? newYear
@@ -449,8 +449,6 @@ export function createTownNpcActivity(
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
-    action('问镇长近况', () => { speech.textContent = questions.host[1].text; });
-    action('问你们怎么认识', () => { speech.textContent = questions.host[0].text; });
     const clue = zodiacHints?.(memorialClerkName)?.[0];
     if (clue) action('问生肖线索', () => { speech.textContent = clue; });
     action('道别', () => { panel.closest('dialog')?.close(); });
@@ -460,7 +458,7 @@ export function createTownNpcActivity(
   function openWaiterConversation(panel: HTMLElement, visitsBefore: number) {
     const speech = document.createElement('p');
     speech.setAttribute('role', 'status');
-    speech.textContent = tavernWaiterLines.迎客[visitsBefore % 3];
+    speech.textContent = tavernWaiterLines.迎客[visitsBefore % tavernWaiterLines.迎客.length];
     const controls = document.createElement('div');
     controls.className = 'town-mail-form';
     function action(label: string, play: () => void) {
@@ -477,8 +475,6 @@ export function createTownNpcActivity(
       speech.textContent = tavernWaiterLines.上酒[pours++ % tavernWaiterLines.上酒.length];
     });
     action('招呼小二', () => { speech.textContent = tavernWaiterLines.巡堂[rounds++ % 2]; });
-    action('问镇长近况', () => { speech.textContent = tavernWaiterLines.迎客[3]; });
-    action('问你们怎么认识', () => { speech.textContent = tavernWaiterLines.巡堂[3]; });
     action('道别', () => {
       panel.closest('dialog')?.close();
       context.announce(tavernWaiterLines.送客[visitsBefore % tavernWaiterLines.送客.length]);

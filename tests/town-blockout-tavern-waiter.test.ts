@@ -9,11 +9,12 @@ import type { TownActivityContext } from '../tools/voxel-tavern/town-blockout/to
 import { layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterStroll } from '../tools/voxel-tavern/town-blockout/tavern-waiter.ts';
 
-test('the waiter line bank matches the twenty authored lines', () => {
+test('the waiter keeps the eighteen authored tavern lines', () => {
   const manuscript = readFileSync(new URL('../docs/交流区/Muse/NPC补供稿-小二明信片生肖线索-v1.md', import.meta.url), 'utf8');
-  const expected = [...manuscript.matchAll(/^- \[田小勤 · [^\]]+\] (.*?)$/gm)]
-    .map(([, text]) => text.replace(/\[(可答|挡回)\]$/u, ''));
-  assert.equal(expected.length, 20);
+  const authored = [...manuscript.matchAll(/^- \[田小勤 · ([^\]]+)\] (.*?)$/gm)];
+  const expected = authored.filter(([, category]) => !category.includes('/问答·')).map(([, , text]) => text);
+  assert.equal(authored.length, 20);
+  assert.equal(expected.length, 18);
   assert.deepEqual(Object.values(tavernWaiterLines).flat(), expected);
 });
 

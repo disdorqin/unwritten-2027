@@ -10,12 +10,13 @@ import { townMailNpcNames } from '../tools/voxel-tavern/town-blockout/town-mail-
 
 const names = ['贾明灯', '文墨生', '胡六环', '纪守信', '翁寒江', '樊樵'] as const;
 
-test('all 150 added NPC lines and routing markers round-trip to the Muse manuscript', () => {
+test('all 114 added NPC town lines match the Muse manuscript without the retired questions', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC新增六人台词-v1.md', import.meta.url), 'utf8');
   const snakeUpdate = readFileSync(new URL('../docs/交流区/Muse/给GPT-蛇件新谜面与接线-2026-11-18.md', import.meta.url), 'utf8');
   const revisedClue = snakeUpdate.match(/^> 「(.+)」$/m)?.[1];
   assert.ok(revisedClue);
   const expected = source.split(/\r?\n/).filter(line => /^- \[[^\]]+ · [^\]]+\] /.test(line))
+    .filter(line => !line.includes(' · 问答/'))
     .map(line => line.startsWith('- [翁寒江 · 线索] 远处还有一件') ? `- [翁寒江 · 线索] ${revisedClue}` : line);
   const actual = names.flatMap(name => {
     const role = npcAuthoredDialogue[name];
@@ -23,19 +24,16 @@ test('all 150 added NPC lines and routing markers round-trip to the Muse manuscr
     const linesFor = (category: string, texts: readonly string[]) => texts.map(text => lineFor(category, text));
     assert.deepEqual(Object.values(role.familiar).map(lines => lines.length), [3, 3, 2]);
     assert.deepEqual([role.guides.length, role.clues.length, role.newYear.length, role.gossip.length], [6, 2, 2, 1]);
-    assert.deepEqual(role.questions.host.map(({ verdict }) => verdict), ['挡回', '可答', '挡回', '可答']);
-    assert.deepEqual(role.questions.outside.map(({ verdict }) => verdict), ['挡回', '挡回']);
+    assert.equal(Object.hasOwn(role, 'questions'), false, name);
     return [
       ...Object.entries(role.familiar).flatMap(([familiarity, lines]) => linesFor(`日常/${familiarity}`, lines)),
       ...linesFor('引导', role.guides),
       ...linesFor('线索', role.clues),
       ...linesFor('跨年夜', role.newYear),
-      ...role.questions.host.map(({ text, verdict }) => lineFor('问答/张乐天', `${text}[${verdict}]`)),
-      ...role.questions.outside.map(({ text, verdict }) => lineFor('问答/挡回', `${text}[${verdict}]`)),
       ...linesFor('八卦', role.gossip),
     ];
   });
-  assert.equal(actual.length, 150);
+  assert.equal(actual.length, 114);
   assert.deepEqual(actual, expected);
 });
 
