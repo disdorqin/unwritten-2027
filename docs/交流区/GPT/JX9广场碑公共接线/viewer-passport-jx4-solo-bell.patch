@@ -1,0 +1,66 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-passport.ts b/tools/voxel-tavern/town-blockout/town-passport.ts
+index ee19e2007f0c85b2f7e543b15eab9cc21a51b53d..13be170777173f9dd7cbee1b69c5c176624eb4ff 100644
+--- a/tools/voxel-tavern/town-blockout/town-passport.ts
++++ b/tools/voxel-tavern/town-blockout/town-passport.ts
+@@ -71,6 +71,7 @@ export function createTownPassport<Id extends string>(
+   extensionStamps: readonly PassportStamp[] = [],
+   riddleProgress?: () => { totalSolved: number; fullLightDays: readonly string[]; fullLightToday: boolean },
+   zodiac?: ZodiacProgress,
++  iceTreasureBest?: () => number | undefined,
+ ) {
+   const byId = new Map(stamps.map(stamp => [stamp.id, stamp]));
+   const extensionById = new Map(extensionStamps.map(stamp => [stamp.id, stamp]));
+@@ -166,6 +167,12 @@ export function createTownPassport<Id extends string>(
+       list.append(row);
+     });
+     panel.append(summary, meter, list);
++    const bellBest = iceTreasureBest?.();
++    if (bellBest !== undefined) {
++      const result = document.createElement('p');
++      result.textContent = `冰上夺宝 · 单人运送最快 ${(bellBest / 1000).toFixed(2)} 秒`;
++      panel.append(result);
++    }
+ 
+     if (progress.complete) {
+       const download = document.createElement('button');
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 72cc9c1d1eb946211844850a95392381c5a8871d..941ba039dac41d1a2bf08984f7b63a18bf26a772 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -1793,6 +1793,7 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
+ const passport = createTownPassport(
+   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
+   [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp], riddleActivity.getProgress, zodiac,
++  lakeSkating.bestDelivery,
+ );
+ const passportButton = element<HTMLButtonElement>('town-passport-button');
+ function showStampCount() {
+@@ -2874,7 +2875,9 @@ renderer.setAnimationLoop(now => {
+           }
+         } else if (skatesOnIce() && landingFeedback.pose() === 'none') {
+           snowMoveScale = chillMoveScale = 1;
+-          const glide = lakeSkateMotion.step(east, north, townPhysicsDelta);
++          const stalled = lakeSkating.deliveryStalled();
++          if (stalled) lakeSkateMotion.reset();
++          const glide = lakeSkateMotion.step(stalled ? 0 : east, stalled ? 0 : north, townPhysicsDelta, lakeSkating.carryingTreasure());
+           const glideEast = x, glideNorth = n;
+           if ((glide.east || glide.north) &&
+             !tryMove(x + glide.east * townPhysicsDelta, n + glide.north * townPhysicsDelta)) lakeSkateMotion.reset();
+@@ -2899,7 +2902,8 @@ renderer.setAnimationLoop(now => {
+           }
+         }
+         if (!sledRide.active() && !sledRide.recovering()) stepJump(townPhysicsDelta);
+-        if (lakeSkating.enabled()) lakeSkating.onPosition(x, n, townPhysicsDelta, isLakeSkateIce(x, n));
++        if (lakeSkating.enabled()) lakeSkating.onPosition(x, n, townPhysicsDelta, isLakeSkateIce(x, n),
++          !sledRide.active() && !sledRide.recovering() && skatesOnIce());
+         storeWalkView(walkCurrent);
+       });
+     } else {
+@@ -2912,6 +2916,7 @@ renderer.setAnimationLoop(now => {
+     const dip = landingPose === 'prone' ? 1.21 : reduceSnowEffects.matches ? 0 : .22 * landingFeedback.compression();
+     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
+     faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
++    lakeSkating.updateHeldBell(x, n, airHeight ?? ground, yaw);
+     const movement = sledRide.active() ? '雪橇' : sledRide.recovering() ? '翻橇' :
+       landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
+       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :

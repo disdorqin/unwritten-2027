@@ -1,0 +1,40 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 72cc9c1..24d78c0 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -134,6 +134,7 @@ import { findNearestLegalSpawn } from './town-spawn';
+ import { approachTownSnowScale } from './town-snow-cover';
+ import { createTownSnowField } from './town-snow-field';
+ import { createPlazaInformationActivity } from './plaza-information-activity';
++import { buildPlazaChronicleStele, createOpeningChronicleActivity } from './plaza-chronicle-fragment';
+ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
+ import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
+ import { createSledRide, createSledWallCollider } from './sled-ride';
+@@ -514,7 +515,8 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
+ type WalkGeometry = ReturnType<typeof readWalkGeometry>;
+ const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
+ const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
+-scene.add(tigerPine);
++const plazaChronicle = buildPlazaChronicleStele(grid.heightAt);
++scene.add(tigerPine, plazaChronicle);
+ let extensionStreets: ReturnType<typeof import('./extension-streets').buildExtensionStreets> | undefined;
+ let extensionStreetsLoad: Promise<void> | undefined;
+ let homeReturn: TownHousePortal | undefined;
+@@ -547,7 +549,7 @@ function geometry() {
+     }
+   }
+   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
+-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
++  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group, plazaChronicle];
+   if (extensionStreets) groups.push(extensionStreets.group);
+   for (const group of groups) {
+     const { colliders, floors, ramps } = readWalkGeometry(group);
+@@ -1019,7 +1021,7 @@ const personalFirecrackers = createTownPersonalFireworks({
+ presence.onFirecracker(personalFirecrackers.receive, personalFirecrackers.reject);
+ activities.unshift(tavernActivity);
+ activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
+-activities.push(marketFair);
++activities.push(marketFair, createOpeningChronicleActivity(activityContext, grid.heightAt));
+ const activitySpots = activities.flatMap(activity => activity.spots);
+ activitySpots.push(...sledRacks.map(rack => ({
+   x: rack.x, n: rack.n, ground: rack.y, range: 2.4, label: '乘雪橇',

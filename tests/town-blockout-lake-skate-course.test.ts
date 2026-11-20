@@ -77,7 +77,7 @@ test('one night-only batch lights both sides of every existing skate gate', () =
   assert.equal(lights.geometry, markers.geometry);
   assert.equal(lights.visible, false);
   assert.equal(markers.visible, false);
-  assert.deepEqual(scene.children, [markers, lights]);
+  assert.deepEqual(scene.children.filter(child => child instanceof InstancedMesh), [markers, lights]);
 
   night = true;
   activity.update?.(0);
