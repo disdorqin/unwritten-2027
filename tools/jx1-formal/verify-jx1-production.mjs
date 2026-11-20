@@ -14,6 +14,11 @@ const reentryLabel = '出门 · 返回来时的屋门';
 const legacyLabel = '进入屋舍空间';
 const desktop = { viewport: { width: 1000, height: 650 }, deviceScaleFactor: 1 };
 const mobile = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+const touchCruisePixels = 28;
+// The native 5 px dead zone and 34 px radius give 0.039 m per 60 Hz step at this deflection.
+// Begin the approach before the four 0.099 m cruise steps observed after the target latch.
+const touchApproachPixels = 14;
+const touchApproachDistance = .85;
 const exact = 1e-6;
 const distance = (a, b) => Math.hypot(a.east - b.east, a.north - b.north);
 const near = (a, b, eps, label) => assert.ok(Math.abs(a - b) <= eps, `${label}: got ${a}, expected ${b} ±${eps}`);
@@ -139,23 +144,28 @@ async function capture(page, output, filename) {
 }
 
 async function beginForward(session) {
-  const { page, cdp } = session;
-  if (!cdp) {
-    await page.keyboard.down('w');
-    return () => page.keyboard.up('w');
-  }
+  if (session.cdp) return (await beginTouchForward(session, touchCruisePixels)).release;
+  await session.page.keyboard.down('w');
+  return () => session.page.keyboard.up('w');
+}
+
+async function beginTouchForward({ page, cdp }, pixels) {
   const box = await page.locator('#touch-walk').boundingBox({ timeout });
   assert.ok(box, 'Production joystick must be visible');
   const x = Math.round(box.x + box.width / 2);
   const y = Math.round(box.y + box.height / 2);
+  const deflect = travel => cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove', touchPoints: [{ x, y: y - travel }],
+  });
+  const release = () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
   try {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - 28 }] });
+    await deflect(pixels);
   } catch (error) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await release();
     throw error;
   }
-  return () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  return { deflect, release };
 }
 
 async function moveTo(session, target, options = {}) {
@@ -168,15 +178,29 @@ async function moveTo(session, target, options = {}) {
   let end;
   let observed;
   let moves;
+  const expected = { after: before.frames, home: before.home, mask: before.mask };
+  // Software WebGL can spend over a second on a frame, with at most two native walking steps per frame.
+  const limit = target.timeout ?? Math.max(timeout, Math.ceil(distance(before, target) * 10_000));
   try {
-    end = await beginForward(session);
-    const expected = { after: before.frames, home: before.home, mask: before.mask };
+    if (session.cdp && !options.block) {
+      const cruise = distance(before, target) > touchApproachDistance;
+      const touch = await beginTouchForward(session, cruise ? touchCruisePixels : touchApproachPixels);
+      end = touch.release;
+      if (cruise) {
+        const approaching = await waitForFrame(page, { ...expected, near: target, tolerance: touchApproachDistance }, limit);
+        try {
+          await touch.deflect(touchApproachPixels);
+        } finally {
+          await approaching.dispose();
+        }
+      }
+    } else {
+      end = await beginForward(session);
+    }
     let observation;
     if (options.block) {
       observation = await waitForFrame(page, { ...expected, segmentRejected: true }, target.timeout ?? 12_000);
     } else {
-      // Software WebGL can spend over a second on a frame, with at most two native walking steps per frame.
-      const limit = target.timeout ?? Math.max(timeout, Math.ceil(distance(before, target) * 10_000));
       observation = await waitForFrame(page, { ...expected, segmentReached: true }, limit);
     }
     const release = end;
@@ -212,6 +236,7 @@ async function moveTo(session, target, options = {}) {
     assert.ok(distance(move.before, move.after) <= .5, 'Observed displacement exceeds one physics step');
   }
   const after = await frame(page, { after: observed.frames, home: before.home, mask: before.mask });
+  if (options.diagnostics) options.diagnostics.at(-1).settled = after;
   if (!options.block) assert.ok(distance(after, target) <= tolerance + .15, 'The waypoint overshot after releasing movement');
   return { target, before, after, moves, length: accepted.reduce((sum, move) => sum + distance(move.before, move.after), 0) };
 }
