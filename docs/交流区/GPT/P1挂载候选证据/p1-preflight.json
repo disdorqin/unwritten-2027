@@ -1,0 +1,133 @@
+{
+  "scope": "local fixtures and current production camera settings; no host route or coordinates claimed",
+  "sourceHostImportFound": false,
+  "productionCameraFar": 1400,
+  "fixtureCamerasFar": 2400,
+  "views": [
+    {
+      "side": "east",
+      "cameraDepth": 1662.0490357314163,
+      "productionClipAtSamePose": false,
+      "referenceFixtureClip": true
+    },
+    {
+      "side": "west",
+      "cameraDepth": 1662.049035731416,
+      "productionClipAtSamePose": false,
+      "referenceFixtureClip": true
+    },
+    {
+      "side": "north",
+      "cameraDepth": 1662.062938725705,
+      "productionClipAtSamePose": false,
+      "referenceFixtureClip": true
+    },
+    {
+      "side": "south",
+      "cameraDepth": 1662.0629387257045,
+      "productionClipAtSamePose": false,
+      "referenceFixtureClip": true
+    }
+  ],
+  "center": [
+    {
+      "east": 0.125,
+      "north": -10,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 0.125,
+      "north": 0,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 0.125,
+      "north": 10,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 0.125,
+      "north": 20,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 0.125,
+      "north": 40,
+      "floor": 347,
+      "intersects": false
+    }
+  ],
+  "column": [
+    {
+      "east": 2.2,
+      "north": -10,
+      "floor": 347,
+      "intersects": true
+    },
+    {
+      "east": 2.2,
+      "north": 0,
+      "floor": 347,
+      "intersects": true
+    },
+    {
+      "east": 2.2,
+      "north": 10,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 2.2,
+      "north": 20,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 2.2,
+      "north": 40,
+      "floor": 347,
+      "intersects": false
+    }
+  ],
+  "flank": [
+    {
+      "east": 4.25,
+      "north": -10,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 4.25,
+      "north": 0,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 4.25,
+      "north": 10,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 4.25,
+      "north": 20,
+      "floor": 347,
+      "intersects": false
+    },
+    {
+      "east": 4.25,
+      "north": 40,
+      "floor": 347,
+      "intersects": false
+    }
+  ],
+  "ridge": [
+    347,
+    347,
+    347
+  ]
+}

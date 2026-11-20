@@ -1,0 +1,93 @@
+diff --git a/tools/p1-camera-and-gate-preflight.mts b/tools/p1-camera-and-gate-preflight.mts
+new file mode 100644
+index 0000000..dac53df
+--- /dev/null
++++ b/tools/p1-camera-and-gate-preflight.mts
+@@ -0,0 +1,87 @@
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++import { Frustum, Group, Matrix4, PerspectiveCamera, Vector3 } from 'three';
++import {
++  createMainSummitBlock, mainSummitLayout, mainSummitSpec,
++} from './voxel-tavern/town-blockout/main-summit-block.ts';
++import { sampleNorthRidge350 } from './voxel-tavern/town-blockout/north-ridge-350-terrain.ts';
++
++const viewerPath = new URL('./voxel-tavern/town-blockout/viewer.ts', import.meta.url);
++const viewer = readFileSync(viewerPath, 'utf8');
++const cameraParameters = /const camera = new PerspectiveCamera\((\d+(?:\.\d+)?), innerWidth \/ innerHeight, ([\d.]+), ([\d._]+)\);/.exec(viewer);
++assert.ok(cameraParameters, 'Read the current viewer camera clip planes before running this preflight.');
++const near = Number(cameraParameters[2]);
++const productionFar = Number(cameraParameters[3]?.replaceAll('_', ''));
++assert.ok(Number.isFinite(near) && near > 0 && Number.isFinite(productionFar) && productionFar > near);
++
++const fixtureHeight = 347;
++const referenceFar = 2_400;
++const directions = [
++  ['east', 1_600, 0], ['west', -1_600, 0], ['north', 0, -1_600], ['south', 0, 1_600],
++] as const;
++const block = createMainSummitBlock(mainSummitLayout, fixtureHeight, 100);
++const { east, north } = mainSummitLayout.summit;
++const peak = new Vector3(east, mainSummitSpec.summitHeight, -north);
++const [plateauWidth, plateauDepth] = mainSummitSpec.summitPlateau;
++const frustum = new Frustum();
++const projection = new Matrix4();
++
++function seesPeak(camera: PerspectiveCamera) {
++  camera.updateMatrixWorld(true);
++  frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
++  return frustum.containsPoint(peak);
++}
++
++try {
++  // These are the frozen C-01 fixture cameras. Change only the far plane for the comparison.
++  const views = directions.map(([side, offsetEast, offsetZ]) => {
++    const camera = new PerspectiveCamera(50, 1.55, near, productionFar);
++    camera.position.set(peak.x + offsetEast, 350, peak.z + offsetZ);
++    camera.lookAt(peak.clone().add(new Vector3(
++      Math.sign(offsetEast) * (plateauWidth / 2 - .1), 0,
++      Math.sign(offsetZ) * (plateauDepth / 2 - .1),
++    )));
++    const withinTownFar = seesPeak(camera);
++    const cameraDepth = -peak.clone().applyMatrix4(camera.matrixWorldInverse).z;
++    camera.far = referenceFar;
++    camera.updateProjectionMatrix();
++    const withinReferenceFar = seesPeak(camera);
++    assert.ok(withinReferenceFar, side + ' fixture reference must see the peak');
++    return { side, cameraDepth, withinTownFar, withinReferenceFar };
++  });
++
++  const { colliders } = block.enter(new Group());
++  const alongApproach = [-10, 0, 10, 20, 40];
++  function probe(east: number) {
++    return alongApproach.map(north => {
++      const floor = block.heightAt(east, north);
++      assert.notEqual(floor, undefined);
++      const height = floor!;
++      const intersects = colliders.some(({ min, max }) => {
++        const dx = Math.max(min[0] - east, east - max[0], 0);
++        const dz = Math.max(min[2] + north, -north - max[2], 0);
++        return height + 1.8 > min[1] && height < max[1] && Math.hypot(dx, dz) < .27;
++      });
++      return { east, north, height, intersects };
++    });
++  }
++  const middle = probe(.125);
++  const jamb = probe(2.20);
++  // The flank can have open ground without being a legal crossing of the gate plane.
++  const flank = probe(4.25);
++  const terrace = [654, 660, 666].map(north => {
++    const height = sampleNorthRidge350(300, north);
++    return { east: 300, north, height };
++  });
++  assert.ok(middle.every(point => point.height === fixtureHeight && !point.intersects));
++  assert.ok(jamb.some(point => point.intersects));
++  assert.ok(terrace.every(point => point.height === fixtureHeight));
++
++  console.log(JSON.stringify({
++    scope: 'C-01 local fixtures. The host world anchor, town camera and live crossing are outside this preflight.',
++    viewerReferencesMainSummit: /(?:main-summit-block|createMainSummitBlock)/.test(viewer),
++    camera: { near, productionFar, referenceFar }, views, middle, jamb, flank, terrace,
++  }, null, 2));
++} finally {
++  block.dispose();
++}
