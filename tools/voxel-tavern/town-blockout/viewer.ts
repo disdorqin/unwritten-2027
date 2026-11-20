@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Raycaster, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
 import { addScenery } from './scenery';
 import { buildPineCamp } from './town-pine-camp';
@@ -141,6 +141,7 @@ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-su
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
 import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
+import { resolveTownSledRacks } from './town-sled-racks';
 import { createSledAnimation } from './sled-animation';
 import { createSledDrift } from './sled-drift';
 import { createGrandPrix } from './town-grand-prix';
@@ -245,46 +246,51 @@ const plazaCanvasSize = new Vector2();
 const railway = createTownRailway(grid, presence.serverNow);
 const frontRailStation = railway.stops.find(stop => stop.id === 'railway-station')!;
 
-// 3.0 D2 雪橇 / H2 长雪痕 / 环镇大奖赛接线（任务书 §1 D2、§2 H2）。
-// 雪橇候选模块来自 lane-build（B3/B3b），此处首次接线：11 处雪橇架 =
-// 6 站台 + 广场 + 纪念馆入口 + 集市牌楼 + 北坡顶（S1 起点）+ 城堡门。
+const sledFootRadius = .36;
 function sledGroundAt(east: number, north: number) {
+  if (cloudRoute.active()) return cloudRoute.surfaceAt(east, north, sledFootRadius) ?? NaN;
+  if (!walkable(east, north)) return NaN;
   return supportAt(east, north, Number.POSITIVE_INFINITY);
 }
-const sledRacks = [
-  ...railway.stops.map(stop => ({ x: stop.x + 1.6, n: stop.n, y: stop.ground, yaw: 0 })),
-  { x: 234, n: 174, y: grid.heightAt(234, 174), yaw: 0 },
-  { x: 350, n: 249, y: grid.heightAt(350, 249), yaw: 0 },
-  { x: 150, n: 92, y: grid.heightAt(150, 92), yaw: 0 },
-  { x: 378, n: 303, y: grid.heightAt(378, 303), yaw: Math.PI },
-  { x: 460, n: 72, y: grid.heightAt(460, 72), yaw: 0 },
-];
-const sledVisuals = createTownSledVisuals(scene, sledRacks);
-const sledAnimation = createSledAnimation((east, north) => grid.heightAt(east, north));
+const sledAnimation = createSledAnimation((east, north) => {
+  const height = sledGroundAt(east, north);
+  return Number.isFinite(height) ? height : ground;
+});
+type SledRackVisuals = ReturnType<typeof createTownSledVisuals>;
+type SledRackState = { visuals: SledRackVisuals; actions: TownActivitySpot[] };
+let townSledRacks: SledRackState;
+let summitSledRacks: SledRackState | undefined;
+let setMountedRackVehicle: ((spot: { x: number; n: number; y: number; yaw: number }) => void) | undefined;
 const sledDrift = createSledDrift();
 const sledWallCollider = createSledWallCollider(
   (gx, gy) => teamFight.wallColumnAt(gx, gy),
   (gx, gy, speed) => presence.sendSnowfightSledSmash(gx, gy, speed),
 );
-const sledRide = createSledRide({
+const sledWorld: Parameters<typeof createSledRide>[0] = {
   height: sledGroundAt,
   surface(sx, nn, y) {
+    if (cloudRoute.active()) return { surface: 0, deepSnow: false };
     const col = Math.round(sx), row = Math.round(nn);
     const surface = col >= 0 && row >= 0 && col < grid.gridWidth && row < grid.gridDepth
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
     return { surface, deepSnow: snowCover.depthAt(sx, nn, y) >= .6 };
   },
   blocked: obstructed,
+  canTraverse: (from, to) => !cloudRoute.active() ||
+    cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius),
   wallBlocked: (sx, nn, y) => {
+    if (cloudRoute.active()) return false;
     const column = teamFight.wallColumnAt(wallCellOf(sx), wallCellOf(nn));
     return !!column && y < column.ground + column.height * .5;
   },
-  wallImpact: sledWallCollider.collide,
-  snow: (sx, nn, y, snowYaw, count, effect) => sledVisuals.puff(sx, nn, y, snowYaw, count, effect),
+  wallImpact: (from, to, speed) => cloudRoute.active() ? undefined : sledWallCollider.collide(from, to, speed),
+  snow: (sx, nn, y, snowYaw, count, effect) =>
+    (cloudRoute.active() ? summitSledRacks : townSledRacks)?.visuals.puff(sx, nn, y, snowYaw, count, effect),
   stopped: () => announceActivity('雪橇停稳了，找个下坡再出发'),
   smoothFlight: () => announceActivity('漂亮'),
-});
-const sledTrackView = createSledTrackView(scene, sledGroundAt);
+};
+let sledRide = createSledRide(sledWorld);
+const sledTrackView = createSledTrackView(scene, (east, north) => supportAt(east, north, Number.POSITIVE_INFINITY));
 const grandPrix = createGrandPrix();
 const sledStatus = element<HTMLOutputElement>('sled-status');
 const grandPrixStatus = element<HTMLOutputElement>('grand-prix-status');
@@ -305,6 +311,8 @@ function leaveSled() {
   sledDrift.reset();
   const parked = sledRide.parked();
   if (!parked) return;
+  setMountedRackVehicle?.(parked);
+  setMountedRackVehicle = undefined;
   ({ x, n, y: ground } = parked);
   airHeight = undefined;
   riseSpeed = 0;
@@ -315,22 +323,61 @@ function leaveSled() {
 }
 function alignPlayerWithSled() {
   const spot = sledRide.spot;
-  ({ x, n, yaw } = spot);
+  ({ x, n } = spot);
   ground = sledGroundAt(x, n);
   airHeight = spot.y > ground + .02 ? spot.y : undefined;
 }
-const parkedSledAction = {
-  label: '重新上橇',
-  run() {
-    if (!sledRide.remount(x, n, ground)) return;
-    alignPlayerWithSled();
-    stopTravel();
-    storeWalkView(walkRender);
-    walkCurrent.copy(walkRender);
-    walkPrevious.copy(walkRender);
-    announceActivity('重新坐上雪橇');
-  },
-};
+function playerBodyYaw() {
+  return sledRide.active() ? sledRide.spot.yaw : yaw;
+}
+function createSledRacks(domain: 'town' | 'summit'): SledRackState {
+  const sampleFooting = (east: number, north: number) => {
+    if (domain === 'summit') {
+      const surface = cloudRoute.surfaceAt(east, north, sledFootRadius);
+      if (surface === undefined || cloudRoute.blocked(east, north, surface, sledFootRadius, bodyHeight)) return;
+      return surface;
+    }
+    return dryTownLandingHeight(east, north, undefined, true);
+  };
+  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
+  const visuals = createTownSledVisuals(domain === 'summit' ? cloudRoute.scene : scene, racks);
+  const actions = racks.map(rack => {
+    let ride: ReturnType<typeof createSledRide> | undefined;
+    const position = () => ride?.parked() ?? rack;
+    return {
+      get x() { return position().x; },
+      get n() { return position().n; },
+      get ground() { return position().y; },
+      range: 2.4,
+      get label() { return ride?.parked() ? '重新上橇' : '乘雪橇'; },
+      run() {
+        if (sledRide.active()) return;
+        ride ??= createSledRide(sledWorld);
+        const parked = ride.parked() !== undefined;
+        if (parked) {
+          if (!ride.remount(x, n, ground)) return;
+        } else {
+          // Deferred station and palace floors may have loaded since this rack was placed.
+          const feet = sampleFooting(rack.x, rack.n);
+          if (feet === undefined || !ride.mount(rack.x, rack.n, feet, rack.yaw)) {
+            announceActivity('雪橇旁暂时没有安全落脚点');
+            return;
+          }
+        }
+        sledRide = ride;
+        visuals.setRackVehicle(rack.id, undefined);
+        setMountedRackVehicle = spot => visuals.setRackVehicle(rack.id, spot);
+        alignPlayerWithSled();
+        stopTravel();
+        storeWalkView(walkRender);
+        walkCurrent.copy(walkRender);
+        walkPrevious.copy(walkRender);
+        announceActivity(parked ? '重新坐上雪橇' : '坐上雪橇 · W 前行 / S 倒车 · A D 转向 · 空格刹车');
+      },
+    };
+  });
+  return { visuals, actions };
+}
 const previousStationEye = new Vector3();
 let stationViewStillSince = Infinity;
 const stationCullCamera = new PerspectiveCamera();
@@ -1056,7 +1103,7 @@ const personalFirecrackers = createTownPersonalFireworks({
   player() {
     const protectedSpace = !walking || seated || boardingGround || museumOverlay() || waterAtFeet() || homeReturn ||
       roofed(x, n, ground) || personalFireworkRestricted(x, n, ground);
-    return { x, y: airHeight ?? ground, z: -n, yaw, area: protectedSpace ? 'house' : 'open' };
+    return { x, y: airHeight ?? ground, z: -n, yaw: playerBodyYaw(), area: protectedSpace ? 'house' : 'open' };
   },
   listener: () => camera.position,
   hand(owner) {
@@ -1090,15 +1137,6 @@ activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
-activitySpots.push(...sledRacks.map(rack => ({
-  x: rack.x, n: rack.n, ground: rack.y, range: 2.4, label: '乘雪橇',
-  available: () => !homeReturn && !sledRide.active() && !sledRide.parked(),
-  run() {
-    if (sledRide.mount(x, n, ground, yaw)) {
-      announceActivity('坐上雪橇 · W 前行 / S 刹车 · A D 转向 · 漂移攒加速，松开释放');
-    }
-  },
-})));
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
@@ -1400,7 +1438,6 @@ function handleCeremonyCue(cue: CeremonyCue) {
 }
 const tossOrigin = new Vector3();
 const tossDirection = new Vector3();
-const touchHoldMilliseconds = 150;
 const gatherRayEnd = new Vector3();
 const plazaSnowSupply = createPlazaSnowSupply();
 const gatherCheck = { x: NaN, n: NaN, ground: NaN, yaw: NaN, pitch: NaN, snow: false,
@@ -1603,12 +1640,7 @@ const teamFight = createTeamSnowfight({
   heightAt: (east, north) => grid.heightAt(east, north),
   announce: message => announceActivity(message),
   playerPose: () => ({ east: x, north: n }),
-  aimRay: () => {
-    aimSnowball();
-    return { origin: tossOrigin, dir: tossDirection };
-  },
   snowDepthLevel: () => snowCover.depth().level,
-  canScoop: () => aimsAtNearbySnow(),
   freeBuildAvailable: presence.freeSnowWallsAvailable,
 });
 
@@ -1698,6 +1730,67 @@ function aimSnowball() {
   tossDirection.set(Math.sin(yaw) * flat, Math.sin(pitch), -Math.cos(yaw) * flat);
   tossOrigin.set(x, (airHeight ?? ground) + eye - .08, -n).addScaledVector(tossDirection, .06);
 }
+const wallAimFrom = new Vector3();
+const wallAimTo = new Vector3();
+const touchSnowRay = new Raycaster();
+const touchSnowCoordinates = new Vector2();
+const wallAimReach = 4.5;
+
+function snowWallTarget(origin: Vector3, direction: Vector3) {
+  if (direction.y >= -.1) return;
+  wallAimFrom.copy(origin);
+  // Short segments keep the first obstruction and the terrain grade at the cursor.
+  for (let distance = 1.5; distance <= wallAimReach; distance += 1.5) {
+    wallAimTo.copy(origin).addScaledVector(direction, distance);
+    const hit = sweepSnowball(wallAimFrom, wallAimTo, 0, 'local', snowballExtras);
+    if (!hit) {
+      wallAimFrom.copy(wallAimTo);
+      continue;
+    }
+    const east = hit.at.x, north = -hit.at.z;
+    const gx = wallCellOf(east), gy = wallCellOf(north);
+    if (hit.kind === 'target') {
+      const wallKey = hit.targetId?.split(':');
+      if (wallKey?.[0] !== 'wall') return;
+      const wallX = Number(wallKey[1]), wallY = Number(wallKey[2]);
+      const wall = teamFight.wallColumnAt(wallX, wallY);
+      if (wall && hit.at.y >= wall.ground + wall.height * .5 - .09) return { gx: wallX, gy: wallY };
+      return;
+    }
+    const support = supportAt(east, north, hit.at.y + .06);
+    if (Math.abs(hit.at.y - support) <= .25) return { gx, gy };
+    return;
+  }
+}
+
+function aimedSnowWall() {
+  aimSnowball();
+  return snowWallTarget(tossOrigin, tossDirection);
+}
+
+function throwSnowball(origin: Vector3, direction: Vector3) {
+  if (!snowballs.getState().ammo) {
+    announceActivity(touchWalk.active() ? '对准近处雪地，长按交互键采集' : '对准近处雪地，按住 E 采集');
+    return;
+  }
+  personalFirecrackers.cancelSparkler();
+  snowballs.throwBall(origin, direction, 'local', 1);
+}
+
+function tapSnowTarget(clientX: number, clientY: number) {
+  if (!canUseSnow()) return false;
+  const { left, top, width, height } = renderer.domElement.getBoundingClientRect();
+  if (!width || !height) return false;
+  touchSnowCoordinates.set((clientX - left) / width * 2 - 1, 1 - (clientY - top) / height * 2);
+  camera.updateMatrixWorld();
+  touchSnowRay.setFromCamera(touchSnowCoordinates, camera);
+  const { origin, direction } = touchSnowRay.ray;
+  return snowControls.touchPrimary(snowWallTarget(origin, direction), () => {
+    tossOrigin.copy(origin).addScaledVector(direction, .06);
+    throwSnowball(tossOrigin, direction);
+  });
+}
+
 const canUseSnow = () => moveAllowed() && !cloudRoute.active() && !sledRide.active() && !homeReturn &&
   waterAtFeet()?.mode !== 'swim';
 const snowControls = createTownSnowControls({
@@ -1712,22 +1805,15 @@ const snowControls = createTownSnowControls({
   canInteract: () => Boolean(currentAction()),
   interact,
   throwSnowball() {
-    if (!snowballs.getState().ammo) {
-      announceActivity(touchWalk.active() ? '对准近处雪地，长按交互键采集' : '对准近处雪地，按住 E 采集');
-    } else {
-      aimSnowball();
-      personalFirecrackers.cancelSparkler();
-      snowballs.throwBall(tossOrigin, tossDirection, 'local', 1);
-    }
+    aimSnowball();
+    throwSnowball(tossOrigin, tossDirection);
   },
-  buildMode: teamFight.buildMode,
-  setBuildMode: teamFight.setBuildMode,
+  wallTarget: aimedSnowWall,
   placeWall: teamFight.tryPlace,
 });
 const mobileControls = mountTownMobileControls(snowControls, {
   action: actionButton,
   throwButton: snowPrimaryButton,
-  wallButton: element<HTMLButtonElement>('snowfight-build'),
   brakeButton: touchSledBrakeButton,
   direction: element('touch-walk'),
   jump: touchJump,
@@ -1771,8 +1857,8 @@ function updateSnowFight(dt: number) {
   remoteSnowballTargets.length = remoteCount;
   snowballExtras.length = 0;
   snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
-  if (sledRide.active() && teamFight.buildMode()) teamFight.setBuildMode(false);
-  teamFight.update(dt);
+  const wallPreview = canUseSnow() ? touchWalk.active() ? snowControls.touchWallPreview() : aimedSnowWall() : undefined;
+  teamFight.update(dt, wallPreview);
   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
   snowControls.update(dt);
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
@@ -2064,9 +2150,13 @@ function openTavernSeatActions() {
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
-  if (cloudRoute.active()) return airHeight === undefined ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
   if (airHeight !== undefined) return undefined;
+  if (cloudRoute.active()) {
+    if (cloudRoute.riding()) return undefined;
+    const cable = cloudRoute.action({ east: x, north: n, height: ground });
+    return cable ?? nearestTownActivity(summitSledRacks?.actions ?? [], x, n, ground);
+  }
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2100,8 +2190,9 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
-  if (!homeReturn && sledRide.canRemount(x, n, ground)) return parkedSledAction;
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
+  const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);
+  if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
   if (nearest) return nearest;
   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
   return tavernActivity.carryAction();
@@ -2129,8 +2220,8 @@ function landAtSelectedDestination() {
   pitch = selector.value === '雪团练习场' ? .09 : 0;
   return true;
 }
-const walkMouseHelp = '移动鼠标转向，WASD 行走，空格跳跃。短按 E 互动，瞄准雪地长按 E 采雪。左键投掷，B 切换堆墙。骑行时空格刹车，E 下橇。';
-const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，E 互动；点准心下方按钮可锁定鼠标视角。';
+const walkMouseHelp = '移动鼠标转向，WASD 行走，空格跳跃。短按 E 互动，瞄准雪地长按 E 采雪。左键瞄地放墙，瞄空或瞄人投雪球。骑行时空格刹车，E 下橇。';
+const walkDragHelp = '当前为拖拽视角：按住左键拖动转向，WASD 行走，双按 W 或 Shift+W 疾跑，空格跳跃，短按 E 互动、长按采雪。左键短点瞄地放墙，瞄空或瞄人投掷。';
 let lookLocked = false;
 let lockFailure: DesktopLookLockFailure | undefined;
 let lastUnlockAt = 0;
@@ -2231,7 +2322,7 @@ lockLookButton.onclick = () => {
 if (typeof renderer.domElement.requestPointerLock !== 'function' ||
     /MicroMessenger|MQQBrowser|QQ\//.test(navigator.userAgent)) envBanner.hidden = false;
 const touchLook = createTouchLook(renderer.domElement, lookAllowed, turnView,
-  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, undefined, touchLookSensitivity);
+  () => boardingGround ? ridePitch : seated?.pitch ?? pitch, undefined, touchLookSensitivity, tapSnowTarget);
 const lookSensitivityInput = element<HTMLInputElement>('touch-look-sensitivity');
 lookSensitivityInput.value = String(touchLookSensitivity());
 lookSensitivityInput.addEventListener('input', () => setTouchLookSensitivity(Number(lookSensitivityInput.value)));
@@ -2446,7 +2537,7 @@ function updateMascotFollower(dt: number, movementSpeed: number) {
   const edge = hotSpringSoak.dryEdge();
   const bathEdge = edge && mascotFollowGround(edge.x, edge.n, edge.ground) !== undefined ? edge : undefined;
   ownedMascot = mascotFollower.update({
-    x: seated?.x ?? x, n: seated?.n ?? n, ground, yaw: seated?.yaw ?? yaw,
+    x: seated?.x ?? x, n: seated?.n ?? n, ground, yaw: seated?.yaw ?? playerBodyYaw(),
     speed: movementSpeed, indoor: Boolean(homeReturn), wet: Boolean(wetGround),
     skating: skatesOnIce(), bathing: hotSpringSoak.active(), sitting: Boolean(seated),
   }, dt, mounted, bathEdge);
@@ -2722,9 +2813,10 @@ function showLiveRailSchedule(title: string, read: () => string) {
   }, { once: true });
 }
 if (!landAtSelectedDestination()) throw new Error('小镇出生点不可用');
+townSledRacks = createSledRacks('town');
 walking = true;
 element('help').textContent = touchWalk.active()
-  ? '滑动转向，短按大交互键互动。瞄准雪地长按交互键采雪。投掷与堆墙有独立按钮。'
+  ? '滑动转向，短按大交互键互动。瞄准雪地长按交互键采雪。点地预览，再点同一处放墙。点空处或人物投雪球。'
   : walkDragHelp;
 refreshLockHint();
 let presenceSkateSpeed = 0;
@@ -2821,10 +2913,44 @@ function refreshPlayerControls() {
     canMove: moveAllowed(),
     driving: sledRide.active(),
     canUseSnow: canUseSnow(),
-    canBuild: teamFight.canBuild(),
-    buildMode: teamFight.buildMode(),
     action: currentAction()?.label,
   });
+}
+
+function stepMountedSled(forward: number, turn: number) {
+  const brake = sledBrakeHeld || touchSledBrakeHeld;
+  const drift = sledDrift.update(townPhysicsDelta, {
+    grounded: !sledRide.airborne(), speed: sledRide.speed(),
+    turn, lateral: sledRide.lateral(),
+    engaged: sledRide.drifting() && (forward < -.1 || brake),
+  });
+  sledRide.step(townPhysicsDelta, { forward, turn, brake }, drift.boost);
+  alignPlayerWithSled();
+}
+
+function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
+  sledRide.finishFrame(dt, x, n);
+  const sledFrame = sledAnimation.step(dt, {
+    mounted: sledRide.active(), east: x, north: n, height: airHeight ?? ground, yaw: playerBodyYaw(),
+    speed: sledRide.speed(), turn: sledRide.turnRate(), braking: sledRide.braking(), airborne: sledRide.airborne(),
+    drifting: sledRide.drifting(),
+  });
+  const sledDisplay = sledRide.active() ? sledRide.spot : undefined;
+  if (sledDisplay) {
+    visuals.setPose(sledDisplay.x, sledDisplay.n, sledDisplay.y, sledDisplay.yaw,
+      sledFrame.shellRoll + sledRide.roll(), sledFrame.shellPitch, sledRide.active() ? sledFrame : undefined);
+  } else visuals.hide();
+  visuals.update(dt);
+  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
+  if (Math.abs(camera.fov - targetFov) > .01) {
+    camera.fov = targetFov;
+    camera.updateProjectionMatrix();
+  }
+  sledStatus.textContent = sledRide.recovering() && sledRide.active() ? '翻橇中 · 仍在雪橇上' : sledRide.active()
+    ? `雪橇 ${(sledRide.speed() * 3.6).toFixed(0)} km/h` +
+      (sledDrift.drifting() ? ` · 漂移充能 ${Math.round(sledDrift.charge() * 100)}%`
+        : sledDrift.boosting() ? ' · 漂移加速' : '')
+    : sledRide.recovering() ? '翻橇了，缓一缓' : '';
 }
 
 function renderCloudRoute(frameSeconds: number) {
@@ -2834,6 +2960,7 @@ function renderCloudRoute(frameSeconds: number) {
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
     element('position').textContent = '缆车一线 · 前山';
   } else {
+    summitSledRacks ??= createSledRacks('summit');
     const { forward, right, sprint } = walkingAxes();
     const speed = (sprint ? 11.3 : 7.5) / Math.max(1, Math.hypot(forward, right));
     const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
@@ -2841,18 +2968,23 @@ function renderCloudRoute(frameSeconds: number) {
     const interpolation = walkClock.advance(frameSeconds, () => {
       walkPrevious.copy(walkCurrent);
       if (moveAllowed()) {
-        const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
-        if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
-        stepJump(townPhysicsDelta);
+        if (sledRide.active()) stepMountedSled(forward, right);
+        else {
+          const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
+          if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
+          stepJump(townPhysicsDelta);
+        }
       }
       storeWalkView(walkCurrent);
     });
     walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
     faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
     const place = cloudRoute.updateView({ east: walkRender.x, north: -walkRender.z, height: walkRender.y - eye });
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}`;
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}${sledRide.active() ? ' · 雪橇' : ''}`;
+    updateSledPresentation(summitSledRacks.visuals, Math.min(.25, frameSeconds));
   }
-  presence.sample(!cabin && walking, x, n, airHeight ?? ground, yaw);
+  presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
+  presence.sample(!cabin && walking, x, n, airHeight ?? ground, playerBodyYaw());
   presence.update(Math.min(.25, frameSeconds));
   const enabled = moveAllowed();
   touchWalk.setAllowed(enabled);
@@ -2873,7 +3005,7 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
-  cloudRoute.update({ east: x, north: n, height: ground });
+  cloudRoute.update({ east: x, north: n, height: ground }, !sledRide.active());
   if (cloudRoute.active()) {
     renderCloudRoute(frameSeconds);
     return;
@@ -2963,19 +3095,11 @@ renderer.setAnimationLoop(now => {
           lakeSkateMotion.reset();
           if (sledRide.active()) {
             const beforeX = x, beforeN = n;
-            const brake = sledBrakeHeld || touchSledBrakeHeld;
-            const driftState = sledDrift.update(townPhysicsDelta, {
-              grounded: !sledRide.airborne(), speed: sledRide.speed(),
-              turn: right, lateral: sledRide.lateral(),
-              engaged: sledRide.drifting() && (forward < -.1 || brake),
-            });
-            sledRide.step(townPhysicsDelta, { forward, turn: right, brake }, driftState.boost);
-            alignPlayerWithSled();
+            stepMountedSled(forward, right);
             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
               Math.hypot(x - beforeX, n - beforeN) > .05) {
               snowCover.addTrack(beforeX, beforeN, x, n, sledRide.deepSnow() ? 1 : .55, sledRide.drifting());
             }
-            if (!sledRide.active()) sledDrift.reset();
           }
         } else if (skatesOnIce() && landingFeedback.pose() === 'none') {
           snowMoveScale = chillMoveScale = 1;
@@ -3038,36 +3162,15 @@ renderer.setAnimationLoop(now => {
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
     boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
-    boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? yaw,
+    boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? playerBodyYaw(),
     walking && !museumOverlay(),
   );
   presence.update(dt);
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.
-  sledRide.finishFrame(dt, x, n);
-  const sledFrame = sledAnimation.step(dt, {
-    mounted: sledRide.active(), east: x, north: n, height: airHeight ?? ground, yaw,
-    speed: sledRide.speed(), turn: sledRide.turnRate(), braking: sledRide.braking(), airborne: sledRide.airborne(),
-    drifting: sledRide.drifting(),
-  });
-  const sledDisplay = sledRide.active() ? sledRide.spot : sledRide.parked();
-  if (sledDisplay) {
-    sledVisuals.setPose(sledDisplay.x, sledDisplay.n, sledDisplay.y, sledDisplay.yaw,
-      sledFrame.shellRoll + sledRide.roll(), sledFrame.shellPitch, sledRide.active() ? sledFrame : undefined);
-  } else sledVisuals.hide();
-  sledVisuals.update(dt);
+  updateSledPresentation(townSledRacks.visuals, dt);
   sledTrackView.sync(snowCover, now / 1000);
-  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
-  if (Math.abs(camera.fov - targetFov) > .01) {
-    camera.fov = targetFov;
-    camera.updateProjectionMatrix();
-  }
-  sledStatus.textContent = sledRide.recovering() && sledRide.active() ? '翻橇中 · 仍在雪橇上' : sledRide.active()
-    ? `雪橇 ${(sledRide.speed() * 3.6).toFixed(0)} km/h` +
-      (sledDrift.drifting() ? ` · 漂移充能 ${Math.round(sledDrift.charge() * 100)}%`
-        : sledDrift.boosting() ? ' · 漂移加速' : '')
-    : sledRide.recovering() ? '翻橇了，缓一缓' : '';
   const gpStatus = walking
     ? grandPrix.update(x, n, { sledding: sledRide.active(), skating: skatesOnIce() && presenceSkateSpeed > .5 })
     : '';

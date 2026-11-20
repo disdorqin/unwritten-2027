@@ -1,6 +1,8 @@
 export const snowGatherHoldMilliseconds = 150;
 export const snowGatherSeconds = .8;
 
+export type SnowWallCell = Readonly<{ gx: number; gy: number }>;
+
 type SnowControlHost = {
   canUseSnow(): boolean;
   canGather(): boolean;
@@ -9,22 +11,27 @@ type SnowControlHost = {
   canInteract(): boolean;
   interact(): void;
   throwSnowball(): void;
-  buildMode(): boolean;
-  setBuildMode(enabled: boolean): boolean;
-  placeWall(): void;
+  wallTarget(): SnowWallCell | undefined;
+  placeWall(cell: SnowWallCell): void;
   now?: () => number;
 };
 
 export function createTownSnowControls(host: SnowControlHost) {
   const now = host.now ?? (() => performance.now());
   let hold: { pointer: number | undefined; started: number } | undefined;
+  let touchWall: SnowWallCell | undefined;
   let gatherElapsed = 0;
   let gathering = false;
 
-  function cancel() {
+  function cancelHold() {
     hold = undefined;
     gatherElapsed = 0;
     gathering = false;
+  }
+
+  function cancel() {
+    cancelHold();
+    touchWall = undefined;
   }
 
   function begin(pointer?: number) {
@@ -35,14 +42,33 @@ export function createTownSnowControls(host: SnowControlHost) {
 
   function primary() {
     if (!host.canUseSnow()) return false;
-    if (host.buildMode()) host.placeWall();
+    touchWall = undefined;
+    const cell = host.wallTarget();
+    if (cell) host.placeWall(cell);
     else host.throwSnowball();
     return true;
   }
 
-  function toggleBuild() {
-    if (!host.canUseSnow()) return false;
-    return host.setBuildMode(!host.buildMode());
+  function touchPrimary(cell: SnowWallCell | undefined, throwAtPoint = () => host.throwSnowball()) {
+    if (!host.canUseSnow()) {
+      touchWall = undefined;
+      return false;
+    }
+    if (!cell) {
+      touchWall = undefined;
+      throwAtPoint();
+    } else if (touchWall?.gx === cell.gx && touchWall.gy === cell.gy) {
+      touchWall = undefined;
+      host.placeWall(cell);
+    } else {
+      touchWall = { gx: cell.gx, gy: cell.gy };
+    }
+    return true;
+  }
+
+  function touchWallPreview() {
+    if (touchWall && !host.canUseSnow()) touchWall = undefined;
+    return touchWall;
   }
 
   function interact() {
@@ -54,17 +80,13 @@ export function createTownSnowControls(host: SnowControlHost) {
   function finish(pointer?: number) {
     if (!hold || hold.pointer !== pointer) return false;
     const shortPress = now() - hold.started < snowGatherHoldMilliseconds;
-    cancel();
+    cancelHold();
     if (shortPress) interact();
     return true;
   }
 
   return {
     keyDown(code: string, repeat: boolean) {
-      if (code === 'KeyB') {
-        if (!repeat) toggleBuild();
-        return true;
-      }
       if (code !== 'KeyE' || !(host.canUseSnow() || host.canInteract())) return false;
       if (!repeat) begin();
       return true;
@@ -72,10 +94,12 @@ export function createTownSnowControls(host: SnowControlHost) {
     keyUp(code: string) { return code === 'KeyE' && finish(); },
     pressTouch(pointer: number) { return (host.canInteract() || host.canUseSnow()) && begin(pointer); },
     releaseTouch(pointer: number) { return finish(pointer); },
-    cancelTouch(pointer: number) { if (hold?.pointer === pointer) cancel(); },
+    cancelTouch(pointer: number) { if (hold?.pointer === pointer) cancelHold(); },
     primary,
+    touchPrimary,
+    touchWallPreview,
+    throwTouch() { return touchPrimary(undefined); },
     interact,
-    toggleBuild,
     cancel,
     update(dt: number) {
       const heldSeconds = hold ? (now() - hold.started - snowGatherHoldMilliseconds) / 1000 : -1;

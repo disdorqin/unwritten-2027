@@ -3,7 +3,6 @@ import type { createTownSnowControls } from './town-snow-controls';
 type MobileControlElements = {
   action: HTMLButtonElement;
   throwButton: HTMLButtonElement;
-  wallButton: HTMLButtonElement;
   brakeButton: HTMLButtonElement;
   direction: HTMLElement;
   jump: HTMLButtonElement;
@@ -15,14 +14,12 @@ type ControlState = {
   canMove: boolean;
   driving: boolean;
   canUseSnow: boolean;
-  canBuild: boolean;
-  buildMode: boolean;
   action?: string;
 };
 
 export function mountTownMobileControls(
   controls: ReturnType<typeof createTownSnowControls>,
-  { action, throwButton, wallButton, brakeButton, direction, jump, sprint }: MobileControlElements,
+  { action, throwButton, brakeButton, direction, jump, sprint }: MobileControlElements,
   setTouchBrake: (held: boolean) => void,
 ) {
   const listeners = new AbortController();
@@ -56,8 +53,7 @@ export function mountTownMobileControls(
     if (!mobile || event.detail === 0 || (event as PointerEvent).pointerType === 'mouse') controls.interact();
   }, { signal });
   action.addEventListener('contextmenu', event => { if (mobile) event.preventDefault(); }, { signal });
-  throwButton.addEventListener('click', () => controls.primary(), { signal });
-  wallButton.addEventListener('click', () => controls.toggleBuild(), { signal });
+  throwButton.addEventListener('click', () => controls.throwTouch(), { signal });
 
   brakeButton.addEventListener('pointerdown', event => {
     if (!canBrake || brakePointer !== undefined || event.button !== 0) return;
@@ -78,6 +74,7 @@ export function mountTownMobileControls(
   }, { signal });
 
   brakeButton.setAttribute('aria-pressed', 'false');
+  throwButton.textContent = '投雪球';
   return {
     update(state: ControlState) {
       if (state.driving !== driving || state.mobile !== mobile) controls.cancel();
@@ -88,13 +85,10 @@ export function mountTownMobileControls(
       brakeButton.hidden = !canBrake;
       jump.hidden = sprint.hidden = !pedestrian;
       throwButton.hidden = !pedestrian || !state.canUseSnow;
-      wallButton.hidden = driving || !state.canUseSnow || !state.canBuild;
       action.hidden = !state.action && !(pedestrian && state.canUseSnow);
 
       const label = state.action ? (mobile ? state.action : `E · ${state.action}`) : '长按采雪';
       if (action.textContent !== label) action.textContent = label;
-      const primary = state.buildMode ? '放雪墙' : '投雪球';
-      if (throwButton.textContent !== primary) throwButton.textContent = primary;
       const directionLabel = driving ? '驾驶摇杆' : '移动摇杆';
       if (direction.getAttribute('aria-label') !== directionLabel) direction.setAttribute('aria-label', directionLabel);
     },

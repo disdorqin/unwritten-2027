@@ -218,9 +218,9 @@ export function createZa22CloudRoute(host: Host) {
     return inside ? '山门' : '云海台';
   }
 
-  function update(position: Point) {
+  function update(position: Point, canBoard = true) {
     const now = host.now();
-    if (pending && (!near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8)
+    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8)
         || (pending === 'base' && !host.nightOpen()))) pending = undefined;
     if (pending && !ride) {
       const from = pending;

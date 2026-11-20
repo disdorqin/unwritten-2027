@@ -1,4 +1,4 @@
-import { createSledMotion, sledCrashKind } from './sled-motion';
+import { createSledMotion, sledCrashKind, sledReverseSpeed, type SledControls } from './sled-motion';
 import { sledSnowAmount, sledYawDelta } from './sled-animation';
 import { WALL_CELL, sledWallImpact, sledWallReportSpeed, wallCellOf } from '../../../src/presence/snowfight';
 
@@ -64,6 +64,7 @@ type SledWorld = {
   height(x: number, n: number): number;
   surface(x: number, n: number, y: number): { surface: number; deepSnow: boolean };
   blocked(x: number, n: number, y: number): boolean;
+  canTraverse?(from: Readonly<SledPoint>, to: Readonly<SledPoint>): boolean;
   wallBlocked?(x: number, n: number, y: number): boolean;
   wallImpact?(from: Spot, to: Spot, speed: number): WallReport | undefined;
   snow(x: number, n: number, y: number, yaw: number, count: number, effect?: 'brake' | 'land'): void;
@@ -71,7 +72,7 @@ type SledWorld = {
   smoothFlight?(): void;
 };
 type Spot = { x: number; n: number; y: number; yaw: number };
-type SledControls = { forward: number; turn: number; drift?: boolean; brake?: boolean };
+type SledPoint = Pick<Spot, 'x' | 'n' | 'y'>;
 
 export function createSledRide(world: SledWorld) {
   const motion = createSledMotion();
@@ -84,8 +85,9 @@ export function createSledRide(world: SledWorld) {
   let landingCompression = 0, flightSeconds = 0;
   let braking = false, turnRate = 0, deepSnow = false;
 
-  function canMountAt({ x, n, y }: Pick<Spot, 'x' | 'n' | 'y'>) {
-    return !world.blocked(x, n, y) && !world.wallBlocked?.(x, n, y);
+  function canMountAt({ x, n, y }: SledPoint) {
+    return Number.isFinite(x) && Number.isFinite(n) && Number.isFinite(y) &&
+      !world.blocked(x, n, y) && !world.wallBlocked?.(x, n, y);
   }
 
   function mountAt({ x, n, y, yaw }: Spot) {
@@ -148,26 +150,55 @@ export function createSledRide(world: SledWorld) {
     motion.reset(spot.yaw);
   }
 
+  function reverseSupport(x: number, n: number, from: number, speed: number) {
+    const candidate = { x, n, y: world.height(x, n), yaw: spot.yaw };
+    if (!canMountAt(candidate) || Math.abs(candidate.y - from) > .25 ||
+        world.canTraverse?.(spot, candidate) === false || world.wallImpact?.(spot, candidate, speed)?.blocked) return;
+    return candidate;
+  }
+
+  function moveInReverse(x: number, n: number, from: number, speed: number) {
+    const direct = reverseSupport(x, n, from, speed);
+    if (direct) Object.assign(spot, direct);
+    else {
+      // Retain the tangential component when the combined step hits the side of an obstacle.
+      const eastDistance = Math.abs(x - spot.x), northDistance = Math.abs(n - spot.n);
+      const east = eastDistance > 1e-6 ? reverseSupport(x, spot.n, from, speed) : undefined;
+      const north = northDistance > 1e-6 ? reverseSupport(spot.x, n, from, speed) : undefined;
+      const useEast = !!east && (!north || eastDistance >= northDistance);
+      motion.limitHorizontal(useEast, !!north && !useEast);
+      const accepted = useEast ? east : north;
+      if (accepted) Object.assign(spot, accepted);
+    }
+    Object.assign(lastGrounded, spot);
+  }
+
   function step(dt: number, controls: SledControls, boost = 0) {
     if (!active || recovery > 0 || dt <= 0) return;
     const state = motion.state;
     const incomingSpeed = state.speed;
     const from = world.height(spot.x, spot.n);
+    if (!Number.isFinite(from)) {
+      motion.limitHorizontal(false, false);
+      return;
+    }
     const momentum = state.speed > .15;
-    const de = momentum ? state.east / state.speed : Math.sin(spot.yaw);
-    const dn = momentum ? state.north / state.speed : Math.cos(spot.yaw);
+    const noseEast = Math.sin(spot.yaw), noseNorth = Math.cos(spot.yaw);
+    const backing = state.rollingBack || (state.speed === 0 && controls.forward < -.1 && !controls.brake);
+    const de = momentum ? state.east / state.speed : noseEast * (backing ? -1 : 1);
+    const dn = momentum ? state.north / state.speed : noseNorth * (backing ? -1 : 1);
+    const sampledBackward = momentum ? de * noseEast + dn * noseNorth < 0 : backing;
     const ahead = world.height(spot.x + de * 1.5, spot.n + dn * 1.5);
-    const grade = (ahead - from) / 1.5;
+    const grade = Number.isFinite(ahead) ? (ahead - from) / 1.5 : 0;
     const surface = world.surface(spot.x, spot.n, from);
     const accelerating = !state.airborne && grade < -.43 / 1.5 && state.speed >= 6;
     if (accelerating) {
       const recent = world.height(spot.x - de * .6, spot.n - dn * .6);
-      motion.takeOff((from - recent) * state.speed / .6);
+      if (Number.isFinite(recent)) motion.takeOff((from - recent) * state.speed / .6);
     }
-    const drive = controls.brake ? { ...controls, forward: -1 } : controls;
-    braking = drive.forward < -.1;
     deepSnow = surface.deepSnow;
-    const next = motion.step(dt, drive, { ...surface, grade }, controls.brake ? 0 : boost);
+    const next = motion.step(dt, controls, { ...surface, grade, sampledBackward }, boost);
+    braking = next.braking;
     turnRate = sledYawDelta(spot.yaw, next.heading) / dt;
     spot.yaw = next.heading;
     if (next.uphillStalled && !wasStalled) world.stopped();
@@ -175,8 +206,18 @@ export function createSledRide(world: SledWorld) {
     if (next.speed === 0 && !next.airborne) return;
     const x = spot.x + next.east * dt;
     const n = spot.n + next.north * dt;
+    if (!next.airborne && next.rollingBack && next.speed <= sledReverseSpeed + 1e-9) {
+      moveInReverse(x, n, from, next.speed);
+      return;
+    }
     const floor = world.height(x, n);
-    const curbRise = world.height(spot.x + de * .8, spot.n + dn * .8) - from;
+    const nextY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
+    if (!Number.isFinite(nextY) || world.canTraverse?.(spot, { x, n, y: nextY }) === false) {
+      motion.limitHorizontal(false, false);
+      return;
+    }
+    const curb = world.height(spot.x + de * .8, spot.n + dn * .8);
+    const curbRise = Number.isFinite(curb) ? curb - from : 0;
     curbCooldown = Math.max(0, curbCooldown - dt);
     if (!next.airborne && (curbRise > .9 || (curbRise > .25 && next.speed < 8) || Math.abs(grade) > .55)) {
       crash(next.speed);
@@ -188,12 +229,12 @@ export function createSledRide(world: SledWorld) {
       curbCooldown = .22;
     }
     flightSeconds = next.airborne ? flightSeconds + dt : 0;
-    const nextY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
-    if (world.blocked(x, n, nextY)) {
+    const destinationY = next.airborne ? Math.max(floor, spot.y + next.vertical * dt) : floor;
+    if (world.blocked(x, n, destinationY)) {
       crash(next.speed);
       return;
     }
-    const impact = world.wallImpact?.(spot, { x, n, y: nextY, yaw: spot.yaw }, incomingSpeed);
+    const impact = world.wallImpact?.(spot, { x, n, y: destinationY, yaw: spot.yaw }, incomingSpeed);
     if (impact) {
       motion.wallImpact(impact.speed, impact.normalEast, impact.normalNorth);
       spot.yaw = next.heading;
@@ -201,8 +242,8 @@ export function createSledRide(world: SledWorld) {
     }
     spot.x = x;
     spot.n = n;
-    spot.y = nextY;
-    if (next.airborne && next.vertical <= 0 && nextY === floor) {
+    spot.y = destinationY;
+    if (next.airborne && next.vertical <= 0 && destinationY === floor) {
       const impact = Math.abs(next.vertical);
       const landing = motion.land(grade);
       if (landing === 'smooth' && flightSeconds >= 1.2) world.smoothFlight?.();
@@ -211,7 +252,7 @@ export function createSledRide(world: SledWorld) {
       if (landing === 'spill') { crash(0); return; }
       if (landing === 'hard') landingCompression = Math.min(.17, impact * .012);
     }
-    if (!next.airborne && !world.wallBlocked?.(x, n, nextY)) Object.assign(lastGrounded, spot);
+    if (!next.airborne && !world.wallBlocked?.(x, n, destinationY)) Object.assign(lastGrounded, spot);
     const sideSpray = next.drifting || braking;
     const mist = next.airborne ? 0 : sledSnowAmount(next.speed, sideSpray, Math.abs(curbRise));
     snowTime = mist ? snowTime + dt : 0;
