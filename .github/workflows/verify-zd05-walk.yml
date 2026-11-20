@@ -13,7 +13,6 @@ jobs:
     timeout-minutes: 12
     env:
       ZD05_SOURCE: fae14b2d8a1ad8f2fadd0eb1cd6bee025e2fd28f
-      ZD05_OUTPUT: ${{ runner.temp }}/zd05-walk
     defaults:
       run:
         shell: bash
@@ -51,18 +50,18 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: >-
           timeout --signal=TERM --kill-after=10s 60s
-          node "$GITHUB_WORKSPACE/tools/verify-sky-city-sweep-browser.mjs" "$ZD05_OUTPUT"
+          node "$GITHUB_WORKSPACE/tools/verify-sky-city-sweep-browser.mjs" "$RUNNER_TEMP/zd05-walk"
       - name: Walk the island in the built preview
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: >-
           timeout --signal=TERM --kill-after=10s 220s
-          node tools/verify-sky-city-browser.mjs "$ZD05_OUTPUT"
+          node tools/verify-sky-city-browser.mjs "$RUNNER_TEMP/zd05-walk"
       - name: Hash native captures and readings
         if: always()
-        working-directory: ${{ runner.temp }}
+        working-directory: .
         run: |
-          mkdir -p "$ZD05_OUTPUT"
-          cd "$ZD05_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/zd05-walk"
+          cd "$RUNNER_TEMP/zd05-walk"
           find . -maxdepth 1 -type f \( -name '*.jpg' -o -name '*-result.json' \) -print0 |
             sort -z | xargs -0 --no-run-if-empty sha256sum > captures.sha256
       - uses: actions/upload-artifact@v4
@@ -70,6 +69,6 @@ jobs:
         with:
           name: zd05-native-walk-fae14b2d
           path: |
-            ${{ env.ZD05_OUTPUT }}/*.jpg
-            ${{ env.ZD05_OUTPUT }}/*-result.json
-            ${{ env.ZD05_OUTPUT }}/captures.sha256
+            ${{ runner.temp }}/zd05-walk/*.jpg
+            ${{ runner.temp }}/zd05-walk/*-result.json
+            ${{ runner.temp }}/zd05-walk/captures.sha256
