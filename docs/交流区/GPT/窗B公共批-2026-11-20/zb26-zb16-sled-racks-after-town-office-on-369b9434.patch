@@ -1,0 +1,97 @@
+diff --git a/tests/town-blockout-sled-racks.test.ts b/tests/town-blockout-sled-racks.test.ts
+index e3d0be4f..1b67ffe1 100644
+--- a/tests/town-blockout-sled-racks.test.ts
++++ b/tests/town-blockout-sled-racks.test.ts
+@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
+ import { test } from 'node:test';
+ import { InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
+ import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance';
++import { createSledRide } from '../tools/voxel-tavern/town-blockout/sled-ride';
+ import { createTownSledVisuals, sledParts } from '../tools/voxel-tavern/town-blockout/sled-visuals';
+ import { canEnter, createTerrainGrid, isWater, layout, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+-import { resolveTownSledRacks, townSledRackMissingSites } from '../tools/voxel-tavern/town-blockout/town-sled-racks';
++import {
++  nearestParkedTownSledAction, resolveTownSledRacks, townSledRackMissingSites, type TownSledRackAction,
++} from '../tools/voxel-tavern/town-blockout/town-sled-racks';
+ import {
+   createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
+ } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
+@@ -73,6 +76,35 @@ test('racks skip their primary pad if the vehicle footprint has no safe support'
+   assert.deepEqual(noFooting, []);
+ });
+
++test('the parked sled wins over a closer full rack and can only be selected while remountable', () => {
++  let blocked = false;
++  const ride = createSledRide({
++    height: () => 12, surface: () => ({ surface: 0, deepSnow: false }), blocked: () => blocked,
++    snow() {}, stopped() {},
++  });
++  assert.equal(ride.mount(101.2, 80, 12, Math.PI / 2), true);
++  assert.equal(ride.leave(), true);
++  const original = ride.parked();
++  assert.ok(original);
++  const full: TownSledRackAction = { x: 100.1, n: 80, ground: 12, range: 2.4, parked: false, label: '乘雪橇', run() {} };
++  const parked: TownSledRackAction = {
++    x: original.x, n: original.n, ground: original.y, range: 2.4, parked: true, label: '重新上橇',
++    available: () => ride.canRemount(100, 80, 12),
++    run() { assert.equal(ride.remount(100, 80, 12), true); },
++  };
++  const racks = [full, parked];
++  blocked = true;
++  assert.equal(nearestParkedTownSledAction(racks, 100, 80, 12), undefined);
++  blocked = false;
++  assert.equal(nearestParkedTownSledAction(racks, 100, 80, 13), undefined);
++  assert.equal(nearestParkedTownSledAction(racks, 104, 80, 12), undefined);
++  const picked = nearestParkedTownSledAction(racks, 100, 80, 12);
++  assert.equal(picked, parked);
++  picked?.run();
++  assert.deepEqual(ride.spot, original);
++  assert.equal(ride.active(), true);
++});
++
+ test('a taken sled can park away from the rack with its original rack poles intact', () => {
+   const scene = new Scene();
+   const first = { id: 'a', x: 30, n: 42, y: 8, yaw: 0 };
+diff --git a/tools/voxel-tavern/town-blockout/town-sled-racks.ts b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+index c444f9d4..c08749ef 100644
+--- a/tools/voxel-tavern/town-blockout/town-sled-racks.ts
++++ b/tools/voxel-tavern/town-blockout/town-sled-racks.ts
+@@ -1,8 +1,10 @@
+ import { mirrorLakeSignedDistance } from '../../../src/shared/mirror-lake';
+ import { icePalaceSite } from './ice-palace-site';
+ import { roadCorridorKeepClear } from './road-clearance';
++import { longHallSledStart } from './sled-route';
+ import type { SledRack } from './sled-visuals';
+ import { layout } from './terrain';
++import { nearestTownActivity, type TownActivitySpot } from './town-activity';
+ import { extensionPlots } from './town-extension';
+ import { pineCampSites } from './town-pine-camp';
+ import { za22StationApproach } from './town-za22-cloud-route';
+@@ -10,11 +12,18 @@ import { craterWestSurvey } from './town-za22-crater-road';
+ import { za22GateSeamNorth } from './town-za22-mountain-gate';
+
+ export type SledRackDomain = 'town' | 'summit';
++export type TownSledRackAction = TownActivitySpot & { readonly parked: boolean };
+ type Pad = readonly [east: number, north: number, yaw: number];
+ type Site = Readonly<{ id: string; domain: SledRackDomain; pads: readonly Pad[] }>;
+ type DryFooting = (east: number, north: number) => number | undefined;
+ type CraterLip = Readonly<{ east: number; north: number }>;
+
++export function nearestParkedTownSledAction(
++  actions: readonly TownSledRackAction[], east: number, north: number, height: number,
++) {
++  return nearestTownActivity(actions.filter(action => action.parked), east, north, height);
++}
++
+ const west = -Math.PI / 2;
+ const east = Math.PI / 2;
+ const south = Math.PI;
+@@ -62,7 +71,7 @@ export const townSledRackSites: readonly Site[] = [
+
+ export const townSledRackMissingSites = ['old-home'] as const;
+ export const townSledRackLegacySites: readonly Site[] = [
+-  { id: 'north-slope', domain: 'town', pads: [[378, 303, south]] },
++  { id: 'north-slope', domain: 'town', pads: [[...longHallSledStart, south]] },
+   { id: 'memorial', domain: 'town', pads: [[347.5, 255, 0], [348, 255, 0], [348.5, 255, 0]] },
+   { id: 'market', domain: 'town', pads: [[150.5, 90, 0], [151.5, 90.5, 0], [151, 90, 0]] },
+ ];
