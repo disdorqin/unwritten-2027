@@ -131,12 +131,16 @@ test('crossing snow rolls scatter both participants and leave each vulnerable to
   assert.equal(step(36, {}, { target: 'other', tool: 'snowball' }).hit, 'defeated');
 });
 
-test('the campfire, the room exit and peaceful mode cancel pending follow rolls', () => {
-  for (const wayOut of ['fire', 'exit', 'peace'] as const) {
+test('the campfire, room exits and mode changes cancel pending follow rolls', () => {
+  for (const wayOut of ['fire', 'exit', 'crystal', 'peace'] as const) {
     const { step, clump, encounter } = setupSnowClumps([['lead', 0, 0], ['other', 0, 1.2]]);
     step(0, { action: 'scoop-snow' });
     if (wayOut === 'peace') encounter.advance({ tick: 1, mode: 'peaceful' });
-    else assert.equal(step(1, wayOut === 'fire' ? { at: { east: 5, north: 7 } } : { room: 'next-room' }).damage, 0);
+    else if (wayOut === 'crystal') {
+      assert.equal(encounter.advance({ tick: 1, mode: 'survival', section: 'crystal-cave',
+        player: { room, at: { east: 5, north: 0 }, action: 'quiet', health: 100, maxHealth: 100 } }).damage, 0);
+      assert.equal(clump('lead').phase, 'retreat');
+    } else assert.equal(step(1, wayOut === 'fire' ? { at: { east: 5, north: 7 } } : { room: 'next-room' }).damage, 0);
     for (let tick = 2; tick <= 10; tick++) assert.equal(step(tick).damage, 0);
     assert.equal(clump('other').phase, 'rest');
     assert.deepEqual(clump('other').at, { east: 0, north: 1.2 });

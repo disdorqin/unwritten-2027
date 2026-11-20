@@ -180,7 +180,14 @@ export function createMineBestiaryEncounter(spawns: readonly CreatureSpawn[], ho
     const { species, id, room, at: origin } = actor.spawn;
     const { speed, attackRange, windup, recovery } = tuning[species];
     const rule = mineBestiary[species];
-    if (rule.section !== frame.section || actor.phase === 'defeated') return;
+    if (actor.phase === 'defeated') return;
+    if (rule.section !== frame.section) {
+      if (actor.snowRoll) {
+        actor.snowRoll = undefined;
+        if (actor.phase !== 'rest') actor.phase = 'retreat';
+      }
+      return;
+    }
     const sameRoom = player.room === room;
     const range = distance(actor.at, player.at);
     const safeFire = host.insideCampfire(room, player.at);
