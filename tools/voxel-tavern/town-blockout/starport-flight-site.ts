@@ -2,6 +2,7 @@ import { BoxGeometry, Group, Mesh, MeshLambertMaterial, type Object3D } from 'th
 import type { AircraftPoint, AircraftRunway, AircraftSurface, AircraftWorld } from '../../../src/shared/aircraft-flight';
 import { createFlightBoosterVisual, createSnowWingVisual, flightEquipmentMounts } from './flight-equipment-visuals';
 import { northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
+import { starportAssemblyEnvelopeAt } from './starport-assembly-site';
 import { createTerrainGrid, isWater, layout, waterHeight } from './terrain';
 
 const point = (east: number, north: number, height: number): AircraftPoint => ({ east, north, height });
@@ -28,10 +29,6 @@ const legacyPosts = [
   { ...starportFlightSite.assembly, width: 3.9, depth: 1.8, tall: .9 },
   { ...starportFlightSite.door, width: 2.7, depth: .6, tall: 2.8 },
 ];
-// The fitted rack spans local Z −0.505 to +0.973 m, including the protruding booster.
-const assemblyRackEnvelope = { ...starportFlightSite.assembly,
-  north: starportFlightSite.assembly.north - .235, width: 6.06, depth: 1.48, tall: 2.15 };
-
 /** Preview uses the existing town terrain, lake and plot envelopes, plus the 350 m design survey. */
 export function createStarportReviewWorld({ assemblyHandoff = false }: StarportReviewOptions = {}) {
   const terrain = createTerrainGrid();
@@ -39,7 +36,7 @@ export function createStarportReviewWorld({ assemblyHandoff = false }: StarportR
     ? sampleNorthRidge350(east, north)
     : terrain.heightAt(east, north);
   const envelopes = [
-    ...(assemblyHandoff ? [assemblyRackEnvelope] : legacyPosts),
+    ...(assemblyHandoff ? [starportAssemblyEnvelopeAt(starportFlightSite.assembly)] : legacyPosts),
     ...layout.plots.map(plot => ({ ...point(...plot.origin as [number, number, number]),
       width: plot.footprint[0], depth: plot.footprint[1], tall: plot.id === 'clocktower' ? 117.125 : 12 })),
   ];
