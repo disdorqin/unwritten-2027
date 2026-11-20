@@ -1,0 +1,47 @@
+name: Verify ZD-05 island approach and walking
+
+on:
+  push:
+    branches: [town-verify-zd05-altitude-20261120]
+
+permissions:
+  contents: read
+
+jobs:
+  walkthrough:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies and select Chromium
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            printf 'SKY_CITY_CHROME=%s\n' "$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - name: Verify approach, landing and the built island walkthrough
+        run: |
+          node --import tsx --test tests/town-blockout-sky-city.test.ts tests/town-blockout-aircraft-flight.test.ts
+          node tools/verify-sky-city-browser.mjs "$RUNNER_TEMP/zd05"
+      - name: Hash original captures
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/zd05"
+          cd "$RUNNER_TEMP/zd05"
+          find . -maxdepth 1 -type f \( -name '*.jpg' -o -name 'sky-city-result.json' \) -print0 | sort -z | xargs -0 --no-run-if-empty sha256sum > captures.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zd05-island-walkthrough
+          path: |
+            ${{ runner.temp }}/zd05/*.jpg
+            ${{ runner.temp }}/zd05/sky-city-result.json
+            ${{ runner.temp }}/zd05/captures.sha256
