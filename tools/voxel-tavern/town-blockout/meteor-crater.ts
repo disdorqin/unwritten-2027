@@ -29,6 +29,16 @@ export type MeteorCraterPlan = Readonly<{
   mainTrail: MeteorCraterTrail;
 }>;
 
+/** B-01's reviewed relative shape. The enclosing town host supplies its absolute datum. */
+export const meteorCraterFixturePlan: MeteorCraterPlan = {
+  terraces: [
+    { outerRadius: 50, innerRadius: 46, depth: 7 },
+    { outerRadius: 41, innerRadius: 37, depth: 16 },
+    { outerRadius: 32, innerRadius: 27, depth: 26 },
+  ],
+  mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
+};
+
 function positiveAngle(angle: number) {
   const remainder = angle % fullTurn;
   return remainder < 0 ? remainder + fullTurn : remainder;

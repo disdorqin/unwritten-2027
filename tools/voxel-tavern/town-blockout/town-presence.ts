@@ -36,7 +36,10 @@ import {
 import {
   isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath, townNightWindowPath,
 } from '../../../src/shared/za22-mountain-domain';
-import type { TownNightWindowState } from '../../../src/shared/town-night-window';
+import { townLayerOverlapMs, type TownNightWindowState } from '../../../src/shared/town-night-window';
+import {
+  isWestPresenceFoot, westPresenceEastOrigin, westPresenceHeightOrigin, westPresencePath,
+} from '../../../src/shared/za22-west-domain';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -178,12 +181,15 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let mountainDomain = false;
+  let domain: 'town' | 'mountain' | 'west' = 'town';
   let nightWindow: (TownNightWindowState & { now: number }) | undefined;
   let lastNightRead = -Infinity;
   let refreshNightAfter = -Infinity;
   let readingNight = false;
-  const presencePath = (path: string) => mountainDomain ? mountainPresencePath + path.slice('/presence'.length) : path;
+  function presencePath(path: string) {
+    if (domain === 'town') return path;
+    return (domain === 'mountain' ? mountainPresencePath : westPresencePath) + path.slice('/presence'.length);
+  }
   let show = false;
   let haveId = false;
   let insideSharedHome = false;
@@ -223,7 +229,7 @@ export function createTownPresence(
       now,
       canEnterRestricted: nightWindow.canEnterRestricted && sameNight,
       layersOverlap: nightWindow.layersOverlap && sameNight && nightWindow.beaconAt !== null &&
-        now < nightWindow.beaconAt + 60_000,
+        now < nightWindow.beaconAt + townLayerOverlapMs,
     };
   }
 
@@ -438,6 +444,21 @@ export function createTownPresence(
         if (graceful && active.readyState === WebSocket.OPEN) active.send(JSON.stringify({ type: 'leave' }));
         active.close();
       } catch { /* A connection failure leaves the local viewer untouched. */ }
+    }
+  }
+
+  function switchDomain(next: typeof domain, nextScene = scene) {
+    if (domain === next) return;
+    resetRetry();
+    disconnect(true);
+    domain = next;
+    avatarScene = nextScene;
+    avatars?.setScene(avatarScene);
+    lastPosition = lastHeightYaw = -1;
+    remaining = 0;
+    if (inTown) {
+      link.enterTown();
+      scheduleConnection();
     }
   }
 
@@ -671,8 +692,10 @@ export function createTownPresence(
     const stamp = ++epoch;
     const time = performance.now();
     let mascotSeen = false;
-    const valid = visitPresenceSnapshot(data, (id, east, localNorth, height, yaw, sequence) => {
-      const north = localNorth + (mountainDomain ? mountainPresenceNorthOrigin : 0);
+    const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
+      const east = localEast + (domain === 'west' ? westPresenceEastOrigin : 0);
+      const north = localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0);
+      const height = localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0);
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       if (id === MASCOT_ACTOR_ID) {
         mascotSeen = true;
@@ -725,9 +748,14 @@ export function createTownPresence(
     const interval = poll ? pollSampleIntervalSeconds : sampleInterval;
     if (remaining > 0 || (!poll && active!.bufferedAmount > maximumBufferedBytes)) return;
     remaining = remaining > -interval ? remaining + interval : interval;
-    if (mountainDomain) {
+    if (domain === 'mountain') {
       if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
       writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
+    } else if (domain === 'west') {
+      if (!isWestPresenceFoot(local.east, local.north, local.height)) return;
+      writePresencePose({
+        ...local, east: local.east - westPresenceEastOrigin, height: local.height - westPresenceHeightOrigin,
+      }, seq, outgoing);
     } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
@@ -863,18 +891,12 @@ export function createTownPresence(
     readNightWindow,
     northRidgeNightOpen: () => readNightWindow()?.canEnterRestricted === true,
     setMountainDomain(enabled: boolean, mountainScene?: Scene) {
-      if (mountainDomain === enabled) return;
-      resetRetry();
-      disconnect(true);
-      mountainDomain = enabled;
-      avatarScene = enabled && mountainScene ? mountainScene : scene;
-      avatars?.setScene(avatarScene);
-      lastPosition = lastHeightYaw = -1;
-      remaining = 0;
-      if (inTown) {
-        link.enterTown();
-        scheduleConnection();
-      }
+      if (enabled) switchDomain('mountain', mountainScene);
+      else if (domain === 'mountain') switchDomain('town');
+    },
+    setWestDomain(enabled: boolean) {
+      if (enabled && domain !== 'mountain') switchDomain('west');
+      else if (!enabled && domain === 'west') switchDomain('town');
     },
     summitPassportAvailable: () => haveId && summitPassportSupported,
     requestSummitPassport(action: SummitPassportAction) {

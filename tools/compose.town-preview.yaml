@@ -34,6 +34,7 @@ services:
       PRESENCE_HOST: "0.0.0.0"
       PRESENCE_PORT: "8090"
       PRESENCE_MOUNTAIN_PORT: "8091"
+      PRESENCE_WEST_PORT: "8092"
       TOWN_NIGHT_DAWN_EPOCH: "${TOWN_NIGHT_DAWN_EPOCH:-}"
       TOWN_NIGHT_OFFSETS_AFTER_DUSK: "${TOWN_NIGHT_OFFSETS_AFTER_DUSK:-}"
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
@@ -43,6 +44,7 @@ services:
     expose:
       - "8090"
       - "8091"
+      - "8092"
     logging:
       driver: json-file
       options:
