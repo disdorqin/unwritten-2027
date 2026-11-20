@@ -37,15 +37,23 @@ export function createUndergroundMineLift(options: LiftOptions) {
   }
 
   const boarded = new Set<string>();
-  let stop: LiftStop = 'crater-floor';
+  let stop: LiftStop | undefined;
   let trip: UndergroundMineLiftTrip | undefined;
   let sequence = 0;
 
-  function directionAtStop(): LiftDirection {
+  function observedStop(): LiftStop | undefined {
+    const dock = options.readDockedStop();
+    if (dock === undefined) return;
+    // A fresh authority can recover either dock. After that, only a confirmed trip changes stops.
+    stop ??= dock;
+    return dock === stop ? stop : undefined;
+  }
+
+  function directionAtStop(stop: LiftStop): LiftDirection {
     return stop === 'crater-floor' ? 'down' : 'up';
   }
 
-  function canRide(playerId: string, direction: LiftDirection): boolean {
+  function canRide(playerId: string, direction: LiftDirection, stop: LiftStop): boolean {
     if (!playerId) return false;
     const foot = options.readAcceptedFoot(playerId);
     if (!foot || foot.playerId !== playerId || !foot.domainId ||
@@ -56,12 +64,14 @@ export function createUndergroundMineLift(options: LiftOptions) {
   }
 
   return {
-    state: () => trip ? { trip: { ...trip, riders: [...trip.riders] } } : { stop, riders: [...boarded] },
+    state: () => trip ? { trip: { ...trip, riders: [...trip.riders] } } : { stop: observedStop(), riders: [...boarded] },
 
     // The caller supplies the authenticated session's stable player id.
     board(playerId: string, direction: LiftDirection): boolean {
-      if (trip || direction !== directionAtStop() || options.readDockedStop() !== stop ||
-          (boarded.size >= riderCapacity && !boarded.has(playerId)) || !canRide(playerId, direction)) {
+      if (trip) return false;
+      const dock = observedStop();
+      if (!dock || direction !== directionAtStop(dock) ||
+          (boarded.size >= riderCapacity && !boarded.has(playerId)) || !canRide(playerId, direction, dock)) {
         return false;
       }
       boarded.add(playerId);
@@ -73,17 +83,19 @@ export function createUndergroundMineLift(options: LiftOptions) {
     },
 
     depart(playerId: string): UndergroundMineLiftTrip | undefined {
-      if (trip || !boarded.has(playerId) || options.readDockedStop() !== stop) return;
+      if (trip || !boarded.has(playerId)) return;
+      const dock = observedStop();
+      if (!dock) return;
       const departedAt = options.now();
       if (!Number.isFinite(departedAt)) return;
-      const direction = directionAtStop();
+      const direction = directionAtStop(dock);
       for (const rider of boarded) {
-        if (!canRide(rider, direction)) boarded.delete(rider);
+        if (!canRide(rider, direction, dock)) boarded.delete(rider);
       }
       if (!boarded.has(playerId)) return;
       trip = {
         id: ++sequence,
-        origin: stop,
+        origin: dock,
         destination: direction === 'down' ? 'mine' : 'crater-floor',
         direction,
         departedAt,

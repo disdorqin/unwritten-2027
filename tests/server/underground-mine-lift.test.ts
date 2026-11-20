@@ -111,6 +111,28 @@ test('departure revalidates boarded players and releases stale seats', () => {
   assert.deepEqual(h.lift.depart('b')?.riders, ['b']);
 });
 
+test('a fresh lift waits for the physical dock and can recover at the mine', () => {
+  const h = setup();
+  h.gate('ride-cage');
+  h.dock(undefined);
+  h.feet.set('a', at('a', 'mine'));
+  const restored = createUndergroundMineLift(h.options);
+  assert.deepEqual(restored.state(), { stop: undefined, riders: [] });
+  assert.equal(restored.board('a', 'up'), false);
+  assert.deepEqual(h.requests, []);
+
+  h.dock('mine');
+  assert.deepEqual(restored.state(), { stop: 'mine', riders: [] });
+  assert.equal(restored.board('a', 'up'), true);
+  h.dock('crater-floor');
+  assert.equal(restored.depart('a'), undefined);
+  assert.equal(restored.board('b', 'down'), false);
+  h.dock('mine');
+  const trip = restored.depart('a');
+  assert.equal(trip?.origin, 'mine');
+  assert.equal(trip?.destination, 'crater-floor');
+});
+
 test('travel duration and capacity require explicit design-compatible inputs', () => {
   const { options } = setup();
   assert.doesNotThrow(() => createUndergroundMineLift({ ...options, travelMs: 20_000 }));
