@@ -168,7 +168,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     // P-1 local coordinates. The host prefers its plaza surface in the
     // overlap and this cut/fill tread before bare ground outside the plaza.
     trailSurfaceAt: trail.sampleWalkwaySurface,
-    wreckageSites: wreckage.sites,
+    wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
     wingRack, cableTravel, outlook,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {

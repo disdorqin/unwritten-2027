@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Box3, Group, type BufferGeometry, type Material, type Mesh, type Object3D } from 'three';
+import {
+  Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, Raycaster, Vector3,
+  type BufferGeometry, type Material, type Object3D,
+} from 'three';
 import snowSurvey from '../tools/fixtures/main-summit-snow-belt-survey.json';
-import { mountMainSummitAssembly } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
+import { mountMainSummitAssembly, summitWorldPoint } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
 import { cloudPavilionSites } from '../tools/voxel-tavern/town-blockout/main-summit-pavilion-site';
 import { createMainSummitSledRoute } from '../tools/voxel-tavern/town-blockout/main-summit-sled-route';
 import { createMainSummitSnowBelt, type SnowBeltKnot } from '../tools/voxel-tavern/town-blockout/main-summit-snow-belt';
@@ -122,4 +125,56 @@ test('ZD-07 detaches the decoration and releases its model resources when the as
   assert.equal(wreckage.parent, null);
   assert.equal(owner.children.length, 0);
   assert.ok([...releases.values()].every(count => count === 1));
+});
+
+test('ZD-07 resolves visible fragment faces from the three existing stands with a finite camera ray', () => {
+  const assembly = mountMainSummitAssembly(new Group(), 0);
+  const mounted = assembly.group.getObjectByName('main-summit-wreckage');
+  assert.ok(mounted);
+  assembly.group.updateMatrixWorld(true);
+
+  const sightlines: Raycaster[] = [];
+  for (const { id, stand } of assembly.wreckageSites) {
+    const mesh = mounted.getObjectByName(id) as Mesh | undefined;
+    assert.ok(mesh?.isMesh);
+    const eye = summitWorldPoint(stand.east, stand.north, stand.height + 1.65);
+    const origin = new Vector3(eye.east, eye.height, -eye.north);
+    // Aim at a rendered face. Cutaway and ring fragments may have empty bounding-box centers.
+    const vertices = mesh.geometry.getAttribute('position');
+    let target: Vector3 | undefined;
+    let sightline: Raycaster | undefined;
+    for (let i = 0; i < vertices.count && !sightline; i += 3) {
+      const center = new Vector3().fromBufferAttribute(vertices, i)
+        .add(new Vector3().fromBufferAttribute(vertices, i + 1))
+        .add(new Vector3().fromBufferAttribute(vertices, i + 2)).multiplyScalar(1 / 3);
+      const face = mesh.localToWorld(center);
+      const probe = new Raycaster(origin, face.clone().sub(origin).normalize(), 0, face.distanceTo(origin) + .001);
+      if (assembly.aimWreckage(probe)?.id === id) {
+        target = face;
+        sightline = probe;
+      }
+    }
+    assert.ok(target && sightline, `${id} must have a rendered face visible from its surveyed stand`);
+    sightlines.push(sightline);
+    const direction = sightline.ray.direction;
+    assert.equal(assembly.aimWreckage(new Raycaster(origin, direction, 0, .75)), null);
+    assert.equal(assembly.aimWreckage(new Raycaster(origin, direction.clone().negate(), 0, sightline.far)), null);
+    const belowTrail = origin.clone().add(new Vector3(0, -3, 0));
+    const throughTrail = new Raycaster(belowTrail, target.clone().sub(belowTrail).normalize(), 0, target.distanceTo(belowTrail));
+    assert.ok(throughTrail.intersectObject(mesh, false)[0]);
+    assert.equal(assembly.aimWreckage(throughTrail), null, `${id} must be occluded from below the tread`);
+  }
+
+  const blocker = new Mesh(new BoxGeometry(.2, .2, .2), new MeshBasicMaterial());
+  const first = sightlines[0]!;
+  blocker.position.copy(assembly.group.worldToLocal(first.ray.at(.5, new Vector3())));
+  assembly.group.add(blocker);
+  assert.equal(assembly.aimWreckage(first), null);
+  blocker.visible = false;
+  assert.equal(assembly.aimWreckage(first)?.id, assembly.wreckageSites[0]!.id);
+  blocker.removeFromParent();
+  blocker.geometry.dispose();
+  blocker.material.dispose();
+  assembly.dispose();
+  assert.equal(assembly.aimWreckage(first), null);
 });

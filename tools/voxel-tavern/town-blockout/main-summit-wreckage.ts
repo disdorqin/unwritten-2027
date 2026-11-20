@@ -1,7 +1,7 @@
 import {
   BoxGeometry, Color, CylinderGeometry, DoubleSide, ExtrudeGeometry,
   Float32BufferAttribute, Group, Mesh, MeshLambertMaterial, Shape, TorusGeometry,
-  type BufferGeometry,
+  type BufferGeometry, type Object3D, type Raycaster,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createMainSummitTrail, MainSummitTrailPoint } from './main-summit-trail';
@@ -122,9 +122,29 @@ export function mountMainSummitWreckage(owner: Group, trail: Trail) {
   });
   owner.add(group);
 
+  // The host sets the camera ray and its reach. Only a first visible assembly surface can be aimed at.
+  function aim(ray: Raycaster) {
+    if (!group.parent || !Number.isFinite(ray.far) || ray.far <= ray.near) return null;
+    for (let object: Object3D | null = group; object; object = object.parent) {
+      if (!object.visible) return null;
+    }
+    group.updateWorldMatrix(true, true);
+    const hit = ray.intersectObjects(group.children.filter(mesh => mesh.visible), false)[0];
+    if (!hit) return null;
+
+    owner.updateWorldMatrix(true, true);
+    const blockers: Object3D[] = [];
+    owner.traverseVisible(object => {
+      if ((object as Mesh).isMesh && object.parent !== group) blockers.push(object);
+    });
+    if (ray.intersectObjects(blockers, false).some(blocker => blocker.distance <= hit.distance)) return null;
+    return sites.find(site => site.id === hit.object.name) ?? null;
+  }
+
   return {
     group,
     sites,
+    aim,
     dispose() {
       if (!fragments.length) return;
       group.removeFromParent();
