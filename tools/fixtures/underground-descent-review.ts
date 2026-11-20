@@ -82,6 +82,7 @@ let foot = { ...shaft };
 let sound: AudioContext | undefined;
 const getAudioContext = () => sound ??= new AudioContext();
 let analyser: AnalyserNode | undefined;
+let waterFilmAnalyser: AnalyserNode | undefined;
 const waveSamples = new Float32Array(2048);
 const insidePool = (point: UndergroundEntryPoint) => point.east === pool.east &&
   point.north === pool.north && point.height === pool.height &&
@@ -141,6 +142,8 @@ const transfers: { tripId: number; first: boolean; wasBlack: boolean; fallDamage
 const requests: { tripId: number; frame: number; at: number }[] = [];
 let blackoutFrame = -1;
 let audioPeak = 0;
+let waterFilmPeak = 0;
+let waterFilmPlays = 0;
 let swayPeak = 0;
 let flashPeak = 0;
 
@@ -162,6 +165,16 @@ const descent = mountUndergroundDescent({
   cameraMotion(value) { motion = value ?? {}; },
   getAudioContext,
   audioOutput(context) {
+    const remaining = active ? active.departedAt + active.travelMs - clock : Infinity;
+    if (remaining > 0 && remaining <= 1_500) {
+      waterFilmPlays++;
+      if (!waterFilmAnalyser) {
+        waterFilmAnalyser = context.createAnalyser();
+        waterFilmAnalyser.fftSize = waveSamples.length;
+        waterFilmAnalyser.connect(context.destination);
+      }
+      return waterFilmAnalyser;
+    }
     if (!analyser) {
       analyser = context.createAnalyser();
       analyser.fftSize = waveSamples.length;
@@ -182,7 +195,7 @@ function beginDescent() {
   if (scene !== 'crater-floor' || locked) return;
   phases.length = requests.length = transfers.length = 0;
   blackoutFrame = -1;
-  audioPeak = swayPeak = flashPeak = 0;
+  audioPeak = waterFilmPeak = waterFilmPlays = swayPeak = flashPeak = 0;
   motion = {};
   let firstFall = entry.pendingFirstFall(playerId);
   if (entry.sceneState().coverVisible) {
@@ -320,6 +333,10 @@ function render() {
     analyser.getFloatTimeDomainData(waveSamples);
     for (const sample of waveSamples) audioPeak = Math.max(audioPeak, Math.abs(sample));
   }
+  if (waterFilmAnalyser && waterFilmPlays) {
+    waterFilmAnalyser.getFloatTimeDomainData(waveSamples);
+    for (const sample of waveSamples) waterFilmPeak = Math.max(waterFilmPeak, Math.abs(sample));
+  }
   const progress = active ? Math.min(1, (clock - active.departedAt) / active.travelMs) : 0;
   cage.position.y = shaft.height - 18 * progress;
   crank.rotation.z = winchTurns * 2 * Math.PI;
@@ -342,7 +359,7 @@ function inspect() {
     firstFallPending: entry.pendingFirstFall(playerId) !== undefined, entrySaves,
     cageAvailable: entry.sceneState().cageAvailable.down,
     overlayOpaque: blackFrame(), blackoutFrame, skipVisible: visible(skipButton()), wakeProgress: motion.wakeProgress,
-    phase: phases.at(-1)?.phase, audioPeak, swayPeak, flashPeak,
+    phase: phases.at(-1)?.phase, audioPeak, waterFilmPeak, waterFilmPlays, swayPeak, flashPeak,
     camera: { eyeY: camera.position.y, pitch: camera.rotation.x },
     phases: [...phases], events: [...events], requests: [...requests], transfers: [...transfers],
   };

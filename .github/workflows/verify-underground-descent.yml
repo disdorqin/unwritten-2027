@@ -7,6 +7,7 @@ on:
       - '.github/workflows/verify-underground-descent.yml'
       - 'src/presence/underground-entry*.ts'
       - 'tests/server/underground-entry*.test.ts'
+      - 'tests/town-blockout-underground-lift-cinematic.test.ts'
       - 'src/presence/underground-lift-*.ts'
       - 'src/presence/underground-mine-gate.ts'
       - 'src/presence/underground-mine-lift.ts'
@@ -43,7 +44,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
-      - run: node --import tsx --test tests/server/underground-entry*.test.ts tests/server/underground-lift-domain-handoff.test.ts tests/server/underground-mine-lift.test.ts tests/server/underground-winch.test.ts
+      - run: node --import tsx --test tests/server/underground-entry*.test.ts tests/server/underground-lift-domain-handoff.test.ts tests/server/underground-mine-lift.test.ts tests/server/underground-winch.test.ts tests/town-blockout-underground-lift-cinematic.test.ts
       - name: Select Chromium
         shell: bash
         run: |

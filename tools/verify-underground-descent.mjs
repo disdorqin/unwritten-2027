@@ -127,6 +127,15 @@ async function windFirstShaft(page, capture) {
   return { tapped, partial, interrupted, twoTurns, almost, opened };
 }
 
+async function expectWaterFilm(page) {
+  await driveUntil(page, state => state.waterFilmPlays > 0, 'the water-film cue');
+  await page.waitForFunction(() => window.undergroundDescentReview.inspect().waterFilmPeak > .001);
+  const state = await inspect(page);
+  assert.equal(state.waterFilmPlays, 1);
+  assert.ok(state.travelMs > state.elapsed);
+  return { elapsed: state.elapsed, peak: state.waterFilmPeak };
+}
+
 async function blackoutPending(page, first, shot) {
   const beforeDock = await driveUntil(page, state => state.overlayOpaque, 'the full black frame');
   if (beforeDock.elapsed < beforeDock.travelMs) assert.deepEqual(beforeDock.requests, []);
@@ -203,7 +212,9 @@ try {
   assert.deepEqual((await inspect(page)).foot, first.foot);
   await driveUntil(page, state => state.phase === 'screech', 'metal screech');
   await page.waitForFunction(() => window.undergroundDescentReview.inspect().audioPeak > .001);
+  const firstWaterFilm = await expectWaterFilm(page);
   const firstBlack = await blackoutPending(page, true, 'first-black');
+  assert.equal(firstBlack.waiting.waterFilmPlays, 1);
   assert.ok(firstBlack.waiting.flashPeak > 0);
   assert.ok(firstBlack.waiting.swayPeak > 0);
   const firstWake = await releaseAndWake(page, true);
@@ -212,7 +223,7 @@ try {
   assert.ok(firstWake.settled.camera.eyeY - firstWake.wake.camera.eyeY > 1);
   assert.equal(firstWake.settled.camera.pitch, 0);
   await checkpoint(page, 'pool-after-wake');
-  evidence.runs.fullThenRepeat.first = { ...firstBlack, ...firstWake, phases: phaseSequence(firstWake.settled) };
+  evidence.runs.fullThenRepeat.first = { ...firstBlack, ...firstWake, waterFilm: firstWaterFilm, phases: phaseSequence(firstWake.settled) };
 
   await page.keyboard.press('e');
   assert.equal((await inspect(page)).scene, 'crater');
@@ -220,7 +231,9 @@ try {
   const repeat = await inspect(page);
   assert.equal(repeat.first, false);
   assert.notEqual(repeat.tripId, first.tripId);
+  const repeatWaterFilm = await expectWaterFilm(page);
   const repeatBlack = await blackoutPending(page, false, 'repeat-black');
+  assert.equal(repeatBlack.waiting.waterFilmPlays, 1);
   const repeatWake = await releaseAndWake(page, false);
   const fullPhases = phaseSequence(firstWake.settled);
   const shortPhases = phaseSequence(repeatWake.settled);
@@ -228,7 +241,7 @@ try {
   assert.deepEqual(shortPhases, ['boarding', 'ride', 'sway', 'blackout', 'complete']);
   assert.equal(repeatBlack.waiting.flashPeak, 0);
   assert.equal(repeatBlack.waiting.audioPeak, 0);
-  evidence.runs.fullThenRepeat.repeat = { ...repeatBlack, ...repeatWake, phases: shortPhases };
+  evidence.runs.fullThenRepeat.repeat = { ...repeatBlack, ...repeatWake, waterFilm: repeatWaterFilm, phases: shortPhases };
   assert.deepEqual(errors, []);
   await context.close();
 
@@ -264,6 +277,7 @@ try {
   assert.deepEqual(held.requests, []);
   skipTrace.black = await blackoutPending(page, true, 'skip-black');
   skipTrace.landed = await releaseAndWake(page, true);
+  assert.equal(skipTrace.landed.settled.waterFilmPlays, held.waterFilmPlays);
   assert.ok(!phaseSequence(skipTrace.landed.settled).some(phase => ['waking', 'sitting'].includes(phase)));
   assert.deepEqual(skipErrors, []);
   await context.close();
