@@ -124,9 +124,12 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
         target.array.set(original.array, start);
         target.addUpdateRange(start, original.array.length);
         target.needsUpdate = true;
-        geometry.setAttribute(name, target);
+        // A walking draw uploads only this chunk's view. Keep the shared
+        // backing arrays and global vertex offsets for the aerial tile index.
+        const local = target.array.subarray(start, start + original.array.length);
+        geometry.setAttribute(name, new BufferAttribute(local, target.itemSize, target.normalized));
       }
-      geometry.setDrawRange(first, vertices);
+      geometry.setDrawRange(0, vertices);
       nextVertex += vertices;
     }
     const mesh = new Mesh(geometry, material);
