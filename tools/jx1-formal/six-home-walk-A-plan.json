@@ -183,6 +183,18 @@
           "tolerance": 0.13
         },
         {
+          "east": 152,
+          "north": 136.095,
+          "ground": 11.899653,
+          "tolerance": 0.1
+        },
+        {
+          "east": 156,
+          "north": 136.095,
+          "ground": 12.06355,
+          "tolerance": 0.1
+        },
+        {
           "east": 160,
           "north": 136.095,
           "ground": 12.122746,
@@ -259,6 +271,18 @@
           "east": 160,
           "north": 136.095,
           "ground": 12.122746,
+          "tolerance": 0.1
+        },
+        {
+          "east": 156,
+          "north": 136.095,
+          "ground": 12.06355,
+          "tolerance": 0.1
+        },
+        {
+          "east": 152,
+          "north": 136.095,
+          "ground": 11.899653,
           "tolerance": 0.1
         },
         {
