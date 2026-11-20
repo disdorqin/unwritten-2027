@@ -1,0 +1,342 @@
+From 8b1a8e0846895e13ffc6956edf953cd7bb84c3cf Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 20 Nov 2026 01:00:15 -0800
+Subject: [PATCH] ZA-21: take the walked station ticket and catalogue slice
+
+---
+ .../town-blockout-bus-station-hidden.test.ts  | 128 ++++++++++++++++++
+ .../bus-station-hidden-activity.ts            |  82 +++++++++++
+ .../town-blockout/landmark-station.ts         |  37 +++++
+ tools/voxel-tavern/town-blockout/viewer.ts    |   9 +-
+ 4 files changed, 255 insertions(+), 1 deletion(-)
+ create mode 100644 tests/town-blockout-bus-station-hidden.test.ts
+ create mode 100644 tools/voxel-tavern/town-blockout/bus-station-hidden-activity.ts
+
+diff --git a/tests/town-blockout-bus-station-hidden.test.ts b/tests/town-blockout-bus-station-hidden.test.ts
+new file mode 100644
+index 00000000..afd723a6
+--- /dev/null
++++ b/tests/town-blockout-bus-station-hidden.test.ts
+@@ -0,0 +1,128 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  busStationCatalogueStamp, busStationTicket, createBusStationHiddenActivity,
++} from '../tools/voxel-tavern/town-blockout/bus-station-hidden-activity.ts';
++import type { Box } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
++import { buildRailwayStation, railwayStationStops } from '../tools/voxel-tavern/town-blockout/landmark-station.ts';
++import { nearestTownActivity } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
++import { extensionPlots } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
++import { createTownPassport } from '../tools/voxel-tavern/town-blockout/town-passport.ts';
++
++function stationFixture() {
++  const station = buildRailwayStation();
++  const { origin: [east, north, base] } = extensionPlots.find(plot => plot.id === 'railway-station')!;
++  station.position.set(east, base, -north);
++  const { colliders, floors } = station.userData as { colliders: Box[]; floors: Box[] };
++  const bodyRadius = .27;
++  const canStand = (worldEast: number, worldNorth: number, ground: number) => {
++    const x = worldEast - east;
++    const z = north - worldNorth;
++    const y = ground - base;
++    return floors.some(({ min, max }) => x >= min[0] && x <= max[0] && z >= min[2] && z <= max[2] &&
++      Math.abs(max[1] - y) < .001) &&
++      !colliders.some(({ min, max }) => x + bodyRadius > min[0] && x - bodyRadius < max[0] &&
++        z + bodyRadius > min[2] && z - bodyRadius < max[2] && y + 1.65 > min[1] && y < max[1]);
++  };
++  return { station, canStand, east, north, ground: base + .14 };
++}
++
++test('the station ticket and catalogue use a reachable side window and persist without changing core stamp progress', t => {
++  const saved = new Map<string, string>();
++  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
++  Object.defineProperty(globalThis, 'localStorage', {
++    configurable: true,
++    value: {
++      getItem: (key: string) => saved.get(key) ?? null,
++      setItem: (key: string, value: string) => saved.set(key, value),
++    },
++  });
++  t.after(() => {
++    if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
++    else Reflect.deleteProperty(globalThis, 'localStorage');
++  });
++  const { station, canStand, east, north, ground } = stationFixture();
++  let living = false;
++  let collected = 0;
++  const opened: string[] = [];
++  const ui = {
++    open(title: string) { opened.push(title); return {} as HTMLElement; },
++    announce() {},
++  };
++  const coreStamp = { id: 'core-stamp', label: '核心印章', hint: '' };
++  const passport = () => createTownPassport(ui, [coreStamp], undefined, [busStationCatalogueStamp]);
++  const host = {
++    canStand,
++    canBuyTicket: () => living,
++    canHearStationBroadcast: () => false,
++    listener: () => undefined,
++    onTicketCollected: () => { collected++; },
++  };
++  const original = passport();
++  const { spots, platform } = createBusStationHiddenActivity(station, ui, original, host);
++  const [collect, catalogue] = spots;
++  assert.equal(spots.length, 2);
++  assert.deepEqual([collect.x, collect.n, collect.ground], [east - 9.9, north + .14, ground]);
++  const oldTicket = railwayStationStops.ticketCounter[0] * station.scale.x + east;
++  assert.ok(Math.abs(collect.x - oldTicket) > collect.range + 1.35);
++
++  for (let n = north - 16; n <= platform.n; n += .20) assert.ok(canStand(east, n, ground), String(n));
++  for (let x = east; x >= collect.x; x -= .20) assert.ok(canStand(x, collect.n, ground), String(x));
++  for (let x = east; x <= platform.x; x += .20) assert.ok(canStand(x, platform.n, ground), String(x));
++
++  collect.run();
++  assert.equal(collected, 0);
++  assert.equal(nearestTownActivity(spots, collect.x, collect.n, collect.ground), undefined);
++  living = true;
++  assert.equal(nearestTownActivity(spots, collect.x, collect.n, collect.ground), collect);
++  collect.run();
++  collect.run();
++  assert.equal(collected, 1);
++  assert.deepEqual(original.getProgress(), { collected: 0, total: 1, complete: false });
++  assert.equal(nearestTownActivity(spots, collect.x, collect.n, collect.ground), catalogue);
++
++  const reloaded = passport();
++  const { spots: afterReload } = createBusStationHiddenActivity(station, ui, reloaded, host);
++  living = false;
++  assert.equal(reloaded.hasExtension(busStationCatalogueStamp.id), true);
++  const reopened = nearestTownActivity(afterReload, collect.x, collect.n, collect.ground);
++  assert.equal(reopened?.label, `查看图鉴 · ${busStationCatalogueStamp.label}`);
++  reopened?.run();
++  assert.deepEqual(opened, [busStationTicket, busStationCatalogueStamp.label]);
++});
++
++test('only a new delivered station effect reaches an eligible listener on the same platform floor', () => {
++  const { station, canStand } = stationFixture();
++  const ears: { listener?: { x: number; n: number; ground: number }; allowed: boolean } = { allowed: false };
++  const clips: { at: number; origin: number[] }[] = [];
++  const ui = { open() { assert.fail('ambient broadcast must not open a dialog'); } };
++  const passport = { hasExtension: () => false, collectExtension: () => false };
++  const host = {
++    canStand,
++    canBuyTicket: () => false,
++    canHearStationBroadcast: () => ears.allowed,
++    listener: () => ears.listener,
++  };
++  const activity = createBusStationHiddenActivity(station, ui, passport, {
++    ...host, playStationBroadcast: (cue, origin) => clips.push({ at: cue.at, origin: origin.toArray() }),
++  });
++  const frame = (at: number) => ({ type: 'event', kind: 'town-night-beacon', at, expiresAt: at + 1 } as const);
++  ears.listener = activity.platform;
++  assert.equal(activity.stationBroadcast(frame(1)), false);
++  ears.allowed = true;
++  assert.equal(activity.stationBroadcast(frame(1)), false);
++  ears.listener = { ...activity.platform, ground: activity.platform.ground + 1 };
++  assert.equal(activity.stationBroadcast(frame(2)), false);
++  ears.listener = { ...activity.platform, n: activity.platform.n + 5 };
++  assert.equal(activity.stationBroadcast(frame(3)), false);
++  ears.listener = activity.platform;
++  assert.equal(activity.stationBroadcast(frame(4)), true);
++  assert.equal(activity.stationBroadcast(frame(4)), false);
++  assert.equal(activity.stationBroadcast(frame(3)), false);
++  assert.equal(clips.length, 1);
++  assert.equal(clips[0].at, 4);
++  assert.deepEqual(clips[0].origin, [543, 30.19, -342.4]);
++
++  const silent = createBusStationHiddenActivity(station, ui, passport, host);
++  assert.equal(silent.stationBroadcast(frame(4)), false);
++});
+diff --git a/tools/voxel-tavern/town-blockout/bus-station-hidden-activity.ts b/tools/voxel-tavern/town-blockout/bus-station-hidden-activity.ts
+new file mode 100644
+index 00000000..489873c9
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/bus-station-hidden-activity.ts
+@@ -0,0 +1,82 @@
++import { Vector3, type Group } from 'three';
++import { busStationHiddenStops } from './landmark-station';
++import type { TownActivityContext, TownActivitySpot } from './town-activity';
++import type { PassportStamp } from './town-passport';
++
++export const busStationTicket = '永不启程的车票';
++export const busStationCatalogueStamp = {
++  id: 'bus-station-waiting-for-the-bus',
++  label: '等一班不来的车',
++  hint: '在汽车站售票窗收集旧车票。',
++} as const satisfies PassportStamp;
++
++type StationFoot = Pick<TownActivitySpot, 'x' | 'n' | 'ground'>;
++
++// Structural subset of the ZB-17 stationBroadcast effect. Freshness and delivery
++// are decided by ZB-17's receiver on the established presence connection.
++type StationBeaconCue = Readonly<{ type: 'event'; kind: 'town-night-beacon'; at: number; expiresAt: number }>;
++type BusStationHost = {
++  canStand(x: number, n: number, ground: number): boolean;
++  canBuyTicket(): boolean;
++  canHearStationBroadcast?(): boolean;
++  listener?(): StationFoot | undefined;
++  onTicketCollected?(): void;
++  playStationBroadcast?(cue: StationBeaconCue, origin: Vector3): void;
++};
++
++const ticketReach = 1.25;
++const platformHearingRange = 4;
++const floorTolerance = .55;
++
++function worldFoot(station: Group, local: readonly [number, number, number]): StationFoot {
++  const world = station.localToWorld(new Vector3(...local));
++  return { x: world.x, n: -world.z, ground: world.y };
++}
++
++export function createBusStationHiddenActivity(
++  station: Group, context: Pick<TownActivityContext, 'open'>,
++  passport: { hasExtension(id: string): boolean; collectExtension(id: string): boolean },
++  host: BusStationHost,
++) {
++  const ticket = worldFoot(station, busStationHiddenStops.ticket);
++  const platform = worldFoot(station, busStationHiddenStops.platform);
++  const speaker = station.localToWorld(new Vector3(...busStationHiddenStops.speaker));
++  const spots: TownActivitySpot[] = [];
++  const { id, label } = busStationCatalogueStamp;
++  const hasTicket = () => passport.hasExtension(id);
++  const canBuy = () => host.canBuyTicket() && !hasTicket();
++  if (host.canStand(ticket.x, ticket.n, ticket.ground)) {
++    spots.push({
++      ...ticket, range: ticketReach, label: `领取${busStationTicket}`,
++      available: canBuy,
++      run() {
++        if (!canBuy() || !passport.collectExtension(id)) return;
++        context.open(busStationTicket, `已收进扩展收集页 · ${label}`);
++        host.onTicketCollected?.();
++      },
++    }, {
++      ...ticket, range: ticketReach, label: `查看图鉴 · ${label}`,
++      available: hasTicket,
++      run() {
++        if (hasTicket()) context.open(label, busStationTicket);
++      },
++    });
++  }
++
++  let lastStationBeaconAt = -1;
++  return {
++    spots,
++    platform,
++    stationBroadcast(cue: StationBeaconCue) {
++      if (cue.at <= lastStationBeaconAt) return false;
++      lastStationBeaconAt = cue.at;
++      if (!host.playStationBroadcast || !host.canHearStationBroadcast?.()) return false;
++      const player = host.listener?.();
++      const withinPlatform = player && Math.abs(player.ground - platform.ground) <= floorTolerance &&
++        Math.hypot(player.x - platform.x, player.n - platform.n) <= platformHearingRange;
++      if (!withinPlatform) return false;
++      host.playStationBroadcast(cue, speaker);
++      return true;
++    },
++  };
++}
+diff --git a/tools/voxel-tavern/town-blockout/landmark-station.ts b/tools/voxel-tavern/town-blockout/landmark-station.ts
+index f9fab203..e6a84db9 100644
+--- a/tools/voxel-tavern/town-blockout/landmark-station.ts
++++ b/tools/voxel-tavern/town-blockout/landmark-station.ts
+@@ -24,6 +24,17 @@ export const railwayStationStops = {
+   cableGate: stationLocalPoint([10.8, .14, 11.85]),
+ };
+ 
++const busTicketWindowEast = -9.9;
++const busPlatformSpeakerEast = 17;
++const busPlatformSpeakerHeight = 4.19;
++const busPlatformSpeakerDepth = -13.4;
++
++export const busStationHiddenStops = {
++  ticket: stationLocalPoint([busTicketWindowEast, .14, -.14]),
++  platform: stationLocalPoint([busPlatformSpeakerEast, .14, -11.6]),
++  speaker: stationLocalPoint([busPlatformSpeakerEast, busPlatformSpeakerHeight, busPlatformSpeakerDepth]),
++};
++
+ function stationBuilder() {
+   const builder = createMuseumBuilder({ mergeLabelSizes: true });
+   const u = 1 / museumHorizontalScale;
+@@ -47,6 +58,29 @@ function stationBuilder() {
+ 
+ type StationBuilder = ReturnType<typeof stationBuilder>;
+ 
++function busStationTicket(b: StationBuilder) {
++  const z = -1.71;
++  b.box('#8d673b', busTicketWindowEast, 1.505, z, .71, .05, .36);
++  b.box('#d8b374', busTicketWindowEast, 1.54, z, .71, .035, .36);
++  b.box('#efe0ad', busTicketWindowEast, 1.563, z, .68, .015, .33);
++  for (const dz of [-.10, -.025, .05, .125]) {
++    b.box('#8d673b', busTicketWindowEast + .16, 1.573, z + dz, .019, .008, .023);
++  }
++  b.box('#947044', busTicketWindowEast - .12, 1.573, z, .31, .008, .046);
++}
++
++function busStationSpeaker(b: StationBuilder) {
++  const x = busPlatformSpeakerEast;
++  const z = busPlatformSpeakerDepth;
++  b.box(iron, x, 4.93, z, .14, 1.42, .14);
++  const y = busPlatformSpeakerHeight;
++  b.box(dark, x, y, z, .60, .53, .48);
++  b.box('#737878', x, y, z + .245, .52, .45, .06);
++  for (const dy of [-.14, -.07, 0, .07, .14]) {
++    b.box(iron, x, y + dy, z + .282, .41, .022, .018);
++  }
++}
++
+ function walkSurface(b: StationBuilder, paint: string, x: number, top: number, z: number, w: number, d: number) {
+   b.box(paint, x, top - .18, z, w, .36, d);
+   b.floor(x, top, z, w, d);
+@@ -238,6 +272,8 @@ export function buildRailwayStation() {
+   }
+   for (const x of [-19, -11.3, 0, 11.3, 19]) lamp(b, x, 5.35, -13.4);
+   for (const x of [-17, 17]) bench(b, x, -9.2, .14, 5.8, -1);
++  for (const x of [-17, 17]) b.box(snow, x - 1.78, .755, -9.2, 1.87, .048, .49);
++  busStationSpeaker(b);
+ 
+   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
+   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
+@@ -248,6 +284,7 @@ export function buildRailwayStation() {
+   b.sign(railHallGuide.board, -21.5, 3.1, 2.1, 5.6, 2.02, Math.PI / 2);
+   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
+   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
++  busStationTicket(b);
+   for (const x of [-15.5, -12.7, -9.9]) {
+     b.box(dark, x, 2.62, -2.52, 2.2, 2.15, .18);
+     b.box(glow, x, 2.68, -2.41, 1.85, 1.61, .12, true);
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 921fae33..f78d2936 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -117,6 +117,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
+ import './plaza-group-photo.css';
+ import { downloadTownCanvas } from './town-photo-download';
+ import { createTownPassport } from './town-passport';
++import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
+ import { createZodiacProgress, postMousePosition } from './town-zodiac';
+ import { createLighthouseSnakeCharm } from './town-zodiac-snake';
+ import { createTownZodiacSites } from './town-zodiac-atlas';
+@@ -1811,7 +1812,8 @@ const railHorseCharm = createRailHorseCharm(railway, zodiac, () => {
+ });
+ const passport = createTownPassport(
+   { ...activityContext, announce: announceActivity }, stampSites, tavernActivity.getMixIds,
+-  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp], riddleActivity.getProgress, zodiac,
++  [stationTicketStamp, iceFishingCatalogueStamp, longHallRelayStamp, marketTastingStamp, busStationCatalogueStamp],
++  riddleActivity.getProgress, zodiac,
+ );
+ const passportButton = element<HTMLButtonElement>('town-passport-button');
+ function showStampCount() {
+@@ -2008,6 +2010,11 @@ function registerLandmarkActivities(id: string, group: Group) {
+     activitySpots.push(...createRailwayStationSpots(
+       group, activityContext, railway, passport, canStandAtActivity, ceremonyClock.now, showLiveRailSchedule,
+     ));
++    activitySpots.push(...createBusStationHiddenActivity(group, activityContext, passport, {
++      canStand: canStandAtActivity,
++      canBuyTicket: () => walking && !homeReturn,
++      onTicketCollected: showStampCount,
++    }).spots);
+   } else if (id === 'hot-spring') {
+     activitySpots.push(...hotSpringSoak.spots(group), zodiacSites.mount(group, hotSpringPigSite));
+     const tea = localSpot(group, hotSpringTeaStand, 1.15, '取一份茶点', () => {
+-- 
+2.56.1
+
