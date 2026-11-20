@@ -74,7 +74,8 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
     let selected: Target | null = null;
     for (const { target, point } of hitTargets) {
       offset.subVectors(point, sight.origin);
-      if (offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
+      // Each fitting faces +Z. The eye must be in front of its face, including at oblique angles.
+      if (offset.z >= 0 || offset.dot(sight.direction) <= 0 || offset.lengthSq() > sightDistance ** 2) continue;
       const miss = sight.distanceSqToPoint(point);
       if (miss > sightRadius ** 2 || miss >= closest) continue;
       closest = miss;

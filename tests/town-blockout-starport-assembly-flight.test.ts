@@ -169,3 +169,29 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   assert.equal(model.group.parent, null);
   assert.equal(model.blocked(anchor, radius, bodyHeight), false);
 });
+
+test('ZD-03 rack targets reject rear sightlines and remain available from oblique front approaches', t => {
+  const anchor = { east: 324, north: 657, height: 347 };
+  const model = mountStarportAssemblySite(new Group(), anchor);
+  t.after(() => model.dispose());
+  const eyeHeight = 1.65;
+  function aimAt(feet: AircraftPoint, target: AircraftPoint) {
+    const east = target.east - feet.east;
+    const north = target.north - feet.north;
+    const distance = Math.hypot(east, north);
+    assert.ok(distance < model.site.reach);
+    assert.equal(model.blocked(feet, .27, 1.8), false);
+    return model.aim(feet, Math.atan2(east, north), Math.atan2(target.height - feet.height - eyeHeight, distance), eyeHeight);
+  }
+
+  for (const name of [...starportAssemblyParts, 'ignition'] as const) {
+    const target = model.targets[name];
+    const rear = { ...anchor, east: target.east, north: 658.2 };
+    assert.equal(aimAt(rear, target), null, `${name} is hidden from behind`);
+  }
+  for (const [name, east] of [['snow-wing', 320.5], ['navigation-core', 327.5]] as const) {
+    const target = model.targets[name];
+    const oblique = { ...anchor, east, north: target.north - .18 };
+    assert.equal(aimAt(oblique, target), name);
+  }
+});
