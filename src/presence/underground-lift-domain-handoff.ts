@@ -4,7 +4,7 @@ type LiftPort = Pick<ReturnType<typeof createUndergroundMineLift>, 'state' | 'co
 type Stop = UndergroundMineLiftTrip['destination'];
 type Foot = Readonly<{ playerId: string; domainId: string; east: number; north: number; height: number }>;
 type AcceptedLanding = Readonly<{ tripId: number; foot: Foot }>;
-type CueState = Readonly<{ tripId: number; stop: Stop; docked: boolean; landing?: Foot }>;
+type CueState = Readonly<{ tripId: number; stop: Stop; docked: boolean; jolted: boolean; landing?: Foot }>;
 type Options = Readonly<{
   lift: LiftPort;
   domains: Readonly<Record<Stop, string>>;
@@ -19,14 +19,20 @@ export function createUndergroundLiftDomainHandoff({ lift, domains, readAccepted
     throw new RangeError('A lift handoff requires distinct registered domains');
   }
   const cues = new Map<string, CueState>();
+  let disconnected: { tripId: number; riders: Set<string> } | undefined;
 
   return {
     // The cabin's jolt is rendered by the caller, using the server-accepted list of riders.
     jolt(playerId: string, tripId: number) {
       const { trip } = lift.state();
       const current = cues.get(playerId);
-      if (!trip || trip.id !== tripId || !trip.riders.includes(playerId) || (current && current.tripId >= tripId)) return;
-      cues.set(playerId, { tripId, stop: trip.destination, docked: false });
+      if ((current && (current.tripId > tripId || (current.tripId === tripId && current.jolted))) ||
+          (disconnected?.tripId === tripId && disconnected.riders.has(playerId))) return;
+      if (trip?.id === tripId && trip.riders.includes(playerId)) {
+        cues.set(playerId, { tripId, stop: trip.destination, docked: false, jolted: true });
+      } else if (current?.tripId === tripId && current.docked && !trip?.riders.includes(playerId)) {
+        cues.set(playerId, { ...current, jolted: true });
+      } else return;
       return { phase: 'blackout', playerId, tripId } as const;
     },
 
@@ -34,15 +40,17 @@ export function createUndergroundLiftDomainHandoff({ lift, domains, readAccepted
       const { trip } = lift.state();
       if (!trip || trip.id !== tripId || !lift.confirmArrival(tripId)) return false;
       for (const rider of trip.riders) {
+        if (disconnected?.tripId === tripId && disconnected.riders.has(rider)) continue;
         const cue = cues.get(rider);
-        if (cue?.tripId === tripId) cues.set(rider, { ...cue, docked: true });
+        cues.set(rider, { tripId, stop: trip.destination, docked: true, jolted: cue?.tripId === tripId && cue.jolted });
       }
+      if (disconnected?.tripId === tripId) disconnected = undefined;
       return true;
     },
 
     wake(playerId: string, tripId: number) {
       const current = cues.get(playerId);
-      if (!current?.docked || current.tripId !== tripId) return;
+      if (!current?.docked || !current.jolted || current.tripId !== tripId) return;
       if (current.landing) return { phase: 'wake', tripId, foot: { ...current.landing } } as const;
       const landing = readAcceptedLanding(playerId);
       if (!landing || landing.tripId !== tripId) return;
@@ -60,6 +68,11 @@ export function createUndergroundLiftDomainHandoff({ lift, domains, readAccepted
     },
 
     forget(playerId: string) {
+      const { trip } = lift.state();
+      if (trip?.riders.includes(playerId)) {
+        if (disconnected?.tripId !== trip.id) disconnected = { tripId: trip.id, riders: new Set() };
+        disconnected.riders.add(playerId);
+      }
       cues.delete(playerId);
     },
   };

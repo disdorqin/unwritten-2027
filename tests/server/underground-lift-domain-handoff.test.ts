@@ -64,6 +64,36 @@ test('the jolt and wake follow a confirmed ride, physical docking and an accepte
   assert.equal(handoff.wake('rider', trip.id), undefined);
 });
 
+test('a same-trip blackout may arrive after physical docking but cannot be skipped or replayed', () => {
+  const { handoff, lift, setDock, setFoot, acceptLanding, domains } = fixture();
+  assert.equal(lift.board('rider', 'down'), true);
+  const trip = lift.depart('rider')!;
+  setDock('mine', 20_000);
+  assert.equal(handoff.confirmDock(trip.id), true);
+  setFoot({ domainId: domains.mine, height: -90 });
+  acceptLanding(trip.id);
+  assert.equal(handoff.wake('rider', trip.id), undefined);
+  assert.equal(handoff.jolt('spectator', trip.id), undefined);
+  assert.deepEqual(handoff.jolt('rider', trip.id), { phase: 'blackout', playerId: 'rider', tripId: trip.id });
+  assert.equal(handoff.wake('rider', trip.id)?.foot.domainId, domains.mine);
+  assert.equal(handoff.finishWake('rider', trip.id), true);
+  assert.equal(handoff.jolt('rider', trip.id), undefined);
+});
+
+test('disconnect before the first blackout does not resurrect a cue at docking', () => {
+  const { handoff, lift, setDock, setFoot, acceptLanding, domains } = fixture();
+  assert.equal(lift.board('rider', 'down'), true);
+  const trip = lift.depart('rider')!;
+  handoff.forget('rider');
+  assert.equal(handoff.jolt('rider', trip.id), undefined);
+  setDock('mine', 20_000);
+  assert.equal(handoff.confirmDock(trip.id), true);
+  setFoot({ domainId: domains.mine, height: -90 });
+  acceptLanding(trip.id);
+  assert.equal(handoff.jolt('rider', trip.id), undefined);
+  assert.equal(handoff.wake('rider', trip.id), undefined);
+});
+
 test('discarding a departed rider clears that old cue and an immediate return uses a new trip', () => {
   const { handoff, lift, setDock, setFoot, acceptLanding, domains } = fixture();
   lift.board('rider', 'down');
@@ -73,6 +103,7 @@ test('discarding a departed rider clears that old cue and an immediate return us
   setDock('mine', 20_000);
   assert.equal(handoff.confirmDock(down.id), true);
   setFoot({ domainId: domains.mine, height: -90 });
+  assert.equal(handoff.jolt('rider', down.id), undefined);
   assert.equal(handoff.wake('rider', down.id), undefined);
   assert.equal(lift.board('rider', 'up'), true);
   const up = lift.depart('rider')!;
