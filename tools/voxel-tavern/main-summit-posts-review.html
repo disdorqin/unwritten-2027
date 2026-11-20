@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 主峰三岗走查</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; color: #f4f2ec; background: #344254; }
+    body { margin: 0; }
+    canvas { display: block; }
+    main { position: fixed; inset: 1rem auto auto 1rem; padding: .8rem; border: 1px solid #becde48a; border-radius: .35rem; background: #182230ed; }
+    h1 { font-size: 1rem; margin: 0 0 .5rem; }
+    nav { display: flex; gap: .35rem; }
+    button { border: 1px solid #788ca6; border-radius: .25rem; padding: .35rem .55rem; background: #364e63; color: inherit; }
+    button[aria-pressed="true"] { background: #dbebf5; color: #172536; }
+    p { margin: .55rem 0 0; font-size: .85rem; }
+    output { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>主峰三岗走查</h1>
+    <nav aria-label="选择起步点">
+      <button type="button" id="gatekeeper">山门门房</button>
+      <button type="button" id="dispatcher">云海台调度员</button>
+      <button type="button" id="pavilion-keeper">观云亭守亭人</button>
+    </nav>
+    <p>WASD 行走，拖动视角。</p>
+    <p><output id="position"></output></p>
+  </main>
+  <script type="module" src="./town-blockout/main-summit-posts-review.ts"></script>
+</body>
+</html>
