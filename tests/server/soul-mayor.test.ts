@@ -1,10 +1,56 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { promisify } from 'node:util';
 import { createSoulMayorAuthority } from '../../src/presence/soul-mayor.ts';
+import { createSoulMayorInvitationFileStore } from '../../src/presence/soul-mayor-invitations.ts';
 import { createZodiacStarStoneAuthority } from '../../src/presence/zodiac-star-stone-authority.ts';
 
 const actor = { layer: 'test-platform', east: 220, north: 188, height: 12 };
 const talk = { ...actor, north: 187.1 };
+
+test('invitation receipts survive reopening, isolate profiles and permit retry after a write failure', t => {
+  const root = mkdtempSync(join(tmpdir(), 'town-mayor-invitations-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const directory = join(root, 'receipts');
+  const hero = 'stable/private/hero';
+  const a = createSoulMayorInvitationFileStore(directory);
+  const b = createSoulMayorInvitationFileStore(directory);
+  assert.equal(a.grantOnce(hero), 'retry');
+  assert.equal(b.received(hero), false);
+  mkdirSync(directory);
+  assert.equal(a.grantOnce(hero), 'received');
+  assert.equal(b.grantOnce(hero), 'already-received');
+  assert.equal(b.grantOnce('other-profile'), 'received');
+  assert.equal(b.grantOnce(''), 'retry');
+  assert.equal(createSoulMayorInvitationFileStore(directory).received(hero), true);
+  assert.equal(a.received('different-profile'), false);
+  const files = readdirSync(directory);
+  assert.equal(files.length, 2);
+  for (const file of files) {
+    assert.match(file, /^soul-mayor-[a-f0-9]{64}\.receipt$/);
+    assert.equal(readFileSync(join(directory, file), 'utf8'), 'received\n');
+  }
+});
+
+test('competing processes publish one receipt for the same protagonist', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'town-mayor-race-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const run = promisify(execFile);
+  const source = new URL('../../src/presence/soul-mayor-invitations.ts', import.meta.url);
+  const script = `import {createSoulMayorInvitationFileStore} from ${JSON.stringify(source.href)};
+    const store = createSoulMayorInvitationFileStore(process.argv[1]);
+    console.log(store.grantOnce('same-hero'));`;
+  const results = await Promise.all(Array.from({ length: 4 }, () =>
+    run(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, directory])));
+  assert.deepEqual(results.map(result => result.stdout.trim()).sort(),
+    ['already-received', 'already-received', 'already-received', 'received']);
+  assert.equal(readdirSync(directory).length, 1);
+  assert.equal(createSoulMayorInvitationFileStore(directory).received('same-hero'), true);
+});
 
 test('authority limits delivery to a trusted protagonist on the approved layer and talk footpoint', () => {
   const positions = new Map([

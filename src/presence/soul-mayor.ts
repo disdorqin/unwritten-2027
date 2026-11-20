@@ -3,6 +3,11 @@ import { readStarStoneLocation, type StarStoneLocation } from '../shared/zodiac-
 import type { createZodiacStarStoneAuthority } from './zodiac-star-stone-authority.js';
 
 type InvitationResult = 'received' | 'already-received' | 'retry';
+export type SoulMayorInvitationStore = Readonly<{
+  received(key: string): boolean;
+  /** Commit atomically before returning received. An unsuccessful save returns retry. */
+  grantOnce(key: string): InvitationResult;
+}>;
 
 type SoulMayorHost = Readonly<{
   /** Resolve a live connection at the authority. The key identifies the same protagonist after reconnect. */
@@ -11,11 +16,7 @@ type SoulMayorHost = Readonly<{
   /** The approved encounter can follow the staging from the arrival platform to the plaza. */
   encounterSite(peer: number): SoulMayorSite | undefined;
   canTalk(peer: number, from: StarStoneLocation, site: SoulMayorSite): boolean;
-  invitations: Readonly<{
-    received(key: string): boolean;
-    /** Commit atomically before returning received. An unsuccessful save returns retry. */
-    grantOnce(key: string): InvitationResult;
-  }>;
+  invitations: SoulMayorInvitationStore;
   stars: Pick<ReturnType<typeof createZodiacStarStoneAuthority>, 'snapshot'>;
 }>;
 
