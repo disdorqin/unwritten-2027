@@ -19,6 +19,7 @@ const west = -Math.PI / 2;
 const east = Math.PI / 2;
 const south = Math.PI;
 const tavernDoor = layout.plots.find(plot => plot.id === 'tavern')!.door;
+const townOfficeDoor = layout.plots.find(plot => plot.id === 'town-office')!.door;
 const [stationEast, stationNorth] = extensionPlots.find(plot => plot.id === 'railway-station')!.origin;
 const [palaceEndEast, palaceEndNorth] = icePalaceSite.stationTrail.at(-1)!;
 const [pineFireEast, pineFireNorth] = pineCampSites.fire;
@@ -44,6 +45,10 @@ export const townSledRackSites: readonly Site[] = [
     [tavernDoor[0] - 4, tavernDoor[1] - 2, south], [tavernDoor[0] + 4, tavernDoor[1] - 2, south],
     [tavernDoor[0] - 5, tavernDoor[1] - 3.5, south],
   ] },
+  { id: 'town-hall', domain: 'town', pads: [
+    [townOfficeDoor[0] + 4.5, townOfficeDoor[1] - 2.25, south],
+    [townOfficeDoor[0] - 4.5, townOfficeDoor[1] - 2.25, south],
+  ] },
   { id: 'ice-palace', domain: 'town', pads: [
     [palaceEndEast + 4, palaceEndNorth - 1, 0], [palaceEndEast + 4, palaceEndNorth + 1, 0],
     [palaceEndEast + 1, palaceEndNorth - 4, 0], [palaceEndEast + 3, palaceEndNorth - 3, 0],
@@ -55,7 +60,7 @@ export const townSledRackSites: readonly Site[] = [
   { id: 'cloud-terrace', domain: 'summit', pads: [[333, 660.6, west], [331, 660.5, west], [329, 660.5, west]] },
 ];
 
-export const townSledRackMissingSites = ['old-home', 'town-hall'] as const;
+export const townSledRackMissingSites = ['old-home'] as const;
 export const townSledRackLegacySites: readonly Site[] = [
   { id: 'north-slope', domain: 'town', pads: [[378, 303, south]] },
   { id: 'memorial', domain: 'town', pads: [[347.5, 255, 0], [348, 255, 0], [348.5, 255, 0]] },

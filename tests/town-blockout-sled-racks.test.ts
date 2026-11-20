@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
+import { roadCorridorKeepClear } from '../tools/voxel-tavern/town-blockout/road-clearance';
 import { createTownSledVisuals, sledParts } from '../tools/voxel-tavern/town-blockout/sled-visuals';
-import { canEnter, createTerrainGrid, isWater, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+import { canEnter, createTerrainGrid, isWater, layout, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { resolveTownSledRacks, townSledRackMissingSites } from '../tools/voxel-tavern/town-blockout/town-sled-racks';
 import {
   createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
@@ -29,7 +30,7 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
     return y !== undefined && !cloud.blocked(east, north, y, .27, 1.8) ? y : undefined;
   });
   assert.deepEqual(town.map(({ id }) => id), [
-    'plaza', 'cable-base', 'mirror-lake', 'pine-chop', 'station', 'tavern', 'ice-palace', 'crater-mouth',
+    'plaza', 'cable-base', 'mirror-lake', 'pine-chop', 'station', 'tavern', 'town-hall', 'ice-palace', 'crater-mouth',
     'north-slope', 'memorial', 'market',
   ]);
   assert.deepEqual(summit.map(({ id, y }) => [id, y]), [['mountain-gate', 347], ['cloud-terrace', 347]]);
@@ -37,7 +38,28 @@ test('sled rack configurations resolve on the surveyed town, west approach and s
   const craterRack = town.find(({ id }) => id === 'crater-mouth')!;
   assert.equal(crater.fenceBlocks(craterRack.x, craterRack.n, craterRack.y, .36), false);
   assert.equal(crater.heightAt(craterRack.x, craterRack.n), craterRack.y);
-  assert.deepEqual(townSledRackMissingSites, ['old-home', 'town-hall']);
+  assert.deepEqual(townSledRackMissingSites, ['old-home']);
+});
+
+test('the town hall rack leaves its front steps and roadway clear, with room to use either flank', () => {
+  const terrain = createTerrainGrid();
+  const [doorEast, doorNorth] = layout.plots.find(plot => plot.id === 'town-office')!.door;
+  const dryGround = (east: number, north: number) => {
+    if (canEnter(east, north) && !isWater(east, north)) return terrain.heightAt(east, north);
+  };
+  const findRack = (sample: typeof dryGround) => resolveTownSledRacks('town', sample)
+    .find(({ id }) => id === 'town-hall');
+  const first = findRack(dryGround);
+  assert.ok(first);
+  const fallback = findRack((east, north) => east === first.x && north === first.n ? undefined : dryGround(east, north));
+  assert.ok(fallback);
+  assert.ok(first.x > doorEast && fallback.x < doorEast);
+  for (const rack of [first, fallback]) {
+    assert.ok(rack.n + 1.05 < doorNorth);
+    assert.ok(Math.abs(rack.x - doorEast) > 2.35 + 1.05);
+    assert.equal(roadCorridorKeepClear(rack.x, rack.n, 1.05), false);
+    assert.equal(rack.yaw, Math.PI);
+  }
 });
 
 test('racks skip their primary pad if the vehicle footprint has no safe support', () => {
