@@ -12,6 +12,7 @@ import { createStarportFuelDispenser } from '../../../src/presence/starport-fuel
 import { flightAirspaceAt } from '../../../src/shared/flight-field';
 import { createTownNightWindow, type TownNightSchedule } from '../../../src/shared/town-night-window';
 import { createStarportReviewWorld, mountStarportFlightSite, starportFlightSite } from './starport-flight-site';
+import { mountStarportFlightAssembly } from './starport-flight-assembly';
 import { mountStarportFieldReview } from './starport-field-review';
 import { mountStarportNightRing } from './starport-night-ring';
 import { northRidgeFrame } from './north-ridge-350-terrain';
@@ -26,7 +27,12 @@ const sun = new DirectionalLight('#fff1dc', 2.1);
 sun.position.set(-32, 68, 21);
 scene.add(sun);
 
-const fieldWorld = createStarportReviewWorld();
+const proofMode = new URLSearchParams(location.search).get('proof');
+const nightProof = proofMode === 'night-window';
+const assemblyHandoff = proofMode === 'assembly-handoff';
+const scheduledProof = nightProof || assemblyHandoff;
+const fixedClock = proofMode === 'clock' || scheduledProof;
+const fieldWorld = createStarportReviewWorld({ assemblyHandoff });
 const { world, groundAt } = fieldWorld;
 const step = 4;
 const columns = northRidgeFrame.width / step + 1;
@@ -53,14 +59,11 @@ terrain.setAttribute('color', new Float32BufferAttribute(colors, 3));
 terrain.setIndex(indices);
 terrain.computeVertexNormals();
 scene.add(new Mesh(terrain, new MeshLambertMaterial({ vertexColors: true })));
-const site = mountStarportFlightSite(scene);
+const site = mountStarportFlightSite(scene, { assemblyHandoff });
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 document.querySelector('#scene')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(64, 1, .07, 1_800);
-const proofMode = new URLSearchParams(location.search).get('proof');
-const nightProof = proofMode === 'night-window';
-const fixedClock = proofMode === 'clock' || nightProof;
 const proofStepMs = 100;
 const proofWalkStepMs = 25;
 // The review has no live town host. This one-night schedule belongs only to the evidence fixture.
@@ -68,16 +71,25 @@ const reviewNightSchedule: TownNightSchedule = { duskAt: 360_000, beaconAt: 420_
   cueExpiresAt: 422_000, morningBellAt: 600_000 };
 let reviewNightNow = 0;
 let trustedGateChecks = 0;
-const nightWindow = createTownNightWindow({ now: () => nightProof ? reviewNightNow : Date.now(),
-  scheduleAt: () => nightProof ? reviewNightSchedule : undefined });
-const nightRing = mountStarportNightRing(site.group, starportFlightSite.door);
+const nightWindow = createTownNightWindow({ now: () => scheduledProof ? reviewNightNow : Date.now(),
+  scheduleAt: () => scheduledProof ? reviewNightSchedule : undefined });
+const nightRing = assemblyHandoff ? undefined : mountStarportNightRing(site.group, starportFlightSite.door);
 const status = document.querySelector<HTMLElement>('#status')!;
 const reading = document.querySelector<HTMLOutputElement>('#reading')!;
 const aircraftControls = document.querySelector<HTMLDivElement>('#aircraft-controls')!;
+const groundControls = document.querySelector<HTMLElement>('#ground-controls')!;
+const assemblyAim = document.querySelector<HTMLElement>('#assembly-aim')!;
+const assemblyAction = document.querySelector<HTMLElement>('#assembly-action')!;
 let fuelDisplay: ReturnType<typeof mountFlightFuelDisplay> | undefined;
 let fullPowerScaleMs = flightFuelCanFullPowerMs;
 const held = new Set<string>();
 const keys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyF', 'KeyQ', 'ArrowLeft', 'ArrowRight', 'Digit1', 'Digit2', 'Digit3']);
+if (assemblyHandoff) {
+  keys.add('ArrowUp');
+  keys.add('ArrowDown');
+  groundControls.textContent = 'WASD 移动，方向键转动视角。对准槽位或面板按 E 装件、点火。';
+  status.textContent = '走近装配架，依次装入三件。';
+}
 const runway = starportFlightSite.runway;
 const runwaySurvey = surveyAircraftRunway(runway, world);
 const operations = mountStarportFieldReview(scene, fieldWorld, runwaySurvey.heading);
@@ -90,6 +102,9 @@ const distance = (a: AircraftPoint, b: AircraftPoint) => Math.hypot(a.east - b.e
 let loadout: AircraftLoadout = { snowWingClaimed: true, boosterOwned: true, aircraftAssembled: false };
 let feet = { ...starportFlightSite.assembly, north: 671.2 };
 let heading = 0;
+let pitch = 0;
+const assembly = assemblyHandoff ? mountStarportFlightAssembly(site.group, starportFlightSite.assembly,
+  () => feet, () => nightWindow.snapshot().layersOverlap) : undefined;
 let throttle: AircraftThrottle = 'off';
 let lockResult = 'idle';
 let fuelRevision = 0;
@@ -121,15 +136,34 @@ function prepareFlightFuelDisplay() {
   fuelDisplay = mountFlightFuelDisplay(aircraftControls, { remainingFullPowerMs, throttle }, scale);
 }
 
+const assemblyStatus: Record<string, string> = {
+  placed: '零件已装入架体。', 'already-installed': '零件已经安装。',
+  incomplete: '三件装齐后才能点火。', 'missing-key': '点火需要讲古钥一。',
+  'window-closed': '等待第十三声首分钟。', 'out-of-reach': '往装配架靠近一点。',
+  ignited: '点火完成。前往铜色跑道起线。', 'already-ignited': '飞行器已点火。前往跑道起线。',
+};
+const assemblyLabels = {
+  'snow-wing': '雪翼槽', booster: '助推器槽', 'navigation-core': '导航芯槽', ignition: '点火',
+};
+
 function interact(trustedKey: boolean) {
   if (flight.skipRecovery() || unavailable()) return;
-  if (distance(feet, starportFlightSite.assembly) <= 1.65) {
+  if (assembly && assembly.aim(heading, pitch)) {
+    void assembly.interact(heading, pitch).then(result => {
+      if (result.kind === 'ignited' || result.kind === 'already-ignited') {
+        loadout = { ...loadout, aircraftAssembled: result.state.ignited };
+        groundControls.textContent = '沿平台走到跑道起线，E 起飞，F 补给，Q 检查试飞。';
+      }
+      status.textContent = assemblyStatus[result.kind] ?? '对准零件槽或点火面板。';
+      renderFrame();
+    });
+  } else if (!assembly && distance(feet, starportFlightSite.assembly) <= 1.65) {
     const result = assembleAircraftAtStarport(loadout, 'starport-assembly-pad', feet, starportFlightSite.assembly);
     if (!result.ok) { status.textContent = '靠近合体台。'; return; }
     loadout = result.loadout;
     site.craft.visible = true;
     status.textContent = '合体完成。前往铜色跑道起线。';
-  } else if (distance(feet, starportFlightSite.door) <= 1.6) {
+  } else if (!assembly && distance(feet, starportFlightSite.door) <= 1.6) {
     if (nightProof && trustedKey) trustedGateChecks++;
     const travel = resolveOrbitalGateTravel({ gate: 'starport', direction: 'enter' }, { site: 'starport',
       pose: { ...feet, yaw: heading } }, {
@@ -140,6 +174,7 @@ function interact(trustedKey: boolean) {
     status.textContent = '已锁定。';
   } else if (distance(feet, runway.start) <= 1.4) {
     if (flight.launchRunway(loadout.aircraftAssembled, feet, runway)) {
+      site.craft.visible = true;
       prepareFlightFuelDisplay();
       throttle = 'full';
       status.textContent = '滑跑。';
@@ -171,6 +206,8 @@ window.addEventListener('blur', () => held.clear());
 
 function walk(dt: number) {
   heading += (Number(held.has('ArrowRight')) - Number(held.has('ArrowLeft'))) * dt * 1.8;
+  if (assemblyHandoff) pitch = Math.max(-1.28, Math.min(1.28,
+    pitch + (Number(held.has('ArrowUp')) - Number(held.has('ArrowDown'))) * dt * 1.6));
   const front = Number(held.has('KeyW')) - Number(held.has('KeyS'));
   const side = Number(held.has('KeyD')) - Number(held.has('KeyA'));
   const stride = 5.5 * dt / Math.max(1, Math.hypot(front, side));
@@ -212,12 +249,19 @@ function advanceFrame(dt: number, clockRate = 1) {
 
 function renderFrame() {
   operations.syncMarkers();
-  nightRing.apply(nightWindow.snapshot());
+  nightRing?.apply(nightWindow.snapshot());
   const air = flight.snapshot();
   const bodyY = feet.height + 1.58;
   camera.position.set(feet.east, bodyY, -feet.north);
-  camera.lookAt(feet.east + Math.sin(heading) * 15, bodyY + (air?.usesBothHands ? -.7 : -.25),
+  const lookHeight = air?.usesBothHands ? -.7 : assemblyHandoff ? Math.tan(pitch) * 15 : -.25;
+  camera.lookAt(feet.east + Math.sin(heading) * 15, bodyY + lookHeight,
     -feet.north - Math.cos(heading) * 15);
+  if (assembly) {
+    const target = !unavailable() && assembly.aim(heading, pitch);
+    assemblyAim.hidden = unavailable();
+    assemblyAction.hidden = !target;
+    assemblyAction.textContent = target ? `E · ${assemblyLabels[target]}` : '';
+  }
   reading.value = `E ${feet.east.toFixed(1)} · N ${feet.north.toFixed(1)} · ${feet.height.toFixed(1)} m · ${(air?.speed ?? 0).toFixed(1)} m/s`;
   aircraftControls.hidden = !air?.usesBothHands;
   if (air?.usesBothHands) {
@@ -255,7 +299,8 @@ if (proofMode !== null) {
   const readProof = () => ({ feet: { ...feet }, loadout, runway, runwaySurvey, lockResult,
     flight: flight.snapshot(), phases: [...phases], drawCalls: renderer.info.render.calls,
     emergencySites: operations.sites.sites().map(({ id }) => id), checklist, circuit: operations.route.snapshot(),
-    gates: operations.route.gates, fuel: { seconds: engine.snapshot().fuelSeconds, ore, revision: fuelRevision } });
+    gates: operations.route.gates, fuel: { seconds: engine.snapshot().fuelSeconds, ore, revision: fuelRevision },
+    ...(assembly && { heading, pitch, assembly: { ...assembly.snapshot(), aimed: assembly.aim(heading, pitch) } }) });
   Object.assign(window, { starportFlightProof: readProof });
   if (fixedClock) {
     // The verifier controls only time. Every step reads the normal browser key handlers.
@@ -267,10 +312,10 @@ if (proofMode !== null) {
       },
     });
   }
-  if (nightProof) {
+  if (scheduledProof) {
     Object.assign(window, {
       starportNightProof: () => ({ now: reviewNightNow, schedule: reviewNightSchedule,
-        state: nightWindow.snapshot(), ring: nightRing.snapshot(), trustedGateChecks, lockResult,
+        state: nightWindow.snapshot(), ring: nightRing?.snapshot(), trustedGateChecks, lockResult,
         feet: { ...feet }, door: starportFlightSite.door }),
       starportNightClock(now: number) { reviewNightNow = now; renderFrame(); },
       starportNightBeacon(at: number) {
@@ -280,4 +325,9 @@ if (proofMode !== null) {
       },
     });
   }
+  if (assembly) Object.assign(window, { starportAssemblyKeyOne: () => assembly.grantKeyOne() });
 }
+
+if (assembly) window.addEventListener('pagehide', event => {
+  if (!event.persisted) assembly.dispose();
+});

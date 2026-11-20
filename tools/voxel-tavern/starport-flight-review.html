@@ -3,12 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>未写镇 · 星港坪试飞</title>
   <style>
     :root { color-scheme: dark; font: 15px system-ui, sans-serif; color: #edf4fa; background: #afc5df; }
     body { margin: 0; }
     #scene { position: fixed; inset: 0; }
     #scene canvas { display: block; }
+    #assembly-aim { position: fixed; top: 50%; left: 50%; width: .44rem; height: .44rem; border-radius: 50%; background: #f4e6c3; box-shadow: 0 0 0 1px #203040; pointer-events: none; transform: translate(-50%, -50%); }
     main { position: relative; max-width: min(26rem, calc(100% - 4rem)); margin: 1rem; padding: .8rem 1rem; border-radius: .6rem; background: #18283cea; }
     h1 { margin: 0 0 .4rem; font-size: 1.1rem; }
     p { margin: .35rem 0; }
@@ -18,11 +20,13 @@
 </head>
 <body>
   <div id="scene" aria-hidden="true"></div>
+  <div id="assembly-aim" aria-hidden="true" hidden></div>
   <main>
     <h1>星港坪试飞</h1>
-    <p>WASD 移动，方向键转身。E 合体或起飞，F 补给，Q 检查试飞。</p>
+    <p id="ground-controls">WASD 移动，方向键转身。E 合体或起飞，F 补给，Q 检查试飞。</p>
     <p>飞行 W/S 俯冲或抬头，A/D 转向。1 / 2 / 3 选择关档、巡航或全推。</p>
     <p id="status" role="status">沿木台走到合体台前。</p>
+    <p id="assembly-action" hidden></p>
     <output id="reading" aria-live="off"></output>
     <div id="aircraft-controls" hidden></div>
   </main>

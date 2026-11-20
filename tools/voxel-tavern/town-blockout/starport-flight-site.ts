@@ -22,19 +22,24 @@ export const townFlightRunwayCandidates = [
   { id: 'ring-road', start: point(219.785, 85.525, 9), end: point(267.215, 99.475, 9), width: 4.4 },
 ] as const satisfies readonly AircraftRunway[];
 
-const posts = [
+type StarportReviewOptions = Readonly<{ assemblyHandoff?: boolean }>;
+
+const legacyPosts = [
   { ...starportFlightSite.assembly, width: 3.9, depth: 1.8, tall: .9 },
   { ...starportFlightSite.door, width: 2.7, depth: .6, tall: 2.8 },
 ];
+// The fitted rack spans local Z −0.505 to +0.973 m, including the protruding booster.
+const assemblyRackEnvelope = { ...starportFlightSite.assembly,
+  north: starportFlightSite.assembly.north - .235, width: 6.06, depth: 1.48, tall: 2.15 };
 
 /** Preview uses the existing town terrain, lake and plot envelopes, plus the 350 m design survey. */
-export function createStarportReviewWorld() {
+export function createStarportReviewWorld({ assemblyHandoff = false }: StarportReviewOptions = {}) {
   const terrain = createTerrainGrid();
   const candidateGround = (east: number, north: number) => north >= 540
     ? sampleNorthRidge350(east, north)
     : terrain.heightAt(east, north);
   const envelopes = [
-    ...posts,
+    ...(assemblyHandoff ? [assemblyRackEnvelope] : legacyPosts),
     ...layout.plots.map(plot => ({ ...point(...plot.origin as [number, number, number]),
       width: plot.footprint[0], depth: plot.footprint[1], tall: plot.id === 'clocktower' ? 117.125 : 12 })),
   ];
@@ -88,7 +93,7 @@ export function createStarportReviewWorld() {
 }
 
 /** The original F-7 parts share their published socket without changing either asset. */
-export function mountStarportFlightSite(owner: Object3D) {
+export function mountStarportFlightSite(owner: Object3D, { assemblyHandoff = false }: StarportReviewOptions = {}) {
   const group = new Group();
   group.name = 'starport-flight-site';
   owner.add(group);
@@ -107,16 +112,20 @@ export function mountStarportFlightSite(owner: Object3D) {
   for (const side of [-1, 1]) {
     box(stone, point(pad.east + side * 12, pad.north, 347.035), .18, .06, 24);
     box(stone, point(pad.east, pad.north + side * 12, 347.035), 24, .06, .18);
-    box(wood, point(assembly.east + side * 1.52, assembly.north, 347.36), .26, .72, 1.5);
-    box(stone, point(door.east + side * 1.14, door.north, 348.25), .42, 2.5, .58);
+    if (!assemblyHandoff) {
+      box(wood, point(assembly.east + side * 1.52, assembly.north, 347.36), .26, .72, 1.5);
+      box(stone, point(door.east + side * 1.14, door.north, 348.25), .42, 2.5, .58);
+    }
     box(copper, point(recovery.east + side * 1.7, recovery.north, 347.04), .16, .08, 3.4);
     box(copper, point(recovery.east, recovery.north + side * 1.7, 347.04), 3.4, .08, .16);
   }
-  box(wood, point(assembly.east, assembly.north, 347.79), 3.9, .18, 1.8);
-  box(copper, point(assembly.east, assembly.north, 347.90), 2.35, .05, .85);
-  box(stone, point(door.east, door.north, 349.63), 2.7, .32, .64);
-  // Locked current-chapter face. The separate S-1/S-11 package owns ring and insignia art.
-  box(stone, point(door.east, door.north, 348.31), 1.9, 2.6, .17);
+  if (!assemblyHandoff) {
+    box(wood, point(assembly.east, assembly.north, 347.79), 3.9, .18, 1.8);
+    box(copper, point(assembly.east, assembly.north, 347.90), 2.35, .05, .85);
+    box(stone, point(door.east, door.north, 349.63), 2.7, .32, .64);
+    // Locked face retained for the historical prototype proof.
+    box(stone, point(door.east, door.north, 348.31), 1.9, 2.6, .17);
+  }
   for (let east = runway.start.east - 2; east > runway.end.east; east -= 4) {
     box(pale, point(east, runway.start.north, 347.06), 1.6, .07, .18);
   }
