@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
-const url = new URL('/?profile', origin);
+const bare = segment === 'gate';
+const url = bare ? new URL(origin) : new URL('/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
+if (bare) assert.equal(url.href, `${url.origin}/`, 'Use the bare production root, with no query or hash');
 assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
@@ -26,7 +29,7 @@ const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683], 
 const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
 assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
 const viewport = { width, height };
-const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? .25);
+const deviceScaleFactor = Number(process.env.ZA22_DEVICE_SCALE ?? (bare ? 1 : .25));
 assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
 const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
 const maxDrag = Math.round(width * .34);
@@ -36,15 +39,52 @@ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
 const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: bare ? 'fresh default' : 'smooth',
+  gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+if (bare) {
+  report.input = 'native keyboard and mouse, using the game’s pointer-drag fallback';
+  if (process.env.ZA30_LOCAL_TEST_NIGHT) report.serverTestNight = JSON.parse(process.env.ZA30_LOCAL_TEST_NIGHT);
+}
 
 await mkdir(output, { recursive: true });
 let browser;
 let lastPage;
 let measuring = true;
 
+// Observe the viewer's actual WebGL submissions on the normal canvas. No
+// profiling URL, quality preference, or application state is set in bare mode.
+function observeBareTown() {
+  const prototype = WebGL2RenderingContext.prototype;
+  const locate = prototype.getUniformLocation;
+  const setMatrix = prototype.uniformMatrix4fv;
+  const draw = prototype.drawElements;
+  const viewLocations = new WeakSet();
+  const observation = { cameraY: null, draws: 0, recentIndexedDraws: [] };
+  window.__za22Bare = observation;
+
+  prototype.getUniformLocation = function (program, name) {
+    const location = locate.call(this, program, name);
+    if (location && name === 'viewMatrix') viewLocations.add(location);
+    return location;
+  };
+  prototype.uniformMatrix4fv = function (location, transpose, values, ...offsets) {
+    setMatrix.call(this, location, transpose, values, ...offsets);
+    if (this.canvas.parentElement?.id !== 'scene' || !viewLocations.has(location)) return;
+    const m = offsets[0] ? values.subarray(offsets[0]) : values;
+    observation.cameraY = -(m[4] * m[12] + m[5] * m[13] + m[6] * m[14]);
+  };
+  prototype.drawElements = function (mode, count, type, offset) {
+    draw.call(this, mode, count, type, offset);
+    if (this.canvas.parentElement?.id !== 'scene' || mode !== this.TRIANGLES) return;
+    observation.draws++;
+    observation.recentIndexedDraws.push({ count, type });
+    if (observation.recentIndexedDraws.length > 256) observation.recentIndexedDraws.shift();
+  };
+}
+
 async function openTown(name) {
   const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
+  if (bare) await context.addInitScript(observeBareTown);
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
@@ -95,22 +135,26 @@ async function openTown(name) {
       });
     });
   });
-  await page.addInitScript(() => {
+  await page.addInitScript(bare => {
     // Use the production drag fallback for consistent native mouse input in headless Chromium.
     // Only the browser API is made unavailable. All movement still runs through the viewer.
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
+    if (bare) return;
     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
     localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
     document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
-  });
+  }, bare);
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
   assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
+  if (bare) assert.equal(page.url(), url.href, 'The navigated document must stay at the bare root');
   await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
-  await page.waitForFunction(pattern => {
+  await page.waitForFunction(({ pattern, bare }) => {
     const hud = document.querySelector('#position')?.textContent ?? '';
-    return new RegExp(pattern).test(hud) && window.__za22Frame?.calls > 0;
-  }, positionPattern.source, { timeout: 90_000 });
+    const rendered = bare ? window.__za22Bare?.draws > 0 && Number.isFinite(window.__za22Bare?.cameraY)
+      : window.__za22Frame?.calls > 0;
+    return new RegExp(pattern).test(hud) && rendered;
+  }, { pattern: positionPattern.source, bare }, { timeout: 90_000 });
   if (!report.gpu) report.gpu = await page.evaluate(() => {
     const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
     const names = gl?.getExtension('WEBGL_debug_renderer_info');
@@ -123,17 +167,18 @@ async function openTown(name) {
   await page.locator('#scene canvas').click({ position: { x: Math.round(width * .35), y: dragY } });
   await waitForWire(page, evidence);
   evidence.checkpoints.push({ label: 'spawn', ...start, wire: evidence.poses.at(-1) });
+  if (bare) await snapshot(page, evidence, 'ordinary-spawn');
   console.log(JSON.stringify({ phase: 'spawn', east: start.east, north: start.north, y: start.height }));
   return { page, evidence, westWindow: () => westWindow };
 }
 
 async function readPose(page) {
-  const frame = await page.evaluate(() => ({
+  const frame = await page.evaluate(bare => ({
     hud: document.querySelector('#position')?.textContent ?? '',
-    cameraY: window.__za22Frame?.cameraY,
+    cameraY: bare ? window.__za22Bare?.cameraY : window.__za22Frame?.cameraY,
     action: document.querySelector('#world-action')?.textContent ?? '',
     status: document.querySelector('#town-presence-status')?.textContent ?? '',
-  }));
+  }), bare);
   const point = positionPattern.exec(frame.hud);
   return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
     height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100 : undefined };
@@ -239,14 +284,22 @@ async function card(page, title) {
 }
 
 async function snapshot(page, evidence, label) {
-  await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
-  evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
+  const file = `${label}.png`;
+  const bytes = await page.screenshot({ path: join(output, file), timeout: 45_000 });
+  const image = { file, sha256: createHash('sha256').update(bytes).digest('hex') };
+  evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1), image });
 }
 
 try {
+  if (bare) {
+    const health = await fetch(new URL('/healthz', url), { signal: AbortSignal.timeout(5_000), redirect: 'error' });
+    assert.ok(health.ok, `Production preview health probe returned ${health.status}`);
+    report.release = (await health.text()).trim();
+    if (process.env.GITHUB_SHA) assert.equal(report.release, `town-preview ${process.env.GITHUB_SHA}`);
+  }
   browser = await chromium.launch({
     headless: true,
-    executablePath: process.env.CHROMIUM_PATH || undefined,
+    executablePath: process.env.UNWRITTEN_CHROMIUM_EXECUTABLE || process.env.CHROMIUM_PATH || undefined,
     args: graphicsArgs,
   });
   report.browser = browser.version();
@@ -262,19 +315,27 @@ try {
       await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
         null, { timeout: 135_000 });
       await snapshot(page, evidence, 'cable-boarding');
-      await page.waitForFunction(() => {
+      const cableProgress = await page.waitForFunction(({ bare, pattern, destination }) => {
+        const hud = document.querySelector('#position')?.textContent ?? '';
         const riding = document.querySelector('#position')?.textContent?.includes('缆车一线');
-        const height = window.__za22Frame?.cameraY;
-        return riding && height > 80 && height < 300;
-      }, null, { timeout: 90_000 });
-      await snapshot(page, evidence, 'cable-moving');
+        const height = bare ? window.__za22Bare?.cameraY : window.__za22Frame?.cameraY;
+        if (riding && height > 80 && height < 300) return 'moving';
+        if (!bare) return false;
+        const pose = new RegExp(pattern).exec(hud);
+        return pose && Math.hypot(Number(pose[1]) - destination[0], Number(pose[2]) - destination[1]) < 1
+          ? 'hud-arrival' : false;
+      }, { bare, pattern: positionPattern.source, destination: cloudStop }, { timeout: bare ? 210_000 : 90_000 });
+      evidence.cableProgress = await cableProgress.jsonValue();
+      await cableProgress.dispose();
+      if (evidence.cableProgress === 'moving') await snapshot(page, evidence, 'cable-moving');
 
-      await page.waitForFunction(({ pattern, destination }) => {
+      await page.waitForFunction(({ pattern, destination, bare }) => {
         const pose = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
         return pose && Math.hypot(Number(pose[1]) - destination[0], Number(pose[2]) - destination[1]) < 1
-          && Math.abs((window.__za22Frame?.cameraY ?? 0) - 348.65) < .55;
-      }, { pattern: positionPattern.source, destination: cloudStop }, { timeout: 210_000 });
-      await waitForWire(page, evidence, pose => pose?.area === 'mountain' && Math.abs(pose.height - 347) < .7);
+          && (bare || Math.abs((window.__za22Frame?.cameraY ?? 0) - 348.65) < .55);
+      }, { pattern: positionPattern.source, destination: cloudStop, bare }, { timeout: 210_000 });
+      await waitForWire(page, evidence, pose => pose?.area === 'mountain' && Math.abs(pose.height - 347) < .7 &&
+        Math.hypot(pose.east - cloudStop[0], pose.north - cloudStop[1]) < 1);
       await snapshot(page, evidence, 'cloud-cable-arrival');
       if (segment === 'cloud' || segment === 'all') {
         await follow(page, evidence, cloudRunway, 'cloud-runway');
@@ -287,7 +348,24 @@ try {
           await page.keyboard.press('Escape');
           await walkTo(page, evidence, cloudRunway[0], 'return-to-cloud-walkway');
         }
-        await follow(page, evidence, gate, 'gate');
+        if (bare) {
+          await follow(page, evidence, gate.slice(0, 2), 'gate-approach');
+          await face(page, evidence, 0);
+          await snapshot(page, evidence, 'mountain-gate-approach');
+          await follow(page, evidence, gate.slice(2, 4), 'gate-crossing');
+          await waitForWire(page, evidence, wire => wire?.area === 'mountain' && Math.abs(wire.east - 300) < .65 &&
+            wire.north > 695 && wire.north < 697 && Math.abs(wire.height - 347) < .7);
+          await snapshot(page, evidence, 'mountain-gate-crossing');
+          await follow(page, evidence, gate.slice(4), 'gate-interior');
+          await waitForWire(page, evidence, wire => wire?.area === 'mountain' && wire.north > 682 && wire.north < 684);
+          await snapshot(page, evidence, 'mountain-gate-walk');
+          evidence.canvas = await page.evaluate(() => {
+            const canvas = document.querySelector('#scene canvas');
+            const { cameraY, draws, recentIndexedDraws } = window.__za22Bare;
+            return { width: canvas.width, height: canvas.height, cameraY, draws, recentIndexedDraws };
+          });
+          assert.ok(evidence.canvas.width > 0 && evidence.canvas.height > 0 && evidence.canvas.draws > 0);
+        } else await follow(page, evidence, gate, 'gate');
         await action(page, '查看山门班次');
         await card(page, '山门');
         await snapshot(page, evidence, 'mountain-gate');
@@ -337,8 +415,12 @@ try {
 } finally {
   measuring = false;
   report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
-  await writeFile(join(output, 'za22-live-walk.json'), `${JSON.stringify(report, null, 2)}\n`);
-  console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
-    frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
-  await browser?.close();
+  try {
+    const reportFile = bare ? 'zd01-default-mountain-walk.json' : 'za22-live-walk.json';
+    await writeFile(join(output, reportFile), `${JSON.stringify(report, null, 2)}\n`);
+    console.log(JSON.stringify({ segment, paths: report.paths.map(path => ({ name: path.name, checkpoints: path.checkpoints.length,
+      frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
+  } finally {
+    await browser?.close();
+  }
 }
