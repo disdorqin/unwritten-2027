@@ -69,6 +69,7 @@ jobs:
           dawn="$(node -p 'Date.now() - 390000')"
           docker run -d --name za22-presence --network za22 --network-alias presence \
             -e PRESENCE_MOUNTAIN_PORT=8091 \
+            -e PRESENCE_WEST_PORT=8092 \
             -e "TOWN_NIGHT_DAWN_EPOCH=$dawn" \
             -e 'TOWN_NIGHT_OFFSETS_AFTER_DUSK=[60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000,60000]' \
             za22-presence

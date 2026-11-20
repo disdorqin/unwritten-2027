@@ -7,6 +7,7 @@ import {
 } from './main-summit-assembly';
 import { createNorthRidgeCableClock } from './north-ridge-cable-clock';
 import { createNorthRidge350Block, northRidgeCableAnchors, sampleNorthRidge350 } from './north-ridge-350-terrain';
+import { mountZa22MountainGate, za22GateSeamNorth } from './town-za22-mountain-gate';
 
 type Point = Readonly<{ east: number; north: number; height: number }>;
 type Terminal = 'base' | 'summit';
@@ -22,7 +23,6 @@ export const za22StationApproach = { east: 536.8, north: 317.15, height: 26.14 }
 export const za22CloudRunway = { start: 331, end: 288.5, north: 662, width: 4.4 };
 const terminalDwell = 8_000;
 const roofClearance = 3.5;
-const summitSeamNorth = 666;
 const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
 const assemblyBench = { east: 324, north: 657, width: 3.9, depth: 1.8, top: .87 };
 const benchVisitor = { east: 326.82, north: 657, height: 347 };
@@ -96,7 +96,7 @@ export function za22CloudSurfaceAt(east: number, north: number, radius = .27) {
     Math.abs(north - cloudTerminal.north) <= 4 - radius;
   const apron = east >= za22CloudRunway.end - 2 + radius && east <= 339 - radius && north >= 654 + radius &&
     north <= 664.65 - radius;
-  if (north < summitSeamNorth && (landing || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
+  if (north < za22GateSeamNorth && (landing || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
     return sampleNorthRidge350(east, north);
   }
 }
@@ -124,6 +124,7 @@ export function createZa22CloudRoute(host: Host) {
     const terrain = createNorthRidge350Block(sampleNorthRidge350, 4);
     front.add(terrain.mesh);
     const assembly = mountMainSummitAssembly(owner, fullEpoch);
+    const gate = mountZa22MountainGate(assembly, { open: host.view });
     const iron = new MeshLambertMaterial({ color: '#4c606b' });
     const brass = new MeshLambertMaterial({ color: '#b59669' });
     const wood = new MeshLambertMaterial({ color: '#59483e' });
@@ -171,11 +172,12 @@ export function createZa22CloudRoute(host: Host) {
     for (let east = 302; east < 336; east += 2) {
       box(front, iron, east, 663.25, sampleNorthRidge350(east, 663.25), .36, .64, .043);
     }
-    return { owner, terrain, assembly, cabins, front, boxGeometry, materials: [iron, brass, wood] };
+    return { owner, terrain, assembly, gate, cabins, front, boxGeometry, materials: [iron, brass, wood] };
   }
 
   function disposeMountain() {
     if (!world) return;
+    world.gate.dispose();
     world.assembly.dispose();
     world.terrain.dispose();
     world.boxGeometry.dispose();
@@ -203,6 +205,17 @@ export function createZa22CloudRoute(host: Host) {
       label: '查看星港坪装配和起飞线',
       run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标起飞线出坪。'); },
     };
+    return world?.gate.action(position);
+  }
+
+  function updateView(position: Point) {
+    const inside = mode === 'summit' && position.north >= za22GateSeamNorth;
+    if (world) {
+      world.front.visible = !inside;
+      world.assembly.setFrontDetail(!inside);
+      world.gate.update(position);
+    }
+    return inside ? '山门' : '云海台';
   }
 
   function update(position: Point) {
@@ -235,11 +248,16 @@ export function createZa22CloudRoute(host: Host) {
   }
 
   return {
-    scene, action, update,
+    scene, action, update, updateView,
     active: () => mode !== 'town',
     riding: () => ride !== undefined,
     ridePoint: () => ride && line.timeline(host.now(), ride.index).at,
-    surfaceAt: za22CloudSurfaceAt,
+    surfaceAt(east: number, north: number, radius: number) {
+      return za22CloudSurfaceAt(east, north, radius) ?? world?.gate.surfaceAt(east, north, radius);
+    },
+    acceptsStep(fromEast: number, fromNorth: number, toEast: number, toNorth: number, radius: number) {
+      return world?.gate.acceptsStep(fromEast, fromNorth, toEast, toNorth, radius) ?? true;
+    },
     assembly: () => world?.assembly,
     front: () => world?.front,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {

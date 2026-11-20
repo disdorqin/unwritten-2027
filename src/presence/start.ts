@@ -2,6 +2,7 @@ import { createPresenceServer } from './server.js';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { createZa22NightWindowEndpoint } from './za22-night-window-endpoint.js';
+import { westPresenceBounds } from '../shared/za22-west-domain.js';
 
 export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
   const host = process.env.PRESENCE_HOST ?? '0.0.0.0';
@@ -21,18 +22,14 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     requestListener: night.listener,
     ceremonyStartAt,
   });
-  let mountain: Awaited<ReturnType<typeof createPresenceServer>> | undefined;
+  const separateRooms: Awaited<ReturnType<typeof createPresenceServer>>[] = [];
   try {
-    if (process.env.PRESENCE_MOUNTAIN_PORT) {
-      mountain = await createPresenceServer({
-        host,
-        port: Number(process.env.PRESENCE_MOUNTAIN_PORT),
-        ...mountainPresenceBounds,
-        ceremonyStartAt: 0,
-      });
+    for (const [port, bounds] of [[process.env.PRESENCE_MOUNTAIN_PORT, mountainPresenceBounds],
+      [process.env.PRESENCE_WEST_PORT, westPresenceBounds]] as const) {
+      if (port) separateRooms.push(await createPresenceServer({ host, port: Number(port), ...bounds, ceremonyStartAt: 0 }));
     }
   } catch (error) {
-    await server.close();
+    await Promise.allSettled([server, ...separateRooms].map(room => room.close()));
     throw error;
   }
   const timer = dawn && offsets ? setInterval(night.tick, 250) : undefined;
@@ -40,7 +37,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   console.log(`Town presence listening on ${server.address().port}`);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => {
     clearInterval(timer);
-    void Promise.all([server.close(), mountain?.close()]).catch(error => {
+    void Promise.all([server, ...separateRooms].map(room => room.close())).catch(error => {
       console.error(error);
       process.exitCode = 1;
     });

@@ -7,6 +7,11 @@
         uri replace /presence-mountain /presence
         reverse_proxy presence:8091
     }
+    @western path /presence-west /presence-west/*
+    handle @western {
+        uri replace /presence-west /presence
+        reverse_proxy presence:8092
+    }
     @townPresence path /presence /presence/*
     reverse_proxy @townPresence presence:8090
     @entry path / /town-blockout.html

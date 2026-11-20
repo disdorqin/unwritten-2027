@@ -129,6 +129,7 @@ import { createTavernRoosterCharm, tavernRoosterClues } from './town-zodiac-roos
 import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpots, stationTicketStamp } from './landmark-refinement-activity';
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
+import { craterWestSurvey, mountWestCraterRoad, permitsMeteorCraterStep } from './town-za22-crater-road';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale } from './town-snow-cover';
@@ -159,6 +160,14 @@ const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
+let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+function ensureWestCraterRoad() {
+  if (!westCraterRoad) {
+    westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
+    scene.add(westCraterRoad.group);
+  }
+  return westCraterRoad;
+}
 scene.background = new Color('#adc2dd');
 const weatherFog = new Fog('#adc2dd', 360, 1300);
 scene.fog = weatherFog;
@@ -204,7 +213,8 @@ if (mountSummitSkyline) {
   scene.add(skyline);
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
-  (east, north) => grid.heightAt(east, north));
+  (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
+    : grid.heightAt(east, north));
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
   nightOpen: () => presence.northRidgeNightOpen(),
@@ -592,6 +602,7 @@ function geometryAt(east: number, north: number) {
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
+  if (east < 0) return emptyGeometry;
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -2339,7 +2350,10 @@ function walkable(x: number, n: number) {
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
-  const terrainPassable = canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
+  if (x < 0) return x >= craterWestSurvey.west + bodyRadius && n >= 1 && n <= worldBounds.depth - 1;
+  // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
+  const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
+  const terrainPassable = westSeam || canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
   return terrainPassable && !scenery.blocked(x, n) && !scenery.plazaCoverBlocks(x, n, bodyRadius) && !districts.blocked(x, n) &&
     !forest.blocked(x, n) && !streetscape.blocked(x, n);
 }
@@ -2353,6 +2367,7 @@ function surfaceAt(east: number, north: number) {
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
 }
 function outdoorSurfaceAt(east: number, north: number) {
+  if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function snowCleared(east: number, north: number, feet: number) {
@@ -2465,6 +2480,11 @@ function supportAt(
 
 function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+  if (!homeReturn && east < 0) {
+    if (!outdoorWalkable(east, north)) return true;
+    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
+    return !permitsMeteorCraterStep({ east: x, north: n }, { east, north }, presence.northRidgeNightOpen());
+  }
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
   return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
@@ -2474,7 +2494,8 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
 
 function dryTownLandingHeight(east: number, north: number, heightHint?: number, outdoors = false) {
   const canStand = outdoors ? outdoorWalkable : walkable;
-  if (east < bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
+  const townWest = outdoors || !homeReturn ? craterWestSurvey.west : 0;
+  if (east < townWest + bodyRadius || north < bodyRadius || east > worldBounds.width - bodyRadius ||
     north > worldBounds.depth - bodyRadius || !canStand(east, north)) return undefined;
   if (bridgeAt(east, north) === undefined && (isWater(east, north) || townWater.at(east, north))) return undefined;
   const surface = outdoors ? outdoorSurfaceAt(east, north) : surfaceAt(east, north);
@@ -2499,6 +2520,7 @@ function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number)
 }
 
 function tryMove(nextX: number, nextN: number) {
+  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
   const limit = feet + (airHeight === undefined ? stepHeight : surfaceEpsilon);
@@ -2786,6 +2808,7 @@ function refreshWorldAction() {
 function renderCloudRoute(frameSeconds: number) {
   const cabin = cloudRoute.ridePoint();
   if (cabin) {
+    cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
     element('position').textContent = '缆车一线 · 前山';
   } else {
@@ -2804,7 +2827,8 @@ function renderCloudRoute(frameSeconds: number) {
     });
     walkRender.lerpVectors(walkPrevious, walkCurrent, interpolation);
     faceFrom(walkRender.x, -walkRender.z, walkRender.y, yaw, pitch);
-    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · 云海台`;
+    const place = cloudRoute.updateView({ east: walkRender.x, north: -walkRender.z, height: walkRender.y - eye });
+    element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}`;
   }
   presence.sample(!cabin && walking, x, n, airHeight ?? ground, yaw);
   presence.update(Math.min(.25, frameSeconds));
@@ -2996,6 +3020,7 @@ renderer.setAnimationLoop(now => {
     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
+  presence.setWestDomain(walking && !homeReturn && x < 0);
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
     boardingGround ? -camera.position.z : seated?.n ?? n,
@@ -3070,7 +3095,10 @@ renderer.setAnimationLoop(now => {
   const towerInterior = architecture.get('clocktower')?.userData.detailInterior as Group | undefined;
   if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
-  if (!homeReturn) prepareLandmarks(camera.position.x, -camera.position.z);
+  if (!homeReturn) {
+    if (!cloudRoute.active() && camera.position.x < 100) ensureWestCraterRoad();
+    prepareLandmarks(camera.position.x, -camera.position.z);
+  }
   if (!homeReturn && !extensionStreetsLoad && (camera.position.x > 320 || -camera.position.z > 275)) {
     void prepareExtensionStreets();
   }
