@@ -105,7 +105,7 @@ export function createTownNightWindow(host: TownNightWindowHost, restoredBeaconA
       } finally {
         recording = false;
       }
-      return { kind: 'town-night-beacon' as const, at, state: windowState(now, schedule, receivedAt) };
+      return { kind: 'town-night-beacon' as const, at, expiresAt: schedule.cueExpiresAt, state: windowState(now, schedule, receivedAt) };
     },
     /** Reconnect reads the current state without emitting a cue. */
     snapshot() {
