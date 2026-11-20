@@ -1,8 +1,8 @@
 diff --git a/tools/verify-za22-live.mjs b/tools/verify-za22-live.mjs
-index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8b142865f 100644
+index fea093075252e0425b49682a2d2a1d196701095f..0537de5481cba896df2a66dfaddf828b9dd3abf9 100644
 --- a/tools/verify-za22-live.mjs
 +++ b/tools/verify-za22-live.mjs
-@@ -2,15 +2,20 @@ import assert from 'node:assert/strict';
+@@ -2,15 +2,21 @@ import assert from 'node:assert/strict';
  import { mkdir, writeFile } from 'node:fs/promises';
  import { join } from 'node:path';
  import { chromium } from '@playwright/test';
@@ -11,13 +11,14 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
  const [origin, output, segment = 'all'] = process.argv.slice(2);
  assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 -const url = new URL('/?profile', origin);
-+const bare = segment === 'bare' || segment === 'north';
++const bare = ['bare', 'north', 'mountain-bare', 'crater-bare'].includes(segment);
++const mountainDragFallback = segment === 'mountain-bare';
 +const url = bare ? new URL(origin) : new URL('/?profile', origin);
  assert.equal(url.protocol, 'http:');
  assert.equal(url.hostname, '127.0.0.1');
 -assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 +if (bare) assert.equal(url.href, `${url.origin}/`, 'ZA-30 requires the bare production root, with no query or hash');
-+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'north', 'bare'].includes(segment), segment);
++assert.ok(bare || ['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
  
  const spawn = [223, 180];
 +const northLook = [236, 180];
@@ -25,7 +26,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
  const station = [
    [245, 192], [251, 192], [278, 192], [304, 192], [315, 199], [319, 230], [332, 245],
    [350, 249], [382, 220], [398, 207], [410, 207], [427, 214], [445, 221], [456, 222],
-@@ -26,7 +31,7 @@ const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683],
+@@ -26,7 +32,7 @@ const gate = [[336, 663.25], [300, 663.25], [300, 676], [300, 696], [300, 683],
  const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
  assert.ok(Number.isInteger(width) && width >= 320 && Number.isInteger(height) && height >= 200);
  const viewport = { width, height };
@@ -34,7 +35,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
  assert.ok(Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0 && deviceScaleFactor <= 2);
  const dragX = Math.round(width * .48), dragY = Math.round(height * .51);
  const maxDrag = Math.round(width * .34);
-@@ -34,9 +39,12 @@ const tau = 2 * Math.PI;
+@@ -34,9 +40,14 @@ const tau = 2 * Math.PI;
  const yawDistance = (from, to) => ((to - from + Math.PI) % tau + tau) % tau - Math.PI;
  const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
  const hardware = process.env.ZA22_HARDWARE === '1';
@@ -44,19 +45,25 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
 -const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 +const report = { url: url.href, segment, viewport, deviceScaleFactor, headless, quality: bare ? 'fresh default' : 'smooth',
 +  gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], stageFailures: [] };
++if (bare) report.input = mountainDragFallback ? 'native mouse, production drag fallback (Pointer Lock unavailable in this context)'
++  : 'native mouse, standard browser Pointer Lock';
 +if (bare && process.env.ZA30_LOCAL_TEST_NIGHT) report.localTestNight = JSON.parse(process.env.ZA30_LOCAL_TEST_NIGHT);
  
  await mkdir(output, { recursive: true });
  let browser;
-@@ -45,6 +53,7 @@ let measuring = true;
+@@ -45,6 +56,11 @@ let measuring = true;
  
  async function openTown(name) {
    const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
 +  if (bare) await context.addInitScript(observeBareTown);
++  if (mountainDragFallback) await context.addInitScript(() => {
++    // The standalone mountain route selects the viewer's ordinary fallback.
++    Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
++  });
    const page = await context.newPage();
    lastPage = page;
    const evidence = { name, checkpoints: [], sockets: [], poses: [] };
-@@ -95,7 +104,7 @@ async function openTown(name) {
+@@ -95,7 +111,7 @@ async function openTown(name) {
        });
      });
    });
@@ -65,7 +72,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
      // Use the production drag fallback for consistent native mouse input in headless Chromium.
      // Only the browser API is made unavailable. All movement still runs through the viewer.
      Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
-@@ -106,11 +115,12 @@ async function openTown(name) {
+@@ -106,11 +122,12 @@ async function openTown(name) {
    const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
    assert.equal(response?.status(), 200);
    assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
@@ -81,7 +88,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
    if (!report.gpu) report.gpu = await page.evaluate(() => {
      const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
      const names = gl?.getExtension('WEBGL_debug_renderer_info');
-@@ -128,12 +138,13 @@ async function openTown(name) {
+@@ -128,12 +145,13 @@ async function openTown(name) {
  }
  
  async function readPose(page) {
@@ -98,7 +105,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
    const point = positionPattern.exec(frame.hud);
    return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
      height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100 : undefined };
-@@ -147,7 +158,43 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
+@@ -147,7 +165,46 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
    return pose;
  }
  
@@ -131,7 +138,10 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
 +    assert.ok(anchor, 'The canvas needs an unobstructed native look target');
 +    await page.mouse.move(anchor.x, anchor.y);
 +    await page.mouse.down();
-+    try { await page.mouse.move(anchor.x + dx, anchor.y + yMove); }
++    try {
++      const steps = mountainDragFallback ? Math.max(2, Math.ceil(Math.hypot(dx, yMove) / 55)) : 1;
++      await page.mouse.move(anchor.x + dx, anchor.y + yMove, { steps });
++    }
 +    finally { await page.mouse.up(); }
 +    await page.waitForTimeout(120);
 +  }
@@ -143,7 +153,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
    for (let attempt = 0; attempt < 16; ++attempt) {
      const before = await waitForWire(page, evidence);
      const delta = yawDistance(before.yaw, desired);
-@@ -243,14 +290,73 @@ async function snapshot(page, evidence, label) {
+@@ -243,14 +300,73 @@ async function snapshot(page, evidence, label) {
    evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
  }
  
@@ -211,15 +221,15 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
    });
    report.browser = browser.version();
 -  if (segment !== 'crater') {
-+  if (bare) await collectStage('north', async () => {
++  if (segment === 'bare' || segment === 'north') await collectStage('north', async () => {
 +    const { page, evidence } = await openTown('north');
 +    await captureMainSummit(page, evidence);
 +  });
-+  if (segment !== 'crater' && segment !== 'north') await collectStage('mountain', async () => {
++  if (!['crater', 'crater-bare', 'north'].includes(segment)) await collectStage('mountain', async () => {
      const { page, evidence } = await openTown('cable');
      await follow(page, evidence, station, 'station');
      if (segment === 'station') {
-@@ -262,18 +368,19 @@ try {
+@@ -262,18 +378,19 @@ try {
        await page.waitForFunction(() => document.querySelector('#position')?.textContent?.includes('缆车一线'),
          null, { timeout: 135_000 });
        await snapshot(page, evidence, 'cable-boarding');
@@ -245,7 +255,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
        await waitForWire(page, evidence, pose => pose?.area === 'mountain' && Math.abs(pose.height - 347) < .7);
        await snapshot(page, evidence, 'cloud-cable-arrival');
        if (segment === 'cloud' || segment === 'all') {
-@@ -282,19 +389,26 @@ try {
+@@ -282,19 +399,26 @@ try {
          await card(page, '星港坪');
          await snapshot(page, evidence, 'cloud-runway');
        }
@@ -272,11 +282,11 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
 -  }
 -  if (segment === 'crater' || segment === 'all') {
 +  });
-+  if (segment === 'crater' || segment === 'all' || segment === 'bare') await collectStage('crater', async () => {
++  if (['crater', 'crater-bare', 'all', 'bare'].includes(segment)) await collectStage('crater', async () => {
      const { page, evidence, westWindow } = await openTown('crater');
      await follow(page, evidence, westShore, 'west-shore');
      await follow(page, evidence, crater, 'crater');
-@@ -323,8 +437,9 @@ try {
+@@ -323,8 +447,9 @@ try {
      await snapshot(page, evidence, 'crater-inside');
      await walkTo(page, evidence, [-67, 159], 'crater-return');
      await snapshot(page, evidence, 'crater-return');
@@ -287,7 +297,7 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
  } catch (error) {
    report.failure = error instanceof Error ? error.stack : String(error);
    if (lastPage && !lastPage.isClosed()) {
-@@ -337,7 +452,7 @@ try {
+@@ -337,7 +462,7 @@ try {
  } finally {
    measuring = false;
    report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
@@ -297,19 +307,20 @@ index fea093075252e0425b49682a2d2a1d196701095f..e8c2b5992594e9f193f67bea608b12c8
      frames: path.poses.length, last: path.checkpoints.at(-1) })), errors: report.errors, failure: report.failure }));
    await browser?.close();
 diff --git a/tools/verify-za22-local.mjs b/tools/verify-za22-local.mjs
-index 2bdfa13cece0338cd03099072b15eb42ed7bce13..6328f58346eab308e7e6023f3bd03b96c3a0e813 100644
+index 2bdfa13cece0338cd03099072b15eb42ed7bce13..4dae1fe03909ece2e2255f6c363f8542fa448e4b 100644
 --- a/tools/verify-za22-local.mjs
 +++ b/tools/verify-za22-local.mjs
-@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
+@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
  import { promisify } from 'node:util';
  
  const [segment, evidencePath] = process.argv.slice(2);
 -assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
-+assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'north', 'bare'].includes(segment) && evidencePath,
++const bareRoute = ['bare', 'mountain-bare', 'crater-bare'].includes(segment);
++assert.ok((bareRoute || ['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'north'].includes(segment)) && evidencePath,
    'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
  const run = promisify(execFile);
  const repo = fileURLToPath(new URL('../', import.meta.url));
-@@ -153,12 +153,20 @@ try {
+@@ -153,12 +154,20 @@ try {
    frontend = servePreview(ports, commit);
    const port = await usePort(frontend);
    const base = `http://${host}:${port}`;
@@ -317,7 +328,7 @@ index 2bdfa13cece0338cd03099072b15eb42ed7bce13..6328f58346eab308e7e6023f3bd03b96
 +  const nightSchedule = {
 +    dawnEpoch: anchor - 390_000, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
 +  };
-+  if (segment === 'bare') {
++  if (bareRoute) {
 +    nightSchedule.specialNight = {
 +      duskAt: anchor - 1_000, beaconAt: anchor + 18_000, cueExpiresAt: anchor + 35_000, morningBellAt: anchor + 600_000,
 +    };
@@ -333,7 +344,7 @@ index 2bdfa13cece0338cd03099072b15eb42ed7bce13..6328f58346eab308e7e6023f3bd03b96
      TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
    });
    await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
-@@ -166,6 +174,7 @@ try {
+@@ -166,6 +175,7 @@ try {
    driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
      base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {
      ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
@@ -343,10 +354,10 @@ index 2bdfa13cece0338cd03099072b15eb42ed7bce13..6328f58346eab308e7e6023f3bd03b96
  } finally {
 diff --git a/tools/verify-za30-bare-observer.mjs b/tools/verify-za30-bare-observer.mjs
 new file mode 100644
-index 0000000000000000000000000000000000000000..65a3b327e0673c200839a0d06fdd80ab80ef5ca1
+index 0000000000000000000000000000000000000000..75ffbb3ebd4641be9a2cc216c41786a7ce3d2399
 --- /dev/null
 +++ b/tools/verify-za30-bare-observer.mjs
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,105 @@
 +// Runs before the viewer in a fresh browser context. Forward calls unchanged
 +// and read the real camera and the surveyed main-summit GPU draw.
 +export function observeBareTown() {
@@ -396,8 +407,11 @@ index 0000000000000000000000000000000000000000..65a3b327e0673c200839a0d06fdd80ab
 +    if (!uniform || this.canvas.parentElement?.id !== 'scene') return;
 +    const m = offsets[0] ? values.subarray(offsets[0]) : values;
 +    const data = programs.get(uniform.program);
-+    if (uniform.name === 'modelViewMatrix') data.modelView = m;
-+    else if (uniform.name === 'viewMatrix') observation.camera = cameraFrom(m);
++    if (uniform.name === 'modelViewMatrix') {
++      // Three reuses one temporary mat4 array across programs. Save the values
++      // through the next draw, even if the uniform is still valid and skipped.
++      (data.modelView ??= new Float32Array(16)).set(m);
++    } else if (uniform.name === 'viewMatrix') observation.camera = cameraFrom(m);
 +    else data.far = m[14] / (m[10] + 1);
 +  };
 +
