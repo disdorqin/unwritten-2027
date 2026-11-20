@@ -1,0 +1,257 @@
+diff --git a/tools/jx1-formal/verify-jx1-production.mjs b/tools/jx1-formal/verify-jx1-production.mjs
+index 17d6152..ffb647b 100644
+--- a/tools/jx1-formal/verify-jx1-production.mjs
++++ b/tools/jx1-formal/verify-jx1-production.mjs
+@@ -1,5 +1,5 @@
+ import assert from 'node:assert/strict';
+-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
++import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+ import { createRequire } from 'node:module';
+ import { tmpdir } from 'node:os';
+ import path from 'node:path';
+@@ -36,6 +36,7 @@
+     for (const key of ['mask', 'home', 'menuId', 'dialogOpen', 'canvasFocused', 'canMove', 'segmentRejected', 'segmentReached']) {
+       if (key in expected && pose[key] !== expected[key]) return;
+     }
++    if (expected.segmentFinished && !pose.segmentReached && !pose.segmentRejected) return;
+     if (expected.action && !pose.action.includes(expected.action)) return;
+     if (expected.near && Math.hypot(pose.east - expected.near.east, pose.north - expected.near.north) > expected.tolerance) return;
+     return pose;
+@@ -170,17 +171,23 @@
+
+ async function moveTo(session, target, options = {}) {
+   const { page } = session;
++  const continuous = session.continuousDeadline !== undefined;
++  const remaining = continuous ? session.continuousDeadline - Date.now() : Infinity;
++  assert.ok(remaining > 0, 'Continuous keyboard walk exceeded the browser run budget');
+   const before = await sample(page);
+   const tolerance = target.tolerance ?? .22;
+   if (!options.block && distance(before, target) <= tolerance) return { before, after: before, moves: [], length: 0 };
+   await observe(page, 'aim', target);
+-  await observe(page, 'startSegment', options.block ? undefined : { ...target, tolerance });
++  await observe(page, 'startSegment', options.block && !continuous ? undefined : { ...target, tolerance });
+   let end;
+   let observed;
+   let moves;
++  let waitError;
+   const expected = { after: before.frames, home: before.home, mask: before.mask };
+   // Software WebGL can spend over a second on a frame, with at most two native walking steps per frame.
+-  const limit = target.timeout ?? Math.max(timeout, Math.ceil(distance(before, target) * 10_000));
++  const pointLimit = target.timeout ?? Math.max(continuous ? 120_000 : timeout,
++    Math.ceil(distance(before, target) * (continuous ? 20_000 : 10_000)));
++  const limit = Math.min(remaining, pointLimit);
+   try {
+     if (session.cdp && !options.block) {
+       const cruise = distance(before, target) > touchApproachDistance;
+@@ -198,7 +205,10 @@
+       end = await beginForward(session);
+     }
+     let observation;
+-    if (options.block) {
++    if (continuous) {
++      observation = await waitForFrame(page, { ...expected, segmentFinished: true },
++        options.block ? Math.min(remaining, target.timeout ?? 90_000) : limit);
++    } else if (options.block) {
+       observation = await waitForFrame(page, { ...expected, segmentRejected: true }, target.timeout ?? 12_000);
+     } else {
+       observation = await waitForFrame(page, { ...expected, segmentReached: true }, limit);
+@@ -211,16 +221,30 @@
+     } finally {
+       await observation.dispose();
+     }
++  } catch (error) {
++    waitError = error;
+   } finally {
+     try { if (end) await end(); } finally { moves = await observe(page, 'endSegment'); }
+     options.diagnostics?.push({ target, before, observed, moves });
+   }
+   const accepted = moves.filter(move => move.accepted);
+   const rejected = moves.filter(move => !move.accepted);
++  if (waitError) {
++    if (!continuous || options.block || waitError.name !== 'TimeoutError') throw waitError;
++    const last = moves.at(-1)?.after ?? before;
++    const cause = rejected.length ? 'Native collision' : accepted.length ? 'Progress before timeout' : 'No native walking step';
++    throw new Error(`${cause} at E${target.east}/N${target.north} after ${limit} ms. ` +
++      `${accepted.length} accepted, ${rejected.length} rejected, ${distance(last, target).toFixed(3)} m remaining.`,
++    { cause: waitError });
++  }
+   assert.ok(moves.length > 0, 'Input did not reach production tryMove');
+   if (options.block) {
+     assert.ok(rejected.length > 0, 'The attempted wall approach had no rejected production movement');
+     assert.ok(distance(observed, target) > tolerance, 'The player reached a point on the wrong side of the adjacent wall');
++    if (continuous) {
++      assert.ok(!accepted.some(move => distance(move.after, target) <= tolerance),
++        'An accepted native step reached the point behind the adjacent wall');
++    }
+   } else {
+     assert.deepEqual(rejected, [], 'The surveyed passable route collided');
+     assert.ok(accepted.some(move => distance(move.after, target) <= tolerance),
+@@ -401,6 +425,8 @@
+
+ async function tourHome(session, plan, door, output, result) {
+   const { page } = session;
++  const continuous = session.continuousDeadline !== undefined;
++  const inputStart = continuous ? (await observe(page, 'events')).length : 0;
+   result.legs = {};
+   result.frameCounts = {};
+   result.door = door;
+@@ -429,7 +455,9 @@
+   const inside = await frame(page, { mask: outdoor, home: null });
+   assert.ok(distance(inside, plan.object) <= (plan.object.tolerance ?? .22) + .15, 'Did not pass the surveyed interactive piece');
+   if (plan.object.action) result.objectAction = await frame(page, { mask: outdoor, home: null, action: plan.object.action });
+-  result.insideScreenshot = await capture(page, output, `${door.id.replaceAll(':', '-')}-${session.cdp ? 'touch' : 'desktop'}-inside.png`);
++  if (!continuous) {
++    result.insideScreenshot = await capture(page, output, `${door.id.replaceAll(':', '-')}-${session.cdp ? 'touch' : 'desktop'}-inside.png`);
++  }
+   result.legs.egress = [];
+   await walkGroup(session, plan.egress, result.legs.egress);
+   result.egressThreshold = checkCrossing(result.legs.egress, plan.threshold, door, false);
+@@ -444,14 +472,14 @@
+   result.started = tourStartsAt;
+   result.traveled = Object.fromEntries(Object.entries(result.legs).map(([role, entries]) => [role, entries
+     .flatMap(entry => entry.moves).filter(move => move.accepted).reduce((sum, move) => sum + distance(move.before, move.after), 0)]));
+-  const inputs = await observe(page, 'events');
++  const inputs = (await observe(page, 'events')).slice(inputStart);
+   assert.ok(inputs.every(event => event.trusted));
+   assert.ok(session.cdp ? inputs.some(event => event.type === 'touchmove' && event.id === 'touch-walk')
+     : inputs.some(event => event.code === 'KeyW'));
+   assert.deepEqual(session.errors, []);
+ }
+
+-async function runTours(browser, url, plan, tours, doors, output, evidence) {
++async function runTours(browser, url, plan, tours, doors, output, evidence, continuousProof) {
+   const append = (tour, session) => {
+     const entry = { id: tour.id, session: session.id, touch: Boolean(session.cdp) };
+     evidence.tours.push(entry);
+@@ -460,9 +488,28 @@
+   if (plan.mode === 'continuous-walk') {
+     const session = await start(browser, url, false);
+     try {
+-      await observe(session.page, 'registry');
++      const registry = await observe(session.page, 'registry');
++      if (continuousProof) {
++        session.continuousDeadline = Date.now() + 210 * 60_000;
++        evidence.registry = registry;
++        evidence.comparison = compareRegistry(continuousProof.baseline, registry, plan.enableIds);
++        evidence.continuousSession = session.id;
++        evidence.completedHomes = [];
++        evidence.status = 'walking';
++      }
+       await observe(session.page, 'stage', plan.start);
+-      for (const tour of tours) await tourHome(session, tour, doors.get(tour.id), output, append(tour, session));
++      for (const tour of tours) {
++        const entry = append(tour, session);
++        await tourHome(session, tour, doors.get(tour.id), output, entry);
++        if (continuousProof) {
++          assert.equal(entry.session, evidence.continuousSession);
++          assert.ok(entry.returned && entry.ingressThreshold && entry.egressThreshold);
++          evidence.completedHomes.push(tour.id);
++          await continuousProof.saveProgress();
++          console.log(JSON.stringify({ session: session.id, returnedToStreet: tour.id, completed: evidence.completedHomes.length }));
++        }
++      }
++      if (continuousProof) assert.deepEqual(evidence.completedHomes, tours.map(tour => tour.id));
+     } finally { await session.context.close(); }
+   } else {
+     for (const tour of tours) {
+@@ -474,7 +521,7 @@
+       } finally { await session.context.close(); }
+     }
+   }
+-  if (plan.touchTour) {
++  if (plan.touchTour && !continuousProof) {
+     await runTouchTour(browser, url, tours.find(tour => tour.id === plan.touchTour), doors, output, evidence);
+   }
+ }
+@@ -493,13 +540,16 @@
+
+ const [checkoutArg, baselineArg, planArg, outArg, ...options] = process.argv.slice(2);
+ assert.ok(checkoutArg && baselineArg && planArg && outArg && new Set(options).size === options.length &&
+-    options.every(option => ['--build-only', '--touch-only'].includes(option)),
+-  'Usage: node verify-jx1-production.mjs CHECKOUT BASELINE_JSON PLAN_JSON OUTPUT_DIR [--build-only] [--touch-only]');
++    options.every(option => ['--build-only', '--touch-only', '--continuous-only'].includes(option)),
++  'Usage: node verify-jx1-production.mjs CHECKOUT BASELINE_JSON PLAN_JSON OUTPUT_DIR [--build-only] [--touch-only|--continuous-only]');
+ const touchOnly = options.includes('--touch-only');
++const continuousOnly = options.includes('--continuous-only');
+ const checkout = path.resolve(checkoutArg);
+ const output = path.resolve(outArg);
+ const [baseline, plan] = await Promise.all([baselineArg, planArg].map(async file => JSON.parse(await readFile(file, 'utf8'))));
+ const { doors, tours, menuDoors } = validatePlan(plan, baseline);
++assert.ok(!continuousOnly || (!touchOnly && plan.mode === 'continuous-walk'),
++  '--continuous-only requires the continuous route without --touch-only');
+ const touchTour = tours.find(tour => tour.id === plan.touchTour);
+ if (touchOnly) assert.ok(touchTour, '--touch-only requires a surveyed full route in plan.touchTour');
+ const temporary = await mkdtemp(path.join(tmpdir(), 'jx1-production-proof-'));
+@@ -508,8 +558,15 @@
+   baseline: baseline.commit, runtime: process.env.JX1_RUNTIME_COMMIT ?? null, mode: plan.mode, status: 'starting',
+   probeActivation: plan.enableIds, desktop, mobile, menus: [], tours: [], connectionLogs: [],
+   ...(touchOnly ? { modality: 'touch-only', touchTour: touchTour.id } : {}),
++  ...(continuousOnly ? { modality: 'continuous-keyboard', screenshots: false } : {}),
+ };
+ await mkdir(output, { recursive: true });
++async function saveEvidence() {
++  const target = path.join(output, 'jx1-production-proof.json');
++  const staging = target + '.tmp';
++  await writeFile(staging, JSON.stringify(evidence, null, 2) + '\n');
++  await rename(staging, target);
++}
+ let server;
+ let browser;
+ try {
+@@ -527,14 +584,16 @@
+     evidence.step = 'launch-browser';
+     browser = await chromium.launch({ executablePath: process.env.JX1_CHROMIUM_PATH, args: swiftShader });
+     evidence.browser = browser.version();
+-    evidence.step = 'compare-complete-registry';
+-    const session = await start(browser, started.url, touchOnly);
+-    try {
+-      evidence.registry = await observe(session.page, 'registry');
+-      evidence.comparison = compareRegistry(baseline, evidence.registry, plan.enableIds);
+-      assert.deepEqual(session.errors, []);
+-    } finally { await session.context.close(); }
+-    if (!touchOnly) {
++    if (!continuousOnly) {
++      evidence.step = 'compare-complete-registry';
++      const session = await start(browser, started.url, touchOnly);
++      try {
++        evidence.registry = await observe(session.page, 'registry');
++        evidence.comparison = compareRegistry(baseline, evidence.registry, plan.enableIds);
++        assert.deepEqual(session.errors, []);
++      } finally { await session.context.close(); }
++    }
++    if (!continuousOnly && !touchOnly) {
+       evidence.step = 'check-original-legacy-action';
+       evidence.plainDoor = {};
+       await checkLegacy(browser, started.url, doors.get(plan.legacyDoor), evidence.plainDoor);
+@@ -551,7 +610,7 @@
+         await checkMenu(browser, started.url, id, false, output, result);
+       }
+     }
+-    if (menuDoors.length) {
++    if (!continuousOnly && menuDoors.length) {
+       const id = touchOnly ? touchTour.id : plan.touchMenu ?? menuDoors[0];
+       assert.ok(plan.enableIds.includes(id));
+       evidence.step = `touch-menu:${id}`;
+@@ -566,10 +625,11 @@
+       console.log(JSON.stringify({ status: evidence.status, door: touchTour.id, nativeTours: evidence.tours.length }));
+     } else if (tours.length) {
+       evidence.step = 'physical-street-to-home-tours';
+-      await runTours(browser, started.url, plan, tours, doors, output, evidence);
+-    }
++      await runTours(browser, started.url, plan, tours, doors, output, evidence,
++        continuousOnly ? { baseline, saveProgress: saveEvidence } : undefined);
+     if (!touchOnly) evidence.status = `${plan.mode}-passed`;
+     evidence.step = 'passed';
++    }
+   }
+ } catch (error) {
+   evidence.status = 'failed';
+@@ -581,7 +641,7 @@
+     if (browser) await browser.close();
+     if (server) await server.close();
+   } finally {
+-    await writeFile(path.join(output, 'jx1-production-proof.json'), JSON.stringify(evidence, null, 2) + '\n');
++    await saveEvidence();
+     await rm(temporary, { recursive: true, force: true });
+   }
+ }
