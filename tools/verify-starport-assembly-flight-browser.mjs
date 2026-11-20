@@ -100,9 +100,14 @@ async function aimAt(slot) {
 }
 
 async function interact(slot, kind) {
-  assert.equal((await state()).assembly.aimed, slot);
+  const before = (await state()).assembly;
+  assert.equal(before.aimed, slot);
+  const revision = before.profile.revision + Number(kind === 'placed' || kind === 'ignited');
   await page.keyboard.press('e');
-  const wait = await page.waitForFunction(expected => window.starportFlightProof().assembly.lastResult === expected, kind);
+  const wait = await page.waitForFunction(({ kind, revision }) => {
+    const { lastResult, profile } = window.starportFlightProof().assembly;
+    return lastResult === kind && profile.revision === revision;
+  }, { kind, revision });
   await wait.dispose();
   return (await state()).assembly.profile;
 }
