@@ -1,12 +1,13 @@
 import { Group, type BufferGeometry, type Material, type Mesh } from 'three';
 import { buildSkyCityBuildings } from './sky-city-buildings';
 import { buildSkyCityIsland } from './sky-city-island';
-import { buildSkyCitySilhouette } from './sky-city-silhouette';
+import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
+import type { SkyCityFoot } from './sky-city-site';
 import { buildSkyCityTower } from './sky-city-tower';
 import { buildSkyCityTree } from './sky-city-tree';
 
 export type SkyCityTier = 'hidden' | 'silhouette' | 'full';
-export type SkyCityFoot = { x: number; y: number; z: number };
+export type { SkyCityFoot } from './sky-city-site';
 export const skyCityNearMetres = 145;
 const footRadius = .28;
 const stepHeight = .42;
@@ -76,10 +77,8 @@ export function mountSkyCity(parent: Group) {
 
   return { show, current: () => current, footModel: () => current === 'full' ? full : undefined,
     update(seconds: number) {
-      if (current === 'silhouette' && silhouette) {
-        silhouette.position.set(Math.sin(seconds * .1) * 1.15, Math.sin(seconds * .08) * .55, 0);
-        silhouette.rotation.y = Math.sin(seconds * .075) * .042;
-      } else if (current === 'full') full?.update(seconds);
+      if (current === 'silhouette' && silhouette) updateSkyCitySilhouette(silhouette, seconds);
+      else if (current === 'full') full?.update(seconds);
     },
     dispose() {
       if (silhouette) disposeModel(silhouette);

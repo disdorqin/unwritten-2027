@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, type Mesh } from 'three';
-import { createSkyCityApproach } from '../tools/voxel-tavern/town-blockout/sky-city-approach';
+import { Group, Vector3, type Mesh } from 'three';
+import { createSkyCityApproach, createSkyCityLanding } from '../tools/voxel-tavern/town-blockout/sky-city-approach';
+import { createSkyCitySite } from '../tools/voxel-tavern/town-blockout/sky-city-site';
 import { mountSkyCity, skyCityTier, type SkyCityFoot } from '../tools/voxel-tavern/town-blockout/sky-city';
 
 test('valley has no island and the summit loads one low-detail mesh before the close flight view', () => {
@@ -23,6 +24,44 @@ test('valley has no island and the summit loads one low-detail mesh before the c
   assert.equal(silhouette.parent, null);
   city.show('hidden');
   assert.equal(layer.children.length, 0);
+  city.dispose();
+});
+
+test('a translated and turned site aligns the reveal silhouette, landing surface and locked gate', () => {
+  const site = createSkyCitySite({ east: -318, north: 912, height: 785 }, .64);
+  const layer = new Group();
+  site.place(layer);
+  const city = mountSkyCity(layer);
+  const localNorth = site.toWorld({ x: 0, y: 0, z: -1 });
+  const heading = Math.atan2(localNorth.east - site.origin.east, localNorth.north - site.origin.north);
+  assert.ok(Math.abs(heading - site.yaw) < 1e-10);
+
+  city.show('silhouette');
+  city.update(11);
+  const silhouette = layer.children[0]!;
+  const sightline = silhouette.localToWorld(new Vector3(0, 3, 0));
+  const sightTarget = site.toWorld({ x: silhouette.position.x, y: silhouette.position.y + 3, z: 0 });
+  assert.ok(sightline.distanceTo(new Vector3(sightTarget.east, sightTarget.height, -sightTarget.north)) < 1e-9);
+
+  city.show('full');
+  const model = city.footModel()!;
+  const landing = createSkyCityLanding(site, { islandFloorAt: model.floorAt, islandBlocked: model.obstructs });
+  const localLane = new Vector3(-14, 0, 36);
+  const lane = site.toWorld(localLane);
+  assert.ok(model.group.localToWorld(localLane.clone()).distanceTo(new Vector3(lane.east, lane.height, -lane.north)) < 1e-9);
+  const local = site.toLocal(lane);
+  assert.ok(localLane.distanceTo(new Vector3(local.x, local.y, local.z)) < 1e-9);
+  assert.ok(landing.onLane(lane));
+  assert.deepEqual(landing.surfaceAt(lane.east, lane.north), { height: lane.height, kind: 'roof', slopeDegrees: 0, obstacleAhead: 0 });
+  assert.equal(landing.blocked(lane, .35), false);
+  const offLane = site.toWorld({ x: -13, y: 0, z: -18 });
+  assert.equal(landing.onLane(offLane), false);
+  assert.equal(landing.surfaceAt(offLane.east, offLane.north)?.obstacleAhead, 2);
+  assert.equal(landing.surfaceAt(localLane.x, -localLane.z), undefined);
+
+  const [x, y, z] = model.gate;
+  const gate = site.toWorld({ x, y, z });
+  assert.equal(landing.blocked(gate, .28), true);
   city.dispose();
 });
 

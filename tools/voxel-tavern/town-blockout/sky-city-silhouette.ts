@@ -17,6 +17,11 @@ const stone = '#aab9bf';
 const roof = '#bac8cc';
 const bough = '#5c6b68';
 
+export function updateSkyCitySilhouette(silhouette: Group, seconds: number) {
+  silhouette.position.set(Math.sin(seconds * .1) * 1.15, Math.sin(seconds * .08) * .55, 0);
+  silhouette.rotation.y = Math.sin(seconds * .075) * .042;
+}
+
 /** One opaque draw for the mountain view. The full city shares this island's local frame. */
 export function buildSkyCitySilhouette() {
   const parts: BufferGeometry[] = [];

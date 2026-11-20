@@ -2,7 +2,7 @@ import { AmbientLight, BufferGeometry, Color, DirectionalLight, Float32BufferAtt
   IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
 import { createDesktopLook } from './desktop-look';
 import { mountSkyCity, skyCityTier, type SkyCityFoot } from './sky-city';
-import { createSkyCityApproach, skyCityDatum, skyCityDeparture, skyCityDepartureBounds, skyCityDepartureFloorAt } from './sky-city-approach';
+import { createSkyCityApproach, skyCityApproachSite, skyCityDeparture, skyCityDepartureBounds, skyCityDepartureFloorAt } from './sky-city-approach';
 import type { AircraftThrottle } from '../../../src/shared/aircraft-flight';
 
 const scene = new Scene();
@@ -16,7 +16,7 @@ sunlight.position.set(-42, 130, 65);
 scene.add(sunlight);
 
 const islandFrame = new Group();
-islandFrame.position.y = skyCityDatum;
+skyCityApproachSite.place(islandFrame);
 scene.add(islandFrame);
 const city = mountSkyCity(islandFrame);
 const departure = new Group();
@@ -41,8 +41,9 @@ for (let index = 0; index < 26; index++) {
   const angle = index * 2.399963;
   const span = 62 + index * 4.5;
   const cloud = new Mesh(cloudGeometry, cloudFinish);
-  cloud.position.set(Math.cos(angle) * span, skyCityDatum - 47 + Math.sin(index * 3.1) * 10,
-    Math.sin(angle) * span + 23);
+  const cloudAt = skyCityApproachSite.toWorld({ x: Math.cos(angle) * span, y: -47 + Math.sin(index * 3.1) * 10,
+    z: Math.sin(angle) * span + 23 });
+  cloud.position.set(cloudAt.east, cloudAt.height, -cloudAt.north);
   cloud.scale.set(18 + index % 4 * 11, 2.2 + index % 3, 11 + index % 6 * 4);
   clouds.add(cloud);
 }
@@ -70,6 +71,7 @@ const held = new Set<string>();
 const keys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Digit1', 'Digit2', 'Digit3']);
 
 const newApproach = () => createSkyCityApproach({
+  site: skyCityApproachSite,
   islandFloorAt: (x, z) => city.footModel()?.floorAt(x, z),
   islandBlocked: (x, z, y, radius) => city.footModel()?.obstructs(x, z, y, radius) ?? false,
 });
@@ -154,7 +156,8 @@ function walk(dt: number) {
   foot = model.step(foot, x + dx, z + dz) ?? model.step(foot, x + dx, z) ?? model.step(foot, x, z + dz) ?? foot;
   const [gx, gy, gz] = model.gate;
   status.textContent = Math.hypot(gx - foot.x, gy - foot.y, gz - foot.z) < 4 ? '未央门 · 锁闭' : '天空之城 · 观测站';
-  lookFrom(foot.x, skyCityDatum + foot.y + 1.65, foot.z, yaw, pitch);
+  const eye = skyCityApproachSite.toWorld({ ...foot, y: foot.y + 1.65 });
+  lookFrom(eye.east, eye.height, -eye.north, yaw + skyCityApproachSite.yaw, pitch);
 }
 
 function resize() {
@@ -179,7 +182,8 @@ renderer.setAnimationLoop(now => {
     lookFrom(skyCityDeparture.east, ledgeTop + 1.7, -skyCityDeparture.north, yaw, pitch - .09);
   } else if (view === 'aircraft') {
     const state = approach.snapshot();
-    const distance = Math.hypot(state.feet.east, state.feet.north);
+    const origin = skyCityApproachSite.origin;
+    const distance = Math.hypot(state.feet.east - origin.east, state.feet.north - origin.north);
     const tier = skyCityTier('aircraft', distance);
     city.show(tier);
     if (tier === 'full') departure.visible = false;
@@ -192,9 +196,9 @@ renderer.setAnimationLoop(now => {
     fog.far = tier === 'full' ? 290 : 550;
     lookFrom(next.feet.east, next.feet.height + 1.55, -next.feet.north, next.heading, -.13);
     if (next.stage === 'walking') {
-      yaw = next.heading;
+      yaw = next.heading - skyCityApproachSite.yaw;
       pitch = 0;
-      foot = { x: next.feet.east, y: next.feet.height - skyCityDatum, z: -next.feet.north };
+      foot = skyCityApproachSite.toLocal(next.feet);
       setView('city');
     } else if (next.stage === 'departure') reset('summit');
   } else walk(dt);

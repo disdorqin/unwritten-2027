@@ -2,17 +2,19 @@ import {
   createAircraftFlight, type AircraftInput, type AircraftPoint, type AircraftSurface, type AircraftWorld,
 } from '../../../src/shared/aircraft-flight';
 import { createFlightThrust, fuelSecondsPerStardustOre } from '../../../src/shared/flight-thrust';
+import { createSkyCitySite, type SkyCitySite } from './sky-city-site';
 
-/** The spring island is modeled at y=0. Flight and foot readings use the surveyed review datum. */
-export const skyCityDatum = 750;
+/** The flight review uses this isolated datum. A live host supplies its own island site. */
+export const skyCityApproachSite = createSkyCitySite({ east: 0, north: 0, height: 750 });
 export const skyCityDeparture = Object.freeze({ east: -14, north: -250, height: 796 } satisfies AircraftPoint);
 export const skyCityDepartureBounds = Object.freeze({ xMin: -23, xMax: -5, zMin: 204, zLip: 250, zMax: 266 });
 export const skyCityLandingLane = Object.freeze({ xMin: -16.65, xMax: -11.35, zMin: 16, zMax: 52 });
 
-type SkyCityApproachOptions = Readonly<{
+type SkyCityLandingModel = Readonly<{
   islandFloorAt(x: number, z: number): number | undefined;
   islandBlocked?(x: number, z: number, feet: number, radius: number): boolean;
 }>;
+type SkyCityApproachOptions = SkyCityLandingModel & Readonly<{ site?: SkyCitySite }>;
 
 type ApproachStage = 'departure' | 'flight' | 'walking';
 const dropPerMetre = 1.25;
@@ -24,23 +26,40 @@ export function skyCityDepartureFloorAt(east: number, north: number) {
   return skyCityDeparture.height - Math.max(0, zLip - z) * dropPerMetre;
 }
 
-function onLandingLane(east: number, north: number) {
+function onLandingLane(x: number, z: number) {
   const { xMin, xMax, zMin, zMax } = skyCityLandingLane;
-  const z = -north;
-  return east >= xMin && east <= xMax && z >= zMin && z <= zMax;
+  return x >= xMin && x <= xMax && z >= zMin && z <= zMax;
 }
 
-export function createSkyCityApproach({ islandFloorAt, islandBlocked }: SkyCityApproachOptions) {
+export function createSkyCityLanding(site: SkyCitySite, { islandFloorAt, islandBlocked }: SkyCityLandingModel) {
+  return {
+    surfaceAt(east: number, north: number): AircraftSurface | undefined {
+      const { x, z } = site.toLocal({ east, north, height: site.origin.height });
+      const height = islandFloorAt(x, z);
+      if (height === undefined || !Number.isFinite(height)) return;
+      // The flight model's hard-surface rollout also fits the paved landing lane.
+      return { height: site.origin.height + height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(x, z) ? 0 : 2 };
+    },
+    onLane(at: AircraftPoint) {
+      const { x, z } = site.toLocal(at);
+      return onLandingLane(x, z);
+    },
+    blocked(at: AircraftPoint, clearance: number) {
+      const { x, y, z } = site.toLocal(at);
+      return islandBlocked?.(x, z, y, clearance) ?? false;
+    },
+  };
+}
+
+export function createSkyCityApproach({ site = skyCityApproachSite, islandFloorAt, islandBlocked }: SkyCityApproachOptions) {
+  const landing = createSkyCityLanding(site, { islandFloorAt, islandBlocked });
   function surfaceAt(east: number, north: number): AircraftSurface | undefined {
     const departureHeight = skyCityDepartureFloorAt(east, north);
     if (departureHeight !== undefined) {
       const slopeDegrees = -north < skyCityDepartureBounds.zLip ? Math.atan(dropPerMetre) * 180 / Math.PI : 0;
       return { height: departureHeight, kind: 'snow', slopeDegrees, obstacleAhead: 0 };
     }
-    const height = islandFloorAt(east, -north);
-    if (height === undefined || !Number.isFinite(height)) return;
-    // The shared flight model's hard-surface rollout is also suitable for the paved approach.
-    return { height: skyCityDatum + height, kind: 'roof', slopeDegrees: 0, obstacleAhead: onLandingLane(east, north) ? 0 : 2 };
+    return landing.surfaceAt(east, north);
   }
 
   const world: AircraftWorld = {
@@ -58,7 +77,7 @@ export function createSkyCityApproach({ islandFloorAt, islandBlocked }: SkyCityA
         const feet = from.height + (to.height - from.height) * fraction;
         const ridge = skyCityDepartureFloorAt(east, north);
         if (ridge !== undefined && feet < ridge - .025) return 'wall';
-        if (islandBlocked?.(east, -north, feet - skyCityDatum, clearance)) return 'wall';
+        if (landing.blocked({ east, north, height: feet }, clearance)) return 'wall';
       }
     },
   };
@@ -88,7 +107,7 @@ export function createSkyCityApproach({ islandFloorAt, islandBlocked }: SkyCityA
     feet = next.point;
     heading = next.heading;
     if (next.phase === 'landed') {
-      stage = !next.recovery && next.touchdown === 'roof' && onLandingLane(feet.east, feet.north) ? 'walking' : 'departure';
+      stage = !next.recovery && next.touchdown === 'roof' && landing.onLane(feet) ? 'walking' : 'departure';
       if (stage === 'departure') heading = 0;
     }
     return snapshot();

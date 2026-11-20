@@ -10,7 +10,8 @@ import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { createMainSummitCloudLayer, mainSummitCloudSpec } from './main-summit-cloud-layer';
 import { createSkyCityReveal } from './sky-city-reveal';
 import { createSkyCityRevealEffects } from './sky-city-reveal-effects';
-import { buildSkyCitySilhouette } from './sky-city-silhouette';
+import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
+import { createSkyCitySite } from './sky-city-site';
 
 const dwellMs = 10_000;
 const startMs = 66_000;
@@ -49,12 +50,15 @@ const cars = mountMainSummitCable(cableRoot, cable, summit.heightAt);
 scene.add(summit.coarse, cloud.group, cableRoot);
 
 // This sightline is in the isolated P-1 review frame. The host owns the production island transform.
+const islandSite = createSkyCitySite({ east: -420, north: 832, height: 689 });
+const islandFrame = new Group();
+islandSite.place(islandFrame);
 const island = buildSkyCitySilhouette();
-const islandAnchor = new Vector3(-420, 689, -832);
 const islandCenter = new Vector3();
 const islandMesh = island.children[0]! as Mesh<BufferGeometry, MeshBasicMaterial>;
 island.visible = false;
-scene.add(island);
+islandFrame.add(island);
+scene.add(islandFrame);
 let cityDraws = 0;
 islandMesh.onBeforeRender = () => { cityDraws++; };
 
@@ -194,12 +198,8 @@ renderer.setAnimationLoop(now => {
   }
   camera.updateMatrixWorld();
 
-  island.position.copy(islandAnchor);
-  island.position.x += Math.sin(seconds * .10) * 1.15;
-  island.position.y += Math.sin(seconds * .08) * .55;
-  island.rotation.y = Math.sin(seconds * .075) * .042;
-  islandCenter.copy(island.position);
-  islandCenter.y += 3;
+  updateSkyCitySilhouette(island, seconds);
+  island.localToWorld(islandCenter.set(0, 3, 0));
   island.visible = mountain && !whiteout && height > mainSummitCloudSpec.top;
   const inView = island.visible && looksAtIsland();
   if (reveal.sample({ source, height, whiteout, inView })) {
