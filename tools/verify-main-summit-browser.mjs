@@ -455,7 +455,8 @@ try {
     ['context', () => context?.close()], ['browser', () => browser?.close()], ['Vite', () => server?.close()],
     ['presence', () => presence?.close()],
   ]) {
-    try { await limited(`close ${label}`, Promise.resolve().then(close), 3_500); }
+    const closeBudget = townOnly && label === 'browser' ? 20_000 : 3_500;
+    try { await limited(`close ${label}`, Promise.resolve().then(close), closeBudget); }
     catch (error) { teardownErrors.push(String(error)); }
   }
   const evidence = {
