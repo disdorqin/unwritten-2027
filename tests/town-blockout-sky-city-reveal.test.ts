@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Group, PerspectiveCamera, Vector3 } from 'three';
+import { createMainSummitBlock, mainSummitLayout } from '../tools/voxel-tavern/town-blockout/main-summit-block';
 import { createMainSummitCable, summitCableSpec } from '../tools/voxel-tavern/town-blockout/main-summit-cable';
+import { createMainSummitCableTravel } from '../tools/voxel-tavern/town-blockout/main-summit-cable-travel';
 import { mainSummitCloudSpec } from '../tools/voxel-tavern/town-blockout/main-summit-cloud-layer';
 import { createSkyCityRevealEffects } from '../tools/voxel-tavern/town-blockout/sky-city-reveal-effects';
+import { createSkyCityRevealSightline } from '../tools/voxel-tavern/town-blockout/sky-city-reveal-sightline';
 import { createSkyCityReveal } from '../tools/voxel-tavern/town-blockout/sky-city-reveal';
+import { createSkyCitySite } from '../tools/voxel-tavern/town-blockout/sky-city-site';
 
 test('both existing cable ropes clear the P-8 cloud top before the cue', t => {
   const dwell = 10_000;
@@ -24,6 +29,64 @@ test('both existing cable ropes clear the P-8 cloud top before the cue', t => {
   }
   assert.equal(crossings.length, 2);
   t.diagnostic(JSON.stringify(crossings));
+});
+
+test('the sightline uses a parented camera world pose and rejects terrain and off-screen targets', () => {
+  const carrier = new Group();
+  carrier.position.set(10, 50, -20);
+  const camera = new PerspectiveCamera(60, 1, .1, 100);
+  camera.position.set(1, 2, 3);
+  carrier.add(camera);
+  const center = new Vector3(11, 52, -37);
+  let ridge: number | undefined;
+  const visible = createSkyCityRevealSightline((east, north) => east === 11 && north === 27 ? ridge : undefined);
+
+  assert.equal(visible(camera, center), true);
+  ridge = 51.99;
+  assert.equal(visible(camera, center), true);
+  ridge = 52;
+  assert.equal(visible(camera, center), false);
+  assert.equal(visible(camera, new Vector3(31, 52, -37)), false);
+  assert.equal(visible(camera, new Vector3(11, 52, -17.05)), false);
+  assert.equal(visible(camera, new Vector3(11, 52, -120)), false);
+  assert.equal(visible(camera, new Vector3(11, 52, 3)), false);
+  carrier.rotateY(Math.PI);
+  assert.equal(visible(camera, center), false);
+});
+
+test('both boarded cabins require a visible island after leaving the cloud', () => {
+  const dwell = 10_000;
+  const cable = createMainSummitCable(0, dwell, 347);
+  const travel = createMainSummitCableTravel(cable);
+  const summit = createMainSummitBlock(mainSummitLayout, 347, 48);
+  const visible = createSkyCityRevealSightline(summit.heightAt);
+  const camera = new PerspectiveCamera(61, 800 / 520, .07, 3_200);
+  // Reuse the isolated review site. A production host supplies its own site.
+  const reviewSite = createSkyCitySite({ east: -420, north: 832, height: 689 });
+  const centerAt = reviewSite.toWorld({ x: 0, y: 3, z: 0 });
+  const center = new Vector3(centerAt.east, centerAt.height, -centerAt.north);
+  const lookTarget = new Vector3();
+  try {
+    for (const index of [0, 1] as const) {
+      const stationTime = index * cable.legMs;
+      const ride = travel.attemptBoard(stationTime, index, cable.ropes[index].dock('cloud-deck').approach);
+      assert.ok(ride);
+      const reveal = createSkyCityReveal();
+      const sample = (elapsed: number, towardsIsland: boolean) => {
+        const { feet, whiteout } = travel.ridePose(stationTime + dwell + elapsed, ride);
+        camera.position.set(feet.east, feet.height + 1.65, -feet.north);
+        camera.lookAt(towardsIsland ? center : lookTarget.copy(camera.position).multiplyScalar(2).sub(center));
+        return reveal.sample({ source: 'mountain', height: feet.height, whiteout, inView: visible(camera, center) });
+      };
+      assert.equal(sample(summitCableSpec.whiteoutMs, true), false);
+      assert.equal(sample(138_000, false), false);
+      assert.equal(reveal.seen(), false);
+      assert.equal(sample(140_000, true), true);
+      assert.equal(sample(142_000, true), false);
+    }
+  } finally {
+    summit.dispose();
+  }
 });
 
 test('joins above the cloud, descending, transfer from ground, and replay stay quiet; looking back can reveal', () => {

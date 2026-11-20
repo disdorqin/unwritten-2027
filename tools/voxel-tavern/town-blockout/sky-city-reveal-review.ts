@@ -10,6 +10,7 @@ import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { createMainSummitCloudLayer, mainSummitCloudSpec } from './main-summit-cloud-layer';
 import { createSkyCityReveal, type SkyCityDiscoveryStore } from './sky-city-reveal';
 import { createSkyCityRevealEffects } from './sky-city-reveal-effects';
+import { createSkyCityRevealSightline } from './sky-city-reveal-sightline';
 import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
 import { createSkyCitySite } from './sky-city-site';
 
@@ -38,6 +39,7 @@ sun.position.set(-130, 650, -170);
 scene.add(fill, sun);
 
 const summit = createMainSummitBlock(mainSummitLayout, 347, 48);
+const looksAtIsland = createSkyCityRevealSightline(summit.heightAt);
 const cloud = createMainSummitCloudLayer({ bounds: mainSummitBounds, summit: mainSummitLayout.summit,
   shoulders: mainSummitLayout.shoulders, heightAt: summit.heightAt });
 const cable = createMainSummitCable(0, dwellMs, 347);
@@ -70,9 +72,6 @@ renderer.domElement.setAttribute('aria-label', '缆车车厢内视角');
 document.querySelector('#scene')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(61, 1, .07, 3_200);
 const aim = new Vector3();
-const projectedIsland = new Vector3();
-const viewDirection = new Vector3();
-const islandDirection = new Vector3();
 const controls = document.querySelector<HTMLElement>('#review-controls')!;
 const instructions = document.querySelector<HTMLElement>('#review-instructions')!;
 const startButton = document.querySelector<HTMLButtonElement>('#start-reveal-ride')!;
@@ -146,23 +145,6 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-function looksAtIsland() {
-  camera.getWorldDirection(viewDirection);
-  if (islandDirection.subVectors(islandCenter, camera.position).dot(viewDirection) <= 0) return false;
-  projectedIsland.copy(islandCenter).project(camera);
-  if (projectedIsland.z < -1 || projectedIsland.z > 1 || Math.abs(projectedIsland.x) > .94 ||
-      Math.abs(projectedIsland.y) > .91) return false;
-  // The center must also clear the same P-1 terrain that supplies the rendered mountain.
-  for (let part = 1; part < 16; part++) {
-    const weight = part / 16;
-    const east = camera.position.x + (islandCenter.x - camera.position.x) * weight;
-    const north = -(camera.position.z + (islandCenter.z - camera.position.z) * weight);
-    const sightHeight = camera.position.y + (islandCenter.y - camera.position.y) * weight;
-    if ((summit.heightAt(east, north) ?? -Infinity) >= sightHeight) return false;
-  }
-  return true;
-}
-
 renderer.setAnimationLoop(now => {
   const dt = Math.min(.10, (now - (previous ?? now)) / 1000);
   previous = now;
@@ -191,12 +173,10 @@ renderer.setAnimationLoop(now => {
     camera.position.set(-23, 13.65, 120);
     camera.lookAt(0, 175, -1_000);
   }
-  camera.updateMatrixWorld();
-
   updateSkyCitySilhouette(island, seconds);
   island.localToWorld(islandCenter.set(0, 3, 0));
   island.visible = mountain && !whiteout && height > mainSummitCloudSpec.top;
-  const inView = island.visible && looksAtIsland();
+  const inView = island.visible && looksAtIsland(camera, islandCenter);
   if (reveal.sample({ source, height, whiteout, inView })) {
     cueCount++;
     effects.reveal(seconds);
