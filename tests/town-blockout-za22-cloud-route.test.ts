@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { surveyAircraftRunway, type AircraftWorld } from '../src/shared/aircraft-flight';
 import { createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudRunway, za22CloudSurfaceAt, za22StationApproach } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 
@@ -35,12 +36,69 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
       assert.equal(za22CloudSurfaceAt(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), 347);
     }
   }
-  for (let east = za22CloudRunway.end; east <= za22CloudRunway.start; east += .25) {
+  for (let east = za22CloudRunway.start; east <= za22CloudRunway.end; east += .25) {
     assert.equal(za22CloudSurfaceAt(east, za22CloudRunway.north + 2.2), 347);
     assert.equal(za22CloudSurfaceAt(east, za22CloudRunway.north - 2.2), 347);
   }
   assert.equal(za22CloudSurfaceAt(300, 666), undefined);
-  assert.equal(za22CloudSurfaceAt(350, 654), undefined);
+  assert.equal(za22CloudSurfaceAt(350, 662), 347);
+  assert.equal(za22CloudSurfaceAt(353, 662), undefined);
+});
+
+test('the mounted eastbound strip has full takeoff clearance behind the retained registration monument', () => {
+  const epoch = Date.UTC(2026, 0, 1);
+  let now = epoch;
+  const cloud = createZa22CloudRoute({ now: () => now, enterOrExit() {}, view() {} });
+  cloud.action(za22StationApproach)?.run();
+  cloud.update(za22StationApproach);
+  const { legMs } = createZa22NorthRidgeLine(26);
+  now += legMs;
+  cloud.update(za22StationApproach);
+  const point = (east: number, north: number) => ({ east, north, height: 347 });
+  const { start, end, north, width } = za22CloudRunway;
+  const runway = { id: 'starport', start: point(start, north), end: point(end, north), width };
+  const world: AircraftWorld = {
+    contains: ({ east, north }) => cloud.surfaceAt(east, north, 0) !== undefined,
+    surfaceAt(east, north, heading) {
+      const height = cloud.surfaceAt(east, north, 0);
+      if (height === undefined) return;
+      const slope = Math.hypot(sampleNorthRidge350(east + .5, north) - sampleNorthRidge350(east - .5, north),
+        sampleNorthRidge350(east, north + .5) - sampleNorthRidge350(east, north - .5));
+      let obstacleAhead = 0;
+      for (let metres = 0; metres <= 8; metres += .5) {
+        if (cloud.blocked(east + Math.sin(heading) * metres, north + Math.cos(heading) * metres,
+          height + 1.01, .7, .05)) {
+          obstacleAhead = 1.01;
+          break;
+        }
+      }
+      return { height, kind: 'snow', slopeDegrees: Math.atan(slope) * 180 / Math.PI, obstacleAhead };
+    },
+    sweep(from, to, clearance) {
+      const steps = Math.max(1, Math.ceil(Math.hypot(to.east - from.east, to.north - from.north) / .05));
+      for (let step = 0; step <= steps; step++) {
+        const part = step / steps;
+        if (cloud.blocked(from.east + (to.east - from.east) * part, from.north + (to.north - from.north) * part,
+          from.height + (to.height - from.height) * part, clearance, 1.8)) return 'wall';
+      }
+    },
+    recoveryAt: () => undefined,
+  };
+  try {
+    assert.equal(cloud.riding(), false);
+    assert.ok(cloud.assembly());
+    assert.equal(cloud.blocked(306, 662, 347, .27, 1.8), true);
+    assert.equal(cloud.surfaceAt(306, 659, .27), 347);
+    assert.equal(cloud.blocked(306, 659, 347, .27, 1.8), false);
+    assert.deepEqual(surveyAircraftRunway(runway, world), { ok: true, length: 41, heading: Math.PI / 2, checkedMetres: 41 });
+    assert.equal(surveyAircraftRunway({ ...runway, start: runway.end, end: runway.start }, world).ok, false);
+  } finally {
+    const landing = point(336, 640);
+    cloud.action(landing)?.run();
+    cloud.update(landing);
+    now += legMs;
+    cloud.update(landing);
+  }
 });
 
 test('boarding uses the station and the cable schedule, and pending riders can be disqualified', () => {
