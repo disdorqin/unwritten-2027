@@ -9,7 +9,7 @@ const route = new URL(process.env.DB2_BROWSER_URL ?? 'http://127.0.0.1:4173/town
 const artifacts = resolve(process.env.DB2_BROWSER_ARTIFACTS ?? 'db2-browser-artifacts');
 const wait = expect.configure({ timeout: 45_000 });
 const roundText = /^移动靶场 · (\d+) 秒 · 命中 0$/;
-const actionText = /(?:E · )?开始移动靶练习/;
+const actionText = /^(?:E · )?开始移动靶练习$/;
 const sceneLabel = '雪团练习场';
 
 async function openPractice(page) {
@@ -23,12 +23,11 @@ async function openPractice(page) {
   await wait(page.locator('#walk')).toHaveAttribute('aria-pressed', 'true');
 
   const canvas = page.locator('#scene canvas');
-  const action = page.locator('#world-action');
+  const action = page.locator('#world-action').filter({ hasText: actionText });
   const hud = page.locator('#snow-practice-status');
   const notice = page.locator('#town-activity-status');
   await wait(page.locator('#snowball-controls')).toBeVisible();
   await wait(action).toBeVisible();
-  await wait(action).toHaveText(actionText);
   await wait(hud).toBeHidden();
   return { canvas, action, hud, notice };
 }
