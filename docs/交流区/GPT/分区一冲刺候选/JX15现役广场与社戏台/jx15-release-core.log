@@ -1,0 +1,47 @@
+✔ expanded plaza roads and theater entrances retain the old snow-wall exclusion (3.007735ms)
+✔ ceremony slots fit both plaza bounds and meet the 1.2m clearance at full capacity (8435.798448ms)
+✔ ceremony arrival decode refuses malformed or unknown slots (2.647249ms)
+✔ ceremony clocks: local provider and reserved server provider offset (1.006339ms)
+✔ the shared rehearsal calendar plays the countdown and midnight in UTC+08:00 (2.313826ms)
+✔ ceremony eve year resolves the right cycle around midnight (0.294398ms)
+✔ ceremony phases follow the design timeline (0.785611ms)
+✔ snow intensity curve: tiers, 10-minute ramps, post-midnight falloff (1.98871ms)
+✔ frost baseline follows the shared ceremony curve and decays fast after midnight (0.327672ms)
+✔ dim level: 60% from 23:50, 30% for the final ten seconds, restored at midnight (0.467531ms)
+✔ cue table for the whole evening matches the design cue sheet (2.762988ms)
+✔ director fires each cue once, in order, across the midnight boundary (1.803716ms)
+✔ director state during countdown and late join without replay (1.016211ms)
+✔ director reports frost baseline changes through the hook (1.275604ms)
+✔ director initializes weather and dimming hooks before emitting changes (0.47763ms)
+✔ frost tracker: instant sync on first update, then 1 level per 20 s both ways (0.789948ms)
+✔ frost tracker: any single warmth source is enough, floor is level 0 (0.358116ms)
+✔ frost exposure follows snow strength and full depth pressure, and recedes on cleared roads (0.443255ms)
+✔ fastest warmth source lowers exposure while the old ceremony baseline keeps its rate (0.642332ms)
+✔ ceremony relief halves pressure and caps L3 walking drag without changing the visible level (0.338033ms)
+✔ frost level styles match the design bands (0.190332ms)
+✔ a clock correction cannot replay ceremony cues already delivered by the director (0.897354ms)
+✔ P21 keeps two one-metre snow covers and leaves the main walking line open (7892.509937ms)
+✔ the new stand admits every physical tier and only the apron may launch without joining (3.613199ms)
+✔ one authoritative roster is sorted and capped, with malformed or duplicate names packets rejected (10.88165ms)
+✔ a missing shared lineup unlocks movement without another animation frame (3.87466ms)
+✔ the four original plaza board cells read their injected sources on every refresh (5.758557ms)
+✔ ceremony time from the same offset clock drives both countdowns (1.123455ms)
+✔ both board approaches and the countdown approach are on actual clear plaza ground (6469.946046ms)
+ℹ checked 87 ground and collision points across three approaches
+✔ P23 ray target is mapped to the three authored coordinates and respects nearer world hits (6.793184ms)
+✔ authorized supply gathers award five while ambient weather servings and the ten-ball cap remain intact (34.627175ms)
+✔ a successful dig shrinks only its local pile and restores height in sixty seconds after the last dig (1.032168ms)
+✔ the stage front tread gives a direct route onto a single deck (29.749758ms)
+✔ the south theater joins four photo tiers to two ramps without expanding photo eligibility (28.650892ms)
+✔ five-minute stage repeat uses continuous formations, closing bow and two prop intervals (478.196009ms)
+✔ stage retains the viewer activity contract and guest toggles leave the clock running (21.877277ms)
+✔ New Year Eve slots reuse the manual show and stop near-stage-only animation on departure (9.677957ms)
+✔ both approved theater anchors contain 48 standing figures and tighten for a central small group (7815.652078ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9959.613734
