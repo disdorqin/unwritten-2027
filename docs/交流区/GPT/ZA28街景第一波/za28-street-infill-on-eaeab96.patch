@@ -1,0 +1,289 @@
+From b4f5702c173998ca4efb8ec410d455be2a119b31 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Fri, 20 Nov 2026 01:27:40 -0800
+Subject: [PATCH] Add four clearance-checked clusters of street infill
+
+---
+ tests/town-blockout-house-portals.test.ts     |   6 +
+ .../town-blockout/streetscape-infill.ts       |  58 ++++++++
+ .../voxel-tavern/town-blockout/streetscape.ts | 138 ++++++++++++++++--
+ 3 files changed, 192 insertions(+), 10 deletions(-)
+ create mode 100644 tools/voxel-tavern/town-blockout/streetscape-infill.ts
+
+diff --git a/tests/town-blockout-house-portals.test.ts b/tests/town-blockout-house-portals.test.ts
+index d2d080e3..412c5ed4 100644
+--- a/tests/town-blockout-house-portals.test.ts
++++ b/tests/town-blockout-house-portals.test.ts
+@@ -9,6 +9,7 @@ import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmar
+ import { buildVillageLandmark, villageHousePortals } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
+ import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
+ import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
++import { streetInfill } from '../tools/voxel-tavern/town-blockout/streetscape-infill.ts';
+ import { canEnter, createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+ import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
+ import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
+@@ -72,6 +73,11 @@ test('every built decorative house has a unique dry, clear portal on its real fr
+   const district = addDistrictHousing(landscape, grid, scenery.blocked, track.keepClear);
+   const streetscape = addStreetscape(landscape, grid, (x, n, r) =>
+     district.keepClear(x, n, r) || extensionRoadClearance(x, n, r));
++  assert.deepEqual(
++    [...streetscape.infillPlaced],
++    streetInfill.map(({ id, points }) => [id, points.map(([kind]) => kind)]),
++    'all configured streetscape clusters survive door and road clearance',
++  );
+   const forest = addForestDensity(landscape, grid,
+     (x, n, r) => district.keepClear(x, n, r) || streetscape.occupied(x, n, r),
+     (x, n, r) => extensionRoadClearance(x, n, r) || track.keepClear(x, n, r) || extensionStreetClearance(x, n, r));
+diff --git a/tools/voxel-tavern/town-blockout/streetscape-infill.ts b/tools/voxel-tavern/town-blockout/streetscape-infill.ts
+new file mode 100644
+index 00000000..ba5f901e
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/streetscape-infill.ts
+@@ -0,0 +1,58 @@
++export type StreetInfillKind =
++  'fir' | 'lanternFir' | 'lantern' | 'bench' | 'fence' | 'snowman' |
++  'firewood' | 'stall' | 'sign' | 'well' | 'dryingRack';
++
++export type StreetInfillPoint = readonly [
++  kind: StreetInfillKind, east: number, north: number, heading?: number,
++];
++
++export type StreetInfillCluster = {
++  id: string;
++  points: readonly StreetInfillPoint[];
++};
++
++export const streetInfill: readonly StreetInfillCluster[] = [
++  {
++    id: 'southwest-plaza',
++    points: [
++      ['lantern', 159.5, 163, Math.PI],
++      ['firewood', 159.5, 161, Math.PI / 2],
++      ['sign', 157.5, 159, .35],
++      ['lantern', 159.5, 158.8, Math.PI],
++      ['fence', 159.5, 156.5, Math.PI / 2],
++    ],
++  },
++  {
++    id: 'market-south-loop',
++    points: [
++      ['well', 191, 90],
++      ['dryingRack', 193, 93, .20],
++      ['lantern', 195, 90, Math.PI / 2],
++      ['firewood', 197, 88],
++      ['stall', 200, 90, .23],
++      ['bench', 201.75, 93.25, .23],
++      ['lantern', 205, 90, Math.PI / 2],
++      ['fir', 198, 94],
++    ],
++  },
++  {
++    id: 'northeast-approach',
++    points: [
++      ['lanternFir', 323, 212.5],
++      ['lantern', 326, 227, Math.PI],
++      ['sign', 338.5, 239.5, .6],
++      ['snowman', 350, 240.5, Math.PI],
++    ],
++  },
++  {
++    id: 'station-approach',
++    points: [
++      ['lantern', 485, 287.5, Math.PI / 2],
++      ['firewood', 496, 293, .3],
++      ['fence', 501, 294, .4],
++      ['sign', 504.5, 298, .8],
++      ['firewood', 515, 308, .45],
++      ['lantern', 518.5, 310, Math.PI / 2],
++    ],
++  },
++];
+diff --git a/tools/voxel-tavern/town-blockout/streetscape.ts b/tools/voxel-tavern/town-blockout/streetscape.ts
+index 76658d3b..97794f72 100644
+--- a/tools/voxel-tavern/town-blockout/streetscape.ts
++++ b/tools/voxel-tavern/town-blockout/streetscape.ts
+@@ -3,9 +3,11 @@ import {
+   InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, SphereGeometry, Vector3,
+   type Material,
+ } from 'three';
+-import { bridgeAt, isWater, layout, riverX, waterHeight, type createTerrainGrid } from './terrain';
++import { bridgeAt, isWater, layout, riverX, waterHeight, worldBounds, type createTerrainGrid } from './terrain';
+ import { roadCorridorKeepClear } from './road-clearance';
+ import { addTavernStreetBanner } from './market-stall-banners';
++import { streetInfill, type StreetInfillKind } from './streetscape-infill';
++import { districtParcels, extensionPlots, extensionStreetClearance } from './town-extension';
+ 
+ type Ground = ReturnType<typeof createTerrainGrid>;
+ type Dimensions = [width: number, height: number, depth: number];
+@@ -54,9 +56,26 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
+     return keepClear(x, n, radius) || roadCorridorKeepClear(x, n, radius);
+   }
+ 
+-  function reserve(x: number, n: number, radius: number, colliderRadius = 0) {
+-    if (!Number.isFinite(x + n) || x < 2 + radius || x > layout.width - 2 - radius
+-      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || protectedArea(x, n, radius)
++  function infillProtectedArea(x: number, n: number, radius: number) {
++    if (extensionStreetClearance(x, n, radius)) return true;
++    const oldMargin = 8 + radius;
++    if (x <= layout.width - oldMargin && n <= layout.depth - oldMargin) return protectedArea(x, n, radius);
++    // The old housing predicate marks the whole expansion as outside its lots.
++    if (roadCorridorKeepClear(x, n, radius)) return true;
++    for (const { origin: [east, north], footprint: [width, depth] } of extensionPlots) {
++      if (Math.abs(x - east) < width / 2 + radius && Math.abs(n - north) < depth / 2 + radius) return true;
++    }
++    for (const parcels of Object.values(districtParcels)) for (const [east, north, width, depth] of parcels) {
++      if (Math.hypot(x - east, n - north) < Math.hypot(width, depth) / 2 + radius) return true;
++    }
++    return false;
++  }
++
++  function reserve(x: number, n: number, radius: number, colliderRadius = 0, infill = false) {
++    const bounds = infill ? worldBounds : layout;
++    if (!Number.isFinite(x + n) || x < 2 + radius || x > bounds.width - 2 - radius
++      || n < 2 + radius || n > bounds.depth - 2 - radius || isWater(x, n)
++      || (infill ? infillProtectedArea(x, n, radius) : protectedArea(x, n, radius))
+       || grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 4
+       || footprints.some(other => Math.hypot(x - other.x, n - other.n) < radius + other.radius)) return false;
+     footprints.push({ x, n, radius });
+@@ -168,8 +187,8 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
+     }
+   }
+ 
+-  function snowman(x: number, n: number, direction: number) {
+-    if (!reserve(x, n, 1.25, .7)) return;
++  function snowman(x: number, n: number, direction: number, infill = false) {
++    if (!reserve(x, n, 1.25, .7, infill)) return;
+     const y = grid.heightAt(x, n);
+     for (const [offset, size] of [[.59, 1.3], [1.35, .98], [2.0, .73]]) {
+       part('globe', x, y + offset, n, [size, size, size], snow);
+@@ -188,8 +207,8 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
+     part('rock', x + fx * .34, y + 1.97, n + fn * .34, [.16, .14, .16], '#f10');
+   }
+ 
+-  function bench(x: number, n: number, direction: number) {
+-    if (!reserve(x, n, 1.7)) return;
++  function bench(x: number, n: number, direction: number, infill = false) {
++    if (!reserve(x, n, 1.7, 0, infill)) return;
+     const y = grid.heightAt(x, n);
+     const point = (u: number, v = 0) => [x + u * Math.cos(direction) - v * Math.sin(direction), n + u * Math.sin(direction) + v * Math.cos(direction)] as const;
+     for (const u of [-.88, .88]) {
+@@ -414,6 +433,104 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
+     }
+   }
+ 
++  const legacyFootprints = footprints.length;
++  const infillPlaced = new Map<string, StreetInfillKind[]>();
++  const infillSize = {
++    fir: [1.65, .36], lanternFir: [1.65, .36], lantern: [.55, .22],
++    fence: [1.4, .58], firewood: [.8, .55], stall: [1.65, .92],
++    sign: [.76, .24], well: [1.28, .95], dryingRack: [1.35, .52],
++  } as const;
++
++  function addInfill(kind: StreetInfillKind, x: number, n: number, yaw: number) {
++    if (kind === 'bench') return bench(x, n, yaw, true);
++    if (kind === 'snowman') return snowman(x, n, yaw, true);
++    const [radius, collision] = infillSize[kind];
++    const y = grid.heightAt(x, n);
++    if (!reserve(x, n, radius, collision, true)) return;
++    const dx = Math.cos(yaw), dn = Math.sin(yaw);
++    const block = (u: number, h: number, v: number, size: Dimensions, tint: string) =>
++      box(x + dx * u - dn * v, y + h, n + dn * u + dx * v, size, tint, yaw);
++
++    switch (kind) {
++      case 'fir':
++      case 'lanternFir':
++        block(0, .67, 0, [.24, 1.34, .26], timber);
++        for (const [tier, width] of [2.22, 1.63, 1.02, .55].entries()) {
++          const height = 1.04 + tier * .47;
++          block(0, height, 0, [width, .58, width * .86], tier % 2 ? '#395b53' : '#36534e');
++          block(0, height + .33, 0, [width * .91, .10, width * .76], snow);
++        }
++        if (kind === 'lanternFir') {
++          lantern(x - dx * .82, y + 1.36, n - dn * .82, .34);
++          lantern(x + dx * .65, y + 1.85, n + dn * .65, .31);
++        }
++        break;
++      case 'lantern':
++        block(0, .13, 0, [.48, .26, .48], stone);
++        block(0, 1.34, 0, [.15, 2.68, .15], timber);
++        block(.23, 2.61, 0, [.49, .10, .16], wood);
++        lantern(x + dx * .39, y + 2.45, n + dn * .39, .28);
++        break;
++      case 'fence':
++        for (const u of [-1.05, 0, 1.05]) {
++          block(u, .33, 0, [.15, .74, .15], timber);
++          block(u, .74, 0, [.19, .09, .19], snow);
++          if (u) colliders.push({ x: x + dx * u, n: n + dn * u, radius: .26 });
++        }
++        for (const h of [.27, .56]) block(0, h, 0, [2.16, .12, .11], wood);
++        break;
++      case 'firewood':
++        block(0, .11, 0, [1.30, .22, .73], timber);
++        for (const [row, count] of [5, 4, 3].entries()) for (let i = 0; i < count; i++) {
++          const u = (i - (count - 1) / 2) * .19;
++          block(u, .27 + row * .15, 0, [.16, .16, .67], wood);
++          block(u, .27 + row * .15, -.34, [.123, .123, .035], '#bf956a');
++        }
++        block(0, .69, 0, [.84, .09, .72], snow);
++        break;
++      case 'stall':
++        for (const u of [-.88, .88]) for (const v of [-.63, .63]) {
++          block(u, 1.03, v, [.13, 2.18, .13], timber);
++        }
++        block(0, .78, -.07, [1.9, .14, 1.0], wood);
++        block(0, .49, -.52, [1.8, .43, .11], timber);
++        for (const u of [-.75, -.25, .25, .75]) {
++          block(u, 2.17, 0, [.50, .13, 1.54], Math.abs(u) > .5 ? red : '#d6ac79');
++        }
++        block(0, 2.31, .25, [1.99, .10, .69], snow);
++        break;
++      case 'sign':
++        block(0, .9, 0, [.14, 1.80, .14], timber);
++        block(.25, 1.50, 0, [.88, .30, .12], wood);
++        block(.47, 1.50, -.08, [.14, .14, .045], gold);
++        block(.25, 1.68, 0, [.88, .09, .16], snow);
++        break;
++      case 'well':
++        part('pillar', x, y + .34, n, [1.78, .68, 1.78], stone, yaw);
++        part('pillar', x, y + .69, n, [1.92, .13, 1.92], '#8191a1', yaw);
++        part('pillar', x, y + .76, n, [1.40, .037, 1.40], '#293b4d', yaw);
++        for (const u of [-.72, .72]) block(u, .94, 0, [.14, 1.88, .14], timber);
++        block(0, 1.91, 0, [1.58, .14, .13], wood);
++        break;
++      case 'dryingRack':
++        for (const u of [-1.04, 1.04]) block(u, .89, 0, [.13, 1.78, .14], timber);
++        block(0, 1.61, 0, [2.16, .08, .09], wood);
++        block(-.54, 1.33, 0, [.42, .47, .07], '#cbbfb0');
++        block(.28, 1.25, 0, [.67, .61, .07], '#8d4a45');
++        break;
++    }
++  }
++
++  for (const { id, points } of streetInfill) {
++    const placed: StreetInfillKind[] = [];
++    for (const [kind, x, n, yaw = 0] of points) {
++      const before = footprints.length;
++      addInfill(kind, x, n, yaw);
++      if (footprints.length > before) placed.push(kind);
++    }
++    infillPlaced.set(id, placed);
++  }
++
+   const lit = new MeshBasicMaterial();
+   const neutral = new MeshLambertMaterial();
+   const instanceColor = new Color();
+@@ -436,8 +553,9 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
+ 
+   return {
+     count: footprints.length + (batches.get('floe')?.length ?? 0),
+-    occupied: (x: number, n: number, radius: number) => footprints.some(other =>
+-      Math.hypot(x - other.x, n - other.n) < other.radius + radius),
++    infillPlaced,
++    occupied: (x: number, n: number, radius: number) => footprints.some((other, index) =>
++      index < legacyFootprints && Math.hypot(x - other.x, n - other.n) < other.radius + radius),
+     blocked: (x: number, n: number) => colliders.some(other => Math.hypot(x - other.x, n - other.n) < other.radius + .26),
+   };
+ }
+-- 
+2.56.1
+

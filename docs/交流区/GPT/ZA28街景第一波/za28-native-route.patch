@@ -1,0 +1,67 @@
+--- a/tools/verify-za22-local.mjs
++++ b/tools/verify-za22-local.mjs
+@@ -10,7 +10,7 @@
+ import { promisify } from 'node:util';
+ 
+ const [segment, evidencePath] = process.argv.slice(2);
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'za28-smoke', 'za28-infill'].includes(segment) && evidencePath,
+   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
+ const run = promisify(execFile);
+ const repo = fileURLToPath(new URL('../', import.meta.url));
+--- a/tools/verify-za22-live.mjs
++++ b/tools/verify-za22-live.mjs
+@@ -8,7 +8,7 @@
+ const url = new URL('/?profile', origin);
+ assert.equal(url.protocol, 'http:');
+ assert.equal(url.hostname, '127.0.0.1');
+-assert.ok(['station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
++assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'za28-smoke', 'za28-infill'].includes(segment), segment);
+ 
+ const spawn = [223, 180];
+ const station = [
+@@ -131,6 +131,8 @@
+   const frame = await page.evaluate(() => ({
+     hud: document.querySelector('#position')?.textContent ?? '',
+     cameraY: window.__za22Frame?.cameraY,
++    calls: window.__za22Frame?.calls,
++    triangles: window.__za22Frame?.triangles,
+     action: document.querySelector('#world-action')?.textContent ?? '',
+     status: document.querySelector('#town-presence-status')?.textContent ?? '',
+   }));
+@@ -250,7 +252,34 @@
+     args: graphicsArgs,
+   });
+   report.browser = browser.version();
+-  if (segment !== 'crater') {
++  if (segment === 'za28-infill' || segment === 'za28-smoke') {
++    const { page, evidence } = await openTown('street-infill');
++    await page.waitForTimeout(700);
++    await snapshot(page, evidence, 'ordinary-spawn-smoke');
++    if (segment === 'za28-infill') {
++      async function sample(label, east, north) {
++        const here = await readPose(page);
++        await face(page, evidence, Math.atan2(east - here.east, north - here.north));
++        await snapshot(page, evidence, label);
++      }
++      await follow(page, evidence, [...westShore.slice(0, 3), [155,156.6], [157.6,156.8]], 'plaza-verge');
++      await sample('southwest-plaza', 159.5, 161);
++      await follow(page, evidence, [[155,156.6], ...westShore.slice(2, 5), [129,86], [176,74], [199,80.024], [198.5,86], [200,87]], 'market');
++      await sample('market-south-loop', 200, 90);
++      await follow(page, evidence, [[198.5,86], [199,80.024], [176,74], [129,86], ...westShore.slice(0, 5).reverse(), spawn], 'market-return');
++      await follow(page, evidence, [...station.slice(0, 5), [317.25,216]], 'northeast');
++      await sample('northeast-approach', 323, 212.5);
++      await follow(page, evidence, station.slice(5, 17), 'station');
++      await sample('station-approach-west', 501, 294);
++      await follow(page, evidence, station.slice(17, 20), 'station-entry');
++      await walkTo(page, evidence, station[17], 'station-forecourt-return');
++      await sample('station-approach-east', 518.5, 310);
++      await follow(page, evidence, [...station.slice(0, 17).reverse(), spawn], 'station-return');
++      await snapshot(page, evidence, 'spawn-return');
++      console.log(JSON.stringify({ segment, reached: evidence.checkpoints.filter(x => ['southwest-plaza', 'market-south-loop', 'northeast-approach', 'station-approach-west', 'station-approach-east', 'spawn-return'].includes(x.label)) }));
++    }
++  }
++  if (!['crater', 'za28-infill', 'za28-smoke'].includes(segment)) {
+     const { page, evidence } = await openTown('cable');
+     await follow(page, evidence, station, 'station');
+     if (segment === 'station') {
