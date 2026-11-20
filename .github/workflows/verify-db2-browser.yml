@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/verify-db2-browser.yml'
       - 'tools/verify-db2-browser.mjs'
+      - 'tools/verify-db2-aim-browser.mjs'
 
 permissions:
   contents: read
@@ -14,7 +15,16 @@ jobs:
   moving-target-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - proof: controls
+            script: tools/verify-db2-browser.mjs
+          - proof: aim
+            script: tools/verify-db2-aim-browser.mjs
     env:
+      DB2_SCRIPT: ${{ matrix.script }}
       DB2_BASE: e1931a717320edc87f223ccf0303256da2149881
       DB2_RECEIPT: fcdb709f36c3259f9626fff3f6fae408c83f0c70
       DB2_PATCH: docs/交流区/GPT/分区一冲刺候选/DB2-production-candidate.patch
@@ -50,7 +60,7 @@ jobs:
           git apply --whitespace=error "$RUNNER_TEMP/db2.patch"
           git diff --check
 
-      - name: Build and verify the desktop and touch rounds
+      - name: Build and run the browser input proof
         working-directory: town
         shell: bash
         run: |
@@ -68,13 +78,13 @@ jobs:
           db2_preview_pid=$!
           trap 'kill "$db2_preview_pid" 2>/dev/null || true' EXIT
           curl --retry 20 --retry-connrefused --retry-delay 1 --silent --show-error --fail "$DB2_BROWSER_URL" --output /dev/null
-          node ../ci/tools/verify-db2-browser.mjs | tee "$DB2_BROWSER_ARTIFACTS/result.log"
+          node "../ci/$DB2_SCRIPT" | tee "$DB2_BROWSER_ARTIFACTS/result.log"
 
       - name: Preserve the browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: db2-moving-target-browser-proof
+          name: db2-moving-target-${{ matrix.proof }}-browser-proof
           path: ${{ runner.temp }}/db2-browser-proof
           retention-days: 14
           if-no-files-found: warn
