@@ -216,8 +216,8 @@ const descent = mountUndergroundDescent({
 
 function beginDescent() {
   if (scene !== 'crater-floor' || locked) return;
-  const firstFall = entry.pendingFirstFall(playerId);
-  if (firstFall ? !isFirstFallDeparture(playerId, foot) : !entry.sceneState().cageAvailable.down) return;
+  const firstFall = entry.requestFirstFallFromShaft(playerId, foot);
+  if (!firstFall && !entry.sceneState().cageAvailable.down) return;
   phases.length = requests.length = transfers.length = 0;
   blackoutFrame = -1;
   audioPeak = waterFilmPeak = waterFilmPlays = swayPeak = flashPeak = 0;
@@ -337,7 +337,7 @@ document.addEventListener('keydown', event => {
       if (floor) foot = { ...foot, north, height: floor.waterDepth ? pool.height : floor.floor };
     } else if (entry.pendingFirstFall(playerId)) {
       foot = { ...foot, north };
-      if (isFirstFallDeparture(playerId, foot)) beginDescent();
+      beginDescent();
     }
   }
 });
@@ -370,7 +370,7 @@ function update() {
       const order = entry.openWell(playerId);
       winding.cancel(playerId);
       if (order.kind !== 'opened') throw new Error('The shaft cover did not open after three accepted winch turns');
-      if (isFirstFallDeparture(playerId, foot)) beginDescent();
+      beginDescent();
     }
   }
   updateReturningCage();

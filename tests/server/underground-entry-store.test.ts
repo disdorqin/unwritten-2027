@@ -214,9 +214,18 @@ test('an interpolated depth hit from the operation foot cannot substitute for ac
     },
     isFirstFallPool: point => point.height === pool.height,
   });
+  assert.equal(entry.requestFirstFallFromShaft('opener', shaft), undefined);
   assert.equal(entry.openWell('opener').kind, 'opened');
+  assert.equal(entry.requestFirstFallFromShaft('opener', shaft), undefined);
   assert.equal(entry.confirmFirstFallTransfer('opener', shaft, pool), undefined);
   committedDeparture = true;
+  const beforeRequest = store.load();
+  assert.equal(entry.requestFirstFallFromShaft('opener', winch), undefined);
+  assert.equal(entry.requestFirstFallFromShaft('next-player', shaft), undefined);
+  assert.deepEqual(entry.requestFirstFallFromShaft('opener', shaft), {
+    kind: 'first-fall', playerId: 'opener', destination: pool, fallDamage: 0,
+  });
+  assert.deepEqual(store.load(), beforeRequest);
   assert.equal(entry.confirmFirstFallTransfer('opener', winch, pool), undefined);
   assert.equal(entry.confirmFirstFallTransfer('next-player', shaft, pool), undefined);
   assert.equal(crossingChecks, 0);

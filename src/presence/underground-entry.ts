@@ -70,6 +70,11 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     if (well.kind === 'open' && well.openedBy === playerId && well.firstFallPending) return firstFallOrder(playerId);
   }
 
+  function requestFirstFallFromShaft(playerId: string, point: UndergroundEntryPoint) {
+    const order = pendingFirstFall(playerId);
+    if (order && isFinitePoint(point) && options.isFirstFallDeparture?.(playerId, point) === true) return order;
+  }
+
   function resolveDepthCrossing(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint,
       originMode: UndergroundEntryMode = modeOf(playerId)) {
     if (!isFinitePoint(before) || !isFinitePoint(after)) return;
@@ -106,6 +111,7 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     },
     modeOf,
     pendingFirstFall,
+    requestFirstFallFromShaft,
     openWell(playerId: string) {
       if (well.kind === 'open') return { kind: 'already-open' } as const;
       if (!options.canUseWinch(playerId)) return { kind: 'denied' } as const;
@@ -131,8 +137,7 @@ export function createUndergroundEntry(options: UndergroundEntryOptions) {
     },
     // The host supplies the authorized first fall's departure and verified pool landing.
     confirmFirstFallTransfer(playerId: string, before: UndergroundEntryPoint, after: UndergroundEntryPoint) {
-      if (well.kind !== 'open' || !pendingFirstFall(playerId) || !isFinitePoint(before) ||
-          options.isFirstFallDeparture?.(playerId, before) !== true) return;
+      if (well.kind !== 'open' || !requestFirstFallFromShaft(playerId, before)) return;
       // A legacy save may have committed survival mode before clearing the pending fall.
       const crossing = resolveDepthCrossing(playerId, before, after, 'peace');
       if (crossing?.direction !== 'down' || !options.isFirstFallPool(after)) return;
