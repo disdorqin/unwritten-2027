@@ -88,6 +88,51 @@ test('heating stoke is routed only after F-2 enables it and an accepted foot rea
   assert.deepEqual(calls, [{ ...command, forgeId: 'fixture-forge', socketId: 'bellows', expectedRevision: 6 }]);
 });
 
+test('core installation and flight fueling require their explicitly registered reachable sockets', () => {
+  const { options, calls, forge, move, advance } = fixture();
+  const install = { playerId: 'smith', requestId: 'core', action: 'install-core' } as const;
+  const fuel = { playerId: 'smith', requestId: 'fuel', action: 'fuel' } as const;
+  const core = { id: 'core-stand', point: { ...place, east: 145 } };
+  assert.equal(forge.interact(install).kind, 'invalid');
+  move(sockets.collect.point);
+  assert.equal(forge.interact(fuel).kind, 'invalid');
+
+  const serviceSockets = { ...sockets, 'install-core': core, fuel: sockets.collect };
+  const station = createUndergroundWarriorForge({
+    ...options,
+    sockets: serviceSockets,
+    receipt: (playerId, requestId, action) =>
+      playerId === 'smith' && requestId === 'fuel' && action === 'fuel' && calls.length === 2 ? 'accepted' : undefined,
+  });
+  assert.equal(station.interact(install).kind, 'unreachable');
+  move({ ...core.point, layer: 'fixture-crystal-cave' });
+  assert.equal(station.interact(install).kind, 'unreachable');
+  move(core.point);
+  assert.equal(station.interact(install).kind, 'submitted');
+
+  advance('heating');
+  assert.equal(station.interact(fuel).kind, 'unreachable');
+  move(sockets.collect.point);
+  assert.equal(station.interact(fuel).kind, 'submitted');
+  assert.equal(station.interact(fuel).kind, 'submitted');
+  move(core.point);
+  assert.equal(station.interact(fuel).kind, 'unreachable');
+  assert.deepEqual(calls, [
+    { ...install, forgeId: 'fixture-forge', socketId: 'core-stand', expectedRevision: 0 },
+    { ...fuel, forgeId: 'fixture-forge', socketId: 'outlet', expectedRevision: 1 },
+  ]);
+});
+
+test('explicit service sockets must still be finite and in the forge domain', () => {
+  const { options } = fixture();
+  assert.throws(() => createUndergroundWarriorForge({
+    ...options, sockets: { ...sockets, fuel: { ...sockets.collect, point: { ...place, height: NaN } } },
+  }), /finite points/);
+  assert.throws(() => createUndergroundWarriorForge({
+    ...options, sockets: { ...sockets, 'install-core': { id: 'core-stand', point: { ...place, layer: 'another' } } },
+  }), /same confirmed domain/);
+});
+
 test('a known authority receipt can be returned after its action has moved the furnace to a new phase', () => {
   const { options, calls, move } = fixture();
   const forge = createUndergroundWarriorForge<'accepted' | 'replayed' | 'invalid'>({
