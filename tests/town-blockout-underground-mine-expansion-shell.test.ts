@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import {
+  createUndergroundCrystalGate, createUndergroundCrystalReturnSwitch,
+} from '../tools/voxel-tavern/town-blockout/underground-crystal-gate.js';
 import { createUndergroundMineExpansionShell } from '../tools/voxel-tavern/town-blockout/underground-mine-expansion-shell.js';
 
 const options = { seam: [3, -91, 45] as const, openingWidth: 4, openingHeight: 3.5, layerStartZ: 0 };
@@ -18,6 +21,39 @@ function surfacesFor(mesh: ReturnType<typeof createUndergroundMineExpansionShell
 function cast(surface: Mesh | Mesh[], at: Vector3, direction: Vector3) {
   return new Raycaster(at, direction).intersectObjects(Array.isArray(surface) ? surface : [surface], false)[0];
 }
+
+test('the crystal return switch reuses the gate control at the explicit crystal-side pose', () => {
+  const shell = createUndergroundMineExpansionShell({ ...options, crystalGate: true });
+  assert.ok(shell.gate);
+  const gate = createUndergroundCrystalGate(shell.gate);
+  const position = [2.4, -.06, -1] as const;
+  const crystalSwitch = createUndergroundCrystalReturnSwitch({ position, yaw: Math.PI / 2 });
+  const owner = new Group();
+  owner.add(crystalSwitch.group);
+  owner.updateMatrixWorld(true);
+  try {
+    const mineWinch = gate.group.getObjectByName('mine-crystal-gate-winch');
+    const group = crystalSwitch.group;
+    const mineHandle = mineWinch?.getObjectByName('crystal-gate-switch-handle');
+    const returnHandle = group.getObjectByName('crystal-gate-switch-handle');
+    assert.ok(mineHandle && returnHandle);
+    assert.deepEqual(group.getWorldPosition(new Vector3()).toArray(), [...position]);
+    assert.equal(group.rotation.y, Math.PI / 2);
+    assert.equal(group.getObjectByName('mine-crystal-gate-leaf'), undefined);
+    assert.ok(new Raycaster(new Vector3(position[0], position[1] + .52, position[2] + 1), new Vector3(0, 0, -1))
+      .intersectObject(group, true).length > 0);
+    for (const stage of ['closed', 'ajar', 'open'] as const) {
+      gate.update(stage);
+      crystalSwitch.update(stage);
+      assert.equal(returnHandle.rotation.z, mineHandle.rotation.z);
+    }
+    assert.throws(() => createUndergroundCrystalReturnSwitch({ position, yaw: Infinity }), /switch pose/);
+  } finally {
+    crystalSwitch.dispose();
+    gate.dispose();
+  }
+  assert.deepEqual(owner.children, []);
+});
 
 test('the expansion keeps the camp footprint seam and rail route continuously walkable', () => {
   const shell = createUndergroundMineExpansionShell(options);
