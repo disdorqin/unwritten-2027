@@ -162,6 +162,8 @@ export type TownMascotFinaleFrame = Readonly<{
   progress: Readonly<{ ringCount: number; goatRevealed: boolean; firstKeyLit: boolean }>;
   phase: 'background' | 'ring-passage' | 'witness';
   point: Readonly<MascotFollowPoint>;
+  /** Live host cue from the persisted reveal edge. Leave absent in snapshots. */
+  resonanceAt?: number;
 }>;
 
 export type TownMascotOptions = {
@@ -177,6 +179,7 @@ export type TownMascotOptions = {
     // The host supplies the live presentation phase and its approved model pose.
     read: () => TownMascotFinaleFrame | undefined;
     ringResonance?: Pick<Object3D, 'visible'>;
+    onRingResonance?: (at: number, point: Readonly<MascotFollowPoint>) => void;
   };
 };
 
@@ -241,6 +244,9 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
   const animated = pivots.map(() => new Matrix4());
   const finale = options.finale;
   const resonance = finale?.ringResonance;
+  const onRingResonance = finale?.onRingResonance;
+  const observingFrom = onRingResonance ? options.now() : Infinity;
+  let playedResonanceAt = -Infinity;
   if (resonance) resonance.visible = false;
   batch.count = initialStart;
   let patrol: MascotPatrol;
@@ -260,11 +266,16 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
     const authorityPose = modelPose && Number.isFinite(modelPose.x) && Number.isFinite(modelPose.n) &&
       Number.isFinite(modelPose.ground) && Number.isFinite(modelPose.yaw) && Number.isFinite(modelPose.speed)
       ? modelPose : undefined;
-    if (resonance) {
-      resonance.visible = Boolean(authorityPose && frame?.phase === 'ring-passage' && frame.progress.ringCount === 11 &&
-        frame.progress.goatRevealed && !frame.progress.firstKeyLit);
-    }
     const now = options.now();
+    const ringPose = frame?.phase === 'ring-passage' && frame.progress.ringCount === 11 &&
+      frame.progress.goatRevealed === true && frame.progress.firstKeyLit === false ? authorityPose : undefined;
+    if (resonance) resonance.visible = ringPose !== undefined;
+    const at = frame?.resonanceAt;
+    if (ringPose && onRingResonance && at !== undefined && Number.isSafeInteger(at) &&
+        at >= observingFrom && at <= now && at > playedResonanceAt) {
+      playedResonanceAt = at;
+      onRingResonance(at, ringPose);
+    }
     // Share repeatable location and movement phase while limiting instance writes to 25 Hz.
     const tick = Math.floor(now / 40) * 40;
     const follow = finale ? undefined : options.follow?.();

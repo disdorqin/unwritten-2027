@@ -1,0 +1,87 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 296ebfa1c8778c858def2e6966ff0e6a986c36e5..77622957e8ea91b35153ca176958df655fdd3252 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -270,4 +270,22 @@ function leaveSled() {
+   sledDrift.reset();
+ }
++function alignPlayerWithSled() {
++  const spot = sledRide.spot;
++  ({ x, n, yaw } = spot);
++  ground = sledGroundAt(x, n);
++  airHeight = spot.y > ground + .02 ? spot.y : undefined;
++}
++const parkedSledAction = {
++  label: '重新上橇',
++  run() {
++    if (!sledRide.remount(x, n, ground)) return;
++    alignPlayerWithSled();
++    stopTravel();
++    storeWalkView(walkRender);
++    walkCurrent.copy(walkRender);
++    walkPrevious.copy(walkRender);
++    announceActivity('重新坐上雪橇');
++  },
++};
+ const previousStationEye = new Vector3();
+ let stationViewStillSince = Infinity;
+@@ -735,5 +753,4 @@ function stopTravel() {
+ function resetMovement() {
+   landingFeedback.reset();
+-  sledRide.interrupt();
+   sledDrift.reset();
+   stopTravel();
+@@ -1056,5 +1073,5 @@ const activitySpots = activities.flatMap(activity => activity.spots);
+ activitySpots.push(...sledRacks.map(rack => ({
+   x: rack.x, n: rack.n, ground: rack.y, range: 2.4, label: '乘雪橇',
+-  available: () => !sledRide.active(),
++  available: () => !homeReturn && !sledRide.active() && !sledRide.parked(),
+   run() {
+     if (sledRide.mount(x, n, ground, yaw)) {
+@@ -2083,4 +2100,5 @@ function currentAction() {
+   if (museumInspection.active) return { label: '返回展柜', run: museumInspection.close };
+   if (museumLaunch.active) return { label: '返回展柜', run: museumLaunch.close };
++  if (!homeReturn && sledRide.canRemount(x, n, ground)) return parkedSledAction;
+   const local = museumPosition();
+   const museumStop = museumVisit.near(local.x, local.y, local.z);
+@@ -2147,4 +2165,8 @@ function refreshLockHint() {
+ function mode(next: boolean) {
+   if (houseDoorTravel) return false;
++  if (sledRide.active()) {
++    announceActivity('下橇后再切换地点或视角');
++    return false;
++  }
+   if (homeReturn) {
+     leaveSeat();
+@@ -2764,4 +2786,5 @@ function arriveAtCeremony(event: CeremonyArrival, now: number) {
+   museumLaunch.close();
+   museumGuide.setActive(false);
++  sledRide.interrupt();
+   resetMovement();
+
+@@ -2894,10 +2917,5 @@ renderer.setAnimationLoop(now => {
+             sledRide.step(townPhysicsDelta, { forward, turn: right, drift: sledSpace ||
+               (touchSledDrift !== undefined && now - touchSledDrift.since >= touchHoldMilliseconds) }, driftState.boost);
+-            const spot = sledRide.spot;
+-            x = spot.x;
+-            n = spot.n;
+-            ground = sledGroundAt(x, n);
+-            airHeight = spot.y > ground + .02 ? spot.y : undefined;
+-            yaw = spot.yaw;
++            alignPlayerWithSled();
+             if (sledRide.active() && !sledRide.airborne() && sledRide.speed() > .5 &&
+               Math.hypot(x - beforeX, n - beforeN) > .05) {
+@@ -2946,5 +2964,5 @@ renderer.setAnimationLoop(now => {
+     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
+     faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
+-    const movement = sledRide.active() ? '雪橇' : sledRide.recovering() ? '翻橇' :
++    const movement = sledRide.recovering() ? '翻橇' : sledRide.active() ? '雪橇' :
+       landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
+       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
+@@ -2994,5 +3012,5 @@ renderer.setAnimationLoop(now => {
+     camera.updateProjectionMatrix();
+   }
+-  sledStatus.textContent = sledRide.active()
++  sledStatus.textContent = sledRide.recovering() && sledRide.active() ? '翻橇中 · 仍在雪橇上' : sledRide.active()
+     ? `雪橇 ${(sledRide.speed() * 3.6).toFixed(0)} km/h` +
+       (sledDrift.drifting() ? ` · 漂移充能 ${Math.round(sledDrift.charge() * 100)}%`

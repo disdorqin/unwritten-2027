@@ -1,0 +1,30 @@
+diff --git a/tools/voxel-tavern/town-blockout/festival.ts b/tools/voxel-tavern/town-blockout/festival.ts
+index c232dd495ee748699d3c4f8d0290323fbb0cfb86..a2d2e36eac60c9fb67fd6dd79d77ed0872176c55 100644
+--- a/tools/voxel-tavern/town-blockout/festival.ts
++++ b/tools/voxel-tavern/town-blockout/festival.ts
+@@ -348,6 +348,7 @@ export function createFestival(
+     showActive() { return elapsed >= 0 || hasMainTrack(); },
+     mountAudioSettings: showAudio.mountSettings,
+     getAudioContext,
++    runningAudioContext: () => audio?.state === 'running' ? audio : undefined,
+     enableAudio() { void tryEnableAudio(); },
+     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
+       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 296ebfa1c8778c858def2e6966ff0e6a986c36e5..0a1ba85a5565c3ccd2ee1cab7b3ab70f492976f8 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -923,6 +923,13 @@ panel => openTavernDice(panel, () => {
+   now: presence.serverNow,
+   groundAt: mascotOutdoorGround,
+   follow: () => presence.ownerFollowsMascot() && walking ? ownedMascot : presence.sampleRemoteMascot(),
++  bell: {
++    runningAudio: festival.runningAudioContext,
++    listenerDistance(east, north, feet) {
++      if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return;
++      return Math.hypot(camera.position.x - east, camera.position.y - feet - .214, camera.position.z + north);
++    },
++  },
+   visible(east, north, feet) {
+     if (Boolean(homeReturn) !== isSharedHomePosition(east, north, feet)) return false;
+     mascotBounds.center.set(east, feet + .32, -north);

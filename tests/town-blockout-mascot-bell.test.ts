@@ -143,3 +143,46 @@ test('the finale keeps the neck bell on real strides and resets it across scene 
   step(scene(2.6, 'witness', revealed, 0));
   assert.deepEqual(frequencies, [920, 1470, 920, 1470]);
 });
+test('the host motif consumes a live authorized ring cue once without replaying snapshot state', () => {
+  const batch = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), 100);
+  const revealed = { ringCount: 11, goatRevealed: true, firstKeyLit: false };
+  const point = { x: 10, n: 22, ground: 12, yaw: 0, speed: 0 };
+  const confirmed: TownMascotFinaleFrame = { progress: revealed, phase: 'ring-passage', point };
+  const light = { visible: true };
+  const heard: Array<{ at: number; x: number }> = [];
+  let now = 1000, frame: TownMascotFinaleFrame | undefined;
+  const update = addMascotToNpcBatch(batch, 0, {
+    now: () => now,
+    groundAt: () => undefined,
+    visible: () => false,
+    finale: {
+      read: () => frame,
+      ringResonance: light,
+      onRingResonance: (at, pose) => heard.push({ at, x: pose.x }),
+    },
+  });
+  function step(value?: TownMascotFinaleFrame) {
+    frame = value;
+    update();
+  }
+
+  step(confirmed);
+  assert.equal(light.visible, true);
+  step({ ...confirmed, resonanceAt: 999 });
+  step({ ...confirmed, resonanceAt: 1002 });
+  step({ ...confirmed, resonanceAt: 1000, progress: { ...revealed, goatRevealed: false } });
+  step({ ...confirmed, resonanceAt: 1000, point: { ...point, ground: NaN } });
+  assert.equal(light.visible, false);
+  assert.deepEqual(heard, []);
+  const cue = { ...confirmed, resonanceAt: 1000 };
+  step(cue);
+  step(cue);
+  step();
+  now += 40;
+  step(cue);
+  step({ ...confirmed, resonanceAt: 1001, phase: 'witness' });
+  step({ ...confirmed, resonanceAt: 1001, progress: { ...revealed, ringCount: 12, firstKeyLit: true } });
+  assert.equal(light.visible, false);
+  assert.equal(batch.count, 0);
+  assert.deepEqual(heard, [{ at: 1000, x: 10 }]);
+});
