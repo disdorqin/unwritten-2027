@@ -25,6 +25,7 @@ test('the original conversations retain local activity, neighbor, and festival c
     style = { cssText: '' };
     textContent = '';
     value = '';
+    label = '';
     disabled = false;
     onclick?: () => void;
     onchange?: () => void;
@@ -83,7 +84,13 @@ test('the original conversations retain local activity, neighbor, and festival c
     assert.deepEqual(buttons, ['问一句', '聊聊雪镇', '聊聊镇民', '聊聊跨年', '附近有什么好玩的？', '道别']);
     const { selector, ask } = talk;
     assert.ok(selector?.onchange && ask);
-    assert.deepEqual(selector.children.map(option => option.value), ['', 'town', 'neighbors', 'new-year', 'activities']);
+    assert.deepEqual(selector.children.map(node => [node.tagName, node.label, node.children.map(option => option.value)]), [
+      ['option', '', []],
+      ['optgroup', '地点与设施', ['activities']],
+      ['optgroup', '镇民与日常', ['town', 'neighbors', 'new-year']],
+      ['optgroup', '镇史传说', ['founding', 'crater', 'mountain', 'chronicle']],
+      ['optgroup', '生肖星石', ['star-decree']],
+    ]);
     assert.equal(ask.disabled, true);
     selector.value = '12';
     selector.onchange();
@@ -102,6 +109,14 @@ test('the original conversations retain local activity, neighbor, and festival c
     assert.equal(talk.click('附近有什么好玩的？'), '先到街上走走，看看雪和灯吧。');
     assert.equal(talk.click('问一句'), '先到街上走走，看看雪和灯吧。');
     guideEnabled = true;
+    for (const topic of ['crater', 'mountain', 'star-decree', 'founding', 'chronicle', 'star-decree']) {
+      selector.value = topic;
+      selector.onchange();
+      assert.equal(ask.disabled, false);
+      const deflection = talk.click('问一句');
+      assert.equal(deflection, script.smallTalk[0]);
+      assert.doesNotMatch(deflection, /入口|归环|核心舱|飞船|铃铛芯|大坑|山顶/u);
+    }
     closed = false;
     announced = '';
     talk.click('道别');

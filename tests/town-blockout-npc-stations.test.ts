@@ -79,20 +79,20 @@ test('resident hotspots fail closed until their stations work, share a batch, an
   assert.equal(scene.children.length, 1);
 });
 
-test('the 19 Qin town lines match the manuscript and keep the clue gates', () => {
+test('the 17 current Qin town lines match the manuscript and exclude the retired goat route', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC补供稿二-汤守礼仪官戏台联-v1.md', import.meta.url), 'utf8');
-  const lines = [...source.matchAll(/^- \[秦知礼 · (?!问答\/)[^\]]+\] (.*)$/gm)].map(([, value]) =>
-    value.trim().replace(/\[挡回式·门控口径\]$/, ''));
+  const lines = [...source.matchAll(/^- \[秦知礼 · (?!问答\/|线索\/金羊)[^\]]+\] (.*)$/gm)]
+    .map(([, value]) => value.trim());
   const role = palaceStewardDialogue;
-  assert.equal(lines.length, 19);
+  assert.equal(lines.length, 17);
   assert.equal(Object.hasOwn(role, 'questions'), false);
   assert.deepEqual([
-    ...Object.values(role.familiar).flat(), ...role.guides, ...role.clues, ...role.newYear, ...role.gossip,
+    ...Object.values(role.familiar).flat(), ...role.guides, ...role.newYear, ...role.gossip,
   ], lines);
   assert.ok(residentZodiacClues('翁寒江', () => true).every(line => !line.includes('桥洞')));
   assert.deepEqual(residentZodiacClues('翁寒江', id => id === 'snake'), [lighthouseSnakeClue]);
-  assert.deepEqual(residentZodiacClues('秦知礼', () => true), [role.clues[0]]);
-  assert.deepEqual(residentZodiacClues('秦知礼', () => false, true), [role.clues[1]]);
+  assert.deepEqual(residentZodiacClues('秦知礼', () => true), []);
+  assert.deepEqual(residentZodiacClues('秦知礼', () => false), []);
   const initial = { key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false };
   assert.equal(palaceStewardGuides(initial)[0], 0);
   assert.equal(palaceStewardGuides({ ...initial, key: true })[0], 4);
@@ -143,6 +143,7 @@ test('each resident station offers only town topics and its available activity',
     [steward, palaceStewardDialogue, undefined], [lantern, npcAddedDialogue.贾明灯, activities.贾明灯],
     [words, npcAddedDialogue.文墨生, activities.文墨生], [toss, npcAddedDialogue.胡六环, activities.胡六环],
   ] as const;
+  const protectedTopics = ['问生肖星石收集令', '问开镇传说', '问镇志讲古', '问镇志讲古'];
   for (const [spot, role, activity] of cases) {
     assert.equal(spot.available?.(), true, spot.label);
     spot.run();
@@ -150,7 +151,8 @@ test('each resident station offers only town topics and its available activity',
     assert.deepEqual(panel.children.map(child => child.tagName), ['p', 'div']);
     assert.ok(controls.children.every(child => child.tagName === 'button'));
     assert.deepEqual(controls.children.map(button => button.textContent), [
-      '请讲讲这里的玩法', ...(spot === steward ? ['问生肖线索'] : []), '聊聊镇民', '聊聊跨年',
+      '请讲讲这里的玩法', '聊聊镇民', '聊聊跨年',
+      '问附近的去处', '问镇民的故事', '问镇上的节庆', '问生肖星石收集令', '问开镇传说', '问镇志讲古',
       ...(activity ? [activity.label] : []), '道别',
     ], spot.label);
     const click = (label: string) => {
@@ -162,7 +164,15 @@ test('each resident station offers only town topics and its available activity',
     assert.equal(click('请讲讲这里的玩法'), role.guides[0]);
     assert.equal(click('聊聊镇民'), role.gossip[0]);
     assert.equal(click('聊聊跨年'), role.newYear[0]);
-    if (spot === steward) assert.equal(click('问生肖线索'), palaceStewardDialogue.clues[0]);
+    assert.equal(click('问附近的去处'), role.guides[0]);
+    assert.equal(click('问镇民的故事'), role.gossip[0]);
+    assert.equal(click('问镇上的节庆'), role.newYear[0]);
+    const deflections = protectedTopics.map(click);
+    assert.equal(new Set(deflections).size, 1);
+    const [reply] = deflections;
+    assert.ok([...Object.values(role.familiar).flat(), ...role.guides].some(line => line.includes(reply)));
+    assert.doesNotMatch(reply, /入口|地窖|北坡|木屋那头|灯塔|宝物间|归环|核心舱|飞船|铃铛芯/u);
+    if (spot === woodcutter) assert.equal(click('聊聊镇民'), '小未是镇上的吉祥物。');
     if (activity) {
       click(activity.label);
       assert.equal(activated, activity.label);

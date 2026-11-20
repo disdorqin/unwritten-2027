@@ -405,18 +405,41 @@ export function createTownNpcActivity(
         return guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
       } },
     ];
-    const selectedTopic = () => topics.find(({ id }) => id === selector.value);
+    const [town, neighbors, festival, places] = topics;
+    const deflect = () => dialogue.smallTalk[0];
+    const groups = [
+      { label: '地点与设施', topics: [places] },
+      { label: '镇民与日常', topics: [town, neighbors, festival] },
+      { label: '镇史传说', topics: [
+        { id: 'founding', label: '能讲讲开镇的传说吗？', reply: deflect },
+        { id: 'crater', label: '镇外那个坑有什么传说？', reply: deflect },
+        { id: 'mountain', label: '山上有什么老故事？', reply: deflect },
+        { id: 'chronicle', label: '能听一段镇志讲古吗？', reply: deflect },
+      ] },
+      { label: '生肖星石', topics: [
+        { id: 'star-decree', label: '能讲讲生肖星石收集令吗？', reply: deflect },
+      ] },
+    ];
+    const townTopics = groups.flatMap(group => group.topics);
+    const selectedTopic = () => townTopics.find(({ id }) => id === selector.value);
     const ask = action('问一句', () => {
       const topic = selectedTopic();
       if (topic) speech.textContent = topic.reply();
     });
     ask.disabled = true;
     selector.onchange = () => { ask.disabled = !selectedTopic(); };
-    for (const { id, label, reply } of topics) {
-      const option = document.createElement('option');
-      option.value = id;
-      option.textContent = label;
-      selector.append(option);
+    for (const { label, topics } of groups) {
+      const group = document.createElement('optgroup');
+      group.label = label;
+      for (const { id, label } of topics) {
+        const option = document.createElement('option');
+        option.value = id;
+        option.textContent = label;
+        group.append(option);
+      }
+      selector.append(group);
+    }
+    for (const { label, reply } of topics) {
       action(label, () => { speech.textContent = reply(); });
     }
     const clues = zodiacHints?.(name);

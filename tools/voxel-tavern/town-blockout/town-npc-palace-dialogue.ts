@@ -1,4 +1,4 @@
-// Verbatim town dialogue from Muse's NPC补供稿二, §乙. The clue tuple is [sealed, awakened].
+// Verbatim lines from Muse's NPC补供稿二, §乙. Public palace activity lines.
 export const palaceStewardDialogue = {
   "familiar": {
     "初见": [
@@ -23,10 +23,6 @@ export const palaceStewardDialogue = {
     "画廊那面乐谱画，是塔顶敲钟的题面：低、高、中——顺序记牢。容我多一句嘴：钟在塔顶，门在梯下，敲对了，自个儿下楼取门，不必谢我。",
     "王座后头那间密室里，有一幅图谱，画着四间密室的相对位置。先看图，后探路，事半功倍——这不是泄题，这是礼数，先来后到都看得。",
     "想赛一程的，西门起点板是发令处：踩板计时，登主塔，塔顶平台是终点。容我发令——预备，走！摔了不记仇，成绩记在塔基的牌子上。"
-  ],
-  "clues": [
-    "您问金羊？金羊未醒，本宫不便多言。先把其余十一件集齐——醒没醒，届时您自然知道，我这把嘴，提前一个字也不漏。",
-    "金羊既醒，容我引一句：它的归处，在本宫密室链的尽头——宝物间。过限时门，验冰钥匙，方得入内。机关是您的功课，礼数我替您守到门口。"
   ],
   "newYear": [
     "今夜大殿是跨年的第二会场：长桌开席，吊灯全明。广场听钟声，这儿举杯——两处年味，一样圆满。",

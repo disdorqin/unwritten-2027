@@ -5,26 +5,29 @@ import { Scene } from 'three';
 import { nearestTownActivity, type TownActivityContext } from '../tools/voxel-tavern/town-blockout/town-activity.ts';
 import { createTownNpcActivity, memorialClerkHome } from '../tools/voxel-tavern/town-blockout/town-npc.ts';
 import { canEnter, createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
-import { npcAuthoredDialogue, npcScript } from '../tools/voxel-tavern/town-blockout/town-npc-dialogue.ts';
+import { npcAuthoredDialogue, npcExpansion, npcScript } from '../tools/voxel-tavern/town-blockout/town-npc-dialogue.ts';
 import { townMailNpcNames } from '../tools/voxel-tavern/town-blockout/town-mail-store.ts';
 
 const names = ['贾明灯', '文墨生', '胡六环', '纪守信', '翁寒江', '樊樵'] as const;
 
-test('all 114 added NPC town lines match the Muse manuscript without the retired questions', () => {
+test('the six added NPCs retain their public town dialogue from the Muse manuscript', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC新增六人台词-v1.md', import.meta.url), 'utf8');
   const snakeUpdate = readFileSync(new URL('../docs/交流区/Muse/给GPT-蛇件新谜面与接线-2026-11-18.md', import.meta.url), 'utf8');
   const revisedClue = snakeUpdate.match(/^> 「(.+)」$/m)?.[1];
   assert.ok(revisedClue);
   const expected = source.split(/\r?\n/).filter(line => /^- \[[^\]]+ · [^\]]+\] /.test(line))
-    .filter(line => !line.includes(' · 问答/'))
-    .map(line => line.startsWith('- [翁寒江 · 线索] 远处还有一件') ? `- [翁寒江 · 线索] ${revisedClue}` : line);
+    .filter(line => !line.includes(' · 问答/') && !line.includes('一只白羊卧雪坡'))
+    .map(line => line.startsWith('- [翁寒江 · 线索] 远处还有一件')
+      ? `- [翁寒江 · 线索] ${revisedClue}` : line.replace('，也可以写给乐天', ''));
+  expected.push('- [樊樵 · 八卦] 小未是镇上的吉祥物。');
   const actual = names.flatMap(name => {
     const role = npcAuthoredDialogue[name];
     const lineFor = (category: string, text: string) => `- [${name} · ${category}] ${text}`;
     const linesFor = (category: string, texts: readonly string[]) => texts.map(text => lineFor(category, text));
     assert.deepEqual(Object.values(role.familiar).map(lines => lines.length), [3, 3, 2]);
-    assert.deepEqual([role.guides.length, role.clues.length, role.newYear.length, role.gossip.length], [6, 2, 2, 1]);
-    assert.equal(Object.hasOwn(role, 'questions'), false, name);
+    assert.deepEqual([role.guides.length, role.clues.length, role.newYear.length, role.gossip.length],
+      [6, name === '樊樵' ? 1 : 2, 2, name === '樊樵' ? 2 : 1]);
+    assert.equal('questions' in role, false);
     return [
       ...Object.entries(role.familiar).flatMap(([familiarity, lines]) => linesFor(`日常/${familiarity}`, lines)),
       ...linesFor('引导', role.guides),
@@ -43,7 +46,14 @@ test('adding authored dialogue leaves the live dialogue and postal recipient lis
   assert.equal(Object.keys(npcAuthoredDialogue).length, 12);
   for (const [name, role] of Object.entries(npcScript)) {
     assert.equal(npcAuthoredDialogue[name as keyof typeof npcScript], role);
+    assert.deepEqual(Object.keys(role), ['greetings', 'farewells', 'smallTalk']);
+    assert.ok(role.smallTalk.length);
   }
+  for (const role of Object.values(npcExpansion)) {
+    assert.equal('holidayFacts' in role, false);
+  }
+  assert.doesNotMatch(JSON.stringify([npcAuthoredDialogue, npcExpansion]),
+    /张乐天|托马斯|保研|电价预测|AI 工程师|白羊卧雪坡|羊石来历|星舰迫降|核心舱/u);
 });
 
 test('the memorial clerk and branch mailbox remain separately selectable', () => {
