@@ -154,6 +154,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
 
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    wreckageSites: wreckage.sites,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;

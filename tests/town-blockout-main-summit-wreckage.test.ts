@@ -48,6 +48,7 @@ test('ZD-07 mounts three stable slope fragments on the existing P-3 ribbon witho
     'summit-wreckage-nozzle', 'summit-wreckage-skin', 'summit-wreckage-collar',
   ]);
   assert.notEqual(wreckage.group, mounted);
+  assert.deepEqual(assembly.wreckageSites, wreckage.sites);
   assert.deepEqual(mounted.children.map(mesh => [mesh.name, mesh.position.toArray()]),
     wreckage.sites.map(({ id, model }) => [id, [model.east, model.height, -model.north]]));
   const meshes = meshesOf(wreckage.group);
