@@ -127,6 +127,20 @@ test('R2 port survey records the official seam, downhill probe and asymmetric cl
   assert.equal(missing.samples[35]!.seamHeight, undefined);
 });
 
+test('R2 parked sled reachability shares the one-way hinge without recording a crash', () => {
+  let contacts = 0;
+  const world = adapter.sledWorld({}, { ...effects, onGateImpact() { contacts++; } });
+  for (const offset of [-1.73, 0, 1.73]) {
+    const parked = foot(candidate.pointsAt(candidate.gate.metres - .8, offset));
+    const sameSide = foot(candidate.pointsAt(candidate.gate.metres - 1.2, offset));
+    const downhillSide = foot(candidate.pointsAt(candidate.gate.metres + .8, offset));
+    assert.equal(world.canReachParked(sameSide, parked), true);
+    assert.equal(world.canReachParked(downhillSide, parked), false);
+    assert.equal(world.canReachParked(parked, downhillSide), true);
+  }
+  assert.equal(contacts, 0);
+});
+
 test('actual stock ride runs the R2 hinge downhill and rejects swept uphill approach at both rails', () => {
   let contacts = 0;
   const world = adapter.sledWorld({ exit: fixturePort('exit') }, { ...effects, onGateImpact() { contacts++; } });

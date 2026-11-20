@@ -161,6 +161,9 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
         return support.part !== 'r2' && host[support.part]?.blocked?.({ x, n, y }, r2SledFootRadius) === true;
       },
       canTraverse,
+      canReachParked(from: Foot, to: Foot) {
+        return !gateContact(from, to);
+      },
       wallImpact(from: Foot, to: Foot, speed: number) {
         const hit = gateContact(from, to);
         if (!hit) return;
@@ -170,7 +173,10 @@ export function createR2HostAdapter(candidate = createR2EngineeringCandidate()) 
       snow: effects.snow,
       stopped: effects.stopped,
       smoothFlight: effects.smoothFlight,
-    } satisfies RideWorld & { canTraverse(from: Foot, to: Foot): boolean };
+    } satisfies RideWorld & {
+      canTraverse(from: Foot, to: Foot): boolean;
+      canReachParked(from: Foot, to: Foot): boolean;
+    };
   }
 
   return { track, halfNetWidth, supportAt, crossing, gateContact, sledWorld, surveyPort };
