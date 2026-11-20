@@ -2,6 +2,7 @@ import {
   AmbientLight, BoxGeometry, BufferGeometry, Color, DirectionalLight, Fog, Group, Line, LineBasicMaterial,
   Mesh, MeshLambertMaterial, Scene, Vector3,
 } from 'three';
+import { isMountainPresenceFoot } from '../../../src/shared/za22-mountain-domain';
 import {
   mountMainSummitAssembly, summitAssemblyAnchor, supportsCloudTerrace,
 } from './main-summit-assembly';
@@ -17,10 +18,12 @@ type Host = {
   now(): number;
   enterOrExit(terminal: Terminal, at: Point): void;
   view(title: string, message: string): void;
+  cloudStamp?: { available(): boolean; request(): void };
 };
 
 export const za22StationApproach = { east: 536.8, north: 317.15, height: 26.14 };
-export const za22CloudRunway = { start: 331, end: 288.5, north: 662, width: 4.4 };
+export const za22CloudRunway = { start: 310.5, end: 351.5, north: 662, width: 4.4 };
+const cloudApron = { west: 286.5, east: 352, south: 654, north: 664.65 };
 const terminalDwell = 8_000;
 const roofClearance = 3.5;
 const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
@@ -94,8 +97,8 @@ export function za22CloudSurfaceAt(east: number, north: number, radius = .27) {
   const localNorth = north - summitAssemblyAnchor.north;
   const landing = Math.abs(east - cloudTerminal.east) <= 4 - radius &&
     Math.abs(north - cloudTerminal.north) <= 4 - radius;
-  const apron = east >= za22CloudRunway.end - 2 + radius && east <= 339 - radius && north >= 654 + radius &&
-    north <= 664.65 - radius;
+  const apron = east >= cloudApron.west + radius && east <= cloudApron.east - radius &&
+    north >= cloudApron.south + radius && north <= cloudApron.north - radius;
   if (north < za22GateSeamNorth && (landing || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
     return sampleNorthRidge350(east, north);
   }
@@ -135,6 +138,7 @@ export function createZa22CloudRoute(host: Host) {
       mesh.position.set(east, height, -north);
       mesh.scale.set(width, tall, depth);
       group.add(mesh);
+      return mesh;
     }
     for (const index of [0, 1] as const) {
       const shift = index === 0 ? -1.55 : 1.55;
@@ -157,8 +161,14 @@ export function createZa22CloudRoute(host: Host) {
     }
     box(front, wood, cloudTerminal.east, 639, cloudTerminal.height + 3.31, 8.45, 1.6, .16);
     const run = za22CloudRunway;
-    for (let x = run.end + 2; x < run.start - 1; x += 4) {
+    for (let x = run.start + 2; x < run.end - 1; x += 4) {
       box(front, brass, x, run.north, za22CloudSurfaceAt(x, run.north) ?? 347, 1.6, .16, .045);
+    }
+    const arrowEast = run.start + 4;
+    for (const side of [-1, 1]) {
+      const north = run.north + side * .4;
+      box(front, brass, arrowEast, north, za22CloudSurfaceAt(arrowEast, north) ?? 347, 1.2, .16, .045)
+        .rotateY(-side * Math.PI / 4);
     }
     for (const x of [run.start, run.end]) {
       box(front, brass, x, run.north, za22CloudSurfaceAt(x, run.north) ?? 347, .20, run.width, .045);
@@ -202,7 +212,12 @@ export function createZa22CloudRoute(host: Host) {
       : { label: '乘缆车一线返回山脚站', run() { pending = 'summit'; } };
     if (near(position, benchVisitor, 1.45)) return {
       label: '查看星港坪装配和起飞线',
-      run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标起飞线出坪。'); },
+      run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标向东滑跑出坪。'); },
+    };
+    const cloudStamp = host.cloudStamp;
+    if (cloudStamp?.available() && world?.assembly.atCloudStamp(position)) return {
+      label: '在前山碑盖章',
+      run() { if (mode === 'summit' && cloudStamp.available()) cloudStamp.request(); },
     };
     return world?.gate.action(position);
   }
@@ -245,14 +260,25 @@ export function createZa22CloudRoute(host: Host) {
     });
   }
 
+  function surfaceAt(east: number, north: number, radius: number) {
+    return za22CloudSurfaceAt(east, north, radius) ?? world?.gate.surfaceAt(east, north, radius);
+  }
+
+  function walkingSurfaceAt(east: number, north: number, radius: number) {
+    const existing = surfaceAt(east, north, radius);
+    if (existing !== undefined || mode !== 'summit' || !world) return existing;
+    const height = world.assembly.trailSurfaceAt(
+      east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, radius,
+    );
+    return height !== undefined && isMountainPresenceFoot(east, north, height) ? height : undefined;
+  }
+
   return {
     scene, action, update, updateView,
     active: () => mode !== 'town',
     riding: () => ride !== undefined,
     ridePoint: () => ride && line.timeline(host.now(), ride.index).at,
-    surfaceAt(east: number, north: number, radius: number) {
-      return za22CloudSurfaceAt(east, north, radius) ?? world?.gate.surfaceAt(east, north, radius);
-    },
+    surfaceAt, walkingSurfaceAt,
     acceptsStep(fromEast: number, fromNorth: number, toEast: number, toNorth: number, radius: number) {
       return world?.gate.acceptsStep(fromEast, fromNorth, toEast, toNorth, radius) ?? true;
     },

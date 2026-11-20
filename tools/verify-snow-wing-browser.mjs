@@ -6,8 +6,10 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const [checkoutPath, outputPath] = process.argv.slice(2);
-assert.ok(checkoutPath && outputPath, 'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output>');
+const [checkoutPath, outputPath, mode] = process.argv.slice(2);
+assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings'),
+  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings]');
+const withRings = mode === '--rings';
 const checkout = path.resolve(checkoutPath);
 const output = path.resolve(outputPath);
 const viteRoot = path.join(checkout, 'tools/voxel-tavern');
@@ -65,6 +67,55 @@ async function hold(key, action) {
   finally { await p.keyboard.up(key); }
 }
 
+// Ground waypoints use the actual WASD controls with the camera facing south.
+async function groundAxis(axis, target, lowerKey, upperKey) {
+  const initial = (await getState()).position[axis];
+  const direction = Math.sign(target - initial);
+  if (Math.abs(target - initial) <= .12) return getState();
+  return hold(direction > 0 ? upperKey : lowerKey, () => watch(({ axis, target, direction }) => {
+    const { position } = window.__snowWingReview.getState();
+    return direction * (target - position[axis]) <= .12;
+  }, { axis, target, direction }, 12_000));
+}
+
+const walkEast = target => groundAxis('east', target, 'd', 'a');
+const walkNorth = target => groundAxis('north', target, 'w', 's');
+
+async function faceGround(target) {
+  const initial = (await getState()).groundHeading;
+  const delta = Math.atan2(Math.sin(target - initial), Math.cos(target - initial));
+  if (Math.abs(delta) <= .045) return getState();
+  return hold(delta > 0 ? 'ArrowRight' : 'ArrowLeft', () => watch(({ initial, delta }) => {
+    const { groundHeading } = window.__snowWingReview.getState();
+    const angle = groundHeading - initial;
+    const moved = Math.atan2(Math.sin(angle), Math.cos(angle));
+    return Math.sign(delta) * moved >= Math.abs(delta) - .028;
+  }, { initial, delta }, 8_000));
+}
+
+async function lodgeInteraction(action) {
+  await p.keyboard.press('e');
+  return watch(expected => window.__snowWingReview.getState().lodgeAction === expected, action, 8_000);
+}
+
+async function walkToRack(stand) {
+  await walkEast(65.55);
+  await walkNorth(stand.north);
+  await walkEast(stand.east);
+  await faceGround(Math.PI / 2);
+  const atRack = await watch(() => window.__snowWingReview.getState().rack.inReach, null, 8_000);
+  assert.ok(Math.hypot(atRack.position.east - stand.east,
+    atRack.position.north - stand.north) <= .4, 'Native walking must reach the wing-rack stand');
+  return atRack;
+}
+
+async function walkFromRackToRegistry() {
+  await faceGround(Math.PI);
+  await walkEast(65.55);
+  await walkNorth(1014);
+  return walkEast(62.5);
+}
+
 async function capture(label) {
   await p.keyboard.press('p');
   try {
@@ -95,33 +146,55 @@ async function main() {
     (!existsSync(chromium.executablePath()) && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
   browser = await chromium.launch({
     headless: true, executablePath, timeout: timeLeft(20_000),
-    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'],
+    args: process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] :
+      ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage'],
   });
   browserVersion = browser.version();
   context = await browser.newContext({ viewport, deviceScaleFactor: 1, reducedMotion: 'reduce', locale: 'zh-CN' });
   p = await context.newPage();
+  p.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
   p.on('pageerror', error => errors.push(error.message));
   p.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
   p.on('response', response => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
-  const response = await p.goto(`http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1`, {
+  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}`;
+  const response = await p.goto(reviewUrl, {
     waitUntil: 'domcontentloaded', timeout: timeLeft(30_000),
   });
   assert.equal(response?.status(), 200);
   const initial = await watch(() => window.__snowWingReview?.getState().frame > 1);
-  assert.deepEqual(initial.position, { east: 62.5, north: 1014, height: 800 });
+  assert.deepEqual(initial.position, { east: 62.5, north: 1006, height: 800 });
   assert.equal(initial.flightTimeScale, 12);
   assert.ok(!initial.claimed && !initial.registration.snowWingEligible && !initial.wing.visible);
-  await p.keyboard.press('e');
-  await watch(() => {
-    const s = window.__snowWingReview.getState();
-    return s.registration.snowWingEligible && !s.claimed;
-  });
-  await p.keyboard.press('e');
-  const claimed = await watch(() => window.__snowWingReview.getState().claimed);
-  assert.deepEqual(claimed.position, initial.position);
+  if (withRings) assert.deepEqual(initial.rings?.passed ?? [], []);
+  else assert.equal(initial.rings ?? null, null);
+  const outside = await lodgeInteraction('out-of-reach');
+  assert.ok(!outside.registration.snowWingEligible && !outside.claimed);
+  await walkNorth(1013.55);
+  const unregisteredRack = await walkToRack(initial.rack.stand);
+  assert.ok(unregisteredRack.rack.visible && unregisteredRack.rack.draws > 0, 'The physical rack should be visible from its stand');
+  const denied = await lodgeInteraction('need-registration');
+  assert.ok(!denied.registration.snowWingEligible && !denied.claimed);
+  await walkFromRackToRegistry();
+  const registered = await lodgeInteraction('registered');
+  assert.ok(registered.registration.snowWingEligible && !registered.claimed);
+  const deskRepeat = await lodgeInteraction('already-registered');
+  assert.ok(!deskRepeat.claimed, 'A second E at the registry does not grant the wing');
+  await walkToRack(initial.rack.stand);
+  await capture('f1-physical-wing-rack');
+  const claimed = await lodgeInteraction('claimed');
+  assert.ok(claimed.claimed && claimed.registration.snowWingEligible);
+  assert.ok(Math.hypot(claimed.position.east - registered.position.east,
+    claimed.position.north - registered.position.north) > 2, 'Wing claim requires a separate walk from the desk');
   await capture('f1-lodge-wing-claim');
+  const duplicate = await lodgeInteraction('already-claimed');
+  assert.ok(duplicate.claimed);
+  assert.deepEqual(duplicate.position, claimed.position);
+  const readyToLaunch = await walkFromRackToRegistry();
+  if (withRings) assert.deepEqual(readyToLaunch.rings?.passed ?? [], [], 'Ground travel must not count as flying through a ring');
 
   const lift = await hold('w', () => watch(() => {
     const s = window.__snowWingReview.getState();
@@ -132,6 +205,19 @@ async function main() {
   assert.ok(lift.launchProbe.pathClear && lift.launchProbe.drop >= 15);
   assert.equal(lift.wing.name, 'snow-wing');
   assert.ok(lift.wing.width >= 3.79);
+  let ringEvidence;
+  if (withRings) {
+    assert.equal(lift.rings?.count, 3);
+    assert.deepEqual(lift.rings.passed, [], 'No ring is passed at takeoff');
+    await watch(() => {
+      const { rings } = window.__snowWingReview.getState();
+      return rings?.draws > 0 && rings.passed.length < 2;
+    });
+    const visible = await capture('f1-glide-rings');
+    assert.ok(visible.rings.draws > 0 && visible.rings.passed.length < 2,
+      'The ring screenshot must show the course before passing the second ring');
+    ringEvidence = { visible };
+  }
   const steady = await watch(() => {
     const s = window.__snowWingReview.getState();
     return s.flight?.phase === 'glide' && s.flight.speed === 15 && s.wing.draws === 1;
@@ -141,6 +227,14 @@ async function main() {
     (steady.flight.height - straight.flight.height);
   assert.ok(Math.abs(ratio - 6) < 1e-7, 'Neutral browser flight did not retain the 6:1 glide ratio');
   await capture('f1-steady-glide');
+  if (ringEvidence) {
+    const completed = await watch(() => {
+      const s = window.__snowWingReview.getState();
+      return s.flight?.phase === 'glide' && s.rings?.passed.length === 3;
+    });
+    assert.deepEqual(completed.rings.passed, ['ring-1', 'ring-2', 'ring-3']);
+    ringEvidence.completed = completed;
+  }
 
   const banked = await hold('a', async () => {
     await watch(() => window.__snowWingReview.getState().flight.bank <= -.5);
@@ -177,8 +271,22 @@ async function main() {
   assert.equal(landed.flight.touchdown, 'soft');
   assert.equal(landed.flight.usesBothHands, false);
   assert.ok(landed.claimed && landed.registration.snowWingEligible);
+  if (ringEvidence) assert.deepEqual(landed.rings.passed, ringEvidence.completed.rings.passed);
+  const { east, north, height, heading } = landed.flight;
+  assert.deepEqual(landed.position, { east, north, height });
+  assert.equal(landed.groundHeading, heading);
+  await hold('w', () => watch(({ east, north, heading }) => {
+    const { position } = window.__snowWingReview.getState();
+    return (position.east - east) * Math.sin(heading) + (position.north - north) * Math.cos(heading) >= 1;
+  }, { east, north, heading }, 10_000));
+  const walkedAfterLanding = await capture('f1-walk-after-touchdown');
+  assert.equal(walkedAfterLanding.position.height, height);
+  assert.ok(!walkedAfterLanding.wing.visible && walkedAfterLanding.wing.draws === 0);
+  assert.deepEqual(walkedAfterLanding.flight, landed.flight);
   assert.deepEqual(errors, [], 'The snow-wing preview reported a browser or resource error');
-  return { initial, claimed, lift, steady, straight, ratio, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed };
+  return { initial, outside, unregisteredRack, denied, registered, deskRepeat, claimed, duplicate,
+    lift, steady, straight, ratio, ringEvidence, banked, stalled, afterHold, sink, recovered, held, recoveredAt, landed,
+    walkedAfterLanding };
 }
 
 await mkdir(output, { recursive: true });
@@ -201,10 +309,12 @@ try {
   const evidence = {
     head: git('rev-parse', 'HEAD'), browserVersion, viewport, pins, screenshots, walkthrough, errors, teardownErrors, failure,
     stateAtFailure, elapsedMs: Math.round(performance.now() - started), passed: !failure && teardownErrors.length === 0,
-    fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys, 12× flight-clock evidence mode; flat terrain fallback outside P-1. No production host, inventory, multiplayer or sound.',
+    fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys walk from outside through the lodge to the registry and wing rack. Flight uses the 12× evidence clock and a flat terrain fallback outside P-1.' +
+      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : ''),
   };
   await writeFile(path.join(output, 'snow-wing-browser-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify({ passed: evidence.passed, elapsedMs: evidence.elapsedMs, screenshots: screenshots.length,
-    ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, errors, teardownErrors, failure }));
+    ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, rings: walkthrough?.ringEvidence?.completed.rings.passed,
+    errors, teardownErrors, failure }));
   if (!failure) assert.deepEqual(teardownErrors, [], 'A fixture process failed to close cleanly');
 }

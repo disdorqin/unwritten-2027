@@ -78,6 +78,9 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     streetInfill.map(({ id, points }) => [id, points.map(([kind]) => kind)]),
     'all configured streetscape clusters survive door and road clearance',
   );
+  assert.deepEqual(streetscape.infillPlaced.get('market-south-loop'),
+    ['well', 'dryingRack', 'lantern', 'firewood', 'stall', 'bench', 'lantern', 'fir'],
+    'the old-town infill retains every south market furnishing');
   const forest = addForestDensity(landscape, grid,
     (x, n, r) => district.keepClear(x, n, r) || streetscape.occupied(x, n, r),
     (x, n, r) => extensionRoadClearance(x, n, r) || track.keepClear(x, n, r) || extensionStreetClearance(x, n, r));
