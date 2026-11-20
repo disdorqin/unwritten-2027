@@ -1,4 +1,4 @@
-name: Verify ZD-05 island approach and walking
+name: Verify Window D clay atlas candidates
 
 on:
   push:
@@ -45,3 +45,40 @@ jobs:
             ${{ runner.temp }}/zd05/*.jpg
             ${{ runner.temp }}/zd05/sky-city-result.json
             ${{ runner.temp }}/zd05/captures.sha256
+  starport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies and select Chromium
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+          if browser="$(command -v google-chrome-stable || command -v google-chrome)"; then
+            printf 'STARPORT_ASSEMBLY_CHROME=%s\n' "$browser" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - name: Capture the rack and repeat native assembly and flight
+        run: |
+          node --import tsx --test tests/starport-assembly.test.ts tests/town-blockout-starport-assembly-flight.test.ts
+          node tools/verify-starport-assembly-flight-browser.mjs "$RUNNER_TEMP/zd03" --rack-views
+      - name: Hash original starport captures
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/zd03"
+          cd "$RUNNER_TEMP/zd03"
+          find . -maxdepth 1 -type f \( -name '*.jpg' -o -name 'starport-assembly-flight-result.json' \) -print0 | sort -z | xargs -0 --no-run-if-empty sha256sum > captures.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zd03-starport-rack
+          path: |
+            ${{ runner.temp }}/zd03/*.jpg
+            ${{ runner.temp }}/zd03/starport-assembly-flight-result.json
+            ${{ runner.temp }}/zd03/captures.sha256
