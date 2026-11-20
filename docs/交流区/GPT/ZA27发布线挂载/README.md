@@ -14,7 +14,7 @@
 
 [02 viewer-only 补丁](02-zb16-ceremony-on-za27-01.patch) 以 ① `9601e75d` 的 viewer blob `590232bbf44b09bfd0e4333a8e15e299c31138e5` 为前像，候选 `bd460799126681b4e199665310daeffec7c6c490`，结果 viewer blob `1265ad244628235ff064f2226726a92e3eefced6`。SHA256 `2b732047c21f7f1b2eeae64a56d8b2e92dae5b49e3db3f613b5c00eb30304b19`。
 
-来自窗 B `332f7aa` 对 ZA-22 的重定版。只动 viewer.ts 的仪式落位与姿态、雪橇空中退出判断，保留云海优先交互和山门西域场景。严格索引实贴、两端类型、生产构建、定向 67/67 通过。正式时序的仪式携橇浏览器证据独立登记。
+来自窗 B `332f7aa` 对 ZA-22 的重定版。只动 viewer.ts 的仪式落位与姿态、雪橇空中退出判断，保留云海优先交互和山门西域场景。严格索引实贴、两端类型、生产构建、定向 67/67 通过。Windows Chrome 146 / Intel UHD D3D11 正常根页从 E223/N180/Y12 出生，D/S/D 原生实走 E232.9/N174.4/Y12 上橇。服务端使用受控验收档期，发出唯一 on-time `ceremony-arrival`，真实 WS 显示 E228/N188/Y12 落场，HUD 保持下橇；随后下橇和原地复骑均通过。8 检查点、25 位姿帧、页面/控制台/HTTP/请求错误 0。出生点采样 160 draws / 1,110,788 tris / 0 错误。候选组合含独立 ZA-02 06，QA 组合提交 `ea27a2e`。原件 `za27-02-native-ceremony-06/za27-02-runtime.json`，SHA256 `0f65402a6f238211a076c02b71429359d8881cfac7a4db431d0e7e44b908d537`。先前两轮 Linux 只证普通到场，后续 Windows 这轮补齐携橇门。
 
 ## 实施顺序
 
