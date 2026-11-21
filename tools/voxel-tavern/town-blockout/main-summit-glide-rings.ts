@@ -36,7 +36,7 @@ export function summitGlideRingTerrainClears(ring: SummitGlideRing, groundAt: Gr
 }
 
 export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundAt,
-  targetMetres: readonly number[] = targets): readonly SummitGlideRing[] {
+  targetMetres: readonly number[] = targets, heightOffset = 0): readonly SummitGlideRing[] {
   if (!Array.isArray(targetMetres) || !targetMetres.length || targetMetres.length > 10 ||
       targetMetres.some((metres, index) => !Number.isFinite(metres) || metres <= 0 || metres > 1_200 ||
         (index > 0 && metres <= targetMetres[index - 1]!))) throw new RangeError('Invalid glide ring checkpoints');
@@ -58,7 +58,7 @@ export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundA
       id: `ring-${index + 1}`,
       east: previous.east + (current.east - previous.east) * t,
       north: previous.north + (current.north - previous.north) * t,
-      height: previous.height + (current.height - previous.height) * t + summitGlideRingBodyLift,
+      height: previous.height + (current.height - previous.height) * t + summitGlideRingBodyLift + heightOffset,
       heading: launch.heading,
       radius,
     };
@@ -107,3 +107,4 @@ export function createSummitGlideRingProgress(rings: readonly SummitGlideRing[])
     },
   };
 }
+

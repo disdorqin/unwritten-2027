@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, Fog, Group,
-  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PointLight, Quaternion, Raycaster, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
+  InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PlaneGeometry, PointLight, Quaternion, Raycaster, Scene, Vector2, Vector3, WebGLRenderer, Frustum, Sphere,
 } from 'three';
 import { addScenery } from './scenery';
 import { buildPineCamp } from './town-pine-camp';
@@ -357,6 +357,14 @@ scene.add(summitSkyline);
   }
   summitSkyline.add(plume);
 }
+// Summit hut window light (§3.9 hard metric): the one warm point visible
+// from town on a clear night. Toggled by setNight with the skyline shell.
+const summitHutLight = new Mesh(new PlaneGeometry(7, 9),
+  new MeshBasicMaterial({ color: '#ffb45c', fog: false }));
+summitHutLight.name = 'summit-hut-window-light';
+summitHutLight.position.set(62, mainSummitSpec.summitHeight - 14, -1012);
+summitSkyline.add(summitHutLight);
+
 // Icefall (追令二): chaotic crystal-cyan ice towers at the col foot,
 // where the front wall meets the main peak.
 {
@@ -691,6 +699,8 @@ function applyCeremonyLighting() {
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
+  summitHutLight.visible = night;
+  cloudRoute.setNight(night);
   const sky = night ? '#182642' : '#acc2dd';
   (scene.background as Color).set(sky);
   scene.fog!.color.set(sky);
