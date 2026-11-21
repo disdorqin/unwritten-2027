@@ -22,7 +22,7 @@ const app=await createServer({
   }}],
   server:{host:'127.0.0.1',port:0,hmr:false},
 });
-const result={kind:'ISOLATED ART ONLY, NOT official D palace shell / world -190m / player',
+const result={kind:'ISOLATED ART + PINNED WINDOW D SHELL SNAPSHOT; not official world -190m, U-15 or player',
   views:{},errors:[],passed:false};
 let browser,error;
 try{
@@ -48,10 +48,11 @@ try{
     assert.equal(stats.allPieces,9861);
     assert.equal(stats.visualPieces,9861);
     assert.ok(stats.materials>0 && stats.materials<=8);
-    assert.ok(stats.drawing<=10,'U-11 material batches exploded: '+name);
-    assert.ok(stats.triangles>=20000 && stats.triangles<=130000,
+    assert.ok(stats.drawing<=12,'D-shell plus C materials exceeded batch cap: '+name);
+    assert.ok(stats.triangles>=20000 && stats.triangles<=500000,
       'render empty or too dense '+name+': '+stats.triangles);
     assert.equal(stats.officialWorldMounted,false);
+    assert.equal(stats.reviewedDShellSnapshot,true);
     const shot=await page.screenshot({path:resolve(output,
       (index+1)+'-'+name+'.png')});
     assert.ok(shot.byteLength>12000,'black/blank image '+name);

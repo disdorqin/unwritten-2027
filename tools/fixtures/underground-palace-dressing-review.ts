@@ -2,6 +2,7 @@ import {
   AmbientLight, Color, DirectionalLight, FogExp2, Group, PerspectiveCamera,
   PointLight, Scene, WebGLRenderer,
 } from 'three';
+import { createUndergroundPalaceShell } from './underground-palace-d-shell-snapshot';
 import {
   mountUndergroundPalaceDressing,
   undergroundPalaceDressing,
@@ -27,6 +28,8 @@ document.body.append(renderer.domElement);
 
 const parent=new Group();
 scene.add(parent);
+const reviewedDShell=createUndergroundPalaceShell();
+scene.add(reviewedDShell.group);
 const mounted=mountUndergroundPalaceDressing(parent,true);
 // Vault geometry is intentionally shown only in the *art* QA camera so the
 // designer can inspect it before U-5 authorizes its actual in-game mount.
@@ -78,13 +81,15 @@ Object.assign(window,{
         drawing:renderer.info.render.calls,
         triangles:renderer.info.render.triangles,
         eye:camera.position.toArray(),
-        officialWorldMounted:false};
+        officialWorldMounted:false,
+        reviewedDShellSnapshot:true};
     },
     dispose(){
       if(!active)return; active=false;
       window.removeEventListener('resize',onResize);
       window.removeEventListener('keydown',onKey);
       mounted.dispose();
+      reviewedDShell.dispose();
       renderer.dispose();renderer.domElement.remove();
     },
   },

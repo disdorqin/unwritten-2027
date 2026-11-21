@@ -1,0 +1,169 @@
+{
+  "kind": "ISOLATED ART + PINNED WINDOW D SHELL SNAPSHOT; not official world -190m, U-15 or player",
+  "views": {
+    "stairs": {
+      "view": "stairs",
+      "frames": 7,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 9,
+      "triangles": 196328,
+      "eye": [
+        -0.5,
+        1.4,
+        1.1
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 193016
+    },
+    "colonnade": {
+      "view": "colonnade",
+      "frames": 13,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 9,
+      "triangles": 196328,
+      "eye": [
+        1,
+        -0.65,
+        -22.5
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 173789
+    },
+    "gallery": {
+      "view": "gallery",
+      "frames": 20,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 9,
+      "triangles": 196328,
+      "eye": [
+        12,
+        -0.7,
+        -52.8
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 300788
+    },
+    "throne": {
+      "view": "throne",
+      "frames": 26,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 8,
+      "triangles": 193448,
+      "eye": [
+        6,
+        -0.6,
+        -71
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 195344
+    },
+    "arena": {
+      "view": "arena",
+      "frames": 32,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 8,
+      "triangles": 193448,
+      "eye": [
+        0,
+        -0.65,
+        -106
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 74182
+    },
+    "vault": {
+      "view": "vault",
+      "frames": 38,
+      "materials": 7,
+      "allPieces": 9861,
+      "visualPieces": 9861,
+      "zoneCounts": {
+        "broken-steps": 452,
+        "colonnade": 2616,
+        "side-passage": 570,
+        "throne": 1716,
+        "exit-shrine": 193,
+        "forecourt": 1299,
+        "vault-antechamber": 2484,
+        "vault-display": 531
+      },
+      "drawing": 8,
+      "triangles": 193448,
+      "eye": [
+        0,
+        -0.55,
+        -133
+      ],
+      "officialWorldMounted": false,
+      "reviewedDShellSnapshot": true,
+      "imageBytes": 538118
+    }
+  },
+  "errors": [],
+  "passed": true
+}
