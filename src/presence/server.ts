@@ -33,6 +33,8 @@ import {
 } from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import { createTownNightBeaconHost } from './town-night-beacon.js';
+import { createTownOutdoorWeatherHost } from './town-outdoor-weather.js';
+import type { TownOutdoorWeatherState } from '../shared/town-outdoor-weather.js';
 import {
   ceremonyLandingAnnouncement, ceremonyLandingCentre, ceremonyLandingLeadMs, ceremonyLandingOuterRadius,
   ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
@@ -50,6 +52,8 @@ import {
 export type PresenceConnectionLog = (line: string) => void;
 
 export type PresenceTownNightOptions = Readonly<{
+  /** Same authoritative calendar anchor as the G-09 weather cycle. */
+  dawnEpoch?: number;
   scheduleAt: (now: number) => TownNightSchedule | undefined;
   restoredBeaconAt?: number | null;
   saveBeacon?: (at: number) => void;
@@ -59,6 +63,18 @@ export type PresenceTownNightOptions = Readonly<{
 type TownNightFeed = Readonly<{
   snapshot(): TownNightWindowState;
   subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherFeed = Readonly<{
+  snapshot(): TownOutdoorWeatherState;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherOptions = Readonly<{
+  dawnEpoch: number;
+  restoredWarningAt?: number | null;
+  saveWarning?: (at: number) => void;
+  onSaveError?: (error: unknown) => void;
 }>;
 
 type Options = {
@@ -73,6 +89,10 @@ type Options = {
   townNight?: PresenceTownNightOptions;
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
+  /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
+  townOutdoorWeather?: TownWeatherOptions;
+  /** Secondary rooms relay primary-town weather rather than running a second schedule. */
+  townOutdoorWeatherFeed?: TownWeatherFeed;
   /** Optional G-09 server-authoritative shot-time wind. Leave disabled until clients support relay kind 3. */
   snowballWindForThrow?: (shot: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
@@ -195,6 +215,30 @@ export async function createPresenceServer(options: Options = {}) {
     },
   };
   const nightFeed = ownedNightFeed ?? options.townNightFeed;
+  const weatherConfig = options.townOutdoorWeather;
+  if (weatherConfig && options.townOutdoorWeatherFeed) {
+    throw new Error('A presence room cannot author and follow the same outdoor weather.');
+  }
+  if (weatherConfig && nightConfig?.dawnEpoch !== undefined &&
+      weatherConfig.dawnEpoch !== nightConfig.dawnEpoch) {
+    throw new Error('Outdoor weather must use the town night dawn anchor.');
+  }
+  const weatherListeners = new Set<(frame: string) => void>();
+  const townWeather = weatherConfig && createTownOutdoorWeatherHost({
+    now: wallNow,
+    dawnEpoch: weatherConfig.dawnEpoch,
+    saveWarning: weatherConfig.saveWarning,
+    broadcast: frame => publishTownWeather(JSON.stringify(frame)),
+  }, weatherConfig.restoredWarningAt);
+  const ownedWeatherFeed: TownWeatherFeed | undefined = townWeather && {
+    snapshot: townWeather.snapshot,
+    subscribe(receive) {
+      weatherListeners.add(receive);
+      return () => { weatherListeners.delete(receive); };
+    },
+  };
+  const weatherFeed = ownedWeatherFeed ?? options.townOutdoorWeatherFeed;
+  let weatherErrorReported = false;
   let lastTownNightWindow = townNight?.snapshot();
   let nightErrorReported = false;
   const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
@@ -454,6 +498,27 @@ export async function createPresenceServer(options: Options = {}) {
   function publishTownNight(frame: string) {
     broadcast(frame);
     for (const receive of nightListeners) receive(frame);
+  }
+
+  function publishTownWeather(frame: string) {
+    broadcast(frame);
+    for (const receive of weatherListeners) receive(frame);
+  }
+
+  function updateTownWeather() {
+    if (!townWeather) return;
+    try {
+      townWeather.tick();
+      weatherErrorReported = false;
+    } catch (error) {
+      // A failed durable warning receipt must not be followed by a false cue.
+      // Retry while the warning remains fresh without killing player sessions.
+      if (!weatherErrorReported) {
+        weatherErrorReported = true;
+        if (weatherConfig?.onSaveError) weatherConfig.onSaveError(error);
+        else console.error('Town weather warning could not advance:', error);
+      }
+    }
   }
 
   function updateTownNight() {
@@ -1143,6 +1208,7 @@ export async function createPresenceServer(options: Options = {}) {
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true,
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
+      townOutdoorWeather: weatherFeed?.snapshot(),
     }));
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
@@ -1296,6 +1362,7 @@ export async function createPresenceServer(options: Options = {}) {
     });
   });
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
+  const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
   const tick = setInterval(() => {
     const time = now();
     // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
@@ -1309,6 +1376,7 @@ export async function createPresenceServer(options: Options = {}) {
     iceThrone.tick(time);
     const epoch = wallNow();
     updateTownNight();
+    updateTownWeather();
     updateCeremony(epoch);
     updateBell(epoch);
     if (photo) updatePhoto(epoch);
@@ -1345,13 +1413,16 @@ export async function createPresenceServer(options: Options = {}) {
     address: () => http.address() as AddressInfo,
     stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
     townNightFeed: ownedNightFeed,
+    townOutdoorWeatherFeed: ownedWeatherFeed,
     close() {
       if (stop) return stop;
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
       stopFollowingNight?.();
+      stopFollowingWeather?.();
       nightListeners.clear();
+      weatherListeners.clear();
       for (const peer of peers.values()) {
         clearTimeout(peer.joinTimer);
         peer.socket?.terminate();
