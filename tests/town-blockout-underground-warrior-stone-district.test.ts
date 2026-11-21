@@ -258,7 +258,8 @@ test('U-10 four open house interiors are actually reachable from their one stree
     const x = house.localEntrance[0], n = house.localEntrance[2];
     const side = house.side === 'north' ? 1 : -1;
     const start: readonly [number, number] = [x, n - side * .6];
-    const goals = mounted.feet.filter(item => item.id === house.id);
+    const goals: Array<{ id: string; role: string; foot: readonly [number, number, number] }> =
+      mounted.feet.filter(item => item.id === house.id);
     assert.equal(goals.length, 2);
     const minE = x - 4.45, maxE = x + 4.45;
     const minN = Math.min(n, n + side * 8.4) - 1.2;
