@@ -60,6 +60,26 @@ export function createUndergroundMainlineTrack(profile: UndergroundMainlineProfi
       profile.turnoutMetres <= 15 || profile.turnoutMetres >= length - 10) {
     throw new RangeError('U-19 expects the real approximately 120m camp-to-gate corridor');
   }
+  // Bend chainages come from the exact same certified polyline as the cart, sleepers
+  // and colliders. No client-authored turn danger zones or decorative path offsets.
+  const bends: Array<Readonly<{ chainage: number; angleRad: number; direction: 'left' | 'right' }>> = [];
+  for (let i = 1; i < segments.length; i++) {
+    const before = segments[i - 1]!;
+    const after = segments[i]!;
+    const ax = before.to.east - before.from.east;
+    const ay = before.to.north - before.from.north;
+    const bx = after.to.east - after.from.east;
+    const by = after.to.north - after.from.north;
+    const cross = ax * by - ay * bx;
+    const dot = ax * bx + ay * by;
+    const signed = Math.atan2(cross, dot);
+    const angleRad = Math.abs(signed);
+    if (angleRad > .45) throw new RangeError('U-19 sharp turn cannot support a mine-cart rail');
+    if (angleRad >= .05) bends.push(Object.freeze({
+      chainage: after.start, angleRad,
+      direction: signed > 0 ? 'left' as const : 'right' as const,
+    }));
+  }
   const chainages = Object.values(profile.faults);
   if (!chainages.every(m => Number.isFinite(m) && m >= 3 && m < length - 3) ||
       chainages.length !== faultNames.length ||
@@ -98,6 +118,7 @@ export function createUndergroundMainlineTrack(profile: UndergroundMainlineProfi
   return Object.freeze({
     domainId: profile.domainId, length, gaugeMetres, clearanceRadius,
     turnoutMetres: profile.turnoutMetres, faults: { ...profile.faults }, work,
+    bends: Object.freeze(bends),
     sample, sections: segments.map(s => Object.freeze({ ...s })),
     /** Used by the same cart model and movement sweep, no independent visual spline. */
     sampleSleepers(spacingMetres: number) {

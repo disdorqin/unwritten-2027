@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createUndergroundMainlineTrack } from '../../src/shared/underground-mainline-track.js';
-import { createUndergroundMainlineCart } from '../../src/presence/underground-mainline-cart.js';
+import { createUndergroundMainlineCart, type U19MineCartSnapshot } from '../../src/presence/underground-mainline-cart.js';
 
-function fixture() {
+function fixture(options: { bent?: boolean; initial?: U19MineCartSnapshot } = {}) {
   const route = createUndergroundMainlineTrack({
     domainId: 'mine', waypoints: [0, 24, 48, 72, 96, 120]
-      .map(m => ({ east: 0, north: -m, height: -90 })),
+      .map((m, i) => ({ east: options.bent && i >= 3 ? 3.5 : 0,
+        north: -m, height: -90 })),
     turnoutMetres: 94, faults: { sleepers: 18, gauge: 48, 'turnout-rust': 83 },
     clearanceRadius: .82, gaugeMetres: 1,
     acceptsTrackStep: () => true, acceptsWorkFoot: () => true,
@@ -20,7 +21,7 @@ function fixture() {
   const noise: number[] = [];
   const journal: unknown[] = [];
   const cart = createUndergroundMainlineCart({
-    route, now: () => clock,
+    route, initial: options.initial, now: () => clock,
     readAcceptedFoot: playerId => ({ ...place, playerId, domainId }),
     canUse: () => permitted,
     canTransferOre: (_playerId, _oreId, pieces, direction) => direction === 'load' ? inventory >= pieces : true,
@@ -33,7 +34,8 @@ function fixture() {
     },
     config: {
       acceleration: 1.25, brakeDeceleration: 4.5, maxSpeed: 9,
-      safeTurnoutSpeed: 3.5, recallMetresPerSecond: 12,
+      safeTurnoutSpeed: 3.5, safeCurveSpeed: 3.25,
+      recallMetresPerSecond: 12,
       maximumTickMs: 1000, actionReachMetres: 1,
     },
   });
@@ -126,6 +128,52 @@ test('U-19 overspeed at uncertified turnout derails but NEVER auto-dismounts or 
   assert.equal(f.cart.switchTurnout('miner', f.state().revision, 'gate'), true);
   assert.equal(f.cart.board('miner', f.state().revision), true);
   assert.equal(f.cart.go('miner', f.state().revision), true);
+});
+
+test('U-19 physically certified bend derails overspeed rider without ejecting or losing cargo', () => {
+  const ready: U19MineCartSnapshot = {
+    revision: 29, mode: 'rolling', lastAtMs: 1000,
+    chainage: 45, speed: 7.0, riderId: 'miner', brakeHeld: false, turnout: 'gate',
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: 'iron', pieces: 4 },
+  };
+  const f = fixture({ bent: true, initial: ready });
+  assert.equal(f.route.bends.length, 2, 'only the certified sharp geometry becomes a hazard');
+  assert.equal(f.advance(), true);
+  assert.equal(f.state().mode, 'derailed');
+  assert.equal(f.state().chainage, f.route.bends[0].chainage);
+  assert.equal(f.state().speed, 0);
+  assert.equal(f.state().riderId, 'miner', 'an impact never auto-dismounts');
+  assert.equal(f.state().cargo.pieces, 4, 'derail never leaks items');
+  assert.equal(f.inventory, 30);
+  assert.equal(f.noise.length, 1);
+  assert.equal(f.cart.tick(ready.revision), false, 'stale duplicate packets cannot replay impact');
+});
+
+test('U-19 even a gate-selected turnout derails at dangerous speed, but a slow branch stops safely', () => {
+  const state: U19MineCartSnapshot = {
+    revision: 10, mode: 'rolling', lastAtMs: 1000, chainage: 91,
+    speed: 8, riderId: 'miner', brakeHeld: false, turnout: 'gate',
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: '', pieces: 0 },
+  };
+  const fast = fixture({ initial: state });
+  assert.equal(fast.advance(), true);
+  assert.equal(fast.state().mode, 'derailed');
+  assert.equal(fast.state().chainage, fast.route.turnoutMetres);
+  assert.equal(fast.state().riderId, 'miner');
+  const slow = fixture({ initial: { ...state, chainage: 92, speed: 2, turnout: 'branch' } });
+  assert.equal(slow.advance(), true);
+  assert.equal(slow.state().mode, 'stopped');
+  assert.equal(slow.state().chainage, slow.route.turnoutMetres);
+  assert.equal(slow.state().riderId, 'miner');
+  assert.equal(slow.cart.go('miner', slow.state().revision), false,
+    'unregistered scenic branch must not become a phantom through track');
+  slow.atCart();
+  assert.equal(slow.cart.leave('miner', slow.state().revision), true);
+  assert.equal(slow.cart.switchTurnout('miner', slow.state().revision, 'gate'), true);
+  assert.equal(slow.cart.board('miner', slow.state().revision), true);
+  assert.equal(slow.cart.go('miner', slow.state().revision), true);
 });
 
 test('U-19 loading and unloading use G11 atomic 3x capacity and never duplicate inventory on failure', () => {
