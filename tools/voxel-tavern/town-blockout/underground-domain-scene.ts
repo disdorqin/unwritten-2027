@@ -10,6 +10,7 @@ import { mountUndergroundCampLighting } from './underground-camp-lighting.js';
 import { createUndergroundCrystalGate } from './underground-crystal-gate.js';
 import { mountUndergroundCampScene } from './underground-camp-scene.js';
 import { createUndergroundOreVein } from './underground-ore-vein.js';
+import { createUndergroundRecoveryFirePresentation, type UndergroundRecoveryFireSite } from './underground-recovery-fires.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -42,6 +43,12 @@ type Host = Readonly<{
     sites: readonly OreSite[];
     supportsFace(site: OreSite): boolean;
     readTargets(): readonly UndergroundMiningTargetView[];
+  }>;
+  /** U-13's authoritative fires and contact receipts, not a new healing implementation. */
+  recoveryRuntime?: Readonly<{
+    sites: readonly UndergroundRecoveryFireSite[];
+    supportsFire(site: UndergroundRecoveryFireSite): boolean;
+    readConfirmedContact(): Readonly<{ fireId: string; layer: string }> | undefined;
   }>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
   readGateStage?(): UndergroundMineGateStage | undefined;
@@ -89,6 +96,17 @@ export function mountUndergroundMineDomain(host: Host) {
         Math.hypot(normal.east, normal.north, normal.height) < .0001 ||
         host.oreRuntime?.supportsFace(site) !== true) return { kind: 'unsupported-ores' } as const;
     oreIds.add(target.id);
+  }
+
+  const recoverySites = host.recoveryRuntime?.sites ?? [];
+  for (const site of recoverySites) {
+    if (site.fire.point.layer !== landing.domainId ||
+        ![site.fire.point.east, site.fire.point.north, site.fire.point.height,
+          site.fire.healPerSecond, site.radius].every(Number.isFinite) ||
+        site.fire.healPerSecond < 0 || site.radius <= 0 ||
+        host.recoveryRuntime?.supportsFire(site) !== true) {
+      return { kind: 'unsupported-fires' } as const;
+    }
   }
 
   // A single rigid transform aligns the original pool, gallery, camp and ore markers.
@@ -149,6 +167,12 @@ export function mountUndergroundMineDomain(host: Host) {
   const gate = host.readGateStage && mine.expansion?.gate
     ? createUndergroundCrystalGate(mine.expansion.gate) : undefined;
   if (gate) root.add(gate.group);
+  const recovery = recoverySites.length ? createUndergroundRecoveryFirePresentation(recoverySites, point => {
+    const scene = new Vector3(point.east, point.height, -point.north)
+      .sub(root.position).applyAxisAngle(new Vector3(0, 1, 0), -mineYaw);
+    return [scene.x, scene.y, scene.z];
+  }) : undefined;
+  if (recovery) root.add(recovery.group);
   const veins = new Map<string, ReturnType<typeof createUndergroundOreVein>>();
   for (const { target, normal } of oreSites) {
     const localFace = new Vector3(target.at.east, target.at.height, -target.at.north)
@@ -186,6 +210,7 @@ export function mountUndergroundMineDomain(host: Host) {
         staticCampLights.sync(lights.litNicheIds, lights.extraCampLightCount, lights.remainingBudget);
       }
       gate?.update(host.readGateStage?.() ?? 'closed');
+      recovery?.sync(host.recoveryRuntime?.readConfirmedContact());
       if (host.oreRuntime) {
         const snapshot = new Map(host.oreRuntime.readTargets().map(target => [target.id, target]));
         for (const [id, vein] of veins) {
@@ -208,6 +233,7 @@ export function mountUndergroundMineDomain(host: Host) {
       interactiveCamp?.dispose();
       staticCampLights?.dispose();
       gate?.dispose();
+      recovery?.dispose();
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       for (const geometry of geometries) geometry.dispose();
