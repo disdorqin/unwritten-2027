@@ -1,7 +1,7 @@
 import {
-  BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry,
-  DataTexture, DodecahedronGeometry, Group, Mesh, MeshStandardMaterial,
-  NearestFilter, PointLight, SRGBColorSpace, TorusGeometry,
+  BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
+  DataTexture, DodecahedronGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  NearestFilter, PlaneGeometry, PointLight, SRGBColorSpace, TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
@@ -145,6 +145,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
   }
 
+  /** A text-bearing board: batched backing plus a canvas face. All crater
+   * signage text is 《文本-坑区牌面-2026-11-21》 verbatim — never paraphrased. */
+  function sign(east: number, h: number, north: number, yaw: number, w: number, hh: number,
+    back: MeshStandardMaterial,
+    draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) {
+    box(back, east, h, north, w + .14, hh + .14, .06, yaw);
+    if (typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = Math.round(512 * hh / w);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    draw(ctx, canvas.width, canvas.height);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    const plane = new Mesh(new PlaneGeometry(w, hh), new MeshBasicMaterial({ map: texture }));
+    const off = .055;
+    plane.position.set(east + Math.sin(yaw) * off, h, -north + Math.cos(yaw) * off);
+    plane.rotation.y = yaw;
+    group.add(plane);
+  }
+
   // ================= 2a · industrial belt （停工那一天） =================
 
   // ---------- smelter plant (bearing 207°, main hall 28 m + blast-furnace tower) ----------
@@ -198,6 +219,39 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const w = fr.at(2 + s * .95, 8);
       cyl(iron, w.east, g + .42, w.north, .42, .42, .12, 10, fr.yaw, Math.PI / 2);
     }
+    // Works signage (牌面 §五): cast-iron name plate right of the furnace
+    // mouth; the chalk duty board left of it, its last line trailing off.
+    const plateP = fr.at(1.8, 5.58);
+    siteAt('smelter-sign', plateP.east, plateP.north, 1);
+    sign(plateP.east, g + 3.6, plateP.north, fr.yaw, 1.9, .62, iron, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('冶炼工坊', w / 2, h / 2 + 4);
+    });
+    const dutyP = fr.at(-8.6, 5.58);
+    siteAt('smelter-duty-board', dutyP.east, dutyP.north, 1);
+    sign(dutyP.east, g + 2.3, dutyP.north, fr.yaw, 1.5, 1.9, timber, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(0, 0, 0, .35)'; c.lineWidth = 2;
+      for (const fy of [.25, .5, .75]) {
+        c.beginPath(); c.moveTo(0, h * fy); c.lineTo(w, h * fy); c.stroke();
+      }
+      c.fillStyle = '#e8e2d2'; c.textBaseline = 'middle';
+      c.font = '44px "Noto Sans SC", sans-serif'; c.textAlign = 'left';
+      c.fillText('腊月廿三', 40, h * .15);
+      c.fillText('一班　白望山　到', 40, h * .37);
+      c.fillText('二班　石　沉　到', 40, h * .59);
+      c.font = '37px "Noto Sans SC", sans-serif';
+      c.fillText('三班　炉火看住，莫等我——', 40, h * .81);
+      // The stroke drags a little past the last dash and stops.
+      c.fillStyle = 'rgba(232, 226, 210, .3)';
+      c.fillRect(452, h * .815, 42, 3);
+      c.fillStyle = 'rgba(232, 226, 210, .16)';
+      c.fillRect(452, h * .835, 26, 2);
+    });
   }
 
   // ---------- instrument plant (bearing 127°, two-storey, tall chimney, water tower) ----------
@@ -244,6 +298,40 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     cyl(corrugated, wt.east, g + 8.4, wt.north, 2.3, 2.3, 3.2, 12);
     cone(slate, wt.east, g + 10.9, wt.north, 2.7, 1.8, 12);
+    // Works signage (牌面 §六): brass name plate between the ground-floor
+    // windows; the brittle paper notice nailed beside where the door reads.
+    const plateP = fr.at(0, 5.16);
+    siteAt('instrument-sign', plateP.east, plateP.north, 1);
+    sign(plateP.east, g + 2.5, plateP.north, fr.yaw, 1.9, .62, brass, (c, w, h) => {
+      const grad = c.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#a3803c'); grad.addColorStop(1, '#86652c');
+      c.fillStyle = grad; c.fillRect(0, 0, w, h);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('仪器工坊', w / 2, h / 2 + 4);
+    });
+    const noteP = fr.at(3.4, 5.16);
+    siteAt('instrument-notice', noteP.east, noteP.north, 1);
+    sign(noteP.east, g + 2.5, noteP.north, fr.yaw, 1.05, 1.25, timberWarm, (c, w, h) => {
+      let seed = 23;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 9; i++) {
+        c.fillStyle = `rgba(150, 118, 66, ${.08 + rnd() * .12})`;
+        c.beginPath();
+        c.arc(rnd() * w, rnd() * h, 14 + rnd() * 42, 0, 7);
+        c.fill();
+      }
+      c.fillStyle = '#3a3125'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '46px "Noto Sans SC", sans-serif';
+      c.fillText('各表送修，', w / 2, h * .22);
+      c.fillText('先登记，后领取。', w / 2, h * .47);
+      c.fillText('急件敲窗，莫敲门。', w / 2, h * .72);
+      c.fillStyle = '#5d564c';
+      for (const [nx, ny] of [[.06, .05], [.94, .05]] as const) {
+        c.beginPath(); c.arc(w * nx, h * ny, 5, 0, 7); c.fill();
+      }
+    });
   }
 
   // ---------- ore yard (bearing 186°): piles, sorting shed, small derrick ----------
@@ -346,6 +434,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
       }
       box(timber, wallEast, g + 6.35, wallGateNorth, 1.2, .45, 8.2);
+      // Town-office notice, fresh paint, on the south post's passage face
+      // (牌面 §一, verbatim — the town era still speaks gently).
+      siteAt('wall-gate-notice', wallEast, 156.2, 1);
+      sign(wallEast, g + 3.3, 156.18, Math.PI, 1.5, 1.9, timberWarm, (c, w, h) => {
+        c.fillStyle = '#c9ae7e'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(90, 70, 40, .4)'; c.lineWidth = 2;
+        for (const fy of [.25, .5, .75]) {
+          c.beginPath(); c.moveTo(0, h * fy); c.lineTo(w, h * fy); c.stroke();
+        }
+        c.strokeStyle = '#8a6f42'; c.lineWidth = 5;
+        c.strokeRect(14, 14, w - 28, h - 28);
+        c.fillStyle = '#33291d'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = '600 45px "Noto Sans SC", sans-serif';
+        c.fillText('坑区年久失修，', w / 2, h * .17);
+        c.fillText('山路危险——', w / 2, h * .33);
+        c.fillText('乡亲们送到这里，', w / 2, h * .52);
+        c.fillText('就请回吧。', w / 2, h * .66);
+        c.fillText('夜里风大，莫要久留。', w / 2, h * .82);
+        c.font = '600 36px "Noto Sans SC", sans-serif'; c.textAlign = 'right';
+        c.fillText('未写镇公所', w - 40, h * .93);
+      });
     }
   }
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.
@@ -381,6 +490,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   {
     const gaps: [number, number][] = [[18, 24], [283, 289]];
     const stationGap: [number, number] = [102, 109];
+    const railGap: [number, number] = [53, 61];
     const inZone = (b: number, z: [number, number]) => b >= z[0] && b <= z[1];
     const ringRadius = (b: number) => {
       if (b >= 108 && b < 142) return 102;
@@ -394,6 +504,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     for (let b = 0; b < 360; b += 2) {
       if (b >= 146 && b < 184) { prev = undefined; continue; }
       if (inZone(b, stationGap)) { prev = undefined; continue; }
+      if (inZone(b, railGap)) { prev = undefined; continue; }
       if (gaps.some(z => inZone(b, z))) { prev = undefined; continue; }
       const r = ringRadius(b);
       const rad = d2r(b);
@@ -436,8 +547,36 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       box(rustIron, e, h + .3, n, 3.4, .12, 1.6, -mid + .3, 0, .06);
       box(rustIron, e + 1.2, h + .18, n + .8, 3, .1, 1.4, -mid - .2, 0, -.05);
     }
-    // Flanking posts at the station crossing gap.
-    for (const b of [101, 110]) {
+    // Half-rotted warning boards outside both collapsed gaps (牌面 §三,
+    // same text at both — the sealing era's boards outlasted its people).
+    gaps.forEach(([z0, z1], gi) => {
+      const midDeg = (z0 + z1) / 2;
+      const mid = d2r(midDeg);
+      const r = ringRadius(midDeg) + 2.6;
+      const e = anchor.east + r * Math.sin(mid);
+      const n = anchor.north + r * Math.cos(mid);
+      const h = heightAt(e, n);
+      if (h === undefined) return;
+      siteAt(`collapse-sign-${gi + 1}`, e, n, 1);
+      box(timber, e, h + .62, n, .13, 1.24, .13, -mid);
+      sign(e, h + 1.66, n, Math.PI - mid, 1.15, .85, timber, (c, w, hh) => {
+        let seed = 31 + gi * 7;
+        const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        c.fillStyle = '#6e6455'; c.fillRect(0, 0, w, hh);
+        for (let i = 0; i < 8; i++) {
+          c.fillStyle = `rgba(38, 32, 26, ${.14 + rnd() * .2})`;
+          c.beginPath();
+          c.arc(rnd() * w, rnd() * hh, 12 + rnd() * 38, 0, 7);
+          c.fill();
+        }
+        c.fillStyle = '#ded4c2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = '600 47px "Noto Sans SC", sans-serif';
+        c.fillText('此处塌方，危险。', w / 2, hh * .32);
+        c.fillText('绕行正门。', w / 2, hh * .68);
+      });
+    });
+    // Flanking posts at the station crossing gap and the railway gate (mainline 3).
+    for (const b of [101, 110, 52, 62]) {
       const rad = d2r(b);
       const r = ringRadius(b);
       const e = anchor.east + r * Math.sin(rad);

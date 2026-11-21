@@ -33,6 +33,10 @@ test('crater mouth works: the five named sites land in their surveyed bands', ()
   const gate = polar(byId.get('fence-main-gate')!.east, byId.get('fence-main-gate')!.north);
   assert.ok(gate.radius > 86 && gate.radius < 94, `gate radius ${gate.radius}`);
   assert.ok(gate.bearing > 158 && gate.bearing < 172, `gate bearing ${gate.bearing}`);
+  // The rusted warning plate rides the gate's right leaf (牌面 §二).
+  const plate = polar(byId.get('fence-gate-sign')!.east, byId.get('fence-gate-sign')!.north);
+  assert.ok(plate.radius > 86 && plate.radius < 94, `plate radius ${plate.radius}`);
+  assert.ok(plate.bearing > 160 && plate.bearing < 166, `plate bearing ${plate.bearing}`);
 });
 
 test('crater mouth works: rim lamp chain has ten lamps and three real lights burn', () => {

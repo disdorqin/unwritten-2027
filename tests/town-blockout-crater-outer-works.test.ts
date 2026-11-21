@@ -22,6 +22,22 @@ test('crater outer works: industrial belt, ruins and isolation sites all land', 
   for (let i = 1; i <= 6; i++) assert.ok(byId.has(`foundation-stub-${i}`), `missing stub ${i}`);
 });
 
+test('crater outer works: the settled signage set is mounted (牌面定稿)', () => {
+  for (const id of [
+    'wall-gate-notice', 'collapse-sign-1', 'collapse-sign-2',
+    'smelter-sign', 'smelter-duty-board', 'instrument-sign', 'instrument-notice',
+  ]) assert.ok(byId.has(id), `missing sign ${id}`);
+  // Collapse boards stand just outside the fence ring (r 97 + board offset).
+  for (const id of ['collapse-sign-1', 'collapse-sign-2']) {
+    const s = byId.get(id)!;
+    const r = Math.hypot(s.east - anchor.east, s.north - anchor.north);
+    assert.ok(r > 98 && r < 101.5, `${id} radius ${r.toFixed(1)}`);
+  }
+  const notice = byId.get('wall-gate-notice')!;
+  assert.ok(Math.abs(notice.east - (-18)) < 1 && Math.abs(notice.north - 159) < 4,
+    'wall notice hangs at the gate');
+});
+
 test('crater outer works: wall runs at least 300 m with its gate on the approach line', () => {
   const south = byId.get('wall-south-end')!;
   const north = byId.get('wall-north-end')!;
@@ -50,7 +66,9 @@ test('crater outer works: fence ring is continuous except its designed openings'
     assert.ok(!(p.bearing >= 146 && p.bearing < 184), `post duplicates the built gate segment at ${p.bearing}`);
     assert.ok(!((p.bearing >= 19 && p.bearing <= 23) || (p.bearing >= 284 && p.bearing <= 288)),
       `post inside a collapsed gap at ${p.bearing}`);
+    assert.ok(!(p.bearing > 53 && p.bearing < 61), `post inside the railway gate at ${p.bearing}`);
   }
+  assert.ok(bearings.has(52) && bearings.has(62), 'railway gate flanking posts missing');
 });
 
 test('crater outer works: the reserved narrow-gauge corridor stays clear of the belt', () => {

@@ -156,6 +156,8 @@ import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpo
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
+import { buildCraterRailExtension } from './town-crater-rail-extension';
+import { buildShankouNodeScenery } from './town-shankou-node-scenery';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 import { findNearestLegalSpawn } from './town-spawn';
 import { approachTownSnowScale } from './town-snow-cover';
@@ -628,6 +630,9 @@ function stationViewCamera() {
   return stationCullCamera;
 }
 scene.add(railway.group);
+const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad());
+scene.add(railExtension.group);
+scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
 const pineCamp = buildPineCamp(grid);

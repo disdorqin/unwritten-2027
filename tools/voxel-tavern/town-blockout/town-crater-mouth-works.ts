@@ -435,6 +435,50 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       }
       box(iron, gEast, gH + 2.2, gNorth, .34, .42, .14, -gb);
       part(iron, new TorusGeometry(.3, .05, 5, 10), gEast, gH + 2.55, gNorth, -gb);
+      // Rusted iron warning plate on the right leaf, seen from the approach
+      // (《文本-坑区牌面》 §二, verbatim). The plate guards on paper only —
+      // no system check hangs on it; people do the turning-back.
+      const rc = d2r(gateB - 1.3);
+      const re = anchor.east + fenceR * Math.sin(rc);
+      const rn = anchor.north + fenceR * Math.cos(rc);
+      const rh = heightAt(re, rn) ?? gH;
+      sites.push({ id: 'fence-gate-sign', east: re, north: rn, height: rh, radius: .9 });
+      box(iron, re, rh + 2.35, rn, 1.78, 1.06, .07, -rc);
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 300;
+        const c = canvas.getContext('2d');
+        if (c) {
+          let seed = 11;
+          const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+          c.fillStyle = '#403931'; c.fillRect(0, 0, 512, 300);
+          for (let i = 0; i < 260; i++) {
+            c.fillStyle = `rgba(138, 74, 52, ${.12 + rnd() * .3})`;
+            c.beginPath();
+            c.arc(rnd() * 512, rnd() * 300, 1.5 + rnd() * 7, 0, 7);
+            c.fill();
+          }
+          c.textAlign = 'center'; c.textBaseline = 'middle';
+          c.font = 'bold 55px "Noto Sans SC", sans-serif';
+          c.fillStyle = '#ded3bf';
+          c.fillText('封存重地 · 非工勿入', 256, 108);
+          c.font = '29px "Noto Sans SC", sans-serif';
+          c.fillStyle = '#c9bda4';
+          c.fillText('入内者须持工牌，于集结地登记。', 256, 208);
+          for (let i = 0; i < 46; i++) {
+            c.fillStyle = `rgba(138, 74, 52, ${.1 + rnd() * .16})`;
+            c.fillRect(rnd() * 512, rnd() * 300, 2 + rnd() * 5, 6 + rnd() * 26);
+          }
+          const texture = new CanvasTexture(canvas);
+          texture.colorSpace = SRGBColorSpace;
+          const plane = new Mesh(new PlaneGeometry(1.7, 1),
+            new MeshBasicMaterial({ map: texture }));
+          const yaw = Math.PI - rc, off = .075;
+          plane.position.set(re + Math.sin(yaw) * off, rh + 2.35, -rn + Math.cos(yaw) * off);
+          plane.rotation.y = yaw;
+          group.add(plane);
+        }
+      }
     }
     // One older wooden stretch patched in beside the gate (two generations).
     for (let i = 0; i < 4; i++) {
