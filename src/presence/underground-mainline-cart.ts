@@ -152,7 +152,7 @@ export function createUndergroundMainlineCart(options: Option) {
       if (at === undefined || revision !== state.revision || state.riderId !== playerId ||
           state.mode !== 'stopped' || !repaired() ||
           state.chainage >= route.length ||
-          (Math.abs(state.chainage - route.turnoutMetres) < 1 && state.turnout === 'unset')) return false;
+          (Math.abs(state.chainage - route.turnoutMetres) < 1 && state.turnout !== 'gate')) return false;
       return commit({ ...state, lastAtMs: at, mode: 'rolling', brakeHeld: false });
     },
     /** A stopped cart is not enough: the rider must step out and physically switch the lever. */

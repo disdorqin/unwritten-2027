@@ -5,6 +5,7 @@ import { resolveUndergroundShaftRegistration } from '../src/presence/underground
 import { createUndergroundMineLayout, type UndergroundMineSpec } from '../tools/voxel-tavern/town-blockout/underground-mine-layout.js';
 import { mountUndergroundMineDomain } from '../tools/voxel-tavern/town-blockout/underground-domain-scene.js';
 import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe } from '../src/shared/underground-camp-pickaxe.js';
+import { createUndergroundMainlineTrack } from '../src/shared/underground-mainline-track.js';
 
 const spec: UndergroundMineSpec = {
   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
@@ -405,6 +406,47 @@ test('U-18 shared warm-fire camps use host-recognized sites inside the same regi
   assert.ok(fire.getObjectByName('u18-flame-stack')?.visible);
   mounted.dispose();
   assert.equal(f.parent.children.length, 0);
+});
+
+test('U-19 full 120m mainline is a certified optional mine-section, not a fake U-7 in default world', () => {
+  const f = fixture();
+  const route = createUndergroundMainlineTrack({
+    domainId: f.pool.domainId,
+    waypoints: [0, 24, 48, 72, 96, 120].map(m =>
+      ({ east: f.pool.east + 3, north: f.pool.north - m, height: -90 })),
+    turnoutMetres: 94, gaugeMetres: 1, clearanceRadius: .82,
+    faults: { sleepers: 18, gauge: 48, 'turnout-rust': 83 },
+    acceptsTrackStep: () => true, acceptsWorkFoot: () => true,
+  });
+  const snapshot = { revision: 0, lastAtMs: 100, mode: 'repairing' as const,
+    chainage: 0, speed: 0, brakeHeld: false, turnout: 'unset' as const,
+    faults: { sleepers: 0, gauge: 0, 'turnout-rust': 0 },
+    cargo: { oreId: '', pieces: 0 } };
+  let accepted = true;
+  const runtime = {
+    route, supportsRoute: () => accepted,
+    readSnapshot: () => snapshot, readLightBudget: () => 2,
+    readViewer: () => undefined, canSee: () => true,
+    dispatch: () => assert.fail('no user request without accepted foot'),
+  };
+  const mounted = mountUndergroundMineDomain({ ...f.host, mainlineRuntime: runtime });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail();
+  assert.equal(mounted.mainlineStatus, 'ready');
+  assert.ok(mounted.mainline);
+  assert.equal(mounted.mainline.route.length, 120);
+  assert.equal(f.parent.children.length, 2, 'real rail section remains world anchored');
+  mounted.sync();
+  assert.equal(mounted.mainline.cart.visible, true);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+  accepted = false;
+  const blocked = mountUndergroundMineDomain({ ...f.host, mainlineRuntime: runtime });
+  assert.equal(blocked.kind, 'ready');
+  if (blocked.kind !== 'ready') assert.fail();
+  assert.equal(blocked.mainlineStatus, 'unsupported-route');
+  assert.equal(blocked.mainline, undefined);
+  blocked.dispose();
 });
 
 test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {

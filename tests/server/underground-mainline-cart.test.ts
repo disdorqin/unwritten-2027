@@ -118,6 +118,11 @@ test('U-19 overspeed at uncertified turnout derails but NEVER auto-dismounts or 
   assert.equal(f.cart.leave('miner', f.state().revision), true);
   assert.equal(f.cart.rerail('miner', f.state().revision), true);
   assert.equal(f.state().mode, 'stopped');
+  assert.equal(f.cart.switchTurnout('miner', f.state().revision, 'branch'), true);
+  assert.equal(f.cart.board('miner', f.state().revision), true);
+  assert.equal(f.cart.go('miner', f.state().revision), false,
+    'the scenic spur is not an invented registered branch');
+  assert.equal(f.cart.leave('miner', f.state().revision), true);
   assert.equal(f.cart.switchTurnout('miner', f.state().revision, 'gate'), true);
   assert.equal(f.cart.board('miner', f.state().revision), true);
   assert.equal(f.cart.go('miner', f.state().revision), true);
