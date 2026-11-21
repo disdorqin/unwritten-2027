@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   museumFoundingCaptions, museumHeartStoneCaption, museumSandTableCaption,
   museumSpecimenCaptions, museumShiftBoardCaption,
+  museumClosureNoticeCaption, museumWaitingChairCaption,
 } from '../tools/voxel-tavern/town-blockout/museum-zones';
 
 test('ZA-06 zone one uses the controller-approved public texts verbatim', () => {
@@ -39,4 +40,16 @@ test('ZA-06 zone two eight mine specimens and full five-line shift board remain 
     '（三班那一栏，年年空着）',
   ]);
   assert.ok(museumSpecimenCaptions.every(text => text.split('\n').length === 2));
+});
+
+test('ZA-06 zone three approved notice and waiting chair text remain intact', () => {
+  assert.deepEqual(museumClosureNoticeCaption, [
+    '布告',
+    '开镇卅二年冬，北山道塌，矿口险。',
+    '自今日起，封山、封矿、封北站。',
+    '归期，另行布告。',
+  ]);
+  assert.equal(museumWaitingChairCaption,
+    '等车的人\n椅子按当年等车的人数摆的，多一把是给司机的');
+  assert.ok(!museumClosureNoticeCaption.join('\n').includes('另行布告从此没有来'));
 });

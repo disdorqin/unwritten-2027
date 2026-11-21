@@ -37,6 +37,13 @@ export const museumShiftBoardCaption = [
   '三班 夜里不入',
   '（三班那一栏，年年空着）',
 ] as const;
+export const museumClosureNoticeCaption = [
+  '布告',
+  '开镇卅二年冬，北山道塌，矿口险。',
+  '自今日起，封山、封矿、封北站。',
+  '归期，另行布告。',
+] as const;
+export const museumWaitingChairCaption = '等车的人\n椅子按当年等车的人数摆的，多一把是给司机的';
 
 const FLOOR = .28;
 const ROCK = ['#4a3826', '#5d4630', '#3e2f20', '#54402a'];
@@ -163,8 +170,8 @@ function zoneThree(m: MuseumBuilder) {
   m.solid('#6e5136', -4.2, FLOOR + .52, fenceZ, 4.4, 1.05, .12);
   for (let x = -6.3; x <= -2.1; x += 1.05) m.box('#59402a', x, FLOOR + .58, fenceZ, .12, 1.16, .12);
   for (const ry of [.38, .82]) m.box('#7a5c3d', -4.2, FLOOR + ry, fenceZ, 4.4, .07, .05);
-  m.box('#59483e', -4.2, FLOOR + 1.32, fenceZ + .06, 1.05, .62, .05);
-  m.label('布告', -4.2, FLOOR + 1.32, fenceZ + .1, .9, .3, 0);
+  m.box('#59483e', -4.2, FLOOR + 1.6, fenceZ + .06, 2.85, 1.12, .06);
+  m.label(museumClosureNoticeCaption.join('\n'), -4.2, FLOOR + 1.6, fenceZ + .11, 2.76, .98, 0);
   // Luggage pile behind the cordon.
   const pile: [number, number, number, string, number][] = [
     [-5.3, .55, -11.3, '#765044', .15], [-4.4, .55, -11.5, '#5d4630', -.1], [-4.85, 1.05, -11.4, '#6e5136', .3],
@@ -179,7 +186,7 @@ function zoneThree(m: MuseumBuilder) {
     for (const [dx, dz] of [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]] as const)
       m.box('#59402a', cx + dx, FLOOR + .12, -10.7 + dz, .06, .24, .06);
   }
-  m.label('', -4.3, FLOOR + .5, -10.35, .8, .26, 0);
+  m.label(museumWaitingChairCaption, -4.3, FLOOR + .54, -10.35, 2.52, .49, 0);
   // The one wrong exhibit: a dark slab at the zone's east edge, leaning on
   // a half-grade plinth. No number, no label, no light, no interaction.
   // Face scratches are meaningless short strokes, never a sheep pattern.
