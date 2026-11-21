@@ -7,12 +7,17 @@ export type SummitGlideRing = Point & Readonly<{ id: string; heading: number; ra
 
 export const summitGlideRingBodyLift = 1.5;
 const targets = [60, 120, 190] as const;
+/** ZD-08 full run uses nine surveyed flight checkpoints; the original three-ring review stays unchanged. */
+export const summitGlideNineRingMetres = Object.freeze([60, 120, 190, 260, 330, 400, 470, 540, 610]);
 const radius = 6;
 const rimAllowance = 1;
 const terrainMargin = .5;
 const surveyStep = 1 / 60;
 
-function terrainClears(ring: SummitGlideRing, groundAt: GroundAt) {
+/** Survey both ring rim and adjacent approach clearance before the host may mount a shifted course. */
+export function summitGlideRingTerrainClears(ring: SummitGlideRing, groundAt: GroundAt) {
+  if (![ring.east, ring.north, ring.height, ring.heading, ring.radius].every(Number.isFinite) ||
+      ring.radius <= 0) return false;
   const forwardEast = Math.sin(ring.heading);
   const forwardNorth = Math.cos(ring.heading);
   const outerRadius = ring.radius + rimAllowance;
@@ -24,20 +29,24 @@ function terrainClears(ring: SummitGlideRing, groundAt: GroundAt) {
         ring.east + side * forwardNorth + depth * forwardEast,
         ring.north - side * forwardEast + depth * forwardNorth,
       );
-      if (floor !== undefined && (!Number.isFinite(floor) || floor >= lowestAllowed)) return false;
+      if (floor === undefined || !Number.isFinite(floor) || floor >= lowestAllowed) return false;
     }
   }
   return true;
 }
 
-export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundAt): readonly SummitGlideRing[] {
+export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundAt,
+  targetMetres: readonly number[] = targets): readonly SummitGlideRing[] {
+  if (!Array.isArray(targetMetres) || !targetMetres.length || targetMetres.length > 10 ||
+      targetMetres.some((metres, index) => !Number.isFinite(metres) || metres <= 0 || metres > 1_200 ||
+        (index > 0 && metres <= targetMetres[index - 1]!))) throw new RangeError('Invalid glide ring checkpoints');
   const flight = createSnowWingFlight(groundAt);
   if (!flight.launch(launch)) return [];
   let current = flight.snapshot()!;
   let previous = current;
   const rings: SummitGlideRing[] = [];
 
-  for (const [index, target] of targets.entries()) {
+  for (const [index, target] of targetMetres.entries()) {
     while (current.horizontalMetres < target) {
       previous = current;
       const next = flight.advance(surveyStep);
@@ -53,7 +62,7 @@ export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundA
       heading: launch.heading,
       radius,
     };
-    if (!terrainClears(ring, groundAt)) return [];
+    if (!summitGlideRingTerrainClears(ring, groundAt)) return [];
     rings.push(ring);
   }
   return rings;
