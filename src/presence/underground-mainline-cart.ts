@@ -30,7 +30,8 @@ type Option = Readonly<{
   initial?: U19MineCartSnapshot;
   config: Readonly<{
     acceleration: number; brakeDeceleration: number; maxSpeed: number;
-    safeTurnoutSpeed: number; recallMetresPerSecond: number; maximumTickMs: number;
+    safeTurnoutSpeed: number; safeCurveSpeed: number;
+    recallMetresPerSecond: number; maximumTickMs: number;
     actionReachMetres: number;
   }>;
 }>;
@@ -52,7 +53,8 @@ const cleanId = (v: string) => typeof v === 'string' && v.trim().length > 0 && v
 export function createUndergroundMainlineCart(options: Option) {
   const { route, config } = options;
   if (!route || !cleanId(route.domainId) || !Object.values(config).every(n => finite(n) && n > 0) ||
-      config.maxSpeed <= config.safeTurnoutSpeed || config.maximumTickMs > 2_000 ||
+      config.maxSpeed <= config.safeTurnoutSpeed || config.maxSpeed <= config.safeCurveSpeed ||
+      config.maximumTickMs > 2_000 ||
       config.actionReachMetres > 2.5 || !finite(options.now())) {
     throw new RangeError('U-19 requires certified route and host movement constants');
   }
@@ -182,18 +184,26 @@ export function createUndergroundMainlineCart(options: Option) {
       const signedAccel = state.brakeHeld ? -config.brakeDeceleration : config.acceleration;
       const speed = Math.max(0, Math.min(config.maxSpeed, state.speed + signedAccel * dt));
       const proposed = Math.min(route.length, state.chainage + (state.speed + speed) / 2 * dt);
-      const crossingSwitch = state.chainage <= route.turnoutMetres &&
-        proposed >= route.turnoutMetres && state.turnout === 'unset';
-      const overspeed = crossingSwitch && speed > config.safeTurnoutSpeed;
-      const finalChainage = crossingSwitch ? route.turnoutMetres : proposed;
-      if (overspeed) {
-        const next = { ...state, lastAtMs: at, chainage: finalChainage, speed: 0,
+      const crossingTurnout = state.chainage < route.turnoutMetres &&
+        proposed >= route.turnoutMetres;
+      // A scenic branch without an official movement domain must stop here. An approved
+      // straight-through switch still derails a fast cart: switch setting is NOT immunity.
+      const blockedTurnout = crossingTurnout && state.turnout !== 'gate';
+      const stopAt = blockedTurnout ? route.turnoutMetres : proposed;
+      const fastBend = route.bends.find(bend => bend.chainage > state.chainage &&
+        bend.chainage <= stopAt && speed > config.safeCurveSpeed);
+      const fastTurnout = crossingTurnout && speed > config.safeTurnoutSpeed;
+      const derailAt = Math.min(fastBend?.chainage ?? Infinity,
+        fastTurnout ? route.turnoutMetres : Infinity);
+      if (Number.isFinite(derailAt)) {
+        const next = { ...state, lastAtMs: at, chainage: derailAt, speed: 0,
           brakeHeld: false, mode: 'derailed' as const };
         if (!commit(next)) return false;
-        options.onAcceptedRun?.(route.sample(finalChainage).position, speed);
+        options.onAcceptedRun?.(route.sample(derailAt).position, speed);
         return true;
       }
-      const stopping = speed <= .01 || proposed >= route.length || crossingSwitch;
+      const finalChainage = blockedTurnout ? route.turnoutMetres : proposed;
+      const stopping = speed <= .01 || proposed >= route.length || blockedTurnout;
       const next = { ...state, lastAtMs: at, chainage: finalChainage, speed: stopping ? 0 : speed,
         brakeHeld: stopping ? false : state.brakeHeld, mode: stopping ? 'stopped' as const : 'rolling' as const };
       if (!commit(next)) return false;

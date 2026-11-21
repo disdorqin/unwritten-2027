@@ -93,5 +93,23 @@ test('U-19 a gentle mine curve preserves physical distance while enforcing full 
   assert.ok(at.position.east > -100);
   assert.ok(at.position.east < -99);
   assert.ok(Math.abs(at.grade) < .05);
+  assert.ok(route.bends.every(bend => bend.chainage > 0 &&
+    bend.chainage < route.length && bend.angleRad >= .05),
+    'turn warnings must derive from real surveyed vertices');
   assert.throws(() => route.sampleSleepers(.1), /spacing/);
+});
+
+test('U-19 official bends come only from certified route geometry; unsafe kinks cannot be called rails', () => {
+  const f = fixture();
+  assert.equal(createUndergroundMainlineTrack(f).bends.length, 0);
+  const curved = createUndergroundMainlineTrack({ ...f, waypoints: f.waypoints.map((p, i) =>
+    ({ ...p, east: p.east + (i >= 3 ? 3.5 : 0) })) });
+  assert.equal(curved.bends.length, 2);
+  assert.equal(curved.bends[0].chainage, 48);
+  assert.ok(curved.bends[0].angleRad > .1);
+  assert.ok(curved.bends[1].chainage > 72 && curved.bends[1].chainage < 73);
+  assert.ok(curved.bends.every(bend => ['left', 'right'].includes(bend.direction)));
+  assert.throws(() => createUndergroundMainlineTrack({ ...f,
+    waypoints: f.waypoints.map((p, i) => ({ ...p, east: p.east + (i >= 3 ? 13 : 0) })),
+  }), /sharp turn/);
 });
