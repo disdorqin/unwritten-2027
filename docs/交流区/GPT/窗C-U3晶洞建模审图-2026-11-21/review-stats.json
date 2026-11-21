@@ -4,11 +4,11 @@
     "entrance": {
       "view": "entrance",
       "kind": "ready",
-      "frames": 7,
-      "drawCalls": 7,
-      "triangles": 98496,
-      "groups": 7,
-      "voxelCount": 8208,
+      "frames": 6,
+      "drawCalls": 8,
+      "triangles": 108552,
+      "groups": 8,
+      "voxelCount": 9046,
       "visibleLights": 4,
       "eye": [
         0,
@@ -16,16 +16,16 @@
         -1
       ],
       "isFootClear": true,
-      "imageBytes": 203026
+      "imageBytes": 207095
     },
     "grove": {
       "view": "grove",
       "kind": "ready",
-      "frames": 13,
-      "drawCalls": 6,
-      "triangles": 95028,
-      "groups": 7,
-      "voxelCount": 8208,
+      "frames": 14,
+      "drawCalls": 7,
+      "triangles": 105084,
+      "groups": 8,
+      "voxelCount": 9046,
       "visibleLights": 4,
       "eye": [
         -20,
@@ -33,16 +33,16 @@
         -41
       ],
       "isFootClear": true,
-      "imageBytes": 170233
+      "imageBytes": 159547
     },
     "overlook": {
       "view": "overlook",
       "kind": "ready",
-      "frames": 20,
+      "frames": 21,
       "drawCalls": 7,
-      "triangles": 98496,
-      "groups": 7,
-      "voxelCount": 8208,
+      "triangles": 105816,
+      "groups": 8,
+      "voxelCount": 9046,
       "visibleLights": 4,
       "eye": [
         10.3,
@@ -55,11 +55,11 @@
     "quay": {
       "view": "quay",
       "kind": "ready",
-      "frames": 26,
+      "frames": 28,
       "drawCalls": 7,
-      "triangles": 98496,
-      "groups": 7,
-      "voxelCount": 8208,
+      "triangles": 105816,
+      "groups": 8,
+      "voxelCount": 9046,
       "visibleLights": 4,
       "eye": [
         24.5,
@@ -68,6 +68,40 @@
       ],
       "isFootClear": true,
       "imageBytes": 165908
+    },
+    "monolith": {
+      "view": "monolith",
+      "kind": "ready",
+      "frames": 34,
+      "drawCalls": 7,
+      "triangles": 105084,
+      "groups": 8,
+      "voxelCount": 9046,
+      "visibleLights": 4,
+      "eye": [
+        -17,
+        0.35206185567010295,
+        -42
+      ],
+      "isFootClear": true,
+      "imageBytes": 160771
+    },
+    "moonstone": {
+      "view": "moonstone",
+      "kind": "ready",
+      "frames": 41,
+      "drawCalls": 7,
+      "triangles": 105084,
+      "groups": 8,
+      "voxelCount": 9046,
+      "visibleLights": 4,
+      "eye": [
+        -38,
+        -0.036061855670103116,
+        -56
+      ],
+      "isFootClear": true,
+      "imageBytes": 159719
     }
   },
   "errors": [],

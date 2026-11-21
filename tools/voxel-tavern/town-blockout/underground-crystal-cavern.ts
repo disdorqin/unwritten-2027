@@ -17,7 +17,7 @@ import {
 export type CrystalCavernPoint = Readonly<{ east: number; north: number; height: number }>;
 export type CrystalCavernFrame = CrystalCavernPoint & Readonly<{ yaw: number; domainId: string }>;
 type Local = readonly [east: number, height: number, north: number];
-type Family = 'rock' | 'shadow' | 'slate' | 'timber' | 'rust' | 'moss' | 'crystal' | 'water';
+type Family = 'rock' | 'shadow' | 'slate' | 'timber' | 'rust' | 'moss' | 'crystal' | 'water' | 'moonstone';
 export type CrystalCavernBlock = Readonly<{
   name: string;
   family: Family;
@@ -367,6 +367,83 @@ function makeCavern() {
   }
 }
 makeCavern();
+function buildMonolithHallAndMoonstoneSpur() {
+  // U-3 R2: the visual centrepiece is exactly three ~8 m crystalline columns
+  // in a triangular arrangement. These are geological scenery, never new
+  // ore-vein IDs, crystal-mimic spawns or mining rewards. Keep the route clear.
+  const monoliths = [[-31,49],[26,46],[-2,67]] as const;
+  for (const [index,[east,north]] of monoliths.entries()) {
+    const base = crystalCavernTrailHeight(north);
+    for (let tier=0;tier<20;tier++) {
+      const rise=(tier+.5)*.40;
+      const shrink=1-.023*tier;
+      const lean=-Math.sin(CRYSTAL_CAVERN_CANT_RAD)*rise;
+      add('crystal','u3/hall/monolith-'+index+'/spine-'+tier,
+        east+lean,base+Math.cos(CRYSTAL_CAVERN_CANT_RAD)*rise+.24,north,
+        1.12*shrink,.41,1.03*shrink,false,CRYSTAL_CAVERN_CANT_RAD);
+      for (let rib=0;rib<4;rib++) {
+        const angle=rib*Math.PI/2;
+        add(tier%5===0?'slate':'crystal',
+          'u3/hall/monolith-'+index+'/facet-'+tier+'-'+rib,
+          east+lean+Math.cos(angle)*.57*shrink,
+          base+Math.cos(CRYSTAL_CAVERN_CANT_RAD)*rise+.24,
+          north+Math.sin(angle)*.51*shrink,
+          .20*shrink,.40,.21*shrink,false,CRYSTAL_CAVERN_CANT_RAD);
+      }
+    }
+    for(let root=0;root<8;root++) for(let level=0;level<5;level++) {
+      const a=root*Math.PI/4;
+      const r=1.18+level*.23;
+      add(level===4?'moss':level%3===0?'slate':'rock',
+        'u3/hall/monolith-'+index+'/root-'+root+'-'+level,
+        east+Math.cos(a)*r,base-.27+level*.075,
+        north+Math.sin(a)*r,.50,.24,.55);
+    }
+  }
+
+  // U-3 R2 visual-only moonstone branch: a furnished silver-grey side niche
+  // with a natural flat crystal face. This is NOT a reflective mirror shader,
+  // a host-certified playable corridor or a mining/reward registration.
+  for(let bay=0;bay<25;bay++){
+    const east=-17-bay*1.4;
+    const north=56+Math.sin(bay/5)*1.3;
+    const base=crystalCavernTrailHeight(north);
+    for(let lane=-2;lane<=2;lane++) {
+      add((bay+lane)%4===0?'moonstone':'slate',
+        'u3/moonstone-spur/floor-'+bay+'-'+lane,
+        east,base-.15,north+lane*.75,1.40,.24,.73);
+    }
+    for(const side of [-1,1]) for(let tier=0;tier<3;tier++) {
+      add((bay+tier)%5===0?'slate':'moonstone',
+        'u3/moonstone-spur/bank-'+bay+'-'+side+'-'+tier,
+        east,base+.68+tier*1.35,north+side*2.35,
+        1.37,1.33,.51);
+    }
+    add('shadow','u3/moonstone-spur/cap-'+bay,
+      east,base+5.28,north,1.40,.36,5.1);
+  }
+  // The wall can be photographed, but actual avatar reflections require a
+  // separately reviewed host shader/scene capture. Do not call this one a
+  // working mirror in release notes.
+  const mirrorEast=-53.4, mirrorNorth=56;
+  const mirrorBase=crystalCavernTrailHeight(mirrorNorth);
+  for(let row=0;row<9;row++) for(let col=0;col<10;col++) {
+    add((row+col)%7===0?'slate':'moonstone',
+      'u3/moonstone-spur/natural-mirror-'+row+'-'+col,
+      mirrorEast,mirrorBase+.42+row*.55,mirrorNorth+(col-4.5)*.54,
+      .32,.54,.53);
+  }
+  for(let jamb=0;jamb<2;jamb++) for(let segment=0;segment<9;segment++) {
+    add('rock','u3/moonstone-spur/mirror-jamb-'+jamb+'-'+segment,
+      mirrorEast+.05,mirrorBase+.42+segment*.57,
+      mirrorNorth+(jamb?3.0:-3.0),.58,.55,.62);
+  }
+  for(let segment=0;segment<10;segment++)
+    add('shadow','u3/moonstone-spur/mirror-crown-'+segment,
+      mirrorEast+.04,mirrorBase+5.56,
+      mirrorNorth+(segment-4.5)*.59,.56,.23,.55);
+}
+buildMonolithHallAndMoonstoneSpur();
 export const crystalCavernArchitecture = Object.freeze({
   pieces: Object.freeze(objects),
   numbers: Object.freeze({
@@ -382,10 +459,12 @@ export const crystalCavernArchitecture = Object.freeze({
 const colors: Readonly<Record<Family, number>> = {
   rock: 0x8a8378, shadow: 0x2c3648, slate: 0x5d4630, timber: 0xa98a56,
   rust: 0x8a4a34, moss: 0x44503c, crystal: 0x7fd4c8, water: 0x2c3648,
+  moonstone: 0xa7b4b6,
 };
 const accent: Readonly<Record<Family, number>> = {
   ...colors, rock: 0x5d4630, shadow: 0x8a8378, slate: 0x8a8378,
   timber: 0x5d4630, rust: 0x5d4630, crystal: 0xe8ecf0, water: 0x7fd4c8,
+  moonstone: 0xd1d9d7,
 };
 function texture(family: Family) {
   const bytes = new Uint8Array(16 * 16 * 4);

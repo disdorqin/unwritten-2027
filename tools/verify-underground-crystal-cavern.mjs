@@ -37,7 +37,7 @@ try {
   page.on('requestfailed',r=>result.errors.push('network '+r.url()));
   await page.goto(`http://127.0.0.1:${addr.port}/crystal-review`,{waitUntil:'networkidle'});
   await page.waitForFunction(()=>window.cavernReview?.inspect().frames>=2);
-  for(const [index,name] of ['entrance','grove','overlook','quay'].entries()){
+  for(const [index,name] of ['entrance','grove','overlook','quay','monolith','moonstone'].entries()){
     assert.equal(await page.evaluate(name=>window.cavernReview.setView(name),name),true);
     await page.evaluate(()=>new Promise(ok=>requestAnimationFrame(()=>requestAnimationFrame(ok))));
     const stats=await page.evaluate(()=>window.cavernReview.inspect());
