@@ -93,10 +93,15 @@ export function b1TerrainReliefOffset(e:number,n:number) {
   if(envelope===0)return 0;
   const safety=terrainBuildProtection(e,n);
   if(safety===0)return 0;
-  // Single 174x180m rolling mode in the pilot; 3.2m displacement amplitude.
-  // The remaining harmonics belong to R2 after sled / house apron verification.
-  return 3.2*Math.sin((e-512)*Math.PI*2/174)
-    *Math.cos((n-250)*Math.PI*2/180)*envelope*safety;
+  // Three superposed 132–188m modes: broad knolls, a cross-wind fold and
+  // lower diagonal ridges. Geometry and movement sample this SAME shape;
+  // the paved/rail/house apron masks remain identical to the R1 pilot.
+  const broad=3.0*Math.sin((e-512)*Math.PI*2/174)
+    *Math.cos((n-250)*Math.PI*2/180);
+  const cross=.76*Math.sin((e-501)*Math.PI*2/132)
+    *Math.cos((n-309)*Math.PI*2/188);
+  const diagonal=.45*Math.cos((e+n-745)*Math.PI*2/176);
+  return (broad+cross+diagonal)*envelope*safety;
 }
 
 /** Backwards-compatible name used by the original B1 clearance audit. */

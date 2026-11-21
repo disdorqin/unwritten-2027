@@ -23,7 +23,13 @@ test('ZA34 R1: the B1 ground is actually sculpted on the default shared terrain 
     largest=Math.max(largest,Math.abs(offset));
   }
   assert.ok(changed>100,`not a usable landscape; displaced only ${changed} samples`);
-  assert.ok(largest>=1.2&&largest<=3.201,`unexpected pilot displacement ${largest.toFixed(3)}m`);
+  // Peak enforcement must scan at the model's true 1m resolution: the
+  // interleaved 132/174/176m harmonics can peak between 5m audit samples.
+  let resolvedPeak=0;
+  for(let n=205;n<=540;n++)for(let e=447;e<=640;e++)
+    resolvedPeak=Math.max(resolvedPeak,Math.abs(b1TerrainReliefOffset(e,n)));
+  assert.ok(resolvedPeak>=2&&resolvedPeak<=3.201,
+    `1m B1 displacement ${resolvedPeak.toFixed(3)}m outside the 2–3.2m model gate`);
   assert.ok(near(sculpted.groundHeightAt(620,420)-vanilla.groundHeightAt(620,420),
     b1TerrainReliefOffset(620,420),1e-4));
 });
