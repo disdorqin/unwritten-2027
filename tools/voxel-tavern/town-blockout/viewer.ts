@@ -674,6 +674,7 @@ snowButton.onclick = () => {
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
+let clockNightApplied: boolean | null = null;
 let ceremonyDim = 1;
 function applyCeremonyLighting() {
   ambient.intensity = (nightMode ? .96 : 1.35) * ceremonyDim;
@@ -3549,6 +3550,19 @@ renderer.setAnimationLoop(now => {
   const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
   festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
+  // Day/night visuals follow the server night-window clock (one game day = 10
+  // minutes: 6 daylight, 4 night). phase 'day' is the only daylight phase;
+  // 'awaiting-beacon' and 'night-window' are night. Applied on phase change
+  // only, so the ceremony can still force night within a phase. The lighting
+  // button remains a manual override until the next phase change.
+  const nightWindowState = presence.getTownNightWindow();
+  if (nightWindowState) {
+    const clockNight = nightWindowState.phase !== 'day';
+    if (clockNight !== clockNightApplied) {
+      clockNightApplied = clockNight;
+      setNight(clockNight);
+    }
+  }
   const weather = townSnowWeatherForFrame(ceremonyState);
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
