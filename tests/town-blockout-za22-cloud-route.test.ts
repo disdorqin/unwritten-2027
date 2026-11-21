@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createAircraftFlight, surveyAircraftRunway, type AircraftWorld } from '../src/shared/aircraft-flight';
 import { createFlightThrust } from '../src/shared/flight-thrust';
+import { createTownCableWindClock, townCableWindDawnEpoch } from '../src/shared/town-cable-wind';
+import { townOutdoorWeatherAt } from '../src/presence/town-outdoor-weather';
 import { createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudRunway, za22CloudSurfaceAt, za22StationApproach } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 
@@ -190,4 +192,94 @@ test('the default mountain route offers the lower stamp at the mounted monument 
   action?.run();
   assert.equal(requests, 1);
   assert.equal(cloud.assembly()?.interact(6, -17, 347).changed, true);
+});
+
+test('G-09 whiteout station action waits safely and self-resumes when the shared line returns', () => {
+  const epoch = townCableWindDawnEpoch;
+  const cableWeather = createTownCableWindClock(time => townOutdoorWeatherAt(time, epoch));
+  let now = epoch + 45 * 60_000;
+  const transfers: string[] = [];
+  const cloud = createZa22CloudRoute({
+    now: () => now,
+    cableWeather,
+    enterOrExit(terminal) { transfers.push(terminal); },
+    view() {},
+  });
+  const first = cloud.action(za22StationApproach);
+  assert.match(first?.label ?? '', /缆车停驶/);
+  first?.run();
+  assert.match(cloud.action(za22StationApproach)?.label ?? '', /暴风雪候车中/);
+  cloud.update(za22StationApproach);
+  assert.equal(cloud.riding(), false);
+  assert.equal(cloud.cableStatus()?.rate, 0);
+  // The user can actively cancel while the weather is unsafe.
+  cloud.action(za22StationApproach)?.run();
+  assert.match(cloud.action(za22StationApproach)?.label ?? '', /缆车停驶/);
+  cloud.action(za22StationApproach)?.run();
+  now = epoch + 50 * 60_000;
+  let boarded = false;
+  for (let index = 0; index < 2_500; index++) {
+    now += 200;
+    cloud.update(za22StationApproach);
+    if (cloud.riding()) { boarded = true; break; }
+  }
+  assert.ok(boarded, 'post-storm waiting passenger boards the next arriving cabin');
+  assert.match(cloud.cableStatus()?.label ?? '', /大减速/);
+  for (let index = 0; index < 4_000 && cloud.riding(); index++) {
+    now += 200;
+    cloud.update(za22StationApproach);
+  }
+  assert.deepEqual(transfers, ['summit']);
+  assert.equal(cloud.riding(), false);
+});
+
+test('G-09 a mid-span whiteout never ejects, skips, or teleports the rider', () => {
+  const epoch = townCableWindDawnEpoch;
+  const cableWeather = createTownCableWindClock(time => townOutdoorWeatherAt(time, epoch));
+  const line = createZa22NorthRidgeLine(26);
+  // Find a real scheduled departure still in transit at a whiteout boundary.
+  // The test must never silently pass without actually freezing a passenger.
+  let boardingAt: number | undefined;
+  let stormAt = 0;
+  for (let cycle = 0; cycle < 24 && boardingAt === undefined; cycle++) {
+    const boundary = epoch + cycle * 100 * 60_000 + 40 * 60_000;
+    const frozenTime = cableWeather.scaledNow(boundary);
+    for (let secondsBefore = 10; secondsBefore <= 170; secondsBefore++) {
+      const candidate = boundary - secondsBefore * 1_000;
+      const timeline = line.timeline(cableWeather.scaledNow(candidate), 0);
+      if (timeline.boarding === 'base' && timeline.arrivalAt > frozenTime) {
+        boardingAt = candidate;
+        stormAt = boundary;
+        break;
+      }
+    }
+  }
+  assert.ok(boardingAt !== undefined, 'find a live departing cable before one whiteout');
+  let now = boardingAt;
+  let transfers = 0;
+  const cloud = createZa22CloudRoute({
+    now: () => now,
+    cableWeather,
+    enterOrExit() { transfers++; },
+    view() {},
+  });
+  cloud.action(za22StationApproach)?.run();
+  cloud.update(za22StationApproach);
+  assert.equal(cloud.riding(), true, 'passenger really boarded before storm');
+  now = stormAt;
+  cloud.update(za22StationApproach);
+  assert.equal(cloud.riding(), true, 'still aboard at whiteout start');
+  const before = cloud.ridePoint();
+  const frozenTime = cableWeather.scaledNow(now);
+  now += 5 * 60_000;
+  cloud.update(za22StationApproach);
+  assert.equal(cableWeather.scaledNow(now), frozenTime);
+  assert.deepEqual(cloud.ridePoint(), before);
+  assert.equal(transfers, 0, 'never auto-eject a stranded passenger');
+  for (let step = 0; step < 4_000 && cloud.riding(); step++) {
+    now += 250;
+    cloud.update(za22StationApproach);
+  }
+  assert.equal(cloud.riding(), false, 'resume and arrive safely after storm');
+  assert.equal(transfers, 1, 'one authoritative transfer at the station');
 });

@@ -1,0 +1,151 @@
+diff --git a/tests/town-blockout-cable-repair-host.test.ts b/tests/town-blockout-cable-repair-host.test.ts
+new file mode 100644
+index 00000000..1a66926d
+--- /dev/null
++++ b/tests/town-blockout-cable-repair-host.test.ts
+@@ -0,0 +1,50 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createZa36CableRepair } from '../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
++import { cableWakeEvent, createCableRepairHost } from '../tools/voxel-tavern/town-blockout/town-cable-repair-host';
++
++const anchors = {
++  brake: { east: 0, north: 0 }, cableWheel: { east: 10, north: 0 },
++  weightTower: { east: 20, north: 0 }, weightFrame: { east: 11, north: 1 },
++};
++const ids = (actions: { id: string }[]) => actions.map(action => action.id);
++
++test('wake mapping: sled and rolled snowballs wake, hand snowballs never do', () => {
++  assert.deepEqual(cableWakeEvent('sled'), { kind: 'wake', impact: 'sled' });
++  assert.deepEqual(cableWakeEvent('big-snowball'), { kind: 'wake', impact: 'snowball' });
++  assert.equal(cableWakeEvent('snowball'), undefined);
++});
++
++test('the host walks the whole repair by offered actions only', () => {
++  const machine = createZa36CableRepair(1);
++  const host = createCableRepairHost(1, anchors);
++  const act = (player: { east: number; north: number }, id: string) => {
++    const action = host.actions(machine.snapshot(), player).find(candidate => candidate.id === id);
++    assert.ok(action, `expected ${id} to be offered`);
++    machine.apply(action!.event);
++    host.sync(machine.snapshot());
++  };
++  assert.deepEqual(host.actions(machine.snapshot(), anchors.brake), [], 'dormant: nothing to repair yet');
++  machine.apply(cableWakeEvent('big-snowball')!);
++  for (let i = 0; i < 9; i++) act(anchors.brake, 'strike-rust');
++  assert.deepEqual(ids(host.actions(machine.snapshot(), anchors.brake)), ['pull-brake'], 'brake unlocks exactly at 9 strikes');
++  act(anchors.brake, 'pull-brake');
++  act(anchors.cableWheel, 'pry-cable');
++  for (let i = 0; i < 3; i++) act(anchors.cableWheel, 'tighten-cable');
++  for (let round = 0; round < 4; round++) {
++    act(anchors.weightTower, 'take-weight');
++    assert.deepEqual(ids(host.actions(machine.snapshot(), anchors.weightTower)), [], 'hands full at the tower');
++    act(anchors.weightFrame, 'hang-weight');
++  }
++  assert.equal(machine.snapshot().stage, 'full-line');
++  assert.deepEqual(host.actions(machine.snapshot(), anchors.brake), [], 'open line offers no repairs');
++});
++
++test('actions are reach-bound and line-bound', () => {
++  const machine = createZa36CableRepair(2);
++  const host = createCableRepairHost(2, anchors);
++  machine.apply({ kind: 'wake', impact: 'sled' });
++  assert.deepEqual(host.actions(machine.snapshot(), { east: 100, north: 100 }), []);
++  const other = createCableRepairHost(1, anchors);
++  assert.deepEqual(other.actions(machine.snapshot(), anchors.brake), [], 'line 1 host ignores line 2 state');
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-cable-repair-host.ts b/tools/voxel-tavern/town-blockout/town-cable-repair-host.ts
+new file mode 100644
+index 00000000..59c72f29
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-cable-repair-host.ts
+@@ -0,0 +1,89 @@
++import type {
++  Za36CableRepairEvent, Za36CableRepairLine, Za36CableRepairState,
++} from './town-za36-cable-repair';
++
++/**
++ * Cable repair interaction host (atlas package B2 continuation,
++ * branch window B). The state machine (town-za36-cable-repair) is
++ * owned by the presence authority; this leaf is the client-side hand:
++ * given the latest broadcast state and where the player stands, it
++ * decides which repair actions exist and turns a player's action into
++ * the event to send. It keeps NO repair state of its own — the only
++ * local fact is which weight block is in the player's hands, and even
++ * that is reconciled against the authority state on every frame.
++ *
++ * Stations (forms by window D's D3 package; anchors host-supplied):
++ * the rust brake and the cable wheel live in the mid-station machine
++ * room (atlas m26 / m06), the counterweights at the weight tower
++ * (m27) — take a block at the tower, carry it (one at a time, hands
++ * full), hang it at the machine-room frame.
++ *
++ * Wake mapping (host canon, flagged for 总控 confirmation): only a
++ * sled strike or a ROLLED BIG snowball wakes the line. A thrown hand
++ * snowball never does — the state machine's 'snowball' impact word
++ * means the rolled kind, and this mapper is where that is enforced.
++ */
++export type RepairAnchor = Readonly<{ east: number; north: number }>;
++export type RepairAnchors = Readonly<{
++  brake: RepairAnchor;
++  cableWheel: RepairAnchor;
++  weightTower: RepairAnchor;
++  weightFrame: RepairAnchor;
++}>;
++
++export const repairReachM = 2.2;
++
++export type RepairAction = Readonly<{
++  id: 'strike-rust' | 'pull-brake' | 'pry-cable' | 'tighten-cable' | 'take-weight' | 'hang-weight';
++  label: string;
++  event: Za36CableRepairEvent;
++}>;
++
++const near = (a: RepairAnchor, b: RepairAnchor) => Math.hypot(a.east - b.east, a.north - b.north) <= repairReachM;
++
++/** Map a physical impact on the station structure to a wake event, if it qualifies. */
++export function cableWakeEvent(kind: 'sled' | 'big-snowball' | 'snowball' | 'snow-wall'): Za36CableRepairEvent | undefined {
++  if (kind === 'sled') return { kind: 'wake', impact: 'sled' };
++  if (kind === 'big-snowball') return { kind: 'wake', impact: 'snowball' };
++  if (kind === 'snow-wall') return { kind: 'wake', impact: 'snow-wall' };
++  return undefined; // a hand-thrown snowball never wakes the line
++}
++
++export function createCableRepairHost(line: Za36CableRepairLine, anchors: RepairAnchors) {
++  let carrying: number | null = null;
++
++  return {
++    /** Reconcile the local hand against the authority state (call on every broadcast frame). */
++    sync(state: Za36CableRepairState) {
++      if (state.line !== line) return;
++      carrying = state.carriedWeight;
++    },
++    carrying: () => carrying,
++    /** The repair actions available to a player standing at `player`, under `state`. */
++    actions(state: Za36CableRepairState, player: RepairAnchor): RepairAction[] {
++      if (state.line !== line || state.stage !== 'one-station') return [];
++      const offered: RepairAction[] = [];
++      if (near(player, anchors.brake)) {
++        if (state.impacts < 9) {
++          offered.push({ id: 'strike-rust', label: `敲锈（${state.impacts}/9）`, event: { kind: 'strike-rust' } });
++        } else if (!state.brakePulled) {
++          offered.push({ id: 'pull-brake', label: '拉下锈闸', event: { kind: 'pull-brake' } });
++        }
++      }
++      if (near(player, anchors.cableWheel) && state.brakePulled && !state.cableAligned) {
++        offered.push({ id: 'pry-cable', label: '撬正缆绳', event: { kind: 'pry-cable', effort: 1 } });
++      }
++      if (near(player, anchors.cableWheel) && state.cableAligned && state.cableTurns < 3) {
++        offered.push({ id: 'tighten-cable', label: `紧缆（${state.cableTurns}/3）`, event: { kind: 'tighten-cable' } });
++      }
++      if (near(player, anchors.weightTower) && carrying === null) {
++        const index = state.weightMounted.findIndex(mounted => !mounted);
++        if (index >= 0) offered.push({ id: 'take-weight', label: '扛起配重块', event: { kind: 'take-weight', index } });
++      }
++      if (near(player, anchors.weightFrame) && carrying !== null) {
++        offered.push({ id: 'hang-weight', label: '挂上配重块', event: { kind: 'hang-weight', index: carrying } });
++      }
++      return offered;
++    },
++  };
++}

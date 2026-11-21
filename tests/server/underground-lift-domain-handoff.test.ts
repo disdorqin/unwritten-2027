@@ -7,11 +7,13 @@ function fixture() {
   const domains = { 'crater-floor': 'fixture/crater', mine: 'fixture/mine' };
   let dock: 'crater-floor' | 'mine' | undefined = 'crater-floor';
   let time = 0;
+  let lastAllocatedTrip = 0;
   let foot = { playerId: 'rider', domainId: domains['crater-floor'], east: 4, north: 5, height: -30 };
   const readAcceptedFoot = (player: string) => player === foot.playerId ? foot : undefined;
   let acceptedLanding: { tripId: number; foot: typeof foot } | undefined;
   const lift = createUndergroundMineLift({
-    travelMs: 20_000, riderCapacity: 2, now: () => time, readAcceptedFoot, readDockedStop: () => dock,
+    travelMs: 20_000, riderCapacity: 2, now: () => time, allocateTripId: () => ++lastAllocatedTrip,
+    readAcceptedFoot, readDockedStop: () => dock,
     isAtBoardingPlatform: (stop, point) => point.domainId === domains[stop],
     requestCageRide: (_player, direction) => ({ kind: 'ride-cage', direction }),
   });

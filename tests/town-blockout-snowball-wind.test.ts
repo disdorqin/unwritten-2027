@@ -1,0 +1,98 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { InstancedMesh, LineSegments, Scene, Vector3 } from 'three';
+import { createTownSnowballFight, snowballRange } from '../tools/voxel-tavern/town-blockout/town-snowball.ts';
+import { townSnowballWindAcceleration } from '../tools/voxel-tavern/town-blockout/town-snowball-wind.ts';
+import { snowballWindAcceleration } from '../src/shared/snowball-wind.ts';
+import type { SnowballWindWeather } from '../tools/voxel-tavern/town-blockout/town-snowball-wind.ts';
+
+const weather = (weather: SnowballWindWeather['weather']): SnowballWindWeather => ({
+  weather, windEast: 0, windNorth: 1, windStrength: 1,
+});
+
+test('server and viewer share one G-09 wind formula, including invalid inputs', () => {
+  assert.equal(townSnowballWindAcceleration, snowballWindAcceleration);
+  assert.deepEqual(snowballWindAcceleration(weather('wind'), Number.NaN), { east: 0, north: 0 });
+  assert.deepEqual(snowballWindAcceleration({ ...weather('wind'), windStrength: Infinity }, 1), { east: 0, north: 0 });
+  assert.deepEqual(snowballWindAcceleration({ ...weather('wind'), windEast: Infinity, windNorth: -1 }, 1), { east: 0, north: -1.6 });
+  assert.deepEqual(snowballWindAcceleration(weather('wind'), -100), { east: 0, north: 0 });
+});
+
+test('wind leaf has no drift in clear weather, and obeys exposure and server wind direction', () => {
+  assert.deepEqual(townSnowballWindAcceleration(weather('clear-snow'), 1), { east: 0, north: 0 });
+  const exposed = townSnowballWindAcceleration(weather('wind'), 1);
+  const sheltered = townSnowballWindAcceleration(weather('wind'), .4);
+  assert.ok(exposed.north > sheltered.north && sheltered.north > 0);
+  assert.equal(exposed.east, 0);
+  assert.equal(exposed.north, 1.6);
+  const west = townSnowballWindAcceleration({ ...weather('whiteout'), windEast: -1, windNorth: 0 }, .4);
+  assert.ok(Math.abs(west.east + .64) < 1e-12);
+  assert.equal(west.north, 0);
+});
+
+test('G-09 crosswind curves the released ball toward its visible aiming marker', () => {
+  const scene = new Scene();
+  const origin = new Vector3(0, 1.8, 0);
+  const direction = new Vector3(1, 0, 0);
+  const wind = townSnowballWindAcceleration(weather('wind'), 1);
+  const events: { type: string; at?: Vector3 }[] = [];
+  let distance = 0;
+  const fight = createTownSnowballFight({
+    scene, windAtLaunch: () => wind, onEvent: event => events.push(event),
+    sweep(from, to) { distance += from.distanceTo(to); return undefined; },
+  });
+  fight.showAim(origin, direction, 1);
+  const marker = scene.getObjectByName('Town snowball aim marker') as LineSegments;
+  const predicted = marker.position.clone();
+  assert.ok(predicted.z < -0.6, `map north is Three.js -Z, got ${predicted.z}`);
+  distance = 0; // Ignore aim-preview probes; measure only the launched projectile.
+  assert.ok(fight.gather());
+  assert.ok(fight.throwBall(origin, direction, 'local', 1));
+  for (let i = 0; i < 175; i++) fight.update(1 / 60);
+  const actual = events.find(event => event.type === 'miss')?.at;
+  assert.ok(actual);
+  assert.ok(actual.distanceTo(predicted) < .02, `predicted ${predicted.toArray()} vs actual ${actual.toArray()}`);
+  assert.ok(distance <= snowballRange + .02, `wind must not extend normal shot reach: ${distance}`);
+  const mesh = scene.getObjectByName('Town snowball projectiles') as InstancedMesh;
+  assert.equal(mesh.count, 0);
+  fight.dispose();
+});
+
+test('weather is snapshotted per projectile; later weather updates do not steer an in-flight shot', () => {
+  const scene = new Scene();
+  let wind = { east: 0, north: 1.2 };
+  const shots: Vector3[] = [];
+  const fight = createTownSnowballFight({
+    scene, windAtLaunch: () => wind,
+    sweep(from, to) { shots.push(to.clone()); return undefined; },
+  });
+  assert.ok(fight.throwNpc(new Vector3(0, 1, 0), new Vector3(1, 0, 0), 'npc', 1));
+  fight.update(1 / 60);
+  wind = { east: 0, north: -1.2 };
+  for (let i = 0; i < 30; i++) fight.update(1 / 60);
+  assert.ok(shots.at(-1)!.z < 0);
+  fight.dispose();
+});
+
+test('remote snowballs replay server wind snapshots rather than receiver weather', () => {
+  const scene = new Scene();
+  const origin = new Vector3(0, 2, 0);
+  const direction = new Vector3(1, 0, 0);
+  const samples = new Map<string, Vector3[]>();
+  const fight = createTownSnowballFight({
+    scene,
+    windAtLaunch: () => ({ east: 0, north: -2 }),
+    sweep(from, to, _radius, thrower) {
+      const list = samples.get(thrower) ?? [];
+      list.push(to.clone());
+      samples.set(thrower, list);
+      return undefined;
+    },
+  });
+  assert.ok(fight.throwRemote(origin, direction, 'p:101', 12, { east: 0, north: 1.2 }));
+  assert.ok(fight.throwRemote(origin, direction, 'p:102', 13));
+  for (let i = 0; i < 45; i++) fight.update(1 / 60);
+  assert.ok(samples.get('p:101')!.at(-1)!.z < -0.3, 'server north wind must push world -Z');
+  assert.ok(Math.abs(samples.get('p:102')!.at(-1)!.z) < .001, 'legacy relay has zero wind');
+  fight.dispose();
+});
