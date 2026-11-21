@@ -96,6 +96,54 @@ test('U-19 round 3 uses dense bundled rust, wood, rock and ballast with real two
   mounted.dispose();
 });
 
+test('U-19 surveyed bend hazards add advance trackside warning clusters, never dummy geometry', () => {
+  const f = setup();
+  const curved = createUndergroundMainlineTrack({
+    domainId: 'mine', waypoints: [0, 24, 48, 72, 96, 120].map((m, i) =>
+      ({ east: -100 + (i >= 3 ? 3.5 : 0), north: 200 - m, height: -90 })),
+    turnoutMetres: 94, faults: { sleepers: 18, gauge: 48, 'turnout-rust': 83 },
+    clearanceRadius: .82, gaugeMetres: 1,
+    acceptsTrackStep: () => true, acceptsWorkFoot: () => true,
+  });
+  assert.equal(curved.bends.length, 2);
+  const mounted = mountUndergroundMainlineScene({ ...f.options, route: curved });
+  if (mounted.kind !== 'ready') assert.fail();
+  const warnings = mounted.group.getObjectByName('u19/curve-warning-rusted-plate');
+  assert.ok(warnings && 'isInstancedMesh' in warnings && warnings.isInstancedMesh === true);
+  assert.ok('count' in warnings && warnings.count === curved.bends.length);
+  assert.ok(mounted.group.getObjectByName('u19/curve-warning-timber-post'));
+  assert.ok(mounted.words.curve.includes('降速'));
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
+test('U-19 brake sparks and derail tilt follow accepted vehicle snapshots, not a local client key', () => {
+  const f = setup();
+  const mounted = mountUndergroundMainlineScene(f.options);
+  if (mounted.kind !== 'ready') assert.fail();
+  const sparks = mounted.cart.getObjectByName('u19-authoritative-brake-sparks');
+  assert.ok(sparks);
+  assert.equal(sparks.visible, false);
+  f.setSnapshot({ ...fresh, mode: 'rolling', revision: 2,
+    chainage: 40, riderId: 'miner', speed: 3.5, brakeHeld: true });
+  mounted.sync();
+  assert.equal(sparks.visible, true);
+  assert.equal(mounted.cart.rotation.z, 0);
+  f.setSnapshot({ ...fresh, mode: 'stopped', revision: 3,
+    chainage: 40, riderId: 'miner', speed: 0, brakeHeld: false });
+  mounted.sync();
+  assert.equal(sparks.visible, false);
+  f.setSnapshot({ ...fresh, mode: 'derailed', revision: 4,
+    chainage: route.turnoutMetres, riderId: 'miner', speed: 0, brakeHeld: false });
+  mounted.sync();
+  assert.ok(mounted.cart.rotation.z > .2);
+  assert.equal(mounted.cart.visible, true, 'crash does not delete or dismount the cart');
+  f.setSnapshot(undefined);
+  mounted.sync();
+  assert.equal(sparks.visible, false);
+  mounted.dispose();
+});
+
 test('U-19 round 4 repair E selects exact approved bay and current repair verb; off-domain players cannot act', () => {
   const f = setup();
   const mounted = mountUndergroundMainlineScene(f.options);
