@@ -35,7 +35,7 @@ test('G-09 crosswind curves the released ball toward its visible aiming marker',
   fight.showAim(origin, direction, 1);
   const marker = scene.getObjectByName('Town snowball aim marker') as LineSegments;
   const predicted = marker.position.clone();
-  assert.ok(predicted.z > 0.6, `wind should curve the trajectory north, got ${predicted.z}`);
+  assert.ok(predicted.z < -0.6, `map north is Three.js -Z, got ${predicted.z}`);
   distance = 0; // Ignore aim-preview probes; measure only the launched projectile.
   assert.ok(fight.gather());
   assert.ok(fight.throwBall(origin, direction, 'local', 1));
@@ -61,6 +61,29 @@ test('weather is snapshotted per projectile; later weather updates do not steer 
   fight.update(1 / 60);
   wind = { east: 0, north: -1.2 };
   for (let i = 0; i < 30; i++) fight.update(1 / 60);
-  assert.ok(shots.at(-1)!.z > 0);
+  assert.ok(shots.at(-1)!.z < 0);
+  fight.dispose();
+});
+
+test('remote snowballs replay server wind snapshots rather than receiver weather', () => {
+  const scene = new Scene();
+  const origin = new Vector3(0, 2, 0);
+  const direction = new Vector3(1, 0, 0);
+  const samples = new Map<string, Vector3[]>();
+  const fight = createTownSnowballFight({
+    scene,
+    windAtLaunch: () => ({ east: 0, north: -2 }),
+    sweep(from, to, _radius, thrower) {
+      const list = samples.get(thrower) ?? [];
+      list.push(to.clone());
+      samples.set(thrower, list);
+      return undefined;
+    },
+  });
+  assert.ok(fight.throwRemote(origin, direction, 'p:101', 12, { east: 0, north: 1.2 }));
+  assert.ok(fight.throwRemote(origin, direction, 'p:102', 13));
+  for (let i = 0; i < 45; i++) fight.update(1 / 60);
+  assert.ok(samples.get('p:101')!.at(-1)!.z < -0.3, 'server north wind must push world -Z');
+  assert.ok(Math.abs(samples.get('p:102')!.at(-1)!.z) < .001, 'legacy relay has zero wind');
   fight.dispose();
 });

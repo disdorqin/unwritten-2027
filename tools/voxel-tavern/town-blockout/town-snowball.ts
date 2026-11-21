@@ -100,7 +100,7 @@ function flightTime(velocity: Vector3, windEast = 0, windNorth = 0) {
         const at = (i + .5) * dt;
         length += Math.hypot(velocity.x + windEast * at,
           velocity.y - snowballGravity * at,
-          velocity.z + windNorth * at) * dt;
+          velocity.z - windNorth * at) * dt;
       }
       return length;
     };
@@ -138,7 +138,8 @@ function ballisticPosition(result: Vector3, origin: Vector3, velocity: Vector3, 
   result.copy(origin).addScaledVector(velocity, seconds);
   const halfSquare = .5 * seconds * seconds;
   result.x += windEast * halfSquare;
-  result.z += windNorth * halfSquare;
+  // Town map north is -Z in Three.js. The wire and weather use +north.
+  result.z -= windNorth * halfSquare;
   result.y -= snowballGravity * halfSquare;
 }
 
@@ -241,7 +242,8 @@ export function createTownSnowballFight({
   // Older host calls can still pass a weather serving count. Each shovel now gives one snowball.
   function gather(_legacyServings?: number) { return !disposed && stock.gather(); }
 
-  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy, ballId?: number) {
+  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy,
+    ballId?: number, windOverride?: Readonly<{ east: number; north: number }>) {
     if (disposed || !thrower || !validAim(origin, direction, power)) return false;
     if (shotBy === 'player') {
       if (stock.available() < 1 || simulationTime + 1e-9 < nextThrow) return false;
@@ -268,7 +270,9 @@ export function createTownSnowballFight({
     shot.previous.copy(origin);
     shot.age = 0;
     shot.velocity.copy(direction).normalize().multiplyScalar(snowballSpeed(strength));
-    const wind = windAtLaunch?.(origin, shotBy);
+    // Remote projectiles must replay the server's launch snapshot. Sampling
+    // the receiver's current weather would diverge after a weather change.
+    const wind = shotBy === 'remote' ? windOverride : windAtLaunch?.(origin, shotBy);
     shot.windEast = Number.isFinite(wind?.east) ? Math.max(-2, Math.min(2, wind!.east)) : 0;
     shot.windNorth = Number.isFinite(wind?.north) ? Math.max(-2, Math.min(2, wind!.north)) : 0;
     shot.duration = flightTime(shot.velocity, shot.windEast, shot.windNorth);
@@ -297,7 +301,8 @@ export function createTownSnowballFight({
     return launch(origin, direction, thrower, power, 'npc');
   }
 
-  function throwRemote(origin: Vector3, direction: Vector3, thrower: string, ballId: number) {
+  function throwRemote(origin: Vector3, direction: Vector3, thrower: string, ballId: number,
+    serverWind?: Readonly<{ east: number; north: number }>) {
     const time = now();
     for (const [key, until] of seenRemoteThrows) {
       if (time < until) break;
@@ -312,7 +317,7 @@ export function createTownSnowballFight({
         return false;
       }
     }
-    return launch(origin, direction, thrower, 1, 'remote', ballId);
+    return launch(origin, direction, thrower, 1, 'remote', ballId, serverWind);
   }
 
   function clearRemote() {
@@ -435,7 +440,7 @@ export function createTownSnowballFight({
         const travel = shot.at.distanceTo(destination);
         const hitTime = travel > 0 ? step * Math.min(1, shot.at.distanceTo(contact.at) / travel) : 0;
         shot.velocity.x += shot.windEast * hitTime;
-        shot.velocity.z += shot.windNorth * hitTime;
+        shot.velocity.z -= shot.windNorth * hitTime;
         shot.velocity.y -= snowballGravity * hitTime;
         shot.active = false;
         const target = contact.kind === 'target';
@@ -459,7 +464,7 @@ export function createTownSnowballFight({
       }
       shot.at.copy(destination);
       shot.velocity.x += shot.windEast * step;
-      shot.velocity.z += shot.windNorth * step;
+      shot.velocity.z -= shot.windNorth * step;
       shot.velocity.y -= snowballGravity * step;
       if (shot.age < shot.duration - 1e-9) continue;
       shot.active = false;
