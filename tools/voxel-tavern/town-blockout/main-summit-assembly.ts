@@ -9,6 +9,12 @@ import { mountMainSummitCable } from './main-summit-cable-scene';
 import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { createMainSummitCableTravel } from './main-summit-cable-travel';
 import { mountMainSummitOutlook } from './main-summit-outlook';
+import { mountMainSummitExpeditionSites } from './main-summit-expedition-sites';
+import { mountSummitExpeditionPlaques } from './main-summit-expedition-plaques';
+import { createSummitExpeditionActivities } from './main-summit-expedition-activities';
+import { mountSummitExpeditionDynamics } from './main-summit-expedition-dynamics';
+import { mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
+import { mountSummitCloudBellArray } from './main-summit-cloud-bell-array';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
@@ -94,7 +100,9 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
   return new Mesh(geometry, new MeshLambertMaterial({ color: '#bac2bf', side: DoubleSide }));
 }
 
-export function mountMainSummitAssembly(owner: Group, epochMs: number) {
+export function mountMainSummitAssembly(
+  owner: Group, epochMs: number, options: Readonly<{ expeditionPreview?: boolean }> = {},
+) {
   const group = new Group();
   group.name = 'main-summit-assembly';
   group.position.set(summitAssemblyAnchor.east, 0, -summitAssemblyAnchor.north);
@@ -133,6 +141,30 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   block.coarse.geometry = trailTerrain;
   group.add(ribbon);
   const wreckage = mountMainSummitWreckage(group, trail);
+  // Seven-round built scenery is a separately authorized review candidate.
+  // The ordinary world must not instantiate, spend draw calls on, or expose
+  // unapproved mountainside attractions before story/multiplayer/style gates.
+  // All candidate coordinates are the real approved P-1/P-3 local survey.
+  const candidate = options.expeditionPreview ? (() => {
+    const expedition = mountMainSummitExpeditionSites(group, block.heightAt, trail.points);
+    const workshop = mountMainSummitCableWorkshop(group, block.heightAt);
+    const cloudBells = mountSummitCloudBellArray(group, trail.points, block.heightAt);
+    const openingBell = cloudBells.posts[0]!;
+    const plaques = mountSummitExpeditionPlaques(group, [...expedition.sites, {
+      id: openingBell.id, kind: 'waymark', east: openingBell.east, north: openingBell.north,
+      height: openingBell.height, yaw: openingBell.heading,
+      trail: { ...trail.points[0]! }, distanceToTrail: openingBell.baseClearanceMetres,
+    }]);
+    const expeditionDynamics = mountSummitExpeditionDynamics(group, expedition.sites);
+    // Preview consumes only already-local accepted interactions, not WS input.
+    const expeditionActivities = createSummitExpeditionActivities([
+      ...expedition.sites,
+      { id: 'expedition-cable-machine-room', kind: 'machine-hall', east: -21, north: 7, height: 347,
+        yaw: Math.PI / 2, trail: { east: 0, north: 7, height: 347 }, distanceToTrail: 21 },
+    ]);
+    return { expedition, workshop, cloudBells, plaques,
+      expeditionDynamics, expeditionActivities };
+  })() : undefined;
   const knots = survey.map((row): SnowBeltKnot => {
     const [east, north, heading, height] = row;
     if (row.length < 4) throw new RangeError('Invalid surveyed snow belt knot.');
@@ -167,15 +199,27 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
     // P-1 local coordinates. The host prefers its plaza surface in the
     // overlap and this cut/fill tread before bare ground outside the plaza.
-    trailSurfaceAt: trail.sampleWalkwaySurface,
+    trailSurfaceAt(east: number, north: number, radius = .27) {
+      return candidate?.expedition.surfaceAt(east, north, radius) ??
+        candidate?.workshop.surfaceAt(east, north, radius) ??
+        candidate?.cloudBells.surfaceAt(east, north, radius) ??
+        trail.sampleWalkwaySurface(east, north, radius);
+    },
     wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
     wingRack, cableTravel, outlook,
+    expedition: candidate?.expedition, workshop: candidate?.workshop,
+    cloudBells: candidate?.cloudBells, plaques: candidate?.plaques,
+    expeditionActivities: candidate?.expeditionActivities,
+    expeditionDynamics: candidate?.expeditionDynamics,
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
       if (!front && (wingRack.blocked(east, north, feet, radius, bodyHeight) ||
-        outlook.blocked(east, north, feet, radius, bodyHeight))) return true;
+        outlook.blocked(east, north, feet, radius, bodyHeight) ||
+        (candidate?.expedition.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
+        (candidate?.workshop.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
+        (candidate?.cloudBells.blocked(east, north, feet, radius, bodyHeight) ?? false))) return true;
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {
@@ -195,6 +239,11 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
         : registration.interact('summit', { east, north, height });
     },
     dispose() {
+      candidate?.cloudBells.dispose();
+      candidate?.expeditionDynamics.dispose();
+      candidate?.plaques.dispose();
+      candidate?.expedition.dispose();
+      candidate?.workshop.dispose();
       wreckage.dispose();
       stations.dispose();
       cableView.dispose();
