@@ -3,10 +3,19 @@ import assert from 'node:assert/strict';
 import { InstancedMesh, LineSegments, Scene, Vector3 } from 'three';
 import { createTownSnowballFight, snowballRange } from '../tools/voxel-tavern/town-blockout/town-snowball.ts';
 import { townSnowballWindAcceleration } from '../tools/voxel-tavern/town-blockout/town-snowball-wind.ts';
+import { snowballWindAcceleration } from '../src/shared/snowball-wind.ts';
 import type { SnowballWindWeather } from '../tools/voxel-tavern/town-blockout/town-snowball-wind.ts';
 
 const weather = (weather: SnowballWindWeather['weather']): SnowballWindWeather => ({
   weather, windEast: 0, windNorth: 1, windStrength: 1,
+});
+
+test('server and viewer share one G-09 wind formula, including invalid inputs', () => {
+  assert.equal(townSnowballWindAcceleration, snowballWindAcceleration);
+  assert.deepEqual(snowballWindAcceleration(weather('wind'), Number.NaN), { east: 0, north: 0 });
+  assert.deepEqual(snowballWindAcceleration({ ...weather('wind'), windStrength: Infinity }, 1), { east: 0, north: 0 });
+  assert.deepEqual(snowballWindAcceleration({ ...weather('wind'), windEast: Infinity, windNorth: -1 }, 1), { east: 0, north: -1.6 });
+  assert.deepEqual(snowballWindAcceleration(weather('wind'), -100), { east: 0, north: 0 });
 });
 
 test('wind leaf has no drift in clear weather, and obeys exposure and server wind direction', () => {
