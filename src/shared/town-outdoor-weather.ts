@@ -1,4 +1,6 @@
 export type TownOutdoorWeather = 'clear-snow' | 'wind' | 'whiteout';
+/** One deterministic weather cycle: the 60/30/10 G-09 approved schedule. */
+export const townOutdoorWeatherCycleMs = 100 * 60_000;
 
 export type TownOutdoorWeatherState = Readonly<{
   weather: TownOutdoorWeather;
