@@ -1,0 +1,142 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { Group, PointLight } from 'three';
+import { resolveUndergroundShaftRegistration } from '../src/presence/underground-shaft-registration.js';
+import { createUndergroundMineLayout, type UndergroundMineSpec } from '../tools/voxel-tavern/town-blockout/underground-mine-layout.js';
+import { mountUndergroundMineDomain } from '../tools/voxel-tavern/town-blockout/underground-domain-scene.js';
+
+const spec: UndergroundMineSpec = {
+  pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
+  shoreLength: 8,
+  gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
+  collapse: { length: 3, width: 1.2, height: 1.3 },
+  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true },
+  walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
+};
+function fixture() {
+  const parent = new Group();
+  const mine = createUndergroundMineLayout(spec);
+  const pool = { domainId: 'underground/mine', east: -119, north: 189, height: -90 };
+  const registration = resolveUndergroundShaftRegistration({
+    crater: { domainId: 'west', fixtureRim: { east: 0, north: 0, height: 0, yaw: 0 },
+      liveRim: { east: -120, north: 185, rimHeight: 10.7773, yaw: 0 } },
+    fixtureShaftFoot: { east: 0, north: 0, height: -35, yaw: 0 },
+    liveWinchFoot: { domainId: 'west', east: -121.08, north: 181.73, height: -24.2227,
+      horizontalReach: .7, verticalReach: .3 },
+    mineLanding: pool, depthLine: -73,
+  }, { supportsFoot: () => true, acceptsShaftHandoff: () => true });
+  assert.equal(registration.kind, 'ready');
+  let acceptance = true;
+  let checks = 0;
+  let readLights = 0;
+  let lightCount = 0;
+  const host: Parameters<typeof mountUndergroundMineDomain>[0] = {
+    parent, registration, mine, camp: spec.camp, walker: spec.walker, mineYaw: Math.PI / 6,
+    acceptsMineGeometry(placement) {
+      checks++;
+      return acceptance && placement.domainId === pool.domainId &&
+        placement.landing.height === -90 && placement.localPool[1] === -90;
+    },
+    readLights() {
+      readLights++;
+      return { litNicheIds: new Set(), extraCampLightCount: lightCount, remainingBudget: 3 };
+    },
+  };
+  return {
+    host, parent, mine, pool,
+    setAcceptance(value: boolean) { acceptance = value; },
+    setLightCount(value: number) { lightCount = value; },
+    get checks() { return checks; },
+    get reads() { return readLights; },
+  };
+}
+
+test('an unregistered B-01 shaft or absent host geometry cannot mount or update a cave', () => {
+  const f = fixture();
+  const unregistered = mountUndergroundMineDomain({ ...f.host, registration: { kind: 'unregistered' } });
+  assert.deepEqual(unregistered, { kind: 'unregistered' });
+  assert.equal(f.checks, 0);
+  assert.equal(f.reads, 0);
+  assert.equal(f.parent.children.length, 0);
+  for (const overrides of [
+    { mineYaw: undefined }, { mineYaw: NaN }, { acceptsMineGeometry: undefined },
+    { mine: undefined }, { camp: undefined }, { walker: undefined },
+  ]) {
+    assert.deepEqual(mountUndergroundMineDomain({ ...f.host, ...overrides }), { kind: 'unregistered' });
+  }
+  f.setAcceptance(false);
+  assert.deepEqual(mountUndergroundMineDomain(f.host), { kind: 'unsupported-mine' });
+  assert.equal(f.parent.children.length, 0);
+  assert.equal(f.reads, 0);
+});
+
+test('certified mine foot anchors rock, rail, water, filled camp and live lamps to one ENY transform', () => {
+  const f = fixture();
+  const mounted = mountUndergroundMineDomain(f.host);
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail('expected a registered mine');
+  assert.equal(f.checks, 1);
+  assert.equal(f.parent.children.length, 1);
+  assert.equal(mounted.group.parent, f.parent);
+  assert.equal(mounted.group.children.filter(child => 'isMesh' in child && child.isMesh === true).length, 3);
+  for (const name of ['rock', 'rail', 'water']) {
+    const mesh = mounted.group.getObjectByName('underground-mine-' + name);
+    assert.ok(mesh && 'isMesh' in mesh && mesh.isMesh === true, name);
+    assert.ok((mesh as any).geometry.attributes.position.count > 0);
+  }
+  const camp = mounted.group.children.find(child => child.name.includes('camp'));
+  assert.ok(camp, 'camp is not a placeholder box');
+  assert.ok(camp.children.length > 0);
+  assert.deepEqual(mounted.poolWorld, { east: f.pool.east, north: f.pool.north, height: f.pool.height });
+  const at = mounted.toWorld(f.mine.anchors.poolLanding);
+  assert.ok(at);
+  for (const key of ['east', 'north', 'height'] as const)
+    assert.ok(Math.abs(at[key] - f.pool[key]) < 1e-7);
+  assert.equal(f.reads, 0, 'no light is added without live receipts');
+  mounted.sync();
+  assert.equal(f.reads, 1);
+  const lamps: PointLight[] = [];
+  mounted.group.traverse(object => {
+    if ('isPointLight' in object && object.isPointLight === true) lamps.push(object as PointLight);
+  });
+  assert.ok(lamps.length > 0);
+  assert.ok(lamps.every(light => light.visible === false));
+  f.setLightCount(3);
+  mounted.sync();
+  assert.ok(lamps.some(light => light.visible));
+  mounted.dispose();
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+  assert.equal(mounted.toWorld(f.mine.anchors.poolLanding), undefined);
+});
+
+test('wrong mine domain, wrong surveyed depth and invalid geometry never register as playable space', () => {
+  const f = fixture();
+  const good = f.host.registration;
+  assert.equal(good.kind, 'ready');
+  if (good.kind !== 'ready') assert.fail();
+  const wrongDomain = { ...good, connection: { ...good.connection,
+    firstFallLanding: { ...good.connection.firstFallLanding, domainId: good.connection.shaftFoot.domainId } } };
+  assert.deepEqual(mountUndergroundMineDomain({ ...f.host, registration: wrongDomain }), { kind: 'invalid-landing' });
+  const wrongDepth = { ...good, connection: { ...good.connection,
+    firstFallLanding: { ...good.connection.firstFallLanding, height: -88 } } };
+  assert.deepEqual(mountUndergroundMineDomain({ ...f.host, registration: wrongDepth }), { kind: 'invalid-landing' });
+  const bogusPool = createUndergroundMineLayout(spec);
+  bogusPool.mesh.rock[0] = NaN;
+  assert.throws(() => mountUndergroundMineDomain({ ...f.host, mine: bogusPool }), /validated rock/);
+  assert.equal(f.parent.children.length, 0);
+});
+
+test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {
+  const f = fixture();
+  const straight = mountUndergroundMineDomain({ ...f.host, mineYaw: 0 });
+  assert.equal(straight.kind, 'ready');
+  if (straight.kind !== 'ready') assert.fail();
+  const local: [number, number, number] = [2, -91, 12];
+  assert.deepEqual(straight.toWorld(local), {
+    east: f.pool.east + 2, north: f.pool.north - (12 - f.mine.anchors.poolLanding[2]),
+    height: -91,
+  });
+  assert.equal(straight.toWorld([Infinity, -90, 0]), undefined);
+  straight.dispose();
+});
