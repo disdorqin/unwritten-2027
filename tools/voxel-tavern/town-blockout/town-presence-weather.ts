@@ -10,17 +10,20 @@ import {
  */
 export function createTownPresenceWeather(serverNow: () => number) {
   let state: TownOutdoorWeatherState | undefined;
+  let dawnEpoch: number | undefined;
   let joined = false;
   let lastWarningAt = -Infinity;
   let warn: ((cue: TownOutdoorWeatherCue) => void) | undefined;
 
   return {
-    join(raw: unknown) {
+    join(raw: unknown, anchor?: unknown) {
       joined = true;
       state = readTownOutdoorWeatherState(raw);
+      dawnEpoch = typeof anchor === 'number' && Number.isSafeInteger(anchor) && anchor >= 0 ? anchor : undefined;
     },
-    disconnect() { joined = false; state = undefined; },
+    disconnect() { joined = false; state = undefined; dawnEpoch = undefined; },
     state: () => state,
+    dawnEpoch: () => state && dawnEpoch,
     onWarning(handler: (cue: TownOutdoorWeatherCue) => void) { warn = handler; },
     accept(raw: unknown) {
       if (!joined) return;

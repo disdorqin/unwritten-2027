@@ -66,6 +66,7 @@ type TownNightFeed = Readonly<{
 }>;
 
 type TownWeatherFeed = Readonly<{
+  dawnEpoch: number;
   snapshot(): TownOutdoorWeatherState;
   subscribe(receive: (frame: string) => void): () => void;
 }>;
@@ -231,6 +232,7 @@ export async function createPresenceServer(options: Options = {}) {
     broadcast: frame => publishTownWeather(JSON.stringify(frame)),
   }, weatherConfig.restoredWarningAt);
   const ownedWeatherFeed: TownWeatherFeed | undefined = townWeather && {
+    dawnEpoch: weatherConfig!.dawnEpoch,
     snapshot: townWeather.snapshot,
     subscribe(receive) {
       weatherListeners.add(receive);
@@ -1209,6 +1211,7 @@ export async function createPresenceServer(options: Options = {}) {
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
+      townOutdoorWeatherDawnEpoch: weatherFeed?.dawnEpoch,
     }));
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
