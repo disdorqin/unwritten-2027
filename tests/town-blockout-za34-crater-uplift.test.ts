@@ -71,7 +71,7 @@ test('ZA34 crater uplift R1 candidate: west wildland has measurable non-flat rin
     `no proper west slope: positive=${positive}, nonFlat=${nonFlat}, belt=${beltNonFlat}`);
 });
 
-test('ZA34 crater uplift R1 candidate: no new cliff in a 1-m sample (local <=18 deg except industrial edge survey)',()=>{
+test('ZA34 crater uplift R1 candidate: no new cliff in a 1-m sample (strict <=18 degrees)',()=>{
   let steepest=0,location='';
   for(let n=40;n<=360;n+=2)for(let e=-238;e<=-26;e+=2){
     const h=craterWestUpliftCandidate(e,n,anchor);
@@ -80,7 +80,7 @@ test('ZA34 crater uplift R1 candidate: no new cliff in a 1-m sample (local <=18 
       craterWestUpliftCandidate(e,n+1,anchor)-h);
     if(slope>steepest){steepest=slope;location=`E${e}/N${n}`;}
   }
-  assert.ok(steepest<Math.tan(18*Math.PI/180)+.02,
+  assert.ok(steepest<=Math.tan(18*Math.PI/180),
     `steepest added slope ${(Math.atan(steepest)*180/Math.PI).toFixed(2)}° at ${location}`);
   // The far belt is still a physical height function, not repeated loose snow meshes.
   const b=polar(135,315);

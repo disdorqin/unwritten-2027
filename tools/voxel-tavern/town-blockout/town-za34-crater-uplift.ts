@@ -36,6 +36,29 @@ export function craterIndustrialProtection(east:number,north:number,anchor:Crate
   return smooth((distance-65*DEG)/(30*DEG));
 }
 
+/**
+ * Preserve the large, enterable fixed foundations surveyed in ZA-36/A2.
+ * Guard shed (358°, r64) and north lookout tower (358°, r67.5) overlap and
+ * share one softened footprint; the western tower (262°, r64) is separate.
+ * Clusters of stones/pines are individually sampled and intentionally NOT
+ * made flat, so most of the crater's rolling terrain remains visible.
+ */
+export function craterStructureFootingWeight(east:number,north:number,anchor:CraterReliefAnchor) {
+  const reservations=[
+    { bearing:358, radius:65.5, footprint:9.0, apron:26 },
+    { bearing:262, radius:64.0, footprint:5.0, apron:26 },
+  ] as const;
+  let weight=1;
+  for(const reservation of reservations){
+    const b=reservation.bearing*DEG;
+    const centreEast=anchor.east+reservation.radius*Math.sin(b);
+    const centreNorth=anchor.north+reservation.radius*Math.cos(b);
+    const distance=Math.hypot(east-centreEast,north-centreNorth);
+    weight=Math.min(weight,smooth((distance-reservation.footprint)/reservation.apron));
+  }
+  return weight;
+}
+
 /** Only the already existing west-domain mesh; zero at the town seam. */
 export function craterWestBoundaryEnvelope(east:number,north:number) {
   if(east<=-240||east>=-24||north<=0||north>=540)return 0;
@@ -54,7 +77,7 @@ export function craterImpactRing(east:number,north:number,anchor:CraterReliefAnc
   const inner=smooth((radius-meteorCraterRimRadius-5)/20);
   const outer=1-smooth((radius-82)/28);
   const natural=0.9+0.07*Math.cos(bearing*6.0)+0.03*Math.sin(bearing*9.0);
-  return 4.5*natural*inner*outer;
+  return 4.3*natural*inner*outer;
 }
 
 /** Outer rolling wave beyond the crater crown, fading before the management rim. */
@@ -78,5 +101,7 @@ export function craterWestUpliftCandidate(east:number,north:number,anchor:Crater
   if(range===0)return 0;
   const industrial=craterIndustrialProtection(east,north,anchor);
   if(industrial===0)return 0;
-  return (craterImpactRing(east,north,anchor)+craterWestBelt(east,north,anchor))*range*industrial;
+  const footing=craterStructureFootingWeight(east,north,anchor);
+  if(footing===0)return 0;
+  return (craterImpactRing(east,north,anchor)+craterWestBelt(east,north,anchor))*range*industrial*footing;
 }

@@ -85,6 +85,25 @@ test('ZA34 crater gated mount: existing outside buildings, lamps and dressing mo
   assert.ok(changedSites>5,`only ${changedSites} model sites follow the displaced ground`);
 });
 
+test('ZA34 crater gated mount: guard house and both large towers retain flat structural footprints',()=>{
+  const buildings=[
+    candidate.mouthWorks.sites.find(p=>p.id==='guard-shed'),
+    candidate.outerWorks.sites.find(p=>p.id==='north-tower'),
+    candidate.outerWorks.sites.find(p=>p.id==='west-tower'),
+  ];
+  for(const site of buildings){
+    assert.ok(site,'missing permanent building');
+    const delta=(east:number,north:number)=>candidate.heightAt(east,north)!-legacy.heightAt(east,north)!;
+    const centre=delta(site.east,site.north);
+    for(const [de,dn] of [
+      [site.radius,0],[-site.radius,0],[0,site.radius],[0,-site.radius],
+    ]){
+      const change=Math.abs(delta(site.east+de,site.north+dn)-centre);
+      assert.ok(change<.08,`${site.id} has a new ${change.toFixed(2)}m footing step`);
+    }
+  }
+});
+
 test('ZA34 crater gated mount: railroad rebuilt on new ground stays supported by terrain',()=>{
   const railway=buildCraterRailExtension(grid,candidate);
   let west=0;
