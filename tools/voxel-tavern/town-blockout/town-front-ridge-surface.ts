@@ -58,11 +58,22 @@ export function frontRidgeSurfaceColorAt(east:number,north:number,height:number,
   const ochreMiddle=.42*smooth((altitude-94)/62)*(1-smooth((altitude-254)/58));
   base.lerp(earth,(1-soil)*.55+geology*.1+ochreMiddle);
   if(altitude<125)base.lerp(moss,.13+(1-geology)*.22);
+  // D-1 close-range daylight QA: the old plain rock had too little ochre
+  // area, so the entire 250m face became a single black/grey shape from
+  // the crater. Build broad *material bands* and irregular vertical scree
+  // chutes into the actual vertex pigments instead of altering scene fog.
+  const middle=smooth((altitude-67)/42)*(1-smooth((altitude-258)/56));
+  const shale= (Math.sin(east*.037+north*.009)+1)*.5;
+  const chute=smooth((shale-.37)/.48);
+  const sideNoise=.65+.35*geology;
+  base.lerp(earth,middle*(.19+.29*chute)*sideNoise);
   if(altitude>=112&&altitude<245){
-    const rockLayer=.22*smooth((altitude-112)/55)+.16*geology;
+    const rockLayer=.14*smooth((altitude-112)/55)+.09*geology;
     base.lerp(umber,rockLayer);
   }
-  if(altitude>=180)base.lerp(night,.28*smooth((altitude-180)/105));
+  // Keep the peak broken and shadowed, but never let the entire upper
+  // south wall become midnight-blue on a DAYTIME first-person view.
+  if(altitude>=210)base.lerp(night,.13*smooth((altitude-210)/88));
   // A broad snowline with noisy variation: the upper ledges accumulate
   // snow on nearly-horizontal faces only. Cliff faces remain exposed rock.
   const snowline=frontRidgePixelSpec.minAltitudeSnowMetres+(geology-.5)*34;
@@ -79,7 +90,13 @@ export function frontRidgeSurfaceColorAt(east:number,north:number,height:number,
   const snowPatch=(hash(Math.floor(east/19),Math.floor(north/17),7)%9)/8;
   const shelfSnow=(.48+.35*snowPatch)*Math.max(shelfOne,shelfTwo)*
     altitudeWeight;
-  base.lerp(snow,Math.max(snowWeight,shelfSnow));
+  // D-1 windswept streaks: broken small snow pockets on the high cliff
+  // face, not an all-white coat. This is a spatial material field anchored
+  // to the actual vertex position, not an opaque fog fade.
+  const windPocket=Math.pow(Math.max(0,Math.sin(east*.066+north*.028+
+    Math.sin(east*.021)*1.6)),4);
+  const frost=altitudeWeight*(.16+.22*(1-incline))*windPocket;
+  base.lerp(snow,Math.max(snowWeight,shelfSnow,frost));
   return base;
 }
 
