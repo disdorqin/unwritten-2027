@@ -127,6 +127,30 @@ test('wrong mine domain, wrong surveyed depth and invalid geometry never registe
   assert.equal(f.parent.children.length, 0);
 });
 
+test('the mounted U-15 iron gate uses only this mine shell and the accepted stage', () => {
+  const f = fixture();
+  let stage: 'closed' | 'ajar' | 'open' | undefined;
+  const mounted = mountUndergroundMineDomain({ ...f.host, readGateStage: () => stage });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail('expected mine domain');
+  const gate = mounted.group.getObjectByName('mine-crystal-gate');
+  const leaf = mounted.group.getObjectByName('mine-crystal-gate-leaf');
+  assert.ok(gate && leaf && f.mine.expansion?.gate);
+  assert.deepEqual(gate.position.toArray(), f.mine.expansion.gate.position);
+  assert.equal(leaf.visible, true, 'missing authority snapshot is closed, never open');
+  mounted.sync();
+  assert.equal(leaf.visible, true);
+  const heightBefore = leaf.scale.y;
+  stage = 'ajar';
+  mounted.sync();
+  assert.ok(leaf.scale.y < heightBefore && leaf.scale.y > 0, 'ajar gap comes from same collision shell');
+  stage = 'open';
+  mounted.sync();
+  assert.equal(leaf.visible, false);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
 test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {
   const f = fixture();
   const straight = mountUndergroundMineDomain({ ...f.host, mineYaw: 0 });

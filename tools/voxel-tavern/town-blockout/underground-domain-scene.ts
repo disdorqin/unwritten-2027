@@ -2,9 +2,11 @@ import {
   BufferAttribute, BufferGeometry, DoubleSide, Group, Mesh, MeshStandardMaterial, Vector3,
 } from 'three';
 import type { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration.js';
+import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
 import type { createUndergroundMineLayout, UndergroundMineSpec } from './underground-mine-layout.js';
 import { createUndergroundCampRemains } from './underground-camp-remains.js';
 import { mountUndergroundCampLighting } from './underground-camp-lighting.js';
+import { createUndergroundCrystalGate } from './underground-crystal-gate.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -26,6 +28,8 @@ type Host = Readonly<{
     yaw: number;
     localPool: readonly [number, number, number];
   }>): boolean;
+  /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
+  readGateStage?(): UndergroundMineGateStage | undefined;
   /** Host-approved light budget and offering receipts; never grant light from render state. */
   readLights(): {
     litNicheIds: ReadonlySet<string>;
@@ -102,6 +106,11 @@ export function mountUndergroundMineDomain(host: Host) {
     throw error;
   }
   root.add(camp.group);
+  // Do not create or draw a crystal gate from a review-only position. Its shape comes
+  // from this same collision layout, and opening is driven by an accepted gate stage.
+  const gate = host.readGateStage && mine.expansion?.gate
+    ? createUndergroundCrystalGate(mine.expansion.gate) : undefined;
+  if (gate) root.add(gate.group);
   const campLights = mountUndergroundCampLighting(camp.lighting);
   // Never illuminate the detached scene until the caller provides the live budget.
   campLights.sync(new Set(), 0, 0);
@@ -122,12 +131,14 @@ export function mountUndergroundMineDomain(host: Host) {
       if (disposed) return;
       const lights = host.readLights();
       campLights.sync(lights.litNicheIds, lights.extraCampLightCount, lights.remainingBudget);
+      gate?.update(host.readGateStage?.() ?? 'closed');
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       root.removeFromParent();
       campLights.dispose();
+      gate?.dispose();
       camp.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
