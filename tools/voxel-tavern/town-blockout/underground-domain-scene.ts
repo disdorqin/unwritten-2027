@@ -3,17 +3,23 @@ import {
 } from 'three';
 import type { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration.js';
 import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
+import type { UndergroundMiningTargetView } from '../../../src/shared/underground-mining.js';
 import type { createUndergroundMineLayout, UndergroundMineSpec } from './underground-mine-layout.js';
 import { createUndergroundCampRemains } from './underground-camp-remains.js';
 import { mountUndergroundCampLighting } from './underground-camp-lighting.js';
 import { createUndergroundCrystalGate } from './underground-crystal-gate.js';
 import { mountUndergroundCampScene } from './underground-camp-scene.js';
+import { createUndergroundOreVein } from './underground-ore-vein.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
 type Point = Readonly<{ east: number; north: number; height: number }>;
 type Camp = UndergroundMineSpec['camp'];
 type Walker = UndergroundMineSpec['walker'];
+type OreSite = Readonly<{
+  target: UndergroundMiningTargetView;
+  normal: Readonly<{ east: number; north: number; height: number }>;
+}>;
 type Host = Readonly<{
   parent: Group;
   registration: Registration;
@@ -31,6 +37,12 @@ type Host = Readonly<{
   }>): boolean;
   /** Enable U-2 interactions only with movement-accepted feet, sight and inventory receipts. */
   campRuntime?: Pick<Parameters<typeof mountUndergroundCampScene>[0], 'actions' | 'pickaxe' | 'ambience'>;
+  /** Mining markers come ONLY from the authenticated U-8 world site registry. */
+  oreRuntime?: Readonly<{
+    sites: readonly OreSite[];
+    supportsFace(site: OreSite): boolean;
+    readTargets(): readonly UndergroundMiningTargetView[];
+  }>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
   readGateStage?(): UndergroundMineGateStage | undefined;
   /** Host-approved light budget and offering receipts; never grant light from render state. */
@@ -66,6 +78,18 @@ export function mountUndergroundMineDomain(host: Host) {
     yaw: mineYaw, localPool: [...pool] as [number, number, number],
   };
   if (acceptsMineGeometry(placement) !== true) return { kind: 'unsupported-mine' } as const;
+  const oreSites = host.oreRuntime?.sites ?? [];
+  const oreIds = new Set<string>();
+  for (const site of oreSites) {
+    const { target, normal } = site;
+    if (target.kind !== 'ore' || !target.id.trim() || oreIds.has(target.id) ||
+        target.at.layer !== landing.domainId ||
+        ![target.at.east, target.at.north, target.at.height,
+          normal.east, normal.north, normal.height].every(Number.isFinite) ||
+        Math.hypot(normal.east, normal.north, normal.height) < .0001 ||
+        host.oreRuntime?.supportsFace(site) !== true) return { kind: 'unsupported-ores' } as const;
+    oreIds.add(target.id);
+  }
 
   // A single rigid transform aligns the original pool, gallery, camp and ore markers.
   // Three uses (east, height, -north); local +Z is the mine's forward direction.
@@ -125,6 +149,17 @@ export function mountUndergroundMineDomain(host: Host) {
   const gate = host.readGateStage && mine.expansion?.gate
     ? createUndergroundCrystalGate(mine.expansion.gate) : undefined;
   if (gate) root.add(gate.group);
+  const veins = new Map<string, ReturnType<typeof createUndergroundOreVein>>();
+  for (const { target, normal } of oreSites) {
+    const localFace = new Vector3(target.at.east, target.at.height, -target.at.north)
+      .sub(root.position).applyAxisAngle(new Vector3(0, 1, 0), -mineYaw);
+    const localNormal = new Vector3(normal.east, normal.height, -normal.north)
+      .applyAxisAngle(new Vector3(0, 1, 0), -mineYaw);
+    const vein = createUndergroundOreVein({ id: target.id, face: localFace, normal: localNormal, ore: target });
+    vein.group.visible = false; // Never display an ore that lacks a live U-8 authority snapshot.
+    veins.set(target.id, vein);
+    root.add(vein.group);
+  }
   parent.add(root);
   let disposed = false;
 
@@ -151,6 +186,20 @@ export function mountUndergroundMineDomain(host: Host) {
         staticCampLights.sync(lights.litNicheIds, lights.extraCampLightCount, lights.remainingBudget);
       }
       gate?.update(host.readGateStage?.() ?? 'closed');
+      if (host.oreRuntime) {
+        const snapshot = new Map(host.oreRuntime.readTargets().map(target => [target.id, target]));
+        for (const [id, vein] of veins) {
+          const candidate = snapshot.get(id);
+          const reference = oreSites.find(site => site.target.id === id)!.target;
+          const authorized = candidate?.kind === 'ore' && candidate.at.layer === landing.domainId &&
+            candidate.at.east === reference.at.east && candidate.at.north === reference.at.north &&
+            candidate.at.height === reference.at.height && candidate.mineral === reference.mineral &&
+            Number.isSafeInteger(candidate.hits) && candidate.hits >= 0 &&
+            Number.isSafeInteger(candidate.strikes) && candidate.strikes >= 1 && candidate.hits <= candidate.strikes;
+          vein.group.visible = authorized === true;
+          if (authorized) vein.sync(candidate!);
+        }
+      }
     },
     dispose() {
       if (disposed) return;
@@ -159,6 +208,7 @@ export function mountUndergroundMineDomain(host: Host) {
       interactiveCamp?.dispose();
       staticCampLights?.dispose();
       gate?.dispose();
+      for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
