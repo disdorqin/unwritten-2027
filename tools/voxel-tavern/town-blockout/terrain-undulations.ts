@@ -6,7 +6,8 @@ import { districtParcels, districtStreets, extensionPlots, extensionRoads } from
  * ZA-34 / R1: real, deterministic wildland relief on the shared 1m terrain grid.
  * B1 is the surveyed first-person pilot; B2 lake-east and B4 northwest are
  * isolated R1 candidate landscapes, pending real ride/walk acceptance.
- * B3/mountain/crater are intentionally held for the separate ZA-36 seam survey.
+ * B3 is deliberately restricted to its south town-side strip (N440–540).
+ * B3 north of N540, summit/mountain and crater are held for ZA-36's seam survey.
  * Never displace roads, rail, built plots, lake/river or district houses.
  */
 type Segment = Readonly<{ ax:number; an:number; dx:number; dn:number; len2:number; halfWidth:number }>;
@@ -137,9 +138,35 @@ export function b4TerrainReliefOffset(e:number,n:number) {
   return wave*envelope*safety;
 }
 
+/**
+ * B3 town-side mountain skirt: a real rolling foothill shoulder, but never a
+ * fake replacement for the unbuilt N540–800 mountain profile. The town's
+ * existing 540m north edge remains exactly untouched until ZA-36 widens the
+ * Presence/collision/world grid and resolves the eastern bench-road seam.
+ * E40–440 avoids overlap with the already-reviewed B1 northeast pilot.
+ */
+function b3TownEnvelope(e:number,n:number) {
+  return smooth((e-40)/38)*smooth((440-e)/37)
+    *smooth((n-440)/32)*smooth((540-n)/32);
+}
+export function b3TownSkirtReliefOffset(e:number,n:number) {
+  if(e<=40||e>=440||n<=440||n>=540)return 0;
+  const envelope=b3TownEnvelope(e,n);
+  if(envelope===0)return 0;
+  const safety=terrainBuildProtection(e,n);
+  if(safety===0)return 0;
+  // Two 80–200m harmonics; keep profiles deterministic for both ground
+  // sampling and render geometry. The 36m infrastructure shoulder is shared.
+  const wave=3.8*Math.sin((e-118)*Math.PI*2/174)
+    *Math.cos((n-466)*Math.PI*2/162)
+    +1.3*Math.cos((e-205)*Math.PI*2/188+(n-476)*Math.PI*2/188);
+  return wave*envelope*safety;
+}
+
 /** Authoritative relief for both mesh vertices and gameplay groundHeightAt. */
 export function terrainReliefOffset(e:number,n:number) {
   return b1TerrainReliefOffset(e,n)
     +b2TerrainReliefOffset(e,n)
-    +b4TerrainReliefOffset(e,n);
+    +b4TerrainReliefOffset(e,n)
+    +b3TownSkirtReliefOffset(e,n);
 }

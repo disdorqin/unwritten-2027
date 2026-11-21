@@ -36,7 +36,7 @@ test('ZA34 R1 B2/B4: both candidates actually displace the shared 1m terrain, no
     assert.ok(maxDelta>=2&&maxDelta<5.1,`${zone.name}: displacement ${maxDelta.toFixed(3)}m`);
   }
   // Geometrically important datum points outside the wilds must stay unchanged.
-  for(const [e,n] of [[10,10],[210,190],[370,160],[575,365],[318,510],[200,540]]){
+  for(const [e,n] of [[10,10],[210,190],[370,160],[575,365],[318,540],[200,540]]){
     assert.ok(near(after.heightAt(e,n),before.heightAt(e,n),2e-4),`built or mountain seam E${e}/N${n}`);
   }
 });
