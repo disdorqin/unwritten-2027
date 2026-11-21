@@ -4,8 +4,17 @@ import { readRecord, RECORD_BYTES, TOWN_BOUNDS, writeSnapshot } from '../src/pre
 import {
   fromSkyCityPresencePose, isSkyCityPresenceFoot, skyCityPresenceBounds,
   skyCityPresenceOrigin, skyCityPresencePath, skyCityWorldHeightLimit, toSkyCityPresencePose,
+  skyCityPresenceEndpoint,
 } from '../src/shared/sky-city-presence-domain.ts';
 import { visitPresenceSnapshot, writePresencePose } from '../tools/voxel-tavern/town-blockout/town-presence-motion.ts';
+
+test('sky domain preserves the same websocket and poll paths without touching town', () => {
+  assert.equal(skyCityPresenceEndpoint('/presence'), '/presence-sky');
+  assert.equal(skyCityPresenceEndpoint('/presence/poll'), '/presence-sky/poll');
+  assert.equal(skyCityPresenceEndpoint('/presence/poll/join'), '/presence-sky/poll/join');
+  assert.equal(skyCityPresenceEndpoint('/presence/poll/leave'), '/presence-sky/poll/leave');
+  assert.throws(() => skyCityPresenceEndpoint('/presence-west'));
+});
 
 test('Y750 sky domain fits the unchanged 12-byte unsigned-centimetre frame', () => {
   assert.equal(skyCityPresencePath, '/presence-sky');

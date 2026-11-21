@@ -40,6 +40,9 @@ import {
 import {
   isWestPresenceFoot, westPresenceEastOrigin, westPresenceHeightOrigin, westPresencePath,
 } from '../../../src/shared/za22-west-domain';
+import {
+  skyCityPresenceEndpoint, toSkyCityPresencePose, fromSkyCityPresencePose,
+} from '../../../src/shared/sky-city-presence-domain';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -182,10 +185,12 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let domain: 'town' | 'mountain' | 'west' = 'town';
+  let domain: 'town' | 'mountain' | 'west' | 'sky' = 'town';
   function presencePath(path: string) {
     if (domain === 'town') return path;
-    return (domain === 'mountain' ? mountainPresencePath : westPresencePath) + path.slice('/presence'.length);
+    if (domain === 'sky') return skyCityPresenceEndpoint(path);
+    const room = domain === 'mountain' ? mountainPresencePath : westPresencePath;
+    return room + path.slice('/presence'.length);
   }
   let show = false;
   let haveId = false;
@@ -668,9 +673,13 @@ export function createTownPresence(
     const time = performance.now();
     let mascotSeen = false;
     const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
-      const east = localEast + (domain === 'west' ? westPresenceEastOrigin : 0);
-      const north = localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0);
-      const height = localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0);
+      const received = domain === 'sky'
+        ? fromSkyCityPresencePose({ east: localEast, north: localNorth, height: localHeight })
+        : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
+            north: localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0),
+            height: localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0) };
+      if (!received) return; // Invalid sky-room record must not be painted in another domain.
+      const { east, north, height } = received;
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
       if (id === MASCOT_ACTOR_ID) {
         mascotSeen = true;
@@ -731,6 +740,10 @@ export function createTownPresence(
       writePresencePose({
         ...local, east: local.east - westPresenceEastOrigin, height: local.height - westPresenceHeightOrigin,
       }, seq, outgoing);
+    } else if (domain === 'sky') {
+      const safe = toSkyCityPresencePose(local);
+      if (!safe) return; // Never let the legacy uint16 centimetres clamp world Y750+.
+      writePresencePose(safe, seq, outgoing);
     } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
@@ -872,8 +885,14 @@ export function createTownPresence(
       else if (domain === 'mountain') switchDomain('town');
     },
     setWestDomain(enabled: boolean) {
-      if (enabled && domain !== 'mountain') switchDomain('west');
+      if (enabled && domain !== 'mountain' && domain !== 'sky') switchDomain('west');
       else if (!enabled && domain === 'west') switchDomain('town');
+    },
+    /** Only the starport transition authority may call this after a successful transfer. */
+    setSkyCityDomain(enabled: boolean, skyScene?: Scene, returnMountainScene?: Scene) {
+      // Do not connect the sky room while painting avatars onto the town scene.
+      if (enabled && skyScene) switchDomain('sky', skyScene);
+      else if (!enabled && domain === 'sky' && returnMountainScene) switchDomain('mountain', returnMountainScene);
     },
     summitPassportAvailable: () => haveId && summitPassportSupported,
     requestSummitPassport(action: SummitPassportAction) {

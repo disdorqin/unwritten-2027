@@ -7,6 +7,11 @@
  * room; the scene host and presence room must switch together.
  */
 export const skyCityPresencePath = '/presence-sky';
+/** Reuse the established WS and poll URI suffixes in the isolated sky room. */
+export function skyCityPresenceEndpoint(path: string): string {
+  if (path !== '/presence' && !path.startsWith('/presence/')) throw new Error('Invalid presence route');
+  return skyCityPresencePath + path.slice('/presence'.length);
+}
 export const skyCityPresenceOrigin = Object.freeze({ east: -320, north: -270, height: 750 });
 export const skyCityPresenceBounds = Object.freeze({ width: 640, depth: 540, height: 150 });
 export const skyCityWorldHeightLimit = skyCityPresenceOrigin.height + skyCityPresenceBounds.height;
