@@ -1,6 +1,6 @@
 import {
   AmbientLight, Color, DirectionalLight, FogExp2, Mesh, MeshStandardMaterial,
-  PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
+  PerspectiveCamera, PlaneGeometry, PointLight, Scene, WebGLRenderer,
 } from 'three';
 import { mountWarriorStoneDistrict } from '../voxel-tavern/town-blockout/underground-warrior-stone-district';
 
@@ -27,6 +27,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x2c3648);
 document.body.append(renderer.domElement);
 const camera = new PerspectiveCamera(67, window.innerWidth / window.innerHeight, .09, 300);
+// Review-only approximation of the accepted player's headlamp in U-13.
+// It does not register a new light in the official city scene or circumvent
+// the six real moonstone fixtures and server-selected budget of three.
+const reviewHeadlamp = new PointLight(0xe8ecf0, 7.2, 17, 2);
+reviewHeadlamp.position.set(0, 0, -.15);
+camera.add(reviewHeadlamp);
+scene.add(camera);
 const views = {
   'home-street': {
     eye: [47, 1.67, 1.5] as const,
@@ -37,12 +44,12 @@ const views = {
     target: [37.75, 1.55, -15.5] as const,
   },
   'market-arcade': {
-    eye: [141, 1.68, 8.3] as const,
-    target: [145, 2.4, 22] as const,
+    eye: [141, 1.68, 18.8] as const,
+    target: [158, 2.1, 22] as const,
   },
   'citywall-top': {
-    eye: [124, 8.77, -26.65] as const,
-    target: [139, 2.25, -5.4] as const,
+    eye: [101, 8.77, -27] as const,
+    target: [155, 7.85, -27] as const,
   },
 } as const;
 type View = keyof typeof views;

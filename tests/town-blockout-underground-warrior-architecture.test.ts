@@ -13,11 +13,11 @@ test('YS4 mass modeling actually builds twelve complete houses, four furnished h
   assert.equal(tally.marketBays, 7);
   assert.equal(tally.ruination, 1);
   assert.equal(tally.wallMeters, 90);
-  assert.ok(tally.architecturePieces > 6000,
+  assert.ok(tally.architecturePieces > 6800,
     'round 1 must produce real buildings rather than a tiny API/test-only patch');
-  assert.ok(tally.facadePieces >= 4000);
+  assert.ok(tally.facadePieces >= 4700);
   assert.ok(tally.roomPieces >= 270);
-  assert.ok(tally.marketPieces >= 700);
+  assert.ok(tally.marketPieces >= 1000);
   assert.ok(tally.ruinedHousePieces >= 70);
   assert.ok(tally.wallPieces >= 700);
   assert.equal(pieces.length,
@@ -33,6 +33,9 @@ test('YS4 each stone house has continuous front/rear courses, roof tiles and a r
     assert.ok(props.some(piece => piece.name.includes('/jamb--1')));
     assert.ok(props.some(piece => piece.name.includes('/jamb-1')));
     assert.ok(props.filter(piece => piece.name.includes('/roof-tile-')).length >= 24);
+    assert.equal(props.filter(piece => piece.name.includes('/pitched-roof-course-')).length, 18,
+      'the first screenshot showed an over-flat roof: stepped roof courses must now be visible');
+    assert.equal(props.filter(piece => piece.name.includes('/stepped-roof-gable-')).length, 18);
     assert.ok(props.filter(piece => piece.name.includes('/rear-course-')).length >= 80);
     assert.ok(props.filter(piece => piece.name.includes('/front-course-')).length >= 60);
     assert.ok(props.every(piece => !piece.name.includes('sign') && !piece.name.includes('placeholder')));
@@ -53,9 +56,11 @@ test('YS4 seven market bays have vault ribs, physical-looking ware clusters and 
   for (let bay = 0; bay < 7; bay++) {
     const prefix = 'u10/arcade-bay-' + bay + '/';
     const props = market.filter(piece => piece.name.startsWith(prefix));
-    assert.ok(props.length >= 100, prefix);
+    assert.ok(props.length >= 140, prefix);
     assert.equal(props.filter(piece => piece.name.includes('/coffer-')).length, 30);
     assert.equal(props.filter(piece => piece.name.includes('/wares-')).length, 29);
+    assert.equal(props.filter(piece => piece.name.includes('/visible-vault-')).length, 16);
+    assert.equal(props.filter(piece => piece.name.includes('/floor-course-')).length, 28);
     assert.equal(props.filter(piece => piece.name.includes('/counter-slats-')).length, 9);
     assert.ok(props.filter(piece => piece.solid).length <= 2,
       'market aisle should not be filled with invisible impassable furniture');
@@ -87,7 +92,7 @@ test('YS5 supporting battlement courses follow the certified 90m range without f
     'extension ornaments may not create new unregistered walls on the 90m walk');
 });
 
-test('YS4/YS5 6107 new blocks are finite, positive and batched into the eight existing stone palettes', () => {
+test('YS4/YS5 full architecture stays finite and batched into the eight approved stone palettes', () => {
   const names = new Set<string>();
   const families = new Set<string>();
   for (const piece of pieces) {

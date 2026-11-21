@@ -4,19 +4,19 @@
     "home-street": {
       "kind": "ready",
       "view": "home-street",
-      "frames": 9,
+      "frames": 8,
       "eyeHeight": 1.67,
-      "voxelCount": 8181,
+      "voxelCount": 8921,
       "architecture": {
         "homes": 12,
         "accessible": 4,
         "marketBays": 7,
         "ruination": 1,
         "wallMeters": 90,
-        "architecturePieces": 6107,
-        "facadePieces": 4325,
+        "architecturePieces": 6847,
+        "facadePieces": 4757,
         "roomPieces": 281,
-        "marketPieces": 714,
+        "marketPieces": 1022,
         "ruinedHousePieces": 75,
         "wallPieces": 712,
         "structuralSolids": 77
@@ -24,31 +24,31 @@
       "batches": 8,
       "lights": 6,
       "visibleLights": 3,
-      "triangles": 98174,
+      "triangles": 107054,
       "drawCalls": 9,
       "renderedSize": [
         1280,
         720
       ],
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\1-home-street.png",
-      "imageBytes": 93968
+      "imageBytes": 122992
     },
     "home-interior": {
       "kind": "ready",
       "view": "home-interior",
-      "frames": 17,
+      "frames": 15,
       "eyeHeight": 1.67,
-      "voxelCount": 8181,
+      "voxelCount": 8921,
       "architecture": {
         "homes": 12,
         "accessible": 4,
         "marketBays": 7,
         "ruination": 1,
         "wallMeters": 90,
-        "architecturePieces": 6107,
-        "facadePieces": 4325,
+        "architecturePieces": 6847,
+        "facadePieces": 4757,
         "roomPieces": 281,
-        "marketPieces": 714,
+        "marketPieces": 1022,
         "ruinedHousePieces": 75,
         "wallPieces": 712,
         "structuralSolids": 77
@@ -56,31 +56,31 @@
       "batches": 8,
       "lights": 6,
       "visibleLights": 3,
-      "triangles": 98174,
+      "triangles": 107054,
       "drawCalls": 9,
       "renderedSize": [
         1280,
         720
       ],
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\2-home-interior.png",
-      "imageBytes": 58313
+      "imageBytes": 128899
     },
     "market-arcade": {
       "kind": "ready",
       "view": "market-arcade",
-      "frames": 24,
+      "frames": 21,
       "eyeHeight": 1.68,
-      "voxelCount": 8181,
+      "voxelCount": 8921,
       "architecture": {
         "homes": 12,
         "accessible": 4,
         "marketBays": 7,
         "ruination": 1,
         "wallMeters": 90,
-        "architecturePieces": 6107,
-        "facadePieces": 4325,
+        "architecturePieces": 6847,
+        "facadePieces": 4757,
         "roomPieces": 281,
-        "marketPieces": 714,
+        "marketPieces": 1022,
         "ruinedHousePieces": 75,
         "wallPieces": 712,
         "structuralSolids": 77
@@ -88,31 +88,31 @@
       "batches": 8,
       "lights": 6,
       "visibleLights": 3,
-      "triangles": 98174,
-      "drawCalls": 9,
+      "triangles": 107052,
+      "drawCalls": 8,
       "renderedSize": [
         1280,
         720
       ],
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\3-market-arcade.png",
-      "imageBytes": 53047
+      "imageBytes": 153681
     },
     "citywall-top": {
       "kind": "ready",
       "view": "citywall-top",
-      "frames": 31,
+      "frames": 28,
       "eyeHeight": 8.77,
-      "voxelCount": 8181,
+      "voxelCount": 8921,
       "architecture": {
         "homes": 12,
         "accessible": 4,
         "marketBays": 7,
         "ruination": 1,
         "wallMeters": 90,
-        "architecturePieces": 6107,
-        "facadePieces": 4325,
+        "architecturePieces": 6847,
+        "facadePieces": 4757,
         "roomPieces": 281,
-        "marketPieces": 714,
+        "marketPieces": 1022,
         "ruinedHousePieces": 75,
         "wallPieces": 712,
         "structuralSolids": 77
@@ -120,14 +120,14 @@
       "batches": 8,
       "lights": 6,
       "visibleLights": 3,
-      "triangles": 98174,
+      "triangles": 107054,
       "drawCalls": 9,
       "renderedSize": [
         1280,
         720
       ],
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\4-citywall-top.png",
-      "imageBytes": 85079
+      "imageBytes": 123686
     }
   },
   "passed": true,
