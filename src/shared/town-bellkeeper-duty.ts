@@ -261,6 +261,26 @@ export function createTownBellkeeperDuty(tuning: TownBellkeeperTuning) {
       if (now >= s.schedule.beaconAt && now < s.schedule.beaconExpiresAt) s.interrupted = true;
       return record;
     },
+    /**
+     * An interrupted physical rope grip must not leave an abandoned charging
+     * state behind after a player leaves the room or loses a connection.
+     * No bell is broadcast and no grade is forged: if the bell is missed,
+     * the dawn ledger naturally records it as 'missed'. A legitimate player
+     * can try again while the same bell window is still open.
+     *
+     * Server time only. Holding across any part of the supernatural minute
+     * invalidates that night's watch even if no gaze samples were received.
+     */
+    abandonRope(profile: string, now: number) {
+      const s = sessionFor(profile, now);
+      if (!s || s.page || !s.pull) return false;
+      const beganAt = s.pull.at;
+      s.pull = null;
+      if (beganAt < s.schedule.beaconExpiresAt && now > s.schedule.beaconAt) {
+        s.interrupted = true;
+      }
+      return true;
+    },
     /** At dawn the host calls this once with its verified server timestamp. */
     finishDawn(profile: string, now: number) {
       const s = sessionFor(profile, now);

@@ -101,11 +101,19 @@ export function createTownBellkeeperHost<Session>(
       const at = now();
       if (!hooks.inBellRoom(session) || !hooks.canUseRope(session)) {
         duty.interact(profile, at);
+        // A failed remote release must not leave a rope grip permanently
+        // blocking all later bells for this authenticated player.
+        duty.abandonRope(profile, at);
         return null;
       }
       const record = duty.releaseRope(profile, at);
       if (record) hooks.ring?.(profile, record);
       return record;
+    },
+    /** On disconnect/scene transfer release a stale grip without ringing. */
+    leaveBellRoom(session: Session) {
+      const profile = identity(session);
+      return profile ? duty.abandonRope(profile, now()) : false;
     },
     /** Called after authoritative dawn; idempotent across reconnects. */
     closeAtDawn(session: Session) {

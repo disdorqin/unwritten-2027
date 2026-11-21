@@ -163,6 +163,37 @@ test('dawn close is idempotent and the generated maintenance ledger is stable', 
     duskAt: 400_000, midnightAt: 430_000, secondMidnightAt: 460_000,
     beaconAt: 490_000, beaconExpiresAt: 550_000, dawnAt: 580_000 }, 400_000), true);
 });
+test('abandoned rope has no phantom bell and permits a retry before the mark', () => {
+  const duty = create();
+  assert.equal(duty.beginDuty('alice', schedule, schedule.duskAt), true);
+  assert.equal(duty.pressRope('alice', 'dusk', schedule.duskAt), true);
+  assert.equal(duty.abandonRope('alice', schedule.duskAt + 100), true);
+  assert.equal(duty.snapshot('alice')?.charging, null);
+  assert.equal(duty.abandonRope('alice', schedule.duskAt + 101), false);
+  assert.equal(ring(duty, 'alice', 'dusk', schedule.duskAt + 1200)?.grade, 'accurate');
+  const page = duty.finishDawn('alice', schedule.dawnAt);
+  assert.equal(page?.records[0].grade, 'accurate');
+});
+test('rope held across the apparition minute spoils watch even with no samples', () => {
+  const duty = create();
+  assert.equal(duty.beginDuty('alice', schedule, schedule.duskAt), true);
+  assert.equal(duty.pressRope('alice', 'second-midnight', schedule.secondMidnightAt), true);
+  assert.equal(duty.abandonRope('alice', schedule.beaconExpiresAt + 1), true);
+  // No gaze samples at all: rope occupancy across the witness interval
+  // must still be registered as an interrupted watch.
+  assert.equal(duty.finishDawn('alice', schedule.dawnAt)?.interrupted, true);
+  assert.equal(duty.ledger('alice')[0]?.witnessed, false);
+});
+test('abandon rope requires monotonic server time and valid active duty', () => {
+  const duty = create();
+  assert.equal(duty.abandonRope('alice', schedule.duskAt), false);
+  assert.equal(duty.beginDuty('alice', schedule, schedule.duskAt), true);
+  assert.equal(duty.pressRope('alice', 'dusk', schedule.duskAt + 5), true);
+  assert.equal(duty.abandonRope('alice', schedule.duskAt), false);
+  assert.equal(duty.snapshot('alice')?.charging, 'dusk');
+  assert.equal(duty.abandonRope('alice', schedule.duskAt + 9), true);
+  assert.equal(duty.abandonRope('alice', schedule.duskAt + 10), false);
+});
 test('untrusted backwards timestamp is rejected for state changes', () => {
   const duty = create();
   assert.ok(duty.beginDuty('alice', schedule, schedule.duskAt));

@@ -62,6 +62,34 @@ test('server-side rope collision and position gate the manual bell', () => {
   // Release gate rejects a remote click: no broadcast and no grade awarded.
   assert.deepEqual(f.ring, []);
 });
+test('walking away during E charge releases the rope without ringing or softlock', () => {
+  const f = fixture();
+  assert.equal(f.host.handoff(f.alice), true);
+  assert.equal(f.host.press(f.alice, 'dusk'), true);
+  f.time(night.duskAt + 150);
+  assert.equal(f.host.release({ ...f.alice, inRoom: false }), null);
+  assert.equal(f.host.snapshot(f.alice)?.charging, null);
+  assert.deepEqual(f.ring, []);
+  f.time(night.duskAt + 200);
+  assert.equal(f.host.press(f.alice, 'dusk'), true);
+  f.time(night.duskAt + 900);
+  assert.equal(f.host.release(f.alice)?.grade, 'accurate');
+  assert.deepEqual(f.ring, ['alice:dusk:accurate']);
+});
+test('disconnect or scene transfer cleans only the authenticated player grip', () => {
+  const f = fixture();
+  const bob = { ...f.alice, id: 'bob' };
+  assert.equal(f.host.handoff(f.alice), true);
+  assert.equal(f.host.handoff(bob), true);
+  assert.equal(f.host.press(f.alice, 'dusk'), true);
+  assert.equal(f.host.press(bob, 'dusk'), true);
+  f.time(night.duskAt + 100);
+  assert.equal(f.host.leaveBellRoom({ ...f.alice, authenticated: false }), false);
+  assert.equal(f.host.leaveBellRoom(f.alice), true);
+  assert.equal(f.host.snapshot(f.alice)?.charging, null);
+  assert.equal(f.host.snapshot(bob)?.charging, 'dusk');
+  assert.deepEqual(f.ring, []);
+});
 test('a valid press-release sends exactly one authoritative bell result', () => {
   const f = fixture();
   assert.ok(f.host.handoff(f.alice));
