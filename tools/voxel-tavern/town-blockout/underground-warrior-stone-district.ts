@@ -58,16 +58,37 @@ export const warriorDistrictCanon = Object.freeze({
 });
 const plannedHouses = warriorDistrictHouses;
 
+/**
+ * Round 4: 16-pixel nearest-neighbor clay-factory material. A limited set of
+ * *approved* palette colors draws chipped outlines, dry stone joints, gritty
+ * warm-sand veins, rotted wood grain, rust spalls and downward oxide drips.
+ * No smooth gradients, HDR bloom, stock photos or new unapproved colors.
+ * References: clay-factory atlas #02/#04 interior, #05/#07 dark cavern.
+ */
 function tex(color: number, accent: number) {
   const pixels = new Uint8Array(16 * 16 * 4);
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const useAccent = (y * 29 + x * 17 + (x >> 2) * 5) % 37 < 4 ||
-      (color === stone.wood && y % 5 === 0);
-    const c = useAccent ? accent : color;
+    const g = (Math.imul(x + 31, 15731) ^ Math.imul(y + 17, 4817) ^
+      Math.imul(x + y + 7, 3779)) >>> 0;
+    const grain = (g ^ (g >>> 9) ^ (g >>> 17)) % 23;
+    const outline = x === 0 || y === 0 || x === 15 || y === 15;
+    const stoneJoint = (y === 5 || y === 11) && (x < 3 || x > 12);
+    const chip = (x + 2 * y) % 17 === 0 || (x * 7 + y * 13) % 47 === 0;
+    const woodGrain = color === stone.wood && (y === 4 || y === 10 || (x % 7 === 3 && y % 4 === 0));
+    const greenMoss = color !== stone.crystal && color !== stone.moon &&
+      ((g >>> 11) % 37 === 0 || (y > 10 && (x + y * 3) % 23 === 0));
+    const rustSpall = color === stone.rust && (grain < 8 || (x % 5 === 2 && y > 7));
+    // Palette lock: all pixel RGB values are one of the nine official swatches.
+    const c = outline || stoneJoint || woodGrain || rustSpall && grain < 3
+      ? stone.shade
+      : rustSpall ? stone.rust
+        : greenMoss ? stone.moss
+          : chip || grain < 4 ? accent : color;
     pixels.set([c >>> 16, (c >>> 8) & 255, c & 255, 255], (y * 16 + x) * 4);
   }
   const map = new DataTexture(pixels, 16, 16);
   map.minFilter = map.magFilter = NearestFilter;
+  map.generateMipmaps = false;
   map.colorSpace = SRGBColorSpace;
   map.needsUpdate = true;
   return map;
@@ -363,8 +384,14 @@ export function mountWarriorStoneDistrict(host: Host) {
   const textures: DataTexture[] = [];
   for (const [family, transforms] of blocks) {
     const texture = tex(stone[family], familyAccent[family]);
+    const liveCrystal = family === 'crystal' || family === 'moon';
     const material = new MeshStandardMaterial({ map: texture, roughness: .94,
-      metalness: 0, flatShading: true });
+      metalness: family === 'rust' ? .12 : 0, flatShading: true,
+      // Only already-certified lamps create real illumination. Tiny self-glow
+      // keeps their stone/crystal silhouette readable, not a full-room wash.
+      ...(liveCrystal ? { emissive: stone.crystal,
+        emissiveIntensity: family === 'moon' ? .14 : .09 } : {}),
+    });
     const mesh = new InstancedMesh(geometry, material, transforms.length);
     mesh.name = 'u10-clay-stone/' + family;
     transforms.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));

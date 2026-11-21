@@ -421,6 +421,66 @@ test('U-10 four open house interiors are actually reachable from their one stree
   mounted.dispose();
 });
 
+test('U-10 round 3 real route sweeps the 12-house street, all seven market aisles and 90m wall without a 27cm snag', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict(f.host);
+  if (mounted.kind !== 'ready') assert.fail();
+  const lanes = [
+    { title: 'stone-home main street', from: 27, to: 76, n: 0, h: 0 },
+    { title: 'arcade aisle', from: 120, to: 167, n: -20.4, h: 0 },
+    { title: 'ruined arcade storehouse opening', from: 167, to: 176.5, n: -20.4, h: 0 },
+    { title: 'wall battlement', from: 84, to: 165, n: 27, h: 7.12 },
+  ];
+  for (const lane of lanes) {
+    let samples = 0;
+    for (let x = lane.from; x <= lane.to; x += .14) {
+      assert.ok(mounted.isClearLocal([x, lane.h, lane.n], .27, 1.8),
+        lane.title + ': 27cm avatar collides at x=' + x.toFixed(2));
+      samples++;
+    }
+    assert.ok(samples >= 60, 'not a fake point-only test: ' + lane.title);
+  }
+  // A guest cannot shortcut through the back wall of a stone home.
+  const house = mounted.houses.find(h => h.accessible)!;
+  const wallN = house.side === 'north' ? 16.55 : -16.55;
+  assert.equal(mounted.isClearLocal([house.localEntrance[0], 0, wallN]), false);
+  mounted.dispose();
+});
+
+test('U-10 round 4 official clay palette: 16px nearest texture contains stone grain, dark tile outlines and no new colors', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict(f.host);
+  if (mounted.kind !== 'ready') assert.fail();
+  const colors = new Set([0x8a8378, 0x2c3648, 0xa98a56, 0x5d4630,
+    0x44503c, 0x8a4a34, 0x7fd4c8, 0xe8ecf0]);
+  const meshes = mounted.group.children.filter(child => child.type === 'Mesh' ||
+    child.type === 'InstancedMesh').filter(child => child.name.startsWith('u10-clay-stone/'));
+  assert.ok(meshes.length >= 6 && meshes.length <= 8);
+  for (const mesh of meshes) {
+    const mat = (mesh as import('three').InstancedMesh).material as import('three').MeshStandardMaterial;
+    assert.ok(mat.map);
+    assert.equal(mat.map.image.width, 16);
+    assert.equal(mat.map.image.height, 16);
+    assert.equal(mat.map.minFilter, NearestFilter);
+    assert.equal(mat.map.magFilter, NearestFilter);
+    assert.equal(mat.map.generateMipmaps, false);
+    const data = mat.map.image.data as Uint8Array;
+    const swatches = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) {
+      const c = (data[i]! << 16) | (data[i + 1]! << 8) | data[i + 2]!;
+      assert.ok(colors.has(c), 'unapproved color ' + c.toString(16));
+      assert.equal(data[i + 3], 255);
+      swatches.add(c);
+    }
+    assert.ok(swatches.size >= 2, 'flat swatch lacks grain, joints or weathering');
+    assert.deepEqual([...data.slice(0, 3)], [0x2c, 0x36, 0x48],
+      'pixel-drawn dark edge anchors the clay-style silhouette');
+  }
+  assert.ok(mounted.voxelCount >= 6500, 'review must render the full architecture, not the old tiny sample');
+  assert.equal(mounted.batches, meshes.length, 'thousands of props must be eight instanced batches');
+  mounted.dispose();
+});
+
 test('U-10 all clay stone families render as batched 16px nearest-neighbor swatches and dispose once', () => {
   const f = setup();
   const mounted = mountWarriorStoneDistrict(f.host);
