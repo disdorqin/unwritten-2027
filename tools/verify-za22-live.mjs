@@ -5,10 +5,11 @@ import { chromium } from '@playwright/test';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
-const url = new URL('/?profile', origin);
+const bare = process.env.ZA22_BARE === '1';
+const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment), segment);
+assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -57,6 +58,7 @@ const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null,
 await mkdir(output, { recursive: true });
 let browser;
 let lastPage;
+let lastEvidence;
 let measuring = true;
 
 async function openTown(name) {
@@ -64,6 +66,7 @@ async function openTown(name) {
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
+  lastEvidence = evidence;
   report.paths.push(evidence);
   page.on('pageerror', error => { if (measuring) report.pageErrors.push(String(error)); });
   page.on('console', message => {
@@ -113,7 +116,7 @@ async function enterTown(page, evidence, label, poseCursor = 0) {
   await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
   await page.waitForFunction(pattern => {
     const hud = document.querySelector('#position')?.textContent ?? '';
-    return new RegExp(pattern).test(hud) && window.__za22Frame?.calls > 0;
+    return new RegExp(pattern).test(hud) && (window.__za22Frame?.calls > 0 || !location.search);
   }, positionPattern.source, { timeout: 90_000 });
   if (!report.gpu) report.gpu = await page.evaluate(() => {
     const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
@@ -121,6 +124,11 @@ async function enterTown(page, evidence, label, poseCursor = 0) {
     return names ? { vendor: gl.getParameter(names.UNMASKED_VENDOR_WEBGL),
       renderer: gl.getParameter(names.UNMASKED_RENDERER_WEBGL) } : null;
   });
+  if (bare) {
+    await page.locator('#scene canvas').click({ position: { x: Math.round(width * .35), y: dragY } });
+    await waitForWire(page, evidence, pose => pose?.area === 'town' &&
+      Math.hypot(pose.east - spawn[0], pose.north - spawn[1]) < .3);
+  }
   const start = await readPose(page);
   assert.ok(Math.hypot(start.east - spawn[0], start.north - spawn[1]) < .3, JSON.stringify(start));
   assert.ok(Math.abs(start.height - 12) < .3, JSON.stringify(start));
@@ -141,7 +149,8 @@ async function readPose(page) {
   }));
   const point = positionPattern.exec(frame.hud);
   return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
-    height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100 : undefined };
+    height: Number.isFinite(frame.cameraY) ? Math.round((frame.cameraY - 1.65) * 100) / 100
+      : lastEvidence?.poses.at(-1)?.height };
 }
 
 async function waitForWire(page, evidence, predicate = pose => Boolean(pose), timeoutMs = 12_000) {
@@ -241,6 +250,36 @@ async function card(page, title) {
     const label = document.querySelector('#place-title');
     return label?.closest('dialog')?.open && label.textContent.includes(text);
   }, title, { timeout: 12_000 });
+}
+
+async function sampleFrameCadence(page, evidence, label) {
+  // rAF frame cadence is a browser scheduling proxy, NOT a GPU timer query.
+  const reading = await page.evaluate(async () => {
+    const gaps = [];
+    let previous;
+    const started = performance.now();
+    return await new Promise(resolve => {
+      const sample = now => {
+        if (previous !== undefined) gaps.push(now - previous);
+        previous = now;
+        if (now - started >= 2000) {
+          const sorted = gaps.slice().sort((a, b) => a - b);
+          const average = gaps.reduce((sum, gap) => sum + gap, 0) / Math.max(1, gaps.length);
+          resolve({
+            frames: gaps.length, durationMs: now - started,
+            meanFrameMs: average,
+            p95FrameMs: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * .95))],
+            rafFps: average > 0 ? 1000 / average : 0,
+            source: 'native browser requestAnimationFrame cadence; not GPU FPS',
+          });
+        } else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+  });
+  evidence.cadence ??= {};
+  evidence.cadence[label] = reading;
+  console.log(JSON.stringify({ phase: 'native-cadence', label, ...reading }));
 }
 
 async function snapshot(page, evidence, label) {
@@ -355,6 +394,20 @@ try {
     args: graphicsArgs,
   });
   report.browser = browser.version();
+  if (segment === 'spawn') {
+    const { page, evidence } = await openTown('spawn');
+    await sampleFrameCadence(page, evidence, 'plaza');
+    // Persist real measurements before screenshots or a slow GPU driver can stall teardown.
+    await writeFile(join(output, 'spawn-native-cadence.json'), `${JSON.stringify({
+      url: url.href, gpu: report.gpu, browser: report.browser, checkpoint: evidence.checkpoints[0],
+      cadence: evidence.cadence, errorsSeen: {
+        page: report.pageErrors, console: report.consoleErrors,
+        failedRequests: report.requestFailures, http: report.httpErrors,
+      },
+    }, null, 2)}\n`);
+    await page.screenshot({ path: join(output, 'spawn-bare.png'), timeout: 16_000 });
+    evidence.checkpoints.push({ label: 'spawn-bare', ...await readPose(page), wire: evidence.poses.at(-1) });
+  }
   if (['station', 'cloud', 'gate', 'all'].includes(segment)) {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');

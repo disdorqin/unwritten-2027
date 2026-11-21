@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment) && evidencePath,
+assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment) && evidencePath,
   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -141,8 +141,9 @@ try {
   const tree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout;
   await writeFile(join(output, 'source-tree.txt'), tree);
   await finish(startNode([vite, 'build', '--mode', 'town-preview', '--outDir', web], {}, { cwd: viewer }));
-  await finish(startNode([tsc, '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext',
-    '--strict', '--skipLibCheck', '--rootDir', 'src', '--outDir', compiled, 'src/presence/index.ts'], {}));
+  // Presence now has a separate start.ts: compile the complete NodeNext graph,
+  // not just index.ts, whose JS-suffixed dependency is otherwise left un-emitted.
+  await finish(startNode([tsc, '-p', 'tsconfig.server.json', '--outDir', compiled], {}));
   const ports = { town: await freePort(), mountain: await freePort(), west: await freePort() };
   frontend = servePreview(ports, commit);
   const port = await usePort(frontend);
