@@ -124,6 +124,26 @@ function buildStoneHomes() {
         x, h + .62, front + side * (1.35 + r * 2.75),
         .38, .24, 2.6);
     }
+    // R4 silhouette correction after the actual screenshot review: ancient
+    // double-pitched roofs rise toward a stepped high central ridge instead
+    // of reading as a single flat sheet across twelve identical house fronts.
+    for (let col = 0; col < 9; col++) {
+      const e = x - w / 2 + .53 + col * (w - 1.06) / 8;
+      const tier = Math.min(col, 8 - col);
+      for (let r = 0; r < 2; r++) {
+        block('home-facade', prefix + '/pitched-roof-course-' + col + '-' + r,
+          (col + index + r) % 5 === 0 ? 'shade' : 'tan',
+          e, h + .64 + tier * .095,
+          front + side * (2.4 + r * 3.7),
+          .66, .16, 3.52);
+      }
+      for (const gable of [front, rear]) {
+        block('home-facade', prefix + '/stepped-roof-gable-' + col + '-' + gable,
+          tier % 3 ? 'wall' : 'shade', e, h + .43 + tier * .09,
+          gable + (gable > 0 ? .18 : -.18),
+          .68, .26 + tier * .08, .23);
+      }
+    }
     // The eight sealed doors still have complete facades and readable debris,
     // but no invisible working inside or player-through-wall route.
     if (!house.accessible) {
@@ -226,6 +246,19 @@ function buildArcade() {
           n + (side ? .2 : -.2), .4, .38, .83);
       }
     }
+    // R4 picture review found the continuous ceiling visually too flat.
+    // Exposed 8-segment stepped vaults cross the aisle above 2.8m headroom;
+    // every bay gets a real visible masonry arch, not a floating roof sheet.
+    for (let vault = 0; vault < 8; vault++) {
+      const north = -17.55 - vault * 1.04;
+      const archRise = (1 - Math.abs(vault - 3.5) / 3.5) * .92;
+      for (const edge of [-1, 1]) {
+        block('arcade-market', name + '/visible-vault-' + edge + '-' + vault,
+          vault % 4 === 0 ? 'shade' : 'tan',
+          x + edge * 2.24, 3.15 + archRise, north,
+          .42, .26, 1.01);
+      }
+    }
     // Curved-appearance stepped ceiling formed by offset voxel courses.
     for (let row = 0; row < 5; row++) for (let col = 0; col < 6; col++) {
       const e = x - 2.53 + col * 1.0;
@@ -250,6 +283,15 @@ function buildArcade() {
         rail % 3 === 0 ? 'rust' : 'wood',
         x - 1.20 + rail * .36, .55, -22.88,
         .31, .15, .22);
+    }
+    // R5 patchwork slate floor: material participates in the camera's low
+    // foreground, but the top remains 2cm BELOW accepted y=0 feet. This is
+    // authentic paving, not a new invisible physics blocker.
+    for (let p = 0; p < 7; p++) for (let lane = 0; lane < 4; lane++) {
+      block('arcade-market', name + '/floor-course-' + p + '-' + lane,
+        (p + 2 * lane + bay) % 11 ? 'wall' : 'moss',
+        x - 2.85 + p * .88, -.06, -18.45 - lane * .95,
+        .82, .075, .84);
     }
     for (const edge of [-1, 1]) {
       block('arcade-market', name + '/counter-foot-' + edge, 'shade',
