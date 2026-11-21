@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, NearestFilter } from 'three';
+import { warriorSquarePlan } from '../tools/voxel-tavern/town-blockout/underground-warrior-square.js';
+import { warriorForgeHallSite } from '../tools/voxel-tavern/town-blockout/underground-warrior-forge-hall.js';
 import {
   mountWarriorStoneDistrict, warriorDistrictCanon, type WarriorDistrictFoot,
   type WarriorDistrictSite,
@@ -158,6 +160,31 @@ test('U-10 moonstone lamps are real cold physical fixtures under the host lighti
   f.setBudget(9);
   mounted.sync();
   assert.equal(mounted.lamps.filter(light => light.visible).length, 6);
+  mounted.dispose();
+});
+
+test('U-10 room line and bazaar do not engulf the pre-existing statue square or north forge site', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict({ ...f.host,
+    site: { domainId: 'warrior/local', east: 0, north: 0, height: -165, yaw: 0 },
+  });
+  if (mounted.kind !== 'ready') assert.fail();
+  const statue = warriorSquarePlan.statue;
+  const square = { minE: statue.east - 20, maxE: statue.east + 20,
+    minN: statue.north - 20, maxN: statue.north + 20 };
+  const encroaches = (box: (typeof mounted.colliders)[number], area: typeof square) => {
+    const minE = box.min[0], maxE = box.max[0];
+    const minN = -box.max[2], maxN = -box.min[2];
+    return maxE > area.minE && minE < area.maxE && maxN > area.minN && minN < area.maxN;
+  };
+  assert.equal(mounted.colliders.filter(box => encroaches(box, square)).length, 0,
+    'real 40m centre square must stay clear for existing statue and cold-fire assembly');
+  const forge = { minE: warriorForgeHallSite.east - 5.2,
+    maxE: warriorForgeHallSite.east + 5.2,
+    minN: warriorForgeHallSite.north -.4,
+    maxN: warriorForgeHallSite.north + 10 };
+  assert.equal(mounted.colliders.filter(box => encroaches(box, forge)).length, 0,
+    'do not cover the only warm forge and its existing U-16 approach');
   mounted.dispose();
 });
 

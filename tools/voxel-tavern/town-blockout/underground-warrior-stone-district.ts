@@ -54,7 +54,9 @@ export const warriorDistrictCanon = Object.freeze({
 const plannedHouses: readonly House[] = Array.from({ length: 12 }, (_, index) => {
   const accessible = [1, 4, 7, 10].includes(index);
   const side = index < 6 ? 'north' as const : 'south' as const;
-  const x = 29 + index % 6 * 10;
+  // Stop before the existing 40x40m central statue square, without swallowing
+  // the 25m entry approach or compressing house-to-house collision gaps.
+  const x = 29 + index % 6 * 8.75;
   const front = side === 'north' ? 8.15 : -8.15;
   return {
     id: 'u10/stone-home-' + String(index + 1).padStart(2, '0'),
@@ -220,7 +222,8 @@ export function mountWarriorStoneDistrict(host: Host) {
   // Round 2: south-side market arcade. Pillars have room for circling, and every stall
   // bears only abstract stone wares: NO text signage in this ancient layer.
   for (let index = 0; index < 7; index++) {
-    const x = 117 + index * 6.5;
+    // Southern market begins beyond the existing square's eastern edge.
+    const x = 122 + index * 6.5;
     for (const south of [-17, -24.8]) {
       part('shade', x, 1.95, south, .80, 3.9, .85, true, 'arcade/column-' + index);
       part('tan', x, 3.97, south, 1.22, .38, 1.18);
