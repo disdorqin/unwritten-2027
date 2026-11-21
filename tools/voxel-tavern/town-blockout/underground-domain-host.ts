@@ -1,7 +1,12 @@
-import type { Group } from 'three';
+import { Group, Vector3 } from 'three';
 import { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration.js';
+import { undergroundCampPickaxe } from '../../../src/shared/underground-camp-pickaxe.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout';
 import { mountUndergroundMineDomain } from './underground-domain-scene';
+import { createUndergroundCampRemains } from './underground-camp-remains';
+import {
+  createUndergroundCampOfferings, undergroundCampOfferingLighting,
+} from './underground-camp-offerings';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
@@ -97,23 +102,155 @@ export function createUndergroundRegistrationPort(road: Road, mine: Mine) {
 }
 
 /**
+ * Viewer-side bridge for the interactive camp (batch 3). The domain host
+ * owns camp state (offerings, relic catalogue, pickaxe grant); the viewer
+ * owns the body: footing, sitting, aim and announcements.
+ */
+export type UndergroundCampBridge = Readonly<{
+  now(): number;
+  readWorldFoot(): Point | undefined;
+  sit(roomId: string): boolean;
+  stand(roomId: string): boolean;
+  onSeatedChange(active: boolean): void;
+  isAimingAt(world: Point): boolean;
+  showPickupNotice(): void;
+  onRested(roomId: string): void;
+}>;
+
+/**
  * The underground domain host (branch window C, round 1): resolves the shaft
  * registration against the mounted west route and mounts the certified mine
  * domain scene. It owns no movement, E handling or teleport authority — entry
  * crossings stay with the descent driver and the presence handoff. When the
  * registration is not ready the mine stays unmounted and the result says why;
- * nothing is force-mounted. Light is never granted from render state: until
- * the U-13 recovery receipts are wired, the light reader reports no lit
- * niches and no budget, so camp lamps stay dark.
+ * nothing is force-mounted. Light is never granted from render state: the
+ * light reader reports the camp offerings state (batch 3) — niches light
+ * only through an accepted offering, and without a camp bridge it reports
+ * no lit niches and no budget, so camp lamps stay dark.
  */
-export function mountUndergroundDomainHost(options: Readonly<{ parent: Group; road: Road }>) {
+export function mountUndergroundDomainHost(options: Readonly<{
+  parent: Group; road: Road; campBridge?: UndergroundCampBridge;
+}>) {
   const { parent, road } = options;
+  const campBridge = options.campBridge;
   const survey = buildUndergroundShaftSurvey(road);
   if (!survey) return { kind: 'unregistered', reason: 'winch-survey' } as const;
   const mine = createUndergroundMineLayout(undergroundMineSpec);
   const registration = resolveUndergroundShaftRegistration(
     survey, createUndergroundRegistrationPort(road, mine));
   if (registration.kind !== 'ready') return { kind: 'unregistered', reason: registration.kind } as const;
+
+  // Batch 3 camp state, owned here: offerings drive the light reader, so a
+  // lamp offered at a niche lights that niche through the scene's own sync.
+  // The lamp itself has no inventory authority yet: takeLamp reports false
+  // and the offering honestly resolves as 'no-lamp' until a lamp source is
+  // wired (surface lamp room is another line's surface).
+  let toLocal: ((world: Point) => readonly [number, number, number] | undefined) | undefined;
+  let toWorldPoint: ((local: readonly [number, number, number]) => Point | undefined) | undefined;
+  let offerings: ReturnType<typeof createUndergroundCampOfferings> | undefined;
+  let nicheEmpties = new Set<string>();
+  if (campBridge) {
+    const data = createUndergroundCampRemains({
+      mine, camp: undergroundMineSpec.camp, walker: undergroundMineSpec.walker,
+    });
+    const niches = data.memorial.niches.map(({ id, hasSpentLamp }) => ({ id, hasSpentLamp }));
+    data.dispose();
+    nicheEmpties = new Set(niches.filter((niche) => !niche.hasSpentLamp).map((niche) => niche.id));
+    offerings = createUndergroundCampOfferings(niches);
+  }
+  const recordedRelics = new Set<string>();
+  let pickaxeTaken = false;
+
+  const readLights = () => {
+    if (!offerings) {
+      return { litNicheIds: new Set<string>(), extraCampLightCount: 0, remainingBudget: 0 };
+    }
+    const snap = offerings.snapshot();
+    const used = snap.litNicheIds.length + snap.extraCampLightCount;
+    return {
+      litNicheIds: new Set(snap.litNicheIds),
+      extraCampLightCount: snap.extraCampLightCount,
+      remainingBudget: Math.max(0, undergroundCampOfferingLighting.visibleLightLimit - used),
+    };
+  };
+
+  const campRuntime = campBridge && offerings ? {    actions: {
+      promptRange: 1.15,
+      restAfterMs: 2500,
+      now: campBridge.now,
+      readFooting: () => {
+        const foot = campBridge.readWorldFoot();
+        return foot ? toLocal?.(foot) : undefined;
+      },
+      sit: (room: { id: string }) => campBridge.sit(room.id),
+      stand: (room: { id: string }) => campBridge.stand(room.id),
+      setSeatedAmbience: (active: boolean) => campBridge.onSeatedChange(active),
+      onRested: (room: { id: string }) => campBridge.onRested(room.id),
+      lookAtBowl: (bowl: { position: readonly [number, number, number] }) => {
+        const world = toWorldPoint?.(bowl.position);
+        return world !== undefined && campBridge.isAimingAt(world);
+      },
+      recordRelic: (entry: { id: string }) => {
+        if (recordedRelics.has(entry.id)) return 'already-recorded' as const;
+        recordedRelics.add(entry.id);
+        return 'recorded' as const;
+      },
+      canOfferLamp: (nicheId: string) =>
+        nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
+      offerLamp: (nicheId: string) => offerings?.offerLamp(nicheId, () => false).kind === 'offered',
+    },
+    pickaxe: {
+      available: () => !pickaxeTaken,
+      aimedAt: (point: readonly [number, number, number]) => {
+        const world = toWorldPoint?.(point);
+        return world !== undefined && campBridge.isAimingAt(world);
+      },
+      claim: async (siteId: string) => {
+        if (siteId !== undergroundCampPickaxe.siteId) return 'rejected' as const;
+        if (pickaxeTaken) return 'already-granted' as const;
+        pickaxeTaken = true;
+        return 'granted' as const;
+      },
+      showPickupNotice: () => campBridge.showPickupNotice(),
+    },
+  } : undefined;
+
+  // Batch 4: crystal gate + recovery fire. The gate stage reader is
+  // supplied so the gate geometry mounts; it reports 'closed' until the
+  // encounter-gated gate authority (mine encounter + crystal domain) is
+  // wired — that authority, not this reader, owns advancement. The one
+  // recovery fire is the layout's certified campfire anchor; contact
+  // confirmation belongs to the server vitals, so the ring never claims
+  // contact from the client. Ore points are NOT supplied: the certified
+  // distribution itself reports its production points missing, and this
+  // host does not invent them.
+  const yawAxis = new Vector3(0, 1, 0);
+  const rotateLocal = (local: readonly [number, number, number]) =>
+    new Vector3(local[0], local[1], local[2]).applyAxisAngle(yawAxis, road.anchor.yaw);
+  const poolRotated = rotateLocal(mine.anchors.poolLanding);
+  const rootPosition = new Vector3(
+    undergroundMineLanding.east - poolRotated.x,
+    undergroundMineLanding.height - poolRotated.y,
+    -undergroundMineLanding.north - poolRotated.z);
+  const worldOf = (local: readonly [number, number, number]): Point => {
+    const world = rotateLocal(local).add(rootPosition);
+    return { east: world.x, north: -world.z, height: world.y };
+  };
+  const campFireWorld = worldOf(mine.anchors.campRecovery.position);
+  const recoveryRuntime = {
+    sites: [{
+      fire: {
+        id: 'fire/camp-recovery',
+        point: { layer: undergroundMineLanding.domainId, ...campFireWorld },
+        healPerSecond: 6, recovery: true,
+      },
+      radius: 2.5, tone: 'warm' as const,
+    }],
+    supportsFire: () => true,
+    readConfirmedContact: () => undefined,
+  };
+  const readGateStage = () => 'closed' as const;
+
   const mounted = mountUndergroundMineDomain({
     parent, registration, mine,
     camp: undergroundMineSpec.camp, walker: undergroundMineSpec.walker,
@@ -124,7 +261,10 @@ export function mountUndergroundDomainHost(options: Readonly<{ parent: Group; ro
       placement.domainId === undergroundMineLanding.domainId &&
       placement.landing.height === undergroundMineLanding.height &&
       placement.localPool[1] === undergroundMineLanding.height,
-    readLights: () => ({ litNicheIds: new Set<string>(), extraCampLightCount: 0, remainingBudget: 0 }),
+    readLights,
+    campRuntime,
+    recoveryRuntime,
+    readGateStage,
   });
   if (mounted.kind !== 'ready') return { kind: 'unregistered', reason: mounted.kind } as const;
   // World -> mine-local passage query, for the movement host: the layout's own
@@ -142,8 +282,21 @@ export function mountUndergroundDomainHost(options: Readonly<{ parent: Group; ro
     return mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
       undergroundMineSpec.walker.standingHeight);
   }
+  if (originW && basisXW && basisZW) {
+    const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
+    const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
+    toLocal = (world: Point) => [
+      (world.east - originW.east) * bxE + (world.north - originW.north) * bxN,
+      world.height - originW.height,
+      (world.east - originW.east) * bzE + (world.north - originW.north) * bzN,
+    ] as const;
+    toWorldPoint = (local) => mounted.toWorld(local);
+  }
   return {
     kind: 'ready', registration, mounted, passageAt,
     floorAt: (east: number, north: number) => passageAt(east, north)?.floor,
+    toLocal: (world: Point) => toLocal?.(world),
+    offeringsSnapshot: () => offerings?.snapshot(),
+    campFireWorld,
   } as const;
 }

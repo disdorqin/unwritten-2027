@@ -76,3 +76,60 @@ test('a route with no surveyed winch foot stays unregistered', () => {
   assert.deepEqual(result, { kind: 'unregistered', reason: 'winch-survey' });
   assert.equal(parent.children.length, 0);
 });
+
+test('batch 3: with a camp bridge the interactive camp serves prompts and the pickaxe grant', async () => {
+  const { resolveUndergroundCampPickaxeSite } = await import('../src/shared/underground-camp-pickaxe.js');
+  const { createUndergroundMineLayout } = await import('../tools/voxel-tavern/town-blockout/underground-mine-layout.js');
+  const { undergroundMineSpec } = await import('../tools/voxel-tavern/town-blockout/underground-domain-host.js');
+  const mine = createUndergroundMineLayout(undergroundMineSpec);
+  const site = resolveUndergroundCampPickaxeSite(mine, undergroundMineSpec.camp);
+  assert.ok(site);
+  let worldFoot: { east: number; north: number; height: number } | undefined;
+  const sat: string[] = [];
+  let notices = 0;
+  const result = mountUndergroundDomainHost({
+    parent: new Group(), road: fakeRoad(),
+    campBridge: {
+      now: () => 5_000,
+      readWorldFoot: () => worldFoot,
+      sit: (roomId) => { sat.push(roomId); return true; },
+      stand: () => true,
+      onSeatedChange: () => undefined,
+      isAimingAt: () => true,
+      showPickupNotice: () => { notices++; },
+      onRested: () => undefined,
+    },
+  });
+  assert.equal(result.kind, 'ready');
+  if (result.kind !== 'ready') return;
+  const world = result.mounted.toWorld(site.approach);
+  assert.ok(world);
+  worldFoot = world;
+  result.mounted.sync();
+  const prompt = result.mounted.campPrompt();
+  assert.equal(prompt?.id, 'mine-camp-old-pickaxe');
+  assert.equal(await result.mounted.pressCamp('mine-camp-old-pickaxe'), 'granted');
+  assert.equal(notices, 1);
+  result.mounted.sync();
+  assert.equal(result.mounted.campPrompt()?.id, undefined);
+  // Offerings: no lamp authority yet, so nothing is lit and the reader agrees.
+  assert.deepEqual(result.offeringsSnapshot(), { litNicheIds: [], extraCampLightCount: 0 });
+  void sat;
+});
+
+test('batch 4: the crystal gate mounts shut and the camp recovery ring sits on the certified anchor', async () => {
+  const { createUndergroundMineLayout } = await import('../tools/voxel-tavern/town-blockout/underground-mine-layout.js');
+  const { undergroundMineSpec } = await import('../tools/voxel-tavern/town-blockout/underground-domain-host.js');
+  const mine = createUndergroundMineLayout(undergroundMineSpec);
+  const result = mountUndergroundDomainHost({ parent: new Group(), road: fakeRoad() });
+  assert.equal(result.kind, 'ready');
+  if (result.kind !== 'ready') return;
+  assert.ok(result.mounted.group.getObjectByName('mine-crystal-gate'));
+  assert.ok(result.mounted.group.getObjectByName('recovery-fire/fire/camp-recovery'));
+  // The pre-mount world transform must agree with the mounted scene's own.
+  const viaScene = result.mounted.toWorld(mine.anchors.campRecovery.position);
+  assert.ok(viaScene);
+  assert.ok(Math.abs(viaScene.east - result.campFireWorld.east) < 1e-9);
+  assert.ok(Math.abs(viaScene.north - result.campFireWorld.north) < 1e-9);
+  assert.ok(Math.abs(viaScene.height - result.campFireWorld.height) < 1e-9);
+});

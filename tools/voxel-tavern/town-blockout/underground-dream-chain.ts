@@ -1,4 +1,5 @@
 import { createUndergroundWellBridge } from '../../../src/presence/underground-well-bridge';
+import { createWinch } from './town-winch';
 import { createUndergroundMineLift, type UndergroundMineLiftTrip } from '../../../src/presence/underground-mine-lift';
 import { createUndergroundLiftDomainHandoff } from '../../../src/presence/underground-lift-domain-handoff';
 import type { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration';
@@ -23,6 +24,8 @@ export type DreamChainHost = Readonly<{
   /** The local player's current world foot, from the viewer's own movement state. */
   readLocalFoot(): Foot | undefined;
   onEvent(event: DreamChainEvent): void;
+  /** True while another player stands at the steady-rope stay (duo crank). */
+  readRopeHeld?(): boolean;
 }>;
 
 const liftTravelMs = 25_000;
@@ -73,10 +76,11 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     Math.hypot(foot.east - mineLanding.east, foot.north - mineLanding.north) <= 3 &&
     Math.abs(foot.height - mineLanding.height) <= 1.5;
 
+  const winchLeaf = createWinch();
   const bridge = createUndergroundWellBridge({
     registration: host.registration,
     now: host.now,
-    maxSampleGapMs: 200,
+    maxSampleGapMs: 300,
     readAcceptedFoot: acceptedFoot,
     readConfirmedFirstFallTransfer: () => confirmedTransfer,
     isFirstFallDeparture: (_id, point) => nearShaft(point),
@@ -100,6 +104,12 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     },
     load: () => savedSnapshot,
     save: (snapshot) => { savedSnapshot = snapshot; },
+    // 乙案: the town-winch leaf paces the crank (40 s solo, duo rope x1.8);
+    // the bridge/entry still issue the opening credential.
+    winchExternal: {
+      isComplete: () => winchLeaf.open,
+      progress: () => winchLeaf.progress,
+    },
   });
   if (bridge.kind !== 'ready') return { kind: 'unregistered' } as const;
 
@@ -160,6 +170,23 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
       const result = bridge.holdWinch(playerId);
       if (result.kind === 'opened') host.onEvent({ kind: 'well-opened' });
       return result;
+    },
+    /**
+     * 乙案 crank: one viewer frame of held E. The leaf ticks first (pace,
+     * duo rope, no regress), then the bridge's external stream carries the
+     * credential. Returns leaf progress for the HUD either way.
+     */
+    crankWinch(dtSeconds: number) {
+      if (!bridge.sceneState().coverVisible) return { kind: 'already-open', progress: 1 } as const;
+      winchLeaf.tick(dtSeconds, { cranking: true, ropeHeld: host.readRopeHeld?.() ?? false });
+      const result = bridge.holdWinchExternal(playerId);
+      if (result.kind === 'opened') host.onEvent({ kind: 'well-opened' });
+      return { ...result, progress: winchLeaf.progress } as const;
+    },
+    winchProgress: () => winchLeaf.progress,
+    /** Cage sway for the descent presentation, from the leaf. */
+    swayRoll(elapsedSeconds: number) {
+      return winchLeaf.swayAt(elapsedSeconds, host.readRopeHeld?.() ?? false);
     },
     releaseWinch() {
       bridge.releaseWinch(playerId);

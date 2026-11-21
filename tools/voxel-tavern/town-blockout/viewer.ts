@@ -158,6 +158,7 @@ import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
 import { mountUndergroundDomainHost } from './underground-domain-host';
+import { surveyZa36RopeStay } from './town-za36-rope-stay';
 import { createUndergroundDreamChain, type DreamChainTrip } from './underground-dream-chain';
 import { mountUndergroundDescent } from './underground-descent';
 import type { UndergroundLiftCameraMotion } from './underground-lift-cinematic-effects';
@@ -208,6 +209,11 @@ let dreamHoldE = false;
 let dreamLastTurns = -1;
 let dreamMotion: UndergroundLiftCameraMotion = { yaw: 0, pitch: 0, roll: 0 };
 let dreamFade: HTMLDivElement | undefined;
+let dreamRopeStay: ReturnType<typeof surveyZa36RopeStay>;
+let dreamTripStartedAt = 0;
+let dreamTripActive = false;
+let dreamRopeAnnounced = false;
+let dreamCampSeated: string | undefined;
 let dreamEKey = false;
 addEventListener('keydown', (e) => { if (e.code === 'KeyE') dreamEKey = true; });
 addEventListener('keyup', (e) => {
@@ -222,10 +228,33 @@ function ensureWestCraterRoad() {
   if (!westCraterRoad) {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
     scene.add(westCraterRoad.group);
+    dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
     scene.add(undergroundParent);
-    undergroundDomain = mountUndergroundDomainHost({ parent: undergroundParent, road: westCraterRoad });
+    undergroundDomain = mountUndergroundDomainHost({
+      parent: undergroundParent, road: westCraterRoad,
+      campBridge: {
+        now: () => performance.now(),
+        readWorldFoot: () => ({ east: x, north: n, height: airHeight ?? ground }),
+        sit: (roomId) => { dreamCampSeated = roomId; return true; },
+        stand: (roomId) => {
+          if (dreamCampSeated === roomId) dreamCampSeated = undefined;
+          return true;
+        },
+        onSeatedChange: (active) => { if (!active) dreamCampSeated = undefined; },
+        isAimingAt: (world) => {
+          const target = new Vector3(world.east, world.height, -world.north).sub(camera.position);
+          const distance = target.length();
+          if (distance > 9 || distance < .01) return false;
+          const forward = new Vector3();
+          camera.getWorldDirection(forward);
+          return forward.angleTo(target.normalize()) < .12;
+        },
+        showPickupNotice: () => announceActivity('捡起旧铁镐 · 矿点能敲了'),
+        onRested: () => announceActivity('歇好了 · 篝火旁缓过来了'),
+      },
+    });
     if (undergroundDomain.kind === 'ready') {
       undergroundDomain.mounted.sync();
       const chain = createUndergroundDreamChain({
@@ -233,6 +262,7 @@ function ensureWestCraterRoad() {
         now: () => performance.now(),
         playerId: 'local-player',
         readLocalFoot: () => ({ east: x, north: n, height: airHeight ?? ground }),
+        readRopeHeld: () => dreamRopeHeldNow(),
         onEvent: (event) => {
           if (event.kind === 'well-opened') {
             announceActivity('井盖开了 · 走到井口圈梁，按 E 跃入');
@@ -245,6 +275,15 @@ function ensureWestCraterRoad() {
   return westCraterRoad;
 }
 
+function dreamRopeHeldNow() {
+  const stay = dreamRopeStay;
+  if (!stay) return false;
+  const self = presence.selfId();
+  return presence.getSnowballPeers().some((peer) => peer.id !== self &&
+    Math.hypot(peer.east - stay.steady.east, peer.north - stay.steady.north) <= 1.3 &&
+    Math.abs(peer.height - stay.steady.height) <= 2);
+}
+
 function dreamFadeTo(black: boolean) {
   if (!dreamFade) {
     dreamFade = document.createElement('div');
@@ -255,6 +294,7 @@ function dreamFadeTo(black: boolean) {
 }
 
 function applyDreamLanding(foot: { east: number; north: number; height: number }, toMine: boolean) {
+  dreamTripActive = false;
   x = foot.east;
   n = foot.north;
   ground = foot.height;
@@ -265,6 +305,8 @@ function applyDreamLanding(foot: { east: number; north: number; height: number }
 
 function startDreamTrip(trip: DreamChainTrip) {
   if (!dreamChain) return;
+  dreamTripStartedAt = performance.now();
+  dreamTripActive = true;
   if (trip.direction === 'up') {
     // The descent cinematic is down-only; the return ride fades through black.
     dreamControlsLocked = true;
@@ -2639,6 +2681,13 @@ function currentAction() {
     const nearPoint = (p: { east: number; north: number; height: number }, range: number) =>
       Math.hypot(x - p.east, n - p.north) <= range && Math.abs(ground - p.height) <= 2;
     if (chain.phase() === 'mine') {
+      const campPrompt = undergroundDomain?.kind === 'ready'
+        ? undergroundDomain.mounted.campPrompt() : undefined;
+      if (campPrompt) return { label: campPrompt.label, run() {
+        if (undergroundDomain?.kind === 'ready') {
+          void undergroundDomain.mounted.pressCamp(campPrompt.id);
+        }
+      } };
       if (nearPoint(chain.mineLanding, 3)) return { label: chain.pendingRide() ? '等空笼下来' : '乘笼回地面', run() {
         if (!chain.pendingRide() && !chain.requestCageRide('up')) announceActivity('笼子还没到这一层');
       } };
@@ -2659,7 +2708,7 @@ function currentAction() {
         if (!presence.northRidgeNightOpen()) {
           announceActivity('天还没黑 · 守卫在坑口，先回镇里等第十三声');
         } else {
-          announceActivity('按住 E 别松手 · 转满三圈开井');
+          announceActivity('按住 E 别松手 · 摇满约四十秒开井；有人扶稳绳更快');
         }
       } };
     }
@@ -2788,7 +2837,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked; }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked && !dreamCampSeated; }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -3718,7 +3767,10 @@ renderer.setAnimationLoop(now => {
     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
     const dreamDip = dreamMotion.wakeProgress === undefined ? 0 : (1 - dreamMotion.wakeProgress) * 1.2;
     faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip - dreamDip, yaw + dreamMotion.yaw, landingTilt + dreamMotion.pitch);
-    if (dreamMotion.roll) camera.rotateZ(dreamMotion.roll);
+    const dreamSway = dreamTripActive && dreamChain
+      ? dreamChain.swayRoll((now - dreamTripStartedAt) / 1000) : 0;
+    const dreamRoll = dreamMotion.roll + dreamSway;
+    if (dreamRoll) camera.rotateZ(dreamRoll);
     const movement = sledRide.recovering() ? '翻橇' : sledRide.active() ? '雪橇' :
       landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
@@ -3735,6 +3787,7 @@ renderer.setAnimationLoop(now => {
     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
+  if (undergroundDomain?.kind === 'ready') undergroundDomain.mounted.sync();
   if (dreamChain) {
     dreamChain.update();
     if (dreamDescent) dreamDescent.update(now);
@@ -3744,9 +3797,17 @@ renderer.setAnimationLoop(now => {
       Math.abs(ground - chain.winchFoot.height) <= 2;
     if (dreamEKey && atWinch && presence.northRidgeNightOpen()) {
       dreamHoldE = true;
-      const result = chain.holdWinch();
+      // 乙案: the leaf paces the crank (40 s solo, duo rope faster); the
+      // bridge's external stream carries the opening credential.
+      const ropeNow = dreamRopeHeldNow();
+      if (ropeNow && !dreamRopeAnnounced) {
+        dreamRopeAnnounced = true;
+        announceActivity('有人扶住稳绳 · 绞盘快了，笼子也稳了');
+      }
+      if (!ropeNow) dreamRopeAnnounced = false;
+      const result = chain.crankWinch(dt);
       if (result.kind === 'winding') {
-        const turns = Math.floor(result.turns);
+        const turns = Math.floor(result.progress * 3);
         if (turns !== dreamLastTurns) {
           dreamLastTurns = turns;
           announceActivity(`绞盘转动 · 第 ${turns + 1} 圈`);
