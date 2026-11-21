@@ -256,7 +256,11 @@ function ensureWestCraterRoad() {
       },
     });
     if (undergroundDomain.kind === 'ready') {
-      undergroundDomain.mounted.sync();
+      // C-3 production startup: do not read the camp's live player foot
+      // before x/n/ground bindings are initialized. Vite production bundling
+      // renames those TDZ variables, so a named ReferenceError catch cannot
+      // reliably rescue this eager call. The existing main animation frame
+      // calls mounted.sync() AFTER player initialization instead.
       const chain = createUndergroundDreamChain({
         registration: undergroundDomain.registration,
         now: () => performance.now(),
