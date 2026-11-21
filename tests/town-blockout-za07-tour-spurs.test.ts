@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { InstancedMesh } from 'three';
 import {
-  createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach,
+  createZa22CloudRoute, createZa22NorthRidgeLine, za22CloudSurfaceAt, za22StationApproach, za07CloudLookouts,
 } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 
 // ZA-07: keep the signed-off terminal, gate and starport lanes intact while opening
@@ -60,4 +61,36 @@ test('ZA-07 summit walking spurs connect to the cable terminal with no ghost flo
   now += createZa22NorthRidgeLine(26).legMs;
   cloud.update({ east: 336, north: 640, height: 347 });
   assert.deepEqual(transfers, ['summit', 'base']);
+});
+
+test('ZA-07 four named lookouts are physically reachable and use one shared marker draw', () => {
+  let now = Date.UTC(2026, 0, 1);
+  const views: Array<{ title: string; message: string }> = [];
+  const cloud = createZa22CloudRoute({
+    now: () => now, enterOrExit() {},
+    view(title, message) { views.push({ title, message }); },
+  });
+  for (const lookout of za07CloudLookouts) {
+    assert.equal(cloud.action(lookout), undefined, 'lookout does not bypass a cable ride');
+  }
+  cloud.action(za22StationApproach)?.run();
+  cloud.update(za22StationApproach);
+  now += createZa22NorthRidgeLine(26).legMs;
+  cloud.update(za22StationApproach);
+
+  for (const [index, lookout] of za07CloudLookouts.entries()) {
+    assert.equal(cloud.walkingSurfaceAt(lookout.east, lookout.north, .27), lookout.height);
+    assert.equal(cloud.blocked(lookout.east, lookout.north, lookout.height, .27, 1.8), false);
+    const action = cloud.action(lookout);
+    assert.equal(action?.label, lookout.label);
+    action?.run();
+    assert.equal(views[index]?.title, lookout.title);
+    assert.equal(views[index]?.message, lookout.message);
+    assert.doesNotMatch(lookout.message, /版本|未开放|敬请期待|更新/);
+    assert.notEqual(cloud.action({ ...lookout, height: lookout.height + .65 })?.label, lookout.label);
+  }
+  const stones = cloud.front()?.getObjectByName('za07-cloud-lookout-stones');
+  assert.ok(stones instanceof InstancedMesh);
+  assert.equal(stones.count, 4);
+  assert.equal(cloud.action({ east: 336, north: 640, height: 347 })?.label, '乘缆车一线返回山脚站');
 });

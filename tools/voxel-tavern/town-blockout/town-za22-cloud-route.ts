@@ -1,6 +1,6 @@
 import {
   AmbientLight, BoxGeometry, BufferGeometry, Color, DirectionalLight, Fog, Group, Line, LineBasicMaterial,
-  Mesh, MeshLambertMaterial, Scene, Vector3,
+  InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Scene, Vector3,
 } from 'three';
 import { isMountainPresenceFoot } from '../../../src/shared/za22-mountain-domain';
 import {
@@ -27,6 +27,18 @@ const cloudApron = { west: 286.5, east: 352, south: 654, north: 664.65 };
 const terminalDwell = 8_000;
 const roofClearance = 3.5;
 const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
+// Four lookouts reuse existing snow ground and do not claim an open passage
+// through the steep central summit cap.
+export const za07CloudLookouts = [
+  { east: 320, north: 634, height: 347, label: '观景 · 南望小镇',
+    title: '云海台 · 南望', message: '朝南寻找广场、钟楼与镇上屋顶。' },
+  { east: 350, north: 650, height: 347, label: '观景 · 东望冰宫',
+    title: '云海台 · 东望', message: '朝东寻找晨光方向与冰晶宫。' },
+  { east: 291, north: 660, height: 347, label: '观景 · 西望镜湖',
+    title: '云海台 · 西望', message: '朝西寻找镜湖冰面与陨星原的坑沿。' },
+  { east: 300, north: 662, height: 347, label: '观景 · 北望主峰',
+    title: '云海台 · 北望', message: '朝北辨认主峰方向与山门前的云雾。' },
+] as const;
 const assemblyBench = { east: 324, north: 657, width: 3.9, depth: 1.8, top: .87 };
 const benchVisitor = { east: 324, north: 655, height: 347 };
 const fullEpoch = Date.UTC(2026, 0, 1);
@@ -142,6 +154,15 @@ export function createZa22CloudRoute(host: Host) {
     const brass = new MeshLambertMaterial({ color: '#b59669' });
     const wood = new MeshLambertMaterial({ color: '#59483e' });
     const boxGeometry = new BoxGeometry();
+    // Four shallow brass direction stones share a single draw call.
+    const lookoutStones = new InstancedMesh(boxGeometry, brass, za07CloudLookouts.length);
+    lookoutStones.name = 'za07-cloud-lookout-stones';
+    for (const [index, lookout] of za07CloudLookouts.entries()) {
+      const transform = new Matrix4().makeScale(.68, .05, .68);
+      transform.setPosition(lookout.east, lookout.height + .03, -lookout.north);
+      lookoutStones.setMatrixAt(index, transform);
+    }
+    front.add(lookoutStones);
     function box(group: Group, material: MeshLambertMaterial, east: number, north: number, height: number,
       width: number, depth: number, tall: number) {
       const mesh = new Mesh(boxGeometry, material);
@@ -229,6 +250,11 @@ export function createZa22CloudRoute(host: Host) {
       label: '在前山碑盖章',
       run() { if (mode === 'summit' && cloudStamp.available()) cloudStamp.request(); },
     };
+    for (const lookout of za07CloudLookouts) {
+      if (near(position, lookout, 1.35)) {
+        return { label: lookout.label, run() { host.view(lookout.title, lookout.message); } };
+      }
+    }
     return world?.gate.action(position);
   }
 
