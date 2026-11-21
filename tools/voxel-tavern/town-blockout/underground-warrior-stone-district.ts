@@ -1,17 +1,16 @@
 import {
   BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshStandardMaterial, NearestFilter,
-  Object3D, PointLight, SRGBColorSpace, Vector3,
+  Object3D, PointLight, SRGBColorSpace,
 } from 'three';
+import {
+  warriorDistrictHouses, warriorDistrictStations, warriorDistrictTransform,
+  warriorDistrictValidFrame,
+  type WarriorDistrictAction, type WarriorDistrictPoint, type WarriorDistrictFrame,
+} from '../../../src/shared/underground-warrior-district.js';
 
-export type WarriorDistrictFoot = Readonly<{ east: number; north: number; height: number }>;
-export type WarriorDistrictSite = WarriorDistrictFoot & Readonly<{ domainId: string; yaw: number }>;
-type DistrictRole = 'search-room' | 'take-cover' | 'arcade-cover' | 'lookout' | 'trace';
-type House = Readonly<{
-  id: string; side: 'north' | 'south'; accessible: boolean;
-  blockedBy?: 'rubble' | 'grille' | 'fallen-slab';
-  workFeet: readonly DistrictRole[];
-  localEntrance: readonly [number, number, number];
-}>;
+export type WarriorDistrictFoot = WarriorDistrictPoint;
+export type WarriorDistrictSite = WarriorDistrictFrame;
+type DistrictRole = WarriorDistrictAction;
 type Local = readonly [east: number, y: number, north: number];
 type WorldBox = Readonly<{ name: string; min: readonly number[]; max: readonly number[] }>;
 type Host = Readonly<{
@@ -51,21 +50,7 @@ export const warriorDistrictCanon = Object.freeze({
     trace: '磨亮的旧石阶和半截石矛，静静指着城外。',
   },
 });
-const plannedHouses: readonly House[] = Array.from({ length: 12 }, (_, index) => {
-  const accessible = [1, 4, 7, 10].includes(index);
-  const side = index < 6 ? 'north' as const : 'south' as const;
-  // Stop before the existing 40x40m central statue square, without swallowing
-  // the 25m entry approach or compressing house-to-house collision gaps.
-  const x = 29 + index % 6 * 8.75;
-  const front = side === 'north' ? 8.15 : -8.15;
-  return {
-    id: 'u10/stone-home-' + String(index + 1).padStart(2, '0'),
-    side, accessible, blockedBy: accessible ? undefined :
-      (['rubble', 'grille', 'fallen-slab'] as const)[(index + Math.floor(index / 3)) % 3],
-    workFeet: accessible ? ['search-room', 'take-cover'] as const : [] as const,
-    localEntrance: [x, 0, front] as const,
-  };
-});
+const plannedHouses = warriorDistrictHouses;
 
 function tex(color: number, accent: number) {
   const pixels = new Uint8Array(16 * 16 * 4);
@@ -91,19 +76,15 @@ const finite = (value: number) => Number.isFinite(value);
 export function mountWarriorStoneDistrict(host: Host) {
   const site = host.site;
   if (!site) return { kind: 'unregistered' } as const;
-  if (!site.domainId.trim() || ![site.east, site.north, site.height, site.yaw].every(finite) ||
-      !host.supportsDistrict(site)) return { kind: 'unsupported-site' } as const;
+  if (!warriorDistrictValidFrame(site) || !host.supportsDistrict(site))
+    return { kind: 'unsupported-site' } as const;
   const fixedSite = site;
   const group = new Group();
   group.name = 'u10-warrior-houses-arcade-walkable-wall';
   group.position.set(site.east, site.height, -site.north);
   group.rotation.y = site.yaw;
 
-  const localToWorld = ([e, y, north]: Local): WarriorDistrictFoot => {
-    const p = new Vector3(e, y, -north).applyAxisAngle(new Vector3(0, 1, 0), fixedSite.yaw)
-      .add(group.position);
-    return { east: p.x, north: -p.z, height: p.y };
-  };
+  const localToWorld = (point: Local): WarriorDistrictFoot => warriorDistrictTransform(fixedSite, point);
   const blocks = new Map<StoneFamily, Matrix4[]>();
   const solids: Array<{ name: string; center: Local; size: Local }> = [];
   const pose = new Object3D();
@@ -122,7 +103,10 @@ export function mountWarriorStoneDistrict(host: Host) {
       center: [e, y, north], size: [width, height, depth] });
   }
   const floor: Array<Readonly<{ name: string; foot: Local; role?: DistrictRole; houseId?: string }>> = [];
-  const entryFeet: Array<Readonly<{ id: string; foot: Local; role: DistrictRole }>> = [];
+  const entryFeet: Array<Readonly<{ id: string; foot: Local; role: DistrictRole }>> =
+    warriorDistrictStations.map(station => ({
+      id: station.id, foot: station.localFoot, role: station.role,
+    }));
 
   // Round 1: twelve recognizable contiguous ancient homes: exactly one public doorway
   // for an accessible home; collapsed roofs are visible but never player-climbable.
@@ -210,10 +194,6 @@ export function mountWarriorStoneDistrict(host: Host) {
     for (let j = 0; j < 5; j++)
       part(j % 2 ? 'shade' : 'wall', x + (j % 3 - 1) * .3, .12,
         center + side * (1.0 + (j % 2) * .2), .27, .22, .28);
-    const search: Local = [x - 1.0, 0, rear - side * 2.2];
-    const cover: Local = [x + 1.05, 0, center - side * 1.1];
-    entryFeet.push({ id: house.id, role: 'search-room', foot: search },
-      { id: house.id, role: 'take-cover', foot: cover });
     floor.push({ name: house.id + '/entrance', foot: [x, 0, front - side * .60] },
       { name: house.id + '/passage', foot: [x, 0, front + side * .75] },
       { name: house.id + '/interior', foot: [x, 0, center] });
@@ -242,7 +222,6 @@ export function mountWarriorStoneDistrict(host: Host) {
     floor.push({ name: 'arcade/aisle-' + index, foot: [x + 2.65, 0, -20.4] },
       { name: 'arcade/columns-' + index, foot: [x + 2.0, 0, -17.1] });
   }
-  entryFeet.push({ id: 'u10/market-arcade', role: 'arcade-cover', foot: [133, 0, -19.05] });
 
   // Round 3: cold moonstone sources are attached to actual stone/wood sconces.
   // The forge remains the single warm source elsewhere in the city.
@@ -312,8 +291,6 @@ export function mountWarriorStoneDistrict(host: Host) {
   }
   part('rust', 130, 7.90, 28.40, .13, 1.34, .12);
   part('shade', 130.06, 8.65, 28.4, .23, .23, .26);
-  entryFeet.push({ id: 'u10/wall-lookout', role: 'lookout', foot: [147, 7.12, 27] },
-    { id: 'u10/worn-stair', role: 'trace', foot: [84.93, 7.12 / 26, 23.1] });
 
   // Test physical human-cylinder clearance against the SAME stone props exported to
   // the movement authority. A supported ground foot cannot hide inside a house/solid.

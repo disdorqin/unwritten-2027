@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, NearestFilter } from 'three';
+import { warriorDistrictStations, warriorDistrictTransform } from '../src/shared/underground-warrior-district.js';
 import { warriorSquarePlan } from '../tools/voxel-tavern/town-blockout/underground-warrior-square.js';
 import { warriorForgeHallSite } from '../tools/voxel-tavern/town-blockout/underground-warrior-forge-hall.js';
 import {
@@ -256,6 +257,21 @@ test('U-10 room line and bazaar do not engulf the pre-existing statue square or 
     maxN: warriorForgeHallSite.north + 10 };
   assert.equal(mounted.colliders.filter(box => encroaches(box, forge)).length, 0,
     'do not cover the only warm forge and its existing U-16 approach');
+  mounted.dispose();
+});
+
+test('U-10 renderer and presence use exactly the same eleven immutable station IDs and surveyed ENY feet', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict(f.host);
+  if (mounted.kind !== 'ready') assert.fail();
+  assert.equal(mounted.feet.length, warriorDistrictStations.length);
+  for (const station of warriorDistrictStations) {
+    const found = mounted.feet.find(item => item.id === station.id && item.role === station.role);
+    assert.ok(found, 'rendered action missing server registered station ' + station.id);
+    assert.deepEqual(found.foot, station.localFoot);
+    assert.deepEqual(found.world, warriorDistrictTransform(surveyFixture, station.localFoot),
+      'both sides must transform an authority foot into the same world frame');
+  }
   mounted.dispose();
 });
 
