@@ -1,0 +1,75 @@
+{
+  "scope": "ISOLATED U-3 modeling review, not real player or official -140m production mount",
+  "views": {
+    "entrance": {
+      "view": "entrance",
+      "kind": "ready",
+      "frames": 4,
+      "drawCalls": 7,
+      "triangles": 44556,
+      "groups": 7,
+      "voxelCount": 3713,
+      "visibleLights": 4,
+      "eye": [
+        0,
+        1.6059999999999999,
+        -1
+      ],
+      "isFootClear": true,
+      "imageBytes": 162950
+    },
+    "grove": {
+      "view": "grove",
+      "kind": "ready",
+      "frames": 12,
+      "drawCalls": 6,
+      "triangles": 41088,
+      "groups": 7,
+      "voxelCount": 3713,
+      "visibleLights": 4,
+      "eye": [
+        -20,
+        0.4117731958762887,
+        -41
+      ],
+      "isFootClear": true,
+      "imageBytes": 138893
+    },
+    "overlook": {
+      "view": "overlook",
+      "kind": "ready",
+      "frames": 20,
+      "drawCalls": 7,
+      "triangles": 44556,
+      "groups": 7,
+      "voxelCount": 3713,
+      "visibleLights": 4,
+      "eye": [
+        10.3,
+        -0.006206185567010358,
+        -55
+      ],
+      "isFootClear": true,
+      "imageBytes": 133028
+    },
+    "quay": {
+      "view": "quay",
+      "kind": "ready",
+      "frames": 29,
+      "drawCalls": 7,
+      "triangles": 44556,
+      "groups": 7,
+      "voxelCount": 3713,
+      "visibleLights": 4,
+      "eye": [
+        24.5,
+        -0.6331752577319589,
+        -76
+      ],
+      "isFootClear": true,
+      "imageBytes": 149138
+    }
+  },
+  "errors": [],
+  "passed": true
+}
