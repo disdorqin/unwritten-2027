@@ -2,6 +2,7 @@ import { createPresenceServer } from './server.js';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
+import { skyCityPresenceBounds } from '../shared/sky-city-presence-domain.js';
 import { readTownNightOptions } from './town-night-config.js';
 
 // The town night clock is core game canon (one game day = 10 minutes:
@@ -40,7 +41,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   const separateRooms: Awaited<ReturnType<typeof createPresenceServer>>[] = [];
   try {
     for (const [port, bounds] of [[process.env.PRESENCE_MOUNTAIN_PORT, mountainPresenceBounds],
-      [process.env.PRESENCE_WEST_PORT, westPresenceBounds]] as const) {
+      [process.env.PRESENCE_WEST_PORT, westPresenceBounds],
+      [process.env.PRESENCE_SKY_PORT, skyCityPresenceBounds]] as const) {
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
       }));

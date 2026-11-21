@@ -35,6 +35,8 @@ services:
       PRESENCE_PORT: "8090"
       PRESENCE_MOUNTAIN_PORT: "8091"
       PRESENCE_WEST_PORT: "8092"
+      # Do not open the sky room before ZB-22/G-01/ZB-17 transfer authorization is live.
+      PRESENCE_SKY_PORT: "${PRESENCE_SKY_PORT:-}"
       TOWN_NIGHT_SCHEDULE: "${TOWN_NIGHT_SCHEDULE:-}"
       TOWN_NIGHT_BEACON_RECEIPT: "${TOWN_NIGHT_BEACON_RECEIPT:-}"
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
@@ -45,6 +47,7 @@ services:
       - "8090"
       - "8091"
       - "8092"
+      - "8093"
     logging:
       driver: json-file
       options:

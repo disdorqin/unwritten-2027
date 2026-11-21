@@ -12,6 +12,11 @@
         uri replace /presence-west /presence
         reverse_proxy presence:8092
     }
+    @skyCity path /presence-sky /presence-sky/*
+    handle @skyCity {
+        uri replace /presence-sky /presence
+        reverse_proxy presence:8093
+    }
     @townPresence path /presence /presence/*
     reverse_proxy @townPresence presence:8090
     @entry path / /town-blockout.html
