@@ -43,7 +43,7 @@ type Options = Readonly<{
   dispatch(intent: Readonly<{ playerId: string; revision: number; role: Role;
     fault?: keyof U19MineCartSnapshot['faults']; verb?: string;
     held?: boolean; target?: string }>): void;
-  onNoise?(kind: 'rolling'|'brake'|'derail'|'repair', at: UndergroundMainlinePoint): void;
+  onNoise?(kind: 'rolling'|'brake'|'derail'|'repair'|'winch', at: UndergroundMainlinePoint): void;
 }>;
 const activities: readonly Role[] = ['repair', 'board', 'leave', 'brake', 'go',
   'turnout', 'rerail', 'load', 'unload', 'winch'];
@@ -177,7 +177,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       // Distinct end winches, one active only when the cart is on the far end.
       piece('station-winch-iron', swatches.rust, swatches.night,
         p.x - 2.6, p.y + .42, p.z + 2, .85, .78, .78);
-      piece('station-winch-wood-wheel', swatches.wood, swatches.earth,
+      if (role === 'gate') piece('station-winch-wood-wheel', swatches.wood, swatches.earth,
         p.x - 2.6, p.y + .93, p.z + 2, 1.0, .14, .24);
       for (let i = 0; i < 9; i++)
         piece('station-wood-storage', swatches.wood, swatches.green,
@@ -287,6 +287,25 @@ export function mountUndergroundMainlineScene(host: Options) {
     root.add(sign); signMeshes.push(sign);
   }
 
+  // Camp winch is a real movable wooden wheel. Only persisted recall chainage
+  // rotates it; requesting E locally or merely repainting a frame cannot cheat it.
+  const campAt = at(0);
+  const winchWheel = new Group();
+  winchWheel.name = 'u19-host-confirmed-recall-winch';
+  winchWheel.position.set(campAt.x - 2.6, campAt.y + .93, campAt.z + 2);
+  const winchWood = new MeshStandardMaterial({ color: swatches.wood, roughness: .96 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const spoke = new Mesh(blockGeo, winchWood);
+    spoke.position.set(Math.cos(a) * .27, Math.sin(a) * .27, 0);
+    spoke.rotation.z = a;
+    spoke.scale.set(.54, .115, .16);
+    winchWheel.add(spoke);
+  }
+  const hub = new Mesh(blockGeo, winchWood);
+  hub.scale.set(.22, .22, .24);
+  winchWheel.add(hub);
+  root.add(winchWheel);
   const cart = createUndergroundMineCartModel();
   cart.group.name = 'u19-shared-full-line-cart';
   cart.group.visible = false;
@@ -330,12 +349,15 @@ export function mountUndergroundMainlineScene(host: Options) {
     if (disposed || !validateSnapshot(snapshot) ||
         snapshot.chainage < 0 || snapshot.chainage > route.length) {
       cart.group.visible = false;
+      winchWheel.visible = false;
       brakeSparks.visible = false;
       lamps.forEach(lamp => lamp.visible = false);
       return false;
     }
     const p = at(snapshot.chainage);
     cart.group.visible = true;
+    winchWheel.visible = true;
+    winchWheel.rotation.z = (route.length - snapshot.chainage) * .45;
     cart.group.position.set(p.x, p.y, p.z);
     cart.group.rotation.set(p.grade, p.heading, snapshot.mode === 'derailed' ? .24 : 0, 'YXZ');
     cart.setWheelTravel(snapshot.chainage);
@@ -351,7 +373,12 @@ export function mountUndergroundMainlineScene(host: Options) {
     }
     if (last && snapshot.revision > last.revision && snapshot.chainage !== last.chainage) {
       if (snapshot.mode === 'derailed') host.onNoise?.('derail', p.position);
+      else if (snapshot.mode === 'recalling' || last.mode === 'recalling')
+        host.onNoise?.('winch', campAt.position);
       else host.onNoise?.('rolling', p.position);
+    } else if (last && snapshot.revision > last.revision &&
+        last.mode !== 'recalling' && snapshot.mode === 'recalling') {
+      host.onNoise?.('winch', campAt.position);
     }
     if (last && snapshot.revision > last.revision && snapshot.brakeHeld !== last.brakeHeld &&
         snapshot.brakeHeld) host.onNoise?.('brake', p.position);
@@ -431,6 +458,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       cart.dispose();
       brakeSparks.dispose();
       sparkMaterial.dispose();
+      winchWood.dispose();
       for (const batch of instances) batch.dispose();
       for (const material of materials) material.dispose();
       for (const map of maps) map.dispose();
