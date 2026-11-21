@@ -701,6 +701,7 @@ function setNight(night: boolean) {
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
+  westCraterRoad?.craterActions.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
@@ -2435,6 +2436,7 @@ function openTavernSeatActions() {
   }
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+let craterTelescopeActive = false;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2479,6 +2481,33 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
+  // ZA-36 crater outside works: public-layer E actions only (salvage ①).
+  // Routed through the existing E affordance, not a disconnected preview UI.
+  const works = homeReturn ? undefined : westCraterRoad?.craterActions;
+  const craterSpot = works?.actionAt(x, n, ground);
+  if (craterSpot && works) return { label: craterSpot.label, run() {
+    switch (craterSpot.id) {
+      case 'registration':
+        openPlace('入坑登记', '入坑登记 · 天黑前出坑');
+        break;
+      case 'map':
+        openPlace('坑区手绘图', '图上只有井口、栈道与黑石带，最后一格尚未标注。');
+        break;
+      case 'telescope':
+        craterTelescopeActive = !craterTelescopeActive;
+        if (craterTelescopeActive) {
+          activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
+          announceActivity('望筒已对准坑心 · E 收起 · 离开底座自动退出');
+        } else announceActivity('收起望筒 · 恢复正常视角');
+        break;
+      case 'firewood':
+        announceActivity(works.firewood() ? '添柴后火盆亮了一些' : '火盆恢复原样');
+        break;
+      case 'survey':
+        openPlace('测绘位 M1', '三角觇标读数待测绘线接入。');
+        break;
+    }
+  } };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);
   if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
@@ -3246,7 +3275,14 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
       sledFrame.shellRoll + sledRide.roll(), sledFrame.shellPitch, sledRide.active() ? sledFrame : undefined);
   } else visuals.hide();
   visuals.update(dt);
-  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
+  // The ground-level crater scope needs persistent optical framing.
+  // The sled's per-frame camera FOV reconciliation also performs automatic
+  // recovery when the player walks away, boards, or changes world domain.
+  const scopeSpot = westCraterRoad?.craterActions.actions.find(site => site.id === 'telescope');
+  if (craterTelescopeActive && (!scopeSpot || !walking || cloudRoute.active() || sledRide.active() ||
+      Math.hypot(x - scopeSpot.east, n - scopeSpot.north) > scopeSpot.range + .8 ||
+      Math.abs(ground - scopeSpot.height) > 3)) craterTelescopeActive = false;
+  const targetFov = craterTelescopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;
     camera.updateProjectionMatrix();
@@ -3517,7 +3553,9 @@ renderer.setAnimationLoop(now => {
   if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
   if (!homeReturn) {
-    if (!cloudRoute.active() && camera.position.x < 100) ensureWestCraterRoad();
+    if (!cloudRoute.active() && camera.position.x < 100) {
+      ensureWestCraterRoad().craterActions.setNight(nightMode);
+    }
     prepareLandmarks(camera.position.x, -camera.position.z);
   }
   if (!homeReturn && !extensionStreetsLoad && (camera.position.x > 320 || -camera.position.z > 275)) {

@@ -595,6 +595,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
 
   // ---------- layer 3: three stone-iron defense towers ----------
+  /** The north tower's real lamp — the warm chain's only outer-works light. */
+  let northTowerLight: PointLight | undefined;
   function tower(origin: { east: number; north: number; height: number }, totalH: number,
     mode: 'active' | 'tilted' | 'broken-ladder', faceDeg: number) {
     const fr = frame(origin, faceDeg);
@@ -635,6 +637,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const light = new PointLight(new Color(palette.ember), 14, 32, 2);
       light.position.set(lampP.east, g + shaftH + 2.6, -lampP.north);
       group.add(light);
+      northTowerLight = light;
     }
   }
   const northTower = site('north-tower', 358, 67.5, 4, 13.5);
@@ -691,5 +694,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     mesh.name = `crater-outer-${(mat as MeshStandardMaterial).uuid.slice(0, 6)}`;
     group.add(mesh);
   }
-  return { group, sites, fencePosts };
+  // North-tower lamp follows the warm chain: on at night, off by day
+  // (previously always on — same correction as the mouth-works lights).
+  function setNight(value: boolean) {
+    if (northTowerLight) northTowerLight.intensity = value ? 14 : 0;
+  }
+  setNight(true);
+  return {
+    group, sites, fencePosts, setNight,
+    wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
+  };
 }

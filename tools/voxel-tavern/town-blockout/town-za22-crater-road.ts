@@ -7,8 +7,12 @@ import { buildZa31CraterRim } from './town-za31-crater-rim';
 import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing';
-import { buildCraterMouthWorks } from './town-crater-mouth-works';
+import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
 import { buildCraterOuterWorks } from './town-crater-outer-works';
+import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
+import { buildZa36CraterMidground } from './town-za36-crater-midground';
+import { mountZa36RopeStay } from './town-za36-rope-stay';
+import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -21,6 +25,18 @@ const tileSize = 48;
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
+  readonly mouthWorks: ReturnType<typeof buildCraterMouthWorks>;
+  readonly outerWorks: ReturnType<typeof buildCraterOuterWorks>;
+  readonly ejecta: ReturnType<typeof buildZa36CraterEjecta>;
+  readonly midground: ReturnType<typeof buildZa36CraterMidground>;
+  readonly ropeStay: ReturnType<typeof mountZa36RopeStay> | undefined;
+  readonly surveyM1: ReturnType<typeof buildCraterSurveyM1> | undefined;
+  readonly craterActions: {
+    actions: CraterActionSpot[];
+    actionAt(east: number, north: number, height: number): CraterActionSpot | undefined;
+    firewood(): boolean;
+    setNight(night: boolean): void;
+  };
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
@@ -144,7 +160,54 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
   group.add(outerWorks.group);
+  // Salvage ③: V3 ejecta/midground, cleared against the mainline fence
+  // (outer ring + gate segment) and the town-era wall line — a boulder
+  // whose footprint would swallow a post is skipped, never nudged.
+  const fenceExclusions = [
+    ...outerWorks.fencePosts,
+    ...mouthWorks.fencePosts,
+  ].map(post => {
+    const rad = (post.bearing * Math.PI) / 180;
+    return {
+      east: anchor.east + post.radius * Math.sin(rad),
+      north: anchor.north + post.radius * Math.cos(rad),
+      radius: 1,
+    };
+  });
+  for (let n = outerWorks.wallLine.northStart; n <= outerWorks.wallLine.northEnd; n += 1.5) {
+    fenceExclusions.push({ east: outerWorks.wallLine.east, north: n, radius: 1 });
+  }
+  const ejecta = buildZa36CraterEjecta(road, fenceExclusions);
+  group.add(ejecta.group);
+  const midground = buildZa36CraterMidground(road, [
+    ...rim.placements, ...camp.placements,
+    ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),
+    ...ejecta.placements.map(site => ({ east: site.east, north: site.north, radius: site.footprint })),
+  ]);
+  group.add(midground.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
-  return { ...road, winch };
+  const ropeStay = mountZa36RopeStay(road);
+  if (ropeStay) group.add(ropeStay.group);
+  const surveyM1 = buildCraterSurveyM1(road);
+  if (surveyM1) group.add(surveyM1.group);
+  // Salvage ①: one E-action surface for the crater — the mouth-works
+  // spots (registration / map / telescope / firewood) plus the M1 station.
+  const surveySpot: CraterActionSpot | undefined = surveyM1 ? {
+    id: 'survey', label: '查看测绘位 M1',
+    east: surveyM1.site.east, north: surveyM1.site.north, height: surveyM1.site.height, range: 2.8,
+  } : undefined;
+  const craterActions = {
+    actions: surveySpot ? [...mouthWorks.actions, surveySpot] : [...mouthWorks.actions],
+    actionAt(east: number, north: number, height: number) {
+      const found = mouthWorks.actionAt(east, north, height);
+      if (found) return found;
+      if (surveySpot && Math.hypot(east - surveySpot.east, north - surveySpot.north) <= surveySpot.range &&
+        Math.abs(height - surveySpot.height) <= 3.3) return surveySpot;
+      return undefined;
+    },
+    firewood: mouthWorks.firewood,
+    setNight(night: boolean) { mouthWorks.setNight(night); outerWorks.setNight(night); },
+  };
+  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, ropeStay, surveyM1, craterActions };
 }

@@ -13,6 +13,12 @@ export type CraterMouthSite = Readonly<{
   id: string; east: number; north: number; height: number; radius: number;
 }>;
 
+/** E-action spots (salvage ①, ported from lane-a 976ab6d): ids mirror the viewer switch. */
+export type CraterActionId = 'registration' | 'map' | 'telescope' | 'firewood' | 'survey';
+export type CraterActionSpot = Readonly<{
+  id: CraterActionId; label: string; east: number; north: number; height: number; range: number;
+}>;
+
 const palette = {
   stone: '#8a8378', stoneDark: '#5d564c', ochre: '#a98a56', earth: '#5d4630',
   timberLight: '#a36b48', pine: '#44503c', night: '#2c3648', snow: '#e8ecf0',
@@ -148,7 +154,16 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const light = new PointLight(new Color(palette.ember), intensity, distance, 2);
     light.position.set(east, h, -north);
     group.add(light);
+    return light;
   }
+
+  /** The three real light pools of the outside warm chain (§六). */
+  let yardLight: PointLight | undefined;
+  let doorLamp: PointLight | undefined;
+  let brazierLight: PointLight | undefined;
+  const actions: CraterActionSpot[] = [];
+  /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
+  const gateFencePosts: { bearing: number; radius: number }[] = [];
 
   // ---------- §三.8 assembly ground (south rim, outside the haul gap) ----------
   const assembly = site('assembly-ground', 168, 70, 10);
@@ -188,6 +203,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         c.beginPath(); c.moveTo(150, y); c.lineTo(150, y + 40); c.stroke();
       }
     });
+    const boardH = heightAt(board.east, board.north);
+    if (boardH !== undefined) {
+      actions.push({ id: 'registration', label: '阅读入坑告示', east: board.east, north: board.north, height: boardH, range: 2.1 });
+    }
     // Sled slots: six stake pairs with a rope line.
     for (let i = 0; i < 6; i++) {
       const p = fr.at(-5 + i * 1.7, -2.8);
@@ -212,7 +231,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(iron, p.east, g + 2.48, p.north, .44, .08, .44, fr.yaw);
     }
     const lampP = fr.at(-7.6, 1.2);
-    lampLight(lampP.east, g + 2.2, lampP.north, 5.5, 9);
+    yardLight = lampLight(lampP.east, g + 2.2, lampP.north, 5.5, 9);
   }
 
   // ---------- §三.9 supply station (core anchor, per ref-01) ----------
@@ -274,7 +293,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(glow, lp.east, g + foundH + 2.15, lp.north, .2, .3, .2, fr.yaw);
     }
     const doorLight = fr.at(0, D / 2 + .6);
-    lampLight(doorLight.east, g + foundH + 2.1, doorLight.north, 5, 8.5);
+    doorLamp = lampLight(doorLight.east, g + foundH + 2.1, doorLight.north, 5, 8.5);
     const step = fr.at(0, D / 2 + .55);
     box(stone, step.east, g + .12, step.north, 1.7, .24, 1, fr.yaw);
     // Interior: shelves with dry goods / rope / oil lamps, counter, hand-drawn map.
@@ -305,6 +324,31 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.strokeStyle = 'rgba(61,44,28,.6)'; c.lineWidth = 3;
       c.strokeRect(w * .74, h * .62, 88, 66);
     });
+    const mapH = heightAt(mapP.east, mapP.north);
+    if (mapH !== undefined) {
+      actions.push({ id: 'map', label: '查看坑区手绘图', east: mapP.east, north: mapP.north, height: mapH, range: 2.1 });
+    }
+  }
+
+  // ---------- 地面三脚望筒（抢救包 ②，移植自 lane-a 453422e） ----------
+  // 屋顶筒仍为剪影道具（甲板无正式登顶验收）；这架地面三脚架站在补给站
+  // 东侧外路旁，E 可达，FOV 58→25，离座自动退出（viewer 侧）。
+  if (supply) {
+    const scopeE = supply.east + 7.2, scopeN = supply.north + 2.8;
+    const scopeH = heightAt(scopeE, scopeN);
+    if (scopeH !== undefined) {
+      box(stone, scopeE, scopeH + .12, scopeN, .78, .12, .78);
+      for (const s of [-1, 0, 1]) {
+        box(timber, scopeE + s * .34, scopeH + .68, scopeN + .12, .13, 1.12, .13, 0, 0, s * .14);
+      }
+      box(iron, scopeE, scopeH + 1.35, scopeN, .28, .45, .28);
+      const tubeYaw = Math.PI - Math.atan2(anchor.east - scopeE, anchor.north - scopeN);
+      cyl(brass, scopeE, scopeH + 1.71, scopeN, .1, .15, 1.15, 9, tubeYaw, Math.PI / 2 - .18);
+      const backBearing = Math.atan2(anchor.east - scopeE, anchor.north - scopeN) + Math.PI;
+      box(iron, scopeE + Math.sin(backBearing) * .45, scopeH + 1.6, scopeN + Math.cos(backBearing) * .45,
+        .36, .08, .12, tubeYaw);
+      actions.push({ id: 'telescope', label: '使用望筒观坑', east: scopeE - .25, north: scopeN - .65, height: scopeH, range: 1.75 });
+    }
   }
 
   // ---------- §三.10 guard shed (north rim high point, per ref-03) ----------
@@ -325,7 +369,11 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const brz = fr.at(.7, .3);
     cyl(iron, brz.east, g + .32, brz.north, .52, .34, .5, 9);
     part(glow, new ConeGeometry(.34, .42, 7), brz.east, g + .68, brz.north);
-    lampLight(brz.east, g + .95, brz.north, 6, 9.5);
+    brazierLight = lampLight(brz.east, g + .95, brz.north, 6, 9.5);
+    const brzH = heightAt(brz.east, brz.north);
+    if (brzH !== undefined) {
+      actions.push({ id: 'firewood', label: '给哨棚火盆添柴', east: brz.east, north: brz.north, height: brzH, range: 2.1 });
+    }
     for (let i = 0; i < 5; i++) {
       const p = fr.at(-1.15 + (i % 3) * .24, .9 + Math.floor(i / 3) * .3);
       box(timber, p.east, g + .12 + (i % 2) * .16, p.north, .16, .24 + (i % 2) * .2, .16, fr.yaw + i);
@@ -385,6 +433,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const north = anchor.north + fenceR * Math.cos(b);
       const h = heightAt(east, north);
       if (h === undefined) continue;
+      gateFencePosts.push({ bearing: bDeg, radius: fenceR });
       const yaw = -b;
       box(rustIron, east, h + 2.35, north, .14, 4.7, .14, yaw);
       part(rustIron, new ConeGeometry(.11, .42, 5), east, h + 4.9, north, yaw);
@@ -555,5 +604,31 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     group.add(mesh);
   }
 
-  return { group, sites, debrisCount, rimRadius: meteorCraterRimRadius };
+  // ---------- E 动作接线 + 夜间点亮（抢救包 ①） ----------
+  // 坑外三盏实灯是 §六暖光链的坑外段：夜间点亮，白天熄灭（此前常亮）。
+  // 添柴只调火盆亮度，不改变昼夜开关。
+  let night = true;
+  let fireFed = false;
+  function applyLighting() {
+    if (yardLight) yardLight.intensity = night ? 5.5 : 0;
+    if (doorLamp) doorLamp.intensity = night ? 5 : 0;
+    if (brazierLight) brazierLight.intensity = night ? (fireFed ? 10 : 6) : 0;
+  }
+  function setNight(value: boolean) { night = !!value; applyLighting(); }
+  const firewood = () => { fireFed = !fireFed; applyLighting(); return fireFed; };
+  function actionAt(east: number, north: number, height: number) {
+    let nearest: CraterActionSpot | undefined; let best = Infinity;
+    for (const spot of actions) {
+      const horizontal = Math.hypot(east - spot.east, north - spot.north);
+      if (horizontal > spot.range || Math.abs(height - spot.height) > 3.3 || horizontal >= best) continue;
+      best = horizontal; nearest = spot;
+    }
+    return nearest;
+  }
+  applyLighting();
+
+  return {
+    group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,
+  };
 }
