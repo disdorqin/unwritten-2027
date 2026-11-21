@@ -22,7 +22,7 @@ import {
   createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
 } from './summit-passport-authority.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
-import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
+import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX, type SnowballThrow } from './snowball-events.js';
 import {
   SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_CELL, buildHalfAllows,
   classifyFreeWallSite, classifyWallSite, freeWallTeam, sledWallImpact, sledWallMaximumReportSpeed, wallCellCentre,
@@ -73,6 +73,8 @@ type Options = {
   townNight?: PresenceTownNightOptions;
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
+  /** Optional G-09 server-authoritative shot-time wind. Leave disabled until clients support relay kind 3. */
+  snowballWindForThrow?: (shot: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
   /** Enables legacy team matches in an isolated room. */
   formalSnowfight?: boolean;
@@ -677,7 +679,20 @@ export async function createPresenceServer(options: Options = {}) {
       if (pending.expiresAt <= time) peer.pendingThrows.delete(ballId);
     }
     if (peer.pendingThrows.has(event.ballId)) return;
-    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id });
+    // Wind is snapshotted only after all origin/rate/identity checks. Client
+    // packets are still legacy 16 B and contain no trusted weather field.
+    // An unconfigured or invalid authority falls back to the old 18 B relay.
+    let wind: Readonly<{ east: number; north: number }> | undefined;
+    if (options.snowballWindForThrow) {
+      try {
+        const sampled = options.snowballWindForThrow(event, wallNow());
+        if (sampled && Number.isFinite(sampled.east) && Number.isFinite(sampled.north) &&
+            Math.abs(sampled.east) <= 2 && Math.abs(sampled.north) <= 2) wind = sampled;
+      } catch { /* Fail closed: old no-wind relay, never crash the presence room. */ }
+    }
+    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id,
+      ...(wind && { windEast: wind.east, windNorth: wind.north }),
+    });
     const recipients = new Set<Peer>();
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) {
       if (send(recipient, relay)) recipients.add(recipient);

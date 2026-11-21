@@ -815,6 +815,47 @@ test("G-09 server wind relay adds a versioned launch vector without changing the
   assert.equal(decodeSnowballEvents(malformed), null);
 });
 
+test("G-09 presence relays server-selected launch wind, never a client field", { timeout: 8000 }, async context => {
+  const epochs: number[] = [];
+  const epoch = 123_456;
+  const { join } = await fixture(context, {
+    wallNow: () => epoch,
+    snowballWindForThrow(shot, at) {
+      assert.equal(shot.ballId, throwBall.ballId);
+      epochs.push(at);
+      return { east: -.75, north: 1.125 };
+    },
+  });
+  const [shooter, receiver] = await Promise.all([join("G09投手"), join("G09接球")]);
+  shooter.socket.send(encodePose(pose));
+  receiver.socket.send(encodePose(pose));
+  await receiver.snapshot.next(records => records.some(record => record.id === shooter.id));
+  // encodeSnowballThrow drops any extra object properties; the wire remains 16 bytes.
+  const packet = encodeSnowballThrow({ ...throwBall, windEast: 99, windNorth: 99 } as typeof throwBall);
+  assert.equal(packet.length, 16);
+  shooter.socket.send(packet);
+  assert.deepEqual(await receiver.events.next(events => events[0]?.kind === "throw"), [{
+    kind: "throw", throwerId: shooter.id, ...throwBall, windEast: -.75, windNorth: 1.125,
+  }]);
+  assert.deepEqual(epochs, [epoch]);
+});
+
+test("G-09 invalid or throwing authority fails closed to legacy 18-byte relay", { timeout: 8000 }, async context => {
+  let calls = 0;
+  const { join } = await fixture(context, {
+    snowballWindForThrow() { calls++; throw Error("weather unavailable"); },
+  });
+  const [shooter, receiver] = await Promise.all([join("回退投手"), join("回退观众")]);
+  shooter.socket.send(encodePose(pose));
+  receiver.socket.send(encodePose(pose));
+  await receiver.snapshot.next(records => records.some(record => record.id === shooter.id));
+  shooter.socket.send(encodeSnowballThrow(throwBall));
+  assert.deepEqual(await receiver.events.next(events => events[0]?.kind === "throw"), [{
+    kind: "throw", throwerId: shooter.id, ...throwBall,
+  }]);
+  assert.equal(calls, 1);
+});
+
 test("P2b relays only nearby throws and credits the first delivered victim claim exactly once", { timeout: 8000 }, async context => {
   const { join } = await fixture(context, { width: 180 });
   const [shooter, victim, watcher, distant] = await Promise.all([
