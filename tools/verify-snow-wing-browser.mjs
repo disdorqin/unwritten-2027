@@ -7,9 +7,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [checkoutPath, outputPath, mode] = process.argv.slice(2);
-assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings'),
-  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings]');
+assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings' || mode === '--target' || mode === '--target-straight'),
+  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings|--target|--target-straight]');
 const withRings = mode === '--rings';
+const withTarget = mode === '--target' || mode === '--target-straight';
+const straightTarget = mode === '--target-straight';
 const checkout = path.resolve(checkoutPath);
 const output = path.resolve(outputPath);
 const viteRoot = path.join(checkout, 'tools/voxel-tavern');
@@ -160,7 +162,7 @@ async function main() {
   p.on('response', response => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
-  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}`;
+  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}${withTarget ? '&target=1' : ''}`;
   const response = await p.goto(reviewUrl, {
     waitUntil: 'domcontentloaded', timeout: timeLeft(30_000),
   });
@@ -171,6 +173,11 @@ async function main() {
   assert.ok(!initial.claimed && !initial.registration.snowWingEligible && !initial.wing.visible);
   if (withRings) assert.deepEqual(initial.rings?.passed ?? [], []);
   else assert.equal(initial.rings ?? null, null);
+  if (withTarget) {
+    assert.equal(initial.practiceTarget?.lamps, 2, 'Target must use two real PointLight sources');
+    assert.ok(initial.practiceTarget.target.north < -3000, 'Practice target must be surveyed at the neutral flight touchdown');
+    assert.equal(initial.practiceTarget.settlement ?? null, null);
+  } else assert.equal(initial.practiceTarget ?? null, null);
   const outside = await lodgeInteraction('out-of-reach');
   assert.ok(!outside.registration.snowWingEligible && !outside.claimed);
   await walkNorth(1013.55);
@@ -205,6 +212,23 @@ async function main() {
   assert.ok(lift.launchProbe.pathClear && lift.launchProbe.drop >= 15);
   assert.equal(lift.wing.name, 'snow-wing');
   assert.ok(lift.wing.width >= 3.79);
+  if (withTarget) {
+    const guidance = await p.locator('#target-reading').evaluate(output => output.value);
+    assert.match(guidance, /练习落靶导航.*距目标.*m.*修正|练习落靶导航.*距目标.*m.*正前方/);
+  }
+  if (straightTarget) {
+    const touchdown = await watch(() => {
+      const s = window.__snowWingReview.getState();
+      return s.flight?.phase === 'landed' && !!s.practiceTarget?.settlement;
+    }, null, 85_000);
+    const landed = await capture('zd08-practice-bullseye');
+    assert.equal(landed.practiceTarget.settlement.grade, 'bullseye', 'Neutral real flight should land at its surveyed target');
+    assert.ok(landed.practiceTarget.settlement.horizontalMetres <= 2,
+      `Native bullseye miss: ${landed.practiceTarget.settlement.horizontalMetres} m`);
+    assert.equal(landed.flight.touchdown, 'soft');
+    assert.deepEqual(errors, []);
+    return { initial, lift, touchdown, landed, walkedAfterLanding: landed };
+  }
   let ringEvidence;
   if (withRings) {
     assert.equal(lift.rings?.count, 3);
@@ -269,6 +293,14 @@ async function main() {
   }, null, 85_000);
   const landed = await capture('f1-touchdown');
   assert.equal(landed.flight.touchdown, 'soft');
+  if (withTarget) {
+    assert.equal(landed.practiceTarget.settlement?.targetId, 'practice-finish');
+    assert.equal(landed.practiceTarget.settlement?.touchdown, landed.flight.touchdown);
+    assert.ok(Number.isFinite(landed.practiceTarget.settlement?.horizontalMetres));
+    assert.ok(landed.practiceTarget.settlement?.horizontalMetres >= 0);
+    const targetText = await p.locator('#target-reading').evaluate(output => output.value);
+    assert.match(targetText, /练习落靶.*距心.*m/);
+  }
   assert.equal(landed.flight.usesBothHands, false);
   assert.ok(landed.claimed && landed.registration.snowWingEligible);
   if (ringEvidence) assert.deepEqual(landed.rings.passed, ringEvidence.completed.rings.passed);
@@ -310,11 +342,14 @@ try {
     head: git('rev-parse', 'HEAD'), browserVersion, viewport, pins, screenshots, walkthrough, errors, teardownErrors, failure,
     stateAtFailure, elapsedMs: Math.round(performance.now() - started), passed: !failure && teardownErrors.length === 0,
     fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys walk from outside through the lodge to the registry and wing rack. Flight uses the 12× evidence clock and a flat terrain fallback outside P-1.' +
-      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : ''),
+      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : '') +
+      (withTarget ? ' The target is an isolated neutral-landing practice fixture, not the official ZD-08 world-host footslope course.' : '') +
+      (straightTarget ? ' The native keyboard takeoff is followed by hands-off neutral flight and a surveyed bullseye touchdown.' : ''),
   };
   await writeFile(path.join(output, 'snow-wing-browser-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify({ passed: evidence.passed, elapsedMs: evidence.elapsedMs, screenshots: screenshots.length,
     ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, rings: walkthrough?.ringEvidence?.completed.rings.passed,
+    practiceTarget: walkthrough?.landed.practiceTarget?.settlement,
     errors, teardownErrors, failure }));
   if (!failure) assert.deepEqual(teardownErrors, [], 'A fixture process failed to close cleanly');
 }

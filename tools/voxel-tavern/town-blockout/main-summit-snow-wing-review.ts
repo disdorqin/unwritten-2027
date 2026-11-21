@@ -7,6 +7,8 @@ import { summitWingPickupAvailability } from '../../../src/shared/summit-wing-pi
 import { createSnowWingVisual } from './flight-equipment-visuals';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
+import { createSummitGlideTargetRun, surveySummitGlidePracticeTarget } from './main-summit-glide-target';
+import { mountSummitGlideTargetVisual } from './main-summit-glide-target-visual';
 import { createSummitGlideRingProgress, summitGlideRingBodyLift, surveySummitGlideRings } from './main-summit-glide-rings';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
@@ -44,12 +46,14 @@ const camera = new PerspectiveCamera(54, 1, .05, 3000);
 const status = document.querySelector<HTMLElement>('#flight-status')!;
 const reading = document.querySelector<HTMLOutputElement>('#flight-reading')!;
 const ringReading = document.querySelector<HTMLOutputElement>('#ring-reading')!;
+const targetReading = document.querySelector<HTMLOutputElement>('#target-reading')!;
 const vignette = document.querySelector<HTMLElement>('#vignette')!;
 const keys = new Set<string>();
 const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
 const reviewOptions = new URLSearchParams(location.search);
 const proof = reviewOptions.get('proof') === '1';
 const showRings = reviewOptions.get('rings') === '1' || (!proof && reviewOptions.get('rings') !== '0');
+const showPracticeTarget = reviewOptions.get('target') === '1';
 const flightTimeScale = proof ? 12 : 1;
 const groundAt = (east: number, north: number) => block.heightAt(east, north) ?? 0;
 const flight = createSnowWingFlight(groundAt);
@@ -64,6 +68,16 @@ const rings = showRings ? surveySummitGlideRings({
 }, groundAt) : [];
 const course = showRings ? createSummitGlideRingProgress(rings) : undefined;
 const ringVisuals = showRings ? mountSummitGlideRingVisuals(scene, rings) : undefined;
+// Isolated demonstration only. The formal ZD-08 footslope target is registered by the world host.
+const practiceTarget = showPracticeTarget ? surveySummitGlidePracticeTarget({
+  east: practiceEast, north: edgeNorth, height: practiceHeight, heading: Math.PI,
+  speed: 7.5, claimed: true, pathClear: true,
+  drop: practiceHeight - groundAt(practiceEast, edgeNorth - 40),
+}, groundAt) : undefined;
+const targetVisual = practiceTarget ? mountSummitGlideTargetVisual(scene, practiceTarget) : undefined;
+const targetRun = practiceTarget ? createSummitGlideTargetRun('review-flight', practiceTarget, groundAt) : undefined;
+targetReading.hidden = !targetRun;
+if (targetRun) targetReading.value = '练习落靶已标定：触雪后按离靶心距离结算（非正式山脚赛道）';
 const radius = .26;
 let claimed = false;
 let groundHeading = Math.PI;
@@ -176,6 +190,16 @@ function simulate() {
     const { east, north, height, heading } = next;
     Object.assign(position, { east, north, height });
     groundHeading = heading;
+    if (air?.usesBothHands && targetRun) {
+      const result = targetRun.settle({
+        flightId: 'review-flight', accepted: true, phase: next.phase, touchdown: next.touchdown,
+        east, north, height,
+      });
+      if (result) {
+        const label = { bullseye: '正中靶心', inner: '内环', outer: '外环', outside: '靶外' }[result.grade];
+        targetReading.value = `练习落靶：${label} · 距心 ${result.horizontalMetres.toFixed(2)} m · ${result.touchdown === 'seated' ? '坐地缓冲' : '柔和触雪'}`;
+      }
+    }
   }
   observe(next);
 }
@@ -196,6 +220,14 @@ function display() {
     ringReading.value = `滑翔光圈 ${passed} / ${rings.length}`;
   }
   if (air?.usesBothHands) {
+    if (practiceTarget) {
+      const east = practiceTarget.east - air.east;
+      const north = practiceTarget.north - air.north;
+      const bearing = Math.atan2(east, north);
+      const offset = Math.atan2(Math.sin(bearing - air.heading), Math.cos(bearing - air.heading));
+      const correction = offset > .12 ? '向右修正' : offset < -.12 ? '向左修正' : '正前方';
+      targetReading.value = `练习落靶导航 · 距目标 ${Math.hypot(east, north).toFixed(0)} m · ${correction} · 触雪结算`;
+    }
     const flutter = air.stallCue === 'flutter' ? Math.sin(air.elapsed * 32) * .035 : 0;
     wing.group.position.set(point.east, point.height + 1.5, -point.north);
     wing.group.rotation.set(0, Math.PI - heading, air.bank + flutter, 'YXZ');
@@ -262,6 +294,7 @@ addEventListener('resize', resize);
 addEventListener('pagehide', () => {
   cancelAnimationFrame(frameId);
   ringVisuals?.dispose();
+  targetVisual?.dispose();
   rack.dispose();
   lodge.dispose();
   wing.dispose();
@@ -275,6 +308,8 @@ Object.defineProperty(window, '__snowWingReview', { value: Object.freeze({ getSt
   frame, flightTimeScale, paused, claimed, registration: registrar.snapshot(), position: { ...position },
   groundHeading, lodgeAction, rack: { stand: rack.stand, visible: !claimed, draws: rackDraws, inReach: rack.canReach(position) },
   rings: course ? { passed: course.snapshot(), count: rings.length, draws: ringDraws } : null,
+  practiceTarget: practiceTarget ? { target: { ...practiceTarget }, settlement: targetRun?.snapshot(),
+    lamps: targetVisual?.lights.length } : null,
   flight: flight.snapshot(), launchProbe: launchProbe && { ...launchProbe }, events: events.map(event => ({ ...event })),
   wing: { name: wing.group.name, visible: wing.group.visible, draws: wingDraws, bank: wing.group.rotation.z,
     width: wing.bounds.max.x - wing.bounds.min.x },
