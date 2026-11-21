@@ -101,5 +101,6 @@ export function createUndergroundWellBridge(host: WellHost) {
       return entry.confirmFirstFallTransfer(playerId, receipt.departure, receipt.landing);
     },
     requestCageRide: entry.requestCageRide,
+    confirmDepthCrossing: entry.confirmDepthCrossing,
   } as const;
 }
