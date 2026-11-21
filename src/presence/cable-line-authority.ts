@@ -3,7 +3,7 @@ import {
   type Za36CableRepairEvent,
   type Za36CableRepairLine,
   type Za36CableRepairState,
-} from '../../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
+} from '../shared/za36-cable-repair.js';
 
 /**
  * Cable line authority (branch window B, flag alignment spec of
