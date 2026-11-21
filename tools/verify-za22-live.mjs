@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -109,7 +109,11 @@ async function openTown(name) {
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
   assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
-  await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
+  await Promise.race([
+    page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 }),
+    page.waitForFunction(() => document.getElementById('town-entry-error')?.hidden === false,
+      null, { timeout: 90_000 }).then(() => { throw new Error('Town entry explicitly showed failure fallback'); }),
+  ]);
   await page.waitForFunction(pattern => {
     const hud = document.querySelector('#position')?.textContent ?? '';
     return new RegExp(pattern).test(hud) && (window.__za22Frame?.calls > 0 || !location.search);
@@ -279,7 +283,8 @@ async function sampleFrameCadence(page, evidence, label) {
 
 async function snapshot(page, evidence, label) {
   await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
-  evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
+  evidence.checkpoints.push({ label, lighting: await page.locator('#lighting').textContent(),
+    ...await readPose(page), wire: evidence.poses.at(-1) });
 }
 
 try {
@@ -303,7 +308,43 @@ try {
     await page.screenshot({ path: join(output, 'spawn-bare.png'), timeout: 16_000 });
     evidence.checkpoints.push({ label: 'spawn-bare', ...await readPose(page), wire: evidence.poses.at(-1) });
   }
-  if (segment !== 'crater') {
+  if (segment === 'a1-shots') {
+    const { page, evidence } = await openTown('a1-shots');
+    // These three points are actual in-game destination anchors, not injected
+    // test positions. The screenshots remain first-person WebGL frames.
+    const views = [
+      { id:'plaza-exit', label:'西南河畔街巷', east:161.5, north:165.5, yaw:-1.15 },
+      { id:'approach-mid', label:'羊圈', east:70, north:215, yaw:-2.25 },
+      { id:'west-gate', label:'陨石坑口', east:2, north:159, yaw:-1.57 },
+    ];
+    for (const view of views) {
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({ label: view.label });
+      await page.waitForFunction(({pattern,east,north})=>{
+        const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return p && Math.hypot(+p[1]-east,+p[2]-north)<1.5;
+      },{pattern:positionPattern.source,east:view.east,north:view.north},{timeout:45_000});
+      await face(page,evidence,view.yaw);
+      // Night is the initial town state. A real UI toggle switches to day.
+      if ((await page.locator('#lighting').textContent()) !== '雪夜') {
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼','day scene toggle failed');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    report.startupEvidence={
+      validSpawn:true, actualJumpDestinations:await page.locator('#jump option').count(),
+      canvasVisible:await page.locator('#scene canvas').isVisible(),
+      firstPersonHud:await page.locator('#position').textContent(),
+    };
+  }
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
@@ -381,6 +422,21 @@ try {
 } catch (error) {
   report.failure = error instanceof Error ? error.stack : String(error);
   if (lastPage && !lastPage.isClosed()) {
+    // Preserve DOM-entry state; the entry controller catches lazy-import
+    // rejection, so it may show the fallback without any JS pageerror.
+    try { report.entryDiagnostics = await lastPage.evaluate(() => ({
+      bodyClass: document.body.className,
+      readyState: document.readyState,
+      entryHidden: document.getElementById('town-entry')?.hidden,
+      loadingHidden: document.getElementById('town-entry-loading')?.hidden,
+      failureHidden: document.getElementById('town-entry-error')?.hidden,
+      retryHidden: document.getElementById('town-entry-retry')?.hidden,
+      jumpCount: document.querySelectorAll('#jump option').length,
+      canvasCount: document.querySelectorAll('#scene canvas').length,
+      statusText: document.getElementById('town-entry')?.textContent?.slice(0,400),
+    })); } catch (diagnosticError) {
+      report.entryDiagnosticError = String(diagnosticError);
+    }
     try {
       report.lastPose = await readPose(lastPage);
       await lastPage.screenshot({ path: join(output, 'failed-position.png'), timeout: 10_000 });
