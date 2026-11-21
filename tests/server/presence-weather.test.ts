@@ -11,7 +11,7 @@ const windAt = dawn + 30 * minute;
 const whiteoutAt = dawn + 40 * minute;
 type Message = {
   type: string; kind?: string; name?: string; self?: boolean; id?: number; epochMs?: number;
-  townOutdoorWeather?: unknown; townNightWindow?: unknown; weather?: string; at?: number; expiresAt?: number;
+  townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: number; townNightWindow?: unknown; weather?: string; at?: number; expiresAt?: number;
   state?: unknown;
 };
 
@@ -66,6 +66,7 @@ test('G-09 real primary + secondary Presence WebSockets broadcast one shared pha
   ]);
   const clear = townOutdoorWeatherAt(epoch, dawn);
   assert.deepEqual(first.joined.townOutdoorWeather, clear);
+  assert.equal(first.joined.townOutdoorWeatherDawnEpoch, dawn);
   assert.deepEqual(second.joined.townOutdoorWeather, clear);
   assert.deepEqual(mountain.joined.townOutdoorWeather, clear);
 
@@ -140,7 +141,7 @@ test('G-09 one failed warning receipt never publishes a phantom warning or crash
 test('G-09 rejects a primary/follower split brain and mismatched ZB-17 dawn origin', async t => {
   await assert.rejects(createPresenceServer({
     host: '127.0.0.1', port: 0, townOutdoorWeather: { dawnEpoch: dawn },
-    townOutdoorWeatherFeed: { snapshot: () => townOutdoorWeatherAt(dawn, dawn), subscribe: () => () => {} },
+    townOutdoorWeatherFeed: { dawnEpoch: dawn, snapshot: () => townOutdoorWeatherAt(dawn, dawn), subscribe: () => () => {} },
   }), /cannot author and follow/);
   await assert.rejects(createPresenceServer({
     host: '127.0.0.1', port: 0, townNight: { dawnEpoch: dawn + 10, scheduleAt: () => undefined },

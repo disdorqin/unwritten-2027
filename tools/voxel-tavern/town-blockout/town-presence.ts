@@ -463,7 +463,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        townNightWindow?: unknown; townOutdoorWeather?: unknown; state?: unknown;
+        townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
@@ -622,7 +622,7 @@ export function createTownPresence(
             if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
-          townWeather.join(message.townOutdoorWeather);
+          townWeather.join(message.townOutdoorWeather, message.townOutdoorWeatherDawnEpoch);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
             resetRetry();
@@ -888,6 +888,7 @@ export function createTownPresence(
     getTownNightWindow: townNight.state,
     /** True server-authored weather state or undefined when a legacy room lacks G-09. */
     getTownOutdoorWeather: townWeather.state,
+    getTownWeatherDawnEpoch: townWeather.dawnEpoch,
     onTownOutdoorWeatherWarning: townWeather.onWarning,
     townNightConnectedAt: townNight.connectedAt,
     onTownNightBeacon: townNight.onBeacon,
