@@ -1,0 +1,78 @@
+type HeightPoint = readonly [east: number, north: number, height: number];
+type Bounds = readonly [west: number, south: number, east: number, north: number];
+
+const ridge: readonly HeightPoint[] = [
+  [0, 440, 48], [30, 455, 55], [90, 485, 88], [160, 498, 120], [250, 502, 116],
+  [340, 492, 110], [415, 480, 106], [500, 485, 88], [580, 495, 65], [640, 480, 55],
+];
+
+export const northRailLedge: readonly HeightPoint[] = [
+  [112, 417, 31.5], [175, 442, 44], [242, 448, 57], [300, 449, 68], [365, 435, 60], [431, 410, 47],
+];
+export const northRailLedgeWidth = 12;
+const forestDock = { east: 112, north: 420, height: 31.5, halfLength: 10 };
+const forestLedgeEnd = northRailLedge[1];
+
+export function shapeForestRailApproach(east: number, north: number, elevation: number) {
+  const [endEast, endNorth, endHeight] = forestLedgeEnd;
+  if (east < forestDock.east - forestDock.halfLength - 5 || east >= endEast) return elevation;
+  const platformEast = forestDock.east + forestDock.halfLength;
+  const blendToLedge = fade((east - platformEast) / (endEast - platformEast));
+  const center = mix(forestDock.north, endNorth, blendToLedge);
+  const mask = 1 - fade((Math.abs(north - center) - northRailLedgeWidth / 2) / 5);
+  const height = mix(forestDock.height, endHeight, blendToLedge);
+  return mix(elevation, Math.min(height, elevation), mask);
+}
+export const northRidgeApproachTrail = [[291, 452.5], [291, 458], [296, 466]] as const;
+
+export const northRidgePads = [
+  { bounds: [120, 308, 300, 345], height: 30, shoulder: 8 },
+  { bounds: [320, 468, 344, 484], height: 95, shoulder: 5 },
+  { bounds: [372, 439, 398, 457], height: 78, shoulder: 5 },
+  { bounds: [452, 411, 472, 425], height: 65, shoulder: 5 },
+] as const satisfies readonly { bounds: Bounds; height: number; shoulder: number }[];
+
+function westToEast(points: readonly HeightPoint[], east: number): HeightPoint {
+  for (let i = 1; i < points.length; i++) {
+    const [x0, n0, h0] = points[i - 1];
+    const [x1, n1, h1] = points[i];
+    if (east <= x1 || i === points.length - 1) {
+      const u = (east - x0) / (x1 - x0);
+      return [east, n0 + u * (n1 - n0), h0 + u * (h1 - h0)];
+    }
+  }
+  return points[0];
+}
+
+function fade(value: number) {
+  const t = Math.min(1, Math.max(0, value));
+  return t * t * (3 - 2 * t);
+}
+
+function mix(from: number, to: number, t: number) {
+  return from + t * (to - from);
+}
+
+function boxDistance(east: number, north: number, [w, s, e, n]: Bounds) {
+  return Math.hypot(Math.max(w - east, 0, east - e), Math.max(s - north, 0, north - n));
+}
+
+export function mountainElevation(east: number, north: number) {
+  const [, crestNorth, crestHeight] = westToEast(ridge, east);
+  const [, ledgeNorth, ledgeHeight] = westToEast(northRailLedge, east);
+  // Keep the north face open to its descending drainage basin. The eastern
+  // shoulder terminates on the station approach instead of carrying the crest down.
+  const stationGround = (28 + 30) / 2;
+  const shoulderFloor = east <= 431 ? 30 : mix(30, stationGround, fade((east - 431) / (477 - 431)));
+  const foothillNorth = 308;
+  const lowerLedgeHeight = Math.max(shoulderFloor, ledgeHeight);
+  let height = north >= crestNorth ? Math.max(35, crestHeight - .55 * (north - crestNorth)) :
+    north >= ledgeNorth ? mix(lowerLedgeHeight, crestHeight, fade((north - ledgeNorth) / Math.max(8, crestNorth - ledgeNorth))) :
+    mix(shoulderFloor, lowerLedgeHeight, Math.max(0, (north - foothillNorth) / Math.max(1, ledgeNorth - foothillNorth)));
+  for (const pad of northRidgePads) {
+    height = mix(height, pad.height, 1 - fade(boxDistance(east, north, pad.bounds) / pad.shoulder));
+  }
+  // The grass-mouth point is a wide low mound adjoining the level service apron.
+  height = mix(height, 38, 1 - fade(Math.hypot(east - 150, north - 318) / 8));
+  return height;
+}

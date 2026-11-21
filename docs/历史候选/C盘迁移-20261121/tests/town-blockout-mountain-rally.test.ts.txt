@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createMountainRally, rallyCourses, rallyPrettyFlightMs } from '../tools/voxel-tavern/town-blockout/mountain-rally';
+
+test('mountain rally preserves the Muse checkpoint chainages and cumulative targets', () => {
+  const expected = {
+    R1: [[0, 250, 500, 1000, 1700, 2000], [0, 19, 38, 89, 160, 186]],
+    R2: [[0, 275, 550, 850, 1150], [0, 29, 58, 76, 93]],
+    R5: [[0, 100, 200, 360], [0, 5, 9, 21]],
+    R3: [[0, 260, 520], [0, 21, 42]],
+  } as const;
+  for (const route of Object.keys(expected) as (keyof typeof expected)[]) {
+    let total = 0;
+    const actual = rallyCourses[route].checkpoints;
+    assert.deepEqual(actual.map(cp => cp.metres), expected[route][0]);
+    assert.deepEqual(actual.map(cp => (total += cp.targetMs) / 1000), expected[route][1]);
+  }
+  assert.deepEqual(rallyCourses.R5.checkpoints.filter(cp => 'flight' in cp).map(cp => cp.metres), [100, 200]);
+  assert.equal(rallyPrettyFlightMs, 1200);
+});
+
+test('R1 accepts only ridden gates in order, records each split difference and delivers the result once', () => {
+  const simulatedSegmentMs = [19_000, 24_000, 51_000, 66_000, 26_000];
+  const distances = [0, 250, 500, 1000, 1700, 2000];
+  const saved = new Map<string, string>();
+  const storage = { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => saved.set(key, value) };
+  let now = 10_000;
+  const rally = createMountainRally('R1', () => now, storage);
+  const pass = (metres: number, riding = true) => rally.update(riding, cp => cp.metres === metres);
+  assert.equal(pass(0, false), undefined);
+  assert.equal(rally.running(), false);
+  assert.equal(pass(250), undefined);
+  assert.equal(rally.running(), false);
+  assert.equal(pass(0), undefined);
+  assert.equal(rally.running(), true);
+  assert.equal(pass(500), undefined);
+  assert.equal(rally.nextCheckpoint().metres, 250);
+  const splits = simulatedSegmentMs.map((ms, index) => {
+    now += ms;
+    return pass(distances[index + 1])!;
+  });
+  assert.deepEqual(splits.map(split => split.cumulativeMs), [19000, 43000, 94000, 160000, 186000]);
+  assert.deepEqual(splits.map(split => split.differenceMs), [0, 5000, 0, -5000, 0]);
+  assert.deepEqual(splits.map(split => split.withinTarget), [true, false, true, true, true]);
+  assert.deepEqual(rally.takeResult(), { totalMs: 186000, splits });
+  assert.equal(rally.takeResult(), undefined);
+  assert.equal(createMountainRally('R1', () => now, storage).best(), 186000);
+  assert.equal(createMountainRally('R5', () => now, storage).best(), undefined);
+});
