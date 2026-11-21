@@ -36,6 +36,11 @@ function saveReceipt(path: string, at: number) {
   }
 }
 
+// Reuse the already-audited atomic receipt format for G-09 warning delivery.
+// Keeping both beacon and weather receipts on the same primitive avoids two
+// subtly different restart/rename crash-safety implementations.
+export { loadReceipt as loadTownTimestampReceipt, saveReceipt as saveTownTimestampReceipt };
+
 export function readTownNightOptions(schedule: string | undefined, receiptPath: string | undefined): PresenceTownNightOptions | undefined {
   if (schedule === undefined && receiptPath === undefined) return;
   if (!schedule || !receiptPath?.trim()) {
@@ -63,6 +68,7 @@ export function readTownNightOptions(schedule: string | undefined, receiptPath: 
     return ordinary(now);
   }
   return {
+    dawnEpoch: config.dawnEpoch,
     scheduleAt,
     restoredBeaconAt: loadReceipt(receiptPath),
     saveBeacon: at => saveReceipt(receiptPath, at),

@@ -4,6 +4,9 @@ import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
 import { skyCityPresenceBounds } from '../shared/sky-city-presence-domain.js';
 import { readTownNightOptions } from './town-night-config.js';
+import { readTownWeatherOptions } from './town-weather-config.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // The town night clock is core game canon (one game day = 10 minutes:
 // 6 daylight, 4 night; the thirteenth bell sounds 60 s after dusk), so it
@@ -27,6 +30,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     process.env.TOWN_NIGHT_SCHEDULE || defaultTownNightSchedule,
     process.env.TOWN_NIGHT_BEACON_RECEIPT || defaultTownNightBeaconReceipt,
   );
+  const townWeather = readTownWeatherOptions(townNight!.dawnEpoch!,
+    process.env.TOWN_WEATHER_WARNING_RECEIPT || join(tmpdir(), 'unwritten-town-weather-warning-receipt.json'));
   const server = await createPresenceServer({
     host,
     port: Number(process.env.PRESENCE_PORT ?? 8090),
@@ -36,6 +41,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     onMascotClaimRejected: total => console.info('Mascot actor rejected claims:', total),
     requestListener,
     townNight,
+    // G-09 reuses the exact ZB-17 dawn origin; no second weather calendar.
+    townOutdoorWeather: townWeather,
     ceremonyStartAt,
   });
   const separateRooms: Awaited<ReturnType<typeof createPresenceServer>>[] = [];
@@ -45,6 +52,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
       [process.env.PRESENCE_SKY_PORT, skyCityPresenceBounds]] as const) {
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
+        townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
       }));
     }
   } catch (error) {
