@@ -15,6 +15,7 @@ import { mountZa36RopeStay } from './town-za36-rope-stay';
 import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 import { buildCraterDensityA2 } from './town-crater-density-a2';
 import { craterWestUpliftCandidate } from './town-za34-crater-uplift';
+import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -49,7 +50,7 @@ type WestCraterRoad = {
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
 export function mountWestCraterRoad(
   northLimit: number, westTownHeightAt: (north: number) => number,
-  options: { za34UpliftCandidate?: boolean } = {},
+  options: { za34UpliftCandidate?: boolean; za34DistantPaletteCandidate?: boolean } = {},
 ): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
@@ -58,10 +59,22 @@ export function mountWestCraterRoad(
   const yaw = approachBearing - meteorCraterFixturePlan.mainTrail.startBearing;
   const anchor = { east: survey.east, north: survey.north, rimHeight, yaw };
   const crater = mountMeteorCraterSurface(anchor);
+  if (options.za34DistantPaletteCandidate) {
+    const walkSurface = crater.group.getObjectByName('meteor-crater-walk-mesh');
+    if (!walkSurface || !(walkSurface as { isMesh?: boolean }).isMesh) {
+      throw new Error('ZA34 distant palette requires the real B-01 crater walk mesh');
+    }
+    crater.group.userData.za34DistantPaletteAudit = applyCraterDistancePalette(
+      walkSurface as import('three').Mesh,
+    );
+  }
   const lip = crater.trailPoint(0);
   const group = new Group();
   group.name = 'meteor-crater-west-road';
   group.add(crater.group);
+  if (options.za34DistantPaletteCandidate) {
+    group.userData.za34DistantPaletteAudit = crater.group.userData.za34DistantPaletteAudit;
+  }
 
   const tileGround = new MeshStandardMaterial({ color: 0xc1cedc, roughness: 1 });
   const eastCount = -survey.west + 1;
