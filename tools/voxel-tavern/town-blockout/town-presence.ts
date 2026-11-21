@@ -31,6 +31,10 @@ import {
   pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
+import type {
+  Za36CableRepairEvent, Za36CableRepairLine, Za36CableRepairState,
+} from './town-za36-cable-repair';
+import type { CableLineFlags } from '../../../src/presence/cable-line-authority';
 import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
@@ -143,6 +147,9 @@ export function createTownPresence(
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   let bellSupported = false;
   let iceThroneSupported = false;
+  let cableLineSupported = false;
+  const cableLineStates = new Map<Za36CableRepairLine, Za36CableRepairState>();
+  let cableLineFlags: CableLineFlags = { cableLine1Open: false, cableLine2Open: false };
   let crownedId: number | null = null;
   const bellEvents: BellEvent[] = [];
   let onBellEvent: ((event: BellEvent) => void) | undefined;
@@ -467,6 +474,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
+        cableLine?: boolean; line?: unknown; flags?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
@@ -479,6 +487,19 @@ export function createTownPresence(
         if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
           if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
           else townNight.acceptBeacon(message);
+        }
+        return;
+      }
+      if (message.type === 'cable-line') {
+        const line = message.line === 1 || message.line === 2 ? message.line : undefined;
+        const state = message.state as Za36CableRepairState | undefined;
+        if (line && state && typeof state === 'object' && state.line === line &&
+          typeof state.version === 'number' && typeof state.stage === 'string') {
+          cableLineStates.set(line, state);
+          const flags = message.flags as CableLineFlags | undefined;
+          if (flags && typeof flags.cableLine1Open === 'boolean' && typeof flags.cableLine2Open === 'boolean') {
+            cableLineFlags = { cableLine1Open: flags.cableLine1Open, cableLine2Open: flags.cableLine2Open };
+          }
         }
         return;
       }
@@ -608,6 +629,8 @@ export function createTownPresence(
             crownedId = null;
           }
           iceThroneSupported = message.iceThrone === true;
+          cableLineSupported = message.cableLine === true;
+          if (!cableLineSupported) { cableLineStates.clear(); cableLineFlags = { cableLine1Open: false, cableLine2Open: false }; }
           haveId = true;
           link.joined(roster.size + 1);
           joinedId = id;
@@ -895,6 +918,14 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    /** Latest server-authored cable repair state for a line, or undefined
+     * when the room predates the cable authority or no frame arrived yet. */
+    getCableLineState: (line: Za36CableRepairLine) => cableLineSupported ? cableLineStates.get(line) : undefined,
+    getCableLineFlags: (): CableLineFlags => cableLineFlags,
+    /** Submit one repair event; the authority's broadcast frame is the
+     * only state change a client ever applies. Returns false offline. */
+    sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
+      cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
     getTownNightWindow: townNight.state,
     /** True server-authored weather state or undefined when a legacy room lacks G-09. */
     getTownOutdoorWeather: townWeather.state,

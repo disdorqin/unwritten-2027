@@ -29,6 +29,7 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
 import { addTerrainMeshes } from './terrain-mesh';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
+import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
@@ -70,7 +71,7 @@ import {
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
-import { wallCellOf } from '../../../src/presence/snowfight';
+import { WALL_CELL, wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires, pineCampfireId } from './town-campfires';
 import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
@@ -531,6 +532,32 @@ const cloudRoute = createZa22CloudRoute({
   enterOrExit: transferCloudTerminal,
   view: (title, message) => { activityContext.open(title, message); },
 });
+// 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
+// derived per frame from the server-authored state in town-presence.
+// Anchors follow the repair spec's three fault points: the rust brake
+// at the base station brake gate, the derailed cable at the mid-line
+// tower between base and mid stations, the counterweights at the mid
+// station tower with the hanging frame beside it. Physical props are
+// D3 form work; the anchors are the host-supplied positions.
+const cableRepairHost1 = createCableRepairHost(1, {
+  brake: { east: 524.6, north: 326.6 },
+  cableWheel: { east: 483, north: 424.5 },
+  weightTower: { east: 436.8, north: 523.2 },
+  weightFrame: { east: 440.6, north: 517.4 },
+});
+const cableStationPoints = [[526, 329], [440, 520], [336, 640]] as const;
+let cableStageSeen: string | undefined;
+let sledWasRiding = false;
+let sledSpeedBeforeStop = 0;
+/** A hard impact on a station structure wakes line 1 (host mapping:
+ * sled strikes and snow-wall collapses qualify, hand snowballs never). */
+function reportCableWake(kind: 'sled' | 'snow-wall', east: number, north: number) {
+  const state = presence.getCableLineState(1);
+  if (!state || state.stage !== 'dormant') return;
+  if (!cableStationPoints.some(([e, n]) => Math.hypot(east - e, north - n) <= 15)) return;
+  const event = cableWakeEvent(kind);
+  if (event) presence.sendCableRepair(1, event);
+}
 function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
   const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
   return { model, duty };
@@ -586,7 +613,13 @@ let setMountedRackVehicle: ((spot: { x: number; n: number; y: number; yaw: numbe
 const sledDrift = createSledDrift();
 const sledWallCollider = createSledWallCollider(
   (gx, gy) => teamFight.wallColumnAt(gx, gy),
-  (gx, gy, speed) => presence.sendSnowfightSledSmash(gx, gy, speed),
+  (gx, gy, speed) => {
+    const sent = presence.sendSnowfightSledSmash(gx, gy, speed);
+    // A sled smashing a snow wall against a station structure is one of
+    // the audited wake impacts (this report only fires when layers broke).
+    reportCableWake('snow-wall', (gx + .5) * WALL_CELL, (gy + .5) * WALL_CELL);
+    return sent;
+  },
 );
 const sledWorld: Parameters<typeof createSledRide>[0] = {
   height: sledGroundAt,
@@ -2585,6 +2618,15 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
+  // 缆车修缮 (B2 host): the host offers the repair action for where the
+  // player stands under the latest broadcast state; running it only
+  // submits the event — the authority's frame is what changes the world.
+  const repairState = homeReturn ? undefined : presence.getCableLineState(1);
+  if (repairState) {
+    cableRepairHost1.sync(repairState);
+    const repair = cableRepairHost1.actions(repairState, { east: x, north: n })[0];
+    if (repair) return { label: repair.label, run() { presence.sendCableRepair(1, repair.event); } };
+  }
   // ZA-36 crater outside works: public-layer E actions only (salvage ①).
   // Routed through the existing E affordance, not a disconnected preview UI.
   const works = homeReturn ? undefined : westCraterRoad?.craterActions;
@@ -3617,6 +3659,13 @@ renderer.setAnimationLoop(now => {
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
+        if (sledRide.active()) { sledWasRiding = true; sledSpeedBeforeStop = sledRide.speed(); }
+        else if (sledWasRiding) {
+          sledWasRiding = false;
+          // A tumble-class crash (speed > 6, the sled's own crash kind)
+          // against a station structure is an audited wake impact.
+          if (sledRide.recovering() && sledSpeedBeforeStop > 6) reportCableWake('sled', x, n);
+        }
         if (sledRide.active() || sledRide.recovering()) {
           snowMoveScale = chillMoveScale = 1;
           lakeSkateMotion.reset();
@@ -3717,6 +3766,19 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  const cableState1 = presence.getCableLineState(1);
+  if (cableState1) {
+    cableRepairHost1.sync(cableState1);
+    if (cableStageSeen !== cableState1.stage) {
+      if (cableStageSeen !== undefined && cableState1.stage === 'one-station') {
+        announceActivity('缆车被震醒了，只先动一站');
+      }
+      if (cableStageSeen !== undefined && cableState1.stage === 'full-line') {
+        announceActivity('缆车修通了，全线通车');
+      }
+      cableStageSeen = cableState1.stage;
+    }
+  }
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.
