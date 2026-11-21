@@ -11,11 +11,17 @@ function nearBoardingPoint(feet: SummitCablePoint, point: SummitCablePoint) {
     Math.abs(feet.height - point.height) <= .43 + roundoff;
 }
 
-export function createMainSummitCableTravel(cable: SummitCable) {
+/** An optional server-backed boarding policy; omitted for the legacy isolated P-2 geometry review. */
+export type SummitCableBoardingPolicy = (input: Readonly<{
+  nowMs: number; cabinIndex: SummitCableRide['cabinIndex'];
+  station: 'cloud-deck' | 'summit'; direction: 'up' | 'down';
+}>) => boolean;
+
+export function createMainSummitCableTravel(cable: SummitCable, boardingAllowed?: SummitCableBoardingPolicy) {
   return {
     attemptBoard(nowMs: number, cabinIndex: SummitCableRide['cabinIndex'], feet: SummitCablePoint): SummitCableRide | undefined {
-      const { station } = cable.cabinsAt(nowMs)[cabinIndex];
-      if (!station) return;
+      const { station, direction } = cable.cabinsAt(nowMs)[cabinIndex];
+      if (!station || (boardingAllowed && !boardingAllowed({ nowMs, cabinIndex, station, direction }))) return;
       const { approach, board } = cable.ropes[cabinIndex].dock(station);
       if (nearBoardingPoint(feet, approach) || nearBoardingPoint(feet, board)) return { cabinIndex };
     },
