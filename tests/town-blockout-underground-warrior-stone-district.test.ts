@@ -266,7 +266,10 @@ test('U-10 renderer and presence use exactly the same eleven immutable station I
   if (mounted.kind !== 'ready') assert.fail();
   assert.equal(mounted.feet.length, warriorDistrictStations.length);
   for (const station of warriorDistrictStations) {
-    const found = mounted.feet.find(item => item.id === station.id && item.role === station.role);
+    const found: { id: string; role: string;
+      foot: readonly [number, number, number];
+      world: { east: number; north: number; height: number } } | undefined =
+      mounted.feet.find(item => item.id === station.id && item.role === station.role);
     assert.ok(found, 'rendered action missing server registered station ' + station.id);
     assert.deepEqual(found.foot, station.localFoot);
     assert.deepEqual(found.world, warriorDistrictTransform(surveyFixture, station.localFoot),

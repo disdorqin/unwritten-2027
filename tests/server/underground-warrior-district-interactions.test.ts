@@ -105,9 +105,9 @@ test('U-10 wrong registered layer, unsupported foot, bad player ID or blocked si
   const action = { playerId: 'a', requestId: 'q', locationId: f.first.id, role: f.first.role };
   f.move('a', { ...frame, east: frame.east + 300 });
   assert.equal((await f.service.interact(action)).kind, 'unreachable');
-  f.move('a', { ...f.first.worldFoot, domainId: frame.domainId }, 'town');
+  f.move('a', { ...f.first.worldFoot }, 'town');
   assert.equal((await f.service.interact(action)).kind, 'unreachable');
-  f.move('a', { ...f.first.worldFoot, domainId: frame.domainId });
+  f.move('a', { ...f.first.worldFoot });
   f.setLOS(false);
   assert.equal((await f.service.interact(action)).kind, 'unreachable');
   f.setLOS(true);
@@ -146,7 +146,7 @@ test('U-10 durable receipt does not let one request ID be reused to obtain a dif
     locationId: f.first.id, role: f.first.role } as const;
   assert.equal((await f.service.interact(first)).kind, 'submitted');
   const cover = f.all.find(s => s.id === f.first.id && s.role === 'take-cover')!;
-  f.move('a', { ...cover.worldFoot, domainId: frame.domainId });
+  f.move('a', { ...cover.worldFoot });
   assert.deepEqual(await f.service.interact({ ...first, role: 'take-cover' }),
     { kind: 'conflicting-request' });
   assert.equal(f.calls.length, 1);
