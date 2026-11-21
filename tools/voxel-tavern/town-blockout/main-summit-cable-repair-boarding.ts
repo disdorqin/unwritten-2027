@@ -1,4 +1,5 @@
-import type { SummitCableRepairState } from '../../../src/shared/main-summit-cable-repair';
+import { summitCableLine2Open, summitCableSingleTripCabin,
+  type SummitCableRepairState } from '../../../src/shared/main-summit-cable-repair';
 import type { SummitCableBoardingPolicy } from './main-summit-cable-travel';
 
 /**
@@ -13,12 +14,13 @@ export function createSummitRepairBoardingPolicy(
   return ({ nowMs, cabinIndex, station, direction }) => {
     const status = state();
     if (!status) return false;
-    if (status.stage === 'single-trip') {
+    const releasedCabin = summitCableSingleTripCabin(status);
+    if (releasedCabin !== null) {
       // Before all three repairs, only the cab released by a climber at
       // the summit may descend one station. No lower-station ascent.
       return station === 'summit' && direction === 'down' &&
-        status.singleTripCabin === cabinIndex;
+        releasedCabin === cabinIndex;
     }
-    return status.stage === 'open' && daylightService(nowMs);
+    return summitCableLine2Open(status) && daylightService(nowMs);
   };
 }
