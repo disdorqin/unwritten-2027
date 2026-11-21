@@ -13,6 +13,7 @@ import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
 import { buildCraterSurveyM1 } from './town-crater-survey-m1';
+import { buildCraterDensityA2 } from './town-crater-density-a2';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -29,6 +30,7 @@ type WestCraterRoad = {
   readonly outerWorks: ReturnType<typeof buildCraterOuterWorks>;
   readonly ejecta: ReturnType<typeof buildZa36CraterEjecta>;
   readonly midground: ReturnType<typeof buildZa36CraterMidground>;
+  readonly densityA2: ReturnType<typeof buildCraterDensityA2>;
   readonly ropeStay: ReturnType<typeof mountZa36RopeStay> | undefined;
   readonly surveyM1: ReturnType<typeof buildCraterSurveyM1> | undefined;
   readonly craterActions: {
@@ -185,6 +187,17 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     ...ejecta.placements.map(site => ({ east: site.east, north: site.north, radius: site.footprint })),
   ]);
   group.add(midground.group);
+  // A2 density backfill: keeps out of everything already placed — the fence
+  // and wall lines, the mainline sites, and every earlier dressing placement.
+  const densityA2 = buildCraterDensityA2(road, [
+    ...fenceExclusions,
+    ...mouthWorks.sites, ...outerWorks.sites,
+    ...rim.placements, ...camp.placements,
+    ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),
+    ...ejecta.placements.map(site => ({ east: site.east, north: site.north, radius: site.footprint })),
+    ...midground.placements.map(site => ({ east: site.east, north: site.north, radius: site.radius })),
+  ]);
+  group.add(densityA2.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
   const ropeStay = mountZa36RopeStay(road);
@@ -209,5 +222,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     firewood: mouthWorks.firewood,
     setNight(night: boolean) { mouthWorks.setNight(night); outerWorks.setNight(night); },
   };
-  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, ropeStay, surveyM1, craterActions };
+  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
 }
