@@ -5,6 +5,7 @@ import {
 import survey from '../../fixtures/main-summit-snow-belt-survey.json';
 import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './main-summit-block';
 import { createMainSummitCable } from './main-summit-cable';
+import { createMainSummitCloudLayer } from './main-summit-cloud-layer';
 import { mountMainSummitCable } from './main-summit-cable-scene';
 import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
@@ -92,7 +93,9 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
   return new Mesh(geometry, new MeshLambertMaterial({ color: '#bac2bf', side: DoubleSide }));
 }
 
-export function mountMainSummitAssembly(owner: Group, epochMs: number) {
+/** The optional official wind is supplied by the shared ZB-20 host, not generated in the summit scene. */
+export function mountMainSummitAssembly(owner: Group, epochMs: number,
+  officialWind?: () => Readonly<{ east: number; north: number }> | undefined) {
   const group = new Group();
   group.name = 'main-summit-assembly';
   group.position.set(summitAssemblyAnchor.east, 0, -summitAssemblyAnchor.north);
@@ -102,6 +105,14 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const frontSnowAt = createFrontTerraceSnow();
   const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
   group.add(block.coarse);
+  // Mount the existing, fully built P-8 layer in the real ZA-22 host, not only in
+  // preview-main-summit-clouds. With no official wind feed, banks stay calm;
+  // no local weather generator or client-side random gusts are introduced.
+  const clouds = createMainSummitCloudLayer({
+    bounds: mainSummitBounds, summit: mainSummitLayout.summit,
+    shoulders: mainSummitLayout.shoulders, heightAt: block.heightAt,
+  });
+  group.add(clouds.group);
 
   const cable = createMainSummitCable(epochMs, 10_000, arrivalHeight);
   const cableView = mountMainSummitCable(group, cable, block.heightAt);
@@ -153,6 +164,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     if (ribbon.parent === group && snow.parent === group) parts.push('P-3');
     if (cabin.group.parent === group && cloudRegistration.group.parent === group) parts.push('P-4');
     if (stations.group.parent === group) parts.push('P-7');
+    if (clouds.group.parent === group) parts.push('P-8');
     if (pavilionGroup.parent === group && pavilionGroup.children.length === cloudPavilionSites.length) parts.push('P-9');
     return parts;
   }
@@ -181,13 +193,19 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     leaveGate: block.leave,
     setFrontDetail: (visible: boolean) => { cloudRegistration.group.visible = visible; },
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },
-    update: cableView.update,
+    update(now: number) {
+      const wind = officialWind?.();
+      clouds.update(now, wind && Number.isFinite(wind.east) && Number.isFinite(wind.north)
+        ? wind : { east: 0, north: 0 });
+      return cableView.update(now);
+    },
     interact(east: number, north: number, height: number) {
       return north < seam ? registration.interact('cloud-deck', summitWorldPoint(east, north, height))
         : registration.interact('summit', { east, north, height });
     },
     dispose() {
       wreckage.dispose();
+      clouds.dispose();
       stations.dispose();
       cableView.dispose();
       cabin.dispose();
