@@ -377,6 +377,36 @@ test('U-17 certified between-layer pump annex composes with U-15 mine without st
   assert.equal(f.parent.children.length, 0);
 });
 
+test('U-18 shared warm-fire camps use host-recognized sites inside the same registered mine scene', () => {
+  const f = fixture();
+  const site = { layer: f.pool.domainId, east: f.pool.east + 2,
+    north: f.pool.north + 3, height: f.pool.height };
+  const camp = { id: 'camp/test-one', at: site, founderId: 'miner',
+    fire: { fuel: 7, atMs: 100, phase: 'burning' as const } };
+  const expeditionRuntime = {
+    readCamps: () => [camp],
+    readRevision: () => 7,
+    supportsCamp: () => true,
+    readLightBudget: () => 1,
+    readViewer: () => undefined,
+    canReach: () => false,
+    dispatch: () => assert.fail('no such player was accepted'),
+    supportsBuildFoot: () => true,
+  };
+  const mounted = mountUndergroundMineDomain({ ...f.host, expeditionRuntime });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail();
+  assert.ok(mounted.expedition);
+  assert.equal(f.parent.children.length, 2);
+  const fire = mounted.expedition.group.getObjectByName('u18-expedition-camp/' + camp.id);
+  assert.ok(fire);
+  assert.deepEqual(fire.position.toArray(), [site.east, site.height, -site.north]);
+  mounted.sync();
+  assert.ok(fire.getObjectByName('u18-flame-stack')?.visible);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
 test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {
   const f = fixture();
   const straight = mountUndergroundMineDomain({ ...f.host, mineYaw: 0 });

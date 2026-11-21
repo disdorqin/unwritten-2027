@@ -12,6 +12,7 @@ import { mountUndergroundCampScene } from './underground-camp-scene.js';
 import { createUndergroundOreVein } from './underground-ore-vein.js';
 import { createUndergroundRecoveryFirePresentation, type UndergroundRecoveryFireSite } from './underground-recovery-fires.js';
 import { mountUndergroundPumpHouseScene } from './underground-pump-house-scene.js';
+import { mountUndergroundExpeditionCampScene } from './underground-expedition-camp-scene.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -53,6 +54,8 @@ type Host = Readonly<{
   }>;
   /** U-17's between-layer world site is certified separately from the mine landing. */
   pumpHouseRuntime?: Omit<Parameters<typeof mountUndergroundPumpHouseScene>[0], 'parent'>;
+  /** U-18 shared host camp receipts, dynamically accepted by U-13 light and safety sources. */
+  expeditionRuntime?: Omit<Parameters<typeof mountUndergroundExpeditionCampScene>[0], 'parent'>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
   readGateStage?(): UndergroundMineGateStage | undefined;
   /** Host-approved light budget and offering receipts; never grant light from render state. */
@@ -193,6 +196,9 @@ export function mountUndergroundMineDomain(host: Host) {
   const pumpHouse = host.pumpHouseRuntime && mountUndergroundPumpHouseScene({
     parent, ...host.pumpHouseRuntime,
   });
+  const expedition = host.expeditionRuntime && mountUndergroundExpeditionCampScene({
+    parent, ...host.expeditionRuntime,
+  });
   let disposed = false;
 
   return {
@@ -202,6 +208,7 @@ export function mountUndergroundMineDomain(host: Host) {
     camp: interactiveCamp?.camp ?? staticCamp,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
+    expedition,
     /** Caller sends the E request only to the registered and current camp action. */
     campPrompt: () => interactiveCamp?.prompt(),
     pressCamp: async (expectedId: string) => interactiveCamp
@@ -222,6 +229,7 @@ export function mountUndergroundMineDomain(host: Host) {
       gate?.update(host.readGateStage?.() ?? 'closed');
       recovery?.sync(host.recoveryRuntime?.readConfirmedContact());
       if (pumpHouse?.kind === 'ready') pumpHouse.sync();
+      expedition?.sync();
       if (host.oreRuntime) {
         const snapshot = new Map(host.oreRuntime.readTargets().map(target => [target.id, target]));
         for (const [id, vein] of veins) {
@@ -246,6 +254,7 @@ export function mountUndergroundMineDomain(host: Host) {
       gate?.dispose();
       recovery?.dispose();
       if (pumpHouse?.kind === 'ready') pumpHouse.dispose();
+      expedition?.dispose();
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       for (const geometry of geometries) geometry.dispose();
