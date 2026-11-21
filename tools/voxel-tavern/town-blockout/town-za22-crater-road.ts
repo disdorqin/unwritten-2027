@@ -39,7 +39,6 @@ type WestCraterRoad = {
     firewood(): boolean;
     setNight(night: boolean): void;
   };
-  readonly outerWorks: ReturnType<typeof buildCraterOuterWorks>;
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;

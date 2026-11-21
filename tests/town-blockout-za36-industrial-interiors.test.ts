@@ -67,6 +67,18 @@ test('ZA36 R6: two actual interior machine handles turn four steps without alter
   }
   assert.equal(model.actionAt(0,0,12),undefined);
 });
+test('ZA36 R7: mainline canonical signs are reused without a parallel duplicate decal layer',()=>{
+  const grid=createTerrainGrid();
+  const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+  assert.equal(west.group.getObjectByName('za36-canonical-crater-signage'),undefined);
+  const names=new Set(west.outerWorks.sites.map(s=>s.id));
+  for(const required of [
+    'smelter-sign','smelter-duty-board','instrument-sign','instrument-notice',
+    'wall-gate-notice','collapse-sign-1','collapse-sign-2',
+  ])assert.ok(names.has(required),`missing mainline sign: ${required}`);
+  assert.ok(west.mouthWorks.sites.some(site=>site.id==='fence-gate-sign'));
+  assert.equal(west.group.children.filter(g=>g.name==='crater-outer-works').length,1);
+});
 test('ZA36 R3: finished factory door elevations sample the genuine current crater terrain',()=>{
   const grid=createTerrainGrid();
   const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
