@@ -149,7 +149,9 @@ test('C-10 mounts exactly three staffed positions and leaves the original summit
   newPosts.dispose();
   assert.equal(newPosts.group.parent, null);
   assert.equal(newPosts.blocked(-4.5, 9, 347, radius, bodyHeight), false);
-  assert.equal(assembly.mountedParts().length, 6);
+  assert.deepEqual(assembly.mountedParts().sort(),
+    ['P-1', 'P-2', 'P-3', 'P-4', 'P-7', 'P-8', 'P-9'],
+    'the real summit host also carries P-8, not just its isolated review page');
 });
 
 test('P-5 round trips retain support and avoid real P-4, P-7, P-9 and P-11 structures', context => {
