@@ -48,7 +48,9 @@ test('crater mouth works: rim lamp chain has ten lamps and three real lights bur
     assert.ok(radius > 59 && radius < 63, `lamp radius ${radius}`);
   }
   let lights = 0;
-  group.traverse(obj => { if (obj instanceof PointLight) lights++; });
+  // The voxel-tavern subtree and root tests load separate Three runtimes.
+  // Three's standard runtime flags identify the actual lights across bundles.
+  group.traverse(obj => { if ((obj as PointLight).isPointLight) lights++; });
   assert.equal(lights, 3);
 });
 
@@ -56,7 +58,7 @@ test('crater mouth works: wreckage stays on the outer slope, clear of the belt a
   const { group, debrisCount } = buildCraterMouthWorks(road);
   assert.ok(debrisCount >= 40 && debrisCount <= 110, `debris ${debrisCount}`);
   let ring: InstancedMesh | undefined;
-  group.traverse(obj => { if (obj instanceof InstancedMesh) ring = obj; });
+  group.traverse(obj => { if ((obj as InstancedMesh).isInstancedMesh) ring = obj as InstancedMesh; });
   assert.ok(ring, 'wreckage instanced mesh exists');
   const m = new Matrix4();
   const v = new Vector3();
@@ -78,7 +80,7 @@ test('crater mouth works: draw and triangle ledger stays inside the mainline-1 s
     draws++;
     const geo = mesh.geometry;
     const per = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
-    tris += mesh instanceof InstancedMesh ? per * mesh.count : per;
+    tris += mesh.isInstancedMesh ? per * mesh.count : per;
   });
   assert.ok(draws <= 40, `draws ${draws}`);
   assert.ok(tris <= 60000, `tris ${tris}`);

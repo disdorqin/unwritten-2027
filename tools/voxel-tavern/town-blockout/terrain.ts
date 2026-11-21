@@ -1,6 +1,7 @@
 import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
+import { terrainReliefOffset } from './terrain-undulations';
 
 export { layout, worldBounds };
 
@@ -158,7 +159,8 @@ function sample(x: number, n: number) {
   return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };
 }
 
-export function createTerrainGrid() {
+/** Default is the authoritative model; relief=false is for baseline regression only. */
+export function createTerrainGrid(options: { relief?: boolean } = {}) {
   const elevation = new Float32Array(gridWidth * gridDepth);
   const surfaces = new Uint8Array(elevation.length);
   for (let j = 0; j < gridDepth; j++) {
@@ -168,7 +170,11 @@ export function createTerrainGrid() {
       const outsideLegacy = east > layout.width || north > layout.depth;
       const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      elevation[index] = extension.elevation;
+      // ZA-34 R1: the mesh and gameplay height sampler share B1/B2/B4 relief.
+      // Built footings, paths, ice and water retain their existing datum.
+      const relief = options.relief === false || isWater(east, north) || cell.ice
+        ? 0 : terrainReliefOffset(east, north);
+      elevation[index] = extension.elevation + relief;
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }
