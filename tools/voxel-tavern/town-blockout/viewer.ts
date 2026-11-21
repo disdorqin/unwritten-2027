@@ -256,9 +256,7 @@ function ensureWestCraterRoad() {
       },
     });
     if (undergroundDomain.kind === 'ready') {
-      // Do not sync camp avatar-foot state during module construction: x/n/
-      // ground are initialized later. The frame loop below already calls
-      // mounted.sync() after the player's spawn pose exists (TDZ-safe).
+      undergroundDomain.mounted.sync();
       const chain = createUndergroundDreamChain({
         registration: undergroundDomain.registration,
         now: () => performance.now(),
