@@ -223,8 +223,11 @@ function makeCavern() {
       ] as const) {
         const segmentHeight = height * span;
         add('crystal', base + '/spike-' + t + '-tier-' + level,
-          cx + Math.sin(CRYSTAL_CAVERN_CANT_RAD) * height * frac,
-          h + height * frac + .23, cn,
+          // Three.js +Z rotation sends the segment's +Y towards -X.
+          // Centre points MUST track that same tilted spine: otherwise the
+          // three tier ends float apart despite identical 20° rotations.
+          cx - Math.sin(CRYSTAL_CAVERN_CANT_RAD) * height * frac,
+          h + Math.cos(CRYSTAL_CAVERN_CANT_RAD) * height * frac + .23, cn,
           (.4 + (t % 3) * .12) * scale, segmentHeight,
           (.42 + (t % 2) * .17) * scale,
           false, CRYSTAL_CAVERN_CANT_RAD);

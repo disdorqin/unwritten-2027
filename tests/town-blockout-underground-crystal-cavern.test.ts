@@ -82,6 +82,32 @@ test('U-3 R2 all crystalline growth is tilted exactly +20° and grouped, 6 cold 
   assert.ok(!pieces.some(p => /placeholder|lorem|loot-grant|lore-text|spawn-monster/.test(p.name)));
 });
 
+test('U-3 tapered crystals have real continuous segment tips under the exact rotated +20° spine', () => {
+  const groups = new Map<string, Array<typeof crystalCavernArchitecture.pieces[number]>>();
+  for (const piece of crystalCavernArchitecture.pieces) {
+    const matched = piece.name.match(/^(u3\/crystals\/\d+\/spike-\d+)-tier-(\d)$/);
+    if (!matched) continue;
+    const entries = groups.get(matched[1]) ?? [];
+    entries.push(piece);
+    groups.set(matched[1], entries);
+  }
+  assert.ok(groups.size >= 140, 'all the flora must use three actual tapered segments');
+  const sin = Math.sin(CRYSTAL_CAVERN_CANT_RAD), cos = Math.cos(CRYSTAL_CAVERN_CANT_RAD);
+  for (const [name, raw] of groups) {
+    assert.equal(raw.length, 3, name);
+    const tiers = [...raw].sort((a,b)=>a.name.localeCompare(b.name));
+    for (let i=0;i<2;i++) {
+      const lower=tiers[i]!, upper=tiers[i+1]!;
+      const tipX = lower.center[0] - sin * lower.size[1] / 2;
+      const tipY = lower.center[1] + cos * lower.size[1] / 2;
+      const nextX = upper.center[0] + sin * upper.size[1] / 2;
+      const nextY = upper.center[1] - cos * upper.size[1] / 2;
+      assert.ok(Math.hypot(tipX-nextX,tipY-nextY) < .085,
+        name + ' crystal geometry split at tier ' + i);
+    }
+  }
+});
+
 test('U-3 R3 all supported path samples are clear to a standing 27cm avatar, graded gently to the source exit', () => {
   const f = fixture();
   const scene = mountUndergroundCrystalCavern(f.host);
