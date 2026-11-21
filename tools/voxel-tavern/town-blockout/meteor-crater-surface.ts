@@ -4,6 +4,7 @@ import {
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterRimRadius,
 } from './meteor-crater';
+import { mountCraterInteriorDressing } from './meteor-crater-interior-dressing.js';
 
 export type MeteorCraterWorldAnchor = Readonly<{
   east: number;
@@ -59,6 +60,10 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
   cover.position.y = -meteorCraterDepth - .06;
   group.add(cover);
 
+  // C3 is a strictly visual add-on to the original B-01 authoritative mesh.
+  // It follows this same approved anchor/yaw and owns no new colliders or E.
+  const interiorDressing = mountCraterInteriorDressing(group);
+
   function heightAt(worldEast: number, worldNorth: number) {
     const dx = worldEast - east, dn = worldNorth - north;
     const fixtureEast = dx * c - dn * s, fixtureNorth = dx * s + dn * c;
@@ -74,5 +79,5 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
     return { east: worldEast, north: worldNorth, height: heightAt(worldEast, worldNorth)! };
   }
 
-  return { group, heightAt, trailPoint, shaftRadius };
+  return { group, heightAt, trailPoint, shaftRadius, interiorDressing };
 }
