@@ -43,6 +43,10 @@ test('R4 joinery polish preserves the shelter entrance and the sled craft budget
     'snow-lipped eave shingles should be individually readable');
   assert.ok(sledDetailParts.some(([c, , tint]) => c[1] > .53 && tint === '#d07e6b'),
     'quilting needs actual top-surface lines');
+  assert.ok(sledDepotParts.filter(([, , tint]) => tint === '#f4deb3').length >= 35,
+    'the timber sign must include a real voxel emblem instead of a blank panel');
+  assert.equal(sledDepotParts.filter(([, , tint]) => tint === '#d5e9ed').length, 10,
+    'icicles need five eave anchors on each side');
 });
 
 test('12 roadside depots remain 1 instanced draw; sled and particle system keep their existing interfaces', () => {

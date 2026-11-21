@@ -169,6 +169,17 @@ export const sledDepotParts: readonly SledPiece[] = (() => {
       }
     }
   }
+  // R5 eave frost tips are staggered at the far sides of the roof and do
+  // not extend into the centre walk-in line. Explicit pieces help close-ups.
+  for (const side of [-1, 1]) {
+    for (let j = 0; j < 5; j++) {
+      const z = -.74 + j * .37;
+      const long = j % 2 === 0;
+      p.push(piece(side * 1.13, 1.97, z, .035, .085, .048, '#d5e9ed'));
+      p.push(piece(side * 1.13, long ? 1.882 : 1.908, z,
+        .022, long ? .09 : .038, .032, '#e6f0f2'));
+    }
+  }
   // Roof ridge and tiny icicles hanging safely above pedestrian head height.
   p.push(piece(0, 2.36, 0, .22, .085, 2.2, freshSnow));
   for (const z of [-.74, -.37, 0, .37, .74]) {
@@ -190,6 +201,24 @@ export const sledDepotParts: readonly SledPiece[] = (() => {
   }
   p.push(piece(0, 1.77, -.864, .95, .055, .09, bronze));
   p.push(piece(0, 1.44, -.864, .95, .055, .09, bronze));
+  // R5: a pixel-built sleigh emblem in the existing timber sign, legible at
+  // first-person height without requiring a font texture, atlas or new draw.
+  const runnersEmblem = [
+    '.........##....',
+    '........###....',
+    '..######.......',
+    '..#....#.......',
+    '..######.......',
+    '.############..',
+    '..##########...',
+  ];
+  runnersEmblem.forEach((line, row) => {
+    for (let col = 0; col < line.length; col++) {
+      if (line[col] !== '#') continue;
+      p.push(piece((col - 7) * .048, 1.734 - row * .040, -.816,
+        .040, .032, .018, '#f4deb3'));
+    }
+  });
   // Lanterns on either side: rim, distinct shade and hanging tassel.
   for (const x of [-.68, .68]) {
     p.push(piece(x, 1.73, .65, .026, .19, .025, bronze));
