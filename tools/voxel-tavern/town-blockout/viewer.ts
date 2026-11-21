@@ -51,6 +51,10 @@ import { mountTownFillB6 } from './town-fill-b6';
 import { mountTownFillB3x } from './town-fill-b3x';
 import { mountTownFillSouthGate } from './town-fill-south-gate';
 import { mountTownFillRimeGrove } from './town-fill-rime-grove';
+import { mountTownFillLakeEast } from './town-fill-lake-east';
+import { mountTownFillReedMarsh } from './town-fill-reed-marsh';
+import { mountTownFillPlumSlope } from './town-fill-plum-slope';
+import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
@@ -648,6 +652,14 @@ const townFillSouthGate = mountTownFillSouthGate(landscape, (east, north) => gri
 void townFillSouthGate;
 const townFillRimeGrove = mountTownFillRimeGrove(landscape, (east, north) => grid.heightAt(east, north));
 void townFillRimeGrove;
+const townFillLakeEast = mountTownFillLakeEast(landscape, (east, north) => grid.heightAt(east, north));
+void townFillLakeEast;
+const townFillReedMarsh = mountTownFillReedMarsh(landscape, (east, north) => grid.heightAt(east, north));
+void townFillReedMarsh;
+const townFillPlumSlope = mountTownFillPlumSlope(landscape, (east, north) => grid.heightAt(east, north));
+void townFillPlumSlope;
+const townFillNorthWest = mountTownFillNorthWest(landscape, (east, north) => grid.heightAt(east, north));
+void townFillNorthWest;
 void townFillEast;
 void za32StreetProps; void townFillNorth;
 const forest = addForestDensity(landscape, grid,
