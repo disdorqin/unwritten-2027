@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, NearestFilter } from 'three';
 import { warriorDistrictStations, warriorDistrictTransform } from '../src/shared/underground-warrior-district.js';
+import { createWarriorDistrictAuthority } from '../src/presence/underground-warrior-district-interactions.js';
 import { warriorSquarePlan } from '../tools/voxel-tavern/town-blockout/underground-warrior-square.js';
 import { warriorForgeHallSite } from '../tools/voxel-tavern/town-blockout/underground-warrior-forge-hall.js';
 import {
@@ -22,7 +23,11 @@ function setup() {
   let allowed = true;
   let viewer: ReturnType<MountHost['readViewer']>;
   let budget = 3;
-  const records: Array<{ playerId: string; role: string; locationId: string }> = [];
+  let actionRevision = 43;
+  let requestIdEnabled = true;
+  let seq = 0;
+  const records: Array<{ playerId: string; role: string; locationId: string;
+    requestId: string; expectedRevision: number }> = [];
   const seen: WarriorDistrictFoot[] = [];
   const solids: Array<Readonly<{ name: string; min: readonly number[]; max: readonly number[] }>> = [];
   const host: MountHost = {
@@ -32,6 +37,8 @@ function setup() {
     acceptsSolidWorldBox(box) { solids.push(box); return acceptedSolid; },
     readViewer: () => viewer,
     canUse: () => allowed,
+    readActionRevision: () => actionRevision,
+    nextActionRequestId: () => requestIdEnabled ? 'host-action-' + ++seq : undefined,
     dispatch(intent) { records.push(intent); },
     readLightBudget: () => budget,
   };
@@ -42,6 +49,8 @@ function setup() {
     acceptSolid(v: boolean) { acceptedSolid = v; },
     setViewer(v: typeof viewer) { viewer = v; },
     setBudget(v: number) { budget = v; },
+    setActionRevision(v: number) { actionRevision = v; },
+    setActionNonce(v: boolean) { requestIdEnabled = v; },
   };
 }
 test('U-10 round 1 must fail closed on absent site or uncertified movement volume with no scene leaks', () => {
@@ -278,6 +287,66 @@ test('U-10 renderer and presence use exactly the same eleven immutable station I
   mounted.dispose();
 });
 
+test('U-10 real E relay sends host nonce + trusted revision through Presence and never grants loot on stale or replay', async () => {
+  const f = setup();
+  const journal = new Map<string, { role: 'search-room'; locationId: string; result: string }>();
+  const commits: unknown[] = [];
+  let authoritativeRevision = 43;
+  const service = createWarriorDistrictAuthority({
+    frame: surveyFixture,
+    isCertifiedFrame: () => true,
+    supportsStation: () => true,
+    readAcceptedFoot(playerId) {
+      const v = f.host.readViewer();
+      return v?.playerId === playerId ? {
+        playerId, domainId: v.domainId, ...v.foot,
+      } : undefined;
+    },
+    canReach: () => true,
+    readRevision: () => authoritativeRevision,
+    async readReceipt(playerId, requestId) { return journal.get(playerId + '/' + requestId); },
+    async submit(request) {
+      commits.push(request);
+      journal.set(request.playerId + '/' + request.requestId, {
+        role: 'search-room', locationId: request.locationId, result: 'one-trusted-observation',
+      });
+      return 'one-trusted-observation';
+    },
+  });
+  let pending: ReturnType<typeof service.interact> | undefined;
+  let last: Parameters<MountHost['dispatch']>[0] | undefined;
+  const host: MountHost = { ...f.host,
+    dispatch(intent) { last = intent; pending = service.interact(intent); },
+  };
+  const mounted = mountWarriorStoneDistrict(host);
+  if (mounted.kind !== 'ready') assert.fail();
+  const place = mounted.feet.find(item => item.role === 'search-room');
+  assert.ok(place);
+  f.setViewer({ playerId: 'miner', domainId: surveyFixture.domainId, foot: place.world });
+  assert.equal(mounted.press('search-room', place.id), true);
+  assert.deepEqual(await pending, { kind: 'submitted', result: 'one-trusted-observation' });
+  assert.equal(commits.length, 1);
+  assert.equal(last?.expectedRevision, 43);
+  assert.equal(last?.requestId, 'host-action-1');
+  assert.deepEqual(await service.interact(last!), {
+    kind: 'replayed', result: 'one-trusted-observation',
+  });
+  assert.equal(commits.length, 1, 'duplicate input cannot grant a second find');
+  f.setActionNonce(false);
+  assert.equal(mounted.press('search-room', place.id), false, 'no host nonce, no E transaction');
+  f.setActionNonce(true);
+  f.setActionRevision(NaN);
+  assert.equal(mounted.press('search-room', place.id), false, 'no authority revision, no E transaction');
+  f.setActionRevision(42);
+  authoritativeRevision = 43;
+  assert.equal(mounted.press('search-room', place.id), true);
+  assert.deepEqual(await pending, { kind: 'stale', revision: 43 });
+  assert.equal(commits.length, 1);
+  f.setViewer({ playerId: 'miner', domainId: 'surface', foot: place.world });
+  assert.equal(mounted.press('search-room', place.id), false);
+  mounted.dispose();
+});
+
 test('U-10 round 4 returns host-only search, single-door cover, arcade tactics and upper-wall lookout', () => {
   const f = setup();
   const mounted = mountWarriorStoneDistrict(f.host);
@@ -289,7 +358,8 @@ test('U-10 round 4 returns host-only search, single-door cover, arcade tactics a
   f.setViewer({ playerId: 'miner', domainId: surveyFixture.domainId, foot: sample.world });
   assert.equal(mounted.getPrompts('search-room')[0]?.id, sample.id);
   assert.equal(mounted.press('search-room', sample.id), true);
-  assert.deepEqual(f.records[0], { playerId: 'miner', role: 'search-room', locationId: sample.id });
+  assert.deepEqual(f.records[0], { playerId: 'miner', role: 'search-room',
+    locationId: sample.id, requestId: 'host-action-1', expectedRevision: 43 });
   assert.equal(mounted.press('lookout', 'u10/wall-lookout'), false);
   f.allow(false);
   assert.equal(mounted.press('search-room', sample.id), false);

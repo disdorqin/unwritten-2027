@@ -23,7 +23,12 @@ type Host = Readonly<{
   acceptsSolidWorldBox(box: WorldBox): boolean;
   readViewer(): Readonly<{ playerId: string; domainId: string; foot: WarriorDistrictFoot }> | undefined;
   canUse(playerId: string, foot: WarriorDistrictFoot, role: DistrictRole): boolean;
-  dispatch(intent: Readonly<{ playerId: string; role: DistrictRole; locationId: string }>): void;
+  /** Fresh trusted world revision, used by the matching Presence authority. */
+  readActionRevision(): number | undefined;
+  /** Stable nonce supplied by the session host, never inferred from a client clock. */
+  nextActionRequestId(playerId: string, role: DistrictRole, locationId: string): string | undefined;
+  dispatch(intent: Readonly<{ playerId: string; role: DistrictRole; locationId: string;
+    requestId: string; expectedRevision: number }>): void;
   readLightBudget(): number;
 }>;
 const stone = {
@@ -390,8 +395,15 @@ export function mountWarriorStoneDistrict(host: Host) {
     const viewer = host.readViewer();
     const prompt = getPrompts(role).find(item => item.id === id);
     if (!viewer || !prompt) return false;
-    // Host rechecks accepted foot/domain, permissions, monster state and loot grant.
-    host.dispatch({ playerId: viewer.playerId, role, locationId: id });
+    const expectedRevision = host.readActionRevision();
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision === undefined ||
+        expectedRevision < 0) return false;
+    const requestId = host.nextActionRequestId(viewer.playerId, role, id);
+    if (!requestId?.trim()) return false;
+    // Server rechecks foot/domain/occlusion, authenticates revision and atomically
+    // records the request ID; the scene has no authority to grant loot or cover.
+    host.dispatch({ playerId: viewer.playerId, role, locationId: id,
+      requestId, expectedRevision });
     return true;
   }
   return {
