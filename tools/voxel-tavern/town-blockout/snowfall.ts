@@ -31,6 +31,9 @@ export function createSnowfall(scene: Scene) {
     depthWrite: false,
     uniforms: {
       time: { value: 0 },
+      // World-space weather drift is integrated on CPU, not time * changing
+      // wind: a phase change therefore never teleports existing snowflakes.
+      weatherShift: { value: new Vector2() },
       storm: { value: 0 },
       elevationMode: { value: 0 },
       viewportHeight: { value: 640 },
@@ -39,6 +42,7 @@ export function createSnowfall(scene: Scene) {
     vertexShader: /* glsl */ `
       attribute vec4 flake;
       uniform float time;
+      uniform vec2 weatherShift;
       uniform float storm;
       uniform float elevationMode;
       uniform float viewportHeight;
@@ -55,7 +59,8 @@ export function createSnowfall(scene: Scene) {
         float flutter = time * mix(.85, 2.0, flake.z) + phase;
         vec3 wind = vec3(mix(.9, 2.7, flake.z), -mix(2.7, 4.7, flake.y), mix(.28, .8, flake.z));
         wind *= mix(1., 2.2, elevationMode);
-        vec3 drift = time * wind + vec3(sin(flutter), 0., cos(flutter * .72)) * .72;
+        vec3 drift = time * wind + vec3(weatherShift.x, 0., weatherShift.y)
+          + vec3(sin(flutter), 0., cos(flutter * .72)) * .72;
         // Wrap a world-aligned field around the viewer without attaching snow to the camera.
         vec3 local = mod((position - .5) * volume + drift - cameraPosition + volume * .5, volume) - volume * .5;
         vec4 viewPosition = viewMatrix * vec4(cameraPosition + local, 1.);
@@ -113,13 +118,26 @@ export function createSnowfall(scene: Scene) {
   };
   scene.add(particles);
   let active = true;
+  const outdoorWind = new Vector2();
 
   return {
     update(_camera: PerspectiveCamera, dt: number, walking: boolean, sheltered = false) {
       particles.visible = active && !sheltered;
       material.uniforms.elevationMode.value = walking ? 0 : 1;
-      // Integrate speed into time so changing the weather never teleports existing snow.
-      if (active) material.uniforms.time.value += dt * (1 + material.uniforms.storm.value * .42);
+      // Integrate speed and changing server wind, never retroactively apply
+      // a newly received direction to time already elapsed.
+      if (active && Number.isFinite(dt) && dt > 0) {
+        material.uniforms.time.value += dt * (1 + material.uniforms.storm.value * .42);
+        material.uniforms.weatherShift.value.addScaledVector(outdoorWind, dt);
+      }
+    },
+    /** G-09 one uniform for all flakes; map north is Three.js negative Z. */
+    setOutdoorWind(east: number, north: number, strength: number, exposure = 1) {
+      if (![east, north, strength, exposure].every(Number.isFinite)) return;
+      const s = Math.max(0, Math.min(1, strength)) * Math.max(0, Math.min(1, exposure));
+      const length = Math.hypot(east, north);
+      if (!length) { outdoorWind.set(0, 0); return; }
+      outdoorWind.set(6 * s * east / length, -6 * s * north / length);
     },
     setIntensity(intensity: number) {
       if (!Number.isFinite(intensity)) return;
