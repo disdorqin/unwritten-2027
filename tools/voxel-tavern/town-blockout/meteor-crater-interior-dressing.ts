@@ -6,6 +6,7 @@ import {
   createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius,
   meteorCraterDepth,
 } from './meteor-crater.js';
+import { craterFloorLampRockBufferM, craterFloorWorklightSites } from './meteor-crater-floor-worklight-sites.js';
 
 /**
  * C3: survey-relative visual geology inside the already accepted B-01 crater.
@@ -20,6 +21,9 @@ type Triple = readonly [number, number, number];
 export type CraterDressingPiece = Readonly<{
   id: string; zone: Zone; family: Family; center: Triple; size: Triple;
 }>;
+// B-01 owns r=50..55 as the pit lip/seam; this is an existing boundary,
+// NOT a replacement for the still-missing Muse C3 four-belt allocation.
+export const craterInteriorTerraceMaxRadius = meteorCraterFixturePlan.terraces[0].outerRadius;
 export const craterInteriorSurvey = Object.freeze({
   terraceAreaM2: 6597.3,
   floorAreaM2: 1256.6,
@@ -55,6 +59,16 @@ function prepare(): readonly CraterDressingPiece[] {
   function block(zone:Zone,family:Family,id:string,e:number,y:number,n:number,w:number,h:number,d:number){
     if(![e,y,n,w,h,d].every(Number.isFinite)||w<=0||h<=0||d<=0)
       throw new RangeError('invalid crater stone '+id);
+    // C-0 audit 44a6088f found 741 visual pieces intruding into the
+    // r50..55 B-01 rim seam. Clip the FULL stone footprint, not only its
+    // center, at the previously approved B-01 terrace/rim boundary.
+    // The four inner C3 art belts remain UNASSIGNED until Muse C registers
+    // their exact map; never infer them from these radial rings.
+    if(zone==='terraces' && Math.hypot(e,n)+Math.hypot(w,d)*.5 > craterInteriorTerraceMaxRadius) return;
+    // Fixed C2 worklight feet are surveyed scenery. Leave their standing
+    // apron clear; never float a lamp above a C3 decorative shard pile.
+    if(zone==='floor' && craterFloorWorklightSites.some(site=>
+      Math.hypot(e-site.east,n-site.north) < craterFloorLampRockBufferM + Math.hypot(w,d)*.5)) return;
     pieces.push(Object.freeze({id,zone,family,center:[e,y,n] as const,size:[w,h,d] as const}));
   }
 

@@ -1,0 +1,529 @@
+{
+  "scope": "REAL B-01 surface mount in offline Chrome; not official town domain/player/server",
+  "views": {
+    "rim": {
+      "current": "rim",
+      "phase": "day",
+      "frames": 9,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -11,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        41.235992903678365,
+        -0.7800000000000002,
+        32.57445915510782
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 586953
+    },
+    "upper": {
+      "current": "upper",
+      "phase": "day",
+      "frames": 17,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -26.683566931092916,
+        -13.379999999999999,
+        29.731965219841836
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        15.808172189355723,
+        -7.780000000000001,
+        -42.71889736441801
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 533557
+    },
+    "middle": {
+      "current": "middle",
+      "phase": "day",
+      "frames": 28,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -21.902939889051712,
+        -23.53,
+        20.206464911423456
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        8.107065949094647,
+        -17.58,
+        -34.818644167988936
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 601488
+    },
+    "floor": {
+      "current": "floor",
+      "phase": "day",
+      "frames": 37,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        5,
+        -34,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        15,
+        -33.33,
+        7
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 414117
+    },
+    "well": {
+      "current": "well",
+      "phase": "day",
+      "frames": 44,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -34,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        5,
+        -33.33,
+        4.2
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 315285
+    },
+    "overview": {
+      "current": "overview",
+      "phase": "day",
+      "frames": 52,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -24,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        72,
+        45,
+        61
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 228789
+    },
+    "pit-bottom-to-terrace-day.png": {
+      "current": "auditFloorToTerrace",
+      "phase": "day",
+      "frames": 61,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        40,
+        -15,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 10,
+      "triangles": 102173,
+      "eye": [
+        16,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 194640,
+      "mode": "offline-visual-day-night-review"
+    },
+    "pit-bottom-to-terrace-night.png": {
+      "current": "auditFloorToTerrace",
+      "phase": "night",
+      "frames": 68,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        40,
+        -15,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 6,
+      "draws": 10,
+      "triangles": 102173,
+      "eye": [
+        16,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 91601,
+      "mode": "offline-visual-day-night-review"
+    },
+    "rim-to-pit-bottom-day.png": {
+      "current": "auditRimToFloor",
+      "phase": "day",
+      "frames": 76,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        10,
+        -32,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        51.5,
+        -3.2299999999999995,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 523253,
+      "mode": "offline-visual-day-night-review"
+    },
+    "rim-to-pit-bottom-night.png": {
+      "current": "auditRimToFloor",
+      "phase": "night",
+      "frames": 87,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        10,
+        -32,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 6,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        51.5,
+        -3.2299999999999995,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 313838,
+      "mode": "offline-visual-day-night-review"
+    },
+    "c2-well-to-worklights-day.png": {
+      "current": "c2WellAcrossWorklights",
+      "phase": "day",
+      "frames": 94,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -9,
+        -33,
+        6
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        0,
+        -33.33,
+        -5
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 349227,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    },
+    "c2-well-to-worklights-night.png": {
+      "current": "c2WellAcrossWorklights",
+      "phase": "night",
+      "frames": 102,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -9,
+        -33,
+        6
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 6,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        0,
+        -33.33,
+        -5
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 250766,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    },
+    "c2-winch-worksite-day.png": {
+      "current": "c2WinchService",
+      "phase": "day",
+      "frames": 109,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -6,
+        -33,
+        7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        8,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 354734,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    },
+    "c2-winch-worksite-night.png": {
+      "current": "c2WinchService",
+      "phase": "night",
+      "frames": 118,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -6,
+        -33,
+        7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 6,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        8,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 262577,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    },
+    "c2-return-side-chain-day.png": {
+      "current": "c2ReturnWorklightChain",
+      "phase": "day",
+      "frames": 125,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        8,
+        -33,
+        4
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 0,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        -15,
+        -33.33,
+        -2
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 421146,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    },
+    "c2-return-side-chain-night.png": {
+      "current": "c2ReturnWorklightChain",
+      "phase": "night",
+      "frames": 133,
+      "counts": {
+        "count": 6056,
+        "terraces": 3043,
+        "floor": 2665,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        8,
+        -33,
+        4
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "physicalWorklightCount": 6,
+      "activeWorklightSources": 6,
+      "draws": 14,
+      "triangles": 102845,
+      "eye": [
+        -15,
+        -33.33,
+        -2
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 317623,
+      "phaseProof": "actual C2 sources switched; offline browser phase not live clock"
+    }
+  },
+  "errors": [],
+  "passed": true
+}
