@@ -1,0 +1,108 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index a1af2505..d55d4d91 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -170,6 +170,10 @@ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-su
+ import { advanceWeatherCover, townSnowWeatherForFrame, townWeatherEpoch } from './town-weather';
+ import { anchorNightIndex, anchorRing, createAnchorRun } from './town-anchor-run';
+ import { createAnchorRunScene } from './town-anchor-run-scene';
++import {
++  createGhostRecorder, createRingRace, ghostAt, isGhostRun, ringGates, ringStart, type GhostSample,
++} from './town-grand-prix-ring';
++import { createRingGateScene } from './town-grand-prix-ring-scene';
+ import { createSledRide, createSledWallCollider } from './sled-ride';
+ import { createTownSledVisuals } from './sled-visuals';
+ import { resolveTownSledRacks } from './town-sled-racks';
+@@ -693,6 +697,84 @@ function syncAnchorRun() {
+   const states = anchorRun.lampStates();
+   for (const site of anchorRing) anchorRunScene.setLamp(site.id, open ? states[site.id] : 'dark');
+ }
++// ZB-33 package 3: ring grand prix wiring. The race is observed from the
++// sled position each frame; gate lamps are physical light, no arrows.
++// Results stay local (announce + personal best + ghost) until the
++// coordinator rules on the D2 mixed-course coexistence — the shared
++// 'grand-prix' presence relay is NOT reused here, so ring times never
++// land on the D2 board under a false name.
++const ringGateScene = createRingGateScene((east, north) => grid.heightAt(east, north));
++landscape.add(ringGateScene.root);
++const ringRace = createRingRace(() => performance.now());
++const ghostMarker = new Group();
++{
++  const ghostMaterial = new MeshLambertMaterial({ color: '#9fc4e8', transparent: true, opacity: .45 });
++  const board = new Mesh(new BoxGeometry(1.5, .1, .8), ghostMaterial);
++  board.position.y = .3;
++  ghostMarker.add(board);
++  ghostMarker.visible = false;
++  landscape.add(ghostMarker);
++}
++let ringPrev: { east: number; north: number } | undefined;
++let ringStartStamp = 0;
++let ghostRecorder = createGhostRecorder();
++let ghostSamples: GhostSample[] = (() => {
++  try {
++    const parsed = JSON.parse(localStorage.getItem('unwritten.ring-ghost.v1') ?? 'null');
++    return isGhostRun(parsed) ? parsed : [];
++  } catch { return []; }
++})();
++let ringBestMs: number | undefined = (() => {
++  try {
++    const value = Number(localStorage.getItem('unwritten.ring-best.v1'));
++    return Number.isFinite(value) && value > 0 ? value : undefined;
++  } catch { return undefined; }
++})();
++function driveRingRace() {
++  const pos = { east: x, north: n };
++  if (!ringPrev) { ringPrev = pos; return; }
++  const before = ringRace.state;
++  ringRace.observe(ringPrev, pos, sledRide.active());
++  ringPrev = pos;
++  const states = ringRace.gateStates();
++  ringGates.forEach((gate, i) => ringGateScene.setLamp(gate.id,
++    ringRace.state !== 'racing' ? 'dark' : states[i] === 'passed' ? 'green' : states[i] === 'next' ? 'warm' : 'dark'));
++  ringGateScene.setLamp(ringStart.id, ringRace.state === 'racing' ? 'warm' : 'dark');
++  if (before !== 'racing' && ringRace.state === 'racing') {
++    ringStartStamp = performance.now();
++    ghostRecorder = createGhostRecorder();
++    announceActivity('大奖赛开始计时。');
++  }
++  if (ringRace.state === 'racing') {
++    const elapsed = performance.now() - ringStartStamp;
++    ghostRecorder.record(elapsed, pos, yaw);
++    const ghost = ghostSamples.length ? ghostAt(ghostSamples, elapsed) : undefined;
++    ghostMarker.visible = ghost !== undefined;
++    if (ghost) {
++      ghostMarker.position.set(ghost.east, grid.heightAt(ghost.east, ghost.north) + .1, -ghost.north);
++      ghostMarker.rotation.y = ghost.heading;
++    }
++  }
++  if (before === 'racing' && (ringRace.state === 'finished' || ringRace.state === 'spoiled')) {
++    ghostMarker.visible = false;
++    const result = ringRace.result(String(presence.selfId() ?? 'local'), presence.playerName());
++    if (result) {
++      const secs = (result.totalMs / 1000).toFixed(1);
++      if (result.spoiled) announceActivity(`未完赛 · ${secs} 秒（有漏门）`);
++      else {
++        announceActivity(`环镇完赛 ${secs} 秒`, true);
++        if (!ringBestMs || result.totalMs < ringBestMs) {
++          ringBestMs = result.totalMs;
++          ghostSamples = ghostRecorder.finish();
++          try {
++            localStorage.setItem('unwritten.ring-ghost.v1', JSON.stringify(ghostSamples));
++            localStorage.setItem('unwritten.ring-best.v1', String(ringBestMs));
++          } catch { /* transient storage: the ghost is a bonus, not a save */ }
++        }
++      }
++    }
++  }
++}
+ function anchorRunAction() {
+   const phase = presence.getTownNightWindow()?.phase;
+   if (phase !== 'night-window') return undefined;
+@@ -3771,6 +3853,7 @@ renderer.setAnimationLoop(now => {
+   snowmanScene.tick(dt);
+   syncAnchorRun();
+   anchorRunScene.tick(dt);
++  driveRingRace();
+   // ZB-31: leaving a climb (jump-off or climbing down) releases the pinned
+   // altitude so the ordinary fall/landing takes over.
+   if (wasClimbing && !treeClimb.climbing && airHeight !== undefined) airHeight = undefined;

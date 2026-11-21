@@ -1,0 +1,327 @@
+diff --git a/src/presence/cable-line-authority.ts b/src/presence/cable-line-authority.ts
+new file mode 100644
+index 00000000..1ebdb9b2
+--- /dev/null
++++ b/src/presence/cable-line-authority.ts
+@@ -0,0 +1,83 @@
++import {
++  createZa36CableRepair,
++  type Za36CableRepairEvent,
++  type Za36CableRepairLine,
++  type Za36CableRepairState,
++} from '../../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
++
++/**
++ * Cable line authority (branch window B, flag alignment spec of
++ * 2026-11-21). The presence server holds ONE repair state machine per
++ * line and is the only writer. Clients submit repair events; the
++ * server applies them here and broadcasts the returned frame so every
++ * client reconciles on `version`. The world-facing flags are derived,
++ * never set directly:
++ *
++ *   cableLine1Open ⇔ line 1 stage === 'full-line'
++ *   cableLine2Open ⇔ line 2 stage === 'full-line'
++ *
++ * 'one-station' (woken by an impact) is NOT open — it authorises the
++ * single-station run only. Window D's line-2 instance consumes this
++ * same authority; it must not keep a shadow repair state. Scope is
++ * the server run: a restart returns both lines to dormant.
++ */
++export type CableLineFlags = Readonly<{ cableLine1Open: boolean; cableLine2Open: boolean }>;
++
++export type CableLineFrame = Readonly<{
++  type: 'cable-line';
++  line: Za36CableRepairLine;
++  version: number;
++  stage: Za36CableRepairState['stage'];
++  /** True only on the single frame where the line flips to full-line. */
++  openedNow: boolean;
++  flags: CableLineFlags;
++}>;
++
++export function createCableLineAuthority() {
++  const lines = {
++    1: createZa36CableRepair(1),
++    2: createZa36CableRepair(2),
++  } as const;
++
++  function flags(): CableLineFlags {
++    return {
++      cableLine1Open: lines[1].snapshot().stage === 'full-line',
++      cableLine2Open: lines[2].snapshot().stage === 'full-line',
++    };
++  }
++
++  function frame(line: Za36CableRepairLine, openedNow: boolean): CableLineFrame {
++    const state = lines[line].snapshot();
++    return { type: 'cable-line', line, version: state.version, stage: state.stage, openedNow, flags: flags() };
++  }
++
++  return {
++    flags,
++    snapshot: (line: Za36CableRepairLine) => lines[line].snapshot(),
++    /** The frame a newly connected client needs for one line. */
++    hello: (line: Za36CableRepairLine) => frame(line, false),
++    /**
++     * Apply one client repair event. Rejected events produce no frame
++     * (nothing changed, nothing to broadcast); accepted events return
++     * the frame to broadcast, with openedNow set exactly once per line.
++     */
++    applyEvent(line: Za36CableRepairLine, event: Za36CableRepairEvent): CableLineFrame | undefined {
++      const result = lines[line].apply(event);
++      if (!result.accepted) return undefined;
++      return frame(line, result.opened);
++    },
++  };
++}
++
++/**
++ * Service gate (总包 B2 canon): the cable car does not run at night —
++ * even a fully repaired line is out of service inside the night
++ * window, the mirror image of the night train that runs empty and on
++ * time. Consumers must gate boarding on this, not on the flags alone.
++ * awaiting-beacon is still service time (dusk, last runs).
++ */
++export function cableServiceOpen(flags: CableLineFlags, line: Za36CableRepairLine,
++  phase: 'day' | 'awaiting-beacon' | 'night-window' | undefined): boolean {
++  if (phase === 'night-window') return false;
++  return line === 1 ? flags.cableLine1Open : flags.cableLine2Open;
++}
+diff --git a/tests/server/cable-line-authority.test.ts b/tests/server/cable-line-authority.test.ts
+new file mode 100644
+index 00000000..5c69582a
+--- /dev/null
++++ b/tests/server/cable-line-authority.test.ts
+@@ -0,0 +1,59 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createCableLineAuthority } from '../../src/presence/cable-line-authority';
++
++function repairFully(authority: ReturnType<typeof createCableLineAuthority>, line: 1 | 2) {
++  const frames = [];
++  frames.push(authority.applyEvent(line, { kind: 'wake', impact: 'sled' }));
++  for (let i = 0; i < 9; i++) authority.applyEvent(line, { kind: 'strike-rust' });
++  authority.applyEvent(line, { kind: 'pull-brake' });
++  authority.applyEvent(line, { kind: 'pry-cable', effort: 1 });
++  for (let i = 0; i < 3; i++) authority.applyEvent(line, { kind: 'tighten-cable' });
++  for (let index = 0; index < 4; index++) {
++    authority.applyEvent(line, { kind: 'take-weight', index });
++    frames.push(authority.applyEvent(line, { kind: 'hang-weight', index }));
++  }
++  return frames;
++}
++
++test('flags stay closed through wake and partial repairs; one-station is not open', () => {
++  const authority = createCableLineAuthority();
++  assert.deepEqual(authority.flags(), { cableLine1Open: false, cableLine2Open: false });
++  const wake = authority.applyEvent(1, { kind: 'wake', impact: 'sled' });
++  assert.equal(wake?.stage, 'one-station');
++  assert.equal(wake?.flags.cableLine1Open, false);
++  assert.equal(authority.hello(1).version, wake?.version);
++});
++
++test('full repair opens exactly once, per line independently', () => {
++  const authority = createCableLineAuthority();
++  const frames = repairFully(authority, 1);
++  const openedFrames = frames.filter(frame => frame?.openedNow);
++  assert.equal(openedFrames.length, 1);
++  assert.equal(openedFrames[0]?.flags.cableLine1Open, true);
++  assert.equal(openedFrames[0]?.flags.cableLine2Open, false);
++  assert.deepEqual(authority.flags(), { cableLine1Open: true, cableLine2Open: false });
++  // Terminal: further events are rejected and produce no frame.
++  assert.equal(authority.applyEvent(1, { kind: 'strike-rust' }), undefined);
++  repairFully(authority, 2);
++  assert.deepEqual(authority.flags(), { cableLine1Open: true, cableLine2Open: true });
++});
++
++test('rejected events broadcast nothing and do not move the version', () => {
++  const authority = createCableLineAuthority();
++  assert.equal(authority.applyEvent(2, { kind: 'pull-brake' }), undefined);
++  assert.equal(authority.snapshot(2).version, 0);
++  assert.equal(authority.applyEvent(2, { kind: 'pry-cable', effort: 2 }), undefined);
++  assert.equal(authority.snapshot(2).version, 0);
++});
++
++test('night window closes service even on a fully repaired line', async () => {
++  const { cableServiceOpen } = await import('../../src/presence/cable-line-authority');
++  const open = { cableLine1Open: true, cableLine2Open: true };
++  assert.equal(cableServiceOpen(open, 1, 'day'), true);
++  assert.equal(cableServiceOpen(open, 2, 'awaiting-beacon'), true);
++  assert.equal(cableServiceOpen(open, 1, 'night-window'), false);
++  assert.equal(cableServiceOpen(open, 2, 'night-window'), false);
++  assert.equal(cableServiceOpen({ cableLine1Open: false, cableLine2Open: false }, 1, 'day'), false);
++  assert.equal(cableServiceOpen(open, 1, undefined), true, 'unknown phase does not close service');
++});
+diff --git a/tests/town-blockout-za36-cable-repair.test.ts b/tests/town-blockout-za36-cable-repair.test.ts
+new file mode 100644
+index 00000000..db7ef52d
+--- /dev/null
++++ b/tests/town-blockout-za36-cable-repair.test.ts
+@@ -0,0 +1,56 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createZa36CableRepair } from '../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
++
++test('ZA-36 line one wake is only a one-station run; all three manual repairs unlock full line', () => {
++  const line = createZa36CableRepair(1);
++  assert.equal(line.snapshot().stage, 'dormant');
++  assert.equal(line.apply({ kind: 'strike-rust' }).accepted, false, 'repairs are unavailable before wake');
++  assert.deepEqual(line.apply({ kind: 'wake', impact: 'sled' }).state.stage, 'one-station');
++  assert.equal(line.apply({ kind: 'wake', impact: 'snowball' }).accepted, false, 'duplicate impact must not reset');
++  assert.equal(line.apply({ kind: 'pull-brake' }).accepted, false, 'rust needs nine hits first');
++  for (let i = 0; i < 9; i++) assert.equal(line.apply({ kind: 'strike-rust' }).accepted, true);
++  assert.equal(line.apply({ kind: 'strike-rust' }).accepted, false);
++  assert.equal(line.apply({ kind: 'pull-brake' }).accepted, true);
++  assert.deepEqual(line.snapshot().repaired[0], 'rust-brake');
++  assert.equal(line.snapshot().stage, 'one-station');
++
++  assert.equal(line.apply({ kind: 'tighten-cable' }).accepted, false);
++  assert.equal(line.apply({ kind: 'pry-cable', effort: .6 }).state.cableHeight, .6);
++  assert.equal(line.apply({ kind: 'release-cable' }).state.cableHeight, .3);
++  assert.equal(line.apply({ kind: 'pry-cable', effort: .7 }).state.cableHeight, 1);
++  for (let i = 0; i < 3; i++) assert.equal(line.apply({ kind: 'tighten-cable' }).accepted, true);
++  assert.equal(line.apply({ kind: 'tighten-cable' }).accepted, false);
++  assert.equal(line.snapshot().stage, 'one-station');
++
++  const order = [2, 0, 3, 1];
++  for (const index of order) {
++    assert.equal(line.apply({ kind: 'hang-weight', index }).accepted, false, 'must carry weight first');
++    assert.equal(line.apply({ kind: 'take-weight', index }).accepted, true);
++    assert.equal(line.apply({ kind: 'take-weight', index: (index + 1) % 4 }).accepted, false,
++      'only one shoulder-borne block at a time');
++    const result = line.apply({ kind: 'hang-weight', index });
++    assert.equal(result.accepted, true);
++    assert.equal(result.opened, index === 1, 'signal completion exactly once');
++  }
++  assert.equal(line.snapshot().stage, 'full-line');
++  assert.deepEqual(line.snapshot().repaired, ['rust-brake', 'cable-wheel', 'counterweight']);
++  assert.equal(line.apply({ kind: 'take-weight', index: 0 }).accepted, false, 'full-line is permanent');
++  assert.equal(line.snapshot().weightMounted.every(Boolean), true);
++});
++
++test('ZA-36 line two has independent repair state, accepts no invalid payload and does not auto-authorize the world', () => {
++  const line1 = createZa36CableRepair(1);
++  const line2 = createZa36CableRepair(2);
++  assert.equal(line2.apply({ kind: 'wake', impact: 'night-window' }).accepted, true);
++  assert.equal(line1.snapshot().stage, 'dormant');
++  for (const effort of [0, -1, 1.01, NaN, Infinity]) {
++    assert.equal(line2.apply({ kind: 'pry-cable', effort }).accepted, false);
++  }
++  for (const index of [-1, 4, 1.5, Number.NaN]) {
++    assert.equal(line2.apply({ kind: 'take-weight', index }).accepted, false);
++  }
++  assert.equal(line2.snapshot().version, 1, 'rejected malformed commands never mutate state');
++  assert.equal(line2.snapshot().line, 2);
++  assert.equal(line2.snapshot().stage, 'one-station');
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-za36-cable-repair.ts b/tools/voxel-tavern/town-blockout/town-za36-cable-repair.ts
+new file mode 100644
+index 00000000..2f40cae5
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-za36-cable-repair.ts
+@@ -0,0 +1,105 @@
++export type Za36CableRepairLine = 1 | 2;
++export type Za36CableRepairStage = 'dormant' | 'one-station' | 'full-line';
++export type Za36CableRepairState = Readonly<{
++  line: Za36CableRepairLine;
++  stage: Za36CableRepairStage;
++  impacts: number;
++  brakePulled: boolean;
++  cableHeight: number;
++  cableAligned: boolean;
++  cableTurns: number;
++  weightMounted: readonly boolean[];
++  carriedWeight: number | null;
++  repaired: readonly ['rust-brake' | 'pending', 'cable-wheel' | 'pending', 'counterweight' | 'pending'];
++  version: number;
++}>;
++export type Za36CableRepairEvent =
++  | { kind: 'wake'; impact: 'sled' | 'snow-wall' | 'snowball' | 'night-window' }
++  | { kind: 'strike-rust' }
++  | { kind: 'pull-brake' }
++  | { kind: 'pry-cable'; effort: number }
++  | { kind: 'release-cable' }
++  | { kind: 'tighten-cable' }
++  | { kind: 'take-weight'; index: number }
++  | { kind: 'hang-weight'; index: number };
++
++/**
++ * Stage-only A-window rule candidate, not a server state or a UI binding.
++ * The host must authenticate each input, persist versioned accepted events
++ * and gate cable runs until cableLine{1,2}Open has authoritative approval.
++ */
++export function createZa36CableRepair(line: Za36CableRepairLine) {
++  let stage: Za36CableRepairStage = 'dormant';
++  let impacts = 0, brakePulled = false, cableHeight = 0;
++  let cableAligned = false, cableTurns = 0, carriedWeight: number | null = null;
++  const weightMounted = [false, false, false, false];
++  let version = 0;
++
++  const repaired = (): Za36CableRepairState['repaired'] => [
++    brakePulled ? 'rust-brake' : 'pending',
++    cableAligned && cableTurns === 3 ? 'cable-wheel' : 'pending',
++    weightMounted.every(Boolean) ? 'counterweight' : 'pending',
++  ];
++  function snapshot(): Za36CableRepairState {
++    return Object.freeze({
++      line, stage, impacts, brakePulled, cableHeight, cableAligned, cableTurns,
++      weightMounted: Object.freeze([...weightMounted]),
++      carriedWeight, repaired: repaired(), version,
++    });
++  }
++  function apply(event: Za36CableRepairEvent): Readonly<{ accepted: boolean; state: Za36CableRepairState; opened: boolean }> {
++    let accepted = false, opened = false;
++    if (event.kind === 'wake') {
++      if (stage === 'dormant') {
++        stage = 'one-station';
++        accepted = true;
++      }
++    } else if (stage === 'one-station') {
++      switch (event.kind) {
++        case 'strike-rust':
++          if (impacts < 9) { impacts++; accepted = true; }
++          break;
++        case 'pull-brake':
++          if (impacts === 9 && !brakePulled) { brakePulled = true; accepted = true; }
++          break;
++        case 'pry-cable':
++          // A scene can map a held key and real cable geometry into [0,1].
++          if (Number.isFinite(event.effort) && event.effort > 0 && event.effort <= 1 &&
++            !cableAligned && cableHeight < 1) {
++            cableHeight = Math.min(1, cableHeight + event.effort);
++            if (cableHeight === 1) cableAligned = true;
++            accepted = true;
++          }
++          break;
++        case 'release-cable':
++          if (!cableAligned && cableHeight > 0) {
++            cableHeight *= .5; // physically droops halfway, never resets the other two repairs
++            accepted = true;
++          }
++          break;
++        case 'tighten-cable':
++          if (cableAligned && cableTurns < 3) { cableTurns++; accepted = true; }
++          break;
++        case 'take-weight':
++          if (Number.isInteger(event.index) && event.index >= 0 && event.index < 4 &&
++            carriedWeight === null && !weightMounted[event.index]) {
++            carriedWeight = event.index; accepted = true;
++          }
++          break;
++        case 'hang-weight':
++          if (event.index === carriedWeight && carriedWeight !== null &&
++            !weightMounted[carriedWeight]) {
++            weightMounted[carriedWeight] = true; carriedWeight = null; accepted = true;
++          }
++          break;
++      }
++      if (accepted && repaired().every(item => item !== 'pending')) {
++        stage = 'full-line';
++        opened = true;
++      }
++    }
++    if (accepted) version++;
++    return { accepted, state: snapshot(), opened };
++  }
++  return { apply, snapshot };
++}
