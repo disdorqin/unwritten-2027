@@ -21,7 +21,7 @@ import {
 } from './cable-line-authority.js';
 import type {
   Za36CableRepairEvent, Za36CableRepairLine,
-} from '../../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
+} from '../shared/za36-cable-repair.js';
 import { isSummitPassportAction } from '../shared/summit-passport.js';
 import { snowWallBuildLayers } from '../shared/snow-stock.js';
 import {
