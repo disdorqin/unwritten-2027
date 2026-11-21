@@ -2090,6 +2090,7 @@ function openTavernSeatActions() {
   }
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+let craterTelescopeActive = false;
 function currentAction() {
   if (houseDoorTravel || !walking || airHeight !== undefined || placeCard.open || museumVisit.dialog.open) return undefined;
   if (cloudRoute.active()) return cloudRoute.action({ east: x, north: n, height: ground });
@@ -2140,8 +2141,11 @@ function currentAction() {
         openPlace('坑区手绘图', '图上只有井口、栈道与黑石带，最后一格尚未标注。');
         break;
       case 'telescope':
-        activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
-        announceActivity('望筒朝向坑沿与坑心');
+        craterTelescopeActive = !craterTelescopeActive;
+        if (craterTelescopeActive) {
+          activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
+          announceActivity('望筒已对准坑心 · E 收起 · 离开底座自动退出');
+        } else announceActivity('收起望筒 · 恢复正常视角');
         break;
       case 'firewood':
         announceActivity(works.firewood() ? '添柴后火盆亮了一些' : '火盆恢复原样');
@@ -2842,6 +2846,7 @@ function refreshWorldAction() {
   actionButton.hidden = !action;
   const label = action ? (touchWalk.active() ? action.label : `E · ${action.label}`) : '';
   if (label !== actionButton.textContent) actionButton.textContent = label;
+
 }
 
 function renderCloudRoute(frameSeconds: number) {
@@ -3084,7 +3089,14 @@ renderer.setAnimationLoop(now => {
   } else sledVisuals.hide();
   sledVisuals.update(dt);
   sledTrackView.sync(snowCover, now / 1000);
-  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
+  // The real ground-level crater scope needs persistent optical framing.
+  // The sled's per-frame camera FOV reconciliation also performs automatic
+  // recovery when the player walks away, boards, or changes world domain.
+  const scopeSpot = westCraterRoad?.outerworks.actions.find(site => site.id === 'telescope');
+  if (craterTelescopeActive && (!scopeSpot || !walking || cloudRoute.active() || sledRide.active() ||
+      Math.hypot(x - scopeSpot.east, n - scopeSpot.north) > scopeSpot.range + .8 ||
+      Math.abs(ground - scopeSpot.height) > 3)) craterTelescopeActive = false;
+  const targetFov = craterTelescopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;
     camera.updateProjectionMatrix();
