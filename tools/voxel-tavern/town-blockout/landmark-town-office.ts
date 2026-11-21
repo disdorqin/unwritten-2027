@@ -110,8 +110,11 @@ export function buildTownOfficeLandmark(_plot: TownPlot): Group {
       }
     }
     // Window dressing: timber frame, warm glass, stone sill with snow.
+    // Floor-level openings are doorways, not windows: no glass, frame or sill —
+    // dressing the ZA-11 door span here is what sealed the office entrance
+    // behind a full-span glass pane (Release 7/9 live failure, fixed 2026-11-21).
     for (const o of openings) {
-      if (o.h < 1.5) continue;
+      if (o.h < 1.5 || o.y0 < .5) continue;
       const cy = o.y0 + o.h / 2;
       const put = (tint: string, a: number, b: number, w: number, h: number, d: number, out: number) => {
         if (alongX) box(tint, a, b, face + out * side, w, h, d); else box(tint, face + out * side, b, a, d, h, w);

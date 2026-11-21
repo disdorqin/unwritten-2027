@@ -26,7 +26,7 @@ export const za22CloudRunway = { start: 310.5, end: 351.5, north: 662, width: 4.
 const cloudApron = { west: 286.5, east: 352, south: 654, north: 664.65 };
 const terminalDwell = 8_000;
 const roofClearance = 3.5;
-const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
+export const cloudTerminal: Point = { east: 336, north: 640, height: 347 };
 // Four lookouts reuse existing snow ground and do not claim an open passage
 // through the steep central summit cap.
 export const za07CloudLookouts = [

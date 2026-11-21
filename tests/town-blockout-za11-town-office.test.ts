@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group } from 'three';
+import { Group, InstancedMesh, Matrix4 } from 'three';
 import { layout } from '../tools/voxel-tavern/town-blockout/terrain';
 import {
   buildTownOfficeLandmark, STAR_RING_CENTER, STAR_RING_GAP, STAR_RING_RADIUS, STAR_RING_SOCKETS, CELLAR_HATCH_LOCAL,
@@ -70,4 +70,25 @@ test('ZA-11: the star ring is the town-chronicle ring — 40 degree gap, twelve 
   // The cellar hatch (rat-stone cellar interface) sits in the ring room's far corner.
   const [hx, , hz] = CELLAR_HATCH_LOCAL;
   assert.ok(hx > 3.4 && hz < -3, 'hatch inside the east room');
+});
+
+test('ZA-11 regression: no glass pane seals the front door span (Release 7/9 live failure)', () => {
+  assert.ok(plot);
+  const model = buildTownOfficeLandmark(plot as never);
+  // The door span is local x -1.2..1.2, floor .3 to lintel 3.4, at the front wall z ~8.
+  // Window dressing must never place glass (or any visual block) inside it:
+  // the collider check above cannot see visual-only blocks, which is how a
+  // full-span glass pane shipped while every gate stayed green.
+  const glass = model.children.find(c => c.name === 'TownOffice glass') as InstancedMesh | undefined;
+  assert.ok(glass, 'window glass batch exists');
+  const m = new Matrix4();
+  for (let i = 0; i < glass.count; i++) {
+    glass.getMatrixAt(i, m);
+    const e = m.elements;
+    const px = e[12], py = e[13], pz = e[14];
+    const sx = Math.hypot(e[0], e[1], e[2]), sy = Math.hypot(e[4], e[5], e[6]), sz = Math.hypot(e[8], e[9], e[10]);
+    const overlapsDoor = Math.abs(px) < 1.2 + sx / 2 && pz > 7.4 && pz < 8.6 + sz / 2 &&
+      py - sy / 2 < 3.4 && py + sy / 2 > .3;
+    assert.equal(overlapsDoor, false, `glass instance ${i} at (${px}, ${py}, ${pz}) seals the door span`);
+  }
 });

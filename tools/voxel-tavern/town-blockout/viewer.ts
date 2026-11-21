@@ -27,7 +27,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
-import { createZa22CloudRoute } from './town-za22-cloud-route';
+import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
@@ -397,6 +397,22 @@ let skyCityViewKind: 'ground' | 'summit' | 'city' = 'ground';
 function enterSkyCity() { skyCityViewKind = 'city'; }
 function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
+// 缆车进出站与「前往」星港坪共用同一条域交接：切 presence 域与场景、落到站台点。
+function transferCloudTerminal(terminal: 'base' | 'summit', at: { east: number; north: number; height: number }) {
+  skyCityViewKind = terminal === 'summit' ? 'summit' : 'ground';
+  presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
+  x = at.east;
+  n = at.north;
+  ground = at.height;
+  airHeight = undefined;
+  riseSpeed = 0;
+  stopTravel();
+  snowControls.cancel();
+  storeWalkView(walkCurrent);
+  walkPrevious.copy(walkCurrent);
+  yaw = 0;
+  pitch = 0;
+}
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
   cloudStamp: {
@@ -405,21 +421,7 @@ const cloudRoute = createZa22CloudRoute({
       if (!presence.requestSummitPassport('cloud-stamp')) announceActivity('前山碑盖章暂不可用');
     },
   },
-  enterOrExit(terminal, at) {
-    skyCityViewKind = terminal === 'summit' ? 'summit' : 'ground';
-    presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
-    x = at.east;
-    n = at.north;
-    ground = at.height;
-    airHeight = undefined;
-    riseSpeed = 0;
-    stopTravel();
-    snowControls.cancel();
-    storeWalkView(walkCurrent);
-    walkPrevious.copy(walkCurrent);
-    yaw = 0;
-    pitch = 0;
-  },
+  enterOrExit: transferCloudTerminal,
   view: (title, message) => { activityContext.open(title, message); },
 });
 function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
@@ -2469,6 +2471,17 @@ function interact() {
   if (!placeCard.open && !museumVisit.dialog.open) renderer.domElement.focus();
 }
 function landAtSelectedDestination() {
+  if (selector.value === '星港坪') {
+    // 星港坪本体在山域场景内，镇域落点搜索在 (324,657) 无合法落脚点；
+    // 必须走缆车同一条域交接落到云海台站台，而不是改镇域坐标。
+    transferCloudTerminal('summit', cloudTerminal);
+    return true;
+  }
+  if (skyCityViewKind === 'summit') {
+    // 人在山域时选镇域目的地：先切回镇域，再按镇域落点落位。
+    skyCityViewKind = 'ground';
+    presence.setMountainDomain(false);
+  }
   const destination = points.get(selector.value);
   if (!destination || !settleTownLanding(destination[0], destination[1])) return false;
   const target = layout.plots[plotLabels.indexOf(selector.value)];
