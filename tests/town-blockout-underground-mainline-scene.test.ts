@@ -228,6 +228,42 @@ test('U-19 derail is visible as a stopped cart and rerail prompt, without auto-h
   assert.equal(f.parent.children.length, 0);
 });
 
+test('U-19 camp winch wheel and winch-only audio follow persisted shared recall, not local frames', () => {
+  const f = setup();
+  const mounted = mountUndergroundMainlineScene(f.options);
+  if (mounted.kind !== 'ready') assert.fail();
+  const wheel = mounted.group.getObjectByName('u19-host-confirmed-recall-winch');
+  assert.ok(wheel);
+  assert.equal(wheel.children.length, 9, 'eight spokes and a central wooden hub');
+  f.setSnapshot({ ...fresh, revision: 2, mode: 'stopped', chainage: route.length,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 } });
+  mounted.sync();
+  const before = wheel.rotation.z;
+  f.setSnapshot({ ...fresh, revision: 3, mode: 'recalling', chainage: route.length,
+    recallOperator: 'miner', lastRecallAtMs: 200,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 } });
+  mounted.sync();
+  assert.equal(wheel.rotation.z, before, 'pressing E does not move a cart without accepted winch work');
+  assert.ok(f.noises.some(e => (e as { kind: string }).kind === 'winch'));
+  const count = f.noises.length;
+  f.setSnapshot({ ...fresh, revision: 4, mode: 'recalling', chainage: route.length - 12,
+    recallOperator: 'miner', lastRecallAtMs: 1200,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 } });
+  mounted.sync();
+  assert.notEqual(wheel.rotation.z, before);
+  const during = wheel.rotation.z;
+  assert.ok(f.noises.length > count);
+  assert.equal((f.noises[f.noises.length - 1] as { kind: string }).kind, 'winch');
+  mounted.sync();
+  assert.equal(wheel.rotation.z, during);
+  assert.equal(f.noises.length, count + 1, 'no repeated sound on unchanged accepted revision');
+  f.setSnapshot(undefined);
+  mounted.sync();
+  assert.equal(wheel.visible, false, 'missing authoritative state never shows a phantom wheel');
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
 test('U-19 full ore cart never offers an empty-cart recall interaction at the camp station', () => {
   const f = setup();
   const mounted = mountUndergroundMainlineScene(f.options);
