@@ -81,8 +81,20 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
     densityDraws++;
     densityTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
   });
-  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
+  const signage = crater.group.getObjectByName('za36-canonical-crater-signage');
+  assert.ok(signage, 'approved signs mounted once on existing worksite');
+  let signDraws = 0, signTriangles = 0;
+  signage.traverse(node => {
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    signDraws++;
+    signTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
+  assert.ok(signDraws >= 5 && signDraws <= 7, 'one atlas + period-dependent structural frames');
+  assert.ok(signTriangles < 2500, 'painted signs may not explode the GPU budget');
+
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - signDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - signTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
   assert.ok(dressingDraws <= 15, 'added story details must stay batched');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');

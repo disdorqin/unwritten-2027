@@ -65,6 +65,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const group = new Group();
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
+  const interiorEntrances: { id:string; east:number; north:number; height:number; yaw:number; clearWidth:number }[] = [];
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 43, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 89, palette.stone);
@@ -181,14 +182,31 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Yard pad and hall: stone base, corrugated walls, timber posts, slate gable.
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
-    put(stone, 0, g + .6, 0, 28, 1.2, 11);
-    put(corrugated, 0, g + 5.1, 0, 28, 7.8, 11);
+    // On current live heightAt the shop pad must not submerge the visitor.
+    put(stone, 0, g + .07, 0, 28, .14, 11);
+    // R1 structural build: a *hollow* 28x11m factory, not the former solid
+    // corrugated cuboid that blocked the entire interior volume.
+    put(corrugated, 0, g + 4.55, -5.36, 27.8, 8.9, .28);
+    for (const side of [-1,1]) {
+      put(corrugated, side*13.86, g + 4.55, 0, .28, 8.9, 10.8);
+    }
+    // Open 3.5m freight door at dx=-4. Main wall is split; overhead lintel
+    // stops rain but leaves the visitor's full 4m headroom.
+    put(corrugated, -9.875, g + 4.55, 5.36, 8.25, 8.9, .28);
+    put(corrugated, 5.875, g + 4.55, 5.36, 16.25, 8.9, .28);
+    put(corrugated, -4, g + 7.15, 5.36, 3.8, 3.7, .28);
+    const smelterDoor = fr.at(-4,5.58);
+    interiorEntrances.push({id:'smelter-plant',...smelterDoor,height:g+.14,yaw:fr.yaw,clearWidth:3.5});
     for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 5.1, 5.45, .45, 7.8, .3);
     put(slate, -7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, .5);
     put(slate, 7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, -.5);
     put(timber, 0, g + 12.3, 0, 28.6, .4, .5);
-    // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
-    put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
+    // The furnace door swings aside; a black panel across the opening was
+    // removed because it visually defeated the new enterable ground floor.
+    for (const side of [-1,1]) put(iron, -4+side*1.78, g+2.65,5.64,.12,5.1,.16);
+    put(iron,-4,g+5.03,5.64,3.6,.14,.16);
+    // Shallow outside threshold reduces the one-metre plinth step.
+    put(stone,-4,g+.08,6.08,3.45,.16,1.02);
     const doorP = fr.at(-2.1, 5.75);
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
     // Tall brick chimney, cold.
@@ -204,6 +222,35 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     put(timberWarm, -9, g + .8, 9, 1.6, 1.6, 1.6);
     put(timberWarm, -7.2, g + .7, 9.4, 1.4, 1.4, 1.4, 0, .2);
+    // First-pass interior: two working aisles with visible production tools.
+    // Keep the central dx=-4 aisle from the public door to the back free.
+    for(const x of [-11.25,10.35]) {
+      for(const z of [-3.6,-.75,2.2]) {
+        put(timberWarm,x,g+2.2,z,3.0,.16,1.15);
+        for(const sx of [-1.18,1.18]) for(const sz of [-.36,.36])
+          put(timber,x+sx,g+1.55,z+sz,.17,1.9,.17);
+      }
+    }
+    // Cold furnace body, casting mouth, two heat shields, and twelve valves.
+    put(stoneDark,7.1,g+3.0,-2.4,4.2,3.8,2.45);
+    put(dark,7.1,g+3.1,-1.12,2.5,2.5,.08);
+    for(const x of [4.8,9.4])put(iron,x,g+3.15,-2.4,.20,4.2,2.1);
+    for(let i=0;i<12;i++){
+      const x=4.0+(i%6)*1.13,z=-3.9+Math.floor(i/6)*.65;
+      put(brass,x,g+1.5+(i%3)*.30,z,.36,.20,.24);
+    }
+    // Logbooks and gauges remain an unpowered industrial set, not invented lore.
+    for(let i=0;i<9;i++) {
+      const x=-11.2+(i%3)*1.0,z=-3.35+Math.floor(i/3)*.78;
+      put(iron,x,g+2.5,z,.66,.16,.58);
+      put(brass,x,g+2.65,z,.35,.05,.24);
+    }
+    // Freight bridge and suspended chain hang inside the actual roof volume.
+    put(iron,0,g+8.25,0,26,.25,.32);
+    for(const x of [-6.5,4.8,9.8]){
+      put(iron,x,g+7.45,0,.11,1.4,.11);
+      put(rustIron,x,g+6.65,0,.58,.21,.58);
+    }
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
     cyl(rustIron, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
@@ -266,8 +313,26 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
-    put(stone, 0, g + 2.1, 0, 20, 4.2, 10);
-    put(timberWarm, 0, g + 6.3, 0, 20, 4.2, 10);
+    // R1: real two-storey, hollow instrument repair shop. A solid 20x10x8
+    // brick from the former blockout was preventing all interior exploration.
+    put(stone, 0, g + .06, 0, 20, .12, 10);
+    put(stone, 0, g + 2.18, -4.86, 19.8, 4.04, .28);
+    for(const side of [-1,1])put(stone,side*9.86,g+2.18,0,.28,4.04,9.8);
+    put(stone,-6.1,g+2.18,4.86,7.6,4.04,.28);
+    put(stone,6.1,g+2.18,4.86,7.6,4.04,.28);
+    put(stone,0,g+3.93,4.86,4.35,.54,.28);
+    // Upper floor / stairwell: a real opening remains on the east side.
+    put(timberWarm,-3.05,g+4.21,0,13.8,.20,9.4);
+    put(timberWarm,8.65,g+4.21,0,2.0,.20,9.4);
+    put(timberWarm,5.5,g+4.21,-3.55,5.2,.20,2.25);
+    put(timberWarm,0,g+6.4,-4.86,19.8,4.1,.28);
+    for(const side of [-1,1])put(timberWarm,side*9.86,g+6.4,0,.28,4.1,9.8);
+    put(timberWarm,-5.90,g+6.4,4.86,8.1,4.1,.28);
+    put(timberWarm,5.90,g+6.4,4.86,8.1,4.1,.28);
+    put(timberWarm,0,g+8.13,4.86,3.72,.54,.28);
+    const instrumentDoor = fr.at(0,5.0);
+    interiorEntrances.push({id:'instrument-plant',...instrumentDoor,
+      height:g+.12,yaw:fr.yaw,clearWidth:4.2});
     put(slate, -5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, .48);
     put(slate, 5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, -.48);
     // Two rows of dark windows; two boarded up.
@@ -282,6 +347,32 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Chimney twice the ridge height above the roof.
     put(rustIron, -8, g + 11, -2, 1.1, 13, 1.1);
     put(stoneDark, -8, g + 17.7, -2, 1.5, .45, 1.5);
+    // R2: genuinely modelled visitor stair (twelve treads + side rail),
+    // with a separate upper landing. The avatar floor authority is a later
+    // integration step; we do not claim these steps are walkable yet.
+    for(let i=0;i<12;i++) {
+      const z=3.33-i*.53,top=.34+i*.326;
+      put(timberWarm,6.55,g+top,z,1.63,.14,.56);
+      put(timber,7.42,g+top*.5,z,.12,top,.12);
+    }
+    for(let z=-2.5;z<=3.5;z+=1.5)
+      put(iron,7.55,g+3.30,z,.09,2.2,.09);
+    put(iron,7.55,g+4.38,.30,.11,.13,7.4);
+    // Calibration bench and upper-floor storeroom.
+    for(const x of [-7.3,-4.8,-2.3]) {
+      put(timberWarm,x,g+1.50,-1.65,2.20,.16,1.25);
+      for(const sx of [-1.03,1.03])put(timber,x+sx,g+1.12,-1.65,.14,.93,.16);
+      for(let k=0;k<6;k++){
+        const px=x-1.0+(k%3)*.78,pz=-1.75+Math.floor(k/3)*.42;
+        put(iron,px,g+1.67,pz,.36,.12,.33);
+        put(brass,px,g+1.80,pz,.21,.15,.20);
+      }
+    }
+    for(const x of [-6.6,-3.2,0.2]){
+      put(timber,x,g+5.27,-3.05,2.5,1.42,.55);
+      for(let i=0;i<4;i++)
+        put(iron,x-1.0+i*.68,g+6.10,-3.08,.40,.36,.38);
+    }
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
@@ -701,7 +792,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight,
+    group, sites, fencePosts, interiorEntrances, setNight,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
   };
 }

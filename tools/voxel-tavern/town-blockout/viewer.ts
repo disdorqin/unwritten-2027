@@ -2517,6 +2517,14 @@ function currentAction() {
         break;
     }
   } };
+  // Canonical ZA-36 plaques: signs describe history, they do not grant or
+  // validate an invented work permit. Guards retain higher E priority.
+  const plaque = !homeReturn && x < 0
+    ? ensureWestCraterRoad().signage.actionAt(x, n, ground) : undefined;
+  if (plaque) return {
+    label: `阅读${plaque.title}`,
+    run() { openPlace(plaque.title, plaque.lines.join('\n')); },
+  };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);
   if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
