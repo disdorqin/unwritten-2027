@@ -1,6 +1,7 @@
 # ZB-20 服务端授权风偏·公共批交接（2026-11-21）
  
 - 窗号 / 自有分支 / 候选提交：B / `lane-build` / `bd68e200`；已并独立叶件 `town-blockout-integration@f7383f2b`。
+- **权威天气公共取件最新（2026-11-21）**：集成已推至 `c3e8c349`，正式 Presence 的 G-09 多房广播与重连快照已经启用；客户端 `presence.getTownOutdoorWeather()`、`getTownWeatherDawnEpoch()`、`onTownOutdoorWeatherWarning()` 全部可供 viewer 消费。B 新增 `town-g09-scene-adapter.ts`、`town-g09-snow-cover.ts`、`town-weather-exposure.ts`（共享系数在 `src/shared/town-weather-exposure.ts`）、`snowfall.setOutdoorWind` 等组件，能做同服积雪/暴雪缓融、分区白茫 12/15/30m 和单组雪粒连续受风。已验 Presence 54/54、场景关联 26/26、真实 HTTP 轮询/分区 3/3、断线 5/5、TypeScript 定向 0、Chrome 裸镇页 0 页错误。**接线仍被 A 的单写 viewer 挂载门阻塞**；本轮未改 viewer、不触发 22B 风偏投掷、未假报发布。完整精确接口/验收门在 `GPT/2026-11-21-ZB20-权威天气正式链路与积雪刷新六段回执.md`。
 - **缆车风雪四轮补充（2026-11-21）**：共享缆车时钟、官方 G-09 天气叶件、实物 ZA-22 双车线路可选注入、暴风雪中候车和途中停驶测例已顺序审合至集成 `1b817af2`（16/16、定向 TS 0、Chromium 无参入口 0 错）。A 窗只需在公共 `viewer.ts` 确认 G-09 母钟/体感入图后向原 `createZa22CloudRoute` host 注入 `cableWeather: createTownCableWindClock(at => townOutdoorWeatherAt(at, dawnEpoch), dawnEpoch)`；不能使用另一个本机时间，更不能在未发布天气广播时默认启用。详细交付和当前验收限制见 `GPT/2026-11-21-ZB20-四轮制缆车风雪交付与取件回执.md`。本包仍在建。
 - **最新同步（2026-11-21）**：`src/presence/server.ts` 已通过单写窄改并线 `town-blockout-integration@924bd471`，完成真实 Presence 30/30 和 TypeScript 定向 0 错；不必再次取该文件旧补丁。未配置时保持旧 18B 发球。公共 viewer 接线、正式权威天气/暴露系数及双端实走仍待。
 - **原始交接留档（以下 server 取件要求已由上条结案）**：`src/presence/server.ts` 的 B 候选内有精确差分：`git show bd68e200 -- src/presence/server.ts`。不可直接用 B 旧文件覆盖当前集成线服务端，需在当前集成尖端复放。公共服务端单写锁归公共批审取。
