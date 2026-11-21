@@ -52,7 +52,7 @@ test('U-3 R1 models the entire 180×120m layer, 97m path, vault, clusters, river
   assert.equal(crystalCavernPlan.minimumVaultHeight, 20);
   assert.deepEqual(crystalCavernPlan.entry, { east: 0, north: 1, height: -.064 });
   assert.deepEqual(crystalCavernPlan.exit, { east: 8.7, north: 98, height: -2.960 });
-  assert.ok(numbers.cuboids >= 3500, 'large-scale build, not an interface-only specimen');
+  assert.ok(numbers.cuboids >= 6500, 'complete cavern floor, roof and crystal clumps, not floating props');
   assert.equal(numbers.riverCells, 289);
   assert.ok(numbers.trailBlocks >= 775);
   assert.ok(numbers.quayBlocks > 150);
@@ -177,9 +177,9 @@ test('U-3 route geometry stays decoupled from unauthorized mining, crystal-mimic
     p.size.every(x=>x>0)));
   assert.ok(pieces.filter(p => p.solid).every(p => p.name.startsWith('u3/vault/') ||
     p.name.startsWith('u3/overlook/')));
-  assert.ok(pieces.every(p => p.center[0] >= -85 && p.center[0] <= 85));
+  assert.ok(pieces.every(p => p.center[0] >= -90 && p.center[0] <= 90));
   assert.ok(pieces.every(p => p.center[2] >= -12 && p.center[2] <= 120));
-  assert.ok(crystalCavernArchitecture.numbers.cuboids*12 < 55000,
+  assert.ok(crystalCavernArchitecture.numbers.cuboids*12 < 110000,
     'mobile-friendly instanced geometry should have a budget');
   assert.equal(crystalCavernTrailEast(98),8.7);
   assert.equal(crystalCavernTrailHeight(98),-2.960);
