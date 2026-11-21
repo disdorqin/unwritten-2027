@@ -179,8 +179,23 @@ export function mountUndergroundDomainHost(options: Readonly<{
       restAfterMs: 2500,
       now: campBridge.now,
       readFooting: () => {
-        const foot = campBridge.readWorldFoot();
-        return foot ? toLocal?.(foot) : undefined;
+        // Default town startup mounts the mine while viewer.ts's player x/n/
+        // ground lexical bindings are still in their initialization phase.
+        // A camp has no authorized footing before the rigid transform exists;
+        // an early synchronous sync() must not kill the entire town entry.
+        if (!toLocal) return undefined;
+        let foot: Point | undefined;
+        try { foot = campBridge.readWorldFoot(); }
+        catch (error) {
+          // This is strictly an initialization-time signal, NOT a general
+          // exception swallowing policy. All other host/camp bugs propagate.
+          if (error instanceof ReferenceError &&
+              /^Cannot access '(?:x|n|ground)' before initialization$/.test(error.message)) {
+            return undefined;
+          }
+          throw error;
+        }
+        return foot ? toLocal(foot) : undefined;
       },
       sit: (room: { id: string }) => campBridge.sit(room.id),
       stand: (room: { id: string }) => campBridge.stand(room.id),
