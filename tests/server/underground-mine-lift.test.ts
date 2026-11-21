@@ -14,12 +14,14 @@ function setup() {
   let time = 10;
   let dock: Stop | undefined = 'crater-floor';
   let gate = 'locked';
+  let lastAllocatedTrip = 0;
   const feet = new Map([['a', at('a', 'crater-floor')], ['b', at('b', 'crater-floor')], ['c', at('c', 'crater-floor')]]);
   const requests: [string, 'down' | 'up'][] = [];
   const options: Options = {
     travelMs: 25_000,
     riderCapacity: 2,
     now: () => time,
+    allocateTripId: () => ++lastAllocatedTrip,
     readDockedStop: () => dock,
     readAcceptedFoot: playerId => feet.get(playerId),
     isAtBoardingPlatform: (stop, foot) => foot.domainId === stop && foot.east === 0,
@@ -166,6 +168,56 @@ test('a lone first-fall survivor can call the empty cage and then ride back from
   h.time(50_010);
   assert.equal(h.lift.confirmArrival(returning.id), true);
   assert.equal(h.lift.board('b', 'down'), true);
+});
+
+test('restoring the lift reuses the physical dock but never recycles a previous trip ID', () => {
+  const h = setup();
+  h.gate('ride-cage');
+  assert.equal(h.lift.board('a', 'down'), true);
+  const down = h.lift.depart('a')!;
+  h.dock('mine');
+  h.time(25_010);
+  assert.equal(h.lift.confirmArrival(down.id), true);
+  h.feet.set('a', at('a', 'mine'));
+
+  // Two authorities share the host's durable allocator, not a local sequence reset to zero.
+  const restarted = createUndergroundMineLift(h.options);
+  assert.deepEqual(restarted.state(), { stop: 'mine', riders: [] });
+  assert.equal(restarted.board('a', 'up'), true);
+  const up = restarted.depart('a')!;
+  assert.equal(up.id, down.id + 1);
+  assert.equal(restarted.confirmArrival(down.id), false);
+  h.dock('crater-floor');
+  h.time(50_010);
+  assert.equal(restarted.confirmArrival(down.id), false);
+  assert.equal(restarted.confirmArrival(up.id), true);
+});
+
+test('a missing, invalid or repeated host allocation cannot launch or discard boarded players', () => {
+  const h = setup();
+  h.gate('ride-cage');
+  let supplied = 0;
+  const lift = createUndergroundMineLift({ ...h.options, allocateTripId: () => supplied });
+  assert.equal(lift.board('a', 'down'), true);
+
+  for (const invalid of [0, -1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    supplied = invalid;
+    assert.throws(() => lift.depart('a'), /trip IDs must be durable/);
+    assert.deepEqual(lift.state(), { stop: 'crater-floor', riders: ['a'] });
+  }
+  supplied = 101;
+  const down = lift.depart('a')!;
+  assert.equal(down.id, 101);
+  h.dock('mine');
+  h.time(25_010);
+  assert.equal(lift.confirmArrival(101), true);
+  h.feet.set('a', at('a', 'mine'));
+  assert.equal(lift.board('a', 'up'), true);
+  supplied = 101; // An allocator with stale persisted state must not replay this process' old ID.
+  assert.throws(() => lift.depart('a'), /trip IDs must be durable/);
+  assert.deepEqual(lift.state(), { stop: 'mine', riders: ['a'] });
+  supplied = 102;
+  assert.equal(lift.depart('a')?.id, 102);
 });
 
 test('travel duration and capacity require explicit design-compatible inputs', () => {
