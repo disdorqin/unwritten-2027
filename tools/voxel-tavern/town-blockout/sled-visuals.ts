@@ -5,11 +5,12 @@ import {
 import type { SledAnimationFrame } from './sled-animation';
 import { createSledRiderMatrices, writeSledRiderPart } from './sled-rider-pose';
 import { voxelPersonParts } from './town-voxel-person';
+import { sledDepotParts, sledDetailParts, type SledPiece } from './sled-model-kit';
 
 const firstPersonParts = voxelPersonParts.slice(10);
 const firstPersonPalette = ['#e6b18c', '#423541', '#a54345', '#e0caaf', '#4c4357', '#ddae5f'];
 
-type SledPart = readonly [readonly [number, number, number], readonly [number, number, number], string];
+type SledPart = SledPiece;
 export const sledParts: readonly SledPart[] = [
   [[-.29, .075, 0], [.095, .11, 1.65], '#4f3027'],
   [[.29, .075, 0], [.095, .11, 1.65], '#4f3027'],
@@ -21,8 +22,14 @@ export const sledParts: readonly SledPart[] = [
   [[.23, .22, .38], [.14, .26, .13], '#7f5534'],
   [[0, .37, -.1], [.7, .1, 1.25], '#b47342'],
   [[0, .53, -.69], [.68, .28, .115], '#a44340'],
+  ...sledDetailParts,
 ];
-export const remoteSledParts = sledParts.filter((_, index) => index < 2 || index === 4 || index === 5 || index >= 8);
+// Keep shared-presence avatars bounded: the stationary and local sled gets the full
+// craft; each remote rider retains the recognisable nose/runner without 70+ extra
+// per-player instances. Index 10+ is the added model-kit geometry.
+export const remoteSledParts = sledParts.filter((_, index) =>
+  (index < 10 && (index < 2 || index === 4 || index === 5 || index >= 8)) ||
+  (index >= 10 && index < 23));
 
 type Rack = { x: number; n: number; y: number; yaw: number };
 
@@ -33,7 +40,7 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   sled.count = sledParts.length;
   sled.frustumCulled = false;
   sled.instanceMatrix.setUsage(DynamicDrawUsage);
-  const rackMesh = new InstancedMesh(geometry, material, racks.length * (4 + 2 * sledParts.length));
+  const rackMesh = new InstancedMesh(geometry, material, racks.length * (sledDepotParts.length + 2 * sledParts.length));
   sled.name = 'town-local-sled';
   rackMesh.name = 'town-sled-racks';
   sled.visible = false;
@@ -43,7 +50,8 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   const color = new Color();
   scene.add(sled, rackMesh);
   function placePart(mesh: InstancedMesh, index: number, definition: SledPart, horizontal = 0, scale = 1) {
-    const [center, size, tint] = definition;
+    const [center, size, tint, roofSlope] = definition;
+    part.rotation.set(0, 0, roofSlope ?? 0);
     part.position.set(center[0] * scale + horizontal, center[1] * scale, center[2] * scale);
     part.scale.set(size[0] * scale, size[1] * scale, size[2] * scale);
     part.updateMatrix();
@@ -55,18 +63,12 @@ export function createTownSledVisuals(scene: Scene, racks: readonly Rack[]) {
   firstPersonParts.forEach(([, , palette], index) => {
     sled.setColorAt(sledParts.length + index, color.set(firstPersonPalette[palette]));
   });
-  const poles: readonly SledPart[] = [
-    [[-.78, .385, -.36], [.12, .77, .14], '#7f5032'],
-    [[.78, .385, -.36], [.12, .77, .14], '#7f5032'],
-    [[0, .66, -.36], [1.68, .14, .14], '#9b6239'],
-    [[0, .45, -.36], [.44, .22, .12], '#a74241'],
-  ];
   let rackIndex = 0;
   for (const rack of racks) {
     rackRoot.position.set(rack.x, rack.y, -rack.n);
     rackRoot.rotation.y = Math.PI - rack.yaw;
     rackRoot.updateMatrix();
-    for (const pole of poles) placePart(rackMesh, rackIndex++, pole);
+    for (const depotPiece of sledDepotParts) placePart(rackMesh, rackIndex++, depotPiece);
     for (const offset of [-.42, .42]) {
       for (const definition of sledParts) placePart(rackMesh, rackIndex++, definition, offset, .62);
     }
