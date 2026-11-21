@@ -2,6 +2,7 @@ import {
   BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshStandardMaterial, NearestFilter,
   Object3D, PointLight, SRGBColorSpace,
 } from 'three';
+import { warriorDistrictArchitecture } from './underground-warrior-architecture';
 import {
   warriorDistrictHouses, warriorDistrictStations, warriorDistrictTransform,
   warriorDistrictValidFrame,
@@ -297,6 +298,17 @@ export function mountWarriorStoneDistrict(host: Host) {
   part('rust', 130, 7.90, 28.40, .13, 1.34, .12);
   part('shade', 130.06, 8.65, 28.4, .23, .23, .26);
 
+  // Seven-round reconstruction: every YS4 house now receives complete masonry,
+  // actual roof courses and distinctive furnished rooms; all seven market bays
+  // gain carved vaults, wares and slatted counters; the fixed ruined arcade-end
+  // house and YS5 battlement receive full dense architectural volumes. Reuse
+  // existing materials/batches and collider authority rather than 2500 meshes.
+  for (const piece of warriorDistrictArchitecture.pieces) {
+    const [e, y, north] = piece.center;
+    const [w, h, depth] = piece.size;
+    part(piece.family, e, y, north, w, h, depth, piece.solid, piece.name);
+  }
+
   // Test physical human-cylinder clearance against the SAME stone props exported to
   // the movement authority. A supported ground foot cannot hide inside a house/solid.
   function isClearLocal([e, y, north]: Local, radius = .27, playerHeight = 1.8) {
@@ -408,7 +420,8 @@ export function mountWarriorStoneDistrict(host: Host) {
   }
   return {
     kind: 'ready', group, houses: plannedHouses, colliders, feet,
-    sampledRoute, isClearLocal, voxelCount: elements, batches: meshes.length,
+    sampledRoute, isClearLocal, voxelCount: elements,
+    architecture: warriorDistrictArchitecture.tally, batches: meshes.length,
     lamps, sync, story: warriorDistrictCanon.story, getPrompts, press,
     toWorld: localToWorld,
     dispose() {
