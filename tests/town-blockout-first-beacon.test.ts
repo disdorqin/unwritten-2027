@@ -143,3 +143,37 @@ test('a throwing audio effect preserves other beacon effects and leaves the firs
   assert.equal(stations, 2);
   assert.equal(first.catalogueEntry(), thirteenthBellCatalogueEntry);
 });
+
+test('ZB-17: an off-domain listener cannot consume a live first-hear receipt', () => {
+  let now = dayMs + 10;
+  let inTown = false, sounds = 0;
+  const first = createTownFirstBeacon({
+    storage: browserStorage(), connectedAt: () => dayMs - 100, serverNow: () => now,
+    canHearHere: () => inTown, playAudibleTowerCue() { sounds++; return true; },
+  });
+  first.ringTower(beacon(dayMs));
+  assert.equal(sounds, 0);
+  assert.equal(first.catalogueEntry(), undefined);
+  inTown = true;
+  now += dayMs;
+  first.ringTower(beacon(dayMs * 2));
+  assert.equal(sounds, 1);
+  assert.equal(first.catalogueEntry(), thirteenthBellCatalogueEntry);
+  first.ringTower(beacon(dayMs * 2));
+  assert.equal(sounds, 1, 'duplicate direct callbacks do not sound twice');
+});
+
+test('ZB-17: client clock resync does not replay a synchronized first-hear gesture', () => {
+  let server = dayMs + 10, monotonic = 100;
+  const first = createTownFirstBeacon({
+    storage: browserStorage(), connectedAt: () => dayMs - 100, serverNow: () => server,
+    monotonicNow: () => monotonic, playAudibleTowerCue: () => true,
+  });
+  first.ringTower(beacon(dayMs));
+  monotonic += 550;
+  server -= 700;
+  assert.deepEqual(first.sampleScene(), { livingPaused: false, mascotLooksAtTower: true });
+  monotonic += 1_000;
+  server += 1_400;
+  assert.equal(first.sampleScene(), undefined);
+});
