@@ -27,6 +27,8 @@ test('ZA-07 summit walking spurs connect to the cable terminal with no ghost flo
   const routes = [
     { name: 'cable-to-south-lip', points: [[336, 640], [336, 654.5], [318, 654.5], [318, 634], [320, 634]] },
     { name: 'cable-to-east-overlook', points: [[336, 640], [336, 654.5], [350, 654.5], [350, 650]] },
+    { name: 'cable-to-west-overlook', points: [[336, 640], [336, 654.5], [291, 654.5], [291, 660]] },
+    { name: 'cable-to-north-overlook', points: [[336, 640], [336, 654.5], [300, 654.5], [300, 662]] },
   ];
   for (const route of routes) {
     let previous: [number, number] | undefined;
