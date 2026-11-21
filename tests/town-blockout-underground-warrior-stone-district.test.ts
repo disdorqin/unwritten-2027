@@ -196,6 +196,44 @@ test('U-10 wall stairs have 26 load-bearing treads with continuous overlap to th
   mounted.dispose();
 });
 
+test('U-10 full climbing route is supported, clear for a 27cm-radius avatar and joins the real wall top', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict({ ...f.host,
+    site: { ...surveyFixture, east: 0, north: 0, height: -165, yaw: 0 },
+  });
+  if (mounted.kind !== 'ready') assert.fail();
+  const stairFeet = mounted.sampledRoute.filter(item => item.name.startsWith('citywall/stair-foot-'));
+  const landingFoot = mounted.sampledRoute.find(item => item.name === 'citywall/stair-landing-foot');
+  const wallFeet = mounted.sampledRoute.filter(item => item.name.startsWith('citywall/top-foot-'));
+  assert.equal(stairFeet.length, 26);
+  assert.ok(landingFoot && wallFeet.length > 35);
+  const support = (east: number, y: number, north: number) => mounted.colliders.some(box => {
+    const top = box.max[1] + 165;
+    const minNorth = -box.max[2], maxNorth = -box.min[2];
+    return Math.abs(top - y) < .034 && east >= box.min[0] - .02 &&
+      east <= box.max[0] + .02 && north >= minNorth - .02 && north <= maxNorth + .02;
+  });
+  const foot = (p: readonly [number, number, number]) => {
+    assert.ok(mounted.isClearLocal(p), 'player cannot stand inside the next stair riser');
+    assert.ok(support(p[0], p[1], p[2]),
+      'each step must have a real support top, not a floating camera waypoint: ' + p);
+  };
+  for (const item of stairFeet) foot(item.foot);
+  foot(landingFoot.foot);
+  const firstDeck = wallFeet.find(item => item.foot[0] === 99);
+  assert.ok(firstDeck);
+  foot(firstDeck.foot);
+  // The final stair is flush to the landing, then the avatar moves north under
+  // the deliberately open (non-air-wall) parapet into the full 90m battlement.
+  const last = stairFeet[25].foot;
+  for (let north = last[2]; north <= 27; north += .08) {
+    const p: readonly [number, number, number] = [99, 7.12, north];
+    assert.ok(mounted.isClearLocal(p), 'landing corridor snag at north=' + north);
+    assert.ok(support(p[0], p[1], p[2]), 'no support lip at north=' + north);
+  }
+  mounted.dispose();
+});
+
 test('U-10 room line and bazaar do not engulf the pre-existing statue square or north forge site', () => {
   const f = setup();
   const mounted = mountWarriorStoneDistrict({ ...f.host,
