@@ -117,6 +117,45 @@ test('ZA pit area is a nominal radial-profile ledger, not a measured trail-carve
   assert.equal(crater.terraceHeightOffsetAt(55), 0);
 });
 
+test('ZA pit area physically sums accepted road-carved preview triangles, not the radial bare profile', () => {
+  const shaftRadius = meteorCraterRimRadius / 30;
+  const mesh = crater.buildPreviewSurface(shaftRadius);
+  const { positions, indices } = mesh;
+  let surveyedSurface = 0, surveyedProjected = 0, triangles = 0;
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = indices[i]! * 3, b = indices[i + 1]! * 3, c = indices[i + 2]! * 3;
+    const meanRad = (Math.hypot(positions[a]!, positions[a + 2]!) +
+      Math.hypot(positions[b]!, positions[b + 2]!) +
+      Math.hypot(positions[c]!, positions[c + 2]!)) / 3;
+    if (meanRad < shaftRadius || meanRad > meteorCraterRimRadius) continue;
+    const ax = positions[b]! - positions[a]!, ay = positions[b + 1]! - positions[a + 1]!,
+      az = positions[b + 2]! - positions[a + 2]!;
+    const bx = positions[c]! - positions[a]!, by = positions[c + 1]! - positions[a + 1]!,
+      bz = positions[c + 2]! - positions[a + 2]!;
+    const crossX = ay * bz - az * by;
+    const crossY = az * bx - ax * bz;
+    const crossZ = ax * by - ay * bx;
+    surveyedSurface += .5 * Math.hypot(crossX, crossY, crossZ);
+    surveyedProjected += .5 * Math.abs(crossY);
+    triangles++;
+  }
+  assert.ok(triangles > 10000, 'use the full surveyed B01 mesh, not a single radial slice');
+  assert.ok(surveyedSurface >= surveyedProjected);
+  const expectedProject = area(meteorCraterRimRadius, 0) - area(shaftRadius, 0);
+  assert.ok(tolerancePercent(expectedProject, surveyedProjected) < .1,
+    'mesh projected coverage should agree with the pit footprint after excluding its shaft');
+  const bareSurfaceOnSameFootprint = analyticSurface(55, 0) - area(shaftRadius, 0);
+  assert.ok(surveyedSurface > bareSurfaceOnSameFootprint + 300,
+    'a spiral-carved trail adds genuine 3D surface that a radial profile cannot measure');
+  assert.ok(tolerancePercent(surveyedSurface, table.craterSurface) > 2,
+    'A ledger must not be mislabelled as actual mesh surface');
+  assert.ok(Math.abs(surveyedSurface - 14484.486149) < 2,
+    'record significant real geometry changes for a new production-area review');
+  console.info('C crater mesh audit:', { triangles, surveyedSurface,
+    surveyedProjected, bareProfileWithoutShaft: bareSurfaceOnSameFootprint,
+    roadEffect: surveyedSurface - bareSurfaceOnSameFootprint });
+});
+
 test('ZA pit area does not double-count the 10.6 square-metre capped well as extra crater floor', () => {
   assert.ok(area(55, 0) - area(50, 20) - area(55, 50) - area(20, 0) < 1e-9);
   assert.equal(
