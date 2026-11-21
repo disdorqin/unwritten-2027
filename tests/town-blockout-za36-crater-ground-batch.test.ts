@@ -37,11 +37,24 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
     dressingDraws++;
     dressingTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
   });
-  assert.equal(draws - dressingDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
-  assert.equal(triangles - dressingTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
+  const mouthWorks = crater.group.getObjectByName('crater-mouth-works');
+  assert.ok(mouthWorks, 'crater-mouth works (mainline 1) mounted');
+  let mouthDraws = 0, mouthTriangles = 0, mouthLights = 0;
+  mouthWorks.traverse(node => {
+    if ((node as Light).isLight) mouthLights++;
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    mouthDraws++;
+    mouthTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
+  assert.equal(draws - dressingDraws - mouthDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
+  assert.equal(triangles - dressingTriangles - mouthTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
   assert.ok(dressingDraws <= 15, 'added story details must stay batched');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
-  assert.equal(lights, 3, 'retains all three warm light pools');
+  assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');
+  assert.ok(mouthTriangles <= 60000, 'crater-mouth works stay inside the approved mainline-1 triangle budget');
+  assert.equal(mouthLights, 3, 'crater-mouth works add exactly three real light pools');
+  assert.equal(lights, 6, 'retains all three warm light pools plus the three crater-mouth pools');
   for (let n = 10; n < worldBounds.depth - 1; n += 7.5) {
     const oldTownEdge = terrain.groundHeightAt(0, n);
     assert.ok(Math.abs(crater.heightAt(0, n)! - oldTownEdge) < .001, `seam at ${n}`);
