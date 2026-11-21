@@ -163,6 +163,39 @@ test('U-10 moonstone lamps are real cold physical fixtures under the host lighti
   mounted.dispose();
 });
 
+test('U-10 wall stairs have 26 load-bearing treads with continuous overlap to the real landing and deck', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict({ ...f.host,
+    site: { ...surveyFixture, east: 0, north: 0, height: -165, yaw: 0 },
+  });
+  if (mounted.kind !== 'ready') assert.fail();
+  const stairs = Array.from({ length: 26 }, (_, i) =>
+    mounted.colliders.find(box => box.name === 'citywall/stair-' + i)!);
+  assert.ok(stairs.every(Boolean));
+  const over = (left: { min: readonly number[]; max: readonly number[] },
+    right: { min: readonly number[]; max: readonly number[] }, axis: number) =>
+    Math.min(left.max[axis], right.max[axis]) - Math.max(left.min[axis], right.min[axis]);
+  for (let i = 0; i < stairs.length - 1; i++) {
+    assert.ok(over(stairs[i], stairs[i + 1], 0) >= .065,
+      'stair ' + i + ' cannot leave a free-floating gap before ' + (i + 1));
+    assert.ok(over(stairs[i], stairs[i + 1], 2) >= 2.14);
+    assert.ok(stairs[i + 1].max[1] - stairs[i].max[1] < .3,
+      'each climb must be below the non-jump walking step ceiling');
+  }
+  const landing = mounted.colliders.find(box => box.name === 'citywall/stair-landing');
+  assert.ok(landing);
+  assert.ok(over(stairs[25], landing, 0) > .4);
+  assert.ok(over(stairs[25], landing, 2) >= .09,
+    'the last stair must physically touch and overlap the landing, not require a jump');
+  assert.ok(Math.abs(stairs[25].max[1] - landing.max[1]) < .001);
+  const wallDeck = mounted.colliders.find(box => box.name === 'citywall/body' &&
+    box.min[0] < 100 && box.max[0] > 99);
+  assert.ok(wallDeck);
+  assert.ok(over(landing, wallDeck, 2) > 2,
+    'landing is continuous with wall body, not a disconnected platform');
+  mounted.dispose();
+});
+
 test('U-10 room line and bazaar do not engulf the pre-existing statue square or north forge site', () => {
   const f = setup();
   const mounted = mountWarriorStoneDistrict({ ...f.host,
@@ -214,6 +247,50 @@ test('U-10 round 4 returns host-only search, single-door cover, arcade tactics a
   assert.equal(mounted.story.wall.includes('黑暗'), true);
   mounted.dispose();
   assert.equal(mounted.press('lookout', lookout.id), false);
+});
+
+test('U-10 four open house interiors are actually reachable from their one street-facing doorway', () => {
+  const f = setup();
+  const mounted = mountWarriorStoneDistrict(f.host);
+  if (mounted.kind !== 'ready') assert.fail();
+  const step = .26;
+  for (const house of mounted.houses.filter(h => h.accessible)) {
+    const x = house.localEntrance[0], n = house.localEntrance[2];
+    const side = house.side === 'north' ? 1 : -1;
+    const start: readonly [number, number] = [x, n - side * .6];
+    const goals = mounted.feet.filter(item => item.id === house.id);
+    assert.equal(goals.length, 2);
+    const minE = x - 4.45, maxE = x + 4.45;
+    const minN = Math.min(n, n + side * 8.4) - 1.2;
+    const maxN = Math.max(n, n + side * 8.4) + 1.2;
+    const width = Math.ceil((maxE - minE) / step) + 1;
+    const height = Math.ceil((maxN - minN) / step) + 1;
+    const ix = (v: number) => Math.round((v - minE) / step);
+    const iy = (v: number) => Math.round((v - minN) / step);
+    const key = (e: number, nn: number) => nn * width + e;
+    const queue = [[ix(start[0]), iy(start[1])]];
+    const visited = new Set<number>([key(queue[0][0], queue[0][1])]);
+    const paths = new Set<string>();
+    for (let p = 0; p < queue.length; p++) {
+      const [e, nn] = queue[p]!;
+      const east = minE + e * step, north = minN + nn * step;
+      if (!mounted.isClearLocal([east, 0, north])) continue;
+      for (const goal of goals) if (Math.hypot(east - goal.foot[0], north - goal.foot[2]) < .34)
+        paths.add(goal.role);
+      if (paths.size === 2) break;
+      for (const [de, dn] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ex = e + de, nx = nn + dn;
+        if (ex < 0 || ex >= width || nx < 0 || nx >= height) continue;
+        const k = key(ex, nx);
+        if (visited.has(k)) continue;
+        visited.add(k);
+        queue.push([ex, nx]);
+      }
+    }
+    assert.deepEqual(paths, new Set(['search-room', 'take-cover']),
+      house.id + ': a reachable-looking doorway cannot hide unreachable search/cover actions');
+  }
+  mounted.dispose();
 });
 
 test('U-10 all clay stone families render as batched 16px nearest-neighbor swatches and dispose once', () => {

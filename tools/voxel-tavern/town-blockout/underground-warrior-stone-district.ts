@@ -282,12 +282,17 @@ export function mountWarriorStoneDistrict(host: Host) {
     // The final landing crosses to the open parapet without any invisible wall.
     const e = 85 + i * .55;
     const top = (i + 1) * (7.12 / 26);
-    part('tan', e, top / 2, 23.1, .54, top, 2.15, true, 'citywall/stair-' + i);
+    // Adjacent treads overlap by 7cm in the movement direction; no invisible
+    // support or one-centimetre air crack can catch a 27cm-radius avatar.
+    part('tan', e, top / 2, 23.1, .62, top, 2.15, true, 'citywall/stair-' + i);
     if (i === 0) part('moon', e, top + .025, 23.1, .48, .045, 1.90);
+    // The standing foot sits 7cm back from the nosing, leaving the avatar
+    // 27cm cylinder clear of the next higher riser before moving forward.
     floor.push({ name: 'citywall/stair-foot-' + i,
-      foot: [e, top, 23.1] });
+      foot: [e - .07, top, 23.1] });
   }
-  part('tan', 99.5, 7.12 / 2, 25.7, 2.5, 7.12, 2.6, true, 'citywall/stair-landing');
+  // 10cm physical overlap with the last tread, continuous with the wall's deck.
+  part('tan', 99.5, 7.12 / 2, 25.7, 2.5, 7.12, 3.25, true, 'citywall/stair-landing');
   floor.push({ name: 'citywall/stair-landing-foot', foot: [99.5, 7.12, 25.7] });
   for (let x = 83; x < 169; x += 2)
     floor.push({ name: 'citywall/top-foot-' + x, foot: [x, 7.12, 27] });
@@ -308,7 +313,7 @@ export function mountWarriorStoneDistrict(host: Host) {
   part('rust', 130, 7.90, 28.40, .13, 1.34, .12);
   part('shade', 130.06, 8.65, 28.4, .23, .23, .26);
   entryFeet.push({ id: 'u10/wall-lookout', role: 'lookout', foot: [147, 7.12, 27] },
-    { id: 'u10/worn-stair', role: 'trace', foot: [85, 7.12 / 26, 23.1] });
+    { id: 'u10/worn-stair', role: 'trace', foot: [84.93, 7.12 / 26, 23.1] });
 
   // Test physical human-cylinder clearance against the SAME stone props exported to
   // the movement authority. A supported ground foot cannot hide inside a house/solid.
