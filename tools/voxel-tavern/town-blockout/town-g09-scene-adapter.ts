@@ -39,6 +39,9 @@ export function createTownG09SceneAdapter(host: Host) {
       const now = Math.floor(clockReading);
       if (!state || !Number.isSafeInteger(dawn) || dawn! < 0 ||
           !Number.isFinite(clockReading) || !Number.isSafeInteger(now) || now < 0) {
+        // If Presence drops while the sky is windy, stop only the extra
+        // authority-driven drift. Keep the legacy snowfall base behavior.
+        if (generation) host.particles.setOutdoorWind(0, 0, 0);
         generation = '';
         lastSeenAt = undefined;
         return;

@@ -94,12 +94,13 @@ test('G-09 mount adapter disconnect and reconnect with the same phase still refr
   let state: ReturnType<typeof townOutdoorWeatherAt> | undefined;
   let now = dawn + 45 * minute;
   const cached: number[] = [];
+  let windClears = 0;
   const scene = createTownG09SceneAdapter({
     weather: () => state,
     dawnEpoch: () => state ? dawn : undefined,
     serverNow: () => now,
     exposure: () => 1,
-    particles: { setOutdoorWind() {}, setIntensity() {} },
+    particles: { setOutdoorWind(east, north, strength) { if (east === 0 && north === 0 && strength === 0) windClears++; }, setIntensity() {} },
     snowField: { setWeather() {}, setIntensity() {},
       restoreWeatherSnapshot(snapshot) { cached.push(snapshot.cover); return true; } },
   });
@@ -108,6 +109,9 @@ test('G-09 mount adapter disconnect and reconnect with the same phase still refr
   assert.equal(cached.length, 1);
   state = undefined;
   assert.equal(scene.sample(), undefined);
+  assert.equal(windClears, 1, 'no wind leak from the previous session');
+  assert.equal(scene.sample(), undefined);
+  assert.equal(windClears, 1, 'offline frames do not churn shader uniforms');
   state = townOutdoorWeatherAt(now, dawn);
   scene.sample();
   assert.deepEqual(cached, [1, 1]);
