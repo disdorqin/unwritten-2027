@@ -6,9 +6,9 @@
       "kind": "ready",
       "frames": 7,
       "drawCalls": 7,
-      "triangles": 84024,
+      "triangles": 98496,
       "groups": 7,
-      "voxelCount": 7002,
+      "voxelCount": 8208,
       "visibleLights": 4,
       "eye": [
         0,
@@ -16,16 +16,16 @@
         -1
       ],
       "isFootClear": true,
-      "imageBytes": 178622
+      "imageBytes": 203026
     },
     "grove": {
       "view": "grove",
       "kind": "ready",
-      "frames": 14,
+      "frames": 13,
       "drawCalls": 6,
-      "triangles": 80556,
+      "triangles": 95028,
       "groups": 7,
-      "voxelCount": 7002,
+      "voxelCount": 8208,
       "visibleLights": 4,
       "eye": [
         -20,
@@ -33,16 +33,16 @@
         -41
       ],
       "isFootClear": true,
-      "imageBytes": 163075
+      "imageBytes": 170233
     },
     "overlook": {
       "view": "overlook",
       "kind": "ready",
-      "frames": 21,
+      "frames": 20,
       "drawCalls": 7,
-      "triangles": 84024,
+      "triangles": 98496,
       "groups": 7,
-      "voxelCount": 7002,
+      "voxelCount": 8208,
       "visibleLights": 4,
       "eye": [
         10.3,
@@ -50,16 +50,16 @@
         -55
       ],
       "isFootClear": true,
-      "imageBytes": 143323
+      "imageBytes": 153537
     },
     "quay": {
       "view": "quay",
       "kind": "ready",
-      "frames": 28,
+      "frames": 26,
       "drawCalls": 7,
-      "triangles": 84024,
+      "triangles": 98496,
       "groups": 7,
-      "voxelCount": 7002,
+      "voxelCount": 8208,
       "visibleLights": 4,
       "eye": [
         24.5,
@@ -67,7 +67,7 @@
         -76
       ],
       "isFootClear": true,
-      "imageBytes": 164947
+      "imageBytes": 165908
     }
   },
   "errors": [],

@@ -82,6 +82,24 @@ test('U-3 R2 all crystalline growth is tilted exactly +20° and grouped, 6 cold 
   assert.ok(!pieces.some(p => /placeholder|lorem|loot-grant|lore-text|spawn-monster/.test(p.name)));
 });
 
+test('U-3 R2/R5 complete faceted ceiling, side strata and both river banks without path colliders', () => {
+  const pieces=crystalCavernArchitecture.pieces;
+  const family=(prefix:string)=>pieces.filter(p=>p.name.startsWith(prefix));
+  const teeth=family('u3/vault/hanging-shale-');
+  assert.equal(teeth.filter(p=>p.name.includes('-tier-')).length,576,
+    '24 roof bays × 2 sides × 3 geological ridges × 4 taper tiers');
+  assert.equal(teeth.filter(p=>p.name.includes('-fracture-')).length,288);
+  assert.equal(family('u3/vault/wall-strata-').length,192,
+    'rock bedding must cover both walls along the full cave length');
+  assert.equal(family('u3/river/shore-course-').length,102);
+  assert.equal(family('u3/river/shore-cap-').length,48);
+  assert.ok(teeth.every(p=>!p.solid), 'overhead geological ornament is not a fake route obstruction');
+  assert.ok(family('u3/river/shore-').every(p=>!p.solid));
+  assert.equal(crystalCavernArchitecture.numbers.cuboids,8208);
+  assert.ok(teeth.filter(p=>p.name.includes('-tier-')).every(p=>p.center[1]-p.size[1]/2>=20.4),
+    'ceiling teeth must not invade the 20m traversable envelope');
+});
+
 test('U-3 tapered crystals have real continuous segment tips under the exact rotated +20° spine', () => {
   const groups = new Map<string, Array<typeof crystalCavernArchitecture.pieces[number]>>();
   for (const piece of crystalCavernArchitecture.pieces) {

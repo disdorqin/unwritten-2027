@@ -180,6 +180,46 @@ function makeCavern() {
     }
   }
 
+  // R2 completion / R5 art: continuous hanging shale teeth and stratified
+  // cave-wall ribs. This is visible sculpted geology across the full vaulted
+  // span, not a fake roof plane, invisible blocker or placeable inventory ore.
+  // Every hanging tip stays above Y=20.7 while all traversal occupies Y≈0.
+  for (let bay=0;bay<24;bay++) {
+    const north=-6.3+bay*5.18;
+    const canopy=25+5*(1+Math.sin((bay+.5)*.41))/2;
+    for (const side of [-1,1]) {
+      for (let ridge=0;ridge<3;ridge++) {
+        const east=side*(18+ridge*17.5+(bay%3-1)*1.25);
+        const vein='u3/vault/hanging-shale-'+bay+'-'+side+'-'+ridge;
+        const lengths=[1.35,1.14,.93,.56] as const;
+        const widths=[1.70,1.30,.83,.36] as const;
+        let drop=0;
+        for (let tier=0;tier<lengths.length;tier++) {
+          const length=lengths[tier]!;
+          add(tier===1?'slate':tier===3?'shadow':'rock',
+            vein+'-tier-'+tier,
+            east+side*tier*.13,canopy-.17-drop-length/2,north+tier*.09,
+            widths[tier]!,length,widths[tier]!*.87);
+          drop+=length;
+        }
+        // Extra flat split joints make the near roof look fractured instead of
+        // hanging regular four-storey cuboids.
+        for(let seam=0;seam<2;seam++) {
+          add('shadow',vein+'-fracture-'+seam,
+            east+side*(.34+seam*.18),canopy-.25-seam*.77,north-.13,
+            .16,.085,1.36-seam*.18);
+        }
+      }
+      // Side-wall bedding is a legible stone history, not literal writing.
+      for(let band=0;band<4;band++){
+        const east=side*(73-(band%2)*1.15);
+        add(band===2?'moss':band%2?'slate':'shadow',
+          'u3/vault/wall-strata-'+bay+'-'+side+'-'+band,
+          east,4.8+band*3.85,north+(.6*(bay%3-1)),.35,.18,3.4);
+      }
+    }
+  }
+
   // R1: underground shadow basin and a shallow crystal-fed river. Thin water
   // panes create readable reflections; they do NOT grant a swimming mechanic.
   const { waterRange: basin } = crystalCavernPlan;
@@ -196,6 +236,32 @@ function makeCavern() {
           east, h - .31, north, 1.72, .38, 1.86);
     }
   }
+  // The water surface previously ended in a sharp rectangle. Model both
+  // stone shorelines through the entire bend so the 34m dark river reads as
+  // an enclosed flooded basin, not an isolated blue sheet.
+  for(let row=0;row<17;row++) {
+    const north=62+row*2.0;
+    const h=crystalCavernTrailHeight(north);
+    for(const side of [-1,1]) {
+      const shoreE=side<0?16.45:59.20;
+      for(let course=0;course<3;course++) {
+        add(course===2?'moss':(row+course)%5===0?'slate':'rock',
+          'u3/river/shore-course-'+row+'-'+side+'-'+course,
+          shoreE+(side<0?-course*.48:course*.48),
+          h-.34+course*.14,north+(course%2?.20:0),
+          1.03,.25,1.87);
+      }
+      // Occasional large irregular capstones are intentionally visual only.
+      if(row%3===0) for(let chip=0;chip<4;chip++) {
+        add(chip%3===0?'moss':'shadow',
+          'u3/river/shore-cap-'+row+'-'+side+'-'+chip,
+          shoreE+(side<0?-1:1)*(chip*.22),
+          h+.13+chip*.11,north+.34+chip*.17,
+          .26,.14,.34);
+      }
+    }
+  }
+
   // R1/2: differentiated 3–7-crystal growth clusters, every crystal leaning
   // by EXACTLY the same +20° (confirmed canonical chapter motif).
   for (let cluster = 0; cluster < 62; cluster++) {
