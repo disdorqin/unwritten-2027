@@ -1,6 +1,7 @@
 # ZB-20 服务端授权风偏·公共批交接（2026-11-21）
  
 - 窗号 / 自有分支 / 候选提交：B / `lane-build` / `bd68e200`；已并独立叶件 `town-blockout-integration@f7383f2b`。
+- **缆车风雪四轮补充（2026-11-21）**：共享缆车时钟、官方 G-09 天气叶件、实物 ZA-22 双车线路可选注入、暴风雪中候车和途中停驶测例已顺序审合至集成 `1b817af2`（16/16、定向 TS 0、Chromium 无参入口 0 错）。A 窗只需在公共 `viewer.ts` 确认 G-09 母钟/体感入图后向原 `createZa22CloudRoute` host 注入 `cableWeather: createTownCableWindClock(at => townOutdoorWeatherAt(at, dawnEpoch), dawnEpoch)`；不能使用另一个本机时间，更不能在未发布天气广播时默认启用。详细交付和当前验收限制见 `GPT/2026-11-21-ZB20-四轮制缆车风雪交付与取件回执.md`。本包仍在建。
 - **最新同步（2026-11-21）**：`src/presence/server.ts` 已通过单写窄改并线 `town-blockout-integration@924bd471`，完成真实 Presence 30/30 和 TypeScript 定向 0 错；不必再次取该文件旧补丁。未配置时保持旧 18B 发球。公共 viewer 接线、正式权威天气/暴露系数及双端实走仍待。
 - **原始交接留档（以下 server 取件要求已由上条结案）**：`src/presence/server.ts` 的 B 候选内有精确差分：`git show bd68e200 -- src/presence/server.ts`。不可直接用 B 旧文件覆盖当前集成线服务端，需在当前集成尖端复放。公共服务端单写锁归公共批审取。
 - 入口：在 `Options` 新增可选 `snowballWindForThrow(event,wallNow())`。只在当前 `receiveSnowball` 已完成玩家身份、手部距离和投掷速率检查后，由服务端计算已验证的水平风偏（限 ±2 m/s²）并通过 `encodeSnowballRelay` 送给邻近玩家。
