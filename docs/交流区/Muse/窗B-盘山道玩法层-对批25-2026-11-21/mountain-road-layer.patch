@@ -1,0 +1,122 @@
+diff --git a/tests/town-blockout-mountain-road.test.ts b/tests/town-blockout-mountain-road.test.ts
+new file mode 100644
+index 00000000..ea1ddfb4
+--- /dev/null
++++ b/tests/town-blockout-mountain-road.test.ts
+@@ -0,0 +1,35 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createMountainRoadLayer } from '../tools/voxel-tavern/town-blockout/town-mountain-road';
++
++const layer = () => createMountainRoadLayer({
++  mileposts: [
++    { id: 'P1', east: 0, north: 0, arcM: 0 },
++    { id: 'P2', east: 0, north: 250, arcM: 250 },
++    { id: 'P3', east: 30, north: 480, arcM: 500 },
++  ],
++  restPoints: [{ id: 'R1', east: 30, north: 480, leeRadiusM: 4 }],
++  viewpoints: [{ id: 'V1', east: 34, north: 484, name: '望镇台', radiusM: 5 }],
++});
++
++test('stamps land in any order, only in reach, only once', () => {
++  const road = layer();
++  assert.equal(road.stamp('P3', { east: 30, north: 481 }), true, 'top post first is fine');
++  assert.equal(road.stamp('P3', { east: 30, north: 481 }), false, 'no double stamp');
++  assert.equal(road.stamp('P1', { east: 40, north: 40 }), false, 'too far away');
++  assert.equal(road.stamp('P9', { east: 0, north: 0 }), false, 'unknown post');
++  assert.equal(road.roadComplete(), false);
++  road.stamp('P1', { east: 1, north: 1 });
++  road.stamp('P2', { east: 0, north: 249 });
++  assert.equal(road.roadComplete(), true);
++  assert.equal(road.stampedCount(), 3);
++});
++
++test('rest lee shelters; viewpoints record exactly once', () => {
++  const road = layer();
++  assert.equal(road.shelteredAt({ east: 31, north: 479 }), true);
++  assert.equal(road.shelteredAt({ east: 60, north: 480 }), false);
++  assert.equal(road.visit({ east: 34, north: 484 })?.name, '望镇台');
++  assert.equal(road.visit({ east: 34, north: 484 }), undefined, 'second visit records nothing');
++  assert.equal(road.visit({ east: 0, north: 0 }), undefined);
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-mountain-road.ts b/tools/voxel-tavern/town-blockout/town-mountain-road.ts
+new file mode 100644
+index 00000000..5758de0d
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-mountain-road.ts
+@@ -0,0 +1,75 @@
++/**
++ * Switchback road play layer (branch window B; road form by window D).
++ *
++ * The road from the town gate to the front summit (≥2.75 km of
++ * switchbacks, ≤12% grade) carries three quiet play elements. Canon
++ * red lines: the story is a hidden thread — there is NO route arrow,
++ * NO progress HUD, NO timing and NO score on this road. Walking it is
++ * the play; these elements only notice that you did.
++ *
++ * - Mileposts: a stamped post roughly every 250 m of arc length.
++ *   Stamping is by standing at the post and interacting, in ANY order
++ *   (players join and leave the road at both ends and at the cable
++ *   stations). Stamping every post records the road atlas page.
++ * - Rest points: a bench and windbreak at the exposed switchback
++ *   turns. Standing in a rest point's lee is shelter — the host's
++ *   ZB-20 exposure model reads `shelteredAt` and zeroes accumulation
++ *   there. Rest points are also where the road's sparse dressing
++ *   (thermos, stacked stones) lives; the leaf owns only the shelter
++ *   geometry.
++ * - Viewpoints: named overlooks. The first visit records the atlas
++ *   entry under the overlook's own name; later visits record nothing.
++ *
++ * All positions are host-supplied from window D's road survey; the
++ * leaf owns the rules and the one atlas line.
++ */
++export type RoadPoint = Readonly<{ east: number; north: number }>;
++export type Milepost = RoadPoint & Readonly<{ id: string; arcM: number }>;
++export type RestPoint = RoadPoint & Readonly<{ id: string; leeRadiusM: number }>;
++export type Viewpoint = RoadPoint & Readonly<{ id: string; name: string; radiusM: number }>;
++
++/** The road atlas page's entire text. */
++export const mountainRoadAtlasLine = '这条路，是踩着前人的脚印走出来的。';
++
++export const milepostStampReachM = 3;
++
++export function createMountainRoadLayer(input: {
++  mileposts: readonly Milepost[];
++  restPoints: readonly RestPoint[];
++  viewpoints: readonly Viewpoint[];
++}) {
++  const stamped = new Set<string>();
++  const seenViewpoints = new Set<string>();
++  const postById = new Map(input.mileposts.map(post => [post.id, post]));
++
++  const near = (a: RoadPoint, b: RoadPoint, reach: number) =>
++    Math.hypot(a.east - b.east, a.north - b.north) <= reach;
++
++  return {
++    /** Interact at a post: stamps it if the player is within reach. Returns true only on a NEW stamp. */
++    stamp(postId: string, player: RoadPoint): boolean {
++      const post = postById.get(postId);
++      if (!post || stamped.has(postId)) return false;
++      if (!near(player, post, milepostStampReachM)) return false;
++      stamped.add(postId);
++      return true;
++    },
++    stampedCount: () => stamped.size,
++    /** True once every milepost carries a stamp — the road page records. */
++    roadComplete: () => input.mileposts.length > 0 && stamped.size === input.mileposts.length,
++    /** Shelter query for the exposure host: inside any rest point's lee. */
++    shelteredAt(player: RoadPoint): boolean {
++      return input.restPoints.some(rest => near(player, rest, rest.leeRadiusM));
++    },
++    /** Feed a position; returns the viewpoint whose first visit this is, if any. */
++    visit(player: RoadPoint): Viewpoint | undefined {
++      for (const viewpoint of input.viewpoints) {
++        if (!seenViewpoints.has(viewpoint.id) && near(player, viewpoint, viewpoint.radiusM)) {
++          seenViewpoints.add(viewpoint.id);
++          return viewpoint;
++        }
++      }
++      return undefined;
++    },
++  };
++}

@@ -104,3 +104,25 @@ test('the mounted mountain guard covers both legal edges and a jump at the N666 
     assembly.dispose();
   }
 });
+
+test('ZB-28 phase mapping: day on post, dusk empty without signs, night window signs', async () => {
+  const { za29GuardDutyForPhase } = await import('../tools/voxel-tavern/town-blockout/town-za29-guard-duty');
+  assert.deepEqual(za29GuardDutyForPhase(undefined), { guardPresent: true, showNightSigns: false });
+  assert.deepEqual(za29GuardDutyForPhase('day'), { guardPresent: true, showNightSigns: false });
+  assert.deepEqual(za29GuardDutyForPhase('awaiting-beacon'), { guardPresent: false, showNightSigns: false });
+  assert.deepEqual(za29GuardDutyForPhase('night-window'), { guardPresent: false, showNightSigns: true });
+});
+
+test('ZB-28 crater interception is the fence opening slot (half-width 2.07), not a disc', () => {
+  const height = 10.7773;
+  const approach = foot(-68.4, 159, height);
+  const guard = foot(-68.4, 161.1, height);
+  const duty = createZa29GuardDuty('crater', { guard, approach }, () => {});
+  duty.updateDuty(true);
+  // Inside the slot near its edge (2.0 north of centre): still covered.
+  assert.equal(duty.blocksStep(foot(-66, 161, height), foot(-70.5, 161, height)), true);
+  // Just outside the slot (2.2 north of centre): the guard does not cover it.
+  assert.equal(duty.blocksStep(foot(-66, 161.2, height), foot(-70.5, 161.2, height)), false);
+  // A jump-height crossing inside the slot stays free above the envelope.
+  assert.equal(duty.blocksStep(foot(-66, 159, height + 1.5), foot(-70.5, 159, height + 1.5)), false);
+});

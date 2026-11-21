@@ -1,0 +1,69 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 890a1a95..a1af2505 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -167,7 +167,9 @@ import { approachTownSnowScale } from './town-snow-cover';
+ import { createTownSnowField } from './town-snow-field';
+ import { createPlazaInformationActivity } from './plaza-information-activity';
+ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
+-import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
++import { advanceWeatherCover, townSnowWeatherForFrame, townWeatherEpoch } from './town-weather';
++import { anchorNightIndex, anchorRing, createAnchorRun } from './town-anchor-run';
++import { createAnchorRunScene } from './town-anchor-run-scene';
+ import { createSledRide, createSledWallCollider } from './sled-ride';
+ import { createTownSledVisuals } from './sled-visuals';
+ import { resolveTownSledRacks } from './town-sled-racks';
+@@ -676,6 +678,36 @@ const topScene = createTopScene();
+ landscape.add(topScene.group);
+ let kiteSecond = 0;
+ let lakeWindStrength = .4; // refreshed per frame from the weather system
++// ZB-35 package 2: thirteenth-bell anchor run. One run per night, keyed by
++// the shared calendar (townWeatherEpoch == the night schedule's dawnEpoch);
++// lamps are personal display — only my own next anchor glows.
++const anchorRunScene = createAnchorRunScene((east, north) => grid.heightAt(east, north));
++landscape.add(anchorRunScene.root);
++let anchorRun = createAnchorRun(anchorNightIndex(Date.now(), townWeatherEpoch));
++let anchorRunNight = anchorNightIndex(Date.now(), townWeatherEpoch);
++function syncAnchorRun() {
++  const night = anchorNightIndex(Date.now(), townWeatherEpoch);
++  if (night !== anchorRunNight) { anchorRunNight = night; anchorRun = createAnchorRun(night); }
++  // By day the rings are plain stone circles: every lamp dark.
++  const open = presence.getTownNightWindow()?.phase === 'night-window';
++  const states = anchorRun.lampStates();
++  for (const site of anchorRing) anchorRunScene.setLamp(site.id, open ? states[site.id] : 'dark');
++}
++function anchorRunAction() {
++  const phase = presence.getTownNightWindow()?.phase;
++  if (phase !== 'night-window') return undefined;
++  for (const site of anchorRing) {
++    if (Math.hypot(x - site.east, n - site.north) <= 1.6) {
++      return { label: '点亮锚点', run: () => {
++        const outcome = anchorRun.touch(site.id, phase);
++        if (outcome === 'finished') announceActivity('五环齐亮——今夜的跑图完赛了。', true);
++        else if (outcome === 'stepped-back') announceActivity('摸错了环，上一站熄了。');
++        syncAnchorRun();
++      } };
++    }
++  }
++  return undefined;
++}
+ // ZB-31 package 2: climbing the ancient pines. The fall hook announces the
+ // warmth cost; the ZB-20 warmth meter itself is not landed yet, so the
+ // deduction lands when that system does (interface kept: leaf onFall).
+@@ -2556,6 +2588,7 @@ function currentAction() {
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const anchor = anchorRunAction(); if (anchor) return anchor; }
+   if (!homeReturn) { const climb = treeClimbAction(); if (climb) return climb; }
+   if (!homeReturn) { const lake = lakePlayAction(); if (lake) return lake; }
+   if (!homeReturn) { const pat = snowmanPatAction(); if (pat) return pat; }
+@@ -3736,6 +3769,8 @@ renderer.setAnimationLoop(now => {
+     driveSnowmen(nightWindowState.phase, ceremonyState.phase === 'climax');
+   }
+   snowmanScene.tick(dt);
++  syncAnchorRun();
++  anchorRunScene.tick(dt);
+   // ZB-31: leaving a climb (jump-off or climbing down) releases the pinned
+   // altitude so the ordinary fall/landing takes over.
+   if (wasClimbing && !treeClimb.climbing && airHeight !== undefined) airHeight = undefined;

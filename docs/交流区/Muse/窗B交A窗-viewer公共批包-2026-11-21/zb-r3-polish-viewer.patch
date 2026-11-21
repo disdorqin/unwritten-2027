@@ -1,0 +1,81 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 0c18399d..ac90ddf4 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -685,6 +685,7 @@ const lakeTop = createTopBoard();
+ const topScene = createTopScene();
+ landscape.add(topScene.group);
+ let kiteSecond = 0;
++let topCharge = 0; // sweeping charge for the spinning top (round-3 timing play)
+ let lakeWindStrength = .4; // refreshed per frame from the weather system
+ // ZB-35 package 2: thirteenth-bell anchor run. One run per night, keyed by
+ // the shared calendar (townWeatherEpoch == the night schedule's dawnEpoch);
+@@ -943,20 +944,42 @@ function sculptureAction() {
+       } };
+     }
+   }
+-  // Knock my own work: nearest remaining block to where I stand.
++  // Knock my own work: the block under the view ray (round-3 precise
++  // targeting), falling back to the block nearest where I stand.
+   const activeId = sculptureField.activeOf('local');
+   if (activeId) {
+     const work = sculptureField.work(activeId)!;
+     const pedestal = sculpturePedestals[work.pedestal];
+     if (Math.hypot(x - pedestal.east, n - pedestal.north) <= 2.2) {
+       return { label: '敲一角', run: () => {
++        const baseY = grid.heightAt(pedestal.east, pedestal.north) + .5;
++        const origin = camera.position;
++        const direction = new Vector3();
++        camera.getWorldDirection(direction);
+         let best: readonly [number, number, number] | undefined;
+-        let bestDistance = Infinity;
++        let bestScore = Infinity;
+         for (const cell of work.blocks) {
+           const [bx, by, bz] = cell.split(',').map(Number);
+-          const wx = pedestal.east + (bx - 2.5) * .18, wn = pedestal.north + (bz - 2.5) * .18;
+-          const distance = Math.hypot(wx - x, wn - n) - by * .05;
+-          if (distance < bestDistance) { bestDistance = distance; best = [bx, by, bz]; }
++          const centre = new Vector3(
++            pedestal.east + (bx - 2.5) * .18,
++            baseY + (by + .5) * .18,
++            -(pedestal.north + (bz - 2.5) * .18),
++          );
++          const toBlock = centre.clone().sub(origin);
++          const along = toBlock.dot(direction);
++          if (along <= 0) continue;
++          const perpendicular = toBlock.sub(direction.clone().multiplyScalar(along)).length();
++          const score = perpendicular < .16 ? along : Infinity;
++          if (score < bestScore) { bestScore = score; best = [bx, by, bz]; }
++        }
++        if (!best) { // no block under the ray: nearest to the player
++          let bestDistance = Infinity;
++          for (const cell of work.blocks) {
++            const [bx, by, bz] = cell.split(',').map(Number);
++            const wx = pedestal.east + (bx - 2.5) * .18, wn = pedestal.north + (bz - 2.5) * .18;
++            const distance = Math.hypot(wx - x, wn - n) - by * .05;
++            if (distance < bestDistance) { bestDistance = distance; best = [bx, by, bz]; }
++          }
+         }
+         if (!best) return;
+         const outcome = sculptureField.knock('local', work.id, best[0], best[1], best[2]);
+@@ -1036,10 +1059,10 @@ function lakePlayAction() {
+   const topSite = lakePlaySite('topTable');
+   if (topSite && Math.hypot(x - topSite.east, n - topSite.north) <= 2.2 && !topScene.spinning) {
+     return { label: '打陀螺', run: () => {
+-      const seconds = topSpinSeconds(.75);
++      const seconds = topSpinSeconds(topCharge);
+       topScene.launch(x, n, grid.heightAt(x, n), seconds);
+       const board = lakeTop.add({ name: presence.playerName(), seconds, at: Date.now() });
+-      announceActivity(`陀螺转了 ${seconds.toFixed(0)} 秒 · 本地榜首 ${board[0].seconds.toFixed(0)} 秒`);
++      announceActivity(`蓄力 ${(topCharge * 100).toFixed(0)}% · 陀螺转了 ${seconds.toFixed(0)} 秒 · 本地榜首 ${board[0].seconds.toFixed(0)} 秒`);
+     } };
+   }
+   return undefined;
+@@ -4072,6 +4095,7 @@ renderer.setAnimationLoop(now => {
+   // second (line-snap rule), the top spins down on its own clock.
+   if (iceCart.riding) iceCartScene.place(iceCart.at.east, iceCart.at.north, iceCart.heading);
+   topScene.tick(dt);
++  topCharge = (Math.sin(performance.now() / 450) + 1) / 2;
+   if (lakeKite.flying) {
+     const wind = kiteWindFor(lakeWindStrength);
+     kiteSecond += dt;

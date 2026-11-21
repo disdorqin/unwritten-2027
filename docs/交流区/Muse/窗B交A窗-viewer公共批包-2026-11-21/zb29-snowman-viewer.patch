@@ -1,0 +1,80 @@
+commit 97ab91f2d99fcc12aae772d5b1148c5b097a0d0f
+Author: Muse-B <muse-b@local>
+Date:   Sat Nov 21 05:06:26 2026 +0000
+
+    ZB-29 package 2b: viewer mount for registered snowmen (night drive + pat action)
+    
+    Mounts the snowman scene into the ground landscape, drives the night
+    plan on ZB-17 phase changes (local player gaze as observer), eases head
+    turns per frame, and offers a pat interaction next to a registered
+    snowman. Viewer is a one-writer public file: this commit is the local
+    staging record; the same change ships to window A as a patch segment
+    for its public batch.
+
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index c0e67659..7d3fb551 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -30,6 +30,8 @@ import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-
+ import { createZa22CloudRoute } from './town-za22-cloud-route';
+ import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
+ import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
++import { createSnowmanNightLedger, planSnowmanNightTick } from './town-snowman';
++import { createSnowmanScene, snowmanPostSites } from './town-snowman-scene';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -638,6 +640,35 @@ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
+ // Zone-1 self-mount (代挂, campaign order 2026-11-21): ZA-32 wave-2 props +
+ // blank-fill package 1 (north band + forest district). Window A's public
+ // batch was held by the ZA-30 diagnosis; mounting registered as 代挂.
++// ZB-29: registered snowmen (six posts + the elder) with articulated heads.
++// Night behaviour is planned by the town-snowman leaf on night-window phase
++// changes and applied here; the local player's gaze is the observer (remote
++// gazes are a round-4 refinement). Player-built snowmen join via the same
++// scene once the roll-and-stack interaction lands (package 2c).
++const snowmanLedger = createSnowmanNightLedger();
++const snowmanScene = createSnowmanScene(snowmanPostSites, (east, north) => grid.heightAt(east, north));
++landscape.add(snowmanScene.root);
++let snowmanPhase: string | undefined;
++function driveSnowmen(phase: string, ceremonyClimax: boolean) {
++  if (phase === snowmanPhase) return;
++  snowmanPhase = phase;
++  if (phase === 'day') { snowmanLedger.reset(); return; }
++  if (phase !== 'awaiting-beacon' && phase !== 'night-window') return;
++  const records = [...snowmanScene.views.values()].map(view => view.record);
++  const changes = planSnowmanNightTick(records, [{ at: { east: x, north: n }, yaw }],
++    { thirteenthMinute: phase === 'night-window', ceremony: ceremonyClimax });
++  snowmanScene.applyChanges(changes);
++  snowmanLedger.record(changes);
++}
++function snowmanPatAction() {
++  for (const view of snowmanScene.views.values()) {
++    if (Math.hypot(view.record.at.east - x, view.record.at.north - n) <= 1.6) {
++      const id = view.record.id;
++      return { label: '拍拍雪人', run: () => { snowmanScene.pat(id); } };
++    }
++  }
++  return undefined;
++}
+ const za32StreetProps = mountZa32StreetProps(landscape, (east, north) => grid.heightAt(east, north));
+ const townFillNorth = mountTownFillNorth(landscape, (east, north) => grid.heightAt(east, north));
+ const townFillEast = mountTownFillEast(landscape, (east, north) => grid.heightAt(east, north));
+@@ -2442,6 +2473,7 @@ function currentAction() {
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const pat = snowmanPatAction(); if (pat) return pat; }
+   if (cloudRoute.active()) {
+     if (cloudRoute.riding()) return undefined;
+     const cable = cloudRoute.action({ east: x, north: n, height: ground });
+@@ -3585,7 +3617,9 @@ renderer.setAnimationLoop(now => {
+       clockNightApplied = clockNight;
+       setNight(clockNight);
+     }
++    driveSnowmen(nightWindowState.phase, ceremonyState.phase === 'climax');
+   }
++  snowmanScene.tick(dt);
+   const weather = townSnowWeatherForFrame(ceremonyState);
+   const effectiveSnowIntensity = weather.intensity;
+   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
