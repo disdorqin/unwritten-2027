@@ -581,7 +581,7 @@ export function buildIceCastle() {
   group.userData.palaceBanquetSeats = icePalaceBanquetSeats;
   group.userData.palaceBanquetDrinkStand = icePalaceBanquetDrinkStand;
   group.userData.palaceForecourt = mountIcePalaceForecourt(group);
-  mountIcePalaceRites(group, colliders);
+  group.userData.palaceRiteVisuals = mountIcePalaceRites(group, colliders);
   group.userData.palaceFragment = mountIcePalaceWreckage(group, colliders);
   mountCastleIceSlide(group);
   const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
