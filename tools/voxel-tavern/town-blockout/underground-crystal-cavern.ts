@@ -85,6 +85,27 @@ function add(
   }));
 }
 function makeCavern() {
+  // R2 / R3 screenshot correction: the whole 180×120m chamber must have real
+  // rocky ground, not floating crystal pillars in a void beside a narrow
+  // walkway. Ground is lower than the accepted main path and the shallow river;
+  // the 4m centreline remains obstacle-free for standing avatars.
+  for (let row = 0; row < 41; row++) {
+    const north = -9.0 + row * 2.9;
+    const h = crystalCavernTrailHeight(north);
+    for (let col = 0; col < 61; col++) {
+      const east = -88.5 + col * 2.92;
+      const rough = stable(row * 61 + col, 9);
+      const inRiver = east >= 18 && east <= 60 && north >= 60 && north <= 98;
+      const shallow = Math.abs(east - crystalCavernTrailEast(north)) < 5;
+      const base = inRiver ? h - .66 : shallow ? h - .43 : h - .35 - rough * .17;
+      add((row + col) % 13 === 0 ? 'moss' : (row + col) % 4 ? 'rock' : 'slate',
+        'u3/floor/rock-tile-' + row + '-' + col,
+        east, base, north, 2.91, .3, 2.89);
+      if (!inRiver && !shallow && (row * 13 + col * 17) % 29 === 0)
+        add('shadow', 'u3/floor/lichen-boulder-' + row + '-' + col,
+          east + .35, base + .23, north - .4, .52, .36, .65);
+    }
+  }
   // R1: 120m main passage, gently descending ~2.9m between the real source
   // entry and exit foot. Floor subtiles stay below the walking plane.
   for (let i = 0; i < 97; i++) {
@@ -146,6 +167,17 @@ function makeCavern() {
     }
     add('shadow', 'u3/vault/crown-' + section, 0, vault + .42, north,
       21.4, 1.75, 5.52);
+    // The first visual review exposed two lateral strips of raw sky between
+    // crown and roof strata. Fill them with broad, irregular rock slabs,
+    // keeping the 20m+ cavern silhouette rather than introducing a flat roof.
+    for (const side of [-1, 1]) for (let bridge = 0; bridge < 4; bridge++) {
+      const fromMiddle = 12.3 + bridge * 9.0;
+      add((section + bridge) % 5 === 0 ? 'rock' : 'shadow',
+        'u3/vault/shoulder-canopy-' + section + '-' + side + '-' + bridge,
+        side * fromMiddle, vault - .31 + bridge * .07,
+        north + (bridge % 2 ? .08 : -.08),
+        9.2, 1.8 + (bridge % 3) * .15, 5.49);
+    }
   }
 
   // R1: underground shadow basin and a shallow crystal-fed river. Thin water
@@ -183,11 +215,20 @@ function makeCavern() {
       const height = .8 + stable(cluster * 11 + t, 5) * 5.3;
       add('shadow', base + '/socket-' + t, cx, h + .10, cn,
         .65, .22, .61);
-      add('crystal', base + '/spike-' + t,
-        cx + height * Math.sin(CRYSTAL_CAVERN_CANT_RAD) / 2,
-        h + height / 2 + .23, cn,
-        .31 + (t % 3) * .16, height, .33 + (t % 2) * .19,
-        false, CRYSTAL_CAVERN_CANT_RAD);
+      // The first visual review showed solid rectangular glowing sticks.
+      // Rebuild each growth as three physically narrower tilted segments;
+      // taper and offset are consistent with the single approved +20° cant.
+      for (const [level, frac, span, scale] of [
+        [0,.17,.34,1.00],[1,.51,.36,.72],[2,.84,.30,.42],
+      ] as const) {
+        const segmentHeight = height * span;
+        add('crystal', base + '/spike-' + t + '-tier-' + level,
+          cx + Math.sin(CRYSTAL_CAVERN_CANT_RAD) * height * frac,
+          h + height * frac + .23, cn,
+          (.4 + (t % 3) * .12) * scale, segmentHeight,
+          (.42 + (t % 2) * .17) * scale,
+          false, CRYSTAL_CAVERN_CANT_RAD);
+      }
       add('moss', base + '/growth-moss-' + t,
         cx + .21, h + .07, cn - .20, .38, .09, .24);
       if (t % 3 === 0) {

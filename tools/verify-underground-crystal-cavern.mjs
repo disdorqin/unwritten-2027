@@ -50,7 +50,7 @@ try {
     // Frustum-culling may hide one or more complete instanced material families
     // depending on camera direction. Check meaningful rendered complexity, not
     // a falsely exact total for every view.
-    assert.ok(stats.triangles>9000 && stats.triangles<52000,
+    assert.ok(stats.triangles>20000 && stats.triangles<110000,
       'model failed to render visible cavern or broke geometry budget');
     assert.equal(stats.visibleLights,4);
     assert.ok(stats.eye.every(Number.isFinite));
