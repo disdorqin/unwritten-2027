@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, PointLight } from 'three';
+import { Group, PointLight, Vector3 } from 'three';
 import { resolveUndergroundShaftRegistration } from '../src/presence/underground-shaft-registration.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from '../tools/voxel-tavern/town-blockout/underground-mine-layout.js';
 import { mountUndergroundMineDomain } from '../tools/voxel-tavern/town-blockout/underground-domain-scene.js';
@@ -271,6 +271,69 @@ test('U-8 rejects duplicate sites, malformed normals and arbitrary unseen minera
     } }), { kind: 'unsupported-ores' });
     assert.equal(f.parent.children.length, 0);
   }
+});
+
+test('U-13 mine fire rings use only confirmed host fires and brighten only for accepted same-layer contact', () => {
+  const f = fixture();
+  const site = {
+    fire: {
+      id: 'fire/safe-mine', point: { layer: f.pool.domainId, east: f.pool.east + 2,
+        north: f.pool.north + 4, height: -90 },
+      healPerSecond: 6, recovery: true,
+    }, radius: 2.5, tone: 'warm' as const,
+  };
+  let supported = false;
+  let contact: { fireId: string; layer: string } | undefined;
+  const runtime = {
+    sites: [site],
+    supportsFire: () => supported,
+    readConfirmedContact: () => contact,
+  };
+  assert.deepEqual(mountUndergroundMineDomain({ ...f.host, recoveryRuntime: runtime }),
+    { kind: 'unsupported-fires' });
+  supported = true;
+  const mounted = mountUndergroundMineDomain({ ...f.host, recoveryRuntime: runtime });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail();
+  const ring = mounted.group.getObjectByName('recovery-fire/fire/safe-mine');
+  assert.ok(ring && 'isMesh' in ring && ring.isMesh === true);
+  const mesh = ring as typeof ring & { material: { opacity: number } };
+  mounted.sync();
+  assert.equal(mesh.material.opacity, .2);
+  contact = { fireId: site.fire.id, layer: 'town' };
+  mounted.sync();
+  assert.equal(mesh.material.opacity, .2);
+  contact = { fireId: 'other', layer: f.pool.domainId };
+  mounted.sync();
+  assert.equal(mesh.material.opacity, .2);
+  contact = { fireId: site.fire.id, layer: f.pool.domainId };
+  mounted.sync();
+  assert.equal(mesh.material.opacity, .8);
+  mounted.group.updateWorldMatrix(true, true);
+  const actual = ring.getWorldPosition(new Vector3());
+  assert.ok(Math.abs(actual.x - site.fire.point.east) < .00001);
+  assert.ok(Math.abs(actual.z + site.fire.point.north) < .00001);
+  assert.ok(Math.abs(actual.y - site.fire.point.height - .02) < .00001);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
+test('U-13 refuses recovery rings across domains, zero radii and unconfirmed physical fires', () => {
+  const f = fixture();
+  const site = { fire: { id: 'one', point: { layer: f.pool.domainId,
+    east: -119, north: 189, height: -90 }, healPerSecond: 5 },
+    radius: 2, tone: 'warm' as const };
+  for (const candidate of [
+    { ...site, fire: { ...site.fire, point: { ...site.fire.point, layer: 'town' } } },
+    { ...site, radius: 0 },
+    { ...site, fire: { ...site.fire, healPerSecond: -1 } },
+    { ...site, fire: { ...site.fire, point: { ...site.fire.point, east: Infinity } } },
+  ]) {
+    assert.deepEqual(mountUndergroundMineDomain({ ...f.host, recoveryRuntime: {
+      sites: [candidate], supportsFire: () => true, readConfirmedContact: () => undefined,
+    } }), { kind: 'unsupported-fires' });
+  }
+  assert.equal(f.parent.children.length, 0);
 });
 
 test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {
