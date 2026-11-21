@@ -74,6 +74,9 @@ export function createUndergroundMainlineCart(options: Option) {
       typeof next.brakeHeld === 'boolean' && (!next.riderId || cleanId(next.riderId)) &&
       (!next.recallOperator || cleanId(next.recallOperator)) &&
       (next.lastRecallAtMs === undefined || finite(next.lastRecallAtMs) && next.lastRecallAtMs <= next.lastAtMs) &&
+      (next.mode !== 'recalling' || (!next.riderId && !!next.recallOperator &&
+        next.lastRecallAtMs !== undefined)) &&
+      (next.mode !== 'rolling' || !!next.riderId) &&
       (next.cargo.pieces === 0 && next.cargo.oreId === '' ||
         Number.isSafeInteger(next.cargo.pieces) && next.cargo.pieces > 0 && cleanId(next.cargo.oreId)) &&
       faultList.every(key => Number.isSafeInteger(next.faults[key]) &&
@@ -233,14 +236,25 @@ export function createUndergroundMainlineCart(options: Option) {
       return commit({ ...state, lastAtMs: at, cargo: nextCargo },
         { playerId, direction, oreId, pieces });
     },
-    /** Long E hold at an end winch recalls an EMPTY cart. Rider and cargo never teleport home. */
+    /** Hold E at the real camp winch. An abandoned or disconnected hold can be reclaimed. */
     recall(playerId: string, revision: number) {
       const at = time();
-      if (at === undefined || revision !== state.revision || state.mode !== 'stopped' ||
+      const stalled = state.mode === 'recalling' && state.lastRecallAtMs !== undefined &&
+        at !== undefined && at - state.lastRecallAtMs > 2 * config.maximumTickMs;
+      if (at === undefined || revision !== state.revision ||
+          (state.mode !== 'stopped' && !stalled) ||
           state.riderId || state.cargo.pieces !== 0 || state.chainage <= 2 ||
           !acceptedFoot(playerId, route.work.camp.position, 'winch')) return false;
       return commit({ ...state, lastAtMs: at, mode: 'recalling', recallOperator: playerId,
         lastRecallAtMs: at });
+    },
+    /** On E release or client disconnect, preserve the cart's actual partial position. */
+    releaseRecall(playerId: string, revision: number) {
+      const at = time();
+      if (at === undefined || revision !== state.revision || state.mode !== 'recalling' ||
+          state.recallOperator !== playerId) return false;
+      return commit({ ...state, lastAtMs: at, mode: 'stopped', recallOperator: undefined,
+        lastRecallAtMs: undefined, speed: 0 });
     },
     recallHold(playerId: string, revision: number) {
       const at = time();
@@ -248,7 +262,9 @@ export function createUndergroundMainlineCart(options: Option) {
           state.recallOperator !== playerId ||
           !acceptedFoot(playerId, route.work.camp.position, 'winch') ||
           state.lastRecallAtMs === undefined) return false;
-      const dt = Math.min(config.maximumTickMs, Math.max(0, at - state.lastRecallAtMs)) / 1000;
+      const elapsedMs = at - state.lastRecallAtMs;
+      if (elapsedMs <= 0) return false; // duplicated E heartbeat cannot churn revisions.
+      const dt = Math.min(config.maximumTickMs, elapsedMs) / 1000;
       const pos = Math.max(0, state.chainage - dt * config.recallMetresPerSecond);
       const done = pos <= 0;
       return commit({ ...state, lastAtMs: at, lastRecallAtMs: done ? undefined : at,
