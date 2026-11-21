@@ -10,12 +10,14 @@ import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
+  withinMainSummitRegistrationReach,
 } from './main-summit-registration';
 import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-belt';
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
 import { createMainSummitTrail, mainSummitTrailSpec, type MainSummitTrailPoint } from './main-summit-trail';
 import { buildMainSummitTrailCut } from './main-summit-trail-cut';
+import { mountMainSummitWreckage } from './main-summit-wreckage';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
 
@@ -124,6 +126,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const trailTerrain = buildMainSummitTrailCut(block.coarse.geometry, ribbon.geometry).geometry;
   block.coarse.geometry = trailTerrain;
   group.add(ribbon);
+  const wreckage = mountMainSummitWreckage(group, trail);
   const knots = survey.map((row): SnowBeltKnot => {
     const [east, north, heading, height] = row;
     if (row.length < 4) throw new RangeError('Invalid surveyed snow belt knot.');
@@ -156,6 +159,11 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
 
   return {
     group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    // The host can prefer its plaza surface where it overlaps the P-1 local tread.
+    trailSurfaceAt: trail.sampleWalkwaySurface,
+    wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
+    atCloudStamp: (position: ReturnType<typeof summitWorldPoint>) =>
+      withinMainSummitRegistrationReach(position, landmarks.cloudDeck.stampPoint),
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
@@ -179,6 +187,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
         : registration.interact('summit', { east, north, height });
     },
     dispose() {
+      wreckage.dispose();
       stations.dispose();
       cableView.dispose();
       cabin.dispose();

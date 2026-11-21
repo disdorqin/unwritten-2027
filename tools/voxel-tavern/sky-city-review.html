@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>天空之城 · 未写镇</title>
+  <style>
+    :root{color-scheme:dark;font-family:'Atkinson Hyperlegible Next',system-ui,sans-serif;background:#a5bfc4;color:#fffae8}
+    *{box-sizing:border-box}body{margin:0}canvas{width:100vw;height:100dvh;display:block;touch-action:none}
+    header{position:fixed;top:clamp(14px,4vw,36px);left:clamp(14px,4vw,36px);max-width:calc(100vw - 28px);padding:14px 18px;background:#263934e9;border:1px solid #d1ddbc65;border-radius:10px}
+    h1{font:inherit;font-size:1.24rem;font-weight:700;margin:0 0 5px}p{margin:6px 0 0;line-height:1.5;font-size:.9rem}
+    nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}button{font:inherit;color:inherit;background:#3f554b;border:1px solid #c6d5b381;border-radius:5px;padding:5px 10px;cursor:pointer}button:focus-visible{outline:2px solid #f5cf79}button[aria-pressed=true]{background:#d8d9ad;color:#1d3028}
+    #reticle{position:fixed;top:50%;left:50%;height:4px;width:4px;transform:translate(-50%,-50%);border:1px solid #182a22;border-radius:50%;background:#fffbe7;pointer-events:none}
+  </style>
+</head>
+<body>
+  <main id="scene" aria-label="天空之城模型走查"></main>
+  <header>
+    <h1>天空之城</h1>
+    <p id="status" role="status"></p>
+    <p id="controls"></p>
+    <nav aria-label="走查位置"><button id="ground" type="button">地面</button><button id="summit" type="button">绝顶</button></nav>
+  </header>
+  <span id="reticle" aria-hidden="true"></span>
+  <script type="module" src="./town-blockout/sky-city-review.ts"></script>
+</body>
+</html>

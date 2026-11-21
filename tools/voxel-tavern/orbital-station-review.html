@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轨道舱三舱走查</title>
+<style>
+  html, body { margin:0; overflow:hidden; background:#111d29; color:#f4efe5; font:15px system-ui, sans-serif }
+  canvas { display:block }
+  aside { position:fixed; top:12px; left:12px; padding:9px 12px; border-radius:5px; background:#192934ec }
+  #seat { position:fixed; left:12px; bottom:12px; padding:9px 12px; border-radius:5px; background:#192934ec }
+  section { position:fixed; right:12px; bottom:12px; padding:11px 16px; border-radius:6px; background:#192934ec }
+  dl { display:grid; grid-template-columns:auto auto; gap:4px 20px; margin:8px 0 0 }
+  dd { margin:0; color:#aebcca }
+  dd[data-lit="true"] { color:#ffe3b4 }
+</style>
+<aside aria-label="走查控制"><output id="room" aria-live="polite"></output> · WASD 行走，方向键转看</aside>
+<output id="seat" aria-live="polite" hidden></output>
+<section id="terminal" aria-label="传送中枢" hidden><strong>传送中枢</strong><dl></dl></section>
+<script type="module" src="./town-blockout/orbital-station-review.ts"></script>
+</html>
