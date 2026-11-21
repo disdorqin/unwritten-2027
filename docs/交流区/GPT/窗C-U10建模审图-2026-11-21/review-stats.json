@@ -26,17 +26,37 @@
       "visibleLights": 3,
       "triangles": 107054,
       "drawCalls": 9,
+      "walk": {
+        "meters": 0,
+        "acceptedSteps": 0,
+        "rejectedSteps": 0,
+        "trustedWEvents": 0,
+        "east": 37.75,
+        "north": -1.5,
+        "footHeight": 0,
+        "clear": true
+      },
       "renderedSize": [
         1280,
         720
       ],
+      "walkAfterKeyW": {
+        "meters": 1.5600000000000005,
+        "acceptedSteps": 15,
+        "rejectedSteps": 0,
+        "trustedWEvents": 1,
+        "east": 37.75,
+        "north": 0.06000000000000019,
+        "footHeight": 0,
+        "clear": true
+      },
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\1-home-street.png",
-      "imageBytes": 122992
+      "imageBytes": 147921
     },
     "home-interior": {
       "kind": "ready",
       "view": "home-interior",
-      "frames": 15,
+      "frames": 21,
       "eyeHeight": 1.67,
       "voxelCount": 8921,
       "architecture": {
@@ -58,17 +78,37 @@
       "visibleLights": 3,
       "triangles": 107054,
       "drawCalls": 9,
+      "walk": {
+        "meters": 12.780000000000005,
+        "acceptedSteps": 119,
+        "rejectedSteps": 0,
+        "trustedWEvents": 2,
+        "east": 37.75,
+        "north": 10.9,
+        "footHeight": 0,
+        "clear": true
+      },
       "renderedSize": [
         1280,
         720
       ],
+      "walkAfterKeyW": {
+        "meters": 14.339999999999993,
+        "acceptedSteps": 134,
+        "rejectedSteps": 0,
+        "trustedWEvents": 3,
+        "east": 37.75,
+        "north": 12.459999999999988,
+        "footHeight": 0,
+        "clear": true
+      },
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\2-home-interior.png",
       "imageBytes": 128899
     },
     "market-arcade": {
       "kind": "ready",
       "view": "market-arcade",
-      "frames": 21,
+      "frames": 27,
       "eyeHeight": 1.68,
       "voxelCount": 8921,
       "architecture": {
@@ -90,17 +130,37 @@
       "visibleLights": 3,
       "triangles": 107052,
       "drawCalls": 8,
+      "walk": {
+        "meters": 14.339999999999993,
+        "acceptedSteps": 134,
+        "rejectedSteps": 0,
+        "trustedWEvents": 3,
+        "east": 141,
+        "north": -18.8,
+        "footHeight": 0,
+        "clear": true
+      },
       "renderedSize": [
         1280,
         720
       ],
+      "walkAfterKeyW": {
+        "meters": 15.89999999999998,
+        "acceptedSteps": 149,
+        "rejectedSteps": 0,
+        "trustedWEvents": 4,
+        "east": 142.53307604163842,
+        "north": -19.088579019602474,
+        "footHeight": 0,
+        "clear": true
+      },
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\3-market-arcade.png",
       "imageBytes": 153681
     },
     "citywall-top": {
       "kind": "ready",
       "view": "citywall-top",
-      "frames": 28,
+      "frames": 34,
       "eyeHeight": 8.77,
       "voxelCount": 8921,
       "architecture": {
@@ -122,13 +182,55 @@
       "visibleLights": 3,
       "triangles": 107054,
       "drawCalls": 9,
+      "walk": {
+        "meters": 15.89999999999998,
+        "acceptedSteps": 149,
+        "rejectedSteps": 0,
+        "trustedWEvents": 4,
+        "east": 101,
+        "north": 27,
+        "footHeight": 7.12,
+        "clear": true
+      },
       "renderedSize": [
         1280,
         720
       ],
+      "walkAfterKeyW": {
+        "meters": 17.45999999999997,
+        "acceptedSteps": 164,
+        "rejectedSteps": 0,
+        "trustedWEvents": 5,
+        "east": 102.55999999999999,
+        "north": 27,
+        "footHeight": 7.12,
+        "clear": true
+      },
       "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\4-citywall-top.png",
       "imageBytes": 123686
     }
+  },
+  "openHouseWalk": {
+    "meters": 12.780000000000005,
+    "acceptedSteps": 119,
+    "rejectedSteps": 0,
+    "trustedWEvents": 2,
+    "east": 37.75,
+    "north": 11.28000000000001,
+    "footHeight": 0,
+    "clear": true,
+    "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\5-entered-open-home.png"
+  },
+  "sealedHouseWalk": {
+    "meters": 26.155652173913087,
+    "acceptedSteps": 244,
+    "rejectedSteps": 1,
+    "trustedWEvents": 6,
+    "east": 46.5,
+    "north": 7.195652173913046,
+    "footHeight": 0,
+    "clear": true,
+    "screenshot": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c\\docs\\交流区\\GPT\\窗C-U10建模审图-2026-11-21\\6-sealed-home-rejects-entry.png"
   },
   "passed": true,
   "errors": []
