@@ -198,6 +198,13 @@ async function main() {
     assert.ok(initial.nineRingArt?.budgetDraws <= 20);
     assert.ok(initial.nineRingArt.drawCount > 0, 'At least one of the authored signs or pennants must actually render');
     assert.equal(initial.nineRingAuthority, null, 'Host-run cannot start before accepted takeoff');
+    assert.deepEqual(initial.ringAudio, { enabled: false, played: 0, failed: 0, disposed: false },
+      'Original gameplay feedback must be muted by default');
+    assert.match(await p.locator('#ring-audio-reading').evaluate(element => element.value), /已静音/);
+    await p.keyboard.press('m');
+    const withAudio = await watch(() => window.__snowWingReview.getState().ringAudio?.enabled);
+    assert.equal(withAudio.ringAudio.failed, 0, 'Keyboard opt-in audio must initialize without errors');
+    assert.match(await p.locator('#ring-audio-reading').evaluate(element => element.value), /已开启/);
     assert.equal(initial.nightPreview, false);
     assert.equal(initial.skyHex, 'b1c5dc');
     const help = await p.locator('#course-help').evaluate(element => ({ hidden: element.hidden, text: element.textContent }));
@@ -253,6 +260,7 @@ async function main() {
       assert.equal(lift.nineRingAuthority?.rejectedFrames, 0);
       const first = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing >= 1);
       assert.equal(first.rings.score.results[0].grade, 'clean');
+      assert.ok(first.ringAudio.played >= 1, 'After keyboard opt-in, actual flight ring must emit an original feedback cue');
       assert.ok(first.nineRingArt.drawCount > 0, 'The native airborne camera must render real course art');
       await capture('zd08-nine-first-hoop');
       await p.keyboard.press('n');
@@ -265,9 +273,14 @@ async function main() {
       const middle = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing >= 5);
       assert.equal(middle.rings.score.scoreHalfPoints, 10);
       await capture('zd08-nine-middle-hoops');
+      await p.keyboard.press('m');
+      const muted = await watch(() => !window.__snowWingReview.getState().ringAudio.enabled);
+      assert.match(await p.locator('#ring-audio-reading').evaluate(element => element.value), /已静音/);
+      const beforeMute = muted.ringAudio.played;
       const cleared = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing === 9);
       assert.equal(cleared.rings.score.scoreHalfPoints, 18);
       assert.equal(cleared.rings.score.streak, 9);
+      assert.equal(cleared.ringAudio.played, beforeMute, 'Muted remaining rings must not emit feedback cues');
       assert.deepEqual(cleared.rings.score.results.map(ring => ring.grade), Array(9).fill('clean'));
       assert.equal(cleared.rings.results.length, 9);
       await capture('zd08-nine-all-clear');

@@ -2,6 +2,7 @@ import {
   BoxGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, TorusGeometry,
 } from 'three';
 import type { SummitGlideRing } from './main-summit-glide-rings';
+import type { SummitGlideRingGrade } from './main-summit-glide-ring-score';
 
 const rimSegments = 40;
 const opening = 1 / Math.cos(Math.PI / rimSegments);
@@ -18,6 +19,8 @@ export function mountSummitGlideRingVisuals(owner: Object3D, rings: readonly Sum
     next: { rail: 0x644a38, light: 0xffc375, clip: 0xffe3b0 },
     upcoming: { rail: 0x4a5a64, light: 0xf3dcc0, clip: 0xd2bda4 },
     cleared: { rail: 0x53676b, light: 0x91c7b7, clip: 0xaeddcd },
+    grazed: { rail: 0x735d38, light: 0xf5c578, clip: 0xedcf9e },
+    missed: { rail: 0x5a4851, light: 0xaa6c72, clip: 0x8c6774 },
   } as const;
   const materialFor = ({ rail, light, clip }: (typeof palette)[keyof typeof palette]) => ({
     rail: new MeshLambertMaterial({ color: rail }),
@@ -27,6 +30,8 @@ export function mountSummitGlideRingVisuals(owner: Object3D, rings: readonly Sum
   const next = materialFor(palette.next);
   const upcoming = materialFor(palette.upcoming);
   const cleared = materialFor(palette.cleared);
+  const grazed = materialFor(palette.grazed);
+  const missed = materialFor(palette.missed);
   const clipTransform = new Object3D();
   const ringViews = rings.map(ring => {
     const work = new Group();
@@ -54,13 +59,17 @@ export function mountSummitGlideRingVisuals(owner: Object3D, rings: readonly Sum
     return { rail, light, clips };
   });
 
-  let appliedProgress = -1;
+  let appliedFingerprint = '';
   let disposed = false;
-  function setProgress(passed: number) {
-    if (disposed || passed === appliedProgress) return;
-    appliedProgress = passed;
+  function setProgress(passed: number, grades: readonly SummitGlideRingGrade[] = []) {
+    if (disposed || !Number.isSafeInteger(passed) || passed < 0 || passed > rings.length) return;
+    const fingerprint = passed + ':' + grades.slice(0, passed).join(',');
+    if (fingerprint === appliedFingerprint) return;
+    appliedFingerprint = fingerprint;
     for (const [index, view] of ringViews.entries()) {
-      const material = index < passed ? cleared : index === passed ? next : upcoming;
+      const material = index < passed
+        ? grades[index] === 'graze' ? grazed : grades[index] === 'miss' ? missed : cleared
+        : index === passed ? next : upcoming;
       view.rail.material = material.rail;
       view.light.material = material.light;
       view.clips.material = material.clip;
@@ -78,7 +87,7 @@ export function mountSummitGlideRingVisuals(owner: Object3D, rings: readonly Sum
       group.removeFromParent();
       for (const view of ringViews) view.clips.dispose();
       for (const shape of [railShape, lightShape, clipShape]) shape.dispose();
-      for (const materials of [next, upcoming, cleared]) {
+      for (const materials of [next, upcoming, cleared, grazed, missed]) {
         for (const material of Object.values(materials)) material.dispose();
       }
       group.clear();

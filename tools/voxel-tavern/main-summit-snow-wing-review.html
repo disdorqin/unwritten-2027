@@ -16,7 +16,7 @@
     h1 { margin: 0 0 .4rem; font-size: 1.1rem; }
     p { margin: .3rem 0 0; }
     #flight-reading { display: block; margin-top: .5rem; font-variant-numeric: tabular-nums; }
-    #ring-reading:not([hidden]), #target-reading:not([hidden]) { display: block; margin-top: .3rem; font-variant-numeric: tabular-nums; }
+    #ring-reading:not([hidden]), #target-reading:not([hidden]), #ring-audio-reading:not([hidden]) { display: block; margin-top: .3rem; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -26,10 +26,11 @@
     <h1>雪翼试飞</h1>
     <p>WASD 行走，左右方向键转身，E 登记或领翼。出门向南到雪崖。</p>
     <p>起飞后 W/S 俯冲与抬头，A/D 转向。</p>
-    <p id="course-help" hidden>九环试飞：正穿得 1 分，擦环得 0.5 分，漏环断连击；落雪后再按距靶心误差结算。按 N 可切换本地昼夜灯光预览；当前为绝顶独立练习，不代表正式主峰每日风场已接通。</p>
+    <p id="course-help" hidden>九环试飞：正穿得 1 分，擦环得 0.5 分，漏环断连击；落雪后再按距靶心误差结算。按 N 可切换本地昼夜灯光预览，M 主动开关穿环提示音（默认静音）；当前为绝顶独立练习，不代表正式主峰每日风场已接通。</p>
     <p id="flight-status" role="status">在绝顶小屋登记。</p>
     <output id="flight-reading" aria-live="off"></output>
     <output id="ring-reading" aria-live="off" hidden></output>
+    <output id="ring-audio-reading" aria-live="polite" hidden></output>
     <output id="target-reading" aria-live="polite" hidden></output>
   </main>
   <script type="module" src="./town-blockout/main-summit-snow-wing-review.ts"></script>
