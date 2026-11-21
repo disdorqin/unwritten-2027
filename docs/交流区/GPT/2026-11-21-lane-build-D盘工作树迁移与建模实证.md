@@ -15,6 +15,7 @@
 - `tools/voxel-tavern/sled-model-preview.html` + `tools/verify-sled-kit-browser.mjs`：真实浏览器独立样板、自动输出 D 盘截图。
 - `tests/town-blockout-sled-model-kit.test.ts`：新增断言并沿用旧雪橇动画检查。
 - 6/6 测试通过；`node tools/run.mjs check && node tools/run.mjs build` 通过；Chrome WebGL 1280×720 → 3 draws、4,106 tris、页面错误 0、HTTP 5xx 0，截图 `D:\computer learning\game_exe\kuanian\sled-depot-browser-smoke.png`。
+- **D 盘原生复跑（追加核验）：** 在新建 `D:\computer learning\game_exe\kuanian\.worktrees\window-b`，依赖只安装到该 D 盘 worktree，npm 缓存限定在 D 盘根 `.npm-cache/`；`npm ci --ignore-scripts --no-audit --no-fund` 新增 148 个包，之后重新执行全部 6/6 定向、`check`、`build` 与 Chrome WebGL **全部通过**。系统 Chrome 仅临时验收后退出，不开启任何 watch 或常驻服务；仓库工作树 `git status` 干净。
 - **边界**：这里只是独立资产近景预览，未完成整景 R1/R2 主体、图库 R4、交互 R6、手机/实机/出生点 12 站真实走路 R7。原 `ZB-26` 仍**已接领/在建**。请 A 窗审取公共接线与碰撞净空；不能以 6 项绿灯改成「已完工」。
 
 ## 尚未闭环的迁移
