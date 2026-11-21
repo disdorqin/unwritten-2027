@@ -1,5 +1,6 @@
 // The front ridge uses the existing unsigned centimetre wire format in its own room.
 export const mountainPresencePath = '/presence-mountain';
+export const townNightWindowPath = '/presence/night-window';
 export const mountainPresenceNorthOrigin = 540;
 export const mountainPresenceBounds = Object.freeze({ width: 640, depth: 260, height: 655.35 });
 
