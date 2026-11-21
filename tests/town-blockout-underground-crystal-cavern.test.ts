@@ -66,7 +66,7 @@ test('U-3 R1 models the entire 180×120m layer, 97m path, vault, clusters, river
   assert.ok(pieces.filter(p => p.name.startsWith('u3/crystals/')).length > 400);
   const materials = new Set(pieces.map(p => p.family));
   assert.deepEqual([...materials].sort(),
-    ['crystal','moss','rock','rust','shadow','slate','water'].sort());
+    ['crystal','moonstone','moss','rock','rust','shadow','slate','water'].sort());
 });
 
 test('U-3 R2 all crystalline growth is tilted exactly +20° and grouped, 6 cold fixtures have physical crystals', () => {
@@ -80,6 +80,52 @@ test('U-3 R2 all crystalline growth is tilted exactly +20° and grouped, 6 cold 
   assert.ok(pieces.filter(p => p.name.startsWith('u3/light/attached-')).length === 42);
   assert.ok(pieces.some(p => p.name.includes('/frozen-metal-')));
   assert.ok(!pieces.some(p => /placeholder|lorem|loot-grant|lore-text|spawn-monster/.test(p.name)));
+});
+
+test('U-3 R2/R5 complete faceted ceiling, side strata and both river banks without path colliders', () => {
+  const pieces=crystalCavernArchitecture.pieces;
+  const family=(prefix:string)=>pieces.filter(p=>p.name.startsWith(prefix));
+  const teeth=family('u3/vault/hanging-shale-');
+  assert.equal(teeth.filter(p=>p.name.includes('-tier-')).length,576,
+    '24 roof bays × 2 sides × 3 geological ridges × 4 taper tiers');
+  assert.equal(teeth.filter(p=>p.name.includes('-fracture-')).length,288);
+  assert.equal(family('u3/vault/wall-strata-').length,192,
+    'rock bedding must cover both walls along the full cave length');
+  assert.equal(family('u3/river/shore-course-').length,102);
+  assert.equal(family('u3/river/shore-cap-').length,48);
+  assert.ok(teeth.every(p=>!p.solid), 'overhead geological ornament is not a fake route obstruction');
+  assert.ok(family('u3/river/shore-').every(p=>!p.solid));
+  assert.equal(crystalCavernArchitecture.numbers.cuboids,9046);
+  assert.ok(teeth.filter(p=>p.name.includes('-tier-')).every(p=>p.center[1]-p.size[1]/2>=20.4),
+    'ceiling teeth must not invade the 20m traversable envelope');
+});
+
+test('U-3 R2 hall has exactly three eight-metre faceted monoliths and a visual moonstone spur', () => {
+  const pieces=crystalCavernArchitecture.pieces;
+  const named=(prefix:string)=>pieces.filter(p=>p.name.startsWith(prefix));
+  assert.equal(named('u3/hall/monolith-').length,420);
+  assert.equal(named('u3/hall/monolith-').filter(p=>p.name.includes('/spine-')).length,60);
+  assert.equal(named('u3/hall/monolith-').filter(p=>p.name.includes('/facet-')).length,240);
+  assert.equal(named('u3/hall/monolith-').filter(p=>p.name.includes('/root-')).length,120);
+  for(let index=0;index<3;index++){
+    const spine=named('u3/hall/monolith-'+index+'/spine-');
+    assert.equal(spine.length,20);
+    assert.ok(Math.max(...spine.map(p=>p.center[1]))-Math.min(...spine.map(p=>p.center[1]))>6.9);
+    assert.ok(spine.every(p=>p.rotationZ===CRYSTAL_CAVERN_CANT_RAD));
+  }
+  assert.equal(named('u3/moonstone-spur/floor-').length,125);
+  assert.equal(named('u3/moonstone-spur/bank-').length,150);
+  assert.equal(named('u3/moonstone-spur/cap-').length,25);
+  assert.equal(named('u3/moonstone-spur/natural-mirror-').length,90);
+  assert.equal(named('u3/moonstone-spur/mirror-jamb-').length,18);
+  assert.equal(named('u3/moonstone-spur/mirror-crown-').length,10);
+  assert.equal(crystalCavernArchitecture.numbers.cuboids,9046);
+  assert.equal(named('u3/moonstone-spur/').filter(p=>p.solid).length,0,
+    'the visual spur cannot claim host-certified colliders or playable passage');
+  assert.ok(named('u3/moonstone-spur/').every(p=>p.family!=='water'),
+    'do not disguise the photo wall as water/real reflections');
+  assert.equal(crystalCavernArchitecture.numbers.clusters,62);
+  assert.equal(crystalCavernArchitecture.numbers.riverCells,289);
 });
 
 test('U-3 tapered crystals have real continuous segment tips under the exact rotated +20° spine', () => {
@@ -162,7 +208,7 @@ test('U-3 R4/R5 eight-or-fewer instanced nearest pixel palettes and six attached
   if (scene.kind !== 'ready') assert.fail();
   assert.equal(f.parent.children.length, 1);
   assert.equal(scene.group.position.y, -140);
-  assert.equal(scene.meshes.length, 7);
+  assert.equal(scene.meshes.length, 8);
   assert.equal(scene.lights.length, 6);
   assert.equal(scene.lights.filter(l=>l.visible).length, 3);
   assert.equal(scene.colliders.length, crystalCavernArchitecture.numbers.structuralColliders);
