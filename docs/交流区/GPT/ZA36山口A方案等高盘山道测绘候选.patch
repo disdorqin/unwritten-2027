@@ -1,0 +1,232 @@
+diff --git a/tests/town-blockout-za36-switchback-a-survey.test.ts b/tests/town-blockout-za36-switchback-a-survey.test.ts
+new file mode 100644
+index 00000000..086dfa27
+--- /dev/null
++++ b/tests/town-blockout-za36-switchback-a-survey.test.ts
+@@ -0,0 +1,63 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
++import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
++import {
++  surveyZa36ContinuousSwitchback, ZA36_SWITCHBACK_FOOT_WIDTH,
++  ZA36_SWITCHBACK_GRADE_LIMIT, ZA36_SWITCHBACK_MIN_LENGTH,
++} from '../tools/voxel-tavern/town-blockout/town-za36-switchback-survey';
++
++function findNonlocalOverlap(points: readonly {east:number; north:number; distance:number}[]) {
++  const buckets = new Map<string, typeof points[number][]>();
++  let nearest = Infinity;
++  const cell = 12;
++  for (const point of points) {
++    const gx = Math.floor(point.east / cell), gy = Math.floor(point.north / cell);
++    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
++      for (const previous of buckets.get(`${gx+dx}:${gy+dy}`) ?? []) {
++        if (Math.abs(point.distance - previous.distance) < 28) continue;
++        nearest = Math.min(nearest, Math.hypot(point.east - previous.east,
++          point.north - previous.north));
++      }
++    }
++    const key = `${gx}:${gy}`;
++    const bin = buckets.get(key) ?? [];
++    bin.push(point);
++    buckets.set(key, bin);
++  }
++  return nearest;
++}
++
++test('ZA-36 A ruling: proposed contour route satisfies 2.75km and maximum 12% rise with four surveyed anchors', () => {
++  const ground = createTerrainGrid().groundHeightAt;
++  const route = surveyZa36ContinuousSwitchback(ground);
++  assert.ok(route.length >= ZA36_SWITCHBACK_MIN_LENGTH);
++  assert.ok(route.maxGrade <= ZA36_SWITCHBACK_GRADE_LIMIT);
++  assert.equal(route.width, ZA36_SWITCHBACK_FOOT_WIDTH);
++  assert.equal(route.points[0]?.north, worldBounds.depth - 1);
++  assert.equal(route.points[0]?.height, ground(route.points[0]!.east, worldBounds.depth - 1));
++  assert.deepEqual([route.foot.east, route.foot.north], [290, 300]);
++  assert.deepEqual([route.middle.east, route.middle.north], [440, 520]);
++  assert.deepEqual([route.summit.east, route.summit.north], [336, 640]);
++  for (const point of [route.foot, route.middle, route.summit]) {
++    assert.ok(Math.abs(point.height - sampleNorthRidge350(point.east, point.north)) < 1e-6);
++  }
++  assert.equal(route.checkpoints.length, Math.floor(route.length / 250));
++  for (let i = 1; i < route.points.length; i++) {
++    const before = route.points[i-1]!, after = route.points[i]!;
++    assert.ok(after.distance > before.distance && after.distance - before.distance <= 2.5);
++    assert.ok(Math.abs(after.height-before.height) /
++      (after.distance-before.distance) <= ZA36_SWITCHBACK_GRADE_LIMIT + 1e-8);
++  }
++});
++
++test('ZA-36 A ruling fails construction gate until adjacent ridge cut and nonlocal hairpin overlaps are repaired', () => {
++  const route = surveyZa36ContinuousSwitchback(createTerrainGrid().groundHeightAt);
++  // Negative gate: do NOT infer a road is safe merely from route length/grade.
++  const gap = findNonlocalOverlap(route.points);
++  assert.ok(route.maxRidgeMismatch > 20, 'needs 3D earthworks/shoulder blending before walk surface');
++  assert.ok(gap < ZA36_SWITCHBACK_FOOT_WIDTH, 'turns are closer than a single walk lane');
++  assert.ok(route.length > 5000, 'the safe-gradient approach adds substantial walking distance');
++  // Non-release proof: the survey must remain an isolated candidate until
++  // ridge mismatch and nonlocal clearance pass independently.
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-za36-switchback-survey.ts b/tools/voxel-tavern/town-blockout/town-za36-switchback-survey.ts
+new file mode 100644
+index 00000000..19f17455
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-za36-switchback-survey.ts
+@@ -0,0 +1,157 @@
++import { sampleNorthRidge350 } from './north-ridge-350-terrain';
++
++export type Za36SwitchbackPoint = Readonly<{
++  east: number; north: number; height: number; distance: number;
++}>;
++export const ZA36_SWITCHBACK_FOOT_WIDTH = 2.5;
++export const ZA36_SWITCHBACK_GRADE_LIMIT = .12;
++export const ZA36_SWITCHBACK_MIN_LENGTH = 2750;
++
++// ZA-36 A ruling: no transfer at town/mountain, use a physical contour-following
++// walk from the N539 town edge to existing foot, mid station and cloud terrace.
++// This is an isolated survey candidate only, NOT a terrain/Presence override.
++const R = { centerE: 320, centerN: 650, eastScale: 330, southScale: 380 } as const;
++const controls = {
++  town: { east: 630, north: 539 },
++  foot: { east: 290, north: 300 },
++  mid: { east: 440, north: 520 },
++  summit: { east: 336, north: 640 },
++} as const;
++
++type PlanPoint = { east: number; north: number };
++const mix = (a: number, b: number, t: number) => a + (b - a) * t;
++function elliptical(site: PlanPoint) {
++  const x = (site.east - R.centerE) / R.eastScale;
++  const y = (site.north - R.centerN) / R.southScale;
++  return { theta: Math.atan2(y, x), radius: Math.hypot(x, y) };
++}
++function fromEllipse(radius: number, theta: number): PlanPoint {
++  return {
++    east: R.centerE + radius * R.eastScale * Math.cos(theta),
++    north: R.centerN + radius * R.southScale * Math.sin(theta),
++  };
++}
++function pathPlan() {
++  const route: PlanPoint[] = [{ ...controls.town }];
++  const foot = elliptical(controls.foot);
++  const town = elliptical(controls.town);
++  function arc(from: ReturnType<typeof elliptical>, to: ReturnType<typeof elliptical>,
++    final?: PlanPoint) {
++    const meanR = (from.radius + to.radius) / 2;
++    const count = Math.max(2, Math.ceil(Math.abs(to.theta - from.theta) * meanR * 380 / 2));
++    for (let i = 1; i <= count; i++) {
++      const progress = i / count;
++      route.push(i === count && final ? { ...final } : fromEllipse(
++        mix(from.radius, to.radius, progress), mix(from.theta, to.theta, progress)));
++    }
++  }
++  // Approach follows the outer foothill contour, not a line through the
++  // southern old-town buildings. The start is on the legal N539 town lip.
++  arc(town, foot, controls.foot);
++  const footIndex = route.length - 1;
++  // Four flank traverses rise to the actual lower cable midpoint.
++  const mid = elliptical(controls.mid);
++  const lowTurns = [
++    { theta: -2.64, radius: .83 },
++    { theta: -.5, radius: .70 },
++    { theta: -2.64, radius: .60 },
++    { theta: mid.theta, radius: mid.radius },
++  ];
++  let previous = foot;
++  for (const [i, turn] of lowTurns.entries()) {
++    arc(previous, turn, i === lowTurns.length - 1 ? controls.mid : undefined);
++    previous = turn;
++  }
++  const midIndex = route.length - 1;
++  // Sixteen smaller contour returns distribute the 207m final rise over a
++  // long safe grade, without building giant suspended tracks at E600.
++  const summit = elliptical(controls.summit);
++  for (let i = 1; i <= 16; i++) {
++    const turn = {
++      theta: i === 16 ? summit.theta : i % 2 ? -2.64 : -.5,
++      radius: mix(mid.radius, summit.radius, i / 16),
++    };
++    arc(previous, turn, i === 16 ? controls.summit : undefined);
++    previous = turn;
++  }
++  return { route, footIndex, midIndex, summitIndex: route.length - 1 };
++}
++export function surveyZa36ContinuousSwitchback(townHeightAt: (east: number, north: number) => number) {
++  const { route, footIndex, midIndex, summitIndex } = pathPlan();
++  const horizontal: number[] = [0];
++  for (let i = 1; i < route.length; i++) {
++    const a = route[i - 1]!, b = route[i]!;
++    horizontal.push(horizontal[i - 1]! + Math.hypot(b.east - a.east, b.north - a.north));
++  }
++  const controlsByDistance = [
++    { index: 0, height: townHeightAt(controls.town.east, controls.town.north) },
++    { index: footIndex, height: sampleNorthRidge350(controls.foot.east, controls.foot.north) },
++    { index: midIndex, height: sampleNorthRidge350(controls.mid.east, controls.mid.north) },
++    { index: summitIndex, height: sampleNorthRidge350(controls.summit.east, controls.summit.north) },
++  ];
++  // Fit the old mountain profile under a strict Lipschitz grade bound.
++  // Four signed-off anchors are fixed; between them we minimize vertical
++  // deviations from the real mountain instead of making floating struts.
++  const gradeLimit = ZA36_SWITCHBACK_GRADE_LIMIT * .985;
++  const anchors = controlsByDistance.map(point => ({
++    ...point, distance: horizontal[point.index]!,
++  }));
++  const height = route.map((position, index) => {
++    const natural = sampleNorthRidge350(position.east, position.north);
++    const distance = horizontal[index]!;
++    const low = Math.max(...anchors.map(anchor =>
++      anchor.height - gradeLimit * Math.abs(distance - anchor.distance)));
++    const high = Math.min(...anchors.map(anchor =>
++      anchor.height + gradeLimit * Math.abs(distance - anchor.distance)));
++    if (low > high + 1e-7) throw new Error('ZA-36 signed-off heights require more than 12% grade');
++    return Math.max(low, Math.min(high, natural));
++  });
++  for (let round = 0; round < 5; round++) {
++    for (let index = 1; index < height.length; index++) {
++      const cap = gradeLimit * (horizontal[index]! - horizontal[index - 1]!);
++      height[index] = Math.max(height[index - 1]! - cap,
++        Math.min(height[index - 1]! + cap, height[index]!));
++    }
++    for (let index = height.length - 2; index >= 0; index--) {
++      const cap = gradeLimit * (horizontal[index + 1]! - horizontal[index]!);
++      height[index] = Math.max(height[index + 1]! - cap,
++        Math.min(height[index + 1]! + cap, height[index]!));
++    }
++  }
++  let maxGrade = 0, maxRidgeMismatch = 0;
++  const points: Za36SwitchbackPoint[] = route.map((position, index) => {
++    maxRidgeMismatch = Math.max(maxRidgeMismatch, Math.abs(height[index]! -
++      sampleNorthRidge350(position.east, position.north)));
++    if (index) {
++      const step = horizontal[index]! - horizontal[index - 1]!;
++      maxGrade = Math.max(maxGrade, Math.abs(height[index]! - height[index - 1]!) / step);
++    }
++    return { ...position, height: height[index]!, distance: horizontal[index]! };
++  });
++  const length = horizontal.at(-1)!;
++  function pointAt(distance: number): Za36SwitchbackPoint {
++    if (!Number.isFinite(distance) || distance < 0 || distance > length) {
++      throw new RangeError('ZA-36 requires a bounded physical distance along the approved survey.');
++    }
++    let lo = 0, hi = points.length - 1;
++    while (lo < hi) {
++      const mid = (lo + hi) >> 1;
++      if (points[mid]!.distance < distance) lo = mid + 1;
++      else hi = mid;
++    }
++    if (lo === 0) return points[0]!;
++    const a = points[lo - 1]!, b = points[lo]!;
++    const t = (distance - a.distance) / (b.distance - a.distance);
++    return {
++      east: mix(a.east, b.east, t), north: mix(a.north, b.north, t),
++      height: mix(a.height, b.height, t), distance,
++    };
++  }
++  return {
++    points, length, maxGrade, maxRidgeMismatch,
++    width: ZA36_SWITCHBACK_FOOT_WIDTH,
++    checkpoints: Array.from({ length: Math.floor(length / 250) }, (_, i) => pointAt(250 * (i + 1))),
++    foot: points[footIndex]!, middle: points[midIndex]!, summit: points[summitIndex]!,
++    pointAt,
++  };
++}
