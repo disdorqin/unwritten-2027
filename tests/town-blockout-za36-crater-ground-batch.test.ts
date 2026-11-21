@@ -47,14 +47,27 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
     mouthDraws++;
     mouthTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
   });
-  assert.equal(draws - dressingDraws - mouthDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
-  assert.equal(triangles - dressingTriangles - mouthTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
+  const outerWorks = crater.group.getObjectByName('crater-outer-works');
+  assert.ok(outerWorks, 'crater-outer works (mainline 2) mounted');
+  let outerDraws = 0, outerTriangles = 0, outerLights = 0;
+  outerWorks.traverse(node => {
+    if ((node as Light).isLight) outerLights++;
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    outerDraws++;
+    outerTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
   assert.ok(dressingDraws <= 15, 'added story details must stay batched');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');
   assert.ok(mouthTriangles <= 60000, 'crater-mouth works stay inside the approved mainline-1 triangle budget');
   assert.equal(mouthLights, 3, 'crater-mouth works add exactly three real light pools');
-  assert.equal(lights, 6, 'retains all three warm light pools plus the three crater-mouth pools');
+  assert.ok(outerDraws <= 30, 'crater-outer works stay inside the approved mainline-2 draw budget');
+  assert.ok(outerTriangles <= 110000, 'crater-outer works stay inside the approved mainline-2 triangle budget');
+  assert.equal(outerLights, 1, 'crater-outer works add exactly one real light pool (the north tower)');
+  assert.equal(lights, 7, 'retains all three warm light pools plus the crater-mouth and tower pools');
   for (let n = 10; n < worldBounds.depth - 1; n += 7.5) {
     const oldTownEdge = terrain.groundHeightAt(0, n);
     assert.ok(Math.abs(crater.heightAt(0, n)! - oldTownEdge) < .001, `seam at ${n}`);

@@ -8,6 +8,7 @@ import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing';
 import { buildCraterMouthWorks } from './town-crater-mouth-works';
+import { buildCraterOuterWorks } from './town-crater-outer-works';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -141,6 +142,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(story.group);
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
+  const outerWorks = buildCraterOuterWorks(road);
+  group.add(outerWorks.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
   return { ...road, winch };

@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, NearestFilter, PlaneGeometry, PointLight, Quaternion,
-  SRGBColorSpace, TorusGeometry, Vector3,
+  SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterRimRadius } from './meteor-crater';
@@ -341,6 +341,12 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     box(timberWarm, table.east, g + .62, table.north, .8, .07, .55, fr.yaw);
     box(timber, table.east, g + .3, table.north, .09, .6, .09, fr.yaw);
     cyl(paper, table.east, g + .74, table.north, .07, .055, .13, 8);
+    // Steam wisp over the half cup (§三.10): a still column of soft spheres.
+    const steam = new MeshStandardMaterial({ color: 0xdfe8ee, transparent: true, opacity: .32, roughness: 1 });
+    for (let i = 0; i < 6; i++) {
+      const p = fr.at(.9 + Math.sin(i * 1.2) * .05 + i * .02, -.7);
+      part(steam, new SphereGeometry(.035 + i * .012, 6, 5), p.east, g + .88 + i * .13, p.north);
+    }
     // Hanging paper lantern under the roof edge.
     const lant = fr.at(-1.5, 1.35);
     cyl(paper, lant.east, g + 2.05, lant.north, .17, .17, .34, 8);
