@@ -15,6 +15,33 @@ const fixture = (): UndergroundMineSpec => ({
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 });
 
+test('the optional crystal gate sweeps the player footprint and keeps the local terminal wall', () => {
+  const spec = fixture();
+  const expanded = { ...spec.camp, openBackForExpansion: true };
+  const standard = createUndergroundMineLayout({ ...spec, camp: expanded });
+  const layout = createUndergroundMineLayout({ ...spec, camp: { ...expanded, crystalGate: true } });
+  const gate = layout.expansion?.gate;
+  assert.ok(gate);
+  assert.equal(standard.expansion?.gate, undefined);
+  assert.deepEqual(standard.anchors, layout.anchors);
+  const [x, floor, z] = gate.position;
+  assert.equal(floor, -91);
+  assert.equal(gate.gapFor('closed'), 0);
+  assert.equal(gate.gapFor('ajar'), .1);
+  assert.equal(gate.gapFor('open'), gate.height);
+  const { radius, standingHeight, crouchingHeight } = spec.walker;
+  assert.ok(layout.queryPassage(x, z - .5, radius, standingHeight));
+  assert.equal(layout.queryPassage(x, z - .2, radius, standingHeight), undefined);
+  assert.equal(layout.queryPassage(x, z + .2, radius, crouchingHeight, 'ajar'), undefined);
+  for (const offset of [-.5, -.2, 0, .2, .5]) {
+    const foot = layout.queryPassage(x, z + offset, radius, standingHeight, 'open');
+    assert.equal(foot?.floor, floor);
+  }
+  assert.equal(layout.queryPassage(x + gate.width / 2, z, radius, standingHeight, 'open'), undefined);
+  assert.equal(layout.queryPassage(x, z, radius, gate.height + .01, 'open'), undefined);
+  assert.equal(layout.queryPassage(x, layout.expansion!.bounds.maxZ, radius, standingHeight, 'open'), undefined);
+});
+
 test('mine meshes expose the locked level and dimensions, flush double rail and a separate water surface', () => {
   const layout = createUndergroundMineLayout(fixture());
   assert.equal(undergroundMineDepth, -90);
