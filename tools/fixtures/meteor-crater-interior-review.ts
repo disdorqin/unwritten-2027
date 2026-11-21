@@ -43,6 +43,9 @@ const views={
   overview:{eye:[72,45,61],target:[0,-24,0]},
   auditFloorToTerrace:{eye:[16,-33.33,0],target:[40,-15,0]},
   auditRimToFloor:{eye:[51.5,crater.heightOffsetAt(51.5,0)!+1.67,0],target:[10,-32,0]},
+  c2WellAcrossWorklights:{eye:[0,-33.33,-5],target:[-9,-33,6]},
+  c2WinchService:{eye:[8,-33.33,0],target:[-6,-33,7]},
+  c2ReturnWorklightChain:{eye:[-15,-33.33,-2],target:[8,-33,4]},
 } as const;
 type View=keyof typeof views;
 let current:View='rim',frames=0,alive=true;
@@ -56,6 +59,9 @@ function setPhase(next:'day'|'night') {
   ambient.intensity=night?.28:1.2;
   sun.intensity=night?.14:2.5;
   reviewHeadlamp.intensity=night?.35:0;
+  // The actual C2 lamps, not a fake screenshot-only orange tint.
+  // The same method is invoked by town-za22-crater-road on live setNight().
+  mounted.floorWorklights.setNight(night);
   return true;
 }
 function setView(next:View){
@@ -93,6 +99,8 @@ Object.assign(window,{
         target:[...views[current].target],
         firstPersonEyeHeight:1.67,
         materials:mounted.interiorDressing.meshes.length,
+        physicalWorklightCount:mounted.floorWorklights.data.lampCount,
+        activeWorklightSources:mounted.floorWorklights.lights.filter(light=>light.visible).length,
         draws:renderer.info.render.calls,triangles:renderer.info.render.triangles,
         eye:camera.position.toArray(),
         worldIsLive:false,

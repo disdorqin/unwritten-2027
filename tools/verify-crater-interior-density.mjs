@@ -53,7 +53,7 @@ try{
     assert.equal(stats.worldIsLive,false);
     assert.equal(stats.sealedCover,true);
     assert.ok(Math.abs(stats.surfaceHeightAtWell+35)<.001);
-    assert.ok(stats.draws<=13,'C3 detail budget exceeded '+name+': '+stats.draws);
+    assert.ok(stats.draws<=18,'C3+C2 detail budget exceeded '+name+': '+stats.draws);
     assert.ok(stats.triangles>28000 && stats.triangles<275000,
       'empty/oversized draw: '+name+' tris='+stats.triangles);
     const shot=await page.screenshot({path:resolve(output,String(index+1)+'-'+name+'.png')});
@@ -75,11 +75,33 @@ try{
       assert.equal(stats.current,name);
       assert.equal(stats.phase,phase);
       assert.equal(stats.firstPersonEyeHeight,1.67);
-      assert.ok(stats.draws<=13);
+      assert.ok(stats.draws<=18);
       const file=(name==='auditFloorToTerrace'?'pit-bottom-to-terrace':'rim-to-pit-bottom')+'-'+phase+'.png';
       const shot=await page.screenshot({path:resolve(output,file)});
       assert.ok(shot.length>15000,'missing audit first-person shot '+file);
       result.views[file]={...stats,bytes:shot.length,mode:'offline-visual-day-night-review'};
+    }
+  }
+  // C-2: exactly the real B-01 lamp mount seen at 1.67 m eye height.
+  // Check actual six PointLight.visible states as the phase changes.
+  for(const name of ['c2WellAcrossWorklights','c2WinchService','c2ReturnWorklightChain']){
+    for(const phase of ['day','night']){
+      assert.equal(await page.evaluate(({name,phase})=>
+        window.craterInteriorReview.setView(name)&&
+        window.craterInteriorReview.setPhase(phase),{name,phase}),true);
+      await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+      const stats=await page.evaluate(()=>window.craterInteriorReview.inspect());
+      assert.equal(stats.physicalWorklightCount,6);
+      assert.equal(stats.activeWorklightSources,phase==='night'?6:0);
+      assert.ok(stats.draws<=18,'C2 near-camera draw budget '+stats.draws);
+      assert.equal(stats.firstPersonEyeHeight,1.67);
+      const nameOut=name==='c2WellAcrossWorklights'?'c2-well-to-worklights':
+        name==='c2WinchService'?'c2-winch-worksite':'c2-return-side-chain';
+      const imageName=nameOut+'-'+phase+'.png';
+      const image=await page.screenshot({path:resolve(output,imageName)});
+      assert.ok(image.length>15000);
+      result.views[imageName]={...stats,bytes:image.length,
+        phaseProof:'actual C2 sources switched; offline browser phase not live clock'};
     }
   }
   assert.deepEqual(result.errors,[]);
