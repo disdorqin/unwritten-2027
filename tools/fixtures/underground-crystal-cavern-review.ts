@@ -40,6 +40,14 @@ const views = {
     eye: [24.5, crystalCavernTrailHeight(76) + 1.67, -76] as const,
     target: [49, crystalCavernTrailHeight(87) + 1.6, -87] as const,
   },
+  monolith: {
+    eye: [-17, crystalCavernTrailHeight(43) + 1.67, -42] as const,
+    target: [-31, crystalCavernTrailHeight(49) + 4.2, -49] as const,
+  },
+  moonstone: {
+    eye: [-38, crystalCavernTrailHeight(56) + 1.67, -56] as const,
+    target: [-53.4, crystalCavernTrailHeight(56) + 2.6, -56] as const,
+  },
 } as const;
 type ViewName = keyof typeof views;
 let current: ViewName = 'entrance';
@@ -68,8 +76,8 @@ function draw() {
 }
 draw();
 const keyboard = (event: KeyboardEvent) => {
-  const keys: readonly ViewName[] = ['entrance', 'grove', 'overlook', 'quay'];
-  const idx = ['1','2','3','4'].indexOf(event.key);
+  const keys: readonly ViewName[] = ['entrance', 'grove', 'overlook', 'quay', 'monolith', 'moonstone'];
+  const idx = ['1','2','3','4','5','6'].indexOf(event.key);
   if (idx >= 0) setView(keys[idx]);
 };
 window.addEventListener('keydown', keyboard);
