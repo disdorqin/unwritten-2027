@@ -156,6 +156,10 @@ import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpo
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
+import { mountUndergroundDomainHost } from './underground-domain-host';
+import { createUndergroundDreamChain, type DreamChainTrip } from './underground-dream-chain';
+import { mountUndergroundDescent } from './underground-descent';
+import type { UndergroundLiftCameraMotion } from './underground-lift-cinematic-effects';
 import { buildCraterRailExtension } from './town-crater-rail-extension';
 import { buildShankouNodeScenery } from './town-shankou-node-scenery';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
@@ -194,12 +198,103 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
+type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
+let dreamChain: DreamChain | undefined;
+let dreamDescent: ReturnType<typeof mountUndergroundDescent> | undefined;
+let dreamControlsLocked = false;
+let dreamHoldE = false;
+let dreamLastTurns = -1;
+let dreamMotion: UndergroundLiftCameraMotion = { yaw: 0, pitch: 0, roll: 0 };
+let dreamFade: HTMLDivElement | undefined;
+let dreamEKey = false;
+addEventListener('keydown', (e) => { if (e.code === 'KeyE') dreamEKey = true; });
+addEventListener('keyup', (e) => {
+  if (e.code !== 'KeyE') return;
+  dreamEKey = false;
+  if (dreamHoldE) {
+    dreamHoldE = false;
+    dreamChain?.releaseWinch();
+  }
+});
 function ensureWestCraterRoad() {
   if (!westCraterRoad) {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
     scene.add(westCraterRoad.group);
+    const undergroundParent = new Group();
+    undergroundParent.name = 'underground-domain-host';
+    scene.add(undergroundParent);
+    undergroundDomain = mountUndergroundDomainHost({ parent: undergroundParent, road: westCraterRoad });
+    if (undergroundDomain.kind === 'ready') {
+      undergroundDomain.mounted.sync();
+      const chain = createUndergroundDreamChain({
+        registration: undergroundDomain.registration,
+        now: () => performance.now(),
+        playerId: 'local-player',
+        readLocalFoot: () => ({ east: x, north: n, height: airHeight ?? ground }),
+        onEvent: (event) => {
+          if (event.kind === 'well-opened') {
+            announceActivity('井盖开了 · 走到井口圈梁，按 E 跃入');
+          } else startDreamTrip(event.trip);
+        },
+      });
+      if (chain.kind === 'ready') dreamChain = chain;
+    }
   }
   return westCraterRoad;
+}
+
+function dreamFadeTo(black: boolean) {
+  if (!dreamFade) {
+    dreamFade = document.createElement('div');
+    dreamFade.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:40';
+    document.body.append(dreamFade);
+  }
+  dreamFade.style.opacity = black ? '1' : '0';
+}
+
+function applyDreamLanding(foot: { east: number; north: number; height: number }, toMine: boolean) {
+  x = foot.east;
+  n = foot.north;
+  ground = foot.height;
+  airHeight = undefined;
+  riseSpeed = 0;
+  presence.setMineDomain(toMine);
+}
+
+function startDreamTrip(trip: DreamChainTrip) {
+  if (!dreamChain) return;
+  if (trip.direction === 'up') {
+    // The descent cinematic is down-only; the return ride fades through black.
+    dreamControlsLocked = true;
+    dreamFadeTo(true);
+    void dreamChain.requestLanding(trip.id).then((foot) => {
+      if (foot) {
+        applyDreamLanding(foot, false);
+        announceActivity('回到坑底地面');
+      }
+      dreamFadeTo(false);
+      dreamControlsLocked = false;
+    });
+    return;
+  }
+  dreamDescent ??= mountUndergroundDescent({
+    parent: element('scene'),
+    setControlsLocked: (locked) => { dreamControlsLocked = locked; },
+    cameraMotion: (motion) => { dreamMotion = motion; },
+    requestMineLanding: async (tripId) => {
+      if (!dreamChain) return undefined;
+      const foot = await dreamChain.requestLanding(tripId);
+      if (!foot) return undefined;
+      applyDreamLanding(foot, true);
+      return { tripId, destination: 'mine', fallDamage: 0 } as const;
+    },
+    onHandoffError: () => announceActivity('落点没有应答 · 再试一次'),
+  });
+  dreamDescent.start(
+    { id: trip.id, first: trip.first, departedAt: trip.departedAt, travelMs: trip.travelMs },
+    performance.now(),
+  );
 }
 scene.background = new Color('#adc2dd');
 const weatherFog = new Fog('#adc2dd', 360, 1300);
@@ -2494,6 +2589,39 @@ function currentAction() {
   // Routed through the existing E affordance, not a disconnected preview UI.
   const works = homeReturn ? undefined : westCraterRoad?.craterActions;
   const craterSpot = works?.actionAt(x, n, ground);
+  // C2 dream chain: winch / shaft / cage actions at the crater floor and in
+  // the mine. The night gate is the ZB-17 restricted-entry flag, read through
+  // the same presence state the guard posts use; there is no second clock.
+  if (!homeReturn && dreamChain) {
+    const chain = dreamChain;
+    const nearPoint = (p: { east: number; north: number; height: number }, range: number) =>
+      Math.hypot(x - p.east, n - p.north) <= range && Math.abs(ground - p.height) <= 2;
+    if (chain.phase() === 'mine') {
+      if (nearPoint(chain.mineLanding, 3)) return { label: chain.pendingRide() ? '等空笼下来' : '乘笼回地面', run() {
+        if (!chain.pendingRide() && !chain.requestCageRide('up')) announceActivity('笼子还没到这一层');
+      } };
+    } else if (chain.coverOpen()) {
+      if (nearPoint(chain.shaftFoot, 2.4)) {
+        if (chain.firstFallPending()) return { label: '跃入井口', run() {
+          if (!chain.requestFirstFall()) announceActivity('先站稳到井口圈梁上');
+        } };
+        return { label: '乘笼下井', run() {
+          if (!chain.requestCageRide('down')) announceActivity('笼子不在这一层');
+        } };
+      }
+      if (nearPoint(chain.winchFoot, 1.6)) return { label: '井盖已开', run() {
+        announceActivity('井盖已开 · 走到井口跃入');
+      } };
+    } else if (nearPoint(chain.winchFoot, 1.6)) {
+      return { label: '按住 E 转绞盘', run() {
+        if (!presence.northRidgeNightOpen()) {
+          announceActivity('天还没黑 · 守卫在坑口，先回镇里等第十三声');
+        } else {
+          announceActivity('按住 E 别松手 · 转满三圈开井');
+        }
+      } };
+    }
+  }
   if (craterSpot && works) return { label: craterSpot.label, run() {
     switch (craterSpot.id) {
       case 'registration':
@@ -2632,7 +2760,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked(); }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked; }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -2962,7 +3090,50 @@ function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number)
   return true;
 }
 
+function dreamInMine() {
+  return dreamChain?.phase() === 'mine' && undergroundDomain?.kind === 'ready';
+}
+
+function tryMoveInMine(nextX: number, nextN: number) {
+  if (undergroundDomain?.kind !== 'ready') return false;
+  const passage = undergroundDomain.passageAt(nextX, nextN);
+  if (!passage) return false;
+  const floor = passage.floor;
+  if (airHeight === undefined && floor > ground + stepHeight) return false;
+  [x, n] = [nextX, nextN];
+  if (airHeight === undefined) {
+    if (ground - floor > stepHeight) {
+      landingFeedback.begin(ground);
+      airHeight = ground;
+      riseSpeed = 0;
+    } else ground = floor;
+  }
+  return true;
+}
+
+function stepJumpInMine(dt: number) {
+  if (airHeight === undefined) return;
+  const feet = airHeight;
+  const next = feet + riseSpeed * dt - .5 * gravity * dt * dt;
+  riseSpeed -= gravity * dt;
+  if (next > feet) {
+    airHeight = next;
+    return;
+  }
+  const landing = undergroundDomain?.kind === 'ready'
+    ? undergroundDomain.floorAt(x, n) ?? feet : feet;
+  if (next <= landing) {
+    ground = landing;
+    airHeight = undefined;
+    riseSpeed = 0;
+    landingFeedback.land(landing, false);
+    return;
+  }
+  airHeight = next;
+}
+
 function tryMove(nextX: number, nextN: number) {
+  if (dreamInMine()) return tryMoveInMine(nextX, nextN);
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
@@ -2985,6 +3156,10 @@ function tryMove(nextX: number, nextN: number) {
 }
 
 function stepJump(dt: number) {
+  if (dreamInMine()) {
+    stepJumpInMine(dt);
+    return;
+  }
   if (airHeight === undefined) return;
   const feet = airHeight;
   const next = feet + riseSpeed * dt - .5 * gravity * dt * dt;
@@ -3506,7 +3681,9 @@ renderer.setAnimationLoop(now => {
     const landingPose = landingFeedback.pose();
     const dip = landingPose === 'prone' ? 1.21 : reduceSnowEffects.matches ? 0 : .22 * landingFeedback.compression();
     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
-    faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
+    const dreamDip = dreamMotion.wakeProgress === undefined ? 0 : (1 - dreamMotion.wakeProgress) * 1.2;
+    faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip - dreamDip, yaw + dreamMotion.yaw, landingTilt + dreamMotion.pitch);
+    if (dreamMotion.roll) camera.rotateZ(dreamMotion.roll);
     const movement = sledRide.recovering() ? '翻橇' : sledRide.active() ? '雪橇' :
       landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
@@ -3523,6 +3700,28 @@ renderer.setAnimationLoop(now => {
     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
+  if (dreamChain) {
+    dreamChain.update();
+    if (dreamDescent) dreamDescent.update(now);
+    const chain = dreamChain;
+    const atWinch = chain.phase() === 'surface' && !chain.coverOpen() &&
+      Math.hypot(x - chain.winchFoot.east, n - chain.winchFoot.north) <= 1.6 &&
+      Math.abs(ground - chain.winchFoot.height) <= 2;
+    if (dreamEKey && atWinch && presence.northRidgeNightOpen()) {
+      dreamHoldE = true;
+      const result = chain.holdWinch();
+      if (result.kind === 'winding') {
+        const turns = Math.floor(result.turns);
+        if (turns !== dreamLastTurns) {
+          dreamLastTurns = turns;
+          announceActivity(`绞盘转动 · 第 ${turns + 1} 圈`);
+        }
+      } else {
+        dreamHoldE = false;
+        if (result.kind === 'unreachable') announceActivity('站得太远 · 贴近绞盘再转');
+      }
+    }
+  }
   presence.setWestDomain(walking && !homeReturn && x < 0);
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
