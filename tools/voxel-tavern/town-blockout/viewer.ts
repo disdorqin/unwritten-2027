@@ -696,6 +696,7 @@ function setNight(night: boolean) {
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
+  westCraterRoad?.outerworks.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
@@ -2474,6 +2475,30 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
+  // ZA-36 outside works: only public-layer actions. Player interaction is
+  // routed through the existing E affordance, not a disconnected preview UI.
+  const works = homeReturn ? undefined : westCraterRoad?.outerworks;
+  const craterSpot = works?.actionAt(x, n, ground);
+  if (craterSpot && works) return { label: craterSpot.label, run() {
+    switch(craterSpot.id) {
+      case 'registration':
+        openPlace('入坑登记', '入坑登记 · 天黑前出坑');
+        break;
+      case 'map':
+        openPlace('坑区手绘图', '图上只有井口、栈道与黑石带，最后一格尚未标注。');
+        break;
+      case 'telescope':
+        activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
+        announceActivity('望筒朝向坑沿与坑心');
+        break;
+      case 'firewood':
+        announceActivity(works.firewood() ? '添柴后火盆亮了一些' : '火盆恢复原样');
+        break;
+      case 'survey':
+        openPlace('测绘位 M1', '三角觇标读数待测绘线接入。');
+        break;
+    }
+  } };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);
   if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
@@ -3512,7 +3537,9 @@ renderer.setAnimationLoop(now => {
   if (towerInterior) towerInterior.visible = Math.hypot(camera.position.x - 226, camera.position.z + 223) < 45;
   updateTowerWingVisibility(tower, camera.position.x, -camera.position.z, camera.position.y);
   if (!homeReturn) {
-    if (!cloudRoute.active() && camera.position.x < 100) ensureWestCraterRoad();
+    if (!cloudRoute.active() && camera.position.x < 100) {
+      ensureWestCraterRoad().outerworks.setNight(nightMode);
+    }
     prepareLandmarks(camera.position.x, -camera.position.z);
   }
   if (!homeReturn && !extensionStreetsLoad && (camera.position.x > 320 || -camera.position.z > 275)) {

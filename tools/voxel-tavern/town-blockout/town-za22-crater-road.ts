@@ -7,6 +7,10 @@ import { buildZa31CraterRim } from './town-za31-crater-rim';
 import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing';
+import { mountZa36CraterOuterworks } from './town-za36-crater-outerworks';
+import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
+import { buildZa36CraterMidground } from './town-za36-crater-midground';
+import { mountZa36RopeStay } from './town-za36-rope-stay';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -19,6 +23,8 @@ const tileSize = 48;
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
+  readonly outerworks: ReturnType<typeof mountZa36CraterOuterworks>;
+  readonly ropeStay: ReturnType<typeof mountZa36RopeStay>;
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
@@ -138,7 +144,27 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(rim.group, camp.group);
   const story = buildZa36CraterStoryDressing(road);
   group.add(story.group);
+  const ejecta = buildZa36CraterEjecta(road);
+  group.add(ejecta.group);
+  const midground = buildZa36CraterMidground(road, [
+    ...rim.placements, ...camp.placements,
+    ...story.placements.map(site => ({east:site.east,north:site.north,radius:.58})),
+    ...ejecta.placements.map(site => ({east:site.east,north:site.north,radius:site.footprint})),
+  ]);
+  group.add(midground.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
-  return { ...road, winch };
+  const ropeStay = mountZa36RopeStay(road);
+  if (ropeStay) group.add(ropeStay.group);
+  // ZA-36 batch 17: outside industrial belt is real default-world scenery,
+  // not a detached review gallery. Pending new enlarged-area budget signoff.
+  const outerworks = mountZa36CraterOuterworks(road);
+  group.add(outerworks.group);
+  return {
+    ...road, winch, outerworks, ropeStay,
+    fenceBlocks(east: number, north: number, height: number, radius: number) {
+      return fenceBlocks(east, north, height, radius) ||
+        outerworks.wallBlocks(east, north, height, radius);
+    },
+  };
 }
