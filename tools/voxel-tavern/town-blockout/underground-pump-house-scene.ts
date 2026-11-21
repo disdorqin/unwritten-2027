@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DoubleSide, Group, InstancedMesh, Matrix4,
-  Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, PointLight,
+  BoxGeometry, CanvasTexture, DataTexture, CylinderGeometry, DoubleSide, Group, InstancedMesh,
+  Mesh, MeshBasicMaterial, MeshStandardMaterial, NearestFilter, Object3D, PlaneGeometry, PointLight,
   SRGBColorSpace, Vector3,
 } from 'three';
 import { pumpHouseLogbook, type PumpHouseSnapshot } from '../../../src/presence/underground-pump-house.js';
@@ -29,11 +29,46 @@ type Box = Readonly<{ at: readonly [number, number, number]; scale: readonly [nu
 type Solid = Readonly<{
   name: string; min: readonly [number, number, number]; max: readonly [number, number, number];
 }>;
-const palette = {
-  slate: 0x545963, masonry: 0x756459, timber: 0x775943, darkTimber: 0x483b32,
-  iron: 0x42505b, steel: 0x7f8b91, rust: 0x9a633d, copper: 0xb48d65,
-  paper: 0xd9c19a, glass: 0xf3c58e, moss: 0x596b5e,
+// Existing Clay-Factory canon swatches. Texture variants may only sample these colors.
+export const pumpHouseCanonSwatches = {
+  stone: 0x8a8378, earth: 0xa98a56, timber: 0x5d4630, green: 0x44503c,
+  midnight: 0x2c3648, snow: 0xe8ecf0, ember: 0xe08a3c, crystal: 0x7fd4c8,
+  rust: 0x8a4a34,
 } as const;
+const c = pumpHouseCanonSwatches;
+const palette = {
+  slate: c.stone, masonry: c.earth, timber: c.timber, darkTimber: c.timber,
+  iron: c.midnight, steel: c.stone, rust: c.rust, copper: c.earth,
+  paper: c.earth, glass: c.ember, moss: c.green,
+} as const;
+const textureBand: Record<keyof typeof palette, readonly [number, number, number]> = {
+  slate: [c.stone, c.midnight, c.earth], masonry: [c.earth, c.stone, c.rust],
+  timber: [c.timber, c.earth, c.green], darkTimber: [c.timber, c.green, c.midnight],
+  iron: [c.midnight, c.stone, c.rust], steel: [c.stone, c.midnight, c.snow],
+  rust: [c.rust, c.timber, c.earth], copper: [c.earth, c.rust, c.stone],
+  paper: [c.earth, c.snow, c.timber], glass: [c.ember, c.earth, c.snow],
+  moss: [c.green, c.timber, c.stone],
+};
+function makePixelMaterial(family: keyof typeof palette) {
+  const pixels = new Uint8Array(16 * 16 * 4);
+  const [base, dark, accent] = textureBand[family];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const grain = (x * 17 + y * 23 + Math.floor(x / 3) * 7 + Math.floor(y / 5) * 11) % 37;
+    const woodStreak = (family === 'timber' || family === 'darkTimber') && y % 4 === 0;
+    const rustPits = family === 'rust' && (x * 3 + y * 5) % 11 <= 2;
+    const cracked = (family === 'slate' || family === 'masonry') && (x + y * 3) % 19 === 0;
+    const color = woodStreak || rustPits || cracked ? dark : grain < 3 ? accent : base;
+    pixels.set([color >> 16, (color >> 8) & 255, color & 255, 255], (y * 16 + x) * 4);
+  }
+  const map = new DataTexture(pixels, 16, 16);
+  map.minFilter = map.magFilter = NearestFilter;
+  map.colorSpace = SRGBColorSpace;
+  map.needsUpdate = true;
+  const metal = ['iron', 'steel', 'rust', 'copper'].includes(family);
+  const material = new MeshStandardMaterial({ map, roughness: metal ? .82 : .98,
+    metalness: metal ? .17 : 0, flatShading: true });
+  return { map, material };
+}
 const roleNames: Record<Role, string> = {
   journal: pumpHouseLogbook.title,
   pump: pumpHouseLogbook.labels.pump,
@@ -171,7 +206,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   pumpLever.name = 'pump-mechanical-hand-crank';
   pumpLever.position.set(-2.15, 1.55, -4.18);
   root.add(pumpLever);
-  const iron = new MeshStandardMaterial({ color: palette.iron, metalness: .24, roughness: .79 });
+  const iron = new MeshStandardMaterial({ color: c.midnight, metalness: .24, roughness: .79 });
   const leverGeometry = new BoxGeometry();
   const lever = new Mesh(leverGeometry, iron);
   lever.name = 'pump-crank-iron-arm';
@@ -188,7 +223,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   cap.position.set(-1.0, .99, -6.18);
   cap.scale.set(.71, .15, .55);
   root.add(cap);
-  const blockage = new Mesh(leverGeometry, new MeshStandardMaterial({ color: 0x6b6658, roughness: .96 }));
+  const blockage = new Mesh(leverGeometry, new MeshStandardMaterial({ color: c.stone, roughness: .96 }));
   blockage.name = 'pump-blockage-stones';
   blockage.position.set(-1.0, .80, -6.17);
   blockage.scale.set(.35, .26, .35);
@@ -208,7 +243,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   const dialMetal = new Mesh(circleGeometry, new MeshStandardMaterial({ color: palette.copper, metalness: .22 }));
   dialMetal.rotation.x = Math.PI / 2;
   dial.add(dialMetal);
-  const needle = new Mesh(leverGeometry, new MeshStandardMaterial({ color: 0xb53d31, emissive: 0x27130e }));
+  const needle = new Mesh(leverGeometry, new MeshStandardMaterial({ color: c.rust, emissive: c.timber, emissiveIntensity: .2 }));
   needle.name = 'pump-pressure-needle';
   needle.position.z = .095;
   needle.scale.set(.047, .45, .05);
@@ -224,19 +259,19 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   root.add(ruler);
   for (let i = 0; i < 15; i++) {
     const segment = new Mesh(leverGeometry, new MeshStandardMaterial({
-      color: i > 9 ? 0xb4553c : i > 4 ? 0xc6a760 : 0x74a69d,
-      roughness: .82, emissive: 0x131512,
+      color: i > 9 ? c.rust : i > 4 ? c.earth : c.crystal,
+      roughness: .82, emissive: c.midnight, emissiveIntensity: .08,
     }));
     segment.position.set(.16, i * .10, 0);
     segment.scale.set(i % 5 === 0 ? .48 : .31, .045, .08);
     ruler.add(segment);
   }
-  const waterMarker = new Mesh(leverGeometry, new MeshBasicMaterial({ color: 0xffe5ad }));
+  const waterMarker = new Mesh(leverGeometry, new MeshBasicMaterial({ color: c.snow }));
   waterMarker.name = 'pump-water-ruler-moving-pointer';
   waterMarker.scale.set(.25, .08, .14);
   ruler.add(waterMarker);
-  const waterMaterial = new MeshStandardMaterial({ color: 0x527e8e, transparent: true,
-    opacity: .77, metalness: .10, roughness: .27, side: DoubleSide, depthWrite: false });
+  const waterMaterial = new MeshStandardMaterial({ color: c.crystal, transparent: true,
+    opacity: .55, metalness: .10, roughness: .27, side: DoubleSide, depthWrite: false });
   const waterGeometry = new PlaneGeometry(6.05, 13.45, 1, 1);
   const water = new Mesh(waterGeometry, waterMaterial);
   water.rotation.x = -Math.PI / 2;
@@ -282,7 +317,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   }
   // Three physical source lanterns: an armature, amber glass and caged warm light.
   const lamps: PointLight[] = [];
-  const lampGlass = new MeshStandardMaterial({ color: 0xd6a364, emissive: 0xd0904a,
+  const lampGlass = new MeshStandardMaterial({ color: c.earth, emissive: c.ember,
     emissiveIntensity: .8 });
   const lampGeometry = new BoxGeometry();
   for (const [x, y, z] of [[-3.85, 2.56, -3], [3.91, 2.65, -7.1], [0, 2.28, -17.1]]) {
@@ -295,7 +330,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
     glass.scale.set(.31, .38, .32);
     glass.name = 'pump-host-budgeted-lantern';
     root.add(glass);
-    const light = new PointLight(0xffb97c, 6, 9, 2);
+    const light = new PointLight(c.ember, 6, 9, 2);
     light.position.set(x, y - .1, z);
     light.name = 'pump-host-budgeted-source';
     light.visible = false;
@@ -306,13 +341,12 @@ export function mountUndergroundPumpHouseScene(host: Host) {
   // Batch voxel-like stone/wood/metal/cloth; owned resources disposed exactly once.
   const sharedBox = new BoxGeometry();
   const mats: MeshStandardMaterial[] = [];
+  const texMaps: DataTexture[] = [];
   const instances: InstancedMesh[] = [];
   const placement = new Object3D();
   for (const [family, pieces] of groups) {
-    const metal = ['iron', 'steel', 'rust', 'copper'].includes(family);
-    const mat = new MeshStandardMaterial({ color: palette[family], roughness: metal ? .82 : .98,
-      metalness: metal ? .17 : 0, flatShading: true });
-    mats.push(mat);
+    const { map, material: mat } = makePixelMaterial(family);
+    mats.push(mat); texMaps.push(map);
     const batch = new InstancedMesh(sharedBox, mat, pieces.length);
     batch.name = 'pump-house/' + family;
     for (let i = 0; i < pieces.length; i++) {
@@ -447,6 +481,7 @@ export function mountUndergroundPumpHouseScene(host: Host) {
       root.removeFromParent();
       for (const batch of instances) batch.dispose();
       for (const material of mats) material.dispose();
+      for (const map of texMaps) map.dispose();
       sharedBox.dispose();
       leverGeometry.dispose();
       lampGeometry.dispose();

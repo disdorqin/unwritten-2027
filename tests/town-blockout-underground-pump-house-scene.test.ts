@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, PointLight } from 'three';
+import { DataTexture, Group, InstancedMesh, MeshStandardMaterial, NearestFilter, PointLight } from 'three';
 import {
-  mountUndergroundPumpHouseScene, pumpHouseStoryText, type PumpHouseSceneSite,
+  mountUndergroundPumpHouseScene, pumpHouseStoryText, pumpHouseCanonSwatches, type PumpHouseSceneSite,
 } from '../tools/voxel-tavern/town-blockout/underground-pump-house-scene.js';
 import type { PumpHouseSnapshot } from '../src/presence/underground-pump-house.js';
 
@@ -104,6 +104,34 @@ test('round 3 retains all story text and keeps light within host budget and real
   f.setBudget(10);
   mounted.sync();
   assert.equal(light.filter(lamp => lamp.visible).length, 3);
+  mounted.dispose();
+});
+
+test('round 3 texture polish strictly uses 16x16 nearest-neighbor clay-factory canon swatches', () => {
+  const f = setup();
+  const mounted = mountUndergroundPumpHouseScene(f.host);
+  if (mounted.kind !== 'ready') assert.fail();
+  const palette = new Set<number>(Object.values(pumpHouseCanonSwatches));
+  let checked = 0;
+  for (const object of mounted.group.children) {
+    if (!('isInstancedMesh' in object && object.isInstancedMesh === true) ||
+        !object.name.startsWith('pump-house/')) continue;
+    const material = (object as InstancedMesh).material as MeshStandardMaterial;
+    if (Array.isArray(material)) assert.fail('one batched family must have one material');
+    const map = material.map as DataTexture;
+    assert.ok(map && 'isDataTexture' in map && map.isDataTexture === true);
+    assert.equal(map.image.width, 16);
+    assert.equal(map.image.height, 16);
+    assert.equal(map.minFilter, NearestFilter);
+    assert.equal(map.magFilter, NearestFilter);
+    const pixels = map.image.data as Uint8Array;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const rgb = pixels[i] * 65536 + pixels[i + 1] * 256 + pixels[i + 2];
+      assert.ok(palette.has(rgb), 'off-canon material pixel ' + rgb.toString(16));
+    }
+    checked++;
+  }
+  assert.equal(checked, mounted.materialFamilies.length);
   mounted.dispose();
 });
 
