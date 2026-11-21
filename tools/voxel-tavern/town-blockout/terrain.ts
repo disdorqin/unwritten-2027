@@ -2,6 +2,7 @@ import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
 import { b1TerrainReliefOffset } from './terrain-undulations';
+import { b2TerrainReliefOffset } from './terrain-undulations-b2';
 
 export { layout, worldBounds };
 
@@ -170,10 +171,11 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
       const outsideLegacy = east > layout.width || north > layout.depth;
       const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      // ZA-34 R1: the 1m mesh and the gameplay height sampler use the same
-      // actual B1 relief vertices; footings, paths, ice and water stay fixed.
+      // ZA-34 R1/R2: B1 and B2 apply on the SAME 1m physical grid sampled by
+      // player feet, sled, render mesh and Presence. They occupy disjoint
+      // zones, and masks preserve routes, parcels, frozen lake and props.
       const relief = options.relief === false || isWater(east, north) || cell.ice
-        ? 0 : b1TerrainReliefOffset(east, north);
+        ? 0 : b1TerrainReliefOffset(east, north) + b2TerrainReliefOffset(east, north);
       elevation[index] = extension.elevation + relief;
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
