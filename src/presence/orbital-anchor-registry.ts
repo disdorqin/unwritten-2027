@@ -39,10 +39,16 @@ export function resolveOrbitalAnchorVisit(
   return { ok: true, visited: [...visited, id], added: true };
 }
 
-/** Reports key progress. The current chapter still keeps both doors locked. */
-export function readOrbitalDualKeyStatus(recoveredPageIds: Iterable<number>, assembledFlyer: boolean) {
+/**
+ * Reports the two independent orbital unlock prerequisites. The numbered
+ * recoveredLogPageIds (1–12) are pages of the missing 未央号 ship's log.
+ * They are NOT the twelve zodiac stones, not the town atlas rubbings, and
+ * never a client claim of an unlocked transfer. The current chapter keeps
+ * both doors locked until the server owns the full accepted transition.
+ */
+export function readOrbitalDualKeyStatus(recoveredLogPageIds: Iterable<number>, assembledFlyer: boolean) {
   const pages = new Set<number>();
-  for (const id of recoveredPageIds) {
+  for (const id of recoveredLogPageIds) {
     if (Number.isSafeInteger(id) && id >= 1 && id <= 12) pages.add(id);
   }
   return {
