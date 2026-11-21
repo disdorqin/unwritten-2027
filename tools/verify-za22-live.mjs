@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -344,7 +344,29 @@ try {
       firstPersonHud:await page.locator('#position').textContent(),
     };
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots') {
+  if (segment === 'a1-station') {
+    const { page, evidence } = await openTown('a1-station');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({ label: '陨石坑口' });
+    await page.waitForFunction(pattern => {
+      const match = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
+      return match && Math.abs(+match[1]-2)<1 && Math.abs(+match[2]-159)<1;
+    },positionPattern.source,{timeout:45_000});
+    // Walk the *actual* west-domain crossing on foot, through the town gate
+    // and to the mined-out station platform, rather than teleporting to a
+    // test-only coordinate. A collision error must abort without fake shots.
+    await follow(page,evidence,[[-12,159],[-30,159],[-43.5,159],[-44.5,168]],'a1-kengkou-walk');
+    await face(page,evidence,-1.35);
+    await snapshot(page,evidence,'kengkou-station-front-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    assert.equal(await page.locator('#lighting').textContent(),'白昼');
+    await snapshot(page,evidence,'kengkou-station-front-day');
+    report.startupEvidence={validSpawn:true,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      jumpCount:await page.locator('#jump option').count(),frontWalked:true};
+  }
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
