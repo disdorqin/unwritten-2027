@@ -33,7 +33,7 @@ test('ZA34 R1 B2/B4: both candidates actually displace the shared 1m terrain, no
         maxDelta=Math.max(maxDelta,Math.abs(delta));
       }
     assert.ok(count>=25,`${zone.name}: only ${count} changed samples`);
-    assert.ok(maxDelta>.55&&maxDelta<5.1,`${zone.name}: displacement ${maxDelta.toFixed(3)}m`);
+    assert.ok(maxDelta>=2&&maxDelta<5.1,`${zone.name}: displacement ${maxDelta.toFixed(3)}m`);
   }
   // Geometrically important datum points outside the wilds must stay unchanged.
   for(const [e,n] of [[10,10],[210,190],[370,160],[575,365],[318,510],[200,540]]){
@@ -81,7 +81,7 @@ test('ZA34 R1 B2/B4: smooth boundaries and limited incremental cross-slope',()=>
       const d=zone.offset(e,n);
       maxSlope=Math.max(maxSlope,Math.hypot(zone.offset(e+1,n)-d,zone.offset(e,n+1)-d));
     }
-    assert.ok(maxSlope<=Math.tan(12*Math.PI/180)+.04,
+    assert.ok(maxSlope<=Math.tan(12*Math.PI/180)+.01,
       `${zone.name}: incremental slope ${(Math.atan(maxSlope)*180/Math.PI).toFixed(2)} degrees`);
   }
   assert.equal(terrainReliefOffset(0,430),0);

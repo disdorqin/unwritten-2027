@@ -114,9 +114,9 @@ export function b2TerrainReliefOffset(e:number,n:number) {
   if(safety===0)return 0;
   // Two smooth 80–200m modes; shoreline, housing, baths and curved rail
   // are zeroed by the common mask. No new primitive meshes or draw calls.
-  const wave=2.8*Math.sin((e-476)*Math.PI*2/162)
+  const wave=5.35*Math.sin((e-476)*Math.PI*2/162)
     *Math.cos((n-48)*Math.PI*2/184)
-    +1.1*Math.cos((e+n-520)*Math.PI*2/194);
+    +1.95*Math.cos((e+n-520)*Math.PI*2/194);
   return wave*envelope*safety;
 }
 
@@ -131,9 +131,9 @@ export function b4TerrainReliefOffset(e:number,n:number) {
   if(envelope===0)return 0;
   const safety=terrainBuildProtection(e,n);
   if(safety===0)return 0;
-  const wave=2.1*Math.sin((n-384)*Math.PI*2/158)
+  const wave=2.0*Math.sin((n-384)*Math.PI*2/158)
     *Math.cos((e-18)*Math.PI*2/145)
-    +.7*Math.sin((e+n-411)*Math.PI*2/186);
+    +.67*Math.sin((e+n-411)*Math.PI*2/186);
   return wave*envelope*safety;
 }
 
