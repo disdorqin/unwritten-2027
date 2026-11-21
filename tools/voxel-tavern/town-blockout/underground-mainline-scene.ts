@@ -27,6 +27,7 @@ export const undergroundMainlineWords = Object.freeze({
   },
   car: '第六班矿车 · 载矿不载谎言',
   brake: '弯前握闸，车速高则翻；脱轨不卸人。',
+  curve: '急弯预告 · 前方降速，松开刹车不会自动减速',
   winch: '空车才能唤回；守住绞盘直至车归站。',
 } as const);
 type Viewer = Readonly<{ playerId: string; domainId: string; foot: UndergroundMainlinePoint }>;
@@ -198,6 +199,23 @@ export function mountUndergroundMainlineScene(host: Options) {
           .11, .065, .17);
     }
   }
+  // Preview each real host-certified bend five metres ahead. The signs are physical
+  // trackside furniture; no invented UI arrow, no unsurveyed hazard polygon.
+  for (const bend of route.bends) {
+    const p = at(Math.max(2, bend.chainage - 5));
+    piece('curve-warning-timber-post', swatches.wood, swatches.earth,
+      p.x + 2.2, p.y + .92, p.z, .20, 1.84, .2, p.heading);
+    piece('curve-warning-rusted-plate', swatches.rust, swatches.night,
+      p.x + 2.2, p.y + 1.91, p.z, 1.28, .48, .13, p.heading);
+    for (let i = 0; i < 3; i++)
+      piece('curve-warning-amber-notches', swatches.ember, swatches.rust,
+        p.x + 1.83 + i * .33, p.y + 1.91, p.z + .10,
+        .17, .15, .08, p.heading);
+    for (let i = 0; i < 5; i++)
+      piece('curve-warning-ballast', swatches.stone, swatches.wood,
+        p.x + 1.95 + i * .18, p.y + .06, p.z - .26,
+        .24, .14, .23, p.heading);
+  }
   for (let i = 0; i < 12; i++) {
     const p = at(route.turnoutMetres + i * .12);
     piece('turnout-adjustable-rusty-blades', swatches.rust, swatches.night,
@@ -241,11 +259,13 @@ export function mountUndergroundMainlineScene(host: Options) {
   }
   // Written story signs are physical pixel text, never placeholders or HUD floating hints.
   const signMeshes: Array<Mesh<PlaneGeometry, MeshBasicMaterial>> = [];
-  const signRecords = [
+  const signRecords: Array<readonly [string, number]> = [
     [undergroundMainlineWords.camp, 0],
     [undergroundMainlineWords.gate, route.length],
     [undergroundMainlineWords.switch, route.turnoutMetres],
-  ] as const;
+    ...route.bends.map(bend => [undergroundMainlineWords.curve,
+      Math.max(2, bend.chainage - 5)] as const),
+  ];
   for (const [label, chainage] of signRecords) {
     if (typeof document === 'undefined') continue;
     const canvas = document.createElement('canvas');
@@ -271,6 +291,25 @@ export function mountUndergroundMainlineScene(host: Options) {
   cart.group.name = 'u19-shared-full-line-cart';
   cart.group.visible = false;
   root.add(cart.group);
+  // One instanced spark cluster follows the REAL accepted hand-brake snapshot.
+  // The visual cannot slow the cart or claim an unconfirmed brake packet.
+  const sparkMaterial = new MeshBasicMaterial({ color: swatches.ember, depthWrite: false });
+  const brakeSparks = new InstancedMesh(blockGeo, sparkMaterial, 12);
+  brakeSparks.name = 'u19-authoritative-brake-sparks';
+  const sparkPose = new Object3D();
+  for (let i = 0; i < 12; i++) {
+    sparkPose.position.set(i % 2 ? .52 : -.52, .16 + Math.floor(i / 4) * .05,
+      i % 4 < 2 ? -.37 : .37);
+    sparkPose.scale.set(.05, .045 + i % 3 * .018, .08);
+    sparkPose.rotation.set(0, 0, (i % 2 ? .38 : -.38));
+    sparkPose.updateMatrix();
+    brakeSparks.setMatrixAt(i, sparkPose.matrix);
+  }
+  brakeSparks.instanceMatrix.needsUpdate = true;
+  brakeSparks.computeBoundingSphere();
+  brakeSparks.visible = false;
+  brakeSparks.raycast = () => undefined;
+  cart.group.add(brakeSparks);
   const faultMarkers = new Map<string, Group>();
   for (const key of repairIds) {
     const marker = new Group();
@@ -291,14 +330,17 @@ export function mountUndergroundMainlineScene(host: Options) {
     if (disposed || !validateSnapshot(snapshot) ||
         snapshot.chainage < 0 || snapshot.chainage > route.length) {
       cart.group.visible = false;
+      brakeSparks.visible = false;
       lamps.forEach(lamp => lamp.visible = false);
       return false;
     }
     const p = at(snapshot.chainage);
     cart.group.visible = true;
     cart.group.position.set(p.x, p.y, p.z);
-    cart.group.rotation.set(p.grade, p.heading, 0, 'YXZ');
+    cart.group.rotation.set(p.grade, p.heading, snapshot.mode === 'derailed' ? .24 : 0, 'YXZ');
     cart.setWheelTravel(snapshot.chainage);
+    brakeSparks.visible = snapshot.mode === 'rolling' && snapshot.brakeHeld &&
+      snapshot.speed > .05;
     for (const [key, group] of faultMarkers)
       group.visible = snapshot.faults[key as keyof typeof snapshot.faults] <
         repairVerbs[key as keyof typeof repairVerbs].length;
@@ -387,6 +429,8 @@ export function mountUndergroundMainlineScene(host: Options) {
       disposed = true;
       root.removeFromParent();
       cart.dispose();
+      brakeSparks.dispose();
+      sparkMaterial.dispose();
       for (const batch of instances) batch.dispose();
       for (const material of materials) material.dispose();
       for (const map of maps) map.dispose();
