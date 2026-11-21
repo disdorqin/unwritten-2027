@@ -22,6 +22,8 @@ type LiftOptions = {
   travelMs: number;
   riderCapacity: number;
   now(): number;
+  /** Allocate and durably commit a positive, never-reused trip ID in the single world authority. */
+  allocateTripId(): number;
   requestCageRide(playerId: string, direction: LiftDirection): { kind: string; direction?: LiftDirection };
   readAcceptedFoot(playerId: string): AcceptedFoot | undefined;
   isAtBoardingPlatform(stop: LiftStop, foot: AcceptedFoot): boolean;
@@ -39,7 +41,7 @@ export function createUndergroundMineLift(options: LiftOptions) {
   const boarded = new Set<string>();
   let stop: LiftStop | undefined;
   let trip: UndergroundMineLiftTrip | undefined;
-  let sequence = 0;
+  let lastIssuedTripId = 0;
 
   function observedStop(): LiftStop | undefined {
     const dock = options.readDockedStop();
@@ -64,9 +66,16 @@ export function createUndergroundMineLift(options: LiftOptions) {
   }
 
   function startTrip(origin: LiftStop, departedAt: number, riders: readonly string[]) {
+    // A restart must never recycle trip 1: the old rider's accepted landing could then wake in a new trip.
+    // The host must commit the allocation before this authority announces departure.
+    const id = options.allocateTripId();
+    if (!Number.isSafeInteger(id) || id <= lastIssuedTripId) {
+      throw new RangeError('Lift trip IDs must be durable, positive and monotonically increasing');
+    }
     const direction = directionAtStop(origin);
+    lastIssuedTripId = id;
     trip = {
-      id: ++sequence, origin, direction,
+      id, origin, direction,
       destination: direction === 'down' ? 'mine' : 'crater-floor',
       departedAt, travelMs, riders,
     };
