@@ -1,0 +1,153 @@
+{
+  "kind": "static runtime Three.js module census, NOT per-camera real renderer contribution",
+  "test": "pass: model mounted and per-group real geometries/lights traversed",
+  "totals": {
+    "meshNodes": 121,
+    "triangles": 411483,
+    "lights": 7
+  },
+  "modules": [
+    {
+      "module": "terrain-west-ground-batches",
+      "meshNodes": 12,
+      "triangles": 238442,
+      "lights": 0,
+      "meshInstances": 12
+    },
+    {
+      "module": "meteor-crater-surface",
+      "meshNodes": 8,
+      "triangles": 113033,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "crater-outer-works",
+      "meshNodes": 16,
+      "triangles": 23440,
+      "lights": 1,
+      "meshInstances": 1
+    },
+    {
+      "module": "za31-crater-rim-clusters",
+      "meshNodes": 6,
+      "triangles": 12312,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "crater-mouth-works",
+      "meshNodes": 14,
+      "triangles": 7358,
+      "lights": 3,
+      "meshInstances": 1
+    },
+    {
+      "module": "za36-crater-story-dressing",
+      "meshNodes": 12,
+      "triangles": 5390,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "za36-crater-ejecta-landmarks",
+      "meshNodes": 4,
+      "triangles": 3516,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "za31-crater-camp",
+      "meshNodes": 8,
+      "triangles": 2664,
+      "lights": 3,
+      "meshInstances": 1
+    },
+    {
+      "module": "za36-crater-midground",
+      "meshNodes": 5,
+      "triangles": 2304,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "crater-density-a2",
+      "meshNodes": 7,
+      "triangles": 2052,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "za31-crater-freestanding-winch",
+      "meshNodes": 7,
+      "triangles": 584,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "za36-winch-rope-stay",
+      "meshNodes": 8,
+      "triangles": 132,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "za31-crater-entrance",
+      "meshNodes": 3,
+      "triangles": 124,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "Mesh",
+      "meshNodes": 8,
+      "triangles": 96,
+      "lights": 0,
+      "meshInstances": 8
+    },
+    {
+      "module": "crater-survey-m1",
+      "meshNodes": 3,
+      "triangles": 36,
+      "lights": 0,
+      "meshInstances": 1
+    }
+  ],
+  "topFiveByTotalGeometry": [
+    {
+      "module": "terrain-west-ground-batches",
+      "meshNodes": 12,
+      "triangles": 238442,
+      "lights": 0,
+      "meshInstances": 12
+    },
+    {
+      "module": "meteor-crater-surface",
+      "meshNodes": 8,
+      "triangles": 113033,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "crater-outer-works",
+      "meshNodes": 16,
+      "triangles": 23440,
+      "lights": 1,
+      "meshInstances": 1
+    },
+    {
+      "module": "za31-crater-rim-clusters",
+      "meshNodes": 6,
+      "triangles": 12312,
+      "lights": 0,
+      "meshInstances": 1
+    },
+    {
+      "module": "crater-mouth-works",
+      "meshNodes": 14,
+      "triangles": 7358,
+      "lights": 3,
+      "meshInstances": 1
+    }
+  ]
+}

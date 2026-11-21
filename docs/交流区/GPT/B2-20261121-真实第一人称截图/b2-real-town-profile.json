@@ -1,0 +1,361 @@
+{
+  "scene": "real default player town (not detached model viewer)",
+  "source": "viewer.ts ?profile renderer.info event; Chromium native location chooser + pointer drag + keyboard movement",
+  "integrationHead": "read from git command separately",
+  "passed": true,
+  "recordedViews": [
+    {
+      "name": "plaza-night",
+      "positionLabel": "plaza E223/N180 toward clocktower",
+      "phase": "night",
+      "validity": "true-spawn",
+      "position": {
+        "east": 223,
+        "north": 180,
+        "hud": "东 223.0 m · 北 180.0 m · 行走"
+      },
+      "estimatedYawRadians": 0,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 310,
+      "medianTriangles": 1241454,
+      "lights": null,
+      "cameraY": 13.65,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "plaza-night.png",
+      "canvasPresent": true,
+      "dayText": "雪夜"
+    },
+    {
+      "name": "plaza-day",
+      "positionLabel": "plaza E223/N180 toward clocktower",
+      "phase": "day",
+      "validity": "true-spawn",
+      "position": {
+        "east": 223,
+        "north": 180,
+        "hud": "东 223.0 m · 北 180.0 m · 行走"
+      },
+      "estimatedYawRadians": 0,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 309,
+      "medianTriangles": 1241452,
+      "lights": null,
+      "cameraY": 13.65,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "plaza-day.png",
+      "canvasPresent": true,
+      "dayText": "白昼"
+    },
+    {
+      "name": "crater-mouth-night",
+      "positionLabel": "crater mouth E2/N159, NOT station",
+      "phase": "night",
+      "validity": "mouth-only",
+      "position": {
+        "east": 2,
+        "north": 159,
+        "hud": "东 2.0 m · 北 159.0 m · 行走"
+      },
+      "estimatedYawRadians": 1.292,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 1177,
+      "medianTriangles": 2071488,
+      "lights": null,
+      "cameraY": 12.505027198791504,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "crater-mouth-night.png",
+      "canvasPresent": true,
+      "dayText": "雪夜"
+    },
+    {
+      "name": "crater-mouth-day",
+      "positionLabel": "crater mouth E2/N159, NOT station",
+      "phase": "day",
+      "validity": "mouth-only",
+      "position": {
+        "east": 2,
+        "north": 159,
+        "hud": "东 2.0 m · 北 159.0 m · 行走"
+      },
+      "estimatedYawRadians": 1.292,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 1175,
+      "medianTriangles": 2071016,
+      "lights": null,
+      "cameraY": 12.505027198791504,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "crater-mouth-day.png",
+      "canvasPresent": true,
+      "dayText": "白昼"
+    },
+    {
+      "name": "kengkou-station-day",
+      "positionLabel": "station E-44.5/N168 facing crater",
+      "phase": "day",
+      "validity": "walk-reached-within-5.5m",
+      "position": {
+        "east": -41.9,
+        "north": 167.5,
+        "hud": "东 -41.9 m · 北 167.5 m · 行走"
+      },
+      "estimatedYawRadians": -1.35,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 135,
+      "medianTriangles": 425181,
+      "lights": null,
+      "cameraY": 12.427305603027344,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "kengkou-station-day.png",
+      "canvasPresent": true,
+      "dayText": "白昼"
+    },
+    {
+      "name": "kengkou-station-night",
+      "positionLabel": "station E-44.5/N168 facing crater",
+      "phase": "night",
+      "validity": "walk-reached-within-5.5m",
+      "position": {
+        "east": -41.9,
+        "north": 167.5,
+        "hud": "东 -41.9 m · 北 167.5 m · 行走"
+      },
+      "estimatedYawRadians": -1.35,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 135,
+      "medianTriangles": 425181,
+      "lights": null,
+      "cameraY": 12.427305603027344,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "kengkou-station-night.png",
+      "canvasPresent": true,
+      "dayText": "雪夜"
+    },
+    {
+      "name": "spiral-entry-blocked-night",
+      "positionLabel": "near B-01 lip E-68/N159",
+      "phase": "night",
+      "validity": "blocked-not-floor",
+      "position": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "estimatedYawRadians": -1.571,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 99,
+      "medianTriangles": 366953,
+      "lights": null,
+      "cameraY": 12.427305603027344,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "spiral-entry-blocked-night.png",
+      "canvasPresent": true,
+      "dayText": "雪夜"
+    },
+    {
+      "name": "spiral-entry-blocked-day",
+      "positionLabel": "near B-01 lip E-68/N159",
+      "phase": "day",
+      "validity": "blocked-not-floor",
+      "position": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "estimatedYawRadians": -1.571,
+      "angleSource": "native gesture integration estimate; NOT verified camera yaw",
+      "medianCalls": 99,
+      "medianTriangles": 366953,
+      "lights": null,
+      "cameraY": 12.427305603027344,
+      "lightEvidence": "renderer.info in current scene exposes draws/tris but does not expose scene light list",
+      "screenshot": "spiral-entry-blocked-day.png",
+      "canvasPresent": true,
+      "dayText": "白昼"
+    }
+  ],
+  "movements": [
+    {
+      "label": "kengkou-station",
+      "step": 0,
+      "before": {
+        "east": 2,
+        "north": 159,
+        "hud": "东 2.0 m · 北 159.0 m · 行走"
+      },
+      "after": {
+        "east": -26.5,
+        "north": 164.5,
+        "hud": "东 -26.5 m · 北 164.5 m · 行走"
+      },
+      "distanceBefore": 47.363,
+      "distanceAfter": 18.337
+    },
+    {
+      "label": "kengkou-station",
+      "step": 1,
+      "before": {
+        "east": -26.5,
+        "north": 164.5,
+        "hud": "东 -26.5 m · 北 164.5 m · 行走"
+      },
+      "after": {
+        "east": -37.6,
+        "north": 166.7,
+        "hud": "东 -37.6 m · 北 166.7 m · 行走"
+      },
+      "distanceBefore": 18.337,
+      "distanceAfter": 7.021
+    },
+    {
+      "label": "kengkou-station",
+      "step": 2,
+      "before": {
+        "east": -37.6,
+        "north": 166.7,
+        "hud": "东 -37.6 m · 北 166.7 m · 行走"
+      },
+      "after": {
+        "east": -41.9,
+        "north": 167.5,
+        "hud": "东 -41.9 m · 北 167.5 m · 行走"
+      },
+      "distanceBefore": 7.021,
+      "distanceAfter": 2.648
+    },
+    {
+      "label": "spiral-entry",
+      "step": 0,
+      "before": {
+        "east": -41.9,
+        "north": 167.5,
+        "hud": "东 -41.9 m · 北 167.5 m · 行走"
+      },
+      "after": {
+        "east": -60,
+        "north": 162.3,
+        "hud": "东 -60.0 m · 北 162.3 m · 行走"
+      },
+      "distanceBefore": 30.828,
+      "distanceAfter": 11.996
+    },
+    {
+      "label": "spiral-entry",
+      "step": 1,
+      "before": {
+        "east": -60,
+        "north": 162.3,
+        "hud": "东 -60.0 m · 北 162.3 m · 行走"
+      },
+      "after": {
+        "east": -66.9,
+        "north": 160.3,
+        "hud": "东 -66.9 m · 北 160.3 m · 行走"
+      },
+      "distanceBefore": 11.996,
+      "distanceAfter": 4.812
+    },
+    {
+      "label": "spiral-entry",
+      "step": 2,
+      "before": {
+        "east": -66.9,
+        "north": 160.3,
+        "hud": "东 -66.9 m · 北 160.3 m · 行走"
+      },
+      "after": {
+        "east": -68.4,
+        "north": 159.5,
+        "hud": "东 -68.4 m · 北 159.5 m · 行走"
+      },
+      "distanceBefore": 4.812,
+      "distanceAfter": 3.173
+    },
+    {
+      "label": "spiral-entry",
+      "step": 3,
+      "before": {
+        "east": -68.4,
+        "north": 159.5,
+        "hud": "东 -68.4 m · 北 159.5 m · 行走"
+      },
+      "after": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "distanceBefore": 3.173,
+      "distanceAfter": 3.134
+    },
+    {
+      "label": "spiral-entry",
+      "step": 4,
+      "before": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "after": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "distanceBefore": 3.134,
+      "distanceAfter": 3.134
+    }
+  ],
+  "descent": {
+    "attempted": true,
+    "visited": 0,
+    "reachedFloor": false,
+    "blocker": {
+      "reason": "no valid walking route to spiral entrance",
+      "at": {
+        "east": -68.4,
+        "north": 159,
+        "hud": "东 -68.4 m · 北 159.0 m · 行走"
+      },
+      "entry": {
+        "east": -71.53351673578946,
+        "north": 159,
+        "progress": 0
+      }
+    }
+  },
+  "errors": [
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence-west/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "cleanupErrors": [],
+  "elapsedMs": 43497,
+  "missingRequired": [
+    "crater-bottom-facing-rim-day/night"
+  ],
+  "caveat": "Browser is local Vite without live Presence backend; 404/poll may occur. FPS, lights and exact camera yaw not falsely claimed. Crater mouth != crater bottom."
+}
