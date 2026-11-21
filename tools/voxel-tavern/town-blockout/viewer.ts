@@ -10,6 +10,7 @@ import { readWalkGeometry, type Box, type Ramp, type TownPlot } from './landmark
 import { buildTowerLandmark, setClocktowerDuskLighting, updateTowerWingVisibility, type TowerBellMotion } from './landmark-tower';
 import { updateTowerTime } from './clocktower-face';
 import { createDailyTowerChime } from './town-clocktower-time';
+import { createOrdinaryHookOne } from './town-hook-one';
 import { buildTavernLandmark, tavernInteriorContains, updateTavernInteriorVisibility } from './landmark-tavern';
 import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { createIcePalaceLandmarkActivity } from './ice-palace-landmark-activity';
@@ -138,6 +139,7 @@ import { createPlazaGroupPhoto } from './plaza-group-photo';
 import './plaza-group-photo.css';
 import { downloadTownCanvas } from './town-photo-download';
 import { createTownPassport } from './town-passport';
+import { openTownChronicleBook } from './town-chronicle-book';
 import { buildMascotPen } from './landmark-mascot-pen';
 import { busStationCatalogueStamp, createBusStationHiddenActivity } from './bus-station-hidden-activity';
 import { createZodiacProgress, postMousePosition } from './town-zodiac';
@@ -1652,6 +1654,9 @@ let bellShakeStartedAt = -Infinity;
 let nextHourlyBell = Infinity;
 let hourlyBellsRemaining = 0;
 const dailyTowerChime = createDailyTowerChime();
+const hookOne = createOrdinaryHookOne();
+let hookListens = 0;
+let hookNinthAt: number | undefined;
 let overtureMidnight: number | undefined;
 const ceremony = createCeremonyDirector(ceremonyClock, {
   onCue: handleCeremonyCue,
@@ -2395,6 +2400,16 @@ function registerLandmarkActivities(id: string, group: Group) {
     }));
     activitySpots.push(...createIceThroneSpots(group, activityContext, canStandAtActivity, filename => {
       photoFilename = filename;
+    }));
+  } else if (id === 'town-office') {
+    // 翻镇志: the chronicle book rests by the star ring (the 镇志圆环) in
+    // the east room. The book UI is self-contained; its passport action
+    // hooks back into the stamp book.
+    activitySpots.push(localSpot(group, [7.35, .3, 3.8], 1.75, '翻镇志', () => {
+      openTownChronicleBook(activityContext.open, {
+        onPassport: () => passport.open(),
+        playerName: presence.playerName(),
+      });
     }));
   }
 }
@@ -3552,6 +3567,21 @@ renderer.setAnimationLoop(now => {
       hourlyBellsRemaining = cue.strikes - 1;
     }
   }
+  // 钩子一号 (ZB-12): the planner consumes the same fresh cue; when its
+  // plan carries a ninth strike, schedule it on the ordinary bell voice.
+  // The cue's own strike schedule is untouched — adopting the plan's
+  // eight-strike schedule, the dedicated ninth sound (DB-1) and an aurora
+  // source are follow-ups, so aurora passes false for now. Attendance is
+  // the count of audible hour cues this player has already been present
+  // for; the planner's third-listen stage keys off it.
+  const hookPlan = hookOne({
+    phase: ceremonyState.phase,
+    dailyChime,
+    attendance: dailyChime ? { at: dailyChime.cue.at, confirmedListenCount: hookListens } : undefined,
+    auroraAtHour: false,
+  });
+  if (hookPlan?.ninth) hookNinthAt = hookPlan.ninth.at;
+  if (dailyChime?.audible) hookListens++;
   let ceremonyElapsed: number | undefined;
   if (ceremonyState.phase !== 'ordinary') {
     ceremonyElapsed = (ceremonyState.now - midnight) / 1000;
@@ -3628,6 +3658,11 @@ renderer.setAnimationLoop(now => {
     if (ceremonyState.now - nextHourlyBell < 800) bellMotion.strike(.65);
     hourlyBellsRemaining--;
     nextHourlyBell += 2020;
+  }
+  if (hookNinthAt !== undefined && ceremonyState.now >= hookNinthAt) {
+    hookNinthAt = undefined;
+    festival.playCeremonyBell('hourly', bellDistance());
+    bellMotion.strike(.65);
   }
   bellMotion.update(dt);
   const reserveBell = ceremonyState.phase === 'climax' ||
