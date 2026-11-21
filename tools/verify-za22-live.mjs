@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -366,7 +366,25 @@ try {
     report.startupEvidence={validSpawn:true,canvasVisible:await page.locator('#scene canvas').isVisible(),
       jumpCount:await page.locator('#jump option').count(),frontWalked:true};
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station') {
+  if (segment === 'a1-full') {
+    const {page,evidence}=await openTown('a1-full');
+    // A-1 acceptance: every knot in the canon westShore route is reached
+    // by real W/Shift movement, never a jump/menu teleport.
+    await follow(page,evidence,westShore,'a1-from-plaza-to-west');
+    await follow(page,evidence,[[-12,159],[-30,159],[-43.5,159],[-44.5,168]],'a1-west-to-kengkou');
+    await face(page,evidence,-1.35);
+    await snapshot(page,evidence,'a1-full-kengkou-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'a1-full-kengkou-day');
+    report.startupEvidence={fullWalkNoTeleport:true,landedInWest:evidence.poses.at(-1)?.area==='west',
+      checkpoints:evidence.checkpoints.length,
+      canvasVisible:await page.locator('#scene canvas').isVisible(),
+      jumpCount:await page.locator('#jump option').count()};
+    assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
+  }
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
