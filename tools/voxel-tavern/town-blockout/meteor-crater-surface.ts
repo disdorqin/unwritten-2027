@@ -5,6 +5,7 @@ import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterRimRadius,
 } from './meteor-crater';
 import { mountCraterInteriorDressing } from './meteor-crater-interior-dressing.js';
+import { mountCraterFloorWorklightChain } from './meteor-crater-floor-worklight-chain.js';
 
 export type MeteorCraterWorldAnchor = Readonly<{
   east: number;
@@ -63,6 +64,9 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
   // C3 is a strictly visual add-on to the original B-01 authoritative mesh.
   // It follows this same approved anchor/yaw and owns no new colliders or E.
   const interiorDressing = mountCraterInteriorDressing(group);
+  // C2: physical lamp carriers with six actual warm night sources. The
+  // existing road.craterActions.setNight is the sole day/night switch.
+  const floorWorklights = mountCraterFloorWorklightChain(group);
 
   function heightAt(worldEast: number, worldNorth: number) {
     const dx = worldEast - east, dn = worldNorth - north;
@@ -79,5 +83,5 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
     return { east: worldEast, north: worldNorth, height: heightAt(worldEast, worldNorth)! };
   }
 
-  return { group, heightAt, trailPoint, shaftRadius, interiorDressing };
+  return { group, heightAt, trailPoint, shaftRadius, interiorDressing, floorWorklights };
 }

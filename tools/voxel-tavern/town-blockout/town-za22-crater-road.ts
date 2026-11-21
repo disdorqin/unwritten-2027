@@ -220,7 +220,11 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       return undefined;
     },
     firewood: mouthWorks.firewood,
-    setNight(night: boolean) { mouthWorks.setNight(night); outerWorks.setNight(night); },
+    setNight(night: boolean) {
+      mouthWorks.setNight(night);
+      outerWorks.setNight(night);
+      crater.floorWorklights.setNight(night);
+    },
   };
   return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
 }
