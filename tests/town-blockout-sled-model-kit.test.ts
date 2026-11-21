@@ -23,6 +23,28 @@ test('sled R1-R3 model kit contains true rails, individual planks, pitched roof 
     'the runner needs a swept, metal-tipped nose');
 });
 
+test('R4 joinery polish preserves the shelter entrance and the sled craft budget', () => {
+  assert.ok(sledDetailParts.length >= 120, 'new plank grain and upholstered detailing must ship');
+  assert.ok(sledDepotParts.length >= 160, 'gable joinery, eave tiles and back shelf must ship');
+  const entryHalfWidth = .27; // player collision radius; geometry-only screening
+  const entryMinZ = .38;
+  const entryMaxZ = .83;
+  const playerHeight = 1.8;
+  for (const [[x, y, z], [sx, sy, sz]] of sledDepotParts) {
+    const crossesX = x - sx / 2 < entryHalfWidth && x + sx / 2 > -entryHalfWidth;
+    const crossesZ = z - sz / 2 < entryMaxZ && z + sz / 2 > entryMinZ;
+    const crossesY = y - sy / 2 < playerHeight && y + sy / 2 > 0;
+    assert.ok(!(crossesX && crossesZ && crossesY),
+      `depot structural mesh obstructs the front-centre player corridor at (${x}, ${y}, ${z})`);
+  }
+  // This only checks the shelter frame. Occupied sleds, placement and player
+  // physics still require full-scene walk-through and must not be called passed.
+  assert.ok(sledDepotParts.some(([c, , tint]) => c[1] > 2.1 && tint === '#eff3f5'),
+    'snow-lipped eave shingles should be individually readable');
+  assert.ok(sledDetailParts.some(([c, , tint]) => c[1] > .53 && tint === '#d07e6b'),
+    'quilting needs actual top-surface lines');
+});
+
 test('12 roadside depots remain 1 instanced draw; sled and particle system keep their existing interfaces', () => {
   const scene = new Scene();
   const depots = Array.from({ length: 12 }, (_, i) => ({ ...rack, x: rack.x + i * 8 }));

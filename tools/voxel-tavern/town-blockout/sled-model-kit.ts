@@ -57,6 +57,27 @@ export const sledDetailParts: readonly SledPiece[] = (() => {
     p.push(piece(0, .415, z, .69, .046, .128, j % 2 ? '#9d6542' : '#ad7149'));
     p.push(piece(0, .444, z + .064, .64, .012, .009, woodShade));
   }
+  // R4: stepped plank-grain, edge piping and hand-finished hardware. Keep
+  // the tread free of raised transverse pieces so the rider's feet still read.
+  for (let j = 0; j < 7; j++) {
+    const z = -.51 + j * .155;
+    p.push(piece(-.23, .441, z - .017, .115, .009, .011,
+      j % 3 ? '#bf8556' : '#77503d'));
+    p.push(piece(.19, .441, z + .021, .15, .009, .011,
+      j % 2 ? '#bd845a' : '#89583d'));
+    for (const x of [-.315, .315]) {
+      p.push(piece(x, .452, z, .019, .012, .023, bronze));
+    }
+  }
+  for (const side of [-1, 1]) {
+    // A laminated silhouette around each curled runner and the tail binding.
+    p.push(piece(side * .31, .08, -.52, .024, .025, .86, '#c49a6e'));
+    p.push(piece(side * .312, .075, .56, .024, .028, .32, '#bd986e'));
+    p.push(piece(side * .31, .14, -.87, .14, .035, .042, darkRed));
+    for (const z of [-.67, -.2, .25, .68]) {
+      p.push(piece(side * .325, .10, z, .044, .04, .045, tin));
+    }
+  }
   // Padded bench, lower footrest, slatted back and brass seat nails.
   p.push(piece(0, .49, -.21, .64, .075, .38, '#a64b45'));
   p.push(piece(0, .48, .45, .57, .055, .12, woodShade));
@@ -67,6 +88,16 @@ export const sledDetailParts: readonly SledPiece[] = (() => {
   for (const side of [-1, 1]) {
     p.push(piece(side * .245, .525, -.22, .035, .013, .32, bronze));
     p.push(piece(side * .245, .81, -.746, .04, .04, .065, bronze));
+  }
+  // Quilted upholstery with fine warm piping instead of a featureless slab.
+  for (const z of [-.34, -.22, -.10]) {
+    p.push(piece(0, .532, z, .56, .010, .012, '#d07e6b'));
+    for (const x of [-.2, 0, .2]) {
+      p.push(piece(x, .538, z + .044, .023, .011, .022, bronze));
+    }
+  }
+  for (const x of [-.31, .31]) {
+    p.push(piece(x, .535, -.21, .016, .014, .39, '#d7aa78'));
   }
   // Protective front apron, painted crest and a genuine open nose silhouette.
   p.push(piece(0, .37, .585, .60, .15, .065, darkRed));
@@ -95,6 +126,24 @@ export const sledDepotParts: readonly SledPiece[] = (() => {
     p.push(piece(x, 1.89, 0, .13, .10, 1.69, wood));
     p.push(piece(x, .17, 0, .10, .09, 1.62, woodShade));
   }
+  // R4 clay-town carpentry: visible knee-braces, gable lattice and wooden
+  // panel seams, all outside the unobstructed centre entrance.
+  for (const side of [-1, 1]) {
+    const x = side * .94;
+    for (const z of [-.79, .79]) {
+      p.push(piece(x - side * .135, 1.74, z, .34, .045, .075, '#a1714c', side * .40));
+      p.push(piece(x, 1.74, z - Math.sign(z) * .14, .075, .045, .34, wood));
+      p.push(piece(x, 1.39, z, .17, .07, .15, '#b08055'));
+    }
+    for (const y of [.71, 1.13]) {
+      p.push(piece(x, y, -.39, .045, .075, .71, '#a1714c'));
+    }
+    for (const z of [-.61, -.39, -.17]) {
+      p.push(piece(x, .94, z, .045, .48, .04, z === -.39 ? bronze : wood));
+    }
+    // Snow piled against the closed rear corners; the open front stays empty.
+    p.push(piece(side * 1.01, .11, -.77, .32, .11, .25, warmSnow));
+  }
   // Two sloping roofs. Exposed tiles are separate rather than a solid snow slab.
   for (const side of [-1, 1]) {
     const slope = -side * .29;
@@ -108,11 +157,30 @@ export const sledDepotParts: readonly SledPiece[] = (() => {
     p.push(piece(side * 1.145, 2.03, 0, .09, .12, 2.19, wood));
     p.push(piece(side * 1.14, 2.07, -.96, .09, .09, .12, freshSnow));
     p.push(piece(side * 1.14, 2.07, .96, .09, .09, .12, freshSnow));
+    // Individual tile noses and irregular snow drifts define the eave line
+    // from ground-level views, without adding draw calls or new materials.
+    for (let j = 0; j < 9; j++) {
+      const z = -.92 + j * .23;
+      p.push(piece(side * .95, 2.108 + (j % 3) * .007, z,
+        .13, .026, .185, j % 4 === 0 ? '#e8e4d9' : '#eff3f5', slope));
+      if (j % 3 === 0) {
+        p.push(piece(side * .73, 2.291, z, .29, .028, .10,
+          j === 0 ? warmSnow : freshSnow, slope));
+      }
+    }
   }
   // Roof ridge and tiny icicles hanging safely above pedestrian head height.
   p.push(piece(0, 2.36, 0, .22, .085, 2.2, freshSnow));
   for (const z of [-.74, -.37, 0, .37, .74]) {
     p.push(piece(0, 2.395, z, .25, .045, .075, warmSnow));
+  }
+  // Wind-polished eave caps, rafters and a repeated stepped ridge crest.
+  for (const z of [-1.015, 1.015]) {
+    p.push(piece(0, 2.25, z, .31, .085, .10, wood));
+    for (const side of [-1, 1]) {
+      p.push(piece(side * .56, 2.08, z, .12, .08, .10, bronze));
+      p.push(piece(side * 1.07, 2.035, z, .16, .085, .13, woodShade));
+    }
   }
   // Framed signboard and struts on the back gable; opening to the front stays clear.
   p.push(piece(0, 1.61, -.814, .93, .34, .065, wood));
@@ -142,5 +210,22 @@ export const sledDepotParts: readonly SledPiece[] = (() => {
   p.push(piece(-.73, .11, -.60, .24, .10, .14, tin));
   p.push(piece(.76, .49, -.70, .055, .96, .055, '#9a8160'));
   p.push(piece(.76, .12, -.59, .16, .14, .18, tin));
+  // R4 shelf narrative: wrapped spare rope, polished fittings and a wool roll.
+  // All placed at the back so that the south-facing walk-in corridor is free.
+  for (const x of [-.40, .40]) {
+    p.push(piece(x, .76, -.76, .20, .075, .19, '#b68b60'));
+    p.push(piece(x, .81, -.76, .18, .035, .17, darkRed));
+    for (const z of [-.83, -.72]) {
+      p.push(piece(x, .85, z, .16, .023, .027, bronze));
+    }
+  }
+  for (const y of [.26, .35, .44]) {
+    p.push(piece(.58, y, -.62, .14, .038, .17, woodShade));
+    p.push(piece(.58, y, -.62, .07, .04, .19, bronze));
+  }
+  for (const x of [-.22, .22]) {
+    p.push(piece(x, .93, -.83, .10, .13, .12, '#c3a27f'));
+    p.push(piece(x, 1.01, -.83, .11, .025, .13, darkRed));
+  }
   return p;
 })();

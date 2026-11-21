@@ -34,8 +34,27 @@ try {
   assert.ok(result.objectNames.includes('town-local-sled'));
   const output='D:/computer learning/game_exe/kuanian/sled-depot-browser-smoke.png';
   await page.screenshot({path:output});
+  // A second native WebGL render checks the phone-sized composition. This is
+  // Chromium viewport emulation, not a claim of real-device acceptance.
+  const mobile=await browser.newPage({viewport:{width:390,height:844},
+    deviceScaleFactor:1,isMobile:true,hasTouch:true});
+  const mobileErrors=[],mobile5xx=[];
+  mobile.on('pageerror',err=>mobileErrors.push(err.message));
+  mobile.on('response',response=>{if(response.status()>=500)mobile5xx.push(response.url());});
+  await mobile.goto(url,{waitUntil:'networkidle'});
+  await mobile.waitForFunction(()=>Boolean(window.__sledAudit),{timeout:20000});
+  const mobileResult=await mobile.evaluate(()=>window.__sledAudit);
+  assert.deepEqual(mobileResult.canvas,[390,844],'mobile drawing buffer');
+  assert.equal(mobileErrors.length,0,'mobile browser JS errors '+mobileErrors.join('; '));
+  assert.equal(mobile5xx.length,0,'mobile HTTP 5xx');
+  assert.ok(mobileResult.renderCalls<=4,'mobile draw calls');
+  const mobileOutput='D:/computer learning/game_exe/kuanian/sled-depot-mobile-smoke.png';
+  await mobile.screenshot({path:mobileOutput});
+  await mobile.close();
   console.log(JSON.stringify({result:'PASS',...result,screenshot:output,
-    browserErrors:errors.length,http5xx:http5xx.length}));
+    browserErrors:errors.length,http5xx:http5xx.length,
+    mobile:{...mobileResult,screenshot:mobileOutput,
+      browserErrors:mobileErrors.length,http5xx:mobile5xx.length}}));
 } finally {
   if(browser)await browser.close();
   await server.close();
