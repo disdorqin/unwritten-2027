@@ -198,6 +198,81 @@ test('the U-2 camp in the certified mine denies absent footing and permits real 
   assert.equal(f.parent.children.length, 0);
 });
 
+test('U-8 ore veins require registered wall support and stay hidden without accepted mineral snapshots', () => {
+  const f = fixture();
+  const id = 'mine/registered-stardust';
+  const target = {
+    id, kind: 'ore' as const, mineral: 'stardust',
+    at: { layer: f.pool.domainId, east: f.pool.east + 2, north: f.pool.north + 4, height: -90 },
+    surface: 'rock' as const, strikes: 4, hits: 0, open: false,
+  };
+  const site = { target, normal: { east: 1, north: 0, height: 0 } };
+  let allowed = true;
+  let targets: typeof target[] = [];
+  const runtime = {
+    sites: [site],
+    supportsFace: () => allowed,
+    readTargets: () => targets,
+  };
+  allowed = false;
+  assert.deepEqual(mountUndergroundMineDomain({ ...f.host, oreRuntime: runtime }),
+    { kind: 'unsupported-ores' });
+  assert.equal(f.parent.children.length, 0);
+  allowed = true;
+  const mounted = mountUndergroundMineDomain({ ...f.host, oreRuntime: runtime });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail();
+  const ore = mounted.group.getObjectByName('ore-vein:' + id);
+  assert.ok(ore);
+  assert.equal(ore.visible, false);
+  mounted.sync();
+  assert.equal(ore.visible, false);
+  targets = [target];
+  mounted.sync();
+  assert.equal(ore.visible, true);
+  assert.equal(ore.children[0].visible, true);
+  targets = [{ ...target, hits: 2 }];
+  mounted.sync();
+  assert.equal(ore.children[1].visible, true);
+  targets = [{ ...target, open: true, hits: 4 }];
+  mounted.sync();
+  assert.equal(ore.children[0].visible, false);
+  assert.equal(ore.children[2].visible, true);
+  targets = [{ ...target, at: { ...target.at, layer: 'town' } }];
+  mounted.sync();
+  assert.equal(ore.visible, false);
+  targets = [{ ...target, mineral: 'ordinary-ore' }];
+  mounted.sync();
+  assert.equal(ore.visible, false);
+  targets = [target];
+  mounted.sync();
+  assert.equal(ore.visible, true);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
+test('U-8 rejects duplicate sites, malformed normals and arbitrary unseen mineral surfaces', () => {
+  const f = fixture();
+  const target = {
+    id: 'ores/mine', kind: 'ore' as const, mineral: 'ordinary-ore', surface: 'rock' as const,
+    at: { layer: f.pool.domainId, east: -119, north: 180, height: -90 },
+    strikes: 3, hits: 0, open: false,
+  };
+  const site = { target, normal: { east: 1, north: 0, height: 0 } };
+  for (const sites of [
+    [site, site],
+    [{ ...site, normal: { east: 0, north: 0, height: 0 } }],
+    [{ ...site, target: { ...target, at: { ...target.at, layer: 'town' } } }],
+    [{ ...site, target: { ...target, id: '' } }],
+    [{ ...site, normal: { east: Infinity, north: 0, height: 0 } }],
+  ]) {
+    assert.deepEqual(mountUndergroundMineDomain({ ...f.host, oreRuntime: {
+      sites, supportsFace: () => true, readTargets: () => [],
+    } }), { kind: 'unsupported-ores' });
+    assert.equal(f.parent.children.length, 0);
+  }
+});
+
 test('world transform and collision registration remain host-owned and cannot be inferred from a fixture', () => {
   const f = fixture();
   const straight = mountUndergroundMineDomain({ ...f.host, mineYaw: 0 });
