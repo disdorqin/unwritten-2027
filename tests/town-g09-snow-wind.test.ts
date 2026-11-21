@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { PerspectiveCamera, Points, Scene, ShaderMaterial, Vector2 } from 'three';
+import { createSnowfall } from '../tools/voxel-tavern/town-blockout/snowfall';
+
+test('G-09 all snowflakes use one Points draw and an integrated wind shift without a phase teleport', () => {
+  const scene = new Scene();
+  const snow = createSnowfall(scene);
+  const camera = new PerspectiveCamera(70, 16 / 9, .1, 800);
+  const points = scene.children.filter(child => child instanceof Points);
+  assert.equal(points.length, 1, 'G-09 adds no extra particle draw');
+  const material = points[0]!.material as ShaderMaterial;
+  const drift = material.uniforms.weatherShift.value as Vector2;
+  assert.deepEqual(drift.toArray(), [0, 0]);
+  const started = material.uniforms.time.value;
+  snow.setOutdoorWind(1, 0, 1, 1);
+  assert.deepEqual(drift.toArray(), [0, 0], 'wind change does not retroactively move existing flakes');
+  snow.update(camera, 1, true);
+  assert.deepEqual(drift.toArray(), [6, 0]);
+  assert.ok(material.uniforms.time.value > started);
+  snow.setOutdoorWind(0, 1, 1, .5);
+  assert.deepEqual(drift.toArray(), [6, 0], 'phase direction changed, but the world is still continuous');
+  snow.update(camera, 2, true);
+  assert.deepEqual(drift.toArray(), [6, -6], 'map north is Three.js negative Z');
+  snow.setOutdoorWind(1, 1, 0, 1);
+  snow.update(camera, 2, true);
+  assert.deepEqual(drift.toArray(), [6, -6], 'clear-snow has no extra wind');
+  assert.equal(scene.children.filter(child => child instanceof Points).length, 1);
+  assert.ok(material.vertexShader.includes('weatherShift'));
+});
+
+test('G-09 malformed wind, rendering quality changes and pause never spawn particles or corrupt world drift', () => {
+  const scene = new Scene();
+  const snow = createSnowfall(scene);
+  const camera = new PerspectiveCamera();
+  const particle = scene.children[0] as Points;
+  const material = particle.material as ShaderMaterial;
+  const drift = material.uniforms.weatherShift.value as Vector2;
+  snow.setOutdoorWind(-100, 0, 100, 100);
+  snow.update(camera, 1, true);
+  assert.ok(drift.x < 0 && drift.x >= -6.001, 'clamp the only wind vector to a bounded speed');
+  const before = drift.clone();
+  snow.setOutdoorWind(NaN, Infinity, 1);
+  snow.update(camera, 0, true);
+  snow.update(camera, -10, true);
+  assert.deepEqual(drift.toArray(), before.toArray());
+  snow.setEnabled(false);
+  snow.update(camera, 12, true);
+  assert.deepEqual(drift.toArray(), before.toArray());
+  snow.setEnabled(true);
+  snow.setIntensity(4);
+  snow.setDensityScale(.35);
+  assert.equal(scene.children.length, 1);
+  assert.equal(scene.children[0], particle);
+  assert.ok(particle.geometry.drawRange.count > 0);
+});
