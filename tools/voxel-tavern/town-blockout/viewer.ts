@@ -2517,13 +2517,19 @@ function currentAction() {
         break;
     }
   } };
-  // Canonical ZA-36 plaques: signs describe history, they do not grant or
-  // validate an invented work permit. Guards retain higher E priority.
-  const plaque = !homeReturn && x < 0
-    ? ensureWestCraterRoad().signage.actionAt(x, n, ground) : undefined;
-  if (plaque) return {
-    label: `阅读${plaque.title}`,
-    run() { openPlace(plaque.title, plaque.lines.join('\n')); },
+  // R6: small, local physical controls on the APPROVED existing workshop
+  // props. Deliberately no forged electrical/grid/server unlock flags.
+  const industrialRoad = !homeReturn && x < 0 ? ensureWestCraterRoad() : undefined;
+  const industrial = industrialRoad?.outerWorks.actionAt(x, n, ground);
+  if (industrial && industrialRoad) return {
+    label: industrial === 'smelter-cold-valve' ? '转动停工炉阀' : '微调维修表针',
+    run() {
+      const position = industrialRoad.outerWorks.turnMechanism(industrial);
+      if (position === undefined) return;
+      announceActivity(industrial === 'smelter-cold-valve'
+        ? `旧炉阀轻响了一声 · 刻度 ${position + 1}/4 · 炉火未起`
+        : `维修表针移到刻度 ${position + 1}/4 · 表盘仍未通电`);
+    },
   };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);

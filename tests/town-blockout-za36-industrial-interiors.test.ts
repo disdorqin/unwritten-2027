@@ -48,6 +48,25 @@ test('ZA36 R2: every instrument stair tread is a physical 3D surface with consis
   }
   assert.ok(shop.topHeight && shop.topHeight>=17);
 });
+test('ZA36 R6: two actual interior machine handles turn four steps without altering world authority',()=>{
+  const model=buildCraterOuterWorks(flat);
+  assert.deepEqual(model.mechanisms.map(m=>m.id),
+    ['smelter-cold-valve','instrument-calibration']);
+  for(const machinery of model.mechanisms){
+    assert.equal(model.actionAt(machinery.east,machinery.north,machinery.foot),machinery.id);
+    assert.equal(model.actionAt(machinery.east,machinery.north,machinery.foot+2),undefined);
+    assert.equal(model.actionAt(machinery.east+5,machinery.north,machinery.foot),undefined);
+    assert.equal(model.group.getObjectByName('za36-manual-'+machinery.id),machinery.handle);
+    const before=machinery.handle.rotation.z;
+    assert.equal(before,0);
+    for(const expected of [1,2,3,0]){
+      assert.equal(model.turnMechanism(machinery.id),expected);
+      assert.ok(Math.abs(machinery.handle.rotation.z-expected*Math.PI/2)<1e-7);
+    }
+    assert.equal(model.turnMechanism('invalid' as typeof machinery.id),undefined);
+  }
+  assert.equal(model.actionAt(0,0,12),undefined);
+});
 test('ZA36 R3: finished factory door elevations sample the genuine current crater terrain',()=>{
   const grid=createTerrainGrid();
   const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));

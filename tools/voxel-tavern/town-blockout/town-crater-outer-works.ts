@@ -66,6 +66,22 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
   const interiorEntrances: { id:string; east:number; north:number; height:number; yaw:number; clearWidth:number }[] = [];
+  type InteriorMechanism = { id:'smelter-cold-valve'|'instrument-calibration';
+    east:number; north:number; foot:number; range:number; state:number; handle:Group };
+  const mechanisms:InteriorMechanism[]=[];
+  function addMechanicalDial(id:InteriorMechanism['id'],position:{east:number;north:number},
+    foot:number,y:number,yaw:number) {
+    const dial=new Group();
+    dial.name='za36-manual-'+id;
+    dial.position.set(position.east,y,-position.north);
+    dial.rotation.y=yaw;
+    const face=new Mesh(new BoxGeometry(.82,.12,.12),brass);
+    face.name='za36-turning-mechanical-indicator';
+    dial.add(face);
+    group.add(dial);
+    mechanisms.push({id,east:position.east,north:position.north,foot,
+      range:1.7,state:0,handle:dial});
+  }
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 43, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 89, palette.stone);
@@ -201,6 +217,22 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(slate, -7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, .5);
     put(slate, 7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, -.5);
     put(timber, 0, g + 12.3, 0, 28.6, .4, .5);
+    // R4 industrial-voxel style: each corrugated sheet is visibly fastened
+    // at 1.8m intervals; fine rust seams stay within the inherited palette.
+    for(let dx=-12.8;dx<=12.8;dx+=1.6) {
+      if(dx>-5.82 && dx<-2.18)continue; // keep the 3.5m freight aperture
+      put(rustIron,dx,g+7.8,5.54,.09,2.00,.08);
+      put(iron,dx,g+1.75,5.56,.12,.12,.11);
+      put(iron,dx,g+6.15,5.56,.12,.12,.11);
+    }
+    for(const side of [-1,1]) for(let dz=-4.3;dz<=4.3;dz+=1.65){
+      put(rustIron,side*14.04,g+7.3,dz,.075,2.0,.10);
+      put(timberWarm,side*14.04,g+1.45,dz,.13,.14,.15);
+    }
+    for(let dx=-11.6;dx<=12.0;dx+=2.6) {
+      put(snow,dx,g+12.52,0,1.20,.12,.24);
+      put(rustIron,dx,g+10.54,5.82,.36,.12,.16);
+    }
     // The furnace door swings aside; a black panel across the opening was
     // removed because it visually defeated the new enterable ground floor.
     for (const side of [-1,1]) put(iron, -4+side*1.78, g+2.65,5.64,.12,5.1,.16);
@@ -251,6 +283,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       put(iron,x,g+7.45,0,.11,1.4,.11);
       put(rustIron,x,g+6.65,0,.58,.21,.58);
     }
+    // R5 retained detail: tie-downs, hand tools, cold ash and rust waterlines.
+    for(const side of [-1,1])for(let j=0;j<10;j++){
+      const z=-4.3+j*.87;
+      put(iron,side*13.37,g+2.72,z,.38,.12,.13);
+      if(j%3===0)put(rustIron,side*13.34,g+1.2,z,.12,2.0,.11);
+    }
+    for(let j=0;j<14;j++){
+      const x=-11.3+(j%7)*.35,z=-3.0+Math.floor(j/7)*.78;
+      put(iron,x,g+2.43,z,.23,.08,.1);
+    }
+    const valvePosition=fr.at(7.1,-1.02);
+    addMechanicalDial('smelter-cold-valve',valvePosition,g,g+3.06,fr.yaw);
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
     cyl(rustIron, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
@@ -259,6 +303,41 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
     cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
     cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
+    // Reference ref-09: the old furnace needs real block-by-block brickwork,
+    // soot streaks, drooping eave ice and a manual ore bucket on a side jib.
+    // The smithy stays COLD per the canonical abandoned-worksite story.
+    for(let row=0;row<12;row++){
+      const y=g+1.2+row*.79;
+      const stagger=row%2?.34:0;
+      for(let col=0;col<4;col++){
+        const p=fr.at(9.70+((col*1.12+stagger)%3.5),-1.20);
+        put(row%3===0?stoneDark:rustIron,9.55+col*.24,y,-1.19,.12,.12,.11);
+      }
+      put(stoneDark,10.5,g+1.2+row*.88,-.88,2.05,.11,.22);
+    }
+    for(let i=0;i<20;i++){
+      const dx=-12.5+i*1.3;
+      const length=.42+(i%5)*.17;
+      const p=fr.at(dx,5.8);
+      cone(snow,p.east,g+9.95-length*.5,p.north,.14,length,6,fr.yaw,Math.PI);
+      if(i%3===0)put(snow,dx,g+10.35,5.83,.75,.16,.46);
+    }
+    // An exposed hoist, cold slag basket, and riveted workshop tooling.
+    const hoist=fr.at(-19.6,10.7);
+    box(timber,hoist.east,g+2.9,hoist.north,.45,5.8,.45,fr.yaw);
+    const jib=fr.at(-17.4,10.7);
+    box(timber,jib.east,g+5.65,jib.north,4.8,.35,.43,fr.yaw,0,-.09);
+    for(let j=0;j<6;j++){
+      const p=fr.at(-15.6,10.7);
+      box(iron,p.east,g+5.0-j*.42,p.north,.06,.32,.07,fr.yaw);
+    }
+    const bucket=fr.at(-15.6,10.7);
+    cyl(rustIron,bucket.east,g+2.55,bucket.north,.57,.34,.88,8);
+    cyl(iron,bucket.east,g+2.07,bucket.north,.44,.48,.08,8);
+    for(let k=0;k<7;k++){
+      const p=fr.at(-18.8+k*.62,8.85);
+      put(iron,-18.8+k*.62,g+.61,8.85,.37,.35,.72);
+    }
     // Hand cart, handles down, mid-yard.
     const cart = fr.at(2, 8);
     box(timber, cart.east, g + .75, cart.north, 1.7, .18, 1.05, fr.yaw);
@@ -335,14 +414,39 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       height:g+.12,yaw:fr.yaw,clearWidth:4.2});
     put(slate, -5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, .48);
     put(slate, 5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, -.48);
-    // Two rows of dark windows; two boarded up.
+    // R4: 16px wood-and-brass glazing with proper dark mullions. The bottom
+    // centre panes were part of the old solid cuboid; REMOVE them so that
+    // the newly built door has its full, physically clear four-metre span.
     for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
-      put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
-      put(dark, dx, g + 6.8, 5.03, 1.7, 1.7, .1);
+      for(const level of [2.6,6.8]){
+        if(level<4&&Math.abs(dx)<3)continue;
+        const tall=level<4?1.9:1.7;
+        put(dark,dx,g+level,5.03,1.7,tall,.10);
+        for(const side of [-1,1]){
+          put(timberWarm,dx+side*.91,g+level,5.14,.12,tall+.18,.16);
+          put(timberWarm,dx,g+level+side*(tall/2+.065),5.15,1.82,.12,.16);
+        }
+        put(iron,dx,g+level,5.18,.075,tall,.14);
+        put(iron,dx,g+level-.16,5.18,1.74,.075,.14);
+      }
     }
+    for(const side of [-1,1]){
+      put(timber,side*2.35,g+1.55,5.12,.22,2.85,.16);
+      put(iron,side*2.2,g+3.13,5.14,.18,.13,.18);
+    }
+    put(timberWarm,0,g+3.46,5.16,4.8,.16,.20);
     for (const dx of [-4.8, 4.8]) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, -.6);
+    }
+    // Thin slate seams and snow shelves break up otherwise flat roof blocks.
+    for(let dx=-8.7;dx<=8.7;dx+=1.45){
+      put(rustIron,dx,g+9.62,0,.10,.18,10.2);
+      put(snow,dx,g+10.07,-4.05,.74,.10,.36);
+    }
+    for(const side of [-1,1]) for(const dz of [-3.6,-1.8,0,1.8,3.6]) {
+      put(timber,side*10.0,g+8.13,dz,.18,.20,.30);
+      put(rustIron,side*10.02,g+6.75,dz,.12,1.55,.10);
     }
     // Chimney twice the ridge height above the roof.
     put(rustIron, -8, g + 11, -2, 1.1, 13, 1.1);
@@ -373,6 +477,16 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       for(let i=0;i<4;i++)
         put(iron,x-1.0+i*.68,g+6.10,-3.08,.40,.36,.38);
     }
+    // R5 detailed repairs: screwed gauges, paper slips, braces and shelving.
+    for(let i=0;i<24;i++) {
+      const x=-7.4+(i%8)*.78,z=-3.8+Math.floor(i/8)*.48;
+      put(brass,x,g+1.96,z,.11,.07,.10);
+      if(i%4===0)put(iron,x,g+2.03,z,.25,.07,.16);
+    }
+    for(const x of [-8.9,-6.9,-4.9])for(const h of [1.4,2.1,2.8])
+      put(timberWarm,x,g+h,-4.48,1.2,.12,.22);
+    const repairDial=fr.at(-4.8,-1.45);
+    addMechanicalDial('instrument-calibration',repairDial,g,g+2.0,fr.yaw);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
@@ -423,6 +537,48 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.beginPath(); c.arc(w * nx, h * ny, 5, 0, 7); c.fill();
       }
     });
+    // ref-06: water tank corrosion is splotched and the timber X bracing
+    // crosses the entire trestle, not just four isolated stilts.
+    for(const sx of [-1,1])for(const sz of [-1,1]){
+      const p=fr.at(15.5+sx*.95,-1+sz*1.55);
+      box(iron,p.east,g+3.15,p.north,.17,5.9,.15,fr.yaw,sx*.31,sz*.27);
+    }
+    for(let j=0;j<8;j++){
+      const a=d2r(j*45),p=fr.at(15.5+2.31*Math.cos(a),-1+2.31*Math.sin(a));
+      put(rustIron,15.5+2.3*Math.cos(a),g+8.0+(j%3)*.48,-1+2.3*Math.sin(a),.28,.75,.16);
+    }
+    // Supply pipes in the reference run BELOW the second-floor windows, so
+    // no pipe is allowed across the real 4m shop entry or glass panes.
+    for(const y of [1.35,4.43]){
+      for(const [start,width] of [[-8.9,5.8],[6.7,2.1]] as const){
+        put(rustIron,start,g+y,5.52,width,.16,.21);
+        put(iron,start,g+y+.18,5.54,width*.83,.06,.12);
+      }
+    }
+    for(const x of [-8.75,8.8]){
+      put(rustIron,x,g+3.06,5.53,.22,4.02,.20);
+      put(iron,x,g+1.78,5.68,.39,.15,.35);
+    }
+    for(const x of [7.25,8.45]){
+      const p=fr.at(x,5.72);
+      cyl(brass,p.east,g+2.28,p.north,.33,.33,.20,12,fr.yaw,Math.PI/2);
+      put(iron,x,g+2.28,5.86,.30,.07,.12,0,(x>8?-.3:.35));
+    }
+    // Icicles use inverted cones so the tips visibly hang DOWN, as in ref-06.
+    for(let i=0;i<22;i++){
+      const x=-9.0+i*.85,len=.31+(i%6)*.13;
+      const p=fr.at(x,5.16);
+      cone(snow,p.east,g+8.71-len/2,p.north,.12,len,6,fr.yaw,Math.PI);
+      if(i%4===0)put(snow,x,g+9.13,5.12,.53,.12,.46);
+    }
+    // Crates and pipe saddles hold the antique hand-built silhouette.
+    for(let j=0;j<6;j++){
+      const x=12.4+(j%3)*1.15,z=5.6+Math.floor(j/3)*1.15;
+      const p=fr.at(x,z);
+      box(timberWarm,p.east,g+.68,p.north,1.05,1.15,1.02,fr.yaw);
+      box(iron,p.east,g+1.22,p.north,1.1,.11,1.1,fr.yaw);
+      box(iron,p.east,g+.19,p.north,1.1,.11,1.1,fr.yaw);
+    }
   }
 
   // ---------- ore yard (bearing 186°): piles, sorting shed, small derrick ----------
@@ -791,8 +947,28 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     if (northTowerLight) northTowerLight.intensity = value ? 14 : 0;
   }
   setNight(true);
+  function actionAt(east:number,north:number,foot:number) {
+    let nearest:InteriorMechanism|undefined;
+    let d=Infinity;
+    for(const mechanism of mechanisms){
+      const distance=Math.hypot(east-mechanism.east,north-mechanism.north);
+      if(distance<=mechanism.range&&distance<d&&Math.abs(foot-mechanism.foot)<1.65){
+        nearest=mechanism;d=distance;
+      }
+    }
+    return nearest?.id;
+  }
+  function turnMechanism(id:InteriorMechanism['id']) {
+    const mechanism=mechanisms.find(item=>item.id===id);
+    if(!mechanism)return undefined;
+    mechanism.state=(mechanism.state+1)%4;
+    mechanism.handle.rotation.z=mechanism.state*Math.PI/2;
+    // These cold, unpowered indicators change only the local model; no
+    // improvised generator, player reward, or server authority flag is set.
+    return mechanism.state;
+  }
   return {
-    group, sites, fencePosts, interiorEntrances, setNight,
-    wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
+    group, sites, fencePosts, interiorEntrances, mechanisms, actionAt, turnMechanism,
+    setNight, wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
   };
 }

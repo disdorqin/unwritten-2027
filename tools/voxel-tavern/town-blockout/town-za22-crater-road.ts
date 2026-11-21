@@ -14,7 +14,6 @@ import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
 import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 import { buildCraterDensityA2 } from './town-crater-density-a2';
-import { mountCraterSignage } from './town-crater-signage';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -40,7 +39,7 @@ type WestCraterRoad = {
     firewood(): boolean;
     setNight(night: boolean): void;
   };
-  readonly signage: ReturnType<typeof mountCraterSignage>;
+  readonly outerWorks: ReturnType<typeof buildCraterOuterWorks>;
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
@@ -164,9 +163,6 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
   group.add(outerWorks.group);
-  // Reuse canonical mainline site anchors; do not duplicate industrial meshes.
-  const signage=mountCraterSignage(road,{mouth:mouthWorks.sites,outer:outerWorks.sites});
-  group.add(signage.group);
   // Salvage ③: V3 ejecta/midground, cleared against the mainline fence
   // (outer ring + gate segment) and the town-era wall line — a boulder
   // whose footprint would swallow a post is skipped, never nudged.
@@ -227,5 +223,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     firewood: mouthWorks.firewood,
     setNight(night: boolean) { mouthWorks.setNight(night); outerWorks.setNight(night); },
   };
-  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions, signage };
+  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
 }

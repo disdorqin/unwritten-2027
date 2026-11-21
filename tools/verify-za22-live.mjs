@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'industrial', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -303,7 +303,7 @@ try {
     await page.screenshot({ path: join(output, 'spawn-bare.png'), timeout: 16_000 });
     evidence.checkpoints.push({ label: 'spawn-bare', ...await readPose(page), wire: evidence.poses.at(-1) });
   }
-  if (segment !== 'crater') {
+  if (segment !== 'crater' && segment !== 'industrial') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
@@ -346,6 +346,42 @@ try {
         await snapshot(page, evidence, 'mountain-gate');
       }
     }
+  }
+  if (segment === 'industrial') {
+    const { page, evidence } = await openTown('industrial');
+    // A LOCALIZED workshop acceptance only. This uses the *native* public
+    // location selector to avoid the known E196.6/N180 obstruction; it does
+    // NOT certify the spawn→west-shore continuous route.
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#town-settings').waitFor({state:'visible',timeout:8000});
+    await page.locator('#jump').selectOption('陨石坑口');
+    // Selecting a destination already invokes visitSelectedDestination() and
+    // closes settings in the viewer's native onchange handler; clicking the
+    // formerly visible close button would wait on an already hidden dialog.
+    await page.waitForFunction(() => !document.querySelector('#town-settings')?.open,
+      null,{timeout:8000});
+    await page.waitForFunction(pattern => {
+      const label=document.querySelector('#position')?.textContent??'';
+      const m=new RegExp(pattern).exec(label);
+      return m && Math.hypot(Number(m[1])-2,Number(m[2])-159)<1;
+    },positionPattern.source,{timeout:18_000});
+    evidence.checkpoints.push({label:'native-menu-west-entry',...await readPose(page),wire:evidence.poses.at(-1)});
+    await snapshot(page,evidence,'za36-native-crater-west-entry');
+    await walkTo(page,evidence,[-12,159],'za36-wall-approach');
+    await walkTo(page,evidence,[-20,159],'za36-wall-crossing');
+    await snapshot(page,evidence,'za36-wall-visible-and-crossed');
+    await walkTo(page,evidence,[-40,153],'za36-approach-west');
+    await walkTo(page,evidence,[-49,142],'za36-instrument-approach');
+    await walkTo(page,evidence,[-53.7,135],'za36-instrument-door');
+    await snapshot(page,evidence,'za36-instrument-visitor-door');
+    await walkTo(page,evidence,[-52.10,133.85],'za36-crossed-physical-workshop-door');
+    await walkTo(page,evidence,[-49.72,132.04],'za36-inside-workshop-ground-floor');
+    await snapshot(page,evidence,'za36-instrument-inside-first-person');
+    await walkTo(page,evidence,[-51.45,127.33],'za36-repair-dial-floor');
+    await action(page,'微调维修表针',12_000);
+    await snapshot(page,evidence,'za36-repair-dial-after-native-E');
+    await page.keyboard.press('e');
+    evidence.checkpoints.push({label:'za36-dial-return-by-native-E',...await readPose(page)});
   }
   if (segment === 'crater' || segment === 'all') {
     const { page, evidence, westWindow } = await openTown('crater');
