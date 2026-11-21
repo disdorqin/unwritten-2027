@@ -1,7 +1,7 @@
 import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
-import { b1TerrainReliefOffset } from './terrain-undulations';
+import { terrainReliefOffset } from './terrain-undulations';
 
 export { layout, worldBounds };
 
@@ -170,10 +170,10 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
       const outsideLegacy = east > layout.width || north > layout.depth;
       const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      // ZA-34 R1: the 1m mesh and the gameplay height sampler use the same
-      // actual B1 relief vertices; footings, paths, ice and water stay fixed.
+      // ZA-34 R1: the mesh and gameplay height sampler share B1/B2/B4 relief.
+      // Built footings, paths, ice and water retain their existing datum.
       const relief = options.relief === false || isWater(east, north) || cell.ice
-        ? 0 : b1TerrainReliefOffset(east, north);
+        ? 0 : terrainReliefOffset(east, north);
       elevation[index] = extension.elevation + relief;
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }

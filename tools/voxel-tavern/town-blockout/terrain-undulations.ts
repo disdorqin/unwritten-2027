@@ -3,13 +3,11 @@ import layout from './layout.json';
 import { districtParcels, districtStreets, extensionPlots, extensionRoads } from './town-extension';
 
 /**
- * ZA-34 / R1: surveyed B1 northeast-wilds pilot. This is *real* terrain
- * displacement, consumed by the shared terrain grid, not a cosmetic snow skin.
- * All values are deterministic on client and Presence/server.
- *
- * R1 is deliberately restricted to B1 until the mounted scenery and sled routes
- * pass first-person clearance. B2/B3/B4, north mountainside and crater uplift are
- * reserved for the subsequent rounds; this function does not rewrite ZA-36.
+ * ZA-34 / R1: real, deterministic wildland relief on the shared 1m terrain grid.
+ * B1 is the surveyed first-person pilot; B2 lake-east and B4 northwest are
+ * isolated R1 candidate landscapes, pending real ride/walk acceptance.
+ * B3/mountain/crater are intentionally held for the separate ZA-36 seam survey.
+ * Never displace roads, rail, built plots, lake/river or district houses.
  */
 type Segment = Readonly<{ ax:number; an:number; dx:number; dn:number; len2:number; halfWidth:number }>;
 type Protection = Readonly<{ east:number; north:number; halfEast:number; halfNorth:number }>;
@@ -58,7 +56,7 @@ function distanceToParcel(e:number,n:number,p:Protection) {
   return Math.hypot(Math.max(0,Math.abs(e-p.east)-p.halfEast),
     Math.max(0,Math.abs(n-p.north)-p.halfNorth));
 }
-/** The world-edge and B1-only rollout envelope, blended over 35-45m. */
+/** The B1 pilot boundary, blended over 35–45m. */
 function b1Envelope(e:number,n:number) {
   return smooth((e-447)/42)*smooth((n-205)/40)
     *smooth((640-e)/35)*smooth((540-n)/35);
@@ -68,7 +66,7 @@ function b1Envelope(e:number,n:number) {
  * At the rail reserve we keep a 10m zero band past the approved corridor.
  * The broad falloff protects road shoulders from discontinuities.
  */
-export function b1BuildProtection(e:number,n:number) {
+export function terrainBuildProtection(e:number,n:number) {
   let clearance=Infinity;
   for(const route of pedestrianRoutes) {
     // Avoid sqrt on distant route segments in the normal B1 loop.
@@ -92,10 +90,56 @@ export function b1TerrainReliefOffset(e:number,n:number) {
   if(e<447||e>640||n<205||n>540)return 0;
   const envelope=b1Envelope(e,n);
   if(envelope===0)return 0;
-  const safety=b1BuildProtection(e,n);
+  const safety=terrainBuildProtection(e,n);
   if(safety===0)return 0;
   // Single 174x180m rolling mode in the pilot; 3.2m displacement amplitude.
   // The remaining harmonics belong to R2 after sled / house apron verification.
   return 3.2*Math.sin((e-512)*Math.PI*2/174)
     *Math.cos((n-250)*Math.PI*2/180)*envelope*safety;
+}
+
+/** Backwards-compatible name used by the original B1 clearance audit. */
+export const b1BuildProtection=terrainBuildProtection;
+
+/** B2: east-lake wilds, E440–640/N0–160; blend 32–40m to existing terrain. */
+function b2Envelope(e:number,n:number) {
+  return smooth((e-440)/40)*smooth((640-e)/36)
+    *smooth(n/38)*smooth((160-n)/34);
+}
+export function b2TerrainReliefOffset(e:number,n:number) {
+  if(e<=440||e>=640||n<=0||n>=160)return 0;
+  const envelope=b2Envelope(e,n);
+  if(envelope===0)return 0;
+  const safety=terrainBuildProtection(e,n);
+  if(safety===0)return 0;
+  // Two smooth 80–200m modes; shoreline, housing, baths and curved rail
+  // are zeroed by the common mask. No new primitive meshes or draw calls.
+  const wave=2.8*Math.sin((e-476)*Math.PI*2/162)
+    *Math.cos((n-48)*Math.PI*2/184)
+    +1.1*Math.cos((e+n-520)*Math.PI*2/194);
+  return wave*envelope*safety;
+}
+
+/** B4: the narrow northwest frame edge, E0–40/N360–480. */
+function b4Envelope(e:number,n:number) {
+  return smooth(e/20)*smooth((40-e)/20)
+    *smooth((n-360)/36)*smooth((480-n)/36);
+}
+export function b4TerrainReliefOffset(e:number,n:number) {
+  if(e<=0||e>=40||n<=360||n>=480)return 0;
+  const envelope=b4Envelope(e,n);
+  if(envelope===0)return 0;
+  const safety=terrainBuildProtection(e,n);
+  if(safety===0)return 0;
+  const wave=2.1*Math.sin((n-384)*Math.PI*2/158)
+    *Math.cos((e-18)*Math.PI*2/145)
+    +.7*Math.sin((e+n-411)*Math.PI*2/186);
+  return wave*envelope*safety;
+}
+
+/** Authoritative relief for both mesh vertices and gameplay groundHeightAt. */
+export function terrainReliefOffset(e:number,n:number) {
+  return b1TerrainReliefOffset(e,n)
+    +b2TerrainReliefOffset(e,n)
+    +b4TerrainReliefOffset(e,n);
 }
