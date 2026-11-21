@@ -1,7 +1,8 @@
 # ZB-20 服务端授权风偏·公共批交接（2026-11-21）
  
 - 窗号 / 自有分支 / 候选提交：B / `lane-build` / `bd68e200`；已并独立叶件 `town-blockout-integration@f7383f2b`。
-- **要取的公共文件仅** `src/presence/server.ts`，B 候选内有精确差分：`git show bd68e200 -- src/presence/server.ts`。不可直接用 B 旧文件覆盖当前集成线服务端，需在当前集成尖端复放。公共服务端单写锁归公共批审取。
+- **最新同步（2026-11-21）**：`src/presence/server.ts` 已通过单写窄改并线 `town-blockout-integration@924bd471`，完成真实 Presence 30/30 和 TypeScript 定向 0 错；不必再次取该文件旧补丁。未配置时保持旧 18B 发球。公共 viewer 接线、正式权威天气/暴露系数及双端实走仍待。
+- **原始交接留档（以下 server 取件要求已由上条结案）**：`src/presence/server.ts` 的 B 候选内有精确差分：`git show bd68e200 -- src/presence/server.ts`。不可直接用 B 旧文件覆盖当前集成线服务端，需在当前集成尖端复放。公共服务端单写锁归公共批审取。
 - 入口：在 `Options` 新增可选 `snowballWindForThrow(event,wallNow())`。只在当前 `receiveSnowball` 已完成玩家身份、手部距离和投掷速率检查后，由服务端计算已验证的水平风偏（限 ±2 m/s²）并通过 `encodeSnowballRelay` 送给邻近玩家。
 - **关键协议风险**：若公共服务端开启回调，会发送 `0xff/3` 新 22 字节包。必须先确认已上线客户端读取 `decodeSnowballEvents` 的新版本，旧版读不了；旧客户端未切换前保持回调关闭，服务器仍发旧 18 字节包。
 - 两端统一公式：现已集成 `src/shared/snowball-wind.ts`（集成 `41b7bb77`），服务端审核接入时直接调用 `snowballWindAcceleration(authoritativeWeather, approvedAreaExposure)`，客户端 `townSnowballWindAcceleration` 为同一函数别名；不要另写系数。缓存的是发射时加速度（east,north），不是当前接收端天气。
