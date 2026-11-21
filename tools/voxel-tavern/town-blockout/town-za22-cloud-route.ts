@@ -3,6 +3,7 @@ import {
   InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Scene, Vector3,
 } from 'three';
 import { isMountainPresenceFoot } from '../../../src/shared/za22-mountain-domain';
+import type { createTownCableWindClock } from '../../../src/shared/town-cable-wind';
 import {
   mountMainSummitAssembly, summitAssemblyAnchor, supportsCloudTerrace,
 } from './main-summit-assembly';
@@ -19,6 +20,8 @@ type Host = {
   enterOrExit(terminal: Terminal, at: Point): void;
   view(title: string, message: string): void;
   cloudStamp?: { available(): boolean; request(): void };
+  /** Opt in only after the public host uses the same G-09 authoritative clock. */
+  cableWeather?: Pick<ReturnType<typeof createTownCableWindClock>, 'scaledNow' | 'statusAt'>;
 };
 
 export const za22StationApproach = { east: 536.8, north: 317.15, height: 26.14 };
@@ -230,17 +233,33 @@ export function createZa22CloudRoute(host: Host) {
     world = undefined;
   }
 
+  function boardingAction(from: Terminal): Action {
+    const status = host.cableWeather?.statusAt(host.now());
+    const destination = from === 'base' ? '云海台' : '山脚站';
+    if (pending) return {
+      label: status?.canBoard === false ? '暴风雪候车中 · 取消候车'
+        : from === 'base' ? '等候前山缆车 · 取消候车' : '等候返程缆车 · 取消候车',
+      run() { pending = undefined; },
+    };
+    if (status?.canBoard === false) return {
+      label: '缆车停驶 · 留在站台候车',
+      run() { pending = from; },
+    };
+    return {
+      label: status?.rate !== undefined && status.rate < 1
+        ? `大风减速 · 乘缆车前往${destination}`
+        : from === 'base' ? '乘缆车一线前往云海台' : '乘缆车一线返回山脚站',
+      run() { pending = from; },
+    };
+  }
+
   function action(position: Point): Action | undefined {
     if (mode === 'riding') return;
     if (mode === 'town') {
       if (!near(position, za22StationApproach, 1.55)) return;
-      return pending
-        ? { label: '等候前山缆车 · 取消候车', run() { pending = undefined; } }
-        : { label: '乘缆车一线前往云海台', run() { pending = 'base'; } };
+      return boardingAction('base');
     }
-    if (near(position, cloudTerminal, 1.8)) return pending
-      ? { label: '等候返程缆车 · 取消候车', run() { pending = undefined; } }
-      : { label: '乘缆车一线返回山脚站', run() { pending = 'summit'; } };
+    if (near(position, cloudTerminal, 1.8)) return boardingAction('summit');
     if (near(position, benchVisitor, 1.45)) return {
       label: '查看星港坪装配和起飞线',
       run() { host.view('星港坪', '雪翼、助推器、导航芯在这里装配。沿铜标向东滑跑出坪。'); },
@@ -269,9 +288,13 @@ export function createZa22CloudRoute(host: Host) {
   }
 
   function update(position: Point, canBoard = true) {
-    const now = host.now();
+    const realNow = host.now();
+    const now = host.cableWeather?.scaledNow(realNow) ?? realNow;
+    const weatherSafeToBoard = host.cableWeather?.statusAt(realNow).canBoard ?? true;
     if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8))) pending = undefined;
-    if (pending && !ride) {
+    // During whiteout the line clock is frozen; waiting is a cancellable
+    // station action rather than an involuntary transfer or teleport.
+    if (pending && !ride && weatherSafeToBoard) {
       const from = pending;
       const index = ([0, 1] as const).find(candidate => line.timeline(now, candidate).boarding === from);
       if (index !== undefined) {
@@ -313,7 +336,12 @@ export function createZa22CloudRoute(host: Host) {
     scene, action, update, updateView,
     active: () => mode !== 'town',
     riding: () => ride !== undefined,
-    ridePoint: () => ride && line.timeline(host.now(), ride.index).at,
+    ridePoint() {
+      if (!ride) return;
+      const realNow = host.now();
+      return line.timeline(host.cableWeather?.scaledNow(realNow) ?? realNow, ride.index).at;
+    },
+    cableStatus: () => host.cableWeather?.statusAt(host.now()),
     surfaceAt, walkingSurfaceAt,
     acceptsStep(fromEast: number, fromNorth: number, toEast: number, toNorth: number, radius: number) {
       return world?.gate.acceptsStep(fromEast, fromNorth, toEast, toNorth, radius) ?? true;
