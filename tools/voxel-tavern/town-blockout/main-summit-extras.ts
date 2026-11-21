@@ -148,7 +148,10 @@ export function mountMainSummitExtras(assembly: Assembly) {
   group.add(machineRoom.group);
   const bellPosts = createMainSummitBellPosts(trail.points);
   group.add(bellPosts.group);
-  const windGround = createMainSummitWindGround({ east: 62.5, north: 975, height: 800 });
+  // Anchor the detailed ref-m64 pad on actual P-1 snow/rock; it needs
+  // retaining piers where the southern terrace drops beneath the deck.
+  const windGround = createMainSummitWindGround(
+    { east: 62.5, north: 975, height: 800 }, assembly.block.heightAt);
   group.add(windGround.group);
 
   // Cloud-sea glow band (§5.21, default plan): a soft lit sheet under the
@@ -182,7 +185,8 @@ export function mountMainSummitExtras(assembly: Assembly) {
         rockTowers.blocked(east, north, feet, radius, bodyHeight) ||
         surveyStations.blocked(east, north, feet, radius, bodyHeight) ||
         hutFurnishings.blocked(east, north, feet, radius, bodyHeight) ||
-        machineRoom.blocked(east, north, feet, radius, bodyHeight);
+        machineRoom.blocked(east, north, feet, radius, bodyHeight) ||
+        windGround.blocked(east, north, feet, radius, bodyHeight);
     },
     /** Night material version (§2.4): paint and massif darken together. */
     setNight(night: boolean) {
