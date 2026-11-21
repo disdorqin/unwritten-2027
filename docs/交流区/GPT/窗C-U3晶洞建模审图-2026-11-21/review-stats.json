@@ -4,7 +4,7 @@
     "entrance": {
       "view": "entrance",
       "kind": "ready",
-      "frames": 8,
+      "frames": 7,
       "drawCalls": 7,
       "triangles": 84024,
       "groups": 7,
@@ -16,7 +16,7 @@
         -1
       ],
       "isFootClear": true,
-      "imageBytes": 182009
+      "imageBytes": 178622
     },
     "grove": {
       "view": "grove",
@@ -33,12 +33,12 @@
         -41
       ],
       "isFootClear": true,
-      "imageBytes": 172014
+      "imageBytes": 163075
     },
     "overlook": {
       "view": "overlook",
       "kind": "ready",
-      "frames": 20,
+      "frames": 21,
       "drawCalls": 7,
       "triangles": 84024,
       "groups": 7,
@@ -50,12 +50,12 @@
         -55
       ],
       "isFootClear": true,
-      "imageBytes": 143041
+      "imageBytes": 143323
     },
     "quay": {
       "view": "quay",
       "kind": "ready",
-      "frames": 26,
+      "frames": 28,
       "drawCalls": 7,
       "triangles": 84024,
       "groups": 7,
@@ -67,7 +67,7 @@
         -76
       ],
       "isFootClear": true,
-      "imageBytes": 166346
+      "imageBytes": 164947
     }
   },
   "errors": [],
