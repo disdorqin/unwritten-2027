@@ -59,7 +59,8 @@ export function surveySummitGlideRings(launch: SnowWingLaunch, groundAt: GroundA
   return rings;
 }
 
-function crossing(ring: SummitGlideRing, previous: Point, current: Point) {
+/** Shared geometric authority: report the exact forward plane intersection and radial miss. */
+export function sampleSummitGlideRingPlane(ring: SummitGlideRing, previous: Point, current: Point) {
   const forwardEast = Math.sin(ring.heading);
   const forwardNorth = Math.cos(ring.heading);
   const before = (previous.east - ring.east) * forwardEast + (previous.north - ring.north) * forwardNorth;
@@ -71,7 +72,12 @@ function crossing(ring: SummitGlideRing, previous: Point, current: Point) {
   const north = previous.north + (current.north - previous.north) * t - ring.north;
   const height = previous.height + (current.height - previous.height) * t - ring.height;
   const side = east * forwardNorth - north * forwardEast;
-  if (Math.hypot(side, height) <= ring.radius) return t;
+  return { fraction: t, radialMetres: Math.hypot(side, height) };
+}
+
+function crossing(ring: SummitGlideRing, previous: Point, current: Point) {
+  const sample = sampleSummitGlideRingPlane(ring, previous, current);
+  return sample && sample.radialMetres <= ring.radius ? sample.fraction : undefined;
 }
 
 export function createSummitGlideRingProgress(rings: readonly SummitGlideRing[]) {
