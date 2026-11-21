@@ -1,0 +1,42 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -126,6 +126,8 @@
+ import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
+ import { npcAuthoredDialogue } from './town-npc-dialogue';
+ import { createTownPresence } from './town-presence';
++import { createTownNightBeaconReceiver } from '../../../src/shared/town-night-beacon';
++import { createTownFirstBeacon } from './town-first-beacon';
+ import { createClocktowerStorySpots } from './clocktower-story';
+ import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+ import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
+@@ -2174,4 +2176,12 @@
+ passportButton.onclick = () => {
+   passport.open();
+   showStampCount();
++  const entry = firstThirteenthBell.catalogueEntry();
++  const extensionList = activityPanel.querySelector('.passport-extensions > ul');
++  if (entry && extensionList && !extensionList.querySelector(`[data-catalogue-entry="${entry.id}"]`)) {
++    const row = document.createElement('li');
++    row.dataset.catalogueEntry = entry.id;
++    row.textContent = entry.title;
++    extensionList.append(row);
++  }
+ };
+@@ -2265,4 +2275,16 @@
+ const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
+ const bellMotion = tower.userData.bellMotion as TowerBellMotion;
++const firstThirteenthBell = createTownFirstBeacon({
++  serverNow: presence.serverNow,
++  connectedAt: presence.townNightConnectedAt,
++  canHearHere: () => walking && !boardingGround && !homeReturn && !cloudRoute.active(),
++  monotonicNow: () => performance.now(),
++  playAudibleTowerCue: () => festival.playThirteenthBell(bellDistance()),
++});
++const receiveThirteenthBell = createTownNightBeaconReceiver({
++  ringTower: firstThirteenthBell.ringTower,
++  swingPendulum: () => bellMotion.strike(.65),
++});
++presence.onTownNightBeacon(cue => receiveThirteenthBell(cue, presence.serverNow()));
+ let bellReservedForCeremony = false;
+ const towerBellSpot = localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
