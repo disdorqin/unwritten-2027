@@ -15,6 +15,7 @@ import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
 import { createTownPresenceNight } from './town-presence-night';
+import { createTownPresenceWeather } from './town-presence-weather';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
@@ -110,6 +111,7 @@ export function createTownPresence(
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
   const townNight = createTownPresenceNight(clock.now);
+  const townWeather = createTownPresenceWeather(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
@@ -337,6 +339,7 @@ export function createTownPresence(
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
         townNight.disconnect();
+        townWeather.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
           stopPoll(false);
           retryPollLater();
@@ -377,6 +380,7 @@ export function createTownPresence(
     socketJoined = false;
     haveId = false;
     townNight.disconnect();
+    townWeather.disconnect();
     resetOwnerSession();
     joinedId = null;
     joinedName = undefined;
@@ -459,10 +463,14 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        townNightWindow?: unknown; state?: unknown;
+        townNightWindow?: unknown; townOutdoorWeather?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'town-outdoor-weather' || message.kind === 'town-outdoor-weather-warning')) {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) townWeather.accept(message);
+        return;
+      }
       if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
         if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
           if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
@@ -614,6 +622,7 @@ export function createTownPresence(
             if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
+          townWeather.join(message.townOutdoorWeather);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
             resetRetry();
@@ -877,6 +886,9 @@ export function createTownPresence(
   return {
     serverNow: clock.now,
     getTownNightWindow: townNight.state,
+    /** True server-authored weather state or undefined when a legacy room lacks G-09. */
+    getTownOutdoorWeather: townWeather.state,
+    onTownOutdoorWeatherWarning: townWeather.onWarning,
     townNightConnectedAt: townNight.connectedAt,
     onTownNightBeacon: townNight.onBeacon,
     northRidgeNightOpen: () => townNight.state()?.canEnterRestricted === true,
