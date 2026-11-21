@@ -7,6 +7,7 @@ import type { createUndergroundMineLayout, UndergroundMineSpec } from './undergr
 import { createUndergroundCampRemains } from './underground-camp-remains.js';
 import { mountUndergroundCampLighting } from './underground-camp-lighting.js';
 import { createUndergroundCrystalGate } from './underground-crystal-gate.js';
+import { mountUndergroundCampScene } from './underground-camp-scene.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -28,6 +29,8 @@ type Host = Readonly<{
     yaw: number;
     localPool: readonly [number, number, number];
   }>): boolean;
+  /** Enable U-2 interactions only with movement-accepted feet, sight and inventory receipts. */
+  campRuntime?: Pick<Parameters<typeof mountUndergroundCampScene>[0], 'actions' | 'pickaxe' | 'ambience'>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
   readGateStage?(): UndergroundMineGateStage | undefined;
   /** Host-approved light budget and offering receipts; never grant light from render state. */
@@ -97,23 +100,31 @@ export function mountUndergroundMineDomain(host: Host) {
     root.add(mesh);
   }
 
-  let camp: ReturnType<typeof createUndergroundCampRemains>;
+  let staticCamp: ReturnType<typeof createUndergroundCampRemains> | undefined;
+  let staticCampLights: ReturnType<typeof mountUndergroundCampLighting> | undefined;
+  let interactiveCamp: ReturnType<typeof mountUndergroundCampScene> | undefined;
   try {
-    camp = createUndergroundCampRemains({ mine, camp: campSpec, walker });
+    if (host.campRuntime) {
+      interactiveCamp = mountUndergroundCampScene({
+        parent: root, mine, camp: campSpec, walker,
+        ...host.campRuntime, readLights: host.readLights,
+      });
+    } else {
+      staticCamp = createUndergroundCampRemains({ mine, camp: campSpec, walker });
+      root.add(staticCamp.group);
+      staticCampLights = mountUndergroundCampLighting(staticCamp.lighting);
+      staticCampLights.sync(new Set(), 0, 0);
+    }
   } catch (error) {
     for (const geometry of geometries) geometry.dispose();
     for (const material of Object.values(materials)) material.dispose();
     throw error;
   }
-  root.add(camp.group);
   // Do not create or draw a crystal gate from a review-only position. Its shape comes
   // from this same collision layout, and opening is driven by an accepted gate stage.
   const gate = host.readGateStage && mine.expansion?.gate
     ? createUndergroundCrystalGate(mine.expansion.gate) : undefined;
   if (gate) root.add(gate.group);
-  const campLights = mountUndergroundCampLighting(camp.lighting);
-  // Never illuminate the detached scene until the caller provides the live budget.
-  campLights.sync(new Set(), 0, 0);
   parent.add(root);
   let disposed = false;
 
@@ -121,6 +132,11 @@ export function mountUndergroundMineDomain(host: Host) {
     kind: 'ready',
     group: root,
     poolWorld: { east: landing.east, north: landing.north, height: landing.height },
+    camp: interactiveCamp?.camp ?? staticCamp,
+    /** Caller sends the E request only to the registered and current camp action. */
+    campPrompt: () => interactiveCamp?.prompt(),
+    pressCamp: async (expectedId: string) => interactiveCamp
+      ? interactiveCamp.press(expectedId) : 'unavailable' as const,
     /** For a renderer preview only: movement authority still validates any attempted step. */
     toWorld(local: readonly [number, number, number]) {
       if (disposed || local.length !== 3 || !local.every(Number.isFinite)) return;
@@ -129,17 +145,21 @@ export function mountUndergroundMineDomain(host: Host) {
     },
     sync() {
       if (disposed) return;
-      const lights = host.readLights();
-      campLights.sync(lights.litNicheIds, lights.extraCampLightCount, lights.remainingBudget);
+      if (interactiveCamp) interactiveCamp.update();
+      else if (staticCampLights) {
+        const lights = host.readLights();
+        staticCampLights.sync(lights.litNicheIds, lights.extraCampLightCount, lights.remainingBudget);
+      }
       gate?.update(host.readGateStage?.() ?? 'closed');
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       root.removeFromParent();
-      campLights.dispose();
+      interactiveCamp?.dispose();
+      staticCampLights?.dispose();
       gate?.dispose();
-      camp.dispose();
+      staticCamp?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
     },

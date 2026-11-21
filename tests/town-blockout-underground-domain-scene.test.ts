@@ -4,6 +4,7 @@ import { Group, PointLight } from 'three';
 import { resolveUndergroundShaftRegistration } from '../src/presence/underground-shaft-registration.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from '../tools/voxel-tavern/town-blockout/underground-mine-layout.js';
 import { mountUndergroundMineDomain } from '../tools/voxel-tavern/town-blockout/underground-domain-scene.js';
+import { resolveUndergroundCampPickaxeSite, undergroundCampPickaxe } from '../src/shared/underground-camp-pickaxe.js';
 
 const spec: UndergroundMineSpec = {
   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
@@ -147,6 +148,52 @@ test('the mounted U-15 iron gate uses only this mine shell and the accepted stag
   stage = 'open';
   mounted.sync();
   assert.equal(leaf.visible, false);
+  mounted.dispose();
+  assert.equal(f.parent.children.length, 0);
+});
+
+test('the U-2 camp in the certified mine denies absent footing and permits real receipt-backed pickaxe actions', async () => {
+  const f = fixture();
+  let foot: readonly [number, number, number] | undefined;
+  let aimed = false;
+  let claimed = 0;
+  let notices = 0;
+  const mounted = mountUndergroundMineDomain({ ...f.host, campRuntime: {
+    actions: {
+      promptRange: 1.15, restAfterMs: 2500, now: () => 10,
+      readFooting: () => foot, sit: () => true, stand: () => true,
+      setSeatedAmbience: () => undefined, lookAtBowl: () => true,
+      recordRelic: () => 'recorded' as const,
+    },
+    pickaxe: {
+      available: () => true, aimedAt: () => aimed,
+      async claim() { claimed++; return 'granted' as const; },
+      showPickupNotice() { notices++; },
+    },
+  } });
+  assert.equal(mounted.kind, 'ready');
+  if (mounted.kind !== 'ready') assert.fail();
+  const site = resolveUndergroundCampPickaxeSite(f.mine, spec.camp);
+  assert.ok(site);
+  assert.equal(mounted.campPrompt(), undefined);
+  assert.equal(await mounted.pressCamp(undergroundCampPickaxe.siteId), 'unavailable');
+  foot = site.approach;
+  mounted.sync();
+  assert.equal(mounted.campPrompt(), undefined);
+  aimed = true;
+  assert.equal(mounted.campPrompt()?.id, undergroundCampPickaxe.siteId);
+  assert.equal(await mounted.pressCamp(undergroundCampPickaxe.siteId), 'granted');
+  assert.equal(claimed, 1);
+  assert.equal(notices, 1);
+  assert.equal(mounted.campPrompt()?.id, undefined);
+  assert.equal(await mounted.pressCamp(undergroundCampPickaxe.siteId), 'unavailable');
+  foot = mounted.camp?.rooms[0].approach;
+  assert.ok(foot);
+  assert.equal(mounted.campPrompt()?.kind, 'bed');
+  assert.equal(await mounted.pressCamp(mounted.campPrompt()?.id ?? ''), 'sat');
+  foot = undefined;
+  mounted.sync();
+  assert.equal(mounted.campPrompt(), undefined);
   mounted.dispose();
   assert.equal(f.parent.children.length, 0);
 });
