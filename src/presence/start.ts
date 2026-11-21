@@ -4,11 +4,27 @@ import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
 import { readTownNightOptions } from './town-night-config.js';
 
+// The town night clock is core game canon (one game day = 10 minutes:
+// 6 daylight, 4 night; the thirteenth bell sounds 60 s after dusk), so it
+// defaults ON. TOWN_NIGHT_SCHEDULE / TOWN_NIGHT_BEACON_RECEIPT override it.
+// dawnEpoch matches townWeatherEpoch (Date.UTC(2026, 0, 1)) so the day cycle
+// and the weather schedule share one epoch.
+// The beacon drift table: the thirteenth bell sounds 50 s after dusk on the
+// first night and drifts +11 s per night across a 12-night cycle, then wraps
+// (canon: 入夜约 1 分钟后响, 漂移按 12 个游戏日绕一圈). Every offset keeps
+// offset + 60 s cue/overlap inside the 4-minute night.
+const defaultTownNightSchedule = JSON.stringify({
+  dawnEpoch: Date.UTC(2026, 0, 1),
+  beaconOffsetsAfterDusk: Array.from({ length: 12 }, (_, day) => 50_000 + day * 11_000),
+  cueFreshnessMs: 60_000,
+});
+const defaultTownNightBeaconReceipt = '/tmp/town-night-beacon-receipt.json';
+
 export async function startPresence(requestListener?: RequestListener, ceremonyStartAt?: number) {
   const host = process.env.PRESENCE_HOST ?? '0.0.0.0';
   const townNight = readTownNightOptions(
-    process.env.TOWN_NIGHT_SCHEDULE || undefined,
-    process.env.TOWN_NIGHT_BEACON_RECEIPT || undefined,
+    process.env.TOWN_NIGHT_SCHEDULE || defaultTownNightSchedule,
+    process.env.TOWN_NIGHT_BEACON_RECEIPT || defaultTownNightBeaconReceipt,
   );
   const server = await createPresenceServer({
     host,

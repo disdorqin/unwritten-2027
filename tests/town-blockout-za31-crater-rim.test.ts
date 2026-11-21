@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InstancedMesh, NearestFilter } from 'three';
-import type { MeshStandardMaterial } from 'three';
+import { NearestFilter, type InstancedMesh, type MeshStandardMaterial } from 'three';
 import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -48,15 +47,18 @@ test('crater dressing uses the live west surface and leaves the road, shaft, and
   assert.equal(group.children.length, 6);
   let triangles = 0;
   for (const batch of group.children) {
-    assert.ok(batch instanceof InstancedMesh && batch.boundingSphere && Number.isFinite(batch.boundingSphere.radius));
-    const material = batch.material as MeshStandardMaterial;
+    const mesh = batch as InstancedMesh;
+    assert.ok(mesh.isInstancedMesh && mesh.boundingSphere && Number.isFinite(mesh.boundingSphere.radius));
+    const material = mesh.material as MeshStandardMaterial;
+    assert.equal(material.isMeshStandardMaterial, true);
     if (material.map) {
-      assert.equal(material.map.image.width, 16);
-      assert.equal(material.map.image.height, 16);
+      const image = material.map.image as { width: number; height: number };
+      assert.equal(image.width, 16);
+      assert.equal(image.height, 16);
       assert.equal(material.map.minFilter, NearestFilter);
       assert.equal(material.map.magFilter, NearestFilter);
     }
-    triangles += (batch.geometry.index?.count ?? batch.geometry.attributes.position.count) / 3 * batch.count;
+    triangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) / 3 * mesh.count;
   }
   assert.ok(triangles < 13_000, `${triangles} instanced triangles`);
 });
