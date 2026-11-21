@@ -29,6 +29,7 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
 import { addTerrainMeshes } from './terrain-mesh';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
+import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
@@ -70,7 +71,7 @@ import {
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
-import { wallCellOf } from '../../../src/presence/snowfight';
+import { WALL_CELL, wallCellOf } from '../../../src/presence/snowfight';
 import { createCeremonyFrost, hasFrostCeremonyRelief, isExposedSnowAt, type FrostExposure } from './town-frost';
 import { campfirePieces, createTownCampfires, findRegionalCampfires, pineCampfireId } from './town-campfires';
 import { createForestCampfire, findForestChopSites } from './town-forest-campfire';
@@ -156,6 +157,10 @@ import { createCourtyardSeatSpots, createIceThroneSpots, createRailwayStationSpo
 import { createTownLights } from './town-lights';
 import { createTownWater, shoreJumpDepth } from './town-water';
 import { craterWestSurvey, mountWestCraterRoad } from './town-za22-crater-road';
+import { mountUndergroundDomainHost } from './underground-domain-host';
+import { createUndergroundDreamChain, type DreamChainTrip } from './underground-dream-chain';
+import { mountUndergroundDescent } from './underground-descent';
+import type { UndergroundLiftCameraMotion } from './underground-lift-cinematic-effects';
 import { buildCraterRailExtension } from './town-crater-rail-extension';
 import { buildShankouNodeScenery } from './town-shankou-node-scenery';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
@@ -194,12 +199,103 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
+type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
+let dreamChain: DreamChain | undefined;
+let dreamDescent: ReturnType<typeof mountUndergroundDescent> | undefined;
+let dreamControlsLocked = false;
+let dreamHoldE = false;
+let dreamLastTurns = -1;
+let dreamMotion: UndergroundLiftCameraMotion = { yaw: 0, pitch: 0, roll: 0 };
+let dreamFade: HTMLDivElement | undefined;
+let dreamEKey = false;
+addEventListener('keydown', (e) => { if (e.code === 'KeyE') dreamEKey = true; });
+addEventListener('keyup', (e) => {
+  if (e.code !== 'KeyE') return;
+  dreamEKey = false;
+  if (dreamHoldE) {
+    dreamHoldE = false;
+    dreamChain?.releaseWinch();
+  }
+});
 function ensureWestCraterRoad() {
   if (!westCraterRoad) {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
     scene.add(westCraterRoad.group);
+    const undergroundParent = new Group();
+    undergroundParent.name = 'underground-domain-host';
+    scene.add(undergroundParent);
+    undergroundDomain = mountUndergroundDomainHost({ parent: undergroundParent, road: westCraterRoad });
+    if (undergroundDomain.kind === 'ready') {
+      undergroundDomain.mounted.sync();
+      const chain = createUndergroundDreamChain({
+        registration: undergroundDomain.registration,
+        now: () => performance.now(),
+        playerId: 'local-player',
+        readLocalFoot: () => ({ east: x, north: n, height: airHeight ?? ground }),
+        onEvent: (event) => {
+          if (event.kind === 'well-opened') {
+            announceActivity('井盖开了 · 走到井口圈梁，按 E 跃入');
+          } else startDreamTrip(event.trip);
+        },
+      });
+      if (chain.kind === 'ready') dreamChain = chain;
+    }
   }
   return westCraterRoad;
+}
+
+function dreamFadeTo(black: boolean) {
+  if (!dreamFade) {
+    dreamFade = document.createElement('div');
+    dreamFade.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:40';
+    document.body.append(dreamFade);
+  }
+  dreamFade.style.opacity = black ? '1' : '0';
+}
+
+function applyDreamLanding(foot: { east: number; north: number; height: number }, toMine: boolean) {
+  x = foot.east;
+  n = foot.north;
+  ground = foot.height;
+  airHeight = undefined;
+  riseSpeed = 0;
+  presence.setMineDomain(toMine);
+}
+
+function startDreamTrip(trip: DreamChainTrip) {
+  if (!dreamChain) return;
+  if (trip.direction === 'up') {
+    // The descent cinematic is down-only; the return ride fades through black.
+    dreamControlsLocked = true;
+    dreamFadeTo(true);
+    void dreamChain.requestLanding(trip.id).then((foot) => {
+      if (foot) {
+        applyDreamLanding(foot, false);
+        announceActivity('回到坑底地面');
+      }
+      dreamFadeTo(false);
+      dreamControlsLocked = false;
+    });
+    return;
+  }
+  dreamDescent ??= mountUndergroundDescent({
+    parent: element('scene'),
+    setControlsLocked: (locked) => { dreamControlsLocked = locked; },
+    cameraMotion: (motion) => { dreamMotion = motion; },
+    requestMineLanding: async (tripId) => {
+      if (!dreamChain) return undefined;
+      const foot = await dreamChain.requestLanding(tripId);
+      if (!foot) return undefined;
+      applyDreamLanding(foot, true);
+      return { tripId, destination: 'mine', fallDamage: 0 } as const;
+    },
+    onHandoffError: () => announceActivity('落点没有应答 · 再试一次'),
+  });
+  dreamDescent.start(
+    { id: trip.id, first: trip.first, departedAt: trip.departedAt, travelMs: trip.travelMs },
+    performance.now(),
+  );
 }
 scene.background = new Color('#adc2dd');
 const weatherFog = new Fog('#adc2dd', 360, 1300);
@@ -436,6 +532,32 @@ const cloudRoute = createZa22CloudRoute({
   enterOrExit: transferCloudTerminal,
   view: (title, message) => { activityContext.open(title, message); },
 });
+// 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
+// derived per frame from the server-authored state in town-presence.
+// Anchors follow the repair spec's three fault points: the rust brake
+// at the base station brake gate, the derailed cable at the mid-line
+// tower between base and mid stations, the counterweights at the mid
+// station tower with the hanging frame beside it. Physical props are
+// D3 form work; the anchors are the host-supplied positions.
+const cableRepairHost1 = createCableRepairHost(1, {
+  brake: { east: 524.6, north: 326.6 },
+  cableWheel: { east: 483, north: 424.5 },
+  weightTower: { east: 436.8, north: 523.2 },
+  weightFrame: { east: 440.6, north: 517.4 },
+});
+const cableStationPoints = [[526, 329], [440, 520], [336, 640]] as const;
+let cableStageSeen: string | undefined;
+let sledWasRiding = false;
+let sledSpeedBeforeStop = 0;
+/** A hard impact on a station structure wakes line 1 (host mapping:
+ * sled strikes and snow-wall collapses qualify, hand snowballs never). */
+function reportCableWake(kind: 'sled' | 'snow-wall', east: number, north: number) {
+  const state = presence.getCableLineState(1);
+  if (!state || state.stage !== 'dormant') return;
+  if (!cableStationPoints.some(([e, n]) => Math.hypot(east - e, north - n) <= 15)) return;
+  const event = cableWakeEvent(kind);
+  if (event) presence.sendCableRepair(1, event);
+}
 function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
   const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
   return { model, duty };
@@ -491,7 +613,13 @@ let setMountedRackVehicle: ((spot: { x: number; n: number; y: number; yaw: numbe
 const sledDrift = createSledDrift();
 const sledWallCollider = createSledWallCollider(
   (gx, gy) => teamFight.wallColumnAt(gx, gy),
-  (gx, gy, speed) => presence.sendSnowfightSledSmash(gx, gy, speed),
+  (gx, gy, speed) => {
+    const sent = presence.sendSnowfightSledSmash(gx, gy, speed);
+    // A sled smashing a snow wall against a station structure is one of
+    // the audited wake impacts (this report only fires when layers broke).
+    reportCableWake('snow-wall', (gx + .5) * WALL_CELL, (gy + .5) * WALL_CELL);
+    return sent;
+  },
 );
 const sledWorld: Parameters<typeof createSledRide>[0] = {
   height: sledGroundAt,
@@ -2490,10 +2618,52 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
+  // 缆车修缮 (B2 host): the host offers the repair action for where the
+  // player stands under the latest broadcast state; running it only
+  // submits the event — the authority's frame is what changes the world.
+  const repairState = homeReturn ? undefined : presence.getCableLineState(1);
+  if (repairState) {
+    cableRepairHost1.sync(repairState);
+    const repair = cableRepairHost1.actions(repairState, { east: x, north: n })[0];
+    if (repair) return { label: repair.label, run() { presence.sendCableRepair(1, repair.event); } };
+  }
   // ZA-36 crater outside works: public-layer E actions only (salvage ①).
   // Routed through the existing E affordance, not a disconnected preview UI.
   const works = homeReturn ? undefined : westCraterRoad?.craterActions;
   const craterSpot = works?.actionAt(x, n, ground);
+  // C2 dream chain: winch / shaft / cage actions at the crater floor and in
+  // the mine. The night gate is the ZB-17 restricted-entry flag, read through
+  // the same presence state the guard posts use; there is no second clock.
+  if (!homeReturn && dreamChain) {
+    const chain = dreamChain;
+    const nearPoint = (p: { east: number; north: number; height: number }, range: number) =>
+      Math.hypot(x - p.east, n - p.north) <= range && Math.abs(ground - p.height) <= 2;
+    if (chain.phase() === 'mine') {
+      if (nearPoint(chain.mineLanding, 3)) return { label: chain.pendingRide() ? '等空笼下来' : '乘笼回地面', run() {
+        if (!chain.pendingRide() && !chain.requestCageRide('up')) announceActivity('笼子还没到这一层');
+      } };
+    } else if (chain.coverOpen()) {
+      if (nearPoint(chain.shaftFoot, 2.4)) {
+        if (chain.firstFallPending()) return { label: '跃入井口', run() {
+          if (!chain.requestFirstFall()) announceActivity('先站稳到井口圈梁上');
+        } };
+        return { label: '乘笼下井', run() {
+          if (!chain.requestCageRide('down')) announceActivity('笼子不在这一层');
+        } };
+      }
+      if (nearPoint(chain.winchFoot, 1.6)) return { label: '井盖已开', run() {
+        announceActivity('井盖已开 · 走到井口跃入');
+      } };
+    } else if (nearPoint(chain.winchFoot, 1.6)) {
+      return { label: '按住 E 转绞盘', run() {
+        if (!presence.northRidgeNightOpen()) {
+          announceActivity('天还没黑 · 守卫在坑口，先回镇里等第十三声');
+        } else {
+          announceActivity('按住 E 别松手 · 转满三圈开井');
+        }
+      } };
+    }
+  }
   if (craterSpot && works) return { label: craterSpot.label, run() {
     switch (craterSpot.id) {
       case 'registration':
@@ -2618,7 +2788,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked(); }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked; }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -2948,7 +3118,50 @@ function settleTownLanding(targetEast = x, targetNorth = n, heightHint?: number)
   return true;
 }
 
+function dreamInMine() {
+  return dreamChain?.phase() === 'mine' && undergroundDomain?.kind === 'ready';
+}
+
+function tryMoveInMine(nextX: number, nextN: number) {
+  if (undergroundDomain?.kind !== 'ready') return false;
+  const passage = undergroundDomain.passageAt(nextX, nextN);
+  if (!passage) return false;
+  const floor = passage.floor;
+  if (airHeight === undefined && floor > ground + stepHeight) return false;
+  [x, n] = [nextX, nextN];
+  if (airHeight === undefined) {
+    if (ground - floor > stepHeight) {
+      landingFeedback.begin(ground);
+      airHeight = ground;
+      riseSpeed = 0;
+    } else ground = floor;
+  }
+  return true;
+}
+
+function stepJumpInMine(dt: number) {
+  if (airHeight === undefined) return;
+  const feet = airHeight;
+  const next = feet + riseSpeed * dt - .5 * gravity * dt * dt;
+  riseSpeed -= gravity * dt;
+  if (next > feet) {
+    airHeight = next;
+    return;
+  }
+  const landing = undergroundDomain?.kind === 'ready'
+    ? undergroundDomain.floorAt(x, n) ?? feet : feet;
+  if (next <= landing) {
+    ground = landing;
+    airHeight = undefined;
+    riseSpeed = 0;
+    landingFeedback.land(landing, false);
+    return;
+  }
+  airHeight = next;
+}
+
 function tryMove(nextX: number, nextN: number) {
+  if (dreamInMine()) return tryMoveInMine(nextX, nextN);
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
@@ -2971,6 +3184,10 @@ function tryMove(nextX: number, nextN: number) {
 }
 
 function stepJump(dt: number) {
+  if (dreamInMine()) {
+    stepJumpInMine(dt);
+    return;
+  }
   if (airHeight === undefined) return;
   const feet = airHeight;
   const next = feet + riseSpeed * dt - .5 * gravity * dt * dt;
@@ -3442,6 +3659,13 @@ renderer.setAnimationLoop(now => {
       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
       interpolation = walkClock.advance(frameSeconds, () => {
         walkPrevious.copy(walkCurrent);
+        if (sledRide.active()) { sledWasRiding = true; sledSpeedBeforeStop = sledRide.speed(); }
+        else if (sledWasRiding) {
+          sledWasRiding = false;
+          // A tumble-class crash (speed > 6, the sled's own crash kind)
+          // against a station structure is an audited wake impact.
+          if (sledRide.recovering() && sledSpeedBeforeStop > 6) reportCableWake('sled', x, n);
+        }
         if (sledRide.active() || sledRide.recovering()) {
           snowMoveScale = chillMoveScale = 1;
           lakeSkateMotion.reset();
@@ -3492,7 +3716,9 @@ renderer.setAnimationLoop(now => {
     const landingPose = landingFeedback.pose();
     const dip = landingPose === 'prone' ? 1.21 : reduceSnowEffects.matches ? 0 : .22 * landingFeedback.compression();
     const landingTilt = landingPose === 'prone' && !reduceSnowEffects.matches ? Math.min(pitch, -.24) : pitch;
-    faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip, yaw, landingTilt);
+    const dreamDip = dreamMotion.wakeProgress === undefined ? 0 : (1 - dreamMotion.wakeProgress) * 1.2;
+    faceFrom(walkRender.x, -walkRender.z, walkRender.y - dip - dreamDip, yaw + dreamMotion.yaw, landingTilt + dreamMotion.pitch);
+    if (dreamMotion.roll) camera.rotateZ(dreamMotion.roll);
     const movement = sledRide.recovering() ? '翻橇' : sledRide.active() ? '雪橇' :
       landingPose === 'prone' ? '趴倒' : landingPose === 'compress' ? '落地' :
       water?.mode === 'swim' ? '游泳' : water?.mode === 'wade' ? '涉水' :
@@ -3509,6 +3735,28 @@ renderer.setAnimationLoop(now => {
     : effectiveTownAvatarPose(now < drinkingPoseUntil, hotSpringSoak.active(), !!boardingGround, !!seated, presenceSkateSpeed, sledRide.active(), sledRide.drifting());
   presence.setActivityPose(ceremonyArrivalPose?.value ?? activityPose);
   const throneSeat = palaceThroneSeat();
+  if (dreamChain) {
+    dreamChain.update();
+    if (dreamDescent) dreamDescent.update(now);
+    const chain = dreamChain;
+    const atWinch = chain.phase() === 'surface' && !chain.coverOpen() &&
+      Math.hypot(x - chain.winchFoot.east, n - chain.winchFoot.north) <= 1.6 &&
+      Math.abs(ground - chain.winchFoot.height) <= 2;
+    if (dreamEKey && atWinch && presence.northRidgeNightOpen()) {
+      dreamHoldE = true;
+      const result = chain.holdWinch();
+      if (result.kind === 'winding') {
+        const turns = Math.floor(result.turns);
+        if (turns !== dreamLastTurns) {
+          dreamLastTurns = turns;
+          announceActivity(`绞盘转动 · 第 ${turns + 1} 圈`);
+        }
+      } else {
+        dreamHoldE = false;
+        if (result.kind === 'unreachable') announceActivity('站得太远 · 贴近绞盘再转');
+      }
+    }
+  }
   presence.setWestDomain(walking && !homeReturn && x < 0);
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
@@ -3518,6 +3766,19 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
+  const cableState1 = presence.getCableLineState(1);
+  if (cableState1) {
+    cableRepairHost1.sync(cableState1);
+    if (cableStageSeen !== cableState1.stage) {
+      if (cableStageSeen !== undefined && cableState1.stage === 'one-station') {
+        announceActivity('缆车被震醒了，只先动一站');
+      }
+      if (cableStageSeen !== undefined && cableState1.stage === 'full-line') {
+        announceActivity('缆车修通了，全线通车');
+      }
+      cableStageSeen = cableState1.stage;
+    }
+  }
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.

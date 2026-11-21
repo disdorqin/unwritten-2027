@@ -16,6 +16,12 @@ import {
 import { createPresenceEgress } from './egress.js';
 import { createIceThroneAuthority } from './ice-throne-authority.js';
 import { isIcePalaceThroneRecord } from './ice-throne-site.js';
+import {
+  createCableLineAuthority, type CableLineFrame,
+} from './cable-line-authority.js';
+import type {
+  Za36CableRepairEvent, Za36CableRepairLine,
+} from '../../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
 import { isSummitPassportAction } from '../shared/summit-passport.js';
 import { snowWallBuildLayers } from '../shared/snow-stock.js';
 import {
@@ -187,6 +193,34 @@ function metresToLimit(value: number): number {
   return Math.round(value * 100);
 }
 
+function isCableRepairLine(value: unknown): value is Za36CableRepairLine {
+  return value === 1 || value === 2;
+}
+
+const cableWakeImpacts: ReadonlySet<string> = new Set(['sled', 'snow-wall', 'snowball', 'night-window']);
+
+/** Shape-check a client cable-repair event before it reaches the authority. */
+function isCableRepairEvent(value: unknown): value is Za36CableRepairEvent {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return false;
+  const event = value as { kind: unknown; impact?: unknown; effort?: unknown; index?: unknown };
+  switch (event.kind) {
+    case 'wake':
+      return typeof event.impact === 'string' && cableWakeImpacts.has(event.impact);
+    case 'strike-rust':
+    case 'pull-brake':
+    case 'release-cable':
+    case 'tighten-cable':
+      return true;
+    case 'pry-cable':
+      return typeof event.effort === 'number' && Number.isFinite(event.effort);
+    case 'take-weight':
+    case 'hang-weight':
+      return Number.isInteger(event.index);
+    default:
+      return false;
+  }
+}
+
 function refuse(socket: Duplex, status: string): void {
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
@@ -273,6 +307,13 @@ export async function createPresenceServer(options: Options = {}) {
   const peers = new Map<number, Peer>();
   const pollSessions = new Map<string, Peer>();
   let crownOwner: number | null = null;
+  // Cable repair authority (window B's module): one repair state machine
+  // per line, this server the only writer. The wire frame is B's
+  // CableLineFrame plus the full snapshot the client repair host syncs
+  // from; flags stay derived inside the authority, never set here.
+  const cableLine = createCableLineAuthority();
+  const cableLineWire = (frame: CableLineFrame) =>
+    JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
   const iceThrone = createIceThroneAuthority(({ ownerId, message }) => {
     const oldOwner = crownOwner;
     crownOwner = ownerId;
@@ -1136,6 +1177,15 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'cable-repair') {
+        const line = 'line' in message ? message.line : undefined;
+        const event = 'event' in message ? message.event : undefined;
+        if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
+          const frame = cableLine.applyEvent(line, event);
+          if (frame) broadcast(cableLineWire(frame));
+        }
+        return;
+      }
       if (message.kind === 'summit-passport') {
         const action = 'action' in message ? message.action : undefined;
         if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
@@ -1207,7 +1257,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true,
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true,
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
@@ -1216,6 +1266,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
+    send(peer, cableLineWire(cableLine.hello(1)));
+    send(peer, cableLineWire(cableLine.hello(2)));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose, ...(other.id === crownOwner ? { crowned: true } : {}) }));
     }
