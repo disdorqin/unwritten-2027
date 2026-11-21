@@ -13,7 +13,7 @@ import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
-import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
+import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX, type SnowballThrow } from './snowball-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import { createTownNightBeaconHost } from './town-night-beacon.js';
 import {
@@ -41,6 +41,8 @@ type Options = {
   now?: () => number;
   wallNow?: () => number;
   townNight?: PresenceTownNightOptions;
+  /** Optional server-authoritative G-09 wind for the relay; clients cannot supply it. */
+  snowballWindForThrow?: (event: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
@@ -260,7 +262,14 @@ export async function createPresenceServer(options: Options = {}) {
       if (pending.expiresAt <= time) peer.pendingThrows.delete(ballId);
     }
     if (peer.pendingThrows.has(event.ballId)) return;
-    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id });
+    // Only the server may add the windy relay variant. On invalid/unconfigured
+    // weather, preserve the original 18-byte packet for older consumers.
+    const candidateWind = options.snowballWindForThrow?.(event, wallNow());
+    const wind = candidateWind && Number.isFinite(candidateWind.east) && Number.isFinite(candidateWind.north) &&
+      Math.abs(candidateWind.east) <= 2 && Math.abs(candidateWind.north) <= 2 ? candidateWind : undefined;
+    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id,
+      ...(wind ? { windEast: wind.east, windNorth: wind.north } : {}),
+    });
     const recipients = new Set<Peer>();
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) {
       if (send(recipient, relay)) recipients.add(recipient);

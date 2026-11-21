@@ -689,6 +689,47 @@ test("P2b wire preserves frame layouts and decodes aggregated throw and hit mess
   assert.equal(decodeSnowballClientEvent(encodeSnowballThrow({ ...throwBall, dirX: 0 })), undefined);
 });
 
+test("G-09 server wind relay adds a versioned launch vector without changing the legacy client packet", () => {
+  const basic = { kind: "throw", throwerId: 3, ...throwBall } as const;
+  const windy = { ...basic, ballId: 0x1235, windEast: -.75, windNorth: 1.125 };
+  const noWind = encodeSnowballRelay(basic);
+  const withWind = encodeSnowballRelay(windy);
+  assert.equal(noWind.length, 18);
+  assert.equal(withWind.length, 22);
+  assert.equal(withWind[1], 3);
+  assert.equal(encodeSnowballThrow(throwBall).length, 16);
+  assert.equal(decodeSnowballClientEvent(withWind), undefined);
+  assert.deepEqual(decodeSnowballEvents(Buffer.concat([noWind, withWind, encodeSnowballRelay({
+    kind: "hit", ballId: 0x1235, throwerId: 3, confirmerId: 9, zone: "torso",
+  })])), [basic, windy, { kind: "hit", ballId: 0x1235, throwerId: 3, confirmerId: 9, zone: "torso" }]);
+  assert.equal(decodeSnowballEvents(withWind.subarray(0, -1)), null);
+  const malformed = withWind.slice();
+  new DataView(malformed.buffer).setInt16(18, 3000, true);
+  assert.equal(decodeSnowballEvents(malformed), null);
+});
+
+test("G-09 authoritative relay snapshots wind at throw time and ignores client supplied fields", { timeout: 8000 }, async context => {
+  const epochs: number[] = [];
+  let epoch = 123_456;
+  const { join } = await fixture(context, {
+    wallNow: () => epoch,
+    snowballWindForThrow(event, at) {
+      epochs.push(at);
+      assert.equal(event.ballId, throwBall.ballId);
+      return { east: -.75, north: 1.125 };
+    },
+  });
+  const [shooter, observer] = await Promise.all([join("投手风"), join("观测风")]);
+  shooter.socket.send(encodePose(pose));
+  observer.socket.send(encodePose(pose));
+  await observer.snapshot.next(records => records.some(record => record.id === shooter.id));
+  shooter.socket.send(encodeSnowballThrow({ ...throwBall, windEast: 99, windNorth: 99 } as typeof throwBall));
+  const result = await observer.events.next(events => events[0]?.kind === "throw");
+  assert.deepEqual(result, [{ kind: "throw", throwerId: shooter.id, ...throwBall,
+    windEast: -.75, windNorth: 1.125 }]);
+  assert.deepEqual(epochs, [epoch]);
+});
+
 test("P2b relays only nearby throws and credits the first delivered victim claim exactly once", { timeout: 8000 }, async context => {
   const { join } = await fixture(context, { width: 180 });
   const [shooter, victim, watcher, distant] = await Promise.all([
