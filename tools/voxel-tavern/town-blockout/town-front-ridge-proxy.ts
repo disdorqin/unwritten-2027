@@ -258,6 +258,11 @@ export function buildFrontRidgeProxy(): Group {
   const pixelMap = makeFrontRidgePixelTexture();
   const material = new MeshLambertMaterial({
     vertexColors: true, fog: false, side: DoubleSide, map: pixelMap,
+    // M15: daylight crater views saw one black facet despite varied actual
+    // pigments. A low warm soil bounce keeps ore/ochre strata legible with
+    // the mountain face in partial shadow; the 32px texture is unchanged.
+    // This is material response, not another distance-fog patch or light rig.
+    emissive: '#a98a56', emissiveIntensity: .38,
   });
   // Pale-slope fix, route 甲 (总控 ruling 2026-11-21, crater-mouth case):
   // the scene fog (360–1300 m) would swallow the peak at ~1470 m, so the
@@ -289,6 +294,14 @@ export function buildFrontRidgeProxy(): Group {
   const mesh = new Mesh(merged, material);
   mesh.name = 'front-ridge-350-proxy-mesh';
   mesh.onBeforeRender = (_renderer, scene) => {
+    // Use the same sky-day state as the existing town's lighting switch.
+    // The previous constant terrain bounce made a yellow NIGHT cliff; the
+    // night value deliberately returns the mountain to a dark silhouette.
+    // No changes to fog distances, no new lights or scene-level UI switches.
+    if (scene.background instanceof Color) {
+      const skyLuminance=(scene.background.r+scene.background.g+scene.background.b)/3;
+      material.emissiveIntensity=skyLuminance>.25 ? .38 : .025;
+    }
     const shader = material.userData.shader as
       { uniforms: { proxyFogColor: { value: Color } } } | undefined;
     if (shader && scene.fog && 'color' in scene.fog) {
