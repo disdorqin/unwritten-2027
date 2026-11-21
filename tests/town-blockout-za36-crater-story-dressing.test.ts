@@ -40,6 +40,23 @@ test('ZA-36 adds clustered crater traces off the real spiral, preserves shaft an
     return { east: road.anchor.east + p.east * c + p.north * s,
       north: road.anchor.north + p.north * c - p.east * s };
   });
+  // Quantitative proximity coverage along the entire signed-off spiral.
+  // This is a conservative flat-distance proxy, not a claim of GPU visibility.
+  const trailPieces = placements.filter(piece => piece.band === 'trail');
+  let routeLength = 0;
+  let maxNearestCluster = 0;
+  for (const [index, position] of route.entries()) {
+    if (index > 0) {
+      const last = route[index - 1]!;
+      routeLength += Math.hypot(position.east - last.east, position.north - last.north);
+    }
+    const nearest = Math.min(...trailPieces.map(piece =>
+      Math.hypot(piece.east - position.east, piece.north - position.north)));
+    maxNearestCluster = Math.max(maxNearestCluster, nearest);
+  }
+  assert.ok(routeLength > 820 && routeLength < 832, `spiral length ${routeLength}`);
+  assert.ok(maxNearestCluster < 21, `largest bare trail gap ${maxNearestCluster}m`);
+  assert.equal(new Set(trailPieces.map(piece => piece.cluster)).size, 28);
   const survey = surveyZa31CraterWinch(road);
   assert.ok(survey, 'existing winch needs to remain the unique interactable machine');
   for (const piece of placements) {
