@@ -303,24 +303,54 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   // ---------- Shankou station (platform on the north side, at the pass node's foot) ----------
   shelter(296, 502, groundAt(296, 502), shankouY, 0, '山口站');
   {
-    // Timetable board: the board stands now, its text follows once the branch
-    // timetable is measured (the book's single text-later exception).
+    // Timetable board: text landed per 《文本-山口站时刻牌-2026-11-21》
+    // (two chalk columns; the northbound column keeps three blank cells —
+    // blank is content, the branch has only just opened).
     const bx = 308, bn = 506;
     const g = groundAt(bx, bn);
     for (const s of [-1, 1]) box(timber, bx + s * .8, g + 1.1, bn, .12, 2.2, .12);
     sign(bx, g + 2.2, bn, 0, 2, 1.15, (c, w, h) => {
-      c.strokeStyle = 'rgba(61,44,28,.55)'; c.lineWidth = 3;
-      c.beginPath(); c.moveTo(w * .06, h * .24); c.lineTo(w * .94, h * .24); c.stroke();
+      c.fillStyle = '#35312b'; c.fillRect(0, 0, w, h);
+      // Column heads + grid: header rule, vertical divider, four row rules.
+      const gridTop = h * .26, gridBottom = h * .78;
+      c.strokeStyle = 'rgba(231, 225, 207, .7)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(w * .06, gridTop); c.lineTo(w * .94, gridTop); c.stroke();
+      c.beginPath(); c.moveTo(w * .5, gridTop); c.lineTo(w * .5, gridBottom); c.stroke();
       for (let row = 0; row < 4; row++) {
-        const y = h * (.4 + row * .14);
+        const y = gridTop + (gridBottom - gridTop) * (row + 1) / 4;
         c.beginPath(); c.moveTo(w * .06, y); c.lineTo(w * .94, y); c.stroke();
       }
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#e7e1cf';
+      c.font = `${Math.round(h * .095)}px "Noto Sans SC", sans-serif`;
+      c.fillText('环镇线', w * .28, h * .16);
+      c.fillText('北行 · 往坑口', w * .72, h * .16);
+      // Loop line: all four cells filled, neat chalk.
+      c.font = `${Math.round(h * .085)}px "Noto Sans SC", sans-serif`;
+      for (const [row, text] of ['晨一班', '午一班', '暮一班', '夜一班'].entries()) {
+        const y = gridTop + (gridBottom - gridTop) * (row + .5) / 4;
+        c.fillText(text, w * .28, y);
+      }
+      // Northbound: only the first cell filled, older chalk; the night cell
+      // keeps an erasure smear — written once, wiped, unexplained.
+      c.fillStyle = '#b9b2a0';
+      c.fillText('晨一班', w * .72, gridTop + (gridBottom - gridTop) * .125);
+      c.strokeStyle = 'rgba(231, 225, 207, .16)'; c.lineWidth = 5;
+      for (let s = 0; s < 3; s++) {
+        const y = gridTop + (gridBottom - gridTop) * (.875 + (s - 1) * .03);
+        c.beginPath(); c.moveTo(w * .56, y); c.lineTo(w * .88, y); c.stroke();
+      }
+      // Newer hand under the board.
+      c.fillStyle = '#e7e1cf';
+      c.font = `${Math.round(h * .075)}px "Noto Sans SC", sans-serif`;
+      c.fillText('北行余班，通车后填。急事找守山口的。', w / 2, h * .9);
     });
   }
 
   // ---------- Crater-mouth station, freight siding, hopper car, freight shed ----------
   const kengkouAt = shelter(-44.5, 168, groundAt(-44.5, 168), kengkouY, 1.7, '坑口站');
   const boards: { id: string; east: number; north: number }[] = [];
+  boards.push({ id: 'shankou-timetable', east: 308, north: 506 });
   {
     // Timetable board at the shelter's east end (《文本-坑区牌面》 §四,
     // verbatim chalk in two hands — the corner note's night empty run is

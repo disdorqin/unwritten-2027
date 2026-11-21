@@ -19,7 +19,8 @@ test('rail extension: alignment survey is complete and at grade at both stations
     `branch length ${alignment.length.toFixed(1)} m outside the surveyed band`);
   assert.deepEqual(alignment.divergence, { east: 477, north: 335 });
   assert.deepEqual(alignment.stations.map(s => s.id), ['shankou-station', 'kengkou-station']);
-  assert.deepEqual(alignment.boards.map(s => s.id), ['kengkou-timetable']);
+  assert.deepEqual(alignment.boards.map(s => s.id), ['shankou-timetable', 'kengkou-timetable']);
+  assert.deepEqual(alignment.boards[0], { id: 'shankou-timetable', east: 308, north: 506 });
   assert.deepEqual(alignment.whistlePoints.map(s => s.id), ['shankou-portal', 'kengkou-approach']);
   const shankou = alignment.stations[0];
   assert.ok(Math.abs(shankou.railY - (grid.heightAt(296, 502) + .62)) <= .8,
