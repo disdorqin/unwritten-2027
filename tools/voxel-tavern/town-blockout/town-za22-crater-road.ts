@@ -1,4 +1,5 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { mountZa31CraterCamp } from './town-za31-crater-camp';
@@ -51,6 +52,10 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       inside[i] = Number(Math.hypot(east - anchor.east, north - anchor.north) < carrierHoleRadius);
     }
   }
+  // Batch adjacent 48 m ground tiles into spatially bounded 2×3 clusters:
+  // fewer draw calls than one mesh per tile, without turning the full west
+  // expanse into a single always-visible 240×540 m mesh.
+  const groundBatches = new Map<string, BufferGeometry[]>();
   for (let north = 0; north < northLimit; north += tileSize) {
     for (let east = survey.west; east < 0; east += tileSize) {
       const endN = Math.min(north + tileSize, northLimit), endE = Math.min(east + tileSize, 0);
@@ -71,10 +76,22 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       footprint.setAttribute('position', new Float32BufferAttribute(positions, 3));
       footprint.setIndex(indices);
       footprint.computeVertexNormals();
-      const mesh = new Mesh(footprint, tileGround);
-      mesh.name = 'meteor-crater-west-ground';
-      group.add(mesh);
+      const batch = `${Math.floor((east - survey.west) / (tileSize * 2))}:${Math.floor(north / (tileSize * 3))}`;
+      const members = groundBatches.get(batch) ?? [];
+      members.push(footprint);
+      groundBatches.set(batch, members);
     }
+  }
+
+  for (const [batch, members] of groundBatches) {
+    const joined = mergeGeometries(members);
+    if (!joined) throw new Error(`West crater terrain batch ${batch} cannot be merged`);
+    for (const member of members) member.dispose();
+    joined.computeBoundingSphere();
+    const mesh = new Mesh(joined, tileGround);
+    mesh.name = 'meteor-crater-west-ground';
+    mesh.userData.groundBatch = batch;
+    group.add(mesh);
   }
 
   const metal = new MeshStandardMaterial({ color: 0x73534a, roughness: 1 });
