@@ -2519,11 +2519,29 @@ function canStandAtActivity(east: number, north: number, feet: number) {
   return walkable(east, north) && !obstructed(east, north, feet);
 }
 
+const icePalaceAimRay = new Raycaster();
+const icePalaceAimCenter = new Vector2(0, 0);
+/** The fragment pickup only arms while the crosshair is actually on the
+ * fragment model; the spot's own range gate handles proximity. */
+function icePalaceAimedAt(object: Object3D) {
+  icePalaceAimRay.setFromCamera(icePalaceAimCenter, camera);
+  return icePalaceAimRay.intersectObject(object, true).length > 0;
+}
+
 function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity,
   createSlide: typeof createCastleIceSlideActivity) {
   const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
     onlineThroneOwned: presence.onlineThroneOwned,
+    rites: {
+      read: () => presence.getIcePalaceRiteState(),
+      request: rite => presence.requestIcePalaceRite(rite),
+    },
+    fragmentPickup: {
+      present: () => presence.icePalaceFragmentPresent(),
+      isTargeted: target => icePalaceAimedAt(target.object),
+      pickUpOne: id => presence.requestIcePalaceFragment(id),
+    },
     stateChanged(state) {
       if (state.crowned && !icePalaceSelfCrowned) refinement?.enthrone();
       icePalaceSelfCrowned = state.crowned;
