@@ -290,7 +290,17 @@ export function mountZa36CraterOuterworks(road: Road) {
   supplyLamp.position.set(supply.east,supply.height+2.6,-supply.north);
   group.add(supplyLamp);
   addAction('map','查看坑区手绘图',supply.east+1.9,supply.north+1.4);
-  addAction('telescope','使用望筒观坑',supply.east-2.9,supply.north-1.1,2.6);
+  // The roof viewer is a silhouette prop until an actual stair/floor exists.
+  // This survey-grade tripod is reachable from the EAST outside path, so
+  // pressing E never teleports the camera through an inaccessible roof.
+  const scope = ground(supply.east+7.2,supply.north+2.8);
+  part('foundation',scope.east,scope.north,.06,.78,.12,.78);
+  for (let side=-1;side<=1;side++)
+    part('timber',scope.east+side*.34,scope.north+.12,.12,.13,1.12,.13,0,side*.14);
+  part('iron',scope.east,scope.north,1.12,.28,.45,.28);
+  part('ochre',scope.east,scope.north,1.56,.42,.3,1.06,.36);
+  part('iron',scope.east,scope.north+.45,1.6,.36,.08,.12);
+  addAction('telescope','使用望筒观坑',scope.east-.25,scope.north-.65,1.75);
 
   const assembly=buildingSite('crater-assembly-ground','assembly',-25,110,18,18,8.3);
   // 2 flagpoles, 6 sled parking rails, 3 stacked-supply groups, 1 notice
@@ -423,7 +433,7 @@ export function mountZa36CraterOuterworks(road: Road) {
     return nearest;
   }
   return {
-    group,sites,actions,wallParts,fenceParts,gate:{east:-11.8,north:159,halfWidth:gateHalf},
+    group,sites,actions,wallParts,fenceParts,scope,gate:{east:-11.8,north:159,halfWidth:gateHalf},
     fenceGate:{east:gateE,north:gateNorth},
     pointLights:[supplyLamp,fire,northLight],
     actionAt,wallBlocks,firewood,setNight,isFireFed:()=>warmed,

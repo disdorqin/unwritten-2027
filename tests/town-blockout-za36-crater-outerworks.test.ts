@@ -89,7 +89,7 @@ test('ZA-36 round 3: 16px materials, readable signs, no enormous mesh/draw-call 
     'do not seed spaceship wreckage inside the crater');
 });
 test('ZA-36 round 4: look/listen/do action hotspots and daytime/nightside fire feedback', () => {
-  const {works:w}=fixture();
+  const {road,works:w}=fixture();
   assert.deepEqual([...new Set(w.actions.map(a=>a.id))].sort(),
     ['firewood','map','registration','survey','telescope']);
   for(const action of w.actions) {
@@ -97,6 +97,14 @@ test('ZA-36 round 4: look/listen/do action hotspots and daytime/nightside fire f
     assert.equal(w.actionAt(action.east,action.north,action.height+10),undefined);
   }
   assert.equal(w.actionAt(0,0,0),undefined);
+  const scope=w.actions.find(a=>a.id==='telescope')!;
+  const hut=w.sites.find(s=>s.id==='core-supply-station')!;
+  assert.equal(w.scope.height,road.heightAt(w.scope.east,w.scope.north));
+  assert.ok(scope.east>hut.east+hut.footprint[0]/2+1,
+    'actual user scope must be on reachable EAST exterior, not the roof behind glass');
+  assert.ok(Math.hypot(scope.east-w.scope.east,scope.north-w.scope.north)<1.2);
+  assert.ok(Math.abs(scope.height-w.scope.height)<.1,
+    'interaction foot stays on the real sloped ground, not six metres up on a roof');
   const fire=w.pointLights.find(light=>light.name==='za36-empty-north-shelter-night-brazier')!;
   const supply=w.pointLights.find(light=>light.name==='za36-supply-night-window')!;
   assert.equal(w.isFireFed(),false);

@@ -2431,6 +2431,7 @@ function openTavernSeatActions() {
   }
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+let craterTelescopeActive = false;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2488,8 +2489,11 @@ function currentAction() {
         openPlace('坑区手绘图', '图上只有井口、栈道与黑石带，最后一格尚未标注。');
         break;
       case 'telescope':
-        activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
-        announceActivity('望筒朝向坑沿与坑心');
+        craterTelescopeActive = !craterTelescopeActive;
+        if (craterTelescopeActive) {
+          activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
+          announceActivity('望筒已对准坑心 · E 收起 · 离开底座自动退出');
+        } else announceActivity('收起望筒 · 恢复正常视角');
         break;
       case 'firewood':
         announceActivity(works.firewood() ? '添柴后火盆亮了一些' : '火盆恢复原样');
@@ -3266,7 +3270,13 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
       sledFrame.shellRoll + sledRide.roll(), sledFrame.shellPitch, sledRide.active() ? sledFrame : undefined);
   } else visuals.hide();
   visuals.update(dt);
-  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
+  // Scope framing is controlled here because the sled camera reconciles
+  // FOV on every frame. Walking away always releases the optical zoom.
+  const scoped = westCraterRoad?.outerworks.actions.find(site => site.id === 'telescope');
+  if (craterTelescopeActive && (!scoped || !walking || cloudRoute.active() || sledRide.active() ||
+      Math.hypot(x - scoped.east, n - scoped.north) > scoped.range + .8 ||
+      Math.abs(ground - scoped.height) > 3)) craterTelescopeActive = false;
+  const targetFov = craterTelescopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;
     camera.updateProjectionMatrix();
