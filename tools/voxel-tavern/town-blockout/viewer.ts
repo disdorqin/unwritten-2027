@@ -2430,6 +2430,7 @@ function openTavernSeatActions() {
   }
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+let craterScopeActive = false;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2474,6 +2475,36 @@ function currentAction() {
   }
   const cable = cloudRoute.action({ east: x, north: n, height: ground });
   if (cable) return cable;
+  const crater = !homeReturn && x < 0 ? ensureWestCraterRoad() : undefined;
+  const worksite = crater?.mouthWorks.actionAt(x, n, ground);
+  if (worksite && crater) return {
+    label: worksite.id === 'crater-ground-telescope' && craterScopeActive
+      ? '收起望筒' : worksite.id === 'crater-ground-telescope' ? '使用望筒观坑'
+        : worksite.id === 'crater-registration' ? '阅读入坑告示'
+          : worksite.id === 'crater-supply-map' ? '查看坑区手绘图' : '给哨棚火盆添柴',
+    run() {
+      switch (worksite.id) {
+        case 'crater-ground-telescope':
+          craterScopeActive = !craterScopeActive;
+          if (craterScopeActive) {
+            activityContext.face(crater.anchor.east, crater.anchor.north,
+              crater.anchor.rimHeight - 18);
+            announceActivity('望筒对准陨石坑 · 再按 E 收起，离开自动恢复视角');
+          } else announceActivity('望筒已收起');
+          break;
+        case 'crater-registration':
+          openPlace('坑口登记', '入坑登记 · 天黑前出坑。值班格仍为空。');
+          break;
+        case 'crater-supply-map':
+          openPlace('坑区手绘图', '图上标着井口、栈道和黑石带。最后一格仍然空白。');
+          break;
+        case 'crater-guard-firewood':
+          announceActivity(crater.mouthWorks.feedFirewood()
+            ? '火盆添了柴 · 火光更亮' : '火盆恢复原样');
+          break;
+      }
+    },
+  };
   const nearest = nearestTownActivity(activitySpots, x, n, ground);
   const rack = homeReturn ? undefined : nearestTownActivity(townSledRacks.actions, x, n, ground);
   if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
@@ -3241,7 +3272,12 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
       sledFrame.shellRoll + sledRide.roll(), sledFrame.shellPitch, sledRide.active() ? sledFrame : undefined);
   } else visuals.hide();
   visuals.update(dt);
-  const targetFov = sledRide.active() ? 58 + sledFrame.fov : 58;
+  const scopeSpot = westCraterRoad?.mouthWorks.interactions.find(
+    point => point.id === 'crater-ground-telescope');
+  if (craterScopeActive && (!walking || cloudRoute.active() || sledRide.active() || !scopeSpot ||
+      Math.hypot(x - scopeSpot.east, n - scopeSpot.north) > scopeSpot.radius + .8 ||
+      Math.abs(ground - scopeSpot.height) > 2.5)) craterScopeActive = false;
+  const targetFov = craterScopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;
     camera.updateProjectionMatrix();
@@ -3309,6 +3345,14 @@ renderer.setAnimationLoop(now => {
   cloudRoute.update({ east: x, north: n, height: ground }, !sledRide.active());
   updateGuardPosts();
   if (cloudRoute.active()) {
+    // A transfer can start while the scope is active; cable cabin frames do
+    // not run the sled camera's ordinary FOV reset. Never carry a 25° view
+    // into the other domain or leave it stuck on mobile after transfer.
+    if (craterScopeActive) {
+      craterScopeActive = false;
+      camera.fov = 58;
+      camera.updateProjectionMatrix();
+    }
     renderCloudRoute(frameSeconds);
     return;
   }

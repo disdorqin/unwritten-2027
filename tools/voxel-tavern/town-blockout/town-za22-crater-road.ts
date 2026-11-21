@@ -21,6 +21,7 @@ const tileSize = 48;
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
+  readonly mouthWorks: ReturnType<typeof buildCraterMouthWorks>;
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
@@ -146,5 +147,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(outerWorks.group);
   const winch = mountZa31CraterWinch(road);
   if (winch) group.add(winch.group);
-  return { ...road, winch };
+  // Expose only the already mounted, approved mouth-work interaction sites.
+  // No second industrial belt or duplicate geometry is added by the viewer.
+  return { ...road, winch, mouthWorks };
 }

@@ -59,6 +59,13 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const group = new Group();
   group.name = 'crater-mouth-works';
   const sites: CraterMouthSite[] = [];
+  const interactions: CraterMouthSite[] = [];
+  let brazierLight: PointLight | undefined;
+  let fireFed = false;
+  function registerInteraction(id: string, east: number, north: number, radius: number) {
+    const height = heightAt(east, north);
+    if (height !== undefined) interactions.push({ id, east, north, height, radius });
+  }
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 41, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
@@ -148,6 +155,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const light = new PointLight(new Color(palette.ember), intensity, distance, 2);
     light.position.set(east, h, -north);
     group.add(light);
+    return light;
   }
 
   // ---------- §三.8 assembly ground (south rim, outside the haul gap) ----------
@@ -175,6 +183,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const p = fr.at(-4.6 + s * 1.15, 2.2);
       box(timber, p.east, g + .95, p.north, .14, 1.9, .14, fr.yaw);
     }
+    registerInteraction('crater-registration', board.east, board.north, 1.8);
     sign(board.east, g + 1.62, board.north, fr.yaw, 2.5, 1.5, (c, w, h) => {
       c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
       c.strokeStyle = '#5d4630'; c.lineWidth = 6; c.strokeRect(14, 14, w - 28, h - 28);
@@ -268,6 +277,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(brass, scope.east + Math.sin(a) * .3, roofY + .45, scope.north + Math.cos(a) * .3, .06, .95, .06, fr.yaw, .3 * Math.cos(a), .3 * Math.sin(a));
     }
     cyl(brass, scope.east, roofY + 1.12, scope.north, .11, .16, 1.25, 9, fr.yaw, Math.PI / 2 - .18);
+    // A second, ground-accessible field telescope complements the roof's
+    // scenic telescope. Its E hotspot cannot operate through an inaccessible
+    // deck and it leaves the two-metre front door/stair route clear.
+    const fieldScope = fr.at(-W / 2 - 2.25, D / 2 + 1.3);
+    const fieldHeight = heightAt(fieldScope.east, fieldScope.north);
+    if (fieldHeight !== undefined) {
+      const e = fieldScope.east, n = fieldScope.north;
+      cyl(stone, e, fieldHeight + .12, n, .46, .54, .24, 9);
+      for (const tilt of [-.28, 0, .28]) {
+        box(timber, e + tilt, fieldHeight + .68, n + .13, .10, 1.08, .12, fr.yaw, tilt);
+      }
+      cyl(brass, e, fieldHeight + 1.43, n, .12, .17, .85, 9, fr.yaw, Math.PI / 2 - .17);
+      registerInteraction('crater-ground-telescope', e, n, 1.85);
+    }
     // Door lanterns (one real light) and the doorway step.
     for (const s of [-1, 1]) {
       const lp = fr.at(s * 1.05, D / 2 + .3);
@@ -292,6 +315,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const counter = fr.at(1.4, 1.1);
     box(timberWarm, counter.east, g + foundH + .5, counter.north, 2.4, 1, .6, fr.yaw);
     const mapP = fr.at(0, -D / 2 + .16);
+    const mapFoot = fr.at(0, -D / 2 + 1.3);
+    registerInteraction('crater-supply-map', mapFoot.east, mapFoot.north, 1.55);
     sign(mapP.east, g + foundH + 1.75, mapP.north, fr.yaw + Math.PI, 2.1, 1.35, (c, w, h) => {
       c.fillStyle = '#e3d3a8'; c.fillRect(0, 0, w, h);
       c.strokeStyle = '#5d4630'; c.lineWidth = 5; c.strokeRect(12, 12, w - 24, h - 24);
@@ -325,7 +350,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const brz = fr.at(.7, .3);
     cyl(iron, brz.east, g + .32, brz.north, .52, .34, .5, 9);
     part(glow, new ConeGeometry(.34, .42, 7), brz.east, g + .68, brz.north);
-    lampLight(brz.east, g + .95, brz.north, 6, 9.5);
+    brazierLight = lampLight(brz.east, g + .95, brz.north, 6, 9.5);
+    registerInteraction('crater-guard-firewood', brz.east, brz.north, 1.65);
     for (let i = 0; i < 5; i++) {
       const p = fr.at(-1.15 + (i % 3) * .24, .9 + Math.floor(i / 3) * .3);
       box(timber, p.east, g + .12 + (i % 2) * .16, p.north, .16, .24 + (i % 2) * .2, .16, fr.yaw + i);
@@ -511,5 +537,26 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     group.add(mesh);
   }
 
-  return { group, sites, debrisCount, rimRadius: meteorCraterRimRadius };
+  function actionAt(east: number, north: number, feet: number) {
+    let best: CraterMouthSite | undefined;
+    let distance = Infinity;
+    for (const spot of interactions) {
+      const d = Math.hypot(east - spot.east, north - spot.north);
+      if (d < spot.radius && d < distance && Math.abs(feet - spot.height) <= 2) {
+        best = spot;
+        distance = d;
+      }
+    }
+    return best;
+  }
+  function feedFirewood() {
+    if (!brazierLight) return false;
+    fireFed = !fireFed;
+    brazierLight.intensity = fireFed ? 8.4 : 6;
+    return fireFed;
+  }
+  return {
+    group, sites, interactions, actionAt, feedFirewood,
+    debrisCount, rimRadius: meteorCraterRimRadius,
+  };
 }
