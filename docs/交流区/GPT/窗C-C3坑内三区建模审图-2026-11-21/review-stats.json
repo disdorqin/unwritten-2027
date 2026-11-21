@@ -1,0 +1,311 @@
+{
+  "scope": "REAL B-01 surface mount in offline Chrome; not official town domain/player/server",
+  "views": {
+    "rim": {
+      "current": "rim",
+      "phase": "day",
+      "frames": 8,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -11,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        41.235992903678365,
+        -0.7800000000000002,
+        32.57445915510782
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 597674
+    },
+    "upper": {
+      "current": "upper",
+      "phase": "day",
+      "frames": 17,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -26.683566931092916,
+        -13.379999999999999,
+        29.731965219841836
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        15.808172189355723,
+        -7.780000000000001,
+        -42.71889736441801
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 535313
+    },
+    "middle": {
+      "current": "middle",
+      "phase": "day",
+      "frames": 26,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        -21.902939889051712,
+        -23.53,
+        20.206464911423456
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        8.107065949094647,
+        -17.58,
+        -34.818644167988936
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 601576
+    },
+    "floor": {
+      "current": "floor",
+      "phase": "day",
+      "frames": 34,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        5,
+        -34,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        15,
+        -33.33,
+        7
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 422454
+    },
+    "well": {
+      "current": "well",
+      "phase": "day",
+      "frames": 42,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -34,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        5,
+        -33.33,
+        4.2
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 316261
+    },
+    "overview": {
+      "current": "overview",
+      "phase": "day",
+      "frames": 49,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        0,
+        -24,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        72,
+        45,
+        61
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 235010
+    },
+    "pit-bottom-to-terrace-day.png": {
+      "current": "auditFloorToTerrace",
+      "phase": "day",
+      "frames": 55,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        40,
+        -15,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 7,
+      "triangles": 112649,
+      "eye": [
+        16,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 194640,
+      "mode": "offline-visual-day-night-review"
+    },
+    "pit-bottom-to-terrace-night.png": {
+      "current": "auditFloorToTerrace",
+      "phase": "night",
+      "frames": 63,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        40,
+        -15,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 7,
+      "triangles": 112649,
+      "eye": [
+        16,
+        -33.33,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 91695,
+      "mode": "offline-visual-day-night-review"
+    },
+    "rim-to-pit-bottom-day.png": {
+      "current": "auditRimToFloor",
+      "phase": "day",
+      "frames": 71,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        10,
+        -32,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        51.5,
+        -3.2299999999999995,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 523325,
+      "mode": "offline-visual-day-night-review"
+    },
+    "rim-to-pit-bottom-night.png": {
+      "current": "auditRimToFloor",
+      "phase": "night",
+      "frames": 80,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "target": [
+        10,
+        -32,
+        0
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        51.5,
+        -3.2299999999999995,
+        0
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 310686,
+      "mode": "offline-visual-day-night-review"
+    }
+  },
+  "errors": [],
+  "passed": true
+}
