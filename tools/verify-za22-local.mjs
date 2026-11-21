@@ -73,6 +73,8 @@ function routePresence(url, ports) {
     return { hostname: host, port: ports.mountain, path: url.replace(/^\/presence-mountain/, '/presence') };
   if (pathname === '/presence-west' || pathname.startsWith('/presence-west/'))
     return { hostname: host, port: ports.west, path: url.replace(/^\/presence-west/, '/presence') };
+  if (pathname === '/presence-sky' || pathname.startsWith('/presence-sky/'))
+    return { hostname: host, port: ports.sky, path: url.replace(/^\/presence-sky/, '/presence') };
   if (pathname === '/presence' || pathname.startsWith('/presence/'))
     return { hostname: host, port: ports.town, path: url };
   return undefined;
@@ -150,13 +152,14 @@ try {
   // Presence now has a separate start.ts: compile the complete NodeNext graph,
   // not just index.ts, whose JS-suffixed dependency is otherwise left un-emitted.
   await finish(startNode([tsc, '-p', 'tsconfig.server.json', '--outDir', compiled], {}));
-  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort() };
+  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort(), sky: await freePort() };
   frontend = servePreview(ports, commit);
   const port = await usePort(frontend);
   const base = `http://${host}:${port}`;
   presence = startNode([join(compiled, 'presence', 'index.js')], {
     NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
     PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
+    PRESENCE_SKY_PORT: String(ports.sky),
     TOWN_NIGHT_SCHEDULE: JSON.stringify({
       dawnEpoch: Date.now() - 390_000, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
     }),

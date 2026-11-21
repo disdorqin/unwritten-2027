@@ -11,6 +11,7 @@ import {
   tavernCraftCaskBoxes, tavernCraftMaterials, type TavernCraftBench, type TavernCraftMaterial, type TavernCraftPart,
 } from './tavern-craft-bench';
 import { relocateTavernFurniture, tavernFurnitureColliders, tavernModelToPlot } from './tavern-seats';
+import { mountPeanutDish } from './tavern-peanut-dish';
 
 export { tavernModelToPlot };
 
@@ -378,6 +379,12 @@ export function buildTavernLandmark(plot: TownPlot) {
     [4.0625, tread, z, 4.1875, tread + 1, back],
     [5.6875, tread, z, 5.8125, tread + 1, back],
   ]);
+  // Peanut dish on the craft-bench top (ZA-20 dressing): the back-left
+  // corner of the bench surface, clear of the vise, the eight material
+  // wells and the hand tools. Its pickup anchor rides in the dish's own
+  // userData for the ZB-22 pickup grammar; feeding rules are ZB-25's.
+  const [dishX, dishY, dishZ] = transform(-2.95, 4.1875, -4.42);
+  mountPeanutDish(near, { x: dishX, y: dishY, z: dishZ });
   group.userData.colliders = [...wallBoxes, ...stairRails].map(toBox);
   group.userData.floors = [...floorBoxes, ...porchSteps, ...stairs].map(toBox);
   return group;

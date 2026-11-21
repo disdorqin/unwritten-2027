@@ -1,9 +1,14 @@
 export const SNOWBALL_EVENT_PREFIX = 0xff;
 const THROW = 1;
 const HIT = 2;
+// Server-only relay variant; clients must continue sending the legacy THROW.
+const THROW_WIND = 3;
 const THROW_BYTES = 16;
 const HIT_BYTES = 8;
 const RELAY_ID_BYTES = 2;
+const WIND_BYTES = 4;
+const WIND_SCALE = 1000;
+const MAX_WIND_ACCELERATION = 2;
 const COORDINATE_SCALE = 100;
 const DIRECTION_SCALE = 32767;
 
@@ -24,7 +29,7 @@ export type SnowballHit = {
 };
 
 export type SnowballClientEvent = ({ kind: 'throw' } & SnowballThrow) | ({ kind: 'hit' } & SnowballHit);
-export type SnowballRelayEvent = ({ kind: 'throw'; throwerId: number } & SnowballThrow)
+export type SnowballRelayEvent = ({ kind: 'throw'; throwerId: number; windEast?: number; windNorth?: number } & SnowballThrow)
   | ({ kind: 'hit'; confirmerId: number } & SnowballHit);
 type Binary = ArrayBuffer | ArrayBufferView;
 
@@ -50,9 +55,13 @@ function coordinate(value: number): number {
   return Math.max(0, Math.min(65535, Math.round(value * COORDINATE_SCALE)));
 }
 
-function writeThrow(event: SnowballThrow, throwerId?: number): Uint8Array {
+function writeThrow(event: SnowballThrow, throwerId?: number, wind?: Readonly<{ east: number; north: number }>): Uint8Array {
   const relayed = throwerId !== undefined;
-  const view = frame(THROW, THROW_BYTES + (relayed ? RELAY_ID_BYTES : 0), event.ballId);
+  // A dedicated kind lets a relay stream concatenate legacy and windy throws unambiguously.
+  const withWind = relayed && wind !== undefined && Number.isFinite(wind.east) && Number.isFinite(wind.north) &&
+    Math.abs(wind.east) <= MAX_WIND_ACCELERATION && Math.abs(wind.north) <= MAX_WIND_ACCELERATION;
+  const view = frame(withWind ? THROW_WIND : THROW,
+    THROW_BYTES + (relayed ? RELAY_ID_BYTES : 0) + (withWind ? WIND_BYTES : 0), event.ballId);
   const origin = relayed ? 6 : 4;
   if (relayed) view.setUint16(4, throwerId, true);
   view.setUint16(origin, coordinate(event.east), true);
@@ -62,6 +71,10 @@ function writeThrow(event: SnowballThrow, throwerId?: number): Uint8Array {
   view.setInt16(origin + 6, Math.round(event.dirX * DIRECTION_SCALE / length), true);
   view.setInt16(origin + 8, Math.round(event.dirY * DIRECTION_SCALE / length), true);
   view.setInt16(origin + 10, Math.round(event.dirZ * DIRECTION_SCALE / length), true);
+  if (withWind && wind) {
+    view.setInt16(origin + 12, Math.round(wind.east * WIND_SCALE), true);
+    view.setInt16(origin + 14, Math.round(wind.north * WIND_SCALE), true);
+  }
   return bytesOf(view);
 }
 
@@ -84,7 +97,10 @@ export function encodeSnowballHit(event: SnowballHit): Uint8Array {
 }
 
 export function encodeSnowballRelay(event: SnowballRelayEvent): Uint8Array {
-  return event.kind === 'throw' ? writeThrow(event, event.throwerId) : writeHit(event, event.confirmerId);
+  return event.kind === 'throw'
+    ? writeThrow(event, event.throwerId, event.windEast === undefined || event.windNorth === undefined
+      ? undefined : { east: event.windEast, north: event.windNorth })
+    : writeHit(event, event.confirmerId);
 }
 
 function readThrow(view: DataView, offset: number, origin: number): SnowballThrow | undefined {
@@ -134,14 +150,19 @@ export function decodeSnowballEvents(bytes: Binary): SnowballRelayEvent[] | null
   while (offset < view.byteLength) {
     if (offset + 2 > view.byteLength || view.getUint8(offset) !== SNOWBALL_EVENT_PREFIX) return null;
     const kind = view.getUint8(offset + 1);
-    if (kind !== THROW && kind !== HIT) return null;
-    const size = (kind === THROW ? THROW_BYTES : HIT_BYTES) + RELAY_ID_BYTES;
+    if (kind !== THROW && kind !== HIT && kind !== THROW_WIND) return null;
+    const size = (kind === HIT ? HIT_BYTES : THROW_BYTES) + RELAY_ID_BYTES + (kind === THROW_WIND ? WIND_BYTES : 0);
     if (offset + size > view.byteLength) return null;
-    if (kind === THROW) {
+    if (kind === THROW || kind === THROW_WIND) {
       const value = readThrow(view, offset, offset + 6);
       const throwerId = view.getUint16(offset + 4, true);
       if (!value || !throwerId) return null;
-      events.push({ kind: 'throw', throwerId, ...value });
+      if (kind === THROW_WIND) {
+        const windEast = view.getInt16(offset + 18, true) / WIND_SCALE;
+        const windNorth = view.getInt16(offset + 20, true) / WIND_SCALE;
+        if (Math.abs(windEast) > MAX_WIND_ACCELERATION || Math.abs(windNorth) > MAX_WIND_ACCELERATION) return null;
+        events.push({ kind: 'throw', throwerId, ...value, windEast, windNorth });
+      } else events.push({ kind: 'throw', throwerId, ...value });
     } else {
       const value = readHit(view, offset, offset + 8);
       const confirmerId = view.getUint16(offset + 6, true);

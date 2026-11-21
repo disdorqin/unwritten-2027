@@ -16,13 +16,19 @@ import {
 import { createPresenceEgress } from './egress.js';
 import { createIceThroneAuthority } from './ice-throne-authority.js';
 import { isIcePalaceThroneRecord } from './ice-throne-site.js';
+import {
+  createCableLineAuthority, type CableLineFrame,
+} from './cable-line-authority.js';
+import type {
+  Za36CableRepairEvent, Za36CableRepairLine,
+} from '../../tools/voxel-tavern/town-blockout/town-za36-cable-repair';
 import { isSummitPassportAction } from '../shared/summit-passport.js';
 import { snowWallBuildLayers } from '../shared/snow-stock.js';
 import {
   createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
 } from './summit-passport-authority.js';
 import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
-import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX } from './snowball-events.js';
+import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX, type SnowballThrow } from './snowball-events.js';
 import {
   SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_CELL, buildHalfAllows,
   classifyFreeWallSite, classifyWallSite, freeWallTeam, sledWallImpact, sledWallMaximumReportSpeed, wallCellCentre,
@@ -33,6 +39,8 @@ import {
 } from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import { createTownNightBeaconHost } from './town-night-beacon.js';
+import { createTownOutdoorWeatherHost } from './town-outdoor-weather.js';
+import type { TownOutdoorWeatherState } from '../shared/town-outdoor-weather.js';
 import {
   ceremonyLandingAnnouncement, ceremonyLandingCentre, ceremonyLandingLeadMs, ceremonyLandingOuterRadius,
   ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
@@ -50,6 +58,8 @@ import {
 export type PresenceConnectionLog = (line: string) => void;
 
 export type PresenceTownNightOptions = Readonly<{
+  /** Same authoritative calendar anchor as the G-09 weather cycle. */
+  dawnEpoch?: number;
   scheduleAt: (now: number) => TownNightSchedule | undefined;
   restoredBeaconAt?: number | null;
   saveBeacon?: (at: number) => void;
@@ -59,6 +69,19 @@ export type PresenceTownNightOptions = Readonly<{
 type TownNightFeed = Readonly<{
   snapshot(): TownNightWindowState;
   subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherFeed = Readonly<{
+  dawnEpoch: number;
+  snapshot(): TownOutdoorWeatherState;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherOptions = Readonly<{
+  dawnEpoch: number;
+  restoredWarningAt?: number | null;
+  saveWarning?: (at: number) => void;
+  onSaveError?: (error: unknown) => void;
 }>;
 
 type Options = {
@@ -73,6 +96,12 @@ type Options = {
   townNight?: PresenceTownNightOptions;
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
+  /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
+  townOutdoorWeather?: TownWeatherOptions;
+  /** Secondary rooms relay primary-town weather rather than running a second schedule. */
+  townOutdoorWeatherFeed?: TownWeatherFeed;
+  /** Optional G-09 server-authoritative shot-time wind. Leave disabled until clients support relay kind 3. */
+  snowballWindForThrow?: (shot: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
   /** Enables legacy team matches in an isolated room. */
   formalSnowfight?: boolean;
@@ -164,6 +193,34 @@ function metresToLimit(value: number): number {
   return Math.round(value * 100);
 }
 
+function isCableRepairLine(value: unknown): value is Za36CableRepairLine {
+  return value === 1 || value === 2;
+}
+
+const cableWakeImpacts: ReadonlySet<string> = new Set(['sled', 'snow-wall', 'snowball', 'night-window']);
+
+/** Shape-check a client cable-repair event before it reaches the authority. */
+function isCableRepairEvent(value: unknown): value is Za36CableRepairEvent {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return false;
+  const event = value as { kind: unknown; impact?: unknown; effort?: unknown; index?: unknown };
+  switch (event.kind) {
+    case 'wake':
+      return typeof event.impact === 'string' && cableWakeImpacts.has(event.impact);
+    case 'strike-rust':
+    case 'pull-brake':
+    case 'release-cable':
+    case 'tighten-cable':
+      return true;
+    case 'pry-cable':
+      return typeof event.effort === 'number' && Number.isFinite(event.effort);
+    case 'take-weight':
+    case 'hang-weight':
+      return Number.isInteger(event.index);
+    default:
+      return false;
+  }
+}
+
 function refuse(socket: Duplex, status: string): void {
   socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 }
@@ -193,6 +250,31 @@ export async function createPresenceServer(options: Options = {}) {
     },
   };
   const nightFeed = ownedNightFeed ?? options.townNightFeed;
+  const weatherConfig = options.townOutdoorWeather;
+  if (weatherConfig && options.townOutdoorWeatherFeed) {
+    throw new Error('A presence room cannot author and follow the same outdoor weather.');
+  }
+  if (weatherConfig && nightConfig?.dawnEpoch !== undefined &&
+      weatherConfig.dawnEpoch !== nightConfig.dawnEpoch) {
+    throw new Error('Outdoor weather must use the town night dawn anchor.');
+  }
+  const weatherListeners = new Set<(frame: string) => void>();
+  const townWeather = weatherConfig && createTownOutdoorWeatherHost({
+    now: wallNow,
+    dawnEpoch: weatherConfig.dawnEpoch,
+    saveWarning: weatherConfig.saveWarning,
+    broadcast: frame => publishTownWeather(JSON.stringify(frame)),
+  }, weatherConfig.restoredWarningAt);
+  const ownedWeatherFeed: TownWeatherFeed | undefined = townWeather && {
+    dawnEpoch: weatherConfig!.dawnEpoch,
+    snapshot: townWeather.snapshot,
+    subscribe(receive) {
+      weatherListeners.add(receive);
+      return () => { weatherListeners.delete(receive); };
+    },
+  };
+  const weatherFeed = ownedWeatherFeed ?? options.townOutdoorWeatherFeed;
+  let weatherErrorReported = false;
   let lastTownNightWindow = townNight?.snapshot();
   let nightErrorReported = false;
   const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
@@ -225,6 +307,13 @@ export async function createPresenceServer(options: Options = {}) {
   const peers = new Map<number, Peer>();
   const pollSessions = new Map<string, Peer>();
   let crownOwner: number | null = null;
+  // Cable repair authority (window B's module): one repair state machine
+  // per line, this server the only writer. The wire frame is B's
+  // CableLineFrame plus the full snapshot the client repair host syncs
+  // from; flags stay derived inside the authority, never set here.
+  const cableLine = createCableLineAuthority();
+  const cableLineWire = (frame: CableLineFrame) =>
+    JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
   const iceThrone = createIceThroneAuthority(({ ownerId, message }) => {
     const oldOwner = crownOwner;
     crownOwner = ownerId;
@@ -454,6 +543,27 @@ export async function createPresenceServer(options: Options = {}) {
     for (const receive of nightListeners) receive(frame);
   }
 
+  function publishTownWeather(frame: string) {
+    broadcast(frame);
+    for (const receive of weatherListeners) receive(frame);
+  }
+
+  function updateTownWeather() {
+    if (!townWeather) return;
+    try {
+      townWeather.tick();
+      weatherErrorReported = false;
+    } catch (error) {
+      // A failed durable warning receipt must not be followed by a false cue.
+      // Retry while the warning remains fresh without killing player sessions.
+      if (!weatherErrorReported) {
+        weatherErrorReported = true;
+        if (weatherConfig?.onSaveError) weatherConfig.onSaveError(error);
+        else console.error('Town weather warning could not advance:', error);
+      }
+    }
+  }
+
   function updateTownNight() {
     if (!townNight) return;
     let state;
@@ -677,7 +787,20 @@ export async function createPresenceServer(options: Options = {}) {
       if (pending.expiresAt <= time) peer.pendingThrows.delete(ballId);
     }
     if (peer.pendingThrows.has(event.ballId)) return;
-    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id });
+    // Wind is snapshotted only after all origin/rate/identity checks. Client
+    // packets are still legacy 16 B and contain no trusted weather field.
+    // An unconfigured or invalid authority falls back to the old 18 B relay.
+    let wind: Readonly<{ east: number; north: number }> | undefined;
+    if (options.snowballWindForThrow) {
+      try {
+        const sampled = options.snowballWindForThrow(event, wallNow());
+        if (sampled && Number.isFinite(sampled.east) && Number.isFinite(sampled.north) &&
+            Math.abs(sampled.east) <= 2 && Math.abs(sampled.north) <= 2) wind = sampled;
+      } catch { /* Fail closed: old no-wind relay, never crash the presence room. */ }
+    }
+    const relay = encodeSnowballRelay({ ...event, throwerId: peer.id,
+      ...(wind && { windEast: wind.east, windNorth: wind.north }),
+    });
     const recipients = new Set<Peer>();
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) {
       if (send(recipient, relay)) recipients.add(recipient);
@@ -1054,6 +1177,15 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'cable-repair') {
+        const line = 'line' in message ? message.line : undefined;
+        const event = 'event' in message ? message.event : undefined;
+        if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
+          const frame = cableLine.applyEvent(line, event);
+          if (frame) broadcast(cableLineWire(frame));
+        }
+        return;
+      }
       if (message.kind === 'summit-passport') {
         const action = 'action' in message ? message.action : undefined;
         if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
@@ -1125,13 +1257,17 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true,
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true,
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
+      townOutdoorWeather: weatherFeed?.snapshot(),
+      townOutdoorWeatherDawnEpoch: weatherFeed?.dawnEpoch,
     }));
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
+    send(peer, cableLineWire(cableLine.hello(1)));
+    send(peer, cableLineWire(cableLine.hello(2)));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose, ...(other.id === crownOwner ? { crowned: true } : {}) }));
     }
@@ -1281,6 +1417,7 @@ export async function createPresenceServer(options: Options = {}) {
     });
   });
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
+  const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
   const tick = setInterval(() => {
     const time = now();
     // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
@@ -1294,6 +1431,7 @@ export async function createPresenceServer(options: Options = {}) {
     iceThrone.tick(time);
     const epoch = wallNow();
     updateTownNight();
+    updateTownWeather();
     updateCeremony(epoch);
     updateBell(epoch);
     if (photo) updatePhoto(epoch);
@@ -1330,13 +1468,16 @@ export async function createPresenceServer(options: Options = {}) {
     address: () => http.address() as AddressInfo,
     stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
     townNightFeed: ownedNightFeed,
+    townOutdoorWeatherFeed: ownedWeatherFeed,
     close() {
       if (stop) return stop;
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
       stopFollowingNight?.();
+      stopFollowingWeather?.();
       nightListeners.clear();
+      weatherListeners.clear();
       for (const peer of peers.values()) {
         clearTimeout(peer.joinTimer);
         peer.socket?.terminate();

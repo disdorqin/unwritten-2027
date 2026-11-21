@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, Color, Group, Mesh, MeshLambertMaterial } from 'three';
 import { ConeGeometry, Matrix4 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -134,8 +134,43 @@ export function buildFrontRidgeProxy(): Group {
     index++;
   }
   const merged = mergeGeometries(parts)!;
-  const mesh = new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, fog: false, side: 2 }));
+  const material = new MeshLambertMaterial({ vertexColors: true, fog: false, side: 2 });
+  // Pale-slope fix, route 甲 (总控 ruling 2026-11-21, crater-mouth case):
+  // the scene fog (360–1300 m) would swallow the peak at ~1470 m, so the
+  // material keeps fog:false — but unfogged it was the only fully bright
+  // distant surface at night and read as a flat pale sheet. The material
+  // now applies its own long-range fog in-shader: the same linear family
+  // as the scene fog at town distances (factor ≈0.18 at the crater
+  // mouth's ~540 m), far stretched to 2600 m so the crown still reads
+  // (≈0.55 at 1470 m). The fog color tracks scene.fog every frame via
+  // onBeforeRender below, so day and night both haze correctly.
+  const PROXY_FOG_NEAR = 100, PROXY_FOG_FAR = 2600;
+  material.onBeforeCompile = shader => {
+    shader.uniforms.proxyFogColor = { value: new Color('#adc2dd') };
+    shader.uniforms.proxyFogNear = { value: PROXY_FOG_NEAR };
+    shader.uniforms.proxyFogFar = { value: PROXY_FOG_FAR };
+    material.userData.shader = shader;
+    shader.vertexShader = 'varying float vProxyFogDepth;\n' + shader.vertexShader.replace(
+      '#include <project_vertex>',
+      '#include <project_vertex>\n\tvProxyFogDepth = - mvPosition.z;');
+    shader.fragmentShader = ('uniform vec3 proxyFogColor;\nuniform float proxyFogNear;\n'
+      + 'uniform float proxyFogFar;\nvarying float vProxyFogDepth;\n'
+      + shader.fragmentShader).replace(
+      '#include <opaque_fragment>',
+      `#include <opaque_fragment>
+\tfloat proxyFogFactor = clamp((vProxyFogDepth - proxyFogNear) / (proxyFogFar - proxyFogNear), 0.0, 1.0);
+\tgl_FragColor.rgb = mix(gl_FragColor.rgb, proxyFogColor, proxyFogFactor);`);
+  };
+  material.customProgramCacheKey = () => 'front-ridge-proxy-long-fog';
+  const mesh = new Mesh(merged, material);
   mesh.name = 'front-ridge-350-proxy-mesh';
+  mesh.onBeforeRender = (_renderer, scene) => {
+    const shader = material.userData.shader as
+      { uniforms: { proxyFogColor: { value: Color } } } | undefined;
+    if (shader && scene.fog && 'color' in scene.fog) {
+      shader.uniforms.proxyFogColor.value.copy(scene.fog.color);
+    }
+  };
   group.add(mesh);
   return group;
 }

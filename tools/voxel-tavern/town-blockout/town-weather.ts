@@ -1,4 +1,8 @@
 import type { CeremonyState } from './town-ceremony';
+import {
+  townOutdoorWeatherEffects, townOutdoorWhiteoutFirePoolMeters,
+  type TownOutdoorWeather, type TownOutdoorWeatherState,
+} from '../../../src/shared/town-outdoor-weather';
 
 const minuteMs = 60_000;
 const weatherSlotCount = 64;
@@ -55,6 +59,37 @@ export function townSnowWeatherAt(sharedTime: number, ceremonyOverride?: TownSno
   const progress = t * t * (3 - 2 * t);
   if (ceremonyOverride) return sampleProfile(ceremonyOverride, ceremonyOverride, 0);
   return sampleProfile(slot.tier, next, progress);
+}
+
+const outdoorSnowTiers: Readonly<Record<TownOutdoorWeather, TownSnowTier>> = {
+  'clear-snow': 'light', wind: 'medium', whiteout: 'heavy',
+};
+
+/**
+ * G-09 renders the *authoritative* Presence weather, rather than choosing a
+ * second client-local 64-slot schedule. The old ceremony curve is unchanged.
+ */
+export function townSnowWeatherForOutdoorState(
+  state: TownOutdoorWeatherState, areaExposure = 1,
+  nightFogFar = Infinity, litFireDistance = Infinity,
+) {
+  const tier = outdoorSnowTiers[state.weather];
+  const snow = sampleProfile(tier, tier, 0);
+  const weatherVisibility = townOutdoorWeatherEffects[state.weather].visibilityMeters;
+  const limit = Number.isFinite(nightFogFar) && nightFogFar > 0 ? Math.min(snow.fogFar, nightFogFar) : snow.fogFar;
+  if (weatherVisibility === null) return { ...snow, fogNear: Math.min(snow.fogNear, limit * .95), fogFar: limit, skyColor: undefined };
+  // The G-09 approved exposure table varies the whiteout range from ~12 m
+  // in open ground to 30 m in the sheltered plaza, no new draw passes.
+  const exposure = Number.isFinite(areaExposure) ? Math.max(.25, Math.min(1, areaExposure)) : 1;
+  const fireRadius = townOutdoorWhiteoutFirePoolMeters;
+  const fireNear = Number.isFinite(litFireDistance)
+    ? fireRadius * Math.max(0, Math.min(1, (fireRadius - litFireDistance) / 2)) : 0;
+  return {
+    ...snow,
+    fogNear: fireNear,
+    fogFar: Math.max(fireNear + .1, Math.min(limit, weatherVisibility / exposure)),
+    skyColor: '#d8e2e9',
+  };
 }
 
 export function advanceWeatherCover(

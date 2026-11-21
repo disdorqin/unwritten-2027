@@ -15,6 +15,7 @@ import { readCeremonyArrival, type CeremonyArrival } from '../../../src/presence
 import { createTownChat, parseTownChat, type TownChatMessage, type TownChatScope } from './town-chat';
 import { createTownPresenceClock } from './town-presence-clock';
 import { createTownPresenceNight } from './town-presence-night';
+import { createTownPresenceWeather } from './town-presence-weather';
 import { isFireworksSeed, isFireworksTheme, type FireworksTheme } from '../../../src/presence/firework-sites';
 import { readPersonalFireworkRelay, type PersonalFireworkRelay, type PersonalFireworkRequest } from '../../../src/presence/personal-fireworks';
 import { plazaPhotoLineup, readPlazaPhotoNotice, type PlazaPhotoNotice, type PlazaPhotoPerson } from '../../../src/presence/plaza-photo';
@@ -30,6 +31,10 @@ import {
   pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
+import type {
+  Za36CableRepairEvent, Za36CableRepairLine, Za36CableRepairState,
+} from './town-za36-cable-repair';
+import type { CableLineFlags } from '../../../src/presence/cable-line-authority';
 import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
@@ -43,6 +48,9 @@ import {
 import {
   skyCityPresenceEndpoint, toSkyCityPresencePose, fromSkyCityPresencePose,
 } from '../../../src/shared/sky-city-presence-domain';
+import {
+  fromMinePresencePose, minePresenceEndpoint, toMinePresencePose,
+} from '../../../src/shared/underground-mine-presence-domain';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -110,6 +118,7 @@ export function createTownPresence(
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
   const townNight = createTownPresenceNight(clock.now);
+  const townWeather = createTownPresenceWeather(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
   const ownerSubmit = document.querySelector<HTMLButtonElement>('#town-mascot-owner-verify');
@@ -138,6 +147,9 @@ export function createTownPresence(
   let playFireworks: ((seed: number, theme: FireworksTheme, ageMs: number, own: boolean) => void) | undefined;
   let bellSupported = false;
   let iceThroneSupported = false;
+  let cableLineSupported = false;
+  const cableLineStates = new Map<Za36CableRepairLine, Za36CableRepairState>();
+  let cableLineFlags: CableLineFlags = { cableLine1Open: false, cableLine2Open: false };
   let crownedId: number | null = null;
   const bellEvents: BellEvent[] = [];
   let onBellEvent: ((event: BellEvent) => void) | undefined;
@@ -185,10 +197,11 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let domain: 'town' | 'mountain' | 'west' | 'sky' = 'town';
+  let domain: 'town' | 'mountain' | 'west' | 'sky' | 'mine' = 'town';
   function presencePath(path: string) {
     if (domain === 'town') return path;
     if (domain === 'sky') return skyCityPresenceEndpoint(path);
+    if (domain === 'mine') return minePresenceEndpoint(path);
     const room = domain === 'mountain' ? mountainPresencePath : westPresencePath;
     return room + path.slice('/presence'.length);
   }
@@ -337,6 +350,7 @@ export function createTownPresence(
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
         townNight.disconnect();
+        townWeather.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
           stopPoll(false);
           retryPollLater();
@@ -377,6 +391,7 @@ export function createTownPresence(
     socketJoined = false;
     haveId = false;
     townNight.disconnect();
+    townWeather.disconnect();
     resetOwnerSession();
     joinedId = null;
     joinedName = undefined;
@@ -459,14 +474,32 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        townNightWindow?: unknown; state?: unknown;
+        cableLine?: boolean; line?: unknown; flags?: unknown;
+        townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
+      if (message.type === 'event' && (message.kind === 'town-outdoor-weather' || message.kind === 'town-outdoor-weather-warning')) {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) townWeather.accept(message);
+        return;
+      }
       if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
         if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
           if (message.kind === 'town-night-window') townNight.acceptWindow(message.state);
           else townNight.acceptBeacon(message);
+        }
+        return;
+      }
+      if (message.type === 'cable-line') {
+        const line = message.line === 1 || message.line === 2 ? message.line : undefined;
+        const state = message.state as Za36CableRepairState | undefined;
+        if (line && state && typeof state === 'object' && state.line === line &&
+          typeof state.version === 'number' && typeof state.stage === 'string') {
+          cableLineStates.set(line, state);
+          const flags = message.flags as CableLineFlags | undefined;
+          if (flags && typeof flags.cableLine1Open === 'boolean' && typeof flags.cableLine2Open === 'boolean') {
+            cableLineFlags = { cableLine1Open: flags.cableLine1Open, cableLine2Open: flags.cableLine2Open };
+          }
         }
         return;
       }
@@ -596,6 +629,8 @@ export function createTownPresence(
             crownedId = null;
           }
           iceThroneSupported = message.iceThrone === true;
+          cableLineSupported = message.cableLine === true;
+          if (!cableLineSupported) { cableLineStates.clear(); cableLineFlags = { cableLine1Open: false, cableLine2Open: false }; }
           haveId = true;
           link.joined(roster.size + 1);
           joinedId = id;
@@ -614,6 +649,7 @@ export function createTownPresence(
             if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
+          townWeather.join(message.townOutdoorWeather, message.townOutdoorWeatherDawnEpoch);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
             resetRetry();
@@ -675,9 +711,11 @@ export function createTownPresence(
     const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
       const received = domain === 'sky'
         ? fromSkyCityPresencePose({ east: localEast, north: localNorth, height: localHeight })
-        : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
-            north: localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0),
-            height: localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0) };
+        : domain === 'mine'
+          ? fromMinePresencePose({ east: localEast, north: localNorth, height: localHeight })
+          : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
+              north: localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0),
+              height: localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0) };
       if (!received) return; // Invalid sky-room record must not be painted in another domain.
       const { east, north, height } = received;
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
@@ -743,6 +781,10 @@ export function createTownPresence(
     } else if (domain === 'sky') {
       const safe = toSkyCityPresencePose(local);
       if (!safe) return; // Never let the legacy uint16 centimetres clamp world Y750+.
+      writePresencePose(safe, seq, outgoing);
+    } else if (domain === 'mine') {
+      const safe = toMinePresencePose(local);
+      if (!safe) return; // Never let the legacy uint16 centimetres clamp world -90.
       writePresencePose(safe, seq, outgoing);
     } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
@@ -876,7 +918,19 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    /** Latest server-authored cable repair state for a line, or undefined
+     * when the room predates the cable authority or no frame arrived yet. */
+    getCableLineState: (line: Za36CableRepairLine) => cableLineSupported ? cableLineStates.get(line) : undefined,
+    getCableLineFlags: (): CableLineFlags => cableLineFlags,
+    /** Submit one repair event; the authority's broadcast frame is the
+     * only state change a client ever applies. Returns false offline. */
+    sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
+      cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
     getTownNightWindow: townNight.state,
+    /** True server-authored weather state or undefined when a legacy room lacks G-09. */
+    getTownOutdoorWeather: townWeather.state,
+    getTownWeatherDawnEpoch: townWeather.dawnEpoch,
+    onTownOutdoorWeatherWarning: townWeather.onWarning,
     townNightConnectedAt: townNight.connectedAt,
     onTownNightBeacon: townNight.onBeacon,
     northRidgeNightOpen: () => townNight.state()?.canEnterRestricted === true,
@@ -885,8 +939,13 @@ export function createTownPresence(
       else if (domain === 'mountain') switchDomain('town');
     },
     setWestDomain(enabled: boolean) {
-      if (enabled && domain !== 'mountain' && domain !== 'sky') switchDomain('west');
+      if (enabled && domain !== 'mountain' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
       else if (!enabled && domain === 'west') switchDomain('town');
+    },
+    /** Only the dream-chain transition may call this, at the descent blackout / return landing. */
+    setMineDomain(enabled: boolean) {
+      if (enabled) switchDomain('mine');
+      else if (domain === 'mine') switchDomain('west');
     },
     /** Only the starport transition authority may call this after a successful transfer. */
     setSkyCityDomain(enabled: boolean, skyScene?: Scene, returnMountainScene?: Scene) {

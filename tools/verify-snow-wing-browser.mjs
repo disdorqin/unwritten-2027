@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const [checkoutPath, outputPath, mode] = process.argv.slice(2);
-assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings'),
-  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings]');
+assert.ok(checkoutPath && outputPath && (mode === undefined || mode === '--rings' || mode === '--target' || mode === '--target-straight' || mode === '--nine-course'),
+  'Usage: node tools/verify-snow-wing-browser.mjs <checkout> <output> [--rings|--target|--target-straight|--nine-course]');
 const withRings = mode === '--rings';
+const nineCourse = mode === '--nine-course';
+const withTarget = mode === '--target' || mode === '--target-straight' || nineCourse;
+const straightTarget = mode === '--target-straight' || nineCourse;
 const checkout = path.resolve(checkoutPath);
 const output = path.resolve(outputPath);
 const viteRoot = path.join(checkout, 'tools/voxel-tavern');
+const builtDir = process.env.SNOW_WING_BUILT_DIR ? path.resolve(process.env.SNOW_WING_BUILT_DIR) : undefined;
 const viewport = { width: 800, height: 520 };
 const requireRoot = createRequire(path.join(checkout, 'package.json'));
 const { chromium } = requireRoot('playwright');
@@ -33,9 +38,13 @@ let pins;
 
 const git = (...args) => execFileSync('git', args, { cwd: checkout, encoding: 'utf8', timeout: 5_000 }).trim();
 const sources = [
-  ['P-1', 'cb47ce2', 'main-summit-block.ts', 'a0dd7b83be27a461a177dd6032114aef96bef6d2'],
-  ['P-4', '90019a5', 'main-summit-registration.ts', '80b739784292592010f61552bc7325034d8ff33a'],
-  ['F-7', '0981021', 'flight-equipment-visuals.ts', 'eb7e008899c64bf2b777d206ea8f306086a0270a'],
+  ['P-1', 'cb47ce2', 'main-summit-block.ts', ['a0dd7b83be27a461a177dd6032114aef96bef6d2']],
+  // The later integration refactors the original reach predicate without changing its geometry.
+  ['P-4', '90019a5', 'main-summit-registration.ts', [
+    '80b739784292592010f61552bc7325034d8ff33a',
+    '8e8f9e990171f8c001791e920d3403767c523e1f',
+  ]],
+  ['F-7', '0981021', 'flight-equipment-visuals.ts', ['eb7e008899c64bf2b777d206ea8f306086a0270a']],
 ];
 
 async function timed(label, run, ms) {
@@ -131,16 +140,27 @@ async function main() {
   pins = sources.map(([part, ref, name, expected]) => {
     const file = 'tools/voxel-tavern/town-blockout/' + name;
     const blob = git('hash-object', file);
-    assert.equal(blob, expected, `${part} does not match the reviewed source pin`);
+    assert.ok(expected.includes(blob), `${part} does not match any reviewed source pin: ${blob}`);
     return { part, ref, file, blob };
   });
-  server = await timed('Vite start', createServer({
-    root: viteRoot, configFile: path.join(viteRoot, 'vite.config.ts'),
-    cacheDir: path.join(output, '.vite-cache'),
-    optimizeDeps: { noDiscovery: true, include: [] }, logLevel: 'warn',
-    server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false },
-  }), timeLeft(20_000));
-  await timed('Vite listen', server.listen(), timeLeft(12_000));
+  if (builtDir) {
+    assert.ok(existsSync(path.join(builtDir, 'main-summit-snow-wing-review.html')),
+      'Compiled review must already exist; do not serve a stale or missing preview');
+    const sirv = requireRoot('sirv');
+    const http = createHttpServer(sirv(builtDir, { dev: false, single: false }));
+    server = { httpServer: http, close: () => new Promise((resolve, reject) =>
+      http.close(error => error ? reject(error) : resolve())) };
+    await timed('Built preview HTTP listen', new Promise((resolve, reject) =>
+      http.once('error', reject).listen(0, '127.0.0.1', resolve)), timeLeft(12_000));
+  } else {
+    server = await timed('Vite start', createServer({
+      root: viteRoot, configFile: path.join(viteRoot, 'vite.config.ts'),
+      cacheDir: path.join(output, '.vite-cache'),
+      optimizeDeps: { noDiscovery: true, include: [] }, logLevel: 'warn',
+      server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false },
+    }), timeLeft(20_000));
+    await timed('Vite listen', server.listen(), timeLeft(12_000));
+  }
   const { port } = server.httpServer.address();
   const executablePath = process.env.CHROMIUM_PATH ??
     (!existsSync(chromium.executablePath()) && existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
@@ -160,7 +180,7 @@ async function main() {
   p.on('response', response => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`);
   });
-  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}`;
+  const reviewUrl = `http://127.0.0.1:${port}/main-summit-snow-wing-review.html?proof=1${withRings ? '&rings=1' : ''}${withTarget ? '&target=1' : ''}${nineCourse ? '&course=nine' : ''}`;
   const response = await p.goto(reviewUrl, {
     waitUntil: 'domcontentloaded', timeout: timeLeft(30_000),
   });
@@ -170,7 +190,25 @@ async function main() {
   assert.equal(initial.flightTimeScale, 12);
   assert.ok(!initial.claimed && !initial.registration.snowWingEligible && !initial.wing.visible);
   if (withRings) assert.deepEqual(initial.rings?.passed ?? [], []);
-  else assert.equal(initial.rings ?? null, null);
+  else if (nineCourse) {
+    assert.equal(initial.rings?.count, 9, 'The all-course reviewer must mount all nine surveyed hoops');
+    assert.equal(initial.rings.score.nextRing, 0);
+    assert.equal(initial.nineRingArt?.lightCount, 2);
+    assert.ok(initial.nineRingArt?.text.launch.includes('九环试飞'));
+    assert.ok(initial.nineRingArt?.budgetDraws <= 20);
+    assert.ok(initial.nineRingArt.drawCount > 0, 'At least one of the authored signs or pennants must actually render');
+    assert.equal(initial.nineRingAuthority, null, 'Host-run cannot start before accepted takeoff');
+    assert.equal(initial.nightPreview, false);
+    assert.equal(initial.skyHex, 'b1c5dc');
+    const help = await p.locator('#course-help').evaluate(element => ({ hidden: element.hidden, text: element.textContent }));
+    assert.equal(help.hidden, false);
+    assert.match(help.text, /正穿得 1 分.*擦环得 0.5 分.*正式主峰每日风场/);
+  } else assert.equal(initial.rings ?? null, null);
+  if (withTarget) {
+    assert.equal(initial.practiceTarget?.lamps, 2, 'Target must use two real PointLight sources');
+    assert.ok(initial.practiceTarget.target.north < -3000, 'Practice target must be surveyed at the neutral flight touchdown');
+    assert.equal(initial.practiceTarget.settlement ?? null, null);
+  } else assert.equal(initial.practiceTarget ?? null, null);
   const outside = await lodgeInteraction('out-of-reach');
   assert.ok(!outside.registration.snowWingEligible && !outside.claimed);
   await walkNorth(1013.55);
@@ -205,6 +243,67 @@ async function main() {
   assert.ok(lift.launchProbe.pathClear && lift.launchProbe.drop >= 15);
   assert.equal(lift.wing.name, 'snow-wing');
   assert.ok(lift.wing.width >= 3.79);
+  if (withTarget) {
+    const guidance = await p.locator('#target-reading').evaluate(output => output.value);
+    assert.match(guidance, /练习落靶导航.*距目标.*m.*修正|练习落靶导航.*距目标.*m.*正前方/);
+  }
+  if (straightTarget) {
+    if (nineCourse) {
+      assert.equal(lift.nineRingAuthority?.lastFrame > 0, true);
+      assert.equal(lift.nineRingAuthority?.rejectedFrames, 0);
+      const first = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing >= 1);
+      assert.equal(first.rings.score.results[0].grade, 'clean');
+      assert.ok(first.nineRingArt.drawCount > 0, 'The native airborne camera must render real course art');
+      await capture('zd08-nine-first-hoop');
+      await p.keyboard.press('n');
+      const dark = await watch(() => window.__snowWingReview.getState().nightPreview);
+      assert.equal(dark.skyHex, '1b2a43');
+      assert.ok(dark.ambientIntensity < initial.ambientIntensity);
+      await capture('zd08-nine-night-hoops');
+      await p.keyboard.press('n');
+      await watch(() => !window.__snowWingReview.getState().nightPreview);
+      const middle = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing >= 5);
+      assert.equal(middle.rings.score.scoreHalfPoints, 10);
+      await capture('zd08-nine-middle-hoops');
+      const cleared = await watch(() => window.__snowWingReview.getState().rings?.score?.nextRing === 9);
+      assert.equal(cleared.rings.score.scoreHalfPoints, 18);
+      assert.equal(cleared.rings.score.streak, 9);
+      assert.deepEqual(cleared.rings.score.results.map(ring => ring.grade), Array(9).fill('clean'));
+      assert.equal(cleared.rings.results.length, 9);
+      await capture('zd08-nine-all-clear');
+      await p.keyboard.press('n');
+      await watch(() => window.__snowWingReview.getState().nightPreview);
+    }
+    const touchdown = await watch(() => {
+      const s = window.__snowWingReview.getState();
+      return s.flight?.phase === 'landed' && !!s.practiceTarget?.settlement;
+    }, null, 85_000);
+    const landed = await capture(nineCourse ? 'zd08-nine-night-bullseye' : 'zd08-practice-bullseye');
+    assert.equal(landed.practiceTarget.settlement.grade, 'bullseye', 'Neutral real flight should land at its surveyed target');
+    assert.ok(landed.practiceTarget.settlement.horizontalMetres <= 2,
+      `Native bullseye miss: ${landed.practiceTarget.settlement.horizontalMetres} m`);
+    assert.equal(landed.flight.touchdown, 'soft');
+    if (nineCourse) {
+      assert.equal(landed.rings.score.nextRing, 9);
+      assert.equal(landed.rings.score.scoreHalfPoints, 18);
+      assert.equal(landed.rings.score.streak, 9);
+      assert.equal(landed.rings.count, 9);
+      assert.equal(landed.nineRingAuthority?.finalized, true);
+      assert.equal(landed.nineRingAuthority?.rejectedFrames, 0);
+      assert.equal(landed.nineRingAuthority?.nextRing, 9);
+      assert.equal(landed.nineRingAuthority?.scoreHalfPoints, 18);
+      assert.equal(landed.nineRingAuthority?.streak, 9);
+      assert.equal(landed.nineRingAuthority?.target?.grade, 'bullseye');
+      assert.equal(landed.nineRingAuthority?.target?.horizontalMetres,
+        landed.practiceTarget?.settlement?.horizontalMetres, 'Renderer scoring and host-accepted landing must agree');
+      assert.ok(landed.nineRingArt.drawCount > 0, 'The finished route board must be visible from the landing camera');
+      assert.equal(landed.nightPreview, true, 'The authored landing board must be checked in nighttime lighting');
+      assert.ok(screenshots.every(entry => entry.state.draws <= 150 && entry.state.triangles <= 120_000),
+        'The isolated nine-ring art must stay within main summit draw and triangle budgets');
+    }
+    assert.deepEqual(errors, []);
+    return { initial, lift, touchdown, landed, walkedAfterLanding: landed };
+  }
   let ringEvidence;
   if (withRings) {
     assert.equal(lift.rings?.count, 3);
@@ -269,6 +368,14 @@ async function main() {
   }, null, 85_000);
   const landed = await capture('f1-touchdown');
   assert.equal(landed.flight.touchdown, 'soft');
+  if (withTarget) {
+    assert.equal(landed.practiceTarget.settlement?.targetId, 'practice-finish');
+    assert.equal(landed.practiceTarget.settlement?.touchdown, landed.flight.touchdown);
+    assert.ok(Number.isFinite(landed.practiceTarget.settlement?.horizontalMetres));
+    assert.ok(landed.practiceTarget.settlement?.horizontalMetres >= 0);
+    const targetText = await p.locator('#target-reading').evaluate(output => output.value);
+    assert.match(targetText, /练习落靶.*距心.*m/);
+  }
   assert.equal(landed.flight.usesBothHands, false);
   assert.ok(landed.claimed && landed.registration.snowWingEligible);
   if (ringEvidence) assert.deepEqual(landed.rings.passed, ringEvidence.completed.rings.passed);
@@ -308,13 +415,21 @@ try {
   }
   const evidence = {
     head: git('rev-parse', 'HEAD'), browserVersion, viewport, pins, screenshots, walkthrough, errors, teardownErrors, failure,
+    servedCompiledBundle: Boolean(builtDir),
     stateAtFailure, elapsedMs: Math.round(performance.now() - started), passed: !failure && teardownErrors.length === 0,
     fixture: 'Isolated summit P-1/P-4/F-7 scene. Real browser keys walk from outside through the lodge to the registry and wing rack. Flight uses the 12× evidence clock and a flat terrain fallback outside P-1.' +
-      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : ''),
+      (withRings ? ' In this run, a neutral glide passes three surveyed rings in order before the turning and recovery checks.' : '') +
+      (withTarget ? ' The target is an isolated neutral-landing practice fixture, not the official ZD-08 world-host footslope course.' : '') +
+      (straightTarget ? ' The native keyboard takeoff is followed by hands-off neutral flight and a surveyed bullseye touchdown.' : '') +
+      (nineCourse ? ' Nine surveyed rings each score a clean accepted-frame forward crossing with real rendered pennants and an authored landing board.' : '') +
+      (builtDir ? ' Served from the compiled static release candidate rather than the Vite dev server.' : ''),
   };
   await writeFile(path.join(output, 'snow-wing-browser-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify({ passed: evidence.passed, elapsedMs: evidence.elapsedMs, screenshots: screenshots.length,
     ratio: walkthrough?.ratio, stallSink: walkthrough?.sink, rings: walkthrough?.ringEvidence?.completed.rings.passed,
+    practiceTarget: walkthrough?.landed.practiceTarget?.settlement,
+    nineCourse: nineCourse && { score: walkthrough?.landed.rings?.score, render: walkthrough?.landed.nineRingArt,
+      authority: walkthrough?.landed.nineRingAuthority },
     errors, teardownErrors, failure }));
   if (!failure) assert.deepEqual(teardownErrors, [], 'A fixture process failed to close cleanly');
 }

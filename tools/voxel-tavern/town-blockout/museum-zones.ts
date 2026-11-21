@@ -4,12 +4,46 @@ import type { MuseumBuilder } from './museum-kit';
 // Builder coordinates: x/z are pre-scale (x1.125 in finish), y is metres.
 // The museum door is on the SOUTH side (builder z +13); circulation spines
 // (centre line x=0 and the z=10.2 stair approach) stay clear by design.
-// Exhibit text policy: structure and format only — description/date lines
-// stay blank pending review; zone titles come from the design document.
+// ZA-06 exhibit captions: approved public-layer text from the controller's
+// 2026-11-21 four-zone label sheet. Do not rewrite or expose the true-layer plot.
 
 export const MUSEUM_MINE_TUNNEL = { x: -18.3, from: 8, to: -11 } as const;
 export const MUSEUM_SPECIMEN_COUNT = 8;
 export const MUSEUM_PAGE_SLOTS = 12;
+
+export const museumFoundingCaptions = {
+  pot: '第一口锅\n开镇那年烧的，煮化了第一场雪',
+  lamp: '第一盏灯\n羊油点的，点了一冬没灭过',
+  cloth: '第一匹布\n羊毛织的，够全镇做一身',
+  books: '镇志底稿\n前三页是三个人的字，第四页起没人认领',
+  tool: '第一把锤\n镇公所的第一块基石，就是它凿的',
+} as const;
+export const museumHeartStoneCaption = '镇心石\n开镇之年坠在镇北，抬回来那天全镇停工';
+export const museumSandTableCaption = '建镇聚落 · 沙盘\n一户一屋，多出来的那间至今空着';
+export const museumSpecimenCaptions = [
+  '星尘矿\n越深越亮，矿工说它自己会发热',
+  '石英\n老钟楼的摆，就是这一块切的',
+  '铜矿\n铸过三口钟，两口在镇上，一口没找到',
+  '煤矿\n冬里取暖全靠它，灰能堆到房檐',
+  '石灰石\n砌镇公所的灰，就是它烧的',
+  '陨铁\n沉得反常，老铁匠说它不像地里的东西',
+  '砂岩\n最软的石头，孩子们在上面刻满了名字',
+  '深层岩芯\n从最底下取的，再往下不挖了',
+] as const;
+export const museumShiftBoardCaption = [
+  '班次牌',
+  '一班 辰入午出 六人 · 班头 石沉',
+  '二班 午入酉出 六人 · 班头 石沉',
+  '三班 夜里不入',
+  '（三班那一栏，年年空着）',
+] as const;
+export const museumClosureNoticeCaption = [
+  '布告',
+  '开镇卅二年冬，北山道塌，矿口险。',
+  '自今日起，封山、封矿、封北站。',
+  '归期，另行布告。',
+] as const;
+export const museumWaitingChairCaption = '等车的人\n椅子按当年等车的人数摆的，多一把是给司机的';
 
 const FLOOR = .28;
 const ROCK = ['#4a3826', '#5d4630', '#3e2f20', '#54402a'];
@@ -29,6 +63,7 @@ function zoneOne(m: MuseumBuilder) {
   m.box('#7fd4c8', .05, 4.68, cz + .1, .1, .08, .05, 0, true);
   for (const dx of [-.45, .45]) m.box(IRON, dx, 5.35, cz, .05, 1.3, .05);
   m.light(0, 3.4, cz, '#ffe9c4', 60, 13);
+  m.label(museumHeartStoneCaption, 0, FLOOR + .72, cz + 1.42, 2.65, .48);
 
   // Founding settlement sand table, west of the spine.
   const cx = -5.5;
@@ -45,10 +80,9 @@ function zoneOne(m: MuseumBuilder) {
   }
   m.box('#8a8378', cx - .1, FLOOR + 1.0, cz - .95, .16, .5, .16);
   m.box('#b88655', cx - .1, FLOOR + 1.28, cz - .95, .2, .06, .2);
-  m.label('建镇聚落 · 沙盘', cx, FLOOR + .45, cz + 1.32, 1.5, .26, 0);
+  m.label(museumSandTableCaption, cx, FLOOR + .45, cz + 1.32, 2.65, .48, 0);
 
-  // Five founding-object plinths: three west around the table, two east
-  // mirroring across the spine; descriptions stay blank pending review.
+  // Five founding-object plinths: publicly approved name/annotation plates.
   const plinths: [number, number, string, string][] = [
     [cx - 2.7, cz - 1.9, '#8a4a34', 'pot'], [cx - 2.7, cz + 1.9, '#e08a3c', 'lamp'],
     [cx + 2.7, cz + 1.9, '#44503c', 'cloth'], [4.6, cz - 1.5, '#765044', 'books'],
@@ -61,7 +95,8 @@ function zoneOne(m: MuseumBuilder) {
     else if (kind === 'cloth') m.box(tint, px, FLOOR + .9, pz, .42, .18, .36, .2);
     else if (kind === 'books') { m.box(tint, px, FLOOR + .88, pz, .34, .14, .26); m.box('#b88655', px + .03, FLOOR + 1.0, pz, .3, .1, .22, .15); }
     else { m.box('#8a6f4d', px, FLOOR + .92, pz, .07, .3, .07, .5); m.box(tint, px, FLOOR + 1.06, pz, .2, .08, .1); }
-    m.label('', px, FLOOR + .52, pz + .31, .5, .2, 0);
+    m.label(museumFoundingCaptions[kind as keyof typeof museumFoundingCaptions],
+      px, FLOOR + .52, pz + .31, 1.55, .4, 0);
   }
   m.label('第一区 · 开镇', 0, 2.3, cz + 3.4, 2.7, .52, 0);
 }
@@ -102,17 +137,21 @@ function zoneTwo(m: MuseumBuilder) {
     m.box('#8a4a34', x - .38, FLOOR + .075, z, .075, .012, .8);
     m.box('#8a4a34', x + .38, FLOOR + .075, z + 1.2, .075, .012, .6);
   }
-  // Eight specimens on the west wall; name plates blank pending review.
+  // Eight specimens in the original survey order, with controller-approved captions.
   const specimens = ['#7fd4c8', '#c8ccd2', '#8a6f4d', '#6f7d72', '#9a8a70', '#5d6a7a', '#b0a58e', '#7a5a40'];
   specimens.forEach((tint, i) => {
     const sz = 5.5 - i * 1.57;
     m.box('#5d4630', x - 1.32, FLOOR + .78, sz, .3, .08, .8);
     m.box(tint, x - 1.32, FLOOR + .95, sz, .26, .3, .4, i * .35, i === 0);
-    m.label('', x - 1.14, FLOOR + .5, sz, .8, .28, Math.PI / 2);
+    m.label(museumSpecimenCaptions[i]!, x - 1.14, FLOOR + .53, sz, 1.43, .48, Math.PI / 2);
   });
   // Shift board at the south entry; warm lamp pools along the run.
-  m.box('#59483e', x - 1.35, FLOOR + 1.75, from - 1.15, .06, .8, 1.15);
-  m.label('班次牌', x - 1.3, FLOOR + 1.75, from - 1.15, 1.0, .34, Math.PI / 2);
+  // Expanded board backing accommodates all five approved lines in two legible panels.
+  m.box('#59483e', x - 1.35, FLOOR + 1.74, from - 1.15, .08, 1.65, 2.25);
+  m.label(museumShiftBoardCaption.slice(0, 3).join('\n'),
+    x - 1.3, FLOOR + 2.04, from - 1.15, 2.12, .64, Math.PI / 2);
+  m.label(museumShiftBoardCaption.slice(3).join('\n'),
+    x - 1.3, FLOOR + 1.34, from - 1.15, 2.12, .46, Math.PI / 2);
   for (const lz of [4, -2, -8]) m.light(x, FLOOR + 2.1, lz, '#f7c69c', 30, 8.5);
   m.label('第二区 · 矿工岁月', x, 2.2, from + .55, 3.0, .52, 0);
 }
@@ -131,8 +170,8 @@ function zoneThree(m: MuseumBuilder) {
   m.solid('#6e5136', -4.2, FLOOR + .52, fenceZ, 4.4, 1.05, .12);
   for (let x = -6.3; x <= -2.1; x += 1.05) m.box('#59402a', x, FLOOR + .58, fenceZ, .12, 1.16, .12);
   for (const ry of [.38, .82]) m.box('#7a5c3d', -4.2, FLOOR + ry, fenceZ, 4.4, .07, .05);
-  m.box('#59483e', -4.2, FLOOR + 1.32, fenceZ + .06, 1.05, .62, .05);
-  m.label('布告', -4.2, FLOOR + 1.32, fenceZ + .1, .9, .3, 0);
+  m.box('#59483e', -4.2, FLOOR + 1.6, fenceZ + .06, 2.85, 1.12, .06);
+  m.label(museumClosureNoticeCaption.join('\n'), -4.2, FLOOR + 1.6, fenceZ + .11, 2.76, .98, 0);
   // Luggage pile behind the cordon.
   const pile: [number, number, number, string, number][] = [
     [-5.3, .55, -11.3, '#765044', .15], [-4.4, .55, -11.5, '#5d4630', -.1], [-4.85, 1.05, -11.4, '#6e5136', .3],
@@ -147,7 +186,7 @@ function zoneThree(m: MuseumBuilder) {
     for (const [dx, dz] of [[-.18, -.18], [.18, -.18], [-.18, .18], [.18, .18]] as const)
       m.box('#59402a', cx + dx, FLOOR + .12, -10.7 + dz, .06, .24, .06);
   }
-  m.label('', -4.3, FLOOR + .5, -10.35, .8, .26, 0);
+  m.label(museumWaitingChairCaption, -4.3, FLOOR + .54, -10.35, 2.52, .49, 0);
   // The one wrong exhibit: a dark slab at the zone's east edge, leaning on
   // a half-grade plinth. No number, no label, no light, no interaction.
   // Face scratches are meaningless short strokes, never a sheep pattern.

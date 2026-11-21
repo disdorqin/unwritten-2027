@@ -1,6 +1,8 @@
+import type { TownNightWindowState } from '../../../src/shared/town-night-window';
 import { summitAssemblyAnchor } from './main-summit-assembly';
 import { mainSummitLayout } from './main-summit-block';
 import { za22GateSeamNorth } from './town-za22-mountain-gate';
+import type { Za29GuardDuty } from './town-za29-guard-scenes';
 
 type Foot = Readonly<{ east: number; north: number; height: number }>;
 type GuardAnchors = Readonly<{ guard: Foot; approach: Foot }>;
@@ -11,6 +13,19 @@ const mountainAperture = {
   halfWidth: mainSummitLayout.gate.clearWidth / 2,
   heightReach: 1.4,
 };
+
+// ZB-28 rewrite (branch window B, against the current trunk API): the
+// crater post's interception window is the REAL fence opening, not a
+// generic disc. The fence stands at lip.east + 1 (town-za22-crater-road:
+// fenceEast, measured on this trunk as east −70.5335 at the seam), its
+// two rails sit at lip.north ± 3.25 and each covers 1.18 of half-length
+// (fenceBlocks), leaving a clear opening of half-width 3.25 − 1.18 =
+// 2.07 centred on the seam north — the same north the scene's approach
+// anchor sits on (za29GuardSurvey.crater.approach). The guard still
+// intercepts in person at his approach line; the opening only bounds
+// where he can be doing it.
+const craterOpeningHalfWidth = 3.25 - 1.18;
+const craterHeightReach = 1.4;
 
 const guards = {
   mountain: {
@@ -29,8 +44,25 @@ const guards = {
 
 const guardReach = 4.5;
 const approachReach = 3.5;
-const passageHalfWidth = 2;
 const levelReach = 1.25;
+
+/**
+ * ZB-28 phase mapping — the single source both posts share (the viewer
+ * must not re-derive this inline). Day, or no window known yet: guard
+ * on post, no night signs. Awaiting-beacon (dusk, the thirteenth bell
+ * not yet heard): the guard has gone home — empty post, and the night
+ * signs (empty-post scuffs, soul footprints) are NOT up yet. Night
+ * window: empty post plus night signs. Entry is never blocked by the
+ * phase itself — only by a present guard (拦截一律由人执行).
+ */
+export function za29GuardDutyForPhase(
+  phase: TownNightWindowState['phase'] | undefined,
+): Za29GuardDuty {
+  return {
+    guardPresent: phase === undefined || phase === 'day',
+    showNightSigns: phase === 'night-window',
+  };
+}
 
 export function createZa29GuardDuty(
   kind: keyof typeof guards,
@@ -87,7 +119,14 @@ export function createZa29GuardDuty(
       north: from.north + (to.north - from.north) * mix,
       height: from.height + (to.height - from.height) * mix,
     };
-    if (!aperture) return inReach(crossing, approach, passageHalfWidth) && inReach(crossing, guard, guardReach);
+    if (!aperture) {
+      // Crater: the crossing must fall inside the fence opening's slot
+      // (centred on the approach/seam north) within the jump envelope.
+      const lateral = Math.abs(crossing.north - approach.north);
+      return lateral <= craterOpeningHalfWidth &&
+        Math.abs(crossing.height - approach.height) <= craterHeightReach &&
+        inReach(crossing, guard, guardReach);
+    }
     // The gate width and ordinary jump envelope bound a real crossing; nearby levels stay open.
     const lateral = (crossing.east - aperture.east) * post.north - (crossing.north - aperture.north) * post.east;
     return Math.abs(lateral) <= aperture.halfWidth && Math.abs(crossing.height - approach.height) <= aperture.heightReach;

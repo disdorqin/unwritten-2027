@@ -131,7 +131,7 @@ export function openTownChronicleBook(
   keyword.addEventListener('input', filter);
   date.addEventListener('input', filter);
   if (initial) pageIndex = pages().findIndex(entry => entry.id === initial.id);
-  root.addEventListener(townChronicleChanged, () => {
+  document.addEventListener(townChronicleChanged, () => {
     const openId = pages()[pageIndex]?.id;
     data = readTownChronicleViews();
     pageIndex = Math.max(0, pages().findIndex(entry => entry.id === openId));
