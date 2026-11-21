@@ -25,6 +25,21 @@ test('U-11 seven-pass companion actually models all palace zones rather than sub
   assert.ok(!pieces.some(p=>/pickup|treasure|inventory|enemy|monster|placeholder|unfinished|inscription|fake/.test(p.name)));
 });
 
+test('U-11 R5 adds five full stone lantern sculptures without owning actual light sources',()=>{
+  const lanterns=pieces.filter(p=>p.name.startsWith('u11/lantern-'));
+  assert.equal(lanterns.length,720);
+  assert.equal(pieces.length,10581);
+  for(const key of ['west-27','east-40','west-82','east-82','north-gateway']){
+    const layers=lanterns.filter(p=>p.name.startsWith('u11/lantern-'+key+'/'));
+    assert.equal(layers.length,144,key+' must have a built frame and prism, not only a light marker');
+    assert.ok(layers.some(p=>p.name.includes('/moonstone-prism-')));
+    assert.ok(layers.some(p=>p.name.includes('/outer-frame-')));
+    assert.ok(layers.some(p=>p.name.includes('/hood-tile-')));
+  }
+  assert.equal(undergroundPalaceDressing.lightSockets.length,5,
+    'stone sculptures must not add extra authority-controlled point lights');
+});
+
 test('U-11 main path, empty throne and certified radius 22m preserve Window D shell footprint',()=>{
   const court=zone('forecourt').filter(p=>p.name.includes('apron-'));
   assert.ok(court.every(p=>Math.hypot(p.center[0],p.center[2]-126)<22.3));

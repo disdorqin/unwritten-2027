@@ -8,17 +8,18 @@ import {
   undergroundPalaceDressing,
 } from '../voxel-tavern/town-blockout/underground-palace-dressing';
 
-// Offline U-11 artwork review, with only the C dressing present.
-// It is NOT the D collision shell, not an authorized underground domain.
+// Offline U-11 artwork review overlays C dressing on a pinned D shell
+// geometry snapshot. The snapshot is NOT live D collision authority,
+// nor an authorized underground domain or production player arrival.
 const scene=new Scene();
 scene.background=new Color(0x212735);
-scene.fog=new FogExp2(0x212735,.0065);
-scene.add(new AmbientLight(0xada0a0,.5));
-const moon=new DirectionalLight(0xa7bbc2,1.7);
+scene.fog=new FogExp2(0x212735,.003);
+scene.add(new AmbientLight(0xb1b5ba,1.4));
+const moon=new DirectionalLight(0xa7bbc2,2.4);
 moon.position.set(-30,35,-14);
 scene.add(moon);
 const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.06,220);
-const lamp=new PointLight(0xffd7a1,8,19,2);
+const lamp=new PointLight(0xffe0b2,10,28,2);
 camera.add(lamp);lamp.position.set(0,0,-.35);
 scene.add(camera);
 const renderer=new WebGLRenderer({antialias:false,powerPreference:'low-power'});
@@ -31,6 +32,15 @@ scene.add(parent);
 const reviewedDShell=createUndergroundPalaceShell();
 scene.add(reviewedDShell.group);
 const mounted=mountUndergroundPalaceDressing(parent,true);
+// Exactly three QA-only stand-ins are sampled from the host-approved sockets.
+// Their visibility proves nothing about U-13's actual production light budget.
+const qaSockets=[0,2,4] as const;
+for(const [index,socketIndex] of qaSockets.entries()){
+  const p=undergroundPalaceDressing.lightSockets[socketIndex]!;
+  const visualLight=new PointLight(index%2?0x7dc4f0:0xffb873,11,25,2);
+  visualLight.position.set(p.east,p.height,-p.north);
+  scene.add(visualLight);
+}
 // Vault geometry is intentionally shown only in the *art* QA camera so the
 // designer can inspect it before U-5 authorizes its actual in-game mount.
 const viewpoints={
@@ -82,7 +92,8 @@ Object.assign(window,{
         triangles:renderer.info.render.triangles,
         eye:camera.position.toArray(),
         officialWorldMounted:false,
-        reviewedDShellSnapshot:true};
+        reviewedDShellSnapshot:true,
+        simulatedFixtureLights:qaSockets.length};
     },
     dispose(){
       if(!active)return; active=false;

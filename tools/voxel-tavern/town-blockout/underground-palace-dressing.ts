@@ -311,12 +311,48 @@ function buildVaultReserve() {
       Math.cos(a)*1.10,floor+5.4+Math.sin(a)*1.10,165.55,.12,.12,.044);
   }
 }
+function buildStoneSconce(
+  zone: PalaceDressingZone, key: string, east: number, y: number, north: number,
+) {
+  // Physical fixtures only; visible illumination belongs to the U-13 / U-15
+  // host budget. No unregistered PointLight or story text is created here.
+  const prefix='u11/lantern-'+key;
+  for(let ring=0;ring<6;ring++) for(let side=0;side<8;side++){
+    const a=side*Math.PI/4;
+    const radius=(ring===0||ring===5)? .48:.36;
+    add(zone,ring===0||ring===5?'gold':'aged',
+      prefix+'/outer-frame-'+ring+'-'+side,
+      east+Math.cos(a)*radius,y-.52+ring*.23,north+Math.sin(a)*radius,
+      .13,.17,.13);
+  }
+  for(let tier=0;tier<9;tier++) for(let side=0;side<8;side++){
+    const a=side*Math.PI/4, radius=.26;
+    add(zone,tier%3===0?'pale':'blue',
+      prefix+'/moonstone-prism-'+tier+'-'+side,
+      east+Math.cos(a)*radius,y-.35+tier*.10,north+Math.sin(a)*radius,
+      .09,.12,.09);
+  }
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6;
+    add(zone,'shadow',prefix+'/hood-tile-'+i,
+      east+Math.cos(a)*.44,y+.78,north+Math.sin(a)*.44,
+      .18,.20,.17);
+    add(zone,'wood',prefix+'/base-foot-'+i,
+      east+Math.cos(a)*.30,y-.66,north+Math.sin(a)*.30,
+      .15,.14,.17);
+  }
+}
 stairHall();
 buildColonnade();
 buildThrone();
 buildExitShrine();
 buildForecourt();
 buildVaultReserve();
+buildStoneSconce('colonnade','west-27',-5.7,floor+6.2,27);
+buildStoneSconce('colonnade','east-40',5.7,floor+6.2,40);
+buildStoneSconce('throne','west-82',-13,floor+8.2,82);
+buildStoneSconce('throne','east-82',13,floor+8.2,82);
+buildStoneSconce('forecourt','north-gateway',0,floor+9.6,125);
 
 export const undergroundPalaceDressing = Object.freeze({
   pieces: Object.freeze(masonry),

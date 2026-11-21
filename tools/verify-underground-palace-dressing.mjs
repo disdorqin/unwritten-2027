@@ -45,8 +45,10 @@ try{
     await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
     const stats=await page.evaluate(()=>window.palaceDressingReview.inspect());
     assert.equal(stats.view,name);
-    assert.equal(stats.allPieces,9861);
-    assert.equal(stats.visualPieces,9861);
+    // Five new 144-piece socket lanterns extend the original 9,861 blocks.
+    // Keep the art fixture pinned to the full R5 visual bill of materials.
+    assert.equal(stats.allPieces,10581);
+    assert.equal(stats.visualPieces,10581);
     assert.ok(stats.materials>0 && stats.materials<=8);
     assert.ok(stats.drawing<=12,'D-shell plus C materials exceeded batch cap: '+name);
     assert.ok(stats.triangles>=20000 && stats.triangles<=500000,
