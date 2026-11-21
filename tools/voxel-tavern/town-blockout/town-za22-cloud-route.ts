@@ -94,9 +94,19 @@ export function za22CloudSurfaceAt(east: number, north: number, radius = .27) {
   const localNorth = north - summitAssemblyAnchor.north;
   const landing = Math.abs(east - cloudTerminal.east) <= 4 - radius &&
     Math.abs(north - cloudTerminal.north) <= 4 - radius;
+  // Player-accessible snow already exists on the ridge mesh; include the two
+  // surveyed spurs without granting a floor across the steep central monument.
+  const southSpur = east >= 316 + radius && east <= 320 - radius &&
+    north >= 632 + radius && north <= 656 - radius;
+  const southLaunch = east >= 316 + radius && east <= 322 - radius &&
+    north >= 632 + radius && north <= 636 - radius;
+  const eastApproach = east >= 330 + radius && east <= 352 - radius &&
+    north >= 652.5 + radius && north <= 655 - radius;
+  const eastLookout = east >= 348 + radius && east <= 352 - radius &&
+    north >= 649 + radius && north <= 655 - radius;
   const apron = east >= za22CloudRunway.end - 2 + radius && east <= 339 - radius && north >= 654 + radius &&
     north <= 664.65 - radius;
-  if (north < za22GateSeamNorth && (landing || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
+  if (north < za22GateSeamNorth && (landing || southSpur || southLaunch || eastApproach || eastLookout || apron || supportsCloudTerrace(localEast, localNorth, radius))) {
     return sampleNorthRidge350(east, north);
   }
 }

@@ -40,7 +40,8 @@ test('the shared front floor reaches the surveyed cloud connection and the runwa
     assert.equal(za22CloudSurfaceAt(east, za22CloudRunway.north - 2.2), 347);
   }
   assert.equal(za22CloudSurfaceAt(300, 666), undefined);
-  assert.equal(za22CloudSurfaceAt(350, 654), undefined);
+  assert.equal(za22CloudSurfaceAt(350, 654), 347); // ZA-07 east overlook approach
+  assert.equal(za22CloudSurfaceAt(353, 654), undefined); // no floor past the true plateau edge
 });
 
 test('boarding comes only from the legal station approach and authoritative night state', () => {
