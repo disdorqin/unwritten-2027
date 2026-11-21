@@ -109,11 +109,55 @@ async function openTown(name) {
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
   assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
+
+  // The current production entry includes an async loading/continue screen.
+  // Previous versions of this native-walk harness assumed the canvas was
+  // visible immediately, then timed out on a hidden yet correctly mounted
+  // Three.js canvas. Follow the SAME normal user flow; never click past an
+  // actual load error or forcibly mutate the entry DOM.
+  await page.waitForFunction(() => {
+    const entry = document.querySelector('#town-entry');
+    const next = document.querySelector('#town-entry-continue');
+    const fail = document.querySelector('#town-entry-error');
+    return entry?.hidden === true || next?.hidden === false || fail?.hidden === false;
+  }, undefined, { timeout: 90_000 });
+  const entryState = await page.evaluate(() => ({
+    entryHidden: document.querySelector('#town-entry')?.hidden === true,
+    canContinue: document.querySelector('#town-entry-continue')?.hidden === false,
+    failed: document.querySelector('#town-entry-error')?.hidden === false,
+  }));
+  if (entryState.failed) {
+    const startupDiagnosis = await page.evaluate(async () => {
+      const resources = performance.getEntriesByType('resource')
+        .map(item => item.name)
+        .filter(url => /\/assets\/(viewer|town-panel|townBlockout)-[^/]+\.js/.test(url));
+      const candidates = resources.filter(url => /\/assets\/(viewer|town-panel)-/.test(url));
+      const checked = [];
+      for (const url of [...new Set(candidates)]) {
+        try {
+          await import(/* @vite-ignore */ url);
+          checked.push({ url, result:'import succeeded' });
+        } catch (error) {
+          checked.push({ url, result:String(error),
+            stack:error instanceof Error ? error.stack : undefined });
+        }
+      }
+      return {resources,checked,htmlTitle:document.title};
+    });
+    throw new Error('Actual production entry failed without bypass: '+
+      JSON.stringify(startupDiagnosis));
+  }
+  if (!entryState.entryHidden && entryState.canContinue)
+    await page.locator('#town-entry-continue').click();
   await Promise.race([
     page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 }),
-    page.waitForFunction(() => document.getElementById('town-entry-error')?.hidden === false,
-      null, { timeout: 90_000 }).then(() => { throw new Error('Town entry explicitly showed failure fallback'); }),
+    page.waitForFunction(() => document.querySelector('#town-entry-error')?.hidden === false,
+      null, {timeout: 90_000}).then(() => {
+        throw new Error('Actual town entry transitioned to failure fallback');
+      }),
   ]);
+
+
   await page.waitForFunction(pattern => {
     const hud = document.querySelector('#position')?.textContent ?? '';
     return new RegExp(pattern).test(hud) && (window.__za22Frame?.calls > 0 || !location.search);
@@ -430,7 +474,33 @@ try {
   }
   if (segment === 'crater' || segment === 'all') {
     const { page, evidence, westWindow } = await openTown('crater');
-    await follow(page, evidence, westShore, 'west-shore');
+    if (segment === 'crater' && process.env.C3_CRATER_MOUTH_JUMP === '1') {
+      // Explicitly opt-in diagnostic only: normal crater/all suites still
+      // require the continuous west-shore walk from plaza and will fail if
+      // scenery blocks it. C-3 isolated crater section: the previously used town-west
+      // approach halts at E207.6/N180 behind other windows' road furniture.
+      // Use the existing in-game “陨石坑口” location chooser ONLY to reach
+      // the upstream end, then all crater checks remain native W walking
+      // with real Presence samples. This is NOT proof of a continuous
+      // spawn-to-crater walking route; the 'all' path still covers that.
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({ label: '陨石坑口' });
+      // The production jump may itself dismiss the modal. Close it ONLY
+      // if still open; both unconditional toggle (reopens) and close (hidden)
+      // were verified as wrong on different native input phases.
+      if(await page.locator('#town-settings').evaluate(dialog=>dialog.open))
+        await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#town-settings').evaluate(dialog=>dialog.open),false);
+      const via=await readPose(page);
+      assert.ok(Math.hypot(via.east-2,via.north-159)<1.0,
+        'Real in-app jump to crater mouth did not land: '+JSON.stringify(via));
+      evidence.checkpoints.push({
+        label:'in-game-town-jump-to-crater-mouth-not-full-west-shore-walk',
+        ...via, wire:evidence.poses.at(-1),
+      });
+    } else {
+      await follow(page, evidence, westShore, 'west-shore');
+    }
     await follow(page, evidence, crater, 'crater');
     await face(page, evidence, -Math.PI / 2);
     const rim = await readPose(page);
