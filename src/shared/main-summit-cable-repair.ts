@@ -105,6 +105,15 @@ function valid(state: SummitCableRepairState | undefined): state is SummitCableR
   return true;
 }
 
+/** Other hosts must consume a validated flag, not trust a raw stage string. */
+export function summitCableLine2Open(state: SummitCableRepairState | undefined) {
+  return valid(state) && state.stage === 'open';
+}
+
+export function summitCableSingleTripCabin(state: SummitCableRepairState | undefined): 0 | 1 | null {
+  return valid(state) && state.stage === 'single-trip' ? state.singleTripCabin : null;
+}
+
 function allRepaired(state: SummitCableRepairState) {
   return state.brakeReleased && state.cableCranks === summitCableRepairSpec.cableCranks &&
     state.weights.every(weight => weight.status === 'hung');
@@ -203,11 +212,11 @@ export function createMainSummitCableRepair(host: SummitCableRepairHost) {
     },
     /** Night-window stoppage applies even after the repairs. The host supplies the official clock phase. */
     canRun(state: SummitCableRepairState, officialDayRunning: boolean) {
-      return valid(state) && officialDayRunning === true && state.stage === 'open';
+      return officialDayRunning === true && summitCableLine2Open(state);
     },
     /** The one sanctioned descent terminates after one actual station advance. */
     canMakeSingleDownhillTrip(state: SummitCableRepairState) {
-      return valid(state) && state.stage === 'single-trip';
+      return summitCableSingleTripCabin(state) !== null;
     },
   };
 }

@@ -27,7 +27,11 @@ test('P-2 repair policy never allows ordinary boarding before the confirmed summ
 });
 
 test('P-2 fully repaired line boards both ways by clock during day, never at night', () => {
-  let record: SummitCableRepairState | undefined = { ...initialSummitCableRepairState(), stage: 'open' };
+  let record: SummitCableRepairState | undefined = {
+    ...initialSummitCableRepairState(), stage: 'open', rustStrikes: 9,
+    brakeReleased: true, cableLift: 1, cableCranks: 3,
+    weights: Array.from({ length: 4 }, () => ({ status: 'hung' as const, holder: null })),
+  };
   let day = true;
   const travel = createMainSummitCableTravel(cable, createSummitRepairBoardingPolicy(() => record, () => day));
   assert.deepEqual(travel.attemptBoard(epoch, 0, lower), { cabinIndex: 0 });
@@ -35,8 +39,11 @@ test('P-2 fully repaired line boards both ways by clock during day, never at nig
   day = false;
   assert.equal(travel.attemptBoard(epoch, 0, lower), undefined);
   assert.equal(travel.attemptBoard(epoch, 1, summit), undefined);
-  record = undefined;
+  record = { ...initialSummitCableRepairState(), stage: 'open' };
   day = true;
+  assert.equal(travel.attemptBoard(epoch, 0, lower), undefined,
+    'forged open flag without completed faults must fail closed');
+  record = undefined;
   assert.equal(travel.attemptBoard(epoch, 0, lower), undefined, 'missing authority fails closed');
 });
 
