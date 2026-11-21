@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { MuseumBuilder } from '../tools/voxel-tavern/town-blockout/museum-kit';
 import {
-  museumFoundingCaptions, museumHeartStoneCaption, museumSandTableCaption,
+  addMuseumZones, museumFoundingCaptions, museumHeartStoneCaption, museumSandTableCaption,
   museumSpecimenCaptions, museumShiftBoardCaption,
   museumClosureNoticeCaption, museumWaitingChairCaption,
 } from '../tools/voxel-tavern/town-blockout/museum-zones';
@@ -52,4 +53,27 @@ test('ZA-06 zone three approved notice and waiting chair text remain intact', ()
   assert.equal(museumWaitingChairCaption,
     '等车的人\n椅子按当年等车的人数摆的，多一把是给司机的');
   assert.ok(!museumClosureNoticeCaption.join('\n').includes('另行布告从此没有来'));
+});
+
+test('ZA-06 zone builder mounts every approved caption once and keeps page slots blank', () => {
+  const labels: string[] = [];
+  const probe = { box() {}, solid() {}, light() {}, label(text: string) { labels.push(text); } } as unknown as MuseumBuilder;
+  addMuseumZones(probe);
+  const approved = [
+    ...Object.values(museumFoundingCaptions),
+    museumHeartStoneCaption,
+    museumSandTableCaption,
+    ...museumSpecimenCaptions,
+    museumShiftBoardCaption.slice(0, 3).join('\n'),
+    museumShiftBoardCaption.slice(3).join('\n'),
+    museumClosureNoticeCaption.join('\n'),
+    museumWaitingChairCaption,
+  ];
+  assert.equal(approved.length, 19, '18 named exhibit points; five-line shift board uses two physical panels');
+  for (const caption of approved) {
+    assert.equal(labels.filter(added => added === caption).length, 1, `missing or duplicated: ${caption}`);
+  }
+  assert.equal(labels.filter(label => label === '').length, 0, 'no blank-label placeholders outside intentionally empty page slots');
+  assert.equal(labels.length, 25, 'all four zone title signs, page-wall and guest-book labels remain present');
+  assert.ok(!labels.includes('另行布告从此没有来'));
 });
