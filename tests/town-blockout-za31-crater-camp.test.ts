@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Mesh, MeshStandardMaterial, NearestFilter, PointLight } from 'three';
+import { NearestFilter, type Mesh, type MeshStandardMaterial, type PointLight } from 'three';
 import { createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { craterWestSurvey, mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { mountZa31CraterCamp } from '../tools/voxel-tavern/town-blockout/town-za31-crater-camp';
@@ -43,16 +43,20 @@ test('the crater camp, warm markers and cut faces use surveyed ground and stay o
 
 test('pixel materials use the approved palette and warm light pools stay local', () => {
   const camp = mountZa31CraterCamp(mountWestCraterRoad(540, () => 10.7773));
-  const meshes = camp.group.children.filter(child => child instanceof Mesh);
+  // Different dependency trees ship distinct Three constructors: use the
+  // built-in runtime type flag, while keeping the original object-count checks.
+  const meshes = camp.group.children.filter((child): child is Mesh => (child as Mesh).isMesh === true);
   assert.equal(meshes.length, 8);
   const approved = new Set([0x8a8378, 0xa98a56, 0x5d4630, 0x44503c, 0x2c3648, 0xe8ecf0, 0xe08a3c, 0x7fd4c8, 0x8a4a34]);
-  for (const { material } of meshes) {
-    assert.ok(material instanceof MeshStandardMaterial);
+  for (const mesh of meshes) {
+    const material = mesh.material as MeshStandardMaterial;
+    assert.equal(material.isMeshStandardMaterial, true);
     if (!material.map) {
       assert.ok(approved.has(material.color.getHex()));
       continue;
     }
-    const { image, minFilter, magFilter } = material.map;
+    const { minFilter, magFilter } = material.map;
+    const image = material.map.image as { width: number; height: number; data: Uint8Array };
     assert.equal(minFilter, NearestFilter);
     assert.equal(magFilter, NearestFilter);
     assert.equal(image.width, 16);
@@ -61,7 +65,8 @@ test('pixel materials use the approved palette and warm light pools stay local',
       assert.ok(approved.has(image.data[i] * 65536 + image.data[i + 1] * 256 + image.data[i + 2]));
     }
   }
-  const lights = camp.group.children.filter(child => child instanceof PointLight);
+  const lights = camp.group.children.filter((child): child is PointLight =>
+    (child as PointLight).isPointLight === true);
   assert.equal(lights.length, 3);
   for (const light of lights) {
     assert.equal(light.color.getHex(), 0xe08a3c);
