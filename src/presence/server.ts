@@ -160,7 +160,7 @@ function horizontalDistanceSquared(a: PresenceRecord, b: PresenceRecord) {
 }
 
 function metresToLimit(value: number): number {
-  if (!Number.isFinite(value) || value <= 0 || value > 655.35) throw new Error('Invalid presence coordinate limit.');
+  if (!Number.isFinite(value) || value <= 0 || value > 900) throw new Error('Invalid presence coordinate limit.'); // follows TOWN_BOUNDS.height (ZD-05: island surface Y750)
   return Math.round(value * 100);
 }
 

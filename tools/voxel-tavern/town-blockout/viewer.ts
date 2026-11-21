@@ -44,6 +44,16 @@ import { addStreetscape } from './streetscape';
 import { mountZa32StreetProps } from './town-za32-street-props';
 import { mountTownFillNorth } from './town-fill-north';
 import { mountTownFillEast } from './town-fill-east';
+import { mountTownFillB3 } from './town-fill-b3';
+import { mountTownFillPinewood } from './town-fill-pinewood';
+import { mountTownFillB1 } from './town-fill-b1';
+import { mountTownFillB6 } from './town-fill-b6';
+import { mountTownFillB3x } from './town-fill-b3x';
+import { mountTownFillSouthGate } from './town-fill-south-gate';
+import { mountTownFillRimeGrove } from './town-fill-rime-grove';
+import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
+import { mountSkyCityHost } from './sky-city-host';
+import { skyCityApproachSite } from './sky-city-approach';
 import { addNewYearDecor } from './town-new-year';
 import { createSnowfall } from './snowfall';
 import { createFestival, makeTestFireworksTable } from './festival';
@@ -218,6 +228,10 @@ const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMat
   createMainSummitBlock(mainSummitLayout, 347, 100).coarse;
 const summitSkylineDayMaterial = summitSkylineMesh.material;
 summitSkylineDayMaterial.side = DoubleSide;
+// The day material is fog:false already (main-summit-block), but without
+// vertexColors it discards the height tint and renders the whole massif
+// as one flat slab — the "low dark ridge" seen live. Enable the tint.
+summitSkylineDayMaterial.vertexColors = true;
 // Town eyes see the underside of the open heightfield. A height tint keeps
 // that backlit silhouette legible during snow nights and the ceremony dim.
 const summitSkylineGeometry = summitSkylineMesh.geometry;
@@ -245,6 +259,22 @@ for (let triangle = 0; triangle < surveyedIndices.count; triangle += 3) {
 // Splay the perimeter into a low foothill behind the forest. A vertical
 // skirt exposes a straight cliff and a floating toe from the forest road.
 const skylinePositions = Array.from(surveyedPositions.array);
+// ZA-30 takeover step 3 (追令二 · Everest grammar): reshape the smooth
+// cone into a steep dark pyramid with ONE sharp sub-peak (Lhotse) west
+// of a south col; the old east shoulder is demoted to a spur. Only the
+// skyline shell is reshaped — the walkable mountain domain is untouched.
+function everestHeight(east: number, north: number, existing: number): number {
+  const dSummit = Math.hypot((east - 50) / 700, (north - 1000) / 750);
+  const hMain = 150 + 650 * Math.pow(Math.max(0, 1 - dSummit), 1.6);
+  const dLhotse = Math.hypot((east + 380) / 330, (north - 940) / 360);
+  const hLhotse = 150 + 505 * Math.pow(Math.max(0, 1 - dLhotse), 2.2);
+  return Math.max(hMain, hLhotse, Math.min(existing, 330));
+}
+for (let vertex = 0; vertex < surveyedPositions.count; vertex++) {
+  const offset = vertex * 3;
+  skylinePositions[offset + 1] = everestHeight(
+    skylinePositions[offset]!, -skylinePositions[offset + 2]!, skylinePositions[offset + 1]!);
+}
 const skylineFeet = new Map<number, number>();
 const skylineFootSpread = 460;
 const skylineFootDepth = 170;
@@ -281,15 +311,22 @@ const skylineSnow = new Color('#e8ecf0');
 const skylineTint = new Color();
 const skylineNormals = summitSkylineGeometry.getAttribute('normal');
 const { baseHeight, summitHeight } = mainSummitSpec;
+// Four-band material grammar (追令三) with the Everest summit rule
+// (追令二): foothill earth/stone, snowfield with rock on steep faces, an
+// ochre rock band across the waist, and a dark-rock pyramid above it —
+// snow survives only on ledges.
+const skylineEarth = new Color('#a98a56');
+const skylineOchre = new Color('#b08d4f');
+const skylineDarkRock = new Color('#35322e');
 for (let vertex = 0; vertex < skylineNormals.count; vertex++) {
   const offset = vertex * 3;
-  const heightRatio = Math.max(0, (skylinePositions[offset + 1]! - baseHeight) / (summitHeight - baseHeight));
-  const stoneLight = Math.max(0, skylineNormals.getX(vertex) * -.55 + skylineNormals.getZ(vertex) * .45);
-  const snowTint = Math.max(0, heightRatio - .75) * Math.max(0, skylineNormals.getY(vertex) - .74) * 2;
-  skylineTint.copy(skylineShadow)
-    .lerp(skylineStone, .08 + heightRatio * .28 + stoneLight * .16)
-    .lerp(skylineSnow, snowTint)
-    .toArray(skylineColors, offset);
+  const y = skylinePositions[offset + 1]!;
+  const steep = 1 - Math.max(0, skylineNormals.getY(vertex));
+  if (y < baseHeight + 60) skylineTint.copy(skylineEarth).lerp(skylineStone, Math.min(1, steep * 1.6));
+  else if (y < 420) skylineTint.copy(steep > .42 ? skylineStone : skylineSnow);
+  else if (y < 510) skylineTint.copy(steep > .5 ? skylineDarkRock : skylineOchre);
+  else skylineTint.copy(steep > .22 || skylineNormals.getY(vertex) <= .8 ? skylineDarkRock : skylineSnow);
+  skylineTint.toArray(skylineColors, offset);
 }
 summitSkylineGeometry.setAttribute('color', new BufferAttribute(skylineColors, 3));
 const summitSkylineNightMaterial = new MeshBasicMaterial({ side: DoubleSide, fog: false, vertexColors: true });
@@ -298,6 +335,41 @@ summitSkyline.name = 'main-summit-world-skyline';
 summitSkyline.position.copy(summitSkylineOrigin);
 summitSkyline.add(summitSkylineMesh);
 scene.add(summitSkyline);
+// Banner cloud (追令二): a voxel plume streaming east from the summit,
+// ~1.5x the summit plateau width long, tapering downwind.
+{
+  const plume = new Group();
+  plume.name = 'summit-banner-cloud';
+  const plumeMaterial = new MeshLambertMaterial({ color: '#eef2f5', fog: false });
+  for (let i = 0; i < 11; i++) {
+    const t = i / 10;
+    const segment = new Mesh(new BoxGeometry(68, 30 * (1 - t * .55), 92 * (1 - t * .4)), plumeMaterial);
+    segment.position.set(50 + t * 620, summitHeight - 6 - t * 46 - Math.sin(t * 9) * 7, -1000 + Math.sin(t * 5) * 16);
+    plume.add(segment);
+  }
+  summitSkyline.add(plume);
+}
+// Icefall (追令二): chaotic crystal-cyan ice towers at the col foot,
+// where the front wall meets the main peak.
+{
+  const icefall = new Group();
+  icefall.name = 'summit-icefall';
+  const iceMaterials = [new MeshLambertMaterial({ color: '#dff3f0', fog: false }),
+    new MeshLambertMaterial({ color: '#7fd4c8', fog: false })];
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 16; i++) {
+    const size = 12 + rand() * 20;
+    const block = new Mesh(new BoxGeometry(size, size * (1.1 + rand()), size), iceMaterials[i % 2]!);
+    block.position.set(-140 + (rand() - .5) * 150, 205 + rand() * 115, -640 + (rand() - .5) * 80);
+    block.rotation.set(rand() * .5 - .25, rand() * Math.PI, rand() * .5 - .25);
+    icefall.add(block);
+  }
+  summitSkyline.add(icefall);
+}
+// ZA-30 takeover step 2: the front ridge (350) as a town-side visual shell.
+const frontRidgeProxy = mountFrontRidgeProxy(scene);
+void frontRidgeProxy;
 if (reportSummitSkyline) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
@@ -306,6 +378,21 @@ if (reportSummitSkyline) {
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
   (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
     : grid.heightAt(east, north));
+// ZD-05 sky-city domain prep (zone-1 wiring plan, ruling 304c2e38):
+// the island lives in its own scene, hosted at the surveyed approach
+// site (island surface Y750). Tier driving follows the player domain:
+// ground -> hidden, summit -> silhouette. The render switch and the
+// presence 'sky' domain land with the flight state-machine batch
+// (ZB-22/G-01/ZB-17); until then enterSkyCity has no caller and the
+// island scene is never rendered — grading stays 未挂载.
+const skyCityScene = new Scene();
+skyCityScene.background = new Color('#adc2dd');
+skyCityScene.fog = weatherFog;
+const skyCityHost = mountSkyCityHost(skyCityScene, skyCityApproachSite);
+let skyCityViewKind: 'ground' | 'summit' | 'city' = 'ground';
+function enterSkyCity() { skyCityViewKind = 'city'; }
+function exitSkyCity() { skyCityViewKind = 'ground'; }
+void enterSkyCity; void exitSkyCity; void skyCityHost;
 const cloudRoute = createZa22CloudRoute({
   now: presence.serverNow,
   cloudStamp: {
@@ -315,6 +402,7 @@ const cloudRoute = createZa22CloudRoute({
     },
   },
   enterOrExit(terminal, at) {
+    skyCityViewKind = terminal === 'summit' ? 'summit' : 'ground';
     presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
     x = at.east;
     n = at.north;
@@ -546,6 +634,20 @@ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
 const za32StreetProps = mountZa32StreetProps(landscape, (east, north) => grid.heightAt(east, north));
 const townFillNorth = mountTownFillNorth(landscape, (east, north) => grid.heightAt(east, north));
 const townFillEast = mountTownFillEast(landscape, (east, north) => grid.heightAt(east, north));
+const townFillB3 = mountTownFillB3(landscape, (east, north) => grid.heightAt(east, north));
+void townFillB3;
+const townFillPinewood = mountTownFillPinewood(landscape, (east, north) => grid.heightAt(east, north));
+void townFillPinewood;
+const townFillB1 = mountTownFillB1(landscape, (east, north) => grid.heightAt(east, north));
+void townFillB1;
+const townFillB6 = mountTownFillB6(landscape, (east, north) => grid.heightAt(east, north));
+void townFillB6;
+const townFillB3x = mountTownFillB3x(landscape, (east, north) => grid.heightAt(east, north));
+void townFillB3x;
+const townFillSouthGate = mountTownFillSouthGate(landscape, (east, north) => grid.heightAt(east, north));
+void townFillSouthGate;
+const townFillRimeGrove = mountTownFillRimeGrove(landscape, (east, north) => grid.heightAt(east, north));
+void townFillRimeGrove;
 void townFillEast;
 void za32StreetProps; void townFillNorth;
 const forest = addForestDensity(landscape, grid,
@@ -896,8 +998,12 @@ const points = new Map<string, number[]>([
   ['雪团练习场', [...snowPracticeStand]],
   ['南河岸', [266, 120]],
   ['北河岸', [212, 400]],
+  ['星港坪', [324, 657]],
+  ['羊圈', [70, 215]],
+  ['陨石坑口', [2, 159]],
+  ['山口', [300, 665]],
 ]);
-const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台'];
+const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台', '镇公所'];
 layout.plots.forEach((plot, i) => {
   points.set(plotLabels[i], plot.id === 'tavern' ? [159, 219.5] : plot.connect);
 });
@@ -3139,6 +3245,7 @@ function renderCloudRoute(frameSeconds: number) {
   presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
   presence.sample(!cabin && walking, x, n, airHeight ?? ground, playerBodyYaw());
   presence.update(Math.min(.25, frameSeconds));
+  skyCityHost.update({ kind: skyCityViewKind }, Math.min(.25, frameSeconds));
   const enabled = moveAllowed();
   touchWalk.setAllowed(enabled);
   crosshair.hidden = !lookAllowed();

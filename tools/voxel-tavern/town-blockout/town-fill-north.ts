@@ -1,4 +1,5 @@
-import { BoxGeometry, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BoxGeometry, Group, Matrix4, Mesh, MeshLambertMaterial } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Blank-fill campaign, package 1 (zone-1 self-build + self-mount, 代挂):
 // north band (old-town north edge to the foothill line) + north forest
@@ -152,6 +153,34 @@ const BUILDERS: Record<FillKind, (part: Part) => void> = {
   },
 };
 
+
+// Draw discipline (景物册追补 c7182bbb): the whole package merges into one
+// mesh per palette material — static scenery costs a handful of draws no
+// matter how many pieces it holds. Returns the pre-merge part count.
+function mergePackage(group: Group): number {
+  group.updateMatrixWorld(true);
+  const byMaterial = new Map<MeshLambertMaterial, BoxGeometry[]>();
+  let parts = 0;
+  const world = new Matrix4();
+  group.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh) return;
+    parts++;
+    world.copy(mesh.matrixWorld);
+    const geometry = boxGeometry.clone().applyMatrix4(world);
+    const key = mesh.material as MeshLambertMaterial;
+    const list = byMaterial.get(key) ?? [];
+    list.push(geometry);
+    byMaterial.set(key, list);
+  });
+  for (const child of [...group.children]) group.remove(child);
+  for (const [mat, geometries] of byMaterial) {
+    const merged = new Mesh(mergeGeometries(geometries)!, mat);
+    group.add(merged);
+  }
+  return parts;
+}
+
 export function mountTownFillNorth(parent: Group, heightAt: (east: number, north: number) => number) {
   const group = new Group();
   group.name = 'town-fill-north';
@@ -174,6 +203,8 @@ export function mountTownFillNorth(parent: Group, heightAt: (east: number, north
     group.add(item);
     placed.push(cluster.id);
   }
+  const parts = mergePackage(group);
+  group.userData.parts = parts;
   return {
     group,
     placed,

@@ -1,6 +1,6 @@
 import {
   BoxGeometry, CanvasTexture, Color, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
+  NearestFilter, Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
@@ -29,6 +29,7 @@ const palette: Record<string, Material> = {
   parcel: new MeshLambertMaterial({ color: '#b77a3f' }),
   brass: new MeshLambertMaterial({ color: '#d3a258', emissive: '#55201a', emissiveIntensity: .38 }),
   red: new MeshLambertMaterial({ color: '#b64734', emissive: '#602519', emissiveIntensity: .23 }),
+  postGreen: new MeshLambertMaterial({ color: '#44503c' }), // 邮筒墨绿（总控 2026-11-21 定版：邮政绿，不与灯笼红撞色）
   redDark: new MeshLambertMaterial({ color: '#672c2a' }),
   dark: new MeshLambertMaterial({ color: '#30262b' }),
   glass: new MeshBasicMaterial({ color: '#ffd482' }),
@@ -264,6 +265,8 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     ctx.fillText(text, 160, 66);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
+    texture.magFilter = NearestFilter; // 风格规范：像素贴图最近邻，禁平滑
+    texture.minFilter = NearestFilter;
     const sign = new Mesh(new PlaneGeometry(width, width * .4), new MeshBasicMaterial({ map: texture }));
     sign.position.set(x, y, z);
     model.add(sign);
@@ -302,7 +305,7 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   // with their local positions translated to this larger building.
   const mailboxX = 3.26;
   const mailboxZ = 7.6;
-  box('red', mailboxX, .85, mailboxZ, .65, 1.35, .65);
+  box('postGreen', mailboxX, .85, mailboxZ, .65, 1.35, .65);
   box('snow', mailboxX, 1.57, mailboxZ, .75, .14, .75);
   box('dark', mailboxX, 1.19, mailboxZ + .34, .4, .075, .035);
   box('brass', mailboxX, .88, mailboxZ + .34, .30, .22, .035);

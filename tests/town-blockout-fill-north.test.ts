@@ -44,6 +44,8 @@ test('fill-north clusters clear the assembled town at their own radii', () => {
   const parent = new Group();
   const mounted = mountTownFillNorth(parent, (e, n) => grid.heightAt(e, n));
   assert.equal(mounted.placed.length, fillNorthClusters.length);
-  assert.equal(mounted.group.children.length, fillNorthClusters.length);
+  // Merged-build discipline: one mesh per palette material, parts preserved.
+  assert.ok(mounted.group.children.length <= 11, 'merged draws exceed palette size');
+  assert.ok((mounted.group.userData.parts as number) > fillNorthClusters.length, 'parts lost in merge');
   mounted.dispose();
 });
