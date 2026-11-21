@@ -47,9 +47,11 @@ export function craterWestBoundaryEnvelope(east:number,north:number) {
 export function craterImpactRing(east:number,north:number,anchor:CraterReliefAnchor) {
   const dx=east-anchor.east,dn=north-anchor.north;
   const radius=Math.hypot(dx,dn);
-  if(radius<=meteorCraterRimRadius||radius>=110)return 0;
+  // B-01 walk mesh extends from the formal rim r55 to its r59 apron.
+  // Exact zero through r60 prevents two overlapping surfaces from disagreeing.
+  if(radius<=meteorCraterRimRadius+5||radius>=110)return 0;
   const bearing=Math.atan2(dx,dn);
-  const inner=smooth((radius-meteorCraterRimRadius)/22);
+  const inner=smooth((radius-meteorCraterRimRadius-5)/20);
   const outer=1-smooth((radius-82)/28);
   const natural=0.9+0.07*Math.cos(bearing*6.0)+0.03*Math.sin(bearing*9.0);
   return 4.5*natural*inner*outer;

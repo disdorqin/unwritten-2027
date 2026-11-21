@@ -14,6 +14,7 @@ import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
 import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 import { buildCraterDensityA2 } from './town-crater-density-a2';
+import { craterWestUpliftCandidate } from './town-za34-crater-uplift';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -46,7 +47,10 @@ type WestCraterRoad = {
 };
 
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
-export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number): WestCraterRoad {
+export function mountWestCraterRoad(
+  northLimit: number, westTownHeightAt: (north: number) => number,
+  options: { za34UpliftCandidate?: boolean } = {},
+): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
@@ -69,8 +73,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     for (let east = survey.west; east <= 0; east++) {
       const t = Math.max(0, (east + seamBlendWidth) / seamBlendWidth);
       const i = address(east, north);
-      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
       inside[i] = Number(Math.hypot(east - anchor.east, north - anchor.north) < carrierHoleRadius);
+      const legacyGround = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
+      // Opt-in R1 integration probe: the uplift is baked into the SAME sampled
+      // vertices used below by collision heightAt and all crater sites.
+      // Default false: the current released landscape is unchanged until R7.
+      samples[i] = legacyGround + (options.za34UpliftCandidate && !inside[i]
+        ? craterWestUpliftCandidate(east, north, anchor) : 0);
     }
   }
   // Batch adjacent 48 m ground tiles into spatially bounded 2×3 clusters:
