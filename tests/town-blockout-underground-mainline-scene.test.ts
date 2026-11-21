@@ -228,6 +228,24 @@ test('U-19 derail is visible as a stopped cart and rerail prompt, without auto-h
   assert.equal(f.parent.children.length, 0);
 });
 
+test('U-19 full ore cart never offers an empty-cart recall interaction at the camp station', () => {
+  const f = setup();
+  const mounted = mountUndergroundMainlineScene(f.options);
+  if (mounted.kind !== 'ready') assert.fail();
+  f.setViewer({ playerId: 'helper', domainId: 'mine', foot: route.work.camp.position });
+  f.setSnapshot({ ...fresh, revision: 19, mode: 'stopped', chainage: route.length,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: 'iron', pieces: 1 } });
+  assert.equal(mounted.prompt('winch'), undefined);
+  assert.equal(mounted.press('winch', true), false);
+  f.setSnapshot({ ...fresh, revision: 20, mode: 'stopped', chainage: route.length,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: '', pieces: 0 } });
+  assert.equal(mounted.prompt('winch')?.role, 'winch');
+  assert.equal(mounted.press('winch', true), true);
+  mounted.dispose();
+});
+
 test('U-19 winch only appears on the certified camp station; unsupported requests remain silent', () => {
   const f = setup();
   const mounted = mountUndergroundMainlineScene(f.options);

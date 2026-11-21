@@ -396,8 +396,8 @@ export function mountUndergroundMainlineScene(host: Options) {
         candidate.push({ role: 'load', pos: point, label: '码入矿石 · 车斗三倍背包容量' },
           { role: 'unload', pos: point, label: '卸矿入账 · 先检查背包' });
     }
-    if (snapshot.mode === 'recalling' || snapshot.mode === 'stopped' &&
-        snapshot.chainage > 2 && !snapshot.riderId)
+    if ((snapshot.mode === 'recalling' || snapshot.mode === 'stopped') &&
+        snapshot.chainage > 2 && !snapshot.riderId && snapshot.cargo.pieces === 0)
       candidate.push({ role: 'winch', pos: route.work.camp.position,
         label: undergroundMainlineWords.winch });
     if (snapshot.riderId === viewer.playerId && snapshot.mode === 'rolling')

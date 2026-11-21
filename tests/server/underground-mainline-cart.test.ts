@@ -216,6 +216,66 @@ test('U-19 work denial and remote packets cannot repair, mount, steer, switch or
   assert.equal(f.cart.leave('miner', 0), false);
 });
 
+test('U-19 holding E at a shared winch is idempotent and releasing mid-recall preserves real position', () => {
+  const stopped: U19MineCartSnapshot = {
+    revision: 25, mode: 'stopped', lastAtMs: 1000, chainage: 120, speed: 0,
+    brakeHeld: false, turnout: 'gate', riderId: undefined,
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: '', pieces: 0 },
+  };
+  const f = fixture({ initial: stopped });
+  assert.equal(f.cart.recall('miner', f.state().revision), true);
+  assert.equal(f.cart.recallHold('miner', f.state().revision), false,
+    'duplicate E press at the same server time must not consume a revision');
+  const before = f.state();
+  assert.equal(before.chainage, 120);
+  f.advance(1000);
+  assert.equal(f.cart.recallHold('miner', f.state().revision), true);
+  assert.ok(f.state().chainage < before.chainage);
+  const position = f.state().chainage;
+  assert.equal(f.cart.releaseRecall('helper', f.state().revision), false);
+  f.setPlace({ ...f.route.work.camp.position, east: 500 });
+  assert.equal(f.cart.releaseRecall('miner', f.state().revision), true,
+    'releasing E always stops the mechanism even if the operator walked away');
+  assert.equal(f.state().mode, 'stopped');
+  assert.equal(f.state().chainage, position, 'release must not teleport or refund movement');
+  assert.equal(f.state().recallOperator, undefined);
+  f.setPlace(f.route.work.camp.position);
+  assert.equal(f.cart.recall('helper', f.state().revision), true,
+    'a second player can resume the same partially returned empty cart');
+  assert.equal(f.state().recallOperator, 'helper');
+});
+
+test('U-19 stale/disconnected winch operator can be replaced by a nearby helper, never a remote request', () => {
+  const stopped: U19MineCartSnapshot = {
+    revision: 5, mode: 'stopped', lastAtMs: 1000, chainage: 120, speed: 0,
+    brakeHeld: false, turnout: 'gate',
+    faults: { sleepers: 3, gauge: 3, 'turnout-rust': 4 },
+    cargo: { oreId: '', pieces: 0 },
+  };
+  const f = fixture({ initial: stopped });
+  assert.equal(f.cart.recall('miner', 5), true);
+  assert.equal(f.cart.recall('helper', 6), false, 'active operator may not be stolen');
+  f.advance(3_500);
+  f.setDomain('town');
+  assert.equal(f.cart.recall('helper', f.state().revision), false, 'world domain remains authoritative');
+  f.setDomain('mine');
+  f.setPlace({ ...f.route.work.camp.position, east: 800 });
+  assert.equal(f.cart.recall('helper', f.state().revision), false, 'remote takeover forbidden');
+  f.setPlace(f.route.work.camp.position);
+  assert.equal(f.cart.recall('helper', f.state().revision), true);
+  assert.equal(f.state().recallOperator, 'helper');
+  assert.equal(f.state().chainage, 120, 'stale hold never catches up via a giant time step');
+  assert.equal(f.cart.recallHold('miner', f.state().revision), false);
+  assert.equal(f.cart.releaseRecall('miner', f.state().revision), false);
+  f.advance(1000);
+  assert.equal(f.cart.recallHold('helper', f.state().revision), true);
+  assert.ok(f.state().chainage < 120);
+  assert.throws(() => fixture({ initial: {
+    ...stopped, mode: 'recalling', recallOperator: undefined, lastRecallAtMs: 1000,
+  } }), /Invalid persisted/);
+});
+
 test('U-19 winch refuses riders and cargo, only empty end-of-line cart can be called back by held E', () => {
   const f = fixture();
   f.repairAll();
