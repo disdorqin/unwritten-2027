@@ -3,6 +3,7 @@ import { createMainSummitApproach, mountMainSummitApproachSigns } from './main-s
 import { createMainSummitBannerCloud } from './main-summit-banner-cloud';
 import { createMainSummitBellPosts } from './main-summit-bell-posts';
 import { createMainSummitWindGround } from './main-summit-wind-ground';
+import { mountCloudTerraceArt } from './main-summit-cloud-terrace-art';
 import { createGlideRingEntities } from './main-summit-glide-ring-entities';
 import {
   buildWindShelter, createSkyWatchRelic, createTrailMarkers, createWishLockPoint,
@@ -129,6 +130,9 @@ export function mountMainSummitExtras(assembly: Assembly) {
   group.add(hutFurnishings.group);
   const wishLock = createWishLockPoint({ east: 12, north: -19, height: assembly.arrivalHeight });
   group.add(wishLock.group);
+  // D4 / m03-m34-m36-m82 is an additive scenery package only; it preserves
+  // the ZA-22 flight runway, the B-window starport rack and portal authority.
+  const cloudTerraceArt = mountCloudTerraceArt(group);
   const shelterMidPoint = trail.points[Math.floor(trail.points.length * .55)]!;
   const shelterMid = buildWindShelter('wind-shelter-trail-mid',
     shelterMidPoint.east + 6, shelterMidPoint.north + 5,
@@ -177,7 +181,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
   return {
     approach, posts, signs, wingRack, cableTravel, glideRings, glideProgress, cloud, paint, bannerCloud, icefall, rockTowers,
     surveyStations, hutFurnishings, wishLock, shelterMid, shelterIce, skyWatch, trailMarkers, machineRoom,
-    bellPosts, windGround, glideEntities, glideLines,
+    bellPosts, windGround, glideEntities, glideLines, cloudTerraceArt,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       return posts.blocked(east, north, feet, radius, bodyHeight) ||
         signs.blocked(east, north, feet, radius, bodyHeight) ||
@@ -186,13 +190,15 @@ export function mountMainSummitExtras(assembly: Assembly) {
         surveyStations.blocked(east, north, feet, radius, bodyHeight) ||
         hutFurnishings.blocked(east, north, feet, radius, bodyHeight) ||
         machineRoom.blocked(east, north, feet, radius, bodyHeight) ||
-        windGround.blocked(east, north, feet, radius, bodyHeight);
+        windGround.blocked(east, north, feet, radius, bodyHeight) ||
+        cloudTerraceArt.blocked(east, north, feet, radius, bodyHeight);
     },
     /** Night material version (§2.4): paint and massif darken together. */
     setNight(night: boolean) {
       paint.setNight(night);
       coarseMaterial.color.setHex(night ? 0x2f3f52 : coarseDayColor);
       glowBand.visible = night;
+      cloudTerraceArt.setNight(night);
     },
     update(nowMs: number) {
       // Calm wind until the ZB-20 wind feed is wired into the mountain domain.
@@ -207,6 +213,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
       glowGeometry.dispose();
       glowMaterial.dispose();
       windGround.dispose();
+      cloudTerraceArt.dispose();
       bellPosts.dispose();
       glideEntities.dispose();
       machineRoom.dispose();

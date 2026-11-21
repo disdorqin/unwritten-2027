@@ -28,12 +28,14 @@ function makeChain() {
   const winchPoint = registration.connection.winch;
   let now = 1_000_000;
   let foot = { east: winchPoint.east, north: winchPoint.north, height: winchPoint.height };
+  let ropeHeld = false;
   const events: DreamChainEvent[] = [];
   const chain = createUndergroundDreamChain({
     registration,
     now: () => now,
     playerId: 'local-player',
     readLocalFoot: () => foot,
+    readRopeHeld: () => ropeHeld,
     onEvent: (event) => { events.push(event); },
   });
   assert.equal(chain.kind, 'ready');
@@ -41,6 +43,7 @@ function makeChain() {
   return {
     chain, events,
     setFoot: (next: typeof foot) => { foot = next; },
+    setRope: (held: boolean) => { ropeHeld = held; },
     advance: (ms: number) => { now += ms; },
   };
 }
@@ -136,4 +139,38 @@ test('cage rides stay locked until the first fall has happened', () => {
   windOpen(ctx);
   ctx.setFoot({ ...shaftFoot });
   assert.equal(ctx.chain.requestCageRide('down'), undefined);
+});
+
+test('crank path (乙案): solo cranking opens after about forty seconds of held frames', () => {
+  const ctx = makeChain();
+  let elapsed = 0;
+  let result = ctx.chain.crankWinch(0.25);
+  while (result.kind !== 'opened' && elapsed < 60_000) {
+    ctx.advance(250);
+    elapsed += 250;
+    result = ctx.chain.crankWinch(0.25);
+  }
+  assert.equal(result.kind, 'opened');
+  assert.ok(elapsed >= 38_000 && elapsed <= 42_000, `solo crank took ${elapsed}ms`);
+  assert.equal(ctx.chain.coverOpen(), true);
+  assert.ok(ctx.events.some((event) => event.kind === 'well-opened'));
+});
+
+test('crank path (乙案): a held steady rope roughly halves the crank and stills the sway', () => {
+  const ctx = makeChain();
+  ctx.setRope(true);
+  assert.equal(ctx.chain.swayRoll(2), 0);
+  let elapsed = 0;
+  let result = ctx.chain.crankWinch(0.25);
+  while (result.kind !== 'opened' && elapsed < 40_000) {
+    ctx.advance(250);
+    elapsed += 250;
+    result = ctx.chain.crankWinch(0.25);
+  }
+  assert.equal(result.kind, 'opened');
+  assert.ok(elapsed >= 20_000 && elapsed <= 25_000, `duo crank took ${elapsed}ms`);
+
+  const solo = makeChain();
+  solo.chain.crankWinch(0.25);
+  assert.notEqual(solo.chain.swayRoll(2), 0);
 });
