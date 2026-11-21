@@ -1,13 +1,25 @@
 import {
-  BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, type BufferGeometry,
+  BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, Vector3, type BufferGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { icePalaceRiteReach } from '../../../src/shared/ice-palace-rites';
 import type { Box } from './landmark-kit';
+import type { TownActivitySpot } from './town-activity';
 
 export const icePalaceFragmentSite = {
+  id: 'ice-palace-coil-fragment',
   stand: [.35, .12, -5.47],
   fragment: [.35, .12, -6.47],
+  label: '拾取船件碎片',
 } as const;
+
+type Target = Readonly<{ id: typeof icePalaceFragmentSite.id; object: Group }>;
+export type IcePalaceFragmentPickupHost = Readonly<{
+  present(id: Target['id']): boolean;
+  isTargeted(target: Target): boolean;
+  /** Resolve true after the source is consumed and one item has entered the existing ZB-22 bag. */
+  pickUpOne(id: Target['id']): Promise<boolean>;
+}>;
 
 export function mountIcePalaceWreckage(palace: Group, colliders: Box[]) {
   const group = new Group();
@@ -64,4 +76,32 @@ export function mountIcePalaceWreckage(palace: Group, colliders: Box[]) {
   fragment.add(brokenPlate, edge, bolt);
   palace.add(fragment);
   return fragment;
+}
+
+export function createIcePalaceFragmentActivity(palace: Group, fragment: Group, host: IcePalaceFragmentPickupHost,
+  notifyPickup: (message: string) => void, canStand?: (x: number, n: number, feet: number) => boolean) {
+  const { x, y: ground, z } = palace.localToWorld(new Vector3(...icePalaceFragmentSite.stand));
+  const n = -z;
+  if (canStand?.(x, n, ground) === false) return;
+  const target = { id: icePalaceFragmentSite.id, object: fragment };
+  let pending = false;
+  const update = () => { fragment.visible = host.present(target.id); };
+  const available = () => !pending && host.present(target.id) && host.isTargeted(target);
+  async function collect() {
+    if (!available()) return;
+    pending = true;
+    try {
+      if (await host.pickUpOne(target.id)) notifyPickup('船件碎片 ×1');
+    } catch { /* The bag controls pickup admission. */ }
+    finally {
+      pending = false;
+      update();
+    }
+  }
+  update();
+  const spot: TownActivitySpot = {
+    x, n, ground, range: icePalaceRiteReach, label: icePalaceFragmentSite.label, available,
+    run() { void collect(); },
+  };
+  return { spot, update };
 }
