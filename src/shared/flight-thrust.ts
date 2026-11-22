@@ -6,7 +6,7 @@ export const flightThrustSpec = {
 } as const;
 
 export type FlightThrottle = 'off' | 'cruise' | 'full';
-const burnRate: Readonly<Record<FlightThrottle, number>> = { off: 0, cruise: .5, full: 1 };
+export const flightBurnRate: Readonly<Record<FlightThrottle, number>> = { off: 0, cruise: .5, full: 1 };
 
 /** Powered portion of a step. The caller continues its snow-wing glide when the tank empties. */
 export function createFlightThrust(fuelSeconds = 0) {
@@ -17,10 +17,10 @@ export function createFlightThrust(fuelSeconds = 0) {
   function snapshot() { return { throttle, fuelSeconds, thrust }; }
 
   function step(seconds: number, requested: FlightThrottle, height: number, diving = false) {
-    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(height) || !Object.hasOwn(burnRate, requested)) {
+    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(height) || !Object.hasOwn(flightBurnRate, requested)) {
       throw new RangeError('Invalid powered flight step');
     }
-    const consumption = burnRate[requested];
+    const consumption = flightBurnRate[requested];
     const poweredSeconds = consumption === 0 ? 0 : Math.min(seconds, fuelSeconds / consumption);
     const startingFuel = fuelSeconds;
     const powered = consumption > 0 && startingFuel > 0;

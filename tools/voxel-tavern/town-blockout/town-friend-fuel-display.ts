@@ -8,6 +8,7 @@ import {
   type Material,
 } from 'three';
 import {
+  flightBurnRate,
   fuelSecondsPerStardustOre,
   type FlightThrottle,
 } from '../../../src/shared/flight-thrust.js';
@@ -40,7 +41,7 @@ export const FUEL_DISPLAY_CONSTANTS = {
     fullRatio: 0.9,     // >= 540s
     halfMinRatio: 0.4,  // 240s
     halfMaxRatio: 0.6,  // 360s
-    lowSeconds: 60,     // <= 60s
+    lowMaxRatio: 0.4,   // <= 40%: 10-40% 原落 normal 无警告，属缺口
     criticalSeconds: 15,// <= 15s
   },
   colors: {
@@ -68,12 +69,6 @@ export const FUEL_DISPLAY_CONSTANTS = {
   },
 } as const;
 
-const burnRateMap: Readonly<Record<FlightThrottle, number>> = {
-  off: 0,
-  cruise: 0.5,
-  full: 1.0,
-};
-
 /**
  * Pure evaluation function for the fuel presentation layer.
  * Evaluates fuel seconds, throttle, consumption rate, remaining endurance and world prompts.
@@ -87,7 +82,7 @@ export function evaluateFuelDisplay(
   const clampedSeconds = Math.max(0, Math.min(safeMax, Number.isFinite(fuelSecondsInput) ? fuelSecondsInput : 0));
   const percentage = Math.round((clampedSeconds / safeMax) * 1000) / 10;
   const canCount = Math.round((clampedSeconds / FUEL_DISPLAY_CONSTANTS.maxFuelSeconds) * 100) / 100;
-  const burnRate = burnRateMap[throttle] ?? 0;
+  const burnRate = flightBurnRate[throttle] ?? 0;
 
   let status: FuelStatusTier;
   let warningLevel: FuelWarningLevel;
@@ -97,17 +92,17 @@ export function evaluateFuelDisplay(
     status = 'empty';
     warningLevel = 'critical';
     indicatorColor = FUEL_DISPLAY_CONSTANTS.colors.empty;
-  } else if (clampedSeconds <= FUEL_DISPLAY_CONSTANTS.thresholds.lowSeconds) {
+  } else if (percentage <= FUEL_DISPLAY_CONSTANTS.thresholds.lowMaxRatio * 100) {
     status = 'low';
     warningLevel = clampedSeconds <= FUEL_DISPLAY_CONSTANTS.thresholds.criticalSeconds ? 'critical' : 'caution';
     indicatorColor = FUEL_DISPLAY_CONSTANTS.colors.low;
-  } else if (clampedSeconds >= safeMax * FUEL_DISPLAY_CONSTANTS.thresholds.fullRatio) {
+  } else if (percentage >= FUEL_DISPLAY_CONSTANTS.thresholds.fullRatio * 100) {
     status = 'full';
     warningLevel = 'none';
     indicatorColor = FUEL_DISPLAY_CONSTANTS.colors.full;
   } else if (
-    clampedSeconds >= safeMax * FUEL_DISPLAY_CONSTANTS.thresholds.halfMinRatio &&
-    clampedSeconds <= safeMax * FUEL_DISPLAY_CONSTANTS.thresholds.halfMaxRatio
+    percentage > FUEL_DISPLAY_CONSTANTS.thresholds.halfMinRatio * 100 &&
+    percentage <= FUEL_DISPLAY_CONSTANTS.thresholds.halfMaxRatio * 100
   ) {
     status = 'half';
     warningLevel = 'none';
@@ -119,7 +114,7 @@ export function evaluateFuelDisplay(
   }
 
   const estimatedEnduranceSeconds =
-    burnRate > 0 ? Math.round((clampedSeconds / burnRate) * 10) / 10 : Infinity;
+    clampedSeconds <= 0.001 ? 0 : burnRate > 0 ? Math.round((clampedSeconds / burnRate) * 10) / 10 : Infinity;
 
   const shortWord = FUEL_DISPLAY_CONSTANTS.shortWords[status];
   const prompt = FUEL_DISPLAY_CONSTANTS.prompts[status];
@@ -237,6 +232,7 @@ export function mountFuelDisplay(
     const scaleX = Math.max(0.01, snapshot.percentage / 100);
     fillMesh.scale.set(scaleX, 1, 1);
     fillMesh.position.x = -0.15 * (1 - scaleX);
+    fillMesh.visible = snapshot.percentage > 0;
 
     const targetColor = new Color(snapshot.indicatorColor);
     levelFillMat.color.copy(targetColor);

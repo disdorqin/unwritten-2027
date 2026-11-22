@@ -62,12 +62,42 @@ test('F-8 evaluates empty fuel state with glide-only prompt and critical warning
   assert.equal(snap.status, 'empty');
   assert.equal(snap.throttle, 'off');
   assert.equal(snap.burnRate, 0);
-  assert.equal(snap.estimatedEnduranceSeconds, Infinity);
+  assert.equal(snap.estimatedEnduranceSeconds, 0);
   assert.equal(snap.warningLevel, 'critical');
   assert.equal(snap.shortWord, '耗尽');
   assert.equal(snap.prompt, '星尘告罄 · 滑翔降落');
   assert.match(snap.gaugeText, /0\.0s/);
   assert.match(snap.rateText, /0\.0 s\/s \[关档\]/);
+});
+
+test('F-8 covers the 10-40% band with a low warning instead of normal', () => {
+  const at40 = evaluateFuelDisplay(240, 'full');
+  assert.equal(at40.status, 'low');
+  assert.equal(at40.warningLevel, 'caution');
+  assert.equal(at40.shortWord, '偏低');
+  assert.equal(at40.percentage, 40);
+
+  const justAbove = evaluateFuelDisplay(241, 'full');
+  assert.equal(justAbove.status, 'half');
+  assert.equal(justAbove.warningLevel, 'none');
+
+  const normal = evaluateFuelDisplay(480, 'full');
+  assert.equal(normal.status, 'normal');
+  assert.equal(normal.warningLevel, 'none');
+  assert.equal(normal.shortWord, '平稳');
+
+  const fullEdge = evaluateFuelDisplay(539.9, 'full');
+  assert.equal(fullEdge.percentage, 90);
+  assert.equal(fullEdge.status, 'full');
+});
+
+test('F-8 keeps canCount in 600s ore cans for a custom tank and full boundary', () => {
+  const snap = evaluateFuelDisplay(120, 'full', 120);
+  assert.equal(snap.maxFuelSeconds, 120);
+  assert.equal(snap.percentage, 100);
+  assert.equal(snap.canCount, 0.2);
+  assert.equal(snap.status, 'full');
+  assert.equal(snap.estimatedEnduranceSeconds, 120);
 });
 
 test('F-8 surveyFuelThreeStates generates comprehensive walkthrough evidence', () => {
@@ -102,11 +132,13 @@ test('F-8 mountFuelDisplay correctly builds, updates and disposes 3D gauge compo
   const halfSnap = component.update(300, 'cruise');
   assert.equal(halfSnap?.status, 'half');
   assert.equal(halfSnap?.shortWord, '半余');
+  assert.equal(root.getObjectByName('fuel-gauge-fill')?.visible, true);
 
   // Transition to empty
   const emptySnap = component.update(0, 'off');
   assert.equal(emptySnap?.status, 'empty');
   assert.equal(emptySnap?.shortWord, '耗尽');
+  assert.equal(root.getObjectByName('fuel-gauge-fill')?.visible, false);
 
   // Duplicate mount guard
   assert.throws(() => {

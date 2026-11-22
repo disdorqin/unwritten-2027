@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>F-8 燃料仪表 · 独立预览（未接线）</title>
+<style>
+  :root{
+    --bg:#0a121c; --panel:#0f1d2acc; --line:#8fb3cf33; --ink:#e8f1f8; --dim:#9fb6c9;
+    --amber:#dfbd83; --green:#82d9a9; --red:#e2726d; --blue:#9cc8e8;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:14px/1.55 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+
+  #panel{position:absolute;top:16px;left:16px;width:min(380px,calc(100vw - 32px));
+    max-height:calc(100vh - 32px);overflow:auto;padding:14px 16px 12px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(14px);
+    box-shadow:0 18px 50px #0006}
+  h1{font-size:15px;margin:0 0 2px;color:#fbe1b0;letter-spacing:.02em}
+  .sub{font-size:11.5px;color:var(--dim);margin:0 0 10px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10.5px;
+    border:1px solid #e2726d66;color:#f0a39e;background:#e2726d14;margin-left:6px;vertical-align:1px}
+
+  .hud{display:flex;align-items:baseline;gap:10px;padding:10px 12px;margin:2px 0 10px;
+    border:1px solid #ffffff12;border-radius:11px;background:#07111a99}
+  #pct{font:600 30px/1 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--green)}
+  #word{font-size:14px;font-weight:600;color:var(--amber)}
+  #prompt{font-size:12.5px;color:#cfe2f1;margin-top:1px}
+
+  .row{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+  button{border:1px solid #8aacc6aa;background:#1d3347c9;color:#eaf3fa;
+    padding:6px 10px;border-radius:8px;cursor:pointer;font:inherit;font-size:12.5px}
+  button:hover{background:#27455f}
+  button.active{background:#b54d3b;border-color:#e08a7a}
+  button.ghost{background:#12223299;border-color:#5f8099aa;color:#bcd2e3}
+
+  .slider{margin:10px 0 2px}
+  .slider label{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:4px}
+  input[type=range]{width:100%;accent-color:#dfbd83;height:26px}
+
+  dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:10px 0 0;
+    padding-top:9px;border-top:1px solid #ffffff14;font-size:12px}
+  dt{color:var(--dim);white-space:nowrap}
+  dd{margin:0;text-align:right;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;color:#d9e8f4}
+
+  .legend{margin-top:10px;font-size:11.5px;color:var(--dim);line-height:1.9}
+  .chip{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:0}
+
+  .note{margin-top:10px;padding:8px 10px;border-left:2px solid #dfbd8377;background:#dfbd830d;
+    font-size:11.5px;color:#c8d6e2;border-radius:0 8px 8px 0}
+
+  #toast{position:absolute;left:50%;bottom:9%;transform:translateX(-50%);
+    padding:9px 18px;border:1px solid #9fb6c966;border-radius:11px;background:#0d1b28e6;
+    font-size:13px;color:#e8f1f8;white-space:nowrap;pointer-events:none;
+    transition:opacity .18s ease;opacity:.94}
+  #foot{position:absolute;right:14px;bottom:12px;font-size:11px;color:#7e97ab;text-align:right;
+    pointer-events:none}
+  #foot b{color:#a9c3d6;font-weight:600}
+</style>
+</head>
+<body>
+
+<aside id="panel">
+  <h1>F-8 燃料仪表 · 独立预览<span class="tag">未接线</span></h1>
+  <p class="sub">渲染 <code>town-blockout/town-friend-fuel-display.ts</code> 的呈现层；
+    不接 viewer，游戏内不可见。拖动旋转，滚轮远近，双击复位。</p>
+
+  <div class="hud">
+    <span id="pct">100.0%</span>
+    <div>
+      <div><span id="word">充盈</span> · <span id="warn">none</span></div>
+      <div id="prompt">星尘充盈 · 动力就绪</div>
+    </div>
+  </div>
+
+  <div class="row" id="presets">
+    <button data-fuel="600">满 600</button>
+    <button data-fuel="540">边界 540</button>
+    <button data-fuel="300">半 300</button>
+    <button data-fuel="240">低边界 240</button>
+    <button data-fuel="480">正常 480</button>
+    <button data-fuel="120">偏低 120</button>
+    <button data-fuel="15">临界 15</button>
+    <button data-fuel="0">空 0</button>
+  </div>
+
+  <div class="slider">
+    <label><span>剩余燃料（秒）</span><span id="fuelVal">600.0 s</span></label>
+    <input id="fuel" type="range" min="0" max="600" step="0.1" value="600" />
+  </div>
+
+  <div class="row" id="throttles">
+    <button data-throttle="off">关档 off</button>
+    <button data-throttle="cruise">巡航 cruise ×0.5</button>
+    <button data-throttle="full">全推 full ×1.0</button>
+  </div>
+
+  <div class="row">
+    <button id="drain" class="ghost">自动消耗 ×20</button>
+    <button id="reset" class="ghost">复位</button>
+  </div>
+
+  <dl>
+    <dt>罐数 canCount</dt><dd id="cans">1.00</dd>
+    <dt>续航估计</dt><dd id="endurance">∞（关档不耗）</dd>
+    <dt>消耗率</dt><dd id="rate">0.0 s/s [关档]</dd>
+    <dt>仪表文本</dt><dd id="gaugeText">600.0s (1.00 罐 · 100%)</dd>
+    <dt>状态档</dt><dd id="tier">full</dd>
+  </dl>
+
+  <div class="legend">
+    <span class="chip" style="background:#82d9a9"></span>≥540s（90%）充盈　
+    <span class="chip" style="background:#dfbd83"></span>240–360s（40–60%）半余　
+    <span class="chip" style="background:#69c09c"></span>360–540s（60–90%）平稳　
+    <span class="chip" style="background:#e59866"></span>≤240s（40%）偏低　
+    <span class="chip" style="background:#d9534f"></span>0 耗尽
+  </div>
+
+  <div class="note">已修：低油告警覆盖到 40%（≤240s），10–40% 不再落「平稳」；档位按显示百分比对齐（90/40/60），239.9s 与 240s 同读同档；0 油续航 0，空条隐藏。≤15s 为 critical。</div>
+</aside>
+
+<div id="toast">星尘充盈 · 动力就绪</div>
+<div id="foot"><b>独立审阅页</b> · 不占 town-blockout.html · 非游戏内画面</div>
+
+<script type="module">
+import {
+  AmbientLight, BoxGeometry, Color, DirectionalLight, Group, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, PointLight,
+  Scene, WebGLRenderer,
+} from 'three';
+import {
+  mountFuelDisplay, evaluateFuelDisplay, FUEL_DISPLAY_CONSTANTS,
+} from './town-blockout/town-friend-fuel-display.ts';
+
+const MAX = FUEL_DISPLAY_CONSTANTS.maxFuelSeconds; // 600
+
+/* ---------- three scene ---------- */
+const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = 4; // ACESFilmic
+renderer.toneMappingExposure = 1.12;
+document.body.prepend(renderer.domElement);
+
+const scene = new Scene();
+scene.background = new Color('#0a121c');
+
+// 舞台整体右移，避开左上信息面板；仪表在剩余可视区居中
+const stage = new Group();
+stage.position.x = 0.13;
+scene.add(stage);
+
+const camera = new PerspectiveCamera(34, innerWidth / innerHeight, 0.02, 20);
+
+scene.add(new AmbientLight('#b9d8f0', 0.55));
+const key = new DirectionalLight('#fff1d6', 2.4); key.position.set(0.5, 0.85, 1.3); scene.add(key);
+const rim = new DirectionalLight('#7fb6d8', 1.6); rim.position.set(-0.9, 0.5, -0.5); scene.add(rim);
+const fillLight = new PointLight('#e6f1fb', 1.4, 3.0, 2); fillLight.position.set(0.13, 0.05, 0.62); scene.add(fillLight);
+
+// 舞台：深背板 + 安装板 + 一道金色底边，让 0.36m 的小仪表有参照
+const backdrop = new Mesh(
+  new PlaneGeometry(2.4, 1.4),
+  new MeshStandardMaterial({ color: '#081019', roughness: 0.98, metalness: 0.02 }),
+);
+backdrop.position.set(0.13, 0, -0.32);
+scene.add(backdrop);
+
+const outline = new Mesh(
+  new BoxGeometry(0.48, 0.22, 0.02),
+  new MeshStandardMaterial({ color: '#04080c', roughness: 0.9, metalness: 0.1 }),
+);
+outline.position.set(0.13, 0, -0.07);
+scene.add(outline);
+
+const plate = new Mesh(
+  new BoxGeometry(0.44, 0.18, 0.03),
+  new MeshStandardMaterial({ color: '#101c28', roughness: 0.8, metalness: 0.2 }),
+);
+plate.position.set(0.13, 0, -0.05);
+scene.add(plate);
+
+const strip = new Mesh(
+  new BoxGeometry(0.16, 0.004, 0.02),
+  new MeshBasicMaterial({ color: '#dfbd83' }),
+);
+strip.position.set(0.13, -0.099, -0.045);
+scene.add(strip);
+
+const host = new Group();
+stage.add(host);
+const display = mountFuelDisplay(host, {
+  maxFuelSeconds: MAX,
+  initialFuelSeconds: MAX,
+  initialThrottle: 'off',
+});
+
+/* ---------- state ---------- */
+let fuel = MAX;
+let throttle = 'off';
+let draining = false;
+let last = performance.now();
+
+const $ = (id) => document.getElementById(id);
+const pctEl = $('pct'), wordEl = $('word'), warnEl = $('warn'), promptEl = $('prompt');
+const fuelVal = $('fuelVal'), fuelInput = $('fuel');
+const cansEl = $('cans'), endEl = $('endurance'), rateEl = $('rate');
+const gaugeEl = $('gaugeText'), tierEl = $('tier'), toastEl = $('toast');
+const drainBtn = $('drain');
+
+const THROTTLE_NAMES = { off: '关档', cruise: '巡航', full: '全推' };
+
+function refresh() {
+  const snap = display.update(fuel, throttle);
+  fuel = snap.fuelSeconds;
+
+  pctEl.textContent = `${snap.percentage.toFixed(1)}%`;
+  pctEl.style.color = `#${snap.indicatorColor.toString(16).padStart(6, '0')}`;
+  wordEl.textContent = snap.shortWord;
+  warnEl.textContent = snap.warningLevel;
+  warnEl.style.color = snap.warningLevel === 'critical' ? '#e2726d'
+    : snap.warningLevel === 'caution' ? '#e5a366' : '#7e97ab';
+  promptEl.textContent = snap.prompt;
+  toastEl.textContent = snap.prompt;
+
+  fuelVal.textContent = `${snap.fuelSeconds.toFixed(1)} s`;
+  if (document.activeElement !== fuelInput) fuelInput.value = String(snap.fuelSeconds);
+  cansEl.textContent = snap.canCount.toFixed(2);
+  endEl.textContent = Number.isFinite(snap.estimatedEnduranceSeconds)
+    ? `${snap.estimatedEnduranceSeconds.toFixed(1)} s` : '∞（关档不耗）';
+  rateEl.textContent = snap.rateText;
+  gaugeEl.textContent = snap.gaugeText;
+  tierEl.textContent = snap.status;
+  return snap;
+}
+
+function setThrottle(next) {
+  throttle = next;
+  for (const b of document.querySelectorAll('#throttles button')) {
+    b.classList.toggle('active', b.dataset.throttle === next);
+  }
+  refresh();
+}
+
+function setFuel(v) {
+  fuel = Math.max(0, Math.min(MAX, Number(v)));
+  refresh();
+}
+
+for (const b of document.querySelectorAll('#presets button')) {
+  b.addEventListener('click', () => { setFuel(Number(b.dataset.fuel)); });
+}
+for (const b of document.querySelectorAll('#throttles button')) {
+  b.addEventListener('click', () => { setThrottle(b.dataset.throttle); });
+}
+fuelInput.addEventListener('input', () => { setFuel(fuelInput.value); });
+
+drainBtn.addEventListener('click', () => {
+  draining = !draining;
+  drainBtn.classList.toggle('active', draining);
+  drainBtn.textContent = draining ? '暂停消耗' : '自动消耗 ×20';
+});
+
+$('reset').addEventListener('click', () => {
+  draining = false;
+  drainBtn.classList.remove('active');
+  drainBtn.textContent = '自动消耗 ×20';
+  throttle = 'off'; fuel = MAX;
+  resetView();
+  setThrottle('off');
+  setFuel(MAX);
+});
+
+/* ---------- camera orbit (manual, no addon dependency) ---------- */
+let yaw = 0, pitch = 0, zoom = 1, dragging = false, lastX = 0, lastY = 0;
+const distance = 0.8;
+
+function placeCamera() {
+  const r = distance * zoom;
+  const cp = Math.cos(pitch);
+  camera.position.set(
+    0.13 + Math.sin(yaw) * cp * r,
+    Math.sin(pitch) * r,
+    Math.cos(yaw) * cp * r,
+  );
+  camera.lookAt(0.13, 0, 0);
+  camera.updateProjectionMatrix();
+}
+function resetView() { yaw = 0; pitch = 0; zoom = 1; placeCamera(); }
+
+const cv = renderer.domElement;
+cv.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerup', () => { dragging = false; });
+cv.addEventListener('pointercancel', () => { dragging = false; });
+cv.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  yaw -= (e.clientX - lastX) * 0.006;
+  pitch = Math.max(-0.55, Math.min(0.55, pitch + (e.clientY - lastY) * 0.004));
+  lastX = e.clientX; lastY = e.clientY;
+});
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoom = Math.max(0.45, Math.min(1.9, zoom * (1 + e.deltaY * 0.0011)));
+}, { passive: false });
+cv.addEventListener('dblclick', resetView);
+
+/* ---------- loop ---------- */
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (draining) {
+    const snap = display.getSnapshot();
+    if (snap.burnRate > 0 && fuel > 0) {
+      fuel = Math.max(0, fuel - dt * snap.burnRate * 20);
+      refresh();
+      if (fuel <= 0) {
+        draining = false;
+        drainBtn.classList.remove('active');
+        drainBtn.textContent = '自动消耗 ×20';
+      }
+    }
+  }
+  placeCamera();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+placeCamera();
+setThrottle('off');
+setFuel(MAX);
+requestAnimationFrame(frame);
+
+// 便于控制台取数对照
+globalThis.__f8 = { display, evaluateFuelDisplay, FUEL_DISPLAY_CONSTANTS };
+</script>
+</body>
+</html>
