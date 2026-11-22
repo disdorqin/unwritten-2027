@@ -6,13 +6,13 @@ import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za
 
 // Geometric invariants rather than instanceof: the town-blockout package uses
 // its own Three.js version and does not share constructors with the root tests.
-test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups without removing geometry', () => {
+test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size groups without removing geometry', () => {
   const terrain = createTerrainGrid();
   const crater = mountWestCraterRoad(worldBounds.depth, north => terrain.groundHeightAt(0, north));
   const ground = crater.group.children.filter((child): child is Mesh =>
     child.name === 'meteor-crater-west-ground' && (child as Mesh).isMesh);
-  assert.equal(ground.length, 12);
-  assert.equal(new Set(ground.map(mesh => mesh.userData.groundBatch)).size, 12);
+  assert.equal(ground.length, 9);
+  assert.equal(new Set(ground.map(mesh => mesh.userData.groundBatch)).size, 9);
   for (const mesh of ground) {
     assert.ok(mesh.isMesh && mesh.geometry.index && mesh.geometry.boundingSphere);
     assert.ok(mesh.geometry.boundingSphere.radius > 0);
@@ -117,8 +117,13 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
   // pin are exactly the two C-line landings itemized above (6+6 draws,
   // 1,368+72,672 triangles, 6 lights), verified group-by-group against the
   // mounted scene. Any further drift must name its own source commit here.
-  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 58, 'crater remainder stays at the 2026-11-22 re-pinned draw baseline (46 + C1/C2 lamps 6 + C3 dressing 6)');
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 357067, 'crater remainder stays at the 2026-11-22 re-pinned triangle baseline (283,027 + 1,368 lamps + 72,672 C3 details)');
+  // W-1 re-pin (2026-11-22, 分支窗 A): the west ground sheet is capped at
+  // craterGroundSheetNorth (336) instead of following the world depth to
+  // 800 — 3 fewer ground batch meshes (−3 draws) and the sheet rows north
+  // of 336 removed (20 full tiles + the 12 m partial row at 528:
+  // −97,920 triangles) against the pin above.
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 259147, 'crater remainder stays at the W-1 re-pinned triangle baseline (357,067 − 97,920 capped ground-sheet rows)');
   assert.ok(dressingDraws <= 15, 'added story details must stay batched');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');

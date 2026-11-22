@@ -19,6 +19,15 @@ export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
 });
 
+// North extent of the visible west ground sheet. The sheet covers the
+// surveyed crater domain plus the isolation-wall line that bounds it
+// (wall segments run to north 307, the north defence tower stands at
+// ~252), rounded up to the 48 m tile grid. It deliberately does NOT
+// follow the world depth: the height samples below keep the caller's
+// full north limit, so heightAt keeps answering along the whole west
+// seam even where no sheet is drawn.
+export const craterGroundSheetNorth = 336;
+
 const seamBlendWidth = 24;
 const carrierHoleRadius = meteorCraterRimRadius + 2;
 const tileSize = 48;
@@ -77,9 +86,10 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // fewer draw calls than one mesh per tile, without turning the full west
   // expanse into a single always-visible 240×540 m mesh.
   const groundBatches = new Map<string, BufferGeometry[]>();
-  for (let north = 0; north < northLimit; north += tileSize) {
+  const sheetNorthLimit = Math.min(northLimit, craterGroundSheetNorth);
+  for (let north = 0; north < sheetNorthLimit; north += tileSize) {
     for (let east = survey.west; east < 0; east += tileSize) {
-      const endN = Math.min(north + tileSize, northLimit), endE = Math.min(east + tileSize, 0);
+      const endN = Math.min(north + tileSize, sheetNorthLimit), endE = Math.min(east + tileSize, 0);
       const width = endE - east + 1;
       const positions: number[] = [], indices: number[] = [];
       for (let n = north; n <= endN; n++) {
