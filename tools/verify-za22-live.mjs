@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -325,6 +325,55 @@ async function sampleFrameCadence(page, evidence, label) {
   console.log(JSON.stringify({ phase: 'native-cadence', label, ...reading }));
 }
 
+async function sampleA6TwentySeconds(page, label) {
+  // A-6 mandated 20 s *native browser* rAF cadence, same page and renderer.
+  // A genuine renderer.info event is emitted by the shipping viewer when
+  // ?profile is used; do not substitute estimated triangles from static meshes.
+  const metrics = await page.evaluate(() => new Promise(resolve => {
+    const START=performance.now();
+    const gaps=[],calls=[],tris=[],points=[];
+    let last=undefined;
+    const onProfile = event => {
+      const d=event.detail;
+      if(Number.isFinite(d?.calls))calls.push(d.calls);
+      if(Number.isFinite(d?.triangles))tris.push(d.triangles);
+      if(Number.isFinite(d?.points))points.push(d.points);
+    };
+    document.addEventListener('town-frame-profile',onProfile,true);
+    const finish = timestamp => {
+      if(last!==undefined)gaps.push(timestamp-last);
+      last=timestamp;
+      if(timestamp-START<20_000) return requestAnimationFrame(finish);
+      document.removeEventListener('town-frame-profile',onProfile,true);
+      gaps.sort((a,b)=>a-b);
+      const sum=(values)=>values.reduce((a,b)=>a+b,0);
+      const order=(values)=>values.slice().sort((a,b)=>a-b);
+      const percentile=(values,q)=>values.length?order(values)[Math.floor((values.length-1)*q)]:null;
+      resolve({
+        durationMs:timestamp-START,
+        frameCount:gaps.length,
+        rafFps:1000*gaps.length/(timestamp-START),
+        meanFrameMs:gaps.length?sum(gaps)/gaps.length:null,
+        p95FrameMs:percentile(gaps,.95),
+        rendererInfoSamples:calls.length,
+        drawsMean:calls.length?sum(calls)/calls.length:null,
+        drawsP95:percentile(calls,.95),
+        trianglesMean:tris.length?sum(tris)/tris.length:null,
+        trianglesP95:percentile(tris,.95),
+        pointsMean:points.length?sum(points)/points.length:null,
+        metricSource:'renderer.info.render via real town-frame-profile event',
+        cadenceSource:'native Chromium requestAnimationFrame, 20-second stationary interval',
+      });
+    };
+    requestAnimationFrame(finish);
+  }));
+  assert.ok(metrics.durationMs>=20_000,'A-6 frame count must span 20 full seconds');
+  assert.ok(metrics.rendererInfoSamples>0,'A-6 requires real renderer.info draw/triangle counters');
+  assert.ok(Number.isFinite(metrics.drawsMean)&&Number.isFinite(metrics.trianglesMean));
+  console.log(JSON.stringify({phase:'a6-20s',label,...metrics}));
+  return metrics;
+}
+
 async function snapshot(page, evidence, label) {
   await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
   evidence.checkpoints.push({ label, lighting: await page.locator('#lighting').textContent(),
@@ -510,6 +559,59 @@ try {
       expectedBuildingPairs:buildings.length,
       liveFirstPersonMode:true};
   }
+  if (segment === 'a6-perf') {
+    const {page,evidence}=await openTown('a6-perf');
+    const measures=[];
+    // Same browser tab, device, resolution and graphics tier for all four.
+    // Spawn camera from the genuine E223/N180 point faces the clocktower
+    // surveyed at E226/N223; do not reposition the player in test JS.
+    await face(page,evidence,Math.atan2(226-223,223-180));
+    for(const state of ['night','day']) {
+      const wanted=state==='night'?'雪夜':'白昼';
+      if((await page.locator('#lighting').textContent())!==wanted) {
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await page.waitForTimeout(850);
+      const label='plaza-clocktower-'+state;
+      measures.push({label,lighting:wanted,checkpoint:await readPose(page),
+        ...await sampleA6TwentySeconds(page,label)});
+      await snapshot(page,evidence,label);
+    }
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    await page.waitForFunction(pattern=>{
+      const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return m&&Math.abs(+m[1]-2)<1&&Math.abs(+m[2]-159)<1;
+    },positionPattern.source,{timeout:45_000});
+    await follow(page,evidence,[[-12,159],[-40,159],[-44.5,167.7]],'a6-station-walk');
+    const stationPose=await readPose(page);
+    assert.ok(stationPose.east<-43&&stationPose.east>-46,'A-6 station is not in first-person walking area');
+    await face(page,evidence,Math.atan2(-120-stationPose.east,185-stationPose.north));
+    for(const state of ['night','day']) {
+      const wanted=state==='night'?'雪夜':'白昼';
+      if((await page.locator('#lighting').textContent())!==wanted) {
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await page.waitForTimeout(850);
+      const label='kengkou-to-bowl-'+state;
+      measures.push({label,lighting:wanted,checkpoint:await readPose(page),
+        ...await sampleA6TwentySeconds(page,label)});
+      await snapshot(page,evidence,label);
+    }
+    const map=Object.fromEntries(measures.map(m=>[m.label,m]));
+    report.a6Performance={
+      measuredAt:'single Chrome browser/device, same 960x540 graphics tier',
+      fourGroups:measures,
+      stationToPlazaRatioNight:map['kengkou-to-bowl-night'].rafFps/map['plaza-clocktower-night'].rafFps,
+      stationToPlazaRatioDay:map['kengkou-to-bowl-day'].rafFps/map['plaza-clocktower-day'].rafFps,
+      optimizationTargetRatio:.8,
+    };
+    assert.equal(measures.length,4);
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -550,7 +652,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
