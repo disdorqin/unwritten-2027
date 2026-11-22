@@ -392,7 +392,10 @@ try {
     const { page, evidence } = await openTown('a2-shots');
     const views = [
       {id:'town-to-crater',label:'羊圈',east:70,north:215,yaw:Math.atan2(-190,-30)},
-      {id:'mountain-gate-to-crater',label:'山口',east:300,north:665,yaw:Math.atan2(-420,-480)},
+      // The normal 山口 destination currently resolves via legal-spawn safety
+      // to E290/N300, NOT its nominal E300/N665 mount. Preserve the real
+      // safe point, and report the discrepancy instead of faking a camera.
+      {id:'mountain-gate-to-crater',label:'山口',east:290,north:300,yaw:Math.atan2(-410,-115)},
       {id:'rim-to-bowl',label:'陨石坑口',east:2,north:159,yaw:Math.atan2(-53,26),walk:[[-12,159],[-43,159],[-67,159]]},
     ];
     for (const view of views) {
