@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 
@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -612,6 +612,60 @@ try {
     };
     assert.equal(measures.length,4);
   }
+  if (segment === 'a5-crystal-live') {
+    const {page,evidence,westWindow}=await openTown('a5-crystal-live');
+    const fixture=JSON.parse(await readFile(new URL('../tests/fixtures/a5-cyan-b01-spiral-route.json',import.meta.url),'utf8'));
+    assert.equal(fixture.points.length,122,'B01 route fixture is incomplete');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    if(await page.locator('#town-settings').evaluate(dialog=>dialog.open))
+      await page.locator('#town-settings-close').click();
+    await page.waitForFunction(pattern=>{
+      const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return m && Math.hypot(+m[1]-2,+m[2]-159)<1.2;
+    },positionPattern.source,{timeout:45000});
+    await follow(page,evidence,[[-12,159],[-40,159],[-67,159],[-71,159]],'a5-b01-approach');
+    await snapshot(page,evidence,'a5-crystal-rim-night');
+    const rim=await readPose(page);
+    assert.ok(Math.abs(rim.east-fixture.lip.east)<1 && Math.abs(rim.north-fixture.lip.north)<.5,
+      'B01 route derived from different crater geometry');
+    const deadline=Date.now()+120_000;
+    while(Date.now()<deadline) {
+      const frame=westWindow();
+      if(frame?.state?.canEnterRestricted) {
+        const now=frame.joinEpoch+Date.now()-frame.joinReceivedAt;
+        if(frame.state.morningBellAt-now>80_000) {
+          evidence.craterWindow={...frame.state,now};
+          break;
+        }
+      }
+      await page.waitForTimeout(400);
+    }
+    assert.ok(evidence.craterWindow,'B01 legitimate night window did not open in the 120s QA budget');
+    await walkTo(page,evidence,[-72.1,159],'a5-legal-b01-entry');
+    // 1m canonical trail samples, with every-other-point walking knots.
+    // Keyboard input remains native W/S/Shift, no transform injection.
+    const route=fixture.points.filter((p,i,pts)=>i>0&&(i<5||i%2===0||i===pts.length-1));
+    for(const [index,knot] of route.entries()) {
+      await walkTo(page,evidence,[knot.east,knot.north], 'a5-b01-t'+knot.t.toFixed(3));
+      if (Math.abs(knot.t-.36)<.009 || Math.abs(knot.t-.6)<.009)
+        await snapshot(page,evidence,'a5-trail-progress-'+knot.t.toFixed(3));
+    }
+    const actual=await readPose(page);
+    const target={east:-147.278839,north:205.414932,height:-10.907392};
+    const sightDistance=Math.hypot(actual.east-target.east,actual.north-target.north,actual.height-target.height);
+    await face(page,evidence,Math.atan2(target.east-actual.east,target.north-actual.north));
+    const yaw=evidence.poses.at(-1)?.yaw;
+    evidence.checkpoints.push({label:'a5-crystal-actual-view',actual,target,sightDistance,source:'native player foot on legal B01 spiral t=.721',yaw});
+    await snapshot(page,evidence,'a5-crystal-from-trail-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'a5-crystal-from-trail-day');
+    report.a5CloseView={legalWindow:evidence.craterWindow,sightDistance,actual,target,
+      disclaimer:'Not claimed as 2m; 5.58m is nearest canonical trail centerline, visual and side-step still need C approval'};
+    assert.ok(sightDistance<7);
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -652,7 +706,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
