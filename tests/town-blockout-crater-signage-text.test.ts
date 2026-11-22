@@ -58,7 +58,7 @@ test('crater signage text: settled K-texts land verbatim (总表为准）', () =
     '冶炼工坊', '仪器工坊', '封存重地 · 非工勿入',
     // Roster fill package (批64 §四): both duty boards take the settled
     // second-line roster names; K-11 roster board is new on the facade.
-    '孙长炉', '焦二锤', '罗大年', '田守义', '孙小山',
+    '孙长炉', '焦二锤', '罗大年', '田守义', '三班 孙小山', '夜里不入',
     '值班表', '一班 陆衡', '二班 周文测', '三班 陆箬',
   ]) assert.ok(texts.includes(expected), `missing sign text: ${expected}`);
 });
@@ -85,7 +85,7 @@ test('crater signage text: no soul name on any board; rosters filled (批64)', (
   const guardCanvas = calls.find(c => c.method === 'fillText' && c.args[0] === '班次牌')!.canvas;
   const guardTexts = calls.filter(c => c.canvas === guardCanvas && c.method === 'fillText')
     .map(c => String(c.args[0]));
-  for (const expected of ['罗大年', '田守义', '孙小山', '三班 夜里不入']) {
+  for (const expected of ['罗大年', '田守义', '三班 孙小山', '夜里不入']) {
     assert.ok(guardTexts.includes(expected), `guard board missing: ${expected}`);
   }
 });
