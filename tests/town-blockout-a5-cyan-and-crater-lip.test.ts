@@ -63,7 +63,7 @@ test('A-5: B-01 lip feather matches west carrier snow at outer ring without mesh
 
 test('A-5: roughness gradient is installed on original StandardMaterial, no extra bowl draws',()=>{
   const bowl=west.group.getObjectByName('meteor-crater-walk-mesh') as Mesh;
-  const m=bowl.material as {onBeforeCompile:(s:{vertexShader:string;fragmentShader:string})=>void};
+  const m=bowl.material as unknown as {onBeforeCompile:(s:{vertexShader:string;fragmentShader:string})=>void};
   const shader={vertexShader:'#include <common>\n#include <begin_vertex>',
     fragmentShader:'#include <common>\n#include <roughnessmap_fragment>'};
   m.onBeforeCompile(shader);
