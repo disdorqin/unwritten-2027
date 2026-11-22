@@ -88,18 +88,27 @@ export function buildFrontRidgeProxy(): Group {
   }
   // Skirts: south rim (toe) and both side rims drop below ground so the
   // shell never shows a floating edge.
-  function skirt(edge: number[]) {
-    const start = positions.length / 3;
-    for (const vertex of edge) {
-      positions.push(positions[vertex * 3]!, -60, positions[vertex * 3 + 2]!);
-    }
-    for (let i = 0; i + 1 < edge.length; i++) {
-      const a = edge[i]!, b = edge[i + 1]!, a2 = start + i, b2 = start + i + 1;
-      indices.push(a, b, a2, b, b2, a2);
+  function skirt(edge: number[], steps: readonly number[] = [1]) {
+    // steps are absolute fractions of the full drop to -60. The west
+    // rim (branch window D west-end special, 2026-11-22) gets a mid
+    // ring at 0.42 so its sealed face has two facet rows whose vertex
+    // colours pick up the strata/foot streaks instead of one flat quad.
+    let upper = edge;
+    for (const step of steps) {
+      const start = positions.length / 3;
+      for (const vertex of edge) {
+        const y = positions[vertex * 3 + 1]!;
+        positions.push(positions[vertex * 3]!, y + (-60 - y) * step, positions[vertex * 3 + 2]!);
+      }
+      for (let i = 0; i + 1 < edge.length; i++) {
+        const a = upper[i]!, b = upper[i + 1]!, a2 = start + i, b2 = start + i + 1;
+        indices.push(a, b, a2, b, b2, a2);
+      }
+      upper = edge.map((_, i) => start + i);
     }
   }
   skirt(Array.from({ length: cols }, (_, c) => c));
-  skirt(Array.from({ length: rows }, (_, r) => r * cols));
+  skirt(Array.from({ length: rows }, (_, r) => r * cols), [0.42, 1]);
   skirt(Array.from({ length: rows }, (_, r) => r * cols + cols - 1));
 
   const geometry = new BufferGeometry();
@@ -249,8 +258,35 @@ export function buildFrontRidgeProxy(): Group {
       attachFeature('pine',e,n,2.0+rand()*2.0,6.2+rand()*7.1,2.0);
     }
   }
+  // West-end special (branch window D, 2026-11-22): from the crater
+  // mouth the feathered west wall and its sealed skirt were one smooth
+  // giant face (A window bisect evidence, day pale-brown / night near
+  // black). Set mid-ground rock and scree clusters, snow lips and a
+  // conifer foot onto the WEST slope itself (crater palette families),
+  // so the wall breaks into layered masses at crater distances.
+  let westRocks=0,westPines=0;
+  for(let e=27;e<92;e+=6.4+rand()*5.2){
+    if(rand()>.22){
+      attachFeature('rock',e,716+rand()*44,4.6+rand()*6.4,1.6+rand()*2.6,1.6+rand()*1.6,(rand()-.5)*.5);
+      westRocks++;
+    }
+    if(rand()>.42){
+      attachFeature('ochre',e+2.5,733+rand()*30,3.8+rand()*5.6,1.1+rand()*1.9,1.5+rand()*1.2,(rand()-.5)*.4);
+      westRocks++;
+    }
+    if(rand()>.55){
+      attachFeature('snow',e+1.2,746+rand()*17,4.4+rand()*6.2,.6+rand()*.7,1.5,(rand()-.5)*.2);
+    }
+  }
+  for(let cluster=0;cluster<7;cluster++){
+    const centre=34+cluster*8.6+rand()*4;
+    for(let tree=0;tree<3;tree++){
+      attachFeature('pine',centre+(rand()-.5)*7,700+(rand()-.5)*8,2.0+rand()*1.8,5.6+rand()*6.4,2.0);
+      westPines++;
+    }
+  }
   group.userData.surfaceSurvey={
-    snowShelves,exposedRocks,conifers,
+    snowShelves,exposedRocks,conifers,westRocks,westPines,
     includesWorldCollision:false,
     palette:'D11 m15 / 粘土工厂 32px Nearest',
   };
@@ -334,3 +370,4 @@ export function mountFrontRidgeProxy(parent: import('three').Object3D) {
     });
   } };
 }
+

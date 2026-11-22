@@ -58,6 +58,8 @@ import { mountTownFillReedMarsh } from './town-fill-reed-marsh';
 import { mountTownFillPlumSlope } from './town-fill-plum-slope';
 import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
+import { createFrontRidgeSwitchbackRoad } from './front-ridge-switchback-road';
+import { createTownSkyClouds } from './town-sky-clouds';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
 import { addNewYearDecor } from './town-new-year';
@@ -200,6 +202,33 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+// S-1 (分支窗 A): the west (crater) domain gets its OWN walk-geometry index.
+// The town chunk key (chunkAtCell) collides for negative east — a west cell
+// block and a town-east cell block can share chunk id AND subcell, which
+// would ghost-collide crater walls onto the town's east edge. String cell
+// keys in (east, north) space cannot collide. Built when the west road is
+// first mounted; before that the west has no box geometry, as before.
+// Declared here, beside westCraterRoad: ensureWestCraterRoad() is called
+// during module initialisation, long before the geometry() section below.
+let westWalkGeometry: Map<string, WalkGeometry> | undefined;
+const westCellKey = (east: number, north: number) =>
+  `${Math.floor(east / collisionCellSize)},${Math.floor(north / collisionCellSize)}`;
+// Collision constants live up here too (moved from the geometry() section):
+// buildCraterRailExtension(grid, ensureWestCraterRoad()) runs at module
+// init, far above that section, and the west index built inside
+// ensureWestCraterRoad reads bodyRadius/collisionCellSize — declaring them
+// down there is a TDZ ReferenceError the moment the west has any boxes.
+const bodyRadius = .27;
+const collisionChunkSize = 64;
+const collisionSubcells = 4;
+const collisionCellSize = collisionChunkSize / collisionSubcells;
+const collisionStride = Math.ceil(worldBounds.width / collisionChunkSize) + 3;
+const chunkAtCell = (east: number, north: number) => Math.floor(east / collisionSubcells) +
+  collisionStride * Math.floor(north / collisionSubcells);
+const subcellMask = collisionSubcells - 1;
+const subcellAt = (east: number, north: number) => (east & subcellMask) +
+  collisionSubcells * (north & subcellMask);
+let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
 let dreamChain: DreamChain | undefined;
@@ -228,6 +257,7 @@ function ensureWestCraterRoad() {
   if (!westCraterRoad) {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
     scene.add(westCraterRoad.group);
+    westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
@@ -528,6 +558,25 @@ summitSkyline.add(summitHutLight);
 // ZA-30 takeover step 2: the front ridge (350) as a town-side visual shell.
 const frontRidgeProxy = mountFrontRidgeProxy(scene);
 void frontRidgeProxy;
+// T5 mount (总控裁定 批55，分支窗 A): the D switchback corridor.
+// The walking fold LANDED with the T5 seam package (分支窗 A, 2026-11-22):
+// D-6 (批73) re-profiled the toe against the grid, resampled the corridor
+// to ~3 m and added the entry approach, so outdoorSurfaceAt now consults
+// switchbackRoad.heightAt first (see the fold at outdoorSurfaceAt).
+// Known remaining defect, measured by A at fold time and reported with the
+// seam package: heightAt picks the horizontally nearest sample, so where
+// switchback passes stack within ~3 m of each other the surface can flip
+// to a neighbouring pass between samples (~6% of toe samples, ~8% of
+// summit-spiral samples at 0.25 m steps; at centreline samples it is
+// always exact). The fix belongs to the corridor module (D); the fold
+// wiring here is the surface it will plug into.
+switchbackRoad = createFrontRidgeSwitchbackRoad();
+scene.add(switchbackRoad.group);
+// Batch-67 cloud layer (A share): five designed drift clusters plus the
+// crater smoke clouds. Self-contained at build time; weather and night are
+// fed per frame in the weather section below, so no init-order coupling.
+const skyClouds = createTownSkyClouds();
+scene.add(skyClouds.group);
 if (reportSummitSkyline) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
@@ -819,7 +868,7 @@ addTownRailWayfinding(scene, grid.heightAt);
 const pineCamp = buildPineCamp(grid);
 landscape.add(pineCamp.group);
 const scenery = addScenery(landscape, grid, pineCamp.keepClear);
-const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
+const districts = addDistrictHousing(landscape, grid, scenery.placementBlocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
 // Zone-1 self-mount (代挂, campaign order 2026-11-21): ZA-32 wave-2 props +
@@ -885,6 +934,7 @@ function setNight(night: boolean) {
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
   westCraterRoad?.craterActions.setNight(night);
+  switchbackRoad?.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
@@ -1066,16 +1116,9 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
 const slide = buildIcePlayProps();
 scene.add(slide);
 
-const bodyRadius = .27;
-const collisionChunkSize = 64;
-const collisionSubcells = 4;
-const collisionCellSize = collisionChunkSize / collisionSubcells;
-const collisionStride = Math.ceil(worldBounds.width / collisionChunkSize) + 3;
-const chunkAtCell = (east: number, north: number) => Math.floor(east / collisionSubcells) +
-  collisionStride * Math.floor(north / collisionSubcells);
-const subcellMask = collisionSubcells - 1;
-const subcellAt = (east: number, north: number) => (east & subcellMask) +
-  collisionSubcells * (north & subcellMask);
+// bodyRadius / collision* / chunkAtCell / subcellAt are declared beside
+// westCraterRoad near the top of this file (S-1: the west index built
+// during module init reads them; see the note there).
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
@@ -1123,12 +1166,39 @@ function geometry() {
   return chunks;
 }
 let walkGeometry = geometry();
+// S-1 (分支窗 A): buildWestGeometry fills the west index declared beside
+// westCraterRoad above (the declaration must sit early: ensureWestCraterRoad
+// runs during module init, before this point in the file is reached).
+function buildWestGeometry(group: Group) {
+  const cells = new Map<string, WalkGeometry>();
+  const { colliders, floors, ramps } = readWalkGeometry(group);
+  function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
+    for (const box of boxes) {
+      const e0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
+      const e1 = Math.floor((box.max[0] + bodyRadius) / collisionCellSize);
+      const n0 = Math.floor((-box.max[2] - bodyRadius) / collisionCellSize);
+      const n1 = Math.floor((-box.min[2] + bodyRadius) / collisionCellSize);
+      for (let n = n0; n <= n1; n++) {
+        for (let e = e0; e <= e1; e++) {
+          const key = `${e},${n}`;
+          const cell: WalkGeometry = cells.get(key) ?? { colliders: [], floors: [], ramps: [] };
+          if (!cells.has(key)) cells.set(key, cell);
+          append(cell, box);
+        }
+      }
+    }
+  }
+  index(colliders, (cell, box) => cell.colliders.push(box));
+  index(floors, (cell, box) => cell.floors.push(box));
+  index(ramps, (cell, ramp) => cell.ramps.push(ramp));
+  return cells;
+}
 function geometryAt(east: number, north: number) {
   if (cloudRoute.active()) return emptyGeometry;
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
-  if (east < 0) return emptyGeometry;
+  if (east < 0) return westWalkGeometry?.get(westCellKey(east, north)) ?? emptyGeometry;
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -1207,7 +1277,11 @@ const points = new Map<string, number[]>([
   ['星港坪', [324, 657]],
   ['羊圈', [70, 215]],
   ['陨石坑口', [2, 159]],
-  ['山口', [300, 665]],
+  // 山口落点＝盘山道中心线第一点＝山口锚 (290,300)（D 测绘＋交叉核已验：
+  // heightAt 23.3、压线落在路面可走；走廊半宽 1.75 m、羽化 3.4 m，偏出线即无值，
+  // 不取近似点）。旧点 (300,665) 离走廊线 43.8 m 且镇域无合法落脚点，
+  // settleTownLanding 只能回落广场出生点（2026-11-21 live 实证）。
+  ['山口', [290, 300]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台', '镇公所'];
 layout.plots.forEach((plot, i) => {
@@ -2519,11 +2593,29 @@ function canStandAtActivity(east: number, north: number, feet: number) {
   return walkable(east, north) && !obstructed(east, north, feet);
 }
 
+const icePalaceAimRay = new Raycaster();
+const icePalaceAimCenter = new Vector2(0, 0);
+/** The fragment pickup only arms while the crosshair is actually on the
+ * fragment model; the spot's own range gate handles proximity. */
+function icePalaceAimedAt(object: Object3D) {
+  icePalaceAimRay.setFromCamera(icePalaceAimCenter, camera);
+  return icePalaceAimRay.intersectObject(object, true).length > 0;
+}
+
 function registerIcePalaceActivities(group: Group, createActivity: typeof createIcePalaceLandmarkActivity,
   createSlide: typeof createCastleIceSlideActivity) {
   const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const activity = createActivity(group, { ...activityContext, announce: announceActivity }, {
     onlineThroneOwned: presence.onlineThroneOwned,
+    rites: {
+      read: () => presence.getIcePalaceRiteState(),
+      request: rite => presence.requestIcePalaceRite(rite),
+    },
+    fragmentPickup: {
+      present: () => presence.icePalaceFragmentPresent(),
+      isTargeted: target => icePalaceAimedAt(target.object),
+      pickUpOne: id => presence.requestIcePalaceFragment(id),
+    },
     stateChanged(state) {
       if (state.crowned && !icePalaceSelfCrowned) refinement?.enthrone();
       icePalaceSelfCrowned = state.crowned;
@@ -2773,7 +2865,7 @@ function landAtSelectedDestination() {
     '爆竹摊': [firecrackerStand.x, firecrackerStand.n],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
-    '温泉浴场': [524, 158], '冰雪城堡': [460, 72],
+    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329],
     '雪团练习场': snowPracticeTarget, '南河岸': [303, 120], '北河岸': [246, 400],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
@@ -3021,6 +3113,13 @@ function surfaceAt(east: number, north: number) {
 }
 function outdoorSurfaceAt(east: number, north: number) {
   if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
+  // T5 fold (分支窗 A): inside the switchback corridor's band its own
+  // surface wins — the core is the road profile and the feather band
+  // already blends to the host ground, so the seam stays continuous.
+  // Outside the band heightAt is undefined and the water/grid fallback
+  // below applies unchanged.
+  const roadSurface = switchbackRoad?.heightAt(east, north);
+  if (roadSurface !== undefined) return roadSurface;
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function snowCleared(east: number, north: number, feet: number) {
@@ -3135,7 +3234,12 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
-    return ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius);
+    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
+    // S-1: west box geometry (za22 top-group userData via the west index) —
+    // the lip fence check above stays, buildings/walls/fence ring add here.
+    const westIntersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+      feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+    return colliders.some(westIntersects) || floors.some(westIntersects);
   }
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
@@ -3999,6 +4103,9 @@ renderer.setAnimationLoop(now => {
     : snowCover.amount();
   // H2: the unified snow field follows the same shared-clock weather tiers.
   snowCover.setWeather(weather);
+  // Batch-67: clouds hang off the same single authoritative weather state
+  // (ZB-20 / G-09 presence weather) — never a second weather source.
+  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));

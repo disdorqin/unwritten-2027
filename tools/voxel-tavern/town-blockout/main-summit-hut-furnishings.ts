@@ -2,6 +2,7 @@ import {
   BoxGeometry, CanvasTexture, CylinderGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, PlaneGeometry, PointLight, Quaternion, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
+import { surveyPlateLines } from './town-survey';
 
 const floor = 800;
 // Hut interior frame (registration landmarks): west 56, east 69,
@@ -170,6 +171,33 @@ export function createMainSummitHutFurnishings() {
   marker.position.set(circle.east, floor + .03, -circle.north);
   group.add(marker);
   disposers.push(() => marker.geometry.dispose());
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#b08d4f';
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.fillStyle = '#2e2413';
+      ctx.textAlign = 'center';
+      // M7 plate: exactly the three derived lines (town-survey.ts).
+      const lines = surveyPlateLines('M7');
+      ctx.font = 'bold 44px system-ui, sans-serif';
+      ctx.fillText(lines[0], 128, 78);
+      ctx.font = 'bold 40px system-ui, sans-serif';
+      ctx.fillText(lines[1], 128, 148);
+      ctx.fillText(lines[2], 128, 208);
+      const texture = new CanvasTexture(canvas);
+      texture.colorSpace = SRGBColorSpace;
+      const face = new Mesh(new PlaneGeometry(.44, .44), new MeshBasicMaterial({ map: texture, transparent: true }));
+      face.name = 'survey-station-m7-face';
+      face.rotation.x = -Math.PI / 2;
+      face.rotation.z = Math.PI / 3;
+      face.position.set(circle.east, floor + .062, -circle.north);
+      group.add(face);
+      disposers.push(() => { face.geometry.dispose(); face.material.dispose(); texture.dispose(); });
+    }
+  }
 
   let disposed = false;
   return {

@@ -60,11 +60,57 @@ const d2r = (deg: number) => deg * Math.PI / 180;
  * Everything samples the road's heightAt; nothing here blocks a path — the
  * ZB-28 guards (people) do the turning-back, never a wall.
  */
+export type CraterHitBox = { min: number[]; max: number[] };
+export type CraterHitRamp = CraterHitBox & { axis: 'x' | 'z'; ascending: 1 | -1 };
+
+/** A doorway ramp in a local frame (the landmark-culture door-ramp
+ * precedent): rises from yLow at dzOuter to yHigh at dzInner along the
+ * dominant world axis of the frame's facing bearing. */
+function hitRamp(list: CraterHitRamp[], fr: { at(dx: number, dz: number): { east: number; north: number } },
+  dzOuter: number, dzInner: number, halfW: number, yLow: number, yHigh: number) {
+  const corners = [fr.at(-halfW, dzOuter), fr.at(halfW, dzOuter), fr.at(-halfW, dzInner), fr.at(halfW, dzInner)];
+  const es = corners.map(p => p.east), ns = corners.map(p => p.north);
+  const o = fr.at(0, dzOuter), i = fr.at(0, dzInner);
+  const axis: 'x' | 'z' = Math.abs(i.east - o.east) > Math.abs(i.north - o.north) ? 'x' : 'z';
+  const innerCoord = axis === 'x' ? i.east : -i.north;
+  const outerCoord = axis === 'x' ? o.east : -o.north;
+  list.push({
+    min: [Math.min(...es), yLow, -Math.max(...ns)],
+    max: [Math.max(...es), yHigh, -Math.min(...ns)],
+    axis, ascending: innerCoord > outerCoord ? 1 : -1,
+  });
+}
+
+/** World-space AABB of a yaw-rotated box centred at (east, north): the sx axis
+ * lies along the frame right, sz along the facing bearing (sign-free). */
+function hitBox(list: CraterHitBox[], east: number, north: number, yaw: number,
+  sx: number, sz: number, y0: number, y1: number) {
+  const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+  const hx = (sx * c + sz * s) / 2, hz = (sx * s + sz * c) / 2;
+  list.push({ min: [east - hx, y0, -(north + hz)], max: [east + hx, y1, -(north - hz)] });
+}
+
+/** AABB covering the straight segment (e0, n0)-(e1, n1) padded on all sides. */
+function hitSegment(list: CraterHitBox[], e0: number, n0: number, e1: number, n1: number,
+  pad: number, y0: number, y1: number) {
+  list.push({
+    min: [Math.min(e0, e1) - pad, y0, -(Math.max(n0, n1) + pad)],
+    max: [Math.max(e0, e1) + pad, y1, -(Math.min(n0, n1) - pad)],
+  });
+}
+
 export function buildCraterMouthWorks(road: CraterRoad) {
   const { anchor, heightAt } = road;
   const group = new Group();
   group.name = 'crater-mouth-works';
   const sites: CraterMouthSite[] = [];
+  // S-1 collision (分支窗 A): structural wall boxes + standable floors in
+  // world coordinates, exported for the za22 top group's userData. Only
+  // load-bearing walls are recorded — props, roofs and lintels above head
+  // height stay walk-through-free by omission, door gaps stay open.
+  const colliders: CraterHitBox[] = [];
+  const floors: CraterHitBox[] = [];
+  const ramps: CraterHitRamp[] = [];
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 41, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
@@ -262,6 +308,21 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const side = fr.at(s * W / 2, 0);
       box(timber, side.east, wallY, side.north, .22, wallH, D, fr.yaw);
     }
+    // S-1 collision: foundation ledge + interior slab as standable floors
+    // (a doorway ramp bridges the .91 rise — three plain steps would each
+    // exceed the .43 step height), the four walls as colliders; the 2.8 m
+    // doorway between the front segments stays open, the lintel above it
+    // is above head height.
+    hitBox(floors, c0.east, c0.north, fr.yaw, W + .5, D + .5, g - .1, g + foundH - .1);
+    hitBox(floors, c0.east, c0.north, fr.yaw, W, D, g + foundH - .1, g + foundH + .06);
+    hitRamp(ramps, fr, D / 2 + 1.1, D / 2 - .5, .85, g, g + foundH + .06);
+    for (const s of [-1, 1]) {
+      const seg = fr.at(s * 2.55, D / 2);
+      hitBox(colliders, seg.east, seg.north, fr.yaw, 2.3, .22, g + foundH, g + foundH + wallH);
+      const sd = fr.at(s * W / 2, 0);
+      hitBox(colliders, sd.east, sd.north, fr.yaw, .22, D, g + foundH, g + foundH + wallH);
+    }
+    hitBox(colliders, back.east, back.north, fr.yaw, W, .22, g + foundH, g + foundH + wallH);
     // Roof: pitched slate over the back half, flat viewing deck over the front half.
     const roofY = g + foundH + wallH;
     for (const s of [-1, 1]) {
@@ -310,6 +371,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
     const counter = fr.at(1.4, 1.1);
     box(timberWarm, counter.east, g + foundH + .5, counter.north, 2.4, 1, .6, fr.yaw);
+    hitBox(colliders, counter.east, counter.north, fr.yaw, 2.4, .6, g + foundH, g + foundH + 1);
     const mapP = fr.at(0, -D / 2 + .16);
     sign(mapP.east, g + foundH + 1.75, mapP.north, fr.yaw + Math.PI, 2.1, 1.35, (c, w, h) => {
       c.fillStyle = '#e3d3a8'; c.fillRect(0, 0, w, h);
@@ -328,6 +390,39 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     if (mapH !== undefined) {
       actions.push({ id: 'map', label: '查看坑区手绘图', east: mapP.east, north: mapP.north, height: mapH, range: 2.1 });
     }
+    // K-01/02/03 (《设计-全图文字件总表》，总控裁定 批58 追补六）：牌匾挂门楣、
+    // 登记台告示立柜台、值班室门牌挂右窗上——总表逐字，不改字。K-03 注：本栋为
+    // 一间通房，无独立值班室门；牌挂右前窗上方作房间标牌，不另隔墙。
+    const plaqueP = fr.at(0, D / 2 + .16);
+    sites.push({ id: 'supply-station-plaque', east: plaqueP.east, north: plaqueP.north, height: g + 3.2, radius: 1 });
+    sign(plaqueP.east, g + 3.2, plaqueP.north, fr.yaw, 2.2, .55, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 72px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('坑口补给站', w / 2, h / 2 + 2);
+    });
+    const noticeP = fr.at(1.4, 1.1);
+    sites.push({ id: 'supply-registration-notice', east: noticeP.east, north: noticeP.north, height: g + foundH + 1.35, radius: 1 });
+    sign(noticeP.east, g + foundH + 1.35, noticeP.north, fr.yaw, 1.1, .7, (c, w, h) => {
+      c.fillStyle = '#e8e0cc'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#5d4630'; c.lineWidth = 4; c.strokeRect(8, 8, w - 16, h - 16);
+      c.fillStyle = '#3d2c1c'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '38px "Noto Sans SC", sans-serif';
+      c.fillText('入坑先登记，领灯一盏。', w / 2, h * .32);
+      c.fillText('出坑销名，灯还灯房。', w / 2, h * .68);
+    });
+    const dutyP = fr.at(2.55, D / 2 + .16);
+    sites.push({ id: 'supply-duty-room-plate', east: dutyP.east, north: dutyP.north, height: g + foundH + 2.45, radius: 1 });
+    sign(dutyP.east, g + foundH + 2.45, dutyP.north, fr.yaw, .9, .3, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(232, 226, 210, .4)'; c.lineWidth = 3;
+      c.strokeRect(6, 6, w - 12, h - 12);
+      c.font = 'bold 56px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('值班室', w / 2, h / 2 + 2);
+    });
   }
 
   // ---------- 地面三脚望筒（抢救包 ②，移植自 lane-a 453422e） ----------
@@ -365,6 +460,13 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     box(snow, roofC.east, g + 2.78, roofC.north, 4.1, .16, 3.1, fr.yaw, .1);
     const backW = fr.at(0, -1.25);
     box(timber, backW.east, g + 1.1, backW.north, 3.6, 2.2, .14, fr.yaw);
+    // S-1 collision: back wall + the four corner posts; the shed is open on
+    // the other three sides by design.
+    hitBox(colliders, backW.east, backW.north, fr.yaw, 3.6, .14, g, g + 2.2);
+    for (const [dx, dz] of [[-1.7, -1.2], [1.7, -1.2], [-1.7, 1.2], [1.7, 1.2]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, .18, .18, g, g + 2.5);
+    }
     // Brazier with a real light — the warm chain's northernmost lamp.
     const brz = fr.at(.7, .3);
     cyl(iron, brz.east, g + .32, brz.north, .52, .34, .5, 9);
@@ -399,7 +501,13 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const lant = fr.at(-1.5, 1.35);
     cyl(paper, lant.east, g + 2.05, lant.north, .17, .17, .34, 8);
     box(glow, lant.east, g + 2.05, lant.north, .07, .2, .07, fr.yaw);
-    // Duty board — the museum shift board's text, same source.
+    // Duty board — format kept from the museum shift board. Names were
+    // BLANKED per 总控裁定 批55 (K-24/25: 白望山/石沉 are souls and may not
+    // appear on a living duty board), then REFILLED per 名册定版 批64
+    // (K-25): 一班 罗大年 / 二班 田守义 / 三班 孙小山 — living guards from
+    // the settled second-line roster. Third row per 总控回话 (2026-11-22):
+    // the row reads 「三班 孙小山」 with 「夜里不入」 kept as the night-shift
+    // note at the row's end — the note never replaces the name.
     const boardP = fr.at(1.95, -.4);
     sign(boardP.east, g + 1.5, boardP.north, fr.yaw - Math.PI / 2, 1.35, 1.5, (c, w, h) => {
       c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
@@ -408,11 +516,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.font = 'bold 44px "Noto Sans SC", sans-serif';
       c.fillText('班次牌', w / 2, 66);
       c.font = '30px "Noto Sans SC", sans-serif';
-      c.fillText('一班 辰入午出 · 班头 石沉', w / 2, 128);
-      c.fillText('二班 午入酉出 · 班头 石沉', w / 2, 178);
-      c.fillText('三班 夜里不入', w / 2, 228);
-      c.font = '24px "Noto Sans SC", sans-serif'; c.fillStyle = 'rgba(61,44,28,.7)';
-      c.fillText('（三班那一栏，年年空着）', w / 2, 272);
+      c.textAlign = 'left';
+      const x0 = w / 2 - 190;
+      c.fillText('一班 辰入午出 · 班头', x0, 128);
+      c.fillText('二班 午入酉出 · 班头', x0, 178);
+      // Roster names on their ruled slots (批64 fill).
+      c.strokeStyle = 'rgba(61, 44, 28, .55)'; c.lineWidth = 2;
+      for (const y of [128, 178]) {
+        c.beginPath(); c.moveTo(x0 + 330, y + 10); c.lineTo(x0 + 420, y + 10); c.stroke();
+      }
+      c.fillText('罗大年', x0 + 330, 128);
+      c.fillText('田守义', x0 + 330, 178);
+      // Third row: name in the row, 「夜里不入」 as the trailing note.
+      c.fillText('三班 孙小山', x0, 228);
+      c.fillText('夜里不入', x0 + 330, 228);
     });
   }
 
@@ -540,6 +657,26 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
   }
 
+  // S-1 collision for the works-boundary fence above: one segment box per
+  // 2° of arc across the whole 146–184° span, INCLUDING the gate bearing —
+  // the double gate is chained shut (its warning plate says so), so the
+  // fence line is continuous; the arc's two ends stay open as the passages.
+  {
+    let prevPt: { e: number; n: number; h: number } | undefined;
+    for (let bDeg = 146; bDeg <= 184; bDeg += 2) {
+      const b = d2r(bDeg);
+      const e = anchor.east + fenceR * Math.sin(b);
+      const n = anchor.north + fenceR * Math.cos(b);
+      const h = heightAt(e, n);
+      if (h === undefined) { prevPt = undefined; continue; }
+      if (prevPt) {
+        hitSegment(colliders, prevPt.e, prevPt.n, e, n, .3,
+          Math.min(prevPt.h, h), Math.max(prevPt.h, h) + 4.7);
+      }
+      prevPt = { e, n, h };
+    }
+  }
+
   // ---------- §六 rim lamp chain, outside segment (10 lamps at r=61) ----------
   const lampSites: CraterMouthSite[] = [];
   for (let i = 0; i < 10; i++) {
@@ -630,5 +767,6 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
     actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,
+    colliders, floors, ramps,
   };
 }

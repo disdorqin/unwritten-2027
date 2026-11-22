@@ -19,6 +19,8 @@ import { isIcePalaceThroneRecord } from './ice-throne-site.js';
 import {
   createCableLineAuthority, type CableLineFrame,
 } from './cable-line-authority.js';
+import { createIcePalaceRiteAuthority } from './ice-palace-rite-authority.js';
+import { createIcePalaceFragment } from './ice-palace-fragment.js';
 import type {
   Za36CableRepairEvent, Za36CableRepairLine,
 } from '../shared/za36-cable-repair.js';
@@ -314,6 +316,19 @@ export async function createPresenceServer(options: Options = {}) {
   const cableLine = createCableLineAuthority();
   const cableLineWire = (frame: CableLineFrame) =>
     JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
+  // Ice palace rites: the authority validates the caller's alcove pose and
+  // delegates to policy stores. None of the three stores (ice window, forge
+  // inventory, solstice) exists yet, so snapshots honestly report every rite
+  // unavailable until its store lands; the transport and pose gate are live.
+  const icePalaceRites = createIcePalaceRiteAuthority({
+    groundPeer: peerId => {
+      const peer = peers.get(peerId);
+      return peer?.record ? { pose: peer.record } : undefined;
+    },
+  });
+  // The palace wreckage fragment is room-local: one per room, consumed by
+  // the first admitted pickup, then gone for everyone in the room.
+  const icePalaceFragment = createIcePalaceFragment();
   const iceThrone = createIceThroneAuthority(({ ownerId, message }) => {
     const oldOwner = crownOwner;
     crownOwner = ownerId;
@@ -1196,6 +1211,26 @@ export async function createPresenceServer(options: Options = {}) {
         }
         return;
       }
+      if (message.kind === 'ice-palace-rite') {
+        if (allowEvent(peer, now())) {
+          const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+          return icePalaceRites.request(peer.id, message).then(accepted => {
+            if (peers.get(peer.id) !== peer) return;
+            if (requestId) send(peer, JSON.stringify({ type: 'ice-palace-rite-result', requestId, accepted }));
+            send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
+          });
+        }
+        return;
+      }
+      if (message.kind === 'ice-palace-fragment') {
+        if (allowEvent(peer, now())) {
+          const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+          const accepted = icePalaceFragment.request(peer.id, peer.record, message);
+          if (requestId) send(peer, JSON.stringify({ type: 'ice-palace-fragment-result', requestId, accepted }));
+          if (accepted) broadcast(JSON.stringify(icePalaceFragment.frame()));
+        }
+        return;
+      }
       if (message.kind === 'bell-start') {
         if (allowEvent(peer, now())) requestBell(peer);
         return;
@@ -1257,7 +1292,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true,
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true, icePalaceRites: true,
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
@@ -1268,6 +1303,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
     send(peer, cableLineWire(cableLine.hello(1)));
     send(peer, cableLineWire(cableLine.hello(2)));
+    send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
+    send(peer, JSON.stringify(icePalaceFragment.frame()));
     for (const other of peers.values()) {
       if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose, ...(other.id === crownOwner ? { crowned: true } : {}) }));
     }

@@ -230,11 +230,17 @@ export function createSledRide(world: SledWorld) {
     const curb = world.height(spot.x + de * .8, spot.n + dn * .8);
     const curbRise = Number.isFinite(curb) ? curb - from : 0;
     curbCooldown = Math.max(0, curbCooldown - dt);
-    if (!next.airborne && (curbRise > .9 || (curbRise > .25 && next.speed < 8) || Math.abs(grade) > .55)) {
+    // Only a true ledge (a >0.9 m rise inside 0.8 m) is a crash. A steep
+    // grade or a sub-8 m/s step is a dynamics case — decelerate, crawl, or
+    // roll back — never a tumble: the old clauses fired on ordinary stepped
+    // climbs and made every uphill a crash loop (ZB-16 stability canon).
+    if (!next.airborne && curbRise > .9) {
       crash(next.speed);
       return;
     }
-    if (!next.airborne && curbRise > .25 && next.speed >= 8) motion.takeOff(3.5);
+    // Lip launches only where the ground beyond the lip stops climbing;
+    // on a sustained climb a step is a bump (handled below), not a jump.
+    if (!next.airborne && curbRise > .25 && next.speed >= 8 && grade <= .1) motion.takeOff(3.5);
     if (!next.airborne && curbCooldown === 0 && curbRise > .1 && floor - from > .03) {
       motion.reset(next.heading, next.speed * .97);
       curbCooldown = .22;

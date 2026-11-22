@@ -19,8 +19,14 @@ test('rail extension: alignment survey is complete and at grade at both stations
     `branch length ${alignment.length.toFixed(1)} m outside the surveyed band`);
   assert.deepEqual(alignment.divergence, { east: 477, north: 335 });
   assert.deepEqual(alignment.stations.map(s => s.id), ['shankou-station', 'kengkou-station']);
-  assert.deepEqual(alignment.boards.map(s => s.id), ['shankou-timetable', 'kengkou-timetable']);
+  assert.deepEqual(alignment.boards.map(s => s.id),
+    ['shankou-timetable', 'kengkou-timetable', 'kengkou-timetable-wall']);
   assert.deepEqual(alignment.boards[0], { id: 'shankou-timetable', east: 308, north: 506 });
+  // Timetable wall (K-14/15) stands at the shelter's west end, mirroring the
+  // chalk board at the east end: same dz, 9.8 m apart along the shelter.
+  const chalk = alignment.boards[1]!, wall = alignment.boards[2]!;
+  assert.ok(Math.abs(Math.hypot(wall.east - chalk.east, wall.north - chalk.north) - 9.8) < 0.5,
+    `timetable wall ${wall.east},${wall.north} not opposite the chalk board`);
   assert.deepEqual(alignment.whistlePoints.map(s => s.id), ['shankou-portal', 'kengkou-approach']);
   const shankou = alignment.stations[0];
   assert.ok(Math.abs(shankou.railY - (grid.heightAt(296, 502) + .62)) <= .8,

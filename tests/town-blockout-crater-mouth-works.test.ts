@@ -21,6 +21,15 @@ test('crater mouth works: the five named sites land in their surveyed bands', ()
   for (const id of ['assembly-ground', 'supply-station', 'guard-shed', 'zb35-anchor', 'fence-main-gate']) {
     assert.ok(byId.has(id), `missing site ${id}`);
   }
+  // K-01/02/03 (总表，批58 追补六）: all three supply-station signs land
+  // on the station itself (within its 7.4 x 5.6 m footprint + sign offset).
+  const supplySite = byId.get('supply-station')!;
+  for (const id of ['supply-station-plaque', 'supply-registration-notice', 'supply-duty-room-plate']) {
+    assert.ok(byId.has(id), `missing sign ${id}`);
+    const s = byId.get(id)!;
+    assert.ok(Math.hypot(s.east - supplySite.east, s.north - supplySite.north) < 6,
+      `${id} is ${Math.hypot(s.east - supplySite.east, s.north - supplySite.north).toFixed(1)} m from the station`);
+  }
   const assembly = polar(byId.get('assembly-ground')!.east, byId.get('assembly-ground')!.north);
   assert.ok(assembly.radius > 64 && assembly.radius < 76, `assembly radius ${assembly.radius}`);
   assert.ok(assembly.bearing > 150 && assembly.bearing < 186, `assembly bearing ${assembly.bearing}`);
