@@ -11,10 +11,10 @@ const gradeVelocityThreshold = .15;
 const sledGravity = 16;
 const baseDrag = .0135;
 const levelPushSpeed = 22.6;
-const uphillPushSpeed = 4;
+const uphillPushSpeed = 5.5;
 const reverseAcceleration = 2.8;
 const levelSlope = .06;
-const pushableSlope = .25;
+const pushableSlope = .35;
 const driftMinSpeed = 8;
 const driftAngleLimit = 35 * Math.PI / 180;
 const driftReleaseTime = .5;
@@ -134,10 +134,18 @@ export function createSledMotion() {
     } else {
       const slopeAcceleration = -sledGravity * facingGrade / Math.hypot(1, facingGrade);
       const normalFriction = friction(ground);
-      const resistance = (braking && !drifting ? 3.5 : normalFriction) + dragAt(speed);
       const uphill = facingGrade > levelSlope && facingGrade <= pushableSlope;
       const level = Math.abs(facingGrade) <= levelSlope;
-      const pushLimit = uphill ? uphillPushSpeed : levelPushSpeed;
+      // The push cap blends from the level cap to the uphill low gear across
+      // the .06–.25 grade band instead of stepping 22.6 -> low gear the
+      // moment a climb starts (the old step read as a stall shudder).
+      const pushBlend = clamp((facingGrade - levelSlope) / (.25 - levelSlope), 0, 1);
+      const pushLimit = levelPushSpeed + (uphillPushSpeed - levelPushSpeed) * pushBlend;
+      // Carrying momentum uphill above the push cap, the runners glide:
+      // Coulomb friction does not bite at speed, only gravity and drag bleed
+      // the carry, so a fast entry rides its momentum up a short slope.
+      const carrying = !braking && speed > pushLimit && facingGrade > levelSlope;
+      const resistance = (braking && !drifting ? 3.5 : carrying ? 0 : normalFriction) + dragAt(speed);
       const pushing = !braking && controls.forward > .1 && (uphill || level) && (rollingBack || speed <= pushLimit + 1e-9);
       let push = 0;
       if (pushing && uphill) {
