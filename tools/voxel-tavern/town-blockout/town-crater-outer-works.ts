@@ -79,6 +79,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const snow = pixelMaterial(palette.snow, palette.stone, 199);
   const dark = new MeshStandardMaterial({ color: 0x14100d, roughness: 1 });
   const ore = new MeshStandardMaterial({ color: 0x3d3a44, roughness: .95, flatShading: true });
+  // Ore-pile families (card 05: piles sorted by material family — soot-black ore,
+  // ochre timber, lime-grey slag); the K-18/19/20 plates name each pile.
+  const oreOchre = new MeshStandardMaterial({ color: 0xa98a56, roughness: .95, flatShading: true });
+  const oreGrey = new MeshStandardMaterial({ color: 0x8a8378, roughness: .95, flatShading: true });
   const slag = new MeshStandardMaterial({ color: 0x2e2c30, roughness: 1, flatShading: true });
   const brass = new MeshStandardMaterial({ color: palette.brass, roughness: .45, metalness: .65 });
   const glow = new MeshStandardMaterial({
@@ -224,9 +228,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
     // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口
-    // 正上方、料口木牌挂锭垛侧墙面。Smelter duty board soul names (白望山/
-    // 石沉） NOT blanked here — same class as K-24/25 but outside the ruling's
-    // named scope; flagged to 总控 for a call, board left as landed.
+    // 正上方、料口木牌挂锭垛侧墙面。值班牌人名留空（总控裁定 批58 追补六：
+    // 白望山/石沉皆灵魂，活人值班牌不许出现魂名；名册定版后填活人守卫名）。
     const plateP = fr.at(1.8, 5.58);
     siteAt('smelter-sign', plateP.east, plateP.north, 1);
     sign(plateP.east, g + 3.6, plateP.north, fr.yaw, 1.9, .62, iron, (c, w, h) => {
@@ -248,8 +251,15 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillStyle = '#e8e2d2'; c.textBaseline = 'middle';
       c.font = '44px "Noto Sans SC", sans-serif'; c.textAlign = 'left';
       c.fillText('腊月廿三', 40, h * .15);
-      c.fillText('一班　白望山　到', 40, h * .37);
-      c.fillText('二班　石　沉　到', 40, h * .59);
+      // Names blanked (批58 追补六）: ruled slots where the two班头 names go
+      // once the roster is settled; the trailing 到 stays in its old place.
+      c.fillText('一班', 40, h * .37);
+      c.strokeStyle = 'rgba(232, 226, 210, .6)'; c.lineWidth = 2;
+      c.strokeRect(150, h * .37 - 22, 180, 34);
+      c.fillText('到', 348, h * .37);
+      c.fillText('二班', 40, h * .59);
+      c.strokeRect(150, h * .59 - 22, 180, 34);
+      c.fillText('到', 348, h * .59);
       c.font = '37px "Noto Sans SC", sans-serif';
       c.fillText('三班　炉火看住，莫等我——', 40, h * .81);
       // The stroke drags a little past the last dash and stops.
@@ -389,10 +399,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    const piles: [number, number, number, number][] = [[-6, -2, 3.6, 2.6], [-1, 3.5, 2.8, 2], [4.5, -3, 3.1, 2.2], [8, 2.5, 2.2, 1.5]];
-    for (const [dx, dz, r, h] of piles) {
+    const piles: [number, number, number, number, MeshStandardMaterial][] = [
+      [-6, -2, 3.6, 2.6, ore], [-1, 3.5, 2.8, 2, oreOchre], [4.5, -3, 3.1, 2.2, oreGrey], [8, 2.5, 2.2, 1.5, ore],
+    ];
+    for (const [dx, dz, r, h, mat] of piles) {
       const p = fr.at(dx, dz);
-      cone(ore, p.east, g + h / 2, p.north, r, h, 10);
+      cone(mat, p.east, g + h / 2, p.north, r, h, 10);
     }
     // Sorting shed: four posts, flat roof, sorted boxes beneath.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
@@ -417,6 +429,60 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const s = .3 + hash(i * 5) * .5;
       part(ore, new DodecahedronGeometry(s, 0), p.east, g + s * .4, p.north, hash(i) * 3);
     }
+    // K-16 (总表）: shed plate on the sorting shed's roof fascia, yard side.
+    const shedPlateP = fr.at(-8, -3.14);
+    siteAt('ore-shed-plate', shedPlateP.east, shedPlateP.north, 1);
+    sign(shedPlateP.east, g + 3.2, shedPlateP.north, fr.yaw, 1.2, .4, timber, (c, w, h) => {
+      c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('料棚', w / 2, h / 2 + 2);
+    });
+    // K-18/19/20 (总表）: one labelled post at each sorted pile, on the clear
+    // side (measured ≥5 m off the narrow-gauge corridor), facing the yard centre.
+    const faceYard = (east: number, north: number) => Math.atan2(yard.east - east, -(yard.north - north));
+    const pileSigns: [string, string, number, number][] = [
+      ['ore-pile-ore-sign', '矿料', -1.8, -2.0],
+      ['ore-pile-timber-sign', '木料', -1, 0.1],
+      ['ore-pile-slag-sign', '渣料', 8.2, -3.0],
+    ];
+    for (const [id, word, dx, dz] of pileSigns) {
+      const p = fr.at(dx, dz);
+      put(timber, dx, g + .55, dz, .12, 1.1, .12);
+      siteAt(id, p.east, p.north, 1);
+      sign(p.east, g + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
+        c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+        c.font = 'bold 56px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(word, w / 2, h / 2 + 2);
+      });
+    }
+    // K-17 (总表）: the sealed storehouse itself was never built (card 05
+    // structure, crater-outside) — this package builds the closed hut and
+    // hangs the plate above its iron door. The door is sealed with a white band.
+    const store = fr.at(-1.5, -7.5);
+    siteAt('sealed-storehouse', store.east, store.north, 3);
+    put(stone, -1.5, g + .15, -7.5, 4.8, .3, 3.6);
+    put(timber, -1.5, g + 1.6, -9.2, 4.6, 2.6, .2);
+    put(timber, -3.7, g + 1.6, -7.5, .2, 2.6, 3.4);
+    put(timber, 0.7, g + 1.6, -7.5, .2, 2.6, 3.4);
+    put(timber, -2.95, g + 1.6, -5.8, 1.7, 2.6, .2);
+    put(timber, -0.05, g + 1.6, -5.8, 1.7, 2.6, .2);
+    put(timber, -1.5, g + 2.55, -5.8, 1.2, .7, .2);
+    put(slate, -1.5, g + 3.15, -8.35, 5.0, .14, 2.0, -.42, 0);
+    put(slate, -1.5, g + 3.15, -6.65, 5.0, .14, 2.0, .42, 0);
+    put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
+    put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
+    const storePlateP = fr.at(-1.5, -5.64);
+    siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);
+    sign(storePlateP.east, g + 2.45, storePlateP.north, fr.yaw, 1.1, .4, iron, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('封存仓', w / 2, h / 2 + 2);
+    });
   }
 
   // ---------- salvage-era ruins layer （修订一 §五） ----------

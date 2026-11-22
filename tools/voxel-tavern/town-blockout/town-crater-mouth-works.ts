@@ -328,6 +328,39 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     if (mapH !== undefined) {
       actions.push({ id: 'map', label: '查看坑区手绘图', east: mapP.east, north: mapP.north, height: mapH, range: 2.1 });
     }
+    // K-01/02/03 (《设计-全图文字件总表》，总控裁定 批58 追补六）：牌匾挂门楣、
+    // 登记台告示立柜台、值班室门牌挂右窗上——总表逐字，不改字。K-03 注：本栋为
+    // 一间通房，无独立值班室门；牌挂右前窗上方作房间标牌，不另隔墙。
+    const plaqueP = fr.at(0, D / 2 + .16);
+    sites.push({ id: 'supply-station-plaque', east: plaqueP.east, north: plaqueP.north, height: g + 3.2, radius: 1 });
+    sign(plaqueP.east, g + 3.2, plaqueP.north, fr.yaw, 2.2, .55, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 72px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('坑口补给站', w / 2, h / 2 + 2);
+    });
+    const noticeP = fr.at(1.4, 1.1);
+    sites.push({ id: 'supply-registration-notice', east: noticeP.east, north: noticeP.north, height: g + foundH + 1.35, radius: 1 });
+    sign(noticeP.east, g + foundH + 1.35, noticeP.north, fr.yaw, 1.1, .7, (c, w, h) => {
+      c.fillStyle = '#e8e0cc'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#5d4630'; c.lineWidth = 4; c.strokeRect(8, 8, w - 16, h - 16);
+      c.fillStyle = '#3d2c1c'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = '38px "Noto Sans SC", sans-serif';
+      c.fillText('入坑先登记，领灯一盏。', w / 2, h * .32);
+      c.fillText('出坑销名，灯还灯房。', w / 2, h * .68);
+    });
+    const dutyP = fr.at(2.55, D / 2 + .16);
+    sites.push({ id: 'supply-duty-room-plate', east: dutyP.east, north: dutyP.north, height: g + foundH + 2.45, radius: 1 });
+    sign(dutyP.east, g + foundH + 2.45, dutyP.north, fr.yaw, .9, .3, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(232, 226, 210, .4)'; c.lineWidth = 3;
+      c.strokeRect(6, 6, w - 12, h - 12);
+      c.font = 'bold 56px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('值班室', w / 2, h / 2 + 2);
+    });
   }
 
   // ---------- 地面三脚望筒（抢救包 ②，移植自 lane-a 453422e） ----------

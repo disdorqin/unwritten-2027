@@ -29,6 +29,9 @@ test('crater outer works: the settled signage set is mounted (牌面定稿)', ()
     // K-06/07/09/10 (《设计-全图文字件总表》，总控裁定 批55).
     'smelter-furnace-plate', 'smelter-material-plate',
     'instrument-calibration-plate', 'instrument-cabinet-plate',
+    // K-16/17/18/19/20 (总表，批58 追补六）+ the storehouse they hang on.
+    'ore-shed-plate', 'ore-pile-ore-sign', 'ore-pile-timber-sign', 'ore-pile-slag-sign',
+    'sealed-storehouse', 'sealed-storehouse-plate',
   ]) assert.ok(byId.has(id), `missing sign ${id}`);
   // Collapse boards stand just outside the fence ring (r 97 + board offset).
   for (const id of ['collapse-sign-1', 'collapse-sign-2']) {
@@ -95,6 +98,15 @@ test('crater outer works: the reserved narrow-gauge corridor stays clear of the 
   assert.ok(distToCorridor(yardSite.east, yardSite.north) >= 4, 'ore yard crowds the track corridor');
   const smelter = byId.get('smelter-plant')!;
   assert.ok(distToCorridor(smelter.east, smelter.north) <= 9, 'track corridor must reach the smelter door');
+  // K-17 storehouse + K-18/19/20 pile posts (批58 追补六）: all clear of the
+  // corridor by the same 4 m rule, and inside the yard's clear radius.
+  for (const id of ['sealed-storehouse', 'sealed-storehouse-plate',
+    'ore-pile-ore-sign', 'ore-pile-timber-sign', 'ore-pile-slag-sign', 'ore-shed-plate']) {
+    const s = byId.get(id)!;
+    assert.ok(distToCorridor(s.east, s.north) >= 4, `${id} crowds the track corridor (${distToCorridor(s.east, s.north).toFixed(1)} m)`);
+    assert.ok(Math.hypot(s.east - yardSite.east, s.north - yardSite.north) <= 11,
+      `${id} outside the yard clear radius`);
+  }
 });
 
 test('crater outer works: ledger stays inside the approved mainline-2 budget', () => {
