@@ -233,18 +233,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
     put(stone, 0, g + .6, 0, 28, 1.2, 11);
-    put(corrugated, 0, g + 5.1, 0, 28, 7.8, 11);
-    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 5.1, 5.45, .45, 7.8, .3);
-    put(slate, -7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, .5);
-    put(slate, 7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, -.5);
-    put(timber, 0, g + 12.3, 0, 28.6, .4, .5);
+    // A-4: 28m long hall, real 18m gable ridge (not the former 12.3m
+    // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
+    put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
+    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
+    put(slate, -7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, .43);
+    put(slate, 7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, -.43);
+    put(timber, 0, g + 18.45, 0, 28.6, .38, .55);
+    for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
+      put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
+      put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
+    }
+    // Oxidized seams and coherent short snow caps break the old solar-panel silhouette.
+    for (const side of [-1, 1]) for (const dz of [-4.5, 0, 4.5])
+      put(snow, side * 8.65, g + 15.3, dz, 3.8, .08, 1.5, 0, -side * .43);
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
     // Tall brick chimney, cold.
-    put(rustIron, 10.5, g + 9.5, -2, 1.5, 13, 1.5);
-    put(stoneDark, 10.5, g + 16.2, -2, 1.9, .5, 1.9);
+    put(rustIron, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
+    put(stoneDark, 10.5, g + 22.25, -2, 1.9, .5, 1.9);
     // Ingot stacks and crates left where the last shift dropped them.
     for (let s = 0; s < 3; s++) {
       for (let layer = 0; layer < 3 - s; layer++) {
@@ -266,7 +275,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // S-1 collision: the hall is a solid mass (the furnace mouth is a dark
     // inset, the iron door ajar ON the face — no enterable interior), so one
     // mass box for the hall and one for the blast-furnace stack.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 9); }
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 12.9); }
     hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
     // Hand cart, handles down, mid-yard.
     const cart = fr.at(2, 8);
@@ -352,9 +361,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
     put(stone, 0, g + 2.1, 0, 20, 4.2, 10);
-    put(timberWarm, 0, g + 6.3, 0, 20, 4.2, 10);
-    put(slate, -5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, .48);
-    put(slate, 5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, -.48);
+    // A-4: two full storeys plus pitched attic, ridge at g+17m;
+    // the original g+10m lid read as a squat one-storey workshop.
+    put(timberWarm, 0, g + 8.4, 0, 20, 8.4, 10);
+    put(slate, -5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, .48);
+    put(slate, 5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, -.48);
+    put(timber, 0, g + 17.02, 0, 20.6, .31, .42);
+    for(const side of [-1,1]) for(const dz of [-3.6,0,3.6])
+      put(snow, side * 6.15, g + 14.4, dz, 2.9, .08, 1.45, 0, -side * .48);
     // Two rows of dark windows; two boarded up.
     for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
       put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
@@ -364,15 +378,15 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, -.6);
     }
-    // Chimney twice the ridge height above the roof.
-    put(rustIron, -8, g + 11, -2, 1.1, 13, 1.1);
-    put(stoneDark, -8, g + 17.7, -2, 1.5, .45, 1.5);
+    // Tall independent chimney: ~34m total, near twice the 17m roof ridge.
+    put(rustIron, -8, g + 18.0, -2, 1.1, 31, 1.1);
+    put(stoneDark, -8, g + 33.75, -2, 1.5, .45, 1.5);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
     // S-1 collision: solid two-storey shell (no enterable interior — the
     // K-09/K-10 facade precedent) as one mass box; the loading platform is a
     // raised face with no steps, so it blocks as a low mass.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 8.4); }
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 12.6); }
     { const pf = fr.at(0, 6.8); hitBox(colliders, pf.east, pf.north, fr.yaw, 8, 2.6, g, g + .9); }
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
     put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);

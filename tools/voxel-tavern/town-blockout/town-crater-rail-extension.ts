@@ -263,8 +263,23 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       box(timber, p.east, topY + 1.15, p.north, .2, 2.3, .2, yaw);
     }
     const rc = at(0, 3);
-    box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
-    box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
+    if (label === '坑口站') {
+      // A-4 canonical terminal: low rustic two-leaf canopy, visible timber
+      // ridge and uneven snow caps. No roof/awning collider added to paths.
+      for (const side of [-1, 1]) {
+        const half = at(side * 1.7, 3);
+        box(timberWarm, half.east, topY + 2.48, half.north, 3.8, .17, 4.9, yaw, 0, -side * .16);
+        box(snow, half.east, topY + 2.61, half.north, 3.6, .09, 4.7, yaw, 0, -side * .16);
+      }
+      box(timber, rc.east, topY + 2.92, rc.north, .16, .28, 5.15, yaw);
+      for (const s of [-1, 1]) {
+        const lamp = at(s * 2.4, 1.65);
+        box(glow, lamp.east, topY + 2.08, lamp.north, .25, .30, .25, yaw);
+      }
+    } else {
+      box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
+      box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
+    }
     const bc = at(0, 3.4);
     box(timberWarm, bc.east, topY + .45, bc.north, 3.4, .1, .5, yaw);
     const sc = at(-4.6, 2.6);

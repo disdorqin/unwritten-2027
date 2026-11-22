@@ -329,12 +329,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       hitBox(colliders, sd.east, sd.north, fr.yaw, .22, D, g + foundH, g + foundH + wallH);
     }
     hitBox(colliders, back.east, back.north, fr.yaw, W, .22, g + foundH, g + foundH + wallH);
-    // Roof: pitched slate over the back half, flat viewing deck over the front half.
+    // A-4: replace the two huge glossy dark planes (solar-panel reading)
+    // with short overlapping timber shingles, warm eaves and snow-frost ridge.
+    // Keep the approved front half as an actual lookout deck.
     const roofY = g + foundH + wallH;
-    for (const s of [-1, 1]) {
-      const rp = fr.at(0, -D / 4 + s * .1);
-      box(slate, rp.east, roofY + .62, rp.north, W + .7, .12, D / 2 + .75, fr.yaw, s * .62);
+    const backRoof = fr.at(0, -D / 4);
+    box(timberWarm, backRoof.east, roofY + .38, backRoof.north,
+      W + .95, .12, D / 2 + .9, fr.yaw, .27);
+    for (let row = 0; row < 5; row++) {
+      const p = fr.at(0, -D / 2 + .3 + row * .47);
+      box(row % 3 === 0 ? stone : timber, p.east,
+        roofY + .42 + row * .04, p.north, W + 1.03, .08, .52, fr.yaw, .27);
     }
+    const ridgeP = fr.at(0, -D / 3);
+    box(snow, ridgeP.east, roofY + .96, ridgeP.north, W + .75, .13, .45, fr.yaw);
     const deck = fr.at(0, D / 4);
     box(timber, deck.east, roofY + .06, deck.north, W, .12, D / 2, fr.yaw);
     for (let i = 0; i < 7; i++) {
