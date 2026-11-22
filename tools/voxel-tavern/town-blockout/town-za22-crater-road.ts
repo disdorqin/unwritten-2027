@@ -2,6 +2,7 @@ import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshS
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
+import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
 import { mountZa31CraterCamp } from './town-za31-crater-camp';
 import { buildZa31CraterRim } from './town-za31-crater-rim';
 import { mountZa31CraterWinch } from './town-za31-crater-winch';
@@ -55,7 +56,9 @@ type WestCraterRoad = {
 };
 
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
-export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number): WestCraterRoad {
+/** A-2: five-band vertex palette enabled by default; false is explicit rollback. */
+export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number,
+  options: { za34DistantPaletteCandidate?: boolean } = {}): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
@@ -63,9 +66,15 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const yaw = approachBearing - meteorCraterFixturePlan.mainTrail.startBearing;
   const anchor = { east: survey.east, north: survey.north, rimHeight, yaw };
   const crater = mountMeteorCraterSurface(anchor);
+  const surface = crater.group.getObjectByName('meteor-crater-walk-mesh');
+  if (!surface || !(surface as Mesh).isMesh) throw new Error('B-01 crater walk surface absent');
+  const paletteEnabled = options.za34DistantPaletteCandidate !== false;
+  const paletteAudit = paletteEnabled ? applyCraterDistancePalette(surface as Mesh) : undefined;
   const lip = crater.trailPoint(0);
   const group = new Group();
   group.name = 'meteor-crater-west-road';
+  if (paletteAudit) group.userData.za34DistantPaletteAudit = paletteAudit;
+  group.userData.za34DistantPaletteEnabled = paletteEnabled;
   group.add(crater.group);
 
   const tileGround = new MeshStandardMaterial({ color: 0xc1cedc, roughness: 1 });
