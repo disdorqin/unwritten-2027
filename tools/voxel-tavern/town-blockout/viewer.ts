@@ -868,7 +868,7 @@ addTownRailWayfinding(scene, grid.heightAt);
 const pineCamp = buildPineCamp(grid);
 landscape.add(pineCamp.group);
 const scenery = addScenery(landscape, grid, pineCamp.keepClear);
-const districts = addDistrictHousing(landscape, grid, scenery.blocked, railway.keepClear);
+const districts = addDistrictHousing(landscape, grid, scenery.placementBlocked, railway.keepClear);
 const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
   districts.keepClear(east, north, radius) || extensionRoadClearance(east, north, radius) || pineCamp.keepClear(east, north, radius));
 // Zone-1 self-mount (代挂, campaign order 2026-11-21): ZA-32 wave-2 props +
