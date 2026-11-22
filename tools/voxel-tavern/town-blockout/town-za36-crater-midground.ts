@@ -135,7 +135,13 @@ export function buildZa36CraterMidground(road: Ground,
       if (ground === undefined) continue;
       push(melt === 0 ? 'basalt' : 'cinder', e, n,
         ground + height * .49, 1.12, height * .98, 1.05, bearing);
-      push('cyan', e + .38, n + .13, ground + .17, .21, .34, .21, bearing);
+      // A-5 cyan chip has a separate world-space footprint on a tilted
+      // wall. Sampling the big basalt column's centre instead of this
+      // +.38/+13 offset left chips visibly suspended above the real slope.
+      const cyanE = e + .38, cyanN = n + .13;
+      const cyanFoot = road.heightAt(cyanE, cyanN);
+      if (cyanFoot !== undefined && Number.isFinite(cyanFoot))
+        push('cyan', cyanE, cyanN, cyanFoot + .17, .21, .34, .21, bearing);
       admitted++;
     }
   }

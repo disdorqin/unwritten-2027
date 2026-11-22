@@ -39,15 +39,40 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
   const exposedRock = new Color(0x6d6562);
   const tone = new Color();
   const colors = new Float32Array(surface.positions.length);
+  const snowRoughnessFeather = new Float32Array(surface.positions.length / 3);
   for (let i = 0; i < surface.positions.length; i += 3) {
     const radial = Math.hypot(surface.positions[i], surface.positions[i + 2]);
     const snowWeight = Math.min(1, Math.max(0, (radial - 47) / 10));
+    // A-5: a soft mid-lip roughness change. Both ends return to 1.0 so
+    // neither the bowl terrace nor the carrier ground gets a shiny seam.
+    const u = Math.min(1, Math.max(0, (radial - 50) / 9));
+    const eased = u * u * (3 - 2 * u);
+    snowRoughnessFeather[i / 3] = Math.sin(Math.PI * eased);
     const grain = 0.96 + .04 * Math.sin(surface.positions[i] * 4.32 + surface.positions[i + 2] * 1.71);
     tone.copy(exposedRock).lerp(snow, snowWeight).multiplyScalar(grain).toArray(colors, i);
   }
   bowl.setAttribute('color', new BufferAttribute(colors, 3));
+  bowl.setAttribute('aCraterSnowFeather', new BufferAttribute(snowRoughnessFeather, 1));
   bowl.computeVertexNormals();
-  const ground = new Mesh(bowl, new MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  const groundMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  // Use the original ONE B-01 walk mesh and add a per-vertex transition.
+  // Its fragment roughness is 1.0 at both physical edges, gently reaching
+  // 0.97 mid-lip. No overlay ring, no extra draw call or collision surface.
+  groundMaterial.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      '#include <common>\nattribute float aCraterSnowFeather;\nvarying float vCraterSnowFeather;');
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\nvCraterSnowFeather = aCraterSnowFeather;');
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      '#include <common>\nvarying float vCraterSnowFeather;');
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.97, vCraterSnowFeather);');
+  };
+  const ground = new Mesh(bowl, groundMaterial);
   ground.name = 'meteor-crater-walk-mesh';
   group.add(ground);
 
