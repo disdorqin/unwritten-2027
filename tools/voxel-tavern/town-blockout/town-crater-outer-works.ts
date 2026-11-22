@@ -145,8 +145,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
   }
 
-  /** A text-bearing board: batched backing plus a canvas face. All crater
-   * signage text is 《文本-坑区牌面-2026-11-21》 verbatim — never paraphrased. */
+  /** A text-bearing board: batched backing plus a canvas face. Crater signage
+   * text is 《文本-坑区牌面-2026-11-21》 verbatim — never paraphrased — except
+   * K-06/07/09/10, which are 《设计-全图文字件总表-2026-11-22》 verbatim
+   * (总控裁定 批55). */
   function sign(east: number, h: number, north: number, yaw: number, w: number, hh: number,
     back: MeshStandardMaterial,
     draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) {
@@ -221,6 +223,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
+    // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口
+    // 正上方、料口木牌挂锭垛侧墙面。Smelter duty board soul names (白望山/
+    // 石沉） NOT blanked here — same class as K-24/25 but outside the ruling's
+    // named scope; flagged to 总控 for a call, board left as landed.
     const plateP = fr.at(1.8, 5.58);
     siteAt('smelter-sign', plateP.east, plateP.north, 1);
     sign(plateP.east, g + 3.6, plateP.north, fr.yaw, 1.9, .62, iron, (c, w, h) => {
@@ -251,6 +257,26 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillRect(452, h * .815, 42, 3);
       c.fillStyle = 'rgba(232, 226, 210, .16)';
       c.fillRect(452, h * .835, 26, 2);
+    });
+    // K-06 furnace-mouth iron plate, above the cold arch (总表定稿）.
+    const furnaceP = fr.at(-4, 5.58);
+    siteAt('smelter-furnace-plate', furnaceP.east, furnaceP.north, 1);
+    sign(furnaceP.east, g + 5.0, furnaceP.north, fr.yaw, 1.5, .45, iron, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('一号炉 · 冷封', w / 2, h / 2 + 2);
+    });
+    // K-07 material-opening wooden plate, ingot-stack end of the yard face.
+    const materialP = fr.at(9.5, 5.58);
+    siteAt('smelter-material-plate', materialP.east, materialP.north, 1);
+    sign(materialP.east, g + 2.2, materialP.north, fr.yaw, 1.1, .4, timber, (c, w, h) => {
+      c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 56px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('料不过夜', w / 2, h / 2 + 2);
     });
   }
 
@@ -331,6 +357,25 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       for (const [nx, ny] of [[.06, .05], [.94, .05]] as const) {
         c.beginPath(); c.arc(w * nx, h * ny, 5, 0, 7); c.fill();
       }
+    });
+    // K-09/K-10 (《设计-全图文字件总表》，总控裁定 批55)：卡03 一层工位区
+    // （校准台/仪表墙/零件柜）在本栋无可入内景——两牌改挂立面：校准台标牌
+    // 挂两排窗之间（仪表墙外立面），柜门小牌挂装台木箱面（零件柜代位）。
+    const calibP = fr.at(0, 5.16);
+    siteAt('instrument-calibration-plate', calibP.east, calibP.north, 1);
+    sign(calibP.east, g + 4.7, calibP.north, fr.yaw, 1.2, .4, brass, (c, w, h) => {
+      c.fillStyle = '#86652c'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 60px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('校准台', w / 2, h / 2 + 2);
+    });
+    const cabinetP = fr.at(2.5, 7.56);
+    siteAt('instrument-cabinet-plate', cabinetP.east, cabinetP.north, 1);
+    sign(cabinetP.east, g + 1.7, cabinetP.north, fr.yaw, .8, .3, timberWarm, (c, w, h) => {
+      c.fillStyle = '#a36b48'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 52px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('精密件 · 轻放', w / 2, h / 2 + 2);
     });
   }
 

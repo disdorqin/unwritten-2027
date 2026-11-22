@@ -26,6 +26,9 @@ test('crater outer works: the settled signage set is mounted (牌面定稿)', ()
   for (const id of [
     'wall-gate-notice', 'collapse-sign-1', 'collapse-sign-2',
     'smelter-sign', 'smelter-duty-board', 'instrument-sign', 'instrument-notice',
+    // K-06/07/09/10 (《设计-全图文字件总表》，总控裁定 批55).
+    'smelter-furnace-plate', 'smelter-material-plate',
+    'instrument-calibration-plate', 'instrument-cabinet-plate',
   ]) assert.ok(byId.has(id), `missing sign ${id}`);
   // Collapse boards stand just outside the fence ring (r 97 + board offset).
   for (const id of ['collapse-sign-1', 'collapse-sign-2']) {
