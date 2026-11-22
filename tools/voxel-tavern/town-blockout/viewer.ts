@@ -59,6 +59,7 @@ import { mountTownFillPlumSlope } from './town-fill-plum-slope';
 import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
 import { createFrontRidgeSwitchbackRoad } from './front-ridge-switchback-road';
+import { createTownSkyClouds } from './town-sky-clouds';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
 import { addNewYearDecor } from './town-new-year';
@@ -571,6 +572,11 @@ void frontRidgeProxy;
 // wiring here is the surface it will plug into.
 switchbackRoad = createFrontRidgeSwitchbackRoad();
 scene.add(switchbackRoad.group);
+// Batch-67 cloud layer (A share): five designed drift clusters plus the
+// crater smoke clouds. Self-contained at build time; weather and night are
+// fed per frame in the weather section below, so no init-order coupling.
+const skyClouds = createTownSkyClouds();
+scene.add(skyClouds.group);
 if (reportSummitSkyline) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
@@ -4097,6 +4103,9 @@ renderer.setAnimationLoop(now => {
     : snowCover.amount();
   // H2: the unified snow field follows the same shared-clock weather tiers.
   snowCover.setWeather(weather);
+  // Batch-67: clouds hang off the same single authoritative weather state
+  // (ZB-20 / G-09 presence weather) — never a second weather source.
+  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
