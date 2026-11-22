@@ -4,6 +4,7 @@ import { createMainSummitBannerCloud } from './main-summit-banner-cloud';
 import { createMainSummitBellPosts } from './main-summit-bell-posts';
 import { createMainSummitWindGround } from './main-summit-wind-ground';
 import { mountCloudTerraceArt } from './main-summit-cloud-terrace-art';
+import { mountMainSummitTerraceEdge } from './main-summit-terrace-edge';
 import { createGlideRingEntities } from './main-summit-glide-ring-entities';
 import {
   buildWindShelter, createSkyWatchRelic, createTrailMarkers, createWishLockPoint,
@@ -157,6 +158,10 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const windGround = createMainSummitWindGround(
     { east: 62.5, north: 975, height: 800 }, assembly.block.heightAt);
   group.add(windGround.group);
+  // D-6 item 4: terrace platform-edge staging (parapet + day cloud
+  // seam + line-2 station approach sign). Transfer code untouched.
+  const terraceEdge = mountMainSummitTerraceEdge(assembly);
+  group.add(terraceEdge.group);
 
   // Cloud-sea glow band (§5.21, default plan): a soft lit sheet under the
   // cloud tops south of the terrace, visible only at night.
@@ -181,7 +186,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
   return {
     approach, posts, signs, wingRack, cableTravel, glideRings, glideProgress, cloud, paint, bannerCloud, icefall, rockTowers,
     surveyStations, hutFurnishings, wishLock, shelterMid, shelterIce, skyWatch, trailMarkers, machineRoom,
-    bellPosts, windGround, glideEntities, glideLines, cloudTerraceArt,
+    bellPosts, windGround, glideEntities, glideLines, cloudTerraceArt, terraceEdge,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       return posts.blocked(east, north, feet, radius, bodyHeight) ||
         signs.blocked(east, north, feet, radius, bodyHeight) ||
@@ -214,6 +219,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
       glowMaterial.dispose();
       windGround.dispose();
       cloudTerraceArt.dispose();
+      terraceEdge.dispose();
       bellPosts.dispose();
       glideEntities.dispose();
       machineRoom.dispose();

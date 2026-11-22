@@ -3,10 +3,18 @@ import {
   InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import { sampleNorthRidge350 } from './north-ridge-350-terrain';
+import { createTerrainGrid } from './terrain';
 
 export type SwitchbackPoint = { east: number; north: number; height: number; cum: number };
 
 const MAX_GRADE = 0.105;
+let cachedGrid: ReturnType<typeof createTerrainGrid> | undefined;
+/** Host (town) grid sampler: the walking height field the road must
+ *  meet on the toe and entry stretches. Built lazily, once. */
+export function hostGridAt(east: number, north: number): number {
+  cachedGrid ??= createTerrainGrid();
+  return cachedGrid.heightAt(east, north);
+}
 /** Spiral design grade: below the cap, because blended terrain samples
  *  along the laid line run a few percent hotter than the pure profile. */
 const DESIGN_GRADE = 0.09;
@@ -24,14 +32,39 @@ const SHOULDER = 3.4;
  *
  * Anchors are the surveyed cable stations: base (526, 329, H18),
  * mid terrace (440, 520, H140), cloud terrace (336, 640, H347).
+ *
+ * D-6 (总控裁定批60, 2026-11-22): the toe no longer cuts straight
+ * across the memorial hill (grid 46.8 at (400,304) buried the old
+ * line 5-25 m). It re-routes north through the flat river-valley
+ * ground: pass (290,300) -> west jog (270,300) -> north (270,460)
+ * -> east (530,460) -> south to the base station, meeting the grid
+ * at the pass (12.8, the 山口 teleport landing) and the station
+ * platform (18.0). The toe profile follows the host grid with a
+ * grade-clamped, backward-envelope projection (never buried except
+ * the declared station-apron cutting, last ~24 m, depth <= 8 m).
+ * The entry approach (boundary N539 -> pass) runs the same west
+ * line (270,539) -> (270,460) and joins the corridor at the
+ * (270,460) junction; the direct E290 line's hollow (grid 8.6) and
+ * 43% shoulder cliff are bypassed, not filled.
  */
 export function buildSwitchbackCenterline(
   terrainAt: (east: number, north: number) => number = sampleNorthRidge350,
+  gridAt: (east: number, north: number) => number = hostGridAt,
 ): SwitchbackPoint[] {
   const raw: { east: number; north: number }[] = [];
-  // Toe road: surveyed, nearly flat.
-  const toe: [number, number][] = [[290, 300], [350, 301], [400, 304], [460, 312], [500, 320], [526, 329]];
-  for (const [east, north] of toe) raw.push({ east, north });
+  // Toe road (D-6 re-route, 总控裁定批60): the old straight toe cut
+  // the memorial hill and was buried 5-25 m under the grid. The new
+  // toe loops north through flat valley ground (grid 9-22) and meets
+  // the grid at both ends: pass 12.8 / base platform 18.0.
+  const toe: [number, number][] = [[290, 300], [270, 300], [270, 460], [530, 460], [530, 329], [526, 329]];
+  for (let t = 0; t < toe.length - 1; t++) {
+    const [e0, n0] = toe[t]!, [e1, n1] = toe[t + 1]!;
+    const dist = Math.hypot(e1 - e0, n1 - n0);
+    const steps = Math.max(1, Math.round(dist / 3));
+    for (let i = t === 0 ? 0 : 1; i <= steps; i++) {
+      raw.push({ east: e0 + (e1 - e0) * i / steps, north: n0 + (n1 - n0) * i / steps });
+    }
+  }
 
   // The ridge is an elliptical cone: height depends only on the
   // elliptical distance d from the summit. The road is therefore laid
@@ -125,15 +158,20 @@ export function buildSwitchbackCenterline(
     if (carry >= 3 || isAnchor || i === raw.length - 1) { sampled.push(point); carry = 0; }
   }
   // Heights: terrain samples projected onto the grade constraint by
-  // relaxation sweeps, with the surveyed anchors pinned (mid terrace
-  // 140, cloud terrace 347). The projection is the closest legal
-  // profile: it departs from the terrain only where a terrace blend
-  // edge would otherwise break the grade cap.
-  const heights = sampled.map(point => terrainAt(point.east, point.north));
+  // relaxation sweeps, with the surveyed anchors pinned (base 18, mid
+  // terrace 140, cloud terrace 347). The projection is the closest
+  // legal profile: it departs from the terrain only where a terrace
+  // blend edge would otherwise break the grade cap. D-6: the toe
+  // stretch samples the HOST GRID (the walking field it must meet),
+  // the spiral keeps the ridge sampler.
+  const baseIndex = sampled.findIndex(point => point.east === 526 && point.north === 329);
+  const heights = sampled.map((point, i) => (baseIndex >= 0 && i <= baseIndex ? gridAt : terrainAt)(point.east, point.north));
+  const gridSamples = heights.slice(0, baseIndex >= 0 ? baseIndex + 1 : 0);
   const plans = sampled.map((point, i) => i === 0 ? 0
     : Math.hypot(point.east - sampled[i - 1]!.east, point.north - sampled[i - 1]!.north));
   const pins = new Map<number, number>();
   sampled.forEach((point, i) => {
+    if (baseIndex >= 0 && i === baseIndex) pins.set(i, 18);
     if (point.east === 440 && point.north === 520) pins.set(i, 140);
     if (point.east === 336 && point.north === 640) pins.set(i, 347);
   });
@@ -143,9 +181,12 @@ export function buildSwitchbackCenterline(
   // the lower of the two. Both envelopes are grade-legal, so their
   // minimum is too, and the anchor pins land exact.
   const stretches: [number, number, number, number][] = [];
-  const midIndex = pins.size ? [...pins.keys()].sort((a, b) => a - b)[0]! : -1;
+  const pinKeys = [...pins.keys()].sort((a, b) => a - b);
+  const midIndex = pinKeys.find(i => sampled[i]!.east === 440 && sampled[i]!.north === 520) ?? -1;
   const endIndex = sampled.length - 1;
-  if (midIndex > 0) {
+  if (midIndex > 0 && baseIndex >= 0) {
+    stretches.push([0, baseIndex, heights[0]!, 18], [baseIndex, midIndex, 18, 140], [midIndex, endIndex, 140, 347]);
+  } else if (midIndex > 0) {
     stretches.push([0, midIndex, heights[0]!, 140], [midIndex, endIndex, 140, 347]);
   } else {
     stretches.push([0, endIndex, heights[0]!, 347]);
@@ -170,13 +211,27 @@ export function buildSwitchbackCenterline(
       forward[i - from] = Math.max(forward[i - from - 1]! - cap,
         Math.min(forward[i - from - 1]! + cap, heights[i]!));
     }
+    // D-6: on the toe stretch the profile must clear the host grid
+    // (backward envelope of the grid samples, grade-legal by
+    // construction), except where the pin cone forces the station
+    // cutting descent -- there the upper cone wins and the shortfall
+    // is the declared cutting, not a burial.
+    const isToe = from === 0 && baseIndex >= 0 && to === baseIndex;
+    const envelope = isToe ? cums.map((cumI, k) => {
+      let best = -Infinity;
+      for (let j = 0; j < cums.length; j++) {
+        best = Math.max(best, gridSamples[j]! + 0.06 - MAX_GRADE * Math.abs(cums[j]! - cumI));
+      }
+      return best;
+    }) : undefined;
     for (let i = from; i <= to; i++) {
       const lower = Math.max(startH - MAX_GRADE * cums[i - from]!,
         pinH - MAX_GRADE * (total - cums[i - from]!));
       const upper = Math.min(startH + MAX_GRADE * cums[i - from]!,
         pinH + MAX_GRADE * (total - cums[i - from]!));
-      const f = forward[i - from]!;
-      heights[i] = f < lower ? lower : f > upper ? upper : f;
+      let v = forward[i - from]!;
+      if (envelope) v = Math.max(v, envelope[i - from]!);
+      heights[i] = v < lower ? lower : v > upper ? upper : v;
     }
     heights[from] = startH;
     heights[to] = pinH;
@@ -190,94 +245,166 @@ export function buildSwitchbackCenterline(
   return points;
 }
 
+/**
+ * D-6 entry approach (总控裁定批60, item 3): the spur from the town
+ * boundary (270,539) south to the corridor junction (270,460), where
+ * it joins the re-routed toe's north leg. The direct E290 line is
+ * bypassed, not filled: its grid shoulder climbs 43% (12.8 -> 20.9
+ * over 19 m) and its hollow (grid 8.6) sits off-route. The spur
+ * follows the host grid with the same grade-clamped projection
+ * (pins: boundary ground / junction height from the main corridor).
+ */
+export function buildEntryApproach(
+  junctionHeight: number,
+  gridAt: (east: number, north: number) => number = hostGridAt,
+): SwitchbackPoint[] {
+  const raw: { east: number; north: number }[] = [];
+  const leg: [number, number][] = [[270, 539], [270, 460]];
+  for (let t = 0; t < leg.length - 1; t++) {
+    const [e0, n0] = leg[t]!, [e1, n1] = leg[t + 1]!;
+    const dist = Math.hypot(e1 - e0, n1 - n0);
+    const steps = Math.max(1, Math.round(dist / 3));
+    for (let i = t === 0 ? 0 : 1; i <= steps; i++) {
+      raw.push({ east: e0 + (e1 - e0) * i / steps, north: n0 + (n1 - n0) * i / steps });
+    }
+  }
+  const heights = raw.map(point => gridAt(point.east, point.north));
+  const plans = raw.map((point, i) => i === 0 ? 0
+    : Math.hypot(point.east - raw[i - 1]!.east, point.north - raw[i - 1]!.north));
+  const cums = [0];
+  for (let i = 1; i < raw.length; i++) cums.push(cums[i - 1]! + plans[i]!);
+  const total = cums.at(-1)!;
+  const startH = heights[0]! + 0.06;
+  const endH = junctionHeight;
+  const forward = [startH];
+  for (let i = 1; i < raw.length; i++) {
+    const cap = MAX_GRADE * plans[i]!;
+    forward.push(Math.max(forward[i - 1]! - cap, Math.min(forward[i - 1]! + cap, heights[i]!)));
+  }
+  const points: SwitchbackPoint[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const lower = Math.max(startH - MAX_GRADE * cums[i]!, endH - MAX_GRADE * (total - cums[i]!));
+    const upper = Math.min(startH + MAX_GRADE * cums[i]!, endH + MAX_GRADE * (total - cums[i]!));
+    let v = forward[i]!;
+    for (let j = 0; j < raw.length; j++) {
+      v = Math.max(v, heights[j]! + 0.06 - MAX_GRADE * Math.abs(cums[j]! - cums[i]!));
+    }
+    v = v < lower ? lower : v > upper ? upper : v;
+    points.push({ east: raw[i]!.east, north: raw[i]!.north, height: v, cum: cums[i]! });
+  }
+  points[0]!.height = startH;
+  points.at(-1)!.height = endH;
+  return points;
+}
+
 export function createFrontRidgeSwitchbackRoad(
   terrainAt: (east: number, north: number) => number = sampleNorthRidge350,
+  gridAt: (east: number, north: number) => number = hostGridAt,
 ) {
-  const centreline = buildSwitchbackCenterline(terrainAt);
+  const centreline = buildSwitchbackCenterline(terrainAt, gridAt);
   const totalLength = centreline.at(-1)!.cum;
   const group = new Group();
   group.name = 'front-ridge-switchback-road';
   const disposers: (() => void)[] = [];
+  // D-6 entry spur: boundary (270,539) -> junction (270,460), pinned
+  // to the main corridor's profile at the junction so the T-junction
+  // has one height, not two.
+  const toeEndIndex = centreline.findIndex(point => point.east === 526 && point.north === 329);
+  const junction = centreline.find(point => point.east === 270 && point.north === 460)!;
+  const entryCentreline = buildEntryApproach(junction.height, gridAt);
 
-  // --- Ribbon: road rows at profile height, shoulder rows on the terrain.
-  const rowsAt = (point: SwitchbackPoint, dirE: number, dirN: number) => {
-    const perpE = -dirN, perpN = dirE;
-    return [-SHOULDER, -ROAD_HALF, ROAD_HALF, SHOULDER].map(lateral => {
-      const east = point.east + perpE * lateral;
-      const north = point.north + perpN * lateral;
-      const onRoad = Math.abs(lateral) <= ROAD_HALF;
-      return { east, north, height: onRoad ? point.height : terrainAt(east, north), onRoad };
-    });
-  };
-  const positions: number[] = [];
-  const colors: number[] = [];
-  const indices: number[] = [];
-  const gravel = [0.52, 0.46, 0.38];
-  const gravelDark = [0.42, 0.37, 0.30];
-  for (let i = 0; i < centreline.length; i++) {
-    const point = centreline[i]!;
-    const prev = centreline[Math.max(0, i - 1)]!;
-    const next = centreline[Math.min(centreline.length - 1, i + 1)]!;
-    let dirE = next.east - prev.east, dirN = next.north - prev.north;
-    const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
-    const rows = rowsAt(point, dirE, dirN);
-    rows.forEach((row, r) => {
-      positions.push(row.east, row.height + (row.onRoad ? 0.06 : 0), -row.north);
-      const tint = row.onRoad ? (i % 2 === 0 ? gravel : gravelDark)
-        : row.height > 200 ? [0.55, 0.57, 0.58] : row.height > 60 ? [0.38, 0.36, 0.30] : [0.34, 0.38, 0.26];
-      colors.push(...tint);
-    });
-    if (i > 0) {
-      const a = (i - 1) * 4;
-      for (let r = 0; r < 3; r++) indices.push(a + r, a + r + 4, a + r + 1, a + r + 1, a + r + 4, a + r + 5);
-    }
-  }
-  const ribbonGeometry = new BufferGeometry();
-  ribbonGeometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-  ribbonGeometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
-  ribbonGeometry.setIndex(indices);
-  ribbonGeometry.computeVertexNormals();
-  const ribbon = new Mesh(ribbonGeometry, new MeshLambertMaterial({ vertexColors: true, side: 2 }));
-  ribbon.name = 'switchback-road-ribbon';
-  group.add(ribbon);
-  disposers.push(() => { ribbonGeometry.dispose(); (ribbon.material as MeshLambertMaterial).dispose(); });
-
-  // --- Height override: nearest centreline sample via a 12 m cell hash.
-  const cell = 12;
-  const hash = new Map<string, number[]>();
-  centreline.forEach((point, i) => {
-    const key = `${Math.floor(point.east / cell)},${Math.floor(point.north / cell)}`;
-    const list = hash.get(key) ?? []; list.push(i); hash.set(key, list);
-  });
-  function nearest(east: number, north: number): { point: SwitchbackPoint; distance: number; lateral: number } | undefined {
-    let best: { point: SwitchbackPoint; distance: number; lateral: number } | undefined;
-    const cx = Math.floor(east / cell), cn = Math.floor(north / cell);
-    for (let x = cx - 1; x <= cx + 1; x++) for (let n = cn - 1; n <= cn + 1; n++) {
-      for (const i of hash.get(`${x},${n}`) ?? []) {
-        const point = centreline[i]!;
-        const distance = Math.hypot(east - point.east, north - point.north);
-        if (!best || distance < best.distance) {
-          const next = centreline[Math.min(centreline.length - 1, i + 1)]!;
-          const prev = centreline[Math.max(0, i - 1)]!;
-          let dirE = next.east - prev.east, dirN = next.north - prev.north;
-          const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
-          const lateral = (east - point.east) * -dirN + (north - point.north) * dirE;
-          best = { point, distance, lateral };
-        }
+  // --- Ribbon: road rows at profile height, shoulder rows on the
+  // terrain. The ground sampler is per-point: the toe and entry spur
+  // sit on the host grid, the spiral on the ridge field.
+  function buildRibbon(points: SwitchbackPoint[], groundAt: (east: number, north: number, index: number) => number, name: string) {
+    const rowsAt = (point: SwitchbackPoint, dirE: number, dirN: number, index: number) => {
+      const perpE = -dirN, perpN = dirE;
+      return [-SHOULDER, -ROAD_HALF, ROAD_HALF, SHOULDER].map(lateral => {
+        const east = point.east + perpE * lateral;
+        const north = point.north + perpN * lateral;
+        const onRoad = Math.abs(lateral) <= ROAD_HALF;
+        return { east, north, height: onRoad ? point.height : groundAt(east, north, index), onRoad };
+      });
+    };
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const indices: number[] = [];
+    const gravel = [0.52, 0.46, 0.38];
+    const gravelDark = [0.42, 0.37, 0.30];
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i]!;
+      const prev = points[Math.max(0, i - 1)]!;
+      const next = points[Math.min(points.length - 1, i + 1)]!;
+      let dirE = next.east - prev.east, dirN = next.north - prev.north;
+      const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
+      const rows = rowsAt(point, dirE, dirN, i);
+      rows.forEach((row, r) => {
+        positions.push(row.east, row.height + (row.onRoad ? 0.06 : 0), -row.north);
+        const tint = row.onRoad ? (i % 2 === 0 ? gravel : gravelDark)
+          : row.height > 200 ? [0.55, 0.57, 0.58] : row.height > 60 ? [0.38, 0.36, 0.30] : [0.34, 0.38, 0.26];
+        colors.push(...tint);
+      });
+      if (i > 0) {
+        const a = (i - 1) * 4;
+        for (let r = 0; r < 3; r++) indices.push(a + r, a + r + 4, a + r + 1, a + r + 1, a + r + 4, a + r + 5);
       }
     }
-    return best;
+    const ribbonGeometry = new BufferGeometry();
+    ribbonGeometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+    ribbonGeometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
+    ribbonGeometry.setIndex(indices);
+    ribbonGeometry.computeVertexNormals();
+    const ribbon = new Mesh(ribbonGeometry, new MeshLambertMaterial({ vertexColors: true, side: 2 }));
+    ribbon.name = name;
+    group.add(ribbon);
+    disposers.push(() => { ribbonGeometry.dispose(); (ribbon.material as MeshLambertMaterial).dispose(); });
   }
+  buildRibbon(centreline, (east, north, i) => (toeEndIndex >= 0 && i <= toeEndIndex ? gridAt : terrainAt)(east, north), 'switchback-road-ribbon');
+  buildRibbon(entryCentreline, (east, north) => gridAt(east, north), 'switchback-entry-ribbon');
+
+  // --- Height override: nearest centreline sample via a 12 m cell
+  // hash, over the main corridor AND the entry spur (union).
+  const cell = 12;
+  type Near = { point: SwitchbackPoint; distance: number; lateral: number; groundAt: (east: number, north: number) => number };
+  function makeNearest(points: SwitchbackPoint[], groundFor: (point: SwitchbackPoint, index: number) => (east: number, north: number) => number) {
+    const hash = new Map<string, number[]>();
+    points.forEach((point, i) => {
+      const key = `${Math.floor(point.east / cell)},${Math.floor(point.north / cell)}`;
+      const list = hash.get(key) ?? []; list.push(i); hash.set(key, list);
+    });
+    return (east: number, north: number): Near | undefined => {
+      let best: Near | undefined;
+      const cx = Math.floor(east / cell), cn = Math.floor(north / cell);
+      for (let x = cx - 1; x <= cx + 1; x++) for (let n = cn - 1; n <= cn + 1; n++) {
+        for (const i of hash.get(`${x},${n}`) ?? []) {
+          const point = points[i]!;
+          const distance = Math.hypot(east - point.east, north - point.north);
+          if (!best || distance < best.distance) {
+            const next = points[Math.min(points.length - 1, i + 1)]!;
+            const prev = points[Math.max(0, i - 1)]!;
+            let dirE = next.east - prev.east, dirN = next.north - prev.north;
+            const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
+            const lateral = (east - point.east) * -dirN + (north - point.north) * dirE;
+            best = { point, distance, lateral, groundAt: groundFor(point, i) };
+          }
+        }
+      }
+      return best;
+    };
+  }
+  const nearestMain = makeNearest(centreline, (_point, i) => (toeEndIndex >= 0 && i <= toeEndIndex ? gridAt : terrainAt));
+  const nearestEntry = makeNearest(entryCentreline, () => gridAt);
   function heightAt(east: number, north: number): number | undefined {
-    const near = nearest(east, north);
-    if (!near) return undefined;
+    const candidates = [nearestMain(east, north), nearestEntry(east, north)].filter((c): c is Near => !!c);
+    if (candidates.length === 0) return undefined;
+    const near = candidates.reduce((a, b) => (b.distance < a.distance ? b : a));
     const lateralAbs = Math.abs(near.lateral);
     if (near.distance > SHOULDER + 2) return undefined;
     if (lateralAbs <= ROAD_HALF) return near.point.height + 0.06;
     if (lateralAbs <= SHOULDER) {
       const t = (lateralAbs - ROAD_HALF) / (SHOULDER - ROAD_HALF);
       const smooth = t * t * (3 - 2 * t);
-      return (near.point.height + 0.06) * (1 - smooth) + terrainAt(east, north) * smooth;
+      return (near.point.height + 0.06) * (1 - smooth) + near.groundAt(east, north) * smooth;
     }
     return undefined;
   }
@@ -290,7 +417,7 @@ export function createFrontRidgeSwitchbackRoad(
   const lampMaterial = new MeshBasicMaterial({ color: '#3a3230' });
   disposers.push(() => lampMaterial.dispose());
   let nextLamp = 30;
-  let nextStone = 500;
+  let nextStone = 250; // spec 250 m (总控裁定批55；原 500 m)
   const lampPosts: { east: number; north: number; height: number }[] = [];
   for (let i = 2; i < centreline.length - 2; i++) {
     const point = centreline[i]!;
@@ -307,7 +434,7 @@ export function createFrontRidgeSwitchbackRoad(
     }
     if (point.cum >= nextStone) {
       const km = nextStone / 1000;
-      nextStone += 500;
+      nextStone += 250;
       const post = new Mesh(new BoxGeometry(0.42, 0.95, 0.3), stone);
       post.name = `switchback-mileage-${km.toFixed(1)}km`;
       post.position.set(point.east + 2.3, point.height + 0.48, -(point.north));
@@ -376,9 +503,98 @@ export function createFrontRidgeSwitchbackRoad(
   sign('switchback-start-sign', centreline[0]!, ['盘山道', `全长约 ${(totalLength / 1000).toFixed(1)} 公里 · 步行登云海台`]);
   sign('switchback-top-sign', centreline.at(-1)!, ['云海台', '盘山道口 · 缆车二线站']);
 
+  // --- D-5 supplement (总控裁定批55): hairpin benches, two wind-shelter
+  // rest points, the (300,400) viewing platform, and the three cable
+  // station timetable boards (texts verbatim from 总控《文本-缆车三站
+  // 时刻牌-2026-11-22》, S-12/S-16/S-19; mounting only, never reword).
+  const benches: Group[] = [];
+  function benchAt(east: number, north: number, height: number, facing: number, name: string) {
+    const bench = new Group();
+    bench.name = name;
+    const seat = new Mesh(new BoxGeometry(1.7, 0.12, 0.55), timber);
+    seat.position.set(0, 0.5, 0);
+    const back = new Mesh(new BoxGeometry(1.7, 0.62, 0.1), timber);
+    back.position.set(0, 0.86, -0.26);
+    const legL = new Mesh(new BoxGeometry(0.12, 0.5, 0.5), stone);
+    legL.position.set(-0.7, 0.25, 0);
+    const legR = new Mesh(new BoxGeometry(0.12, 0.5, 0.5), stone);
+    legR.position.set(0.7, 0.25, 0);
+    bench.add(seat, back, legL, legR);
+    bench.position.set(east, height, -north);
+    bench.rotation.y = facing;
+    group.add(bench);
+    benches.push(bench);
+    disposers.push(() => { for (const part of [seat, back, legL, legR]) part.geometry.dispose(); });
+  }
+  // Hairpins: where the spiral reverses heading (turn > 120 deg) on the
+  // switchback stretches; a bench sits on the uphill (cut) side.
+  let lastBenchCum = -1e9;
+  for (let i = 2; i < centreline.length - 2; i++) {
+    const a = centreline[i - 1]!, b = centreline[i]!, c = centreline[i + 1]!;
+    const v1e = b.east - a.east, v1n = b.north - a.north;
+    const v2e = c.east - b.east, v2n = c.north - b.north;
+    const l1 = Math.hypot(v1e, v1n) || 1, l2 = Math.hypot(v2e, v2n) || 1;
+    const cos = (v1e * v2e + v1n * v2n) / (l1 * l2);
+    if (cos < -0.5 && b.cum - lastBenchCum > 120) {
+      lastBenchCum = b.cum;
+      const perpE = -v1n / l1, perpN = v1e / l1;
+      const up = terrainAt(b.east + perpE * 3, b.north + perpN * 3) >= terrainAt(b.east - perpE * 3, b.north - perpN * 3) ? 1 : -1;
+      benchAt(b.east + perpE * up * 2.6, b.north + perpN * up * 2.6, b.height, Math.atan2(v1e, v1n), `switchback-bench-${b.cum.toFixed(0)}m`);
+    }
+  }
+  // Wind-shelter rest points: lean-to roof + bench, at the mid terrace
+  // and at the gate foot where the southern gate leg starts.
+  const shelters: Group[] = [];
+  function shelterAt(point: SwitchbackPoint, name: string) {
+    const shelter = new Group();
+    shelter.name = name;
+    const roof = new Mesh(new BoxGeometry(3.4, 0.14, 2.6), timber);
+    roof.position.set(0, 2.3, 0);
+    roof.rotation.z = 0.18;
+    const postA = new Mesh(new BoxGeometry(0.16, 2.3, 0.16), timber);
+    postA.position.set(-1.5, 1.15, 1.1);
+    const postB = postA.clone();
+    postB.position.set(1.5, 1.15, 1.1);
+    const wall = new Mesh(new BoxGeometry(3.4, 1.9, 0.18), stone);
+    wall.position.set(0, 0.95, -1.2);
+    shelter.add(roof, postA, postB, wall);
+    shelter.position.set(point.east + 4.2, point.height, -point.north);
+    group.add(shelter);
+    shelters.push(shelter);
+    benchAt(point.east + 4.2, point.north, point.height, 0, `${name}-bench`);
+    disposers.push(() => { for (const part of [roof, postA, postB, wall]) part.geometry.dispose(); });
+  }
+  const midPoint = centreline.find(p => Math.abs(p.east - 440) < 0.01 && Math.abs(p.north - 520) < 0.01);
+  const gatePoint = centreline.find(p => Math.abs(p.east - 347.7) < 0.01 && Math.abs(p.north - 609.8) < 0.01);
+  if (midPoint) shelterAt(midPoint, 'switchback-shelter-mid');
+  if (gatePoint) shelterAt(gatePoint, 'switchback-shelter-gate');
+  // Viewing platform (300,400): the surveyed lookout stone platform
+  // site (H76.9), a flat stone deck with a low parapet and a sign.
+  const platform = new Group();
+  platform.name = 'switchback-lookout-300-400';
+  const deck = new Mesh(new CylinderGeometry(3.6, 3.9, 0.55, 10), stone);
+  deck.position.set(0, 0.28, 0);
+  platform.add(deck);
+  for (let k = 0; k < 7; k++) {
+    const a = Math.PI * (0.15 + k * 0.12);
+    const parapet = new Mesh(new BoxGeometry(1.1, 0.85, 0.28), stone);
+    parapet.position.set(Math.cos(a) * 3.3, 0.95, Math.sin(a) * 3.3);
+    parapet.rotation.y = -a;
+    platform.add(parapet);
+  }
+  const lookoutHeight = terrainAt(300, 400);
+  platform.position.set(300, lookoutHeight, -400);
+  group.add(platform);
+  disposers.push(() => { deck.geometry.dispose(); });
+  // Cable station timetable boards (S-12/S-16/S-19).
+  const boards = createStationBoards(terrainAt, timber, stone);
+  group.add(boards.group);
+  disposers.push(boards.dispose);
+
   let disposed = false;
   return {
-    group, centreline, totalLength, heightAt,
+    group, centreline, entryCentreline, totalLength, heightAt,
+    benches, shelters, platform, boards: boards.group,
     surfaceAt: heightAt,
     setNight(night: boolean) {
       for (const core of lampCores) (core.material as MeshBasicMaterial).color.set(night ? '#ffb45c' : '#3a3230');
@@ -391,6 +607,74 @@ export function createFrontRidgeSwitchbackRoad(
       for (const dispose of disposers) dispose();
     },
   };
+}
+
+/** Cable station timetable board texts — verbatim from 总控
+ * 《文本-缆车三站时刻牌-2026-11-22》 (S-12/S-16/S-19, 批53定稿).
+ * Mounting only: never reword. */
+export const STATION_BOARD_TEXTS = [
+  { id: 'S-12', station: '山下站', east: 522.2, north: 324.2,
+    title: '上山车',
+    lines: ['车自山顶来 · 约二分钟一程', '晨钟后首班 · 日落前末班 · 夜里不开', '先到中山站 · 换口气再登顶'] },
+  { id: 'S-16', station: '中山站', east: 434.4, north: 520.8,
+    title: '中山站 · 上下通停',
+    lines: ['往上 约一分钟到顶 · 往下 约一分钟回山脚', '配重在塔 · 过站先听铃', '夜里过站不停 · 听见铃声莫招手'] },
+  { id: 'S-19', station: '山顶站', east: 333.6, north: 637.6,
+    title: '下山车',
+    lines: ['车从这儿发 · 人到即走 · 不等人齐', '风起缓发 · 雪大停发（站房里等）', '末班看日头 · 落山前准有一班'] },
+] as const;
+
+export function createStationBoards(
+  terrainAt: (east: number, north: number) => number,
+  timber: MeshLambertMaterial,
+  stone: MeshLambertMaterial,
+) {
+  const group = new Group();
+  group.name = 'cable-station-boards';
+  const disposers: (() => void)[] = [];
+  for (const board of STATION_BOARD_TEXTS) {
+    const height = terrainAt(board.east, board.north);
+    if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 384;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#4c3a26'; ctx.fillRect(0, 0, 512, 384);
+        ctx.strokeStyle = '#2c2c30'; ctx.lineWidth = 14; ctx.strokeRect(7, 7, 498, 370);
+        ctx.fillStyle = '#f0e4c8'; ctx.textAlign = 'center';
+        ctx.font = 'bold 64px system-ui, sans-serif';
+        ctx.fillText(board.title, 256, 96);
+        ctx.font = '30px system-ui, sans-serif';
+        board.lines.forEach((line, i) => ctx.fillText(line, 256, 168 + i * 52));
+        const texture = new CanvasTexture(canvas);
+        texture.colorSpace = SRGBColorSpace;
+        const face = new Mesh(new PlaneGeometry(1.7, 1.28), new MeshBasicMaterial({ map: texture, side: 2 }));
+        face.name = `station-board-${board.id}`;
+        face.position.set(board.east, height + 1.9, -board.north);
+        group.add(face);
+        const frame = new Mesh(new BoxGeometry(1.86, 1.44, 0.08), stone);
+        frame.position.set(board.east, height + 1.9, -board.north - 0.06);
+        group.add(frame);
+        const legL = new Mesh(new BoxGeometry(0.12, 1.4, 0.12), timber);
+        legL.position.set(board.east - 0.7, height + 0.7, -board.north);
+        const legR = legL.clone();
+        legR.position.set(board.east + 0.7, height + 0.7, -board.north);
+        group.add(legL, legR);
+        disposers.push(() => {
+          face.geometry.dispose(); face.material.dispose(); texture.dispose();
+          frame.geometry.dispose(); legL.geometry.dispose(); legR.geometry.dispose();
+        });
+      }
+    }
+  }
+  let disposed = false;
+  return { group, dispose() {
+    if (disposed) return;
+    disposed = true;
+    group.removeFromParent();
+    group.clear();
+    for (const dispose of disposers) dispose();
+  } };
 }
 
 function setInstance(mesh: InstancedMesh, index: number, x: number, y: number, z: number) {
