@@ -3,6 +3,7 @@ import {
   PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import type { MainSummitTrailPoint } from './main-summit-trail';
+import { surveyPlateLines } from './town-survey';
 
 export type SurveyStation = {
   id: 'M4' | 'M5' | 'M6' | 'M7';
@@ -29,8 +30,9 @@ const pillarHeight = 1.05;
  * with brass triangle plates. M4 cloud terrace edge, M5 where trail 2 leaves
  * the cloud band, M6 icefall top. M7 is the summit stone circle's brass
  * marker from design book §4.17 — registered here for alignment, not rebuilt.
- * Plate readings derive from B window's beacon drift table and are engraved
- * when that file lands; plates carry the station id today.
+ * Plate readings are engraved from B window's drift-table derivation
+ * (town-survey.ts surveyPlateLines — the single source; do not retype the
+ * numbers anywhere else).
  */
 export function createMainSummitSurveyStations(sites: SurveyStationSites) {
   const group = new Group();
@@ -62,11 +64,14 @@ export function createMainSummitSurveyStations(sites: SurveyStationSites) {
         ctx.fillStyle = '#b08d4f';
         ctx.fillRect(0, 0, 256, 256);
         ctx.fillStyle = '#2e2413';
-        ctx.font = 'bold 110px system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(id, 128, 128);
-        ctx.fillRect(48, 168, 160, 7);
-        ctx.fillRect(48, 192, 160, 7);
+        // The plate carries exactly the three derived lines, nothing else.
+        const lines = surveyPlateLines(id);
+        ctx.font = 'bold 44px system-ui, sans-serif';
+        ctx.fillText(lines[0], 128, 78);
+        ctx.font = 'bold 40px system-ui, sans-serif';
+        ctx.fillText(lines[1], 128, 148);
+        ctx.fillText(lines[2], 128, 208);
         const texture = new CanvasTexture(canvas);
         texture.colorSpace = SRGBColorSpace;
         const face = new Mesh(new PlaneGeometry(.4, .4), new MeshBasicMaterial({ map: texture, transparent: true }));

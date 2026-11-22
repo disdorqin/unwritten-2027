@@ -71,6 +71,31 @@ export function frontRidgeSurfaceColorAt(east:number,north:number,height:number,
     const rockLayer=.14*smooth((altitude-112)/55)+.09*geology;
     base.lerp(umber,rockLayer);
   }
+  // West-end special (branch window D, 2026-11-22): the feathered
+  // west wall (east<96) compresses the whole profile under ~125 m,
+  // where the altitude bands above saturate into one pale-brown mass
+  // seen from the crater. Give that sector its own horizontal strata:
+  // 9 m beds of stone/ochre/umber/rust keyed by altitude and geology,
+  // plus vertical scree streaks, so the wall reads as layered rock
+  // (crater palette families; no midnight blue as a rock base here).
+  if(east<96){
+    const bed=hash(Math.floor(altitude/9),Math.floor(east/23),11)%5;
+    const bedMix=.16+.13*geology;
+    if(bed===1)base.lerp(umber,bedMix);
+    else if(bed===2)base.lerp(earth,bedMix*.9);
+    else if(bed===3)base.lerp(new Color(FRONT_RIDGE_PALETTE.rust),bedMix*.55);
+    const streak=smooth((Math.sin(east*.53+Math.sin(north*.11)*2.1)-.25)/.6);
+    base.lerp(umber,.10*streak*(1-soil));
+  }
+  // Skirt zone (below the toe, altitude<12): the sealed skirt quads
+  // otherwise share one saturated colour and read as a flat void at
+  // night. Streak them vertically by easting so the seal reads as a
+  // shadowed rock foot, never a blank.
+  if(altitude<12){
+    const footStreak=(hash(Math.floor(east/7),3,5)%7)/6;
+    base.lerp(umber,.12+.18*footStreak);
+    base.lerp(earth,.08*(1-footStreak));
+  }
   // Keep the peak broken and shadowed, but never let the entire upper
   // south wall become midnight-blue on a DAYTIME first-person view.
   if(altitude>=210)base.lerp(night,.13*smooth((altitude-210)/88));
@@ -157,3 +182,4 @@ export function frontRidgeBandAt(height:number,steep:number) {
     (height>=frontRidgePixelSpec.minAltitudeSnowMetres && steep<frontRidgePixelSpec.snowMaxSteepness)
       ?'snow-ledge':'dark-cliff';
 }
+
