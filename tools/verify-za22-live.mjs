@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -467,6 +467,49 @@ try {
       realSpawn:true,actualDestinations:await page.locator('#jump option').count(),
       activeCanvas:await page.locator('#scene canvas').isVisible(), screenshots:4};
   }
+  if (segment === 'a4-shots') {
+    const {page,evidence}=await openTown('a4-shots');
+    const buildings=[
+      {id:'kengkou-station', ref:'station-built-canon', target:[-44.5,168],
+        route:[[-12,159],[-40,159],[-44.5,166]]},
+      {id:'instrument-workshop',ref:'docs/参考图/crater/ref-06-instrument-workshop.webp',
+        target:[-49.72,132.04],route:[[-12,159],[-29,151],[-37,141]]},
+      {id:'supply-station',ref:'docs/参考图/crater/ref-01-supply-station-CORE.webp',
+        target:[-83,121],route:[[-12,159],[-39,159],[-53,134],[-74,126]]},
+      {id:'smelting-workshop',ref:'docs/参考图/crater/ref-09-smelting-workshop.webp',
+        target:[-159.95,106.59],route:[[-12,159],[-39,151],[-61,125],[-88,100],[-111,85],[-137,84]]},
+    ];
+    for(const building of buildings){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:'陨石坑口'});
+      await page.waitForFunction(pattern=>{
+        const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return m&&Math.abs(+m[1]-2)<1&&Math.abs(+m[2]-159)<1;
+      },positionPattern.source,{timeout:45_000});
+      await follow(page,evidence,building.route,building.id+'-walk');
+      const p=await readPose(page);
+      const yaw=Math.atan2(building.target[0]-p.east,building.target[1]-p.north);
+      await face(page,evidence,yaw);
+      evidence.checkpoints.push({label:building.id+'-reference',reference:building.ref,
+        buildingCenter:building.target,actualFoot:[p.east,p.north],
+        centerDistance:Math.hypot(building.target[0]-p.east,building.target[1]-p.north)});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,building.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      await snapshot(page,evidence,building.id+'-day');
+    }
+    report.startupEvidence={
+      canvasVisible:await page.locator('#scene canvas').isVisible(),
+      jumpDestinations:await page.locator('#jump option').count(),
+      expectedBuildingPairs:buildings.length,
+      liveFirstPersonMode:true};
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -507,7 +550,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
