@@ -73,9 +73,13 @@ test('ZA34 B3 R1: real curved rail and existing town-side B3 scenery can sample 
     assert.ok(Math.abs(after.heightAt(p.x,-p.z)-before.heightAt(p.x,-p.z))<.01,
       `rail arc raised E${p.x}/N${-p.z}`);
   }
-  const inside=fillB3Clusters.filter(c=>c.north<=worldBounds.depth);
-  const outside=fillB3Clusters.filter(c=>c.north>worldBounds.depth);
-  assert.equal(worldBounds.depth,540,'before extending frame, do not accept false north-of-bounds terrain');
+  // W-1 officially opened the town frame from N540 to N800. The earlier
+  // B3 relief pilot *still* ends at N540; frame extension is not evidence
+  // that the remaining northern clusters were sculpted or surface-audited.
+  const pilotNorthLimit=540;
+  const inside=fillB3Clusters.filter(c=>c.north<=pilotNorthLimit);
+  const outside=fillB3Clusters.filter(c=>c.north>pilotNorthLimit);
+  assert.ok(worldBounds.depth>=pilotNorthLimit,'W-1 world bound regressed');
   assert.equal(inside.length,7);
   assert.equal(outside.length,22);
   for(const cluster of inside){
