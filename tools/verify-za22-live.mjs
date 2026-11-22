@@ -477,7 +477,7 @@ try {
       {id:'supply-station',ref:'docs/参考图/crater/ref-01-supply-station-CORE.webp',
         target:[-83,121],route:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-74,126]]},
       {id:'smelting-workshop',ref:'docs/参考图/crater/ref-09-smelting-workshop.webp',
-        target:[-159.95,106.59],route:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-80,118],[-102,98],[-125,84],[-139,90]]},
+        target:[-159.95,106.59],route:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-65,112],[-84,97],[-111,79],[-139,88]]},
     ];
     for(const building of buildings){
       await page.locator('#town-panel-toggle').click();
