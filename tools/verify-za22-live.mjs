@@ -473,11 +473,11 @@ try {
       {id:'kengkou-station', ref:'station-built-canon', target:[-44.5,168],
         route:[[-12,159],[-40,159],[-44.5,166]]},
       {id:'instrument-workshop',ref:'docs/参考图/crater/ref-06-instrument-workshop.webp',
-        target:[-49.72,132.04],route:[[-12,159],[-29,151],[-37,141]]},
+        target:[-49.72,132.04],route:[[-12,159],[-29,159],[-36,145]]},
       {id:'supply-station',ref:'docs/参考图/crater/ref-01-supply-station-CORE.webp',
         target:[-83,121],route:[[-12,159],[-39,159],[-53,134],[-74,126]]},
       {id:'smelting-workshop',ref:'docs/参考图/crater/ref-09-smelting-workshop.webp',
-        target:[-159.95,106.59],route:[[-12,159],[-39,151],[-61,125],[-88,100],[-111,85],[-137,84]]},
+        target:[-159.95,106.59],route:[[-12,159],[-39,159],[-61,128],[-88,103],[-111,85],[-137,84]]},
     ];
     for(const building of buildings){
       await page.locator('#town-panel-toggle').click();
