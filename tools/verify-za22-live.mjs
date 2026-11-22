@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -109,6 +109,7 @@ async function openTown(name) {
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
   assert.equal(new URL(page.url()).pathname, '/', 'Use the normal production root entry');
+
   // The current production entry includes an async loading/continue screen.
   // Previous versions of this native-walk harness assumed the canvas was
   // visible immediately, then timed out on a hidden yet correctly mounted
@@ -148,7 +149,15 @@ async function openTown(name) {
   }
   if (!entryState.entryHidden && entryState.canContinue)
     await page.locator('#town-entry-continue').click();
-  await page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 });
+  await Promise.race([
+    page.locator('#scene canvas').waitFor({ state: 'visible', timeout: 90_000 }),
+    page.waitForFunction(() => document.querySelector('#town-entry-error')?.hidden === false,
+      null, {timeout: 90_000}).then(() => {
+        throw new Error('Actual town entry transitioned to failure fallback');
+      }),
+  ]);
+
+
   await page.waitForFunction(pattern => {
     const hud = document.querySelector('#position')?.textContent ?? '';
     return new RegExp(pattern).test(hud) && (window.__za22Frame?.calls > 0 || !location.search);
@@ -318,7 +327,8 @@ async function sampleFrameCadence(page, evidence, label) {
 
 async function snapshot(page, evidence, label) {
   await page.screenshot({ path: join(output, `${label}.png`), timeout: 45_000 });
-  evidence.checkpoints.push({ label, ...await readPose(page), wire: evidence.poses.at(-1) });
+  evidence.checkpoints.push({ label, lighting: await page.locator('#lighting').textContent(),
+    ...await readPose(page), wire: evidence.poses.at(-1) });
 }
 
 try {
@@ -342,7 +352,123 @@ try {
     await page.screenshot({ path: join(output, 'spawn-bare.png'), timeout: 16_000 });
     evidence.checkpoints.push({ label: 'spawn-bare', ...await readPose(page), wire: evidence.poses.at(-1) });
   }
-  if (segment !== 'crater') {
+  if (segment === 'a1-shots') {
+    const { page, evidence } = await openTown('a1-shots');
+    // These three points are actual in-game destination anchors, not injected
+    // test positions. The screenshots remain first-person WebGL frames.
+    const views = [
+      { id:'plaza-exit', label:'西南河畔街巷', east:161.5, north:165.5, yaw:-1.15 },
+      { id:'approach-mid', label:'羊圈', east:70, north:215, yaw:-2.25 },
+      { id:'west-gate', label:'陨石坑口', east:2, north:159, yaw:-1.57 },
+    ];
+    for (const view of views) {
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({ label: view.label });
+      await page.waitForFunction(({pattern,east,north})=>{
+        const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return p && Math.hypot(+p[1]-east,+p[2]-north)<1.5;
+      },{pattern:positionPattern.source,east:view.east,north:view.north},{timeout:45_000});
+      await face(page,evidence,view.yaw);
+      // Night is the initial town state. A real UI toggle switches to day.
+      if ((await page.locator('#lighting').textContent()) !== '雪夜') {
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼','day scene toggle failed');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    report.startupEvidence={
+      validSpawn:true, actualJumpDestinations:await page.locator('#jump option').count(),
+      canvasVisible:await page.locator('#scene canvas').isVisible(),
+      firstPersonHud:await page.locator('#position').textContent(),
+    };
+  }
+  if (segment === 'a2-shots') {
+    const { page, evidence } = await openTown('a2-shots');
+    const views = [
+      {id:'town-to-crater',label:'羊圈',east:70,north:215,yaw:Math.atan2(-190,-30)},
+      // The normal 山口 destination currently resolves via legal-spawn safety
+      // to E290/N300, NOT its nominal E300/N665 mount. Preserve the real
+      // safe point, and report the discrepancy instead of faking a camera.
+      {id:'mountain-gate-to-crater',label:'山口',east:290,north:300,yaw:Math.atan2(-410,-115)},
+      {id:'rim-to-bowl',label:'陨石坑口',east:2,north:159,yaw:Math.atan2(-53,26),walk:[[-12,159],[-43,159],[-67,159]]},
+    ];
+    for (const view of views) {
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:view.label});
+      await page.waitForFunction(({east,north,pattern})=>{
+        const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return m && Math.hypot(+m[1]-east,+m[2]-north)<1.5;
+      },{east:view.east,north:view.north,pattern:positionPattern.source},{timeout:45_000});
+      if (view.walk) await follow(page,evidence,view.walk,view.id+'-real-walk');
+      await face(page,evidence,view.yaw);
+      if ((await page.locator('#lighting').textContent())!=='雪夜') {
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    report.startupEvidence={
+      activeProductionCanvas:await page.locator('#scene canvas').isVisible(),
+      realJumpDestinations:await page.locator('#jump option').count(),
+      realSpawn:true, normalEntry:true, measuredCameraPoses:6,
+      referenceSource:'B-01 meteor-crater-walk-mesh; color-only canonical mount',
+    };
+    assert.ok(report.startupEvidence.activeProductionCanvas);
+    assert.ok(report.startupEvidence.realJumpDestinations>0);
+  }
+  if (segment === 'a1-station') {
+    const { page, evidence } = await openTown('a1-station');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({ label: '陨石坑口' });
+    await page.waitForFunction(pattern => {
+      const match = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
+      return match && Math.abs(+match[1]-2)<1 && Math.abs(+match[2]-159)<1;
+    },positionPattern.source,{timeout:45_000});
+    // Walk the *actual* west-domain crossing on foot, through the town gate
+    // and to the mined-out station platform, rather than teleporting to a
+    // test-only coordinate. A collision error must abort without fake shots.
+    await follow(page,evidence,[[-12,159],[-30,159],[-43.5,159],[-44.5,168]],'a1-kengkou-walk');
+    await face(page,evidence,-1.35);
+    await snapshot(page,evidence,'kengkou-station-front-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    assert.equal(await page.locator('#lighting').textContent(),'白昼');
+    await snapshot(page,evidence,'kengkou-station-front-day');
+    report.startupEvidence={validSpawn:true,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      jumpCount:await page.locator('#jump option').count(),frontWalked:true};
+  }
+  if (segment === 'a1-full') {
+    const {page,evidence}=await openTown('a1-full');
+    // A-1 acceptance: every knot in the canon westShore route is reached
+    // by real W/Shift movement, never a jump/menu teleport.
+    await follow(page,evidence,westShore,'a1-from-plaza-to-west');
+    await follow(page,evidence,[[-12,159],[-30,159],[-43.5,159],[-44.5,168]],'a1-west-to-kengkou');
+    await face(page,evidence,-1.35);
+    await snapshot(page,evidence,'a1-full-kengkou-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'a1-full-kengkou-day');
+    report.startupEvidence={fullWalkNoTeleport:true,landedInWest:evidence.poses.at(-1)?.area==='west',
+      checkpoints:evidence.checkpoints.length,
+      canvasVisible:await page.locator('#scene canvas').isVisible(),
+      jumpCount:await page.locator('#jump option').count()};
+    assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
+  }
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
@@ -446,6 +572,21 @@ try {
 } catch (error) {
   report.failure = error instanceof Error ? error.stack : String(error);
   if (lastPage && !lastPage.isClosed()) {
+    // Preserve DOM-entry state; the entry controller catches lazy-import
+    // rejection, so it may show the fallback without any JS pageerror.
+    try { report.entryDiagnostics = await lastPage.evaluate(() => ({
+      bodyClass: document.body.className,
+      readyState: document.readyState,
+      entryHidden: document.getElementById('town-entry')?.hidden,
+      loadingHidden: document.getElementById('town-entry-loading')?.hidden,
+      failureHidden: document.getElementById('town-entry-error')?.hidden,
+      retryHidden: document.getElementById('town-entry-retry')?.hidden,
+      jumpCount: document.querySelectorAll('#jump option').length,
+      canvasCount: document.querySelectorAll('#scene canvas').length,
+      statusText: document.getElementById('town-entry')?.textContent?.slice(0,400),
+    })); } catch (diagnosticError) {
+      report.entryDiagnosticError = String(diagnosticError);
+    }
     try {
       report.lastPose = await readPose(lastPage);
       await lastPage.screenshot({ path: join(output, 'failed-position.png'), timeout: 10_000 });

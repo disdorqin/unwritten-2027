@@ -255,7 +255,11 @@ addEventListener('keyup', (e) => {
 });
 function ensureWestCraterRoad() {
   if (!westCraterRoad) {
-    westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
+    // A-2: ship the verified B-01 five-band palette on the LIVE west crater.
+    // ?za34PaletteOff is an explicit rollback only; normal entry stays ON.
+    westCraterRoad = mountWestCraterRoad(worldBounds.depth,
+      (north) => grid.groundHeightAt(0, north),
+      { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff') });
     scene.add(westCraterRoad.group);
     westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
