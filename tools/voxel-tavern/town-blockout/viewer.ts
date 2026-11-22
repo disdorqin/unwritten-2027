@@ -557,19 +557,18 @@ summitSkyline.add(summitHutLight);
 // ZA-30 takeover step 2: the front ridge (350) as a town-side visual shell.
 const frontRidgeProxy = mountFrontRidgeProxy(scene);
 void frontRidgeProxy;
-// T5 mount (总控裁定 批55，分支窗 A): the D switchback corridor, VISUAL ONLY.
-// The walking fold (road.heightAt into outdoorSurfaceAt) is HELD, not wired:
-// seam-profile measurement (分支窗 A, 2026-11-22) shows the module's toe road
-// is un-walkable as built — (a) heightAt has holes: the 6 surveyed toe points
-// stay 30–60 m apart after resampling, so heightAt is undefined across ~73%
-// of the 239 m toe (only ±5.4 m disks around the points answer); (b) the grid
-// pokes 5–25 m ABOVE the road along the toe (350,301: +5.0; 400,304: +25.3;
-// 460,312: +14.8; 526,329: +7.9) — the ribbon is buried under town terrain,
-// folding it would stand the player underground; (c) the approach segment
-// (town north edge N539 → 290,300) is not in the module at all, so the spec's
-// "walk from the plaza" acceptance has no path. Fix list is with 总控 (D-6);
-// the mount stays visual until the toe is re-profiled against the grid.
-// The 山口 teleport keeps landing on grid height (12.8 at 290,300) — unchanged.
+// T5 mount (总控裁定 批55，分支窗 A): the D switchback corridor.
+// The walking fold LANDED with the T5 seam package (分支窗 A, 2026-11-22):
+// D-6 (批73) re-profiled the toe against the grid, resampled the corridor
+// to ~3 m and added the entry approach, so outdoorSurfaceAt now consults
+// switchbackRoad.heightAt first (see the fold at outdoorSurfaceAt).
+// Known remaining defect, measured by A at fold time and reported with the
+// seam package: heightAt picks the horizontally nearest sample, so where
+// switchback passes stack within ~3 m of each other the surface can flip
+// to a neighbouring pass between samples (~6% of toe samples, ~8% of
+// summit-spiral samples at 0.25 m steps; at centreline samples it is
+// always exact). The fix belongs to the corridor module (D); the fold
+// wiring here is the surface it will plug into.
 switchbackRoad = createFrontRidgeSwitchbackRoad();
 scene.add(switchbackRoad.group);
 if (reportSummitSkyline) {
@@ -3108,6 +3107,13 @@ function surfaceAt(east: number, north: number) {
 }
 function outdoorSurfaceAt(east: number, north: number) {
   if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
+  // T5 fold (分支窗 A): inside the switchback corridor's band its own
+  // surface wins — the core is the road profile and the feather band
+  // already blends to the host ground, so the seam stays continuous.
+  // Outside the band heightAt is undefined and the water/grid fallback
+  // below applies unchanged.
+  const roadSurface = switchbackRoad?.heightAt(east, north);
+  if (roadSurface !== undefined) return roadSurface;
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
 function snowCleared(east: number, north: number, feet: number) {
