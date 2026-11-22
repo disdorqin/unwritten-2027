@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -428,6 +428,45 @@ try {
     assert.ok(report.startupEvidence.activeProductionCanvas);
     assert.ok(report.startupEvidence.realJumpDestinations>0);
   }
+  if (segment === 'a3-shots') {
+    const {page,evidence}=await openTown('a3-shots');
+    const sites=[
+      {id:'ejecta-boulder-2m',from:[[-12,159],[-43,159],[-67,159],[-67.5,142]],
+        rock:[-69.59,138.47],yaw:Math.atan2(-2.09,-3.53),nominalSurfaceDistance:2.1},
+      {id:'wreckage-ring-5m',from:[[-12,159],[-40,159],[-35,185],[-45,199],[-51,201]],
+        rock:[-54.37,206.74],yaw:Math.atan2(-3.37,5.74),nominalSurfaceDistance:4.5},
+    ];
+    for(const site of sites){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:'陨石坑口'});
+      await page.waitForFunction(pattern=>{
+        const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return m&&Math.abs(+m[1]-2)<1&&Math.abs(+m[2]-159)<1;
+      },positionPattern.source,{timeout:45_000});
+      await follow(page,evidence,site.from,site.id+'-walk');
+      await face(page,evidence,site.yaw);
+      const foot=await readPose(page);
+      evidence.checkpoints.push({label:site.id+'-rock-survey',
+        rockWorld:site.rock,footWorld:[foot.east,foot.north],
+        centerDistance:Math.hypot(foot.east-site.rock[0],foot.north-site.rock[1]),
+        nominalSurfaceDistance:site.nominalSurfaceDistance,
+        note:'2m/5m nearest-surface approximation from canon rock geometry; raw center distance reported'});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,site.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,site.id+'-day');
+    }
+    report.startupEvidence={
+      realSpawn:true,actualDestinations:await page.locator('#jump option').count(),
+      activeCanvas:await page.locator('#scene canvas').isVisible(), screenshots:4};
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -468,7 +507,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
