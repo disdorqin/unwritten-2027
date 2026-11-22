@@ -6,6 +6,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterRimRadius } from './meteor-crater';
+import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
@@ -125,7 +126,12 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const glow = new MeshStandardMaterial({
     color: palette.windowWarm, emissive: palette.ember, emissiveIntensity: 1.25, roughness: .8,
   });
-  const wreck = new MeshStandardMaterial({ color: 0x4a3a34, roughness: .92, metalness: .35, flatShading: true });
+  // A-3: wreckage-ring boulders use the same continuous strata as outer
+  // ejecta and basalt, not a featureless rust-black metal surface.
+  const wreck = new MeshStandardMaterial({
+    map: createZa36StrataTexture(0x8a8378, 0x5d4630, 0xa98a56, 23, 0x8a4a34),
+    roughness: .97, metalness: 0, flatShading: true,
+  });
 
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   function part(mat: MeshStandardMaterial, geo: BufferGeometry, east: number, h: number, north: number,
