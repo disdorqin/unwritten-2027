@@ -26,6 +26,8 @@ const rockDusk = new Color('#626a72');
 const dark = new Color('#4a505b');
 const cinder = new Color('#655752');
 const cold = new Color('#a4c9ce');
+// Match the original B-01 walk rim to its surrounding carrier snow material.
+const carrierSnow = new Color(0xc1cedc);
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (v: number) => {
@@ -67,6 +69,9 @@ function craterDistanceColor(east: number, height: number, south: number, target
   const streak = .92 + .065 * Math.sin((east * .26 + south * .17) + bearing * 2)
     + .025 * Math.sin(east * .57 - south * .34);
   target.multiplyScalar(clamp(streak));
+  // A-5: feather the last 7.5m into the identical west-carrier snow tint.
+  // Only colors change; the original walk geometry and collision stay fixed.
+  if (radius > 51.5) target.lerp(carrierSnow, smooth((radius - 51.5) / 7.5));
   return band;
 }
 
