@@ -60,11 +60,57 @@ const d2r = (deg: number) => deg * Math.PI / 180;
  * Everything samples the road's heightAt; nothing here blocks a path — the
  * ZB-28 guards (people) do the turning-back, never a wall.
  */
+export type CraterHitBox = { min: number[]; max: number[] };
+export type CraterHitRamp = CraterHitBox & { axis: 'x' | 'z'; ascending: 1 | -1 };
+
+/** A doorway ramp in a local frame (the landmark-culture door-ramp
+ * precedent): rises from yLow at dzOuter to yHigh at dzInner along the
+ * dominant world axis of the frame's facing bearing. */
+function hitRamp(list: CraterHitRamp[], fr: { at(dx: number, dz: number): { east: number; north: number } },
+  dzOuter: number, dzInner: number, halfW: number, yLow: number, yHigh: number) {
+  const corners = [fr.at(-halfW, dzOuter), fr.at(halfW, dzOuter), fr.at(-halfW, dzInner), fr.at(halfW, dzInner)];
+  const es = corners.map(p => p.east), ns = corners.map(p => p.north);
+  const o = fr.at(0, dzOuter), i = fr.at(0, dzInner);
+  const axis: 'x' | 'z' = Math.abs(i.east - o.east) > Math.abs(i.north - o.north) ? 'x' : 'z';
+  const innerCoord = axis === 'x' ? i.east : -i.north;
+  const outerCoord = axis === 'x' ? o.east : -o.north;
+  list.push({
+    min: [Math.min(...es), yLow, -Math.max(...ns)],
+    max: [Math.max(...es), yHigh, -Math.min(...ns)],
+    axis, ascending: innerCoord > outerCoord ? 1 : -1,
+  });
+}
+
+/** World-space AABB of a yaw-rotated box centred at (east, north): the sx axis
+ * lies along the frame right, sz along the facing bearing (sign-free). */
+function hitBox(list: CraterHitBox[], east: number, north: number, yaw: number,
+  sx: number, sz: number, y0: number, y1: number) {
+  const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+  const hx = (sx * c + sz * s) / 2, hz = (sx * s + sz * c) / 2;
+  list.push({ min: [east - hx, y0, -(north + hz)], max: [east + hx, y1, -(north - hz)] });
+}
+
+/** AABB covering the straight segment (e0, n0)-(e1, n1) padded on all sides. */
+function hitSegment(list: CraterHitBox[], e0: number, n0: number, e1: number, n1: number,
+  pad: number, y0: number, y1: number) {
+  list.push({
+    min: [Math.min(e0, e1) - pad, y0, -(Math.max(n0, n1) + pad)],
+    max: [Math.max(e0, e1) + pad, y1, -(Math.min(n0, n1) - pad)],
+  });
+}
+
 export function buildCraterMouthWorks(road: CraterRoad) {
   const { anchor, heightAt } = road;
   const group = new Group();
   group.name = 'crater-mouth-works';
   const sites: CraterMouthSite[] = [];
+  // S-1 collision (分支窗 A): structural wall boxes + standable floors in
+  // world coordinates, exported for the za22 top group's userData. Only
+  // load-bearing walls are recorded — props, roofs and lintels above head
+  // height stay walk-through-free by omission, door gaps stay open.
+  const colliders: CraterHitBox[] = [];
+  const floors: CraterHitBox[] = [];
+  const ramps: CraterHitRamp[] = [];
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 41, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
@@ -262,6 +308,21 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const side = fr.at(s * W / 2, 0);
       box(timber, side.east, wallY, side.north, .22, wallH, D, fr.yaw);
     }
+    // S-1 collision: foundation ledge + interior slab as standable floors
+    // (a doorway ramp bridges the .91 rise — three plain steps would each
+    // exceed the .43 step height), the four walls as colliders; the 2.8 m
+    // doorway between the front segments stays open, the lintel above it
+    // is above head height.
+    hitBox(floors, c0.east, c0.north, fr.yaw, W + .5, D + .5, g - .1, g + foundH - .1);
+    hitBox(floors, c0.east, c0.north, fr.yaw, W, D, g + foundH - .1, g + foundH + .06);
+    hitRamp(ramps, fr, D / 2 + 1.1, D / 2 - .5, .85, g, g + foundH + .06);
+    for (const s of [-1, 1]) {
+      const seg = fr.at(s * 2.55, D / 2);
+      hitBox(colliders, seg.east, seg.north, fr.yaw, 2.3, .22, g + foundH, g + foundH + wallH);
+      const sd = fr.at(s * W / 2, 0);
+      hitBox(colliders, sd.east, sd.north, fr.yaw, .22, D, g + foundH, g + foundH + wallH);
+    }
+    hitBox(colliders, back.east, back.north, fr.yaw, W, .22, g + foundH, g + foundH + wallH);
     // Roof: pitched slate over the back half, flat viewing deck over the front half.
     const roofY = g + foundH + wallH;
     for (const s of [-1, 1]) {
@@ -310,6 +371,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
     const counter = fr.at(1.4, 1.1);
     box(timberWarm, counter.east, g + foundH + .5, counter.north, 2.4, 1, .6, fr.yaw);
+    hitBox(colliders, counter.east, counter.north, fr.yaw, 2.4, .6, g + foundH, g + foundH + 1);
     const mapP = fr.at(0, -D / 2 + .16);
     sign(mapP.east, g + foundH + 1.75, mapP.north, fr.yaw + Math.PI, 2.1, 1.35, (c, w, h) => {
       c.fillStyle = '#e3d3a8'; c.fillRect(0, 0, w, h);
@@ -398,6 +460,13 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     box(snow, roofC.east, g + 2.78, roofC.north, 4.1, .16, 3.1, fr.yaw, .1);
     const backW = fr.at(0, -1.25);
     box(timber, backW.east, g + 1.1, backW.north, 3.6, 2.2, .14, fr.yaw);
+    // S-1 collision: back wall + the four corner posts; the shed is open on
+    // the other three sides by design.
+    hitBox(colliders, backW.east, backW.north, fr.yaw, 3.6, .14, g, g + 2.2);
+    for (const [dx, dz] of [[-1.7, -1.2], [1.7, -1.2], [-1.7, 1.2], [1.7, 1.2]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, .18, .18, g, g + 2.5);
+    }
     // Brazier with a real light — the warm chain's northernmost lamp.
     const brz = fr.at(.7, .3);
     cyl(iron, brz.east, g + .32, brz.north, .52, .34, .5, 9);
@@ -588,6 +657,26 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
   }
 
+  // S-1 collision for the works-boundary fence above: one segment box per
+  // 2° of arc across the whole 146–184° span, INCLUDING the gate bearing —
+  // the double gate is chained shut (its warning plate says so), so the
+  // fence line is continuous; the arc's two ends stay open as the passages.
+  {
+    let prevPt: { e: number; n: number; h: number } | undefined;
+    for (let bDeg = 146; bDeg <= 184; bDeg += 2) {
+      const b = d2r(bDeg);
+      const e = anchor.east + fenceR * Math.sin(b);
+      const n = anchor.north + fenceR * Math.cos(b);
+      const h = heightAt(e, n);
+      if (h === undefined) { prevPt = undefined; continue; }
+      if (prevPt) {
+        hitSegment(colliders, prevPt.e, prevPt.n, e, n, .3,
+          Math.min(prevPt.h, h), Math.max(prevPt.h, h) + 4.7);
+      }
+      prevPt = { e, n, h };
+    }
+  }
+
   // ---------- §六 rim lamp chain, outside segment (10 lamps at r=61) ----------
   const lampSites: CraterMouthSite[] = [];
   for (let i = 0; i < 10; i++) {
@@ -678,5 +767,6 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
     actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,
+    colliders, floors, ramps,
   };
 }

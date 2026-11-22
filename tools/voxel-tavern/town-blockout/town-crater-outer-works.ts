@@ -60,11 +60,56 @@ export const craterBeltTrackCorridor: readonly (readonly [number, number])[] = [
  * the road's heightAt everywhere; gates stand open or are guarded by people —
  * nothing here is a collision wall.
  */
+export type CraterHitBox = { min: number[]; max: number[] };
+export type CraterHitRamp = CraterHitBox & { axis: 'x' | 'z'; ascending: 1 | -1 };
+
+/** A doorway ramp in a local frame (the landmark-culture door-ramp
+ * precedent): rises from yLow at dzOuter to yHigh at dzInner along the
+ * dominant world axis of the frame's facing bearing. */
+function hitRamp(list: CraterHitRamp[], fr: { at(dx: number, dz: number): { east: number; north: number } },
+  dzOuter: number, dzInner: number, halfW: number, yLow: number, yHigh: number) {
+  const corners = [fr.at(-halfW, dzOuter), fr.at(halfW, dzOuter), fr.at(-halfW, dzInner), fr.at(halfW, dzInner)];
+  const es = corners.map(p => p.east), ns = corners.map(p => p.north);
+  const o = fr.at(0, dzOuter), i = fr.at(0, dzInner);
+  const axis: 'x' | 'z' = Math.abs(i.east - o.east) > Math.abs(i.north - o.north) ? 'x' : 'z';
+  const innerCoord = axis === 'x' ? i.east : -i.north;
+  const outerCoord = axis === 'x' ? o.east : -o.north;
+  list.push({
+    min: [Math.min(...es), yLow, -Math.max(...ns)],
+    max: [Math.max(...es), yHigh, -Math.min(...ns)],
+    axis, ascending: innerCoord > outerCoord ? 1 : -1,
+  });
+}
+
+/** World-space AABB of a yaw-rotated box centred at (east, north). */
+function hitBox(list: CraterHitBox[], east: number, north: number, yaw: number,
+  sx: number, sz: number, y0: number, y1: number) {
+  const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+  const hx = (sx * c + sz * s) / 2, hz = (sx * s + sz * c) / 2;
+  list.push({ min: [east - hx, y0, -(north + hz)], max: [east + hx, y1, -(north - hz)] });
+}
+
+/** AABB covering the straight segment (e0, n0)-(e1, n1) padded on all sides. */
+function hitSegment(list: CraterHitBox[], e0: number, n0: number, e1: number, n1: number,
+  pad: number, y0: number, y1: number) {
+  list.push({
+    min: [Math.min(e0, e1) - pad, y0, -(Math.max(n0, n1) + pad)],
+    max: [Math.max(e0, e1) + pad, y1, -(Math.min(n0, n1) - pad)],
+  });
+}
+
 export function buildCraterOuterWorks(road: CraterRoad) {
   const { anchor, heightAt } = road;
   const group = new Group();
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
+  // S-1 collision (分支窗 A): structural wall boxes + standable floors in
+  // world coordinates, exported for the za22 top group's userData. Solid
+  // shells get one mass box each; designed gaps (wall gate, fence-ring
+  // crossings, the gatehouse doorway) stay open.
+  const colliders: CraterHitBox[] = [];
+  const floors: CraterHitBox[] = [];
+  const ramps: CraterHitRamp[] = [];
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 43, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 89, palette.stone);
@@ -218,6 +263,11 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
     cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
     cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
+    // S-1 collision: the hall is a solid mass (the furnace mouth is a dark
+    // inset, the iron door ajar ON the face — no enterable interior), so one
+    // mass box for the hall and one for the blast-furnace stack.
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 9); }
+    hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
     // Hand cart, handles down, mid-yard.
     const cart = fr.at(2, 8);
     box(timber, cart.east, g + .75, cart.north, 1.7, .18, 1.05, fr.yaw);
@@ -319,6 +369,11 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(stoneDark, -8, g + 17.7, -2, 1.5, .45, 1.5);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
+    // S-1 collision: solid two-storey shell (no enterable interior — the
+    // K-09/K-10 facade precedent) as one mass box; the loading platform is a
+    // raised face with no steps, so it blocks as a low mass.
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 8.4); }
+    { const pf = fr.at(0, 6.8); hitBox(colliders, pf.east, pf.north, fr.yaw, 8, 2.6, g, g + .9); }
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
     put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);
     for (let i = 0; i < 5; i++) {
@@ -421,6 +476,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     for (const [dx, dz, r, h, mat] of piles) {
       const p = fr.at(dx, dz);
       cone(mat, p.east, g + h / 2, p.north, r, h, 10);
+      // S-1 collision: a cone pile blocks as its base square.
+      hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
     }
     // Sorting shed: four posts, flat roof, sorted boxes beneath.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
@@ -489,6 +546,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(slate, -1.5, g + 3.15, -6.65, 5.0, .14, 2.0, .42, 0);
     put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
     put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
+    // S-1 collision: the storehouse is sealed — the iron door fills the
+    // front span flush between the two front segments, so the front reads
+    // as one continuous wall. Four wall boxes, no opening.
+    for (const [dx, dz, sx, sz] of [[-1.5, -9.2, 4.6, .2], [-3.7, -7.5, .2, 3.4], [0.7, -7.5, .2, 3.4], [-1.5, -5.8, 4.6, .2]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .3, g + 2.9);
+    }
     const storePlateP = fr.at(-1.5, -5.64);
     siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);
     sign(storePlateP.east, g + 2.45, storePlateP.north, fr.yaw, 1.1, .4, iron, (c, w, h) => {
@@ -518,6 +582,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(corrugated, 0, g + 2.1, .4, 5.8, .16, 5.6, .62);
     put(timberWarm, -1, g + .6, .5, 1.3, 1.2, 1.3, 0, .2);
     put(timber, 1.2, g + .5, -.8, 1.1, 1, 1.1);
+    // S-1 collision: the ruin's three standing walls (front is collapsed
+    // open where the roof came down).
+    for (const [dx, dz, sx, sz] of [[0, -2.4, 5.4, .14], [-2.65, 0, .14, 4.8], [2.65, 0, .14, 4.8]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g, g + 2.6);
+    }
   }
   // Rusted pipe sections east of the smelter, one half-buried.
   for (let i = 0; i < 3; i++) {
@@ -549,6 +619,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(earthWall, wallEast, g + 3, n, 1.15, 3.6, 6.15);
     box(stoneDark, wallEast, g + 5.15, n, 1.45, .7, 6.3);
     box(snow, wallEast, g + 5.56, n, 1.3, .12, 6.2);
+    // S-1 collision: base + rammed earth + cap read as one wall mass.
+    hitBox(colliders, wallEast, n, 0, 1.5, 6.15, g, g + 5.5);
   }
   {
     // Gate frame and two leaves standing open — the guard turns you back, not the door.
@@ -559,6 +631,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         const leafN = wallGateNorth + s * 2.2;
         box(timber, wallEast - 1.1, g + 2.2, leafN, .14, 4.4, 2.7, s * .85);
         box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
+      }
+      // S-1 collision: gate posts and the two leaves standing open — the
+      // guard turns you back, not the door (design), so the channel between
+      // the leaves' inner edges (≈2.6 m) stays walkable.
+      for (const s of [-1, 1]) {
+        hitBox(colliders, wallEast, wallGateNorth + s * 3.4, 0, 1.7, 1.1, g, g + 6.2);
+        hitBox(colliders, wallEast - 1.1, wallGateNorth + s * 2.2, s * .85, .14, 2.7, g, g + 4.4);
       }
       box(timber, wallEast, g + 6.35, wallGateNorth, 1.2, .45, 8.2);
       // Town-office notice, fresh paint, on the south post's passage face
@@ -601,6 +680,15 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(timber, -1.55, g + 2.2, 1.93, 1.75, 2.6, .16);
     put(timber, 1.85, g + 2.2, 1.93, 1.15, 2.6, .16);
     put(timber, .15, g + 3.35, 1.93, 2.25, .35, .16);
+    // S-1 collision: stone base as a standable floor (a doorway ramp
+    // bridges the 1 m rise), walls as colliders; the front doorway
+    // between the two segments stays 1.95 m open.
+    { const c = fr.at(0, 0); hitBox(floors, c.east, c.north, fr.yaw, 5, 4, g, g + 1); }
+    hitRamp(ramps, fr, 3.05, 1.45, .95, g, g + 1);
+    for (const [dx, dz, sx, sz] of [[0, -1.93, 5, .16], [-2.43, 0, .16, 4], [2.43, 0, .16, 4], [-1.55, 1.93, 1.75, .16], [1.85, 1.93, 1.15, .16]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .9, g + 3.5);
+    }
     put(slate, 0, g + 4.35, -1.05, 5.7, .2, 2.6, .5);
     put(slate, 0, g + 4.35, 1.05, 5.7, .2, 2.6, -.5);
     // Interior: table, bench, duty board; lamp by the door.
@@ -661,6 +749,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
           }
         }
       }
+      // S-1 collision: one segment box per drawn panel span. The skip
+      // conditions above (station / rail / collapsed gaps and the
+      // 146–184° arc owned by the mouth-works fence) break the chain, so
+      // every designed crossing stays open.
+      if (prev && b - prev.b === 2) {
+        hitSegment(colliders, prev.east, prev.north, east, north, .3,
+          Math.min(prev.h, h), Math.max(prev.h, h) + 4.7);
+      }
       prev = { b, east, north, h };
     }
     // Fallen panels at the two collapsed gaps — passable at night, never walled.
@@ -711,6 +807,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const h = heightAt(e, n);
       if (h === undefined) continue;
       box(iron, e, h + 2.6, n, .3, 5.2, .3, -rad);
+      hitBox(colliders, e, n, -rad, .3, .3, h, h + 5.2);
       fencePosts.push({ bearing: b, radius: r });
     }
   }
@@ -738,6 +835,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(stone, 0, g + shaftH * .78, 0, 3.3, shaftH * .44, 3.3);
     for (const fy of [.3, .62, .92]) put(iron, 0, g + shaftH * fy, 0, 4, .28, 4);
     put(stoneDark, 0, g + shaftH + .25, 0, 4.7, .5, 4.7);
+    // S-1 collision: shaft mass + platform slab (the cabin sits on the slab).
+    hitBox(colliders, origin.east, origin.north, fr.yaw, 3.9, 3.9, g, g + shaftH);
+    hitBox(colliders, origin.east, origin.north, fr.yaw, 4.7, 4.7, g + shaftH, g + shaftH + .5);
     for (let m = 0; m < 8; m++) {
       const a = m * Math.PI / 4;
       const p = fr.at(Math.sin(a) * 2.15, Math.cos(a) * 2.15);
@@ -830,5 +930,6 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   return {
     group, sites, fencePosts, setNight,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
+    colliders, floors, ramps,
   };
 }

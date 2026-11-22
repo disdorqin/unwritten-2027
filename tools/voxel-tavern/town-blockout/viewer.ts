@@ -201,6 +201,32 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+// S-1 (分支窗 A): the west (crater) domain gets its OWN walk-geometry index.
+// The town chunk key (chunkAtCell) collides for negative east — a west cell
+// block and a town-east cell block can share chunk id AND subcell, which
+// would ghost-collide crater walls onto the town's east edge. String cell
+// keys in (east, north) space cannot collide. Built when the west road is
+// first mounted; before that the west has no box geometry, as before.
+// Declared here, beside westCraterRoad: ensureWestCraterRoad() is called
+// during module initialisation, long before the geometry() section below.
+let westWalkGeometry: Map<string, WalkGeometry> | undefined;
+const westCellKey = (east: number, north: number) =>
+  `${Math.floor(east / collisionCellSize)},${Math.floor(north / collisionCellSize)}`;
+// Collision constants live up here too (moved from the geometry() section):
+// buildCraterRailExtension(grid, ensureWestCraterRoad()) runs at module
+// init, far above that section, and the west index built inside
+// ensureWestCraterRoad reads bodyRadius/collisionCellSize — declaring them
+// down there is a TDZ ReferenceError the moment the west has any boxes.
+const bodyRadius = .27;
+const collisionChunkSize = 64;
+const collisionSubcells = 4;
+const collisionCellSize = collisionChunkSize / collisionSubcells;
+const collisionStride = Math.ceil(worldBounds.width / collisionChunkSize) + 3;
+const chunkAtCell = (east: number, north: number) => Math.floor(east / collisionSubcells) +
+  collisionStride * Math.floor(north / collisionSubcells);
+const subcellMask = collisionSubcells - 1;
+const subcellAt = (east: number, north: number) => (east & subcellMask) +
+  collisionSubcells * (north & subcellMask);
 let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
@@ -230,6 +256,7 @@ function ensureWestCraterRoad() {
   if (!westCraterRoad) {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth, (north) => grid.groundHeightAt(0, north));
     scene.add(westCraterRoad.group);
+    westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
@@ -1084,16 +1111,9 @@ function updateMuseumLights(dt: number, eyePosition: Vector3) {
 const slide = buildIcePlayProps();
 scene.add(slide);
 
-const bodyRadius = .27;
-const collisionChunkSize = 64;
-const collisionSubcells = 4;
-const collisionCellSize = collisionChunkSize / collisionSubcells;
-const collisionStride = Math.ceil(worldBounds.width / collisionChunkSize) + 3;
-const chunkAtCell = (east: number, north: number) => Math.floor(east / collisionSubcells) +
-  collisionStride * Math.floor(north / collisionSubcells);
-const subcellMask = collisionSubcells - 1;
-const subcellAt = (east: number, north: number) => (east & subcellMask) +
-  collisionSubcells * (north & subcellMask);
+// bodyRadius / collision* / chunkAtCell / subcellAt are declared beside
+// westCraterRoad near the top of this file (S-1: the west index built
+// during module init reads them; see the note there).
 type WalkGeometry = ReturnType<typeof readWalkGeometry>;
 const emptyGeometry: WalkGeometry = { colliders: [], floors: [], ramps: [] };
 const tigerPine = buildTigerZodiacAnchor(grid.heightAt);
@@ -1141,12 +1161,39 @@ function geometry() {
   return chunks;
 }
 let walkGeometry = geometry();
+// S-1 (分支窗 A): buildWestGeometry fills the west index declared beside
+// westCraterRoad above (the declaration must sit early: ensureWestCraterRoad
+// runs during module init, before this point in the file is reached).
+function buildWestGeometry(group: Group) {
+  const cells = new Map<string, WalkGeometry>();
+  const { colliders, floors, ramps } = readWalkGeometry(group);
+  function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
+    for (const box of boxes) {
+      const e0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
+      const e1 = Math.floor((box.max[0] + bodyRadius) / collisionCellSize);
+      const n0 = Math.floor((-box.max[2] - bodyRadius) / collisionCellSize);
+      const n1 = Math.floor((-box.min[2] + bodyRadius) / collisionCellSize);
+      for (let n = n0; n <= n1; n++) {
+        for (let e = e0; e <= e1; e++) {
+          const key = `${e},${n}`;
+          const cell: WalkGeometry = cells.get(key) ?? { colliders: [], floors: [], ramps: [] };
+          if (!cells.has(key)) cells.set(key, cell);
+          append(cell, box);
+        }
+      }
+    }
+  }
+  index(colliders, (cell, box) => cell.colliders.push(box));
+  index(floors, (cell, box) => cell.floors.push(box));
+  index(ramps, (cell, ramp) => cell.ramps.push(ramp));
+  return cells;
+}
 function geometryAt(east: number, north: number) {
   if (cloudRoute.active()) return emptyGeometry;
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
-  if (east < 0) return emptyGeometry;
+  if (east < 0) return westWalkGeometry?.get(westCellKey(east, north)) ?? emptyGeometry;
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -3175,7 +3222,12 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
   if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
-    return ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius);
+    if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
+    // S-1: west box geometry (za22 top-group userData via the west index) —
+    // the lip fence check above stays, buildings/walls/fence ring add here.
+    const westIntersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
+      feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
+    return colliders.some(westIntersects) || floors.some(westIntersects);
   }
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);

@@ -162,6 +162,14 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
   group.add(outerWorks.group);
+  // S-1 collision汇入 (分支窗 A): the crater-outside builders' world-space
+  // wall boxes + floors land on this top group's userData, the single
+  // walk-geometry source the viewer indexes for east < 0. C3's crater-
+  // inside boxes append to these same arrays when they land — do not
+  // create a second userData channel.
+  group.userData.colliders = [...mouthWorks.colliders, ...outerWorks.colliders];
+  group.userData.floors = [...mouthWorks.floors, ...outerWorks.floors];
+  group.userData.ramps = [...mouthWorks.ramps, ...outerWorks.ramps];
   // Salvage ③: V3 ejecta/midground, cleared against the mainline fence
   // (outer ring + gate segment) and the town-era wall line — a boulder
   // whose footprint would swallow a post is skipped, never nudged.
