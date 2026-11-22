@@ -251,14 +251,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillStyle = '#e8e2d2'; c.textBaseline = 'middle';
       c.font = '44px "Noto Sans SC", sans-serif'; c.textAlign = 'left';
       c.fillText('腊月廿三', 40, h * .15);
-      // Names blanked (批58 追补六）: ruled slots where the two班头 names go
-      // once the roster is settled; the trailing 到 stays in its old place.
+      // Roster fill (名册定版 批64): 一班 孙长炉 / 二班 焦二锤 take the
+      // slots blanked by 批58 追补六; the trailing 到 stays in its old place.
       c.fillText('一班', 40, h * .37);
-      c.strokeStyle = 'rgba(232, 226, 210, .6)'; c.lineWidth = 2;
-      c.strokeRect(150, h * .37 - 22, 180, 34);
+      c.fillText('孙长炉', 160, h * .37);
       c.fillText('到', 348, h * .37);
       c.fillText('二班', 40, h * .59);
-      c.strokeRect(150, h * .59 - 22, 180, 34);
+      c.fillText('焦二锤', 160, h * .59);
       c.fillText('到', 348, h * .59);
       c.font = '37px "Noto Sans SC", sans-serif';
       c.fillText('三班　炉火看住，莫等我——', 40, h * .81);
@@ -386,6 +385,23 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.font = 'bold 52px "Noto Sans SC", sans-serif';
       c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText('精密件 · 轻放', w / 2, h / 2 + 2);
+    });
+    // K-11 second-floor duty roster (《设计-全图文字件总表》，名册定版
+    // 批64：三班轮值：陆衡／周文测／陆箬）. The plant has no enterable
+    // second floor, so the roster board hangs on the upper facade between
+    // the second-row windows — the same facade precedent as K-09/K-10.
+    const rosterP = fr.at(0, 5.16);
+    siteAt('instrument-duty-roster', rosterP.east, rosterP.north, 1);
+    sign(rosterP.east, g + 6.8, rosterP.north, fr.yaw, 1.5, 1.0, timber, (c, w, h) => {
+      c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#5d4630'; c.lineWidth = 5; c.strokeRect(10, 10, w - 20, h - 20);
+      c.fillStyle = '#3a3125'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 54px "Noto Sans SC", sans-serif';
+      c.fillText('值班表', w / 2, h * .17);
+      c.font = '42px "Noto Sans SC", sans-serif';
+      c.fillText('一班 陆衡', w / 2, h * .44);
+      c.fillText('二班 周文测', w / 2, h * .65);
+      c.fillText('三班 陆箬', w / 2, h * .86);
     });
   }
 

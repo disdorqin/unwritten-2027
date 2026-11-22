@@ -56,23 +56,36 @@ test('crater signage text: settled K-texts land verbatim (总表为准）', () =
     '夜车空驶，亦准点。乘车请至山口站换乘。',
     // Earlier settled boards.
     '冶炼工坊', '仪器工坊', '封存重地 · 非工勿入',
+    // Roster fill package (批64 §四): both duty boards take the settled
+    // second-line roster names; K-11 roster board is new on the facade.
+    '孙长炉', '焦二锤', '罗大年', '田守义', '孙小山',
+    '值班表', '一班 陆衡', '二班 周文测', '三班 陆箬',
   ]) assert.ok(texts.includes(expected), `missing sign text: ${expected}`);
 });
 
-test('crater signage text: no soul name on any board (批58 追补六 blanking)', () => {
+test('crater signage text: no soul name on any board; rosters filled (批64)', () => {
   for (const t of texts) {
     assert.ok(!t.includes('白望山'), `soul name on a sign: ${t}`);
     assert.ok(!t.includes('石沉'), `soul name on a sign: ${t}`);
   }
   // The smelter duty board keeps its date, both shifts and the trailing 到,
-  // with ruled blank slots where the two班头 names were.
+  // with the settled roster names where the blanked slots were (批58 追补六
+  // blanking superseded by the 批64 roster): no ruled blank slot remains.
   const dutyCanvas = calls.find(c => c.method === 'fillText' && c.args[0] === '腊月廿三')!.canvas;
   const dutyTexts = calls.filter(c => c.canvas === dutyCanvas && c.method === 'fillText')
     .map(c => String(c.args[0]));
-  for (const expected of ['腊月廿三', '一班', '二班', '到', '三班　炉火看住，莫等我——']) {
+  for (const expected of ['腊月廿三', '一班', '二班', '到', '三班　炉火看住，莫等我——',
+    '孙长炉', '焦二锤']) {
     assert.ok(dutyTexts.includes(expected), `duty board missing: ${expected}`);
   }
   const blanks = calls.filter(c => c.canvas === dutyCanvas && c.method === 'strokeRect'
     && Number(c.args[2]) === 180);
-  assert.equal(blanks.length, 2, `expected 2 blank name slots, got ${blanks.length}`);
+  assert.equal(blanks.length, 0, `expected 0 blank name slots after the fill, got ${blanks.length}`);
+  // The guard-shed board (K-25) carries all three living guards.
+  const guardCanvas = calls.find(c => c.method === 'fillText' && c.args[0] === '班次牌')!.canvas;
+  const guardTexts = calls.filter(c => c.canvas === guardCanvas && c.method === 'fillText')
+    .map(c => String(c.args[0]));
+  for (const expected of ['罗大年', '田守义', '孙小山', '三班 夜里不入']) {
+    assert.ok(guardTexts.includes(expected), `guard board missing: ${expected}`);
+  }
 });

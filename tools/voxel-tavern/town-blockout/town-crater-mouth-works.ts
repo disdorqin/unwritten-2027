@@ -432,10 +432,13 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const lant = fr.at(-1.5, 1.35);
     cyl(paper, lant.east, g + 2.05, lant.north, .17, .17, .34, 8);
     box(glow, lant.east, g + 2.05, lant.north, .07, .2, .07, fr.yaw);
-    // Duty board — format kept from the museum shift board, names BLANKED per
-    // 总控裁定 批55（《设计-全图文字件总表》K-24/25）：白望山/石沉皆灵魂，
-    // 活人值班牌上不许出现魂名；两班头位留空，名册定版后填活人守卫名。
-    // （三班那一栏的博物馆原句不随此牌——K-24 定稿只有三班空格＋「夜里不入」。）
+    // Duty board — format kept from the museum shift board. Names were
+    // BLANKED per 总控裁定 批55 (K-24/25: 白望山/石沉 are souls and may not
+    // appear on a living duty board), then REFILLED per 名册定版 批64
+    // (K-25): 一班 罗大年 / 二班 田守义 / 三班 孙小山 — living guards from
+    // the settled second-line roster. K-24's settled format carries a name
+    // slot on the third row too (三班空格＋「夜里不入」), so the third name
+    // takes the same slot column as the first two.
     const boardP = fr.at(1.95, -.4);
     sign(boardP.east, g + 1.5, boardP.north, fr.yaw - Math.PI / 2, 1.35, 1.5, (c, w, h) => {
       c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
@@ -448,11 +451,14 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const x0 = w / 2 - 190;
       c.fillText('一班 辰入午出 · 班头', x0, 128);
       c.fillText('二班 午入酉出 · 班头', x0, 178);
-      // Blank name slots: a ruled gap where the roster will fill a living guard.
+      // Roster names on their ruled slots (批64 fill).
       c.strokeStyle = 'rgba(61, 44, 28, .55)'; c.lineWidth = 2;
-      for (const y of [128, 178]) {
+      for (const y of [128, 178, 228]) {
         c.beginPath(); c.moveTo(x0 + 330, y + 10); c.lineTo(x0 + 420, y + 10); c.stroke();
       }
+      c.fillText('罗大年', x0 + 330, 128);
+      c.fillText('田守义', x0 + 330, 178);
+      c.fillText('孙小山', x0 + 330, 228);
       c.textAlign = 'center';
       c.fillText('三班 夜里不入', w / 2, 228);
     });
