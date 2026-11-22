@@ -81,8 +81,44 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
     densityDraws++;
     densityTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
   });
-  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 46, 'old crater terrain and decor still save 48 ground draw batches');
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 283027, 'baseline terrain, old decor and well polygons unchanged');
+  // C-line carve-outs (ledger ruling 2026-11-22): two audited crater-interior
+  // landings ride their own pinned budgets below and are NOT subtracted from
+  // the remainder baseline — each is asserted on its own numbers so a future
+  // drift inside either group turns red on its own line instead of hiding
+  // inside a re-pinned total.
+  //   823c6636 (C1/C2, 2026-11-21 22:14): six fixed work lamps on the crater
+  //     floor — group 'c2-physical-worklights-authority-free', measured
+  //     6 draws / 1,368 triangles / 6 lights.
+  //   44a6088f (C3 R1, 2026-11-21 21:20): 7,019 colored crater-interior
+  //     details — group 'c3-crater-interior-dressing-visual-only', measured
+  //     6 draws / 72,672 triangles / 0 lights.
+  let worklightDraws = 0, worklightTriangles = 0, worklightLights = 0;
+  const worklights = crater.group.getObjectByName('c2-physical-worklights-authority-free');
+  assert.ok(worklights, 'C2 physical worklight chain mounted');
+  worklights.traverse(node => {
+    if ((node as Light).isLight) worklightLights++;
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    worklightDraws++;
+    worklightTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
+  let c3Draws = 0, c3Triangles = 0, c3Lights = 0;
+  const c3Dressing = crater.group.getObjectByName('c3-crater-interior-dressing-visual-only');
+  assert.ok(c3Dressing, 'C3 crater-interior dressing mounted');
+  c3Dressing.traverse(node => {
+    if ((node as Light).isLight) c3Lights++;
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    c3Draws++;
+    c3Triangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
+  // Remainder baseline re-pinned 2026-11-22 (was 46 draws / 283,027 triangles
+  // / 7 lights): the +12 draws, +74,040 triangles and +6 lights over the old
+  // pin are exactly the two C-line landings itemized above (6+6 draws,
+  // 1,368+72,672 triangles, 6 lights), verified group-by-group against the
+  // mounted scene. Any further drift must name its own source commit here.
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 58, 'crater remainder stays at the 2026-11-22 re-pinned draw baseline (46 + C1/C2 lamps 6 + C3 dressing 6)');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 357067, 'crater remainder stays at the 2026-11-22 re-pinned triangle baseline (283,027 + 1,368 lamps + 72,672 C3 details)');
   assert.ok(dressingDraws <= 15, 'added story details must stay batched');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');
@@ -95,7 +131,13 @@ test('ZA-36 batches sixty surveyed ground tiles into twelve visible-size groups 
   assert.ok(salvageTriangles < 15000, 'salvaged groups stay inside the salvage triangle budget');
   assert.ok(densityDraws <= 12, 'A2 density backfill stays batched');
   assert.ok(densityTriangles < 8000, 'A2 density backfill stays inside its triangle budget');
-  assert.equal(lights, 7, 'retains all three warm light pools plus the crater-mouth and tower pools');
+  assert.ok(worklightDraws <= 6, 'C2 worklight chain stays inside its own draw budget (6 batched fixture meshes)');
+  assert.ok(worklightTriangles <= 1500, 'C2 worklight chain stays inside its own triangle budget');
+  assert.equal(worklightLights, 6, 'C2 worklight chain carries exactly six real lamps');
+  assert.ok(c3Draws <= 6, 'C3 crater-interior dressing stays inside its own draw budget');
+  assert.ok(c3Triangles <= 73000, 'C3 crater-interior dressing stays inside its own triangle budget');
+  assert.equal(c3Lights, 0, 'C3 crater-interior dressing adds no real light pools');
+  assert.equal(lights, 13, 'seven baseline light pools (camp 3 + crater-mouth 3 + north tower 1) plus the six C2 work lamps');
   for (let n = 10; n < worldBounds.depth - 1; n += 7.5) {
     const oldTownEdge = terrain.groundHeightAt(0, n);
     assert.ok(Math.abs(crater.heightAt(0, n)! - oldTownEdge) < .001, `seam at ${n}`);
