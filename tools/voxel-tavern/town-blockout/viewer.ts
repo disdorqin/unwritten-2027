@@ -58,6 +58,7 @@ import { mountTownFillReedMarsh } from './town-fill-reed-marsh';
 import { mountTownFillPlumSlope } from './town-fill-plum-slope';
 import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
+import { createFrontRidgeSwitchbackRoad } from './front-ridge-switchback-road';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
 import { addNewYearDecor } from './town-new-year';
@@ -200,6 +201,7 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
 let dreamChain: DreamChain | undefined;
@@ -528,6 +530,21 @@ summitSkyline.add(summitHutLight);
 // ZA-30 takeover step 2: the front ridge (350) as a town-side visual shell.
 const frontRidgeProxy = mountFrontRidgeProxy(scene);
 void frontRidgeProxy;
+// T5 mount (总控裁定 批55，分支窗 A): the D switchback corridor, VISUAL ONLY.
+// The walking fold (road.heightAt into outdoorSurfaceAt) is HELD, not wired:
+// seam-profile measurement (分支窗 A, 2026-11-22) shows the module's toe road
+// is un-walkable as built — (a) heightAt has holes: the 6 surveyed toe points
+// stay 30–60 m apart after resampling, so heightAt is undefined across ~73%
+// of the 239 m toe (only ±5.4 m disks around the points answer); (b) the grid
+// pokes 5–25 m ABOVE the road along the toe (350,301: +5.0; 400,304: +25.3;
+// 460,312: +14.8; 526,329: +7.9) — the ribbon is buried under town terrain,
+// folding it would stand the player underground; (c) the approach segment
+// (town north edge N539 → 290,300) is not in the module at all, so the spec's
+// "walk from the plaza" acceptance has no path. Fix list is with 总控 (D-6);
+// the mount stays visual until the toe is re-profiled against the grid.
+// The 山口 teleport keeps landing on grid height (12.8 at 290,300) — unchanged.
+switchbackRoad = createFrontRidgeSwitchbackRoad();
+scene.add(switchbackRoad.group);
 if (reportSummitSkyline) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
@@ -885,6 +902,7 @@ function setNight(night: boolean) {
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
   westCraterRoad?.craterActions.setNight(night);
+  switchbackRoad?.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
