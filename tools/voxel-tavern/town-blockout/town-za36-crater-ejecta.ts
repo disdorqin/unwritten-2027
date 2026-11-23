@@ -21,14 +21,29 @@ const fixture = createMeteorCrater(meteorCraterFixturePlan);
 const stone = new DodecahedronGeometry(1, 0);
 const patch = new BoxGeometry();
 
-function rockTexture(base: number, streak: number, fleck: number) {
-  const bytes = new Uint8Array(16 * 16 * 4);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const hashed = (x * 11 + y * 17 + x * y * 3) % 29;
-    const pigment = hashed < 5 ? streak : hashed > 25 ? fleck : base;
-    bytes.set([pigment >> 16, pigment >> 8 & 255, pigment & 255, 255], (y * 16 + x) * 4);
+/** A-3: coherent quarry strata, shared by crater ejecta, midground and rim wreckage.
+ * Four-pixel-wide stepped layers avoid the former one-pixel hash flecks.
+ * Optional rust remains a single 4×4 weathered patch (<2% of the map).
+ * This is a material replacement only; never changes B-01 ground or props.
+ */
+export function createZa36StrataTexture(base: number, streak: number, ochre: number,
+  seed = 0, rust?: number) {
+  const size = 32;
+  const bytes = new Uint8Array(size * size * 4);
+  const bends = [0, 0, 1, 1, 0, -1, -1, 0];
+  const families = [0, 0, 1, 1, 0, 2, 2, 1];
+  const colors = [base, streak, ochre];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const blockX = Math.floor(x / 4), blockY = Math.floor(y / 4);
+    const bend = bends[(blockX + seed) % bends.length]!;
+    const layer = Math.floor((blockY + bend + 8) / 2);
+    let pigment = colors[families[(layer + seed) % families.length]!]!;
+    // Large, isolated rust *patch* rather than scattered red pixels.
+    if (rust !== undefined && blockX === ((seed * 3 + 2) % 8) &&
+      blockY === ((seed + 5) % 8)) pigment = rust;
+    bytes.set([pigment >>> 16, pigment >>> 8 & 255, pigment & 255, 255], (y * size + x) * 4);
   }
-  const tex = new DataTexture(bytes, 16, 16);
+  const tex = new DataTexture(bytes, size, size);
   tex.colorSpace = SRGBColorSpace;
   tex.minFilter = tex.magFilter = NearestFilter;
   tex.generateMipmaps = false;
@@ -36,13 +51,13 @@ function rockTexture(base: number, streak: number, fleck: number) {
   return tex;
 }
 const dark = new MeshStandardMaterial({
-  map: rockTexture(0x2c3648, 0x5d4630, 0x8a8378), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x8a8378, 0xa98a56, 3), flatShading: true, roughness: 1,
 });
 const grey = new MeshStandardMaterial({
-  map: rockTexture(0x8a8378, 0x2c3648, 0x8a4a34), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x8a8378, 0xa98a56, 0x5d4630, 7, 0x8a4a34), flatShading: true, roughness: 1,
 });
 const charcoal = new MeshStandardMaterial({
-  map: rockTexture(0x2c3648, 0x8a4a34, 0x5d4630), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x5d564c, 0x8a8378, 9, 0x8a4a34), flatShading: true, roughness: 1,
 });
 
 function distanceToSegment(east: number, north: number,
