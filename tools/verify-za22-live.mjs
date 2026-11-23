@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -666,6 +666,43 @@ try {
       disclaimer:'Not claimed as 2m; 5.58m is nearest canonical trail centerline, visual and side-step still need C approval'};
     assert.ok(sightDistance<7);
   }
+  if (segment === 'a1-r89-visual') {
+    const {page,evidence}=await openTown('a1-r89-visual');
+    const cameras=[
+      {id:'market-14-protected-row',label:'集市摊位',anchor:[154,79.62],target:[140.4,122.8]},
+      {id:'ice-palace-forecourt-protected',label:'冰雪城堡',anchor:[454,75],target:[484,46]},
+      {id:'sheep-relief-shifted-eye',label:'羊圈',anchor:[70,215],target:[125,170],
+        walk:[[74,211],[78,207]]},
+    ];
+    const ledger=[];
+    for(const view of cameras){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:view.label});
+      await page.waitForFunction(({pattern,east,north})=>{
+        const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.5;
+      },{pattern:positionPattern.source,east:view.anchor[0],north:view.anchor[1]},{timeout:45_000});
+      if(view.walk)await follow(page,evidence,view.walk,view.id+'-native-shift');
+      const pose=await readPose(page);
+      const yaw=Math.atan2(view.target[0]-pose.east,view.target[1]-pose.north);
+      await face(page,evidence,yaw);
+      ledger.push({id:view.id,target:view.target,actual:await readPose(page),yaw,
+        provenance:'production destination selector; optional W/Shift native walk'});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    report.a1R89Visual={views:ledger,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      note:'These are native WebGL visual samples, not a standalone proof of foreground visibility'};
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -706,7 +743,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
