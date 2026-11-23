@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -774,6 +774,55 @@ try {
     report.a2R89Visual={samples,canvasVisible:await page.locator('#scene canvas').isVisible(),
       provenance:'real in-game selector; upper B01 sight from legally descended live spiral; no camera teleport'};
   }
+  if (segment === 'a-r89-refine') {
+    const {page,evidence}=await openTown('a-r89-refine');
+    const samples=[];
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'星港坪'});
+    await page.waitForFunction(pattern=>{
+      const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return p&&Math.abs(+p[1]-336)<2&&Math.abs(+p[2]-640)<2;
+    },positionPattern.source,{timeout:45_000});
+    await follow(page,evidence,[[336,650],[336,657],[326.82,657]],'r89-high-sign-clearance');
+    const high=await readPose(page);
+    await face(page,evidence,Math.atan2(-120-high.east,185-high.north));
+    samples.push({id:'front-high-actual-clear-of-sign',pose:await readPose(page),
+      route:'original high lookout walkway E336/N640 -> E336/N657 -> E326.82/N657; player W/Shift real travel',
+      qualifier:'not necessarily crater-visible across distance fog'});
+    if((await page.locator('#lighting').textContent())!=='雪夜'){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+    }
+    await snapshot(page,evidence,'front-high-actual-clear-of-sign-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'front-high-actual-clear-of-sign-day');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'羊圈'});
+    await page.waitForFunction(pattern=>{
+      const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return p&&Math.hypot(+p[1]-70,+p[2]-215)<1;
+    },positionPattern.source,{timeout:45_000});
+    await follow(page,evidence,[[74,211],[78,207]],'r89-sheep-real-moving');
+    const sheep=await readPose(page);
+    await face(page,evidence,Math.atan2(25-sheep.east,195-sheep.north));
+    samples.push({id:'sheep-open-wildland-facing-west',pose:await readPose(page),
+      target:[25,195],note:'Reoriented from east-facing house row to wildland west, no tree moved'});
+    if((await page.locator('#lighting').textContent())!=='雪夜'){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+    }
+    await snapshot(page,evidence,'sheep-open-wildland-facing-west-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'sheep-open-wildland-facing-west-day');
+    report.r89RefinedViews={samples,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      semantic:'No scene objects repositioned; user moved by in-game controls only'};
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -814,7 +863,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
