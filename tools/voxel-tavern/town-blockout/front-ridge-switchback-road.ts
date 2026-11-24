@@ -362,51 +362,125 @@ export function createFrontRidgeSwitchbackRoad(
   buildRibbon(centreline, (east, north, i) => (toeEndIndex >= 0 && i <= toeEndIndex ? gridAt : terrainAt)(east, north), 'switchback-road-ribbon');
   buildRibbon(entryCentreline, (east, north) => gridAt(east, north), 'switchback-entry-ribbon');
 
-  // --- Height override: nearest centreline sample via a 12 m cell
-  // hash, over the main corridor AND the entry spur (union).
+  // --- Height override: segment projection over the main corridor
+  // AND the entry spur (union), with hint-coherent leg selection.
+  //
+  // Repair note (2026-11-22, A fold-in measurement): pure horizontal
+  // nearest-point sampling flips to the adjacent leg where two legs
+  // stack within ~3 m in plan (toe east leg vs the return leg near
+  // (420.9, 460); the base-station leg E530 N340-377) -- up to 89 m
+  // flips on 6-8% of 0.25 m samples, i.e. step walls / sudden drops
+  // for the walker. The sampler now projects onto centreline
+  // SEGMENTS and selects the leg in three stages: coverage (the
+  // point must lie in the leg's shoulder band, with round end caps
+  // at vertices), locality (only candidates near the closest
+  // approach compete -- a stale vertex behind the walker, whose
+  // height still equals the hint picked up passing it, must not
+  // out-compete the live segment), and a combined score of vertical
+  // coherence with the hint height (the walker's current height /
+  // previous sample) plus a plan-distance term, so a foreign leg
+  // can only steal the chain where its height is within ~half a
+  // metre of the walker's own surface. Blending toward the ground
+  // happens after the leg is chosen, from the chosen leg's lateral
+  // offset. Without a hint the nearest local leg wins (ambiguous on
+  // stacked legs by definition -- sequential samplers must pass the
+  // hint). Verified: centreline 0.25 m hint-walk 0 flips over the
+  // whole corridor; the two named sections 0 flips on centreline
+  // and +-1.2 m band walks alike.
   const cell = 12;
-  type Near = { point: SwitchbackPoint; distance: number; lateral: number; groundAt: (east: number, north: number) => number };
-  function makeNearest(points: SwitchbackPoint[], groundFor: (point: SwitchbackPoint, index: number) => (east: number, north: number) => number) {
+  type Candidate = {
+    roadHeight: number; lateral: number; distance: number; interior: boolean;
+    cumMid: number;
+    groundAt: (east: number, north: number) => number;
+  };
+  function makeCandidates(
+    points: SwitchbackPoint[],
+    groundFor: (point: SwitchbackPoint, index: number) => (east: number, north: number) => number,
+  ) {
     const hash = new Map<string, number[]>();
     points.forEach((point, i) => {
       const key = `${Math.floor(point.east / cell)},${Math.floor(point.north / cell)}`;
       const list = hash.get(key) ?? []; list.push(i); hash.set(key, list);
     });
-    return (east: number, north: number): Near | undefined => {
-      let best: Near | undefined;
+    return (east: number, north: number): Candidate[] => {
+      const out: Candidate[] = [];
+      const seen = new Set<number>();
       const cx = Math.floor(east / cell), cn = Math.floor(north / cell);
       for (let x = cx - 1; x <= cx + 1; x++) for (let n = cn - 1; n <= cn + 1; n++) {
         for (const i of hash.get(`${x},${n}`) ?? []) {
-          const point = points[i]!;
-          const distance = Math.hypot(east - point.east, north - point.north);
-          if (!best || distance < best.distance) {
-            const next = points[Math.min(points.length - 1, i + 1)]!;
-            const prev = points[Math.max(0, i - 1)]!;
-            let dirE = next.east - prev.east, dirN = next.north - prev.north;
-            const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
-            const lateral = (east - point.east) * -dirN + (north - point.north) * dirE;
-            best = { point, distance, lateral, groundAt: groundFor(point, i) };
+          for (const segIndex of [i - 1, i]) {
+            if (segIndex < 0 || segIndex >= points.length - 1 || seen.has(segIndex)) continue;
+            seen.add(segIndex);
+            const a = points[segIndex]!, b = points[segIndex + 1]!;
+            const vx = b.east - a.east, vy = b.north - a.north;
+            const len2 = vx * vx + vy * vy || 1;
+            const rawT = ((east - a.east) * vx + (north - a.north) * vy) / len2;
+            const t = Math.max(0, Math.min(1, rawT));
+            const px = a.east + vx * t, py = a.north + vy * t;
+            const distance = Math.hypot(east - px, north - py);
+            if (distance > SHOULDER + 2) continue;
+            const len = Math.sqrt(len2);
+            const lateral = (east - px) * (-vy / len) + (north - py) * (vx / len);
+            const interior = rawT > 1e-9 && rawT < 1 - 1e-9;
+            out.push({
+              roadHeight: a.height + (b.height - a.height) * t + 0.06,
+              // Effective lateral: perpendicular offset for interior
+              // projections; on the round end caps the radial
+              // distance (a signed lateral against the segment
+              // direction is meaningless past the vertex and made
+              // the blend jump at hairpin apexes).
+              lateral: interior ? lateral : distance,
+              distance,
+              interior,
+              cumMid: (a.cum + b.cum) / 2,
+              groundAt: groundFor(a, segIndex),
+            });
           }
         }
       }
-      return best;
+      return out;
     };
   }
-  const nearestMain = makeNearest(centreline, (_point, i) => (toeEndIndex >= 0 && i <= toeEndIndex ? gridAt : terrainAt));
-  const nearestEntry = makeNearest(entryCentreline, () => gridAt);
-  function heightAt(east: number, north: number): number | undefined {
-    const candidates = [nearestMain(east, north), nearestEntry(east, north)].filter((c): c is Near => !!c);
-    if (candidates.length === 0) return undefined;
-    const near = candidates.reduce((a, b) => (b.distance < a.distance ? b : a));
-    const lateralAbs = Math.abs(near.lateral);
-    if (near.distance > SHOULDER + 2) return undefined;
-    if (lateralAbs <= ROAD_HALF) return near.point.height + 0.06;
-    if (lateralAbs <= SHOULDER) {
-      const t = (lateralAbs - ROAD_HALF) / (SHOULDER - ROAD_HALF);
-      const smooth = t * t * (3 - 2 * t);
-      return (near.point.height + 0.06) * (1 - smooth) + near.groundAt(east, north) * smooth;
+  const candidatesMain = makeCandidates(centreline, (_point, i) => (toeEndIndex >= 0 && i <= toeEndIndex ? gridAt : terrainAt));
+  const candidatesEntry = makeCandidates(entryCentreline, () => gridAt);
+  function heightAt(east: number, north: number, hintHeight?: number): number | undefined {
+    const all = [...candidatesMain(east, north), ...candidatesEntry(east, north)];
+    if (all.length === 0) return undefined;
+    // Coverage: the point must lie inside the leg's shoulder band.
+    const covering = all.filter(c => Math.abs(c.lateral) <= SHOULDER);
+    if (covering.length === 0) return undefined;
+    // Locality first: only candidates near the closest approach
+    // compete. A stale vertex behind the walker (its height still
+    // equal to the hint the walker picked up passing it) must not
+    // out-compete the live segment under the walker's feet -- that
+    // was the shelf-poisoning loop. Foreign legs at a crossing ARE
+    // local (they pass within metres in plan), so the hint's
+    // vertical coherence then decides between legs, which is the
+    // disambiguation the hint exists for.
+    const minDistance = Math.min(...covering.map(c => c.distance));
+    const local = covering.filter(c => c.distance <= minDistance + 2.0);
+    // Combined score inside the local set: vertical coherence plus
+    // a plan-distance term (weight 0.5), so a foreign leg can only
+    // steal the chain where its height is within ~half a metre of
+    // the walker's own surface (a sub-step switch), while at true
+    // crossings the coherence term dominates by tens of metres.
+    const scoreOf = (c: Candidate) => hintHeight === undefined
+      ? c.distance
+      : Math.abs(c.roadHeight - hintHeight) + 0.5 * c.distance;
+    let best = local[0]!;
+    for (const cand of local) {
+      const candScore = scoreOf(cand), bestScore = scoreOf(best);
+      if (candScore < bestScore - 0.5 ||
+          (Math.abs(candScore - bestScore) <= 0.5 &&
+           Math.abs(cand.lateral) < Math.abs(best.lateral) - 1e-9)) {
+        best = cand;
+      }
     }
-    return undefined;
+    const lateralAbs = Math.abs(best.lateral);
+    if (lateralAbs <= ROAD_HALF) return best.roadHeight;
+    const bt = (lateralAbs - ROAD_HALF) / (SHOULDER - ROAD_HALF);
+    const smooth = bt * bt * (3 - 2 * bt);
+    return best.roadHeight * (1 - smooth) + best.groundAt(east, north) * smooth;
   }
 
   // --- Entities: fog-lamp chain, mileage stones, hairpin rest benches, signs.
@@ -595,7 +669,7 @@ export function createFrontRidgeSwitchbackRoad(
   return {
     group, centreline, entryCentreline, totalLength, heightAt,
     benches, shelters, platform, boards: boards.group,
-    surfaceAt: heightAt,
+    surfaceAt: (east: number, north: number, hintHeight?: number) => heightAt(east, north, hintHeight),
     setNight(night: boolean) {
       for (const core of lampCores) (core.material as MeshBasicMaterial).color.set(night ? '#ffb45c' : '#3a3230');
     },

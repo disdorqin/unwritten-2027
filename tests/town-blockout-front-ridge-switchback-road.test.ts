@@ -102,3 +102,64 @@ test('switchback road overlay: height layer, lamps, signs, dispose', () => {
   road.dispose();
   road.dispose();
 });
+
+test('D-6 repair: hint-coherent heightAt never flips legs on stacked sections', () => {
+  const road = createFrontRidgeSwitchbackRoad();
+  // Resample a path (centreline or spur) at 0.25 m steps and walk it
+  // with a hint chain, exactly like the fold-in re-measure: a flip is
+  // a successive-sample jump over the 0.43 m walkable step.
+  const walk = (
+    points: readonly { east: number; north: number; height: number; cum: number }[],
+    lateralOffset: number,
+  ) => {
+    let flips = 0, samples = 0, namedFlips = 0, centreFlips = 0;
+    let hint: number | undefined;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i]!, b = points[i + 1]!;
+      const segLen = b.cum - a.cum;
+      const steps = Math.max(1, Math.round(segLen / 0.25));
+      let dirE = b.east - a.east, dirN = b.north - a.north;
+      const len = Math.hypot(dirE, dirN) || 1; dirE /= len; dirN /= len;
+      for (let sIdx = (i === 0 ? 0 : 1); sIdx <= steps; sIdx++) {
+        const t = sIdx / steps;
+        const e = a.east + (b.east - a.east) * t - dirN * lateralOffset;
+        const n = a.north + (b.north - a.north) * t + dirE * lateralOffset;
+        const h = road.heightAt(e, n, hint);
+        assert.notEqual(h, undefined, `hole at (${e.toFixed(1)}, ${n.toFixed(1)})`);
+        if (hint !== undefined) {
+          const step = Math.abs(h! - hint);
+          if (step > 0.43) {
+            flips++;
+            if (lateralOffset === 0) centreFlips++;
+            const nearToeCross = Math.hypot(e - 420.9, n - 460) < 8;
+            const nearBaseLeg = e > 524 && e < 536 && n > 335 && n < 382;
+            if (nearToeCross || nearBaseLeg) namedFlips++;
+          }
+        }
+        hint = h;
+        samples++;
+      }
+    }
+    return { flips, samples, namedFlips, centreFlips };
+  };
+  let totalFlips = 0, totalSamples = 0, namedFlips = 0, centreFlips = 0;
+  for (const offset of [-1.2, 0, 1.2]) {
+    const main = walk(road.centreline, offset);
+    totalFlips += main.flips; totalSamples += main.samples;
+    namedFlips += main.namedFlips; centreFlips += main.centreFlips;
+    const entry = walk(road.entryCentreline, offset);
+    totalFlips += entry.flips; totalSamples += entry.samples;
+    namedFlips += entry.namedFlips; centreFlips += entry.centreFlips;
+  }
+  // The fold-in acceptance walks the centreline: zero flips, and the
+  // two sections A named ((420.9,460) crossing, E530 base leg) are
+  // flip-free on the +-1.2 m band walks too. The band walks retain a
+  // small residual at the tightest upper hairpins, where the offset
+  // path itself leaves the walked leg's shoulder band and enters
+  // the adjacent traverse's -- guarded here as a rate ceiling.
+  assert.equal(centreFlips, 0, `centreline walk still flips ${centreFlips} times`);
+  assert.equal(namedFlips, 0, 'named sections (420.9,460) / E530 leg still flip');
+  assert.ok(totalFlips / totalSamples < 0.005,
+    `band flip rate ${(100 * totalFlips / totalSamples).toFixed(3)}% over the 0.5% ceiling`);
+  road.dispose();
+});

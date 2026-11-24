@@ -2,6 +2,7 @@ import { Group, Mesh, MeshBasicMaterial, PlaneGeometry } from 'three';
 import { createMainSummitApproach, mountMainSummitApproachSigns } from './main-summit-approach';
 import { createMainSummitBannerCloud } from './main-summit-banner-cloud';
 import { createMainSummitBellPosts } from './main-summit-bell-posts';
+import { makeCloudGlowTexture } from './front-ridge-cloud-band';
 import { createMainSummitWindGround } from './main-summit-wind-ground';
 import { mountCloudTerraceArt } from './main-summit-cloud-terrace-art';
 import { mountMainSummitTerraceEdge } from './main-summit-terrace-edge';
@@ -163,22 +164,36 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const terraceEdge = mountMainSummitTerraceEdge(assembly);
   group.add(terraceEdge.group);
 
-  // Cloud-sea glow band (§5.21, default plan): a soft lit sheet under the
-  // cloud tops south of the terrace, visible only at night.
+  // Cloud-sea glow band, rebuilt to the settled plan B (batch 63,
+  // 《设计-全图云层》): light floats ON the cloud surface south of the
+  // terrace as slow river-like streams -- flowing spot texture in
+  // crystal teal #7fd4c8 to snow white, never saturated blue/purple,
+  // brightness capped under the town lights. Two depths (near/far
+  // sheets, different repeats and flow speeds) replace the old
+  // single static blue sheet. Night only.
   const glowBand = new Group();
   glowBand.name = 'cloud-glow-band';
+  const glowTexture = makeCloudGlowTexture();
+  const glowTextureFar = glowTexture ? glowTexture.clone() : null;
+  if (glowTextureFar) glowTextureFar.needsUpdate = true;
   const glowMaterial = new MeshBasicMaterial({
-    color: '#86b4d9', transparent: true, opacity: .16, depthWrite: false,
+    map: glowTexture ?? undefined, color: '#dff7f1', transparent: true, opacity: 0, depthWrite: false,
+  });
+  const glowMaterialFar = new MeshBasicMaterial({
+    map: glowTextureFar ?? undefined, color: '#cfe9e2', transparent: true, opacity: 0, depthWrite: false,
   });
   const glowGeometry = new PlaneGeometry(130, 34);
   for (let i = 0; i < 4; i++) {
-    const sheet = new Mesh(glowGeometry, glowMaterial);
+    const far = i >= 2;
+    const sheet = new Mesh(glowGeometry, far ? glowMaterialFar : glowMaterial);
     sheet.rotation.x = -Math.PI / 2;
-    sheet.position.set(-140 + i * 125, assembly.arrivalHeight + 5, 10);
+    sheet.position.set(-140 + (i % 2) * 250 + (far ? 60 : 0), assembly.arrivalHeight + (far ? 3.2 : 5), far ? 44 : 10);
+    if (far) sheet.scale.setScalar(1.35);
     glowBand.add(sheet);
   }
   glowBand.visible = false;
   group.add(glowBand);
+  let glowNight = false;
   const coarseMaterial = assembly.block.coarse.material;
   const coarseDayColor = coarseMaterial.color.getHex();
 
@@ -202,7 +217,8 @@ export function mountMainSummitExtras(assembly: Assembly) {
     setNight(night: boolean) {
       paint.setNight(night);
       coarseMaterial.color.setHex(night ? 0x2f3f52 : coarseDayColor);
-      glowBand.visible = night;
+      glowNight = night;
+      glowBand.visible = true;
       cloudTerraceArt.setNight(night);
     },
     update(nowMs: number) {
@@ -211,12 +227,27 @@ export function mountMainSummitExtras(assembly: Assembly) {
       bannerCloud.update(nowMs / 1000);
       windGround.update(nowMs / 1000);
       glideEntities.update(nowMs / 1000);
+      // Glow flow: river-slow texture drift, far layer slower (parallax);
+      // opacity ramps toward the night target and the band hides at 0.
+      const secs = nowMs / 1000;
+      if (glowTexture) { glowTexture.offset.x = (secs * 0.0045) % 1; glowTexture.offset.y = (secs * 0.0011) % 1; }
+      if (glowTextureFar) { glowTextureFar.offset.x = (secs * 0.0026) % 1; glowTextureFar.offset.y = (secs * 0.0007) % 1; }
+      const ramp = (mat: MeshBasicMaterial, target: number) => {
+        mat.opacity += (target - mat.opacity) * 0.04;
+        if (Math.abs(target - mat.opacity) < 0.004) mat.opacity = target;
+      };
+      ramp(glowMaterial, glowNight ? 0.30 : 0);
+      ramp(glowMaterialFar, glowNight ? 0.17 : 0);
+      glowBand.visible = glowNight || glowMaterial.opacity > 0.01;
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       glowGeometry.dispose();
       glowMaterial.dispose();
+      glowMaterialFar.dispose();
+      glowTexture?.dispose();
+      glowTextureFar?.dispose();
       windGround.dispose();
       cloudTerraceArt.dispose();
       terraceEdge.dispose();

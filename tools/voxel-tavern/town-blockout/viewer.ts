@@ -60,6 +60,8 @@ import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
 import { createFrontRidgeSwitchbackRoad } from './front-ridge-switchback-road';
 import { createTownSkyClouds } from './town-sky-clouds';
+import { createFrontRidgeVegetation } from './front-ridge-vegetation';
+import { createFrontRidgeCloudBand } from './front-ridge-cloud-band';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
 import { addNewYearDecor } from './town-new-year';
@@ -581,6 +583,15 @@ scene.add(switchbackRoad.group);
 // fed per frame in the weather section below, so no init-order coupling.
 const skyClouds = createTownSkyClouds();
 scene.add(skyClouds.group);
+// D-share mounts (总控收账批95): the front-ridge vegetation belt and the
+// half-mountain cloud band (batch-67 D share) were delivered as unmounted
+// modules. Night is fed in setNight below; the band's drift and glow fade
+// are fed per frame beside skyClouds. The band runs on its internal
+// weather defaults until a ZB-20 field mapping is ruled.
+const frontRidgeVegetation = createFrontRidgeVegetation(switchbackRoad);
+scene.add(frontRidgeVegetation.group);
+const frontRidgeCloudBand = createFrontRidgeCloudBand();
+scene.add(frontRidgeCloudBand.group);
 if (reportSummitSkyline) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
@@ -939,6 +950,8 @@ function setNight(night: boolean) {
   scenery.setNight(night);
   westCraterRoad?.craterActions.setNight(night);
   switchbackRoad?.setNight(night);
+  frontRidgeVegetation.setNight(night);
+  frontRidgeCloudBand.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
@@ -4110,6 +4123,7 @@ renderer.setAnimationLoop(now => {
   // Batch-67: clouds hang off the same single authoritative weather state
   // (ZB-20 / G-09 presence weather) — never a second weather source.
   skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
+  frontRidgeCloudBand.update(dt);
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
   if (overnightBoard) overnightBoard.visible = Boolean(railOvernightBoardCopy(ceremonyState.now));
