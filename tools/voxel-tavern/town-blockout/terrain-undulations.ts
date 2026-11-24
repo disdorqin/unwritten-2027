@@ -1,5 +1,7 @@
 import expansion from '../../../docs/p0-layout-draft.json';
 import layout from './layout.json';
+import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
+import { icePalaceSite } from './ice-palace-site';
 import { districtParcels, districtStreets, extensionPlots, extensionRoads } from './town-extension';
 
 /**
@@ -50,6 +52,21 @@ const protectedPlots:Protection[]=[
   ...extensionPlots.map(p=>({
     east:p.origin[0],north:p.origin[1],halfEast:p.footprint[0]/2,halfNorth:p.footprint[1]/2,
   })),
+  // R89 / A-1: the northern market row extends beyond the original
+  // market-stalls plot at N115. These are existing counter footprints, not
+  // new terrain. Protect BOTH north-row tills, including stall 14 E140.4/N122.8.
+  ...marketStallLayouts.filter(stall=>stall.row==='north').map(stall=>{
+    const [localEast,localSouth]=marketStallLocalPoint(stall,0,2.6);
+    const market=layout.plots.find(plot=>plot.id==='market-stalls')!;
+    return {east:market.origin[0]+localEast,north:market.origin[1]-localSouth,
+      halfEast:3.5,halfNorth:3.5};
+  }),
+  // R89 / A-1: the 48×52 m ICE PALACE terrain pad is larger than its
+  // 48×38 m building plot. The missing 14m southern forecourt (N39–53)
+  // was acquiring up to 2.5cm of B2 relief across 150 exact-12m cells.
+  {east:icePalaceSite.terrain.origin[0],north:icePalaceSite.terrain.origin[1],
+    halfEast:icePalaceSite.terrain.footprint[0]/2,
+    halfNorth:icePalaceSite.terrain.footprint[1]/2},
   ...Object.values(districtParcels).flat().map(([east,north,w,d])=>({
     east,north,halfEast:w/2,halfNorth:d/2,
   })),

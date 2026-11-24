@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-station', 'a1-full', 'a2-shots', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -666,6 +666,114 @@ try {
       disclaimer:'Not claimed as 2m; 5.58m is nearest canonical trail centerline, visual and side-step still need C approval'};
     assert.ok(sightDistance<7);
   }
+  if (segment === 'a1-r89-visual') {
+    const {page,evidence}=await openTown('a1-r89-visual');
+    const cameras=[
+      {id:'market-14-protected-row',label:'集市摊位',anchor:[154,79.62],target:[140.4,122.8]},
+      {id:'ice-palace-forecourt-protected',label:'冰雪城堡',anchor:[454,75],target:[484,46]},
+      {id:'sheep-relief-shifted-eye',label:'羊圈',anchor:[70,215],target:[125,170],
+        walk:[[74,211],[78,207]]},
+    ];
+    const ledger=[];
+    for(const view of cameras){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:view.label});
+      await page.waitForFunction(({pattern,east,north})=>{
+        const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.5;
+      },{pattern:positionPattern.source,east:view.anchor[0],north:view.anchor[1]},{timeout:45_000});
+      if(view.walk)await follow(page,evidence,view.walk,view.id+'-native-shift');
+      const pose=await readPose(page);
+      const yaw=Math.atan2(view.target[0]-pose.east,view.target[1]-pose.north);
+      await face(page,evidence,yaw);
+      ledger.push({id:view.id,target:view.target,actual:await readPose(page),yaw,
+        provenance:'production destination selector; optional W/Shift native walk'});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    report.a1R89Visual={views:ledger,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      note:'These are native WebGL visual samples, not a standalone proof of foreground visibility'};
+  }
+  if (segment === 'a2-r89-visual') {
+    const {page,evidence,westWindow}=await openTown('a2-r89-visual');
+    const samples=[];
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    await page.waitForFunction(pattern=>{
+      const match=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return match&&Math.hypot(+match[1]-2,+match[2]-159)<1.2;
+    },positionPattern.source,{timeout:45_000});
+    await follow(page,evidence,[[-12,159],[-43,159],[-67,159],[-70.7,159]],'a2-new-rim-approach');
+    const deadline=Date.now()+150_000;
+    while(Date.now()<deadline){
+      const frame=westWindow();
+      if(frame?.state?.canEnterRestricted){
+        const now=frame.joinEpoch+Date.now()-frame.joinReceivedAt;
+        if(frame.state.morningBellAt-now>50_000){
+          evidence.craterWindow={...frame.state,now};
+          break;
+        }
+      }
+      await page.waitForTimeout(500);
+    }
+    assert.ok(evidence.craterWindow,'Cannot enter B01 for the new upper-rim viewpoint without legal night window');
+    await walkTo(page,evidence,[-72.1,159],'a2-rim-legal-entry');
+    const fixture=JSON.parse(await readFile(new URL('../tests/fixtures/a5-cyan-b01-spiral-route.json',import.meta.url),'utf8'));
+    const selected=fixture.points.filter((p,i)=>i>0 && p.t<=.06 && (i<=4 || i%2===0));
+    await follow(page,evidence,selected.map(p=>[p.east,p.north]),'a2-upper-slope-view');
+    const rim=await readPose(page);
+    await face(page,evidence,Math.atan2(-120-rim.east,185-rim.north));
+    samples.push({id:'b01-upper-slope-new-eye',actual:await readPose(page),legalNightWindow:true});
+    if((await page.locator('#lighting').textContent())!=='雪夜'){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+    }
+    await snapshot(page,evidence,'b01-upper-slope-new-eye-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'b01-upper-slope-new-eye-day');
+    for(const item of [
+      {id:'front-mountain-high-candidate',label:'星港坪',requested:[324,657]},
+      {id:'front-hill-road-approach',label:'山口',requested:[290,300]},
+    ]){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#jump').selectOption({label:item.label});
+      await page.waitForFunction(pattern=>{
+        const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+        return m && +m[1]>0 && +m[2]>100;
+      },positionPattern.source,{timeout:40_000});
+      await page.waitForTimeout(600);
+      const actual=await readPose(page);
+      const arrived=Math.hypot(actual.east-item.requested[0],actual.north-item.requested[1])<2;
+      await face(page,evidence,Math.atan2(-120-actual.east,185-actual.north));
+      samples.push({id:item.id,requested:item.requested,actual:await readPose(page),
+        arrived,validHighEye:arrived&&actual.height>=45,
+        note:'Actual legal destination recorded, not passed as a high view if landing falls back'});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,item.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      await snapshot(page,evidence,item.id+'-day');
+    }
+    report.a2R89Visual={samples,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      provenance:'real in-game selector; upper B01 sight from legally descended live spiral; no camera teleport'};
+  }
   if (segment === 'a1-station') {
     const { page, evidence } = await openTown('a1-station');
     await page.locator('#town-panel-toggle').click();
@@ -706,7 +814,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
