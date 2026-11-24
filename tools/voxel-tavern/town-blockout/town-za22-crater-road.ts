@@ -241,10 +241,14 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   if (surveyM1) group.add(surveyM1.group);
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
-  // mounts' own placements. The viewer's geometry index still has to
-  // include this group before the boxes take effect (single-writer file,
-  // pairing-line wiring — registered with the audit).
-  group.userData.colliders = buildCraterColliders({
+  // mounts' own placements. The viewer's west index (buildWestGeometry,
+  // window A's S-1 wiring) reads this group's userData, so registering
+  // here is what makes the boxes take effect for east < 0.
+  // S-1 channel contract: APPEND to the mouth/outer arrays registered
+  // above — overwriting them silently dropped the crater-outside boxes
+  // from the west index (regression caught by window A's west-collision
+  // test on the batch-96 tree: merged colliders 193 < 200).
+  group.userData.colliders = [...group.userData.colliders, ...buildCraterColliders({
     yaw: anchor.yaw,
     winch: winch?.survey,
     camp: camp.placements,
@@ -252,7 +256,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     ejecta: ejecta.placements,
     dressing: story.placements,
     extra: lampRoom?.boxes,
-  });
+  })];
   // Salvage ①: one E-action surface for the crater — the mouth-works
   // spots (registration / map / telescope / firewood) plus the M1 station.
   const surveySpot: CraterActionSpot | undefined = surveyM1 ? {

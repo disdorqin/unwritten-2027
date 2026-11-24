@@ -1,0 +1,258 @@
+diff --git a/src/presence/lamp-desk-host.ts b/src/presence/lamp-desk-host.ts
+new file mode 100644
+index 00000000..f74ec3d0
+--- /dev/null
++++ b/src/presence/lamp-desk-host.ts
+@@ -0,0 +1,87 @@
++/**
++ * Lamp desk host — the production wiring face for taking and
++ * returning lamps (transferred from window C to branch window B,
++ * batch 92; the ledger itself landed in batch 96 and is NOT touched
++ * here — this host only reads its judgments and calls its verbs).
++ *
++ * The single lamp authority is ./lamp-ledger.ts: one book, kept at
++ * the shaft-head lamp room. This host adds what the ledger by design
++ * does not know: WHO is acting (the presence session's verified
++ * profile) and WHERE they stand (the desk, the lamp room's issue
++ * window, a camp niche, the camp). An action the room cannot see
++ * does not happen:
++ *
++ *   register    — at the muster desk, with 石九斤 (K-22's rule);
++ *   issue       — at the lamp room window, against a registration;
++ *   returnLamp  — at the lamp room window; cancels the record;
++ *   reportDamage— anywhere the holder stands; onto the same record;
++ *   placeAtNiche— at a camp niche; the lamp leaves the hand, the
++ *                 record stays as placed;
++ *   onDeath     — wherever death finds them; the lamp is marked
++ *                 lost on the same record, never dropped;
++ *   reissue     — at the camp; a replacement against a lost report.
++ *
++ * Leaf module: importing it does not activate gameplay; the server
++ * entrypoint mounts it under the single-writer rule.
++ */
++import { createLampLedger, type LampLedger, type LampRecord } from './lamp-ledger.js';
++
++export type LampDeskHooks<Session> = Readonly<{
++  /** The authenticated profile for this session; never client-supplied. */
++  profileOf: (session: Session) => string | null | undefined;
++  /** Verified position: standing at the muster registration desk. */
++  atDesk: (session: Session) => boolean;
++  /** Verified position: at the lamp room's issue window. */
++  atLampRoom: (session: Session) => boolean;
++  /** Verified position: at a camp niche where a lamp may be offered. */
++  atNiche: (session: Session) => boolean;
++  /** Verified position: at the camp, where replacements are issued. */
++  atCamp: (session: Session) => boolean;
++}>;
++
++export function createLampDeskHost<Session>(hooks: LampDeskHooks<Session>, ledger: LampLedger = createLampLedger()) {
++  function profile(session: Session): string | null {
++    const value = hooks.profileOf(session);
++    return typeof value === 'string' && value.length > 0 ? value : null;
++  }
++  function act(session: Session, where: (s: Session) => boolean, verb: (id: string) => boolean): boolean {
++    const id = profile(session);
++    if (id === null || !where(session)) return false;
++    return verb(id);
++  }
++
++  return {
++    register(session: Session): boolean {
++      return act(session, hooks.atDesk, (id) => ledger.register(id));
++    },
++    issue(session: Session): boolean {
++      return act(session, hooks.atLampRoom, (id) => ledger.issue(id));
++    },
++    returnLamp(session: Session): boolean {
++      return act(session, hooks.atLampRoom, (id) => ledger.returnLamp(id));
++    },
++    reportDamage(session: Session): boolean {
++      const id = profile(session);
++      return id !== null && ledger.reportDamage(id);
++    },
++    placeAtNiche(session: Session): boolean {
++      return act(session, hooks.atNiche, (id) => ledger.placeAtNiche(id));
++    },
++    onDeath(session: Session): boolean {
++      const id = profile(session);
++      return id !== null && ledger.onDeath(id);
++    },
++    reissue(session: Session): boolean {
++      return act(session, hooks.atCamp, (id) => ledger.reissueAtCamp(id));
++    },
++    /** Scene/domain reads — the same judgments the underground host consumes. */
++    holdsLamp(session: Session): boolean {
++      const id = profile(session);
++      return id !== null && ledger.holdsLamp(id);
++    },
++    recordOf(session: Session): LampRecord | undefined {
++      const id = profile(session);
++      return id === null ? undefined : ledger.record(id);
++    },
++  };
++}
+diff --git a/tests/server/lamp-desk-host.test.ts b/tests/server/lamp-desk-host.test.ts
+new file mode 100644
+index 00000000..84f2c85a
+--- /dev/null
++++ b/tests/server/lamp-desk-host.test.ts
+@@ -0,0 +1,56 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createLampDeskHost } from '../../src/presence/lamp-desk-host';
++import { createLampLedger } from '../../src/presence/lamp-ledger';
++
++type Session = { id: string; where: 'desk' | 'lamp-room' | 'niche' | 'camp' | 'wild' };
++
++function host() {
++  const ledger = createLampLedger();
++  return createLampDeskHost<Session>({
++    profileOf: (s) => s.id,
++    atDesk: (s) => s.where === 'desk',
++    atLampRoom: (s) => s.where === 'lamp-room',
++    atNiche: (s) => s.where === 'niche',
++    atCamp: (s) => s.where === 'camp',
++  }, ledger);
++}
++const at = (where: Session['where'], id = 'p1'): Session => ({ id, where });
++
++test('the full take-and-return flow, gated by where the player stands', () => {
++  const h = host();
++  assert.equal(h.issue(at('lamp-room')), false, 'no registration, no lamp — even at the window');
++  assert.equal(h.register(at('wild')), false, 'registration happens at the desk, not in the wild');
++  assert.equal(h.register(at('desk')), true);
++  assert.equal(h.issue(at('desk')), false, 'the desk registers; the lamp room issues');
++  assert.equal(h.issue(at('lamp-room')), true);
++  assert.equal(h.holdsLamp(at('wild')), true, 'reads are not position-gated');
++  assert.equal(h.returnLamp(at('desk')), false, 'returns also happen at the window');
++  assert.equal(h.returnLamp(at('lamp-room')), true);
++  assert.equal(h.recordOf(at('wild')), undefined, 'return cancels the record outright');
++});
++
++test('damage, niche placement, death and camp reissue follow the one book', () => {
++  const h = host();
++  h.register(at('desk')); h.issue(at('lamp-room'));
++  assert.equal(h.reportDamage(at('wild')), true, 'damage is reported from wherever the holder stands');
++  assert.equal(h.recordOf(at('wild'))?.damaged, true);
++  assert.equal(h.placeAtNiche(at('wild')), false, 'placing needs a niche');
++  assert.equal(h.placeAtNiche(at('niche')), true);
++  assert.equal(h.onDeath(at('wild')), false, 'a placed lamp is not the borrower\'s to lose');
++  // Second player: death marks lost, camp re-issues.
++  h.register(at('desk', 'p2')); h.issue(at('lamp-room', 'p2'));
++  assert.equal(h.onDeath(at('wild', 'p2')), true);
++  assert.equal(h.recordOf(at('wild', 'p2'))?.stage, 'lost');
++  assert.equal(h.reissue(at('lamp-room', 'p2')), false, 'replacements are issued at the camp');
++  assert.equal(h.reissue(at('camp', 'p2')), true);
++  assert.equal(h.holdsLamp(at('wild', 'p2')), true);
++});
++
++test('anonymous sessions can do nothing', () => {
++  const h = host();
++  const anon: Session = { id: '', where: 'desk' };
++  assert.equal(h.register(anon), false);
++  assert.equal(h.holdsLamp(anon), false);
++  assert.equal(h.recordOf(anon), undefined);
++});
+diff --git a/tests/town-blockout-crater-points.test.ts b/tests/town-blockout-crater-points.test.ts
+index cf23476b..238c47b6 100644
+--- a/tests/town-blockout-crater-points.test.ts
++++ b/tests/town-blockout-crater-points.test.ts
+@@ -39,15 +39,19 @@ test('debris ring: two seconds of looking identifies; ship pieces never break; o
+   assert.equal(ring.atlasGroupComplete, true);
+ });
+ 
+-test('registration desk: no sign-in no lamp, return settles, death parks the lamp at the house', () => {
+-  const desk = createRegistrationDesk();
++test('registration desk: a judgment face over the one lamp book — no sign-in no lamp, death marks lost, camp re-issues', async () => {
++  const { createLampLedger } = await import('../src/presence/lamp-ledger');
++  const desk = createRegistrationDesk(createLampLedger(), 'p1');
+   assert.equal(desk.drawLamp(), false, 'unregistered hands get no lamp');
+   desk.register();
+   assert.equal(desk.drawLamp(), true);
+   desk.onDeath();
+-  assert.equal(desk.state, 'registered');
+-  assert.equal(desk.drawLamp(), true, 'the lamp waited at the house');
++  assert.equal(desk.state, 'lost', 'death marks the lamp lost on the same record');
++  assert.equal(desk.drawLamp(), false, 'a lost lamp is not re-drawn at the window');
++  assert.equal(desk.reissue(), true, 'the camp re-issues a replacement');
++  assert.equal(desk.state, 'lamp-out');
+   assert.deepEqual(desk.returnToken(), { settled: true });
++  assert.equal(desk.state, 'unregistered', 'return cancels the record outright');
+   assert.equal(desk.register(), true, 'the next descent signs again');
+ });
+ 
+diff --git a/tools/voxel-tavern/town-blockout/town-crater-points-play.ts b/tools/voxel-tavern/town-blockout/town-crater-points-play.ts
+index c6954d97..cfa2d0b5 100644
+--- a/tools/voxel-tavern/town-blockout/town-crater-points-play.ts
++++ b/tools/voxel-tavern/town-blockout/town-crater-points-play.ts
+@@ -106,38 +106,44 @@ export function createDebrisRing(shipPieceIds: readonly string[], random: () =>
+ 
+ // ------------------------------------------------------------------
+ // Point 4 · The registration desk （集结地登记桌） — sign before
+-// the lamp. No registration, no lamp; returning the token settles
+-// the account. Death never drops the lamp: it waits at the lamp
+-// house to be claimed again.
++// the lamp. This face keeps NO book of its own: since batch 96 the
++// single lamp authority is the presence lamp ledger, and this desk
++// is a judgment face over one player's record in it (the ledger is
++// injected structurally; the production host is lamp-desk-host).
++// No registration, no lamp; returning settles by cancelling the
++// record; death marks the lamp lost on the same record and the
++// camp re-issues — the ledger's words, not a second book's.
+ // ------------------------------------------------------------------
+ 
+-export type DeskState = 'unregistered' | 'registered' | 'lamp-out' | 'settled';
++export type DeskLampBook = Readonly<{
++  register(playerId: string): boolean;
++  issue(playerId: string): boolean;
++  returnLamp(playerId: string): boolean;
++  onDeath(playerId: string): boolean;
++  reissueAtCamp(playerId: string): boolean;
++  record(playerId: string): Readonly<{ stage: 'registered' | 'holding' | 'placed' | 'lost' }> | undefined;
++}>;
+ 
+-export function createRegistrationDesk() {
+-  let state: DeskState = 'unregistered';
++export type DeskState = 'unregistered' | 'registered' | 'lamp-out' | 'lost';
++
++export function createRegistrationDesk(book: DeskLampBook, playerId: string) {
++  const stage = () => book.record(playerId)?.stage;
+   return {
+-    get state() { return state; },
+-    register(): boolean {
+-      if (state !== 'unregistered' && state !== 'settled') return false;
+-      state = 'registered';
+-      return true;
++    get state(): DeskState {
++      const s = stage();
++      if (s === undefined) return 'unregistered';
++      if (s === 'holding' || s === 'placed') return 'lamp-out';
++      return s;
+     },
++    register(): boolean { return book.register(playerId); },
+     /** The lamp house asks the desk before it hands anything over. */
+-    canDrawLamp(): boolean { return state === 'registered'; },
+-    drawLamp(): boolean {
+-      if (!this.canDrawLamp()) return false;
+-      state = 'lamp-out';
+-      return true;
+-    },
+-    returnToken(): { settled: boolean } {
+-      if (state !== 'lamp-out') return { settled: false };
+-      state = 'settled';
+-      return { settled: true };
+-    },
+-    /** Dying sends the lamp back to the house, not into the snow. */
+-    onDeath(): void {
+-      if (state === 'lamp-out') state = 'registered';
+-    },
++    canDrawLamp(): boolean { return stage() === 'registered'; },
++    drawLamp(): boolean { return book.issue(playerId); },
++    returnToken(): { settled: boolean } { return { settled: book.returnLamp(playerId) }; },
++    /** Death marks the lamp lost on the same record — never dropped, never a second book. */
++    onDeath(): void { book.onDeath(playerId); },
++    /** The camp re-issues a replacement against the lost report. */
++    reissue(): boolean { return book.reissueAtCamp(playerId); },
+   };
+ }
+ 

@@ -3124,18 +3124,21 @@ const stepHeight = .43;
 const surfaceEpsilon = .025;
 const gravity = 22;
 const jumpVelocity = Math.sqrt(2 * gravity * 1.255);
-function surfaceAt(east: number, north: number) {
+function surfaceAt(east: number, north: number, hintHeight?: number) {
   if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
-  return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north);
+  return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north, hintHeight);
 }
-function outdoorSurfaceAt(east: number, north: number) {
+function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
   if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
   // T5 fold (分支窗 A): inside the switchback corridor's band its own
   // surface wins — the core is the road profile and the feather band
   // already blends to the host ground, so the seam stays continuous.
   // Outside the band heightAt is undefined and the water/grid fallback
   // below applies unchanged.
-  const roadSurface = switchbackRoad?.heightAt(east, north);
+  // 甲案 (总控裁定 2026-11-24): the walking step passes the player's
+  // current support height as the hint, so heightAt's leg selection
+  // stays on the leg the walker is on; landings keep the no-hint call.
+  const roadSurface = switchbackRoad?.heightAt(east, north, hintHeight);
   if (roadSurface !== undefined) return roadSurface;
   return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
 }
@@ -3340,7 +3343,12 @@ function tryMove(nextX: number, nextN: number) {
   if (!walkable(nextX, nextN)) return false;
   const feet = airHeight ?? ground;
   const limit = feet + (airHeight === undefined ? stepHeight : surfaceEpsilon);
-  const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit);
+  // 甲案 (总控裁定 2026-11-24): the walking step threads the player's
+  // current support height into the corridor heightAt call — the hint
+  // chain D's repair expects (one step's surface is the next step's
+  // hint). Landings (dryTownLandingHeight / settle) keep no hint.
+  const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit,
+    bodyRadius, surfaceAt(nextX, nextN, ground));
   const nextHeight = airHeight === undefined ? floor : feet;
   if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
   if (!homeReturn && currentGuardDuty()?.blocksStep(

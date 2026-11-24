@@ -106,38 +106,44 @@ export function createDebrisRing(shipPieceIds: readonly string[], random: () => 
 
 // ------------------------------------------------------------------
 // Point 4 · The registration desk （集结地登记桌） — sign before
-// the lamp. No registration, no lamp; returning the token settles
-// the account. Death never drops the lamp: it waits at the lamp
-// house to be claimed again.
+// the lamp. This face keeps NO book of its own: since batch 96 the
+// single lamp authority is the presence lamp ledger, and this desk
+// is a judgment face over one player's record in it (the ledger is
+// injected structurally; the production host is lamp-desk-host).
+// No registration, no lamp; returning settles by cancelling the
+// record; death marks the lamp lost on the same record and the
+// camp re-issues — the ledger's words, not a second book's.
 // ------------------------------------------------------------------
 
-export type DeskState = 'unregistered' | 'registered' | 'lamp-out' | 'settled';
+export type DeskLampBook = Readonly<{
+  register(playerId: string): boolean;
+  issue(playerId: string): boolean;
+  returnLamp(playerId: string): boolean;
+  onDeath(playerId: string): boolean;
+  reissueAtCamp(playerId: string): boolean;
+  record(playerId: string): Readonly<{ stage: 'registered' | 'holding' | 'placed' | 'lost' }> | undefined;
+}>;
 
-export function createRegistrationDesk() {
-  let state: DeskState = 'unregistered';
+export type DeskState = 'unregistered' | 'registered' | 'lamp-out' | 'lost';
+
+export function createRegistrationDesk(book: DeskLampBook, playerId: string) {
+  const stage = () => book.record(playerId)?.stage;
   return {
-    get state() { return state; },
-    register(): boolean {
-      if (state !== 'unregistered' && state !== 'settled') return false;
-      state = 'registered';
-      return true;
+    get state(): DeskState {
+      const s = stage();
+      if (s === undefined) return 'unregistered';
+      if (s === 'holding' || s === 'placed') return 'lamp-out';
+      return s;
     },
+    register(): boolean { return book.register(playerId); },
     /** The lamp house asks the desk before it hands anything over. */
-    canDrawLamp(): boolean { return state === 'registered'; },
-    drawLamp(): boolean {
-      if (!this.canDrawLamp()) return false;
-      state = 'lamp-out';
-      return true;
-    },
-    returnToken(): { settled: boolean } {
-      if (state !== 'lamp-out') return { settled: false };
-      state = 'settled';
-      return { settled: true };
-    },
-    /** Dying sends the lamp back to the house, not into the snow. */
-    onDeath(): void {
-      if (state === 'lamp-out') state = 'registered';
-    },
+    canDrawLamp(): boolean { return stage() === 'registered'; },
+    drawLamp(): boolean { return book.issue(playerId); },
+    returnToken(): { settled: boolean } { return { settled: book.returnLamp(playerId) }; },
+    /** Death marks the lamp lost on the same record — never dropped, never a second book. */
+    onDeath(): void { book.onDeath(playerId); },
+    /** The camp re-issues a replacement against the lost report. */
+    reissue(): boolean { return book.reissueAtCamp(playerId); },
   };
 }
 

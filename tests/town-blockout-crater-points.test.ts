@@ -39,15 +39,19 @@ test('debris ring: two seconds of looking identifies; ship pieces never break; o
   assert.equal(ring.atlasGroupComplete, true);
 });
 
-test('registration desk: no sign-in no lamp, return settles, death parks the lamp at the house', () => {
-  const desk = createRegistrationDesk();
+test('registration desk: a judgment face over the one lamp book — no sign-in no lamp, death marks lost, camp re-issues', async () => {
+  const { createLampLedger } = await import('../src/presence/lamp-ledger');
+  const desk = createRegistrationDesk(createLampLedger(), 'p1');
   assert.equal(desk.drawLamp(), false, 'unregistered hands get no lamp');
   desk.register();
   assert.equal(desk.drawLamp(), true);
   desk.onDeath();
-  assert.equal(desk.state, 'registered');
-  assert.equal(desk.drawLamp(), true, 'the lamp waited at the house');
+  assert.equal(desk.state, 'lost', 'death marks the lamp lost on the same record');
+  assert.equal(desk.drawLamp(), false, 'a lost lamp is not re-drawn at the window');
+  assert.equal(desk.reissue(), true, 'the camp re-issues a replacement');
+  assert.equal(desk.state, 'lamp-out');
   assert.deepEqual(desk.returnToken(), { settled: true });
+  assert.equal(desk.state, 'unregistered', 'return cancels the record outright');
   assert.equal(desk.register(), true, 'the next descent signs again');
 });
 
