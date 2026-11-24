@@ -5,6 +5,9 @@ import {
 import {
   waterFormFor, type WaterForm, type WaterLevel, type WaterPhase,
 } from '../../../src/shared/underground-water.js';
+import {
+  readUndergroundWaterPresentation, type AcceptedWaterReader,
+} from '../../../src/shared/town-c-water-snapshot-port.js';
 import type { createUndergroundMineLayout } from './underground-mine-layout.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -224,7 +227,8 @@ export function mountTownC2UndergroundWaterMinus90(host: Readonly<{
   waterMesh: Mesh;
   /** Certified by the movement/world host; no physical default is claimed here. */
   highWaterOffsetM: number;
-  readWater?: () => UndergroundWater90Authority | null | undefined;
+  /** Formal batch96 snapshot reader; when supplied, missing/invalid data never falls back to manual state. */
+  readAcceptedWater?: AcceptedWaterReader;
   oreVisuals?: readonly UndergroundWater90OreVisual[];
 }>) {
   const { parent, mine, waterMesh } = host;
@@ -374,14 +378,16 @@ export function mountTownC2UndergroundWaterMinus90(host: Readonly<{
   return {
     group: root,
     setLevel(level: WaterLevel, phase?: WaterPhase) {
-      if (disposed) return stats();
+      if (disposed || host.readAcceptedWater) return stats();
       manualAuthority = { level, phase };
       apply(adaptUndergroundWater90(manualAuthority, highRiseM));
       return stats();
     },
     sync() {
       if (disposed) return stats();
-      const authority = host.readWater ? host.readWater() : manualAuthority;
+      const authority = host.readAcceptedWater
+        ? readUndergroundWaterPresentation(host.readAcceptedWater)
+        : manualAuthority;
       apply(adaptUndergroundWater90(authority, highRiseM));
       return stats();
     },

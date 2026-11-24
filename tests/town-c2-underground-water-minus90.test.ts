@@ -11,6 +11,8 @@ import {
 import {
   isWaterGated, keyProgressSites,
 } from '../src/shared/underground-water.js';
+import { createUndergroundWaterState } from '../src/presence/underground-water-state.js';
+import type { AcceptedUndergroundWaterSnapshot } from '../src/shared/town-c-water-snapshot-port.js';
 
 const spec: UndergroundMineSpec = {
   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },
@@ -29,7 +31,7 @@ const oreVisuals: readonly UndergroundWater90OreVisual[] = [
 ];
 
 function fixture(options: Readonly<{
-  readWater?: () => UndergroundWater90Authority | null | undefined;
+  readAcceptedWater?: () => AcceptedUndergroundWaterSnapshot | undefined;
   oreVisuals?: readonly UndergroundWater90OreVisual[];
   highWaterOffsetM?: number;
 }> = {}) {
@@ -43,7 +45,8 @@ function fixture(options: Readonly<{
   waterMesh.name = 'underground-mine-water';
   parent.add(waterMesh);
   const overlay = mountTownC2UndergroundWaterMinus90({
-    parent, mine, waterMesh, highWaterOffsetM: fixtureHighRiseM, ...options,
+    parent, mine, waterMesh, highWaterOffsetM: fixtureHighRiseM,
+    readAcceptedWater: options.readAcceptedWater, oreVisuals: options.oreVisuals,
   });
   return { parent, mine, geometry, material, waterMesh, overlay };
 }
@@ -121,31 +124,53 @@ test('high/mid/low switch the real water mesh, knee-rise volume, shortcut and we
   f.material.dispose();
 });
 
-test('sync preserves host level/phase without deriving a night sequence and drops absent authority to mid', () => {
-  let authority: UndergroundWater90Authority | undefined = { level: 'high', phase: 'fall' };
+test('sync consumes the certified snapshot effective level and never derives phase from a clock', () => {
+  let authority: AcceptedUndergroundWaterSnapshot | undefined = {
+    nightOrdinal: 2, phase: 'fall', baseLevel: 'low', pumpOffset: 2, level: 'high',
+  };
   let reads = 0;
-  const f = fixture({ readWater: () => { reads++; return authority; } });
+  const f = fixture({ readAcceptedWater: () => { reads++; return authority; } });
   assert.equal(f.overlay.stats().configuration, 'unconfigured');
   let stats = f.overlay.sync();
   assert.equal(reads, 1);
-  assert.equal(stats.level, 'high', 'phase fall must not be converted into a low level');
+  assert.equal(stats.level, 'high', 'the pump-adjusted effective level wins over the natural fall phase');
   assert.equal(stats.phase, 'fall');
   assert.equal(stats.form.floodedPassages, true);
 
-  authority = { level: 'low', phase: 'rise' };
+  authority = {
+    nightOrdinal: 0, phase: 'rise', baseLevel: 'high', pumpOffset: -2, level: 'low',
+  };
   stats = f.overlay.sync();
   assert.equal(stats.level, 'low');
   assert.equal(stats.phase, 'rise');
   assert.equal(stats.form.riverbedOpen, true);
 
   f.overlay.setLevel('mid', 'level');
-  assert.equal(f.overlay.sync().level, 'low', 'the injected host remains the single source');
+  assert.equal(f.overlay.sync().level, 'low', 'manual fixture state cannot override the certified reader');
   authority = undefined;
   stats = f.overlay.sync();
   assert.equal(stats.level, 'mid');
   assert.equal(stats.phase, undefined);
   assert.equal(stats.configuration, 'unconfigured');
   assert.equal(f.waterMesh.visible, true);
+  f.overlay.dispose();
+  f.geometry.dispose();
+  f.material.dispose();
+});
+
+test('the real presence water state can drive the overlay without phase substituting for level', () => {
+  const state = createUndergroundWaterState({ dawnEpoch: 0, now: () => 0 });
+  assert.deepEqual(state.tonight(), {
+    nightOrdinal: 0, phase: 'rise', baseLevel: 'high', pumpOffset: 0, level: 'high',
+  });
+  const f = fixture({ readAcceptedWater: () => state.tonight() });
+  assert.equal(f.overlay.sync().level, 'high');
+  state.shiftPump(-1);
+  assert.equal(state.tonight().phase, 'rise');
+  assert.equal(state.tonight().level, 'mid');
+  assert.equal(f.overlay.sync().level, 'mid');
+  state.shiftPump(-1);
+  assert.equal(f.overlay.sync().level, 'low');
   f.overlay.dispose();
   f.geometry.dispose();
   f.material.dispose();
@@ -180,7 +205,10 @@ test('no water state locks key progress or changes mine collision/route geometry
 
 test('dispose is idempotent, restores the host water mesh and releases only overlay-owned resources', () => {
   let reads = 0;
-  const f = fixture({ readWater: () => { reads++; return { level: 'high' }; }, oreVisuals });
+  const f = fixture({ readAcceptedWater: () => {
+    reads++;
+    return { nightOrdinal: 0, phase: 'rise', baseLevel: 'high', pumpOffset: 0, level: 'high' };
+  }, oreVisuals });
   let baseDisposals = 0;
   let highDisposals = 0;
   f.geometry.addEventListener('dispose', () => { baseDisposals++; });

@@ -18,8 +18,9 @@ import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 import {
   mountTownC2UndergroundWaterMinus90,
-  type UndergroundWater90Authority, type UndergroundWater90OreVisual,
+  type UndergroundWater90OreVisual,
 } from './town-c2-underground-water-minus90.js';
+import type { AcceptedWaterReader } from '../../../src/shared/town-c-water-snapshot-port.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -68,7 +69,7 @@ type Host = Readonly<{
   /** C2-06 visual-only water adapter; absent means the certified baseline stays untouched. */
   waterRuntime?: Readonly<{
     highWaterOffsetM: number;
-    readWater?: () => UndergroundWater90Authority | null | undefined;
+    readAcceptedWater: AcceptedWaterReader;
     oreVisuals?: readonly UndergroundWater90OreVisual[];
   }>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
@@ -213,7 +214,7 @@ export function mountUndergroundMineDomain(host: Host) {
     ? mountTownC2UndergroundWaterMinus90({
       parent: root, mine, waterMesh,
       highWaterOffsetM: host.waterRuntime.highWaterOffsetM,
-      readWater: host.waterRuntime.readWater,
+      readAcceptedWater: host.waterRuntime.readAcceptedWater,
       oreVisuals: host.waterRuntime.oreVisuals,
     })
     : undefined;
