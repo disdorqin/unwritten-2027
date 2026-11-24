@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'b2-pit-floor', 'station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -167,7 +167,7 @@ try {
   });
   await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
   const clock = segment === 'clock' || segment === 'clock-books';
-  driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
+  driver = startNode([...(segment==='b2-pit-floor'?['--import','tsx']:[]), join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
     base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {
     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
   });

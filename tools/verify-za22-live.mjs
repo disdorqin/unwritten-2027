@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'b2-pit-floor', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -612,6 +612,10 @@ try {
     };
     assert.equal(measures.length,4);
   }
+  if (segment === 'b2-pit-floor') {
+    const {runB2FloorProfile}=await import('./verify-b2-floor-profile.mjs');
+    await runB2FloorProfile({openTown,follow,walkTo,readPose,face,waitForWire,snapshot,sampleA6TwentySeconds,report,output});
+  }
   if (segment === 'a5-crystal-live') {
     const {page,evidence,westWindow}=await openTown('a5-crystal-live');
     const fixture=JSON.parse(await readFile(new URL('../tests/fixtures/a5-cyan-b01-spiral-route.json',import.meta.url),'utf8'));
@@ -814,7 +818,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf' && segment !== 'b2-pit-floor') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
