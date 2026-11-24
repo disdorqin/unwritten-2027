@@ -1,7 +1,8 @@
 import {
-  BoxGeometry, CanvasTexture, CylinderGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, OctahedronGeometry,
   MeshStandardMaterial, Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type BufferGeometry,
 } from 'three';
+import {createSkyCitySurfaceGrain} from './sky-city-surface-grain';
 
 type Solid = { x:number; z:number; y:number; w:number; d:number; h:number };
 type Plot = { name:string; x:number; z:number; w:number; d:number; use:'home'|'clinic'|'seed'|'gallery'|'glasshouse' };
@@ -35,18 +36,21 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
   const solids:Solid[]=[];
   const box=new BoxGeometry(), column=new CylinderGeometry(.5,.5,1,8);
   const tmp=new Object3D();
-  const batches=new Map<string,{geometry:BufferGeometry;material:MeshLambertMaterial; matrices:typeof tmp.matrix[]}>();
+  const batches=new Map<string,{geometry:BufferGeometry;material:MeshLambertMaterial; matrices:typeof tmp.matrix[];tints:Color[]}>();
+  const opaque=new MeshLambertMaterial({color:'#ffffff',map:createSkyCitySurfaceGrain()});
+  const translucent=new MeshLambertMaterial({color:'#ffffff',transparent:true,opacity:.32,depthWrite:false});
   const lanterns=new Group(); lanterns.name='sky-city-dream-street-lanterns'; lanterns.visible=false;
   group.add(lanterns);
   const glow = new MeshStandardMaterial({color:'#f2b375',emissive:'#f6a65d',emissiveIntensity:.8,roughness:.7});
   const anchorGroup=new Group(); anchorGroup.name='sky-city-soul-anchors'; group.add(anchorGroup);
   function part(f:Finish,x:number,y:number,z:number,w:number,h:number,d:number,solid=false,yaw=0,geo:BufferGeometry=box) {
-    const key=f+'-'+geo.type;
+    // Opaque colors share the same shader and geometry. Keep transparent
+    // panes separate for sorting, and preserve every transform and tint.
+    const key=(f==='clearGlass'?'translucent':'opaque')+'-'+geo.type;
     let batch=batches.get(key);
-    if(!batch) batches.set(key,batch={geometry:geo,material:new MeshLambertMaterial({color:colors[f],
-      ...(f==='clearGlass'?{transparent:true,opacity:.32,depthWrite:false}:{} )}),matrices:[]});
+    if(!batch) batches.set(key,batch={geometry:geo,material:f==='clearGlass'?translucent:opaque,matrices:[],tints:[]});
     tmp.position.set(x,y,z);tmp.rotation.set(0,yaw,0);tmp.scale.set(w,h,d);tmp.updateMatrix();
-    batch.matrices.push(tmp.matrix.clone());
+    batch.matrices.push(tmp.matrix.clone());batch.tints.push(new Color(colors[f]));
     if(solid) solids.push({x,z,y,w,h,d});
   }
   function lamp(x:number,z:number) {
@@ -237,7 +241,38 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
         part('bronze',x,4.03,nz,w-1.1,.13,.105);
       }
     }
-    if(use==='home')part('wood',x,1.35,z+d/2,2.1,2.7,.22,true);
+    if(use==='home'){
+      part('wood',x,1.35,z+d/2,2.1,2.7,.22,true);
+      // Four homes use a common ship-plate language but different silhouettes.
+      const variant=skyCityDistrictPlots.indexOf(p)%4;
+      for(let i=0;i<8;i++)part(i%3?'wood':'sandstone',x-.91+i*.26,1.35,z+d/2+.14,.23,2.57,.05);
+      for(const yy of [.48,2.18])part('bronze',x,yy,z+d/2+.18,1.96,.11,.07);
+      part('brass',x+.61,1.28,z+d/2+.20,.15,.12,.10);
+      for(const s of [-1,1]){
+        part('stone',x+s*1.12,.18,z+d/2+.48,.38,.36,.62);
+        part('wood',x+s*1.24,1.72,z+d/2+.44,.13,3.0,.15);
+      }
+      part('copper',x,3.11,z+d/2+.62,2.8,.16,1.27);
+      for(let i=0;i<5;i++)part(i%2?'bronze':'copper',x-1.04+i*.52,3.24,z+d/2+.62,.45,.14,1.22);
+      if(variant===0){
+        for(let k=0;k<4;k++)part('sandstone',x,4.42+k*.17,z,3.0-k*.5,.17,2.4-k*.35);
+        part('brass',x,5.13,z,.23,.48,.23);
+      }else if(variant===1){
+        part('slate',x-1.55,4.58,z,1.55,.32,2.6);
+        for(let k=0;k<5;k++)part('bronze',x-2.22+k*.33,4.78,z,.10,.08,2.61);
+      }else if(variant===2){
+        for(let i=0;i<3;i++)part('copper',x+w*.28,4.55+i*.16,z+1.45,.9-i*.18,.16,.85-i*.13);
+      }else{
+        part('bronze',x-1.4,4.64,z,.35,.75,.35);
+        part('slate',x-1.4,5.02,z,.59,.16,.59);
+      }
+      // Occupied-looking but empty doorstep: varied crates, ceramic and
+      // folded linen, outside the established entrance and circulation lane.
+      const px=x+w/2-.80,pz=z+d/2+.51;
+      part('wood',px,.29,pz,.80,.58,.63,true);
+      for(const a of [-1,1])part('bronze',px+a*.24,.29,pz+.33,.07,.57,.04);
+      part('cloth',px,.62,pz,.49,.08,.43);
+    }
     furniture(p);
     if(use!=='home'&&typeof document!=='undefined'){
       const canvas=document.createElement('canvas');canvas.width=512;canvas.height=160;
@@ -267,6 +302,28 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
     part('glass',bx,8.0,bz,1.55,.72,1.55);
     part('copper',bx,8.52,bz,2.18,.31,2.18);
     part('bronze',bx,8.9,bz,.22,.5,.22);
+    // Ref-28: weathered narrow masonry shaft and exposed crystal crown.
+    for(let j=0;j<10;j++){
+      const y=.56+j*.64;
+      for(const a of [-1,1])for(const b of [-1,1]){
+        part((j+a+b)%3?'sandstone':'mortar',bx+a*.75,y,bz+b*.75,.29,.59,.29);
+      }
+      part('mortar',bx,.82+j*.64,bz+.861,1.68,.035,.06);
+    }
+    for(const a of [-1,1]){
+      part('mortar',bx+a*.87,4.32,bz,.08,4.9,.37);
+      for(let k=0;k<3;k++)part('bronze',bx+a*.94,2.4+k*1.6,bz,.09,.13,.39);
+    }
+    for(let j=0;j<4;j++){
+      const a=j*Math.PI/2;
+      part('bronze',bx+Math.cos(a)*.93,8.0,bz+Math.sin(a)*.93,.17,1.02,.17);
+    }
+    part('stone',bx,9.14,bz,1.54,.25,1.54);
+    const crystal=new Mesh(new OctahedronGeometry(.65,0),new MeshStandardMaterial({color:'#b0dcd0',roughness:.38,metalness:.15,emissive:'#77a99c',emissiveIntensity:.035}));
+    crystal.name='sky-beacon-crystal-crown';crystal.scale.set(.85,1.55,.85);crystal.position.set(bx,10.05,bz);group.add(crystal);
+    for(const s of [-1,1])for(let k=0;k<3;k++){
+      part(k%2?'leaf':'pale',bx+s*(1.45+k*.22),.24,bz+1.28,.40,.38,.36,false,k*.8);
+    }
   }
   const rx=12,rz=36;
   if(supports(rx,rz,5.2)){
@@ -283,13 +340,35 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
       part('wood',rx+a*1.9,2.51,rz,3.7,.07,.12);
     }
     for(const a of [-1,1])part('bronze',rx+a*4.1,.44,rz+2.8,.28,.88,.28,true);
+    // A wing-shaped fabric skin with ribs and rigging, not just two planks.
+    for(const a of [-1,1])for(let j=0;j<6;j++){
+      const ex=rx+a*(.42+j*.58),depth=1.41-j*.12;
+      part(j%2?'paper':'pale',ex,2.69,rz,.54,.085,depth,false,a*.12);
+      part('wood',ex,2.60,rz,.062,.08,depth+.07,false,a*.12);
+    }
+    part('bronze',rx,2.62,rz,.26,.14,1.50);
+    // Tool cabinet and rigging on the rack's rear, not in the landing aisle.
+    part('wood',rx-3.65,.50,rz+1.7,.94,1,.55,true);
+    for(let j=0;j<3;j++){part('bronze',rx-3.65,.36+j*.30,rz+1.39,.75,.07,.10);part('brass',rx-3.65,.45+j*.30,rz+1.36,.22,.05,.07)}
+    const px=rx+4.0,pz=rz-2.6;
+    part('stone',px,.18,pz,.52,.36,.52,true);
+    part('bronze',px,2.1,pz,.12,3.85,.12,true);
+    part('bronze',px,4.01,pz,.20,.14,.20);
+    for(let j=0;j<5;j++)part(j%2?'rust':'paper',px-.16-j*.24,3.74-j*.10,pz,.26,.40-j*.055,.32-j*.045,false,-.10);
+
   }
   for(const [name,x,z] of [['陈星垣',-31,-19],['罗望舒',-20,12],['沈望云',18,-17]] as const){
     const point=new Object3D();point.name='sky-soul-anchor-'+name;point.position.set(x,0,z);anchorGroup.add(point);
   }
   for(const [key,batch] of batches){
     const mesh=new InstancedMesh(batch.geometry,batch.material,batch.matrices.length);mesh.name='sky-district-'+key;
-    batch.matrices.forEach((matrix,index)=>mesh.setMatrixAt(index,matrix));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
+    batch.matrices.forEach((matrix,index)=>{mesh.setMatrixAt(index,matrix);mesh.setColorAt(index,batch.tints[index]!)});mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
+  }
+  // Window overlays have the same transform and emissive material. One
+  // instanced draw replaces dozens of independent meshes in the future dream.
+  const overlays=lanterns.children.filter((o):o is Mesh=>o instanceof Mesh&&o.geometry===box&&o.material===glow);
+  if(overlays.length){const batch=new InstancedMesh(box,glow,overlays.length);
+    overlays.forEach((o,i)=>{o.updateMatrix();batch.setMatrixAt(i,o.matrix);lanterns.remove(o)});batch.computeBoundingSphere();lanterns.add(batch);
   }
   const warm=new PointLight('#ffc38b',12,22,2);warm.position.set(18,4,14);lanterns.add(warm);
   return {group,accepted,anchors:anchorGroup,
