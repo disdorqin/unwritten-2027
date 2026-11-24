@@ -16,7 +16,11 @@ const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const viewer = join(repo, 'tools', 'voxel-tavern');
 const output = resolve(evidencePath);
-await mkdir(output, { recursive: true });
+// B-2 uses a run-exclusive evidence directory. A replayed invocation must
+// fail BEFORE compiling/starting another Chromium or Presence tree; never
+// overwrite a previously captured native report. The parent must already exist.
+if (segment === 'b2-pit-floor') await mkdir(output, { recursive: false });
+else await mkdir(output, { recursive: true });
 const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
 const web = join(temporary, 'web');
 const compiled = join(temporary, 'server');
