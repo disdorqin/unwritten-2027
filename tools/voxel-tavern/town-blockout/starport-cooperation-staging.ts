@@ -1,4 +1,4 @@
-import {BoxGeometry,CanvasTexture,Group,Mesh,MeshBasicMaterial,MeshLambertMaterial,
+import {BoxGeometry,CanvasTexture,Group,InstancedMesh,Mesh,MeshBasicMaterial,MeshLambertMaterial,
   PlaneGeometry,SRGBColorSpace,type Object3D} from 'three';
 import type {AircraftPoint} from '../../../src/shared/aircraft-flight';
 import {sampleNorthRidge350} from './north-ridge-350-terrain';
@@ -26,7 +26,9 @@ export function mountStarportCooperationStaging(parent:Object3D,anchor:AircraftP
   const wood=new MeshLambertMaterial({color:'#725037'}),iron=new MeshLambertMaterial({color:'#475961'}),
     brass=new MeshLambertMaterial({color:'#b59669'}),red=new MeshLambertMaterial({color:'#a74332'}),
     canvasMat=new MeshLambertMaterial({color:'#d9c9a8'});
-  const mats=[wood,iron,brass,red,canvasMat];
+  const darkWood=new MeshLambertMaterial({color:'#4d3e32'}),rope=new MeshLambertMaterial({color:'#b5a080'}),
+    seed=new MeshLambertMaterial({color:'#9a7954'}),paper=new MeshLambertMaterial({color:'#ebe0bd'});
+  const mats=[wood,iron,brass,red,canvasMat,darkWood,rope,seed,paper];
   const blockers:{east:number;north:number;width:number;depth:number;bottom:number;top:number}[]=[];
   function box(name:string,material:MeshLambertMaterial,e:number,n:number,y:number,w:number,d:number,h:number,solid=false){
     const mesh=new Mesh(geometry,material);mesh.name=name;
@@ -83,6 +85,39 @@ export function mountStarportCooperationStaging(parent:Object3D,anchor:AircraftP
   box('starport-folded-red-cloth',red,propX-.42,propN,propY+.98,.58,.42,.11);
   box('starport-wrench',iron,propX+.24,propN,propY+.98,.55,.09,.07).rotation.y=.27;
   box('starport-cooperation-handle',brass,propX+.58,propN,propY+.98,.17,.36,.06);
+  // Wooden carrying poles and coiled rope remain props (no inventory or
+  // event authority). Keep the aisle immediately south of the rack open.
+  for(const a of [-1,1]){
+    box('starport-carry-pole',darkWood,propX,propN+a*.18,propY+1.05,1.74,.095,.095);
+    for(let j=0;j<4;j++)box('starport-pole-strap',rope,propX-.5+j*.34,propN+a*.18,propY+1.10,.065,.11,.07);
+  }
+  for(let j=0;j<8;j++){
+    const angle=j*Math.PI/4;
+    box('starport-rope-coil',rope,propX-.54+Math.cos(angle)*.16,propN+.20+Math.sin(angle)*.16,propY+1.12,.14,.10,.065).rotation.y=-angle;
+  }
+  // Two seed baskets beyond the east end of the viewer line. Actual baskets
+  // share ground support and collision; no actors are spawned by this layer.
+  for(const [e,n]of [[345.1,655.8],[345.1,657.0]] as const){
+    const y=sampleNorthRidge350(e,n);if(y<346.99)continue;
+    box('starport-seed-basket-base',darkWood,e,n,y+.12,.48,.48,.24,true);
+    for(const s of [-1,1]){
+      box('starport-seed-basket-wall',wood,e+s*.21,n,y+.31,.07,.48,.26,true);
+      box('starport-seed-basket-wall',wood,e,n+s*.21,y+.31,.48,.07,.26,true);
+      for(let j=0;j<3;j++)box('starport-seed-basket-weave',rope,e+s*.25,n,y+.23+j*.075,.035,.49,.023);
+    }
+    box('starport-basket-paper',paper,e,n,y+.30,.35,.35,.045);
+    for(let j=0;j<9;j++)box('starport-seed',seed,e+(j%3-1)*.11,n+(Math.floor(j/3)-1)*.11,y+.36,.065,.085,.048);
+  }
+  // All static wooden/iron props use one box geometry. Preserve transforms
+  // and analytical collision; keep sign texture and actor anchors separate.
+  for(const material of mats){
+    const parts=group.children.filter((child):child is Mesh=>child instanceof Mesh&&child.geometry===geometry&&child.material===material);
+    if(!parts.length)continue;
+    const batch=new InstancedMesh(geometry,material,parts.length);
+    batch.name='starport-staging-batch-'+material.color.getHexString();
+    for(const [index,part]of parts.entries()){part.updateMatrix();batch.setMatrixAt(index,part.matrix);group.remove(part)}
+    batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();group.add(batch);
+  }
   return {group,anchors:anchorGroup,route:starportCooperationRouteAnchors,crowd:starportCrowdAnchors,
     blocked(feet:AircraftPoint,radius:number,bodyHeight:number){
       return blockers.some(b=>feet.height+bodyHeight>b.bottom&&feet.height<b.top&&Math.hypot(

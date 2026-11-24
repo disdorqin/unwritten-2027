@@ -413,6 +413,7 @@ export function createZa22CloudRoute(host: Host) {
     },
     front: () => world?.front,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
+      if (world?.middleStation.blocked(east,north,feet,radius,bodyHeight)) return true;
       if (world?.starport.blocked({ east, north, height: feet }, radius, bodyHeight)) return true;
       if (world?.extras.blocked(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, feet, radius, bodyHeight)) return true;
       return world?.assembly.blocked(east - summitAssemblyAnchor.east, north - summitAssemblyAnchor.north, feet, radius, bodyHeight) ?? false;
