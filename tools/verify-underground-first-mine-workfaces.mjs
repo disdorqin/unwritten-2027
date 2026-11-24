@@ -12,12 +12,13 @@ let browser;const report={scope:'actual shared first mine layout and mounted wor
 try{await server.listen();browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:.8});page.on('pageerror',e=>report.errors.push(String(e)));
 await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/workface-review',{waitUntil:'networkidle'});await page.waitForFunction(()=>window.workfaceReview?.inspect().frames>2);
-for(const name of ['workface-1','workface-2','workface-3','workface-4','workface-5','support-station']){
+const deep=process.argv[3]==='deep';
+for(const name of deep?['deep-west-entry','collapse','dry-bypass','barracks','west-bank','east-bank']:['workface-1','workface-2','workface-3','workface-4','workface-5','support-station']){
  assert.ok(await page.evaluate(name=>window.workfaceReview.setView(name),name),name+' standing point blocked');
  await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
  const stats=await page.evaluate(()=>window.workfaceReview.inspect());const shot=await page.screenshot({path:resolve(out,name+'.png')});assert.ok(shot.byteLength>10000);report.views[name]=stats;
 }
-await page.evaluate(()=>{window.workfaceReview.setView('workface-1');window.workfaceReview.resetFPS()});
+await page.evaluate(deep=>{window.workfaceReview.setView(deep?'deep-west-entry':'workface-1');window.workfaceReview.resetFPS()},deep);
 await page.keyboard.down('w');assert.ok(await page.evaluate(()=>window.workfaceReview.step(.5)));await page.keyboard.up('w');await page.waitForTimeout(800);
 report.walk=await page.evaluate(()=>window.workfaceReview.inspect());assert.ok(report.walk.walked>1.49&&report.walk.trustedW>0&&report.walk.rejected===0);assert.deepEqual(report.errors,[]);report.passed=true;
 }finally{await browser?.close().catch(()=>{});await server.close();await rm(cache,{recursive:true,force:true});await writeFile(resolve(out,'review-stats.json'),JSON.stringify(report,null,2));}

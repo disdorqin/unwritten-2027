@@ -1,4 +1,5 @@
 import type { UndergroundMineGateStage } from '../presence/underground-mine-gate.js';
+import {firstMineDeepWorks,isCanonicalDeepWorks} from './town-c-first-mine-deep-works.js';
 
 type Point = readonly [x: number, y: number, z: number];
 type Surface = 'rock' | 'rail' | 'water';
@@ -74,6 +75,7 @@ export function createUndergroundMineExpansionShell({
     thickness: .16,
   } : undefined;
 
+  const deepWorks=isCanonicalDeepWorks(bounds,floor,crystalGate)&&openingWidth===4&&openingHeight===3.5;
   const rooms: readonly Room[] = [
     { minX: openingLeft, maxX: openingRight, minZ: seamZ, maxZ: collarEnd, floor, ceiling: openingCeiling },
     { minX: galleryLeft, maxX: galleryRight, minZ: collarEnd, maxZ: collarStart, floor, ceiling: galleryCeiling },
@@ -85,6 +87,7 @@ export function createUndergroundMineExpansionShell({
     { minX: shaftX + 72, maxX: bounds.maxX, minZ: eastStart - 1.8, maxZ: eastEnd + 1.8, floor, ceiling: floor + 6.9 },
     { minX: galleryRight, maxX: galleryRight + 3.2, minZ: waterStart, maxZ: waterEnd,
       floor: waterFloor, ceiling: floor + 6.1, water: floor },
+    ...(deepWorks?firstMineDeepWorks.rooms.map(r=>({...r,minZ:Math.abs(r.minZ-waterStart)<1e-7?waterStart:r.minZ,maxZ:Math.abs(r.maxZ-waterStart)<1e-7?waterStart:r.maxZ,floor,ceiling:floor+r.ceiling})):[]),
   ];
   const railOffset = Math.min(.5, halfOpening / 2);
   const halfRail = Math.min(.04, railOffset / 4);
@@ -219,6 +222,7 @@ export function createUndergroundMineExpansionShell({
     queryPassage,
     route,
     gateApproach,
+    deepWorks,
     gate: gate && { ...gate, gapFor: gateGap },
     bounds,
   };
