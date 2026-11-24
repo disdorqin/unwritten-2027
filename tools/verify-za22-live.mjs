@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a4-b90-smelter', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a4-b90-smelter', 'b91-a-ground-sites', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -667,6 +667,52 @@ try {
     await snapshot(page,evidence,'smelter-wide-night');
     report.b90Smelter={actual:p,target,pitch,wide,wideTarget,widePitch,canvasVisible:await page.locator('#scene canvas').isVisible()};
   }
+  if (segment === 'b91-a-ground-sites') {
+    const {page,evidence}=await openTown('b91-a-ground-sites');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    if(await page.locator('#town-settings').evaluate(d=>d.open))
+      await page.locator('#town-settings-close').click();
+    await page.waitForFunction(pattern=>{
+      const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;
+    },positionPattern.source,{timeout:45000});
+    const observations=[
+      {id:'registration-desk',knots:[[-12,159],[-43,159],[-67,159],[-68,142],[-98,127],[-108,118]],target:[-107.839573,115.765352,11.95]},
+      {id:'crater-ship-03',knots:[[-161,132],[-171,142]],target:[-168.891910,144.036418,11.2073]},
+      {id:'crater-ship-04',knots:[[-187,175],[-195,201]],target:[-191.730646,200.550125,11.2073]},
+      {id:'crater-ship-05',knots:[[-150,247]],target:[-148.845598,244.140513,11.2073]},
+      {id:'crater-ship-01',knots:[[-115,247],[-105,257]],target:[-105.378911,254.344416,11.2073]},
+      {id:'crater-ship-02',knots:[[-66,224]],target:[-68.169139,222.511436,11.2073]},
+    ];
+    const views=[]; let currentPitch=0;
+    for(const view of observations){
+      await follow(page,evidence,view.knots,view.id+'-native-walk');
+      await page.waitForFunction(()=>document.querySelector('#position')?.textContent?.includes('行走'),null,{timeout:5000});
+      const p=await readPose(page);
+      const [east,north,h]=view.target;
+      await face(page,evidence,Math.atan2(east-p.east,north-p.north));
+      const pitch=Math.atan2(h-p.cameraY,Math.hypot(east-p.east,north-p.north));
+      const applied=Math.round((pitch-currentPitch)/.003)*.003;
+      await tiltFromLevel(page,applied); currentPitch+=applied;
+      views.push({id:view.id,pose:p,target:view.target,pitch,distance:Math.hypot(east-p.east,north-p.north)});
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,view.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,view.id+'-day');
+    }
+    await tiltFromLevel(page,-currentPitch);
+    await follow(page,evidence,[[-59,195],[-58,179],[-59,174],[-67,159]],'wreck-ring-return');
+    report.b91GroundSites={views,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      note:'Scene and walk evidence only. B/C registration and recognition authority not simulated.'};
+  }
   if (segment === 'a6-perf') {
     const {page,evidence}=await openTown('a6-perf');
     const measures=[];
@@ -974,7 +1020,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a4-b90-smelter' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a4-b90-smelter' && segment !== 'b91-a-ground-sites' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {

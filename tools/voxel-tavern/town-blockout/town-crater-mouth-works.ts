@@ -16,6 +16,8 @@ export type CraterMouthSite = Readonly<{
 
 /** E-action spots (salvage ①, ported from lane-a 976ab6d): ids mirror the viewer switch. */
 export type CraterActionId = 'registration' | 'map' | 'telescope' | 'firewood' | 'survey';
+/** Scene anchors for batch 83, not an inventory or presence authority. */
+export type CraterWreckagePiece = Readonly<{id:string; east:number; north:number; height:number; radius:number; ship:boolean; instance:number}>;
 export type CraterActionSpot = Readonly<{
   id: CraterActionId; label: string; east: number; north: number; height: number; range: number;
 }>;
@@ -240,6 +242,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   let doorLamp: PointLight | undefined;
   let brazierLight: PointLight | undefined;
   const actions: CraterActionSpot[] = [];
+  const wreckagePieces: CraterWreckagePiece[] = [];
+  let registrationDesk: Readonly<{east:number;north:number;height:number;useEast:number;useNorth:number;useHeight:number}> | undefined;
   /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
   const gateFencePosts: { bearing: number; radius: number }[] = [];
 
@@ -284,6 +288,54 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const boardH = heightAt(board.east, board.north);
     if (boardH !== undefined) {
       actions.push({ id: 'registration', label: '阅读入坑告示', east: board.east, north: board.north, height: boardH, range: 2.1 });
+    }
+    // Batch83 point 4: the existing assembly ground is the only host.
+    // A real work surface, open roster and a separate rack of blank lamp tokens.
+    // This is scene geometry: the authoritative registration and lamp ledger
+    // remain in B/C; never use the old notice-reading action as registration.
+    const desk=fr.at(-2.5,-.25);
+    const deskPut=(mat:MeshStandardMaterial,dx:number,y:number,dz:number,sx:number,sy:number,sz:number,roll=0)=>{
+      const p=fr.at(-2.5+dx,-.25+dz);
+      box(mat,p.east,g+y,p.north,sx,sy,sz,fr.yaw,0,roll);
+    };
+    deskPut(timberWarm,0,1.02,0,2.55,.14,.95);
+    for(const dx of [-1.05,1.05])for(const dz of [-.32,.32])
+      deskPut(timber,dx,.49,dz,.16,.98,.16);
+    deskPut(timber,0,.55,-.32,2.22,.17,.12);
+    deskPut(timber,0,.19,0,2.18,.12,.72);
+    // The book has its own spine, two cream pages, rules, and a pen.
+    deskPut(timber, -.63,1.13,.03,.76,.08,.52);
+    for(const dx of [-.81,-.45]){
+      deskPut(paper,dx,1.192,.03,.34,.045,.46,dx<-.6?-.04:.04);
+      for(let line=0;line<5;line++)
+        deskPut(stoneDark,dx,1.221,-.13+line*.073,.26,.008,.013);
+    }
+    deskPut(timberWarm,-.63,1.22,.03,.035,.025,.46);
+    deskPut(iron,-.08,1.14,.22,.11,.14,.11);
+    deskPut(timber,.08,1.17,.15,.27,.032,.032);
+    // Freestanding holder on the far right edge; token silhouettes and brass
+    // eyelets are visible, but are NOT a second stock/consumption ledger.
+    deskPut(timber,.73,1.36,-.33,1.12,.58,.13);
+    deskPut(timberWarm,.73,1.08,-.23,1.17,.09,.34);
+    for(let i=0;i<5;i++){
+      const dx=.27+i*.23;
+      deskPut(brass,dx,1.47,-.242,.045,.045,.07);
+      deskPut(timberWarm,dx,1.29,-.224,.16,.22,.045);
+      deskPut(brass,dx,1.36,-.193,.045,.045,.025);
+    }
+    const front=fr.at(-2.5,.27);
+    sign(front.east,g+.83,front.north,fr.yaw,1.57,.28,(c,w,h)=>{
+      c.fillStyle='#5d4630';c.fillRect(0,0,w,h);
+      c.fillStyle='#e8e0cc';c.font='bold 108px "Noto Sans SC",sans-serif';
+      c.textAlign='center';c.textBaseline='middle';c.fillText('石九斤 · 入坑登记',w/2,h/2);
+    });
+    hitBox(colliders,desk.east,desk.north,fr.yaw,2.55,.95,g,g+1.09);
+    const use=fr.at(-2.5,1.55);
+    const useHeight=heightAt(use.east,use.north);
+    if(useHeight!==undefined){
+      registrationDesk={east:desk.east,north:desk.north,height:g,useEast:use.east,useNorth:use.north,useHeight};
+      sites.push({id:'crater-registration-desk',east:desk.east,north:desk.north,height:g,radius:1.55});
+      sites.push({id:'crater-registration-use',east:use.east,north:use.north,height:useHeight,radius:.8});
     }
     // Sled slots: six stake pairs with a rope line.
     for (let i = 0; i < 6; i++) {
@@ -813,6 +865,9 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   }
   sites.push(...lampSites);
 
+  function fragmentsFace(east:number,north:number,yaw:number,dz:number){
+    return {east:east+Math.sin(yaw)*dz,north:north-Math.cos(yaw)*dz};
+  }
   // ---------- wreckage ring: outer slope only, never the walls or floor ----------
   let debrisCount = 0;
   {
@@ -837,7 +892,35 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const north = anchor.north + r * Math.cos(b);
       const h = heightAt(east, north);
       if (h === undefined) continue;
-      const size = .8 + hash(i * 17 + 3) * 1.9;
+      const shipSlot=[78,86,15,64,92].indexOf(i);
+      const ship=shipSlot>=0;
+      const size = (.8 + hash(i * 17 + 3) * 1.9)*(ship?.52:1);
+      // Five surveyed members of the EXISTING ring become recognizable ship
+      // fragments. Their half-buried rock remains, while a riveted hull plate
+      // and the same crescent/falling-arc insignia are visibly above it.
+      // Stable ids use the seed index, not a compacted instance number.
+      const id=ship?'crater-ship-'+String(shipSlot+1).padStart(2,'0'):'crater-wreck-'+String(i).padStart(3,'0');
+      wreckagePieces.push({id,east,north,height:h,radius:Math.max(.55,size*.76),ship,instance:placed});
+      if(ship){
+        const yaw=Math.PI-b;
+        const push=(mat:MeshStandardMaterial,dx:number,y:number,dz:number,sx:number,sy:number,sz:number,roll=0)=>{
+          const e=east+Math.cos(yaw)*dx+Math.sin(yaw)*dz;
+          const n=north+Math.sin(yaw)*dx-Math.cos(yaw)*dz;
+          box(mat,e,h+y,n,sx,sy,sz,yaw,0,roll);
+        };
+        push(rustIron,0,.43,0,1.88,.84,.23,.08);
+        push(iron,0,.78,.04,1.62,.11,.32,.08);
+        push(stoneDark,0,.37,.15,.85,.62,.06);
+        for(const x of [-.77,.77])for(const y of [.23,.66])
+          push(brass,x,y,.16,.09,.09,.07);
+        // Torus arc lies in XY, on the outward-facing face; a descending
+        // short tail makes the half-moon/falling arc glyph unambiguous.
+        const face=fragmentsFace(east,north,yaw,.205);
+        part(brass,new TorusGeometry(.235,.036,6,18,Math.PI*1.4),
+          face.east,h+.43,face.north,yaw,0,-.75);
+        push(brass,.115,.275,.205,.075,.19,.045,-.55);
+        sites.push({id,east,north,height:h,radius:1.1});
+      }
       eul.set(hash(i) * .9 - .45, hash(i * 5) * Math.PI, hash(i * 11) * .7 - .35);
       quat.setFromEuler(eul);
       pos.set(east, h + size * .16, -north);
@@ -887,6 +970,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
     actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,
+    registrationDesk, wreckagePieces,
     colliders, floors, ramps,
   };
 }
