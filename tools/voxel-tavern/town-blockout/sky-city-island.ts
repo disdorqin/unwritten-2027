@@ -1,6 +1,6 @@
 import {
-  BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, ShaderMaterial,
+  BoxGeometry, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, Mesh, MeshBasicMaterial,
+  MeshLambertMaterial, Object3D, ShaderMaterial,
 } from 'three';
 import { insideSkyCityDistrictFootprint } from './sky-city-district';
 
@@ -277,8 +277,49 @@ export function buildSkyCityIsland() {
     return { x, z, endZ, dx, dz, lengthSquared: dx * dx + dz * dz };
   });
 
+  // The actual survey polygon owns the perimeter. Build a continuous inset
+  // barrier from those edges, except the south aircraft corridor. Leave a
+  // deliberate open flight approach rather than a hidden collision wall.
+  const railSegments:{ax:number;az:number;bx:number;bz:number}[]=[];
+  const railGeometry=new BoxGeometry();
+  const railFrame=new Object3D();
+  const railBatch=new Map<string,ReturnType<typeof railFrame.matrix.clone>[]>();
+  function railPart(color:string,x:number,y:number,z:number,w:number,h:number,d:number,yaw:number){
+    railFrame.position.set(x,y,z);railFrame.rotation.set(0,yaw,0);railFrame.scale.set(w,h,d);railFrame.updateMatrix();
+    const batch=railBatch.get(color)??[];batch.push(railFrame.matrix.clone());railBatch.set(color,batch);
+  }
+  for(const edge of edges){
+    const ax=edge.x*.983,az=edge.z*.983,bx=(edge.x+edge.dx)*.983,bz=(edge.z+edge.dz)*.983;
+    const length=Math.hypot(bx-ax,bz-az),yaw=-Math.atan2(bz-az,bx-ax);
+    if(Math.max(az,bz)>45&&Math.min(ax,bx)<-9&&Math.max(ax,bx)>-19)continue;
+    railSegments.push({ax,az,bx,bz});
+    const cx=(ax+bx)/2,cz=(az+bz)/2;
+    railPart('#a99a7e',cx,.19,cz,length+.025,.38,.58,yaw);
+    railPart('#d4c6a5',cx,.42,cz,length+.025,.12,.67,yaw);
+    railPart('#5b6960',cx,.99,cz,length+.025,.11,.15,yaw);
+    railPart('#87795c',cx,.68,cz,length+.025,.065,.10,yaw);
+    const count=Math.ceil(length/1.85);
+    for(let j=0;j<count;j++){
+      const f=j/count,x=ax+(bx-ax)*f,z=az+(bz-az)*f;
+      railPart('#b7a98e',x,.63,z,.29,.68,.34,yaw);
+      railPart('#d4c6a5',x,1.09,z,.39,.12,.43,yaw);
+    }
+  }
+  for(const [color,matrices]of railBatch){
+    const mesh=new InstancedMesh(railGeometry,new MeshLambertMaterial({color}),matrices.length);
+    mesh.name='sky-island-survey-perimeter-'+color;
+    matrices.forEach((matrix,index)=>mesh.setMatrixAt(index,matrix));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
+  }
+  function blocked(x:number,z:number,feet:number,radius:number){
+    if(feet>=1.16||feet+1.8<=0)return false;
+    return railSegments.some(({ax,az,bx,bz})=>{
+      const dx=bx-ax,dz=bz-az;
+      const t=Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz)));
+      return Math.hypot(x-ax-t*dx,z-az-t*dz)<radius+.34;
+    });
+  }
   return {
-    group,
+    group,blocked,
     update(seconds: number) { if (Number.isFinite(seconds)) falls.update(seconds); },
     supports(x: number, z: number, radius = .27) {
       if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius < 0 ||

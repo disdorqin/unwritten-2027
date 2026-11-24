@@ -22,6 +22,7 @@ const colors = {
   ivory:'#e4dfc7', stone:'#aaa992', dark:'#52645d', bronze:'#99835e',
   wood:'#886e52', copper:'#6c8e85', glass:'#b3cbb4', leaf:'#779e58',
   pale:'#d7d9a4', cloth:'#647d72', clay:'#b27c57', paper:'#ddd2ac', clearGlass:'#b3d5c9',
+  sandstone:'#b9a78c', mortar:'#837b6a', brass:'#b89963', slate:'#566c73', rust:'#956d4c',
 } as const;
 type Finish = keyof typeof colors;
 
@@ -96,13 +97,30 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
         part('stone',x,.35,z-1.7,2.5,.7,1.2,true);
         part('copper',x,1.15,z-1.7,1.65,.9,.94,false,0,column);
         part('bronze',x,1.66,z-1.7,1.8,.12,.99);
+        // Exhibition: a retired hull section, brass instrument and six log slots.
+        for(let i=0;i<7;i++){
+          const a=Math.PI*i/6;
+          part('bronze',x+Math.cos(a)*.93,1.08+Math.sin(a)*.78,z-1.7,.16,.18,1.1);
+        }
+        for(let i=0;i<6;i++){
+          const px=x-1.6+i*.64;
+          part('wood',px,1.04,z-d/2+.43,.6,1.95,.58,true);
+          part('dark',px,1.35,z-d/2+.75,.48,.55,.07);
+          if(i!==3)part('paper',px,1.35,z-d/2+.82,.29,.45,.14);
+        }
       }
     }else if(use==='glasshouse'){
       for(const a of [-1,1]){
         part('wood',x+a*2.7,.32,z,1.5,.64,d-2,true);
         for(let i=0;i<6;i++){
-          part('leaf',x+a*2.7,.91,z-d/2+1.4+i*.83,.54,.7,.54,false,.4);
-          part('pale',x+a*2.7,1.30,z-d/2+1.4+i*.83,.23,.17,.23);
+          const px=x+a*2.7,pz=z-d/2+1.4+i*.83;
+          part('mortar',px,.67,pz,.64,.14,.68);
+          part('leaf',px,.91,pz,.54,.7,.54,false,.4);
+          for(let j=0;j<3;j++){
+            part('leaf',px+(j-1)*.19,1.11+j*.14,pz+.12,.30,.22,.28,false,j*.52);
+            part('pale',px+(j-1)*.19,1.26+j*.14,pz+.12,.17,.14,.18);
+          }
+          if(i%2===0)part('copper',px,1.80,pz,.07,2.3,.07);
         }
       }
     }else{
@@ -176,6 +194,41 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
     if(use!=='glasshouse'){
       part('dark',x+w*.29,4.45,z-1.0,.52,1,.52);
       part('bronze',x+w*.29,4.98,z-1.0,.74,.15,.74);
+      // Ship-plate vocabulary from sky-14: staggered sandstone plinths,
+      // oxidized seams, visible rivets, vent grilles, and roof glazing.
+      for(const s of [-1,1]){
+        const ex=x+s*(w/2+.015);
+        for(let k=0;k<3;k++)for(let j=0;j<Math.floor(d/.68);j++){
+          const nz=z-d/2+.36+j*.68+(k%2)*.16;
+          if(nz>=z+d/2-.19)continue;
+          part((j+k)%5?'sandstone':'mortar',ex,.16+k*.21,nz,.11,.19,.63);
+        }
+        for(let j=0;j<5;j++){
+          const nz=z-d/2+.44+j*(d-.88)/4;
+          part('bronze',ex,2.76,nz,.095,.13,.13);
+          part('bronze',ex,1.08,nz,.095,.13,.13);
+        }
+        const fx=x+s*(w/2-1.02),fz=z+d/2+.20;
+        part('mortar',fx,1.03,fz,1.04,.62,.12);
+        for(let j=0;j<4;j++)part('slate',fx,.83+j*.13,fz+.075,.89,.065,.04);
+        part('brass',fx,1.40,fz,.99,.085,.19);
+      }
+      for(let j=0;j<5;j++){
+        const nz=z-d*.30+j*d*.15;
+        part('bronze',x,4.36,nz,2.4,.11,.47);
+        part('slate',x,4.43,nz,2.17,.08,.39);
+        part('brass',x,4.48,nz,.035,.04,.39);
+      }
+      for(const ex of [x-w/2+.22,x+w/2-.22]){
+        part('rust',ex,3.51,z,.17,.15,d+.77);
+        part('bronze',ex,2.13,z+d/2+.25,.105,2.76,.13);
+      }
+    }else{
+      for(const s of [-1,1])for(let j=0;j<5;j++){
+        const nz=z-d/2+.15+j*(d-.3)/4;
+        part('bronze',x+s*w/2,1.8,nz,.11,3.4,.10);
+        part('bronze',x,4.03,nz,w-1.1,.13,.105);
+      }
     }
     if(use==='home')part('wood',x,1.35,z+d/2,2.1,2.7,.22,true);
     furniture(p);
@@ -229,7 +282,7 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
   }
   for(const [key,batch] of batches){
     const mesh=new InstancedMesh(batch.geometry,batch.material,batch.matrices.length);mesh.name='sky-district-'+key;
-    batch.matrices.forEach((matrix,index)=>mesh.setMatrixAt(index,matrix));mesh.instanceMatrix.needsUpdate=true;group.add(mesh);
+    batch.matrices.forEach((matrix,index)=>mesh.setMatrixAt(index,matrix));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
   }
   const warm=new PointLight('#ffc38b',12,22,2);warm.position.set(18,4,14);lanterns.add(warm);
   return {group,accepted,anchors:anchorGroup,

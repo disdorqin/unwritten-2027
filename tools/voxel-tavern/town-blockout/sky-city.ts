@@ -37,7 +37,7 @@ function buildCity() {
   dreamPresentation(false);
 
   function obstructs(x: number, z: number, y: number, radius: number) {
-    return tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius) || district.blocked(x,z,y,radius);
+    return island.blocked(x,z,y,radius) || tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius) || district.blocked(x,z,y,radius);
   }
 
   function step(foot: SkyCityFoot, x: number, z: number): SkyCityFoot | undefined {

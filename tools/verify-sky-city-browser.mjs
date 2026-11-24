@@ -97,6 +97,22 @@ try {
   assert.equal(landed.flight.recovery, null);
   result.checks.push({ landed });
   await shot('03-landing');
+  if(process.argv.includes('--district')){
+    result.step='new district first-person circuit';
+    async function visit(name,points,heading){
+      for(const [x,z] of points)await walk([x,0,z],.22);
+      await turn(heading);await shot(name+'-day');
+      await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+      await shot(name+'-night');result.checks.push({name,...await snapshot()});
+      await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===false);
+    }
+    await visit('13-wing-rack',[[-14,31],[8,29],[12,29.5]],Math.PI);
+    await visit('14-residences',[[12,31],[22,19],[27.8,19],[30,19]],Math.PI);
+    await visit('15-greenhouse',[[27.3,19],[27.3,12],[27.3,5],[27.3,0],[37,-1],[39,-12],[39,-21],[39,-24.5]],0);
+    await visit('16-ship-gallery',[[39,-21],[32,-18],[24,-18],[14,-16],[0,-17],[-14,-14],[-24,-17],[-32,-18],[-32,-21.5]],0);
+    await visit('17-beacon',[[-32,-18],[-22,-18],[-16,-25]],0);
+    assert.deepEqual(result.errors,[]);result.status='passed';
+  }else{
   // B91 expanded district: ordinary WASD walking, never camera teleport.
   result.step='walk new clinic and seed storage';
   const clinic=[[-14,0,31],[8,0,29],[17,0,20],[22,0,19],[22,0,15]];
@@ -153,6 +169,7 @@ try {
   result.checks.push({ lockedGate: blocked });
   assert.deepEqual(result.errors, []);
   result.status = 'passed';
+  }
 } catch (error) {
   result.failure = error.stack;
   result.last = await snapshot().catch(() => undefined);
