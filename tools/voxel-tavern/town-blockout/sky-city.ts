@@ -1,5 +1,6 @@
 import { Group, type BufferGeometry, type Material, type Mesh, type Texture } from 'three';
 import { buildSkyCityBuildings } from './sky-city-buildings';
+import { buildSkyCityDistrict } from './sky-city-district';
 import { buildSkyCityIsland } from './sky-city-island';
 import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
 import type { SkyCityFoot } from './sky-city-site';
@@ -25,10 +26,18 @@ function buildCity() {
   const tree = buildSkyCityTree();
   const buildings = buildSkyCityBuildings();
   const tower = buildSkyCityTower();
-  group.add(island.group, tree.group, buildings.group, tower.group);
+  const district=buildSkyCityDistrict(island.supports);
+  group.add(island.group, tree.group, buildings.group, tower.group,district.group);
+  // The physical empty city is default. These presentation hooks are only
+  // reserved for the future accepted presence-domain event; no UI flag or
+  // client-side event can activate dream state in the production host.
+  const dreamPresentation = (active:boolean) => {
+    tree.setDreamPresentation(active);tower.setDreamPresentation(active);district.setDreamLighting(active);
+  };
+  dreamPresentation(false);
 
   function obstructs(x: number, z: number, y: number, radius: number) {
-    return tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius);
+    return tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius) || district.blocked(x,z,y,radius);
   }
 
   function step(foot: SkyCityFoot, x: number, z: number): SkyCityFoot | undefined {
@@ -51,7 +60,8 @@ function buildCity() {
 
   return { group, step, obstructs, floorAt: (x: number, z: number) => island.supports(x, z) ? 0 : undefined,
     dormRoute: buildings.dormRoute, towerRoute: tower.route, gate: tower.gate,
-    update(seconds: number) { island.update(seconds); tree.update(seconds); } };
+    districtPlots:district.accepted, soulAnchors:district.anchors, dreamPresentation,
+    update(seconds: number) { island.update(seconds); tree.update(seconds); tower.update(seconds); } };
 }
 
 function disposeModel(root: Group) {

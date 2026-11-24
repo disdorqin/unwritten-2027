@@ -2,6 +2,7 @@ import {
   BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, ShaderMaterial,
 } from 'three';
+import { insideSkyCityDistrictFootprint } from './sky-city-district';
 
 type Point = readonly [x: number, y: number, z: number];
 type PlanPoint = readonly [x: number, z: number];
@@ -99,6 +100,14 @@ function paths() {
   strip([[10.8, 0], [16, -1], [21, -5], [26, -11], [32, -16]], 3.4, 272);
   strip([[-11, -1], [-16, -5], [-23, -10], [-31, -18]], 3.6, 307);
   strip([[0, -10.8], [0, -17], [1, -25], [1, -33]], 3.7, 420);
+  // Connect the new residential and service plots with the same flush paving.
+  // Leave the landing corridor and the tower stair clear.
+  strip([[-14,31],[8,29],[17,20],[22,19],[22,16.6]],2.6,501);
+  strip([[22,19],[27.8,19],[28.5,12],[34,11.3],[34,8.6]],2.25,561);
+  strip([[34,11.3],[38,13.2],[43,13.8]],2.1,611);
+  strip([[32,-16],[37,-18.5],[39,-22.9]],2.45,641);
+  strip([[-31,-18],[-32,-19.9]],2.25,671);
+  strip([[8,29],[12,33]],2.5,701);
   return path.mesh('spring-road-and-landing-lane');
 }
 
@@ -115,6 +124,7 @@ function meadow() {
       const index = patch * 41 + stalk * 5;
       const dx = x + (scatter(index) - .5) * 2.1;
       const dz = z + (scatter(index + 1) - .5) * 2.1;
+      if(insideSkyCityDistrictFootprint(dx,dz))continue;
       const h = .16 + scatter(index + 2) * .26;
       model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], tuft);
       if (stalk % 2) continue;

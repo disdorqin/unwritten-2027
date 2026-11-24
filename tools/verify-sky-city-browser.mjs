@@ -97,6 +97,23 @@ try {
   assert.equal(landed.flight.recovery, null);
   result.checks.push({ landed });
   await shot('03-landing');
+  // B91 expanded district: ordinary WASD walking, never camera teleport.
+  result.step='walk new clinic and seed storage';
+  const clinic=[[-14,0,31],[8,0,29],[17,0,20],[22,0,19],[22,0,15]];
+  for(const point of clinic)await walk(point);
+  await turn(0);await shot('07-clinic-day');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('08-clinic-night');
+  result.checks.push({clinic:await snapshot()});
+  await page.keyboard.press('n');
+  const seed=[[22,0,19],[27.8,0,19],[28.5,0,12],[34,0,11.3],[34,0,7.0]];
+  for(const point of seed)await walk(point);
+  await turn(0);await shot('09-seed-store-day');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('10-seed-store-night');result.checks.push({seedStore:await snapshot()});
+  await page.keyboard.press('n');
+  for(const point of [...seed].reverse().slice(1))await walk(point);
+  for(const point of [...clinic].reverse().slice(2))await walk(point);
   result.step = 'walk into dormitory';
   const dorm = buildSkyCityBuildings().dormRoute;
   for (const stop of dorm) await walk(stop);
@@ -110,7 +127,9 @@ try {
   await page.keyboard.down('ArrowDown');
   try { await page.waitForTimeout(320); } finally { await page.keyboard.up('ArrowDown'); }
   await shot('05-crystal-court');
-  result.checks.push({ crystal: await snapshot() });
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('11-crystal-court-night');
+  result.checks.push({ crystal: await snapshot() });await page.keyboard.press('n');
   for (const stop of [[-9, 0, 5.8], [-13, 0, 7], [-13, 0, 2], [-14, 0, -11], [-11, 0, -17], [-5, 0, -19]]) await walk(stop);
   result.step = 'stairs to locked gate';
   const tower = buildSkyCityTower();
@@ -122,6 +141,8 @@ try {
   await turn(0);
   await page.getByText('未央门 · 锁闭', { exact: true }).waitFor();
   await shot('06-locked-gate');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('12-locked-gate-night');await page.keyboard.press('n');
   try {
     await page.keyboard.down('w');
     await page.waitForTimeout(700);
