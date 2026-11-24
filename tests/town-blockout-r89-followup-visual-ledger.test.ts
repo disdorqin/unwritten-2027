@@ -30,7 +30,7 @@ test('R89 cross-window D defect: starport native walk loses >=100m footing and e
   assert.ok(high);
   assert.ok(Math.hypot(high.pose.east-327,high.pose.north-657)<1);
   assert.ok(high.pose.hud.includes('腾空'),'capture has not registered the terrain unsafe status');
-  const poses=report.paths[0].poses.filter((p:{area:string})=>p.area==='mountain'||p.north>=640);
+  const poses=report.paths[0].poses.filter((p:{area:string;north:number})=>p.area==='mountain'||p.north>=640);
   const earliest=poses.find((p:{height:number})=>p.height>345);
   assert.ok(earliest,'no true high-elevation start frame');
   assert.ok(earliest.height-high.pose.height>100,'misreporting an ordinary traversable high lookout');
