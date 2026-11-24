@@ -85,7 +85,11 @@ export function buildSkyCityTower() {
   const moss = new MeshStandardMaterial({ color: '#6b8350', roughness: 1 });
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
 
+  const dishMotion=new Group(); dishMotion.name='sky-city-dish-motion-axis';
+  dishMotion.position.copy(dishOrigin); group.add(dishMotion);
+  let movingDish=false;
   function add(geometry: BufferGeometry, material: MeshStandardMaterial) {
+    if(movingDish){const mesh=new Mesh(geometry,material);mesh.position.copy(dishOrigin).multiplyScalar(-1);dishMotion.add(mesh);return;}
     geometry.deleteAttribute('uv');
     const batch = batches.get(material);
     if (batch) batch.push(geometry);
@@ -195,6 +199,7 @@ export function buildSkyCityTower() {
   for (const side of [-1, 1]) {
     beam(iron, [side * .29, deckY + 6, observatoryZ], [side * .52, dishPivot, observatoryZ], .18, .28);
   }
+  movingDish=true;
   add(createSkyCitySignalDish(20), bronze);
   const rim = new TorusGeometry(dishRadius, .052, 5, 20).rotateX(Math.PI / 2).translate(0, dishRim - .03, 0);
   add(rim.applyQuaternion(dishRotation).translate(...dishOrigin.toArray()), iron);
@@ -207,6 +212,14 @@ export function buildSkyCityTower() {
     const mount = new Vector3(dishRadius * .92 * Math.cos(angle), dishRim - .06, dishRadius * .92 * Math.sin(angle));
     beam(iron, mount.applyQuaternion(dishRotation).add(dishOrigin).toArray(), focus, .065, .08);
   }
+  movingDish=false;
+  const indicatorMaterial=new MeshStandardMaterial({color:'#747e75',emissive:'#f5b477',emissiveIntensity:0});
+  const indicators=new Group();indicators.name='sky-city-observatory-indicator-row';
+  for(let i=0;i<5;i++){
+    const lamp=new Mesh(new BoxGeometry(.16,.13,.07),indicatorMaterial);
+    lamp.position.set((i-2)*.29,deckY+1.85,observatoryZ+3.08);indicators.add(lamp);
+  }
+  group.add(indicators);
 
   const door = new Group();
   door.name = 'sky-city-locked-gate';
@@ -223,6 +236,9 @@ export function buildSkyCityTower() {
   const mark = createTownChronicleDoorRing(.73, .86);
   mark.position.set(0, 1.69, gateDepth / 2 + .011);
   door.add(mark);
+  const ringGlowMaterial=new MeshStandardMaterial({color:'#8baba2',emissive:'#82d8c8',emissiveIntensity:.04,roughness:.6});
+  const ringGlow=new Mesh(new TorusGeometry(.82,.014,5,36),ringGlowMaterial);
+  ringGlow.name='sky-city-door-ring-state-trace';ringGlow.position.set(0,1.69,gateDepth/2+.022);door.add(ringGlow);
   group.add(door);
   for (const x of [-1.64, 1.64]) {
     const jamb = { x, y: deckY + 1.58, z: gate[2] + .09, width: .55, height: 3.16, depth: .83 };
@@ -281,5 +297,13 @@ export function buildSkyCityTower() {
   const route: readonly Point[] = [[0, 0, -25], polar(stairCenter, -.08, 0), ...Array.from({ length: stairCount },
     (_unused, i) => polar(stairCenter, (i + .5) * stairTurn, (i + 1) * stairRise)),
   polar(stairCenter, stairEnd + .11, deckY), [-3.8, deckY, -29.65], [0, deckY, -29.65], [0, deckY, -34.65]];
-  return { group, supportAt, blocked, route, gate };
+  let dream=false;
+  function setDreamPresentation(active:boolean){
+    dream=active;indicatorMaterial.emissiveIntensity=active?.65:0;
+    ringGlowMaterial.emissiveIntensity=active?.65:.04;
+    if(!active){dishMotion.rotation.y=0;ringGlow.rotation.z=0;}
+  }
+  return { group, supportAt, blocked, route, gate, setDreamPresentation,
+    update(seconds:number){if(dream){dishMotion.rotation.y=seconds*.12;indicatorMaterial.emissiveIntensity=.45+.2*Math.sin(seconds*2);ringGlow.rotation.z=seconds*.14;}}
+  };
 }

@@ -5,6 +5,7 @@ import {
   type StarportAssemblyPart, type StarportAssemblyState,
 } from '../../../src/shared/starport-assembly';
 import { buildStarportAssemblyRack } from './starport-assembly-rack';
+import { mountStarportCooperationStaging } from './starport-cooperation-staging';
 
 type Target = StarportAssemblyPart | 'ignition';
 const targetNames = [...starportAssemblyParts, 'ignition'] as const;
@@ -23,6 +24,7 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
   const { group } = rack;
   group.position.set(anchor.east, anchor.height, -anchor.north);
   owner.add(group);
+  const staging=mountStarportCooperationStaging(owner,anchor);
 
   const panelGeometry = new BoxGeometry();
   const panelMaterial = new MeshLambertMaterial({ color: '#414e4d' });
@@ -75,9 +77,11 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
   }
 
   return {
-    group, site, targets, aim,
+    group, site, targets, aim, staging,
     blocked(feet: AircraftPoint, radius: number, bodyHeight: number) {
-      if (disposed || feet.height + bodyHeight - .025 <= envelope.height ||
+      if(disposed)return false;
+      if(staging.blocked(feet,radius,bodyHeight))return true;
+      if (feet.height + bodyHeight - .025 <= envelope.height ||
           feet.height + .025 >= envelope.height + envelope.tall) return false;
       const east = Math.max(Math.abs(feet.east - envelope.east) - envelope.width / 2, 0);
       const north = Math.max(Math.abs(feet.north - envelope.north) - envelope.depth / 2, 0);
@@ -92,6 +96,7 @@ export function mountStarportAssemblySite(owner: Object3D, anchor: AircraftPoint
       if (disposed) return;
       disposed = true;
       rack.dispose();
+      staging.dispose();
       panelGeometry.dispose();
       panelMaterial.dispose();
       indicatorMaterial.dispose();

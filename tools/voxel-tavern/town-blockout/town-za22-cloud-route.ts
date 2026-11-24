@@ -12,15 +12,20 @@ import { createNorthRidgeCableClock } from './north-ridge-cable-clock';
 import { createNorthRidge350Block, northRidgeCableAnchors, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { mountZa22MountainGate, za22GateSeamNorth } from './town-za22-mountain-gate';
 import { mountStarportAssemblySite } from './starport-assembly-site';
+import { mountNorthRidgeMiddleStation, middleStationFoot, middleStationWaitingPoints } from './north-ridge-middle-station';
 
 type Point = Readonly<{ east: number; north: number; height: number }>;
 type Terminal = 'base' | 'summit';
+type BoardingStop=Terminal|'middle-up'|'middle-down';
 type Action = { label: string; run(): void };
 type Host = {
   now(): number;
   enterOrExit(terminal: Terminal, at: Point): void;
   view(title: string, message: string): void;
   cloudStamp?: { available(): boolean; request(): void };
+  /** A window must first mount the town-side deck and fold its supported
+   * surface/collision into the public host. No middle stop before that. */
+  middleStationReady?():boolean;
   /** Opt in only after the public host uses the same G-09 authoritative clock. */
   cableWeather?: Pick<ReturnType<typeof createTownCableWindClock>, 'scaledNow' | 'statusAt'>;
 };
@@ -100,6 +105,7 @@ export function createZa22NorthRidgeLine(baseHeight: number) {
     const side = index === 0 ? -1.55 : 1.55;
     return {
       at: { ...at, east: at.east + side }, direction: descending ? 'down' as const : 'up' as const,
+      distanceMetres:state.distanceMetres,
       station: legPhase < terminalDwell ? descending ? 'summit' as const : 'base' as const : state.station,
       boarding: legPhase < terminalDwell ? descending ? 'summit' as const : 'base' as const : undefined,
       arrivalAt: now + legMs - legPhase,
@@ -142,8 +148,12 @@ export function createZa22CloudRoute(host: Host) {
   let world: ReturnType<typeof mountMountain> | undefined;
   let night = false;
   let mode: 'town' | 'riding' | 'summit' = 'town';
-  let pending: Terminal | undefined;
-  let ride: { index: 0 | 1; arrivalAt: number; to: Terminal } | undefined;
+  let pending: BoardingStop | undefined;
+  let ride: { index: 0 | 1; arrivalAt: number; to: Terminal; middleExit?:boolean } | undefined;
+  const isMiddle=(stop:BoardingStop)=>stop==='middle-up'||stop==='middle-down';
+  const readyMiddle=()=>!night&&host.middleStationReady?.()===true;
+  const boardingFoot=(stop:BoardingStop)=>stop==='middle-up'?middleStationWaitingPoints.up:
+    stop==='middle-down'?middleStationWaitingPoints.down:stop==='base'?za22StationApproach:cloudTerminal;
 
   function mountMountain() {
     const owner = new Group();
@@ -153,6 +163,8 @@ export function createZa22CloudRoute(host: Host) {
     owner.add(front);
     const terrain = createNorthRidge350Block(sampleNorthRidge350, 4);
     front.add(terrain.mesh);
+    const middleStation = mountNorthRidgeMiddleStation(front);
+    middleStation.setNight(night);
     const assembly = mountMainSummitAssembly(owner, fullEpoch);
     const extras = mountMainSummitExtras(assembly);
     extras.setNight(night);
@@ -229,7 +241,7 @@ export function createZa22CloudRoute(host: Host) {
     for (let east = 302; east < 336; east += 2) {
       box(front, iron, east, 663.25, sampleNorthRidge350(east, 663.25), .36, .64, .043);
     }
-    return { owner, terrain, assembly, extras, gate, cabins, front, starport, boxGeometry, materials: [iron, brass, wood, stone] };
+    return { owner, terrain, assembly, extras, gate, cabins, front, starport, middleStation, boxGeometry, materials: [iron, brass, wood, stone] };
   }
 
   function disposeMountain() {
@@ -238,6 +250,7 @@ export function createZa22CloudRoute(host: Host) {
     world.extras.dispose();
     world.assembly.dispose();
     world.starport.dispose();
+    world.middleStation.dispose();
     world.terrain.dispose();
     world.boxGeometry.dispose();
     world.materials.forEach(material => material.dispose());
@@ -253,9 +266,10 @@ export function createZa22CloudRoute(host: Host) {
     world = undefined;
   }
 
-  function boardingAction(from: Terminal): Action {
+  function boardingAction(from: BoardingStop): Action {
     const status = host.cableWeather?.statusAt(host.now());
-    const destination = from === 'base' ? '云海台' : '山脚站';
+    const destination = from === 'base'||from==='middle-up' ? '云海台' : '山脚站';
+    if(isMiddle(from)&&!readyMiddle())return {label:'中山站 · 暂不办理上下车',run(){}};
     if (pending) return {
       label: status?.canBoard === false ? '暴风雪候车中 · 取消候车'
         : from === 'base' ? '等候前山缆车 · 取消候车' : '等候返程缆车 · 取消候车',
@@ -268,7 +282,8 @@ export function createZa22CloudRoute(host: Host) {
     return {
       label: status?.rate !== undefined && status.rate < 1
         ? `大风减速 · 乘缆车前往${destination}`
-        : from === 'base' ? '乘缆车一线前往云海台' : '乘缆车一线返回山脚站',
+        : from === 'middle-up'?'中山站 · 乘上山车':from==='middle-down'?'中山站 · 乘下山车':
+          from === 'base' ? '乘缆车一线前往云海台' : '乘缆车一线返回山脚站',
       run() { pending = from; },
     };
   }
@@ -276,6 +291,10 @@ export function createZa22CloudRoute(host: Host) {
   function action(position: Point): Action | undefined {
     if (mode === 'riding') return;
     if (mode === 'town') {
+      if(readyMiddle()){
+        if(near(position,middleStationWaitingPoints.up,1.45))return boardingAction('middle-up');
+        if(near(position,middleStationWaitingPoints.down,1.45))return boardingAction('middle-down');
+      }
       if (!near(position, za22StationApproach, 1.55)) return;
       return boardingAction('base');
     }
@@ -311,19 +330,28 @@ export function createZa22CloudRoute(host: Host) {
     const realNow = host.now();
     const now = host.cableWeather?.scaledNow(realNow) ?? realNow;
     const weatherSafeToBoard = host.cableWeather?.statusAt(realNow).canBoard ?? true;
-    if (pending && (!canBoard || !near(position, pending === 'base' ? za22StationApproach : cloudTerminal, 1.8))) pending = undefined;
+    if (pending && (!canBoard || !near(position, boardingFoot(pending), 1.8)||isMiddle(pending)&&!readyMiddle())) pending = undefined;
     // During whiteout the line clock is frozen; waiting is a cancellable
     // station action rather than an involuntary transfer or teleport.
     if (pending && !ride && weatherSafeToBoard) {
       const from = pending;
-      const index = ([0, 1] as const).find(candidate => line.timeline(now, candidate).boarding === from);
+      const index = ([0, 1] as const).find(candidate => {
+        const trip=line.timeline(now,candidate);
+        return isMiddle(from)?readyMiddle()&&trip.station==='middle'&&trip.direction===(from==='middle-up'?'up':'down'):
+          trip.boarding===from;
+      });
       if (index !== undefined) {
         world ??= mountMountain();
         pending = undefined;
         const trip = line.timeline(now, index);
-        ride = { index, arrivalAt: trip.arrivalAt, to: from === 'base' ? 'summit' : 'base' };
+        ride = { index, arrivalAt: trip.arrivalAt, to: from === 'base'||from==='middle-up' ? 'summit' : 'base' };
         mode = 'riding';
       }
+    }
+    // Mid-platform belongs to the existing town room (N520 < mountain
+    // domain N540). Exit only through the host's accepted ground transfer.
+    if(ride?.middleExit&&readyMiddle()&&line.timeline(now,ride.index).station==='middle'){
+      ride=undefined;mode='town';host.enterOrExit('base',middleStationFoot);disposeMountain();
     }
     if (ride && now >= ride.arrivalAt) {
       const to = ride.to;
@@ -355,6 +383,15 @@ export function createZa22CloudRoute(host: Host) {
 
   return {
     scene, action, update, updateView,
+    middleStationFoot, middleStationWaitingPoints,
+    // Called by the single-write public viewer from a real cabin action.
+    requestMiddleExit(){
+      if(!ride||!readyMiddle())return false;
+      const now=host.cableWeather?.scaledNow(host.now())??host.now();
+      const trip=line.timeline(now,ride.index);
+      if(trip.direction==='up'?trip.distanceMetres>line.lowerMetres+.01:trip.distanceMetres<line.lowerMetres-.01)return false;
+      ride.middleExit=true;return true;
+    },
     active: () => mode !== 'town',
     riding: () => ride !== undefined,
     ridePoint() {
@@ -372,6 +409,7 @@ export function createZa22CloudRoute(host: Host) {
     setNight(value: boolean) {
       night = value;
       world?.extras.setNight(value);
+      world?.middleStation.setNight(value);
     },
     front: () => world?.front,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
