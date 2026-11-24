@@ -1,0 +1,155 @@
+{
+  "survey": {
+    "lip": {
+      "t": 0,
+      "east": -71.53351673578946,
+      "north": 159,
+      "height": 10.777305603027344
+    },
+    "floor": {
+      "east": -135.8617581591962,
+      "north": 193.5090909090909,
+      "height": -24.222694396972656
+    },
+    "center": {
+      "east": -120,
+      "north": 185
+    },
+    "floorHeight": -24.222694396972656,
+    "knots": 105
+  },
+  "legalWindow": {
+    "phase": "night-window",
+    "shift": "night",
+    "canEnterRestricted": true,
+    "layersOverlap": true,
+    "chapterGatesLocked": true,
+    "beaconAt": 1795518716398,
+    "morningBellAt": 1795518896398,
+    "now": 1795518716568
+  },
+  "visited": 105,
+  "complete": true,
+  "measurements": [
+    {
+      "label": "b2-floor-facing-rim-night",
+      "phase": "night",
+      "lightingAfter": "雪夜",
+      "stationary": {
+        "hud": "东 -136.0 m · 北 193.5 m · 行走",
+        "cameraY": -22.572694396972658,
+        "action": "长按采雪",
+        "status": "已连接 · 1 人",
+        "east": -136,
+        "north": 193.5,
+        "height": -24.22
+      },
+      "wire": {
+        "ms": 1795518844303,
+        "east": -135.97,
+        "north": 193.52,
+        "area": "west",
+        "height": -24.22,
+        "yaw": 5.203933949102795,
+        "seq": 1318
+      },
+      "durationMs": 20006.29999999999,
+      "frameCount": 2534,
+      "rafFps": 126.6601020678487,
+      "meanFrameMs": 7.894948697711124,
+      "p95FrameMs": 16.699999999982538,
+      "rendererInfoSamples": 2535,
+      "drawsMean": 77,
+      "drawsP95": 77,
+      "trianglesMean": 265981,
+      "trianglesP95": 265981,
+      "pointsMean": 799,
+      "metricSource": "renderer.info.render via real town-frame-profile event",
+      "cadenceSource": "native Chromium requestAnimationFrame, 20-second stationary interval"
+    },
+    {
+      "label": "b2-floor-facing-rim-day",
+      "phase": "day",
+      "lightingAfter": "白昼",
+      "stationary": {
+        "hud": "东 -136.0 m · 北 193.5 m · 行走",
+        "cameraY": -22.572694396972658,
+        "action": "长按采雪",
+        "status": "已连接 · 1 人",
+        "east": -136,
+        "north": 193.5,
+        "height": -24.22
+      },
+      "wire": {
+        "ms": 1795518844303,
+        "east": -135.97,
+        "north": 193.52,
+        "area": "west",
+        "height": -24.22,
+        "yaw": 5.203933949102795,
+        "seq": 1318
+      },
+      "durationMs": 20003.100000000006,
+      "frameCount": 2950,
+      "rafFps": 147.47714104313826,
+      "meanFrameMs": 6.78020338983051,
+      "p95FrameMs": 16.60000000000582,
+      "rendererInfoSamples": 2951,
+      "drawsMean": 77,
+      "drawsP95": 77,
+      "trianglesMean": 265981,
+      "trianglesP95": 265981,
+      "pointsMean": 799,
+      "metricSource": "renderer.info.render via real town-frame-profile event",
+      "cadenceSource": "native Chromium requestAnimationFrame, 20-second stationary interval"
+    }
+  ],
+  "note": "Only the original player view and real server poses. Visual day/night switch is not permission.",
+  "lightCount": null,
+  "lightEvidence": "The production renderer profile exposes draws/tris/points, not scene light counts.",
+  "last": {
+    "t": 1,
+    "actual": {
+      "hud": "东 -137.7 m · 北 194.3 m · 行走",
+      "cameraY": -22.55008213672139,
+      "action": "长按采雪",
+      "status": "已连接 · 1 人",
+      "east": -137.7,
+      "north": 194.3,
+      "height": -24.2
+    },
+    "expected": {
+      "t": 1,
+      "east": -137.62417573244022,
+      "north": 194.45454545454544,
+      "height": -24.22269439236924
+    },
+    "wire": {
+      "ms": 1795518842501,
+      "east": -137.75,
+      "north": 194.15,
+      "area": "west",
+      "height": -24.200000000000003,
+      "yaw": 0.4537706918164212,
+      "seq": 1300
+    }
+  },
+  "floorPose": {
+    "hud": "东 -136.0 m · 北 193.5 m · 行走",
+    "cameraY": -22.572694396972658,
+    "action": "长按采雪",
+    "status": "已连接 · 1 人",
+    "east": -136,
+    "north": 193.5,
+    "height": -24.22
+  },
+  "floorWire": {
+    "ms": 1795518844303,
+    "east": -135.97,
+    "north": 193.52,
+    "area": "west",
+    "height": -24.22,
+    "yaw": 5.203933949102795,
+    "seq": 1318
+  }
+}
