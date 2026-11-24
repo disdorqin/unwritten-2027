@@ -633,6 +633,7 @@ try {
     },positionPattern.source,{timeout:45000});
     // Surveyed outside the crater (r>61.5), with 0.65m collision padding.
     await follow(page,evidence,[[-12,159],[-43,159],[-67,159],[-68,142],[-98,127],[-110,124],[-126,123],[-152,124]],'smelter-native-walk');
+    await page.waitForFunction(()=>document.querySelector('#position')?.textContent?.includes('行走'),null,{timeout:5000});
     const p=await readPose(page);
     assert.ok(p.hud.includes('行走'),'smelter observation requires grounded feet');
     const target={east:-159.951164,north:106.591426,height:20.777306};
