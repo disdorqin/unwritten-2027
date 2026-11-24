@@ -233,7 +233,7 @@ async function face(page, evidence, desired) {
 }
 
 // Native vertical mouse drag, matching desktop-look's -dy*.003.
- // Call only after a normal destination jump (pitch=0), and yaw-only walking.
+// Pass the desired pitch delta; after a normal destination jump pitch=0.
 async function tiltFromLevel(page, radians) {
   let remaining=Math.round(-radians/.003);
   while(remaining){
@@ -650,7 +650,22 @@ try {
     await page.locator('#lighting').click();
     await page.locator('#town-settings-close').click();
     await snapshot(page,evidence,'smelter-front-day');
-    report.b90Smelter={actual:p,target,pitch,canvasVisible:await page.locator('#scene canvas').isVisible()};
+    // A second, wider three-quarter eye makes the independent furnace and
+    // roof silhouette visible. The route is on the same outside-bowl belt.
+    await follow(page,evidence,[[-180,137]],'smelter-wide-native-walk');
+    await page.waitForFunction(()=>document.querySelector('#position')?.textContent?.includes('行走'),null,{timeout:5000});
+    const wide=await readPose(page);
+    assert.ok(wide.hud.includes('行走'));
+    const wideTarget={east:-165,north:106.59,height:20.777306};
+    await face(page,evidence,Math.atan2(wideTarget.east-wide.east,wideTarget.north-wide.north));
+    const widePitch=Math.atan2(wideTarget.height-wide.cameraY,Math.hypot(wideTarget.east-wide.east,wideTarget.north-wide.north));
+    await tiltFromLevel(page,widePitch-Math.round(pitch/.003)*.003);
+    await snapshot(page,evidence,'smelter-wide-day');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'smelter-wide-night');
+    report.b90Smelter={actual:p,target,pitch,wide,wideTarget,widePitch,canvasVisible:await page.locator('#scene canvas').isVisible()};
   }
   if (segment === 'a6-perf') {
     const {page,evidence}=await openTown('a6-perf');

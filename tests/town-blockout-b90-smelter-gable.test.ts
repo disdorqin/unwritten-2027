@@ -25,7 +25,7 @@ test('B90 smelter: real roof vertices follow both long-axis slopes, not disconne
   assert.ok(left>1000&&right>1000,JSON.stringify({left,right}));
 });
 test('B90 smelter: outside-bowl approach clears registered structural boxes, nine facade rays unobstructed',()=>{
-  const route=[[-68,142],[-98,127],[-110,124],[-126,123],[-152,124]];
+  const route=[[-68,142],[-98,127],[-110,124],[-126,123],[-152,124],[-180,137]];
   for(let j=1;j<route.length;j++){
     const a=route[j-1],b=route[j],steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])*4);
     for(let i=0;i<=steps;i++){
