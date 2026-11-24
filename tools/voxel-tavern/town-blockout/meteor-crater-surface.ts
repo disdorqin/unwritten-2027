@@ -3,6 +3,7 @@ import {
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterRimRadius,
+  type MeteorCraterOptions,
 } from './meteor-crater';
 import { mountCraterInteriorDressing } from './meteor-crater-interior-dressing.js';
 import { mountCraterFloorWorklightChain } from './meteor-crater-floor-worklight-chain.js';
@@ -15,16 +16,20 @@ export type MeteorCraterWorldAnchor = Readonly<{
   yaw: number;
 }>;
 
-const crater = createMeteorCrater(meteorCraterFixturePlan);
+const neutralCrater = createMeteorCrater(meteorCraterFixturePlan);
 const shaftRadius = meteorCraterRimRadius / 30;
 const coveredRadius = shaftRadius + .03;
 
 /** Render and walk the same surveyed B-01 triangles on the ground layer. */
-export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
+export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
+  options: MeteorCraterOptions = {}) {
   const { east, north, rimHeight, yaw } = anchor;
   if (![east, north, rimHeight, yaw].every(Number.isFinite)) {
     throw new RangeError('A live crater mount requires a finite B-01 anchor.');
   }
+  const crater = options.centralMound
+    ? createMeteorCrater(meteorCraterFixturePlan, options)
+    : neutralCrater;
   const c = Math.cos(yaw), s = Math.sin(yaw);
   const group = new Group();
   group.name = 'meteor-crater-surface';
@@ -96,7 +101,9 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor) {
   function heightAt(worldEast: number, worldNorth: number) {
     const dx = worldEast - east, dn = worldNorth - north;
     const fixtureEast = dx * c - dn * s, fixtureNorth = dx * s + dn * c;
-    const height = surface.heightAt(fixtureEast, fixtureNorth);
+    const height = options.centralMound
+      ? crater.heightOffsetAt(fixtureEast, fixtureNorth)
+      : surface.heightAt(fixtureEast, fixtureNorth);
     if (height !== undefined) return rimHeight + height;
     if (Math.hypot(fixtureEast, fixtureNorth) <= shaftRadius) return rimHeight - meteorCraterDepth;
   }

@@ -1,6 +1,6 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
+import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
 import { mountZa31CraterCamp } from './town-za31-crater-camp';
@@ -17,6 +17,17 @@ import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 import { buildCraterDensityA2 } from './town-crater-density-a2';
 import { buildCraterColliders } from './town-crater-colliders';
 import { mountZa31CraterLampRoom } from './town-za31-crater-lamp-room';
+import {
+  createTownC2CraterCentralMound, mountTownC2CraterCentralMound,
+} from './town-c2-crater-central-mound';
+import { buildTownC2CraterBrokenCircle } from './town-c2-crater-broken-circle';
+import {
+  mountC2CraterMoltenBeads, updateC2CraterMoltenBeads,
+} from './town-c2-crater-molten-beads';
+import { mountC2CraterInscription } from './town-c2-crater-inscription';
+import {
+  mountCraterWarmLightChain, surveyCraterWarmLightChain,
+} from './town-c2-crater-warm-light-chain';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -46,6 +57,11 @@ type WestCraterRoad = {
   readonly densityA2: ReturnType<typeof buildCraterDensityA2>;
   readonly ropeStay: ReturnType<typeof mountZa36RopeStay> | undefined;
   readonly surveyM1: ReturnType<typeof buildCraterSurveyM1> | undefined;
+  readonly centralMound: ReturnType<typeof mountTownC2CraterCentralMound>;
+  readonly brokenCircle: ReturnType<typeof buildTownC2CraterBrokenCircle>;
+  readonly moltenBeads: ReturnType<typeof mountC2CraterMoltenBeads>;
+  readonly inscription: ReturnType<typeof mountC2CraterInscription>;
+  readonly warmLightChain: ReturnType<typeof mountCraterWarmLightChain>;
   readonly craterActions: {
     actions: CraterActionSpot[];
     actionAt(east: number, north: number, height: number): CraterActionSpot | undefined;
@@ -68,7 +84,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const approachBearing = Math.atan2(Math.sqrt(meteorCraterRimRadius ** 2 - northOffset ** 2), northOffset);
   const yaw = approachBearing - meteorCraterFixturePlan.mainTrail.startBearing;
   const anchor = { east: survey.east, north: survey.north, rimHeight, yaw };
-  const crater = mountMeteorCraterSurface(anchor);
+  const neutralCrater = createMeteorCrater(meteorCraterFixturePlan);
+  const centralMoundModel = createTownC2CraterCentralMound(anchor);
+  const crater = mountMeteorCraterSurface(anchor, { centralMound: centralMoundModel });
   const surface = crater.group.getObjectByName('meteor-crater-walk-mesh');
   if (!surface || !(surface as Mesh).isMesh) throw new Error('B-01 crater walk surface absent');
   const paletteEnabled = options.za34DistantPaletteCandidate !== false;
@@ -79,6 +97,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   if (paletteAudit) group.userData.za34DistantPaletteAudit = paletteAudit;
   group.userData.za34DistantPaletteEnabled = paletteEnabled;
   group.add(crater.group);
+  const centralMound = mountTownC2CraterCentralMound(group, anchor, {
+    floorHeightAtLocal: (east, north) => neutralCrater.heightOffsetAt(east, north),
+  });
 
   const tileGround = new MeshStandardMaterial({ color: 0xc1cedc, roughness: 1 });
   const eastCount = -survey.west + 1;
@@ -185,6 +206,11 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const story = buildZa36CraterStoryDressing(road,
     lampRoom ? [lampRoom.footprint] : []);
   group.add(story.group);
+  const brokenCircle = buildTownC2CraterBrokenCircle(road, {
+    oldWorkPlacements: story.placements.filter(piece => piece.cluster.startsWith('old-work-')),
+  });
+  group.add(brokenCircle.group);
+  road.heightAt = brokenCircle.heightAt;
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
@@ -239,6 +265,16 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   if (ropeStay) group.add(ropeStay.group);
   const surveyM1 = buildCraterSurveyM1(road);
   if (surveyM1) group.add(surveyM1.group);
+  const moltenBeads = mountC2CraterMoltenBeads(road);
+  group.add(moltenBeads.group);
+  const moltenEarth = moltenBeads.group.getObjectByName('c2-molten-beads-scorched-earth');
+  if (moltenEarth instanceof Mesh) {
+    moltenEarth.onBeforeRender = (_renderer, _scene, camera) => {
+      updateC2CraterMoltenBeads(moltenBeads, { cameraPosition: camera.position, night: c2Night });
+    };
+  }
+  const warmLightChain = mountCraterWarmLightChain(group, surveyCraterWarmLightChain(road));
+  let c2Night = false;
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
   // mounts' own placements. The viewer's geometry index still has to
@@ -253,6 +289,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     dressing: story.placements,
     extra: lampRoom?.boxes,
   });
+  const inscription = mountC2CraterInscription(group, { ...road, ejecta });
   // Salvage ①: one E-action surface for the crater — the mouth-works
   // spots (registration / map / telescope / firewood) plus the M1 station.
   const surveySpot: CraterActionSpot | undefined = surveyM1 ? {
@@ -270,10 +307,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     },
     firewood: mouthWorks.firewood,
     setNight(night: boolean) {
+      c2Night = night;
       mouthWorks.setNight(night);
       outerWorks.setNight(night);
       crater.floorWorklights.setNight(night);
+      warmLightChain.setNight(night);
     },
   };
-  return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
+  return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
+    centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, craterActions };
 }

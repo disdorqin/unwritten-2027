@@ -16,6 +16,10 @@ import { mountUndergroundExpeditionCampScene } from './underground-expedition-ca
 import { mountUndergroundMainlineScene } from './underground-mainline-scene.js';
 import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {
+  mountTownC2UndergroundWaterMinus90,
+  type UndergroundWater90Authority, type UndergroundWater90OreVisual,
+} from './town-c2-underground-water-minus90.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -61,6 +65,12 @@ type Host = Readonly<{
   expeditionRuntime?: Omit<Parameters<typeof mountUndergroundExpeditionCampScene>[0], 'parent'>;
   /** U-19's entire 120m rail exists only if the real U-15 host certifies its mainline survey. */
   mainlineRuntime?: Omit<Parameters<typeof mountUndergroundMainlineScene>[0], 'parent'>;
+  /** C2-06 visual-only water adapter; absent means the certified baseline stays untouched. */
+  waterRuntime?: Readonly<{
+    highWaterOffsetM: number;
+    readWater?: () => UndergroundWater90Authority | null | undefined;
+    oreVisuals?: readonly UndergroundWater90OreVisual[];
+  }>;
   /** Read the accepted gate stage from its sole movement authority. Unknown means closed. */
   readGateStage?(): UndergroundMineGateStage | undefined;
   /** Host-approved light budget and offering receipts; never grant light from render state. */
@@ -136,6 +146,7 @@ export function mountUndergroundMineDomain(host: Host) {
     }),
   };
   const geometries: BufferGeometry[] = [];
+  let waterMesh: Mesh | undefined;
   for (const surface of ['rock', 'rail', 'water'] as const) {
     const vertices = mine.mesh[surface];
     if (!(vertices instanceof Float32Array) || vertices.length < 9 || vertices.length % 9 !== 0 ||
@@ -151,6 +162,7 @@ export function mountUndergroundMineDomain(host: Host) {
     const mesh = new Mesh(geometry, materials[surface]);
     mesh.name = 'underground-mine-' + surface;
     root.add(mesh);
+    if (surface === 'water') waterMesh = mesh;
   }
 
   let staticCamp: ReturnType<typeof createUndergroundCampRemains> | undefined;
@@ -197,6 +209,14 @@ export function mountUndergroundMineDomain(host: Host) {
   }
   const workfaces=mountFirstMineWorkfaces(root,mine.workfaces,mine.supportStation);
   const deepWorks=mountFirstMineDeepWorks(root,mine.expansion?.deepWorks===true);
+  const waterOverlay = host.waterRuntime && waterMesh
+    ? mountTownC2UndergroundWaterMinus90({
+      parent: root, mine, waterMesh,
+      highWaterOffsetM: host.waterRuntime.highWaterOffsetM,
+      readWater: host.waterRuntime.readWater,
+      oreVisuals: host.waterRuntime.oreVisuals,
+    })
+    : undefined;
   parent.add(root);
   // The pump room uses a distinct certified ENY site in the between-layer passage,
   // not the mine-local pool frame. Missing site/foot approval leaves it unmounted.
@@ -223,6 +243,7 @@ export function mountUndergroundMineDomain(host: Host) {
     expedition,
     mainline: mainline?.kind === 'ready' ? mainline : undefined,
     mainlineStatus: mainline?.kind ?? 'unregistered',
+    waterOverlay,
     /** Caller sends the E request only to the registered and current camp action. */
     campPrompt: () => interactiveCamp?.prompt(),
     pressCamp: async (expectedId: string) => interactiveCamp
@@ -245,6 +266,7 @@ export function mountUndergroundMineDomain(host: Host) {
       if (pumpHouse?.kind === 'ready') pumpHouse.sync();
       expedition?.sync();
       if (mainline?.kind === 'ready') mainline.sync();
+      waterOverlay?.sync();
       if (host.oreRuntime) {
         const snapshot = new Map(host.oreRuntime.readTargets().map(target => [target.id, target]));
         for (const [id, vein] of veins) {
@@ -271,6 +293,7 @@ export function mountUndergroundMineDomain(host: Host) {
       if (pumpHouse?.kind === 'ready') pumpHouse.dispose();
       expedition?.dispose();
       if (mainline?.kind === 'ready') mainline.dispose();
+      waterOverlay?.dispose();
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       workfaces.dispose();
