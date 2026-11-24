@@ -1,5 +1,6 @@
 /** Placement inventory ONLY. Existing water/encounter rotation and spawn authority are untouched.
  * Source: 设计-地下遭遇组逐层配表-2026-11-22, batch 56; batch 94 retains GPT-C scope. */
+import {secondMineDrySites} from './underground-second-mine-dry-wings.js';
 export type EncounterLayer='90-main'|'90-crystal'|'140'|'165'|'190';
 type Family={id:string;layer:EncounterLayer;species:string;habitats:readonly string[];members:readonly [number,number];spacing?:readonly [number,number];safeDistance?:number};
 const families:readonly Family[]=[
@@ -18,10 +19,21 @@ const families:readonly Family[]=[
 ];
 type Point=Readonly<{east:number;north:number}>;
 const local140:readonly Point[]=[{east:-42,north:124},{east:42,north:124},{east:-44,north:149},{east:44,north:149}];
+const cityStone:readonly Point[]=[{east:30,north:-5},{east:55,north:5},{east:118,north:-19}];
+const cityPatrol:readonly Point[]=[{east:13,north:-3},{east:13,north:3}];
+function localCandidate(family:string,i:number){
+  if(family==='140-A')return {frame:'second-mine-local-candidate' as const,at:Object.values(secondMineDrySites)[i]};
+  if(family==='140-B')return {frame:'second-mine-local-candidate' as const,at:local140[i]};
+  if(family==='165-A')return {frame:'warrior-city-local-candidate' as const,at:cityStone[i]};
+  if(family==='165-B')return {frame:'warrior-city-local-candidate' as const,at:cityPatrol[i],
+    patrol:[cityPatrol[i],{east:82,north:cityPatrol[i].north}]};
+  if(family==='165-C')return {frame:'warrior-city-local-candidate' as const,at:{east:171,north:-4.5}};
+  return undefined;
+}
 export const encounterPlacementPlan=families.flatMap(f=>f.habitats.map((habitat,i)=>Object.freeze({
   id:f.id+'-'+String(i+1).padStart(2,'0'),family:f.id,layer:f.layer,species:f.species,habitat,members:f.members,
   spacing:f.spacing,safeDistance:f.safeDistance,
-  candidate:f.id==='140-B'?{frame:'second-mine-local-candidate' as const,at:local140[i]}:undefined,
+  candidate:localCandidate(f.id,i),
   status:'awaiting-registered-survey' as const,
 })));
 /** No method here promotes an unregistered point into a live spawn. */
