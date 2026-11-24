@@ -14,6 +14,7 @@ import { createUndergroundRecoveryFirePresentation, type UndergroundRecoveryFire
 import { mountUndergroundPumpHouseScene } from './underground-pump-house-scene.js';
 import { mountUndergroundExpeditionCampScene } from './underground-expedition-camp-scene.js';
 import { mountUndergroundMainlineScene } from './underground-mainline-scene.js';
+import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
@@ -193,6 +194,7 @@ export function mountUndergroundMineDomain(host: Host) {
     veins.set(target.id, vein);
     root.add(vein.group);
   }
+  const workfaces=mountFirstMineWorkfaces(root,mine.workfaces,mine.supportStation);
   parent.add(root);
   // The pump room uses a distinct certified ENY site in the between-layer passage,
   // not the mine-local pool frame. Missing site/foot approval leaves it unmounted.
@@ -212,6 +214,7 @@ export function mountUndergroundMineDomain(host: Host) {
     group: root,
     poolWorld: { east: landing.east, north: landing.north, height: landing.height },
     camp: interactiveCamp?.camp ?? staticCamp,
+    workfaces,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
     expedition,
@@ -267,6 +270,7 @@ export function mountUndergroundMineDomain(host: Host) {
       if (mainline?.kind === 'ready') mainline.dispose();
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
+      workfaces.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
     },
