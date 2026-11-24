@@ -1,0 +1,143 @@
+{
+  "scope": "local unregistered -165 candidate; existing assets composed; no authority",
+  "errors": [],
+  "views": {
+    "gate": {
+      "frames": 6,
+      "view": "gate",
+      "eye": [
+        1,
+        1.67,
+        0
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 90,
+      "fps": 5.518763796932184
+    },
+    "street": {
+      "frames": 13,
+      "view": "street",
+      "eye": [
+        26,
+        1.67,
+        0
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 114,
+      "fps": 4.358028830036876
+    },
+    "square": {
+      "frames": 20,
+      "view": "square",
+      "eye": [
+        86,
+        1.67,
+        2
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 92,
+      "fps": 4.187166335182665
+    },
+    "tavern": {
+      "frames": 29,
+      "view": "tavern",
+      "eye": [
+        125,
+        1.67,
+        -16
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 28,
+      "fps": 4.653476467852009
+    },
+    "forge": {
+      "frames": 35,
+      "view": "forge",
+      "eye": [
+        142,
+        1.67,
+        -3.6
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 69,
+      "fps": 4.922921120742284
+    },
+    "market": {
+      "frames": 42,
+      "view": "market",
+      "eye": [
+        124,
+        1.67,
+        15
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 46,
+      "fps": 5.379098360655738
+    },
+    "exit": {
+      "frames": 50,
+      "view": "exit",
+      "eye": [
+        171,
+        1.67,
+        0
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "shell": 7067,
+      "instanced": 16745,
+      "calls": 16,
+      "fps": 5.747522817666571
+    }
+  },
+  "passed": true,
+  "walk": {
+    "frames": 4,
+    "view": "gate",
+    "eye": [
+      9.999999999999982,
+      1.67,
+      -1.9984014443252782e-15
+    ],
+    "trustedW": 1,
+    "walked": 8.999999999999984,
+    "rejected": 0,
+    "clear": true,
+    "shell": 7067,
+    "instanced": 16745,
+    "calls": 113,
+    "fps": 4.874482086269482
+  }
+}
