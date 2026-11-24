@@ -1,5 +1,6 @@
 import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,MeshLambertMaterial,NearestFilter,Object3D,PointLight,SRGBColorSpace} from 'three';
 import {createStaticFootIndex} from './town-c-static-foot-index.js';
+import {warriorSafetyPocket} from '../../../src/shared/town-c-warrior-safety-pocket.js';
 /** U10 city ENY local frame. Existing houses, statue, forge, arcade and wall remain separate reusable modules.
  * This shell supplies only missing street, gates, tavern, square paving and enclosing rock. No registration/loot/teleport. */
 type Family='stone'|'shade'|'tan'|'wood'|'moss'|'rust'|'crystal'|'moon';
@@ -116,6 +117,35 @@ for(let i=0;i<9;i++)p('tavern/rear-shelf/'+i,'wood',te-4+i,24.13,2.15,.99,.16,.6
 // Broken cold-transition wall edges leave the last approach open.
 for(let e=168;e<180;e+=.8)for(const s of [-1,1])for(let j=0;j<5;j++)
  p('cold-transition/'+e+'/'+s+'/'+j,j%3?'shade':'stone',e,s*(7.8+j*.53),.26+j*.22,.76,.5+j*.24,.78,true);
+// The cold-flame street has eight small, physical lantern monuments, all
+// outside the safe walkway. Self-lit mineral cores only: no added PointLight.
+for(const {east:e,north:n} of warriorSafetyPocket.lampFeet){
+ const id='cold-street-lamp/'+e+'/'+n;
+ p(id+'/plinth','shade',e,n,.13,1.02,.26,1.02,true);
+ p(id+'/base','stone',e,n,.32,.82,.13,.82,true);
+ for(let row=0;row<7;row++){
+  const w=.48-.02*row;
+  p(id+'/stem/'+row,row%3?'stone':'tan',e,n,.42+row*.22,w,.21,w,true);
+  for(const dx of [-1,1])p(id+'/chisel/'+row+'/'+dx,'shade',e+dx*(w/2-.025),n,.42+row*.22,.046,.09,.12);
+ }
+ p(id+'/capital','tan',e,n,1.94,.66,.17,.66,true);
+ p(id+'/cup','shade',e,n,2.08,.58,.13,.58);
+ for(let j=0;j<8;j++){
+  const a=j*Math.PI/4;
+  p(id+'/lip/'+j,'stone',e+Math.cos(a)*.25,n+Math.sin(a)*.25,2.22,.18,.16,.18);
+  p(id+'/flame/'+j,'crystal',e+Math.cos(a)*.16,n+Math.sin(a)*.16,2.34+(j%3)*.06,.12,.33+(j%3)*.10,.12);
+ }
+ p(id+'/heart','moon',e,n,2.55,.13,.59,.13);
+ for(let j=0;j<4;j++)p(id+'/heart-tip/'+j,'crystal',e+Math.sin(j*1.57)*.08,n+Math.cos(j*1.57)*.08,2.77+j*.04,.08,.16,.08);
+}
+// Thin worn floor inlays delineate the main safe routes, without a raised curb.
+for(let e=97;e<144;e+=.75)for(const n of [-1.65,1.65]){
+ if(n>0&&(e>=123&&e<=127||e>=140&&e<=144))continue;
+ p('safe-path/street/'+e+'/'+n,'tan',e,n,.006,.70,.012,.065);
+}
+for(const [e,start,end] of [[96.9,-6,-1.8],[125,1.8,14.4],[142,1.8,4.5]])
+ for(let n=start+.3;n<end;n+=.6)for(const side of [-1,1])
+  p('safe-path/approach/'+e+'/'+n+'/'+side,'tan',e+side*1.05,n,.006,.06,.012,.53);
 export const warriorCityShellPieces=Object.freeze(pieces);
 function texture(f:Family){const bytes=new Uint8Array(1024),base=colors[f],accent=colors[f==='wood'?'tan':f==='shade'?'stone':'shade'];for(let y=0;y<16;y++)for(let x=0;x<16;x++){
  const c=(x===0||y===0||x===15||y===15||(x*13+y*7+x*y)%29<3)?accent:base;bytes.set([c>>16,(c>>8)&255,c&255,255],(y*16+x)*4)
@@ -124,7 +154,7 @@ export function createWarriorCityShell(){
  const group=new Group();group.name='u10-city-complete-street-shell';const geo=new BoxGeometry(),pose=new Object3D();
  const resources:{mesh:InstancedMesh;mat:MeshLambertMaterial;map:DataTexture}[]=[];
  for(const f of Object.keys(colors) as Family[]){
-   const rows=pieces.filter(p=>p.family===f);if(!rows.length)continue;const map=texture(f),mat=new MeshLambertMaterial({map});
+   const rows=pieces.filter(p=>p.family===f);if(!rows.length)continue;const map=texture(f),mat=new MeshLambertMaterial({map,...(f==='crystal'||f==='moon'?{emissive:new Color(colors[f]),emissiveIntensity:.65,emissiveMap:map}:{})});
    // Spatial chunks prevent the entire 180m street from rendering around every corner.
    for(let start=0;start<180;start+=30){
     const chunk=rows.filter(p=>Math.min(179.999,Math.max(0,p.e))>=start&&Math.min(179.999,Math.max(0,p.e))<start+30);if(!chunk.length)continue;

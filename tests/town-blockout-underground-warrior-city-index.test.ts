@@ -5,7 +5,7 @@ import {createStaticFootIndex} from '../tools/voxel-tavern/town-blockout/town-c-
 test('city retains every physical instance and indexed clearance equals exhaustive boxes',()=>{
  const city=createWarriorCityCandidate(),shell=city.shell;
  try{
-  assert.equal(city.instancedPieces,16745);assert.equal(shell.count,7067);
+  assert.equal(city.instancedPieces,17292);assert.equal(shell.count,7614);
   const boxes=[...city.colliders,...shell.solids.map(p=>({min:[p.e-p.w/2,p.y-p.h/2,-p.n-p.d/2],max:[p.e+p.w/2,p.y+p.h/2,-p.n+p.d/2]}))];
   const index=createStaticFootIndex(boxes);
   let worst=0;
