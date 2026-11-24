@@ -24,7 +24,7 @@ test('five carts, support station and eight surveyed candidates share the mounte
  assert.equal(candidates.length,8);assert.equal(encounterPlacementPlan.length,36);
  for(const g of candidates){
   const p=g.candidate!.at,pass=mine.queryPassage(p.east,p.north,.27,1.8,'open');
-  assert.ok(pass,g.id);assert.equal(pass.floor,p.height);
+  assert.ok(pass,g.id);assert.ok('height' in p);assert.equal(pass.floor,p.height);
   for(const safe of [mine.anchors.campRecovery.position,station.foot])
     assert.ok(Math.hypot(p.east-safe[0],p.north-safe[2])>=30,g.id+' safety');
   if(g.family==='90-D')assert.ok(pass.waterDepth>0);
