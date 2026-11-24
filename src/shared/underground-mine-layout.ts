@@ -2,6 +2,7 @@ import type { UndergroundMineGateStage } from '../presence/underground-mine-gate
 import { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
 import {createFirstMineWorkfaces,createFirstMineSupportStation,workfaceBlocks} from './town-c-first-mine-workfaces.js';
 import {firstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
 
 export const undergroundMineDepth = -90;
 export const undergroundMineGalleryWidth = 4;
@@ -119,7 +120,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const station=expansion&&createFirstMineSupportStation(expansion.bounds,campFloor);
   const supportStation=station&&expansion?.queryPassage(station.x,station.z,station.width/2,station.height,'open')&&
     expansion.queryPassage(station.foot[0],station.foot[2],walker.radius,walker.standingHeight,'open')?station:undefined;
-  const deepFixtures=expansion?.deepWorks?firstMineDeepWorks.fixtures:[];
+  const deepFixtures=expansion?.deepWorks?[...firstMineDeepWorks.fixtures,...firstMineShallowWorks.fixtures]:[];
   const staticFixtures=[...workfaces,...(supportStation?[supportStation]:[]),...deepFixtures];
   const poolLanding: Point = [0, level, pool.length / 2];
   const aperture = pool.shaftAperture;

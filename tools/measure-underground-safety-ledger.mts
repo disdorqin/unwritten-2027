@@ -4,6 +4,7 @@
 import {createUndergroundMineLayout} from '../src/shared/underground-mine-layout.js';
 import {undergroundMineSpec as spec} from './fixtures/underground-first-mine-survey-spec.js';
 import {firstMineDeepWorks} from '../src/shared/town-c-first-mine-deep-works.js';
+import {firstMineShallowWorks} from '../src/shared/town-c-first-mine-shallow-works.js';
 import {createUndergroundCampRemains} from './voxel-tavern/town-blockout/underground-camp-remains.js';
 import {secondMineRooms,secondMineAnchors} from '../src/shared/underground-second-mine-layout.js';
 import {createSecondMineScene} from './voxel-tavern/town-blockout/underground-second-mine.js';
@@ -126,7 +127,7 @@ try{
   rect(-4.2,4.2,49,138.8),rect(-2,2,138.8,140),
   rect(-72,-4.2,71.6,81.1),rect(-100,-72,69.8,82.9),
   rect(4.2,72,88.7,99.15),rect(72,100,86.9,100.95),
-  ...firstMineDeepWorks.rooms.map(r=>rect(r.minX,r.maxX,r.minZ,r.maxZ))];
+  ...[...firstMineDeepWorks.rooms,...firstMineShallowWorks.rooms].map(r=>rect(r.minX,r.maxX,r.minZ,r.maxZ))];
  const wet90=[rect(-3,3,0,4),rect(-2,2,4,12),rect(4.2,7.4,113.4,137)];
  const fixtures90=[...mine.workfaces,...(mine.supportStation?[mine.supportStation]:[]),...mine.deepFixtures].map(s=>centred(s.x,s.z,s.width,s.depth));
  const campMasks=camp.colliders.filter(b=>b.max[1]>-91&&b.min[1]<-91+1.8).map(b=>rect(b.min[0],b.max[0],b.min[2],b.max[2]));
