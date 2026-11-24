@@ -25,7 +25,11 @@ const { buildSkyCityTower } = await import(pathToFileURL(path.join(root, sceneMo
 
 let server, browser, page;
 const viewSize = { width: 760, height: 500 };
-const shot = name => page.screenshot({ path: path.join(output, name + '.jpg'), quality: 78 });
+const shot = async name => {
+  const header=page.locator('header');await header.evaluate(el=>{el.style.visibility='hidden'});
+  try{return await page.screenshot({path:path.join(output,name+'.jpg'),quality:78})}
+  finally{await header.evaluate(el=>{el.style.visibility=''})}
+};
 const snapshot = () => page.evaluate(() => window.lastSkyCityFrame);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -127,7 +131,8 @@ try {
     }
     await visit('13-wing-rack',[[-14,31],[8,29],[12,29.5]],Math.PI);
     await visit('14-residences',[[12,31],[22,19],[27.8,19],[30,19]],Math.PI);
-    await visit('15-greenhouse',[[27.3,19],[27.3,12],[27.3,5],[27.3,0],[37,-1],[39,-12],[39,-21],[39,-24.5]],0);
+    await visit('14b-residence-front',[[35,19],[35,23],[35,32.5],[30,35]],0);
+    await visit('15-greenhouse',[[35,32.5],[35,23],[35,19],[30,19],[27.3,19],[27.3,12],[27.3,5],[27.3,0],[37,-1],[39,-12],[39,-21],[39,-24.5]],0);
     await visit('16-ship-gallery',[[39,-21],[32,-18],[24,-18],[14,-16],[0,-17],[-14,-14],[-24,-17],[-32,-18],[-32,-21.5]],0);
     await visit('17-beacon',[[-32,-18],[-22,-18],[-16,-25]],0);
     assert.deepEqual(result.errors,[]);result.status='passed';

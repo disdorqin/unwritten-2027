@@ -189,6 +189,8 @@ export function createUndergroundPalaceShell() {
   let disposed = false;
   return {
     group, floorAt, canStand, route, cover,
+    // Audit-only copy; the source D shell's art and movement are unchanged.
+    surveyBlockers: blockers.map(b=>Object.freeze([...b] as Solid)),
     dispose() {
       if (disposed) return;
       disposed = true;

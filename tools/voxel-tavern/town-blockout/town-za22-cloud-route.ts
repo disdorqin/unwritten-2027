@@ -241,6 +241,20 @@ export function createZa22CloudRoute(host: Host) {
     for (let east = 302; east < 336; east += 2) {
       box(front, iron, east, 663.25, sampleNorthRidge350(east, 663.25), .36, .64, .043);
     }
+    // All static runway markings and terminal structural boxes are already
+    // in world coordinates. The two moving cabin groups are batched locally
+    // so their original trajectory and parent transforms remain untouched.
+    function batchBoxes(parent:Group){
+      for(const material of [iron,brass,wood,stone]){
+        const boxes=parent.children.filter((child):child is Mesh=>child instanceof Mesh&&child.geometry===boxGeometry&&child.material===material);
+        if(boxes.length<2)continue;
+        const batch=new InstancedMesh(boxGeometry,material,boxes.length);
+        batch.name='za22-box-batch-'+material.color.getHexString();
+        boxes.forEach((child,i)=>{child.updateMatrix();batch.setMatrixAt(i,child.matrix);parent.remove(child)});
+        batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();parent.add(batch);
+      }
+    }
+    batchBoxes(front);cabins.forEach(batchBoxes);
     return { owner, terrain, assembly, extras, gate, cabins, front, starport, middleStation, boxGeometry, materials: [iron, brass, wood, stone] };
   }
 
@@ -252,6 +266,7 @@ export function createZa22CloudRoute(host: Host) {
     world.starport.dispose();
     world.middleStation.dispose();
     world.terrain.dispose();
+    world.front.traverse(child=>{if(child instanceof InstancedMesh&&child.name.startsWith('za22-box-batch-'))child.dispose()});
     world.boxGeometry.dispose();
     world.materials.forEach(material => material.dispose());
     for (const child of world.front.children) {

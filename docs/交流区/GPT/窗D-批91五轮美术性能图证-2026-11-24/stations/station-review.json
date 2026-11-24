@@ -1,0 +1,207 @@
+{
+  "passed": true,
+  "reviewOnly": true,
+  "frames": [
+    {
+      "name": "station-1-day.jpg",
+      "frames": 87,
+      "selected": 0,
+      "night": false,
+      "foot": {
+        "name": "中山站候车区",
+        "east": 440,
+        "north": 517.6017500000004,
+        "height": 140,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 208,
+      "tris": 179008,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-1-night.jpg",
+      "frames": 100,
+      "selected": 0,
+      "night": true,
+      "foot": {
+        "name": "中山站候车区",
+        "east": 440,
+        "north": 517.6017500000004,
+        "height": 140,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 208,
+      "tris": 179008,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-2-day.jpg",
+      "frames": 111,
+      "selected": 1,
+      "night": false,
+      "foot": {
+        "name": "中山站时刻牌",
+        "east": 442.7,
+        "north": 522.1,
+        "height": 140,
+        "yaw": 1.5707963267948966
+      },
+      "yaw": 1.5707963267948966,
+      "walked": 0.8017499999999996,
+      "draws": 23,
+      "tris": 147728,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-2-night.jpg",
+      "frames": 119,
+      "selected": 1,
+      "night": true,
+      "foot": {
+        "name": "中山站时刻牌",
+        "east": 442.7,
+        "north": 522.1,
+        "height": 140,
+        "yaw": 1.5707963267948966
+      },
+      "yaw": 1.5707963267948966,
+      "walked": 0.8017499999999996,
+      "draws": 23,
+      "tris": 147728,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-3-day.jpg",
+      "frames": 131,
+      "selected": 2,
+      "night": false,
+      "foot": {
+        "name": "星港坪装配场",
+        "east": 324,
+        "north": 654.5,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 270,
+      "tris": 191138,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-3-night.jpg",
+      "frames": 140,
+      "selected": 2,
+      "night": true,
+      "foot": {
+        "name": "星港坪装配场",
+        "east": 324,
+        "north": 654.5,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 270,
+      "tris": 191138,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-4-day.jpg",
+      "frames": 155,
+      "selected": 3,
+      "night": false,
+      "foot": {
+        "name": "星港坪工具台",
+        "east": 318.3,
+        "north": 656.8,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 254,
+      "tris": 190954,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-4-night.jpg",
+      "frames": 165,
+      "selected": 3,
+      "night": true,
+      "foot": {
+        "name": "星港坪工具台",
+        "east": 318.3,
+        "north": 656.8,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 254,
+      "tris": 190954,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-5-day.jpg",
+      "frames": 184,
+      "selected": 4,
+      "night": false,
+      "foot": {
+        "name": "星港坪围观区",
+        "east": 342,
+        "north": 654.2,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 234,
+      "tris": 191868,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    },
+    {
+      "name": "station-5-night.jpg",
+      "frames": 201,
+      "selected": 4,
+      "night": true,
+      "foot": {
+        "name": "星港坪围观区",
+        "east": 342,
+        "north": 654.2,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.8017499999999996,
+      "draws": 234,
+      "tris": 191868,
+      "reviewOnly": true,
+      "formationVisible": false,
+      "formationSeconds": 0
+    }
+  ],
+  "errors": []
+}

@@ -1,7 +1,7 @@
 import { AmbientLight, BufferGeometry, Color, DirectionalLight, Float32BufferAttribute, Fog, Group,
   IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
 import { createDesktopLook } from './desktop-look';
-import { mountSkyCity, skyCityTier, type SkyCityFoot } from './sky-city';
+import { mountSkyCity, skyCityTier, skyCityPrewarmMetres, type SkyCityFoot } from './sky-city';
 import { createSkyCityApproach, skyCityApproachSite, skyCityDeparture, skyCityDepartureBounds, skyCityDepartureFloorAt } from './sky-city-approach';
 import type { AircraftThrottle } from '../../../src/shared/aircraft-flight';
 
@@ -176,7 +176,8 @@ addEventListener('resize', resize);
 resize();
 setView('summit');
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(.064, (now - (previous ?? now)) / 1000);
+  const rawDt = (now - (previous ?? now)) / 1000;
+  const dt = Math.min(.064,rawDt);
   previous = now;
   const elapsed = now / 1000;
   if (view === 'ground') {
@@ -192,6 +193,7 @@ renderer.setAnimationLoop(now => {
     const origin = skyCityApproachSite.origin;
     const distance = Math.hypot(state.feet.east - origin.east, state.feet.north - origin.north);
     const tier = skyCityTier('aircraft', distance);
+    if(distance<=skyCityPrewarmMetres&&tier==='silhouette')city.prepare();
     city.show(tier);
     if (tier === 'full') departure.visible = false;
     approach.advance(dt, { throttle,
@@ -213,7 +215,7 @@ renderer.setAnimationLoop(now => {
   city.update(elapsed);
   renderer.render(scene, camera);
   document.dispatchEvent(new CustomEvent('sky-city-frame', { detail: {
-    view, tier: city.current(), foot, yaw, night:reviewNight, fps:dt>0?Math.round(1/dt):0, drawCalls: renderer.info.render.calls,
+    view, tier: city.current(), foot, yaw, night:reviewNight, prepared:city.prepared(), fps:rawDt>0?Math.round(1/rawDt):0, drawCalls: renderer.info.render.calls,
     triangles: renderer.info.render.triangles, flight: approach.snapshot().flight,
   } }));
 });

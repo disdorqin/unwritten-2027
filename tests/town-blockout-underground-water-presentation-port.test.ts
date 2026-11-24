@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Group} from 'three';
+import {readUndergroundWaterPresentation,type AcceptedUndergroundWaterSnapshot} from '../src/shared/town-c-water-snapshot-port.js';
+import {mountSecondMineDomain} from '../tools/voxel-tavern/town-blockout/town-c-second-mine-domain.js';
+test('presentation reads effective server water only and never derives another phase',()=>{
+ let s:AcceptedUndergroundWaterSnapshot|undefined={nightOrdinal:7,phase:'level',baseLevel:'mid',pumpOffset:0,level:'mid'};
+ const read=()=>s;
+ assert.equal(readUndergroundWaterPresentation(read)?.riverState,'middle');
+ s={...s,pumpOffset:1,level:'high'};
+ assert.equal(readUndergroundWaterPresentation(read)?.riverState,'high');
+ s={...s,pumpOffset:-1,level:'low'};
+ assert.equal(readUndergroundWaterPresentation(read)?.riverState,'low');
+ const parent=new Group(),registration={frame:{domainId:'fixture/second-mine',east:712,north:-450,height:-140,yaw:0},acceptsGeometry:()=>true,acceptsFoot:()=>true};
+ const m=mountSecondMineDomain({parent,registration,readAcceptedWater:read,readAcceptedRiverState:()=> 'high'});
+ assert.equal(m.kind,'ready');if(m.kind!=='ready')assert.fail();
+ assert.equal(m.getRiverState(),'low');
+ s=undefined;assert.equal(m.sync(),false);assert.equal(m.getRiverState(),undefined);assert.equal(m.group.visible,false);
+ s={nightOrdinal:8,phase:'fall',baseLevel:'low',pumpOffset:0,level:'low'};
+ assert.ok(m.sync());assert.equal(m.getRiverState(),'low');m.dispose();
+ assert.equal(parent.children.length,0);
+});

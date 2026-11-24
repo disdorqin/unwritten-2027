@@ -56,17 +56,21 @@ function createSculpture() {
   }
 
   function finish(owner: Group, name: string) {
+    const colored:BufferGeometry[]=[];
     for (const [color, geometries] of layers) {
       // Standardize the index state so angular rubble and square masonry batch together.
       const parts = geometries.map(geometry => geometry.index ? geometry.toNonIndexed() : geometry);
       const geometry = mergeGeometries(parts);
       if (!geometry) throw new Error(`Couldn't batch ${name} (${color})`);
-      const mesh = new Mesh(geometry, new MeshLambertMaterial({ color, flatShading: true }));
-      mesh.name = name;
-      owner.add(mesh);
+      const tint=new Color(color),count=geometry.getAttribute('position').count;
+      const rgb=new Float32Array(count*3);
+      for(let i=0;i<count;i++)rgb.set([tint.r,tint.g,tint.b],i*3);
+      geometry.setAttribute('color',new Float32BufferAttribute(rgb,3));colored.push(geometry);
       for (const part of parts) part.dispose();
       for (const source of geometries) if (source.index) source.dispose();
     }
+    const geometry=mergeGeometries(colored);colored.forEach(g=>g.dispose());
+    if(geometry){const mesh=new Mesh(geometry,new MeshLambertMaterial({vertexColors:true,flatShading:true}));mesh.name=name;owner.add(mesh)}
   }
 
   return { panel, fragment, branch, finish };
@@ -90,6 +94,21 @@ function buildRing(owner: Group) {
     if (i % 4 === 1 || i % 7 === 2) {
       stone.fragment(radial(railRadius + .34, angle, .11), [.34, .17, .27], olive, yaw);
     }
+  }
+  // The maintenance structure remains inside the existing closed ring.
+  for(let i=0;i<16;i++){
+    const a=i*turn/16,yaw=Math.PI/2-a;
+    stone.panel(radial(5.04,a,.095),[1.81,.16,.64],i%3?shadedStone:'#879c98',yaw);
+    stone.panel(radial(4.97,a,.30),[1.74,.25,.50],i%2?copper:'#65756c',yaw);
+    stone.panel(radial(5.16,a,.48),[1.80,.11,.55],capstone,yaw);
+    for(let j=0;j<3;j++)stone.panel(radial(5.23,a+(j-1)*.07,.33),[.095,.08,.075],'#af9b75',yaw);
+    if(i%4===0){
+      const postA=radial(4.66,a,.62),postB=radial(4.66,a,2.11);
+      stone.branch(postA,postB,.075,.075,darkBark,5);
+      stone.branch(radial(4.66,a-.17,.62),postB,.047,.047,lightBark,5);
+      stone.panel(radial(4.66,a,1.17),[.88,.14,.40],lightBark,yaw);
+    }
+    stone.panel(radial(5.70,a+.09,.978),[.50,.018,.22],'#d8e5db',yaw);
   }
   stone.finish(owner, 'sky-city-root-vault-rail');
 }

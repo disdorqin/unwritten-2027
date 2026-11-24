@@ -78,6 +78,22 @@ function paths() {
       path.panel(left, right, nextRight, nextLeft, fieldColor(paving, seed + i));
       const [ax, az] = route[i - 1]!, [bx, bz] = route[i]!;
       const count = Math.ceil(Math.hypot(bx - ax, bz - az) / 1.4);
+      // Staggered ashlar paving drawn in the same vertex-colour mesh.
+      // Tile corners are inset from the ribbon edge and flush with the floor.
+      const span=Math.hypot(bx-ax,bz-az);
+      const rows=Math.max(1,Math.ceil(span/.76)),cols=Math.max(2,Math.floor(width/.74));
+      function tile(t:number,u:number):Point{
+        const lx=left[0]+(nextLeft[0]-left[0])*t,lz=left[2]+(nextLeft[2]-left[2])*t;
+        const rx=right[0]+(nextRight[0]-right[0])*t,rz=right[2]+(nextRight[2]-right[2])*t;
+        return [lx+(rx-lx)*u,.026,lz+(rz-lz)*u];
+      }
+      for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+        const shift=row%2?.20:0;
+        const u0=(col+.055+shift)/cols,u1=(col+.945+shift)/cols;
+        if(u1>=1)continue;
+        const t0=(row+.037)/rows,t1=(row+.963)/rows;
+        path.panel(tile(t0,u0),tile(t0,u1),tile(t1,u1),tile(t1,u0),fieldColor(paving,seed+i*71+row*17+col));
+      }
       for (let j = 0; j < count; j++) {
         const t = (j + .5) / count;
         for (const side of [-1, 1]) {
@@ -116,19 +132,23 @@ function paths() {
 function meadow() {
   const model = facets();
   const tuft = new Color('#7e9e51');
-  for (let patch = 0; patch < 74; patch++) {
+  for (let patch = 0; patch < 168; patch++) {
     const angle = scatter(patch * 31) * turn;
     const radius = 26 + scatter(patch * 31 + 1) * 25;
     const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
-    if ((z > 12 && Math.abs(x + 14) < 7) || (Math.abs(x) < 4 && z < 0)) continue;
+    if ((z > 12 && Math.abs(x + 14) < 7) || (Math.abs(x) < 4 && z < 0) ||
+        (Math.abs(x-12)<6&&Math.abs(z-36)<5)||(Math.abs(x+16)<2.8&&Math.abs(z+39)<2.8)||
+        (Math.abs(x+28)<10&&z>3&&z<22)||Math.hypot(x,z+35)<10) continue;
     const color = fieldColor(flowers, patch);
     for (let stalk = 0; stalk < 6; stalk++) {
       const index = patch * 41 + stalk * 5;
       const dx = x + (scatter(index) - .5) * 2.1;
       const dz = z + (scatter(index + 1) - .5) * 2.1;
       if(insideSkyCityDistrictFootprint(dx,dz)||insideSkyObservatoryHall(dx,dz,.5))continue;
-      const h = .16 + scatter(index + 2) * .26;
-      model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], tuft);
+      const h = .13 + scatter(index + 2) * .23;
+      const stalkColor=stalk%3?tuft:fieldColor(grass,index);
+      model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], stalkColor);
+      model.triangle([dx, .03, dz-.055], [dx, .03, dz+.055], [dx-.02, h*.86, dz+.03], stalkColor);
       if (stalk % 2) continue;
       model.panel([dx - .12, h - .028, dz], [dx, h + .082, dz], [dx + .12, h, dz],
         [dx, h - .052, dz], color);
