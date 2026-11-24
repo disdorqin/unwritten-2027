@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -559,6 +559,45 @@ try {
       expectedBuildingPairs:buildings.length,
       liveFirstPersonMode:true};
   }
+  if (segment === 'a4-b89-facades') {
+    const {page,evidence}=await openTown('a4-b89-facades');
+    const subjects=[
+      {id:'supply-same-eye',target:[-83,120.91],route:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-74,126]]},
+      {id:'supply-front-quarter',target:[-83,120.91],route:[[-76,130],[-78,132],[-81,134],[-84,134],[-88,132]],continue:true},
+      {id:'instrument-front-quarter',target:[-49.72,132.04],route:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-65,147]]},
+    ];
+    const samples=[];
+    for(const subject of subjects){
+      if(!subject.continue){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#jump').selectOption({label:'陨石坑口'});
+        await page.waitForFunction(pattern=>{
+          const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+          return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;
+        },positionPattern.source,{timeout:45000});
+      }
+      await follow(page,evidence,subject.route,subject.id+'-native-walk');
+      const p=await readPose(page);
+      await face(page,evidence,Math.atan2(subject.target[0]-p.east,subject.target[1]-p.north));
+      const actual=await readPose(page);
+      samples.push({id:subject.id,pose:actual,target:subject.target,
+        distance:Math.hypot(actual.east-subject.target[0],actual.north-subject.target[1])});
+      assert.ok(actual.hud.includes('行走'),'facade viewpoint must be grounded, not falling');
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,subject.id+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      assert.equal(await page.locator('#lighting').textContent(),'白昼');
+      await snapshot(page,evidence,subject.id+'-day');
+    }
+    report.b89Facades={samples,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      provenance:'normal destination selector and native keyboard walk, grounded facade viewpoints'};
+  }
   if (segment === 'a6-perf') {
     const {page,evidence}=await openTown('a6-perf');
     const measures=[];
@@ -863,7 +902,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
