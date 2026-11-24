@@ -1,0 +1,1022 @@
+{
+  "url": "http://127.0.0.1:60309/?profile",
+  "segment": "a-r89-refine",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "a-r89-refine",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795439757519,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "r89-high-sign-clearance-1",
+          "target": [
+            336,
+            650
+          ],
+          "hud": "东 336.0 m · 北 649.8 m · 腾空",
+          "cameraY": 347.02266722222265,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 336,
+          "north": 649.8,
+          "height": 345.37,
+          "wire": {
+            "ms": 1795439758802,
+            "east": 336,
+            "north": 649.04,
+            "area": "mountain",
+            "height": 345.84,
+            "yaw": 0,
+            "seq": 9
+          }
+        },
+        {
+          "label": "r89-high-sign-clearance-2",
+          "target": [
+            336,
+            657
+          ],
+          "hud": "东 336.0 m · 北 656.7 m · 腾空",
+          "cameraY": 322.5719222222241,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 336,
+          "north": 656.7,
+          "height": 320.92,
+          "wire": {
+            "ms": 1795439760001,
+            "east": 336,
+            "north": 656.59,
+            "area": "mountain",
+            "height": 321.2,
+            "yaw": 0,
+            "seq": 21
+          }
+        },
+        {
+          "label": "r89-high-sign-clearance-3",
+          "target": [
+            326.82,
+            657
+          ],
+          "hud": "东 327.0 m · 北 657.0 m · 腾空",
+          "cameraY": 264.8003683333366,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 327,
+          "north": 657,
+          "height": 263.15,
+          "wire": {
+            "ms": 1795439762767,
+            "east": 327.53,
+            "north": 656.96,
+            "area": "mountain",
+            "height": 265.88,
+            "yaw": 4.744219081733316,
+            "seq": 34
+          }
+        },
+        {
+          "label": "front-high-actual-clear-of-sign-night",
+          "lighting": "雪夜",
+          "hud": "东 327.0 m · 北 657.0 m · 腾空",
+          "cameraY": 220.07925111111442,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 327,
+          "north": 657,
+          "height": 218.43,
+          "wire": {
+            "ms": 1795439767570,
+            "east": 326.96,
+            "north": 656.98,
+            "area": "mountain",
+            "height": 217.39,
+            "yaw": 3.901200764990914,
+            "seq": 44
+          }
+        },
+        {
+          "label": "front-high-actual-clear-of-sign-day",
+          "lighting": "白昼",
+          "hud": "东 327.0 m · 北 657.0 m · 腾空",
+          "cameraY": 204.9089738888921,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 327,
+          "north": 657,
+          "height": 203.26,
+          "wire": {
+            "ms": 1795439772924,
+            "east": 326.96,
+            "north": 656.98,
+            "area": "mountain",
+            "height": 204.5,
+            "yaw": 3.901200764990914,
+            "seq": 48
+          }
+        },
+        {
+          "label": "r89-sheep-real-moving-1",
+          "target": [
+            74,
+            211
+          ],
+          "hud": "东 73.8 m · 北 211.2 m · 行走",
+          "cameraY": 22.385382527692812,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 73.8,
+          "north": 211.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795439777098,
+            "east": 73.62,
+            "north": 211.37,
+            "area": "town",
+            "height": 20.73,
+            "yaw": 2.356577985389316,
+            "seq": 67
+          }
+        },
+        {
+          "label": "r89-sheep-real-moving-2",
+          "target": [
+            78,
+            207
+          ],
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.39310614037207,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795439777894,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 2.356577985389316,
+            "seq": 75
+          }
+        },
+        {
+          "label": "sheep-open-wildland-facing-west-night",
+          "lighting": "雪夜",
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795439778718,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 4.486606183167772,
+            "seq": 81
+          }
+        },
+        {
+          "label": "sheep-open-wildland-facing-west-day",
+          "lighting": "白昼",
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795439778718,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 4.486606183167772,
+            "seq": 81
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:60309/presence",
+        "ws://127.0.0.1:60309/presence-mountain",
+        "ws://127.0.0.1:60309/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795439757519,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795439757844,
+          "east": 336,
+          "north": 640,
+          "area": "mountain",
+          "height": 347,
+          "yaw": 0,
+          "seq": 1
+        },
+        {
+          "ms": 1795439758111,
+          "east": 336,
+          "north": 641.13,
+          "area": "mountain",
+          "height": 347.06,
+          "yaw": 0,
+          "seq": 2
+        },
+        {
+          "ms": 1795439758205,
+          "east": 336,
+          "north": 642.26,
+          "area": "mountain",
+          "height": 347.06,
+          "yaw": 0,
+          "seq": 3
+        },
+        {
+          "ms": 1795439758301,
+          "east": 336,
+          "north": 643.39,
+          "area": "mountain",
+          "height": 347.06,
+          "yaw": 0,
+          "seq": 4
+        },
+        {
+          "ms": 1795439758403,
+          "east": 336,
+          "north": 644.52,
+          "area": "mountain",
+          "height": 347.06,
+          "yaw": 0,
+          "seq": 5
+        },
+        {
+          "ms": 1795439758500,
+          "east": 336,
+          "north": 645.65,
+          "area": "mountain",
+          "height": 347.05,
+          "yaw": 0,
+          "seq": 6
+        },
+        {
+          "ms": 1795439758601,
+          "east": 336,
+          "north": 646.78,
+          "area": "mountain",
+          "height": 346.86,
+          "yaw": 0,
+          "seq": 7
+        },
+        {
+          "ms": 1795439758701,
+          "east": 336,
+          "north": 647.91,
+          "area": "mountain",
+          "height": 346.46,
+          "yaw": 0,
+          "seq": 8
+        },
+        {
+          "ms": 1795439758802,
+          "east": 336,
+          "north": 649.04,
+          "area": "mountain",
+          "height": 345.84,
+          "yaw": 0,
+          "seq": 9
+        },
+        {
+          "ms": 1795439758903,
+          "east": 336,
+          "north": 649.99,
+          "area": "mountain",
+          "height": 344.99,
+          "yaw": 0,
+          "seq": 10
+        },
+        {
+          "ms": 1795439759003,
+          "east": 336,
+          "north": 650.59,
+          "area": "mountain",
+          "height": 343.93,
+          "yaw": 0,
+          "seq": 11
+        },
+        {
+          "ms": 1795439759102,
+          "east": 336,
+          "north": 651.19,
+          "area": "mountain",
+          "height": 342.65,
+          "yaw": 0,
+          "seq": 12
+        },
+        {
+          "ms": 1795439759202,
+          "east": 336,
+          "north": 651.79,
+          "area": "mountain",
+          "height": 341.14,
+          "yaw": 0,
+          "seq": 13
+        },
+        {
+          "ms": 1795439759303,
+          "east": 336,
+          "north": 652.39,
+          "area": "mountain",
+          "height": 339.42,
+          "yaw": 0,
+          "seq": 14
+        },
+        {
+          "ms": 1795439759403,
+          "east": 336,
+          "north": 652.99,
+          "area": "mountain",
+          "height": 337.48,
+          "yaw": 0,
+          "seq": 15
+        },
+        {
+          "ms": 1795439759502,
+          "east": 336,
+          "north": 653.59,
+          "area": "mountain",
+          "height": 335.31,
+          "yaw": 0,
+          "seq": 16
+        },
+        {
+          "ms": 1795439759600,
+          "east": 336,
+          "north": 654.19,
+          "area": "mountain",
+          "height": 332.93,
+          "yaw": 0,
+          "seq": 17
+        },
+        {
+          "ms": 1795439759700,
+          "east": 336,
+          "north": 654.79,
+          "area": "mountain",
+          "height": 330.33,
+          "yaw": 0,
+          "seq": 18
+        },
+        {
+          "ms": 1795439759801,
+          "east": 336,
+          "north": 655.39,
+          "area": "mountain",
+          "height": 327.5,
+          "yaw": 0,
+          "seq": 19
+        },
+        {
+          "ms": 1795439759903,
+          "east": 336,
+          "north": 655.99,
+          "area": "mountain",
+          "height": 324.46,
+          "yaw": 0,
+          "seq": 20
+        },
+        {
+          "ms": 1795439760001,
+          "east": 336,
+          "north": 656.59,
+          "area": "mountain",
+          "height": 321.2,
+          "yaw": 0,
+          "seq": 21
+        },
+        {
+          "ms": 1795439760102,
+          "east": 336,
+          "north": 656.69,
+          "area": "mountain",
+          "height": 317.71,
+          "yaw": 5.305176681103247,
+          "seq": 22
+        },
+        {
+          "ms": 1795439760200,
+          "east": 336,
+          "north": 656.69,
+          "area": "mountain",
+          "height": 314.01,
+          "yaw": 5.305176681103247,
+          "seq": 23
+        },
+        {
+          "ms": 1795439760631,
+          "east": 336,
+          "north": 656.69,
+          "area": "mountain",
+          "height": 309.41,
+          "yaw": 4.88448245002561,
+          "seq": 24
+        },
+        {
+          "ms": 1795439760986,
+          "east": 336,
+          "north": 656.69,
+          "area": "mountain",
+          "height": 307.35,
+          "yaw": 4.744219081733316,
+          "seq": 25
+        },
+        {
+          "ms": 1795439761375,
+          "east": 336,
+          "north": 656.69,
+          "area": "mountain",
+          "height": 304.51,
+          "yaw": 4.744219081733316,
+          "seq": 26
+        },
+        {
+          "ms": 1795439761477,
+          "east": 334.87,
+          "north": 656.73,
+          "area": "mountain",
+          "height": 300.08,
+          "yaw": 4.744219081733316,
+          "seq": 27
+        },
+        {
+          "ms": 1795439761573,
+          "east": 333.74,
+          "north": 656.77,
+          "area": "mountain",
+          "height": 295.42,
+          "yaw": 4.744219081733316,
+          "seq": 28
+        },
+        {
+          "ms": 1795439761673,
+          "east": 332.61,
+          "north": 656.8,
+          "area": "mountain",
+          "height": 290.54,
+          "yaw": 4.744219081733316,
+          "seq": 29
+        },
+        {
+          "ms": 1795439762100,
+          "east": 331.48,
+          "north": 656.84,
+          "area": "mountain",
+          "height": 285.45,
+          "yaw": 4.744219081733316,
+          "seq": 30
+        },
+        {
+          "ms": 1795439762199,
+          "east": 330.35,
+          "north": 656.87,
+          "area": "mountain",
+          "height": 280.13,
+          "yaw": 4.744219081733316,
+          "seq": 31
+        },
+        {
+          "ms": 1795439762565,
+          "east": 329.79,
+          "north": 656.89,
+          "area": "mountain",
+          "height": 277.39,
+          "yaw": 4.744219081733316,
+          "seq": 32
+        },
+        {
+          "ms": 1795439762663,
+          "east": 328.66,
+          "north": 656.9300000000001,
+          "area": "mountain",
+          "height": 271.74,
+          "yaw": 4.744219081733316,
+          "seq": 33
+        },
+        {
+          "ms": 1795439762767,
+          "east": 327.53,
+          "north": 656.96,
+          "area": "mountain",
+          "height": 265.88,
+          "yaw": 4.744219081733316,
+          "seq": 34
+        },
+        {
+          "ms": 1795439763568,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 258.75,
+          "yaw": 4.603668092043295,
+          "seq": 35
+        },
+        {
+          "ms": 1795439764359,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 255.61,
+          "yaw": 4.463212976152516,
+          "seq": 36
+        },
+        {
+          "ms": 1795439764363,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 253.48,
+          "yaw": 4.463212976152516,
+          "seq": 37
+        },
+        {
+          "ms": 1795439764751,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 251.33,
+          "yaw": 4.322661986462494,
+          "seq": 38
+        },
+        {
+          "ms": 1795439766534,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 248.06,
+          "yaw": 4.182206870571715,
+          "seq": 39
+        },
+        {
+          "ms": 1795439766823,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 242.48,
+          "yaw": 4.041655880881693,
+          "seq": 40
+        },
+        {
+          "ms": 1795439767265,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 240.21,
+          "yaw": 3.901200764990914,
+          "seq": 41
+        },
+        {
+          "ms": 1795439767383,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 232.06,
+          "yaw": 3.901200764990914,
+          "seq": 42
+        },
+        {
+          "ms": 1795439767500,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 223.61,
+          "yaw": 3.901200764990914,
+          "seq": 43
+        },
+        {
+          "ms": 1795439767570,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 217.39,
+          "yaw": 3.901200764990914,
+          "seq": 44
+        },
+        {
+          "ms": 1795439767675,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 214.86,
+          "yaw": 3.901200764990914,
+          "seq": 45
+        },
+        {
+          "ms": 1795439772702,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 214.86,
+          "yaw": 3.901200764990914,
+          "seq": 46
+        },
+        {
+          "ms": 1795439772859,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 208.43,
+          "yaw": 3.901200764990914,
+          "seq": 47
+        },
+        {
+          "ms": 1795439772924,
+          "east": 326.96,
+          "north": 656.98,
+          "area": "mountain",
+          "height": 204.5,
+          "yaw": 3.901200764990914,
+          "seq": 48
+        },
+        {
+          "ms": 1795439775356,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.5195997179992133,
+          "seq": 49
+        },
+        {
+          "ms": 1795439775386,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.356518385487121,
+          "seq": 50
+        },
+        {
+          "ms": 1795439775535,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.1935329267742716,
+          "seq": 51
+        },
+        {
+          "ms": 1795439775613,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.0305474680614224,
+          "seq": 52
+        },
+        {
+          "ms": 1795439775688,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 0.5415910919228741,
+          "seq": 53
+        },
+        {
+          "ms": 1795439775803,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 0.5415910919228741,
+          "seq": 54
+        },
+        {
+          "ms": 1795439775892,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.0305474680614224,
+          "seq": 55
+        },
+        {
+          "ms": 1795439776013,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.5195997179992133,
+          "seq": 56
+        },
+        {
+          "ms": 1795439776104,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.5195997179992133,
+          "seq": 57
+        },
+        {
+          "ms": 1795439776201,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.9380888516942647,
+          "seq": 58
+        },
+        {
+          "ms": 1795439776301,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.356577985389316,
+          "seq": 59
+        },
+        {
+          "ms": 1795439776393,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.356577985389316,
+          "seq": 60
+        },
+        {
+          "ms": 1795439776500,
+          "east": 70.44,
+          "north": 214.56,
+          "area": "town",
+          "height": 20.45,
+          "yaw": 2.356577985389316,
+          "seq": 61
+        },
+        {
+          "ms": 1795439776594,
+          "east": 70.97,
+          "north": 214.03,
+          "area": "town",
+          "height": 20.5,
+          "yaw": 2.356577985389316,
+          "seq": 62
+        },
+        {
+          "ms": 1795439776694,
+          "east": 71.5,
+          "north": 213.5,
+          "area": "town",
+          "height": 20.55,
+          "yaw": 2.356577985389316,
+          "seq": 63
+        },
+        {
+          "ms": 1795439776792,
+          "east": 72.03,
+          "north": 212.97,
+          "area": "town",
+          "height": 20.6,
+          "yaw": 2.356577985389316,
+          "seq": 64
+        },
+        {
+          "ms": 1795439776888,
+          "east": 72.56,
+          "north": 212.44,
+          "area": "town",
+          "height": 20.64,
+          "yaw": 2.356577985389316,
+          "seq": 65
+        },
+        {
+          "ms": 1795439776999,
+          "east": 73.09,
+          "north": 211.91,
+          "area": "town",
+          "height": 20.69,
+          "yaw": 2.356577985389316,
+          "seq": 66
+        },
+        {
+          "ms": 1795439777098,
+          "east": 73.62,
+          "north": 211.37,
+          "area": "town",
+          "height": 20.73,
+          "yaw": 2.356577985389316,
+          "seq": 67
+        },
+        {
+          "ms": 1795439777193,
+          "east": 74.06,
+          "north": 210.93,
+          "area": "town",
+          "height": 20.76,
+          "yaw": 2.356577985389316,
+          "seq": 68
+        },
+        {
+          "ms": 1795439777300,
+          "east": 74.59,
+          "north": 210.4,
+          "area": "town",
+          "height": 20.78,
+          "yaw": 2.356577985389316,
+          "seq": 69
+        },
+        {
+          "ms": 1795439777395,
+          "east": 75.12,
+          "north": 209.87,
+          "area": "town",
+          "height": 20.8,
+          "yaw": 2.356577985389316,
+          "seq": 70
+        },
+        {
+          "ms": 1795439777502,
+          "east": 75.65,
+          "north": 209.34,
+          "area": "town",
+          "height": 20.81,
+          "yaw": 2.356577985389316,
+          "seq": 71
+        },
+        {
+          "ms": 1795439777595,
+          "east": 76.18,
+          "north": 208.81,
+          "area": "town",
+          "height": 20.81,
+          "yaw": 2.356577985389316,
+          "seq": 72
+        },
+        {
+          "ms": 1795439777698,
+          "east": 76.72,
+          "north": 208.28,
+          "area": "town",
+          "height": 20.8,
+          "yaw": 2.356577985389316,
+          "seq": 73
+        },
+        {
+          "ms": 1795439777791,
+          "east": 77.25,
+          "north": 207.75,
+          "area": "town",
+          "height": 20.77,
+          "yaw": 2.356577985389316,
+          "seq": 74
+        },
+        {
+          "ms": 1795439777894,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 2.356577985389316,
+          "seq": 75
+        },
+        {
+          "ms": 1795439777992,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 3.3345866114656553,
+          "seq": 76
+        },
+        {
+          "ms": 1795439778088,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 3.3345866114656553,
+          "seq": 77
+        },
+        {
+          "ms": 1795439778415,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 3.660557528891354,
+          "seq": 78
+        },
+        {
+          "ms": 1795439778526,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 4.312595237541994,
+          "seq": 79
+        },
+        {
+          "ms": 1795439778623,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 4.486606183167772,
+          "seq": 80
+        },
+        {
+          "ms": 1795439778718,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 4.486606183167772,
+          "seq": 81
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "r89RefinedViews": {
+    "samples": [
+      {
+        "id": "front-high-actual-clear-of-sign",
+        "pose": {
+          "hud": "东 327.0 m · 北 657.0 m · 腾空",
+          "cameraY": 233.79152111111446,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 327,
+          "north": 657,
+          "height": 232.14
+        },
+        "route": "original high lookout walkway E336/N640 -> E336/N657 -> E326.82/N657; player W/Shift real travel",
+        "qualifier": "not necessarily crater-visible across distance fog"
+      },
+      {
+        "id": "sheep-open-wildland-facing-west",
+        "pose": {
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74
+        },
+        "target": [
+          25,
+          195
+        ],
+        "note": "Reoriented from east-facing house row to wildland west, no tree moved"
+      }
+    ],
+    "canvasVisible": true,
+    "semantic": "No scene objects repositioned; user moved by in-game controls only"
+  },
+  "errors": 0
+}
