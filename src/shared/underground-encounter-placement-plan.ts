@@ -17,11 +17,24 @@ const families:readonly Family[]=[
   {id:'165-C',layer:'165',species:'ice-golem',habitats:['cold-transition'],members:[1,1],safeDistance:30},
   {id:'190-A',layer:'190',species:'ice-golem',habitats:['outer-corridor'],members:[1,1]},
 ];
-type Point=Readonly<{east:number;north:number}>;
+type Point=Readonly<{east:number;north:number;height?:number}>;
 const local140:readonly Point[]=[{east:-42,north:124},{east:42,north:124},{east:-44,north:149},{east:44,north:149}];
 const cityStone:readonly Point[]=[{east:30,north:-5},{east:55,north:5},{east:118,north:-19}];
 const cityPatrol:readonly Point[]=[{east:13,north:-3},{east:13,north:3}];
+// Measured on actual U3 crown underside and rock tile tops, not live ore registry.
+const crystalRoosts:readonly Point[]=[
+ {east:0,north:22.08,height:27.92007657498973},
+ {east:0,north:53.16,height:23.898684675147155},
+ {east:0,north:84.24,height:28.5693949958759},
+];
+const crystalMimics:readonly Point[]=[
+ {east:-27.18,north:40.3,height:-1.5195218820687295},
+ {east:31.22,north:43.2,height:-1.6390682011914437},
+];
 function localCandidate(family:string,i:number){
+  if(family==='crystal-A')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalRoosts[i]};
+  if(family==='crystal-B')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalMimics[i]};
+  if(family==='190-A')return {frame:'palace-shell-local-candidate' as const,at:{east:12,north:58,height:-2.4}};
   if(family==='140-A')return {frame:'second-mine-local-candidate' as const,at:Object.values(secondMineDrySites)[i]};
   if(family==='140-B')return {frame:'second-mine-local-candidate' as const,at:local140[i]};
   if(family==='165-A')return {frame:'warrior-city-local-candidate' as const,at:cityStone[i]};
