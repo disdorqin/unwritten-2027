@@ -143,6 +143,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
   const supplyPlanks = supplyWoodMaterial('supply-cabin-joined-timber', [0x795038, 0x4b3024, 0x876047]);
   const supplyShingles = supplyWoodMaterial('supply-cabin-continuous-shingles', [0x493e33, 0x322b25, 0x5c4b3d], true);
+  const shipHull = supplyWoodMaterial('crater-ship-patinated-hull', [0x60564a, 0x3c342f, 0x7a5e49], true);
   const timber = pixelMaterial(palette.earth, palette.night, 23, palette.stone);
   const timberWarm = pixelMaterial(palette.ochre, palette.earth, 61, palette.timberLight);
   const slate = pixelMaterial(palette.slate, palette.night, 133, palette.stone);
@@ -326,8 +327,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const front=fr.at(-2.5,.27);
     sign(front.east,g+.83,front.north,fr.yaw,1.57,.28,(c,w,h)=>{
       c.fillStyle='#5d4630';c.fillRect(0,0,w,h);
-      c.fillStyle='#e8e0cc';c.font='bold 108px "Noto Sans SC",sans-serif';
-      c.textAlign='center';c.textBaseline='middle';c.fillText('石九斤 · 入坑登记',w/2,h/2);
+      c.save();c.translate(w/2,h/2);c.scale(1,3.05);
+      c.fillStyle='#e8e0cc';c.font='bold 58px "Noto Sans SC",sans-serif';
+      c.textAlign='center';c.textBaseline='middle';c.fillText('石九斤 · 入坑登记',0,0,w-32);
+      c.restore();
     });
     hitBox(colliders,desk.east,desk.north,fr.yaw,2.55,.95,g,g+1.09);
     const use=fr.at(-2.5,1.55);
@@ -894,7 +897,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       if (h === undefined) continue;
       const shipSlot=[78,86,15,64,92].indexOf(i);
       const ship=shipSlot>=0;
-      const size = (.8 + hash(i * 17 + 3) * 1.9)*(ship?.52:1);
+      const size = (.8 + hash(i * 17 + 3) * 1.9) * (ship ? .38 : 1);
       // Five surveyed members of the EXISTING ring become recognizable ship
       // fragments. Their half-buried rock remains, while a riveted hull plate
       // and the same crescent/falling-arc insignia are visibly above it.
@@ -908,22 +911,24 @@ export function buildCraterMouthWorks(road: CraterRoad) {
           const n=north+Math.sin(yaw)*dx-Math.cos(yaw)*dz;
           box(mat,e,h+y,n,sx,sy,sz,yaw,0,roll);
         };
-        push(rustIron,0,.43,0,1.88,.84,.23,.08);
-        push(iron,0,.78,.04,1.62,.11,.32,.08);
-        push(stoneDark,0,.37,.15,.85,.62,.06);
-        for(const x of [-.77,.77])for(const y of [.23,.66])
-          push(brass,x,y,.16,.09,.09,.07);
+        push(shipHull,0,.50,.13,1.88,1.04,.24,.08);
+        push(iron,0,.94,.16,1.62,.12,.38,.08);
+        push(shipHull,-.97,.40,-.12,.32,.71,.55,-.22);
+        push(shipHull,.96,.35,-.10,.30,.66,.49,.27);
+        push(stoneDark,0,.61,.272,.94,.72,.06);
+        for(const x of [-.77,.77])for(const y of [.30,.77])
+          push(brass,x,y,.29,.09,.09,.07);
         // Torus arc lies in XY, on the outward-facing face; a descending
         // short tail makes the half-moon/falling arc glyph unambiguous.
-        const face=fragmentsFace(east,north,yaw,.205);
-        part(brass,new TorusGeometry(.235,.036,6,18,Math.PI*1.4),
-          face.east,h+.43,face.north,yaw,0,-.75);
-        push(brass,.115,.275,.205,.075,.19,.045,-.55);
+        const face=fragmentsFace(east,north,yaw,.335);
+        part(brass,new TorusGeometry(.255,.044,8,22,Math.PI*1.4),
+          face.east,h+.65,face.north,yaw,0,-.75);
+        push(brass,.125,.48,.335,.09,.21,.06,-.55);
         sites.push({id,east,north,height:h,radius:1.1});
       }
       eul.set(hash(i) * .9 - .45, hash(i * 5) * Math.PI, hash(i * 11) * .7 - .35);
       quat.setFromEuler(eul);
-      pos.set(east, h + size * .16, -north);
+      pos.set(east, h + size * (ship ? -.12 : .16), -north);
       scl.set(size, size, size);
       dummy.compose(pos, quat, scl);
       inst.setMatrixAt(placed++, dummy);

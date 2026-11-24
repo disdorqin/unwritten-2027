@@ -679,11 +679,11 @@ try {
     },positionPattern.source,{timeout:45000});
     const observations=[
       {id:'registration-desk',knots:[[-12,159],[-43,159],[-67,159],[-68,142],[-98,127],[-108,118]],target:[-107.839573,115.765352,11.95]},
-      {id:'crater-ship-03',knots:[[-161,132],[-171,142]],target:[-168.891910,144.036418,11.2073]},
-      {id:'crater-ship-04',knots:[[-187,175],[-195,201]],target:[-191.730646,200.550125,11.2073]},
-      {id:'crater-ship-05',knots:[[-150,247]],target:[-148.845598,244.140513,11.2073]},
-      {id:'crater-ship-01',knots:[[-115,247],[-105,257]],target:[-105.378911,254.344416,11.2073]},
-      {id:'crater-ship-02',knots:[[-66,224]],target:[-68.169139,222.511436,11.2073]},
+      {id:'crater-ship-03',knots:[[-161,132],[-171,142]],target:[-168.891910,144.036418,11.4273]},
+      {id:'crater-ship-04',knots:[[-187,175],[-195,201]],target:[-191.730646,200.550125,11.4273]},
+      {id:'crater-ship-05',knots:[[-150,247]],target:[-148.845598,244.140513,11.4273]},
+      {id:'crater-ship-01',knots:[[-115,247],[-105,257]],target:[-105.378911,254.344416,11.4273]},
+      {id:'crater-ship-02',knots:[[-66,224]],target:[-68.169139,222.511436,11.4273]},
     ];
     const views=[]; let currentPitch=0;
     for(const view of observations){
