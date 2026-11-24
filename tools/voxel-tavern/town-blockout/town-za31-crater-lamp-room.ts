@@ -144,6 +144,37 @@ export function mountZa31CraterLampRoom(road: Road) {
     hutWidth * .6, .03, .5, -.4, 3.06, -1.28);
   snowStrip.rotation.x = -.42;
 
+  // Window A fill (K-21/22/23, 《设计-全图文字件总表》): text faces on
+  // the three boards left blank above. Same board style as the
+  // hydrology sign below (dark timber, brass border, off-white text);
+  // browser-only like drawSign — node tests see the blank boards.
+  function textBoard(parent: Object3D, text: string, w: number, h: number,
+    x: number, y: number, z: number, ry = 0) {
+    if (typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = Math.round(512 * h / w);
+    const pen = canvas.getContext('2d');
+    if (!pen) return;
+    pen.fillStyle = '#4a3826';
+    pen.fillRect(0, 0, canvas.width, canvas.height);
+    pen.strokeStyle = '#a98a56';
+    pen.lineWidth = 6;
+    pen.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+    pen.fillStyle = '#e8ecf0';
+    pen.textAlign = 'center';
+    pen.textBaseline = 'middle';
+    pen.font = `bold ${Math.round(canvas.height * .52)}px "Noto Sans SC", sans-serif`;
+    pen.fillText(text, canvas.width / 2, canvas.height / 2 + 2, canvas.width - 48);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.minFilter = texture.magFilter = NearestFilter;
+    texture.generateMipmaps = false;
+    const face = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture }));
+    face.position.set(x, y, z);
+    face.rotation.y = ry;
+    parent.add(face);
+  }
+
   // The rack wall (west interior): two shelves, ten slots — six lamps
   // in, four visibly out. Empty slots keep their peg and dust mark.
   const rack = new Group();
@@ -164,6 +195,7 @@ export function mountZa31CraterLampRoom(road: Road) {
   }
   // Rack sign board — face left blank for window A's K-23.
   box(rack, timberDark, .04, .22, .62, .06, 2.32, 0);
+  textBoard(rack, '灯不离手', .58, .18, .085, 2.32, 0, Math.PI / 2);
 
   // Registration grid (north interior): framed cells, one paper sheet,
   // header board above left blank for window A's K-22.
@@ -176,8 +208,13 @@ export function mountZa31CraterLampRoom(road: Road) {
     box(grid, paperMat, .32, .24, .015, -.55 + col * .37, 1.18 + row * .29, .03);
   }
   box(grid, timberDark, .82, .24, .04, 0, 2.12, 0);
-  // Room sign board over the door (outside) — blank for A's K-21.
+  textBoard(grid, '取灯登记', .78, .2, 0, 2.12, .026);
+  // Room sign board over the door (outside) — blank for A's K-21. The
+  // board projects east above the door, broad faces north/south, so
+  // K-21 is lettered on both faces.
   box(group, timberDark, .95, .36, .05, ex + .06, 2.62, -.65);
+  textBoard(group, '灯房', .9, .31, ex + .06, 2.62, -.65 + .028);
+  textBoard(group, '灯房', .9, .31, ex + .06, 2.62, -.65 - .028, Math.PI);
 
   // Oil corner (south interior): pots, wick jar, bench, floor stain.
   const oilMat = pixelMaterial(0x44503e, palette.rust, 149);
