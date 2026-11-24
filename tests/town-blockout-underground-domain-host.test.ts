@@ -133,3 +133,64 @@ test('batch 4: the crystal gate mounts shut and the camp recovery ring sits on t
   assert.ok(Math.abs(viaScene.north - result.campFireWorld.north) < 1e-9);
   assert.ok(Math.abs(viaScene.height - result.campFireWorld.height) < 1e-9);
 });
+
+test('lamp authority: an issued lamp offers at an empty niche and is placed on the ledger', async () => {
+  const { createLampLedger } = await import('../src/presence/lamp-ledger.js');
+  const { createUndergroundCampRemains } = await import('../tools/voxel-tavern/town-blockout/underground-camp-remains.js');
+  const { createUndergroundMineLayout } = await import('../tools/voxel-tavern/town-blockout/underground-mine-layout.js');
+  const { undergroundMineSpec } = await import('../tools/voxel-tavern/town-blockout/underground-domain-host.js');
+  const mine = createUndergroundMineLayout(undergroundMineSpec);
+  const data = createUndergroundCampRemains({
+    mine, camp: undergroundMineSpec.camp, walker: undergroundMineSpec.walker,
+  });
+  const niche = data.memorial.niches.find((entry) => !entry.hasSpentLamp);
+  assert.ok(niche);
+  // The offering approach stands at the memorial approach, at the niche's x.
+  const approach: readonly [number, number, number] = [
+    niche.position[0], data.memorial.approach[1], data.memorial.approach[2]];
+  data.dispose();
+
+  const ledger = createLampLedger();
+  let placedCalls = 0;
+  let worldFoot: { east: number; north: number; height: number } | undefined;
+  const result = mountUndergroundDomainHost({
+    parent: new Group(), road: fakeRoad(),
+    campBridge: {
+      now: () => 5_000,
+      readWorldFoot: () => worldFoot,
+      sit: () => true,
+      stand: () => true,
+      onSeatedChange: () => undefined,
+      isAimingAt: () => true,
+      showPickupNotice: () => undefined,
+      onRested: () => undefined,
+      readLampHeld: () => ledger.holdsLamp('p1'),
+      onLampPlaced: () => { placedCalls++; ledger.placeAtNiche('p1'); },
+    },
+  });
+  assert.equal(result.kind, 'ready');
+  if (result.kind !== 'ready') return;
+  const ready = result as Extract<typeof result, { kind: 'ready' }>;
+  const world = ready.mounted.toWorld(approach);
+  assert.ok(world);
+  worldFoot = world;
+  ready.mounted.sync();
+  const prompt = ready.mounted.campPrompt();
+  assert.equal(prompt?.id, `offer-lamp:${niche.id}`);
+
+  // Registered but not yet issued: the lamp room has given nothing, so the
+  // offering is refused and the niche stays dark.
+  assert.equal(ledger.register('p1'), true);
+  assert.equal(await ready.mounted.pressCamp(prompt!.id), 'rejected');
+  assert.deepEqual(ready.offeringsSnapshot()?.litNicheIds, []);
+  assert.equal(placedCalls, 0);
+
+  // Issued against the registration: the offering lands, the niche lights,
+  // and the ledger records the lamp as placed — the camp keeps no book.
+  assert.equal(ledger.issue('p1'), true);
+  assert.equal(await ready.mounted.pressCamp(prompt!.id), 'lamp-offered');
+  assert.deepEqual(ready.offeringsSnapshot()?.litNicheIds, [niche.id]);
+  assert.equal(placedCalls, 1);
+  assert.equal(ledger.record('p1')?.stage, 'placed');
+  assert.equal(ledger.holdsLamp('p1'), false);
+});

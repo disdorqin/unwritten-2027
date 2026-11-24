@@ -5,7 +5,7 @@ import {createUndergroundMineLayout} from '../src/shared/underground-mine-layout
 import {encounterPlacementPlan} from '../src/shared/underground-encounter-placement-plan.js';
 import {mountFirstMineWorkfaces} from '../tools/voxel-tavern/town-blockout/town-c-first-mine-workfaces.js';
 import {undergroundMineSpec} from '../tools/fixtures/underground-first-mine-survey-spec.js';
-test('five carts, support station and twelve surveyed candidates share the mounted geometry',()=>{
+test('five carts, support station and sixteen surveyed candidates share the mounted geometry',()=>{
  const mine=createUndergroundMineLayout(undergroundMineSpec),station=mine.supportStation!;
  assert.equal(mine.workfaces.length,5);assert.ok(station);
  const fixtures=[...mine.workfaces,station],scene=new Group(),art=mountFirstMineWorkfaces(scene,mine.workfaces,station);
@@ -21,7 +21,7 @@ test('five carts, support station and twelve surveyed candidates share the mount
  }
  for(let z=45.5;z<138;z+=.25)assert.ok(mine.queryPassage(0,z,.27,1.8,'open'));
  const candidates=encounterPlacementPlan.filter(g=>g.candidate?.frame==='first-mine-local-plus-z-candidate');
- assert.equal(candidates.length,12);assert.equal(encounterPlacementPlan.length,36);
+ assert.equal(candidates.length,16);assert.equal(encounterPlacementPlan.filter(g=>g.candidate).length,36);assert.equal(encounterPlacementPlan.length,36);
  for(const g of candidates){
   const p=g.candidate!.at,pass=mine.queryPassage(p.east,p.north,.27,1.8,'open');
   assert.ok(pass,g.id);assert.ok('height' in p);assert.equal(pass.floor,p.height);

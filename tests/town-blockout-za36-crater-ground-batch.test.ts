@@ -112,6 +112,19 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
     c3Draws++;
     c3Triangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
   });
+  // 卡06 lamp room carve-out (window C, U-20, ruling 2026-11-24): the
+  // shaft-head lamp hut rides its own budget like the salvage groups and
+  // is subtracted from the remainder below, so the W-1 pin does not move.
+  const lampRoom = crater.group.getObjectByName('za31-crater-lamp-room');
+  assert.ok(lampRoom, '卡06 lamp room mounted');
+  let lampDraws = 0, lampTriangles = 0, lampLights = 0;
+  lampRoom.traverse(node => {
+    if ((node as Light).isLight) lampLights++;
+    if (!(node as Mesh).isMesh) return;
+    const mesh = node as Mesh & { count?: number };
+    lampDraws++;
+    lampTriangles += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+  });
   // Remainder baseline re-pinned 2026-11-22 (was 46 draws / 283,027 triangles
   // / 7 lights): the +12 draws, +74,040 triangles and +6 lights over the old
   // pin are exactly the two C-line landings itemized above (6+6 draws,
@@ -122,9 +135,9 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
   // 800 — 3 fewer ground batch meshes (−3 draws) and the sheet rows north
   // of 336 removed (20 full tiles + the 12 m partial row at 528:
   // −97,920 triangles) against the pin above.
-  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles, 259147, 'crater remainder stays at the W-1 re-pinned triangle baseline (357,067 − 97,920 capped ground-sheet rows)');
-  assert.ok(dressingDraws <= 15, 'added story details must stay batched');
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - lampDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles, 259147, 'crater remainder stays at the W-1 re-pinned triangle baseline (357,067 − 97,920 capped ground-sheet rows)');
+  assert.ok(dressingDraws <= 17, 'added story details must stay batched (17 since C3 segments 1-4, crater offensive order 2026-11-21)');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');
   assert.ok(mouthTriangles <= 60000, 'crater-mouth works stay inside the approved mainline-1 triangle budget');
@@ -142,7 +155,10 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
   assert.ok(c3Draws <= 6, 'C3 crater-interior dressing stays inside its own draw budget');
   assert.ok(c3Triangles <= 73000, 'C3 crater-interior dressing stays inside its own triangle budget');
   assert.equal(c3Lights, 0, 'C3 crater-interior dressing adds no real light pools');
-  assert.equal(lights, 13, 'seven baseline light pools (camp 3 + crater-mouth 3 + north tower 1) plus the six C2 work lamps');
+  assert.equal(lights, 14, 'seven baseline light pools (camp 3 + crater-mouth 3 + north tower 1) plus the six C2 work lamps plus the one lamp-room door pool');
+  assert.ok(lampDraws <= 115, '卡06 lamp room stays inside its own draw budget');
+  assert.ok(lampTriangles < 2500, '卡06 lamp room stays inside its own triangle budget');
+  assert.equal(lampLights, 1, '卡06 lamp room adds exactly one real light (the door pool, end of the warm chain)');
   for (let n = 10; n < worldBounds.depth - 1; n += 7.5) {
     const oldTownEdge = terrain.groundHeightAt(0, n);
     assert.ok(Math.abs(crater.heightAt(0, n)! - oldTownEdge) < .001, `seam at ${n}`);

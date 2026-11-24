@@ -3,6 +3,8 @@
 import {secondMineDrySites} from './underground-second-mine-dry-wings.js';
 import {createFirstMineWorkfaces,firstMineMiddleSnowSites,firstMineWaterlineSite} from './town-c-first-mine-workfaces.js';
 import {firstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {warriorSafetyPocket} from './town-c-warrior-safety-pocket.js';
+import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
 export type EncounterLayer='90-main'|'90-crystal'|'140'|'165'|'190';
 type Family={id:string;layer:EncounterLayer;species:string;habitats:readonly string[];members:readonly [number,number];spacing?:readonly [number,number];safeDistance?:number};
 const families:readonly Family[]=[
@@ -21,7 +23,7 @@ const families:readonly Family[]=[
 ];
 type Point=Readonly<{east:number;north:number;height?:number}>;
 const local140:readonly Point[]=[{east:-42,north:124},{east:42,north:124},{east:-44,north:149},{east:44,north:149}];
-const cityStone:readonly Point[]=[{east:30,north:-5},{east:55,north:5},{east:118,north:-19}];
+const cityStone:readonly Point[]=[{east:30,north:-5},{east:55,north:5},warriorSafetyPocket.squareGuard];
 const cityPatrol:readonly Point[]=[{east:13,north:-3},{east:13,north:3}];
 // Measured on actual U3 crown underside and rock tile tops, not live ore registry.
 const crystalRoosts:readonly Point[]=[
@@ -41,6 +43,7 @@ function localCandidate(family:string,i:number){
     const [x,y,z]=firstMineWorkfaceSites[i].foot;
     return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:x,north:z,height:y}};
   }
+  if(family==='90-A'&&i<4)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineShallowWorks.nests[i]};
   if(family==='90-A'&&i>=4){const p=firstMineMiddleSnowSites[i-4];return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='90-D'&&i===0){const p=firstMineWaterlineSite;return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='90-D'&&i>0)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineDeepWorks.snakes[i-1]};

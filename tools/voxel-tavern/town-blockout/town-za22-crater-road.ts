@@ -15,6 +15,8 @@ import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
 import { buildCraterSurveyM1 } from './town-crater-survey-m1';
 import { buildCraterDensityA2 } from './town-crater-density-a2';
+import { buildCraterColliders } from './town-crater-colliders';
+import { mountZa31CraterLampRoom } from './town-za31-crater-lamp-room';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -36,6 +38,7 @@ const tileSize = 48;
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
+  readonly lampRoom: ReturnType<typeof mountZa31CraterLampRoom>;
   readonly mouthWorks: ReturnType<typeof buildCraterMouthWorks>;
   readonly outerWorks: ReturnType<typeof buildCraterOuterWorks>;
   readonly ejecta: ReturnType<typeof buildZa36CraterEjecta>;
@@ -175,7 +178,12 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const camp = mountZa31CraterCamp(road);
   const rim = buildZa31CraterRim(road, camp.placements);
   group.add(rim.group, camp.group);
-  const story = buildZa36CraterStoryDressing(road);
+  // 卡06 lamp room at the winch workface — mounted before the story
+  // dressing so its footprint reserves the ground it stands on.
+  const lampRoom = mountZa31CraterLampRoom(road);
+  if (lampRoom) group.add(lampRoom.group);
+  const story = buildZa36CraterStoryDressing(road,
+    lampRoom ? [lampRoom.footprint] : []);
   group.add(story.group);
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
@@ -231,6 +239,20 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   if (ropeStay) group.add(ropeStay.group);
   const surveyM1 = buildCraterSurveyM1(road);
   if (surveyM1) group.add(surveyM1.group);
+  // Collision fix (audit 2026-11-22): the crater's built pieces register
+  // walk-geometry boxes on the road's top group, generated from the
+  // mounts' own placements. The viewer's geometry index still has to
+  // include this group before the boxes take effect (single-writer file,
+  // pairing-line wiring — registered with the audit).
+  group.userData.colliders = buildCraterColliders({
+    yaw: anchor.yaw,
+    winch: winch?.survey,
+    camp: camp.placements,
+    midground: midground.placements,
+    ejecta: ejecta.placements,
+    dressing: story.placements,
+    extra: lampRoom?.boxes,
+  });
   // Salvage ①: one E-action surface for the crater — the mouth-works
   // spots (registration / map / telescope / firewood) plus the M1 station.
   const surveySpot: CraterActionSpot | undefined = surveyM1 ? {
@@ -253,5 +275,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       crater.floorWorklights.setNight(night);
     },
   };
-  return { ...road, winch, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
+  return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1, craterActions };
 }
