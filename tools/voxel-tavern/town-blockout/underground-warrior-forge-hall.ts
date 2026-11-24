@@ -1,4 +1,5 @@
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight } from 'three';
+import { mountWarriorForgeDressing } from './underground-warrior-forge-dressing.js';
 
 type Position = Readonly<{ east: number; north: number; height: number }>;
 type Solid = Readonly<{ e: number; n: number; y: number; width: number; depth: number; height: number }>;
@@ -99,6 +100,11 @@ export function createWarriorForgeHall(site: Position = warriorForgeHallSite) {
     gauge.visible = true;
   }
 
+  const dressing=mountWarriorForgeDressing(group);
+  // Both new solid furniture silhouettes are part of the real hall collision
+  // query. Decorative details have no duplicate box or authority state.
+  solids.push(...dressing.geometry.solids);
+
   function absolute(e: number, n: number): Position {
     return { east: site.east + e, north: site.north + n, height: site.height };
   }
@@ -117,12 +123,13 @@ export function createWarriorForgeHall(site: Position = warriorForgeHallSite) {
     ) < radius);
   }
   return {
-    group, entry, stand, floorHeightAt, canStand, updateHeat,
+    group, entry, stand, floorHeightAt, canStand, updateHeat, dressing,
     colliders: solids.map(box => ({
       min: [site.east + box.e - box.width / 2, site.height + box.y, -site.north - box.n - box.depth / 2],
       max: [site.east + box.e + box.width / 2, site.height + box.y + box.height, -site.north - box.n + box.depth / 2],
     })),
     dispose() {
+      dressing.dispose();
       group.removeFromParent();
       shape.dispose();
       for (const material of [stone, paving, brick, iron, ember, cold, working, hot, pointer]) material.dispose();
