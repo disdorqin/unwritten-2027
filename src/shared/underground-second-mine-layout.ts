@@ -1,5 +1,6 @@
 /** Batch 91: proposed -140 layout, in local metres. No world/domain registration.
  * Hydrology is supplied by the existing authority; this is not a night clock. */
+import {secondMineDryWings} from './underground-second-mine-dry-wings.js';
 export type MineRiverState = 'high'|'middle'|'low';
 export type MineLocalPoint = Readonly<{east:number;north:number}>;
 type Room = Readonly<{id:string;x0:number;x1:number;n0:number;n1:number;ceiling:number;river?:boolean}>;
@@ -11,6 +12,7 @@ export const secondMineRooms: readonly Room[] = Object.freeze([
   {id:'far-shore',x0:-48,x1:48,n0:146,n1:182,ceiling:12},
   {id:'dry-bypass',x0:48,x1:55,n0:112,n1:164,ceiling:7},
   {id:'exit',x0:-6,x1:6,n0:182,n1:198,ceiling:5},
+  ...secondMineDryWings,
 ]);
 export const secondMineAnchors = Object.freeze({
   entry:{east:0,north:2}, supportCamp:{east:-3.5,north:10},
