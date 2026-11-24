@@ -2,6 +2,7 @@
  * Source: 设计-地下遭遇组逐层配表-2026-11-22, batch 56; batch 94 retains GPT-C scope. */
 import {secondMineDrySites} from './underground-second-mine-dry-wings.js';
 import {createFirstMineWorkfaces,firstMineMiddleSnowSites,firstMineWaterlineSite} from './town-c-first-mine-workfaces.js';
+import {firstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 export type EncounterLayer='90-main'|'90-crystal'|'140'|'165'|'190';
 type Family={id:string;layer:EncounterLayer;species:string;habitats:readonly string[];members:readonly [number,number];spacing?:readonly [number,number];safeDistance?:number};
 const families:readonly Family[]=[
@@ -42,6 +43,8 @@ function localCandidate(family:string,i:number){
   }
   if(family==='90-A'&&i>=4){const p=firstMineMiddleSnowSites[i-4];return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='90-D'&&i===0){const p=firstMineWaterlineSite;return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
+  if(family==='90-D'&&i>0)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineDeepWorks.snakes[i-1]};
+  if(family==='90-C')return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineDeepWorks.zombies[i]};
   if(family==='crystal-A')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalRoosts[i]};
   if(family==='crystal-B')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalMimics[i]};
   if(family==='190-A')return {frame:'palace-shell-local-candidate' as const,at:{east:12,north:58,height:-2.4}};
