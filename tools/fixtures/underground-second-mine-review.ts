@@ -4,7 +4,7 @@ import type {MineRiverState} from '../../src/shared/underground-second-mine-layo
 const mine=createSecondMineScene(),scene=new Scene();scene.background=new Color(0x10171e);scene.add(mine.group,new AmbientLight(0xa0b3c6,.62));
 const camera=new PerspectiveCamera(65,innerWidth/innerHeight,.06,180),lamp=new PointLight(0xffd6ac,26,22,2);camera.add(lamp);scene.add(camera);
 const renderer=new WebGLRenderer({antialias:false,powerPreference:'low-power'});renderer.setSize(innerWidth,innerHeight);document.body.append(renderer.domElement);
-const views={gallery:[0,12,0,48],near:[0,115,0,142],bypass:[51.5,120,51.5,160],far:[0,153,21,164]} as const;
+const views={gallery:[0,12,0,48],near:[0,115,0,142],bypass:[51.5,120,51.5,160],far:[0,153,21,164],support:[0,9,-5,9],workface:[0,46,-24,46],westWing:[-12,46,-27,48],eastWing:[15,79,29,82],collapse:[-52,167,-64,170],barracks:[55,174,63,176]} as const;
 let frames=0,trustedW=0,walked=0,rejected=0,start=performance.now(),view='gallery';const keys=new Set<string>(),direction=new Vector3();
 function setView(name:keyof typeof views){const [e,n,te,tn]=views[name];view=name;camera.position.set(e,(mine.floor(e,n)??0)+1.67,-n);camera.lookAt(te,1.67,-tn);return mine.canStand(e,n);}
 function state(s:MineRiverState){mine.setRiverState(s);return true}

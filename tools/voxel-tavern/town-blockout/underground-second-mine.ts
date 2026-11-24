@@ -1,5 +1,6 @@
 import {BoxGeometry,BufferGeometry,Float32BufferAttribute,Group,InstancedMesh,Mesh,MeshStandardMaterial,Matrix4,Quaternion,Vector3,PointLight,DataTexture,RGBAFormat,NearestFilter} from 'three';
 import {secondMineRooms,secondMineRoomAt,secondMineBed,secondMineAnchors,canStandSecondMine,secondMineFloor,type MineRiverState} from '../../../src/shared/underground-second-mine-layout.js';
+import {dressSecondMineDryWings} from './underground-second-mine-dry-dressing.js';
 type Part={x:number;n:number;y:number;w:number;d:number;h:number;rz:number};
 type Solid=Readonly<{x:number;n:number;w:number;d:number}>;
 const colors={rock:0x555b62,basalt:0x353b44,iron:0x777b82,rust:0x815b44,wood:0x71553c,crystal:0x82c5d6,ember:0xe5a05a,gravel:0x66645d} as const;
@@ -113,6 +114,7 @@ export function createSecondMineScene(){
     for(let i=0;i<5;i++){box('wood',camp.east+(i-2)*.19,camp.north,.18,.17,.78,.22);box('ember',camp.east+(i-2)*.15,camp.north,.52,.13,.18,.7);}
     const light=new PointLight(0xffb277,24,16,2);light.position.set(camp.east,1.4,-camp.north);group.add(light);
   }
+  dressSecondMineDryWings(box);
   const dummy=new Matrix4(),q=new Quaternion(),v=new Vector3(),scale=new Vector3(),axis=new Vector3(0,0,1);
   for(const [kind,items] of parts){
     const m=new InstancedMesh(meshGeometry,material.get(kind),items.length);
