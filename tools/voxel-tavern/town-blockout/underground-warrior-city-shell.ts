@@ -1,4 +1,5 @@
-import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,MeshStandardMaterial,NearestFilter,Object3D,PointLight,SRGBColorSpace} from 'three';
+import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,MeshLambertMaterial,NearestFilter,Object3D,PointLight,SRGBColorSpace} from 'three';
+import {createStaticFootIndex} from './town-c-static-foot-index.js';
 /** U10 city ENY local frame. Existing houses, statue, forge, arcade and wall remain separate reusable modules.
  * This shell supplies only missing street, gates, tavern, square paving and enclosing rock. No registration/loot/teleport. */
 type Family='stone'|'shade'|'tan'|'wood'|'moss'|'rust'|'crystal'|'moon';
@@ -121,9 +122,9 @@ function texture(f:Family){const bytes=new Uint8Array(1024),base=colors[f],accen
 }const t=new DataTexture(bytes,16,16);t.colorSpace=SRGBColorSpace;t.magFilter=t.minFilter=NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;return t}
 export function createWarriorCityShell(){
  const group=new Group();group.name='u10-city-complete-street-shell';const geo=new BoxGeometry(),pose=new Object3D();
- const resources:{mesh:InstancedMesh;mat:MeshStandardMaterial;map:DataTexture}[]=[];
+ const resources:{mesh:InstancedMesh;mat:MeshLambertMaterial;map:DataTexture}[]=[];
  for(const f of Object.keys(colors) as Family[]){
-   const rows=pieces.filter(p=>p.family===f);if(!rows.length)continue;const map=texture(f),mat=new MeshStandardMaterial({map,roughness:.95});
+   const rows=pieces.filter(p=>p.family===f);if(!rows.length)continue;const map=texture(f),mat=new MeshLambertMaterial({map});
    // Spatial chunks prevent the entire 180m street from rendering around every corner.
    for(let start=0;start<180;start+=30){
     const chunk=rows.filter(p=>Math.min(179.999,Math.max(0,p.e))>=start&&Math.min(179.999,Math.max(0,p.e))<start+30);if(!chunk.length)continue;
@@ -131,9 +132,10 @@ export function createWarriorCityShell(){
    }
  }
  const solids=pieces.filter(p=>p.solid);
+ const collisionIndex=createStaticFootIndex(solids.map(p=>({min:[p.e-p.w/2,p.y-p.h/2,-p.n-p.d/2],max:[p.e+p.w/2,p.y+p.h/2,-p.n+p.d/2]})));
  function canStand(e:number,n:number,y=0,r=.27){
    if(![e,n,y,r].every(Number.isFinite)||e-r<0||e+r>180||n-r< -30||n+r>30)return false;
-   return !solids.some(p=>p.y+p.h/2>y+.025&&p.y-p.h/2<y+1.8&&Math.hypot(Math.max(0,Math.abs(e-p.e)-p.w/2),Math.max(0,Math.abs(n-p.n)-p.d/2))<r);
+   return !collisionIndex.blocks(e,n,y,r);
  }
  const lamp=new PointLight(new Color(colors.crystal),13,15,2);lamp.position.set(98.1,1.2,9.65);group.add(lamp);
  return {group,canStand,solids,plan:warriorCityShellPlan,count:pieces.length,dispose(){group.removeFromParent();for(const {mesh} of resources)mesh.dispose();for(const mat of new Set(resources.map(r=>r.mat)))mat.dispose();for(const map of new Set(resources.map(r=>r.map)))map.dispose();geo.dispose();}};
