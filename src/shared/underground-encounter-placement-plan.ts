@@ -1,6 +1,7 @@
 /** Placement inventory ONLY. Existing water/encounter rotation and spawn authority are untouched.
  * Source: 设计-地下遭遇组逐层配表-2026-11-22, batch 56; batch 94 retains GPT-C scope. */
 import {secondMineDrySites} from './underground-second-mine-dry-wings.js';
+import {createFirstMineWorkfaces,firstMineMiddleSnowSites,firstMineWaterlineSite} from './town-c-first-mine-workfaces.js';
 export type EncounterLayer='90-main'|'90-crystal'|'140'|'165'|'190';
 type Family={id:string;layer:EncounterLayer;species:string;habitats:readonly string[];members:readonly [number,number];spacing?:readonly [number,number];safeDistance?:number};
 const families:readonly Family[]=[
@@ -31,7 +32,16 @@ const crystalMimics:readonly Point[]=[
  {east:-27.18,north:40.3,height:-1.5195218820687295},
  {east:31.22,north:43.2,height:-1.6390682011914437},
 ];
+// Canonical layout frame: +Z goes down the registered main mine, not ENY north.
+// Survey only. No live encounter registration until safe/ore masks are accepted.
+const firstMineWorkfaceSites=createFirstMineWorkfaces({minX:-100,maxX:100,minZ:45,maxZ:140},-91);
 function localCandidate(family:string,i:number){
+  if(family==='90-B'){
+    const [x,y,z]=firstMineWorkfaceSites[i].foot;
+    return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:x,north:z,height:y}};
+  }
+  if(family==='90-A'&&i>=4){const p=firstMineMiddleSnowSites[i-4];return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
+  if(family==='90-D'&&i===0){const p=firstMineWaterlineSite;return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='crystal-A')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalRoosts[i]};
   if(family==='crystal-B')return {frame:'first-mine-crystal-local-candidate' as const,at:crystalMimics[i]};
   if(family==='190-A')return {frame:'palace-shell-local-candidate' as const,at:{east:12,north:58,height:-2.4}};
