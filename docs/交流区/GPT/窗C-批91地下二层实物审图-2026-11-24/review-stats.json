@@ -1,0 +1,133 @@
+{
+  "scope": "local unregistered -140 candidate; water injected by fixture, not night authority",
+  "errors": [],
+  "views": {
+    "gallery-middle": {
+      "frames": 9,
+      "view": "gallery",
+      "state": "middle",
+      "eye": [
+        0,
+        1.67,
+        -12
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": true,
+      "water": true,
+      "calls": 52,
+      "fps": 14.669926650366747
+    },
+    "near-middle": {
+      "frames": 20,
+      "view": "near",
+      "state": "middle",
+      "eye": [
+        0,
+        1.67,
+        -115
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": true,
+      "water": true,
+      "calls": 51,
+      "fps": 14.847809948032666
+    },
+    "near-high": {
+      "frames": 31,
+      "view": "near",
+      "state": "high",
+      "eye": [
+        0,
+        1.67,
+        -115
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": false,
+      "water": true,
+      "calls": 11,
+      "fps": 15.836526181353767
+    },
+    "near-low": {
+      "frames": 41,
+      "view": "near",
+      "state": "low",
+      "eye": [
+        0,
+        1.67,
+        -115
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": false,
+      "water": false,
+      "calls": 10,
+      "fps": 16.84954588421083
+    },
+    "bypass-high": {
+      "frames": 51,
+      "view": "bypass",
+      "state": "high",
+      "eye": [
+        51.5,
+        1.67,
+        -120
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": false,
+      "water": true,
+      "calls": 11,
+      "fps": 17.446037012982586
+    },
+    "far-middle": {
+      "frames": 64,
+      "view": "far",
+      "state": "middle",
+      "eye": [
+        0,
+        1.67,
+        -153
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 3546,
+      "boat": true,
+      "water": true,
+      "calls": 10,
+      "fps": 17.309460702121974
+    }
+  },
+  "passed": true,
+  "walk": {
+    "frames": 18,
+    "view": "bypass",
+    "state": "high",
+    "eye": [
+      51.5,
+      1.67,
+      -125.99999999999987
+    ],
+    "trustedW": 1,
+    "walked": 6.0000000000000036,
+    "rejected": 0,
+    "pieces": 3546,
+    "boat": false,
+    "water": true,
+    "calls": 10,
+    "fps": 17.653981953681534
+  }
+}
