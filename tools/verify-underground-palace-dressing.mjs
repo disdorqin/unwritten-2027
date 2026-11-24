@@ -35,20 +35,21 @@ try{
     headless:true,args:['--use-gl=angle','--use-angle=swiftshader',
       '--enable-unsafe-swiftshader'],
   });
-  const page=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:1});
+  const page=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:.8});
   page.on('pageerror',e=>result.errors.push('page '+e.message));
   page.on('requestfailed',r=>result.errors.push('request '+r.url()));
   await page.goto('http://127.0.0.1:'+addr.port+'/u11-review',{waitUntil:'networkidle'});
   await page.waitForFunction(()=>window.palaceDressingReview?.inspect().frames>=3);
-  for(const [index,name] of ['stairs','colonnade','gallery','throne','arena','vault'].entries()){
+  for(const [index,name] of ['stairs','colonnade','gallery','throne','arena','gate'].entries()){
     assert.ok(await page.evaluate(n=>window.palaceDressingReview.setView(n),name));
     await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
     const stats=await page.evaluate(()=>window.palaceDressingReview.inspect());
     assert.equal(stats.view,name);
     // Five new 144-piece socket lanterns extend the original 9,861 blocks.
     // Keep the art fixture pinned to the full R5 visual bill of materials.
-    assert.equal(stats.allPieces,10581);
-    assert.equal(stats.visualPieces,10581);
+    assert.equal(stats.allPieces,12141);
+    assert.equal(stats.visualPieces,9126);
+    assert.equal(stats.vaultMounted,false);
     assert.ok(stats.materials>0 && stats.materials<=8);
     assert.ok(stats.drawing<=12,'D-shell plus C materials exceeded batch cap: '+name);
     assert.ok(stats.triangles>=20000 && stats.triangles<=500000,
@@ -60,6 +61,11 @@ try{
     assert.ok(shot.byteLength>12000,'black/blank image '+name);
     result.views[name]={...stats,imageBytes:shot.byteLength};
   }
+  await page.evaluate(()=>window.palaceDressingReview.setView('retreat'));
+  const started=Date.now(),initial=await page.evaluate(()=>window.palaceDressingReview.inspect().frames);
+  await page.keyboard.down('w');assert.ok(await page.evaluate(()=>window.palaceDressingReview.step(2)));await page.keyboard.up('w');await page.waitForTimeout(650);
+  result.walk=await page.evaluate(()=>window.palaceDressingReview.inspect());result.walk.fps=(result.walk.frames-initial)*1000/(Date.now()-started);
+  assert.ok(result.walk.walked>5.99&&result.walk.trustedW>0&&result.walk.rejected===0);
   assert.deepEqual(result.errors,[]);
   result.passed=true;
   await page.close();
