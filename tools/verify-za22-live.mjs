@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a4-b90-smelter', 'b91-a-ground-sites', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a4-b90-smelter', 'b91-a-ground-sites', 'b91-a-tower-gate', 'b91-a-tower-north', 'b91-a-tower-west', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -255,7 +255,7 @@ async function tiltFromLevel(page, radians) {
   await page.waitForTimeout(250);
 }
 
-async function walkTo(page, evidence, target, label) {
+async function walkTo(page, evidence, target, label, precision=.46) {
   const [east, north] = target;
   let after = await readPose(page);
   for (let attempt = 0; attempt < 6; ++attempt) {
@@ -263,7 +263,7 @@ async function walkTo(page, evidence, target, label) {
     const from = after;
     const dx = east - from.east, dn = north - from.north;
     const distance = Math.hypot(dx, dn);
-    if (distance <= .46) {
+    if (distance <= precision) {
       evidence.checkpoints.push({ label, target, ...from, wire: evidence.poses.at(-1) });
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
@@ -271,21 +271,21 @@ async function walkTo(page, evidence, target, label) {
     const desired = Math.atan2(dx, dn);
     await face(page, evidence, desired);
     // For small final corrections use the slow backward movement, avoiding double-W sprint.
-    const backwards = distance < 1.4;
+    const backwards = precision < .3 || distance < 1.4;
     if (backwards) await face(page, evidence, desired + Math.PI);
     const key = backwards ? 's' : 'w';
-    const fast = distance > 9 && segment !== 'a4-shots';
+    const fast = precision >= .3 && distance > 9 && segment !== 'a4-shots';
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
-      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance }) => {
+      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance, precision }) => {
         const point = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
         if (!point) return false;
         const x = Number(point[1]), n = Number(point[2]);
-        if (Math.hypot(x - east, n - north) <= .32) return true;
+        if (Math.hypot(x - east, n - north) <= Math.max(.10,precision*.7)) return true;
         const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
         return forward >= distance;
-      }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
+      }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance, precision },
       { timeout: Math.ceil(30_000 + distance * 1000) });
     } catch (error) {
       const stopped = await readPose(page);
@@ -713,6 +713,65 @@ try {
     report.b91GroundSites={views,canvasVisible:await page.locator('#scene canvas').isVisible(),
       note:'Scene and walk evidence only. B/C registration and recognition authority not simulated.'};
   }
+  if (segment.startsWith('b91-a-tower-')) {
+    const id=segment.slice('b91-a-tower-'.length)+'-tower';
+    const fixture=JSON.parse(await readFile(new URL('../tests/fixtures/b91-a-tower-native-route.json',import.meta.url),'utf8'));
+    const tower=fixture.routes.find(t=>t.id===id);
+    assert.ok(tower,'unknown tower route');
+    const {page,evidence}=await openTown(segment);
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
+    await page.waitForFunction(pattern=>{
+      const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;
+    },positionPattern.source,{timeout:45000});
+    await follow(page,evidence,tower.approach,id+'-approach');
+    async function step(p,label){
+      await walkTo(page,evidence,[p.east,p.north],label,.18);
+      await page.waitForTimeout(140);
+      const actual=await readPose(page);
+      assert.ok(Math.abs(actual.height-p.height)<.38,JSON.stringify({label,actual,expected:p}));
+      return actual;
+    }
+    await step(tower.entry,id+'-entry');
+    let lookoutPose,rubbingPose,currentPitch=0;
+    const views=[];
+    async function photograph(name,targetEast,targetNorth,targetHeight){
+      await page.waitForFunction(()=>document.querySelector('#position')?.textContent?.includes('行走'),null,{timeout:5000});
+      const p=await readPose(page);
+      await face(page,evidence,Math.atan2(targetEast-p.east,targetNorth-p.north));
+      const pitch=Math.atan2(targetHeight-p.cameraY,Math.hypot(targetEast-p.east,targetNorth-p.north));
+      const applied=Math.round((pitch-currentPitch)/.003)*.003;
+      await tiltFromLevel(page,applied);currentPitch+=applied;
+      if((await page.locator('#lighting').textContent())!=='雪夜'){
+        await page.locator('#town-panel-toggle').click();
+        await page.locator('#lighting').click();
+        await page.locator('#town-settings-close').click();
+      }
+      await snapshot(page,evidence,id+'-'+name+'-night');
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+      await snapshot(page,evidence,id+'-'+name+'-day');
+      views.push({name,pose:p,target:{east:targetEast,north:targetNorth,height:targetHeight},pitch});
+      await tiltFromLevel(page,-currentPitch);currentPitch=0;
+      return p;
+    }
+    for(let k=0;k<tower.stairs.length;k++){
+      const p=tower.stairs[k];
+      await step(p,id+'-ascent-'+k);
+      if(k===10)lookoutPose=await photograph('lookout',-120,185,10.78);
+      if(k===tower.stairs.length-1)rubbingPose=await photograph('rubbing',tower.rubbing.east,tower.rubbing.north,tower.rubbing.height+.96);
+    }
+    assert.ok(lookoutPose&&rubbingPose);
+    const descending=[...tower.stairs].reverse().slice(1).concat([tower.entry]);
+    for(let k=0;k<descending.length;k++)await step(descending[k],id+'-descent-'+k);
+    const returned=await readPose(page);
+    assert.ok(Math.abs(returned.height-tower.entry.height)<.25);
+    report.b91Tower={id,lookoutPose,rubbingPose,returned,views,canvasVisible:await page.locator('#scene canvas').isVisible(),
+      note:'Native walk up/down only; rule authority not simulated.'};
+  }
   if (segment === 'a6-perf') {
     const {page,evidence}=await openTown('a6-perf');
     const measures=[];
@@ -1020,7 +1079,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a4-b90-smelter' && segment !== 'b91-a-ground-sites' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a4-b90-smelter' && segment !== 'b91-a-ground-sites' && !segment.startsWith('b91-a-tower-') && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {
