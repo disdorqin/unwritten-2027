@@ -115,6 +115,15 @@ export type UndergroundCampBridge = Readonly<{
   isAimingAt(world: Point): boolean;
   showPickupNotice(): void;
   onRested(roomId: string): void;
+  /**
+   * Lamp authority seam (ruling 2026-11-22): the single lamp ledger lives
+   * with the shaft-head lamp room on the presence side; the camp holds no
+   * inventory. The viewer supplies the read from its presence state; while
+   * it is unsupplied the offering honestly resolves as 'no-lamp'.
+   */
+  readLampHeld?: () => boolean;
+  /** Called after a successful offering so presence can record placement. */
+  onLampPlaced?: () => void;
 }>;
 
 /**
@@ -142,9 +151,10 @@ export function mountUndergroundDomainHost(options: Readonly<{
 
   // Batch 3 camp state, owned here: offerings drive the light reader, so a
   // lamp offered at a niche lights that niche through the scene's own sync.
-  // The lamp itself has no inventory authority yet: takeLamp reports false
-  // and the offering honestly resolves as 'no-lamp' until a lamp source is
-  // wired (surface lamp room is another line's surface).
+  // The lamp itself answers to the single lamp ledger (lamp room, presence
+  // side — ruling 2026-11-22): the bridge reads whether this session holds
+  // a lamp, and while that read is unsupplied the offering honestly
+  // resolves as 'no-lamp'. The camp never keeps a lamp inventory.
   let toLocal: ((world: Point) => readonly [number, number, number] | undefined) | undefined;
   let toWorldPoint: ((local: readonly [number, number, number]) => Point | undefined) | undefined;
   let offerings: ReturnType<typeof createUndergroundCampOfferings> | undefined;
@@ -212,7 +222,12 @@ export function mountUndergroundDomainHost(options: Readonly<{
       },
       canOfferLamp: (nicheId: string) =>
         nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
-      offerLamp: (nicheId: string) => offerings?.offerLamp(nicheId, () => false).kind === 'offered',
+      offerLamp: (nicheId: string) => {
+        const offered = offerings?.offerLamp(
+          nicheId, () => campBridge.readLampHeld?.() === true).kind === 'offered';
+        if (offered) campBridge.onLampPlaced?.();
+        return offered;
+      },
     },
     pickaxe: {
       available: () => !pickaxeTaken,
