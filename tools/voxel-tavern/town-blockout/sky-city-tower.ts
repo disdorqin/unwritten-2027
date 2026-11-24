@@ -5,6 +5,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createClayMetalPanel } from './clay-metal-panel.js';
 import { createTownChronicleDoorRing } from './town-chronicle-door-ring.js';
+import {skyCityInscribedPlate} from './sky-city-inscribed-plate';
 
 type Point = readonly [x: number, y: number, z: number];
 type Box = { x: number; y: number; z: number; width: number; height: number; depth: number };
@@ -239,6 +240,7 @@ export function buildSkyCityTower() {
   const ringGlowMaterial=new MeshStandardMaterial({color:'#8baba2',emissive:'#82d8c8',emissiveIntensity:.04,roughness:.6});
   const ringGlow=new Mesh(new TorusGeometry(.82,.014,5,36),ringGlowMaterial);
   ringGlow.name='sky-city-door-ring-state-trace';ringGlow.position.set(0,1.69,gateDepth/2+.022);door.add(ringGlow);
+  const inscription=skyCityInscribedPlate('T-02',2.28,.34);inscription.position.set(0,.38,gateDepth/2+.05);door.add(inscription);
   group.add(door);
   for (const x of [-1.64, 1.64]) {
     const jamb = { x, y: deckY + 1.58, z: gate[2] + .09, width: .55, height: 3.16, depth: .83 };

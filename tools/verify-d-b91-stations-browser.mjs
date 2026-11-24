@@ -19,9 +19,10 @@ try{
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});page.on('response',r=>{if(r.status()>=400)errors.push(String(r.status())+' '+r.url())});
  await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/d-b91-stations-review.html',{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>window.__stationReview?.state().frames>3,null,{timeout:45000});
- for(let i=0;i<5;i++){
+ for(const i of (process.argv.includes('--formation')?[5]:[0,1,2,3,4])){
    await page.keyboard.press(String(i+1));
    await page.waitForFunction(i=>window.__stationReview.state().selected===i,i);
+   if(i===5){await page.waitForFunction(()=>window.__stationReview.state().formationVisible&&window.__stationReview.state().formationSeconds>.2,null,{timeout:15000})}
    if(i===0){
      const before=await page.evaluate(()=>window.__stationReview.state().walked);
      await page.keyboard.down('w');

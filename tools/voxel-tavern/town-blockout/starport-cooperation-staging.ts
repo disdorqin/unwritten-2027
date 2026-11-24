@@ -2,6 +2,7 @@ import {BoxGeometry,CanvasTexture,Group,InstancedMesh,Mesh,MeshBasicMaterial,Mes
   PlaneGeometry,SRGBColorSpace,type Object3D} from 'three';
 import type {AircraftPoint} from '../../../src/shared/aircraft-flight';
 import {sampleNorthRidge350} from './north-ridge-350-terrain';
+import {mountStarportCarryFormation} from './starport-cooperation-procession';
 
 /** D scene anchors consumed by B's authoritative event. Coordinates in the
  * existing town / front-ridge frame; no new client event or ignition clock. */
@@ -118,11 +119,12 @@ export function mountStarportCooperationStaging(parent:Object3D,anchor:AircraftP
     for(const [index,part]of parts.entries()){part.updateMatrix();batch.setMatrixAt(index,part.matrix);group.remove(part)}
     batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();group.add(batch);
   }
-  return {group,anchors:anchorGroup,route:starportCooperationRouteAnchors,crowd:starportCrowdAnchors,
+  const procession=mountStarportCarryFormation(group);
+  return {group,anchors:anchorGroup,route:starportCooperationRouteAnchors,crowd:starportCrowdAnchors,procession,
     blocked(feet:AircraftPoint,radius:number,bodyHeight:number){
       return blockers.some(b=>feet.height+bodyHeight>b.bottom&&feet.height<b.top&&Math.hypot(
         Math.max(0,Math.abs(feet.east-b.east)-b.width/2),Math.max(0,Math.abs(feet.north-b.north)-b.depth/2))<radius);
     },
-    dispose(){group.removeFromParent();geometry.dispose();mats.forEach(m=>m.dispose());face?.material.map?.dispose();face?.material.dispose();face?.geometry.dispose()}
+    dispose(){procession.dispose();group.removeFromParent();geometry.dispose();mats.forEach(m=>m.dispose());face?.material.map?.dispose();face?.material.dispose();face?.geometry.dispose()}
   };
 }

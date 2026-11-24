@@ -3,6 +3,7 @@ import {
   MeshLambertMaterial, Object3D, ShaderMaterial,
 } from 'three';
 import { insideSkyCityDistrictFootprint } from './sky-city-district';
+import { insideSkyObservatoryHall } from './sky-city-observatory-hall';
 
 type Point = readonly [x: number, y: number, z: number];
 type PlanPoint = readonly [x: number, z: number];
@@ -108,6 +109,7 @@ function paths() {
   strip([[32,-16],[37,-18.5],[39,-22.9]],2.45,641);
   strip([[-31,-18],[-32,-19.9]],2.25,671);
   strip([[8,29],[12,33]],2.5,701);
+  strip([[15,20],[15,12],[15,7],[16,1],[16,-2]],2.6,741);
   return path.mesh('spring-road-and-landing-lane');
 }
 
@@ -124,7 +126,7 @@ function meadow() {
       const index = patch * 41 + stalk * 5;
       const dx = x + (scatter(index) - .5) * 2.1;
       const dz = z + (scatter(index + 1) - .5) * 2.1;
-      if(insideSkyCityDistrictFootprint(dx,dz))continue;
+      if(insideSkyCityDistrictFootprint(dx,dz)||insideSkyObservatoryHall(dx,dz,.5))continue;
       const h = .16 + scatter(index + 2) * .26;
       model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], tuft);
       if (stalk % 2) continue;

@@ -1,6 +1,7 @@
 import {AmbientLight,Color,DirectionalLight,Fog,PerspectiveCamera,Vector3,WebGLRenderer} from 'three';
 import {createZa22CloudRoute,createZa22NorthRidgeLine,za22StationApproach,cloudTerminal} from './town-za22-cloud-route';
 import {middleStationSurfaceAt} from './north-ridge-middle-station';
+import {createCombineFlags} from '../../../src/shared/town-combine-flags';
 const epoch=Date.UTC(2026,0,1);
 let now=epoch;
 const route=createZa22CloudRoute({now:()=>now,enterOrExit(){},view(){}});
@@ -19,12 +20,16 @@ const stations=[
  {name:'星港坪装配场',east:324,north:654.5,height:347,yaw:0},
  {name:'星港坪工具台',east:318.3,north:656.8,height:347,yaw:0},
  {name:'星港坪围观区',east:342,north:654.2,height:347,yaw:0},
+ {name:'首次搭手队形 · 仅审图旗标',east:336,north:652,height:347,yaw:-Math.PI/3},
 ] as const;
 let selected=0,night=false,yaw=0,foot:{east:number;north:number;height:number;yaw:number;name:string}={...stations[0]!},frames=0,walked=0;
 const keys=new Set<string>();let last=performance.now();
-function choose(i:number){selected=i;foot={...stations[i]!};yaw=foot.yaw;}
+const previewFlags=createCombineFlags({scheduleAt:()=>undefined,hasStoryKey:()=>false});previewFlags.forgeCompleted();
+const formation=route.starportStaging()?.procession;
+let formationSeconds=0;
+function choose(i:number){selected=i;foot={...stations[i]!};yaw=foot.yaw;formationSeconds=0;if(i!==5)formation?.hide();}
 function lighting(){scene.background=new Color(night?'#20314b':'#aebfd2');scene.fog=new Fog(night?'#20314b':'#aebfd2',170,1400);ambient.intensity=night?.42:1.25;sun.intensity=night?.15:1.7;route.setNight(night)}
-addEventListener('keydown',e=>{if(/^Digit[1-5]$/.test(e.code))choose(Number(e.code.slice(-1))-1);else if(e.code==='KeyN'&&!e.repeat){night=!night;lighting()}else keys.add(e.code)});
+addEventListener('keydown',e=>{if(/^Digit[1-6]$/.test(e.code))choose(Number(e.code.slice(-1))-1);else if(e.code==='KeyN'&&!e.repeat){night=!night;lighting()}else keys.add(e.code)});
 addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>keys.clear());
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
 addEventListener('resize',resize);resize();choose(0);lighting();
@@ -35,11 +40,12 @@ function render(t:number){const dt=Math.min(.05,(t-last)/1000);last=t;frames++;
  const e=foot.east+dx,n=foot.north+dn;
  const h=selected<2?middleStationSurfaceAt(e,n):route.surfaceAt(e,n,.27);
  if(h!==undefined&&Math.abs(h-foot.height)<.4&&!route.blocked(e,n,h,.27,1.8)){foot={...foot,east:e,north:n,height:h};walked+=Math.hypot(dx,dn)}
+ if(selected===5&&formation){formationSeconds+=dt;const end=formation.route().at(-1)!.cum;formation.apply(previewFlags.snapshot(0),end-7+Math.min(formationSeconds*.55,2),formationSeconds)}
  camera.position.set(foot.east,foot.height+1.65,-foot.north);
  camera.lookAt(new Vector3(foot.east+Math.sin(yaw),foot.height+1.65,-foot.north-Math.cos(yaw)));
  renderer.render(scene,camera);
  document.querySelector('#hud')!.textContent=stations[selected]!.name+' · '+(night?'夜':'昼')+' · '+foot.east.toFixed(2)+' / '+foot.north.toFixed(2)+' · '+renderer.info.render.calls+' draws';
  requestAnimationFrame(render)
 }
-Object.defineProperty(window,'__stationReview',{value:{state:()=>({frames,selected,night,foot,yaw,walked,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,reviewOnly:true})}});
+Object.defineProperty(window,'__stationReview',{value:{state:()=>({frames,selected,night,foot,yaw,walked,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,reviewOnly:true,formationVisible:formation?.group.visible??false,formationSeconds})}});
 requestAnimationFrame(render);

@@ -406,6 +406,8 @@ export function createZa22CloudRoute(host: Host) {
     },
     assembly: () => world?.assembly,
     extras: () => world?.extras,
+    // B's accepted event host may drive this presentation. No local trigger.
+    starportStaging:()=>world?.starport.staging,
     setNight(value: boolean) {
       night = value;
       world?.extras.setNight(value);

@@ -4,6 +4,7 @@ import {
   type BufferGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {skyCityInscribedPlate} from './sky-city-inscribed-plate';
 
 type Point = readonly [number, number, number];
 const up = new Vector3(0, 1, 0);
@@ -264,6 +265,7 @@ export function buildSkyCityTree() {
   const group = new Group();
   group.name = 'sky-city-tree-court';
   buildRing(group);
+  const inscription=skyCityInscribedPlate('T-03',1.12,.38);inscription.position.set(0,.74,railRadius+.19);group.add(inscription);
   const tree = buildTree(group);
   const guardian = buildGuardian(group);
   for(const [i,point]of watchPoints.entries()){

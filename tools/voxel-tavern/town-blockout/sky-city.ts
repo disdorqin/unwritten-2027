@@ -1,6 +1,7 @@
 import { Group, type BufferGeometry, type Material, type Mesh, type Texture } from 'three';
 import { buildSkyCityBuildings } from './sky-city-buildings';
 import { buildSkyCityDistrict } from './sky-city-district';
+import { buildSkyObservatoryHall, skyObservatoryHall } from './sky-city-observatory-hall';
 import { buildSkyCityIsland } from './sky-city-island';
 import { buildSkyCitySilhouette, updateSkyCitySilhouette } from './sky-city-silhouette';
 import type { SkyCityFoot } from './sky-city-site';
@@ -27,17 +28,19 @@ function buildCity() {
   const buildings = buildSkyCityBuildings();
   const tower = buildSkyCityTower();
   const district=buildSkyCityDistrict(island.supports);
-  group.add(island.group, tree.group, buildings.group, tower.group,district.group);
+  const hall=buildSkyObservatoryHall();
+  if(!island.supports(skyObservatoryHall.x,skyObservatoryHall.z,Math.hypot(skyObservatoryHall.w/2,skyObservatoryHall.d/2)))throw new Error('Observatory hall must be on the surveyed island');
+  group.add(island.group, tree.group, buildings.group, tower.group,district.group,hall.group);
   // The physical empty city is default. These presentation hooks are only
   // reserved for the future accepted presence-domain event; no UI flag or
   // client-side event can activate dream state in the production host.
   const dreamPresentation = (active:boolean) => {
-    tree.setDreamPresentation(active);tower.setDreamPresentation(active);district.setDreamLighting(active);
+    tree.setDreamPresentation(active);tower.setDreamPresentation(active);district.setDreamLighting(active);buildings.setDreamLighting(active);hall.setDreamLighting(active);
   };
   dreamPresentation(false);
 
   function obstructs(x: number, z: number, y: number, radius: number) {
-    return island.blocked(x,z,y,radius) || tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius) || district.blocked(x,z,y,radius);
+    return island.blocked(x,z,y,radius) || tree.blocked(x, z, y, radius) || buildings.blocked(x, z, y, radius) || tower.blocked(x, z, y, radius) || district.blocked(x,z,y,radius) || hall.blocked(x,z,y,radius);
   }
 
   function step(foot: SkyCityFoot, x: number, z: number): SkyCityFoot | undefined {

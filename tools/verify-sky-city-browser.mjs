@@ -97,7 +97,26 @@ try {
   assert.equal(landed.flight.recovery, null);
   result.checks.push({ landed });
   await shot('03-landing');
-  if(process.argv.includes('--district')){
+  if(process.argv.includes('--observatory')){
+    result.step='observatory hall and return';
+    const route=[[-14,31],[8,29],[15,20],[15,12],[15,7],[16,1],[16,-4],[16,-6]];
+    for(const [x,z]of route.slice(0,6))await walk([x,0,z],.22);
+    await turn(0);await shot('18-observatory-front-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('18-observatory-front-night');await page.keyboard.press('n');
+    for(const [x,z]of route.slice(6))await walk([x,0,z],.22);
+    await turn(-Math.PI/2);await shot('19-star-chart-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('19-star-chart-night');await page.keyboard.press('n');
+    await turn(Math.PI/2);await shot('20-telescope-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('20-telescope-night');await page.keyboard.press('n');
+    result.checks.push({observatory:await snapshot()});
+    for(const [x,z]of route.slice(0,-1).reverse())await walk([x,0,z],.22);
+    await walk([-14,0,37.4],.25);
+    result.checks.push({returnToLanding:await snapshot()});await shot('21-return');
+    assert.deepEqual(result.errors,[]);result.status='passed';
+  }else if(process.argv.includes('--district')){
     result.step='new district first-person circuit';
     async function visit(name,points,heading){
       for(const [x,z] of points)await walk([x,0,z],.22);

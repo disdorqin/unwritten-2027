@@ -183,6 +183,13 @@ export function buildSkyCityDistrict(supports:(x:number,z:number,radius?:number)
       part('dark',x+dx,2.04,z+d/2+.19,Math.min(1.22,sideWidth-.12),1.05,.05);
       part('bronze',x+dx,2.04,z+d/2+.23,.08,1.12,.07);
     }
+    // Window glow is a presentation overlay only, not extra geometry collision.
+    for(const wx of windowXs){
+      const lit=new Mesh(box,glow);lit.position.set(wx,1.63,back-.055);lit.scale.set(win-.12,1.38,.025);lanterns.add(lit);
+    }
+    for(const a of [-1,1]){
+      const lit=new Mesh(box,glow);lit.position.set(x+a*(1.05+sideWidth/2),2.04,z+d/2+.225);lit.scale.set(Math.min(1.10,sideWidth-.22),.95,.02);lanterns.add(lit);
+    }
     part('ivory',x,3.12,z+d/2,2.1,.48,.52,true);
     part('bronze',x,3.44,z+d/2+.25,w+.38,.20,.33);
     // Layered stepped metal roof; beams and vents convey ship-component construction.
