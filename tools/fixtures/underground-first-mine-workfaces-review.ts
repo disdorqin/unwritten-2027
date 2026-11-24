@@ -15,7 +15,7 @@ const camera=new PerspectiveCamera(68,innerWidth/innerHeight,.06,88),lamp=new Po
 camera.add(lamp);scene.add(camera);const renderer=new WebGLRenderer({antialias:false,powerPreference:'low-power'});
 renderer.setSize(innerWidth,innerHeight);document.body.append(renderer.domElement);
 const views=Object.fromEntries([...mine.workfaces,mine.supportStation!].map(s=>[s.id,{eye:s.id==='support-station'?[.1,s.z]:[s.x,s.foot[2]+2.1],target:[s.x,s.z]}]));
-Object.assign(views,{'deep-west-entry':{eye:[0,131],target:[-20,131]},'collapse':{eye:[-37,131],target:[-45,131]},'dry-bypass':{eye:[45.5,110],target:[45.5,125]},'barracks':{eye:[38,132],target:[31.2,126.35]},'west-bank':{eye:[-5.6,136.1],target:[2,134.8]},'east-bank':{eye:[16.8,135.5],target:[7,135.5]}});
+Object.assign(views,{'shallow-1':{eye:[-32,52],target:[-35,49.75]},'shallow-2':{eye:[-82,52],target:[-85,49.75]},'shallow-3':{eye:[-55,59],target:[-58,57.25]},'shallow-4':{eye:[-65,66],target:[-68,64.25]},'shallow-walk':{eye:[-5,52],target:[-35,52]},'deep-west-entry':{eye:[0,131],target:[-20,131]},'collapse':{eye:[-37,131],target:[-45,131]},'dry-bypass':{eye:[45.5,110],target:[45.5,125]},'barracks':{eye:[38,132],target:[31.2,126.35]},'west-bank':{eye:[-5.6,136.1],target:[2,134.8]},'east-bank':{eye:[16.8,135.5],target:[7,135.5]}});
 let frames=0,walked=0,rejected=0,trustedW=0,start=performance.now(),view='workface-1';const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
  const v=views[name];if(!v)return false;view=name;const [x,z]=v.eye;

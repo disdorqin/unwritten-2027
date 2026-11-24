@@ -4,6 +4,7 @@ import {secondMineDrySites} from './underground-second-mine-dry-wings.js';
 import {createFirstMineWorkfaces,firstMineMiddleSnowSites,firstMineWaterlineSite} from './town-c-first-mine-workfaces.js';
 import {firstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 import {warriorSafetyPocket} from './town-c-warrior-safety-pocket.js';
+import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
 export type EncounterLayer='90-main'|'90-crystal'|'140'|'165'|'190';
 type Family={id:string;layer:EncounterLayer;species:string;habitats:readonly string[];members:readonly [number,number];spacing?:readonly [number,number];safeDistance?:number};
 const families:readonly Family[]=[
@@ -42,6 +43,7 @@ function localCandidate(family:string,i:number){
     const [x,y,z]=firstMineWorkfaceSites[i].foot;
     return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:x,north:z,height:y}};
   }
+  if(family==='90-A'&&i<4)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineShallowWorks.nests[i]};
   if(family==='90-A'&&i>=4){const p=firstMineMiddleSnowSites[i-4];return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='90-D'&&i===0){const p=firstMineWaterlineSite;return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:p.x,north:p.z,height:p.y}};}
   if(family==='90-D'&&i>0)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineDeepWorks.snakes[i-1]};

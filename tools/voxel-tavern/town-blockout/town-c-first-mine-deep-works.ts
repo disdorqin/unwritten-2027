@@ -1,5 +1,6 @@
 import {BoxGeometry,DataTexture,Group,InstancedMesh,Matrix4,MeshLambertMaterial,NearestFilter,SRGBColorSpace} from 'three';
 import {firstMineDeepWorks} from '../../../src/shared/town-c-first-mine-deep-works.js';
+import {firstMineShallowWorks} from '../../../src/shared/town-c-first-mine-shallow-works.js';
 type K='rock'|'basalt'|'wood'|'iron'|'rust'|'cloth'|'dust'|'frost';
 const colors:Record<K,number>={rock:0x6d6257,basalt:0x333b48,wood:0x745237,iron:0x78828b,rust:0x896044,cloth:0x747b6b,dust:0x9a9183,frost:0x93acbf};
 type Part={k:K;x:number;y:number;z:number;w:number;h:number;d:number};
@@ -8,6 +9,26 @@ export function mountFirstMineDeepWorks(parent:Group,enabled:boolean){
  const add=(k:K,x:number,y:number,z:number,w:number,h:number,d:number)=>parts.push({k,x,y,z,w,h,d});
  if(enabled){
  const f=-91;
+ // Four weathered shallow alcoves: layered ice and timber retaining frames.
+ for(const s of firstMineShallowWorks.fixtures){
+  for(let i=0;i<10;i++)for(let j=0;j<7;j++){
+   const x=s.x-2.25+i*.5,z=s.z-.58+j*.17;
+   const height=.18+((i*7+j*3)%8)*.13;
+   for(let k=0;k<Math.ceil(height/.15);k++)add((i+j+k)%4?'frost':'rock',x,f+.075+k*.15,z,.48,.145,.16);
+  }
+  for(const dx of [-2.1,2.1]){
+   for(let k=0;k<13;k++){
+    add('wood',s.x+dx,f+.14+k*.27,s.z-.32,.24,.26,.30);
+    if(k%3===0)add('iron',s.x+dx,f+.14+k*.27,s.z-.12,.29,.09,.07);
+   }
+  }
+  for(let j=0;j<14;j++)add(j%4?'wood':'iron',s.x-2.1+j*.32,f+3.51,s.z-.32,.31,.27,.32);
+  // Flush snow tracks beside the nest, with no false ore or collision.
+  for(let i=-8;i<=8;i++)for(let j=-6;j<=6;j++){
+   if(Math.hypot(i,j)>6.1+Math.sin(i*4+j*5)*.9)continue;
+   add((i*i+j*j)%5?'frost':'dust',s.x+i*.23,f+.009,s.foot[2]+j*.22,.225,.018,.215);
+  }
+ }
  // Contoured rubble mass; shared solid envelope leaves x=-40 approach clear.
  for(let i=0;i<7;i++)for(let j=0;j<16;j++){
    const x=-46.9+i*.57,z=126.2+j*.61;
