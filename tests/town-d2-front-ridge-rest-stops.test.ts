@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Mesh, Vector3, type BufferGeometry, type Material } from 'three';
+import { Group, Mesh, PlaneGeometry, Vector3, type BufferGeometry, type Material, type Object3D } from 'three';
 import {
-  createTownD2FrontRidgeRestStops, TOWN_D2_REST_STOP_TEXTS,
+  createTownD2FrontRidgeRestStops, hideLegacyD5Supplement, TOWN_D2_REST_STOP_TEXTS,
 } from '../tools/voxel-tavern/town-blockout/town-d2-front-ridge-rest-stops';
 import {
-  buildSwitchbackCenterline, type SwitchbackPoint,
+  buildSwitchbackCenterline, createFrontRidgeSwitchbackRoad, type SwitchbackPoint,
 } from '../tools/voxel-tavern/town-blockout/front-ridge-switchback-road';
 import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 
@@ -40,6 +40,33 @@ function collectCopy(root: Group) {
   return copy;
 }
 
+function withCanvasDocument<T>(run: (paintedText: string[]) => T): T {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const paintedText: string[] = [];
+  const context = {
+    fillRect() {}, strokeRect() {},
+    fillText(text: string) { paintedText.push(text); },
+  };
+  const documentStub = {
+    createElement(tag: string) {
+      assert.equal(tag, 'canvas');
+      return {
+        width: 0, height: 0,
+        getContext(kind: string) {
+          assert.equal(kind, '2d');
+          return context;
+        },
+      };
+    },
+  };
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: documentStub });
+  try { return run(paintedText); }
+  finally {
+    if (previous) Object.defineProperty(globalThis, 'document', previous);
+    else Reflect.deleteProperty(globalThis, 'document');
+  }
+}
+
 test('D-5: exact 250 m 3D arc interpolation, metre copy and complete road sequence', () => {
   const line = buildSwitchbackCenterline();
   const cumulative = trueDistance(line);
@@ -64,6 +91,7 @@ test('D-5: exact 250 m 3D arc interpolation, metre copy and complete road sequen
       assert.ok(copy.includes(TOWN_D2_REST_STOP_TEXTS.milepostTop));
     }
     assert.ok(stops.mileposts.length >= 11, `full surveyed road has ${stops.mileposts.length} metre posts`);
+    assert.equal(stops.benches.length, 21, 'the full surveyed road keeps all 21 hairpin benches');
   } finally { stops.dispose(); }
 });
 
@@ -88,9 +116,14 @@ test('D-5: authored copy, measured lower/middle shelters and exact sampled looko
 
     assert.equal(stops.viewpoint.east, 300);
     assert.equal(stops.viewpoint.north, 400);
-    assert.equal(stops.viewpoint.height, sampleNorthRidge350(300, 400));
-    assert.equal(stops.group.getObjectByName('town-d2-viewpoint-300-400')!.position.y,
-      sampleNorthRidge350(300, 400));
+    const lookout = stops.group.getObjectByName('town-d2-viewpoint-300-400')!;
+    const lookoutFoundation = lookout.userData.foundation;
+    assert.equal(lookoutFoundation.radius, 3.85);
+    assert.equal(stops.viewpoint.height, lookoutFoundation.maxGround + 0.03);
+    assert.equal(lookout.position.y, stops.viewpoint.height);
+    assert.equal(stops.viewpoint.deckHeight, stops.viewpoint.height + 0.42);
+    assert.equal(lookout.userData.deckHeight, stops.viewpoint.deckHeight);
+    assert.ok(stops.viewpoint.height > sampleNorthRidge350(300, 400));
     assert.equal(stops.group.userData.roadMoved, false);
 
     const copy = collectCopy(stops.group);
@@ -199,5 +232,134 @@ test('D-5: 3D interpolation differs from legacy planar cumulative and never drif
     assert.ok(distanceToSegment({ east: post.centreEast, north: post.centreNorth, height: post.centreHeight }, custom) < 1e-8);
     assert.ok(post.centreNorth > 140 && post.centreNorth < 150, `3D target interpolates at N${post.centreNorth.toFixed(3)}`);
     assert.ok(Math.abs(custom[2]!.cum - 2) < 1e-8, 'input is deliberately not mutated');
+  } finally { stops.dispose(); }
+});
+
+function heightAtDistance(line: readonly SwitchbackPoint[], distance: number) {
+  const cumulative = trueDistance(line);
+  for (let i = 1; i < line.length; i++) {
+    if (distance <= cumulative[i]! + 1e-9) {
+      const span = cumulative[i]! - cumulative[i - 1]!;
+      const t = span > 0 ? (distance - cumulative[i - 1]!) / span : 0;
+      return line[i - 1]!.height + (line[i]!.height - line[i - 1]!.height) * t;
+    }
+  }
+  return line.at(-1)!.height;
+}
+
+test('D-5: production mileposts, benches and warning use the road centre-height hint', () => {
+  const line = buildSwitchbackCenterline();
+  const road = createFrontRidgeSwitchbackRoad();
+  const stops = createTownD2FrontRidgeRestStops();
+  try {
+    const checked = [
+      ...stops.mileposts.map(post => ({ placement: post, centreHeight: post.centreHeight })),
+      ...stops.benches.map(post => ({ placement: post, centreHeight: heightAtDistance(line, post.distance) })),
+      ...stops.warnings.map(post => ({ placement: post, centreHeight: heightAtDistance(line, post.distance) })),
+    ];
+    assert.equal(checked.length, stops.mileposts.length + 21 + 1);
+    for (const { placement, centreHeight } of checked) {
+      const surface = road.heightAt(placement.east, placement.north, centreHeight);
+      assert.notEqual(surface, undefined, `${placement.id} must resolve on the production road`);
+      assert.ok(Math.abs(placement.height - (surface! + 0.03)) < 1e-8,
+        `${placement.id} must use road.heightAt(e, n, centreHeight) + 0.03`);
+    }
+  } finally {
+    stops.dispose();
+    road.dispose();
+  }
+});
+
+test('D-5: legacy supplement hides only old props and adjacent mileage copy; canvas paints final copy', () => {
+  withCanvasDocument(paintedText => {
+    const line = buildSwitchbackCenterline();
+    const road = createFrontRidgeSwitchbackRoad();
+    const copyStart = paintedText.length;
+    const stops = createTownD2FrontRidgeRestStops({ centreline: line });
+    try {
+      const oldPosts: Mesh[] = [];
+      const oldFaces: Mesh[] = [];
+      road.group.traverse(object => {
+        if (object.name.startsWith('switchback-mileage-') && object instanceof Mesh) oldPosts.push(object);
+      });
+      for (const post of oldPosts) {
+        const face = post.parent!.children.find((object): object is Mesh =>
+          object instanceof Mesh && !object.name && object.geometry instanceof PlaneGeometry &&
+          object.position.distanceTo(post.position) <= 0.30);
+        assert.ok(face, `${post.name} needs its directly adjacent legacy text face`);
+        oldFaces.push(face!);
+      }
+      assert.ok(oldPosts.length >= 11 && oldFaces.length === oldPosts.length);
+      const oldProps: Object3D[] = [];
+      road.group.traverse(object => {
+        if (object.name.startsWith('switchback-mileage-') ||
+            /(?:^|-)(?:bench|shelter|lookout)-/.test(object.name)) oldProps.push(object);
+      });
+      assert.ok(oldProps.length > oldPosts.length);
+      for (const name of ['switchback-start-sign', 'switchback-top-sign',
+        'station-board-S-12', 'station-board-S-16', 'station-board-S-19']) {
+        assert.ok(road.group.getObjectByName(name), `missing preserved sign ${name}`);
+      }
+
+      hideLegacyD5Supplement(road.group);
+      for (const object of [...oldProps, ...oldFaces]) assert.equal(object.visible, false, object.name || 'mileage copy');
+      for (const name of ['switchback-start-sign', 'switchback-top-sign',
+        'station-board-S-12', 'station-board-S-16', 'station-board-S-19']) {
+        assert.equal(road.group.getObjectByName(name)!.visible, true, `${name} must remain visible`);
+      }
+
+      assert.deepEqual([...new Set(paintedText.slice(copyStart))].sort(),
+        [...new Set(collectCopy(stops.group))].sort(),
+        'every authored line must reach the real CanvasRenderingContext2D.fillText path');
+    } finally {
+      stops.dispose();
+      road.dispose();
+    }
+  });
+});
+
+test('D-5: shelter and lookout foundations span true footprint ground without floating', () => {
+  const line: SwitchbackPoint[] = [
+    { east: 0, north: 0, height: 0, cum: 0 },
+    { east: 1100, north: 0, height: 0, cum: 1100 },
+  ];
+  const groundAt = (east: number, north: number) => 100 + east * 0.2 - north * 0.1;
+  const stops = createTownD2FrontRidgeRestStops({ centreline: line, terrainAt: groundAt });
+  try {
+    assert.equal(stops.shelters.length, 2);
+    for (const shelter of stops.shelters) {
+      const built = stops.group.getObjectByName(shelter.id)!;
+      const data = built.userData.foundation;
+      const minGround = groundAt(shelter.east - data.halfWidth, shelter.north + data.halfDepth);
+      const maxGround = groundAt(shelter.east + data.halfWidth, shelter.north - data.halfDepth);
+      assert.ok(Math.abs(data.minGround - minGround) < 1e-8, shelter.id);
+      assert.ok(Math.abs(data.maxGround - maxGround) < 1e-8, shelter.id);
+      assert.ok(Math.abs(data.base - (maxGround + 0.03)) < 1e-8, shelter.id);
+      assert.equal(built.position.y, data.base);
+      const foundation = built.getObjectByName('shelter-stone-foundation') as Mesh;
+      foundation.geometry.computeBoundingBox();
+      const bounds = foundation.geometry.boundingBox!;
+      assert.ok(Math.abs(built.position.y + foundation.position.y + bounds.min.y - minGround) < 1e-6,
+        `${shelter.id} foundation bottom must meet the lowest ground`);
+      assert.ok(Math.abs(built.position.y + foundation.position.y + bounds.max.y - data.base) < 1e-6,
+        `${shelter.id} foundation top must meet the group base`);
+    }
+
+    const lookout = stops.group.getObjectByName('town-d2-viewpoint-300-400')!;
+    const data = lookout.userData.foundation;
+    const centreGround = groundAt(300, 400);
+    const amplitude = data.radius * Math.hypot(0.2, 0.1);
+    assert.ok(Math.abs(data.minGround - (centreGround - amplitude)) < 1e-8);
+    assert.ok(Math.abs(data.maxGround - (centreGround + amplitude)) < 1e-8);
+    assert.equal(lookout.position.y, data.maxGround + 0.03);
+    const foundation = lookout.getObjectByName('lookout-foundation') as Mesh;
+    foundation.geometry.computeBoundingBox();
+    assert.ok(Math.abs(lookout.position.y + foundation.position.y + foundation.geometry.boundingBox!.min.y -
+      data.minGround) < 1e-6, 'lookout foundation bottom must meet the lowest ground');
+    const deck = lookout.getObjectByName('lookout-deck') as Mesh;
+    deck.geometry.computeBoundingBox();
+    const deckTop = lookout.position.y + deck.position.y + deck.geometry.boundingBox!.max.y;
+    assert.ok(Math.abs(deckTop - stops.viewpoint.deckHeight) < 1e-6);
+    assert.ok(Math.abs(deckTop - (data.base + 0.42)) < 1e-6);
   } finally { stops.dispose(); }
 });

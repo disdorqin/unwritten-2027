@@ -41,9 +41,15 @@ export type D2Milepost = RestStopPlacement & Readonly<{
 }>;
 export type D2Bench = RestStopPlacement & Readonly<{ kind: 'bench'; turnDegrees: number }>;
 export type D2Shelter = RestStopPlacement & Readonly<{ kind: 'shelter'; section: 'lower-end' | 'middle-cliff' }>;
-export type D2Viewpoint = RestStopPlacement & Readonly<{ kind: 'viewpoint'; surveyedEast: 300; surveyedNorth: 400 }>;
+export type D2Viewpoint = RestStopPlacement & Readonly<{
+  kind: 'viewpoint';
+  surveyedEast: 300;
+  surveyedNorth: 400;
+  /** Absolute world Y of the finished deck surface. */
+  deckHeight: number;
+}>;
 export type D2Warning = RestStopPlacement & Readonly<{ kind: 'warning' }>;
-export type HeightAt = (east: number, north: number) => number;
+export type HeightAt = (east: number, north: number, hintHeight?: number) => number;
 
 type CreateOptions = Readonly<{
   centreline?: readonly SwitchbackPoint[];
@@ -63,6 +69,94 @@ const MILE_INTERVAL = 250;
 const MIN_BENCH_TURN = 120;
 const MIN_BENCH_SPACING = 120;
 const LOWER_SECTION_DESIGN_END = 1050;
+const SHELTER_HALF_WIDTH = 2.05;
+const SHELTER_HALF_DEPTH = 1.65;
+const LOOKOUT_FOOTPRINT_RADIUS = 3.85;
+
+/** Hide only superseded D-5 props; route signs and cable-station boards stay visible. */
+export function hideLegacyD5Supplement(legacyGroup: Object3D) {
+  const mileposts: Object3D[] = [];
+  legacyGroup.traverse(object => {
+    if (object.name.startsWith('switchback-mileage-') ||
+        /(?:^|-)(?:bench|shelter|lookout)-/.test(object.name)) {
+      object.visible = false;
+    }
+    if (object.name.startsWith('switchback-mileage-')) mileposts.push(object);
+  });
+  // Legacy mileage copy is an unnamed sibling plane, 0.14 m above and
+  // 0.17 m in front of its stone. Do not blanket-hide unnamed signs.
+  for (const post of mileposts) {
+    for (const sibling of post.parent?.children ?? []) {
+      if (sibling.name || !(sibling instanceof Mesh) ||
+          !(sibling.geometry instanceof PlaneGeometry)) continue;
+      if (sibling.position.distanceTo(post.position) <= 0.30) sibling.visible = false;
+    }
+  }
+}
+
+type GroundExtent = Readonly<{
+  minGround: number;
+  maxGround: number;
+  base: number;
+}>;
+
+/** Sample the complete rotated support footprint, including its boundary. */
+function groundExtentAt(
+  east: number,
+  north: number,
+  yaw: number,
+  groundAt: HeightAt,
+  halfWidth: number,
+  halfDepth: number,
+  circular = false,
+): GroundExtent {
+  const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+  const sample = (x: number, z: number) => groundAt(
+    east + cosine * x + sine * z,
+    north + sine * x - cosine * z,
+  );
+  let minGround = Infinity, maxGround = -Infinity;
+  const include = (x: number, z: number) => {
+    const height = sample(x, z);
+    minGround = Math.min(minGround, height);
+    maxGround = Math.max(maxGround, height);
+  };
+  const step = 0.25;
+  if (circular) {
+    include(0, 0);
+    // Include the gradient-axis boundary points as well as the regular
+    // ring samples, so a linear slope's exact high/low edges are retained.
+    const gradientX = (sample(step, 0) - sample(-step, 0)) / (step * 2);
+    const gradientZ = (sample(0, step) - sample(0, -step)) / (step * 2);
+    const gradientLength = Math.hypot(gradientX, gradientZ);
+    if (gradientLength > 1e-12) {
+      include(gradientX / gradientLength * halfWidth, gradientZ / gradientLength * halfWidth);
+      include(-gradientX / gradientLength * halfWidth, -gradientZ / gradientLength * halfWidth);
+    }
+    const rings = Math.ceil(halfWidth / step);
+    for (let ring = 1; ring <= rings; ring++) {
+      const radius = halfWidth * ring / rings;
+      const count = Math.max(8, Math.ceil(Math.PI * 2 * radius / step));
+      for (let i = 0; i < count; i++) {
+        const angle = i / count * Math.PI * 2;
+        include(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      }
+    }
+  } else {
+    const columns = Math.ceil(halfWidth * 2 / step);
+    const rows = Math.ceil(halfDepth * 2 / step);
+    for (let column = 0; column <= columns; column++) {
+      for (let row = 0; row <= rows; row++) {
+        include(-halfWidth + halfWidth * 2 * column / columns,
+          -halfDepth + halfDepth * 2 * row / rows);
+      }
+    }
+  }
+  if (![minGround, maxGround].every(Number.isFinite)) {
+    throw new RangeError('D-5 support footprint has no finite ground extent.');
+  }
+  return { minGround, maxGround, base: maxGround + 0.03 };
+}
 
 function directionBetween(a: SwitchbackPoint, b: SwitchbackPoint) {
   const east = b.east - a.east, north = b.north - a.north;
@@ -245,7 +339,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const batches = new Map<Material, BufferGeometry[]>();
     const originals: Mesh[] = [];
     root.traverse(object => {
-      if (!(object instanceof Mesh) || object.userData.authoredCopy || Array.isArray(object.material)) return;
+      if (!(object instanceof Mesh) || object.userData.authoredCopy ||
+          object.userData.structuralFoundation || Array.isArray(object.material)) return;
       if ('map' in object.material && object.material.map) return;
       const clone = object.geometry.clone();
       clone.applyMatrix4(object.matrixWorld);
@@ -298,8 +393,9 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   const groundAt = (east: number, north: number) =>
     (survey.baseIndex >= 0 && nearestPlanPoint(survey, east, north).point.cum <= survey.points[survey.baseIndex]!.cum
       ? gridAt : terrainAt)(east, north);
-  const stopSurfaceAt = (east: number, north: number) =>
-    options.surfaceAt?.(east, north) ?? road?.heightAt(east, north) ?? groundAt(east, north);
+  const stopSurfaceAt = (east: number, north: number, centreHeight?: number) =>
+    options.surfaceAt?.(east, north, centreHeight) ??
+    road?.heightAt(east, north, centreHeight) ?? groundAt(east, north);
   for (let meters = MILE_INTERVAL; meters <= survey.length + 1e-8; meters += MILE_INTERVAL) {
     const point = sampleDistance(survey, meters);
     const before = sampleDistance(survey, Math.max(0, meters - 2));
@@ -311,7 +407,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const side = left < right ? 1 : -1; // place on the downhill shoulder
     const east = point.east + perpEast * side * 2.35;
     const north = point.north + perpNorth * side * 2.35;
-    const height = stopSurfaceAt(east, north) + 0.03;
+    const height = stopSurfaceAt(east, north, point.height) + 0.03;
     const yaw = Math.atan2(-direction.east, direction.north);
     const id = `town-d2-milepost-${meters}m`;
     const built = new Group();
@@ -351,7 +447,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const east = point.east + insideEast * 2.55;
     const north = point.north + insideNorth * 2.55;
     makeBench(`town-d2-hairpin-bench-${Math.round(point.cum)}m`, point, east, north,
-      stopSurfaceAt(east, north) + 0.03, Math.atan2(-insideEast, insideNorth), turnDegrees);
+      stopSurfaceAt(east, north, point.height) + 0.03, Math.atan2(-insideEast, insideNorth), turnDegrees);
     lastBenchDistance = point.cum;
   }
 
@@ -379,9 +475,20 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const uphill = a >= b ? 1 : -1;
     const east = point.east + perpEast * uphill * 4.7;
     const north = point.north + perpNorth * uphill * 4.7;
-    const height = groundAt(east, north) + 0.03;
     const yaw = Math.atan2(-perpEast * uphill, -perpNorth * uphill); // opening faces the road
+    const extent = groundExtentAt(east, north, yaw, groundAt, SHELTER_HALF_WIDTH, SHELTER_HALF_DEPTH);
+    const height = extent.base;
     const built = new Group();
+    built.userData.foundation = {
+      footprint: 'rotated-rectangle', halfWidth: SHELTER_HALF_WIDTH, halfDepth: SHELTER_HALF_DEPTH,
+      ...extent,
+    };
+    const supportHeight = height - extent.minGround;
+    const foundation = part(built,
+      bevelBox(SHELTER_HALF_WIDTH * 2, supportHeight, SHELTER_HALF_DEPTH * 2,
+        Math.min(0.04, supportHeight / 4)),
+      stoneDark, 0, -supportHeight / 2, 0, 'shelter-stone-foundation');
+    foundation.userData.structuralFoundation = true;
     // Dry-stone footing and staggered back/side walls leave the road side open.
     for (const x of [-1.65, -0.82, 0, 0.82, 1.65]) {
       part(built, bevelBox(0.76, 0.20, 0.58, 0.04), x % 2 ? stone : stoneDark,
@@ -455,7 +562,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   const warningDirection = directionBetween(warningBefore, warningAfter);
   const warningEast = warningPoint.east - warningDirection.north * 2.45;
   const warningNorth = warningPoint.north + warningDirection.east * 2.45;
-  const warningHeight = stopSurfaceAt(warningEast, warningNorth) + 0.03;
+  const warningHeight = stopSurfaceAt(warningEast, warningNorth, warningPoint.height) + 0.03;
   const warningYaw = Math.atan2(-warningDirection.east, warningDirection.north);
   const warningGroup = new Group();
   for (const x of [-0.86, 0.86]) part(warningGroup, new CylinderGeometry(0.07, 0.09, 2.10, 7), timber,
@@ -468,19 +575,33 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     distance: warningPoint.cum, yaw: warningYaw, text: TOWN_D2_REST_STOP_TEXTS.warning };
   warningGroup.userData.placement = warning; warnings.push(warning); placements.push(warning);
 
-  // The lookout anchor is exact; only its Y comes from the read-only sampler.
+  // The lookout anchor is exact; its support spans the real 3.85 m footprint.
   const viewpointEast = 300, viewpointNorth = 400;
-  const viewpointHeight = terrainAt(viewpointEast, viewpointNorth);
   const nearestRoad = nearestPlanPoint(survey, viewpointEast, viewpointNorth);
+  const extent = groundExtentAt(viewpointEast, viewpointNorth, 0, terrainAt,
+    LOOKOUT_FOOTPRINT_RADIUS, LOOKOUT_FOOTPRINT_RADIUS, true);
+  const viewpointHeight = extent.base;
+  const deckHeight = viewpointHeight + 0.42;
   const lookout = new Group();
-  part(lookout, new CylinderGeometry(3.55, 3.85, 0.42, 12), stoneDark, 0, 0.21, 0, 'lookout-foundation');
+  lookout.userData.foundation = {
+    footprint: 'circle', radius: LOOKOUT_FOOTPRINT_RADIUS, ...extent,
+  };
+  lookout.userData.deckHeight = deckHeight;
+  const supportHeight = viewpointHeight - extent.minGround;
+  const foundation = part(lookout,
+    new CylinderGeometry(3.55, LOOKOUT_FOOTPRINT_RADIUS, supportHeight, 12),
+    stoneDark, 0, -supportHeight / 2, 0, 'lookout-foundation');
+  foundation.userData.structuralFoundation = true;
+  const deck = part(lookout, new CylinderGeometry(3.55, 3.55, 0.42, 12),
+    stoneDark, 0, 0.21, 0, 'lookout-deck');
+  deck.userData.structuralFoundation = true;
   for (let ring = 0; ring < 3; ring++) {
     const count = 8 + ring * 3;
     for (let i = 0; i < count; i++) {
       const angle = i / count * Math.PI * 2 + ring * 0.19;
       const radius = 0.72 + ring * 0.92;
       part(lookout, bevelBox(0.70, 0.10, 0.56, 0.025), (i + ring) % 3 ? stone : stoneLight,
-        Math.cos(angle) * radius, 0.46, Math.sin(angle) * radius, 'individual-paver',
+        Math.cos(angle) * radius, 0.37, Math.sin(angle) * radius, 'individual-paver',
         0, -angle + Math.PI / 2);
     }
   }
@@ -489,14 +610,16 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const angle = Math.PI * (0.10 + i * 0.133);
     const x = Math.cos(angle) * 3.34, z = Math.sin(angle) * 3.34;
     part(lookout, bevelBox(0.94, 0.68, 0.32, 0.045), i % 2 ? stone : stoneDark,
-      x, 0.84, z, 'parapet-block', 0, -angle);
+      x, 0.76, z, 'parapet-block', 0, -angle);
     part(lookout, bevelBox(0.98, 0.08, 0.38, 0.022), snow,
-      x, 1.21, z, 'parapet-snow', 0, -angle);
+      x, 1.13, z, 'parapet-snow', 0, -angle);
   }
-  part(lookout, bevelBox(2.42, 1.13, 0.48, 0.07), stone, 0, 1.02, -1.60, 'engraved-view-stone', -0.035);
-  part(lookout, bevelBox(2.56, 0.13, 0.62, 0.035), stoneLight, 0, 1.64, -1.60, 'view-stone-cap');
-  canvasFace(lookout, [TOWN_D2_REST_STOP_TEXTS.viewpoint], 2.18, 0.56, 0, 1.03, -1.343,
-    'viewpoint-engraving', true);
+  part(lookout, bevelBox(2.42, 1.13, 0.48, 0.07), stone, 0, 0.985, 1.60, 'engraved-view-stone', -0.035);
+  part(lookout, bevelBox(2.56, 0.13, 0.62, 0.035), stoneLight, 0, 1.605, 1.60, 'view-stone-cap');
+  canvasFace(lookout, [TOWN_D2_REST_STOP_TEXTS.viewpoint], 2.18, 0.56, 0, 0.995, 1.343,
+    'viewpoint-engraving-north', true);
+  canvasFace(lookout, [TOWN_D2_REST_STOP_TEXTS.viewpoint], 2.18, 0.56, 0, 0.995, 1.851,
+    'viewpoint-engraving-south', true);
   // Empty old storm lantern: frame, glass, dead wick, no emitted light.
   part(lookout, new CylinderGeometry(0.065, 0.085, 1.62, 7), timberDark, 2.68, 1.25, -1.00, 'lantern-post');
   part(lookout, bevelBox(0.40, 0.08, 0.40), iron, 2.68, 2.10, -1.00, 'lantern-base');
@@ -509,12 +632,12 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   part(lookout, new CylinderGeometry(0.025, 0.025, 0.09, 5), timberDark, 2.68, 2.29, -1.00, 'empty-wick');
   for (let i = 0; i < 5; i++) {
     part(lookout, new CylinderGeometry(0.16 + i * 0.06, 0.21 + i * 0.07, 0.24, 6),
-      i % 2 ? stoneDark : stone, -2.70 + i * 0.13, 0.62 + i * 0.22, -1.60, 'wayfinding-cairn',
+      i % 2 ? stoneDark : stone, -2.70 + i * 0.13, 0.54 + i * 0.22, -1.60, 'wayfinding-cairn',
       0, i * 0.33);
   }
   place('town-d2-viewpoint-300-400', lookout, viewpointEast, viewpointNorth, viewpointHeight, 0);
   const viewpoint: D2Viewpoint = { id: 'town-d2-viewpoint-300-400', kind: 'viewpoint',
-    east: viewpointEast, north: viewpointNorth, height: viewpointHeight,
+    east: viewpointEast, north: viewpointNorth, height: viewpointHeight, deckHeight,
     distance: nearestRoad.point.cum, yaw: 0, text: TOWN_D2_REST_STOP_TEXTS.viewpoint,
     surveyedEast: 300, surveyedNorth: 400 };
   lookout.userData.placement = viewpoint; placements.push(viewpoint);

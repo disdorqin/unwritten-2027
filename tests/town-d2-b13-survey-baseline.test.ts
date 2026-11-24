@@ -55,9 +55,10 @@ test('B13 baseline records the D2 integration base and current M4–M7 copy lite
 test('M4–M7 values agree with the cited current text table', () => {
   const table = readFileSync(new URL(
     '../docs/交流区/Muse/设计-全图文字件总表-2026-11-22.md', import.meta.url,
-  ), 'utf8');
+  ), 'utf8').split(/\r?\n/);
+  const citedRows = table.slice(133, 138).join('\n');
   for (const [station, lines] of Object.entries(expectedPlateLines)) {
-    assert.ok(table.includes(`${station}／${lines[1]}（站名）／${lines[2]}（副行）`), station);
+    assert.ok(citedRows.includes(`${station}／${lines[1]}（站名）／${lines[2]}（副行）`), station);
   }
 });
 

@@ -234,11 +234,11 @@ export function createTownD2WestFootRiverPool() {
     (along > site.radius * .7 && Math.abs(across) < 3.7) ||
     (along < -site.radius * .7 && Math.abs(across) < 3.1);
 
-  // A dark basin and a pale shallow shelf remain below the authoritative Y=5 surface.
+  // The shelf sits just above the old Y=5 water and below the new transparent Y=5.025 surface.
   put('bed', new CylinderGeometry(site.radius * .91, site.radius * .84, 1.1, 48), centre.clone().setY(3.65));
   const shelf = new RingGeometry(site.radius * .68, site.radius * .965, 64);
   shelf.rotateX(-Math.PI / 2);
-  batches.shallow.push(transformed(shelf, centre.clone().setY(4.58)));
+  batches.shallow.push(transformed(shelf, centre.clone().setY(site.waterLevel + .012)));
 
   // Irregular block banks: every block meets the measured ground, with a low inner lip.
   for (let i = 0; i < 56; i++) {
@@ -274,9 +274,11 @@ export function createTownD2WestFootRiverPool() {
       const across = side * (2.65 + .08 * i);
       const east = centre.x + right.x * across + tangent.x * along;
       const north = site.north - right.z * across - tangent.z * along;
-      put(i % 2 ? 'stoneLight' : 'stoneDark', new BoxGeometry(.72, .72, .82),
-        local(across, along, Math.max(site.waterLevel + .18, groundAt(east, north) + .26)),
-        side * .12);
+      const halfHeight = .36;
+      const top = Math.max(site.waterLevel + .18 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
+      const base = groundAt(east, north);
+      put(i % 2 ? 'stoneLight' : 'stoneDark', new BoxGeometry(.72, top - base, .82),
+        local(across, along, base + (top - base) / 2), side * .12);
     }
     const across = side * 2.75;
     const east = centre.x + right.x * across + tangent.x * (site.radius + INLET_REACH);
@@ -287,8 +289,14 @@ export function createTownD2WestFootRiverPool() {
   put('timber', new BoxGeometry(5.85, .2, .24),
     local(0, site.radius + INLET_REACH, site.waterLevel + 1.22), 0);
   for (const side of [-1, 1]) {
-    put('stoneLight', new BoxGeometry(1.18, .58, .74),
-      local(side * 1.48, site.radius + 1.02, site.waterLevel + .12), side * .08);
+    const across = side * 1.48, along = site.radius + 1.02;
+    const east = centre.x + right.x * across + tangent.x * along;
+    const north = site.north - right.z * across - tangent.z * along;
+    const halfHeight = .29;
+    const top = Math.max(site.waterLevel + .12 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
+    const base = groundAt(east, north);
+    put('stoneLight', new BoxGeometry(1.18, top - base, .74),
+      local(across, along, base + (top - base) / 2), side * .08);
   }
 
   // Low outlet stones and reeds make both water edges readable at first-person height.
@@ -298,8 +306,11 @@ export function createTownD2WestFootRiverPool() {
       const across = side * 2.45;
       const east = centre.x + right.x * across + tangent.x * along;
       const north = site.north - right.z * across - tangent.z * along;
-      put('stoneDark', new BoxGeometry(.68, .56, .86),
-        local(across, along, Math.max(site.waterLevel + .1, groundAt(east, north) + .2)), side * .09);
+      const halfHeight = .28;
+      const top = Math.max(site.waterLevel + .1 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
+      const base = groundAt(east, north);
+      put('stoneDark', new BoxGeometry(.68, top - base, .86),
+        local(across, along, base + (top - base) / 2), side * .09);
     }
   }
   for (let i = 0; i < 18; i++) {
@@ -317,10 +328,8 @@ export function createTownD2WestFootRiverPool() {
         stem * .7);
     }
   }
-  const driftPosition = local(-4.1, -site.radius + .2, 0);
   put('timber', new BoxGeometry(2.7, .22, .28),
-    local(-4.1, -site.radius + .2,
-      Math.max(site.waterLevel + .42, groundAt(driftPosition.x, -driftPosition.z) + .16)), -.38);
+    local(-4.1, -site.radius * .55, site.waterLevel + .11), -.38);
 
   const materials: Record<Family, MeshLambertMaterial> = {
     bed: new MeshLambertMaterial({ color: '#354f52' }),
@@ -346,7 +355,7 @@ export function createTownD2WestFootRiverPool() {
   }
 
   // Paint the existing river slot without editing its height field.
-  const poolWater = flatDisk(site.radius * .985, 72, site.waterLevel + .025);
+  const poolWater = flatDisk(site.radius * .97, 72, site.waterLevel + .025);
   poolWater.translate(site.east, 0, -site.north);
   const waterMaterial = new MeshBasicMaterial({
     color: '#78aeb7', vertexColors: true, transparent: true, opacity: .86,
@@ -357,9 +366,9 @@ export function createTownD2WestFootRiverPool() {
   water.renderOrder = 3;
   group.add(water);
 
-  const inletWater = creekRibbon(site.north + site.radius * .68,
+  const inletWater = creekRibbon(site.north + site.radius,
     site.north + site.radius + INLET_REACH, 2.55, 2.15);
-  const outletWater = creekRibbon(site.north - site.radius * .68,
+  const outletWater = creekRibbon(site.north - site.radius,
     site.north - site.radius - 7.5, 2.45, 1.75);
   const creekMaterial = waterMaterial.clone();
   creekMaterial.vertexColors = false;
