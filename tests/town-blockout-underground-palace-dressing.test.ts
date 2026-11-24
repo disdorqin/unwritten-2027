@@ -28,7 +28,11 @@ test('U-11 seven-pass companion actually models all palace zones rather than sub
 test('U-11 R5 adds five full stone lantern sculptures without owning actual light sources',()=>{
   const lanterns=pieces.filter(p=>p.name.startsWith('u11/lantern-'));
   assert.equal(lanterns.length,720);
-  assert.equal(pieces.length,10581);
+  assert.equal(pieces.length,12141);
+  const facade=pieces.filter(p=>p.name.includes('/sealed-face/'));
+  assert.equal(facade.length,1560);
+  assert.ok(facade.every(p=>p.zone==='forecourt'&&p.center[2]<=126.22));
+  assert.equal(facade.filter(p=>p.name.includes('/leaf-body-')).length,2);
   for(const key of ['west-27','east-40','west-82','east-82','north-gateway']){
     const layers=lanterns.filter(p=>p.name.startsWith('u11/lantern-'+key+'/'));
     assert.equal(layers.length,144,key+' must have a built frame and prism, not only a light marker');
