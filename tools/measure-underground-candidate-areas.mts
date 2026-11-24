@@ -40,7 +40,7 @@ try{
   ...city.colliders.filter(b=>b.max[1]>.025&&b.min[1]<1.8).map(b=>({x0:b.min[0],x1:b.max[0],n0:-b.max[2],n1:-b.min[2]})),...sealed];
  const cityArea=measure([cityBounds],cityMasks);
  const mineArea=measure(secondMineRooms.filter(r=>!r.river),mine.solids.map(s=>rect(s.x,s.n,s.w,s.d)));
- const local=encounterPlacementPlan.filter(g=>g.candidate).map(g=>{
+ const local=encounterPlacementPlan.filter(g=>g.candidate?.frame==='warrior-city-local-candidate'||g.candidate?.frame==='second-mine-local-candidate').map(g=>{
   const c=g.candidate!,p=c.at;
   const clear=c.frame==='warrior-city-local-candidate'?city.canStand(p.east,p.north):mine.canStand(p.east,p.north);
   return {id:g.id,frame:c.frame,east:p.east,north:p.north,clear};
