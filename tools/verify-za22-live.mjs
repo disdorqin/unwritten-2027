@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a-r89-refine', 'a3-shots', 'a4-shots', 'a4-b89-facades', 'a4-b90-smelter', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -230,6 +230,29 @@ async function face(page, evidence, desired) {
     await page.waitForTimeout(120);
   }
   assert.fail(`Native mouse drag could not face ${desired}`);
+}
+
+// Native vertical mouse drag, matching desktop-look's -dy*.003.
+ // Call only after a normal destination jump (pitch=0), and yaw-only walking.
+async function tiltFromLevel(page, radians) {
+  let remaining=Math.round(-radians/.003);
+  while(remaining){
+    const dy=Math.max(-Math.floor(height*.24),Math.min(Math.floor(height*.24),remaining));
+    const anchor=await page.evaluate(({width,height,dy})=>{
+      const canvas=document.querySelector('#scene canvas');
+      for(const [cx,cy] of [[.48,.51],[.36,.48],[.61,.46],[.4,.35],[.53,.65]]){
+        const x=Math.round(width*cx),y=Math.round(height*cy);
+        if(y+dy>0&&y+dy<height&&document.elementFromPoint(x,y)===canvas)return {x,y};
+      }
+    },{width,height,dy});
+    assert.ok(anchor,'native tilt needs unobstructed canvas');
+    await page.mouse.move(anchor.x,anchor.y);
+    await page.mouse.down();
+    try{await page.mouse.move(anchor.x,anchor.y+dy,{steps:Math.max(2,Math.ceil(Math.abs(dy)/30))});}
+    finally{await page.mouse.up();}
+    remaining-=dy;
+  }
+  await page.waitForTimeout(250);
 }
 
 async function walkTo(page, evidence, target, label) {
@@ -598,6 +621,36 @@ try {
     report.b89Facades={samples,canvasVisible:await page.locator('#scene canvas').isVisible(),
       provenance:'normal destination selector and native keyboard walk, grounded facade viewpoints'};
   }
+  if (segment === 'a4-b90-smelter') {
+    const {page,evidence}=await openTown('a4-b90-smelter');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#jump').selectOption({label:'陨石坑口'});
+    if(await page.locator('#town-settings').evaluate(d=>d.open))
+      await page.locator('#town-settings-close').click();
+    await page.waitForFunction(pattern=>{
+      const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
+      return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;
+    },positionPattern.source,{timeout:45000});
+    // Surveyed outside the crater (r>61.5), with 0.65m collision padding.
+    await follow(page,evidence,[[-12,159],[-43,159],[-67,159],[-68,142],[-98,127],[-110,124],[-126,123],[-152,124]],'smelter-native-walk');
+    const p=await readPose(page);
+    assert.ok(p.hud.includes('行走'),'smelter observation requires grounded feet');
+    const target={east:-159.951164,north:106.591426,height:20.777306};
+    await face(page,evidence,Math.atan2(target.east-p.east,target.north-p.north));
+    const pitch=Math.atan2(target.height-p.cameraY,Math.hypot(target.east-p.east,target.north-p.north));
+    await tiltFromLevel(page,pitch);
+    if((await page.locator('#lighting').textContent())!=='雪夜'){
+      await page.locator('#town-panel-toggle').click();
+      await page.locator('#lighting').click();
+      await page.locator('#town-settings-close').click();
+    }
+    await snapshot(page,evidence,'smelter-front-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.locator('#town-settings-close').click();
+    await snapshot(page,evidence,'smelter-front-day');
+    report.b90Smelter={actual:p,target,pitch,canvasVisible:await page.locator('#scene canvas').isVisible()};
+  }
   if (segment === 'a6-perf') {
     const {page,evidence}=await openTown('a6-perf');
     const measures=[];
@@ -695,13 +748,16 @@ try {
     const sightDistance=Math.hypot(actual.east-target.east,actual.north-target.north,actual.height-target.height);
     await face(page,evidence,Math.atan2(target.east-actual.east,target.north-actual.north));
     const yaw=evidence.poses.at(-1)?.yaw;
-    evidence.checkpoints.push({label:'a5-crystal-actual-view',actual,target,sightDistance,source:'native player foot on legal B01 spiral t=.721',yaw});
+    const eyeDistance=Math.hypot(actual.east-target.east,actual.north-target.north,actual.cameraY-target.height);
+    const pitch=Math.atan2(target.height-actual.cameraY,Math.hypot(actual.east-target.east,actual.north-target.north));
+    await tiltFromLevel(page,pitch);
+    evidence.checkpoints.push({label:'a5-crystal-actual-view',actual,target,sightDistance,eyeDistance,pitch,source:'native player foot on legal B01 spiral t=.721',yaw});
     await snapshot(page,evidence,'a5-crystal-from-trail-night');
     await page.locator('#town-panel-toggle').click();
     await page.locator('#lighting').click();
     await page.locator('#town-settings-close').click();
     await snapshot(page,evidence,'a5-crystal-from-trail-day');
-    report.a5CloseView={legalWindow:evidence.craterWindow,sightDistance,actual,target,
+    report.a5CloseView={legalWindow:evidence.craterWindow,sightDistance,eyeDistance,pitch,actual,target,
       disclaimer:'Not claimed as 2m; 5.58m is nearest canonical trail centerline, visual and side-step still need C approval'};
     assert.ok(sightDistance<7);
   }
@@ -902,7 +958,7 @@ try {
       jumpCount:await page.locator('#jump option').count()};
     assert.equal(report.startupEvidence.landedInWest,true,'did not reach the real Kengkou west domain');
   }
-  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
+  if (segment !== 'crater' && segment !== 'spawn' && segment !== 'a1-shots' && segment !== 'a1-r89-visual' && segment !== 'a1-station' && segment !== 'a1-full' && segment !== 'a2-shots' && segment !== 'a2-r89-visual' && segment !== 'a-r89-refine' && segment !== 'a3-shots' && segment !== 'a4-shots' && segment !== 'a4-b89-facades' && segment !== 'a4-b90-smelter' && segment !== 'a5-crystal-live' && segment !== 'a6-perf') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {

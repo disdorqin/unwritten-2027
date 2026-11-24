@@ -118,6 +118,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const timber = pixelMaterial(palette.earth, palette.night, 29, palette.stone);
   const timberWarm = pixelMaterial(palette.ochre, palette.earth, 67, palette.timberLight);
   const slate = pixelMaterial(palette.slate, palette.night, 139, palette.stone);
+  slate.name = 'crater-outer-slate';
   const iron = pixelMaterial(palette.night, palette.rust, 157, palette.earth);
   const rustIron = pixelMaterial(palette.rust, palette.night, 181, palette.earth);
   const corrugated = pixelMaterial('#6a7076', palette.rust, 191, palette.night);
@@ -237,16 +238,42 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
     put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
     for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
-    put(slate, -7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, .43);
-    put(slate, 7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, -.43);
-    put(timber, 0, g + 18.45, 0, 28.6, .38, .55);
+    // The ridge runs along the 28m length, not across the hall.
+    // Both roof halves and snow caps share the same pitch and ridge.
+    const eaves = 12.9, roofRise = 5.55, roofRun = 6.35;
+    const roofPitch = Math.atan2(roofRise, roofRun);
+    const roofSlant = Math.hypot(roofRise, roofRun);
+    for (const side of [-1, 1]) {
+      put(slate, 0, g + eaves + roofRise / 2, side * roofRun / 2,
+        29.2, .22, roofSlant + .05, side * roofPitch);
+      for (let bay = 0; bay < 14; bay++) {
+        const dx = -13.55 + bay * 2.08;
+        for (let row = 0; row < 3; row++) {
+          const t = (row + .5) / 3;
+          put(row === 0 && bay % 4 === 0 ? rustIron : slate,
+            dx, g + eaves + roofRise * t + .19, side * roofRun * (1 - t),
+            2.13, .09, roofSlant / 3 + .14, side * roofPitch);
+        }
+        if (bay % 3 === 0) {
+          const t = .22 + (bay % 2) * .13;
+          put(snow, dx, g + eaves + roofRise * t + .29, side * roofRun * (1-t),
+            1.85, .1, 1.45, side * roofPitch);
+        }
+      }
+      put(timber, 0, g + eaves + .06, side * roofRun, 29.3, .3, .24);
+    }
+    // End walls meet the roof rather than leaving two open triangular gaps.
+    for (const side of [-1, 1]) for (let course = 0; course < 10; course++) {
+      const t = (course + 1) / 10;
+      put(corrugated, side * 13.93, g + eaves + roofRise * (course + .5) / 10,
+        0, .20, roofRise / 10 + .015, Math.max(.14, 11 * (1-t)));
+    }
+    put(timber, 0, g + 18.6, 0, 29.3, .24, .35);
     for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
       put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
       put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
     }
-    // Oxidized seams and coherent short snow caps break the old solar-panel silhouette.
-    for (const side of [-1, 1]) for (const dz of [-4.5, 0, 4.5])
-      put(snow, side * 8.65, g + 15.3, dz, 3.8, .08, 1.5, 0, -side * .43);
+    // Roof snow is now generated on the sloped tile plane above.
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
