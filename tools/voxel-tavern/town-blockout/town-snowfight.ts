@@ -4,30 +4,15 @@ import {
 } from 'three';
 import {
   SNOWFIGHT_POINTS, WALL_MAX_LAYERS, WALL_TOWN_CAP, buildHalfAllows, classifyFreeWallSite, classifyWallSite,
-  wallCellCentre, wallCellOf, type SnowfightTeam,
+  wallCellCentre, type SnowfightTeam, type WallSiteRejection,
 } from '../../../src/presence/snowfight';
+import { snowWallBuildLayers, snowWallCost, type SnowballStock } from '../../../src/shared/snow-stock';
 import type { createTownPresence, SnowfightState } from './town-presence';
 import type { TownSnowballTarget } from './town-snow-target';
 import { createSnowfightAudio } from './snowfight-audio';
 import { particleDensityScale, scaledParticleCount } from './town-quality';
 
-export const MATERIAL_CAP = 40;
 export const DIG_CAP = 96;
-
-export class MaterialBank {
-  amount = 0;
-  constructor(private readonly cap = MATERIAL_CAP) {}
-  add(n: number): number {
-    const before = this.amount;
-    this.amount = Math.min(this.cap, this.amount + Math.max(0, Math.floor(n)));
-    return this.amount - before;
-  }
-  take(n: number): boolean {
-    if (this.amount < n) return false;
-    this.amount -= n;
-    return true;
-  }
-}
 
 /** 本地挖坑（纯表现）：深雪区掏雪留下浅坑，深雪回补（H2）落地后由统一场接管。 */
 export class DigField {
@@ -52,6 +37,11 @@ export class DigField {
 }
 
 type Presence = ReturnType<typeof createTownPresence>;
+type WallCell = Readonly<{ gx: number; gy: number }>;
+
+function validWallCell({ gx, gy }: WallCell) {
+  return Number.isSafeInteger(gx) && Number.isSafeInteger(gy);
+}
 type WallView = { gx: number; gy: number; layer: number; hp: number; team: SnowfightTeam | 2; ground: number };
 type Burst = { age: number; lifetime: number; size: number; at: Vector3; velocity: Vector3 };
 
@@ -68,24 +58,26 @@ const REJECT_MESSAGES: Record<string, string> = {
   secret: '密室重地，不能堆墙',
   river: '河里堆不住墙',
   bounds: '这里堆不了墙',
-  stack: '最高四层，堆不上了',
+  stack: '最高三层，堆不上了',
   cap: '全镇雪墙已达上限',
+  pending: '等这一块雪墙确认',
+  rate: '缓一缓再堆',
 };
 
 export function createTeamSnowfight(options: {
   scene: Scene;
   presence: Presence;
+  stock: SnowballStock;
   heightAt(east: number, north: number): number;
   announce(message: string): void;
   playerPose(): { east: number; north: number };
-  aimRay(): { origin: Vector3; dir: Vector3 } | undefined;
   snowDepthLevel(): number;
-  canScoop(): boolean;
   freeBuildAvailable?(): boolean;
+  freeWallSite?(east: number, north: number): WallSiteRejection | undefined;
 }) {
-  const { scene, presence, heightAt, announce } = options;
+  const { scene, presence, stock, heightAt, announce } = options;
+  const classifyFreeSite = options.freeWallSite ?? classifyFreeWallSite;
   const audio = createSnowfightAudio();
-  const material = new MaterialBank();
   const digs = new DigField();
   const walls = new Map<string, WallView>();
   const groundCache = new Map<string, number>();
@@ -94,9 +86,9 @@ export function createTeamSnowfight(options: {
   const color = new Color();
   let state: SnowfightState | undefined;
   let stateAt = 0;
-  let buildMode = false;
+  let pendingWall: { gx: number; gy: number; ownerId: number; settle(accepted: boolean): void } | undefined;
   let explainedFreeBuild = false;
-  let lastRejectAt = 0;
+  let lastRejectAt = -Infinity;
   let prevPhase: string | undefined;
   let prevOwners: number[] = [];
 
@@ -108,7 +100,7 @@ export function createTeamSnowfight(options: {
     let ground = groundCache.get(k);
     if (ground === undefined) {
       ground = heightAt(wallCellCentre(gx), wallCellCentre(gy));
-      groundCache.set(k, ground);
+      if (Number.isFinite(ground)) groundCache.set(k, ground);
     }
     return ground;
   }
@@ -207,6 +199,7 @@ export function createTeamSnowfight(options: {
       new MeshBasicMaterial({ color: '#8fa8bd', transparent: true, opacity: .5, side: DoubleSide, depthWrite: false }), 1);
     ring.name = `Town snowfight point ${point.id}`;
     ring.count = 1;
+    ring.visible = false;
     ring.frustumCulled = false;
     pose.position.set(point.east, ground + .07, -point.north);
     pose.rotation.set(-Math.PI / 2, 0, 0);
@@ -263,8 +256,10 @@ export function createTeamSnowfight(options: {
 
   // ---- HUD ----
   const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
-  const startButton = el<HTMLButtonElement>('snowfight-start');
-  const buildButton = el<HTMLButtonElement>('snowfight-build');
+  for (const id of ['snowfight-start', 'snowfight-build']) {
+    const button = el<HTMLButtonElement>(id);
+    if (button) button.hidden = true;
+  }
   const materialOut = el('snowfight-material');
   const panel = el('snowfight-panel');
   const phaseOut = el('snowfight-phase');
@@ -293,29 +288,21 @@ export function createTeamSnowfight(options: {
     return active() || mayBuildFree();
   }
 
-  function aimCell(): { gx: number; gy: number; east: number; north: number } | undefined {
-    const ray = options.aimRay();
-    if (!ray) return undefined;
-    const px = ray.origin.x + ray.dir.x * 2.2;
-    const pz = ray.origin.z + ray.dir.z * 2.2;
-    const east = px;
-    const north = -pz;
-    if (!Number.isFinite(east) || !Number.isFinite(north)) return undefined;
-    return { gx: wallCellOf(east), gy: wallCellOf(north), east, north };
-  }
-
   function placeRejection(gx: number, gy: number): string | undefined {
     if (!canBuild()) return 'phase';
+    if (!validWallCell({ gx, gy })) return 'bounds';
     const team = myTeam();
     if (active() && team === undefined) return 'phase';
     const east = wallCellCentre(gx);
     const north = wallCellCentre(gy);
     if (state?.phase === 'build' && team !== undefined && !buildHalfAllows(team, east)) return 'half';
-    const site = active() ? classifyWallSite(east, north) : classifyFreeWallSite(east, north);
+    const site = active() ? classifyWallSite(east, north) : classifyFreeSite(east, north);
     if (site) return site;
-    if (columnHeight(gx, gy) >= WALL_MAX_LAYERS) return 'stack';
+    if (!Number.isFinite(groundAt(gx, gy))) return 'bounds';
+    if (columnHeight(gx, gy) >= snowWallBuildLayers) return 'stack';
     if (active() && walls.size >= WALL_TOWN_CAP && ![...walls.values()].some(wall => wall.team === 2)) return 'cap';
-    if (material.amount < 1) return 'empty';
+    if (pendingWall) return 'pending';
+    if (stock.available() < snowWallCost) return 'empty';
     return undefined;
   }
 
@@ -323,34 +310,35 @@ export function createTeamSnowfight(options: {
     const now = performance.now();
     if (now - lastRejectAt < 1200) return;
     lastRejectAt = now;
-    announce(reason === 'empty' ? '雪料不够，先长按掏雪攒料' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
+    announce(reason === 'empty' ? '堆一块墙要 3 个雪团' : (REJECT_MESSAGES[reason] ?? '这里堆不了墙'));
   }
 
-  function tryPlace(): boolean {
-    const cell = aimCell();
-    if (!cell) return false;
+  function tryPlace(cell: WallCell): boolean {
     const rejection = placeRejection(cell.gx, cell.gy);
     if (rejection) {
       noteReject(rejection);
-      return true; // 吞掉这次释放：不掷雪球
+      return true;
     }
-    presence.sendSnowfightPlace(cell.gx, cell.gy);
+    const ownerId = presence.selfId();
+    if (ownerId === null) return false;
+    const settle = stock.reserveWall();
+    if (!settle) return false;
+    pendingWall = { gx: cell.gx, gy: cell.gy, ownerId, settle };
+    if (!presence.sendSnowfightPlace(cell.gx, cell.gy)) finishWall(false);
     return true;
+  }
+
+  function finishWall(accepted: boolean) {
+    const request = pendingWall;
+    pendingWall = undefined;
+    request?.settle(accepted);
   }
 
   function updateHud() {
     const buildingAvailable = canBuild();
-    if (!buildingAvailable) buildMode = false;
-    if (startButton) startButton.hidden = active() || !presence.snowfightAvailable();
-    if (buildButton) {
-      buildButton.hidden = !buildingAvailable;
-      buildButton.textContent = buildMode ? '堆墙中 · 点此收起' : '堆墙';
-      buildButton.setAttribute('aria-pressed', String(buildMode));
-      if (options.freeBuildAvailable) buildButton.style.outline = mayBuildFree() && material.amount > 0 ? '2px solid #9fe8ff' : '';
-    }
     if (materialOut) {
       materialOut.hidden = !buildingAvailable;
-      const text = `雪料 ${material.amount}`;
+      const text = `雪团 ${stock.amount()}`;
       if (buildingAvailable && materialOut.textContent !== text) materialOut.textContent = text;
     }
     if (panel) panel.hidden = !active() && state?.phase !== 'done';
@@ -379,6 +367,7 @@ export function createTeamSnowfight(options: {
     SNOWFIGHT_POINTS.forEach((point, i) => {
       const view = pointViews[i];
       const isActive = current.phase === 'battle' && current.activePoint === i;
+      view.ring.visible = active();
       view.pillar.visible = isActive;
       const owner = current.owners[i];
       view.material.color.set(isActive ? '#ffffff' : owner >= 0 ? TEAM_COLORS[owner as SnowfightTeam] : '#8fa8bd');
@@ -398,7 +387,10 @@ export function createTeamSnowfight(options: {
     if (captured) audio.capture();
     updateHud();
   });
-  presence.onSnowfightRejected(reason => noteReject(reason));
+  presence.onSnowfightRejected(reason => {
+    finishWall(false);
+    noteReject(reason);
+  });
   presence.onSnowfightWallEvent(event => {
     if (event.kind === 'wall-set') {
       const k = key(event.gx, event.gy, event.layer);
@@ -409,9 +401,9 @@ export function createTeamSnowfight(options: {
         ground: groundAt(event.gx, event.gy),
       });
       refreshWalls();
-      const me = presence.selfId();
-      if (!existed && me !== null && event.ownerId === me) {
-        material.take(1);
+      const request = pendingWall;
+      if (!existed && request && event.ownerId === request.ownerId && event.gx === request.gx && event.gy === request.gy) {
+        finishWall(true);
         audio.place();
       } else if (existed && previous && event.hp < previous.hp) {
         audio.crack();
@@ -432,20 +424,9 @@ export function createTeamSnowfight(options: {
     }
   });
 
-  if (startButton) startButton.onclick = () => {
-    if (presence.requestSnowfightStart()) audio.start();
-  };
-  if (buildButton) buildButton.onclick = () => {
-    if (!canBuild()) return;
-    buildMode = !buildMode;
-    if (buildMode && material.amount < 1) announce('雪料为零：对准近处雪地长按掏雪攒料');
-    updateHud();
-  };
-
   return {
     active,
     canBuild,
-    buildMode: () => buildMode,
     tryPlace,
     wallTargets: () => targets,
     /** 本地镜像中的墙列（雪橇交叉判定用）：无墙返回 undefined；ground 为该列基座地面高。 */
@@ -455,21 +436,17 @@ export function createTeamSnowfight(options: {
       const base = walls.get(key(gx, gy, 0));
       return { height, ground: base ? base.ground : groundAt(gx, gy) };
     },
-    material: () => material.amount,
+    material: stock.amount,
     onGatherTick() {
-      if (!canBuild()) return;
-      const previous = material.amount;
       const level = options.snowDepthLevel();
       if (level >= 2) {
-        if (material.add(2) > 0) {
-          const poseNow = options.playerPose();
-          digs.dig(poseNow.east, poseNow.north);
-          refreshDigs();
-        }
-      } else material.add(1);
-      if (!explainedFreeBuild && mayBuildFree() && previous < 1 && material.amount > 0) {
+        const poseNow = options.playerPose();
+        digs.dig(poseNow.east, poseNow.north);
+        refreshDigs();
+      }
+      if (!explainedFreeBuild && mayBuildFree() && stock.available() >= snowWallCost) {
         explainedFreeBuild = true;
-        announce('雪料够了，点『堆墙』可以垒掩体');
+        announce('瞄准地面可堆雪墙，每块消耗 3 个雪团');
       }
       updateHud();
     },
@@ -498,13 +475,15 @@ export function createTeamSnowfight(options: {
         { duration: 700, easing: 'ease-out' },
       );
     },
-    update(dt: number) {
-      // 虚影预览
-      if (buildMode && canBuild()) {
-        const cell = aimCell();
-        if (cell) {
-          const layer = columnHeight(cell.gx, cell.gy);
-          pose.position.set(wallCellCentre(cell.gx), groundAt(cell.gx, cell.gy) + layer * .5 + .25, -wallCellCentre(cell.gy));
+    update(dt: number, cell?: WallCell) {
+      if (pendingWall && (presence.selfId() !== pendingWall.ownerId || !presence.snowfightAvailable())) finishWall(false);
+      ghostMesh.visible = false;
+      if (cell && validWallCell(cell) && canBuild()) {
+        const { gx, gy } = cell;
+        const ground = groundAt(gx, gy);
+        if (Number.isFinite(ground)) {
+          const layer = columnHeight(gx, gy);
+          pose.position.set(wallCellCentre(gx), ground + layer * .5 + .25, -wallCellCentre(gy));
           pose.rotation.set(0, 0, 0);
           pose.scale.setScalar(1);
           pose.updateMatrix();
@@ -512,9 +491,9 @@ export function createTeamSnowfight(options: {
           ghostMesh.count = 1;
           ghostMesh.visible = true;
           ghostMesh.instanceMatrix.needsUpdate = true;
-          ghostMaterial.color.set(placeRejection(cell.gx, cell.gy) ? '#ff7a6b' : '#9fe8ff');
-        } else ghostMesh.visible = false;
-      } else ghostMesh.visible = false;
+          ghostMaterial.color.set(placeRejection(gx, gy) ? '#ff7a6b' : '#9fe8ff');
+        }
+      }
       // 雪雾团
       let visible = 0;
       for (const spark of bursts) {

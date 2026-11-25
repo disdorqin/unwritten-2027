@@ -31,7 +31,7 @@
     },
     "colonnade": {
       "view": "colonnade",
-      "frames": 13,
+      "frames": 12,
       "materials": 8,
       "allPieces": 10581,
       "visualPieces": 10581,
@@ -59,7 +59,7 @@
     },
     "gallery": {
       "view": "gallery",
-      "frames": 19,
+      "frames": 18,
       "materials": 8,
       "allPieces": 10581,
       "visualPieces": 10581,

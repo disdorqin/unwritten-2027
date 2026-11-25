@@ -1,0 +1,582 @@
+{
+  "url": "http://127.0.0.1:56009/?profile",
+  "segment": "a1-r89-visual",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "a1-r89-visual",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795438624498,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "market-14-protected-row-night",
+          "lighting": "雪夜",
+          "hud": "东 154.0 m · 北 79.6 m · 行走",
+          "cameraY": 10.665318832397462,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 154,
+          "north": 79.6,
+          "height": 9.02,
+          "wire": {
+            "ms": 1795438631471,
+            "east": 154,
+            "north": 79.62,
+            "area": "town",
+            "height": 9.02,
+            "yaw": 5.977156139996401,
+            "seq": 4
+          }
+        },
+        {
+          "label": "market-14-protected-row-day",
+          "lighting": "白昼",
+          "hud": "东 154.0 m · 北 79.6 m · 行走",
+          "cameraY": 10.665318832397462,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 154,
+          "north": 79.6,
+          "height": 9.02,
+          "wire": {
+            "ms": 1795438631471,
+            "east": 154,
+            "north": 79.62,
+            "area": "town",
+            "height": 9.02,
+            "yaw": 5.977156139996401,
+            "seq": 4
+          }
+        },
+        {
+          "label": "ice-palace-forecourt-protected-night",
+          "lighting": "雪夜",
+          "hud": "东 454.0 m · 北 75.0 m · 行走",
+          "cameraY": 11.112989807128907,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 454,
+          "north": 75,
+          "height": 9.46,
+          "wire": {
+            "ms": 1795438638905,
+            "east": 454,
+            "north": 75,
+            "area": "town",
+            "height": 9.46,
+            "yaw": 2.340471187116517,
+            "seq": 11
+          }
+        },
+        {
+          "label": "ice-palace-forecourt-protected-day",
+          "lighting": "白昼",
+          "hud": "东 454.0 m · 北 75.0 m · 行走",
+          "cameraY": 11.112989807128907,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 454,
+          "north": 75,
+          "height": 9.46,
+          "wire": {
+            "ms": 1795438638905,
+            "east": 454,
+            "north": 75,
+            "area": "town",
+            "height": 9.46,
+            "yaw": 2.340471187116517,
+            "seq": 11
+          }
+        },
+        {
+          "label": "sheep-relief-shifted-eye-native-shift-1",
+          "target": [
+            74,
+            211
+          ],
+          "hud": "东 73.9 m · 北 211.1 m · 行走",
+          "cameraY": 22.394784642234153,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 73.9,
+          "north": 211.1,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795438641572,
+            "east": 73.71,
+            "north": 211.29,
+            "area": "town",
+            "height": 20.73,
+            "yaw": 2.356577985389316,
+            "seq": 22
+          }
+        },
+        {
+          "label": "sheep-relief-shifted-eye-native-shift-2",
+          "target": [
+            78,
+            207
+          ],
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795438642372,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 2.356577985389316,
+            "seq": 30
+          }
+        },
+        {
+          "label": "sheep-relief-shifted-eye-night",
+          "lighting": "雪夜",
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795438642667,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 2.239516076513793,
+            "seq": 33
+          }
+        },
+        {
+          "label": "sheep-relief-shifted-eye-day",
+          "lighting": "白昼",
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74,
+          "wire": {
+            "ms": 1795438642667,
+            "east": 77.78,
+            "north": 207.22,
+            "area": "town",
+            "height": 20.74,
+            "yaw": 2.239516076513793,
+            "seq": 33
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:56009/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795438624498,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795438627894,
+          "east": 154,
+          "north": 79.62,
+          "area": "town",
+          "height": 9.02,
+          "yaw": 0,
+          "seq": 1
+        },
+        {
+          "ms": 1795438629697,
+          "east": 154,
+          "north": 79.62,
+          "area": "town",
+          "height": 9.02,
+          "yaw": 6.130170723587994,
+          "seq": 2
+        },
+        {
+          "ms": 1795438631375,
+          "east": 154,
+          "north": 79.62,
+          "area": "town",
+          "height": 9.02,
+          "yaw": 5.977156139996401,
+          "seq": 3
+        },
+        {
+          "ms": 1795438631471,
+          "east": 154,
+          "north": 79.62,
+          "area": "town",
+          "height": 9.02,
+          "yaw": 5.977156139996401,
+          "seq": 4
+        },
+        {
+          "ms": 1795438637881,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 2.0344420199333317,
+          "seq": 5
+        },
+        {
+          "ms": 1795438637970,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 2.0344420199333317,
+          "seq": 6
+        },
+        {
+          "ms": 1795438638512,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 2.197427478646181,
+          "seq": 7
+        },
+        {
+          "ms": 1795438638601,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 3.0124506460096705,
+          "seq": 8
+        },
+        {
+          "ms": 1795438638704,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 3.0124506460096705,
+          "seq": 9
+        },
+        {
+          "ms": 1795438638807,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 2.340471187116517,
+          "seq": 10
+        },
+        {
+          "ms": 1795438638905,
+          "east": 454,
+          "north": 75,
+          "area": "town",
+          "height": 9.46,
+          "yaw": 2.340471187116517,
+          "seq": 11
+        },
+        {
+          "ms": 1795438640556,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.5195997179992133,
+          "seq": 12
+        },
+        {
+          "ms": 1795438640677,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.077585229592615,
+          "seq": 13
+        },
+        {
+          "ms": 1795438640769,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.356577985389316,
+          "seq": 14
+        },
+        {
+          "ms": 1795438640861,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.356577985389316,
+          "seq": 15
+        },
+        {
+          "ms": 1795438640968,
+          "east": 70.53,
+          "north": 214.47,
+          "area": "town",
+          "height": 20.46,
+          "yaw": 2.356577985389316,
+          "seq": 16
+        },
+        {
+          "ms": 1795438641066,
+          "east": 71.06,
+          "north": 213.94,
+          "area": "town",
+          "height": 20.51,
+          "yaw": 2.356577985389316,
+          "seq": 17
+        },
+        {
+          "ms": 1795438641168,
+          "east": 71.59,
+          "north": 213.41,
+          "area": "town",
+          "height": 20.56,
+          "yaw": 2.356577985389316,
+          "seq": 18
+        },
+        {
+          "ms": 1795438641263,
+          "east": 72.12,
+          "north": 212.88,
+          "area": "town",
+          "height": 20.61,
+          "yaw": 2.356577985389316,
+          "seq": 19
+        },
+        {
+          "ms": 1795438641371,
+          "east": 72.65,
+          "north": 212.35,
+          "area": "town",
+          "height": 20.65,
+          "yaw": 2.356577985389316,
+          "seq": 20
+        },
+        {
+          "ms": 1795438641463,
+          "east": 73.18,
+          "north": 211.82,
+          "area": "town",
+          "height": 20.7,
+          "yaw": 2.356577985389316,
+          "seq": 21
+        },
+        {
+          "ms": 1795438641572,
+          "east": 73.71,
+          "north": 211.29,
+          "area": "town",
+          "height": 20.73,
+          "yaw": 2.356577985389316,
+          "seq": 22
+        },
+        {
+          "ms": 1795438641670,
+          "east": 74.06,
+          "north": 210.93,
+          "area": "town",
+          "height": 20.76,
+          "yaw": 2.356577985389316,
+          "seq": 23
+        },
+        {
+          "ms": 1795438641768,
+          "east": 74.59,
+          "north": 210.4,
+          "area": "town",
+          "height": 20.78,
+          "yaw": 2.356577985389316,
+          "seq": 24
+        },
+        {
+          "ms": 1795438641868,
+          "east": 75.12,
+          "north": 209.87,
+          "area": "town",
+          "height": 20.8,
+          "yaw": 2.356577985389316,
+          "seq": 25
+        },
+        {
+          "ms": 1795438641969,
+          "east": 75.65,
+          "north": 209.34,
+          "area": "town",
+          "height": 20.81,
+          "yaw": 2.356577985389316,
+          "seq": 26
+        },
+        {
+          "ms": 1795438642065,
+          "east": 76.18,
+          "north": 208.81,
+          "area": "town",
+          "height": 20.81,
+          "yaw": 2.356577985389316,
+          "seq": 27
+        },
+        {
+          "ms": 1795438642172,
+          "east": 76.72,
+          "north": 208.28,
+          "area": "town",
+          "height": 20.8,
+          "yaw": 2.356577985389316,
+          "seq": 28
+        },
+        {
+          "ms": 1795438642265,
+          "east": 77.25,
+          "north": 207.75,
+          "area": "town",
+          "height": 20.77,
+          "yaw": 2.356577985389316,
+          "seq": 29
+        },
+        {
+          "ms": 1795438642372,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 2.356577985389316,
+          "seq": 30
+        },
+        {
+          "ms": 1795438642467,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 2.2980949678511764,
+          "seq": 31
+        },
+        {
+          "ms": 1795438642561,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 2.239516076513793,
+          "seq": 32
+        },
+        {
+          "ms": 1795438642667,
+          "east": 77.78,
+          "north": 207.22,
+          "area": "town",
+          "height": 20.74,
+          "yaw": 2.239516076513793,
+          "seq": 33
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "a1R89Visual": {
+    "views": [
+      {
+        "id": "market-14-protected-row",
+        "target": [
+          140.4,
+          122.8
+        ],
+        "actual": {
+          "hud": "东 154.0 m · 北 79.6 m · 行走",
+          "cameraY": 10.665318832397462,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 154,
+          "north": 79.6,
+          "height": 9.02
+        },
+        "yaw": -0.30499234681440457,
+        "provenance": "production destination selector; optional W/Shift native walk"
+      },
+      {
+        "id": "ice-palace-forecourt-protected",
+        "target": [
+          484,
+          46
+        ],
+        "actual": {
+          "hud": "东 454.0 m · 北 75.0 m · 行走",
+          "cameraY": 11.112989807128907,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 454,
+          "north": 75,
+          "height": 9.46
+        },
+        "yaw": 2.33924696038594,
+        "provenance": "production destination selector; optional W/Shift native walk"
+      },
+      {
+        "id": "sheep-relief-shifted-eye",
+        "target": [
+          125,
+          170
+        ],
+        "actual": {
+          "hud": "东 77.8 m · 北 207.2 m · 行走",
+          "cameraY": 22.390030940039892,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 77.8,
+          "north": 207.2,
+          "height": 20.74
+        },
+        "yaw": 2.2382608901622927,
+        "provenance": "production destination selector; optional W/Shift native walk"
+      }
+    ],
+    "canvasVisible": true,
+    "note": "These are native WebGL visual samples, not a standalone proof of foreground visibility"
+  },
+  "errors": 0
+}

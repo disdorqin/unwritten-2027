@@ -1,0 +1,41 @@
+name: Verify durable summit passport P-10
+
+on:
+  push:
+    branches: [town-review-p10-20261120]
+    paths:
+      - .github/workflows/verify-p10-passport.yml
+      - src/presence/**
+      - src/shared/summit-passport.ts
+      - tests/server/summit-passport.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify accepted locations, durability and both real transports
+        shell: bash
+        run: |
+          {
+            git rev-parse HEAD
+            npm run typecheck
+            npx tsc --noEmit -p tsconfig.server.json
+            node --import tsx --test tests/server/{presence,presence-polling,summit-passport}.test.ts
+          } 2>&1 | tee "$RUNNER_TEMP/p10-passport-verification.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p10-summit-passport-verification
+          path: ${{ runner.temp }}/p10-passport-verification.txt

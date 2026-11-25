@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Color, InstancedMesh, Matrix4, Scene, Vector3 } from 'three';
+import { createTavernTableCups } from '../tools/voxel-tavern/town-blockout/tavern-table-cups.ts';
+import { createTavernSeatSpots, tavernSeatPlacements, type TavernCupRow } from '../tools/voxel-tavern/town-blockout/tavern-seats.ts';
+import { layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import {
   createTavernMixBook, getTavernRecipe, tavernAddIns, tavernBases, tavernRecipes,
 } from '../tools/voxel-tavern/town-blockout/tavern-mix-book.ts';
@@ -74,4 +78,57 @@ test('the current page can still track a completed mix when local storage is blo
   assert.equal(book.has(recipe.id), true);
   assert.deepEqual(book.ids(), [recipe.id]);
   assert.equal(book.record(recipe.id), false);
+});
+
+test('a held drink displays one cup only while sitting at a tavern table', () => {
+  const plot = layout.plots.find(({ id }) => id === 'tavern')!;
+  const placements = tavernSeatPlacements(plot);
+  assert.equal(placements.length, 18);
+  assert.equal(placements.filter(({ pose }) => pose.cupRow).length, 16);
+  const piano = placements.find(({ label }) => label === '一楼琴椅')!;
+  const bench = placements.find(({ label }) => label === '二楼阅览长凳')!;
+  assert.equal(piano.pose.cupRow, undefined);
+  assert.equal(bench.pose.cupRow, undefined);
+
+  const scene = new Scene();
+  const table = createTavernTableCups(scene);
+  const mesh = scene.children[0];
+  assert.ok(mesh instanceof InstancedMesh);
+  assert.equal(scene.children.length, 1);
+  let row: TavernCupRow | undefined;
+  const spots = createTavernSeatSpots(plot, { sit: seat => { row = seat.cupRow; } }, () => true);
+  const drink = tavernRecipes[0];
+  table.update(row, drink);
+  assert.equal(mesh.visible, false);
+  assert.equal(mesh.count, 0);
+
+  spots[0].run();
+  const anchor = placements[0].pose.cupRow!;
+  assert.deepEqual(row, anchor);
+  table.update(row, undefined);
+  assert.equal(mesh.visible, false);
+  table.update(row, drink);
+  assert.equal(mesh.visible, true);
+  assert.equal(mesh.count, 9);
+  const matrix = new Matrix4();
+  const center = new Vector3();
+  mesh.getMatrixAt(0, matrix);
+  assert.ok(center.setFromMatrixPosition(matrix).distanceTo(new Vector3(anchor.x, anchor.y + .015, -anchor.n)) < .00005);
+  const tint = new Color();
+  mesh.getColorAt(mesh.count - 1, tint);
+  assert.equal(tint.getHexString(), new Color(drink.color).getHexString());
+
+  row = undefined; // The viewer's ordinary leaveSeat clears the seat and its table anchor.
+  table.update(row, drink);
+  assert.equal(mesh.visible, false);
+  assert.equal(mesh.count, 0);
+  spots.find(({ label }) => label.includes(piano.label))!.run();
+  table.update(row, drink);
+  assert.equal(mesh.visible, false);
+  spots[0].run();
+  table.update(row, drink);
+  assert.equal(mesh.visible, true);
+  table.update(row, undefined);
+  assert.equal(mesh.visible, false);
+  assert.equal(mesh.count, 0);
 });

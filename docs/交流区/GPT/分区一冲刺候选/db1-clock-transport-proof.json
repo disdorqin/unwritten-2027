@@ -1,0 +1,52 @@
+{
+  "samples": [
+    {
+      "left": {
+        "epochMs": 1795136927806,
+        "roundTripMs": 0.3990000000000009
+      },
+      "right": {
+        "epochMs": 1795136927806,
+        "roundTripMs": 0.4008999999999787
+      },
+      "skewMs": 0.074951171875
+    },
+    {
+      "left": {
+        "epochMs": 1795136928607,
+        "roundTripMs": 0.8985000000000127
+      },
+      "right": {
+        "epochMs": 1795136928607,
+        "roundTripMs": 0.6466000000000349
+      },
+      "skewMs": 0.171875
+    },
+    {
+      "left": {
+        "epochMs": 1795136929408,
+        "roundTripMs": 0.8389000000001943
+      },
+      "right": {
+        "epochMs": 1795136929408,
+        "roundTripMs": 0.6549999999997453
+      },
+      "skewMs": 0.162353515625
+    }
+  ],
+  "cue": {
+    "cue": {
+      "type": "hourly-chime",
+      "at": 1795262400000,
+      "hour": 20,
+      "strikes": 3
+    },
+    "audible": true
+  },
+  "peerIds": [
+    1,
+    2,
+    3
+  ],
+  "rejoinKeepsPeerId": false
+}

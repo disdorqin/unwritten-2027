@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,">
+<title>未写镇 · ref-m64 主峰测风台实体七轮审查</title>
+<style>
+:root{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#efe7d6;background:#172b3d}
+*{box-sizing:border-box}body{margin:0}canvas{display:block}
+#scene{position:fixed;inset:0}
+#hud{position:fixed;top:10px;left:10px;background:#111e2bea;border:1px solid #b99a6b9a;max-width:min(420px,calc(100vw - 20px));padding:10px 15px;border-radius:7px;font-size:13px}
+#hud h1{font-size:17px;margin:0 0 7px}
+#hud p{margin:4px 0}#hud output{display:block;color:#f2c783;margin:6px 0;font-variant-numeric:tabular-nums}
+kbd{font:inherit;border:1px solid #ae9984;border-radius:3px;padding:0 4px}
+#reference{position:fixed;right:10px;bottom:10px;width:min(30vw,390px);margin:0;background:#182435;border:1px solid #ba9b6b;border-radius:7px;overflow:hidden}
+#reference img{width:100%;display:block;max-height:260px;object-fit:contain}
+#reference figcaption{font-size:12px;padding:6px 8px}
+@media(max-width:650px){#reference{width:42vw}#hud{max-width:275px;font-size:11px;padding:7px 8px}#hud h1{font-size:13px}}
+</style>
+</head>
+<body>
+<main id="scene"></main>
+<section id="hud">
+<h1>主峰测风台 · m64 七轮实物验收</h1>
+<p><kbd>1</kbd>日景 <kbd>2</kbd>夜景 <kbd>3</kbd>真实规则的审核天气样例 <kbd>4</kbd>无权威静风 <kbd>5</kbd>近景 <kbd>6</kbd>总览</p>
+<p><kbd>V</kbd>观察 <kbd>L</kbd>倾听 <kbd>E</kbd>罗盘拓印（此页面仅为本地施工审查，不接生产多玩家状态）</p>
+<output id="info">审查模型加载中</output>
+<output id="reply">所有风速与阵风取自测试样例或权威，不在客户端造风。</output>
+</section>
+<figure id="reference">
+<img id="ref" alt="仓内 ref-m64 测风台原始概念图">
+<figcaption>右图：仓内 ref-m64 原图；左侧：真实 WebGL 游戏模型，不是离线渲染图</figcaption>
+</figure>
+<script type="module" src="./town-blockout/main-summit-wind-ground-detail-review.ts"></script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { BoxGeometry, Color, DynamicDrawUsage, Group, InstancedMesh, Matrix4, Me
 import { buildGrandClocktower } from '../build-grand-clocktower.mjs';
 import type { Ramp, TownPlot } from './landmark-kit';
 import { attachTowerTime, clockBoardDimensions } from './clocktower-face';
+import { addClocktowerBellCasting, addClocktowerRepairBooks, addClocktowerWatchPlate } from './clocktower-story';
 import { buildTowerWingRoof, buildTowerWingShell, furnishEastTowerWing, furnishWestTowerWing, towerEastBridge, towerWingRoofCourse } from './clocktower-wings';
 
 type Vec3 = [number, number, number];
@@ -534,6 +535,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   const wingKit = { box, solid, deck, guard, stair: stairs, gear, lamp: (x: number, y: number, z: number) => lamp(box, x, y, z, .62) };
   parts = wingParts[0];
   furnishWestTowerWing(wingKit);
+  addClocktowerRepairBooks(box);
   parts = wingParts[1];
   furnishEastTowerWing(wingKit);
 
@@ -588,6 +590,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
   parts = interiorParts;
   // A small lookout instrument sits by the existing west rail, leaving the approach clear.
   box('oak', -1.46, lookoutY, 1.49, .15, .83, .17);
+  addClocktowerWatchPlate(box, lookoutY);
   box('brass', -1.57, lookoutY + .80, 1.30, .35, .24, .55);
   box('copperDark', -1.53, lookoutY + .83, 1.83, .28, .18, .11);
   // Bell emblem on the lookout rail, kept separate from the photo action.
@@ -688,6 +691,7 @@ export function buildTowerLandmark(plot: TownPlot): Group {
     const a = i * Math.PI / 20;
     box('brass', snap(Math.sin(a) * 1.661), bellBase + .3125, snap(Math.cos(a) * 1.661), unit32, .09375, unit32);
   }
+  addClocktowerBellCasting(box, bellBase, profile);
   parts = clapperParts;
   box('iron', -.09375, bellBase - .1875, -.09375, .1875, 3.5, .1875);
   box('copperDark', -.21875, bellBase - .4375, -.21875, .4375, .34375, .4375);

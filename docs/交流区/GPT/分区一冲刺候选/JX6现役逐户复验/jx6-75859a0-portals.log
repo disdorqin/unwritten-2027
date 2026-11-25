@@ -1,0 +1,27 @@
+✔ every built decorative house has a unique dry, clear portal on its real front (2784.154534ms)
+ℹ old-town zones: {"forest":11,"memorial":5,"market":17,"lakeside":10,"central":9}
+ℹ missing 0: none
+ℹ added 0: none
+ℹ portal IDs: district:125:470, district:145:467, district:151:493, district:168:489, district:211:491, district:410:343, district:421:363, district:489:438, district:502:401, district:503:451, district:513:366, district:516:273, district:520:417, district:521:82, district:528:207, district:532:448, district:535:267, district:539:85, district:550:412, district:551:385, district:551:65, district:552:216, district:554:272, district:555:438, district:560:85, district:571:376, district:572:280, district:576:207, district:586:136, district:589:295, district:590:362, district:603:314, district:603:338, district:619:146, district:620:175, district:76:449, district:92:477, district:94:431, old-town:101:184, old-town:105:152, old-town:117:202, old-town:133:266, old-town:137:168, old-town:137:70, old-town:149:281, old-town:156:141, old-town:158:184, old-town:172:282, old-town:172:323, old-town:173:135, old-town:179:155, old-town:179:248, old-town:186:104, old-town:188:65, old-town:191:282, old-town:191:325, old-town:197:132, old-town:199:262, old-town:200:151, old-town:202:247, old-town:206:110, old-town:216:280, old-town:217:66, old-town:220:138, old-town:221:251, old-town:228:110, old-town:234:74, old-town:246:114, old-town:246:135, old-town:249:264, old-town:253:243, old-town:262:180, old-town:264:228, old-town:329:155, old-town:331:172, old-town:337:130, old-town:349:184, old-town:351:144, old-town:358:163, old-town:364:207, old-town:375:177, old-town:391:234, old-town:405:51, old-town:406:165, old-town:410:119, old-town:410:219, old-town:414:190, old-town:422:101, old-town:70:229, old-town:94:100, village:0, village:1
+ℹ 百门册 中央 9 / 集市 28 / 纪念 14 / 湖畔 20 / 森林 21
+ℹ checked 52 old-town homes, 38 district homes, and 2 decorative cottages
+ℹ M3 approach 137:70 E136.000/N77.720/Y8.620
+ℹ M3 approach 186:104 E174.905/N112.000/Y9.419
+ℹ M3 approach 206:110 E210.500/N94.780/Y9.903
+ℹ M3 approach 228:110 E229.500/N98.155/Y8.689
+ℹ M3 approach 246:114 E246.500/N106.030/Y7.659
+ℹ M3 approach 349:184 E341.405/N184.000/Y11.995
+ℹ M3 approach 351:144 E366.470/N143.000/Y8.524
+ℹ M3 approach 358:163 E371.720/N160.500/Y10.795
+ℹ M3 approach 364:207 E373.470/N207.000/Y16.189
+ℹ 6 reproducibly sampled entries × 3 targets, plus every target sampled against the terrain
+✔ door clearance tries the center, left, then right without widening or changing the original stand (1.180966ms)
+✔ door visits persist without duplicates and the displayed design copy stays exact (1.669387ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3817.258132

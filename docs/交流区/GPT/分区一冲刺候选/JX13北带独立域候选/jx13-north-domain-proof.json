@@ -1,0 +1,374 @@
+{
+  "legacy": {
+    "width": 640,
+    "depth": 540,
+    "height": 655.35
+  },
+  "trial": {
+    "width": 640,
+    "depth": 530,
+    "northOffset": 270
+  },
+  "absoluteDepth800Rejected": true,
+  "oldBoundary": [
+    {
+      "sent": [
+        320,
+        540,
+        350
+      ],
+      "wireNorth": 540,
+      "broadcast": [
+        320,
+        540,
+        350
+      ]
+    },
+    {
+      "sent": [
+        320,
+        650,
+        350
+      ],
+      "wireNorth": 650,
+      "broadcast": [
+        320,
+        540,
+        350
+      ]
+    },
+    {
+      "sent": [
+        320,
+        655.35,
+        350
+      ],
+      "wireNorth": 655.35,
+      "broadcast": [
+        320,
+        540,
+        350
+      ]
+    },
+    {
+      "sent": [
+        320,
+        655.36,
+        350
+      ],
+      "wireNorth": 655.35,
+      "broadcast": [
+        320,
+        540,
+        350
+      ]
+    },
+    {
+      "sent": [
+        320,
+        800,
+        350
+      ],
+      "wireNorth": 655.35,
+      "broadcast": [
+        320,
+        540,
+        350
+      ]
+    }
+  ],
+  "localSamples": [
+    {
+      "name": "foothill-boundary",
+      "at": [
+        320,
+        270,
+        18
+      ],
+      "sent": [
+        320,
+        0,
+        18
+      ],
+      "wireNorth": 0,
+      "broadcast": [
+        320,
+        0,
+        18
+      ],
+      "reconstructed": [
+        320,
+        270,
+        18
+      ]
+    },
+    {
+      "name": "southwest-storage-corner",
+      "at": [
+        0,
+        270,
+        18
+      ],
+      "sent": [
+        0,
+        0,
+        18
+      ],
+      "wireNorth": 0,
+      "broadcast": [
+        0,
+        0,
+        18
+      ],
+      "reconstructed": [
+        0,
+        270,
+        18
+      ]
+    },
+    {
+      "name": "trail-start-design",
+      "at": [
+        290,
+        300,
+        18
+      ],
+      "sent": [
+        290,
+        30,
+        18
+      ],
+      "wireNorth": 30,
+      "broadcast": [
+        290,
+        30,
+        18
+      ],
+      "reconstructed": [
+        290,
+        300,
+        18
+      ]
+    },
+    {
+      "name": "cable-base-design",
+      "at": [
+        526,
+        329,
+        26
+      ],
+      "sent": [
+        526,
+        59,
+        26
+      ],
+      "wireNorth": 59,
+      "broadcast": [
+        526,
+        59,
+        26
+      ],
+      "reconstructed": [
+        526,
+        329,
+        26
+      ]
+    },
+    {
+      "name": "middle-station",
+      "at": [
+        440,
+        520,
+        140
+      ],
+      "sent": [
+        440,
+        250,
+        140
+      ],
+      "wireNorth": 250,
+      "broadcast": [
+        440,
+        250,
+        140
+      ],
+      "reconstructed": [
+        440,
+        520,
+        140
+      ]
+    },
+    {
+      "name": "summit-cable-station",
+      "at": [
+        336,
+        640,
+        347
+      ],
+      "sent": [
+        336,
+        370,
+        347
+      ],
+      "wireNorth": 370,
+      "broadcast": [
+        336,
+        370,
+        347
+      ],
+      "reconstructed": [
+        336,
+        640,
+        347
+      ]
+    },
+    {
+      "name": "summit-reference",
+      "at": [
+        320,
+        650,
+        350
+      ],
+      "sent": [
+        320,
+        380,
+        350
+      ],
+      "wireNorth": 380,
+      "broadcast": [
+        320,
+        380,
+        350
+      ],
+      "reconstructed": [
+        320,
+        650,
+        350
+      ]
+    },
+    {
+      "name": "centimetre-storage-sample",
+      "at": [
+        321.24,
+        655.36,
+        347.64
+      ],
+      "sent": [
+        321.24,
+        385.36,
+        347.64
+      ],
+      "wireNorth": 385.36,
+      "broadcast": [
+        321.24,
+        385.36,
+        347.64
+      ],
+      "reconstructed": [
+        321.24,
+        655.36,
+        347.64
+      ]
+    },
+    {
+      "name": "reserved-north-wall-end",
+      "at": [
+        320,
+        770,
+        100
+      ],
+      "sent": [
+        320,
+        500,
+        100
+      ],
+      "wireNorth": 500,
+      "broadcast": [
+        320,
+        500,
+        100
+      ],
+      "reconstructed": [
+        320,
+        770,
+        100
+      ]
+    },
+    {
+      "name": "northern-frame-end",
+      "at": [
+        320,
+        800,
+        18
+      ],
+      "sent": [
+        320,
+        530,
+        18
+      ],
+      "wireNorth": 530,
+      "broadcast": [
+        320,
+        530,
+        18
+      ],
+      "reconstructed": [
+        320,
+        800,
+        18
+      ]
+    },
+    {
+      "name": "northeast-storage-corner",
+      "at": [
+        640,
+        800,
+        18
+      ],
+      "sent": [
+        640,
+        530,
+        18
+      ],
+      "wireNorth": 530,
+      "broadcast": [
+        640,
+        530,
+        18
+      ],
+      "reconstructed": [
+        640,
+        800,
+        18
+      ]
+    }
+  ],
+  "seen": {
+    "town": [
+      "town-observer",
+      "town-walker"
+    ],
+    "front": [
+      "front-observer",
+      "front-walker"
+    ]
+  },
+  "stations": [
+    {
+      "id": "railway-station",
+      "east": 477,
+      "north": 320,
+      "railY": 33.19
+    },
+    {
+      "id": "north-ridge-station",
+      "east": 300,
+      "north": 449,
+      "railY": 65
+    }
+  ],
+  "cableBaseDesign": [
+    526,
+    329
+  ]
+}

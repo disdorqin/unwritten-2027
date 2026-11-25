@@ -65,20 +65,24 @@ test('the North Ridge geometry builds and disposes independently', () => {
 
 test('the northern block reuses the entire legacy edge and owns only new terrain', t => {
   const grid = createTerrainGrid();
-  const extension = createNorthRidge350NorthernExtension(grid.heightAt, worldBounds.depth);
+  // The extension seams against the historical legacy edge (north 540),
+  // a fixed boundary inside the 800-deep ridge frame — not the live
+  // world depth, which W-1 raised to the frame depth itself.
+  const legacyNorth = 540;
+  const extension = createNorthRidge350NorthernExtension(grid.heightAt, legacyNorth);
   try {
     const position = extension.mesh.geometry.getAttribute('position');
     const { min, max } = extension.mesh.geometry.boundingBox!;
-    assert.equal(-max.z, worldBounds.depth);
+    assert.equal(-max.z, legacyNorth);
     assert.equal(-min.z, northRidgeFrame.depth);
     assert.equal(max.y, 350);
-    for (let north = 0; north <= worldBounds.depth; north++) {
+    for (let north = 0; north <= legacyNorth; north++) {
       for (let east = 0; east <= worldBounds.width; east++) {
         assert.equal(extension.heightAt(east, north), grid.heightAt(east, north));
       }
     }
-    for (let i = 0; i < position.count && -position.getZ(i) === worldBounds.depth; i++) {
-      assert.equal(position.getY(i), Math.fround(grid.heightAt(position.getX(i), worldBounds.depth)));
+    for (let i = 0; i < position.count && -position.getZ(i) === legacyNorth; i++) {
+      assert.equal(position.getY(i), Math.fround(grid.heightAt(position.getX(i), legacyNorth)));
     }
     const summit = extension.heightAt(320, 650);
     assert.equal(summit, 350);

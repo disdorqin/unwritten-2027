@@ -1,0 +1,14 @@
+✔ the stage front tread gives a direct route onto a single deck (15.192797ms)
+✔ the south theater joins the rear steps to both ramps and retains all 48 photo positions (14.592141ms)
+✔ five-minute stage repeat uses continuous formations, closing bow and two prop intervals (102.449656ms)
+✔ stage retains the viewer activity contract and guest toggles leave the clock running (7.292739ms)
+✔ New Year Eve slots reuse the manual show and stop near-stage-only animation on departure (5.334305ms)
+✔ both approved theater anchors contain 48 standing figures and tighten for a central small group (1898.113726ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2535.29052

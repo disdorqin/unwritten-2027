@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "reviewOnly": true,
+  "frames": [
+    {
+      "name": "station-6-day.jpg",
+      "frames": 27,
+      "selected": 5,
+      "night": false,
+      "foot": {
+        "name": "首次搭手队形 · 仅审图旗标",
+        "east": 336,
+        "north": 652,
+        "height": 347,
+        "yaw": -1.0471975511965976
+      },
+      "yaw": -1.0471975511965976,
+      "walked": 0,
+      "draws": 363,
+      "tris": 168638,
+      "reviewOnly": true,
+      "formationVisible": true,
+      "formationSeconds": 0.2082999999999997
+    },
+    {
+      "name": "station-6-night.jpg",
+      "frames": 34,
+      "selected": 5,
+      "night": true,
+      "foot": {
+        "name": "首次搭手队形 · 仅审图旗标",
+        "east": 336,
+        "north": 652,
+        "height": 347,
+        "yaw": -1.0471975511965976
+      },
+      "yaw": -1.0471975511965976,
+      "walked": 0,
+      "draws": 363,
+      "tris": 168638,
+      "reviewOnly": true,
+      "formationVisible": true,
+      "formationSeconds": 0.2665999999999994
+    }
+  ],
+  "errors": []
+}

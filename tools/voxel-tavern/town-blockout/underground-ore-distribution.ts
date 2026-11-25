@@ -1,4 +1,6 @@
-import { flightFuelCanFullPowerMs } from './flight-fuel-display';
+import { fuelSecondsPerStardustOre } from '../../../src/shared/flight-thrust';
+
+const flightFuelCanFullPowerMs = fuelSecondsPerStardustOre * 1000;
 
 export * from '../../../src/shared/underground-ore-distribution.js';
 

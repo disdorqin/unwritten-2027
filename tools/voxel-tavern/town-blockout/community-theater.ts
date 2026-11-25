@@ -2,15 +2,15 @@ import type { Group } from 'three';
 import type { Box, Ramp } from './landmark-kit';
 import { addOpaqueMuseumLabels } from './museum-label-atlas';
 import { createMuseumLabelCanvas } from './museum-label-canvas';
-import { plazaPhotoStand } from '../../../src/presence/plaza-photo';
+import { plazaPhotoStand, plazaPhotoTierRise } from '../../../src/presence/plaza-photo';
 
-const { run: tierRun, rise: tierRise, south: standSouth } = plazaPhotoStand;
+const { run: tierRun, south: standSouth } = plazaPhotoStand;
 
 export const theaterPhotoPositions = Array.from({ length: 48 }, (_, index) => {
   const row = Math.floor(index / 12);
   const col = index % 12;
   return { east: plazaPhotoStand.centreEast + (col - 5.5) * 1.28,
-    north: standSouth + (row + .5) * tierRun, height: plazaPhotoStand.base + (row + 1) * tierRise };
+    north: standSouth + (row + .5) * tierRun, height: plazaPhotoStand.base + plazaPhotoTierRise(row) };
 });
 
 type PieceAdder = (color: string, x: number, y: number, z: number, w: number, h: number, d: number) => void;
@@ -102,43 +102,62 @@ export function addCommunityTheaterDetails(
   const { centreEast, halfWidth, rows } = plazaPhotoStand;
   const tierHalfWidth = halfWidth + 2.4;
   const tierWidth = 2 * tierHalfWidth;
-  for (let index = 0; index < rows; index++) {
-    const south = standSouth + index * tierRun;
-    const height = (index + 1) * tierRise;
-    const z = localNorth(south + tierRun / 2);
-    add(stone, localEast(centreEast), height / 2, z, tierWidth, height, tierRun);
-    add(deck, localEast(centreEast), height - .045, z, tierWidth - .10, .09, tierRun - .04);
+  const addTier = (south: number, north: number, height: number) => {
+    const depth = north - south;
+    const z = localNorth((south + north) / 2);
+    add(stone, localEast(centreEast), height / 2, z, tierWidth, height, depth);
+    add(deck, localEast(centreEast), height - .045, z, tierWidth - .10, .09, depth - .04);
     add('#ffa455', localEast(centreEast), height - .065, localNorth(south + .025), tierWidth - .12, .045, .04);
     floors.push({
-      min: [localEast(centreEast - tierHalfWidth), 0, localNorth(south + tierRun)],
+      min: [localEast(centreEast - tierHalfWidth), 0, localNorth(north)],
       max: [localEast(centreEast + tierHalfWidth), height, localNorth(south)],
     });
+  };
+  const rearRow = rows - 1;
+  const riseTotal = plazaPhotoTierRise(rearRow);
+  const rearSouth = standSouth + rearRow * tierRun;
+  const rearNorth = rearSouth + tierRun;
+  // The two rear steps leave a full player-radius foothold at the existing x/n photo spots.
+  const rearDeckSouth = rearSouth + .165;
+  const lowerTreadSouth = rearDeckSouth - .26;
+  for (let row = 0; row < rearRow; row++) {
+    const south = standSouth + row * tierRun;
+    const north = row === rearRow - 1 ? lowerTreadSouth : south + tierRun;
+    addTier(south, north, plazaPhotoTierRise(row));
   }
+  addTier(lowerTreadSouth, rearDeckSouth, (plazaPhotoTierRise(rearRow - 1) + riseTotal) / 2);
+  addTier(rearDeckSouth, rearNorth, riseTotal);
 
   const rampStart = 204.8, rampEnd = centreEast - halfWidth;
-  const rampNorth = 165.5, rampSouth = 164.1, landingSouth = 164.625;
-  const riseTotal = rows * tierRise;
+  // The south lane still meets row three. Its top carries over the existing ramp grade.
+  const rampSplit = lowerTreadSouth - .13;
+  const lanes = [
+    { south: 164.1, north: rampSplit, top: rows * plazaPhotoStand.rise },
+    { south: rampSplit, north: rearNorth, top: riseTotal },
+  ];
   const segments = 16;
   const run = (rampEnd - rampStart) / segments;
   for (const ascending of [1, -1] as const) {
     const rampX = (east: number) => localEast(centreEast + ascending * (east - centreEast));
-    for (let index = 0; index < segments; index++) {
-      const height = riseTotal * (index + 1) / segments;
-      // The fourth tier now covers the northern part of the top tread.
-      const treadNorth = index === segments - 1 ? landingSouth : rampNorth;
-      add(stone, rampX(rampStart + run * (index + .5)), height / 2,
-        localNorth((treadNorth + rampSouth) / 2), run, height, treadNorth - rampSouth);
-    }
     const start = rampX(rampStart), end = rampX(rampEnd);
-    ramps.push({
-      min: [Math.min(start, end), 0, localNorth(rampNorth)],
-      max: [Math.max(start, end), riseTotal, localNorth(rampSouth)],
-      axis: 'x', ascending,
-    });
+    for (const { south, north, top } of lanes) {
+      for (let index = 0; index < segments; index++) {
+        const height = top * (index + 1) / segments;
+        // The rear deck covers the northern part of the top tread.
+        const treadNorth = index === segments - 1 ? Math.min(north, rearDeckSouth) : north;
+        add(stone, rampX(rampStart + run * (index + .5)), height / 2,
+          localNorth((treadNorth + south) / 2), run, height, treadNorth - south);
+      }
+      ramps.push({
+        min: [Math.min(start, end), 0, localNorth(north)],
+        max: [Math.max(start, end), top, localNorth(south)],
+        axis: 'x', ascending,
+      });
+    }
     const landingEdge = rampX(rampEnd - .25);
     floors.push({
-      min: [Math.min(landingEdge, end), 0, localNorth(rampNorth)],
-      max: [Math.max(landingEdge, end), riseTotal, localNorth(landingSouth)],
+      min: [Math.min(landingEdge, end), 0, localNorth(rearNorth)],
+      max: [Math.max(landingEdge, end), riseTotal, localNorth(rearDeckSouth)],
     });
   }
   for (const east of [218.4, 229.6]) {

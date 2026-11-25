@@ -1,8 +1,13 @@
 import {
-  AmbientLight, Color, DirectionalLight, Fog, Group, Mesh, MeshLambertMaterial, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
+  AmbientLight, BufferGeometry, Color, DirectionalLight, Float32BufferAttribute, Fog, Group,
+  Mesh, MeshLambertMaterial, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
 } from 'three';
-import { createMainSummitBlock, mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
-import { northRidgeSummit, sampleNorthRidge350 } from './north-ridge-350-terrain';
+import {
+  cloudTerminal, cloudTerraceTurnNorth, mountMainSummitAssembly, summitAssemblyAnchor, summitWorldPoint,
+  supportsCloudTerrace,
+} from './main-summit-assembly';
+import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { northRidgeSummit } from './north-ridge-350-terrain';
 import { createTownPhysicsClock, townPhysicsDelta } from './town-physics-clock';
 
 const scene = new Scene();
@@ -12,24 +17,17 @@ scene.add(new AmbientLight('#dce5f2', 1.5));
 const sun = new DirectionalLight('#fff0d6', 2.05);
 sun.position.set(-15, 30, 18);
 scene.add(sun);
-const stage = new Group();
-scene.add(stage);
+const world = new Group();
+scene.add(world);
 
 const renderer = new WebGLRenderer({ antialias: true });
 const camera = new PerspectiveCamera(50, 1, .1, 2_400);
 document.querySelector('#scene')!.append(renderer.domElement);
 
-// Review alignment only. These sampled coordinates are not a host anchor.
-const apronNorthRidgeEast = 300;
-const apronNorthRidgeNorth = 676;
-const frontRidgeAt = (east: number, north: number) =>
-  sampleNorthRidge350(apronNorthRidgeEast + east, apronNorthRidgeNorth + north);
-const arrivalHeight = 347;
-const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-stage.add(block.coarse);
+const assemblyEpoch = Date.UTC(2026, 11, 31, 6);
+const assembly = mountMainSummitAssembly(world, assemblyEpoch);
+const { group: stage, block, frontRidgeAt, arrivalHeight } = assembly;
 const halfPlazaWidth = mainSummitSpec.arrivalPlaza[0] / 2;
-const halfApronWidth = 6;
-const apronSouth = -22;
 const seamNorth = mainSummitBounds.south;
 const plazaNorth = mainSummitSpec.arrivalPlaza[1];
 
@@ -37,7 +35,7 @@ const headings = {
   north: [0, -1_600], east: [1_600, 0], south: [0, 1_600], west: [-1_600, 0],
 } as const;
 type Heading = keyof typeof headings;
-type View = Heading | 'gate';
+type View = Heading | 'gate' | 'cluster';
 type BlockReason = 'extent' | 'step' | 'gate' | 'aperture';
 type DetailLayer = 'front-ridge' | 'main-summit';
 type LayerChange = { from: DetailLayer; to: DetailLayer };
@@ -53,10 +51,11 @@ type LayerFrame = LayerChange & {
   arrivalDetailPresent: boolean;
 };
 
-const buttons = Object.fromEntries((['gate', ...Object.keys(headings)] as View[]).map(name => [
+const buttons = Object.fromEntries((['gate', 'cluster', ...Object.keys(headings)] as View[]).map(name => [
   name, document.querySelector<HTMLButtonElement>(name === 'gate' ? '#gate' : `#view-${name}`)!,
 ])) as Record<View, HTMLButtonElement>;
 const remountButton = document.querySelector<HTMLButtonElement>('#remount')!;
+const terminalButton = document.querySelector<HTMLButtonElement>('#cloud-station')!;
 const disposeButton = document.querySelector<HTMLButtonElement>('#dispose')!;
 const position = document.querySelector<HTMLOutputElement>('#position')!;
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -75,15 +74,17 @@ const clock = createTownPhysicsClock();
 
 let view: View = 'gate';
 let east = 0, north = startNorth, feet = frontRidgeAt(east, north);
+let returnNorth = startNorth;
 let frontierReached = false, returned = false, disposed = false;
 let accepted = 0, blocked = 0, seamCrossings = 0, maxAcceptedStep = 0;
 let lastBlock: BlockReason | null = null;
 let gate: ReturnType<typeof block.enter> | undefined;
+let registration = '';
 let gateGeometryDisposals = 0, gateMaterialDisposals = 0;
 let coarseGeometryDisposals = 0, coarseMaterialDisposals = 0;
 let coarseRendered = false;
 let activeDetailRendered = false;
-let detail: { layer: DetailLayer; mesh: Mesh<PlaneGeometry, MeshLambertMaterial> } | undefined;
+let detail: { layer: DetailLayer; mesh: Mesh<BufferGeometry, MeshLambertMaterial> } | undefined;
 const frontFloorDisposals = { geometry: 0, material: 0 };
 const arrivalFloorDisposals = { geometry: 0, material: 0 };
 let pendingLayerChange: LayerChange | undefined;
@@ -102,30 +103,54 @@ function removeDetail() {
   detail = undefined;
 }
 
-function mountDetail(layer: DetailLayer) {
-  const front = layer === 'front-ridge';
-  const width = 2 * (front ? halfApronWidth : halfPlazaWidth);
-  const south = front ? apronSouth : seamNorth;
-  const north = front ? seamNorth : plazaNorth;
-  const centre = (south + north) / 2;
-  const geometry = new PlaneGeometry(width, north - south, width, north - south);
+function buildFrontTerrace() {
+  const vertices: number[] = [], indices: number[] = [], colors: number[] = [];
+  const snow = new Color('#b8cbd9'), stone = new Color('#899aa9');
+  for (let n = cloudTerminal.north - 12; n < seamNorth; n++) {
+    for (let e = -40; e < cloudTerminal.east + 36; e++) {
+      const color = supportsCloudTerrace(e + .5, n + .5) ? stone : snow;
+      const start = vertices.length / 3;
+      for (const [x, north] of [[e, n], [e + 1, n], [e, n + 1], [e + 1, n + 1]]) {
+        vertices.push(x, frontRidgeAt(x, north), -north);
+        colors.push(color.r, color.g, color.b);
+      }
+      indices.push(start, start + 1, start + 2, start + 2, start + 1, start + 3);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function buildArrivalFloor() {
+  const width = 2 * halfPlazaWidth;
+  const centre = (plazaNorth + seamNorth) / 2;
+  const span = plazaNorth - seamNorth;
+  const geometry = new PlaneGeometry(width, span, width, span);
   const vertices = geometry.getAttribute('position');
-  const heightAt = front ? frontRidgeAt : block.heightAt;
   for (let index = 0; index < vertices.count; index++) {
-    const height = heightAt(vertices.getX(index), centre + vertices.getY(index));
-    vertices.setZ(index, height! - arrivalHeight);
+    const north = centre + vertices.getY(index);
+    const east = vertices.getX(index);
+    vertices.setXYZ(index, east, block.heightAt(east, north)!, -north);
   }
   geometry.computeVertexNormals();
-  const material = new MeshLambertMaterial(front ? { color: '#99a9b7' } : {
+  return geometry;
+}
+
+function mountDetail(layer: DetailLayer) {
+  const front = layer === 'front-ridge';
+  const geometry = front ? buildFrontTerrace() : buildArrivalFloor();
+  const material = new MeshLambertMaterial(front ? { vertexColors: true } : {
     color: '#a8b5c3', polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
   const disposals = front ? frontFloorDisposals : arrivalFloorDisposals;
   geometry.addEventListener('dispose', () => disposals.geometry++);
   material.addEventListener('dispose', () => disposals.material++);
   const mesh = new Mesh(geometry, material);
-  mesh.name = front ? 'fixture-cloud-terrace' : 'fixture-main-summit-detail';
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(0, arrivalHeight, -centre);
+  mesh.name = front ? 'assembly-cloud-terrace' : 'assembly-main-summit-detail';
   mesh.onAfterRender = () => { activeDetailRendered = true; };
   stage.add(mesh);
   detail = { layer, mesh };
@@ -145,7 +170,7 @@ function detailPresent(layer: DetailLayer) {
 
 function mountGate() {
   if (gate || disposed) return;
-  gate = block.enter(stage);
+  gate = assembly.enterGate();
   const materials = new Set<Mesh['material']>();
   for (const object of gate.group.children) {
     if (!(object instanceof Mesh) || Array.isArray(object.material)) continue;
@@ -158,26 +183,33 @@ function mountGate() {
   frontierReached = returned = false;
   lastBlock = null;
   remountButton.disabled = true;
-  status.textContent = '局部山门已挂载。';
+  status.textContent = '总装候选物件已挂载。';
 }
 
 function updateCamera() {
+  const offsetEast = summitAssemblyAnchor.east, offsetNorth = summitAssemblyAnchor.north;
   if (view === 'gate') {
-    camera.position.set(east, feet + eyeHeight, -north);
-    camera.lookAt(east, feet + eyeHeight, -north - 1);
+    camera.position.set(offsetEast + east, feet + eyeHeight, -offsetNorth - north);
+    camera.lookAt(offsetEast + east, feet + eyeHeight, -offsetNorth - north - 1);
     return;
   }
-  const [offsetEast, offsetZ] = headings[view];
+  if (view === 'cluster') {
+    camera.position.set(offsetEast + 106, 834, -offsetNorth - 966);
+    camera.lookAt(offsetEast + 48, 800, -offsetNorth - 1005);
+    return;
+  }
+  const [viewEast, viewZ] = headings[view];
   const { east: summitEast, north: summitNorth } = mainSummitLayout.summit;
   const [plateauWidth, plateauDepth] = mainSummitSpec.summitPlateau;
-  camera.position.set(summitEast + offsetEast, northRidgeSummit.height, -summitNorth + offsetZ);
-  camera.lookAt(summitEast + Math.sign(offsetEast) * (plateauWidth / 2 - .1), mainSummitSpec.summitHeight,
-    -summitNorth + Math.sign(offsetZ) * (plateauDepth / 2 - .1));
+  camera.position.set(offsetEast + summitEast + viewEast, northRidgeSummit.height, -offsetNorth - summitNorth + viewZ);
+  camera.lookAt(offsetEast + summitEast + Math.sign(viewEast) * (plateauWidth / 2 - .1), mainSummitSpec.summitHeight,
+    -offsetNorth - summitNorth + Math.sign(viewZ) * (plateauDepth / 2 - .1));
 }
 
 function selectView(next: View) {
   if (disposed) return;
   view = next;
+  assembly.setSummitDetail(next === 'cluster');
   keys.clear();
   clock.reset();
   for (const name of Object.keys(buttons) as View[]) {
@@ -187,10 +219,9 @@ function selectView(next: View) {
 }
 
 function floorAt(x: number, n: number) {
-  const halfWidth = n < seamNorth ? halfApronWidth : halfPlazaWidth;
-  if (Math.abs(x) > halfWidth - bodyRadius || n < apronSouth + bodyRadius ||
-      n > plazaNorth - bodyRadius) return undefined;
-  return n < seamNorth ? frontRidgeAt(x, n) : block.heightAt(x, n);
+  if (n < seamNorth) return supportsCloudTerrace(x, n, bodyRadius) ? frontRidgeAt(x, n) : undefined;
+  if (Math.abs(x) > halfPlazaWidth - bodyRadius || n > plazaNorth - bodyRadius) return undefined;
+  return assembly.stations.heightAt(x, n);
 }
 
 function gateClearance(x: number, n: number, y: number): number | null {
@@ -212,7 +243,6 @@ function rejectMove(reason: BlockReason) {
 }
 
 function move() {
-  if (!gate) return;
   const lateral = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
   const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
   if (lateral === 0 && forward === 0) return;
@@ -222,9 +252,11 @@ function move() {
   if (nextFeet === undefined) return rejectMove('extent');
   if (Math.abs(nextFeet - feet) > stepHeight) return rejectMove('step');
   if ((gateClearance(nextEast, nextNorth, nextFeet) ?? Infinity) < 0) return rejectMove('gate');
+  if (assembly.blocked(nextEast, nextNorth, nextFeet, bodyRadius, bodyHeight)) return rejectMove('gate');
 
   const crossesSeam = (north < seamNorth) !== (nextNorth < seamNorth);
   if (crossesSeam) {
+    if (!gate) return rejectMove('gate');
     const fraction = (seamNorth - north) / (nextNorth - north);
     const crossingEast = east + (nextEast - east) * fraction;
     const centreClearance = mainSummitLayout.gate.clearWidth / 2 - bodyRadius;
@@ -242,9 +274,9 @@ function move() {
   if (!frontierReached && north >= arrivalNorth) {
     frontierReached = true;
     status.textContent = '已抵达行前坪。';
-  } else if (frontierReached && north <= startNorth) {
+  } else if (frontierReached && !returned && north <= returnNorth) {
     returned = true;
-    block.leave();
+    assembly.leaveGate();
     gate = undefined;
     keys.clear();
     remountButton.disabled = false;
@@ -258,7 +290,7 @@ function getState() {
     wallClearance: gateClearance(east, north, feet),
     draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
     geometries: renderer.info.memory.geometries,
-    gateMounted: gate?.group.parent === stage, gateMeshes: gate?.group.children.length ?? 0,
+    gateMounted: gate?.group.parent === assembly.stations.group, gateMeshes: gate?.group.children.length ?? 0,
     gateGeometryDisposals, gateMaterialDisposals,
     coarsePresent: block.coarse.parent === stage, coarseVisible: block.coarse.parent === stage && coarseRendered,
     coarseGeometryDisposals, coarseMaterialDisposals,
@@ -268,10 +300,25 @@ function getState() {
     layerTransitions: layerTransitions.map(change => ({ ...change })), disposed,
     camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(),
       aspect: camera.aspect, fov: camera.fov, far: camera.far },
+    assembly: {
+      worldAnchor: summitAssemblyAnchor,
+      worldFeet: summitWorldPoint(east, north, feet),
+      mountedParts: assembly.mountedParts(),
+      frontSnowDepth: assembly.frontSnowAt(0, seamNorth),
+      summitSnowDepth: assembly.summitSnowAt(0, seamNorth),
+      apronSeamHeight: arrivalHeight,
+      lowSledTailMounted: false,
+      registration,
+    },
   };
 }
 
 function onKeyDown(event: KeyboardEvent) {
+  if (!disposed && view === 'gate' && event.code === 'KeyE' && !event.repeat) {
+    registration = assembly.interact(east, north, feet).action;
+    if (registration === 'cloud-stamp') status.textContent = '已在前山碑盖章。';
+    return;
+  }
   if (disposed || view !== 'gate' || !moveKeys.has(event.code) || event.ctrlKey || event.metaKey || event.altKey) return;
   event.preventDefault();
   keys.add(event.code);
@@ -291,17 +338,21 @@ function animate(now: number) {
   if (view === 'gate') clock.advance(Math.min((now - previousTime) / 1_000, .1), move);
   previousTime = now;
   updateCamera();
+  assembly.update(assemblyEpoch + now);
   coarseRendered = false;
   activeDetailRendered = false;
   renderer.render(scene, camera);
   frame++;
   if (pendingLayerChange) {
     layerTransitions.push({ ...pendingLayerChange, frame, draws: renderer.info.render.calls, triangles: renderer.info.render.triangles,
-      coarsePresent: block.coarse.parent === stage, coarseRendered, activeDetailRendered, gateMounted: gate?.group.parent === stage,
+      coarsePresent: block.coarse.parent === stage, coarseRendered, activeDetailRendered,
+      gateMounted: gate?.group.parent === assembly.stations.group,
       frontPresent: detailPresent('front-ridge'), arrivalDetailPresent: detailPresent('main-summit') });
     pendingLayerChange = undefined;
   }
-  position.value = `${view} · E ${east.toFixed(3)} / N ${north.toFixed(3)} / Y ${feet.toFixed(3)}`;
+  const worldFeet = summitWorldPoint(east, north, feet);
+  position.value = `E ${worldFeet.east.toFixed(3)} / N ${worldFeet.north.toFixed(3)} / Y ${feet.toFixed(3)}`;
+  terminalButton.disabled = north >= seamNorth;
   raf = requestAnimationFrame(animate);
 }
 
@@ -310,11 +361,11 @@ function dispose() {
   disposed = true;
   cancelAnimationFrame(raf);
   keys.clear();
-  block.dispose();
+  assembly.dispose();
   gate = undefined;
   removeDetail();
   coarseRendered = activeDetailRendered = false;
-  stage.removeFromParent();
+  world.removeFromParent();
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('keyup', onKeyUp);
   window.removeEventListener('blur', onBlur);
@@ -322,12 +373,24 @@ function dispose() {
   renderer.dispose();
   renderer.domElement.remove();
   for (const button of Object.values(buttons)) button.disabled = true;
-  remountButton.disabled = disposeButton.disabled = true;
+  terminalButton.disabled = remountButton.disabled = disposeButton.disabled = true;
   status.textContent = '试览已释放。';
 }
 
 for (const name of Object.keys(buttons) as View[]) buttons[name].onclick = () => selectView(name);
-remountButton.onclick = () => { mountGate(); selectView('gate'); };
+remountButton.onclick = () => { returnNorth = startNorth; mountGate(); selectView('gate'); };
+terminalButton.onclick = () => {
+  if (north >= seamNorth) return;
+  mountGate();
+  east = cloudTerminal.east;
+  north = cloudTerminal.north;
+  returnNorth = cloudTerraceTurnNorth;
+  feet = frontRidgeAt(east, north);
+  frontierReached = returned = false;
+  lastBlock = null;
+  selectView('gate');
+  status.textContent = '缆车一线顶站。沿石道到转角，向西前往山门。';
+};
 disposeButton.onclick = dispose;
 window.addEventListener('keydown', onKeyDown);
 window.addEventListener('keyup', onKeyUp);

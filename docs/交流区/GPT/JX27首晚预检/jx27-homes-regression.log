@@ -1,0 +1,76 @@
+✔ assigns once per verified principal in admission order and preserves 52 unique assignments (5.715031ms)
+✔ a failed durable call neither consumes a slot nor makes an assignment visible (1.23929ms)
+✔ rejects an invalid registry, duplicate occupancy, and unknown persisted houses (0.571488ms)
+{"webSocketIds":[1,2,3],"pollIds":[4,5],"pollSessionChanged":true}
+✔ the published transports give unrelated connection IDs to identical display names (88.275663ms)
+{"ts":"2026-11-20T04:02:54.679Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.680Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.681Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:54.699Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.699Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.699Z","transport":"poll","peer":2,"step":"drop","result":"invalid-name"}
+{"ts":"2026-11-20T04:02:54.703Z","transport":"poll","peer":"-","step":"session","result":"unknown"}
+✔ poll join issues a session and the self join frame; bad names and sessions are refused (121.584995ms)
+{"ts":"2026-11-20T04:02:54.719Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.719Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.719Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:54.723Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.723Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.723Z","transport":"poll","peer":2,"step":"join","result":"ok"}
+✔ S-A1: two poll-only clients see each other's positions, chat and poses without any WebSocket (132.390534ms)
+{"ts":"2026-11-20T04:02:54.843Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.844Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.844Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:54.846Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:54.846Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:54.846Z","transport":"poll","peer":2,"step":"join","result":"ok"}
+✔ snowball throw and hit confirmation travel over the polling channel (150.127395ms)
+✔ throne authority sends a sticky crown and one announcement across both transports (138.893898ms)
+{"ts":"2026-11-20T04:02:55.137Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.137Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.137Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:55.140Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.141Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.141Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+✔ poll and WebSocket clients share one world state (133.949273ms)
+{"ts":"2026-11-20T04:02:55.268Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T04:02:55.286Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.289Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.289Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:55.296Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.296Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.296Z","transport":"poll","peer":2,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:55.392Z","transport":"poll","peer":1,"step":"drop","result":"leave"}
+✔ poll-only owner verification relays the reserved mascot and rejects unverified peers (133.615728ms)
+{"ts":"2026-11-20T04:02:55.400Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.400Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.400Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:55.403Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:55.403Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:55.403Z","transport":"poll","peer":2,"step":"join","result":"ok"}
+✔ queued snapshots coalesce to the latest frame for slow pollers (777.716866ms)
+{"ts":"2026-11-20T04:02:56.177Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:56.177Z","transport":"poll","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:56.177Z","transport":"poll","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:56.179Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:56.179Z","transport":"poll","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:56.179Z","transport":"poll","peer":2,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:56.186Z","transport":"poll","peer":1,"step":"drop","result":"poll-timeout"}
+{"ts":"2026-11-20T04:02:56.186Z","transport":"poll","peer":2,"step":"drop","result":"poll-timeout"}
+{"ts":"2026-11-20T04:02:56.333Z","transport":"poll","peer":"-","step":"session","result":"unknown"}
+{"ts":"2026-11-20T04:02:56.335Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:56.336Z","transport":"poll","peer":3,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:56.336Z","transport":"poll","peer":3,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:56.338Z","transport":"poll","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T04:02:56.338Z","transport":"poll","peer":4,"step":"session","result":"ok"}
+{"ts":"2026-11-20T04:02:56.338Z","transport":"poll","peer":4,"step":"join","result":"ok"}
+{"ts":"2026-11-20T04:02:56.340Z","transport":"poll","peer":3,"step":"drop","result":"leave"}
+✔ poll sessions expire after the timeout and leave notifies the other client (169.730811ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2444.940826

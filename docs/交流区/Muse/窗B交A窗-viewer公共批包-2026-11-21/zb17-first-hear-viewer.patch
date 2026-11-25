@@ -1,0 +1,62 @@
+commit 77b401f1f1958f80fe56dbe863be17ff058ad3db
+Author: Muse-B <muse-b@local>
+Date:   Sat Nov 21 04:50:37 2026 +0000
+
+    ZB-17: mount first-hear beacon receiver in viewer (lane handoff patch)
+    
+    Applies lane-build 36196ccc's one-writer handoff patch
+    (zb17-first-hear-viewer-on-4116fee7) verbatim on current mainline:
+    createTownFirstBeacon + night-beacon receiver wired to the tower bell,
+    catalogue entry appended silently to the passport panel on first hear.
+    The leaf (town-first-beacon.ts) and its guard (0d88a328) were already
+    byte-identical on mainline; this mount makes the module reachable from
+    the entry graph (audit 2026-11-21 section V). tsc 0; first-beacon and
+    night-beacon tests pass.
+
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index e60117da..c0e67659 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -130,6 +130,8 @@ import { createTownNpcActivity, townNpcDoorAnchors } from './town-npc';
+ import { createPlazaResidentGathering, registerTownResidentStations } from './town-npc-stations';
+ import { npcAuthoredDialogue } from './town-npc-dialogue';
+ import { createTownPresence } from './town-presence';
++import { createTownNightBeaconReceiver } from '../../../src/shared/town-night-beacon';
++import { createTownFirstBeacon } from './town-first-beacon';
+ import { createClocktowerStorySpots } from './clocktower-story';
+ import { effectiveTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
+ import { inPlazaPhotoRequestZone } from '../../../src/presence/plaza-photo';
+@@ -2188,6 +2190,14 @@ activitySpots.push(...longHallRelay.spots);
+ passportButton.onclick = () => {
+   passport.open();
+   showStampCount();
++  const entry = firstThirteenthBell.catalogueEntry();
++  const extensionList = activityPanel.querySelector('.passport-extensions > ul');
++  if (entry && extensionList && !extensionList.querySelector(`[data-catalogue-entry="${entry.id}"]`)) {
++    const row = document.createElement('li');
++    row.dataset.catalogueEntry = entry.id;
++    row.textContent = entry.title;
++    extensionList.append(row);
++  }
+ };
+ 
+ const stampGeometry = new BoxGeometry();
+@@ -2278,6 +2288,18 @@ activitySpots.push(
+ const [bellX, bellDeck, bellZ] = towerStops.bell;
+ const towerBellPosition = tower.localToWorld(new Vector3(bellX, bellDeck + 1.8, bellZ));
+ const bellMotion = tower.userData.bellMotion as TowerBellMotion;
++const firstThirteenthBell = createTownFirstBeacon({
++  serverNow: presence.serverNow,
++  connectedAt: presence.townNightConnectedAt,
++  canHearHere: () => walking && !boardingGround && !homeReturn && !cloudRoute.active(),
++  monotonicNow: () => performance.now(),
++  playAudibleTowerCue: () => festival.playThirteenthBell(bellDistance()),
++});
++const receiveThirteenthBell = createTownNightBeaconReceiver({
++  ringTower: firstThirteenthBell.ringTower,
++  swingPendulum: () => bellMotion.strike(.65),
++});
++presence.onTownNightBeacon(cue => receiveThirteenthBell(cue, presence.serverNow()));
+ let bellReservedForCeremony = false;
+ const towerBellSpot = localSpot(tower, towerStops.bell, 2, '拉绳敲钟', () => {
+   if (bellReservedForCeremony) {

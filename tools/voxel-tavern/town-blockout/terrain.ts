@@ -1,6 +1,7 @@
 import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
+import { terrainReliefOffset } from './terrain-undulations';
 
 export { layout, worldBounds };
 
@@ -18,11 +19,16 @@ const gradedMarketCounters = new Set([5, 6, 7, 13, 14, 15, 16].map(index => `mar
 const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(stall => {
   const [x, z] = marketStallLocalPoint(stall, 0, 2.6);
   const [nearX, nearZ] = marketStallLocalPoint(stall, 1.05, 2.6);
+  const northRadius = Math.abs(nearZ - z) + 1;
+  const shifted = stall.id === 'market-stall-5';
   return {
     east: marketEast + x,
     north: marketNorth - z,
     eastRadius: Math.abs(nearX - x) + 1,
-    northRadius: Math.abs(nearZ - z) + 1,
+    // Keep stall 5's old north edge and stop the new south shoulder above N104.
+    northRadius: northRadius + (shifted ? 1.25 : 0),
+    southRadius: shifted ? .75 : northRadius,
+    southBlendScale: shifted ? 2 : 1,
     level: stall.counterGround,
   };
 });
@@ -138,7 +144,8 @@ function sample(x: number, n: number) {
   elevation = mix(elevation, memorialLevel, 1 - fade(apronDistance / 5));
   for (const apron of marketCounterAprons) {
     const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
-    const dn = Math.max(0, Math.abs(n - apron.north) - apron.northRadius);
+    const dn = Math.max(0, (apron.north - n - apron.southRadius) * apron.southBlendScale,
+      n - apron.north - apron.northRadius);
     const distance = Math.hypot(dx, dn);
     if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
   }
@@ -152,7 +159,8 @@ function sample(x: number, n: number) {
   return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };
 }
 
-export function createTerrainGrid() {
+/** Default relief is active on the shipped town grid; relief=false is an audit-only baseline. */
+export function createTerrainGrid(options: { relief?: boolean } = {}) {
   const elevation = new Float32Array(gridWidth * gridDepth);
   const surfaces = new Uint8Array(elevation.length);
   for (let j = 0; j < gridDepth; j++) {
@@ -162,7 +170,12 @@ export function createTerrainGrid() {
       const outsideLegacy = east > layout.width || north > layout.depth;
       const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      elevation[index] = extension.elevation;
+      // Shared physical height authority: render geometry, feet, sled and
+      // scene fixtures all consume this 1m sampled field. Never use a
+      // separate visual-only mound or an opt-in production flag.
+      const relief = options.relief === false || isWater(east, north) || cell.ice
+        ? 0 : terrainReliefOffset(east, north);
+      elevation[index] = extension.elevation + relief;
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }

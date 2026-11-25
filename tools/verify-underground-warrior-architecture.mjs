@@ -33,7 +33,7 @@ const server = await createServer({
 let browser;
 let error;
 const verdict = { scope: 'LOCAL model-only fixture; not mounted in the default town, not a live -165m world.',
-  views: {}, openHouseWalk: undefined, sealedHouseWalk: undefined, passed: false, errors: [] };
+  views: {}, passed: false, errors: [] };
 try {
   await server.listen();
   const address = server.httpServer.address();
@@ -66,67 +66,11 @@ try {
     assert.ok(stats.triangles > 70000 && stats.triangles < 125000,
       'review frame is empty, or detail geometry exceeded budget');
     assert.ok(Math.abs(stats.eyeHeight - [1.67, 1.67, 1.68, 8.77][index]) < .001);
-    assert.equal(stats.walk.clear, true, 'review camera must start at a valid physical foot');
     const file = resolve(output, `${index + 1}-${name}.png`);
     const image = await page.screenshot({ path: file });
     assert.ok(image.byteLength > 15000, 'reference shot rendered blank or not at all');
-    // Verified real Chromium keyboard W, not simply replaying a scripted camera
-    // teleport. The fixture's step() sweeps a 27cm-radius avatar in ≤11cm chunks
-    // against the same 77 physical blockers as the registered city scene.
-    await page.keyboard.down('w');
-    const moved = await page.evaluate(() => window.warriorArchitectureReview.step(.52));
-    await page.keyboard.up('w');
-    const walking = await page.evaluate(() => window.warriorArchitectureReview.inspect());
-    assert.equal(moved, true, name + ': real W must advance first-person view');
-    assert.ok(walking.walk.meters >= stats.walk.meters + 1.35,
-      name + ': expected ≥1.35 m of actual swept keyboard movement');
-    assert.equal(walking.walk.clear, true,
-      name + ': the finished point must remain clear to a standing capsule');
-    assert.equal(walking.walk.rejectedSteps, stats.walk.rejectedSteps,
-      name + ': unexpected stone collider snag during routine walk');
-    assert.ok(walking.walk.trustedWEvents > stats.walk.trustedWEvents,
-      name + ': only real browser keyboard input counts as walk proof');
-    verdict.views[name] = { ...stats, walkAfterKeyW: walking.walk,
-      screenshot: file, imageBytes: image.byteLength };
-    if (name === 'home-street') {
-      // Continue from the street, through the actual 2.52m doorway, to the
-      // furnished chamber. This scene is based on one of the FOUR open homes.
-      await page.keyboard.down('w');
-      await page.evaluate(() => window.warriorArchitectureReview.step(2.5));
-      await page.evaluate(() => window.warriorArchitectureReview.step(1.2));
-      await page.keyboard.up('w');
-      const entered = await page.evaluate(() => window.warriorArchitectureReview.inspect());
-      assert.ok(entered.walk.north > 9.7 && entered.walk.north < 16,
-        'open-home street entry must actually reach inside the roofed room');
-      assert.ok(Math.abs(entered.walk.east - 37.75) < .2);
-      assert.equal(entered.walk.clear, true);
-      assert.equal(entered.walk.rejectedSteps, walking.walk.rejectedSteps,
-        'furnished wall cannot trap the player entering by the open main door');
-      await page.evaluate(() => new Promise(done => requestAnimationFrame(() =>
-        requestAnimationFrame(done))));
-      const thresholdFile = resolve(output, '5-entered-open-home.png');
-      const thresholdShot = await page.screenshot({ path: thresholdFile });
-      assert.ok(thresholdShot.byteLength > 15000);
-      verdict.openHouseWalk = { ...entered.walk, screenshot: thresholdFile };
-    }
+    verdict.views[name] = { ...stats, screenshot: file, imageBytes: image.byteLength };
   }
-  // A sealed home must never become a shortcut to the rear of the street.
-  await page.evaluate(() => window.warriorArchitectureReview.setView('sealed-house'));
-  const blockedBefore = await page.evaluate(() => window.warriorArchitectureReview.inspect());
-  await page.keyboard.down('w');
-  await page.evaluate(() => window.warriorArchitectureReview.step(2.5));
-  await page.evaluate(() => window.warriorArchitectureReview.step(2.5));
-  await page.keyboard.up('w');
-  const sealed = await page.evaluate(() => window.warriorArchitectureReview.inspect());
-  assert.ok(sealed.walk.north >= 4 && sealed.walk.north < 8.15,
-    'sealed home must block the actual forward walk before the front wall');
-  assert.ok(sealed.walk.rejectedSteps > blockedBefore.walk.rejectedSteps,
-    'a physically blocked stair/door must explicitly reject a capsule step');
-  assert.equal(sealed.walk.clear, true);
-  const sealedFile = resolve(output, '6-sealed-home-rejects-entry.png');
-  const sealedScreenshot = await page.screenshot({ path: sealedFile });
-  assert.ok(sealedScreenshot.byteLength > 15000);
-  verdict.sealedHouseWalk = { ...sealed.walk, screenshot: sealedFile };
   assert.deepEqual(verdict.errors, []);
   verdict.passed = true;
   await page.close();

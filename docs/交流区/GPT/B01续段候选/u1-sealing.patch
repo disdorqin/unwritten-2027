@@ -1,0 +1,406 @@
+diff --git a/tests/town-blockout-meteor-crater-sealing.test.ts b/tests/town-blockout-meteor-crater-sealing.test.ts
+new file mode 100644
+index 0000000..d9df4a5
+--- /dev/null
++++ b/tests/town-blockout-meteor-crater-sealing.test.ts
+@@ -0,0 +1,132 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { Group, InstancedMesh, Matrix4, Texture, Vector3 } from 'three';
++import { createMeteorCrater, meteorCraterRimRadius } from '../tools/voxel-tavern/town-blockout/meteor-crater.ts';
++import { buildCraterSealing, craterSealSignText, findCraterSealingObstruction, isCraterSealSignText, planCraterSealing } from '../tools/voxel-tavern/town-blockout/meteor-crater-sealing.ts';
++
++const crater = createMeteorCrater({
++  terraces: [{ outerRadius: 50, innerRadius: 46, depth: 7 }, { outerRadius: 41, innerRadius: 37, depth: 16 },
++    { outerRadius: 32, innerRadius: 27, depth: 26 }],
++  mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
++});
++const surface = crater.buildPreviewSurface(meteorCraterRimRadius / 30);
++const entryGap = crater.mainTrailPoint(0);
++const second = crater.mainTrailPoint(.001);
++const entryDirection = { east: second.east - entryGap.east, north: second.north - entryGap.north };
++const anchors = { pitCenter: { east: 0, north: 0 }, entryGap, entryDirection,
++  rimWall: { east: 3, north: 55.3, yaw: .15 }, terraceWall: { east: 0, north: 39, yaw: 0 },
++  cargo: { east: 54, north: -18, yaw: 1.6 }, rimCrane: { east: 13, north: -54 },
++  heightAt: surface.heightAt };
++const plan = planCraterSealing(anchors);
++
++test('sealing signs use only the approved short commands and statuses', () => {
++  assert.ok(craterSealSignText.every(word => /^[\p{Script=Han}]{2,6}$/u.test(word)));
++  for (const invalid of ['编号12', '2026', '李工', '应急管理处', '危险！', 'DANGER', '封 存']) {
++    assert.equal(isCraterSealSignText(invalid), false);
++  }
++  assert.deepEqual(new Set(plan.signs.map(sign => sign.text)), new Set(['封存', '止步', '勿动', '待检']));
++  assert.ok(plan.signs.every(sign => isCraterSealSignText(sign.text)));
++});
++
++test('the actual spiral mesh still clears the broken fence and four other scenery groups', t => {
++  const scenery = buildCraterSealing(plan, () => new Texture());
++  t.after(() => scenery.dispose());
++  const boxes = scenery.group.userData.colliders as { min: number[]; max: number[] }[];
++  function blockedByNativeBox({ east, north, height }: { east: number; north: number; height: number }) {
++    return boxes.some(({ min, max }) => {
++      const x = Math.max(0, min[0] - east, east - max[0]);
++      const z = Math.max(0, min[2] + north, -north - max[2]);
++      return height + .025 < max[1] && height + 1.8 - .025 > min[1] && x * x + z * z < .27 * .27;
++    });
++  }
++  const counts = [];
++  for (const offset of [0, -.27, .27]) {
++    const route = Array.from({ length: 1501 }, (_, i) => {
++      const sample = crater.mainTrailPoint(i / 1500);
++      const scale = 1 + offset / Math.hypot(sample.east, sample.north);
++      const east = sample.east * scale, north = sample.north * scale;
++      const height = surface.heightAt(east, north);
++      assert.notEqual(height, undefined);
++      return { east, north, height: height! };
++    });
++    assert.equal(findCraterSealingObstruction(plan, route), undefined);
++    assert.equal(findCraterSealingObstruction(plan, [...route].reverse()), undefined);
++    assert.ok(route.every(feet => !blockedByNativeBox(feet)));
++    counts.push(route.length);
++  }
++  const fence = plan.colliders.filter(collider => collider.fixture === 'fence');
++  assert.equal(fence.length, 2);
++  const centerDistance = Math.hypot(fence[0].center.east - fence[1].center.east, fence[0].center.north - fence[1].center.north);
++  const gap = centerDistance - fence[0].size[0];
++  assert.ok(Math.abs(gap - 3.2) < 1e-12);
++  const directionLength = Math.hypot(entryDirection.east, entryDirection.north);
++  const crossing = Array.from({ length: 27 }, (_, index) => {
++    const distance = (index - 18) * .09;
++    const east = entryGap.east + distance * entryDirection.east / directionLength;
++    const north = entryGap.north + distance * entryDirection.north / directionLength;
++    const height = surface.heightAt(east, north);
++    assert.notEqual(height, undefined);
++    return { east, north, height: height! };
++  });
++  assert.equal(findCraterSealingObstruction(plan, crossing), undefined);
++  assert.ok(crossing.every(feet => !blockedByNativeBox(feet)));
++  t.diagnostic(JSON.stringify({ samples: counts.reduce((a, b) => a + b), reversible: true, clearFenceGapMetres: gap,
++    playerDiameter: .54, props: { renderedBoxes: plan.boxes.length, renderedBeams: plan.beams.length,
++      blockers: plan.colliders.length, signs: plan.signs.length } }));
++});
++
++test('a cargo seam is visibly dark but its solid shell and the walls still block movement', () => {
++  const crate = plan.colliders.find(collider => collider.fixture === 'cargo')!;
++  const crateFront = { ...crate.center, height: crate.center.height - 1 };
++  assert.deepEqual(findCraterSealingObstruction(plan, [crateFront]), { fixture: 'cargo', index: 0 });
++  const cargoBoxes = plan.boxes.filter(piece => piece.fixture === 'cargo');
++  assert.equal(cargoBoxes.filter(piece => piece.color === '#13151a').length, 1);
++  assert.equal(cargoBoxes.find(piece => piece.color === '#13151a')!.size[0], .16);
++  const wall = plan.colliders.find(collider => collider.fixture === 'rim-wall')!;
++  assert.deepEqual(findCraterSealingObstruction(plan, [{ ...wall.center, height: wall.center.height - .7 }]),
++    { fixture: 'rim-wall', index: 0 });
++});
++
++test('the main damaged crane arm points to the physical crater center and leaves the pit-bottom well separate', () => {
++  const arm = plan.beams.find(piece => piece.fixture === 'crane')!;
++  const ve = arm.end.east - arm.start.east, vn = arm.end.north - arm.start.north;
++  const de = anchors.pitCenter.east - anchors.rimCrane.east;
++  const dn = anchors.pitCenter.north - anchors.rimCrane.north;
++  const cosine = (ve * de + vn * dn) / (Math.hypot(ve, vn) * Math.hypot(de, dn));
++  assert.ok(cosine > .999999999999);
++  assert.equal(findCraterSealingObstruction(plan, [{ east: 0, north: 0, height: -35 }]), undefined);
++});
++
++test('unsupported geometry and missing alignment are rejected', () => {
++  assert.throws(() => planCraterSealing({ ...anchors, heightAt: () => undefined }), /supported anchor/);
++  assert.throws(() => planCraterSealing({ ...anchors, entryDirection: { east: 0, north: 0 } }), /entry direction/);
++  assert.throws(() => planCraterSealing({ ...anchors, cargo: { ...anchors.cargo, yaw: NaN } }), /finite/);
++  assert.throws(() => findCraterSealingObstruction(plan, [{ east: 0, north: 0, height: NaN }]), /finite foot/);
++});
++
++test('the Three mesh uses one solid batch, preserves placement and releases all owned sign textures', () => {
++  const made: string[] = [];
++  let textureDisposals = 0;
++  const scenery = buildCraterSealing(plan, ({ text }) => {
++    made.push(text);
++    const texture = new Texture();
++    texture.addEventListener('dispose', () => textureDisposals++);
++    return texture;
++  });
++  const host = new Group();
++  host.add(scenery.group);
++  const batch = scenery.group.children[0];
++  assert.ok(batch instanceof InstancedMesh);
++  assert.equal(batch.count, 55);
++  const matrix = new Matrix4();
++  batch.getMatrixAt(0, matrix);
++  const expected = plan.boxes[0].center;
++  assert.ok(new Vector3().setFromMatrixPosition(matrix)
++    .distanceTo(new Vector3(expected.east, expected.height, -expected.north)) < 1e-5);
++  assert.equal(scenery.group.children.length, 5);
++  assert.deepEqual(made, plan.signs.map(sign => sign.text));
++  scenery.dispose();
++  scenery.dispose();
++  assert.equal(textureDisposals, 4);
++  assert.equal(host.children.length, 0);
++});
+diff --git a/tools/voxel-tavern/town-blockout/meteor-crater-sealing.ts b/tools/voxel-tavern/town-blockout/meteor-crater-sealing.ts
+new file mode 100644
+index 0000000..a48c415
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/meteor-crater-sealing.ts
+@@ -0,0 +1,262 @@
++type Point = Readonly<{ east: number; north: number }>;
++type Position = Point & Readonly<{ height: number }>;
++type OrientedPoint = Point & Readonly<{ yaw: number }>;
++
++export const craterSealSignText = ['封存', '止步', '禁入', '危险', '已撤', '勿动', '待检', '封条完好', '闲人免进', '高压', '深井'] as const;
++type SealSignText = (typeof craterSealSignText)[number];
++
++export function isCraterSealSignText(value: string): value is SealSignText {
++  return craterSealSignText.some(word => value === word);
++}
++
++type Fixture = 'fence' | 'rim-wall' | 'terrace-wall' | 'cargo' | 'crane';
++type Size = readonly [width: number, height: number, depth: number];
++type Offset = readonly [east: number, height: number, north: number];
++type BoxPiece = { fixture: Fixture; center: Position; size: Size; yaw: number; color: string };
++type BeamPiece = { fixture: Fixture; start: Position; end: Position; width: number; height: number; color: string };
++type Collider = Omit<BoxPiece, 'color'>;
++type SealSign = { fixture: Fixture; center: Position; width: number; height: number; yaw: number; color: string; text: SealSignText };
++type SealingAnchors = {
++  pitCenter: Point;
++  entryGap: Point;
++  entryDirection: Point;
++  rimWall: OrientedPoint;
++  terraceWall: OrientedPoint;
++  cargo: OrientedPoint;
++  rimCrane: Point;
++  heightAt(east: number, north: number): number | undefined;
++};
++
++const paint = { rust: '#865540', darkRust: '#523b35', steel: '#5e6063', concrete: '#898689', aggregate: '#6c6666',
++  darkGap: '#13151a', red: '#934438', yellow: '#9b7949' } as const;
++
++function shift(point: OrientedPoint, x: number, n: number): Point {
++  const cosine = Math.cos(point.yaw), sine = Math.sin(point.yaw);
++  return { east: point.east + cosine * x - sine * n, north: point.north + sine * x + cosine * n };
++}
++
++// The host provides its already checked terrain samples and local placements. Positions here are
++// crater-local ENY. Nothing in this module moves the pit, chooses absolute anchors, or opens the well.
++export function planCraterSealing(anchors: SealingAnchors) {
++  const boxes: BoxPiece[] = [];
++  const beams: BeamPiece[] = [];
++  const colliders: Collider[] = [];
++  const signs: SealSign[] = [];
++  const ground = ({ east, north }: Point) => {
++    if (!Number.isFinite(east) || !Number.isFinite(north)) throw new RangeError('Crater anchors must be finite.');
++    const height = anchors.heightAt(east, north);
++    if (height === undefined || !Number.isFinite(height)) throw new RangeError('Crater sealing needs a supported anchor.');
++    return height;
++  };
++  const place = (frame: OrientedPoint, x: number, y: number, n: number, followGround = false): Position => {
++    const position = shift(frame, x, n);
++    if (!Number.isFinite(position.east) || !Number.isFinite(position.north)) throw new RangeError('Crater anchors must be finite.');
++    return { ...position, height: ground(followGround ? position : frame) + y };
++  };
++  function box(fixture: Fixture, frame: OrientedPoint, x: number, y: number, n: number,
++    size: Size, color: string, blocks = false) {
++    const part = { fixture, center: place(frame, x, y, n, fixture === 'fence'), size, yaw: frame.yaw, color };
++    boxes.push(part);
++    if (blocks) colliders.push(part);
++  }
++  function beam(fixture: Fixture, frame: OrientedPoint, start: Offset, end: Offset,
++    width: number, height: number, color: string) {
++    const followGround = fixture === 'fence';
++    beams.push({ fixture, start: place(frame, ...start, followGround), end: place(frame, ...end, followGround),
++      width, height, color });
++  }
++  function sign(fixture: Fixture, frame: OrientedPoint, x: number, y: number, n: number,
++    text: SealSignText, color: string) {
++    signs.push({ fixture, center: place(frame, x, y, n), width: .90, height: .36, yaw: frame.yaw, color, text });
++  }
++
++  const { east: directionEast, north: directionNorth } = anchors.entryDirection;
++  const entryMagnitude = Math.hypot(directionEast, directionNorth);
++  if (!Number.isFinite(entryMagnitude) || entryMagnitude === 0) throw new RangeError('Crater sealing needs an entry direction.');
++  const fence = { ...anchors.entryGap, yaw: Math.atan2(directionEast, -directionNorth) };
++  const crown = 1.92;
++  const gapHalfWidth = 1.60;
++  const fenceScale = .70;
++  const fenceHalfSpan = 1.63 * fenceScale;
++  for (const side of [-1, 1]) {
++    const base = { ...shift(fence, side * (gapHalfWidth + fenceHalfSpan), 0), yaw: fence.yaw };
++    box('fence', base, side * 1.48 * fenceScale, 1.02, 0, [.17, 2.16, .18], paint.steel);
++    beam('fence', base, [-side * 1.4 * fenceScale, .26, 0], [side * 1.48 * fenceScale, .26, 0],
++      .11, .10, paint.darkRust);
++    beam('fence', base, [-side * 1.35 * fenceScale, .94, 0], [side * 1.48 * fenceScale, crown, 0],
++      .095, .09, paint.rust);
++    for (let wire = 0; wire < 7; wire++) {
++      const x = side * (-1.35 + wire * .45) * fenceScale;
++      beam('fence', base, [x, .26, 0], [x, .94 + wire * .15, 0], .04, .04, paint.steel);
++    }
++    for (let wire = 0; wire < 4; wire++) {
++      const y = .4 + wire * .35;
++      beam('fence', base, [-side * (1.4 - wire * .32) * fenceScale, y, 0], [side * 1.47 * fenceScale, y, 0],
++        .032, .032, paint.darkRust);
++    }
++    const ends = [-fenceHalfSpan, 0, fenceHalfSpan].map(x => ground(shift(base, x, 0)));
++    const bottom = Math.min(...ends) - .06;
++    const top = Math.max(...ends) + 2.1;
++    colliders.push({ fixture: 'fence', center: { east: base.east, north: base.north, height: (bottom + top) / 2 },
++      yaw: base.yaw, size: [2 * fenceHalfSpan, top - bottom, .23] });
++  }
++
++  for (const [fixture, frame, width, wallHeight] of [
++    ['rim-wall', anchors.rimWall, 5.4, 1.82], ['terrace-wall', anchors.terraceWall, 3.8, 1.28],
++  ] as const) {
++    box(fixture, frame, 0, wallHeight / 2 - .1, 0, [width, wallHeight + .25, .72], paint.concrete, true);
++    box(fixture, frame, -width * .22, wallHeight * .81, 0, [width * .49, wallHeight * .53, .68], paint.aggregate, true);
++    for (const [x, n, size] of [[-width * .42, .49, .53], [width * .43, -.46, .61]] as const) {
++      const rubble = { ...shift(frame, x, n), yaw: frame.yaw + .47 };
++      box(fixture, rubble, 0, .16, 0, [size, .32, .44], paint.aggregate, true);
++    }
++    sign(fixture, frame, -width * .13, .77, .385, fixture === 'rim-wall' ? '封存' : '止步', paint.red);
++  }
++
++  const cargo = anchors.cargo;
++  box('cargo', cargo, 0, 1.18, 0, [3.08, 2.48, 2.44], paint.darkRust, true);
++  box('cargo', cargo, 0, 1.20, 1.23, [.16, 2.16, .027], paint.darkGap);
++  for (const side of [-1, 1]) {
++    box('cargo', cargo, side * .80, 1.19, 1.27, [1.46, 2.19, .11], paint.rust);
++    for (let rib = 0; rib < 4; rib++) box('cargo', cargo, side * (.32 + rib * .29), 1.18, 1.34,
++      [.051, 2.00, .042], paint.darkRust);
++    box('cargo', cargo, side * 1.48, 1.18, 1.30, [.15, 2.47, .16], paint.steel);
++  }
++  sign('cargo', cargo, -.75, 1.56, 1.375, '勿动', paint.yellow);
++
++  const towardPit = { east: anchors.pitCenter.east - anchors.rimCrane.east,
++    north: anchors.pitCenter.north - anchors.rimCrane.north };
++  const reach = Math.hypot(towardPit.east, towardPit.north);
++  if (!Number.isFinite(reach) || reach === 0) throw new RangeError('Rim crane needs a direction toward the pit.');
++  const crane = { ...anchors.rimCrane, yaw: Math.atan2(-towardPit.east, towardPit.north) };
++  box('crane', crane, 0, .30, 0, [1.8, .72, 1.54], paint.concrete, true);
++  box('crane', crane, 0, 1.65, 0, [.51, 2.98, .57], paint.rust, true);
++  beam('crane', crane, [0, 2.90, -.15], [0, 3.49, 4.42], .30, .36, paint.rust);
++  beam('crane', crane, [0, 2.18, .09], [0, 3.38, 2.78], .24, .21, paint.darkRust);
++  beam('crane', crane, [0, 3.49, 4.42], [.14, 3.15, 4.69], .24, .23, paint.steel);
++  sign('crane', crane, 0, .48, .785, '待检', paint.yellow);
++  return { boxes, beams, colliders, signs, entryGapWidth: gapHalfWidth * 2 };
++}
++
++function overlaps(collider: Collider, feet: Position) {
++  const { center, size: [width, height, depth], yaw } = collider;
++  if (feet.height + 1.8 - .025 <= center.height - height / 2 ||
++    feet.height + .025 >= center.height + height / 2) return false;
++  const dx = feet.east - center.east, dn = feet.north - center.north;
++  const x = Math.cos(yaw) * dx + Math.sin(yaw) * dn;
++  const n = -Math.sin(yaw) * dx + Math.cos(yaw) * dn;
++  return Math.hypot(Math.max(0, Math.abs(x) - width / 2), Math.max(0, Math.abs(n) - depth / 2)) < .27;
++}
++
++// Use actual player foot samples supplied by the host (all three approaches, not topology labels).
++export function findCraterSealingObstruction(
++  plan: Pick<ReturnType<typeof planCraterSealing>, 'colliders'>,
++  route: readonly Position[],
++) {
++  for (const [index, feet] of route.entries()) {
++    if (!Number.isFinite(feet.east) || !Number.isFinite(feet.north) || !Number.isFinite(feet.height)) {
++      throw new RangeError('A crater route requires finite foot samples.');
++    }
++    const blockedBy = plan.colliders.find(collider => overlaps(collider, feet));
++    if (blockedBy) return { index, fixture: blockedBy.fixture };
++  }
++}
++import {
++  BoxGeometry, CanvasTexture, Color, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
++  Object3D, PlaneGeometry, SRGBColorSpace, Texture, Vector3,
++} from 'three';
++
++
++function renderSealSign({ color, text }: SealSign) {
++  const canvas = document.createElement('canvas');
++  canvas.width = 256;
++  canvas.height = 100;
++  const paint = canvas.getContext('2d')!;
++  paint.fillStyle = color;
++  paint.fillRect(0, 0, 256, 100);
++  paint.strokeStyle = '#352d2d';
++  paint.lineWidth = 6;
++  paint.strokeRect(3, 3, 250, 94);
++  paint.fillStyle = '#d5c3a0';
++  paint.font = 'bold 52px KaiTi, STKaiti, serif';
++  paint.textAlign = 'center';
++  paint.textBaseline = 'middle';
++  paint.fillText(text, 128, 53, 225);
++  paint.fillStyle = '#d1ae8340';
++  for (let chip = 0; chip < 24; chip++) paint.fillRect((53 * chip) % 252, (23 * chip) % 97, 3 + chip % 5, 2);
++  const texture = new CanvasTexture(canvas);
++  texture.colorSpace = SRGBColorSpace;
++  return texture;
++}
++
++// The returned group is unmounted so the production scene can apply B-01's approved transform.
++export function buildCraterSealing(
++  plan: ReturnType<typeof planCraterSealing>,
++  makeSignTexture: (sign: SealSign) => Texture = renderSealSign,
++) {
++  const group = new Group();
++  group.name = 'Crater sealing fixtures';
++  // Bounds are in local Three coordinates and use the same ENY ↔ X/Y/−Z convention as the meshes.
++  group.userData.colliders = plan.colliders.map(({ center, size: [width, height, depth], yaw }) => {
++    const cosine = Math.abs(Math.cos(yaw)), sine = Math.abs(Math.sin(yaw));
++    const eastHalf = (cosine * width + sine * depth) / 2;
++    const northHalf = (sine * width + cosine * depth) / 2;
++    return { min: [center.east - eastHalf, center.height - height / 2, -center.north - northHalf],
++      max: [center.east + eastHalf, center.height + height / 2, -center.north + northHalf] };
++  });
++  const cube = new BoxGeometry();
++  const finish = new MeshLambertMaterial();
++  const pieces = new InstancedMesh(cube, finish, plan.boxes.length + plan.beams.length);
++  const transform = new Object3D();
++  const color = new Color();
++  let index = 0;
++  function record(paint: string) {
++    transform.updateMatrix();
++    pieces.setMatrixAt(index, transform.matrix);
++    pieces.setColorAt(index++, color.set(paint));
++  }
++  for (const box of plan.boxes) {
++    const { east, north, height } = box.center;
++    transform.position.set(east, height, -north);
++    transform.scale.set(...box.size);
++    transform.rotation.set(0, box.yaw, 0);
++    record(box.color);
++  }
++  const along = new Vector3(), forward = new Vector3(0, 0, 1);
++  for (const { start, end, width, height, color } of plan.beams) {
++    along.set(end.east - start.east, end.height - start.height, start.north - end.north);
++    transform.position.set(start.east, start.height, -start.north).addScaledVector(along, .5);
++    transform.scale.set(width, height, along.length());
++    transform.quaternion.setFromUnitVectors(forward, along.normalize());
++    record(color);
++  }
++  pieces.computeBoundingSphere();
++  group.add(pieces);
++  const boards = plan.signs.map(sign => {
++    const board = new Mesh(new PlaneGeometry(sign.width, sign.height),
++      new MeshBasicMaterial({ map: makeSignTexture(sign) }));
++    board.position.set(sign.center.east, sign.center.height, -sign.center.north);
++    board.rotation.y = sign.yaw + Math.PI;
++    board.name = 'Crater seal sign ' + sign.text;
++    group.add(board);
++    return board;
++  });
++  let disposed = false;
++  return {
++    group,
++    dispose() {
++      if (disposed) return;
++      disposed = true;
++      group.removeFromParent();
++      group.clear();
++      pieces.dispose();
++      cube.dispose();
++      finish.dispose();
++      for (const board of boards) {
++        board.geometry.dispose();
++        board.material.map?.dispose();
++        board.material.dispose();
++      }
++    },
++  };
++}

@@ -1,0 +1,204 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-chronicle-fragments.ts b/tools/voxel-tavern/town-blockout/town-chronicle-fragments.ts
+new file mode 100644
+index 0000000..1996c42
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-chronicle-fragments.ts
+@@ -0,0 +1,77 @@
++export type ChronicleVersion = 'opening' | 'first-season' | 'v1.2' | 'v1.3';
++
++const versions: readonly ChronicleVersion[] = ['opening', 'first-season', 'v1.2', 'v1.3'];
++const catalog = [
++  { id: 1, title: '开镇记', version: 'opening', site: 'plaza-stele', method: 'rubbing', prerequisites: [] },
++  { id: 2, title: '专列', version: 'first-season', site: 'loop-rail-stationmaster', method: 'gift', prerequisites: ['stationmaster-first-talk'] },
++  { id: 3, title: '封字令', version: 'first-season', site: 'loop-outpost-foundation', method: 'rubbing', prerequisites: [] },
++  { id: 4, title: '天火', version: 'first-season', site: 'lookout-crater-rim-stele', method: 'rubbing', prerequisites: [] },
++  { id: 5, title: '井下人', version: 'first-season', site: 'mine-camp-book', method: 'pickup', prerequisites: ['dream-well-passed'], depth: -90 },
++  { id: 6, title: '钟铭', version: 'first-season', site: 'clocktower-bell-inscription', method: 'rubbing', prerequisites: [] },
++  { id: 7, title: '撤', version: 'first-season', site: 'cordon-removal-stele', method: 'rubbing', prerequisites: [] },
++  { id: 8, title: '星尘', version: 'v1.2', site: 'crystal-survey-note', method: 'pickup', prerequisites: ['mine-gate-passed'], depth: -140 },
++  { id: 9, title: '城', version: 'v1.2', site: 'warrior-city-forge-plaque', method: 'rubbing', prerequisites: ['mine-gate-passed', 'crystal-gate-passed'], depth: -165 },
++  { id: 10, title: '宝库门', version: 'v1.3', site: 'palace-vault-scroll', method: 'pickup', prerequisites: ['mine-gate-passed', 'crystal-gate-passed', 'warrior-city-gate-passed', 'vault-guardian-cleared'], depth: -190 },
++  { id: 11, title: '绝顶手记', version: 'v1.3', site: 'summit-cabin-journal', method: 'pickup', prerequisites: ['summit-registered'] },
++  { id: 12, title: '船长页', version: 'v1.3', site: 'clocktower-mayor-private', method: 'gift', prerequisites: [] },
++] as const;
++
++// The catalog has placement metadata only. Story prose and ship records are not inputs.
++export type ChronicleFragment = typeof catalog[number];
++export type ChronicleFragmentId = ChronicleFragment['id'];
++export type ChronicleSite = ChronicleFragment['site'];
++type ChronicleMethod = ChronicleFragment['method'];
++type ChroniclePrerequisite = ChronicleFragment['prerequisites'][number];
++
++type InstalledSites = {
++  version: ChronicleVersion;
++  sites: ReadonlySet<ChronicleSite>;
++};
++
++type TrustedVisit = {
++  site: ChronicleSite;
++  passed: ReadonlySet<ChroniclePrerequisite>;
++};
++
++const majorPages = new Set<ChronicleFragmentId>([7, 9, 11, 12]);
++
++export function installedChronicleFragments({ version, sites }: InstalledSites) {
++  const versionIndex = versions.indexOf(version);
++  return catalog.filter(page => versions.indexOf(page.version) <= versionIndex && sites.has(page.site));
++}
++
++export function canCollectChronicleFragment(
++  id: ChronicleFragmentId,
++  method: ChronicleMethod,
++  world: InstalledSites,
++  visit: TrustedVisit,
++  owned: ReadonlySet<ChronicleFragmentId>,
++) {
++  const page = installedChronicleFragments(world).find(candidate => candidate.id === id);
++  if (!page || owned.has(id) || page.site !== visit.site || page.method !== method) return false;
++  if (!page.prerequisites.every(requirement => visit.passed.has(requirement))) return false;
++  return id !== 12 || catalog.every(candidate => candidate.id === 12 || owned.has(candidate.id));
++}
++
++export function nextChronicleStory(
++  world: InstalledSites,
++  collected: ReadonlySet<ChronicleFragmentId>,
++  told: ReadonlySet<ChronicleFragmentId>,
++) {
++  const next = catalog.find(page => !told.has(page.id));
++  if (!next || !collected.has(next.id) || !installedChronicleFragments(world).includes(next)) return undefined;
++  return { id: next.id, private: next.id === 12 };
++}
++
++export function chronicleFragmentHint(id: ChronicleFragmentId, world: InstalledSites) {
++  return installedChronicleFragments(world).some(page => page.id === id)
++    ? undefined
++    : '此页尚在远方';
++}
++
++// Called on host-accepted world story events. Public output is a count, without
++// page text, names, locally collected pages, or the contents of the private reading.
++export function publicChronicleProgress(toldByWorld: ReadonlySet<ChronicleFragmentId>) {
++  const told = catalog.filter(page => toldByWorld.has(page.id));
++  return { toldCount: told.length, majorToldCount: told.filter(page => majorPages.has(page.id)).length };
++}
+diff --git a/tests/town-blockout-chronicle-fragments.test.ts b/tests/town-blockout-chronicle-fragments.test.ts
+new file mode 100644
+index 0000000..26f6e23
+--- /dev/null
++++ b/tests/town-blockout-chronicle-fragments.test.ts
+@@ -0,0 +1,115 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  canCollectChronicleFragment,
++  chronicleFragmentHint,
++  installedChronicleFragments,
++  nextChronicleStory,
++  publicChronicleProgress,
++  type ChronicleFragmentId,
++  type ChronicleSite,
++  type ChronicleVersion,
++} from '../tools/voxel-tavern/town-blockout/town-chronicle-fragments';
++
++const sites = new Set<ChronicleSite>([
++  'plaza-stele', 'loop-rail-stationmaster', 'loop-outpost-foundation', 'lookout-crater-rim-stele',
++  'mine-camp-book', 'clocktower-bell-inscription', 'cordon-removal-stele', 'crystal-survey-note',
++  'warrior-city-forge-plaque', 'palace-vault-scroll', 'summit-cabin-journal', 'clocktower-mayor-private',
++]);
++const world = { version: 'v1.3', sites } as const;
++const none = new Set<ChronicleFragmentId>();
++const pageIds = (version: ChronicleVersion) => installedChronicleFragments({ version, sites }).map(page => page.id);
++
++test('catalog matches page titles, methods, absolute depths and four tier cutoffs', () => {
++  const catalog = installedChronicleFragments(world);
++  assert.deepEqual(catalog.map(page => page.title), [
++    '开镇记', '专列', '封字令', '天火', '井下人', '钟铭', '撤', '星尘', '城', '宝库门', '绝顶手记', '船长页',
++  ]);
++  assert.deepEqual(catalog.map(page => page.method), [
++    'rubbing', 'gift', 'rubbing', 'rubbing', 'pickup', 'rubbing', 'rubbing', 'pickup', 'rubbing', 'pickup', 'pickup', 'gift',
++  ]);
++  assert.deepEqual(catalog.flatMap(page => 'depth' in page ? [[page.id, page.depth]] : []),
++    [[5, -90], [8, -140], [9, -165], [10, -190]]);
++  assert.deepEqual(pageIds('opening'), [1]);
++  assert.deepEqual(pageIds('first-season'), [1, 2, 3, 4, 5, 6, 7]);
++  assert.deepEqual(pageIds('v1.2'), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
++  assert.deepEqual(pageIds('v1.3'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
++});
++
++test('the opening projection still needs the verified plaza stele', () => {
++  const opening = { version: 'opening', sites } as const;
++  const unmounted = { version: 'opening', sites: new Set<ChronicleSite>() } as const;
++  const plaza = { site: 'plaza-stele', passed: new Set<never>() } as const;
++  const station = { site: 'loop-rail-stationmaster', passed: new Set(['stationmaster-first-talk'] as const) } as const;
++  assert.equal(canCollectChronicleFragment(1, 'rubbing', opening, plaza, none), true);
++  assert.equal(canCollectChronicleFragment(1, 'rubbing', opening, plaza, none), true, 'unrelated guests can use the same stele');
++  assert.equal(canCollectChronicleFragment(1, 'rubbing', opening, plaza, new Set([1])), false);
++  assert.equal(canCollectChronicleFragment(1, 'rubbing', unmounted, plaza, none), false);
++  assert.equal(canCollectChronicleFragment(1, 'pickup', opening, plaza, none), false);
++  assert.equal(canCollectChronicleFragment(2, 'gift', opening, station, none), false);
++  assert.equal(chronicleFragmentHint(1, opening), undefined);
++  assert.equal(chronicleFragmentHint(1, unmounted), '此页尚在远方');
++  assert.equal(chronicleFragmentHint(12, opening), '此页尚在远方');
++});
++
++test('surface fragments are independent while station gifting uses the first talk', () => {
++  for (const [id, site] of [[3, 'loop-outpost-foundation'], [4, 'lookout-crater-rim-stele'],
++    [6, 'clocktower-bell-inscription'], [7, 'cordon-removal-stele']] as const) {
++    assert.equal(canCollectChronicleFragment(id, 'rubbing', world, { site, passed: new Set() }, none), true);
++  }
++  assert.equal(canCollectChronicleFragment(2, 'gift', world, {
++    site: 'loop-rail-stationmaster', passed: new Set(),
++  }, none), false);
++  assert.equal(canCollectChronicleFragment(2, 'gift', world, {
++    site: 'loop-rail-stationmaster', passed: new Set(['stationmaster-first-talk']),
++  }, none), true);
++});
++
++test('underground checks accepted gates and guarding without requiring earlier pickups', () => {
++  type Visit = Parameters<typeof canCollectChronicleFragment>[3];
++  const check = (id: ChronicleFragmentId, method: Parameters<typeof canCollectChronicleFragment>[1],
++    site: ChronicleSite, passed: Visit['passed'], expected: boolean) =>
++    assert.equal(canCollectChronicleFragment(id, method, world, { site, passed }, none), expected);
++
++  check(5, 'pickup', 'mine-camp-book', new Set(), false);
++  check(5, 'pickup', 'mine-camp-book', new Set(['dream-well-passed']), true);
++  check(8, 'pickup', 'crystal-survey-note', new Set(), false);
++  check(8, 'pickup', 'crystal-survey-note', new Set(['mine-gate-passed']), true);
++  check(9, 'rubbing', 'warrior-city-forge-plaque', new Set(['crystal-gate-passed']), false);
++  check(9, 'rubbing', 'warrior-city-forge-plaque', new Set(['mine-gate-passed', 'crystal-gate-passed']), true);
++  check(10, 'pickup', 'palace-vault-scroll',
++    new Set(['mine-gate-passed', 'crystal-gate-passed', 'warrior-city-gate-passed']), false);
++  check(10, 'pickup', 'palace-vault-scroll',
++    new Set(['mine-gate-passed', 'crystal-gate-passed', 'warrior-city-gate-passed', 'vault-guardian-cleared']), true);
++  check(11, 'pickup', 'summit-cabin-journal', new Set(), false);
++  check(11, 'pickup', 'summit-cabin-journal', new Set(['summit-registered']), true);
++});
++
++test('private delivery requires pages 1 through 11 and the mayor in the clocktower', () => {
++  const beforeLast = new Set<ChronicleFragmentId>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
++  const firstEleven = new Set<ChronicleFragmentId>([...beforeLast, 11]);
++  const mayor = { site: 'clocktower-mayor-private', passed: new Set<never>() } as const;
++  assert.equal(canCollectChronicleFragment(12, 'gift', world, mayor, beforeLast), false);
++  assert.equal(canCollectChronicleFragment(12, 'gift', world, mayor, firstEleven), true);
++  assert.equal(canCollectChronicleFragment(12, 'pickup', world, mayor, firstEleven), false);
++  assert.equal(canCollectChronicleFragment(12, 'gift', world, { ...mayor, site: 'plaza-stele' }, firstEleven), false);
++  assert.deepEqual(nextChronicleStory(world, new Set([...firstEleven, 12]), firstEleven), { id: 12, private: true });
++});
++
++test('discovery can be out of order and narration advances only in page order', () => {
++  const collectedEarly = new Set<ChronicleFragmentId>([3, 7]);
++  assert.equal(nextChronicleStory(world, collectedEarly, none), undefined);
++  const collected = new Set<ChronicleFragmentId>([...collectedEarly, 1, 2]);
++  assert.deepEqual(nextChronicleStory(world, collected, none), { id: 1, private: false });
++  assert.deepEqual(nextChronicleStory(world, collected, new Set([1, 2])), { id: 3, private: false });
++  assert.equal(nextChronicleStory(world, collected, new Set([1, 2, 3])), undefined);
++});
++
++test('public progress is only counts derived from host-accepted tell events', () => {
++  assert.deepEqual(publicChronicleProgress(none), { toldCount: 0, majorToldCount: 0 });
++  const told: ChronicleFragmentId[] = [1, 4, 8, 7, 9, 11, 12];
++  assert.deepEqual(publicChronicleProgress(new Set(told)), { toldCount: 7, majorToldCount: 4 });
++  const publicPayload = JSON.stringify([publicChronicleProgress(new Set(told)),
++    chronicleFragmentHint(12, { version: 'opening', sites })]);
++  assert.equal(publicPayload, '[{"toldCount":7,"majorToldCount":4},"此页尚在远方"]');
++});

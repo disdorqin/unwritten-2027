@@ -13,6 +13,8 @@
 !src/shared/*.ts
 !tools/
 !tools/Caddyfile.town-preview
+!tools/fixtures/
+!tools/fixtures/main-summit-snow-belt-survey.json
 !tools/voxel-tavern/
 !tools/voxel-tavern/package.json
 !tools/voxel-tavern/package-lock.json

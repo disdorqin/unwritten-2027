@@ -27,7 +27,7 @@ test('the stage front tread gives a direct route onto a single deck', () => {
   assert.deepEqual([...centerlineFloors].map(height => Math.round(height * 100)), [0, 28, 52]);
 });
 
-test('the south theater joins four photo tiers to two ramps without expanding photo eligibility', () => {
+test('the south theater joins the rear steps to both ramps and retains all 48 photo positions', () => {
   const current = layout.plots.find(({ id }) => id === 'stage')!;
   const stage = buildVillageLandmark({ ...current, origin: [238, 140, 12] });
   stage.position.set(238, 12, -140);
@@ -52,8 +52,9 @@ test('the south theater joins four photo tiers to two ramps without expanding ph
   assert.deepEqual(tiers.map(({ min, max }) => [min[2], max[2], max[1]]), [
     [-162.875, -162, 12.35],
     [-163.75, -162.875, 12.7],
-    [-164.625, -163.75, 13.05],
-    [-165.5, -164.625, 13.4],
+    [-164.53, -163.75, 13.05],
+    [-164.79, -164.53, 13.375],
+    [-165.5, -164.79, 13.7],
   ]);
   assert.equal(theaterPhotoPositions.length, 48);
   for (const [index, photo] of theaterPhotoPositions.entries()) {
@@ -61,7 +62,9 @@ test('the south theater joins four photo tiers to two ramps without expanding ph
     const column = index % 12;
     assert.equal(Math.round(photo.east * 100), 21696 + column * 128);
     assert.equal(photo.north, 162.4375 + row * .875);
-    assert.equal(photo.height, tiers[row].max[1]);
+    const tier = row === 3 ? tiers[4] : tiers[row];
+    assert.equal(photo.height, tier.max[1]);
+    assert.ok(-photo.north - .27 >= tier.min[2] && -photo.north + .27 <= tier.max[2]);
     assert.ok(inPlazaPhotoStand(photo.east, photo.north, photo.height));
     assert.ok(theaterPhotoPositions.slice(index + 1).every(other =>
       Math.hypot(other.east - photo.east, other.north - photo.north) > .54));
@@ -72,12 +75,14 @@ test('the south theater joins four photo tiers to two ramps without expanding ph
     }
   }
   assert.deepEqual(ramps, [
-    { min: [204.8, 12, -165.5], max: [216, 13.4, -164.1], axis: 'x', ascending: 1 },
-    { min: [232, 12, -165.5], max: [243.2, 13.4, -164.1], axis: 'x', ascending: -1 },
+    { min: [204.8, 12, -164.4], max: [216, 13.4, -164.1], axis: 'x', ascending: 1 },
+    { min: [204.8, 12, -165.5], max: [216, 13.7, -164.4], axis: 'x', ascending: 1 },
+    { min: [232, 12, -164.4], max: [243.2, 13.4, -164.1], axis: 'x', ascending: -1 },
+    { min: [232, 12, -165.5], max: [243.2, 13.7, -164.4], axis: 'x', ascending: -1 },
   ]);
   for (const [west, east] of [[215.75, 216], [232, 232.25]]) {
     assert.ok(floors.some(({ min, max }) =>
-      min[0] === west && max[0] === east && min[2] === -165.5 && max[2] === -164.625 && max[1] === 13.4));
+      min[0] === west && max[0] === east && min[2] === -165.5 && max[2] === -164.79 && max[1] === 13.7));
   }
 });
 

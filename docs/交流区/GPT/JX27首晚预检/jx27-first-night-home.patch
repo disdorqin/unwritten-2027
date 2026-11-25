@@ -1,0 +1,205 @@
+diff --git a/src/presence/first-night-home.ts b/src/presence/first-night-home.ts
+new file mode 100644
+index 0000000..1c3c5a1
+--- /dev/null
++++ b/src/presence/first-night-home.ts
+@@ -0,0 +1,56 @@
++export type FirstNightHomeAssignment = Readonly<{ principalKey: string; houseId: string }>;
++
++type AssignmentStore = {
++  load(): unknown;
++  save(assignments: readonly FirstNightHomeAssignment[]): undefined;
++};
++
++function validKey(value: unknown): value is string {
++  return typeof value === 'string' && value.trim().length > 0;
++}
++
++/** Host-authenticated first-arrival route assignment. House ownership is a separate action. */
++export function createFirstNightHomeAssignments(houseIds: readonly string[], store: AssignmentStore) {
++  const ordered = [...houseIds];
++  const registered = new Set(ordered);
++  if (ordered.length !== 52 || registered.size !== 52 || !ordered.every(validKey)) {
++    throw new Error('First-night assignment requires 52 unique registered houses.');
++  }
++
++  const assigned = new Map<string, string>();
++  const used = new Set<string>();
++  const saved = store.load();
++  if (saved !== undefined) {
++    if (!Array.isArray(saved)) throw new Error('Invalid first-night housing records.');
++    for (const row of saved as unknown[]) {
++      if (!row || typeof row !== 'object' || !('principalKey' in row) || !('houseId' in row)) {
++        throw new Error('Invalid first-night housing record.');
++      }
++      const { principalKey, houseId } = row;
++      if (!validKey(principalKey) || !validKey(houseId) || !registered.has(houseId) ||
++          assigned.has(principalKey) || used.has(houseId)) {
++        throw new Error('Invalid or duplicate first-night housing record.');
++      }
++      assigned.set(principalKey, houseId);
++      used.add(houseId);
++    }
++  }
++
++  // Call once at the authoritative admission point after resolving the stable principal.
++  function assign(principalKey: string): string | undefined {
++    if (!validKey(principalKey)) throw new Error('A verified principal key is required.');
++    const existing = assigned.get(principalKey);
++    if (existing !== undefined) return existing;
++    const houseId = ordered.find(candidate => !used.has(candidate));
++    if (houseId === undefined) return undefined;
++
++    const records = Array.from(assigned, ([principalKey, houseId]) => ({ principalKey, houseId }));
++    records.push({ principalKey, houseId });
++    store.save(records);
++    assigned.set(principalKey, houseId);
++    used.add(houseId);
++    return houseId;
++  }
++
++  return { assign };
++}
+diff --git a/tests/server/first-night-home.test.ts b/tests/server/first-night-home.test.ts
+new file mode 100644
+index 0000000..89137cf
+--- /dev/null
++++ b/tests/server/first-night-home.test.ts
+@@ -0,0 +1,137 @@
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { test } from 'node:test';
++import { WebSocket } from 'ws';
++import { createFirstNightHomeAssignments, type FirstNightHomeAssignment } from '../../src/presence/first-night-home.js';
++import { createPresenceServer } from '../../src/presence/server.js';
++
++const houses = Array.from({ length: 52 }, (_, index) => `test-house-${index}`);
++
++test('assigns once per verified principal in admission order and preserves 52 unique assignments', t => {
++  const directory = mkdtempSync(join(tmpdir(), 'jx27-homes-'));
++  t.after(() => rmSync(directory, { recursive: true, force: true }));
++  const file = join(directory, 'assignments.json');
++  let writes = 0;
++  const store = {
++    load() {
++      try { return JSON.parse(readFileSync(file, 'utf8')) as unknown; }
++      catch (error) {
++        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
++        throw error;
++      }
++    },
++    save(rows: readonly FirstNightHomeAssignment[]) {
++      writeFileSync(`${file}.pending`, JSON.stringify(rows));
++      renameSync(`${file}.pending`, file);
++      writes++;
++      return undefined;
++    },
++  };
++
++  const before = createFirstNightHomeAssignments(houses, store);
++  assert.equal(before.assign('host-fixture-a'), houses[0]);
++  assert.equal(before.assign('host-fixture-b'), houses[1]);
++  assert.equal(before.assign('host-fixture-a'), houses[0]);
++  assert.equal(writes, 2);
++
++  const after = createFirstNightHomeAssignments(houses, store);
++  assert.equal(after.assign('host-fixture-b'), houses[1]);
++  assert.equal(after.assign('host-fixture-a'), houses[0]);
++  assert.equal(writes, 2);
++  for (let i = 2; i < houses.length; i++) assert.equal(after.assign(`host-fixture-${i}`), houses[i]);
++  assert.equal(writes, 52);
++  assert.equal(after.assign('host-fixture-overflow'), undefined);
++  assert.equal(after.assign('host-fixture-a'), houses[0]);
++  assert.equal(writes, 52);
++  const persisted = store.load() as FirstNightHomeAssignment[];
++  assert.deepEqual(persisted.map(row => row.houseId), houses);
++});
++
++test('a failed durable call neither consumes a slot nor makes an assignment visible', () => {
++  let failed = true;
++  let committed: readonly FirstNightHomeAssignment[] | undefined;
++  const state = createFirstNightHomeAssignments(houses, {
++    load: () => committed,
++    save(rows) {
++      if (failed) throw new Error('storage unavailable');
++      committed = rows;
++      return undefined;
++    },
++  });
++  assert.throws(() => state.assign('host-fixture-a'), /storage unavailable/);
++  assert.equal(committed, undefined);
++  failed = false;
++  assert.equal(state.assign('host-fixture-b'), houses[0]);
++  assert.equal(state.assign('host-fixture-a'), houses[1]);
++});
++
++test('rejects an invalid registry, duplicate occupancy, and unknown persisted houses', () => {
++  const basic = { load: () => undefined, save: () => undefined };
++  assert.throws(() => createFirstNightHomeAssignments(houses.slice(1), basic), /52 unique/);
++  assert.throws(() => createFirstNightHomeAssignments([...houses.slice(1), houses[1]], basic), /52 unique/);
++  assert.throws(() => createFirstNightHomeAssignments(houses, {
++    ...basic, load: () => [{ principalKey: 'a', houseId: houses[0] }, { principalKey: 'b', houseId: houses[0] }],
++  }), /duplicate/);
++  assert.throws(() => createFirstNightHomeAssignments(houses, {
++    ...basic, load: () => [{ principalKey: 'a', houseId: 'removed' }],
++  }), /Invalid/);
++  assert.throws(() => createFirstNightHomeAssignments(houses, basic).assign(' '), /verified/);
++});
++
++type Join = { type: 'join'; self: boolean; id: number; name: string };
++
++test('the published transports give unrelated connection IDs to identical display names', async t => {
++  const server = await createPresenceServer({ host: '127.0.0.1', port: 0, connectionLog: () => {} });
++  const peers: WebSocket[] = [];
++  t.after(async () => {
++    for (const peer of peers) peer.terminate();
++    await server.close();
++  });
++  const address = `127.0.0.1:${server.address().port}`;
++  const name = '验收同名访客';
++
++  async function joinWebSocket() {
++    const peer = new WebSocket(`ws://${address}/presence`);
++    peers.push(peer);
++    await once(peer, 'open');
++    const reply = new Promise<Join>((resolve, reject) => {
++      const timer = setTimeout(() => reject(new Error('self join timed out')), 3500);
++      function receive(data: Buffer, binary: boolean) {
++        if (binary) return;
++        const message = JSON.parse(data.toString()) as Join;
++        if (message.type !== 'join' || message.self !== true) return;
++        clearTimeout(timer);
++        peer.off('message', receive);
++        resolve(message);
++      }
++      peer.on('message', receive);
++    });
++    peer.send(JSON.stringify({ type: 'join', name }));
++    return { peer, reply: await reply };
++  }
++
++  async function joinPoll() {
++    const response = await fetch(`http://${address}/presence/poll/join`, {
++      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }),
++    });
++    assert.equal(response.status, 200);
++    return await response.json() as { id: number; session: string };
++  }
++
++  const first = await joinWebSocket();
++  const sameName = await joinWebSocket();
++  const firstClosed = once(first.peer, 'close');
++  first.peer.close();
++  await firstClosed;
++  const reconnected = await joinWebSocket();
++  const pollOne = await joinPoll();
++  const pollTwo = await joinPoll();
++  const ids = [first.reply.id, sameName.reply.id, reconnected.reply.id, pollOne.id, pollTwo.id];
++  assert.equal(new Set(ids).size, ids.length);
++  assert.equal(reconnected.reply.name, first.reply.name);
++  assert.notEqual(pollOne.session, pollTwo.session);
++  console.log(JSON.stringify({ webSocketIds: ids.slice(0, 3), pollIds: ids.slice(3), pollSessionChanged: true }));
++});

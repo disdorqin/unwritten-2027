@@ -1,0 +1,31 @@
+{"ts":"2026-11-20T00:50:06.882Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T00:50:06.885Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T00:50:06.896Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T00:50:06.900Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T00:50:06.900Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T00:50:06.901Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+sled wall m/s, layers cleared across both clients 8 [ 3 ]
+sled wall m/s, layers cleared across both clients 15 [ 1, 2 ]
+sled wall m/s, layers cleared across both clients 22.01 [ 0, 1, 2, 3 ]
+✔ snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity (1293.589148ms)
+{"ts":"2026-11-20T00:50:08.143Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T00:50:08.143Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T00:50:08.145Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T00:50:08.145Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T00:50:08.146Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T00:50:08.147Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T00:50:08.147Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T00:50:08.148Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+approved sled speed, wire speed and layers cleared on both clients 45 45 4
+approved sled speed, wire speed and layers cleared on both clients 45.2 46 4
+✔ snowfight: approved upper-band reports 45 and 46 clear all four layers (19.031952ms)
+{"ts":"2026-11-20T00:50:08.158Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T00:50:08.158Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1865.496836

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { flightFuelCanFullPowerMs } from '../tools/voxel-tavern/town-blockout/flight-fuel-display.ts';
+import { fuelSecondsPerStardustOre } from '../src/shared/flight-thrust.ts';
+
+const flightFuelCanFullPowerMs = fuelSecondsPerStardustOre * 1000;
 import {
   createUndergroundOreDistribution, crystalCaveOreCandidateReferences, stardustFullPowerMs,
   type UndergroundOreAnchor, type UndergroundOreFallTraceBand, type UndergroundOrePoint,

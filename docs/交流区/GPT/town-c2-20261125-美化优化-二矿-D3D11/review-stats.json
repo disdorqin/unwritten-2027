@@ -1,0 +1,1587 @@
+{
+  "schema": "town-c2-second-mine-review/v1",
+  "sourceCommit": "d3520c4f500555aa285679b53c83271b72ba6e89",
+  "sourceTree": {
+    "root": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c2\\",
+    "commit": "d3520c4f500555aa285679b53c83271b72ba6e89",
+    "tree": "a627acd673207dff991e4fa009cddc792c8797e3",
+    "dirty": true,
+    "status": "M tests/town-c2-crater-broken-circle.test.ts\n M tests/town-c2-crater-central-mound.test.ts\n M tests/town-c2-crater-inscription.test.ts\n M tests/town-c2-crater-molten-beads.test.ts\n M tests/town-c2-crater-warm-light-chain.test.ts\n M tests/town-c2-second-mine-bypass-wall.test.ts\n M tests/town-c2-second-mine-camp-life.test.ts\n M tests/town-c2-second-mine-far-bank-crystals.test.ts\n M tests/town-c2-second-mine-haulage.test.ts\n M tests/town-c2-second-mine-light-sources.test.ts\n M tests/town-c2-second-mine-near-bank-teeth.test.ts\n M tests/town-c2-second-mine-timbering.test.ts\n M tests/town-c2-second-mine-upper-relief.test.ts\n M tests/town-c2-second-mine-water-differential.test.ts\n M tests/town-c2-underground-water-minus90.test.ts\n M tools/fixtures/town-c2-second-mine-review.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-warm-light-chain.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-bypass-wall.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-camp-life.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-far-bank-crystals.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-haulage.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-light-sources.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-near-bank-teeth.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-prefab.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-timbering.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-upper-relief.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-water-differential.ts\n M tools/voxel-tavern/town-blockout/town-c2-underground-water-minus90.ts\n M tools/voxel-tavern/town-blockout/town-za22-crater-road.ts\n?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/town-c2-2026-11-25-\\347\\276\\216\\345\\214\\226\\344\\274\\230\\345\\214\\226\\345\\233\\236\\346\\211\\247.md\"\n?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/town-c2-20261125-\\347\\276\\216\\345\\214\\226\\344\\274\\230\\345\\214\\226-D3D11/\""
+  },
+  "scope": "C2-07 visual differential and segmented first-person entry/bypass/exit evidence over the registered second-mine domain; formal water snapshot, no viewer or production transition wiring",
+  "uncertified": [
+    "viewer/town-presence production switching, real descent facility and online walkthrough are not wired",
+    "prefab and water differential remain visual-only and do not change floor, canStand, collision, ore or inventory authority",
+    "trusted-W bypass walks use the fixture camera and existing passageAt; they do not certify a production player controller",
+    "high/mid/low selection is fixture input; the accepted water reader is tested separately",
+    "Headless FPS is a review sample, not a device benchmark",
+    "screenshots do not replace human visual acceptance"
+  ],
+  "errors": {
+    "pageerror": [],
+    "consoleError": [],
+    "requestFailed": []
+  },
+  "views": {
+    "town-c2-m140-entry-day.png": {
+      "view": "entry",
+      "state": "middle",
+      "night": false,
+      "frames": 8,
+      "fps": 23.68265245728413,
+      "eye": [
+        7.485619423135674,
+        -138.33,
+        -149.0702106298357
+      ],
+      "localEye": {
+        "east": -5.218048215738236e-15,
+        "north": 1.9999999999999993,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -5.218048215738236e-15,
+        "north": 1.9999999999999993,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "entry",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 102,
+        "triangles": 165758
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 358202
+    },
+    "town-c2-m140-entry-night.png": {
+      "view": "entry",
+      "state": "middle",
+      "night": true,
+      "frames": 44,
+      "fps": 54.46892795266444,
+      "eye": [
+        7.485619423135674,
+        -138.33,
+        -149.0702106298357
+      ],
+      "localEye": {
+        "east": -5.218048215738236e-15,
+        "north": 1.9999999999999993,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -5.218048215738236e-15,
+        "north": 1.9999999999999993,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "entry",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 102,
+        "triangles": 165758
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 375926
+    },
+    "town-c2-m140-support-night.png": {
+      "view": "support",
+      "state": "middle",
+      "night": true,
+      "frames": 75,
+      "fps": 79.94031123402448,
+      "eye": [
+        16.035268670597254,
+        -138.33,
+        -150.84601966950737
+      ],
+      "localEye": {
+        "east": -3.4999999999999907,
+        "north": 10.000000000000002,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -3.4999999999999907,
+        "north": 10.000000000000002,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "entry",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 25,
+        "triangles": 77068
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 331031
+    },
+    "town-c2-m140-upper-west-night.png": {
+      "view": "upperWest",
+      "state": "middle",
+      "night": true,
+      "frames": 105,
+      "fps": 98.94459102874588,
+      "eye": [
+        55.641811604241255,
+        -138.33,
+        -159.36492551740912
+      ],
+      "localEye": {
+        "east": -20,
+        "north": 47,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -20,
+        "north": 47,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "west-workface",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 25,
+        "triangles": 133236
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 125810
+    },
+    "town-c2-m140-upper-east-night.png": {
+      "view": "upperEast",
+      "state": "middle",
+      "night": true,
+      "frames": 124,
+      "fps": 108.74331316348687,
+      "eye": [
+        78.70946823169969,
+        -138.33,
+        -113.62781566427483
+      ],
+      "localEye": {
+        "east": 20.000000000000004,
+        "north": 79,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 20.000000000000004,
+        "north": 79,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "east-workface",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 32,
+        "triangles": 148740
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 193103
+    },
+    "town-c2-m140-near-bank-night.png": {
+      "view": "nearWest",
+      "state": "middle",
+      "night": true,
+      "frames": 142,
+      "fps": 116.82435211846976,
+      "eye": [
+        123.36850230824349,
+        -138.33,
+        -165.53706990039444
+      ],
+      "localEye": {
+        "east": -40.000000000000014,
+        "north": 112,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -40.000000000000014,
+        "north": 112,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 24,
+        "triangles": 102700
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 168991
+    },
+    "town-c2-m140-near-bank-east-night.png": {
+      "view": "nearBankEast",
+      "state": "middle",
+      "night": true,
+      "frames": 164,
+      "fps": 125.44939952602606,
+      "eye": [
+        106.87822028989106,
+        -138.33,
+        -87.2550758088078
+      ],
+      "localEye": {
+        "east": 40.00000000000001,
+        "north": 112,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 40.00000000000001,
+        "north": 112,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 29,
+        "triangles": 109840
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 172751
+    },
+    "town-c2-m140-far-bank-night.png": {
+      "view": "farWest",
+      "state": "middle",
+      "night": true,
+      "frames": 183,
+      "fps": 132.04415902966517,
+      "eye": [
+        168.3806489109058,
+        -138.33,
+        -156.05515773984177
+      ],
+      "localEye": {
+        "east": -39.999999999999986,
+        "north": 158,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -39.999999999999986,
+        "north": 158,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "far-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 19,
+        "triangles": 81390
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 150990
+    },
+    "town-c2-m140-far-bank-east-night.png": {
+      "view": "farBankEast",
+      "state": "middle",
+      "night": true,
+      "frames": 200,
+      "fps": 137.324910738246,
+      "eye": [
+        151.89036689255335,
+        -138.33,
+        -77.77316364825515
+      ],
+      "localEye": {
+        "east": 40.000000000000014,
+        "north": 157.99999999999997,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 40.000000000000014,
+        "north": 157.99999999999997,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "far-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 25,
+        "triangles": 93462
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 160094
+    },
+    "town-c2-m140-bypass-high-night.png": {
+      "view": "bypass",
+      "state": "high",
+      "night": true,
+      "frames": 221,
+      "fps": 141.52151639263235,
+      "eye": [
+        112.33594165891157,
+        -138.33,
+        -74.35301095630699
+      ],
+      "localEye": {
+        "east": 51.5,
+        "north": 120,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 51.5,
+        "north": 120,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "dry-bypass",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "high",
+        "phase": "rise",
+        "configured": true,
+        "waterMode": "raised",
+        "ferryRunning": false,
+        "groundedBoat": false,
+        "flowStreakCount": 18,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 38,
+        "triangles": 123894
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 322935
+    },
+    "town-c2-m140-collapse-night.png": {
+      "view": "collapse",
+      "state": "middle",
+      "night": true,
+      "frames": 247,
+      "fps": 147.95734994556014,
+      "eye": [
+        179.66091554896215,
+        -138.33,
+        -165.94230012651514
+      ],
+      "localEye": {
+        "east": -52.000000000000014,
+        "north": 167,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -52.000000000000014,
+        "north": 167,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "collapse-wing",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 11,
+        "triangles": 77772
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 257564
+    },
+    "town-c2-m140-barracks-night.png": {
+      "view": "barracks",
+      "state": "middle",
+      "night": true,
+      "frames": 274,
+      "fps": 153.81160884645965,
+      "eye": [
+        164.45483783242963,
+        -138.33,
+        -59.79723335241217
+      ],
+      "localEye": {
+        "east": 55,
+        "north": 174.00000000000003,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 55,
+        "north": 174.00000000000003,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "barracks-wing",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 6,
+        "triangles": 66312
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 204141
+    },
+    "town-c2-m140-river-high-night.png": {
+      "view": "river",
+      "state": "high",
+      "night": true,
+      "frames": 297,
+      "fps": 156.11038107752955,
+      "eye": [
+        128.82271026509494,
+        -138.33,
+        -123.51027350138943
+      ],
+      "localEye": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "high",
+        "phase": "rise",
+        "configured": true,
+        "waterMode": "raised",
+        "ferryRunning": false,
+        "groundedBoat": false,
+        "flowStreakCount": 18,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 35,
+        "triangles": 111942
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 122843
+    },
+    "town-c2-m140-river-middle-night.png": {
+      "view": "river",
+      "state": "middle",
+      "night": true,
+      "frames": 318,
+      "fps": 159.81505678986647,
+      "eye": [
+        128.82271026509494,
+        -138.33,
+        -123.51027350138943
+      ],
+      "localEye": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 74,
+        "triangles": 112014
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 130626
+    },
+    "town-c2-m140-river-low-night.png": {
+      "view": "river",
+      "state": "low",
+      "night": true,
+      "frames": 336,
+      "fps": 161.34453781512605,
+      "eye": [
+        128.82271026509494,
+        -138.33,
+        -123.51027350138943
+      ],
+      "localEye": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 7.105427357601002e-15,
+        "north": 126.00000000000001,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "low",
+        "phase": "fall",
+        "configured": true,
+        "waterMode": "hidden",
+        "ferryRunning": false,
+        "groundedBoat": true,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 26,
+        "riverbedStoneCount": 42,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 35,
+        "triangles": 112698
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 126003
+    }
+  },
+  "walks": {
+    "high": {
+      "view": "entry",
+      "state": "high",
+      "night": true,
+      "frames": 4864,
+      "fps": 240.0161853020047,
+      "eye": [
+        197.3194550952281,
+        -138.33,
+        -109.08127673533208
+      ],
+      "localEye": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "exit",
+      "trustedW": 52,
+      "walked": 296.2062132174454,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "high",
+        "phase": "rise",
+        "configured": true,
+        "waterMode": "raised",
+        "ferryRunning": false,
+        "groundedBoat": false,
+        "flowStreakCount": 18,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 11,
+        "triangles": 77772
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "route": [
+        {
+          "east": 0,
+          "north": 2
+        },
+        {
+          "east": 0,
+          "north": 112
+        },
+        {
+          "east": 51.5,
+          "north": 112.8
+        },
+        {
+          "east": 51.5,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 196
+        }
+      ],
+      "segmentCount": 52,
+      "legs": [
+        {
+          "point": {
+            "east": 0,
+            "north": 112
+          },
+          "distance": 2.651648007389456e-12,
+          "eye": [
+            115.12336129906974,
+            -138.33,
+            -126.39607285460015
+          ],
+          "localFoot": {
+            "east": 4.405364961712621e-13,
+            "north": 112.00000000000261,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "near-shore"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 112.8
+          },
+          "distance": 3.588494069408628e-12,
+          "eye": [
+            105.29056219066807,
+            -138.33,
+            -75.83713633795519
+          ],
+          "localFoot": {
+            "east": 51.50000000000359,
+            "north": 112.80000000000004,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 159
+          },
+          "distance": 1.3842459419823473e-12,
+          "eye": [
+            150.4984137785614,
+            -138.33,
+            -66.31399847236014
+          ],
+          "localFoot": {
+            "east": 51.499999999999766,
+            "north": 159.00000000000136,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 159
+          },
+          "distance": 1.0946048639454892e-12,
+          "eye": [
+            161.11403282787367,
+            -138.33,
+            -116.70803216881825
+          ],
+          "localFoot": {
+            "east": 9.521272659185342e-13,
+            "north": 158.99999999999946,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "far-shore"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 196
+          },
+          "distance": 5.229985512166084e-12,
+          "eye": [
+            197.3194550952281,
+            -138.33,
+            -109.08127673533208
+          ],
+          "localFoot": {
+            "east": 6.394884621840902e-14,
+            "north": 195.99999999999477,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "exit"
+        }
+      ],
+      "endpoint": {
+        "name": "exit",
+        "reached": true,
+        "distance": 5.229985512166084e-12,
+        "localFoot": {
+          "east": 6.394884621840902e-14,
+          "north": 195.99999999999477,
+          "height": -1.2434497875801753e-14
+        },
+        "room": "exit"
+      }
+    },
+    "middle": {
+      "view": "entry",
+      "state": "middle",
+      "night": true,
+      "frames": 4924,
+      "fps": 240.04875076173064,
+      "eye": [
+        197.3194550952281,
+        -138.33,
+        -109.08127673533208
+      ],
+      "localEye": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "exit",
+      "trustedW": 52,
+      "walked": 296.2062132174503,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 11,
+        "triangles": 77772
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "route": [
+        {
+          "east": 0,
+          "north": 2
+        },
+        {
+          "east": 0,
+          "north": 112
+        },
+        {
+          "east": 51.5,
+          "north": 112.8
+        },
+        {
+          "east": 51.5,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 196
+        }
+      ],
+      "segmentCount": 52,
+      "legs": [
+        {
+          "point": {
+            "east": 0,
+            "north": 112
+          },
+          "distance": 2.651648007389456e-12,
+          "eye": [
+            115.12336129906974,
+            -138.33,
+            -126.39607285460015
+          ],
+          "localFoot": {
+            "east": 4.405364961712621e-13,
+            "north": 112.00000000000261,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "near-shore"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 112.8
+          },
+          "distance": 3.588494069408628e-12,
+          "eye": [
+            105.29056219066807,
+            -138.33,
+            -75.83713633795519
+          ],
+          "localFoot": {
+            "east": 51.50000000000359,
+            "north": 112.80000000000004,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 159
+          },
+          "distance": 1.3842459419823473e-12,
+          "eye": [
+            150.4984137785614,
+            -138.33,
+            -66.31399847236014
+          ],
+          "localFoot": {
+            "east": 51.499999999999766,
+            "north": 159.00000000000136,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 159
+          },
+          "distance": 1.0946048639454892e-12,
+          "eye": [
+            161.11403282787367,
+            -138.33,
+            -116.70803216881825
+          ],
+          "localFoot": {
+            "east": 9.521272659185342e-13,
+            "north": 158.99999999999946,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "far-shore"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 196
+          },
+          "distance": 5.229985512166084e-12,
+          "eye": [
+            197.3194550952281,
+            -138.33,
+            -109.08127673533208
+          ],
+          "localFoot": {
+            "east": 6.394884621840902e-14,
+            "north": 195.99999999999477,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "exit"
+        }
+      ],
+      "endpoint": {
+        "name": "exit",
+        "reached": true,
+        "distance": 5.229985512166084e-12,
+        "localFoot": {
+          "east": 6.394884621840902e-14,
+          "north": 195.99999999999477,
+          "height": -1.2434497875801753e-14
+        },
+        "room": "exit"
+      }
+    },
+    "low": {
+      "view": "entry",
+      "state": "low",
+      "night": true,
+      "frames": 4976,
+      "fps": 240.02238150817453,
+      "eye": [
+        197.3194550952281,
+        -138.33,
+        -109.08127673533208
+      ],
+      "localEye": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": 6.394884621840902e-14,
+        "north": 195.99999999999477,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "exit",
+      "trustedW": 52,
+      "walked": 296.206213217456,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "low",
+        "phase": "fall",
+        "configured": true,
+        "waterMode": "hidden",
+        "ferryRunning": false,
+        "groundedBoat": true,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 26,
+        "riverbedStoneCount": 42,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 13,
+        "triangles": 78588
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "route": [
+        {
+          "east": 0,
+          "north": 2
+        },
+        {
+          "east": 0,
+          "north": 112
+        },
+        {
+          "east": 51.5,
+          "north": 112.8
+        },
+        {
+          "east": 51.5,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 159
+        },
+        {
+          "east": 0,
+          "north": 196
+        }
+      ],
+      "segmentCount": 52,
+      "legs": [
+        {
+          "point": {
+            "east": 0,
+            "north": 112
+          },
+          "distance": 2.651648007389456e-12,
+          "eye": [
+            115.12336129906974,
+            -138.33,
+            -126.39607285460015
+          ],
+          "localFoot": {
+            "east": 4.405364961712621e-13,
+            "north": 112.00000000000261,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "near-shore"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 112.8
+          },
+          "distance": 3.588494069408628e-12,
+          "eye": [
+            105.29056219066807,
+            -138.33,
+            -75.83713633795519
+          ],
+          "localFoot": {
+            "east": 51.50000000000359,
+            "north": 112.80000000000004,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 51.5,
+            "north": 159
+          },
+          "distance": 1.3842459419823473e-12,
+          "eye": [
+            150.4984137785614,
+            -138.33,
+            -66.31399847236014
+          ],
+          "localFoot": {
+            "east": 51.499999999999766,
+            "north": 159.00000000000136,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "dry-bypass"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 159
+          },
+          "distance": 1.0946048639454892e-12,
+          "eye": [
+            161.11403282787367,
+            -138.33,
+            -116.70803216881825
+          ],
+          "localFoot": {
+            "east": 9.521272659185342e-13,
+            "north": 158.99999999999946,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "far-shore"
+        },
+        {
+          "point": {
+            "east": 0,
+            "north": 196
+          },
+          "distance": 5.229985512166084e-12,
+          "eye": [
+            197.3194550952281,
+            -138.33,
+            -109.08127673533208
+          ],
+          "localFoot": {
+            "east": 6.394884621840902e-14,
+            "north": 195.99999999999477,
+            "height": -1.2434497875801753e-14
+          },
+          "room": "exit"
+        }
+      ],
+      "endpoint": {
+        "name": "exit",
+        "reached": true,
+        "distance": 5.229985512166084e-12,
+        "localFoot": {
+          "east": 6.394884621840902e-14,
+          "north": 195.99999999999477,
+          "height": -1.2434497875801753e-14
+        },
+        "room": "exit"
+      }
+    }
+  },
+  "fpsSample": {
+    "scene": "near-bank-night",
+    "requestedMs": 20000,
+    "wallMs": 20011,
+    "stats": {
+      "view": "nearWest",
+      "state": "middle",
+      "night": true,
+      "frames": 4804,
+      "fps": 240.0439714185779,
+      "eye": [
+        123.36850230824349,
+        -138.33,
+        -165.53706990039444
+      ],
+      "localEye": {
+        "east": -40.000000000000014,
+        "north": 112,
+        "height": 1.6699999999999875
+      },
+      "localFoot": {
+        "east": -40.000000000000014,
+        "north": 112,
+        "height": -1.2434497875801753e-14
+      },
+      "room": "near-shore",
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "registered": true,
+      "worldFrame": {
+        "domainId": "underground/mine-2",
+        "east": 5.528569570846008,
+        "north": 149.48246768029452,
+        "height": -140,
+        "yaw": 4.504772120660682
+      },
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7708,
+        "realLightCount": 3,
+        "visualOnly": true
+      },
+      "water": {
+        "level": "mid",
+        "phase": "level",
+        "configured": true,
+        "waterMode": "baseline",
+        "ferryRunning": true,
+        "groundedBoat": false,
+        "flowStreakCount": 0,
+        "riverbedPatchCount": 0,
+        "riverbedStoneCount": 0,
+        "realLightCount": 0,
+        "colliderCount": 0,
+        "disposed": false
+      },
+      "render": {
+        "calls": 24,
+        "triangles": 102700
+      },
+      "fixtureOnly": true,
+      "productionCertified": false
+    },
+    "certification": "fixture-only d3d11 sample"
+  },
+  "passed": true,
+  "renderer": {
+    "executablePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "headless": true,
+    "gl": "d3d11"
+  },
+  "finishedAt": "2026-11-25T05:35:33.346Z"
+}

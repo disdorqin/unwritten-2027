@@ -1,0 +1,158 @@
+diff --git a/tools/voxel-tavern/town-blockout/town-snowman-scene.ts b/tools/voxel-tavern/town-blockout/town-snowman-scene.ts
+index 9584e6b4..bd5df91d 100644
+--- a/tools/voxel-tavern/town-blockout/town-snowman-scene.ts
++++ b/tools/voxel-tavern/town-blockout/town-snowman-scene.ts
+@@ -58,7 +58,8 @@ export function createSnowmanScene(
+   root.name = 'zb29-snowmen';
+   const views = new Map<string, SnowmanView>();
+ 
+-  for (const record of records) {
++  function addSnowman(record: SnowmanRecord): boolean {
++    if (views.has(record.id)) return false;
+     const group = new Group();
+     group.name = `zb29-snowman-${record.id}`;
+     group.userData.snowman = { clan: record.clan, tag: record.tag };
+@@ -79,7 +80,9 @@ export function createSnowmanScene(
+     head.rotation.y = record.headYaw;
+     root.add(group);
+     views.set(record.id, { record, group, head, targetYaw: record.headYaw, wobble: 0, wobblePhase: 0 });
++    return true;
+   }
++  for (const record of records) addSnowman(record);
+ 
+   function applyChanges(changes: readonly SnowmanNightChange[]) {
+     for (const change of changes) {
+@@ -145,7 +148,7 @@ export function createSnowmanScene(
+     views.clear();
+   }
+ 
+-  return { root, views, applyChanges, pat, attachDecoration, tick, dispose };
++  return { root, views, addSnowman, applyChanges, pat, attachDecoration, tick, dispose };
+ }
+ 
+ /**
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index ac90ddf4..0437a910 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -30,7 +30,7 @@ import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-
+ import { createZa22CloudRoute } from './town-za22-cloud-route';
+ import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
+ import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
+-import { createSnowmanNightLedger, planSnowmanNightTick } from './town-snowman';
++import { createSnowmanNightLedger, planSnowmanNightTick, snowballTier, snowballTierRadius, snowmanDecorations, snowmanPlacementClear, snowmanStackFrom, type SnowmanDecoration } from './town-snowman';
+ import { createSnowmanScene, snowmanPostSites } from './town-snowman-scene';
+ import { createIceCart, createKite, createTopBoard, kiteWindFor, topSpinSeconds } from './town-lake-play';
+ import { createIceCartScene, createKiteScene, createTopScene, lakePlaySite } from './town-lake-play-scene';
+@@ -1088,6 +1088,87 @@ function snowmanPatAction() {
+   }
+   return undefined;
+ }
++// ZB-29 package 2c (round 5 pulled forward): player-built snowmen. The
++// leaf owns the grammar — roll a ball (tiers at 0/14/30 m), park three,
++// stack largest-down where placement is clear; built snowmen join the
++// scene's views, so the night tick, gaze and resonance include them
++// with no extra wiring. Dressing cycles the leaf's decoration list.
++type ParkedBall = { east: number; north: number; metres: number; mesh: Mesh };
++let rollingBall: { metres: number; lastEast: number; lastNorth: number; mesh: Mesh } | undefined;
++const parkedBalls: ParkedBall[] = [];
++let builtSnowmanCount = 0;
++const snowballMaterial = new MeshLambertMaterial({ color: '#eef4f8' });
++function makeBallMesh(radius: number): Mesh {
++  const mesh = new Mesh(new BoxGeometry(2, 2, 2), snowballMaterial); // blocky, like every snow form in town
++  mesh.scale.setScalar(radius);
++  landscape.add(mesh);
++  return mesh;
++}
++function buildSnowmanAction() {
++  if (rollingBall) {
++    return { label: '放下雪球', run: () => {
++      const ball = rollingBall!;
++      rollingBall = undefined;
++      parkedBalls.push({ east: ball.mesh.position.x, north: -ball.mesh.position.z, metres: ball.metres, mesh: ball.mesh });
++      announceActivity(`雪球滚了 ${ball.metres.toFixed(0)} 米（${['小', '中', '大'][snowballTier(ball.metres)]}档）· 已放下 ${parkedBalls.length}/3`);
++    } };
++  }
++  if (parkedBalls.length === 3) {
++    const centroid = {
++      east: parkedBalls.reduce((sum, ball) => sum + ball.east, 0) / 3,
++      north: parkedBalls.reduce((sum, ball) => sum + ball.north, 0) / 3,
++    };
++    const spread = Math.max(...parkedBalls.map(ball => Math.hypot(ball.east - centroid.east, ball.north - centroid.north)));
++    const stack = snowmanStackFrom(parkedBalls.map(ball => ball.metres));
++    if (stack && spread <= 4 && Math.hypot(x - centroid.east, n - centroid.north) <= 3.5 &&
++        snowmanPlacementClear(centroid, (at, radius) => !isLakeSkateIce(at.east, at.north) &&
++          [...snowmanScene.views.values()].every(view =>
++            Math.hypot(view.record.at.east - at.east, view.record.at.north - at.north) > radius + 1.2))) {
++      return { label: '堆成雪人', run: () => {
++        const id = `built-${++builtSnowmanCount}`;
++        snowmanScene.addSnowman({ id, clan: 'player', tag: presence.playerName(),
++          at: { east: centroid.east, north: centroid.north }, headYaw: yaw });
++        for (const ball of parkedBalls.splice(0)) landscape.remove(ball.mesh);
++        announceActivity('雪人堆好了——今晚它也会看向你。');
++      } };
++    }
++    return { label: '推倒雪球重滚', run: () => {
++      for (const ball of parkedBalls.splice(0)) landscape.remove(ball.mesh);
++    } };
++  }
++  // Dressing a built snowman cycles decorations.
++  for (const view of snowmanScene.views.values()) {
++    if (view.record.clan !== 'player') continue;
++    if (Math.hypot(view.record.at.east - x, view.record.at.north - n) > 1.8) continue;
++    const id = view.record.id;
++    return { label: '给雪人打扮', run: () => {
++      const index = (snowmanDressing.get(id) ?? -1) + 1;
++      snowmanDressing.set(id, index);
++      const kind: SnowmanDecoration = snowmanDecorations[index % snowmanDecorations.length];
++      snowmanScene.attachDecoration(id, kind);
++    } };
++  }
++  return undefined;
++}
++/** Low-priority starter: only offered when nothing else claims the key. */
++function rollSnowballAction() {
++  if (rollingBall || parkedBalls.length >= 3 || isLakeSkateIce(x, n)) return undefined;
++  return { label: '滚雪球', run: () => {
++    rollingBall = { metres: 0, lastEast: x, lastNorth: n, mesh: makeBallMesh(snowballTierRadius[0]) };
++  } };
++}
++const snowmanDressing = new Map<string, number>();
++function driveRollingBall() {
++  if (!rollingBall) return;
++  const moved = Math.hypot(x - rollingBall.lastEast, n - rollingBall.lastNorth);
++  rollingBall.metres += moved;
++  rollingBall.lastEast = x; rollingBall.lastNorth = n;
++  const radius = snowballTierRadius[snowballTier(rollingBall.metres)];
++  rollingBall.mesh.scale.setScalar(radius);
++  const ahead = radius + .55;
++  const east = x + Math.sin(yaw) * ahead, north = n + Math.cos(yaw) * ahead;
++  rollingBall.mesh.position.set(east, grid.heightAt(east, north) + radius, -north);
++}
+ const za32StreetProps = mountZa32StreetProps(landscape, (east, north) => grid.heightAt(east, north));
+ const townFillNorth = mountTownFillNorth(landscape, (east, north) => grid.heightAt(east, north));
+ const townFillEast = mountTownFillEast(landscape, (east, north) => grid.heightAt(east, north));
+@@ -2904,6 +2985,7 @@ function currentAction() {
+   if (!homeReturn) { const anchor = anchorRunAction(); if (anchor) return anchor; }
+   if (!homeReturn) { const climb = treeClimbAction(); if (climb) return climb; }
+   if (!homeReturn) { const lake = lakePlayAction(); if (lake) return lake; }
++  if (!homeReturn) { const build = buildSnowmanAction(); if (build) return build; }
+   if (!homeReturn) { const pat = snowmanPatAction(); if (pat) return pat; }
+   if (cloudRoute.active()) {
+     if (cloudRoute.riding()) return undefined;
+@@ -2948,6 +3030,7 @@ function currentAction() {
+   if (rack && (!nearest || Math.hypot(x - rack.x, n - rack.n) <= Math.hypot(x - nearest.x, n - nearest.n))) return rack;
+   if (nearest) return nearest;
+   if (!homeReturn && !plazaPhoto.active() && inPlazaPhotoRequestZone(x, n, ground)) return plazaPhotoAction;
++  if (!homeReturn) { const roll = rollSnowballAction(); if (roll) return roll; }
+   return tavernActivity.carryAction();
+ }
+ function interact() {
+@@ -4082,6 +4165,7 @@ renderer.setAnimationLoop(now => {
+     driveSnowmen(nightWindowState.phase, ceremonyState.phase === 'climax');
+   }
+   snowmanScene.tick(dt);
++  driveRollingBall();
+   syncAnchorRun();
+   anchorRunScene.tick(dt);
+   driveRingRace();

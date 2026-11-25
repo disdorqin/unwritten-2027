@@ -1,3 +1,4 @@
+import { DataTexture, Mesh, MeshLambertMaterial, NearestFilter, PlaneGeometry, SRGBColorSpace, type Group } from 'three';
 import { createMuseumBuilder } from './museum-kit';
 import { museumHorizontalScale } from './museum-scale';
 import { stationSignCopy, TOWN_STATION_NAME } from './station-sign-copy';
@@ -15,12 +16,26 @@ const iron = '#303b40';
 const brass = '#c19456';
 const snow = '#dce7f0';
 const glow = '#eaa852';
+const platformSnow = '#e8ecf0';
 
 const stationLocalPoint = ([x, y, z]: Point): Point => [x / museumHorizontalScale, y, z / museumHorizontalScale];
 export const railwayStationStops = {
   ticketCounter: stationLocalPoint([-12.7, .14, -.14]),
   timetable: stationLocalPoint([12.8, .14, -4.7]),
   guide: stationLocalPoint([-18.6, .14, 2.1]),
+  cableGate: stationLocalPoint([10.8, .14, 11.85]),
+};
+
+const busTicketWindowEast = -9.9;
+const busPlatformSpeakerEast = 17;
+const busPlatformSpeakerHeight = 4.19;
+const busPlatformSpeakerDepth = -13.4;
+const platformWaitingSignEast = 11.25;
+
+export const busStationHiddenStops = {
+  ticket: stationLocalPoint([busTicketWindowEast, .14, -.14]),
+  platform: stationLocalPoint([busPlatformSpeakerEast, .14, -11.6]),
+  speaker: stationLocalPoint([busPlatformSpeakerEast, busPlatformSpeakerHeight, busPlatformSpeakerDepth]),
 };
 
 function stationBuilder() {
@@ -45,6 +60,56 @@ function stationBuilder() {
 }
 
 type StationBuilder = ReturnType<typeof stationBuilder>;
+
+function busStationTicket(b: StationBuilder) {
+  const z = -1.71;
+  b.box('#8d673b', busTicketWindowEast, 1.505, z, .71, .05, .36);
+  b.box('#d8b374', busTicketWindowEast, 1.54, z, .71, .035, .36);
+  b.box('#efe0ad', busTicketWindowEast, 1.563, z, .68, .015, .33);
+  for (const dz of [-.10, -.025, .05, .125]) {
+    b.box('#8d673b', busTicketWindowEast + .16, 1.573, z + dz, .019, .008, .023);
+  }
+  b.box('#947044', busTicketWindowEast - .12, 1.573, z, .31, .008, .046);
+}
+
+function busStationSpeaker(b: StationBuilder) {
+  const x = busPlatformSpeakerEast;
+  const z = busPlatformSpeakerDepth;
+  b.box(iron, x, 4.93, z, .14, 1.42, .14);
+  const y = busPlatformSpeakerHeight;
+  b.box(dark, x, y, z, .60, .53, .48);
+  b.box('#737878', x, y, z + .245, .52, .45, .06);
+  for (const dy of [-.14, -.07, 0, .07, .14]) {
+    b.box(iron, x, y + dy, z + .282, .41, .022, .018);
+  }
+}
+
+function mountWornWaitingSignFrame(station: Group) {
+  const width = 192, height = 24;
+  const paint = [169, 138, 86];
+  const wood = [93, 70, 48];
+  const bare = [138, 131, 120];
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const fleck = (Math.imul(x + 17, 73856093) ^ Math.imul(y + 13, 19349663)) >>> 0;
+      const peel = y < 4 && (x < 19 || x > 141 && x < 162) || y > 20 && x > 172;
+      const color = peel && fleck % 5 !== 0 ? bare : fleck % 7 === 0 ? wood : paint;
+      pixels.set(color, 4 * (y * width + x));
+      pixels[4 * (y * width + x) + 3] = 255;
+    }
+  }
+  const map = new DataTexture(pixels, width, height);
+  map.colorSpace = SRGBColorSpace;
+  map.minFilter = map.magFilter = NearestFilter;
+  map.needsUpdate = true;
+  // Replace the visible finish on the backing, behind the approved legible notice.
+  const [x, y, z] = stationLocalPoint([platformWaitingSignEast, 2.82, -14.991]);
+  const cladding = new Mesh(new PlaneGeometry(7.68 / museumHorizontalScale, .83), new MeshLambertMaterial({ map }));
+  cladding.name = 'Worn platform waiting sign frame';
+  cladding.position.set(x, y, z);
+  station.add(cladding);
+}
 
 function walkSurface(b: StationBuilder, paint: string, x: number, top: number, z: number, w: number, d: number) {
   b.box(paint, x, top - .18, z, w, .36, d);
@@ -136,6 +201,37 @@ function gableRoof(b: StationBuilder, x: number, z: number, width: number, depth
   b.box(iron, x, peak + .12, z, .24, .19, depth + .21);
 }
 
+function cableGateControls(b: StationBuilder) {
+  const x = 10.8, front = 9.78;
+  b.box(iron, x, 1.42, 9.67, 1.42, 1.5, .22);
+  b.box('#566366', x, 1.43, front, 1.29, 1.36, .05);
+  b.box(stone, x, .62, 9.62, 1.55, .16, .30);
+  for (const side of [-1, 1]) {
+    for (const y of [.88, 1.96]) b.box('#a5a29a', x + side * .56, y, 9.83, .08, .08, .07);
+    b.box(dark, x + side * .23, 1.42, 9.87, .09, .38, .15);
+  }
+  b.box(iron, x, 1.47, 9.93, .42, .11, .15);
+  b.beam('#a19783', [x, 1.48, 9.96], [x + .19, 1.79, 10.17], .09);
+  b.box(dark, x + .19, 1.8, 10.17, .25, .09, .09);
+  b.sign('北岭缆车', x, 2.39, 9.69, 2.6, .52);
+
+  // Corrosion spreads from the lower seam and the exposed fasteners.
+  for (const [dx, y, width, height] of [[-.46, .91, .31, .17], [-.31, .80, .39, .13],
+    [.33, .83, .45, .15], [.53, 1.03, .16, .40], [-.52, 1.88, .25, .14], [.47, 1.87, .26, .21]]) {
+    b.box('#57332b', x + dx, y, 9.811, width, height, .014);
+    b.box('#a45532', x + dx + .02, y + .015, 9.824, width * .63, height * .54, .013);
+    b.box('#c78756', x + dx - .03, y - .02, 9.837, width * .25, height * .24, .012);
+  }
+  for (const [dx, y, length] of [[-.52, 1.75, .62], [-.46, 1.52, .35], [.52, 1.72, .47], [.43, 1.63, .31]]) {
+    b.box('#694337', x + dx, y - length / 2, 9.829, .035, length, .013);
+    b.box('#a56040', x + dx + .021, y - length * .34, 9.836, .021, length * .68, .013);
+  }
+  for (const [dx, y] of [[-.48, .96], [-.37, .83], [.20, .84], [.53, 1.11], [.48, 1.87]]) {
+    b.box('#99a5a5', x + dx, y, 9.851, .075, .046, .013);
+    b.box('#d3d6cb', x + dx - .018, y + .016, 9.855, .038, .022, .014);
+  }
+}
+
 export function buildRailwayStation() {
   const b = stationBuilder();
   // South approach reaches the original road at z=17. The concourse runs straight through to the rear portico.
@@ -186,6 +282,7 @@ export function buildRailwayStation() {
   b.sign(stationSignCopy.englishName, 0, 7.74, 9.75, 11.4, .65);
   b.sign(stationSignCopy.townSubtitle, 0, 5.3, 9.76, 10.4, .72);
   b.sign(stationSignCopy.entrance, 5.05, 4.04, 9.676, 2.05, .58);
+  cableGateControls(b);
   b.sign(stationSignCopy.exit, 0, 5.32, -7.37, 10.1, 1.09, Math.PI);
   const clockZ = 10.58;
   b.box(dark, 0, 9.59, clockZ, 3.9, 2.77, .51);
@@ -199,12 +296,19 @@ export function buildRailwayStation() {
   }
   b.box(brass, 0, 5.6, -16.09, 51.4, .09, .15);
   b.box('#ebc163', 0, .15, -16.02, 51.4, .026, .16);
-  for (const [x, text] of [[-11.25, stationSignCopy.platformSafety], [11.25, stationSignCopy.waiting]] as const) {
+  for (const [x, text] of [[-11.25, stationSignCopy.platformSafety], [platformWaitingSignEast, stationSignCopy.waiting]] as const) {
     b.box(dark, x, 2.82, -15.21, 7.68, .83, .43);
     b.sign(text, x, 2.82, -14.985, 7.34, .73);
   }
   for (const x of [-19, -11.3, 0, 11.3, 19]) lamp(b, x, 5.35, -13.4);
   for (const x of [-17, 17]) bench(b, x, -9.2, .14, 5.8, -1);
+  for (const [x, outer] of [[-17, -1], [17, 1]] as const) {
+    // The ends nearest the walkway have been cleared. The snow stays on the seat.
+    b.box(platformSnow, x + outer * 1.94, .757, -9.23, 1.54, .052, .52);
+    b.box(platformSnow, x + outer * .90, .749, -9.30, .58, .035, .35);
+    b.box(platformSnow, x + outer * .49, .743, -9.35, .27, .023, .17);
+  }
+  busStationSpeaker(b);
 
   // Ticket windows and waiting bays are placed at either side of the walk-through aisle.
   b.sign('售票  ·  TICKETS', -12.8, 3.72, -1.81, 7.1, .96);
@@ -215,6 +319,7 @@ export function buildRailwayStation() {
   b.sign(railHallGuide.board, -21.5, 3.1, 2.1, 5.6, 2.02, Math.PI / 2);
   b.solid(brick, -12.7, .73, -2.14, 9.1, 1.18, 1.1);
   b.box(wood, -12.7, 1.39, -2.08, 9.35, .18, 1.35);
+  busStationTicket(b);
   for (const x of [-15.5, -12.7, -9.9]) {
     b.box(dark, x, 2.62, -2.52, 2.2, 2.15, .18);
     b.box(glow, x, 2.68, -2.41, 1.85, 1.61, .12, true);
@@ -232,6 +337,7 @@ export function buildRailwayStation() {
     lamp(b, x, 3.48, 13.5);
   }
   const station = b.finish(true);
+  mountWornWaitingSignFrame(station);
   const notice = stationBuilder();
   notice.sign(railOvernightCopy, 12.8, 2.64, -6.58, 8.3, .55);
   const overnightBoard = notice.finish();
@@ -300,3 +406,4 @@ export function buildCoasterStation() {
   }
   return b.finish();
 }
+

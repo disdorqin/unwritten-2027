@@ -1,0 +1,109 @@
+{
+  "name": "touch",
+  "route": "http://127.0.0.1:4173/town-blockout.html",
+  "pageErrors": [],
+  "tapStartedRound": true,
+  "shownSeconds": 60,
+  "nextSeconds": 59,
+  "gather": {
+    "atSupply": "东 233.3 m · 北 158.1 m · 行走",
+    "ammunition": 5,
+    "touches": [
+      {
+        "type": "pointerdown",
+        "at": 78743.19999999998,
+        "x": 315,
+        "y": 299
+      },
+      {
+        "type": "pointermove",
+        "at": 80369,
+        "x": 264,
+        "y": 528
+      },
+      {
+        "type": "pointerup",
+        "at": 83570.5,
+        "x": 264,
+        "y": 528
+      }
+    ],
+    "gesture": {
+      "search": {
+        "minX": 207,
+        "maxX": 411,
+        "minY": 1,
+        "maxY": 609
+      },
+      "start": {
+        "x": 315,
+        "y": 299
+      },
+      "end": {
+        "x": 264,
+        "y": 528
+      }
+    }
+  },
+  "throw": {
+    "shooter": {
+      "east": 223,
+      "north": 162.5
+    },
+    "shot": {
+      "id": 1,
+      "scoreable": true,
+      "at": 96477.49999999997,
+      "origin": [
+        223.00317625752564,
+        13.925392712951881,
+        -162.55967269086565
+      ],
+      "direction": [
+        0.052937625427337154,
+        0.08987854919801104,
+        -0.9945448477611132
+      ]
+    },
+    "touches": [
+      {
+        "type": "pointerdown",
+        "at": 89642.79999999999,
+        "x": 315,
+        "y": 420
+      },
+      {
+        "type": "pointermove",
+        "at": 92974.9,
+        "x": 339,
+        "y": 420
+      },
+      {
+        "type": "pointerup",
+        "at": 95113.6,
+        "x": 339,
+        "y": 420
+      }
+    ],
+    "remainingAmmo": 4,
+    "gesture": {
+      "search": {
+        "minX": 207,
+        "maxX": 387,
+        "minY": 1,
+        "maxY": 838
+      },
+      "start": {
+        "x": 315,
+        "y": 420
+      },
+      "end": {
+        "x": 339,
+        "y": 420
+      }
+    }
+  },
+  "settled": true,
+  "elapsedMs": 63375,
+  "notice": "移动靶结算 · 命中 0"
+}

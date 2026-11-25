@@ -1,0 +1,15 @@
+body.town-entry-pending > :not(#town-entry) { visibility: hidden; }
+
+#town-entry {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
+  overflow: auto; padding: 16px; background: #101a2b; color: #eef6ff;
+}
+#town-entry[hidden], #town-entry [hidden] { display: none; }
+.town-entry-content { width: min(100%, 420px); }
+.town-entry-content h1 { margin: 0 0 12px; }
+.town-entry-content p { margin: 0 0 16px; line-height: 1.6; }
+.town-entry-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.town-entry-actions button { min-height: 44px; }
+#town-entry-link { width: 100%; margin-top: 12px; }
+#town-entry-copy-status { display: block; margin-top: 8px; }
+#env-banner-dismiss { margin-left: 4px; }

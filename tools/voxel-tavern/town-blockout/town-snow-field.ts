@@ -12,6 +12,7 @@ import { bridgeAt, gridStep, isWater, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import { extensionRoadClearance, extensionStreetClearance } from './town-extension';
 import { advanceWeatherCover, type TownSnowWeather } from './town-weather';
+import type { TownG09SnowSnapshot } from './town-g09-snow-cover';
 
 type Ground = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt' | 'gridWidth' | 'gridDepth' | 'surfaces'>;
 type GroundMask = (x: number, north: number, ground: number) => boolean;
@@ -153,6 +154,22 @@ export function createTownSnowField(grid: Ground) {
           pilingRate: Math.max(0, nextWeather.pilingRate),
         };
       }
+    },
+    /**
+     * Join/reconnect fast-forward from a server-calendar snow snapshot.
+     * Only active snow cells are touched and no extra mesh, draw or frame
+     * simulation is created. Local digging and existing tracks are preserved.
+     */
+    restoreWeatherSnapshot(snapshot: TownG09SnowSnapshot) {
+      if (!Number.isFinite(snapshot.cover) || snapshot.cover < 0 || snapshot.cover > 1 ||
+          !Number.isFinite(snapshot.spillDepth) || snapshot.spillDepth < 0 || snapshot.spillDepth > .45) return false;
+      cover = snapshot.cover;
+      for (const index of liveCells) {
+        amount[index] = base[index] > 0
+          ? base[index] * cover
+          : Math.min(spill[index], snapshot.spillDepth);
+      }
+      return true;
     },
     movementScale(x: number, north: number, ground: number, isCleared?: GroundMask, sprint = false) {
       const depth = depthAt(x, north, ground, isCleared);

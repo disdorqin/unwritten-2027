@@ -21,7 +21,7 @@
     "grove": {
       "view": "grove",
       "kind": "ready",
-      "frames": 14,
+      "frames": 12,
       "drawCalls": 7,
       "triangles": 105084,
       "groups": 8,
@@ -38,7 +38,7 @@
     "overlook": {
       "view": "overlook",
       "kind": "ready",
-      "frames": 21,
+      "frames": 19,
       "drawCalls": 7,
       "triangles": 105816,
       "groups": 8,
@@ -55,7 +55,7 @@
     "quay": {
       "view": "quay",
       "kind": "ready",
-      "frames": 28,
+      "frames": 25,
       "drawCalls": 7,
       "triangles": 105816,
       "groups": 8,
@@ -72,7 +72,7 @@
     "monolith": {
       "view": "monolith",
       "kind": "ready",
-      "frames": 34,
+      "frames": 31,
       "drawCalls": 7,
       "triangles": 105084,
       "groups": 8,
@@ -89,7 +89,7 @@
     "moonstone": {
       "view": "moonstone",
       "kind": "ready",
-      "frames": 41,
+      "frames": 37,
       "drawCalls": 7,
       "triangles": 105084,
       "groups": 8,

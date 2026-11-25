@@ -1,0 +1,23 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 9259da7c..2e7c8a0b 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -30,7 +30,7 @@ import { addTerrainMeshes } from './terrain-mesh';
+ import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+ import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
+ import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
+-import { createZa29GuardDuty } from './town-za29-guard-duty';
++import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -451,8 +451,7 @@ function updateGuardPosts() {
+     const road = ensureWestCraterRoad();
+     craterGuardPost = connectGuardPost('crater', mountZa29GuardPost(road.group, 'crater', road.heightAt));
+   }
+-  const night = presence.getTownNightWindow()?.shift === 'night';
+-  const duty = { guardPresent: !night, showNightSigns: night };
++  const duty = za29GuardDutyForPhase(presence.getTownNightWindow()?.phase);
+   for (const post of [mountainGuardPost, craterGuardPost]) {
+     post?.model.setDuty(duty);
+     post?.duty.updateDuty(duty.guardPresent);

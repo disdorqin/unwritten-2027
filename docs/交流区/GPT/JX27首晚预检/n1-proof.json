@@ -1,0 +1,224 @@
+{
+  "base": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "sourceFiles": {
+    "layout.json": "9dae6c135cd19d845c9f5b9153d66d845fb5f7c0",
+    "plaza-snow-supply.ts": "7270e82f4fb363074735ca49caa2e3a80e7f370d",
+    "town-snowball-world.ts": "173103caeecd9a10ba5255c08bc35393308cce5d",
+    "town-snowball.ts": "c94e714ad4c0a02f804578956fbaeeda304aa6c8",
+    "viewer.ts": "72cc9c1d1eb946211844850a95392381c5a8871d"
+  },
+  "bounds": [
+    161,
+    152,
+    251,
+    212
+  ],
+  "plazaCenter": [
+    206,
+    182
+  ],
+  "spawn": [
+    223,
+    180
+  ],
+  "mayor": [
+    223,
+    183
+  ],
+  "spawnY": 12,
+  "mayorY": 12,
+  "facing": {
+    "northYawDegrees": 0,
+    "towerBearing": 3.9909130984297803,
+    "stageBearing": 159.44395478041653,
+    "stageNorthEdge": 147,
+    "spawnNorth": 180
+  },
+  "oldRange": {
+    "stand": [
+      223,
+      163
+    ],
+    "target": [
+      223,
+      173
+    ],
+    "distance": 10
+  },
+  "walkRoutes": {
+    "mayor": {
+      "maxStep": 0,
+      "steps": 60,
+      "knots": [
+        {
+          "point": [
+            223,
+            180
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            183
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "tutorial": {
+      "maxStep": 0,
+      "steps": 1390,
+      "knots": [
+        {
+          "point": [
+            223,
+            183
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            180
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            247,
+            180
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            247,
+            155
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            233,
+            155
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            233,
+            158.5
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "stageFront": {
+      "maxStep": 0,
+      "steps": 230,
+      "knots": [
+        {
+          "point": [
+            233,
+            158.5
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            233,
+            155
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            238,
+            155
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            238,
+            152
+          ],
+          "support": 12
+        }
+      ]
+    }
+  },
+  "directRoute": {
+    "failed": {
+      "point": [
+        223,
+        165.75
+      ],
+      "before": {
+        "x": 223,
+        "n": 165.8,
+        "ground": 12
+      },
+      "surface": 12,
+      "attempt": "blocked"
+    },
+    "knots": [
+      {
+        "point": [
+          223,
+          180
+        ],
+        "support": 12
+      }
+    ]
+  },
+  "training": {
+    "stand": [
+      233,
+      158.5
+    ],
+    "target": [
+      241,
+      158.5
+    ],
+    "standY": 12,
+    "targetY": 12,
+    "distance": 8,
+    "modelDiameter": 1.2,
+    "hitRadius": 0.8999999999999999,
+    "extraReach": {
+      "sideOffset": 0.75,
+      "normalHit": false,
+      "trainingHit": true
+    },
+    "source": "south",
+    "gathered": true,
+    "ammoAfterGather": 5,
+    "marker": {
+      "visible": true,
+      "position": [
+        239.98499999999999,
+        13.144326923076926,
+        -158.5
+      ]
+    },
+    "thrown": true,
+    "testedState": {
+      "ammo": 4,
+      "hits": 1,
+      "combo": 1
+    },
+    "launchId": 1,
+    "impact": {
+      "id": 1,
+      "target": "first-night-probe",
+      "scored": true,
+      "at": [
+        239.98499999999999,
+        13.144326923076928,
+        -158.5
+      ]
+    }
+  }
+}

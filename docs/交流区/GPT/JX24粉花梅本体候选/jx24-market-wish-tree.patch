@@ -1,0 +1,263 @@
+diff --git a/tests/town-blockout-market-wish-tree.test.ts b/tests/town-blockout-market-wish-tree.test.ts
+new file mode 100644
+index 0000000..15b6eea
+--- /dev/null
++++ b/tests/town-blockout-market-wish-tree.test.ts
+@@ -0,0 +1,69 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { createRequire } from 'node:module';
++import type { InstancedMesh as ThreeInstancedMesh } from 'three';
++import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
++import { buildMarketWishTree, marketWishTreeAnchor } from '../tools/voxel-tavern/town-blockout/market-wish-tree.ts';
++import { createTerrainGrid } from '../tools/voxel-tavern/town-blockout/terrain.ts';
++import { createWishActivity } from '../tools/voxel-tavern/town-blockout/wish-activity.ts';
++
++const { Scene } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as typeof import('three');
++
++test('the market plum is a separate batched tree grounded at E118/N88', () => {
++  const heightAt = createTerrainGrid().heightAt;
++  const group = buildMarketWishTree(heightAt);
++  const { east, north } = marketWishTreeAnchor;
++  assert.deepEqual(group.position.toArray(), [118, heightAt(118, 88), -88]);
++  assert.deepEqual({ east, north }, { east: 118, north: 88 });
++  assert.equal(group.children.length, 1);
++  const batch = group.children[0] as ThreeInstancedMesh;
++  assert.ok(batch.isInstancedMesh && batch.boundingBox);
++  assert.ok(batch.count > 300 && batch.count < 420);
++  const { min, max } = batch.boundingBox;
++  for (const span of [max.x - min.x, max.z - min.z]) assert.ok(13.5 < span && span < 14.5);
++  assert.ok(max.y > 7.8);
++
++  const { colliders, floors } = readWalkGeometry(group);
++  assert.equal(colliders.length, 2, 'trunk and wood box only');
++  const [trunk, chest] = colliders;
++  assert.equal(trunk.min[1], heightAt(east, north));
++  assert.ok(trunk.min[0] < east && trunk.max[0] > east);
++  assert.ok(trunk.min[2] < -north && trunk.max[2] > -north);
++  assert.equal(chest.min[1], heightAt(119.47, 88.71));
++  assert.equal(floors.length, 1, 'stone bench supports foot placement');
++  assert.ok(Math.abs(floors[0].max[1] - heightAt(115.83, 88.29) - .30) < 1e-8);
++  assert.throws(() => buildMarketWishTree(() => Number.NaN), /finite ground height/);
++});
++
++test('building the market plum leaves the plaza wish activity, read key and spot intact', () => {
++  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
++  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
++  const accesses: string[] = [];
++  Object.defineProperty(globalThis, 'document', {
++    configurable: true, value: { createElement: () => ({ getContext: () => null }) },
++  });
++  Object.defineProperty(globalThis, 'localStorage', {
++    configurable: true, value: { getItem: (key: string) => { accesses.push(key); return '["广场回归用祝福"]'; } },
++  });
++  try {
++    const scene = new Scene();
++    const activity = createWishActivity({ scene, open() { throw Error('unexpected dialog'); }, announce() {}, sit() {}, face() {} });
++    assert.deepEqual(scene.children[0].position.toArray(), [201.4, 12, -210.65]);
++    const [spot] = activity.spots;
++    assert.deepEqual([spot.x, spot.n, spot.ground, spot.range, spot.label], [201.5, 207, 12, 2.15, '写匿名祝福']);
++    assert.equal(activity.latestWish(), '广场回归用祝福');
++    assert.equal(activity.blocked?.(199.15, 210.81, 12), true);
++
++    scene.add(buildMarketWishTree(createTerrainGrid().heightAt));
++    assert.equal(scene.children[0].name, 'Wish tree and town blessings');
++    assert.equal(scene.children[1].name, 'Market wish tree');
++    assert.equal(activity.spots.length, 1);
++    assert.equal(activity.latestWish(), '广场回归用祝福');
++    assert.deepEqual(accesses, ['unwritten:town-blessings']);
++  } finally {
++    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
++    else Reflect.deleteProperty(globalThis, 'document');
++    if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
++    else Reflect.deleteProperty(globalThis, 'localStorage');
++  }
++});
+diff --git a/tools/voxel-tavern/town-blockout/market-wish-tree.ts b/tools/voxel-tavern/town-blockout/market-wish-tree.ts
+new file mode 100644
+index 0000000..de5e07f
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/market-wish-tree.ts
+@@ -0,0 +1,123 @@
++import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, MeshLambertMaterial, Object3D, Vector3 } from 'three';
++import type { Box } from './landmark-kit';
++import { addWishPlumWood } from './wish-plum-wood';
++
++export const marketWishTreeAnchor = { east: 118, north: 88 } as const;
++
++const bark = '#644336', dark = '#3e2a2b', snow = '#d5e3f1';
++const pink = ['#e794ac', '#e6a8b9', '#c96889', '#f4bac9'];
++const wood = '#b88d64', rim = '#825e49', stone = '#77818c';
++const up = new Vector3(0, 1, 0);
++
++/** The second plum and its static props. The host owns wish records and festival cues. */
++export function buildMarketWishTree(heightAt: (east: number, north: number) => number): Group {
++  const { east, north } = marketWishTreeAnchor;
++  const ground = heightAt(east, north);
++  if (!Number.isFinite(ground)) throw new RangeError('Market wish tree needs a finite ground height');
++
++  const group = new Group();
++  group.name = 'Market wish tree';
++  group.position.set(east, ground, -north);
++  const transform = new Object3D();
++  const parts: { matrix: Matrix4; tint: Color }[] = [];
++  const colliders: Box[] = [{ min: [-.64, 0, -.64], max: [.64, 5.0552, .64] }];
++  const floors: Box[] = [];
++
++  function record(tint: string) {
++    transform.updateMatrix();
++    parts.push({ matrix: transform.matrix.clone(), tint: new Color(tint) });
++  }
++
++  function box(tint: string, x: number, y: number, z: number, w: number, h: number, d: number, roll = 0) {
++    transform.position.set(x, y, z);
++    transform.scale.set(w, h, d);
++    transform.rotation.set(0, 0, roll);
++    record(tint);
++  }
++
++  function branch(start: Vector3, end: Vector3, width: number, tint: string) {
++    const direction = end.clone().sub(start);
++    const length = direction.length();
++    transform.position.copy(start).addScaledVector(direction, .5);
++    transform.scale.set(width, length + width * .8, width * .9);
++    transform.quaternion.setFromUnitVectors(up, direction.divideScalar(length));
++    record(tint);
++  }
++
++  addWishPlumWood((tint, x, y, z, w, h, d, roll) => {
++    box(tint, (x + 2.25) * 2.15, y * 1.78, (z + .16) * 1.9, w * 2.15, h * 1.78, d * 1.9, roll);
++  });
++
++  // Stagger the branch ends at three heights so the blossom clusters stay separate in silhouette.
++  const layers = [
++    { ends: 8, reach: 5.95, height: 4.74, angle: .045, start: 2.71, width: .34, spread: 1 },
++    { ends: 6, reach: 3.65, height: 6.28, angle: .33, start: 3.88, width: .25, spread: .85 },
++    { ends: 4, reach: 1.64, height: 7.59, angle: .58, start: 4.93, width: .19, spread: .72 },
++  ];
++  for (const [level, { ends, reach, height, angle, start, width, spread }] of layers.entries()) {
++    for (let i = 0; i < ends; i++) {
++      const heading = angle + i * Math.PI * 2 / ends;
++      const radial = new Vector3(Math.cos(heading), 0, Math.sin(heading));
++      const tangent = new Vector3(-radial.z, 0, radial.x);
++      const r = reach + (i % 3 - 1) * .16;
++      const end = radial.clone().multiplyScalar(r).setY(height + (i % 3 - 1) * .16);
++      const elbow = radial.clone().multiplyScalar(r * .53).setY(start + (height - start) * .62);
++      branch(new Vector3(0, start, 0), elbow, width, i % 2 ? bark : dark);
++      branch(elbow, end, width * .69, bark);
++
++      for (let j = 0; j < 4; j++) {
++        const tuft = end.clone().addScaledVector(tangent, (j % 2 ? 1 : -1) * (.22 + (j % 2) * .25) * spread)
++          .addScaledVector(radial, (j < 2 ? -.56 : .40) * spread);
++        tuft.y += (.03 + j * .13) * spread;
++        branch(elbow.clone().lerp(end, .58), tuft, width * .37, bark);
++        const blush = pink[(i + j + level) % pink.length];
++        box(blush, tuft.x, tuft.y, tuft.z, 1.44 * spread, .51 * spread, 1.25 * spread);
++        box(pink[(i + j + level + 1) % pink.length], tuft.x - .26 * spread, tuft.y + .26 * spread, tuft.z + .13 * spread, .99 * spread, .30 * spread, .89 * spread);
++        box(blush, tuft.x + .27 * spread, tuft.y - .18 * spread, tuft.z - .22 * spread, .76 * spread, .33 * spread, .81 * spread);
++        if ((i + j) % 3 === 0) box(snow, tuft.x - .16 * spread, tuft.y + .44 * spread, tuft.z + .12 * spread, .67 * spread, .085, .64 * spread);
++      }
++
++      // These unmarked wood shapes only indicate the historical high branches.
++      if (level === 1 && i % 2 === 0) {
++        for (const side of [-1, 1]) {
++          const cord = end.clone().addScaledVector(tangent, side * .44);
++          box('#ab584e', cord.x, cord.y - .30, cord.z, .024, .42, .024);
++          box(wood, cord.x, cord.y - .66, cord.z, .18, .33, .045, side * .07);
++        }
++      }
++    }
++  }
++
++  function gradeAt(x: number, z: number) {
++    const foot = heightAt(east + x, north - z) - ground;
++    if (!Number.isFinite(foot)) throw new RangeError('Market wish tree props need finite ground heights');
++    return foot;
++  }
++
++  // The root box is open, with plain wood blanks. Interactive reach belongs to the host.
++  const chest = { x: 1.47, z: -.71, w: .88, d: .50, h: .39 };
++  const chestY = gradeAt(chest.x, chest.z);
++  box(wood, chest.x, chestY + .06, chest.z, chest.w, .12, chest.d);
++  for (const edge of [-1, 1]) {
++    box(rim, chest.x, chestY + .25, chest.z + edge * .222, chest.w, .27, .056);
++    box(rim, chest.x + edge * .412, chestY + .25, chest.z, .056, .27, .389);
++  }
++  for (let i = -1; i <= 1; i++) box('#cba576', chest.x + i * .22, chestY + .157, chest.z, .17, .034, .31);
++  colliders.push({ min: [chest.x - chest.w / 2, chestY, chest.z - chest.d / 2], max: [chest.x + chest.w / 2, chestY + chest.h, chest.z + chest.d / 2] });
++
++  const bench = { x: -2.17, z: -.29, w: .57, d: 1.41, h: .30 };
++  const benchY = gradeAt(bench.x, bench.z);
++  for (const side of [-1, 1]) box(stone, bench.x, benchY + .085, bench.z + side * .52, .40, .17, .23);
++  box('#88929c', bench.x, benchY + .23, bench.z, bench.w, .14, bench.d);
++  floors.push({ min: [bench.x - bench.w / 2, benchY + .16, bench.z - bench.d / 2], max: [bench.x + bench.w / 2, benchY + bench.h, bench.z + bench.d / 2] });
++
++  const mesh = new InstancedMesh(new BoxGeometry(), new MeshLambertMaterial(), parts.length);
++  mesh.name = 'Market wish tree wood, snow and pink blossoms';
++  parts.forEach(({ matrix, tint }, i) => { mesh.setMatrixAt(i, matrix); mesh.setColorAt(i, tint); });
++  mesh.computeBoundingBox();
++  mesh.computeBoundingSphere();
++  group.add(mesh);
++  group.userData.colliders = colliders;
++  group.userData.floors = floors;
++  return group;
++}
+diff --git a/tools/voxel-tavern/town-blockout/wish-activity.ts b/tools/voxel-tavern/town-blockout/wish-activity.ts
+index f45121f..d6bf869 100644
+--- a/tools/voxel-tavern/town-blockout/wish-activity.ts
++++ b/tools/voxel-tavern/town-blockout/wish-activity.ts
+@@ -5,6 +5,7 @@ import {
+ import { layout } from './terrain';
+ import { mascotHome } from './town-mascot';
+ import type { TownActivity, TownActivityContext } from './town-activity';
++import { addWishPlumWood } from './wish-plum-wood';
+ 
+ const storageKey = 'unwritten:town-blessings';
+ const textLimit = 120;
+@@ -62,21 +63,7 @@ export function createWishActivity(context: TownActivityContext): TownActivity &
+   part('#9b9261', petX - .46, .148, petZ - .22, .175, .021, .079);
+ 
+   // Plum trunk and branches shelter a board at the edge of the paving.
+-  part(dark, -2.25, 1.42, -.16, .40, 2.84, .43);
+-  part(oak, -2.18, 1.39, .052, .27, 2.78, .06);
+-  part(trim, -2.10, .98, .086, .038, 1.53, .023, -.023);
+-  for (const [x, y, w, h, roll] of [
+-    [-2.25, .17, .83, .22, 0], [-2.64, 1.37, .19, 1.14, .81], [-3.01, 1.94, .123, .61, -.10],
+-    [-3.24, 1.88, .113, .68, .98], [-1.94, 1.84, .185, 1.06, -.68], [-1.52, 2.33, .105, .67, -.48],
+-    [-2.54, 2.42, .158, .90, .76], [-2.86, 2.85, .091, .67, .28], [-1.94, 2.85, .12, .94, -.65],
+-  ]) {
+-    part(oak, x, y, -.12, w, h, w * .92, roll);
+-  }
+-  for (const [x, y] of [[-3.40, 2.05], [-3.00, 2.26], [-2.92, 3.11], [-1.55, 3.16], [-1.36, 2.60]]) {
+-    part(snow, x, y, -.12, .20, .075, .145);
+-  }
+-  part(snow, -2.3, .031, -.12, 1.29, .046, .91);
+-  part('#b9cddd', -2.09, .059, .09, .77, .035, .59);
++  addWishPlumWood(part);
+   for (const [x, y] of [[-3.19, 1.71], [-2.95, 2.31], [-1.51, 2.42]]) {
+     part(gold, x, y, .03, .024, .29, .022);
+     part('#a24343', x, y - .23, .045, .24, .28, .20);
+diff --git a/tools/voxel-tavern/town-blockout/wish-plum-wood.ts b/tools/voxel-tavern/town-blockout/wish-plum-wood.ts
+new file mode 100644
+index 0000000..9ad3fbe
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/wish-plum-wood.ts
+@@ -0,0 +1,18 @@
++type PlumPart = (color: string, x: number, y: number, z: number, w: number, h: number, d: number, roll?: number) => void;
++
++export function addWishPlumWood(part: PlumPart) {
++  const oak = '#644336', dark = '#3e2a2b', trim = '#a57250', snow = '#d5e3f1';
++  part(dark, -2.25, 1.42, -.16, .40, 2.84, .43);
++  part(oak, -2.18, 1.39, .052, .27, 2.78, .06);
++  part(trim, -2.10, .98, .086, .038, 1.53, .023, -.023);
++  for (const [x, y, w, h, roll] of [
++    [-2.25, .17, .83, .22, 0], [-2.64, 1.37, .19, 1.14, .81], [-3.01, 1.94, .123, .61, -.10],
++    [-3.24, 1.88, .113, .68, .98], [-1.94, 1.84, .185, 1.06, -.68], [-1.52, 2.33, .105, .67, -.48],
++    [-2.54, 2.42, .158, .90, .76], [-2.86, 2.85, .091, .67, .28], [-1.94, 2.85, .12, .94, -.65],
++  ]) part(oak, x, y, -.12, w, h, w * .92, roll);
++  for (const [x, y] of [[-3.40, 2.05], [-3.00, 2.26], [-2.92, 3.11], [-1.55, 3.16], [-1.36, 2.60]]) {
++    part(snow, x, y, -.12, .20, .075, .145);
++  }
++  part(snow, -2.3, .031, -.12, 1.29, .046, .91);
++  part('#b9cddd', -2.09, .059, .09, .77, .035, .59);
++}
