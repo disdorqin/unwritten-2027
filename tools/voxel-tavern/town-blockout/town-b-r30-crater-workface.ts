@@ -11,12 +11,8 @@ import {craterFloorWorklightSites,craterFloorLampRockBufferM} from './meteor-cra
 type Road=Pick<ReturnType<typeof mountWestCraterRoad>,'anchor'|'heightAt'|'group'>;
 type Box={min:number[];max:number[]};
 type Point={east:number;north:number};
-type Pad=Point & {id:string;w:number;d:number;h:number};
-const pads:readonly Pad[]=[
-  {id:'abandoned-ore-cart',east:-131,north:172,w:2.8,d:2.6,h:1.55},
-  {id:'repair-rack',east:-115,north:169,w:2.6,d:2.25,h:1.85},
-  {id:'material-bay',east:-136,north:178,w:2.6,d:2.4,h:1.3},
-];
+import {bR30WorkfacePads} from './town-b-r30-crater-workface-layout';
+const pads=bR30WorkfacePads;
 const gap=(e:number,n:number,b:Box)=>Math.hypot(Math.max(b.min[0]-e,e-b.max[0],0),Math.max(b.min[2]+n,-n-b.max[2],0));
 function segmentGap(p:Point,a:Point,b:Point){
   const dx=b.east-a.east,dn=b.north-a.north;
