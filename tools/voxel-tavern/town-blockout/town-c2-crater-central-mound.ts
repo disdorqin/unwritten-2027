@@ -64,6 +64,19 @@ const lampRoomS = Math.sin(townC2CraterCentralMoundAnchor.yaw);
 export const townC2CraterCentralMoundProtectedSites = Object.freeze({
   well: Object.freeze({ east: -120, north: 185, radius: 3.8 }),
   winch: Object.freeze({ east: -120.7468, north: 180.605, radius: 1.4 }),
+  // Winch descent corridor (coordinator fix 2026-11-25, C-line spec ba56604/300cfd1):
+  // the wellhead exit segment crosses the mound disc; protect it end to end
+  // so heightAt along the B-01 descent stays on the crater floor.
+  corridor0: Object.freeze({ east: -137.62, north: 194.45, radius: 2.2 }),
+  corridor1: Object.freeze({ east: -135.41, north: 192.98, radius: 2.2 }),
+  corridor2: Object.freeze({ east: -133.20, north: 191.51, radius: 2.2 }),
+  corridor3: Object.freeze({ east: -130.99, north: 190.03, radius: 2.2 }),
+  corridor4: Object.freeze({ east: -128.78, north: 188.56, radius: 2.2 }),
+  corridor5: Object.freeze({ east: -126.57, north: 187.09, radius: 2.2 }),
+  // Camp cluster + last guiding lamp sit on the mound's west foot (surveyed
+  // flat content, ZA-31): protect both points so they stay on the crater floor.
+  campTent: Object.freeze({ east: -105.60, north: 182.05, radius: 2.6 }),
+  guidingLamp8: Object.freeze({ east: -132.58, north: 185.66, radius: 1.6 }),
   // Mirror the read-only lamp-room fixture transform so its whole base stays on B-01 ground.
   lampRoom: Object.freeze({
     east: townC2CraterCentralMoundAnchor.east + lampRoomFixture.east * lampRoomC - lampRoomFixture.south * lampRoomS,

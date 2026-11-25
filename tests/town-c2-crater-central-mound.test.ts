@@ -104,7 +104,7 @@ test('the mounted voxel mound exposes three textured material families and agree
   assert.equal(built.meshes.length, 3);
   assert.ok(built.stats.voxelCount > 1500);
   assert.ok(built.stats.triangles > 5000 && built.stats.triangles < 30000);
-  assert.equal(built.stats.triangles, 10720, 'visual refinement must not change the approved triangle budget');
+  assert.equal(built.stats.triangles, 9714, 'triangle budget re-pinned 2026-11-25 (coordinator mound fix): the winch-corridor + camp protection discs flatten the west foot, removing 1,006 slope triangles; the height-authority correction outranks the visual budget');
   assert.equal(Object.values(built.stats.materialVoxelCounts).reduce((sum, count) => sum + count, 0),
     built.stats.voxelCount);
   for (const count of Object.values(built.stats.materialVoxelCounts)) assert.ok(count > 100);
