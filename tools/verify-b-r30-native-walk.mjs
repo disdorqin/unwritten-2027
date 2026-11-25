@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 
@@ -32,6 +32,9 @@ let browser;
 let lastPage;
 let lastEvidence;
 let measuring = true;
+// Keep the browser run inside the local execution tool's time budget.
+const runDeadline=Date.now()+225_000;
+function remaining(){const left=runDeadline-Date.now();assert.ok(left>1000,'Native route evidence budget exhausted');return left;}
 
 async function openTown(name) {
   const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
@@ -194,6 +197,7 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
 
 async function face(page, evidence, desired) {
   for (let attempt = 0; attempt < 16; ++attempt) {
+    remaining();
     const before = await waitForWire(page, evidence);
     const delta = yawDistance(before.yaw, desired);
     if (Math.abs(delta) <= .009) return;
@@ -224,6 +228,7 @@ async function walkTo(page, evidence, target, label) {
   const [east, north] = target;
   let after = await readPose(page);
   for (let attempt = 0; attempt < 6; ++attempt) {
+    remaining();
     assert.ok(Number.isFinite(after.east) && Number.isFinite(after.north), JSON.stringify(after));
     const from = after;
     const dx = east - from.east, dn = north - from.north;
@@ -239,7 +244,7 @@ async function walkTo(page, evidence, target, label) {
     const backwards = distance < 1.4;
     if (backwards) await face(page, evidence, desired + Math.PI);
     const key = backwards ? 's' : 'w';
-    const fast = distance > 9 && segment !== 'a4-shots';
+    const fast = !backwards && distance > 3;
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
@@ -251,7 +256,7 @@ async function walkTo(page, evidence, target, label) {
         const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
         return forward >= distance;
       }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
-      { timeout: Math.ceil(30_000 + distance * 1000) });
+      { timeout: Math.min(remaining(),Math.ceil(30_000 + distance * 1000)) });
     } catch (error) {
       const stopped = await readPose(page);
       throw new Error(`Native walking stopped before ${label} (${east}, ${north}): ${JSON.stringify(stopped)}`, { cause: error });
@@ -281,13 +286,19 @@ try{
   const {page,evidence,westWindow}=await openTown('b-r30-'+segment);
   const result={scope:'normal entry and in-game location chooser; actual W/S/Shift and mouse, not full spawn walk or underground entry',down:0,up:0,complete:false,legalWindow:null,route};
   report.bR30=result;
-  const save=()=>writeFile(join(output,'b-r30-progress.json'),JSON.stringify(result,null,2));
+  const save=async()=>{
+    const progress={...result,observed:{checkpoints:evidence.checkpoints.length,poseSamples:evidence.poses.length,
+      errors:report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length,
+      lastAcceptedPose:evidence.poses.at(-1)}};
+    const dst=join(output,'b-r30-progress.json'),tmp=dst+'.next';
+    await writeFile(tmp,JSON.stringify(progress,null,2));await rename(tmp,dst);
+  };
   await page.locator('#town-panel-toggle').click();
   await page.locator('#jump').selectOption({label:'陨石坑口'});
   if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
   await page.waitForFunction(pattern=>{const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');return m&&Math.hypot(+m[1]-2,+m[2]-159)<1.2;},positionPattern.source,{timeout:45000});
   await follow(page,evidence,[[-12,159],[-40,159],[-67,159]],'approach');
-  const deadline=Date.now()+120000;
+  const deadline=Math.min(Date.now()+120000,runDeadline-1000);
   while(Date.now()<deadline){
     const f=westWindow();
     if(f?.state?.phase==='night-window'&&f.state.canEnterRestricted){
@@ -307,7 +318,7 @@ try{
       const actual=await readPose(page);
       assert.ok(Number.isFinite(actual.height)&&Math.abs(actual.height-q.height)<1.3,'Height divergence '+JSON.stringify({q,actual}));
       result[key]=i+1;result.last={key,q,actual,wire:evidence.poses.at(-1)};
-      if(i%10===0||i===knots.length-1)await save();
+      await save();
     }
   }
   await traverse(route.points,'down');
