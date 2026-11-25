@@ -337,6 +337,16 @@ try{
      }
      await picture(page,evidence,'kengkou-'+(lighting==='雪夜'?'night':'day'));
    }
+ }else if(segment==='instrument'||segment==='smelter'){
+   await face(page,evidence,(segment==='instrument'?307:27)*Math.PI/180);
+   for(const lighting of ['雪夜','白昼']){
+     if((await page.locator('#lighting').textContent())!==lighting){
+       await page.locator('#town-panel-toggle').click();
+       await page.locator('#lighting').click();
+       await page.locator('#town-settings-close').click();
+     }
+     await picture(page,evidence,segment+'-interior-'+(lighting==='雪夜'?'night':'day'));
+   }
  }else await picture(page,evidence,segment+'-top');
  if(segment==='supply'){
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('屋顶望筒'),null,{timeout:5000});
