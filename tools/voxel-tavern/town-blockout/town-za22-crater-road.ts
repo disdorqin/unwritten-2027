@@ -260,9 +260,11 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     oldWorkPlacements: story.placements.filter(piece => piece.cluster.startsWith('old-work-')),
   });
   group.add(brokenCircle.group);
-  // Cut B-01 before exposing the wrapped authority so render and walk share one offset.
+  // Cut B-01 once. The legacy sampler is analytic and requires its
+  // wrapper; B-R01's new sampler reads the same mutable vertex array
+  // as the BufferAttribute, so wrapping it would double the offset.
   applyCraterBrokenCircleToWalkMesh(surface as Mesh, anchor, brokenCircle.heightOffsetAt);
-  road.heightAt = brokenCircle.heightAt;
+  if(surface.userData.bR30UnifiedRelief!==true)road.heightAt=brokenCircle.heightAt;
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
