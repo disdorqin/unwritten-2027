@@ -100,3 +100,4 @@ export function createCourtyardSeatSpots(
   }
   return spots;
 }
+

@@ -2,13 +2,15 @@ import {
   BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, Vector3, type BufferGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { icePalaceRiteReach } from '../../../src/shared/ice-palace-rites';
+import {
+  icePalaceFragmentId, icePalaceFragmentStand, icePalaceRiteReach,
+} from '../../../src/shared/ice-palace-rites';
 import type { Box } from './landmark-kit';
 import type { TownActivitySpot } from './town-activity';
 
 export const icePalaceFragmentSite = {
-  id: 'ice-palace-coil-fragment',
-  stand: [.35, .12, -5.47],
+  id: icePalaceFragmentId,
+  stand: icePalaceFragmentStand,
   fragment: [.35, .12, -6.47],
   label: '拾取船件碎片',
 } as const;

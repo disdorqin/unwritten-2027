@@ -1,0 +1,139 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 7d3fb551..03a242f1 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -32,6 +32,8 @@ import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-sc
+ import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
+ import { createSnowmanNightLedger, planSnowmanNightTick } from './town-snowman';
+ import { createSnowmanScene, snowmanPostSites } from './town-snowman-scene';
++import { createIceCart, createKite, createTopBoard, kiteWindFor, topSpinSeconds } from './town-lake-play';
++import { createIceCartScene, createKiteScene, createTopScene, lakePlaySite } from './town-lake-play-scene';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -648,6 +650,57 @@ const streetscape = addStreetscape(landscape, grid, (east, north, radius) =>
+ const snowmanLedger = createSnowmanNightLedger();
+ const snowmanScene = createSnowmanScene(snowmanPostSites, (east, north) => grid.heightAt(east, north));
+ landscape.add(snowmanScene.root);
++// ZB-30 package 3: lake playthings mounted — ice cart ride, kite, spinning
++// top, on the B2 fill pack's surveyed shore sites. Zone approximation until
++// the treasure-round authority publishes live zones: centre rink = the
++// treasure ground (forbidden), west band = quiet fishing water (slow).
++const lakePlayHost = {
++  isIce: (east: number, north: number) => isLakeSkateIce(east, north),
++  zoneAt: (east: number, north: number): 'open' | 'quiet' | 'forbidden' =>
++    Math.hypot(east - 344, north - 66) <= 16 ? 'forbidden' : east < 322 ? 'quiet' : 'open',
++  blockedAt: () => false,
++};
++const iceCart = createIceCart(lakePlayHost, event => {
++  if (event === 'shore') announceActivity('到岸了，冰车停下。');
++  else if (event === 'forbidden') announceActivity('夺宝区里不能行车。');
++  else announceActivity('轻轻碰了一下。');
++});
++const iceCartScene = createIceCartScene((east, north) => grid.heightAt(east, north));
++landscape.add(iceCartScene.group);
++const lakeKite = createKite('swallow');
++const kiteScene = createKiteScene('swallow');
++landscape.add(kiteScene.group);
++const lakeTop = createTopBoard();
++const topScene = createTopScene();
++landscape.add(topScene.group);
++let kiteSecond = 0;
++let lakeWindStrength = .4; // refreshed per frame from the weather system
++function lakePlayAction() {
++  if (iceCart.riding) return { label: '下冰车', run: () => { iceCart.leave(); iceCartScene.park(); } };
++  const cartSite = lakePlaySite('iceCart');
++  if (cartSite && Math.hypot(x - cartSite.east, n - cartSite.north) <= 2.2) {
++    // Leaf heading runs north-negative against viewer yaw: heading = PI - yaw.
++    return { label: '坐冰车', run: () => { iceCart.take({ east: x, north: n }, Math.PI - yaw); } };
++  }
++  const kiteSite = lakePlaySite('kitePoint');
++  if (kiteSite && Math.hypot(x - kiteSite.east, n - kiteSite.north) <= 2.5) {
++    if (lakeKite.fallen) return { label: '拾回风筝', run: () => { if (lakeKite.recover({ east: x, north: n })) announceActivity('拾回了风筝。'); } };
++    if (lakeKite.flying) return { label: '收风筝', run: () => { lakeKite.land(); kiteScene.hide(); } };
++    return { label: '放风筝', run: () => {
++      if (!lakeKite.launch(kiteWindFor(lakeWindStrength))) announceActivity('风太小，风筝放不起来。');
++    } };
++  }
++  const topSite = lakePlaySite('topTable');
++  if (topSite && Math.hypot(x - topSite.east, n - topSite.north) <= 2.2 && !topScene.spinning) {
++    return { label: '打陀螺', run: () => {
++      const seconds = topSpinSeconds(.75);
++      topScene.launch(x, n, grid.heightAt(x, n), seconds);
++      const board = lakeTop.add({ name: presence.playerName(), seconds, at: Date.now() });
++      announceActivity(`陀螺转了 ${seconds.toFixed(0)} 秒 · 本地榜首 ${board[0].seconds.toFixed(0)} 秒`);
++    } };
++  }
++  return undefined;
++}
+ let snowmanPhase: string | undefined;
+ function driveSnowmen(phase: string, ceremonyClimax: boolean) {
+   if (phase === snowmanPhase) return;
+@@ -2473,6 +2526,7 @@ function currentAction() {
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const lake = lakePlayAction(); if (lake) return lake; }
+   if (!homeReturn) { const pat = snowmanPatAction(); if (pat) return pat; }
+   if (cloudRoute.active()) {
+     if (cloudRoute.riding()) return undefined;
+@@ -2698,6 +2752,14 @@ addEventListener('keydown', e => {
+     e.preventDefault();
+     return;
+   }
++  if (iceCart.riding && !e.repeat) {
++    if (e.code === 'KeyA' || e.code === 'ArrowLeft') { iceCart.stroke('left'); e.preventDefault(); return; }
++    if (e.code === 'KeyD' || e.code === 'ArrowRight') { iceCart.stroke('right'); e.preventDefault(); return; }
++  }
++  if (lakeKite.flying && !e.repeat) {
++    if (e.code === 'ArrowUp') { lakeKite.reel(2); e.preventDefault(); return; }
++    if (e.code === 'ArrowDown') { lakeKite.reel(-2); e.preventDefault(); return; }
++  }
+   if (moveAllowed() && e.code === 'Space') {
+     if (sledRide.active()) {
+       e.preventDefault();
+@@ -3419,7 +3481,14 @@ renderer.setAnimationLoop(now => {
+       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
+       interpolation = walkClock.advance(frameSeconds, () => {
+         walkPrevious.copy(walkCurrent);
+-        if (sledRide.active() || sledRide.recovering()) {
++        if (iceCart.riding) {
++          snowMoveScale = chillMoveScale = 1;
++          lakeSkateMotion.reset();
++          iceCart.step(townPhysicsDelta);
++          x = iceCart.at.east; n = iceCart.at.north;
++          yaw = Math.PI - iceCart.heading;
++          ground = grid.heightAt(x, n);
++        } else if (sledRide.active() || sledRide.recovering()) {
+           snowMoveScale = chillMoveScale = 1;
+           lakeSkateMotion.reset();
+           if (sledRide.active()) {
+@@ -3620,8 +3689,28 @@ renderer.setAnimationLoop(now => {
+     driveSnowmen(nightWindowState.phase, ceremonyState.phase === 'climax');
+   }
+   snowmanScene.tick(dt);
++  // ZB-30 frame drive: cart model follows the leaf, kite steps once a
++  // second (line-snap rule), the top spins down on its own clock.
++  if (iceCart.riding) iceCartScene.place(iceCart.at.east, iceCart.at.north, iceCart.heading);
++  topScene.tick(dt);
++  if (lakeKite.flying) {
++    const wind = kiteWindFor(lakeWindStrength);
++    kiteSecond += dt;
++    if (kiteSecond >= 1) {
++      kiteSecond = 0;
++      if (lakeKite.step(wind, .8, .3, { east: x, north: n }) === 'broken') {
++        kiteScene.hide();
++        announceActivity('风筝断线了，落在冰面上，去拾回来吧。');
++      }
++    }
++    if (lakeKite.flying) kiteScene.fly(x, n, ground, lakeKite.altitude(wind), .8, .3);
++  } else if (lakeKite.fallen) {
++    kiteScene.fly(lakeKite.fallen.east, lakeKite.fallen.north,
++      grid.heightAt(lakeKite.fallen.east, lakeKite.fallen.north), .2, 0, 0);
++  }
+   const weather = townSnowWeatherForFrame(ceremonyState);
+   const effectiveSnowIntensity = weather.intensity;
++  lakeWindStrength = effectiveSnowIntensity;
+   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
+     roofed(shedEast, shedNorth, shedFeet);
+   snowfall.setIntensity(effectiveSnowIntensity);

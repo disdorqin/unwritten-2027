@@ -406,3 +406,4 @@ export function buildCoasterStation() {
   }
   return b.finish();
 }
+

@@ -1,0 +1,419 @@
+{
+  "url": "http://127.0.0.1:52492/?profile",
+  "segment": "a1-shots",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "a1-shots",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795271750750,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "plaza-exit-night",
+          "lighting": "雪夜",
+          "hud": "东 161.5 m · 北 165.5 m · 行走",
+          "cameraY": 13.65,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 161.5,
+          "north": 165.5,
+          "height": 12,
+          "wire": {
+            "ms": 1795271758496,
+            "east": 161.5,
+            "north": 165.5,
+            "area": "town",
+            "height": 12,
+            "yaw": 5.133658454257784,
+            "seq": 7
+          }
+        },
+        {
+          "label": "plaza-exit-day",
+          "lighting": "白昼",
+          "hud": "东 161.5 m · 北 165.5 m · 行走",
+          "cameraY": 13.65,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 161.5,
+          "north": 165.5,
+          "height": 12,
+          "wire": {
+            "ms": 1795271758496,
+            "east": 161.5,
+            "north": 165.5,
+            "area": "town",
+            "height": 12,
+            "yaw": 5.133658454257784,
+            "seq": 7
+          }
+        },
+        {
+          "label": "approach-mid-night",
+          "lighting": "雪夜",
+          "hud": "东 70.0 m · 北 215.0 m · 行走",
+          "cameraY": 22.059826278686522,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 70,
+          "north": 215,
+          "height": 20.41,
+          "wire": {
+            "ms": 1795271766162,
+            "east": 70,
+            "north": 215,
+            "area": "town",
+            "height": 20.41,
+            "yaw": 4.033602481745294,
+            "seq": 17
+          }
+        },
+        {
+          "label": "approach-mid-day",
+          "lighting": "白昼",
+          "hud": "东 70.0 m · 北 215.0 m · 行走",
+          "cameraY": 22.059826278686522,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 70,
+          "north": 215,
+          "height": 20.41,
+          "wire": {
+            "ms": 1795271766162,
+            "east": 70,
+            "north": 215,
+            "area": "town",
+            "height": 20.41,
+            "yaw": 4.033602481745294,
+            "seq": 17
+          }
+        },
+        {
+          "label": "west-gate-night",
+          "lighting": "雪夜",
+          "hud": "东 2.0 m · 北 159.0 m · 行走",
+          "cameraY": 12.505027198791504,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 2,
+          "north": 159,
+          "height": 10.86,
+          "wire": {
+            "ms": 1795271768204,
+            "east": 2,
+            "north": 159,
+            "area": "town",
+            "height": 10.86,
+            "yaw": 4.7136353397748465,
+            "seq": 26
+          }
+        },
+        {
+          "label": "west-gate-day",
+          "lighting": "白昼",
+          "hud": "东 2.0 m · 北 159.0 m · 行走",
+          "cameraY": 12.505027198791504,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 2,
+          "north": 159,
+          "height": 10.86,
+          "wire": {
+            "ms": 1795271768204,
+            "east": 2,
+            "north": 159,
+            "area": "town",
+            "height": 10.86,
+            "yaw": 4.7136353397748465,
+            "seq": 26
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:52492/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795271750750,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795271757888,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 4.035615831529394,
+          "seq": 1
+        },
+        {
+          "ms": 1795271757984,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 4.361682622754335,
+          "seq": 2
+        },
+        {
+          "ms": 1795271758090,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 5.013624457605732,
+          "seq": 3
+        },
+        {
+          "ms": 1795271758194,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 5.013624457605732,
+          "seq": 4
+        },
+        {
+          "ms": 1795271758288,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 5.073641455931758,
+          "seq": 5
+        },
+        {
+          "ms": 1795271758389,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 5.133658454257784,
+          "seq": 6
+        },
+        {
+          "ms": 1795271758496,
+          "east": 161.5,
+          "north": 165.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 5.133658454257784,
+          "seq": 7
+        },
+        {
+          "ms": 1795271764498,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.5195997179992133,
+          "seq": 8
+        },
+        {
+          "ms": 1795271764897,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 1.845570635424912,
+          "seq": 9
+        },
+        {
+          "ms": 1795271765202,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.0085560941377616,
+          "seq": 10
+        },
+        {
+          "ms": 1795271765312,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.4975124702763094,
+          "seq": 11
+        },
+        {
+          "ms": 1795271765415,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 2.660593802788402,
+          "seq": 12
+        },
+        {
+          "ms": 1795271765505,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 3.4755210963526486,
+          "seq": 13
+        },
+        {
+          "ms": 1795271765607,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 3.4755210963526486,
+          "seq": 14
+        },
+        {
+          "ms": 1795271765959,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 3.6150174742509993,
+          "seq": 15
+        },
+        {
+          "ms": 1795271766066,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 4.033602481745294,
+          "seq": 16
+        },
+        {
+          "ms": 1795271766162,
+          "east": 70,
+          "north": 215,
+          "area": "town",
+          "height": 20.41,
+          "yaw": 4.033602481745294,
+          "seq": 17
+        },
+        {
+          "ms": 1795271767424,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 1.2924746875928956,
+          "seq": 18
+        },
+        {
+          "ms": 1795271767506,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 0.9665037701671968,
+          "seq": 19
+        },
+        {
+          "ms": 1795271767604,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 0.3144660615165564,
+          "seq": 20
+        },
+        {
+          "ms": 1795271767706,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 0.3144660615165564,
+          "seq": 21
+        },
+        {
+          "ms": 1795271767805,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 6.108694992557594,
+          "seq": 22
+        },
+        {
+          "ms": 1795271767902,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 5.619642742619804,
+          "seq": 23
+        },
+        {
+          "ms": 1795271768003,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 5.619642742619804,
+          "seq": 24
+        },
+        {
+          "ms": 1795271768099,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 4.7136353397748465,
+          "seq": 25
+        },
+        {
+          "ms": 1795271768204,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 4.7136353397748465,
+          "seq": 26
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "startupEvidence": {
+    "validSpawn": true,
+    "actualJumpDestinations": 36,
+    "canvasVisible": true,
+    "firstPersonHud": "东 2.0 m · 北 159.0 m · 行走"
+  },
+  "errors": 0
+}

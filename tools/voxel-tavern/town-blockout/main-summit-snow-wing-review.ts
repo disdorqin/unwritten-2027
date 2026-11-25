@@ -2,19 +2,30 @@ import {
   AmbientLight, Color, DirectionalLight, Fog, Group, Mesh, MeshLambertMaterial, PerspectiveCamera,
   PlaneGeometry, Scene, WebGLRenderer,
 } from 'three';
-import { claimSnowWing, createSnowWingFlight, snowWingSpec } from '../../../src/shared/snow-wing';
+import { createSnowWingFlight, snowWingSpec } from '../../../src/shared/snow-wing';
+import { summitWingPickupAvailability } from '../../../src/shared/summit-wing-pickup';
 import { createSnowWingVisual } from './flight-equipment-visuals';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
+import { createSummitGlideRingScore } from './main-summit-glide-ring-score';
+import { createSummitGlideHostRun } from './main-summit-glide-host-run';
+import { mountSummitGlideCourseDecorations } from './main-summit-glide-course-decorations';
+import { createSummitGlideTargetRun, surveySummitGlidePracticeTarget } from './main-summit-glide-target';
+import { mountSummitGlideTargetVisual } from './main-summit-glide-target-visual';
+import { createSummitGlideRingProgress, summitGlideNineRingMetres,
+  summitGlideRingBodyLift, surveySummitGlideRings } from './main-summit-glide-rings';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
 } from './main-summit-registration';
 import { townPhysicsDelta } from './town-physics-clock';
+import { mountMainSummitWingRack } from './main-summit-wing-rack';
 
 const scene = new Scene();
 scene.background = new Color('#b1c5dc');
 const fog = new Fog('#a9bed8', 90, 1800);
 scene.fog = fog;
-scene.add(new AmbientLight('#d6e2f3', 1.6));
+const skyFill = new AmbientLight('#d6e2f3', 1.6);
+scene.add(skyFill);
 const sun = new DirectionalLight('#fff0d8', 2);
 sun.position.set(-18, 44, 21);
 scene.add(sun);
@@ -24,6 +35,7 @@ const landmarks = createMainSummitRegistrationLandmarks(347);
 const summit = new Group();
 scene.add(summit);
 const lodge = mountMainSummitRegistration(summit, landmarks);
+const rack = mountMainSummitWingRack(lodge.group);
 const registrar = createMainSummitRegistration(landmarks);
 const wing = createSnowWingVisual();
 scene.add(wing.group);
@@ -38,21 +50,71 @@ document.querySelector('#scene')!.append(renderer.domElement);
 const camera = new PerspectiveCamera(54, 1, .05, 3000);
 const status = document.querySelector<HTMLElement>('#flight-status')!;
 const reading = document.querySelector<HTMLOutputElement>('#flight-reading')!;
+const ringReading = document.querySelector<HTMLOutputElement>('#ring-reading')!;
+const targetReading = document.querySelector<HTMLOutputElement>('#target-reading')!;
 const vignette = document.querySelector<HTMLElement>('#vignette')!;
 const keys = new Set<string>();
-const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight']);
-const proof = new URLSearchParams(location.search).get('proof') === '1';
+const movementKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+const reviewOptions = new URLSearchParams(location.search);
+const proof = reviewOptions.get('proof') === '1';
+const showNineRingCourse = reviewOptions.get('course') === 'nine';
+const showRings = showNineRingCourse || reviewOptions.get('rings') === '1' || (!proof && reviewOptions.get('rings') !== '0');
+const showPracticeTarget = showNineRingCourse || reviewOptions.get('target') === '1';
+// Preview-only night lighting. Never replace the production server night clock.
+let nightPreview = reviewOptions.get('night') === '1';
+function setPreviewLighting() {
+  scene.background = new Color(nightPreview ? '#1b2a43' : '#b1c5dc');
+  fog.color.set(nightPreview ? '#263a52' : '#a9bed8');
+  skyFill.intensity = nightPreview ? .7 : 1.6;
+  sun.intensity = nightPreview ? .38 : 2;
+}
+setPreviewLighting();
+document.querySelector<HTMLElement>('#course-help')!.hidden = !showNineRingCourse;
 const flightTimeScale = proof ? 12 : 1;
 const groundAt = (east: number, north: number) => block.heightAt(east, north) ?? 0;
 const flight = createSnowWingFlight(groundAt);
-const position = { ...landmarks.summit.registry };
+const position = { ...landmarks.summit.registry, north: 1006 };
 const edgeNorth = mainSummitLayout.summit.north - mainSummitSpec.summitPlateau[1] / 2;
+// The review course is surveyed from the centre of the P-4 lodge's existing F-1 launch walk.
+const practiceEast = landmarks.summit.registry.east;
+const practiceHeight = groundAt(practiceEast, edgeNorth);
+const rings = showRings ? surveySummitGlideRings({
+  east: practiceEast, north: edgeNorth, height: practiceHeight, heading: Math.PI, speed: 7.5,
+  claimed: true, pathClear: true, drop: practiceHeight - groundAt(practiceEast, edgeNorth - 40),
+}, groundAt, showNineRingCourse ? summitGlideNineRingMetres : undefined) : [];
+const course = showRings && !showNineRingCourse ? createSummitGlideRingProgress(rings) : undefined;
+const nineRingScore = showNineRingCourse && rings.length === 9 ? createSummitGlideRingScore(rings) : undefined;
+const ringVisuals = showRings ? mountSummitGlideRingVisuals(scene, rings) : undefined;
+// Isolated demonstration only. The formal ZD-08 footslope target is registered by the world host.
+const practiceTarget = showPracticeTarget ? surveySummitGlidePracticeTarget({
+  east: practiceEast, north: edgeNorth, height: practiceHeight, heading: Math.PI,
+  speed: 7.5, claimed: true, pathClear: true,
+  drop: practiceHeight - groundAt(practiceEast, edgeNorth - 40),
+}, groundAt) : undefined;
+const targetVisual = practiceTarget ? mountSummitGlideTargetVisual(scene, practiceTarget) : undefined;
+const targetRun = practiceTarget ? createSummitGlideTargetRun('review-flight', practiceTarget, groundAt) : undefined;
+const courseDecorations = showNineRingCourse && rings.length === 9 && practiceTarget ?
+  mountSummitGlideCourseDecorations(scene, rings, practiceTarget,
+    { east: practiceEast, north: edgeNorth, height: practiceHeight }) : undefined;
+const nineRingResults: { ringId: string; grade: string; radialMetres: number }[] = [];
+targetReading.hidden = !targetRun;
+if (targetRun) targetReading.value = '练习落靶已标定：触雪后按离靶心距离结算（非正式山脚赛道）';
 const radius = .26;
 let claimed = false;
+let groundHeading = Math.PI;
+let lodgeAction = '';
 let launchProbe: { east: number; north: number; height: number; drop: number; pathClear: boolean; speed: number } | undefined;
 let lastPhase: string | undefined;
 let lastCue: string | undefined;
 let wingDraws = 0;
+let rackDraws = 0;
+let ringDraws = 0;
+let decorationDraws = 0;
+// This host-run is an isolated self-check of locally accepted F-1 frames,
+// not a WebSocket identity authority or an official G-09 daily wind source.
+let nineRingHostRun: ReturnType<typeof createSummitGlideHostRun> | undefined;
+let nineRingFrameIndex = 0;
+let nineRingRejectedFrames = 0;
 let paused = false;
 let frame = 0;
 let frameId = 0;
@@ -61,8 +123,16 @@ let remainder = 0;
 const events: { kind: string; value: string; elapsed: number; height: number; speed: number }[] = [];
 const wingMesh = wing.group.getObjectByName('snow-wing-voxels')!;
 wingMesh.onAfterRender = () => { wingDraws++; };
+rack.group.getObjectByName('snow-wing-voxels')!.onAfterRender = () => { rackDraws++; };
+ringVisuals?.group.traverse(object => {
+  if ((object as Mesh).isMesh) object.onAfterRender = () => { ringDraws++; };
+});
+courseDecorations?.group.traverse(object => {
+  if ((object as Mesh).isMesh) object.onAfterRender = () => { decorationDraws++; };
+});
 
 function blocked(east: number, north: number, height: number) {
+  if (rack.blocked(east, north, height, radius, 1.8)) return true;
   return lodge.colliders.some(({ min, max }) => {
     if (height + 1.8 <= min[1] || height + .03 >= max[1]) return false;
     const dx = Math.max(min[0] - east, east - max[0], 0);
@@ -73,33 +143,55 @@ function blocked(east: number, north: number, height: number) {
 
 function useLodge() {
   const { east, north } = landmarks.summit.registry;
-  if (flight.snapshot() || Math.hypot(position.east - east, position.north - north) > 1.1) return;
-  if (!registrar.snapshot().snowWingEligible) {
+  if (flight.snapshot()?.usesBothHands) return;
+  const pickup = summitWingPickupAvailability(position, claimed, registrar.snapshot());
+  if (pickup !== 'out-of-reach') {
+    lodgeAction = pickup;
+    if (pickup === 'available') {
+      claimed = true;
+      rack.setClaimed(true);
+      lodgeAction = 'claimed';
+      status.textContent = '已领雪翼。走出小屋，向南越过雪崖。';
+    } else if (pickup === 'need-registration') {
+      status.textContent = '先到登记台登记，再到翼架领翼。';
+    }
+  } else if (Math.hypot(position.east - east, position.north - north) <= 1.1) {
     const action = registrar.interact('summit', position);
-    if (action.changed) status.textContent = '绝顶登记完成。再按 E 领取雪翼。';
-  } else if (!claimed) {
-    claimed = claimSnowWing(claimed, 'summit-lodge', registrar.snapshot());
-    if (claimed) status.textContent = '已领雪翼。走出小屋，向南越过雪崖。';
+    lodgeAction = action.changed ? 'registered' : 'already-registered';
+    if (!claimed) status.textContent = '绝顶已登记。到小屋东侧翼架按 E 领取。';
+  } else {
+    lodgeAction = 'out-of-reach';
   }
 }
 
-function walk() {
+function walk(landed: boolean) {
+  groundHeading += (Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft'))) * 1.65 * townPhysicsDelta;
   const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
-  const sideways = Number(keys.has('KeyA')) - Number(keys.has('KeyD'));
+  const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
   if (!forward && !sideways) return;
   const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 11.3 : 7.5) /
     Math.hypot(forward, sideways);
-  const east = position.east + sideways * speed * townPhysicsDelta;
-  const north = position.north - forward * speed * townPhysicsDelta;
-  const height = block.heightAt(east, north);
+  const dt = speed * townPhysicsDelta;
+  const east = position.east + (Math.sin(groundHeading) * forward + Math.cos(groundHeading) * sideways) * dt;
+  const north = position.north + (Math.cos(groundHeading) * forward - Math.sin(groundHeading) * sideways) * dt;
+  const height = landed ? groundAt(east, north) : block.heightAt(east, north);
   if (height === undefined || Math.abs(height - position.height) > .43 || blocked(east, north, height)) return;
-  if (forward > 0 && north <= edgeNorth) {
+  if (forward > 0 && position.north > edgeNorth && north <= edgeNorth) {
     const edgeHeight = groundAt(east, edgeNorth);
     const drop = edgeHeight - groundAt(east, edgeNorth - 40);
     const pathClear = Array.from({ length: 81 }, (_, index) => edgeNorth - index / 2).every(n =>
       !blocked(east, n, edgeHeight) && groundAt(east, n) <= edgeHeight);
     if (flight.launch({ east, north: edgeNorth, height: edgeHeight, heading: Math.PI, speed, claimed, pathClear, drop })) {
       launchProbe = { east, north: edgeNorth, height: edgeHeight, speed, pathClear, drop };
+      if (nineRingScore && practiceTarget) {
+        nineRingHostRun = createSummitGlideHostRun({
+          flightId: 'review-flight', playerId: 'isolated-review-guest', dayId: 'neutral-review-no-official-wind',
+          startedAtMs: 0, launch: { east, north: edgeNorth, height: edgeHeight },
+          rings, target: practiceTarget, groundAt,
+        });
+        nineRingFrameIndex = 0;
+        nineRingRejectedFrames = 0;
+      }
     } else status.textContent = '需要雪翼和前方净空，才能从崖边起飞。';
     return;
   }
@@ -121,24 +213,83 @@ function observe(air = flight.snapshot()) {
 
 function simulate() {
   const air = flight.snapshot();
-  if (!air) {
-    walk();
+  if (!air?.usesBothHands) {
+    walk(air?.phase === 'landed');
     observe();
     return;
   }
   const pitch = Number(keys.has('KeyS')) - Number(keys.has('KeyW'));
   const turn = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
-  observe(flight.advance(townPhysicsDelta, { pitch, turn }));
+  const next = flight.advance(townPhysicsDelta, { pitch, turn });
+  let validAcceptedFrame = true;
+  if (nineRingHostRun && next) {
+    const index = ++nineRingFrameIndex;
+    const verdict = nineRingHostRun.consume({
+      flightId: 'review-flight', playerId: 'isolated-review-guest', dayId: 'neutral-review-no-official-wind',
+      frame: index, atMs: Math.round(index * 1000 / 60), accepted: true,
+      point: { east: next.east, north: next.north, height: next.height },
+      phase: next.phase === 'landed' ? 'landed' : 'airborne', touchdown: next.touchdown,
+    });
+    validAcceptedFrame = verdict.accepted;
+    if (!verdict.accepted) nineRingRejectedFrames++;
+  }
+  if (next?.usesBothHands && validAcceptedFrame && (course || nineRingScore)) {
+    const from = { east: air.east, north: air.north, height: air.height + summitGlideRingBodyLift };
+    const to = { east: next.east, north: next.north, height: next.height + summitGlideRingBodyLift };
+    course?.advance(from, to);
+    for (const hit of nineRingScore?.advance(from, to, true) ?? []) {
+      nineRingResults.push({ ringId: hit.ringId, grade: hit.grade, radialMetres: hit.radialMetres });
+      events.push({ kind: 'ring-' + hit.grade, value: hit.ringId,
+        elapsed: next.elapsed, height: next.height, speed: next.speed });
+    }
+  }
+  if (next?.phase === 'landed') {
+    const { east, north, height, heading } = next;
+    Object.assign(position, { east, north, height });
+    groundHeading = heading;
+    if (air?.usesBothHands && validAcceptedFrame && targetRun) {
+      const result = targetRun.settle({
+        flightId: 'review-flight', accepted: true, phase: next.phase, touchdown: next.touchdown,
+        east, north, height,
+      });
+      if (result) {
+        const label = { bullseye: '正中靶心', inner: '内环', outer: '外环', outside: '靶外' }[result.grade];
+        targetReading.value = `练习落靶：${label} · 距心 ${result.horizontalMetres.toFixed(2)} m · ${result.touchdown === 'seated' ? '坐地缓冲' : '柔和触雪'}`;
+      }
+    }
+  }
+  observe(next);
 }
 
 function display() {
   const air = flight.snapshot();
-  const point = air ?? position;
-  const heading = air?.heading ?? Math.PI;
+  const airborne = air?.usesBothHands ? air : undefined;
+  const point = airborne ?? position;
+  const heading = airborne?.heading ?? groundHeading;
   const dx = Math.sin(heading);
   const dz = -Math.cos(heading);
   wing.group.visible = air?.usesBothHands === true;
+  if (ringVisuals && (course || nineRingScore)) {
+    const passed = nineRingScore?.snapshot().nextRing ?? course?.snapshot().length ?? 0;
+    ringVisuals.group.visible = air?.usesBothHands === true;
+    ringVisuals.setProgress(passed);
+    ringReading.hidden = !air || rings.length === 0;
+    if (nineRingScore) {
+      const scored = nineRingScore.snapshot();
+      const last = scored.results.at(-1);
+      const tag = last ? ({ clean: '干净穿环', graze: '擦环半分', miss: '漏环断连击' } as const)[last.grade] : '尚未穿环';
+      ringReading.value = `九环 ${scored.nextRing}/${scored.ringCount} · 得分 ${(scored.scoreHalfPoints / 2).toFixed(1)}/9 · 连击 ${scored.streak} · ${tag}`;
+    } else ringReading.value = `滑翔光圈 ${passed} / ${rings.length}`;
+  }
   if (air?.usesBothHands) {
+    if (practiceTarget) {
+      const east = practiceTarget.east - air.east;
+      const north = practiceTarget.north - air.north;
+      const bearing = Math.atan2(east, north);
+      const offset = Math.atan2(Math.sin(bearing - air.heading), Math.cos(bearing - air.heading));
+      const correction = offset > .12 ? '向右修正' : offset < -.12 ? '向左修正' : '正前方';
+      targetReading.value = `练习落靶导航 · 距目标 ${Math.hypot(east, north).toFixed(0)} m · ${correction} · 触雪结算`;
+    }
     const flutter = air.stallCue === 'flutter' ? Math.sin(air.elapsed * 32) * .035 : 0;
     wing.group.position.set(point.east, point.height + 1.5, -point.north);
     wing.group.rotation.set(0, Math.PI - heading, air.bank + flutter, 'YXZ');
@@ -163,6 +314,9 @@ function display() {
     reading.value = `高度 ${air.height.toFixed(1)} m · ${air.speed.toFixed(1)} m/s · ${air.horizontalMetres.toFixed(0)} m`;
   } else reading.value = `E ${point.east.toFixed(2)} · N ${point.north.toFixed(2)} · 高度 ${point.height.toFixed(1)} m`;
   wingDraws = 0;
+  rackDraws = 0;
+  ringDraws = 0;
+  decorationDraws = 0;
   renderer.render(scene, camera);
   frame++;
 }
@@ -187,6 +341,7 @@ function animate(now: number) {
 
 addEventListener('keydown', event => {
   if (proof && event.code === 'KeyP' && !event.repeat) paused = !paused;
+  if (event.code === 'KeyN' && !event.repeat) { nightPreview = !nightPreview; setPreviewLighting(); }
   if (event.code === 'KeyE' && !event.repeat) useLodge();
   if (!movementKeys.has(event.code)) return;
   event.preventDefault();
@@ -202,6 +357,10 @@ addEventListener('blur', () => keys.clear());
 addEventListener('resize', resize);
 addEventListener('pagehide', () => {
   cancelAnimationFrame(frameId);
+  ringVisuals?.dispose();
+  targetVisual?.dispose();
+  courseDecorations?.dispose();
+  rack.dispose();
   lodge.dispose();
   wing.dispose();
   block.dispose();
@@ -212,10 +371,19 @@ addEventListener('pagehide', () => {
 
 Object.defineProperty(window, '__snowWingReview', { value: Object.freeze({ getState: () => ({
   frame, flightTimeScale, paused, claimed, registration: registrar.snapshot(), position: { ...position },
+  groundHeading, lodgeAction, rack: { stand: rack.stand, visible: !claimed, draws: rackDraws, inReach: rack.canReach(position) },
+  rings: course || nineRingScore ? { passed: course?.snapshot() ?? nineRingScore?.snapshot().results.filter(x => x.grade !== 'miss').map(x => x.ringId),
+    count: rings.length, draws: ringDraws, score: nineRingScore?.snapshot(), results: nineRingResults.map(x => ({ ...x })) } : null,
+  nineRingArt: courseDecorations ? { drawCount: decorationDraws, budgetDraws: courseDecorations.drawCount,
+    lightCount: courseDecorations.lights.length, text: courseDecorations.signText } : null,
+  nineRingAuthority: nineRingHostRun ? { ...nineRingHostRun.snapshot(), rejectedFrames: nineRingRejectedFrames } : null,
+  practiceTarget: practiceTarget ? { target: { ...practiceTarget }, settlement: targetRun?.snapshot(),
+    lamps: targetVisual?.lights.length } : null,
   flight: flight.snapshot(), launchProbe: launchProbe && { ...launchProbe }, events: events.map(event => ({ ...event })),
   wing: { name: wing.group.name, visible: wing.group.visible, draws: wingDraws, bank: wing.group.rotation.z,
     width: wing.bounds.max.x - wing.bounds.min.x },
   draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, fogFar: fog.far,
+  nightPreview, skyHex: (scene.background as Color).getHexString(), ambientIntensity: skyFill.intensity,
   cloudRange: [snowWingSpec.cloudLow, snowWingSpec.cloudHigh],
 }) }) });
 resize();

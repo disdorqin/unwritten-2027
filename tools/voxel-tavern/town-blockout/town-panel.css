@@ -154,3 +154,4 @@
 @media (pointer: coarse) {
   .panel button, #town-chat-form :is(input, button), .town-bgm-controls label { min-height: 44px; }
 }
+

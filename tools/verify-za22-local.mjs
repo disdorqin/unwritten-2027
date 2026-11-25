@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books', 'palace', 'station-ticket', 'mascot-patrol'].includes(segment) && evidencePath,
+assert.ok(['spawn', 'a1-shots', 'a1-r89-visual', 'a1-station', 'a1-full', 'a2-shots', 'a2-r89-visual', 'a3-shots', 'a4-shots', 'a5-crystal-live', 'a6-perf', 'station', 'cloud', 'gate', 'crater', 'all', 'clock', 'clock-books'].includes(segment) && evidencePath,
   'Usage: node tools/verify-za22-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -73,6 +73,8 @@ function routePresence(url, ports) {
     return { hostname: host, port: ports.mountain, path: url.replace(/^\/presence-mountain/, '/presence') };
   if (pathname === '/presence-west' || pathname.startsWith('/presence-west/'))
     return { hostname: host, port: ports.west, path: url.replace(/^\/presence-west/, '/presence') };
+  if (pathname === '/presence-sky' || pathname.startsWith('/presence-sky/'))
+    return { hostname: host, port: ports.sky, path: url.replace(/^\/presence-sky/, '/presence') };
   if (pathname === '/presence' || pathname.startsWith('/presence/'))
     return { hostname: host, port: ports.town, path: url };
   return undefined;
@@ -125,10 +127,16 @@ function servePreview(ports, commit) {
   return server;
 }
 
-async function waitForPresence(url, child) {
+async function waitForPresence(port, child) {
   for (let attempt = 0; attempt < 120; ++attempt) {
     if (child.exitCode !== null) throw new Error(`Presence exited ${child.exitCode}`);
-    try { if ((await fetch(url, { signal: AbortSignal.timeout(1_000) })).ok) return; } catch {}
+    const ready = await new Promise(done => {
+      const socket = connect({ host, port, timeout: 1_000 });
+      socket.once('connect', () => { socket.destroy(); done(true); });
+      socket.once('error', () => done(false));
+      socket.once('timeout', () => { socket.destroy(); done(false); });
+    });
+    if (ready) return;
     await new Promise(done => setTimeout(done, 250));
   }
   throw new Error('Live Presence was not ready after 30 seconds');
@@ -144,17 +152,20 @@ try {
   // Presence now has a separate start.ts: compile the complete NodeNext graph,
   // not just index.ts, whose JS-suffixed dependency is otherwise left un-emitted.
   await finish(startNode([tsc, '-p', 'tsconfig.server.json', '--outDir', compiled], {}));
-  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort() };
+  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort(), sky: await freePort() };
   frontend = servePreview(ports, commit);
   const port = await usePort(frontend);
   const base = `http://${host}:${port}`;
   presence = startNode([join(compiled, 'presence', 'index.js')], {
     NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
     PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
-    TOWN_NIGHT_DAWN_EPOCH: String(Date.now() - 390_000),
-    TOWN_NIGHT_OFFSETS_AFTER_DUSK: JSON.stringify(Array(12).fill(60_000)),
+    PRESENCE_SKY_PORT: String(ports.sky),
+    TOWN_NIGHT_SCHEDULE: JSON.stringify({
+      dawnEpoch: Date.now() - 390_000, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
+    }),
+    TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
   });
-  await waitForPresence(new URL('/presence/night-window', base), presence);
+  await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
   const clock = segment === 'clock' || segment === 'clock-books';
   driver = startNode([join(repo, 'tools', clock ? 'verify-za19-clock-live.mjs' : 'verify-za22-live.mjs'),
     base, output, clock ? segment === 'clock' ? 'all' : 'books' : segment], {

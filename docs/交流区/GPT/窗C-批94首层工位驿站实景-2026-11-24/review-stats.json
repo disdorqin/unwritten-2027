@@ -1,0 +1,112 @@
+{
+  "scope": "actual shared first mine layout and mounted workface artwork; fixture movement not live Presence",
+  "errors": [],
+  "views": {
+    "workface-1": {
+      "frames": 21,
+      "view": "workface-1",
+      "eye": [
+        -22,
+        1.67,
+        76.39999999999999
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 10,
+      "fps": 38.46153846153846
+    },
+    "workface-2": {
+      "frames": 32,
+      "view": "workface-2",
+      "eye": [
+        -54,
+        1.67,
+        76.39999999999999
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 9,
+      "fps": 39.88532967732627
+    },
+    "workface-3": {
+      "frames": 44,
+      "view": "workface-3",
+      "eye": [
+        -86,
+        1.67,
+        74.6
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 9,
+      "fps": 42.74334563829774
+    },
+    "workface-4": {
+      "frames": 56,
+      "view": "workface-4",
+      "eye": [
+        29,
+        1.67,
+        93.5
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 10,
+      "fps": 45.23424878836833
+    },
+    "workface-5": {
+      "frames": 69,
+      "view": "workface-5",
+      "eye": [
+        82,
+        1.67,
+        91.7
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 9,
+      "fps": 45.84412995832387
+    },
+    "support-station": {
+      "frames": 82,
+      "view": "support-station",
+      "eye": [
+        0.1,
+        1.67,
+        104.5
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "calls": 10,
+      "fps": 48.25232434981282
+    }
+  },
+  "passed": true,
+  "walk": {
+    "frames": 33,
+    "view": "workface-1",
+    "eye": [
+      -22,
+      1.67,
+      74.89999999999995
+    ],
+    "trustedW": 1,
+    "walked": 1.5000000000000002,
+    "rejected": 0,
+    "pieces": 1174,
+    "calls": 10,
+    "fps": 40.65541456188104
+  }
+}

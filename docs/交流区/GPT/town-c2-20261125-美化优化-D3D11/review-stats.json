@@ -1,0 +1,3212 @@
+{
+  "schema": "town-c2-first-person-review/v1",
+  "sourceCommit": "d3520c4f500555aa285679b53c83271b72ba6e89",
+  "sourceTree": {
+    "root": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c2\\",
+    "commit": "d3520c4f500555aa285679b53c83271b72ba6e89",
+    "tree": "a627acd673207dff991e4fa009cddc792c8797e3",
+    "dirty": true,
+    "status": "M tests/town-c2-crater-broken-circle.test.ts\n M tests/town-c2-crater-central-mound.test.ts\n M tests/town-c2-crater-inscription.test.ts\n M tests/town-c2-crater-molten-beads.test.ts\n M tests/town-c2-crater-warm-light-chain.test.ts\n M tests/town-c2-second-mine-bypass-wall.test.ts\n M tests/town-c2-second-mine-camp-life.test.ts\n M tests/town-c2-second-mine-far-bank-crystals.test.ts\n M tests/town-c2-second-mine-haulage.test.ts\n M tests/town-c2-second-mine-light-sources.test.ts\n M tests/town-c2-second-mine-near-bank-teeth.test.ts\n M tests/town-c2-second-mine-timbering.test.ts\n M tests/town-c2-second-mine-upper-relief.test.ts\n M tests/town-c2-second-mine-water-differential.test.ts\n M tests/town-c2-underground-water-minus90.test.ts\n M tools/fixtures/town-c2-second-mine-review.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-warm-light-chain.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-bypass-wall.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-camp-life.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-far-bank-crystals.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-haulage.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-light-sources.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-near-bank-teeth.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-prefab.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-timbering.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-upper-relief.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-water-differential.ts\n M tools/voxel-tavern/town-blockout/town-c2-underground-water-minus90.ts\n M tools/voxel-tavern/town-blockout/town-za22-crater-road.ts\n?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/town-c2-2026-11-25-\\347\\276\\216\\345\\214\\226\\344\\274\\230\\345\\214\\226\\345\\233\\236\\346\\211\\247.md\""
+  },
+  "scope": "C2-01..06 independent offline first-person visual and ground-step review; real mounts, fixture input",
+  "uncertified": [
+    "not production world/Presence/multiplayer certification",
+    "highWaterOffsetM=1 and high/mid/low selection are explicit fixture-only inputs; production host wiring is tested separately",
+    "water overlay adds no collider; underground step uses mine.queryPassage, not production swimming authority",
+    "SwiftShader headless FPS is a review sample, not a device performance benchmark",
+    "screenshots and API checks do not replace human visual acceptance"
+  ],
+  "errors": {
+    "pageerror": [],
+    "consoleError": [],
+    "requestFailed": []
+  },
+  "views": {
+    "town-c2-crater-central-mound-day.png": {
+      "mode": "crater",
+      "view": "crater/central-mound",
+      "night": false,
+      "frames": 7,
+      "fps": 2.3546032493477633,
+      "eye": [
+        -120.6,
+        -22.552694396972655,
+        -182.7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 2,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 120,
+        "triangles": 254171
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": null,
+          "beadsVisible": false,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 484710
+    },
+    "town-c2-crater-central-mound-night.png": {
+      "mode": "crater",
+      "view": "crater/central-mound",
+      "night": true,
+      "frames": 49,
+      "fps": 9.717594796117341,
+      "eye": [
+        -120.6,
+        -22.552694396972655,
+        -182.7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 3,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 120,
+        "triangles": 254171
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": null,
+          "beadsVisible": false,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 447857
+    },
+    "town-c2-crater-lamp-room-day.png": {
+      "mode": "crater",
+      "view": "crater/lamp-room",
+      "night": false,
+      "frames": 76,
+      "fps": 14.506308335376364,
+      "eye": [
+        -129.9737221603718,
+        -19.338928054090836,
+        -186.98679799368438
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 4,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 197,
+        "triangles": 226299
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": null,
+          "beadsVisible": false,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 561315
+    },
+    "town-c2-crater-lamp-room-night.png": {
+      "mode": "crater",
+      "view": "crater/lamp-room",
+      "night": true,
+      "frames": 124,
+      "fps": 22.587343801182328,
+      "eye": [
+        -129.9737221603718,
+        -19.338928054090836,
+        -186.98679799368438
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 5,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 197,
+        "triangles": 226299
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": null,
+          "beadsVisible": false,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 545034
+    },
+    "town-c2-crater-collapse-fan-day.png": {
+      "mode": "crater",
+      "view": "crater/collapse-fan",
+      "night": false,
+      "frames": 151,
+      "fps": 25.3866845998655,
+      "eye": [
+        -105.88655289364675,
+        -22.552694396972655,
+        -177.46271860839937
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 6,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 122,
+        "triangles": 274888
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 8.685303233393336,
+          "beadsVisible": true,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 199610
+    },
+    "town-c2-crater-collapse-fan-night.png": {
+      "mode": "crater",
+      "view": "crater/collapse-fan",
+      "night": true,
+      "frames": 178,
+      "fps": 27.819889658138624,
+      "eye": [
+        -105.88655289364675,
+        -22.552694396972655,
+        -177.46271860839937
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 7,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 122,
+        "triangles": 274888
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 8.685303233393336,
+          "beadsVisible": true,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 104598
+    },
+    "town-c2-crater-gully-day.png": {
+      "mode": "crater",
+      "view": "crater/gully",
+      "night": false,
+      "frames": 194,
+      "fps": 29.7938999293274,
+      "eye": [
+        -110.39426574555095,
+        -22.552694396972655,
+        -172.20430269844962
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 8,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 135,
+        "triangles": 278306
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 12.767236770236751,
+          "beadsVisible": true,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 247691
+    },
+    "town-c2-crater-gully-night.png": {
+      "mode": "crater",
+      "view": "crater/gully",
+      "night": true,
+      "frames": 224,
+      "fps": 33.60537686025257,
+      "eye": [
+        -110.39426574555095,
+        -22.552694396972655,
+        -172.20430269844962
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 9,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 135,
+        "triangles": 278306
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 12.767236770236751,
+          "beadsVisible": true,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 121314
+    },
+    "town-c2-crater-molten-near-day.png": {
+      "mode": "crater",
+      "view": "crater/molten-near",
+      "night": false,
+      "frames": 243,
+      "fps": 35.55438504077519,
+      "eye": [
+        -87.81487369164824,
+        -4.317346030160552,
+        -167.18113354542294
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 10,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 90,
+        "triangles": 239105
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 0,
+          "beadsVisible": true,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 269768
+    },
+    "town-c2-crater-molten-near-night.png": {
+      "mode": "crater",
+      "view": "crater/molten-near",
+      "night": true,
+      "frames": 268,
+      "fps": 37.694980097597316,
+      "eye": [
+        -87.81487369164824,
+        -4.317346030160552,
+        -167.18113354542294
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 11,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 90,
+        "triangles": 239105
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 0,
+          "beadsVisible": true,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 344980
+    },
+    "town-c2-crater-molten-rim-invisible-day.png": {
+      "mode": "crater",
+      "view": "crater/molten-rim-invisible",
+      "night": false,
+      "frames": 290,
+      "fps": 39.85158719252439,
+      "eye": [
+        -135.26516528287883,
+        12.447305603027344,
+        -132.05677825361974
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 12,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 277,
+        "triangles": 321401
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": false,
+          "emissiveIntensity": 0,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": false,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 722099
+    },
+    "town-c2-crater-molten-rim-invisible-night.png": {
+      "mode": "crater",
+      "view": "crater/molten-rim-invisible",
+      "night": true,
+      "frames": 335,
+      "fps": 44.57158062799361,
+      "eye": [
+        -135.26516528287883,
+        12.447305603027344,
+        -132.05677825361974
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 13,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 277,
+        "triangles": 321401
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": false,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 549300
+    },
+    "town-c2-crater-inscription-day.png": {
+      "mode": "crater",
+      "view": "crater/inscription",
+      "night": false,
+      "frames": 356,
+      "fps": 46.23736914561192,
+      "eye": [
+        -64.63075545125356,
+        12.447305603027344,
+        -183.25
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 14,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 72,
+        "triangles": 202458
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": false,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 113210
+    },
+    "town-c2-crater-inscription-night.png": {
+      "mode": "crater",
+      "view": "crater/inscription",
+      "night": true,
+      "frames": 375,
+      "fps": 48.09603816897912,
+      "eye": [
+        -64.63075545125356,
+        12.447305603027344,
+        -183.25
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 15,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 72,
+        "triangles": 202458
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": false,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 192618
+    },
+    "town-c2-crater-warm-chain-day.png": {
+      "mode": "crater",
+      "view": "crater/warm-chain-night",
+      "night": false,
+      "frames": 392,
+      "fps": 49.66866439433472,
+      "eye": [
+        -120.6,
+        -22.552694396972655,
+        -182.7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 16,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 165,
+        "triangles": 254911
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      },
+      "bytes": 610239
+    },
+    "town-c2-crater-warm-chain-night.png": {
+      "mode": "crater",
+      "view": "crater/warm-chain-night",
+      "night": true,
+      "frames": 433,
+      "fps": 53.514929800257136,
+      "eye": [
+        -120.6,
+        -22.552694396972655,
+        -182.7
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 17,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 165,
+        "triangles": 254911
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 47.64230795074937,
+          "beadsVisible": false,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      },
+      "bytes": 600130
+    },
+    "town-c2-underground-water-high.png": {
+      "mode": "underground",
+      "view": "underground/high",
+      "night": false,
+      "frames": 6,
+      "fps": 58.083252663824794,
+      "eye": [
+        0,
+        -89.53,
+        2
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 2,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 6,
+        "triangles": 1288
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "underground": {
+        "mineDepth": -90,
+        "water": {
+          "layer": -90,
+          "level": "high",
+          "configuration": "host",
+          "form": {
+            "floodedPassages": true,
+            "underwaterOre": true,
+            "riverbedOpen": false,
+            "ferryRunning": false
+          },
+          "waterMode": "raised",
+          "surfaceRiseM": 1,
+          "baselineWaterVisible": false,
+          "highWaterVisible": true,
+          "riverbedShortcutVisible": false,
+          "underwaterOreMarkers": 1,
+          "riverbedOreMarkers": 0,
+          "waterMeshVertices": 24,
+          "colliders": 0,
+          "disposed": false
+        },
+        "waterLevel": "high",
+        "fixtureHighWaterOffsetM": 1,
+        "highWaterOffsetAuthority": "fixture-only; not a production-certified host value",
+        "waterCollisionAuthority": "none; step uses mine.queryPassage at every substep",
+        "crouching": false,
+        "crouchObserved": false,
+        "route": [
+          "pool",
+          "shore",
+          "gallery",
+          "collapse",
+          "camp",
+          "camp"
+        ],
+        "routePoints": [
+          {
+            "zone": "pool",
+            "from": [
+              0,
+              -91.2,
+              2
+            ],
+            "to": [
+              0,
+              -91.2,
+              4
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "shore",
+            "from": [
+              0,
+              -91.2,
+              4
+            ],
+            "to": [
+              0,
+              -90,
+              12
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "gallery",
+            "from": [
+              0,
+              -90,
+              12
+            ],
+            "to": [
+              0,
+              -91,
+              32
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "collapse",
+            "from": [
+              0,
+              -91,
+              32
+            ],
+            "to": [
+              0,
+              -91,
+              35
+            ],
+            "requiresJump": false,
+            "requiresCrouch": true,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              35
+            ],
+            "to": [
+              0,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              40
+            ],
+            "to": [
+              2.5,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          }
+        ]
+      },
+      "bytes": 83275
+    },
+    "town-c2-underground-water-mid.png": {
+      "mode": "underground",
+      "view": "underground/mid",
+      "night": false,
+      "frames": 28,
+      "fps": 144.702842377261,
+      "eye": [
+        0,
+        -89.53,
+        2
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 3,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 3,
+        "triangles": 1224
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "underground": {
+        "mineDepth": -90,
+        "water": {
+          "layer": -90,
+          "level": "mid",
+          "configuration": "host",
+          "form": {
+            "floodedPassages": false,
+            "underwaterOre": false,
+            "riverbedOpen": false,
+            "ferryRunning": false
+          },
+          "waterMode": "baseline",
+          "surfaceRiseM": 0,
+          "baselineWaterVisible": true,
+          "highWaterVisible": false,
+          "riverbedShortcutVisible": false,
+          "underwaterOreMarkers": 0,
+          "riverbedOreMarkers": 0,
+          "waterMeshVertices": 24,
+          "colliders": 0,
+          "disposed": false
+        },
+        "waterLevel": "mid",
+        "fixtureHighWaterOffsetM": 1,
+        "highWaterOffsetAuthority": "fixture-only; not a production-certified host value",
+        "waterCollisionAuthority": "none; step uses mine.queryPassage at every substep",
+        "crouching": false,
+        "crouchObserved": false,
+        "route": [
+          "pool",
+          "shore",
+          "gallery",
+          "collapse",
+          "camp",
+          "camp"
+        ],
+        "routePoints": [
+          {
+            "zone": "pool",
+            "from": [
+              0,
+              -91.2,
+              2
+            ],
+            "to": [
+              0,
+              -91.2,
+              4
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "shore",
+            "from": [
+              0,
+              -91.2,
+              4
+            ],
+            "to": [
+              0,
+              -90,
+              12
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "gallery",
+            "from": [
+              0,
+              -90,
+              12
+            ],
+            "to": [
+              0,
+              -91,
+              32
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "collapse",
+            "from": [
+              0,
+              -91,
+              32
+            ],
+            "to": [
+              0,
+              -91,
+              35
+            ],
+            "requiresJump": false,
+            "requiresCrouch": true,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              35
+            ],
+            "to": [
+              0,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              40
+            ],
+            "to": [
+              2.5,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          }
+        ]
+      },
+      "bytes": 87164
+    },
+    "town-c2-underground-water-low.png": {
+      "mode": "underground",
+      "view": "underground/low",
+      "night": false,
+      "frames": 48,
+      "fps": 139.86013985892535,
+      "eye": [
+        0,
+        -89.53,
+        2
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 4,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 4,
+        "triangles": 1560
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "underground": {
+        "mineDepth": -90,
+        "water": {
+          "layer": -90,
+          "level": "low",
+          "configuration": "host",
+          "form": {
+            "floodedPassages": false,
+            "underwaterOre": false,
+            "riverbedOpen": true,
+            "ferryRunning": false
+          },
+          "waterMode": "hidden",
+          "surfaceRiseM": 0,
+          "baselineWaterVisible": false,
+          "highWaterVisible": false,
+          "riverbedShortcutVisible": true,
+          "underwaterOreMarkers": 0,
+          "riverbedOreMarkers": 1,
+          "waterMeshVertices": 24,
+          "colliders": 0,
+          "disposed": false
+        },
+        "waterLevel": "low",
+        "fixtureHighWaterOffsetM": 1,
+        "highWaterOffsetAuthority": "fixture-only; not a production-certified host value",
+        "waterCollisionAuthority": "none; step uses mine.queryPassage at every substep",
+        "crouching": false,
+        "crouchObserved": false,
+        "route": [
+          "pool",
+          "shore",
+          "gallery",
+          "collapse",
+          "camp",
+          "camp"
+        ],
+        "routePoints": [
+          {
+            "zone": "pool",
+            "from": [
+              0,
+              -91.2,
+              2
+            ],
+            "to": [
+              0,
+              -91.2,
+              4
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "shore",
+            "from": [
+              0,
+              -91.2,
+              4
+            ],
+            "to": [
+              0,
+              -90,
+              12
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "gallery",
+            "from": [
+              0,
+              -90,
+              12
+            ],
+            "to": [
+              0,
+              -91,
+              32
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "collapse",
+            "from": [
+              0,
+              -91,
+              32
+            ],
+            "to": [
+              0,
+              -91,
+              35
+            ],
+            "requiresJump": false,
+            "requiresCrouch": true,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              35
+            ],
+            "to": [
+              0,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          },
+          {
+            "zone": "camp",
+            "from": [
+              0,
+              -91,
+              40
+            ],
+            "to": [
+              2.5,
+              -91,
+              40
+            ],
+            "requiresJump": false,
+            "requiresCrouch": false,
+            "encounter": false
+          }
+        ]
+      },
+      "bytes": 9454
+    }
+  },
+  "walks": {
+    "crater": {
+      "mode": "crater",
+      "view": "crater/trail-walk",
+      "night": false,
+      "frames": 2423,
+      "fps": 121.00600285661865,
+      "eye": [
+        -128.54394396169482,
+        10.47060469225049,
+        -133.2372145195459
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 1.8200000000000003,
+      "rejected": 0,
+      "collisionChecks": 42,
+      "trustedW": 1,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 91,
+        "triangles": 277497
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 0,
+          "beadsVisible": true,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": false,
+          "activeLightCount": 0
+        }
+      }
+    }
+  },
+  "undergroundWalksByLevel": {
+    "high": {
+      "walked": 40.50000000000004,
+      "rejected": 0,
+      "trustedW": 5,
+      "eye": [
+        2.5,
+        -89.33,
+        40.000000000000085
+      ],
+      "crouching": false,
+      "crouchObserved": true
+    },
+    "mid": {
+      "walked": 40.50000000000004,
+      "rejected": 0,
+      "trustedW": 5,
+      "eye": [
+        2.5,
+        -89.33,
+        40.000000000000085
+      ],
+      "crouching": false,
+      "crouchObserved": true
+    },
+    "low": {
+      "walked": 40.50000000000004,
+      "rejected": 0,
+      "trustedW": 5,
+      "eye": [
+        2.5,
+        -89.33,
+        40.000000000000085
+      ],
+      "crouching": false,
+      "crouchObserved": true
+    }
+  },
+  "fpsSample": {
+    "scene": "crater/molten-near-night",
+    "requestedMs": 20000,
+    "wallMs": 20006,
+    "stats": {
+      "mode": "crater",
+      "view": "crater/molten-near",
+      "night": true,
+      "frames": 2421,
+      "fps": 121.00522806557967,
+      "eye": [
+        -87.81487369164824,
+        -4.317346030160552,
+        -167.18113354542294
+      ],
+      "firstPersonEyeHeight": 1.67,
+      "walkSpeed": 2.6,
+      "walked": 0,
+      "rejected": 0,
+      "collisionChecks": 18,
+      "trustedW": 0,
+      "placementAdjustmentM": 0,
+      "render": {
+        "calls": 90,
+        "triangles": 239105
+      },
+      "pointerLock": true,
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "crater": {
+        "anchor": {
+          "east": -120,
+          "north": 185,
+          "rimHeight": 10.777305603027344,
+          "yaw": 1.3631794670708894
+        },
+        "colliderCount": 439,
+        "mounted": {
+          "centralMound": true,
+          "brokenCircle": true,
+          "moltenBeads": true,
+          "inscription": true,
+          "warmLightChain": true
+        },
+        "centralMound": {
+          "voxelCount": 1663,
+          "exposedBlockFaces": 5362,
+          "triangles": 10724,
+          "materialFamilies": 3,
+          "materialVoxelCounts": {
+            "scorched-earth": 952,
+            "basalt": 600,
+            "slag": 111
+          },
+          "maxVisualRise": 7.5,
+          "bounds": {
+            "minEast": -29.88877418759316,
+            "maxEast": 8.36122581240684,
+            "minNorth": -16.857586222476545,
+            "maxNorth": 21.392413777523455,
+            "minHeightOffset": -35,
+            "maxHeightOffset": -24.47637235243297
+          }
+        },
+        "lampRoomRiseM": 0,
+        "brokenCircle": {
+          "featureCount": 8
+        },
+        "moltenBeads": {
+          "beadCount": 640,
+          "gravelCount": 128,
+          "minBeadSize": 0.06029153647832572,
+          "maxBeadSize": 0.17985718513838944,
+          "width": 20,
+          "depth": 15,
+          "longAxis": "east-west",
+          "nearReadDistance": 15,
+          "footprintDistance": 0,
+          "beadsVisible": true,
+          "night": true,
+          "emissiveIntensity": 0.3,
+          "materialFamilies": [
+            "charred-earth",
+            "impact-glass",
+            "basalt-gravel"
+          ],
+          "drawCalls": 3,
+          "triangles": 11616,
+          "reservedSites": [
+            {
+              "east": -120,
+              "north": 185,
+              "radius": 14.5,
+              "source": "workface"
+            },
+            {
+              "east": -121.08785699689096,
+              "north": 181.73906618028857,
+              "height": -24.222694396972656,
+              "radius": 1.45,
+              "source": "winch-foot"
+            },
+            {
+              "east": -122.64461344697452,
+              "north": 180.34830762643276,
+              "height": -24.222694396972656,
+              "radius": 1.05,
+              "source": "snake-stone"
+            },
+            {
+              "east": -120.74677284450578,
+              "north": 180.60501961996064,
+              "height": -24.222694396972656,
+              "radius": 1.2,
+              "source": "winch-plinth"
+            }
+          ]
+        },
+        "moltenInsideRimGuard": true,
+        "inscription": {
+          "dimensions": [
+            2.4,
+            1.6,
+            0.5
+          ],
+          "bearingDeg": 90,
+          "frontBearingDeg": 270,
+          "sampledRadius": 56.919244548746434,
+          "sampledBlackstoneCount": 6,
+          "tableGap": 0.4,
+          "emblemCellCount": 28,
+          "emblemMeshCount": 1,
+          "materialFamilies": [
+            "stone",
+            "timber",
+            "paper",
+            "ink",
+            "engraving"
+          ],
+          "drawCalls": 7,
+          "triangles": 552,
+          "hasText": false
+        },
+        "warmLightChain": {
+          "lampCount": 16,
+          "isNightLit": true,
+          "activeLightCount": 6
+        }
+      }
+    },
+    "certification": "fixture-only d3d11 sample"
+  },
+  "passed": true,
+  "renderer": {
+    "executablePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "headless": true,
+    "gl": "d3d11"
+  },
+  "finishedAt": "2026-11-25T05:34:48.459Z"
+}

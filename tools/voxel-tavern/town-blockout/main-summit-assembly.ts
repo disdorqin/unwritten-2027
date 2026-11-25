@@ -5,16 +5,26 @@ import {
 import survey from '../../fixtures/main-summit-snow-belt-survey.json';
 import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './main-summit-block';
 import { createMainSummitCable } from './main-summit-cable';
+import { createMainSummitCloudLayer } from './main-summit-cloud-layer';
 import { mountMainSummitCable } from './main-summit-cable-scene';
 import { mountMainSummitCableStations } from './main-summit-cable-stations';
 import { cloudPavilionSites, createPlacedCloudPavilion } from './main-summit-pavilion-site';
 import {
   createMainSummitRegistration, createMainSummitRegistrationLandmarks, mountMainSummitRegistration,
+  withinMainSummitRegistrationReach,
 } from './main-summit-registration';
 import { createMainSummitSnowBelt, type SnowBeltKnot } from './main-summit-snow-belt';
 import { buildMainSummitSnowMesh } from './main-summit-snow-mesh';
 import { surveyedSledConnection } from './main-summit-snow-transition';
-import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
+import { createMainSummitTrail, mainSummitTrailSpec, type MainSummitTrailPoint } from './main-summit-trail';
+import { buildMainSummitTrailCut } from './main-summit-trail-cut';
+import { mountMainSummitWreckage } from './main-summit-wreckage';
+import { mountMainSummitExpeditionSites } from './main-summit-expedition-sites';
+import { mountSummitExpeditionPlaques } from './main-summit-expedition-plaques';
+import { createSummitExpeditionActivities } from './main-summit-expedition-activities';
+import { mountSummitExpeditionDynamics } from './main-summit-expedition-dynamics';
+import { mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
+import { mountSummitCloudBellArray } from './main-summit-cloud-bell-array';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
 
@@ -71,7 +81,7 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
     const before = points[Math.max(0, i - 1)]!;
     const after = points[Math.min(points.length - 1, i + 1)]!;
     const de = after.east - before.east, dn = after.north - before.north;
-    const scale = 1.5 / Math.hypot(de, dn);
+    const scale = mainSummitTrailSpec.width / 2 / Math.hypot(de, dn);
     for (const side of [-1, 1]) {
       const e = point.east - side * dn * scale, n = point.north + side * de * scale;
       positions.push(e, point.height + .07, -n, e, groundAt(e, n) ?? point.height - .4, -n);
@@ -89,7 +99,10 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
   return new Mesh(geometry, new MeshLambertMaterial({ color: '#bac2bf', side: DoubleSide }));
 }
 
-export function mountMainSummitAssembly(owner: Group, epochMs: number) {
+/** The optional official wind is supplied by the shared ZB-20 host, not generated in the summit scene. */
+export function mountMainSummitAssembly(owner: Group, epochMs: number,
+  officialWind?: () => Readonly<{ east: number; north: number }> | undefined,
+  options: Readonly<{ expeditionPreview?: boolean }> = {}) {
   const group = new Group();
   group.name = 'main-summit-assembly';
   group.position.set(summitAssemblyAnchor.east, 0, -summitAssemblyAnchor.north);
@@ -99,6 +112,14 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   const frontSnowAt = createFrontTerraceSnow();
   const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
   group.add(block.coarse);
+  // Mount the existing, fully built P-8 layer in the real ZA-22 host, not only in
+  // preview-main-summit-clouds. With no official wind feed, banks stay calm;
+  // no local weather generator or client-side random gusts are introduced.
+  const clouds = createMainSummitCloudLayer({
+    bounds: mainSummitBounds, summit: mainSummitLayout.summit,
+    shoulders: mainSummitLayout.shoulders, heightAt: block.heightAt,
+  });
+  group.add(clouds.group);
 
   const cable = createMainSummitCable(epochMs, 10_000, arrivalHeight);
   const cableView = mountMainSummitCable(group, cable, block.heightAt);
@@ -117,9 +138,34 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
   cloudRegistration.group.position.set(-summitAssemblyAnchor.east, 0, summitAssemblyAnchor.north);
 
   const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
-  const ribbon = createTrailRibbon(trail.points.filter(point => point.north > 40), block.heightAt);
+  // Keep the surveyed plaza join and the later turns that dip below its north edge.
+  const ribbon = createTrailRibbon(trail.points.slice(1), block.heightAt);
   ribbon.name = 'main-summit-walkway';
+  const trailTerrain = buildMainSummitTrailCut(block.coarse.geometry, ribbon.geometry).geometry;
+  block.coarse.geometry = trailTerrain;
   group.add(ribbon);
+  const wreckage = mountMainSummitWreckage(group, trail);
+  // R7 safety gate: models only in an expressly opted-in review, not the
+  // default multiplayer world. Preserve the latest P-8 clouds & cable host.
+  const candidate = options.expeditionPreview ? (() => {
+    const expedition = mountMainSummitExpeditionSites(group, block.heightAt, trail.points);
+    const workshop = mountMainSummitCableWorkshop(group, block.heightAt);
+    const cloudBells = mountSummitCloudBellArray(group, trail.points, block.heightAt);
+    const openingBell = cloudBells.posts[0]!;
+    const plaques = mountSummitExpeditionPlaques(group, [...expedition.sites, {
+      id: openingBell.id, kind: 'waymark', east: openingBell.east, north: openingBell.north,
+      height: openingBell.height, yaw: openingBell.heading,
+      trail: { ...trail.points[0]! }, distanceToTrail: openingBell.baseClearanceMetres,
+    }]);
+    const expeditionDynamics = mountSummitExpeditionDynamics(group, expedition.sites);
+    const expeditionActivities = createSummitExpeditionActivities([
+      ...expedition.sites,
+      { id: 'expedition-cable-machine-room', kind: 'machine-hall', east: -21, north: 7,
+        height: 347, yaw: Math.PI / 2,
+        trail: { east: 0, north: 7, height: 347 }, distanceToTrail: 21 },
+    ]);
+    return { expedition, workshop, cloudBells, plaques, expeditionDynamics, expeditionActivities };
+  })() : undefined;
   const knots = survey.map((row): SnowBeltKnot => {
     const [east, north, heading, height] = row;
     if (row.length < 4) throw new RangeError('Invalid surveyed snow belt knot.');
@@ -146,16 +192,36 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     if (ribbon.parent === group && snow.parent === group) parts.push('P-3');
     if (cabin.group.parent === group && cloudRegistration.group.parent === group) parts.push('P-4');
     if (stations.group.parent === group) parts.push('P-7');
+    if (clouds.group.parent === group) parts.push('P-8');
     if (pavilionGroup.parent === group && pavilionGroup.children.length === cloudPavilionSites.length) parts.push('P-9');
     return parts;
   }
 
   return {
-    group, block, stations, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    group, block, stations, cable, clouds, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    // The host can prefer its plaza surface where it overlaps the P-1 local tread.
+    trailSurfaceAt(east: number, north: number, radius = .27) {
+      return candidate?.expedition.surfaceAt(east, north, radius) ??
+        candidate?.workshop.surfaceAt(east, north, radius) ??
+        candidate?.cloudBells.surfaceAt(east, north, radius) ??
+        trail.sampleWalkwaySurface(east, north, radius);
+    },
+    expedition: candidate?.expedition, workshop: candidate?.workshop,
+    cloudBells: candidate?.cloudBells, plaques: candidate?.plaques,
+    expeditionDynamics: candidate?.expeditionDynamics,
+    expeditionActivities: candidate?.expeditionActivities,
+    wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
+    atCloudStamp: (position: ReturnType<typeof summitWorldPoint>) =>
+      withinMainSummitRegistrationReach(position, landmarks.cloudDeck.stampPoint),
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
+      if (!front && (
+        (candidate?.expedition.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
+        (candidate?.workshop.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
+        (candidate?.cloudBells.blocked(east, north, feet, radius, bodyHeight) ?? false)
+      )) return true;
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {
@@ -169,12 +235,24 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
     leaveGate: block.leave,
     setFrontDetail: (visible: boolean) => { cloudRegistration.group.visible = visible; },
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },
-    update: cableView.update,
+    update(now: number) {
+      const wind = officialWind?.();
+      clouds.update(now, wind && Number.isFinite(wind.east) && Number.isFinite(wind.north)
+        ? wind : { east: 0, north: 0 });
+      return cableView.update(now);
+    },
     interact(east: number, north: number, height: number) {
       return north < seam ? registration.interact('cloud-deck', summitWorldPoint(east, north, height))
         : registration.interact('summit', { east, north, height });
     },
     dispose() {
+      candidate?.cloudBells.dispose();
+      candidate?.expeditionDynamics.dispose();
+      candidate?.plaques.dispose();
+      candidate?.expedition.dispose();
+      candidate?.workshop.dispose();
+      wreckage.dispose();
+      clouds.dispose();
       stations.dispose();
       cableView.dispose();
       cabin.dispose();
@@ -192,6 +270,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number) {
       });
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
+      trailTerrain.dispose();
       block.dispose();
       group.removeFromParent();
       group.clear();

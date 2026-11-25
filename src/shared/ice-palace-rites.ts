@@ -6,6 +6,10 @@ export const icePalaceRiteSites = {
 
 export const icePalaceRiteReach = .85;
 export const icePalaceRiteHeightTolerance = .55;
+
+/** The one loose ship fragment in the palace wreckage, in palace-local coordinates. */
+export const icePalaceFragmentId = 'ice-palace-coil-fragment';
+export const icePalaceFragmentStand = [.35, .12, -5.47] as const;
 export type IcePalaceRite = keyof typeof icePalaceRiteSites;
 export type IcePalaceSolsticeRite = 'closed' | 'ready' | 'completed';
 export type IcePalaceRiteState = Readonly<{

@@ -1,0 +1,168 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index d55d4d91..70b7eb41 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -174,6 +174,8 @@ import {
+   createGhostRecorder, createRingRace, ghostAt, isGhostRun, ringGates, ringStart, type GhostSample,
+ } from './town-grand-prix-ring';
+ import { createRingGateScene } from './town-grand-prix-ring-scene';
++import { createFortressMatch, fortressGrounds, type FortressGroundId } from './town-fortress-match';
++import { createFortressScene, fortressGuardOffsets } from './town-fortress-scene';
+ import { createSledRide, createSledWallCollider } from './sled-ride';
+ import { createTownSledVisuals } from './sled-visuals';
+ import { resolveTownSledRacks } from './town-sled-racks';
+@@ -775,6 +777,116 @@ function driveRingRace() {
+     }
+   }
+ }
++// ZB-34 package 2: fortress grounds wiring — LOCAL solo hosting. The
++// book's server-authoritative two-captain match needs a presence relay
++// kind of its own; until that lands, the board starts a solo match
++// (player attacks, ZB-29-post snowmen guard, sides swap per round with
++// the guards re-forming at the defending stand; solo defence rounds are
++// holdout-only — snowman raiders are the leaf's open interface, not
++// faked here). Scores announce per round; nothing touches teamFight.
++const fortressScene = createFortressScene((east, north) => grid.heightAt(east, north));
++landscape.add(fortressScene.root);
++type FortressHosting = { groundId: FortressGroundId; match: ReturnType<typeof createFortressMatch>; phase: string };
++let fortress: FortressHosting | undefined;
++function fortressGuardPosition(groundId: FortressGroundId, index: number) {
++  if (!fortress) return { east: 0, north: 0 };
++  const ground = fortressGrounds[groundId];
++  const defender = fortress.match.attacker === 'east' ? 'west' : 'east';
++  const stand = defender === 'east' ? ground.eastStand : ground.westStand;
++  const [de, dn] = fortressGuardOffsets[index];
++  return { east: stand.east + de, north: stand.north + dn };
++}
++function startFortressSolo(groundId: FortressGroundId) {
++  const match = createFortressMatch(groundId, () => performance.now());
++  const men = [0, 1, 2].map(i => ({ id: `${groundId}-guard-${i}`, ...fortressGuardPositionFor(match, groundId, i) }));
++  match.startSolo('east', men);
++  fortress = { groundId, match, phase: match.phase };
++  fortressScene.setGuardsAt(groundId, 'west');
++  fortressScene.bellToStand(groundId, 'west');
++  announceActivity('雪堡演练开始：夺下金铃，送回记分牌。');
++}
++function fortressGuardPositionFor(match: ReturnType<typeof createFortressMatch>, groundId: FortressGroundId, index: number) {
++  const ground = fortressGrounds[groundId];
++  const [de, dn] = fortressGuardOffsets[index];
++  return { east: ground.westStand.east + de, north: ground.westStand.north + dn };
++}
++function fortressBellPosition(): { east: number; north: number } | undefined {
++  if (!fortress) return undefined;
++  const ground = fortressGrounds[fortress.groundId];
++  const bell = fortress.match.bell;
++  if (bell.kind === 'stand') return bell.team === 'east' ? ground.eastStand : ground.westStand;
++  if (bell.kind === 'dropped') return { east: bell.east, north: bell.north };
++  return undefined;
++}
++function fortressAction() {
++  if (!fortress || fortress.match.phase === 'settled') {
++    for (const groundId of Object.keys(fortressGrounds) as FortressGroundId[]) {
++      const board = fortressGrounds[groundId].board;
++      if (Math.hypot(x - board.east, n - board.north) <= 2.4) {
++        return { label: '雪堡演练 · 开战', run: () => startFortressSolo(groundId) };
++      }
++    }
++    if (!fortress) return undefined;
++  }
++  if (fortress.match.phase === 'roundEnd') {
++    const board = fortressGrounds[fortress.groundId].board;
++    if (Math.hypot(x - board.east, n - board.north) <= 2.4) {
++      return { label: '下一轮', run: () => { fortress!.match.captainReady(fortress!.match.attacker); } };
++    }
++    return undefined;
++  }
++  if (fortress.match.phase === 'battle' && fortress.match.attacker === 'east') {
++    const bellAt = fortressBellPosition();
++    if (bellAt && Math.hypot(x - bellAt.east, n - bellAt.north) <= 1.8) {
++      return { label: '抱起金铃', run: () => { fortress!.match.pickup('local', 'east'); } };
++    }
++  }
++  return undefined;
++}
++function fortressGuardTargets(): TownSnowballTarget[] {
++  if (!fortress || fortress.match.phase !== 'battle') return [];
++  return fortress.match.guards.filter(guard => !guard.scattered).map(guard => {
++    const index = Number(guard.id.split('-').pop());
++    const pos = fortressGuardPosition(fortress!.groundId, index);
++    return {
++      id: guard.id, label: '雪人守卫', x: pos.east, y: grid.heightAt(pos.east, pos.north), z: -pos.north,
++      radius: .45, height: 1.6, shape: 'box' as const,
++      onHit: () => {
++        if (fortress?.match.guardHit(guard.id) && fortress.match.guards.find(g => g.id === guard.id)?.scattered) {
++          fortressScene.setGuardVisible(guard.id, false);
++          announceActivity('雪人守卫散架了。');
++        }
++      },
++    };
++  });
++}
++function driveFortress() {
++  if (!fortress) return;
++  const { match, groundId } = fortress;
++  match.tick();
++  if (match.bell.kind === 'carried' && match.bell.by === 'local') {
++    fortressScene.bellTo(groundId, x, n, (airHeight ?? ground) + 2);
++    match.carrierAt(x, n);
++  } else if (match.bell.kind === 'dropped') {
++    fortressScene.bellTo(groundId, match.bell.east, match.bell.north,
++      grid.heightAt(match.bell.east, match.bell.north) + .25);
++  } else if (match.bell.kind === 'stand') {
++    fortressScene.bellToStand(groundId, match.bell.team);
++  }
++  if (match.phase !== fortress.phase) {
++    fortress.phase = match.phase;
++    const score = match.score;
++    if (match.phase === 'roundEnd') {
++      announceActivity(`本轮结束 · 东 ${score.east} : ${score.west} 西`);
++      fortressScene.setGuardsAt(groundId, match.attacker === 'east' ? 'east' : 'west');
++    } else if (match.phase === 'settled') {
++      announceActivity(`雪堡演练结算 · 东 ${score.east} : ${score.west} 西`, true);
++    } else if (match.phase === 'battle') {
++      fortressScene.setGuardsAt(groundId, match.attacker === 'east' ? 'west' : 'east');
++      fortressScene.bellToStand(groundId, match.attacker === 'east' ? 'west' : 'east');
++    }
++  }
++}
+ function anchorRunAction() {
+   const phase = presence.getTownNightWindow()?.phase;
+   if (phase !== 'night-window') return undefined;
+@@ -1952,6 +2064,12 @@ const playerTarget: TownSnowballTarget = {
+   id: 'local', label: '你', radius: .27, height: 1.78, shape: 'capsule', x: 0, y: -10000, z: 0,
+   onHit() {
+     if (!moveAllowed()) return;
++    // ZB-34: a snowball on the bell carrier counts toward the drop rule.
++    if (fortress?.match.bell.kind === 'carried' && fortress.match.bell.by === 'local') {
++      fortress.match.carrierHit(x, n);
++      const bellNow: { kind: string } = fortress.match.bell;
++      if (bellNow.kind === 'dropped') announceActivity('金铃被打掉了！');
++    }
+     snowOnHead = Math.min(3, snowOnHead + 1);
+     jumpsToShakeSnow = 3;
+     snowHatTime = 10;
+@@ -2351,7 +2469,7 @@ function updateSnowFight(dt: number) {
+   }
+   remoteSnowballTargets.length = remoteCount;
+   snowballExtras.length = 0;
+-  snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets());
++  snowballExtras.push(...remoteSnowballTargets, ...teamFight.wallTargets(), ...fortressGuardTargets());
+   const wallPreview = canUseSnow() ? touchWalk.active() ? snowControls.touchWallPreview() : aimedSnowWall() : undefined;
+   teamFight.update(dt, wallPreview);
+   npcActivity.updateSnowFight(dt, formal && walking, outdoor && inPlaza ? playerTarget : undefined, snowballs.throwNpc);
+@@ -2670,6 +2788,7 @@ function currentAction() {
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const fort = fortressAction(); if (fort) return fort; }
+   if (!homeReturn) { const anchor = anchorRunAction(); if (anchor) return anchor; }
+   if (!homeReturn) { const climb = treeClimbAction(); if (climb) return climb; }
+   if (!homeReturn) { const lake = lakePlayAction(); if (lake) return lake; }
+@@ -3854,6 +3973,7 @@ renderer.setAnimationLoop(now => {
+   syncAnchorRun();
+   anchorRunScene.tick(dt);
+   driveRingRace();
++  driveFortress();
+   // ZB-31: leaving a climb (jump-off or climbing down) releases the pinned
+   // altitude so the ordinary fall/landing takes over.
+   if (wasClimbing && !treeClimb.climbing && airHeight !== undefined) airHeight = undefined;

@@ -78,6 +78,18 @@ export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
       panels.colors.push(tint.r, tint.g, tint.b);
     }
   }
+  const chroniclePainters: { paint: (data: never) => boolean; texture: CanvasTexture }[] = [];
+  function chronicleFace(face: { source: HTMLCanvasElement; paint: (data: never) => boolean } | undefined,
+    x: number, y: number, z: number, w: number, h: number, ry = 0) {
+    if (!face || typeof document === 'undefined') return;
+    const texture = new CanvasTexture(face.source);
+    texture.colorSpace = SRGBColorSpace;
+    const mesh = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture }));
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = ry;
+    mounting.add(mesh);
+    chroniclePainters.push({ paint: face.paint, texture });
+  }
   const labelCanvases = new Map<string, HTMLCanvasElement>();
   const transparentTextures = new Map<HTMLCanvasElement, CanvasTexture>();
   const opaqueLabels: OpaqueMuseumLabel[] = [];
@@ -158,10 +170,10 @@ export function createMuseumBuilder({ mergeLabelSizes = false } = {}) {
     }
     Object.assign(group.userData, {
       colliders: colliders.map(scaleBounds), floors: floors.map(scaleBounds), ramps: ramps.map(scaleBounds),
-      smallLabels,
+      smallLabels, chroniclePainters,
       lights: lights.map(light => ({ ...light, position: [light.position[0] * museumHorizontalScale, light.position[1], light.position[2] * museumHorizontalScale] })),
     });
     return group;
   }
-  return { group, box, detailBox, detailInterior, solid, collider, floor, beam, panel, label, light, ramps, finish };
+  return { group, box, detailBox, detailInterior, solid, collider, floor, beam, panel, label, chronicleFace, light, ramps, finish };
 }

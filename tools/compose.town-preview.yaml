@@ -35,8 +35,12 @@ services:
       PRESENCE_PORT: "8090"
       PRESENCE_MOUNTAIN_PORT: "8091"
       PRESENCE_WEST_PORT: "8092"
-      TOWN_NIGHT_DAWN_EPOCH: "${TOWN_NIGHT_DAWN_EPOCH:-}"
-      TOWN_NIGHT_OFFSETS_AFTER_DUSK: "${TOWN_NIGHT_OFFSETS_AFTER_DUSK:-}"
+      PRESENCE_MINE_PORT: "8094"
+      PRESENCE_MINE2_PORT: "8095"
+      # Do not open the sky room before ZB-22/G-01/ZB-17 transfer authorization is live.
+      PRESENCE_SKY_PORT: "${PRESENCE_SKY_PORT:-}"
+      TOWN_NIGHT_SCHEDULE: "${TOWN_NIGHT_SCHEDULE:-}"
+      TOWN_NIGHT_BEACON_RECEIPT: "${TOWN_NIGHT_BEACON_RECEIPT:-}"
       PRESENCE_TIERS: "${PRESENCE_TIERS:-}"
       TEST_FIREWORKS: "${TEST_FIREWORKS:-off}"
       TOWN_REHEARSAL_AT: "${TOWN_REHEARSAL_AT:-}"
@@ -45,6 +49,9 @@ services:
       - "8090"
       - "8091"
       - "8092"
+      - "8093"
+      - "8094"
+      - "8095"
     logging:
       driver: json-file
       options:

@@ -1,0 +1,30 @@
+{
+  "url": "http://127.0.0.1:52542/?profile",
+  "segment": "crater",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": null,
+  "paths": [
+    {
+      "name": "crater",
+      "checkpoints": [],
+      "sockets": [],
+      "poses": []
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "failure": "Error: Actual production entry failed without bypass: {\"resources\":[\"http://127.0.0.1:52542/assets/townBlockout-CAP4E5Uz.js\",\"http://127.0.0.1:52542/assets/town-panel-BPnCAgp8.js\",\"http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js\"],\"checked\":[{\"url\":\"http://127.0.0.1:52542/assets/town-panel-BPnCAgp8.js\",\"result\":\"import succeeded\"},{\"url\":\"http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js\",\"result\":\"ReferenceError: Cannot access 'Rt' before initialization\",\"stack\":\"ReferenceError: Cannot access 'Rt' before initialization\\n    at Object.readWorldFoot (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:248210)\\n    at Object.readFooting (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:169136)\\n    at x (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:122796)\\n    at Object.k [as update] (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:123229)\\n    at Object.sync (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:165192)\\n    at $a (http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:248616)\\n    at http://127.0.0.1:52542/assets/viewer-C7qiZJjD.js:227:258105\"}],\"htmlTitle\":\"UNWRITTEN 2027 · 雪夜小镇预览\"}\n    at openTown (file:///D:/computer%20learning/game_exe/kuanian/.worktrees/window-c-integration-review/tools/verify-za22-live.mjs:146:11)\n    at async file:///D:/computer%20learning/game_exe/kuanian/.worktrees/window-c-integration-review/tools/verify-za22-live.mjs:390:44",
+  "lastPose": {
+    "hud": "",
+    "action": "",
+    "status": "单人模式"
+  },
+  "errors": 0
+}

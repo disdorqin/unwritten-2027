@@ -1,0 +1,102 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 03a242f1..890a1a95 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -34,6 +34,7 @@ import { createSnowmanNightLedger, planSnowmanNightTick } from './town-snowman';
+ import { createSnowmanScene, snowmanPostSites } from './town-snowman-scene';
+ import { createIceCart, createKite, createTopBoard, kiteWindFor, topSpinSeconds } from './town-lake-play';
+ import { createIceCartScene, createKiteScene, createTopScene, lakePlaySite } from './town-lake-play-scene';
++import { climbTreeNear, createTreeClimb, crownRewards } from './town-tree-climb';
+ import { createTownViewBatches } from './town-view-batches';
+ import { createTownViewFaces } from './town-view-faces';
+ import { addDistrictHousing } from './district-layout';
+@@ -675,6 +676,34 @@ const topScene = createTopScene();
+ landscape.add(topScene.group);
+ let kiteSecond = 0;
+ let lakeWindStrength = .4; // refreshed per frame from the weather system
++// ZB-31 package 2: climbing the ancient pines. The fall hook announces the
++// warmth cost; the ZB-20 warmth meter itself is not landed yet, so the
++// deduction lands when that system does (interface kept: leaf onFall).
++const treeClimb = createTreeClimb(() => { announceActivity('落进雪堆里，体温掉了一格。'); });
++const climbedCones = new Set<string>();
++const seenCrowns = new Set<string>();
++let wasClimbing = false;
++function treeClimbAction() {
++  if (treeClimb.climbing && treeClimb.tree) {
++    const tree = treeClimb.tree;
++    if (treeClimb.atCrown) {
++      if (!climbedCones.has(tree.id)) {
++        return { label: '采松塔', run: () => {
++          climbedCones.add(tree.id);
++          const rewards = crownRewards(tree, presence.getTownNightWindow()?.phase === 'night-window');
++          announceActivity(rewards.hollowGlimmer
++            ? '一枚松塔。空心松的方向，有一点微光。'
++            : rewards.nest ? '一枚松塔。枝桠间有一只鸟巢，只看不动。' : '一枚松塔到手。');
++        } };
++      }
++      return { label: '跳下', run: () => { treeClimb.drop(); } };
++    }
++    return { label: '向上爬', run: () => { treeClimb.up(); } };
++  }
++  const near = climbTreeNear(x, n);
++  if (near) return { label: '爬上古松', run: () => { treeClimb.start(near); } };
++  return undefined;
++}
+ function lakePlayAction() {
+   if (iceCart.riding) return { label: '下冰车', run: () => { iceCart.leave(); iceCartScene.park(); } };
+   const cartSite = lakePlaySite('iceCart');
+@@ -2523,9 +2552,11 @@ const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
+ function currentAction() {
+   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
+   if (sledRide.active()) return { label: '下橇', run: leaveSled };
++  if (treeClimb.climbing) return treeClimbAction();
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const climb = treeClimbAction(); if (climb) return climb; }
+   if (!homeReturn) { const lake = lakePlayAction(); if (lake) return lake; }
+   if (!homeReturn) { const pat = snowmanPatAction(); if (pat) return pat; }
+   if (cloudRoute.active()) {
+@@ -2760,6 +2791,11 @@ addEventListener('keydown', e => {
+     if (e.code === 'ArrowUp') { lakeKite.reel(2); e.preventDefault(); return; }
+     if (e.code === 'ArrowDown') { lakeKite.reel(-2); e.preventDefault(); return; }
+   }
++  if (treeClimb.climbing && !e.repeat) {
++    if (e.code === 'KeyW' || e.code === 'ArrowUp') { treeClimb.up(); e.preventDefault(); return; }
++    if (e.code === 'KeyS' || e.code === 'ArrowDown') { treeClimb.down(); e.preventDefault(); return; }
++    if (e.code === 'Space') { treeClimb.drop(); e.preventDefault(); return; }
++  }
+   if (moveAllowed() && e.code === 'Space') {
+     if (sledRide.active()) {
+       e.preventDefault();
+@@ -3481,7 +3517,18 @@ renderer.setAnimationLoop(now => {
+       const north = (Math.cos(yaw) * forward - Math.sin(yaw) * right) * speed;
+       interpolation = walkClock.advance(frameSeconds, () => {
+         walkPrevious.copy(walkCurrent);
+-        if (iceCart.riding) {
++        if (treeClimb.climbing && treeClimb.tree) {
++          snowMoveScale = chillMoveScale = 1;
++          lakeSkateMotion.reset();
++          const tree = treeClimb.tree;
++          x = tree.east + .9; n = tree.north;
++          ground = grid.heightAt(tree.east, tree.north);
++          airHeight = ground + treeClimb.currentHeight();
++          if (treeClimb.atCrown && !seenCrowns.has(tree.id)) {
++            seenCrowns.add(tree.id);
++            if (tree.hasNest) announceActivity('树冠上的家——鸟巢在枝桠间，只看不动。');
++          }
++        } else if (iceCart.riding) {
+           snowMoveScale = chillMoveScale = 1;
+           lakeSkateMotion.reset();
+           iceCart.step(townPhysicsDelta);
+@@ -3689,6 +3736,10 @@ renderer.setAnimationLoop(now => {
+     driveSnowmen(nightWindowState.phase, ceremonyState.phase === 'climax');
+   }
+   snowmanScene.tick(dt);
++  // ZB-31: leaving a climb (jump-off or climbing down) releases the pinned
++  // altitude so the ordinary fall/landing takes over.
++  if (wasClimbing && !treeClimb.climbing && airHeight !== undefined) airHeight = undefined;
++  wasClimbing = treeClimb.climbing;
+   // ZB-30 frame drive: cart model follows the leaf, kite steps once a
+   // second (line-snap rule), the top spins down on its own clock.
+   if (iceCart.riding) iceCartScene.place(iceCart.at.east, iceCart.at.north, iceCart.heading);

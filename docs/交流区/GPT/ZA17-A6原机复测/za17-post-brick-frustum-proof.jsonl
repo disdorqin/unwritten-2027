@@ -1,4 +1,0 @@
-{"spawn":{"east":223,"north":180,"eyeHeight":13.65,"yaw":0.0696545737285682},"colls":59,"floors":23,"windows":17}
-{"size":"1000x650","brickDraws":[4,1],"brickTris":[20916,20916],"postInstancedDraws":[15,12],"postInstancedTris":[68316,68316]}
-{"size":"1920x1080","brickDraws":[4,1],"brickTris":[20916,20916],"postInstancedDraws":[18,15],"postInstancedTris":[69180,69180]}
-{"size":"1080x1920","brickDraws":[0,0],"brickTris":[0,0],"postInstancedDraws":[0,0],"postInstancedTris":[0,0]}

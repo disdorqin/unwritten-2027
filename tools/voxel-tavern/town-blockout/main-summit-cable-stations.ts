@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, CanvasTexture, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace,
+  BoxGeometry, CanvasTexture, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace,
   type BufferGeometry, type Material,
 } from 'three';
 import type { Box } from './landmark-kit';
@@ -43,6 +43,9 @@ export function mountMainSummitCableStations(owner: Group, cable: Cable, summit:
   const materials = new Set<Material>();
   const textures = new Set<CanvasTexture>();
   const solids: Solid[] = [];
+  const staticCubes=new Map<Group,Mesh<BoxGeometry,Material>[]>();
+  const staticBatches:InstancedMesh[]=[];
+  const staticBatchGeometry=new BoxGeometry();geometries.add(staticBatchGeometry);
   const stone = material('#63717b');
   const ash = material('#84939d');
   const slate = material('#394852');
@@ -67,6 +70,7 @@ export function mountMainSummitCableStations(owner: Group, cable: Cable, summit:
     mesh.position.set(middle(west, east), middle(base, top), -middle(south, north));
     geometries.add(geometry);
     parent.add(mesh);
+    const list=staticCubes.get(parent)??[];list.push(mesh);staticCubes.set(parent,list);
     if (solid) solids.push(volume);
     return mesh;
   }
@@ -193,6 +197,35 @@ export function mountMainSummitCableStations(owner: Group, cable: Cable, summit:
         west: e - .11, east: e + .11, south: n - .11, north: n + .11, base: y + 2.34, top: y + 2.67,
       });
     }
+    // Weathered masonry joints, eave brackets and panel grain within
+    // the existing wall/roof envelopes. Door openings remain unchanged.
+    for(const n of [b.south+wall/2,b.north-wall/2]){
+      for(let row=0;row<4;row++){
+        const base=y+.18+row*.62;
+        cuboid(building,ash,'gable-mortar-course',{west:b.west+.08,east:b.east-.08,south:n-wall/2-.017,north:n+wall/2+.017,base,top:base+.035});
+        for(let e=b.west+.65+(row%2)*.25;e<b.east-.28;e+=.9){
+          cuboid(building,ash,'gable-stone-joint',{west:e,east:e+.027,south:n-wall/2-.018,north:n+wall/2+.018,base,top:base+.59});
+        }
+      }
+      for(let e=b.west+.4;e<b.east-.3;e+=.85){
+        cuboid(building,oak,'gable-eave-bracket',{west:e,east:e+.10,south:n-.28,north:n+.28,base:y+wallHeight-.32,top:y+wallHeight+.025});
+      }
+    }
+    for(const sign of [-1,1]){
+      const e=centreEast+sign*(roofRun-.10);
+      for(let n=b.south-.40;n<b.north+.35;n+=.85){
+        cuboid(building,oak,'roof-rafter-tail',{west:e-.11,east:e+.11,south:n-.07,north:n+.07,base:y+wallHeight+.02,top:y+wallHeight+.20});
+      }
+      for(const n of [b.south-.47,b.north+.47]){
+        const eave=cuboid(building,timber,'roof-edge-fascia',{west:centreEast+sign*roofRun/2-roofSlant/2,east:centreEast+sign*roofRun/2+roofSlant/2,south:n-.08,north:n+.08,base:y+wallHeight+.12+roofRise/2,top:y+wallHeight+.29+roofRise/2});
+        eave.rotation.z=-sign*Math.atan2(roofRise,roofRun);
+      }
+    }
+    for(const n of [b.south+.75,b.north-.75]){
+      for(let e=centreEast-.95;e<centreEast+1;e+=.38){
+        cuboid(building,timber,'bench-slat-joint',{west:e,east:e+.023,south:n-.23,north:n+.23,base:y+.487,top:y+.493});
+      }
+    }
     return building;
   }
 
@@ -244,6 +277,28 @@ export function mountMainSummitCableStations(owner: Group, cable: Cable, summit:
       west: -1.66, east: 1.66, south: n + .02, north: n + .98, base: y - .08, top: y + .012,
     });
   }
+  // Batch only the tracked static station cubes, per building so an
+  // entire distant building can still be frustum-culled. Amber emission
+  // remains a distinct material; all other opaque Lambert tints share one.
+  const batchMaterial=new MeshLambertMaterial({color:'#ffffff'});materials.add(batchMaterial);
+  const scale=new Matrix4();
+  for(const [parent,cubes]of staticCubes){
+    for(const light of [false,true]){
+      const parts=cubes.filter(m=>(m.material===amber)===light);
+      if(!parts.length)continue;
+      const batch=new InstancedMesh(staticBatchGeometry,light?amber:batchMaterial,parts.length);
+      batch.name=(parent.name||'station')+(light?'-lamp-batch':'-static-batch');
+      batch.userData.partNames=parts.map(p=>p.name);
+      for(const [i,p]of parts.entries()){
+        const {width,height,depth}=p.geometry.parameters;p.updateMatrix();
+        scale.makeScale(width,height,depth);
+        batch.setMatrixAt(i,p.matrix.clone().multiply(scale));
+        if(!light)batch.setColorAt(i,(p.material as MeshLambertMaterial).color);
+        parent.remove(p);geometries.delete(p.geometry);p.geometry.dispose();
+      }
+      batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();parent.add(batch);staticBatches.push(batch);
+    }
+  }
   owner.add(group);
 
   function heightAt(east: number, north: number) {
@@ -273,6 +328,7 @@ export function mountMainSummitCableStations(owner: Group, cable: Cable, summit:
     disposed = true;
     summit.leave();
     group.removeFromParent();
+    for(const batch of staticBatches)batch.dispose();
     group.clear();
     for (const geometry of geometries) geometry.dispose();
     for (const finish of materials) finish.dispose();

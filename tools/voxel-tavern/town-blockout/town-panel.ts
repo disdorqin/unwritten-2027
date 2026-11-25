@@ -9,3 +9,4 @@ toggle.addEventListener('click', () => {
   settings.showModal();
 });
 close.addEventListener('click', () => settings.close());
+

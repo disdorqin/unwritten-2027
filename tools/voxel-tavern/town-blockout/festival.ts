@@ -352,6 +352,10 @@ export function createFestival(
     playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
       if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
     },
+    /** Never claim the first hearing while browser audio is suspended. */
+    playThirteenthBell(distance: number) {
+      return !!audio && Number.isFinite(distance) && distance >= 0 && playTowerBell(audio, 'small', distance);
+    },
     launchCeremony(cue: CeremonyFireworksCue, startAt: number, clockMs: () => number) {
       const program = ceremonyPrograms[cue];
       return Boolean(ceremonyFits && program && launchTimedCeremony(program, startAt, clockMs));

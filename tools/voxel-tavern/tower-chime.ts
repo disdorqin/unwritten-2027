@@ -41,9 +41,9 @@ export function playIcePalaceBell(context: AudioContext, note: 'low' | 'mid' | '
 
 export type TowerBellVoice = 'small' | 'tick' | 'grand';
 
-/** A single source at the tower; callers supply their current listener distance. */
+/** A single source at the tower. Returns true only when sound was actually scheduled. */
 export function playTowerBell(context: AudioContext, voice: TowerBellVoice, distance: number, strikes = 1) {
-  if (context.state !== 'running' || strikes < 1) return;
+  if (context.state !== 'running' || !Number.isFinite(strikes) || strikes < 1) return false;
   const grand = voice === 'grand';
   const range = grand ? 400 : 95;
   const meters = Number.isFinite(distance) ? Math.max(0, distance) : 0;
@@ -64,6 +64,7 @@ export function playTowerBell(context: AudioContext, voice: TowerBellVoice, dist
     playBellTone(context, filter, time, bellFrequency, weight, decay, grand ? undefined : onComplete);
     if (grand) playBellTone(context, filter, time, bellFrequency / 2, .14, decay, onComplete);
   }
+  return true;
 
   function disconnect() {
     filter.disconnect();

@@ -1,8 +1,8 @@
 import {
-  BoxGeometry, ConeGeometry, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
-  NearestFilter, Object3D, SRGBColorSpace,
+  BoxGeometry, ConeGeometry, Group, InstancedMesh, MeshStandardMaterial, Object3D,
 } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
+import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
 type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
@@ -21,33 +21,17 @@ const columnShape = new ConeGeometry(1, 1, 6);
 const ashShape = new BoxGeometry();
 const tau = Math.PI * 2;
 
-function texture(soot: number, trim: number, ash: number) {
-  const image = new Uint8Array(16 * 16 * 4);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const vein = ((x * 3 + y * 13 + x * y) % 31) < 6;
-    const noise = ((x * 11 + y * 7) % 17) > 14;
-    const tint = vein ? trim : noise ? ash : soot;
-    image.set([tint >> 16, tint >> 8 & 255, tint & 255, 255], (y * 16 + x) * 4);
-  }
-  const t = new DataTexture(image, 16, 16);
-  t.colorSpace = SRGBColorSpace;
-  t.minFilter = t.magFilter = NearestFilter;
-  t.generateMipmaps = false;
-  t.needsUpdate = true;
-  return t;
-}
-
 const bark = new MeshStandardMaterial({
-  map: texture(0x2c3648, 0x5d4630, 0x8a4a34), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x5d564c, 0x8a8378, 11), flatShading: true, roughness: 1,
 });
 const burntGround = new MeshStandardMaterial({
-  map: texture(0x5d4630, 0x2c3648, 0x8a4a34), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x8a8378, 0xa98a56, 13, 0x8a4a34), flatShading: true, roughness: 1,
 });
 const basalt = new MeshStandardMaterial({
-  map: texture(0x2c3648, 0x8a8378, 0x5d4630), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x8a8378, 0x5d4630, 0xa98a56, 17), flatShading: true, roughness: 1,
 });
 const cinder = new MeshStandardMaterial({
-  map: texture(0x8a8378, 0x8a4a34, 0x2c3648), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0xa98a56, 0x8a8378, 0x5d4630, 19, 0x8a4a34), flatShading: true, roughness: 1,
 });
 const cyan = new MeshStandardMaterial({
   color: 0x7fd4c8, emissive: 0x7fd4c8, emissiveIntensity: .12, flatShading: true, roughness: 1,
@@ -127,7 +111,7 @@ export function buildZa36CraterMidground(road: Ground,
   let logs = 0;
   for (let i = 0; i < 160 && logs < 8; i++) {
     const bearing = 4.19 + i % 16 * .079;
-    const distance = 91 + Math.floor(i / 16) * 8.2;
+    const distance = 82 + Math.floor(i / 16) * 8.2;
     const e = originE + distance * Math.sin(bearing);
     const n = originN + distance * Math.cos(bearing);
     const ground = place('fallen-pine', 'fallen-carbon-wood', e, n, .68, 2.2);
@@ -151,7 +135,13 @@ export function buildZa36CraterMidground(road: Ground,
       if (ground === undefined) continue;
       push(melt === 0 ? 'basalt' : 'cinder', e, n,
         ground + height * .49, 1.12, height * .98, 1.05, bearing);
-      push('cyan', e + .38, n + .13, ground + .17, .21, .34, .21, bearing);
+      // A-5 cyan chip has a separate world-space footprint on a tilted
+      // wall. Sampling the big basalt column's centre instead of this
+      // +.38/+13 offset left chips visibly suspended above the real slope.
+      const cyanE = e + .38, cyanN = n + .13;
+      const cyanFoot = road.heightAt(cyanE, cyanN);
+      if (cyanFoot !== undefined && Number.isFinite(cyanFoot))
+        push('cyan', cyanE, cyanN, cyanFoot + .17, .21, .34, .21, bearing);
       admitted++;
     }
   }

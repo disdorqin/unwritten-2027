@@ -144,3 +144,4 @@ export function createTownChat(send: (scope: TownChatScope, text: string) => boo
     },
   };
 }
+

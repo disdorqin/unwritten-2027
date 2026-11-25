@@ -21,14 +21,29 @@ const fixture = createMeteorCrater(meteorCraterFixturePlan);
 const stone = new DodecahedronGeometry(1, 0);
 const patch = new BoxGeometry();
 
-function rockTexture(base: number, streak: number, fleck: number) {
-  const bytes = new Uint8Array(16 * 16 * 4);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const hashed = (x * 11 + y * 17 + x * y * 3) % 29;
-    const pigment = hashed < 5 ? streak : hashed > 25 ? fleck : base;
-    bytes.set([pigment >> 16, pigment >> 8 & 255, pigment & 255, 255], (y * 16 + x) * 4);
+/** A-3: coherent quarry strata, shared by crater ejecta, midground and rim wreckage.
+ * Four-pixel-wide stepped layers avoid the former one-pixel hash flecks.
+ * Optional rust remains a single 4×4 weathered patch (<2% of the map).
+ * This is a material replacement only; never changes B-01 ground or props.
+ */
+export function createZa36StrataTexture(base: number, streak: number, ochre: number,
+  seed = 0, rust?: number) {
+  const size = 32;
+  const bytes = new Uint8Array(size * size * 4);
+  const bends = [0, 0, 1, 1, 0, -1, -1, 0];
+  const families = [0, 0, 1, 1, 0, 2, 2, 1];
+  const colors = [base, streak, ochre];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const blockX = Math.floor(x / 4), blockY = Math.floor(y / 4);
+    const bend = bends[(blockX + seed) % bends.length]!;
+    const layer = Math.floor((blockY + bend + 8) / 2);
+    let pigment = colors[families[(layer + seed) % families.length]!]!;
+    // Large, isolated rust *patch* rather than scattered red pixels.
+    if (rust !== undefined && blockX === ((seed * 3 + 2) % 8) &&
+      blockY === ((seed + 5) % 8)) pigment = rust;
+    bytes.set([pigment >>> 16, pigment >>> 8 & 255, pigment & 255, 255], (y * size + x) * 4);
   }
-  const tex = new DataTexture(bytes, 16, 16);
+  const tex = new DataTexture(bytes, size, size);
   tex.colorSpace = SRGBColorSpace;
   tex.minFilter = tex.magFilter = NearestFilter;
   tex.generateMipmaps = false;
@@ -36,13 +51,13 @@ function rockTexture(base: number, streak: number, fleck: number) {
   return tex;
 }
 const dark = new MeshStandardMaterial({
-  map: rockTexture(0x2c3648, 0x5d4630, 0x8a8378), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x8a8378, 0xa98a56, 3), flatShading: true, roughness: 1,
 });
 const grey = new MeshStandardMaterial({
-  map: rockTexture(0x8a8378, 0x2c3648, 0x8a4a34), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x8a8378, 0xa98a56, 0x5d4630, 7, 0x8a4a34), flatShading: true, roughness: 1,
 });
 const charcoal = new MeshStandardMaterial({
-  map: rockTexture(0x2c3648, 0x8a4a34, 0x5d4630), flatShading: true, roughness: 1,
+  map: createZa36StrataTexture(0x5d4630, 0x5d564c, 0x8a8378, 9, 0x8a4a34), flatShading: true, roughness: 1,
 });
 
 function distanceToSegment(east: number, north: number,
@@ -57,8 +72,14 @@ function distanceToSegment(east: number, north: number,
  * Story-board §I.3–4: eight radial impact streaks, with house-size outcrop
  * rocks that read from town, and a staggered blackstone crown inside the rim.
  * This is strictly geometry/dressing: ZA-34 alone owns future terrain relief.
+ *
+ * `reserved` are keep-out points the mount supplies (the mainline fence
+ * posts and the town-era wall line): a boulder or scorch patch whose
+ * footprint would swallow one is skipped, never nudged — the V3 ray/step
+ * layout itself is untouched.
  */
-export function buildZa36CraterEjecta(road: CraterGround) {
+export function buildZa36CraterEjecta(road: CraterGround,
+  reserved: readonly { east: number; north: number; radius: number }[] = []) {
   const { east: centerE, north: centerN, yaw } = road.anchor;
   const group = new Group();
   group.name = 'za36-crater-ejecta-landmarks';
@@ -81,6 +102,7 @@ export function buildZa36CraterEjecta(road: CraterGround) {
     if (trail.some(point => Math.hypot(east - point.east, north - point.north) < radius + 3.2)) return;
     if (placements.some(piece => Math.hypot(east - piece.east, north - piece.north) <
       (radius + piece.footprint) * (kind === 'char' || piece.kind === 'char' ? .3 : .79))) return;
+    if (reserved.some(piece => Math.hypot(east - piece.east, north - piece.north) < radius + piece.radius)) return;
     const piece = new Object3D();
     piece.position.set(east, ground + (kind === 'char' ? .04 : height * .44), -north);
     piece.rotation.set(kind === 'char' ? 0 : .08, angle, kind === 'char' ? 0 : -.12);
@@ -98,18 +120,10 @@ export function buildZa36CraterEjecta(road: CraterGround) {
   for (let ray = 0; ray < 8; ray++) {
     const bearing = yaw + .18 + ray * tau / 8;
     for (let step = 0; step < (ray < 4 ? 8 : 7); step++) {
-      // The 4.8m industrial fence runs at radius 82m: deliberately keep a
-      // distinct no-stone band (r77–89) so posts do not pierce house rocks.
-      const radial = [64.5,70,75,90,95.5,101,106.5,112][step]! + ray % 2 * 1.6;
-      const offset = ray === 1 && step === 7 ? 6 : (step % 3 - 1) * .85;
-      // The enclosed 5.5m heritage wall crosses ray-zero here. Its single
-      // gate stays fixed: offset one boulder north-west without losing its
-      // unique large-scale radial silhouette or shrinking the 60-stone set.
-      const deflection = ray === 0 && step === 6;
-      const e = centerE + radial * Math.sin(bearing) + offset * Math.cos(bearing)
-        - (deflection ? 4.2 : 0);
-      const n = centerN + radial * Math.cos(bearing) - offset * Math.sin(bearing)
-        + (deflection ? 8.8 : 0);
+      const radial = 67 + step * 5.65 + ray % 2 * 1.6;
+      const offset = (step % 3 - 1) * .85;
+      const e = centerE + radial * Math.sin(bearing) + offset * Math.cos(bearing);
+      const n = centerN + radial * Math.cos(bearing) - offset * Math.sin(bearing);
       const width = 2.6 + (step * 7 + ray * 3) % 6 * .42;
       const height = 2.15 + (step * 3 + ray * 5) % 7 * .43;
       put('ejecta', ray, e, n, width, height, bearing + (step % 4) * .23);
@@ -136,14 +150,8 @@ export function buildZa36CraterEjecta(road: CraterGround) {
   const rocks = placements.filter(piece => piece.kind === 'ejecta');
   for (let index = 0; index < rocks.length; index += 3) {
     const rock = rocks[index]!;
-    // Replace a failed decal footprint with another nearby ash patch;
-    // never quietly drop the twentieth piece for road-clearance reasons.
-    const standard = rock.ray === 0 && index === 6 ? -3 : 3;
-    const before = placements.length;
-    for (const [de,dn] of [[standard,2.2],[-3.5,-2.3],[4.2,-4.2],[-5.5,4.8],[-6.3,-5.6]] as const) {
-      put('char',rock.ray,rock.east+de,rock.north+dn,5.1,.11,(rock.ray*1.1)%tau);
-      if (placements.length>before) break;
-    }
+    put('char', rock.ray, rock.east + 3.0, rock.north + 2.2,
+      5.1, .11, (rock.ray * 1.1) % tau);
   }
 
   for (const [name, transforms] of matrices) {

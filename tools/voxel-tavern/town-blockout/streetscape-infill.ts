@@ -55,4 +55,51 @@ export const streetInfill: readonly StreetInfillCluster[] = [
       ['fir', 198, 94],
     ],
   },
+  // ZA-32 second wave (zone-1 self-build): old-town street clusters.
+  // Every point was picked from a clearance scan of the assembled town
+  // (fence = largest reserve radius) and is asserted by the house-portals
+  // test: all configured clusters must survive door/road clearance.
+  {
+    id: 'cabins-approach',
+    points: [
+      ['lantern', 94, 246, Math.PI / 2],
+      ['firewood', 118, 254, .4],
+      ['fence', 120, 258, Math.PI / 2],
+      ['sign', 114, 260, .5],
+    ],
+  },
+  {
+    id: 'workshop-corner',
+    points: [
+      ['lantern', 106, 100, 0],
+      ['fence', 106, 108, 0],
+      ['firewood', 108, 124, .3],
+      ['sign', 110, 130, .4],
+    ],
+  },
+  {
+    id: 'stage-south',
+    points: [
+      ['lantern', 226, 150, Math.PI],
+      ['firewood', 230, 150, .2],
+      ['sign', 234, 150, .35],
+    ],
+  },
+  {
+    id: 'post-office-street',
+    points: [
+      ['lantern', 254, 198, Math.PI / 2],
+      ['fence', 268, 198, Math.PI / 2],
+      ['firewood', 276, 186, .3],
+      ['sign', 280, 198, .6],
+    ],
+  },
+  {
+    id: 'glasshouse-road',
+    points: [
+      ['lantern', 382, 86, 0],
+      ['snowman', 382, 96, Math.PI],
+      ['firewood', 382, 100, .5],
+    ],
+  },
 ];

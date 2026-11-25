@@ -38,7 +38,6 @@ let page;
 let measuring = true;
 let sequence = 0;
 let movementId = 0;
-const pendingReads = new Set();
 
 async function readPose() {
   const reading = await page.evaluate(() => ({
@@ -180,17 +179,26 @@ async function openTown() {
     if (measuring) report.requestFailures.push({ url: request.url(), error: request.failure()?.errorText });
   });
   page.on('response', response => {
-    if (!measuring) return;
-    if (response.status() >= 400) report.httpErrors.push({ url: response.url(), status: response.status() });
-    if (!response.ok() || new URL(response.url()).pathname !== '/presence/night-window') return;
-    const task = response.json().then(snapshot => {
-      report.nightSamples.push({ seq: ++sequence, url: response.url(), snapshot });
-    }).catch(() => {});
-    pendingReads.add(task);
-    void task.finally(() => pendingReads.delete(task));
+    if (measuring && response.status() >= 400) report.httpErrors.push({ url: response.url(), status: response.status() });
   });
   page.on('websocket', socket => {
     if (new URL(socket.url()).pathname !== '/presence') return;
+    let serverEpochMs;
+    socket.on('framereceived', ({ payload }) => {
+      if (!measuring || typeof payload !== 'string') return;
+      let frame;
+      try { frame = JSON.parse(payload); } catch { return; }
+      if (!frame || typeof frame !== 'object') return;
+      if (frame.type === 'join' && frame.self === true && Number.isSafeInteger(frame.epochMs)) {
+        serverEpochMs = frame.epochMs;
+        if (frame.townNightWindow) report.nightSamples.push({ seq: ++sequence, source: 'join',
+          serverEpochMs, snapshot: frame.townNightWindow });
+      } else if (frame.type === 'clock' && Number.isSafeInteger(frame.epochMs)) {
+        serverEpochMs = frame.epochMs;
+      } else if (frame.type === 'event' && frame.kind === 'town-night-window' && frame.state && serverEpochMs !== undefined) {
+        report.nightSamples.push({ seq: ++sequence, source: frame.kind, serverEpochMs, snapshot: frame.state });
+      }
+    });
     socket.on('framesent', ({ payload }) => {
       if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
       report.wirePoses.push({
@@ -220,11 +228,11 @@ async function openTown() {
   report.checkpoints.push({ label: 'ordinary-spawn', ...start, wire: await waitForWire() });
 }
 
-function scheduleShape(snapshot) {
+function scheduleShape({ snapshot, serverEpochMs }) {
   return snapshot && ['day', 'awaiting-beacon', 'night-window'].includes(snapshot.phase) &&
-    Number.isSafeInteger(snapshot.now) && Number.isSafeInteger(snapshot.beaconAt) &&
+    Number.isSafeInteger(serverEpochMs) && Number.isSafeInteger(snapshot.beaconAt) &&
     Number.isSafeInteger(snapshot.morningBellAt) && snapshot.beaconAt < snapshot.morningBellAt &&
-    snapshot.now < snapshot.morningBellAt;
+    serverEpochMs < snapshot.morningBellAt;
 }
 
 async function verifyBooks() {
@@ -240,23 +248,22 @@ async function verifyBooks() {
   await page.keyboard.press('Escape');
   await walk(books[1], 'night-ledger', .19);
   let night;
-  // The first interaction may initiate the client read. Reopening is native E after the real response arrives.
+  // Reopen through native input if the Presence connection is replacing its night state.
   for (let attempt = 0; attempt < 3; attempt++) {
     night = await readBook('魂账');
     if (!night.text.includes('未同步')) break;
     await page.keyboard.press('Escape');
     await page.waitForTimeout(4_200);
   }
-  await Promise.allSettled(pendingReads);
-  const schedules = report.nightSamples.filter(sample => scheduleShape(sample.snapshot));
-  assert.ok(schedules.length, 'The loopback authority returned no configured night schedule');
+  const schedules = report.nightSamples.filter(scheduleShape);
+  assert.ok(schedules.length, 'Presence sent no configured night schedule');
   const authoritative = schedules.toReversed().find(({ snapshot }) => {
     const { beaconAt, morningBellAt } = snapshot;
     return night.text.includes(serverTime.format(beaconAt)) && night.text.includes(serverTime.format(morningBellAt));
   });
   assert.ok(authoritative, `Displayed ledger did not match a live authority read: ${night.text}`);
   assert.ok(Math.abs(night.ground - 12.3125) < .15, JSON.stringify(night));
-  const plannedHour = Number(serverTime.format(authoritative.snapshot.now).slice(0, 2));
+  const plannedHour = Number(serverTime.format(authoritative.serverEpochMs).slice(0, 2));
   assert.ok([plannedHour, (plannedHour + 23) % 24].includes(Number(parsed[1])),
     'Daily ledger does not follow the same server hour');
   report.books.push({ ...night, authoritative });
@@ -325,7 +332,6 @@ try {
   process.exitCode = 1;
 } finally {
   measuring = false;
-  await Promise.allSettled(pendingReads);
   report.errors = report.pageErrors.length + report.consoleErrors.length + report.requestFailures.length + report.httpErrors.length;
   await writeFile(join(output, 'za19-clock-live.json'), `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({ stage, checkpoints: report.checkpoints.length, books: report.books.length,

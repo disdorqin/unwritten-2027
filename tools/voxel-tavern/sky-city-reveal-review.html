@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>破云 · 天空之城走查</title>
+  <style>
+    :root{color-scheme:dark;font-family:'Atkinson Hyperlegible Next',system-ui,sans-serif;background:#c9dbe8;color:#f5f8f7}
+    *{box-sizing:border-box}body{margin:0}canvas{display:block;width:100vw;height:100dvh;touch-action:none}
+    header{position:fixed;top:clamp(14px,4vw,36px);left:clamp(14px,4vw,36px);max-width:calc(100vw - 28px);padding:14px 18px;background:#232f38ec;border:1px solid #dfebe38a;border-radius:8px}
+    h1{font-size:1.2rem;margin:0 0 6px}p{font-size:.88rem;line-height:1.5;margin:0}nav{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+    button{font:inherit;color:inherit;background:#42555d;border:1px solid #d9e9df8a;border-radius:5px;padding:6px 10px;cursor:pointer}button:focus-visible{outline:2px solid #f3dec4}
+    #reticle{position:fixed;left:50%;top:50%;width:4px;height:4px;border-radius:50%;border:1px solid #304752;background:#f0f5f6;pointer-events:none}
+  </style>
+</head>
+<body>
+  <main id="scene" aria-label="北岭缆车第一人称走查"></main>
+  <header id="review-controls">
+    <h1>北岭破云走查</h1>
+    <p id="review-instructions">主峰线路实样，岛体为走查落位。鼠标或方向键转向，E 开始。</p>
+    <nav aria-label="走查控制">
+      <button id="start-reveal-ride" type="button">继续上行</button>
+      <button id="review-ground" type="button">地面</button>
+      <button id="review-mountain" type="button">返回缆车</button>
+    </nav>
+  </header>
+  <span id="reticle" aria-hidden="true"></span>
+  <script type="module" src="./town-blockout/sky-city-reveal-review.ts"></script>
+</body>
+</html>

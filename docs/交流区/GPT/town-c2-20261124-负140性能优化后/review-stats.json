@@ -1,0 +1,487 @@
+{
+  "schema": "town-c2-second-mine-review/v1",
+  "sourceCommit": "407e3001e19f03c81cc06dc400e8250588ea5900",
+  "sourceTree": {
+    "root": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c2\\",
+    "commit": "407e3001e19f03c81cc06dc400e8250588ea5900",
+    "tree": "ba43ab3d6c7b6ac4b2f47360ffe39eede0decd8d",
+    "dirty": true,
+    "status": "M tests/town-c2-crater-inscription.test.ts\n M tests/town-c2-crater-molten-beads.test.ts\n M tests/town-c2-crater-warm-light-chain.test.ts\n M tests/town-c2-integration.test.ts\n M tests/town-c2-second-mine-bypass-wall.test.ts\n M tests/town-c2-second-mine-camp-life.test.ts\n M tests/town-c2-second-mine-far-bank-crystals.test.ts\n M tests/town-c2-second-mine-haulage.test.ts\n M tests/town-c2-second-mine-light-sources.test.ts\n M tests/town-c2-second-mine-near-bank-teeth.test.ts\n M tests/town-c2-second-mine-prefab.test.ts\n M tests/town-c2-second-mine-timbering.test.ts\n M tests/town-c2-second-mine-upper-relief.test.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts\n M tools/voxel-tavern/town-blockout/town-c2-crater-warm-light-chain.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-bypass-wall.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-camp-life.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-far-bank-crystals.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-haulage.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-light-sources.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-near-bank-teeth.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-prefab.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-timbering.ts\n M tools/voxel-tavern/town-blockout/town-c2-second-mine-upper-relief.ts\n M tools/voxel-tavern/town-blockout/town-za22-crater-road.ts\n?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/town-c2-20261124-\\345\\235\\221\\345\\206\\205\\346\\200\\247\\350\\203\\275\\344\\274\\230\\345\\214\\226\\345\\211\\215\\345\\237\\272\\347\\272\\277/\"\n?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/town-c2-20261124-\\350\\264\\237140\\346\\200\\247\\350\\203\\275\\344\\274\\230\\345\\214\\226\\345\\211\\215\\345\\237\\272\\347\\272\\277/\""
+  },
+  "scope": "C2 -140 local visual prefab over the real unregistered second-mine scene; no production domain or collision authority",
+  "uncertified": [
+    "second-mine world transform, Presence room and entry/exit registration are not installed",
+    "prefab is visual-only and does not change floor, canStand, collision, ore or inventory authority",
+    "high/mid/low selection is fixture input; the accepted water reader is tested separately",
+    "SwiftShader headless FPS is a review sample, not a device benchmark",
+    "screenshots do not replace human visual acceptance"
+  ],
+  "errors": {
+    "pageerror": [],
+    "consoleError": [],
+    "requestFailed": []
+  },
+  "views": {
+    "town-c2-m140-entry-day.png": {
+      "view": "entry",
+      "state": "middle",
+      "night": false,
+      "frames": 6,
+      "fps": 8.327550312283137,
+      "eye": [
+        0,
+        1.67,
+        -12
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 94,
+        "triangles": 165058
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 233603
+    },
+    "town-c2-m140-entry-night.png": {
+      "view": "entry",
+      "state": "middle",
+      "night": true,
+      "frames": 12,
+      "fps": 6.887842957168794,
+      "eye": [
+        0,
+        1.67,
+        -12
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 94,
+        "triangles": 165058
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 251270
+    },
+    "town-c2-m140-upper-west-night.png": {
+      "view": "upperWest",
+      "state": "middle",
+      "night": true,
+      "frames": 19,
+      "fps": 6.491509788500225,
+      "eye": [
+        -20,
+        1.67,
+        -47
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 25,
+        "triangles": 133284
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 115980
+    },
+    "town-c2-m140-upper-east-night.png": {
+      "view": "upperEast",
+      "state": "middle",
+      "night": true,
+      "frames": 25,
+      "fps": 6.696129637069774,
+      "eye": [
+        20,
+        1.67,
+        -79
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 32,
+        "triangles": 148788
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 178813
+    },
+    "town-c2-m140-near-bank-night.png": {
+      "view": "nearWest",
+      "state": "middle",
+      "night": true,
+      "frames": 31,
+      "fps": 6.9016185408596815,
+      "eye": [
+        -40,
+        1.67,
+        -112
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 24,
+        "triangles": 102700
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 141530
+    },
+    "town-c2-m140-far-bank-night.png": {
+      "view": "farWest",
+      "state": "middle",
+      "night": true,
+      "frames": 37,
+      "fps": 7.0917907730092455,
+      "eye": [
+        -40,
+        1.67,
+        -158
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 19,
+        "triangles": 81390
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 163699
+    },
+    "town-c2-m140-bypass-high-night.png": {
+      "view": "bypass",
+      "state": "high",
+      "night": true,
+      "frames": 43,
+      "fps": 7.450402841548991,
+      "eye": [
+        51.5,
+        1.67,
+        -120
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": false,
+      "waterVisible": true,
+      "render": {
+        "calls": 36,
+        "triangles": 123462
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 288622
+    },
+    "town-c2-m140-collapse-night.png": {
+      "view": "collapse",
+      "state": "middle",
+      "night": true,
+      "frames": 49,
+      "fps": 7.629427792915531,
+      "eye": [
+        -52,
+        1.67,
+        -167
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 11,
+        "triangles": 77772
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 257684
+    },
+    "town-c2-m140-barracks-night.png": {
+      "view": "barracks",
+      "state": "middle",
+      "night": true,
+      "frames": 56,
+      "fps": 7.957145090011834,
+      "eye": [
+        55,
+        1.67,
+        -174
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 6,
+        "triangles": 66312
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 204213
+    },
+    "town-c2-m140-river-high-night.png": {
+      "view": "river",
+      "state": "high",
+      "night": true,
+      "frames": 64,
+      "fps": 8.498094567848524,
+      "eye": [
+        0,
+        1.67,
+        -126
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": false,
+      "waterVisible": true,
+      "render": {
+        "calls": 32,
+        "triangles": 111486
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 119615
+    },
+    "town-c2-m140-river-middle-night.png": {
+      "view": "river",
+      "state": "middle",
+      "night": true,
+      "frames": 70,
+      "fps": 8.66765725606736,
+      "eye": [
+        0,
+        1.67,
+        -126
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 72,
+        "triangles": 111966
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 127272
+    },
+    "town-c2-m140-river-low-night.png": {
+      "view": "river",
+      "state": "low",
+      "night": true,
+      "frames": 76,
+      "fps": 8.730414005419057,
+      "eye": [
+        0,
+        1.67,
+        -126
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": false,
+      "waterVisible": false,
+      "render": {
+        "calls": 31,
+        "triangles": 111474
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 122424
+    }
+  },
+  "walks": {
+    "bypass": {
+      "view": "bypass",
+      "state": "middle",
+      "night": false,
+      "frames": 153,
+      "fps": 7.640792844624505,
+      "eye": [
+        51.5,
+        1.67,
+        -125.99999999999987
+      ],
+      "trustedW": 1,
+      "walked": 6.0000000000000036,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 24,
+        "triangles": 102700
+      },
+      "fixtureOnly": true,
+      "productionCertified": false
+    }
+  },
+  "fpsSample": {
+    "scene": "near-bank-night",
+    "requestedMs": 20000,
+    "wallMs": 20003,
+    "stats": {
+      "view": "nearWest",
+      "state": "middle",
+      "night": true,
+      "frames": 153,
+      "fps": 7.647705688293512,
+      "eye": [
+        -40,
+        1.67,
+        -112
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "basePieces": 5990,
+      "prefab": {
+        "moduleCount": 8,
+        "pieceCount": 7712,
+        "realLightCount": 3,
+        "visualOnly": true,
+        "domainRegistered": false
+      },
+      "boatVisible": true,
+      "waterVisible": true,
+      "render": {
+        "calls": 24,
+        "triangles": 102700
+      },
+      "fixtureOnly": true,
+      "productionCertified": false
+    },
+    "certification": "fixture-only SwiftShader sample"
+  },
+  "passed": true,
+  "renderer": {
+    "executablePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "headless": true,
+    "gl": "SwiftShader"
+  },
+  "finishedAt": "2026-11-25T02:27:33.180Z"
+}

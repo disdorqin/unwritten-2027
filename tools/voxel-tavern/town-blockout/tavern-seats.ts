@@ -1,5 +1,8 @@
 import type { TownPlot } from './landmark-kit';
-import type { TownActivityContext, TownActivitySpot, TownSeat } from './town-activity';
+import type { TownActivitySpot, TownSeat } from './town-activity';
+
+export type TavernCupRow = { x: number; n: number; y: number; yaw: number };
+type TavernSeat = TownSeat & { cupRow?: TavernCupRow };
 
 type Point = [number, number, number];
 type Bounds = [number, number, number, number, number, number];
@@ -9,23 +12,25 @@ type Chair = {
   yaw: number;
   approach: [number, number];
   source?: [number, number, number]; // The baked chair's east, south and heading.
+  servingEdge?: Point;
 };
 
 const north = 0;
 const south = Math.PI;
 const west = -Math.PI / 2;
 const chairs: readonly Chair[] = [
-  { label: '一楼西侧餐椅一', at: [-2.375, 3, .5625], yaw: west, approach: [-1.625, .5625], source: [-4.25, -.875, south] },
-  { label: '一楼西侧餐椅二', at: [-3.875, 3, 1.875], yaw: north, approach: [-3.1, 1.675], source: [-3.5, 1.5, north] },
-  { label: '一楼中央餐椅一', at: [1.875, 3, 1.0625], yaw: west, approach: [2.625, 1.0625], source: [0, -.125, south] },
-  { label: '一楼中央餐椅二', at: [.75, 3, 2.25], yaw: north, approach: [1.52, 2.35] },
-  { label: '一楼琴边餐椅一', at: [-2.75, 3, 2.4375], yaw: south, approach: [-1.97, 2.42], source: [-3.75, 2.875, south] },
-  { label: '一楼琴边餐椅二', at: [-1.25, 3, 3.6875], yaw: west, approach: [-.47, 3.6875], source: [-3, 5.25, north] },
+  // Serving edges follow the tabletop strips from build-tavern.mjs, after the two relocations below.
+  { label: '一楼西侧餐椅一', at: [-2.375, 3, .5625], yaw: west, approach: [-1.625, .5625], source: [-4.25, -.875, south], servingEdge: [-3.07, 4, .69] },
+  { label: '一楼西侧餐椅二', at: [-3.875, 3, 1.875], yaw: north, approach: [-3.1, 1.675], source: [-3.5, 1.5, north], servingEdge: [-3.875, 4.0625, 1.10] },
+  { label: '一楼中央餐椅一', at: [1.875, 3, 1.0625], yaw: west, approach: [2.625, 1.0625], source: [0, -.125, south], servingEdge: [1.18, 4, 1.06] },
+  { label: '一楼中央餐椅二', at: [.75, 3, 2.25], yaw: north, approach: [1.52, 2.35], servingEdge: [.375, 4.0625, 1.48] },
+  { label: '一楼琴边餐椅一', at: [-2.75, 3, 2.4375], yaw: south, approach: [-1.97, 2.42], source: [-3.75, 2.875, south], servingEdge: [-2.75, 4.0625, 3.265] },
+  { label: '一楼琴边餐椅二', at: [-1.25, 3, 3.6875], yaw: west, approach: [-.47, 3.6875], source: [-3, 5.25, north], servingEdge: [-1.945, 4, 3.69] },
   { label: '一楼琴椅', at: [-4.875, 3.25, 4.5], yaw: north, approach: [-4.1, 4.64], source: [-4.875, 4.625, north] },
-  { label: '二楼阅览桌餐椅一', at: [-4.25, 8, -3.125], yaw: south, approach: [-3.5, -3.125] },
-  { label: '二楼阅览桌餐椅二', at: [-3.5, 8, -.75], yaw: north, approach: [-2.75, -.75] },
-  { label: '二楼靠栏餐椅一', at: [.25, 8, .875], yaw: south, approach: [1, .875] },
-  { label: '二楼靠栏餐椅二', at: [1, 8, 3.25], yaw: north, approach: [1.75, 3.25] },
+  { label: '二楼阅览桌餐椅一', at: [-4.25, 8, -3.125], yaw: south, approach: [-3.5, -3.125], servingEdge: [-3.875, 9.0625, -2.36] },
+  { label: '二楼阅览桌餐椅二', at: [-3.5, 8, -.75], yaw: north, approach: [-2.75, -.75], servingEdge: [-3.875, 9.0625, -1.525] },
+  { label: '二楼靠栏餐椅一', at: [.25, 8, .875], yaw: south, approach: [1, .875], servingEdge: [.625, 9.0625, 1.65] },
+  { label: '二楼靠栏餐椅二', at: [1, 8, 3.25], yaw: north, approach: [1.75, 3.25], servingEdge: [.625, 9.0625, 2.48] },
 ];
 
 const stools = Array.from({ length: 6 }, (_, index) => -4.5 + index * 1.125);
@@ -114,21 +119,24 @@ export function tavernSeatPlacements(plot: TownPlot) {
     const [x, y, z] = transform(...point);
     return { x: east + x, n: north - z, y: base + y };
   }
-  function seat(label: string, at: Point, top: number, approach: Point, yaw: number, range = .53) {
+  function seat(label: string, at: Point, top: number, approach: Point, yaw: number, range = .53, servingEdge?: Point) {
     const { x, n, y: ground } = world(approach);
     const seated = world([at[0], top, at[2]]);
-    const pose: TownSeat = { x: seated.x, n: seated.n, eyeY: seated.y + eyeAboveSeat, yaw };
+    const pose: TavernSeat = { x: seated.x, n: seated.n, eyeY: seated.y + eyeAboveSeat, yaw };
+    if (servingEdge) pose.cupRow = { ...world(servingEdge), yaw };
     return { label, x, n, ground, range, seatY: seated.y, pose };
   }
   return [
-    ...stools.map((x, i) => seat(`吧台第 ${i + 1} 张吧凳`, [x, 3, barStoolZ], 3.75, [x, 3, -.21], 0, .54)),
-    ...chairs.map(({ label, at, approach, yaw }) => seat(label, at, at[1] + .625, [approach[0], at[1], approach[1]], yaw)),
+    ...stools.map((x, i) => seat(`吧台第 ${i + 1} 张吧凳`,
+      [x, 3, barStoolZ], 3.75, [x, 3, -.21], 0, .54, [x, 4.125, -2.06])),
+    ...chairs.map(({ label, at, approach, yaw, servingEdge }) =>
+      seat(label, at, at[1] + .625, [approach[0], at[1], approach[1]], yaw, .53, servingEdge)),
     seat('二楼阅览长凳', [-5.25, 8, 1.36], 8.75, [-3.87, 8, 1.36], Math.PI / 2, .75),
   ];
 }
 
 export function createTavernSeatSpots(
-  plot: TownPlot, context: Pick<TownActivityContext, 'sit'>,
+  plot: TownPlot, context: { sit(seat: TavernSeat): void },
   canStand: (east: number, north: number, ground: number) => boolean,
 ): TownActivitySpot[] {
   return tavernSeatPlacements(plot)

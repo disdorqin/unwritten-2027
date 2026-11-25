@@ -56,7 +56,11 @@ function makeGlows(group: Group, positions: Position[]) {
   return material;
 }
 
-type Blocker = { x: number; n: number; radius: number };
+// AW-6: flat or wide props (notice board, ice horse, firework stand) carry a
+// playerRect — the player-facing test follows the prop's actual outline instead
+// of the placement circle. Placement queries keep using the circle for every
+// blocker, so housing placement results are unchanged.
+type Blocker = { x: number; n: number; radius: number; playerRect?: { hw: number; hd: number } };
 export function addScenery(
   group: Group, grid: Ground, keepClear: (east: number, north: number, radius: number) => boolean = () => false,
 ) {
@@ -224,7 +228,7 @@ export function addScenery(
         plazaBox(boardEast + (index - 1.5) * .74, boardNorth + side * .083, .84, [.66, .45, .012], '#d2b58b');
       }
     }
-    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55 });
+    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55, playerRect: { hw: 1.73, hd: .24 } });
 
     const moundWidth = plazaSnowSupplySize.halfWidth * 2;
     for (const site of plazaSnowSupplySites) {
@@ -308,7 +312,7 @@ export function addScenery(
   iceHorseBox(.88, -.24, 2.22, [.07, .07, .04], '#527e9a');
   iceHorseBox(-.86, 0, 1.5, [.23, .18, .26], '#b6dded');
   iceHorseBox(-1.02, 0, 1.29, [.20, .30, .21], '#abd9ee');
-  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36 });
+  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36, playerRect: { hw: 1.45, hd: .91 } });
 
   for (const [x, north] of [[218, 190], [246, 184], [246, 196]]) {
     for (const [y, width, depth, height, tint] of [
@@ -389,7 +393,7 @@ export function addScenery(
     standPiece(dx, .83, .13, [.26, .07, .26], '#a87549');
     standPiece(dx, .865, .13, [.147, .021, .147], '#362631');
   }
-  blockers.push({ x: fireworkX, n: fireworkNorth, radius: 1.0 });
+  blockers.push({ x: fireworkX, n: fireworkNorth, radius: 1.0, playerRect: { hw: .93, hd: .65 } });
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
@@ -460,7 +464,12 @@ export function addScenery(
         return dx * dx + dn * dn < radius * radius;
       });
     },
-    blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
+    blocked: (x: number, north: number) => blockers.some(b => b.playerRect
+      ? Math.abs(x - b.x) < b.playerRect.hw + .27 && Math.abs(north - b.n) < b.playerRect.hd + .27
+      : Math.hypot(x - b.x, north - b.n) < b.radius + .27),
+    // Placement-facing twin of blocked(): legacy circles only (AW-6 guard —
+    // district housing placement must see exactly the pre-AW-6 field).
+    placementBlocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {
       night = enabled;
       glow.opacity = night ? .85 : .18;

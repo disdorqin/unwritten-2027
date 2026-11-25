@@ -254,3 +254,4 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     if (overview && camera) renderAerialTerrain(camera);
   };
 }
+
