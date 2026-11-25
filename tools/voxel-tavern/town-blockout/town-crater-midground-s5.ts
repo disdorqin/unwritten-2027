@@ -1,0 +1,218 @@
+import {
+  BoxGeometry, ConeGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
+  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace,
+} from 'three';
+import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
+import type { mountWestCraterRoad } from './town-za22-crater-road';
+import { surveyZa31CraterWinch } from './town-za31-crater-winch';
+
+type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
+type Piece = 'scorch' | 'black-rock' | 'timber' | 'rust' | 'ice';
+
+export type CraterMidgroundPiece = Readonly<{
+  kind: Piece; cluster: string; east: number; north: number; height: number;
+}>;
+
+/**
+ * C3 fifth segment — the mid-ground layer (transferred from window C
+ * to branch window B, batch 92; construction ordered batch 103).
+ * Window C's za36 dressing covers the descent lane ribbon, the rim
+ * scatter, the terrace work faces, the floor rings and the shaft
+ * ring; what stayed bare is the bowl's MIDDLE band between those
+ * set pieces — the distances a player actually reads while walking
+ * the spiral. This module fills that band with the same stopped-
+ * workday language (boulder clusters, scorch patches, timber
+ * traces, cold glints), under the same placement guards.
+ *
+ * Deliberately NOT here: the central mound's charred forest and
+ * wind flags. The mound is C2's body (ruled E-120/N196, r21, h7.5);
+ * its disc is reserved below and the planting waits for the
+ * measured mound surface, per the batch-95/103 interface ruling.
+ *
+ * Placement is deterministic (seeded), so the coordinator's
+ * ground-batch accounting can pin this layer's counts.
+ */
+
+const fixture = createMeteorCrater(meteorCraterFixturePlan);
+const tau = 2 * Math.PI;
+const geometry = {
+  scorch: new BoxGeometry(),
+  'black-rock': new DodecahedronGeometry(1, 0),
+  timber: new BoxGeometry(),
+  rust: new ConeGeometry(1, 1, 5),
+  ice: new ConeGeometry(1, 1, 5),
+};
+const sizes: Record<Piece, readonly [number, number, number]> = {
+  scorch: [1.25, .09, .72],
+  'black-rock': [.53, .55, .43],
+  timber: [.9, .14, .23],
+  rust: [.24, .42, .23],
+  ice: [.19, .69, .19],
+};
+
+function grain(base: number, fleck: number, streak: number) {
+  const size = 16;
+  const rgba = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const pattern = (x * 11 + y * 7 + Math.floor(x / 3) * y * 3) % 31;
+    const color = pattern < 4 ? fleck : x % 7 === 1 && y % 3 !== 0 ? streak : base;
+    rgba.set([color >> 16, color >> 8 & 255, color & 255, 255], 4 * (x + size * y));
+  }
+  const map = new DataTexture(rgba, size, size);
+  map.colorSpace = SRGBColorSpace;
+  map.minFilter = map.magFilter = NearestFilter;
+  map.generateMipmaps = false;
+  map.needsUpdate = true;
+  return map;
+}
+const createMaterial = (base: number, fleck: number, streak: number) =>
+  new MeshStandardMaterial({ map: grain(base, fleck, streak), flatShading: true, roughness: 1 });
+const materials: Record<Piece, MeshStandardMaterial> = {
+  scorch: createMaterial(0x38302a, 0x5d4630, 0x8a4a34),
+  'black-rock': createMaterial(0x3a332c, 0x9a8a76, 0x5d4630),
+  timber: createMaterial(0x5d4630, 0xa98a56, 0x2c3648),
+  rust: createMaterial(0x8a4a34, 0x2c3648, 0x5d4630),
+  ice: new MeshStandardMaterial({ color: 0x7fd4c8, emissive: 0x7fd4c8,
+    emissiveIntensity: .18, roughness: 1, flatShading: true }),
+};
+
+/** The ruled mound disc (batch 95): centre E-120/N196, r21 — plus margin. */
+export const moundReservation = { east: -120, north: 196, radius: 23 } as const;
+
+/** Deterministic LCG so placement is stable across runs and machines. */
+function seeded(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+export function buildCraterMidgroundS5(road: Ground,
+  options: {
+    /** Existing dressing placements to keep clear of (e.g. za36's). */
+    avoid?: readonly { east: number; north: number }[];
+    extraReserved?: readonly { east: number; north: number; radius: number }[];
+  } = {}) {
+  const { east: originE, north: originN, yaw } = road.anchor;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const group = new Group();
+  group.name = 'crater-midground-s5';
+  const placements: CraterMidgroundPiece[] = [];
+  const stamps = new Map<Piece, Object3D[]>();
+  const trail = Array.from({ length: 801 }, (_, i) => {
+    const at = fixture.mainTrailPoint(i / 800);
+    return { east: originE + at.east * c + at.north * s,
+      north: originN + at.north * c - at.east * s };
+  });
+  const survey = surveyZa31CraterWinch(road);
+  const reserved = [
+    moundReservation,
+    ...(survey ? [
+      { east: survey.useFoot.east, north: survey.useFoot.north, radius: 1.45 },
+      survey.snakeStoneReservation,
+      { east: survey.plinth.east, north: survey.plinth.north, radius: 1.2 },
+    ] : []),
+    ...(options.extraReserved ?? []),
+  ];
+  const avoid = options.avoid ?? [];
+
+  function add(kind: Piece, cluster: string, east: number, north: number,
+    angle: number, scale = 1, tilt = 0) {
+    const height = road.heightAt(east, north);
+    if (height === undefined || !Number.isFinite(height)) return;
+    if (Math.hypot(east - originE, north - originN) < 8) return;
+    if (Math.hypot(east - road.lip.east, north - road.lip.north) < 9.8) return;
+    if (reserved.some(site => Math.hypot(east - site.east, north - site.north) < site.radius + .55)) return;
+    if (trail.some(p => Math.hypot(east - p.east, north - p.north) < 3.1)) return;
+    if (placements.some(p => Math.hypot(east - p.east, north - p.north) < .72)) return;
+    if (avoid.some(p => Math.hypot(east - p.east, north - p.north) < .72)) return;
+    const [sx, sy, sz] = sizes[kind];
+    const part = new Object3D();
+    part.position.set(east, height + sy * scale * .52, -north);
+    part.rotation.set(tilt, angle, 0);
+    part.scale.set(sx * scale, sy * scale, sz * scale);
+    part.updateMatrix();
+    const entries = stamps.get(kind) ?? [];
+    entries.push(part);
+    stamps.set(kind, entries);
+    placements.push({ kind, cluster, east, north, height });
+  }
+
+  // Cluster angles are chosen in the widest gaps between the spiral
+  // lane's own crossings of each band (the za36 workface method): the
+  // lane winds through every radius, so evenly spaced clusters would
+  // be culled by the lane guard faster than they land.
+  function gapAngles(radius: number, count: number, random: () => number) {
+    const near = trail.filter(p =>
+      Math.abs(Math.hypot(p.east - originE, p.north - originN) - radius) < 6);
+    const chosen: number[] = [];
+    for (let pick = 0; pick < count; pick++) {
+      let best = 0;
+      let bestClearance = -1;
+      for (let step = 0; step < 126; step++) {
+        const angle = step * tau / 126 + random() * .02;
+        if (chosen.some(other => Math.abs(Math.sin(angle - other)) < .3)) continue;
+        const east = originE + radius * Math.sin(angle);
+        const north = originN + radius * Math.cos(angle);
+        if (Math.hypot(east - moundReservation.east, north - moundReservation.north) < moundReservation.radius + 2) continue;
+        let clearance = Infinity;
+        for (const p of near) {
+          clearance = Math.min(clearance, Math.hypot(east - p.east, north - p.north));
+        }
+        if (clearance > bestClearance) { bestClearance = clearance; best = angle; }
+      }
+      chosen.push(best);
+    }
+    return chosen;
+  }
+
+  // Four mid bands between the floor rings and the rim scatter. Each
+  // cluster: one anchor boulder at mid scale (reads from across the
+  // bowl), two or three companion rocks, a scorch patch under them,
+  // and — on the deeper bands — a timber trace or a cold glint.
+  const bands = [
+    { radius: 49, clusters: 8 },
+    { radius: 42, clusters: 9 },
+    { radius: 34, clusters: 9 },
+    { radius: 26, clusters: 7 },
+  ];
+  bands.forEach((band, bandIndex) => {
+    const random = seeded(0xC350 + bandIndex * 977);
+    const angles = gapAngles(band.radius, band.clusters, random);
+    for (let cluster = 0; cluster < band.clusters; cluster++) {
+      const name = 'mid-B' + (bandIndex + 1) + '-' + (cluster + 1);
+      // gapAngles selects in the world frame; place() works in the
+      // fixture's local frame — the two differ by the anchor yaw.
+      const angle = angles[cluster]! - yaw;
+      const radius = band.radius + (random() - .5) * 3;
+      const place = (kind: Piece, radialShift: number, tangent: number, scale: number, tilt = 0) => {
+        const r = radius + radialShift;
+        const localE = r * Math.sin(angle) + tangent * Math.cos(angle);
+        const localN = r * Math.cos(angle) - tangent * Math.sin(angle);
+        add(kind, name, originE + localE * c + localN * s,
+          originN + localN * c - localE * s, angle + yaw + random() * .6, scale, tilt);
+      };
+      place('scorch', 0, 0, 1.6);
+      place('black-rock', .4, -.6, 2.3);
+      place('black-rock', -.5, .9, 1.15);
+      place('black-rock', .9, 1.6, .85);
+      place('black-rock', -1.6, -.5, .7);
+      if (cluster % 2 === 0) place('timber', -.9, -1.7, 1.05, .18);
+      if (bandIndex >= 2 && cluster % 3 === 0) place('ice', -1.4, 2.2, .75);
+      if (cluster % 4 === 3) place('rust', 1.5, -2, .9);
+    }
+  });
+
+  const batches: string[] = [];
+  for (const [kind, parts] of stamps) {
+    if (!parts.length) continue;
+    const batch = new InstancedMesh(geometry[kind], materials[kind], parts.length);
+    batch.name = 'midground-s5-' + kind;
+    parts.forEach((part, index) => batch.setMatrixAt(index, part.matrix));
+    batch.computeBoundingSphere();
+    group.add(batch);
+    batches.push(kind);
+  }
+  return { group, placements, batches };
+}
