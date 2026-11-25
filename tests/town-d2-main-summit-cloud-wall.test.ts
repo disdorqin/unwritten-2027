@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  Group, InstancedMesh, Matrix4, Mesh, Object3D, Vector3, type Material,
+  Group, InstancedMesh, Matrix4, Mesh, MeshLambertMaterial, Object3D, Vector3, type Material,
 } from 'three';
-import { mainSummitBounds } from '../tools/voxel-tavern/town-blockout/main-summit-block';
+import {
+  createMainSummitBlock, mainSummitBounds, mainSummitLayout,
+} from '../tools/voxel-tavern/town-blockout/main-summit-block';
+import { createMainSummitTrail } from '../tools/voxel-tavern/town-blockout/main-summit-trail';
+import { cloudPavilionSites } from '../tools/voxel-tavern/town-blockout/main-summit-pavilion-site';
+import { cloudPavilionDimensions } from '../tools/voxel-tavern/town-blockout/main-summit-pavilions';
+import { northRidgeCableAnchors } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 import {
   createTownD2MainSummitCloudWall, townD2MainSummitCloudSpec,
   type TownD2MainSummitCloudExclusion, type TownD2MainSummitCloudPlacement,
@@ -231,6 +237,76 @@ test('setNight changes a varied snow-white palette to night blue and can restore
   cloud.dispose();
 });
 
+test('cloud puffs fill their vertical radius with smooth layered tints and one opaque fogged Lambert pass', () => {
+  const cloud = createTownD2MainSummitCloudWall(heightAt, trail);
+  const mesh = cloudMesh(cloud);
+  const material = mesh.material as MeshLambertMaterial;
+  assert.ok(material instanceof MeshLambertMaterial);
+  assert.equal(material.transparent, false);
+  assert.equal(material.opacity, 1);
+  assert.equal(material.depthWrite, true);
+  assert.equal(material.vertexColors, true);
+  assert.equal(material.flatShading, false);
+  assert.equal(material.fog, true);
+
+  const position = mesh.geometry.getAttribute('position');
+  const normal = mesh.geometry.getAttribute('normal');
+  const tint = mesh.geometry.getAttribute('color');
+  assert.equal(tint.count, position.count);
+  const top: number[] = [], bottom: number[] = [];
+  for (let index = 0; index < position.count; index++) {
+    const px = position.getX(index), py = position.getY(index), pz = position.getZ(index);
+    assert.ok(Math.hypot(px, py, pz) <= 1 + 1e-6, 'puff vertices must stay inside the exclusion bounding sphere');
+    assert.ok((px * normal.getX(index) + py * normal.getY(index) + pz * normal.getZ(index)) /
+      Math.hypot(px, py, pz) > .9999, 'radial normals must shade each puff smoothly');
+    const shade = (tint.getX(index) + tint.getY(index) + tint.getZ(index)) / 3;
+    assert.ok(shade >= .84 && shade <= 1);
+    if (py > .9) top.push(shade);
+    if (py < -.9) bottom.push(shade);
+  }
+  assert.ok(top.length && bottom.length);
+  assert.ok(Math.max(...position.array.filter((_: number, index: number) => index % 3 === 1)) > .95);
+  assert.ok(Math.min(...position.array.filter((_: number, index: number) => index % 3 === 1)) < -.95);
+  const topMean = top.reduce((sum, value) => sum + value, 0) / top.length;
+  const bottomMean = bottom.reduce((sum, value) => sum + value, 0) / bottom.length;
+  assert.ok(topMean > bottomMean + .04, 'upper billows should catch more snow light than the underside');
+  assert.ok(new Set(tint.array).size >= 12, 'vertex tints need multiple soft levels');
+  cloud.setNight(true);
+  assert.equal(material.opacity, 1, 'night tinting must keep the cloud opaque and inexpensive');
+  cloud.dispose();
+});
+
+test('the reviewed summit host fixture keeps 472 instances, one draw and 9,440 triangles', () => {
+  const block = createMainSummitBlock(mainSummitLayout, 347, 64);
+  const trail = createMainSummitTrail(block.heightAt, 347);
+  const exclusions: readonly TownD2MainSummitCloudExclusion[] = [
+    { kind: 'cable', radius: 20, points: northRidgeCableAnchors.map(([east, north]) => ({
+      east, north, height: block.heightAt(east, north),
+    })) },
+    ...cloudPavilionSites.map(site => {
+      const margin = 13 + cloudPavilionDimensions[site.id].width / 2;
+      return {
+        kind: 'pavilion' as const,
+        minEast: site.east - margin, maxEast: site.east + margin,
+        minNorth: site.north - margin, maxNorth: site.north + margin,
+      };
+    }),
+  ];
+  const cloud = createTownD2MainSummitCloudWall({ heightAt: block.heightAt, trailPoints: trail.points, exclusions });
+  try {
+    assert.equal(cloud.stats.instances, 472);
+    assert.equal(cloud.stats.meshes, 1);
+    assert.equal(cloud.stats.drawCalls, 1);
+    assert.equal(cloud.stats.triangles, 9_440);
+    assert.ok(cloud.stats.triangles <= 12_000);
+    assert.ok(cloud.stats.minTrailClearance >= townD2MainSummitCloudSpec.trailClearance);
+    assert.equal(cloud.stats.rejected.exclusion, 5, 'the reviewed cable and pavilion volumes stay active');
+  } finally {
+    cloud.dispose();
+    block.dispose();
+  }
+});
+
 test('one instanced mesh stays below ten draws and has finite geometry, matrices and colors', () => {
   const cloud = createTownD2MainSummitCloudWall(heightAt, trail);
   let meshes = 0, instanced = 0;
@@ -250,7 +326,9 @@ test('one instanced mesh stays below ten draws and has finite geometry, matrices
   assert.equal(cloud.stats.drawCalls, meshes);
   assert.ok([...cloudMesh(cloud).instanceMatrix.array].every(Number.isFinite));
   assert.ok(colors(cloud).every(Number.isFinite));
-  assert.ok(cloud.stats.triangles < 120_000, 'the supplement leaves room in the main-summit triangle budget');
+  assert.equal(cloudMesh(cloud).geometry.getAttribute('position').count / 3, 20,
+    'visual refinements must not add faces per instance');
+  assert.equal(cloud.stats.triangles, cloud.stats.instances * 20);
   cloud.dispose();
 });
 

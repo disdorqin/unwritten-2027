@@ -161,22 +161,26 @@ test('D2 outer ring: all elevations derive from sampleNorthRidge350 and matrices
   } finally { ring.dispose(); }
 });
 
-test('D2 outer ring: five instanced material families stay below twelve draws without text, lights or colliders', () => {
+test('D2 outer ring: 716 instances in five shared-geometry material batches have no text, lights or colliders', () => {
   const ring = createTownD2CloudTerraceOuterRing();
   try {
     const meshes = collectMeshes(ring.group);
-    assert.ok(ring.stats.materialFamilies.length >= 3);
     assert.deepEqual(ring.stats.materialFamilies, ['stone', 'timber', 'pine', 'shrub', 'snow']);
-    assert.ok(ring.stats.draws <= 12);
-    assert.ok(ring.stats.meshes <= 12);
+    assert.equal(ring.stats.placements, 716);
+    assert.equal(ring.stats.instances, 716);
+    assert.equal(ring.stats.draws, 5);
+    assert.equal(ring.stats.meshes, 5);
     assert.equal(ring.stats.draws, meshes.length);
     assert.equal(ring.stats.instances, ring.placements.length);
-    assert.equal(meshes.reduce((sum, mesh) => sum + (mesh instanceof InstancedMesh ? mesh.count : 1), 0), ring.placements.length);
+    assert.equal(meshes.reduce((sum, mesh) => sum + (mesh instanceof InstancedMesh ? mesh.count : 1), 0), 716);
     assert.ok(meshes.every(mesh => mesh instanceof InstancedMesh));
-    assert.equal(new Set(meshes.map(mesh => mesh.geometry)).size, 1, 'all voxel pieces share one unit cube');
+    assert.equal(new Set(meshes.map(mesh => mesh.geometry)).size, 5, 'each material batch shares one detailed geometry');
+    assert.equal(ring.stats.geometryVariants, 5);
     for (const family of ring.stats.materialFamilies) {
       assert.ok(ring.stats.byMaterial[family] > 0, family);
-      assert.ok(meshes.some(mesh => mesh.name === `town-d2-cloud-terrace-outer-${family}`), family);
+      const mesh: InstancedMesh | undefined = meshes.find(candidate => candidate.name === `town-d2-cloud-terrace-outer-${family}`);
+      assert.ok(mesh, family);
+      assert.equal(mesh.geometry.userData.detailFamily, family);
     }
     ring.group.traverse(object => {
       assert.equal(object instanceof Light, false, 'scenery must not add light authority');
@@ -188,7 +192,44 @@ test('D2 outer ring: five instanced material families stay below twelve draws wi
     assert.equal(ring.group.userData.includesLights, false);
     assert.equal(ring.group.userData.includesText, false);
     assert.equal(ring.group.userData.visualOnly, true);
-    assert.ok(resourcesOf(meshes).size < 12, 'only shared geometry and five materials are owned');
+    assert.equal(resourcesOf(meshes).size, 10, 'only five shared geometries and five materials are owned');
+  } finally { ring.dispose(); }
+});
+
+test('D2 outer ring: chamfered stone, layered pines and snow caps stay inside the unit footprint and 100k triangle budget', () => {
+  const ring = createTownD2CloudTerraceOuterRing();
+  try {
+    const meshes = collectMeshes(ring.group) as InstancedMesh[];
+    let triangleCount = 0;
+    for (const mesh of meshes) {
+      const geometry = mesh.geometry;
+      const positions = geometry.getAttribute('position');
+      const normals = geometry.getAttribute('normal');
+      const colors = geometry.getAttribute('color');
+      assert.ok(positions.count > 72, `${mesh.name} must be more detailed than a cube`);
+      assert.equal(normals.count, positions.count, mesh.name);
+      assert.equal(colors.count, positions.count, `${mesh.name} carries subtle face weathering`);
+      assert.ok(geometry.boundingBox, mesh.name);
+      for (const value of [geometry.boundingBox.min.x, geometry.boundingBox.min.y, geometry.boundingBox.min.z]) {
+        assert.ok(value >= -.500001, `${mesh.name} preserves its nominal footprint`);
+      }
+      for (const value of [geometry.boundingBox.max.x, geometry.boundingBox.max.y, geometry.boundingBox.max.z]) {
+        assert.ok(value <= .500001, `${mesh.name} preserves its nominal footprint`);
+      }
+      const intermediateVertices = Array.from({ length: positions.count }, (_, index) =>
+        [positions.getX(index), positions.getY(index), positions.getZ(index)]
+          .filter(value => Math.abs(value) < .499).length >= 2);
+      assert.ok(intermediateVertices.some(Boolean), `${mesh.name} needs bevels or tapered facets, not a scaled cube`);
+      const yLevels = new Set(Array.from({ length: positions.count }, (_, index) => positions.getY(index).toFixed(3)));
+      if (mesh.name.endsWith('-pine')) assert.ok(yLevels.size >= 7, 'pine layers need an uneven vertical rhythm');
+      if (mesh.name.endsWith('-snow')) assert.ok(yLevels.size >= 6, 'snow caps need a rounded multi-level profile');
+      assert.ok(mesh.instanceColor, mesh.name);
+      assert.ok(new Set(Array.from(mesh.instanceColor.array, value => value.toFixed(3))).size > 5,
+        `${mesh.name} needs deterministic weathering color steps`);
+      triangleCount += (geometry.index?.count ?? positions.count) / 3 * mesh.count;
+    }
+    assert.equal(triangleCount, ring.stats.triangleCount);
+    assert.ok(triangleCount <= 100_000, `detailed scenery exceeds triangle budget: ${triangleCount}`);
   } finally { ring.dispose(); }
 });
 
@@ -224,6 +265,7 @@ test('D2 outer ring: dispose detaches the group and releases every unique resour
   const ring = createTownD2CloudTerraceOuterRing();
   parent.add(ring.group);
   const resources = resourcesOf(collectMeshes(ring.group));
+  assert.equal(resources.size, 10, 'dispose must cover five geometries and five materials');
   let disposed = 0;
   for (const resource of resources) resource.addEventListener('dispose', () => { disposed++; });
   ring.dispose();

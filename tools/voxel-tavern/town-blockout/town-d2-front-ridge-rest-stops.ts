@@ -1,7 +1,7 @@
 import {
-  BoxGeometry, BufferGeometry, CanvasTexture, CylinderGeometry, DoubleSide, ExtrudeGeometry,
+  BoxGeometry, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture, DoubleSide, ExtrudeGeometry,
   Group, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NearestFilter, Object3D, PlaneGeometry,
-  SRGBColorSpace, Shape, TorusGeometry,
+  RepeatWrapping, SRGBColorSpace, Shape, TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
@@ -310,7 +310,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   group.userData = { scope: 'D-5', roadMoved: false, distanceConvention: 'three-dimensional-centreline-arc' };
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
-  const textures = new Set<CanvasTexture>();
+  const textures = new Set<CanvasTexture | DataTexture>();
   let disposed = false;
   let textAtlasBuilt = false;
   const textFaces: TextFace[] = [];
@@ -343,12 +343,33 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     return item;
   }
 
-  const timber = material(new MeshLambertMaterial({ color: '#654b31' }));
-  const timberLight = material(new MeshLambertMaterial({ color: '#80613d' }));
-  const timberDark = material(new MeshLambertMaterial({ color: '#493724' }));
-  const stone = material(new MeshLambertMaterial({ color: '#858b87' }));
-  const stoneDark = material(new MeshLambertMaterial({ color: '#626c6b' }));
-  const stoneLight = material(new MeshLambertMaterial({ color: '#a1a29a' }));
+  // Tiny deterministic rasters give every plank and stone its own material grain
+  // without adding draw calls; authored sign text still uses its separate atlas.
+  function grainTexture(kind: 'wood' | 'stone') {
+    const size = 32, data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const hash = ((x * 73 + y * 151 + x * y * 17) % 29) / 29;
+      const value = kind === 'wood'
+        ? 205 + Math.sin(x * 1.7 + Math.sin(y * 0.31) * 2) * 19 + hash * 13
+        : 190 + hash * 49 + (Math.sin(x * 0.7 + y * 1.1) > 0.72 ? -24 : 0);
+      const offset = (y * size + x) * 4;
+      data[offset] = data[offset + 1] = data[offset + 2] = Math.max(0, Math.min(255, value));
+      data[offset + 3] = 255;
+    }
+    const texture = new DataTexture(data, size, size);
+    texture.colorSpace = SRGBColorSpace;
+    texture.wrapS = texture.wrapT = RepeatWrapping;
+    texture.magFilter = NearestFilter; texture.minFilter = NearestFilter; texture.generateMipmaps = false;
+    textures.add(texture);
+    return texture;
+  }
+  const woodGrain = grainTexture('wood'), stoneGrain = grainTexture('stone');
+  const timber = material(new MeshLambertMaterial({ color: '#654b31', map: woodGrain }));
+  const timberLight = material(new MeshLambertMaterial({ color: '#80613d', map: woodGrain }));
+  const timberDark = material(new MeshLambertMaterial({ color: '#493724', map: woodGrain }));
+  const stone = material(new MeshLambertMaterial({ color: '#858b87', map: stoneGrain }));
+  const stoneDark = material(new MeshLambertMaterial({ color: '#626c6b', map: stoneGrain }));
+  const stoneLight = material(new MeshLambertMaterial({ color: '#a1a29a', map: stoneGrain }));
   const snow = material(new MeshLambertMaterial({ color: '#e8ecf0' }));
   const snowShade = material(new MeshLambertMaterial({ color: '#bfcdd7' }));
   const moss = material(new MeshLambertMaterial({ color: '#4c5a43' }));
@@ -421,6 +442,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       texture.magFilter = NearestFilter; texture.minFilter = NearestFilter; texture.generateMipmaps = false;
       textures.add(texture);
       const faceMaterial = material(new MeshBasicMaterial({ map: texture, side: DoubleSide }));
+      faceMaterial.userData.authoredTextAtlas = true;
       const pieces = textFaces.flatMap(face => {
         const location = locations.get(face.key);
         if (!location) return [];
@@ -465,7 +487,7 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const originals: Mesh[] = [];
     root.traverse(object => {
       if (!(object instanceof Mesh) || object.userData.structuralFoundation || Array.isArray(object.material)) return;
-      if ('map' in object.material && object.material.map) return;
+      if (object.material.userData.authoredTextAtlas) return;
       if (!textAtlasBuilt && Array.isArray(object.userData.authoredCopy)) return;
       if (Array.isArray(object.userData.authoredCopy)) {
         const copy = authoredCopy.get(object.material) ?? [];
@@ -503,6 +525,15 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       part(built, bevelBox(1.95, 0.24, 0.09), timberLight,
         0, 0.86 + i * 0.27, -0.43, 'back-plank', -0.08);
     }
+    // Shallow carved grain and worn end-grain keep the bevels readable at play distance.
+    for (let i = 0; i < 4; i++) {
+      part(built, bevelBox(1.68, 0.012, 0.012, 0.003), timberDark,
+        0.04, 0.535, -0.215 + i * 0.20, 'seat-grain');
+    }
+    for (let i = 0; i < 2; i++) {
+      part(built, bevelBox(1.72, 0.014, 0.012, 0.003), timber,
+        0, 0.89 + i * 0.27, -0.378, 'back-grain', -0.08);
+    }
     for (const side of [-1, 1]) {
       part(built, bevelBox(0.14, 0.53, 0.16), timberDark, side * 0.78, 0.265, 0, 'splayed-leg', 0, 0, side * 0.08);
       part(built, bevelBox(0.12, 0.12, 0.75), timberDark, side * 0.78, 0.10, 0, 'foot');
@@ -510,6 +541,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       part(built, bevelBox(0.10, 0.10, 0.52), timberDark, side * 0.78, 0.36, -0.20, 'diagonal-brace', 0, side * 0.65);
       part(built, new CylinderGeometry(0.035, 0.035, 0.04, 6), iron,
         side * 0.78, 0.53, 0.34, 'seat-peg', Math.PI / 2);
+      part(built, new CylinderGeometry(0.046, 0.046, 0.008, 8), rust,
+        side * 0.78, 0.53, 0.362, 'seat-peg-rust-washer', Math.PI / 2);
     }
     part(built, bevelBox(1.88, 0.045, 0.35, 0.012), snow, 0, 0.603, -0.06, 'seat-snow', -0.015);
     part(built, bevelBox(1.91, 0.045, 0.15, 0.012), snowShade, 0, 1.165, -0.47, 'back-snow', -0.08);
@@ -548,6 +581,14 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     part(built, bevelBox(0.50, 0.045, 0.36, 0.012), snow, 0, 1.47, 0, 'cap-snow', 0.025);
     part(built, bevelBox(0.41, 0.40, 0.035, 0.008), stoneLight, 0, 0.93, 0.19, 'mileage-inset');
     part(built, bevelBox(0.43, 0.16, 0.035, 0.008), timberDark, 0, 1.23, 0.19, 'route-name-inset');
+    for (const x of [-0.12, 0.06]) {
+      part(built, bevelBox(0.014, 0.82, 0.012, 0.003), timberDark,
+        x, 0.78, 0.178, 'post-wood-grain');
+    }
+    part(built, bevelBox(0.012, 0.16, 0.012, 0.003), stoneDark,
+      -0.30, 0.11, 0.39, 'footing-stone-crack', 0, 0, -0.45);
+    part(built, bevelBox(0.16, 0.018, 0.10, 0.004), rust,
+      0.18, 1.405, 0.18, 'cap-rust-scar');
     canvasFace(built, [`${meters} 米`], 0.36, 0.33, 0, 0.93, 0.214, 'mileage', true);
     canvasFace(built, [TOWN_D2_REST_STOP_TEXTS.milepostTop], 0.38, 0.12, 0, 1.23, 0.214, 'route-name');
     for (const x of [-0.15, 0.15]) for (const y of [0.80, 1.06]) nail(built, x, y, 0.226);
@@ -591,8 +632,18 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     }
     part(parent, bevelBox(width, boardHeight, 0.11, 0.025), timberDark, 0, 1.64, 0, 'sign-board');
     part(parent, bevelBox(width + 0.12, 0.08, 0.18, 0.018), timberLight, 0, boardHeight / 2 + 1.68, 0, 'sign-cap');
+    for (let i = 0; i < 5; i++) {
+      part(parent, bevelBox(0.012, boardHeight * 0.78, 0.008, 0.002), timber,
+        -width * 0.40 + i * width * 0.20, 1.64, 0.059, 'sign-board-grain');
+    }
+    part(parent, bevelBox(width * 0.78, 0.018, 0.008, 0.002), rust,
+      0, 1.64 - boardHeight * 0.34, 0.059, 'sign-weather-streak');
     canvasFace(parent, [text], width * 0.91, boardHeight * 0.76, 0, 1.64, 0.064, id);
-    for (const x of [-width * 0.39, width * 0.39]) nail(parent, x, 1.64, 0.082);
+    for (const x of [-width * 0.39, width * 0.39]) {
+      nail(parent, x, 1.64, 0.082);
+      part(parent, new CylinderGeometry(0.043, 0.043, 0.006, 8), rust,
+        x, 1.64, 0.077, 'sign-nail-rust-washer', Math.PI / 2);
+    }
   }
 
   function shelter(id: string, distance: number, section: D2Shelter['section']) {
@@ -637,6 +688,17 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       part(built, bevelBox(0.34, 0.32, 0.66, 0.035), row % 2 ? stoneDark : stone,
         side * 1.67, 0.33 + row * 0.32, -0.93 + row * 0.18, 'side-wall-block');
     }
+    // Chipped dry-stone arrises and shallow mortarless cracks, all within the old wall envelope.
+    for (let row = 0; row < 4; row++) {
+      part(built, bevelBox(0.014, 0.18, 0.012, 0.002), stoneDark,
+        -1.18 + row * 0.77, 0.35 + row * 0.32, -1.147, 'wall-stone-crack', 0, 0, row % 2 ? 0.35 : -0.28);
+      part(built, bevelBox(0.12, 0.025, 0.012, 0.003), stoneLight,
+        -0.74 + row * 0.53, 0.45 + (row % 2) * 0.64, -1.146, 'wall-chipped-arris');
+    }
+    for (const x of [-1.65, 1.65]) {
+      part(built, bevelBox(0.012, 1.48, 0.012, 0.002), timberDark,
+        x + 0.055, 1.27, 1.185, 'shelter-post-grain');
+    }
     for (const x of [-1.65, 1.65]) for (const z of [-1.20, 1.18]) {
       part(built, new CylinderGeometry(0.095, 0.12, 2.34, 7), timber,
         x, 1.22, z, 'hewn-post', 0, x * 0.12);
@@ -656,8 +718,12 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     }
     part(built, new CylinderGeometry(0.09, 0.09, 3.96, 7), timberDark, 0, 2.78, 0, 'ridge-pole', 0, 0, Math.PI / 2);
     // Bench is part of each shelter; these are not hairpin-grid benches.
-    for (let i = 0; i < 3; i++) part(built, bevelBox(1.75, 0.10, 0.18), timberLight,
-      0, 0.53, -0.72 + i * 0.20, 'shelter-seat-plank');
+    for (let i = 0; i < 3; i++) {
+      part(built, bevelBox(1.75, 0.10, 0.18), timberLight,
+        0, 0.53, -0.72 + i * 0.20, 'shelter-seat-plank');
+      part(built, bevelBox(1.52, 0.012, 0.012, 0.003), timberDark,
+        0.05, 0.538, -0.621 + i * 0.20, 'shelter-seat-grain');
+    }
     for (const x of [-0.68, 0.68]) part(built, bevelBox(0.14, 0.48, 0.42), stoneDark,
       x, 0.26, -0.42, 'shelter-seat-support');
     signboard(built, TOWN_D2_REST_STOP_TEXTS.rest, `${id}-rest-copy`);
@@ -744,9 +810,21 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       x, 0.76, z, 'parapet-block', 0, -angle);
     part(lookout, bevelBox(0.98, 0.08, 0.38, 0.022), snow,
       x, 1.13, z, 'parapet-snow', 0, -angle);
+    part(lookout, bevelBox(0.012, 0.25, 0.012, 0.002), stoneDark,
+      x - Math.cos(angle) * 0.17, 0.71, z - Math.sin(angle) * 0.17,
+      'parapet-stone-crack', 0, -angle, i % 2 ? 0.32 : -0.32);
+    part(lookout, bevelBox(0.26, 0.025, 0.018, 0.003), snowShade,
+      x + Math.cos(angle) * 0.20, 1.09, z + Math.sin(angle) * 0.20,
+      'parapet-melt-mark', 0, -angle);
   }
   part(lookout, bevelBox(2.42, 1.13, 0.48, 0.07), stone, 0, 0.985, 1.60, 'engraved-view-stone', -0.035);
   part(lookout, bevelBox(2.56, 0.13, 0.62, 0.035), stoneLight, 0, 1.605, 1.60, 'view-stone-cap');
+  part(lookout, bevelBox(0.45, 0.035, 0.50, 0.012), snow,
+    -0.72, 1.69, 1.57, 'view-stone-snow-cap', 0, 0, -0.035);
+  for (const x of [-0.94, 0.91]) {
+    part(lookout, bevelBox(0.014, 0.34, 0.012, 0.002), stoneDark,
+      x, 0.98, 1.367, 'view-stone-crack', -0.035, 0, x > 0 ? 0.28 : -0.28);
+  }
   canvasFace(lookout, [TOWN_D2_REST_STOP_TEXTS.viewpoint], 2.18, 0.56, 0, 0.995, 1.343,
     'viewpoint-engraving-north', true);
   canvasFace(lookout, [TOWN_D2_REST_STOP_TEXTS.viewpoint], 2.18, 0.56, 0, 0.995, 1.851,

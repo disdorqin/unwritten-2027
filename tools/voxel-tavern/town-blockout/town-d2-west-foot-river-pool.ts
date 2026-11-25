@@ -1,7 +1,7 @@
 import {
-  BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, DodecahedronGeometry,
-  DoubleSide, Float32BufferAttribute, Group, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Quaternion, RingGeometry,
-  Vector3,
+  BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, DataTexture, DodecahedronGeometry,
+  DoubleSide, Float32BufferAttribute, Group, LinearFilter, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Quaternion, RingGeometry,
+  SRGBColorSpace, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
@@ -142,7 +142,7 @@ export function surveyTownD2WestFootRiverPool(): TownD2WestFootRiverPoolSurvey {
   return cachedSurvey;
 }
 
-type Family = 'bed' | 'shallow' | 'stoneLight' | 'stoneDark' | 'timber' | 'reeds';
+type Family = 'bed' | 'shallow' | 'stone' | 'timber' | 'reeds';
 type GeometryBatch = Record<Family, BufferGeometry[]>;
 
 function nonIndexed(geometry: BufferGeometry) {
@@ -159,18 +159,51 @@ function transformed(geometry: BufferGeometry, position: Vector3, yaw = 0, scale
   return nonIndexed(geometry);
 }
 
+function paint(geometry: BufferGeometry, family: Family, piece: number) {
+  const position = geometry.getAttribute('position');
+  const colors = new Float32Array(position.count * 3);
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+    let tone = 1;
+    if (family === 'stone') {
+      tone = [.74, 1.04, .9][piece % 3]! + .025 * Math.sin(x * 4.7 + z * 6.3 + y * 3.1);
+    } else if (family === 'timber') {
+      tone = .73 + .25 * (.5 + .5 * Math.sin((x + z * .65) * 12 + y * 4))
+        + .045 * Math.sin(z * 29 + x * 3);
+    } else if (family === 'reeds') {
+      tone = .77 + .23 * (.5 + .5 * Math.sin(piece * 2.7 + y * 5));
+    } else if (family === 'bed') {
+      tone = .9 + .07 * Math.sin(x * .7 + z * .9);
+    } else {
+      tone = .95 + .05 * Math.sin(x * .8 + z * .6);
+    }
+    colors[i * 3] = tone;
+    colors[i * 3 + 1] = tone + (family === 'stone' ? .018 * Math.sin(z * 8) : 0);
+    colors[i * 3 + 2] = tone + (family === 'timber' ? -.035 * Math.sin(x * 9) : 0);
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  return geometry;
+}
+
+function grounded(geometry: BufferGeometry, scale: Vector3) {
+  geometry.scale(scale.x, scale.y, scale.z);
+  geometry.computeBoundingBox();
+  geometry.translate(0, -geometry.boundingBox!.min.y, 0);
+  return geometry;
+}
+
 function flatDisk(radius: number, segments: number, y: number) {
   const positions: number[] = [0, y, 0];
   const uvs: number[] = [.5, .5];
-  const colors: number[] = [.88, .96, .98];
+  const colors: number[] = [.88, .9, .9];
   const indices: number[] = [];
   for (let i = 0; i <= segments; i++) {
     const angle = i / segments * Math.PI * 2;
     const ripple = 1 + .018 * Math.sin(angle * 5) + .012 * Math.sin(angle * 9 + .7);
     positions.push(Math.cos(angle) * radius * ripple, y, Math.sin(angle) * radius * ripple);
     uvs.push(.5 + Math.cos(angle) * .5, .5 + Math.sin(angle) * .5);
-    const tint = .9 + .08 * Math.sin(angle * 3 + .4);
-    colors.push(.72 * tint, .88 * tint, .92 * tint);
+    const tint = .96 + .04 * Math.sin(angle * 3 + .4);
+    colors.push(tint, tint, tint);
     if (i > 0) indices.push(0, i + 1, i);
   }
   const geometry = new BufferGeometry();
@@ -183,7 +216,7 @@ function flatDisk(radius: number, segments: number, y: number) {
 }
 
 function creekRibbon(startNorth: number, endNorth: number, startHalfWidth: number, endHalfWidth: number) {
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const positions: number[] = [], uvs: number[] = [], colors: number[] = [], indices: number[] = [];
   const steps = Math.max(4, Math.ceil(Math.abs(endNorth - startNorth) / .75));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -192,6 +225,9 @@ function creekRibbon(startNorth: number, endNorth: number, startHalfWidth: numbe
     const halfWidth = startHalfWidth + (endHalfWidth - startHalfWidth) * t;
     positions.push(east - halfWidth, waterHeight + .025, -north, east + halfWidth, waterHeight + .025, -north);
     uvs.push(0, t, 1, t);
+    const edgeTint = .94 + .06 * Math.sin(t * 13);
+    colors.push(1.04 * edgeTint, 1.04 * edgeTint, 1.04 * edgeTint,
+      .9 * edgeTint, .94 * edgeTint, .94 * edgeTint);
     if (i > 0) {
       const a = (i - 1) * 2;
       indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
@@ -200,9 +236,50 @@ function creekRibbon(startNorth: number, endNorth: number, startHalfWidth: numbe
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function waterTexture(kind: 'pool' | 'creek') {
+  const size = 128, data = new Uint8Array(size * size * 4);
+  const hash = (x: number, y: number) => {
+    const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return value - Math.floor(value);
+  };
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = (x + .5) / size, v = (y + .5) / size;
+    const noise = hash(Math.floor(x / 2), Math.floor(y / 2)) - .5;
+    let red: number, green: number, blue: number, highlight = 0;
+    if (kind === 'pool') {
+      const radius = Math.hypot((u - .5) * 1.04, (v - .52) * 1.04);
+      const depth = Math.max(0, Math.min(1, (radius - .1) / .48));
+      const shelf = depth * depth * (3 - 2 * depth);
+      red = 43 + 83 * shelf; green = 104 + 67 * shelf; blue = 111 + 43 * shelf;
+      for (const [cx, cy, stretch] of [[.36, .62, 1.15], [.69, .35, .8]]) {
+        const dx = (u - cx) * stretch, dy = v - cy, distance = Math.hypot(dx, dy);
+        const angle = Math.atan2(dy, dx);
+        const broken = Math.max(0, Math.sin(angle * 3 + distance * 19));
+        highlight += Math.pow(Math.max(0, Math.cos(distance * 78)), 28) * broken * 19;
+      }
+    } else {
+      const edge = Math.max(0, Math.min(1, Math.abs(u - .5) * 2));
+      red = 48 + 78 * edge; green = 111 + 59 * edge; blue = 117 + 37 * edge;
+      highlight = Math.pow(Math.max(0, Math.sin(v * 138 + u * 21 + Math.sin(u * 17) * 2)), 18) * 10;
+    }
+    const offset = (y * size + x) * 4;
+    data[offset] = Math.max(0, Math.min(255, red + noise * 7 + highlight));
+    data[offset + 1] = Math.max(0, Math.min(255, green + noise * 8 + highlight));
+    data[offset + 2] = Math.max(0, Math.min(255, blue + noise * 6 + highlight));
+    data[offset + 3] = 255;
+  }
+  const texture = new DataTexture(data, size, size);
+  texture.colorSpace = SRGBColorSpace;
+  texture.minFilter = texture.magFilter = LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /** Visual-only pond, inlet and short outflow. No terrain, water or collider authority is changed. */
@@ -223,10 +300,12 @@ export function createTownD2WestFootRiverPool() {
   const tangentNorth = .5;
   const tangent = new Vector3(tangentEast, 0, -tangentNorth).normalize();
   const right = new Vector3().crossVectors(tangent, new Vector3(0, 1, 0)).normalize();
-  const batches: GeometryBatch = { bed: [], shallow: [], stoneLight: [], stoneDark: [], timber: [], reeds: [] };
+  const batches: GeometryBatch = { bed: [], shallow: [], stone: [], timber: [], reeds: [] };
+  const poolTexture = waterTexture('pool'), creekTexture = waterTexture('creek');
   const groundAt = (east: number, north: number) => grid.groundHeightAt(east, north);
   const put = (family: Family, geometry: BufferGeometry, position: Vector3, yaw = 0, scale?: Vector3) => {
-    batches[family].push(transformed(geometry, position, yaw, scale));
+    const piece = batches[family].length;
+    batches[family].push(paint(transformed(geometry, position, yaw, scale), family, piece));
   };
   const local = (across: number, along: number, y: number) => centre.clone()
     .addScaledVector(right, across).addScaledVector(tangent, along).setY(y);
@@ -235,36 +314,40 @@ export function createTownD2WestFootRiverPool() {
     (along < -site.radius * .7 && Math.abs(across) < 3.1);
 
   // The shelf sits just above the old Y=5 water and below the new transparent Y=5.025 surface.
-  put('bed', new CylinderGeometry(site.radius * .91, site.radius * .84, 1.1, 48), centre.clone().setY(3.65));
+  const bedTop = site.waterLevel - .8, bedBase = site.groundHeight;
+  put('bed', new CylinderGeometry(site.radius * .91, site.radius * .84, bedTop - bedBase, 48),
+    centre.clone().setY((bedTop + bedBase) / 2));
   const shelf = new RingGeometry(site.radius * .68, site.radius * .965, 64);
   shelf.rotateX(-Math.PI / 2);
-  batches.shallow.push(transformed(shelf, centre.clone().setY(site.waterLevel + .012)));
+  batches.shallow.push(paint(transformed(shelf, centre.clone().setY(site.waterLevel + .012)), 'shallow', 0));
 
   // Irregular block banks: every block meets the measured ground, with a low inner lip.
   for (let i = 0; i < 56; i++) {
-    const angle = i / 56 * Math.PI * 2 + .035 * Math.sin(i * 2.7);
+    const angle = i / 56 * Math.PI * 2 + .018 * Math.sin(i * 1.7);
     const across = Math.cos(angle) * (site.radius + .48);
     const along = Math.sin(angle) * (site.radius + .48);
     if (inChannelGap(across, along)) continue;
     const east = centre.x + right.x * across + tangent.x * along;
     const north = site.north - right.z * across - tangent.z * along;
-    const top = Math.max(site.waterLevel + .42, groundAt(east, north) + .32);
-    const height = i % 7 === 0 ? 1.05 : .76;
-    put(i % 4 === 0 ? 'stoneDark' : 'stoneLight',
-      new BoxGeometry(1.28 + .16 * Math.sin(i * 1.9), height, 1.02),
-      local(across, along, top - height / 2), -angle + Math.PI / 2);
+    const base = groundAt(east, north);
+    const top = Math.max(site.waterLevel + .42, base + .32);
+    put('stone', new BoxGeometry(1.24 + .14 * Math.sin(i * 1.9), top - base, 1.02),
+      local(across, along, base + (top - base) / 2), -angle + Math.PI / 2);
   }
   for (let i = 0; i < 30; i++) {
     const angle = i / 30 * Math.PI * 2 + .11 * Math.sin(i * 4.1);
-    const radial = site.radius + .72 + .32 * Math.sin(i * 2.3);
+    const radial = site.radius + 2.1 + .22 * Math.sin(i * 2.3);
     const across = Math.cos(angle) * radial, along = Math.sin(angle) * radial;
     if (inChannelGap(across, along)) continue;
     const east = centre.x + right.x * across + tangent.x * along;
     const north = site.north - right.z * across - tangent.z * along;
+    const ground = groundAt(east, north);
     const size = .42 + .22 * (Math.sin(i * 8.3) * .5 + .5);
-    put(i % 3 === 0 ? 'stoneLight' : 'stoneDark', new DodecahedronGeometry(1, 0),
-      local(across, along, Math.max(site.waterLevel + .12, groundAt(east, north) + size * .45)),
-      angle, new Vector3(size * 1.25, size * .72, size));
+    const rock = new DodecahedronGeometry(1, 0);
+    rock.computeBoundingBox();
+    const vertical = Math.max(size * .72, (site.waterLevel + .12 - ground) / -rock.boundingBox!.min.y);
+    grounded(rock, new Vector3(size * 1.25, vertical, size));
+    put('stone', rock, local(across, along, ground), angle);
   }
 
   // Stone-lined inlet leaves a central overflow; timber posts mark the interception.
@@ -277,14 +360,14 @@ export function createTownD2WestFootRiverPool() {
       const halfHeight = .36;
       const top = Math.max(site.waterLevel + .18 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
       const base = groundAt(east, north);
-      put(i % 2 ? 'stoneLight' : 'stoneDark', new BoxGeometry(.72, top - base, .82),
+      put('stone', new BoxGeometry(.72, top - base, .46),
         local(across, along, base + (top - base) / 2), side * .12);
     }
-    const across = side * 2.75;
-    const east = centre.x + right.x * across + tangent.x * (site.radius + INLET_REACH);
-    const north = site.north - right.z * across - tangent.z * (site.radius + INLET_REACH);
-    const base = Math.max(site.waterLevel - .45, groundAt(east, north));
-    put('timber', new CylinderGeometry(.13, .17, 1.65, 7), local(across, site.radius + INLET_REACH, base + .825));
+    const across = side * 2.75, along = site.radius + INLET_REACH;
+    const east = centre.x + right.x * across + tangent.x * along;
+    const north = site.north - right.z * across - tangent.z * along;
+    const base = groundAt(east, north), top = site.waterLevel + 1.32;
+    put('timber', new CylinderGeometry(.13, .17, top - base, 7), local(across, along, base + (top - base) / 2));
   }
   put('timber', new BoxGeometry(5.85, .2, .24),
     local(0, site.radius + INLET_REACH, site.waterLevel + 1.22), 0);
@@ -295,7 +378,7 @@ export function createTownD2WestFootRiverPool() {
     const halfHeight = .29;
     const top = Math.max(site.waterLevel + .12 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
     const base = groundAt(east, north);
-    put('stoneLight', new BoxGeometry(1.18, top - base, .74),
+    put('stone', new BoxGeometry(1.18, top - base, .74),
       local(across, along, base + (top - base) / 2), side * .08);
   }
 
@@ -309,39 +392,37 @@ export function createTownD2WestFootRiverPool() {
       const halfHeight = .28;
       const top = Math.max(site.waterLevel + .1 + halfHeight * 2, groundAt(east, north) + halfHeight * 2);
       const base = groundAt(east, north);
-      put('stoneDark', new BoxGeometry(.68, top - base, .86),
+      put('stone', new BoxGeometry(.68, top - base, .86),
         local(across, along, base + (top - base) / 2), side * .09);
     }
   }
   for (let i = 0; i < 18; i++) {
     const angle = i / 18 * Math.PI * 2 + .17;
-    const across = Math.cos(angle) * (site.radius + .8);
-    const along = Math.sin(angle) * (site.radius + .8);
+    const across = Math.cos(angle) * (site.radius - .55);
+    const along = Math.sin(angle) * (site.radius - .55);
     if (inChannelGap(across, along) || i % 4 === 0) continue;
-    const east = centre.x + right.x * across + tangent.x * along;
-    const north = site.north - right.z * across - tangent.z * along;
-    const base = Math.max(site.waterLevel - .12, groundAt(east, north));
     for (let stem = 0; stem < 3; stem++) {
-      const height = .72 + .22 * Math.sin(i * 3.1 + stem);
+      const stemAcross = across + (stem - 1) * .13, stemAlong = along + .08 * Math.sin(stem * 2);
+      const east = centre.x + right.x * stemAcross + tangent.x * stemAlong;
+      const north = site.north - right.z * stemAcross - tangent.z * stemAlong;
+      const base = groundAt(east, north), height = .72 + .22 * Math.sin(i * 3.1 + stem);
       put('reeds', new CylinderGeometry(.018, .026, height, 5),
-        local(across + (stem - 1) * .13, along + .08 * Math.sin(stem * 2), base + height / 2),
-        stem * .7);
+        local(stemAcross, stemAlong, base + height / 2), stem * .7);
     }
   }
-  put('timber', new BoxGeometry(2.7, .22, .28),
+  put('timber', new BoxGeometry(2.7, .22, .28, 12, 1, 2),
     local(-4.1, -site.radius * .55, site.waterLevel + .11), -.38);
 
   const materials: Record<Family, MeshLambertMaterial> = {
-    bed: new MeshLambertMaterial({ color: '#354f52' }),
-    shallow: new MeshLambertMaterial({ color: '#9b9b7c' }),
-    stoneLight: new MeshLambertMaterial({ color: '#858a80' }),
-    stoneDark: new MeshLambertMaterial({ color: '#596660' }),
-    timber: new MeshLambertMaterial({ color: '#72523a' }),
-    reeds: new MeshLambertMaterial({ color: '#8b8b58' }),
+    bed: new MeshLambertMaterial({ color: '#476568', vertexColors: true }),
+    shallow: new MeshLambertMaterial({ color: '#a7a984', vertexColors: true }),
+    stone: new MeshLambertMaterial({ color: '#8a8e83', vertexColors: true }),
+    timber: new MeshLambertMaterial({ color: '#806046', vertexColors: true }),
+    reeds: new MeshLambertMaterial({ color: '#8e945c', vertexColors: true }),
   };
   const names: Record<Family, string> = {
-    bed: 'pool-basin-bed', shallow: 'pool-shallow-shelf', stoneLight: 'pool-stone-bank-light',
-    stoneDark: 'pool-stone-bank-dark', timber: 'pool-timber-weir-and-driftwood', reeds: 'pool-shore-reeds',
+    bed: 'pool-basin-bed', shallow: 'pool-shallow-shelf', stone: 'pool-stone-bank',
+    timber: 'pool-timber-weir-and-driftwood', reeds: 'pool-shore-reeds',
   };
   for (const family of Object.keys(batches) as Family[]) {
     const pieces = batches[family];
@@ -358,7 +439,7 @@ export function createTownD2WestFootRiverPool() {
   const poolWater = flatDisk(site.radius * .97, 72, site.waterLevel + .025);
   poolWater.translate(site.east, 0, -site.north);
   const waterMaterial = new MeshBasicMaterial({
-    color: '#78aeb7', vertexColors: true, transparent: true, opacity: .86,
+    color: '#ffffff', map: poolTexture, vertexColors: true, transparent: true, opacity: .84,
     depthTest: true, depthWrite: false, side: DoubleSide,
   });
   const water = new Mesh(poolWater, waterMaterial);
@@ -371,7 +452,7 @@ export function createTownD2WestFootRiverPool() {
   const outletWater = creekRibbon(site.north - site.radius,
     site.north - site.radius - 7.5, 2.45, 1.75);
   const creekMaterial = waterMaterial.clone();
-  creekMaterial.vertexColors = false;
+  creekMaterial.map = creekTexture;
   const inlet = new Mesh(inletWater, creekMaterial);
   inlet.name = 'pool-inlet-water';
   inlet.renderOrder = 3;
@@ -379,23 +460,6 @@ export function createTownD2WestFootRiverPool() {
   outlet.name = 'pool-outflow-water';
   outlet.renderOrder = 3;
   group.add(inlet, outlet);
-
-  const rippleMaterial = new MeshBasicMaterial({
-    color: '#d0e5e3', transparent: true, opacity: .28,
-    depthTest: true, depthWrite: false, side: DoubleSide,
-  });
-  const rippleParts: BufferGeometry[] = [];
-  for (const [radius, start, length] of [[4.8, .2, 2.2], [7.4, 2.7, 1.7], [10.6, 4.2, 1.25]]) {
-    const ring = new RingGeometry(radius, radius + .055, 36, 1, start, length);
-    ring.rotateX(-Math.PI / 2);
-    ring.translate(site.east + 1.2, site.waterLevel + .045, -site.north - .7);
-    rippleParts.push(nonIndexed(ring));
-  }
-  const ripples = new Mesh(mergeGeometries(rippleParts)!, rippleMaterial);
-  rippleParts.forEach(part => part.dispose());
-  ripples.name = 'pool-surface-ripples';
-  ripples.renderOrder = 4;
-  group.add(ripples);
 
   let disposed = false;
   return {
@@ -416,6 +480,8 @@ export function createTownD2WestFootRiverPool() {
       });
       geometries.forEach(geometry => geometry.dispose());
       ownedMaterials.forEach(material => material.dispose());
+      poolTexture.dispose();
+      creekTexture.dispose();
       group.clear();
     },
   };

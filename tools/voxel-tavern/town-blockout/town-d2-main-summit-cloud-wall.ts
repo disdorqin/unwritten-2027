@@ -1,5 +1,5 @@
 import {
-  Color, Group, IcosahedronGeometry, InstancedMesh, Matrix4,
+  Color, Float32BufferAttribute, Group, IcosahedronGeometry, InstancedMesh, Matrix4,
   MeshLambertMaterial, Object3D, Vector3,
 } from 'three';
 import { mainSummitBounds } from './main-summit-block';
@@ -61,7 +61,7 @@ export const townD2MainSummitCloudSpec = Object.freeze({
   maxDraws: 10,
 });
 
-const DAY_COLORS = ['#e8ecf0', '#d4dee5', '#bccbd5', '#f1f2ed', '#a9bac6'] as const;
+const DAY_COLORS = ['#f1f4f2', '#dfe7eb', '#c7d6df', '#e9eeec', '#b5c7d3'] as const;
 const NIGHT_COLORS = ['#2c3648', '#3c4b61', '#52647c', '#46556c', '#242f42'] as const;
 const EPSILON = 1e-9;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -378,18 +378,41 @@ export function createTownD2MainSummitCloudWall(
     placements.push(provisional);
   }
 
-  // One faceted, irregular unit cloud. The per-instance palette and Lambert
-  // shading keep both day and night from reading as a flat white wall.
+  // Keep the 20-face budget, but turn the icosahedron's broad side toward the
+  // vertical axis so each lobe fills its declared height instead of reading as
+  // a thin snow slab. Radial billows only pull inward: every vertex remains in
+  // the same unit bounding sphere used by the unchanged 3D exclusion tests.
   const geometry = new IcosahedronGeometry(1, 0);
   const vertices = geometry.getAttribute('position');
+  const vertexColors = new Float32Array(vertices.count * 3);
+  const diagonal = Math.SQRT1_2;
   for (let index = 0; index < vertices.count; index++) {
     const x = vertices.getX(index), y = vertices.getY(index), z = vertices.getZ(index);
-    const bump = 1 + .09 * Math.sin(x * 8.1 + y * 5.7 + z * 9.3) + .045 * Math.cos(z * 13.2 - x * 4.1);
-    vertices.setXYZ(index, x * bump, y * (1 + .06 * Math.sin(x * 6.3 + z * 7.1)), z * bump);
+    const cloudX = x;
+    const cloudY = (y + z) * diagonal;
+    const cloudZ = (z - y) * diagonal;
+    const cap = Math.pow(Math.abs(cloudY), 8);
+    const billow = .5 + .5 * Math.sin(cloudX * 7.4 + cloudY * 5.1 + cloudZ * 8.3);
+    const radial = 1 - .055 * (1 - cap) * (.35 + .65 * billow);
+    const px = cloudX * radial, py = cloudY * radial, pz = cloudZ * radial;
+    vertices.setXYZ(index, px, py, pz);
+    // A radial normal is exact for this star-shaped puff and stays smooth
+    // across the duplicated triangle vertices without another geometry pass.
+    geometry.attributes.normal.setXYZ(index, cloudX, cloudY, cloudZ);
+    const shade = clamp(.89 + .085 * ((cloudY + 1) / 2) +
+      .012 * Math.sin(cloudX * 5.2 + cloudZ * 4.7), .86, .99);
+    vertexColors[index * 3] = shade * .985;
+    vertexColors[index * 3 + 1] = shade * .995;
+    vertexColors[index * 3 + 2] = shade;
   }
   vertices.needsUpdate = true;
-  geometry.computeVertexNormals();
-  const material = new MeshLambertMaterial({ color: '#ffffff', flatShading: true, dithering: true });
+  geometry.attributes.normal.needsUpdate = true;
+  geometry.setAttribute('color', new Float32BufferAttribute(vertexColors, 3));
+  // Opaque Lambert keeps the soft vertex shading without transparent overdraw.
+  const material = new MeshLambertMaterial({
+    color: '#ffffff', vertexColors: true, transparent: false, opacity: 1,
+    depthWrite: true, flatShading: false, dithering: true, fog: true,
+  });
   const mesh = new InstancedMesh(geometry, material, placements.length);
   mesh.name = 'town-d2-main-summit-cloud-lobes';
   mesh.frustumCulled = false;

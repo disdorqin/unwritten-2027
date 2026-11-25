@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  CanvasTexture, DoubleSide, Group, Mesh, NearestFilter, PlaneGeometry, Vector3,
+  CanvasTexture, DataTexture, DoubleSide, Group, Mesh, NearestFilter, PlaneGeometry, RepeatWrapping, Vector3,
   type BufferGeometry, type Material, type Object3D,
 } from 'three';
 import {
@@ -221,6 +221,23 @@ test('D-5: three material families, finite transforms/vertices and idempotent co
   try {
     assert.ok(stops.materials.timber && stops.materials.stone && stops.materials.snow);
     assert.ok(stops.benches.length > 0);
+    for (const surface of [stops.materials.timber, stops.materials.timberLight,
+      stops.materials.timberDark, stops.materials.stone, stops.materials.stoneDark,
+      stops.materials.stoneLight]) {
+      const texture = surface.map;
+      assert.ok(texture instanceof DataTexture, `${surface.uuid} needs a procedural material grain`);
+      assert.equal(texture.image.width, 32);
+      assert.equal(texture.image.height, 32);
+      assert.equal(texture.wrapS, RepeatWrapping);
+      assert.equal(texture.wrapT, RepeatWrapping);
+      assert.equal(texture.magFilter, NearestFilter);
+      assert.equal(texture.minFilter, NearestFilter);
+      assert.equal(texture.generateMipmaps, false);
+      assert.ok(texture.image.data.some((value: number, index: number) => index % 4 !== 3 && value !== 255),
+        'grain must contain visible tonal variation');
+    }
+    assert.notEqual(stops.materials.timber.map, stops.materials.stone.map,
+      'wood and stone need distinct grain rasters');
     let meshes = 0;
     stops.group.updateMatrixWorld(true);
     stops.group.traverse(object => {
@@ -238,12 +255,15 @@ test('D-5: three material families, finite transforms/vertices and idempotent co
     });
     assert.ok(meshes < 80, `static detail must be material-batched, got ${meshes} meshes`);
     assert.ok(stops.group.children.some(child => child.name.startsWith('town-d2-static-')));
-    const resources = new Set<BufferGeometry | Material>();
+    const resources = new Set<BufferGeometry | Material | DataTexture>();
     stops.group.traverse(object => {
       if (!(object instanceof Mesh)) return;
       resources.add(object.geometry);
       const list = Array.isArray(object.material) ? object.material : [object.material];
-      list.forEach(item => resources.add(item));
+      list.forEach(item => {
+        resources.add(item);
+        if (item.map instanceof DataTexture) resources.add(item.map);
+      });
     });
     let disposed = 0;
     for (const resource of resources) resource.addEventListener('dispose', () => { disposed++; });
@@ -394,12 +414,15 @@ test('D-5: legacy supplement, one crisp text atlas and complete canvas copy/disp
       assert.ok(textMeshes * 4 < expected.length, 'text mesh count must drop significantly');
       assert.ok(totalMeshes < 80, `browser path must remain material-batched, got ${totalMeshes} meshes`);
 
-      const resources = new Set<BufferGeometry | Material | CanvasTexture>();
+      const resources = new Set<BufferGeometry | Material | CanvasTexture | DataTexture>();
       stops.group.traverse(object => {
         if (!(object instanceof Mesh)) return;
         resources.add(object.geometry);
         const list = Array.isArray(object.material) ? object.material : [object.material];
-        list.forEach(item => resources.add(item));
+        list.forEach(item => {
+          resources.add(item);
+          if (item.map instanceof DataTexture) resources.add(item.map);
+        });
       });
       textures.forEach(texture => resources.add(texture));
       let disposed = 0;
