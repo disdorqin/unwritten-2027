@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  Group, InstancedMesh, MeshStandardMaterial, PointLight, NearestFilter,
+  Group, InstancedMesh, MeshStandardMaterial, PointLight, NearestFilter, Vector3,
 } from 'three';
 import {
   craterFloorWorklightGeometry,mountCraterFloorWorklightChain,
@@ -92,6 +92,13 @@ test('C-2 production WestCraterRoad forwards its existing town phase to bottom l
     if(item instanceof PointLight && item.name.startsWith('c2/'))lights.push(item);
   });
   assert.equal(lights.length,6,'default WestCraterRoad must contain all six real warm lamps');
+  road.group.updateMatrixWorld(true);
+  const moved=lights.find(l=>l.name==='c2/haulage-turn')??lights.find(l=>l.name.startsWith('c2/haulage-turn'));
+  const door:PointLight[]=[];
+  road.lampRoom?.group.traverse(o=>{if(o instanceof PointLight)door.push(o)});
+  assert.ok(moved);assert.equal(door.length,1);
+  const a=moved.getWorldPosition(new Vector3()),b=door[0].getWorldPosition(new Vector3());
+  assert.ok(Math.hypot(a.x-b.x,a.z-b.z)>=8,'haulage-turn must clear lamp-room door pool by 8m');
   assert.equal(lights.filter(l=>l.visible).length,0);
   road.craterActions.setNight(true);
   assert.equal(lights.filter(l=>l.visible).length,6);

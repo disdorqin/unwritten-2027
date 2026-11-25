@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, CanvasTexture, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  PlaneGeometry, SRGBColorSpace, type BufferGeometry, type Material,
+  BoxGeometry, CanvasTexture, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
+  MeshLambertMaterial, Object3D, PlaneGeometry, SRGBColorSpace, type BufferGeometry, type Material,
 } from 'three';
 import type { mountMainSummitAssembly } from './main-summit-assembly';
 
@@ -31,6 +31,7 @@ export function mountMainSummitTerraceEdge(assembly: Assembly) {
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
   const textures = new Set<CanvasTexture>();
+  const batches = new Set<InstancedMesh>();
   const stone = new MeshLambertMaterial({ color: '#6d7276' });
   const timber = new MeshLambertMaterial({ color: '#5d4630' });
   const cloud = new MeshLambertMaterial({ color: '#eef3f6' });
@@ -38,30 +39,42 @@ export function mountMainSummitTerraceEdge(assembly: Assembly) {
   materials.add(timber);
   materials.add(cloud);
 
-  function box(
-    parent: Group, material: Material, name: string,
-    east: number, north: number, base: number, w: number, h: number, d: number,
-  ) {
-    const geometry = new BoxGeometry(w, h, d);
-    const mesh = new Mesh(geometry, material);
+  // A shared unit cube plus instance matrices preserves every original box
+  // extent and position while collapsing each material family to one draw.
+  const boxGeometry = new BoxGeometry(1, 1, 1);
+  geometries.add(boxGeometry);
+  const transform = new Object3D();
+  function boxBatch(name: string, material: Material, transforms: readonly Matrix4[]) {
+    const mesh = new InstancedMesh(boxGeometry, material, transforms.length);
     mesh.name = name;
-    mesh.position.set(east, base + h / 2, -north);
-    geometries.add(geometry);
-    parent.add(mesh);
+    transforms.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+    mesh.computeBoundingSphere();
+    group.add(mesh);
+    batches.add(mesh);
     return mesh;
+  }
+  function boxMatrix(east: number, north: number, base: number, w: number, h: number, d: number) {
+    transform.position.set(east, base + h / 2, -north);
+    transform.rotation.set(0, 0, 0);
+    transform.scale.set(w, h, d);
+    transform.updateMatrix();
+    return transform.matrix.clone();
   }
 
   // Parapet: 2.4 m runs along the south edge (north = -0.6), gate gap |x| < 5.5.
+  const parapetTransforms: Matrix4[] = [];
   let parapetCount = 0;
   for (let x = -30; x <= 30; x += 2.4) {
     if (Math.abs(x + 1.2) < 5.5) continue;
-    box(group, stone, 'terrace-edge-parapet', x + 1.2, -0.6, arrivalHeight, 2.4, 0.9, 0.5);
+    parapetTransforms.push(boxMatrix(x + 1.2, -0.6, arrivalHeight, 2.4, 0.9, 0.5));
     parapetCount++;
   }
+  boxBatch('terrace-edge-parapet', stone, parapetTransforms);
 
   // Cloud puffs beyond the edge: deterministic sizes/positions (no RNG,
   // so the build is reproducible). 14 puffs, local north -4..-14.
   const puffCount = 14;
+  const cloudTransforms: Matrix4[] = [];
   for (let i = 0; i < puffCount; i++) {
     const t = i / (puffCount - 1);
     const east = -34 + 68 * t + ((i * 37) % 5 - 2);
@@ -69,14 +82,16 @@ export function mountMainSummitTerraceEdge(assembly: Assembly) {
     const w = 3 + ((i * 29) % 3);
     const h = 1 + ((i * 17) % 2) * 0.5;
     const base = arrivalHeight - 3 + ((i * 11) % 4);
-    box(group, cloud, 'terrace-edge-cloud', east, north, base, w, h, 2.5);
+    cloudTransforms.push(boxMatrix(east, north, base, w, h, 2.5));
   }
+  boxBatch('terrace-edge-cloud', cloud, cloudTransforms);
 
   // Line-2 station approach sign at the cable dock's approach point.
   const approach = assembly.cable.ropes[0]!.dock('cloud-deck').approach;
   const signEast = approach.east;
   const signNorth = approach.north - 1.5;
-  box(group, timber, 'terrace-edge-sign-frame', signEast, signNorth, arrivalHeight, 0.12, 1.1, 0.9);
+  boxBatch('terrace-edge-sign-frame', timber,
+    [boxMatrix(signEast, signNorth, arrivalHeight, 0.12, 1.1, 0.9)]);
   if (typeof document !== 'undefined') {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -114,6 +129,9 @@ export function mountMainSummitTerraceEdge(assembly: Assembly) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      group.removeFromParent();
+      group.clear();
+      batches.forEach(batch => batch.dispose());
       geometries.forEach(geometry => geometry.dispose());
       materials.forEach(material => material.dispose());
       textures.forEach(texture => texture.dispose());

@@ -2,10 +2,15 @@ import {Group} from 'three';
 import {createSecondMineScene} from './underground-second-mine.js';
 import {resolveSecondMineSurvey,type SurveyRegistration,type MinePoint} from '../../../src/shared/town-c-second-mine-survey.js';
 import type {MineRiverState} from '../../../src/shared/underground-second-mine-layout.js';
+import {secondMineProductionRegistration} from '../../../src/shared/underground-second-mine-presence-domain.js';
 import {readUndergroundWaterPresentation,type AcceptedWaterReader} from '../../../src/shared/town-c-water-snapshot-port.js';
 /** Host adapter; does not create registration, grant passage, or derive water
  * phase. Existing authority supplies the accepted phase; C2 supplies the
  * replacement visual adapter once its state core has been integrated. */
+/** Production host entry; accepted water is required and no transition is granted here. */
+export function mountRegisteredSecondMineDomain(options:{parent:Group;readAcceptedWater:AcceptedWaterReader}){
+ return mountSecondMineDomain({...options,registration:secondMineProductionRegistration});
+}
 export function mountSecondMineDomain(options:{
  parent:Group;registration?:SurveyRegistration;
  /** Formal batch96 authority. If present, no fallback even if missing. */

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Group, InstancedMesh, Mesh, type Material } from 'three';
 import {
   buildSwitchbackCenterline, createFrontRidgeSwitchbackRoad, STATION_BOARD_TEXTS, hostGridAt,
 } from '../tools/voxel-tavern/town-blockout/front-ridge-switchback-road';
@@ -78,7 +79,9 @@ test('switchback road overlay: height layer, lamps, signs, dispose', () => {
   assert.ok(names.includes('switchback-road-ribbon'));
   assert.ok(names.includes('switchback-fog-lamp-posts'));
   const lamps = road.group.children.filter(child => child.name === 'switchback-fog-lamp');
-  assert.ok(lamps.length >= 30, `fog lamp chain has ${lamps.length} lamps`);
+  assert.equal(lamps.length, 1, 'all fog-lamp cores share one instanced render mesh');
+  assert.ok(lamps[0] instanceof InstancedMesh && lamps[0].count >= 30,
+    `fog lamp chain has ${lamps[0] instanceof InstancedMesh ? lamps[0].count : 0} lamps`);
   // D-5 supplement (总控裁定批55): 250 m mileage stones, hairpin
   // benches, two wind-shelter rest points, the (300,400) lookout.
   const stones = road.group.children.filter(child => child.name.startsWith('switchback-mileage-'));
@@ -101,6 +104,96 @@ test('switchback road overlay: height layer, lamps, signs, dispose', () => {
   road.setNight(false);
   road.dispose();
   road.dispose();
+});
+
+test('switchback static batching preserves canvas landmarks and cuts render meshes below 60', () => {
+  const previousDocument = globalThis.document;
+  const drawnText: string[] = [];
+  const context = {
+    fillStyle: '', strokeStyle: '', lineWidth: 0, textAlign: '', font: '',
+    fillRect() {}, strokeRect() {}, fillText(text: string) { drawnText.push(text); },
+  };
+  Reflect.set(globalThis, 'document', {
+    createElement(tag: string) {
+      assert.equal(tag, 'canvas');
+      return { width: 0, height: 0, getContext: () => context };
+    },
+  });
+  const road = (() => {
+    try {
+      return createFrontRidgeSwitchbackRoad();
+    } finally {
+      if (previousDocument === undefined) Reflect.deleteProperty(globalThis, 'document');
+      else Reflect.set(globalThis, 'document', previousDocument);
+    }
+  })();
+  try {
+    const meshes: Mesh[] = [];
+    road.group.traverse(object => { if (object instanceof Mesh) meshes.push(object); });
+    assert.ok(meshes.length < 60, `render mesh count is ${meshes.length}, expected < 60`);
+    assert.equal(meshes.length, 27, 'two ribbons, two instanced lamp meshes, two static batches and 21 canvas faces');
+    const hasMap = (material: Material) => 'map' in material && Boolean(material.map);
+    const canvasFaces = meshes.filter(mesh => !Array.isArray(mesh.material) && hasMap(mesh.material));
+    assert.equal(canvasFaces.length, 21, '16 mileage faces, two direction signs and three station boards stay separate');
+    assert.equal(drawnText.filter(text => text === '公里').length, 16);
+    assert.ok(drawnText.includes('盘山道'));
+    assert.ok(drawnText.includes('云海台'));
+    for (const board of STATION_BOARD_TEXTS) {
+      assert.ok(road.boards.getObjectByName(`station-board-${board.id}`) instanceof Mesh);
+      assert.ok(drawnText.includes(board.title));
+      for (const line of board.lines) assert.ok(drawnText.includes(line));
+    }
+    assert.ok(road.group.getObjectByName('switchback-start-sign') instanceof Mesh);
+    assert.ok(road.group.getObjectByName('switchback-top-sign') instanceof Mesh);
+    road.boards.traverse(object => {
+      if (object instanceof Mesh) assert.ok(!Array.isArray(object.material) && hasMap(object.material));
+    });
+    assert.equal(meshes.filter(mesh => mesh.name.startsWith('switchback-static-batch-')).length, 2);
+    assert.equal(meshes.filter(mesh => mesh.name.endsWith('-ribbon')).length, 2);
+
+    const mileposts = road.group.children.filter(child => child.name.startsWith('switchback-mileage-'));
+    assert.equal(mileposts.length, 16);
+    for (const milepost of mileposts) {
+      assert.ok(milepost instanceof Group);
+      assert.equal(milepost.children.length, 0);
+    }
+    for (const bench of road.benches) assert.equal(bench.children.length, 0);
+    for (const shelter of road.shelters) assert.equal(shelter.children.length, 0);
+    assert.equal(road.platform.children.length, 0);
+
+    const lamps = meshes.filter(mesh => mesh.name === 'switchback-fog-lamp');
+    assert.equal(lamps.length, 1);
+    assert.ok(lamps[0] instanceof InstancedMesh && lamps[0].count >= 30);
+    const lampMaterial = lamps[0]!.material as Material & { color: { getHexString(): string } };
+    const otherColors = new Map<Material, string>();
+    for (const mesh of meshes) {
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        if (material !== lampMaterial && 'color' in material) {
+          otherColors.set(material, (material.color as { getHexString(): string }).getHexString());
+        }
+      }
+    }
+    assert.equal(lampMaterial.color.getHexString(), '3a3230');
+    road.setNight(true);
+    assert.equal(lampMaterial.color.getHexString(), 'ffb45c');
+    for (const [material, color] of otherColors) {
+      assert.equal((material as Material & { color: { getHexString(): string } }).color.getHexString(), color);
+    }
+    road.setNight(false);
+    assert.equal(lampMaterial.color.getHexString(), '3a3230');
+
+    const disposals = new Map(meshes.map(mesh => {
+      let count = 0;
+      mesh.geometry.addEventListener('dispose', () => { count++; });
+      return [mesh, () => count] as const;
+    }));
+    road.dispose();
+    road.dispose();
+    for (const [mesh, count] of disposals) assert.equal(count(), 1, `${mesh.name} geometry disposed once`);
+  } finally {
+    road.dispose();
+  }
 });
 
 test('D-6 repair: hint-coherent heightAt never flips legs on stacked sections', () => {

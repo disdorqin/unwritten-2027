@@ -61,5 +61,6 @@ test('the certified first-fall landing is inside the mine room and the surface i
   assert.equal(toMinePresencePose({ east: -119, north: 189, height: -90 })?.height, 38);
   assert.equal(isMinePresenceFoot(-121.08, 181.73, -24.2227), false, 'crater-floor winch foot stays in the west room');
   assert.equal(isMinePresenceFoot(-119, 189, -140), false, 'the -140 layer is a deeper room, not this one');
-  assert.equal(toMinePresencePose({ east: 10, north: 189, height: -90 }), undefined);
+  assert.ok(toMinePresencePose({east:10,north:189,height:-90}),'expanded dry mine is in the room');
+  assert.equal(toMinePresencePose({ east: 31, north: 189, height: -90 }), undefined);
 });

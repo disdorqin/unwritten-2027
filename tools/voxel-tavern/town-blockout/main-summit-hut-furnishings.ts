@@ -1,7 +1,9 @@
 import {
   BoxGeometry, CanvasTexture, CylinderGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, PlaneGeometry, PointLight, Quaternion, SRGBColorSpace, TorusGeometry, Vector3,
+  MeshLambertMaterial, Object3D, PlaneGeometry, PointLight, Quaternion, SRGBColorSpace, TorusGeometry, Vector3,
+  type BufferGeometry,
 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { surveyPlateLines } from './town-survey';
 
 const floor = 800;
@@ -31,14 +33,58 @@ export function createMainSummitHutFurnishings() {
   const stone = new MeshLambertMaterial({ color: '#6d7276' });
   disposers.push(() => { timber.dispose(); warmTimber.dispose(); cloth.dispose(); bedding.dispose(); iron.dispose(); brass.dispose(); stone.dispose(); });
 
+  // Static solids are baked in group-local space, one draw per material. Named
+  // anchors retain every original transform without adding renderable meshes.
+  const unitBox = new BoxGeometry(1, 1, 1);
+  const sourceGeometries = new Set<BufferGeometry>([unitBox]);
+  const batches = new Map<MeshLambertMaterial, { object: Object3D; geometry: BufferGeometry }[]>();
+  function staticPart(name: string, material: MeshLambertMaterial, geometry: BufferGeometry) {
+    const anchor = new Object3D();
+    anchor.name = name;
+    group.add(anchor);
+    sourceGeometries.add(geometry);
+    const parts = batches.get(material) ?? [];
+    parts.push({ object: anchor, geometry });
+    batches.set(material, parts);
+    return anchor;
+  }
+
   function box(name: string, material: MeshLambertMaterial, size: [number, number, number],
     east: number, lift: number, north: number) {
-    const mesh = new Mesh(new BoxGeometry(...size), material);
-    mesh.name = name;
-    mesh.position.set(east, floor + lift, -north);
-    group.add(mesh);
-    disposers.push(() => mesh.geometry.dispose());
-    return mesh;
+    const anchor = staticPart(name, material, unitBox);
+    anchor.position.set(east, floor + lift, -north);
+    anchor.scale.set(...size);
+    return anchor;
+  }
+
+  function flushStaticBatches() {
+    try {
+      for (const [material, parts] of batches) {
+        const copies = parts.map(({ object, geometry }) => {
+          object.updateMatrix();
+          return geometry.clone().applyMatrix4(object.matrix);
+        });
+        try {
+          const geometry = mergeGeometries(copies, false);
+          if (!geometry) throw new Error(`Could not batch summit hut material ${material.color.getHexString()}.`);
+          geometry.computeBoundingBox();
+          geometry.computeBoundingSphere();
+          const mesh = new Mesh(geometry, material);
+          mesh.name = `hut-static-${material.color.getHexString()}`;
+          mesh.matrixAutoUpdate = false;
+          mesh.userData.partNames = parts.map(part => part.object.name);
+          group.add(mesh);
+          for (const part of parts) part.object.userData.renderBatch = mesh.name;
+          disposers.push(() => geometry.dispose());
+        } finally {
+          for (const copy of copies) copy.dispose();
+        }
+      }
+    } finally {
+      for (const geometry of sourceGeometries) geometry.dispose();
+      sourceGeometries.clear();
+      batches.clear();
+    }
   }
 
   // Bed along the west wall, south end (sleep anchor for the summit).
@@ -69,7 +115,7 @@ export function createMainSummitHutFurnishings() {
     }
     logs.instanceMatrix.needsUpdate = true;
     group.add(logs);
-    disposers.push(() => logGeometry.dispose());
+    disposers.push(() => { logs.dispose(); logGeometry.dispose(); });
   }
 
   // Shelf on the east wall: dry-food sacks, a rope coil, a spare oil lamp.
@@ -77,11 +123,8 @@ export function createMainSummitHutFurnishings() {
   box('hut-shelf-board-upper', timber, [.5, .06, 2.2], 68.35, 2.05, 1016.2);
   box('shelf-food-sack', cloth, [.34, .4, .34], 68.35, 1.73, 1015.5);
   box('shelf-food-sack-2', warmTimber, [.3, .34, .3], 68.35, 1.7, 1016.05);
-  const rope = new Mesh(new TorusGeometry(.17, .055, 6, 14), warmTimber);
-  rope.name = 'shelf-rope-coil';
+  const rope = staticPart('shelf-rope-coil', warmTimber, new TorusGeometry(.17, .055, 6, 14));
   rope.position.set(68.35, floor + 1.72, -1016.75);
-  group.add(rope);
-  disposers.push(() => rope.geometry.dispose());
   box('shelf-lamp-base', iron, [.16, .2, .16], 68.35, 2.18, 1015.7);
   const lampGlow = new Mesh(new PlaneGeometry(.1, .14), new MeshBasicMaterial({ color: '#ffc46b' }));
   lampGlow.name = 'shelf-lamp-glow';
@@ -97,7 +140,7 @@ export function createMainSummitHutFurnishings() {
   pages.name = 'summit-logbook';
   pages.position.set(62.5, floor + 1.13, -1016.14);
   group.add(pages);
-  disposers.push(() => pages.geometry.dispose());
+  disposers.push(() => { pages.geometry.dispose(); pages.material.dispose(); });
   if (typeof document !== 'undefined') {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 352;
@@ -164,7 +207,7 @@ export function createMainSummitHutFurnishings() {
     }
     stones.instanceMatrix.needsUpdate = true;
     group.add(stones);
-    disposers.push(() => stoneGeometry.dispose());
+    disposers.push(() => { stones.dispose(); stoneGeometry.dispose(); });
   }
   const marker = new Mesh(new CylinderGeometry(.3, .3, .05, 3), brass);
   marker.name = 'survey-station-m7-marker';
@@ -199,6 +242,7 @@ export function createMainSummitHutFurnishings() {
     }
   }
 
+  flushStaticBatches();
   let disposed = false;
   return {
     group,
