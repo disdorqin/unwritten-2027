@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Mesh, PlaneGeometry, Vector3, type BufferGeometry, type Material, type Object3D } from 'three';
+import {
+  CanvasTexture, DoubleSide, Group, Mesh, NearestFilter, PlaneGeometry, Vector3,
+  type BufferGeometry, type Material, type Object3D,
+} from 'three';
 import {
   createTownD2FrontRidgeRestStops, hideLegacyD5Supplement, TOWN_D2_REST_STOP_TEXTS,
 } from '../tools/voxel-tavern/town-blockout/town-d2-front-ridge-rest-stops';
@@ -40,27 +43,46 @@ function collectCopy(root: Group) {
   return copy;
 }
 
-function withCanvasDocument<T>(run: (paintedText: string[]) => T): T {
+function expectedCopy(stops: ReturnType<typeof createTownD2FrontRidgeRestStops>) {
+  return [
+    ...stops.mileposts.flatMap(post => [post.faceLabel, post.topLabel]),
+    ...stops.shelters.map(shelter => shelter.text),
+    ...stops.warnings.map(warning => warning.text),
+    stops.viewpoint.text, stops.viewpoint.text,
+  ];
+}
+
+function materialTexture(material: Material) {
+  return 'map' in material && material.map instanceof CanvasTexture ? material.map : null;
+}
+
+function withCanvasDocument<T>(run: (
+  paintedText: string[], canvases: Array<{ width: number; height: number }>,
+) => T): T {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const paintedText: string[] = [];
+  const canvases: Array<{ width: number; height: number }> = [];
   const context = {
+    save() {}, restore() {}, translate() {}, beginPath() {}, rect() {}, clip() {},
     fillRect() {}, strokeRect() {},
     fillText(text: string) { paintedText.push(text); },
   };
   const documentStub = {
     createElement(tag: string) {
       assert.equal(tag, 'canvas');
-      return {
+      const canvas = {
         width: 0, height: 0,
         getContext(kind: string) {
           assert.equal(kind, '2d');
           return context;
         },
       };
+      canvases.push(canvas);
+      return canvas;
     },
   };
   Object.defineProperty(globalThis, 'document', { configurable: true, value: documentStub });
-  try { return run(paintedText); }
+  try { return run(paintedText, canvases); }
   finally {
     if (previous) Object.defineProperty(globalThis, 'document', previous);
     else Reflect.deleteProperty(globalThis, 'document');
@@ -127,6 +149,9 @@ test('D-5: authored copy, measured lower/middle shelters and exact sampled looko
     assert.equal(stops.group.userData.roadMoved, false);
 
     const copy = collectCopy(stops.group);
+    const expected = expectedCopy(stops);
+    assert.deepEqual([...copy].sort(), [...expected].sort(),
+      'Node/no-document must retain every authored line, including both lookout faces');
     for (const text of Object.values(TOWN_D2_REST_STOP_TEXTS)) assert.ok(copy.includes(text), text);
     for (const shelter of stops.shelters) assert.equal(shelter.text, TOWN_D2_REST_STOP_TEXTS.rest);
     assert.equal(stops.viewpoint.text, TOWN_D2_REST_STOP_TEXTS.viewpoint);
@@ -134,6 +159,21 @@ test('D-5: authored copy, measured lower/middle shelters and exact sampled looko
     assert.equal(stops.warnings[0]!.text, TOWN_D2_REST_STOP_TEXTS.warning);
     assert.ok(stops.warnings[0]!.distance > stops.shelters[1]!.distance);
     assert.ok(stops.warnings[0]!.distance < length * 0.65);
+
+    const insets: Mesh[] = [];
+    stops.group.traverse(object => {
+      if (object instanceof Mesh && Array.isArray(object.userData.authoredCopy) &&
+          !materialTexture(object.material as Material)) insets.push(object);
+    });
+    assert.equal(insets.length, expected.length,
+      'Node/no-document keeps the original per-face physical inset meshes');
+    for (const inset of insets) {
+      const insetMaterial = inset.material;
+      assert.ok(!Array.isArray(insetMaterial));
+      assert.equal(insetMaterial.side, DoubleSide);
+      assert.equal(inset.geometry.getAttribute('position').count, 4);
+      assert.equal(inset.userData.authoredCopy.length, 1);
+    }
   } finally { stops.dispose(); }
 });
 
@@ -270,17 +310,18 @@ test('D-5: production mileposts, benches and warning use the road centre-height 
   }
 });
 
-test('D-5: legacy supplement hides only old props and adjacent mileage copy; canvas paints final copy', () => {
-  withCanvasDocument(paintedText => {
+test('D-5: legacy supplement, one crisp text atlas and complete canvas copy/disposal', () => {
+  withCanvasDocument((paintedText, canvases) => {
     const line = buildSwitchbackCenterline();
     const road = createFrontRidgeSwitchbackRoad();
     const copyStart = paintedText.length;
+    const canvasStart = canvases.length;
     const stops = createTownD2FrontRidgeRestStops({ centreline: line });
     try {
-      const oldPosts: Mesh[] = [];
+      const oldPosts: Object3D[] = [];
       const oldFaces: Mesh[] = [];
       road.group.traverse(object => {
-        if (object.name.startsWith('switchback-mileage-') && object instanceof Mesh) oldPosts.push(object);
+        if (object.name.startsWith('switchback-mileage-')) oldPosts.push(object);
       });
       for (const post of oldPosts) {
         const face = post.parent!.children.find((object): object is Mesh =>
@@ -311,6 +352,60 @@ test('D-5: legacy supplement hides only old props and adjacent mileage copy; can
       assert.deepEqual([...new Set(paintedText.slice(copyStart))].sort(),
         [...new Set(collectCopy(stops.group))].sort(),
         'every authored line must reach the real CanvasRenderingContext2D.fillText path');
+      const expected = expectedCopy(stops);
+      assert.deepEqual([...new Set(paintedText.slice(copyStart))].sort(),
+        [...new Set(expected)].sort(), 'canvas copy must match the complete authored text set');
+      assert.equal(canvases.length - canvasStart, 1,
+        'all D-5 browser text faces must share one atlas canvas');
+
+      const atlasMeshes: Mesh[] = [];
+      const textures = new Set<CanvasTexture>();
+      let textMeshes = 0, totalMeshes = 0;
+      stops.group.updateMatrixWorld(true);
+      stops.group.traverse(object => {
+        if (!(object instanceof Mesh)) return;
+        totalMeshes++;
+        if (Array.isArray(object.userData.authoredCopy)) textMeshes++;
+        if (Array.isArray(object.material)) return;
+        const texture = materialTexture(object.material);
+        if (!texture) return;
+        atlasMeshes.push(object); textures.add(texture);
+        const material = object.material;
+        assert.equal(material.side, DoubleSide, 'atlas text remains visible from both sides');
+        assert.equal(texture.magFilter, NearestFilter);
+        assert.equal(texture.minFilter, NearestFilter);
+        assert.equal(texture.generateMipmaps, false, 'nearest atlas texels stay crisp');
+        const uv = object.geometry.getAttribute('uv');
+        for (let i = 0; i < uv.count; i++) {
+          const u = uv.getX(i), v = uv.getY(i);
+          assert.ok([u, v].every(Number.isFinite), `atlas UV ${i} must be finite`);
+          assert.ok(u >= 0 && u <= 1 && v >= 0 && v <= 1, `atlas UV ${i} must stay in range`);
+        }
+        const positions = object.geometry.getAttribute('position');
+        for (let i = 0; i < positions.count; i++) {
+          assert.ok([positions.getX(i), positions.getY(i), positions.getZ(i)].every(Number.isFinite));
+        }
+      });
+      assert.equal(atlasMeshes.length, 1, 'one atlas replaces every CanvasTexture text plane');
+      assert.equal(textures.size, 1);
+      assert.equal(atlasMeshes[0]!.geometry.getAttribute('position').count, expected.length * 4,
+        'the atlas geometry must retain every original text quad');
+      assert.ok(textMeshes <= 2, `atlas plus physical inset should need two text meshes, got ${textMeshes}`);
+      assert.ok(textMeshes * 4 < expected.length, 'text mesh count must drop significantly');
+      assert.ok(totalMeshes < 80, `browser path must remain material-batched, got ${totalMeshes} meshes`);
+
+      const resources = new Set<BufferGeometry | Material | CanvasTexture>();
+      stops.group.traverse(object => {
+        if (!(object instanceof Mesh)) return;
+        resources.add(object.geometry);
+        const list = Array.isArray(object.material) ? object.material : [object.material];
+        list.forEach(item => resources.add(item));
+      });
+      textures.forEach(texture => resources.add(texture));
+      let disposed = 0;
+      for (const resource of resources) resource.addEventListener('dispose', () => { disposed++; });
+      stops.dispose(); stops.dispose();
+      assert.equal(disposed, resources.size, 'atlas geometry/material/texture release exactly once');
     } finally {
       stops.dispose();
       road.dispose();

@@ -198,7 +198,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
   }
 
   return {
-    group, block, stations, cable, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    group, block, stations, cable, clouds, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
     // The host can prefer its plaza surface where it overlaps the P-1 local tread.
     trailSurfaceAt(east: number, north: number, radius = .27) {
       return candidate?.expedition.surfaceAt(east, north, radius) ??

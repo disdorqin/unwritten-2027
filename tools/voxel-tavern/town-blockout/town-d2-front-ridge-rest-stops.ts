@@ -100,6 +100,29 @@ type GroundExtent = Readonly<{
   base: number;
 }>;
 
+type TextFace = Readonly<{
+  key: string;
+  lines: readonly string[];
+  width: number;
+  height: number;
+  engraved: boolean;
+  anchor: Mesh;
+}>;
+
+type TextAtlasCell = Readonly<{
+  key: string;
+  lines: readonly string[];
+  engraved: boolean;
+  canvasWidth: number;
+  canvasHeight: number;
+}>;
+
+type TextAtlasLayout = Readonly<{
+  width: number;
+  height: number;
+  cells: ReadonlyMap<string, Readonly<{ x: number; y: number }>>;
+}>;
+
 /** Sample the complete rotated support footprint, including its boundary. */
 function groundExtentAt(
   east: number,
@@ -245,6 +268,37 @@ function bevelBox(width: number, height: number, depth: number, bevel = 0.025) {
   return geometry;
 }
 
+/** Shelf-pack unchanged 768 px label rasters; mipmaps stay off for crisp nearest sampling. */
+function layoutTextAtlas(input: readonly TextAtlasCell[]): TextAtlasLayout | null {
+  const gutter = 2, maxWidth = 4096, maxHeight = 4096;
+  const strideWidth = 768 + gutter * 2;
+  const maxColumns = Math.max(1, Math.floor((maxWidth - gutter) / strideWidth));
+  const ordered = [...input].sort((a, b) => b.canvasHeight - a.canvasHeight);
+  let best: (TextAtlasLayout & { area: number }) | null = null;
+  for (let columns = 1; columns <= Math.min(maxColumns, ordered.length); columns++) {
+    const width = gutter + columns * strideWidth;
+    const cells = new Map<string, Readonly<{ x: number; y: number }>>();
+    let x = gutter, y = gutter, rowHeight = 0;
+    for (const cell of ordered) {
+      if (x + 768 + gutter > width) {
+        x = gutter; y += rowHeight; rowHeight = 0;
+      }
+      cells.set(cell.key, { x, y });
+      x += strideWidth;
+      rowHeight = Math.max(rowHeight, cell.canvasHeight + gutter * 2);
+    }
+    const height = y + rowHeight;
+    if (height > maxHeight) continue;
+    const area = width * height;
+    if (!best || area < best.area || (area === best.area && height < best.height)) {
+      best = { width, height, cells, area };
+    }
+  }
+  if (!best) return null;
+  const { area: _area, ...layout } = best;
+  return layout;
+}
+
 export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   const centreline = options.centreline ?? buildSwitchbackCenterline();
   const terrainAt = options.terrainAt ?? sampleNorthRidge350;
@@ -258,6 +312,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   const materials = new Set<Material>();
   const textures = new Set<CanvasTexture>();
   let disposed = false;
+  let textAtlasBuilt = false;
+  const textFaces: TextFace[] = [];
   const placements: RestStopPlacement[] = [];
   const mileposts: D2Milepost[] = [];
   const benches: D2Bench[] = [];
@@ -306,28 +362,96 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const inset = part(parent, new PlaneGeometry(width, height), engraving, x, y, z, `${name}-inset`);
     inset.userData.authoredCopy = [...lines];
     if (typeof document === 'undefined') return inset;
-    const canvas = document.createElement('canvas');
-    canvas.width = 768; canvas.height = Math.max(128, Math.round(768 * height / width));
-    const context = canvas.getContext('2d');
-    if (!context) return inset;
-    context.fillStyle = engraved ? '#858b87' : '#493724';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.strokeStyle = engraved ? '#46534d' : '#a08358';
-    context.lineWidth = 10; context.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
-    context.fillStyle = engraved ? '#263c35' : '#eee1bd';
-    context.textAlign = 'center'; context.textBaseline = 'middle';
-    const fontSize = Math.min(canvas.height / (lines.length + 0.7), canvas.width / Math.max(...lines.map(line => line.length)) * 1.55);
-    context.font = `bold ${fontSize}px system-ui, sans-serif`;
-    lines.forEach((line, index) => context.fillText(line, canvas.width / 2,
-      canvas.height * (index + 1) / (lines.length + 1), canvas.width - 38));
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace; texture.magFilter = NearestFilter; texture.minFilter = NearestFilter;
-    textures.add(texture);
-    const faceMaterial = material(new MeshBasicMaterial({ map: texture, side: DoubleSide }));
-    const face = part(parent, new PlaneGeometry(width * 0.96, height * 0.94), faceMaterial,
-      x, y, z + 0.008, `${name}-authored-text`);
-    face.userData.authoredCopy = [...lines];
-    return face;
+    const canvasHeight = Math.max(128, Math.round(768 * height / width));
+    textFaces.push({
+      key: JSON.stringify([engraved, lines, width, height]), lines, width, height, engraved, anchor: inset,
+    });
+    return inset;
+  }
+
+  function buildTextAtlas(root: Group) {
+    if (typeof document === 'undefined' || textFaces.length === 0) return;
+    const unique = new Map<string, TextAtlasCell>();
+    for (const face of textFaces) {
+      if (unique.has(face.key)) continue;
+      unique.set(face.key, {
+        key: face.key, lines: face.lines, engraved: face.engraved, canvasWidth: 768,
+        canvasHeight: Math.max(128, Math.round(768 * face.height / face.width)),
+      });
+    }
+    const pages: Array<Readonly<{ cells: TextAtlasCell[]; layout: TextAtlasLayout }>> = [];
+    const paginate = (cells: TextAtlasCell[]) => {
+      const layout = layoutTextAtlas(cells);
+      if (layout) pages.push({ cells, layout });
+      else {
+        const middle = Math.ceil(cells.length / 2);
+        paginate(cells.slice(0, middle)); paginate(cells.slice(middle));
+      }
+    };
+    paginate([...unique.values()]);
+    for (const page of pages) {
+      const locations = new Map<string, Readonly<{
+        layout: TextAtlasLayout; x: number; y: number;
+      }>>();
+      const canvas = document.createElement('canvas');
+      canvas.width = page.layout.width; canvas.height = page.layout.height;
+      const context = canvas.getContext('2d');
+      if (!context) continue;
+      for (const cell of page.cells) {
+        const position = page.layout.cells.get(cell.key)!;
+        locations.set(cell.key, { layout: page.layout, ...position });
+        context.save();
+        context.translate(position.x, position.y);
+        context.beginPath(); context.rect(0, 0, cell.canvasWidth, cell.canvasHeight); context.clip();
+        context.fillStyle = cell.engraved ? '#858b87' : '#493724';
+        context.fillRect(0, 0, cell.canvasWidth, cell.canvasHeight);
+        context.strokeStyle = cell.engraved ? '#46534d' : '#a08358';
+        context.lineWidth = 10; context.strokeRect(8, 8, cell.canvasWidth - 16, cell.canvasHeight - 16);
+        context.fillStyle = cell.engraved ? '#263c35' : '#eee1bd';
+        context.textAlign = 'center'; context.textBaseline = 'middle';
+        const fontSize = Math.min(cell.canvasHeight / (cell.lines.length + 0.7),
+          cell.canvasWidth / Math.max(...cell.lines.map(line => line.length)) * 1.55);
+        context.font = `bold ${fontSize}px system-ui, sans-serif`;
+        cell.lines.forEach((line, index) => context.fillText(line, cell.canvasWidth / 2,
+          cell.canvasHeight * (index + 1) / (cell.lines.length + 1), cell.canvasWidth - 38));
+        context.restore();
+      }
+      const texture = new CanvasTexture(canvas);
+      texture.colorSpace = SRGBColorSpace;
+      texture.magFilter = NearestFilter; texture.minFilter = NearestFilter; texture.generateMipmaps = false;
+      textures.add(texture);
+      const faceMaterial = material(new MeshBasicMaterial({ map: texture, side: DoubleSide }));
+      const pieces = textFaces.flatMap(face => {
+        const location = locations.get(face.key);
+        if (!location) return [];
+        const shape = new PlaneGeometry(face.width * 0.96, face.height * 0.94);
+        const u0 = location.x / location.layout.width;
+        const u1 = (location.x + 768) / location.layout.width;
+        const v0 = 1 - (location.y + Math.max(128, Math.round(768 * face.height / face.width))) / location.layout.height;
+        const v1 = 1 - location.y / location.layout.height;
+        const uv = shape.getAttribute('uv');
+        for (let i = 0; i < uv.count; i++) {
+          uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
+        }
+        shape.translate(0, 0, 0.008);
+        shape.applyMatrix4(face.anchor.matrixWorld);
+        return [shape];
+      });
+      if (pieces.length === 0) {
+        texture.dispose(); textures.delete(texture);
+        faceMaterial.dispose(); materials.delete(faceMaterial);
+        continue;
+      }
+      const merged = mergeGeometries(pieces);
+      pieces.forEach(piece => piece.dispose());
+      if (!merged) throw new Error('D-5 authored text atlas batch failed.');
+      geometries.add(merged);
+      const atlas = new Mesh(merged, faceMaterial);
+      atlas.name = 'town-d2-authored-text-atlas';
+      atlas.userData.authoredCopy = [...new Set(page.cells.flatMap(cell => [...cell.lines]))];
+      root.add(atlas);
+      textAtlasBuilt = true;
+    }
   }
 
   function nail(parent: Object3D, x: number, y: number, z: number) {
@@ -337,11 +461,16 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
   function batchStaticGeometry(root: Group) {
     root.updateMatrixWorld(true);
     const batches = new Map<Material, BufferGeometry[]>();
+    const authoredCopy = new Map<Material, string[]>();
     const originals: Mesh[] = [];
     root.traverse(object => {
-      if (!(object instanceof Mesh) || object.userData.authoredCopy ||
-          object.userData.structuralFoundation || Array.isArray(object.material)) return;
+      if (!(object instanceof Mesh) || object.userData.structuralFoundation || Array.isArray(object.material)) return;
       if ('map' in object.material && object.material.map) return;
+      if (!textAtlasBuilt && Array.isArray(object.userData.authoredCopy)) return;
+      if (Array.isArray(object.userData.authoredCopy)) {
+        const copy = authoredCopy.get(object.material) ?? [];
+        copy.push(...object.userData.authoredCopy); authoredCopy.set(object.material, copy);
+      }
       const clone = object.geometry.clone();
       clone.applyMatrix4(object.matrixWorld);
       const flat = clone.index ? clone.toNonIndexed() : clone;
@@ -357,6 +486,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
       geometries.add(merged);
       const batch = new Mesh(merged, surface);
       batch.name = `town-d2-static-${surface.uuid}`;
+      const copy = authoredCopy.get(surface);
+      if (copy) batch.userData.authoredCopy = copy;
       root.add(batch);
     }
   }
@@ -642,6 +773,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     surveyedEast: 300, surveyedNorth: 400 };
   lookout.userData.placement = viewpoint; placements.push(viewpoint);
 
+  group.updateMatrixWorld(true);
+  buildTextAtlas(group);
   batchStaticGeometry(group);
   road?.dispose();
 
