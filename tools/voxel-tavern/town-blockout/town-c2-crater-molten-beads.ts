@@ -1,6 +1,6 @@
 import {
   BoxGeometry, BufferGeometry, Color, DataTexture, Float32BufferAttribute, Group,
-  InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, Object3D, RepeatWrapping,
+  InstancedMesh, Mesh, MeshLambertMaterial, NearestFilter, Object3D, RepeatWrapping,
   SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import { meteorCraterRimRadius } from './meteor-crater';
@@ -16,10 +16,10 @@ export const c2CraterMoltenBeadsPlan = Object.freeze({
   width: 20,
   depth: 15,
   longAxis: 'east-west',
-  beadCount: 768,
+  beadCount: 640,
   minBeadSize: .06,
   maxBeadSize: .18,
-  gravelCount: 168,
+  gravelCount: 128,
   nearReadDistance: 15,
   rimGuardInset: 1,
   nightEmissiveIntensity: .3,
@@ -153,7 +153,7 @@ function pointReserved(east: number, north: number, radius: number,
 }
 
 /** The glass shader gates each fragment, not merely the batch centre, at the 15 m near-read limit. */
-function installNearReadGate(material: MeshStandardMaterial) {
+function installNearReadGate(material: MeshLambertMaterial) {
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
@@ -244,7 +244,7 @@ function scatter(ground: MoltenBeadsGround, reserved: readonly MoltenBeadsReserv
   return placements;
 }
 
-function stampInstances(geometry: BoxGeometry, material: MeshStandardMaterial,
+function stampInstances(geometry: BoxGeometry, material: MeshLambertMaterial,
   placements: readonly Scatter[], embedded: number, gravel: boolean) {
   const mesh = new InstancedMesh(geometry, material, placements.length);
   const dummy = new Object3D();
@@ -296,13 +296,12 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
   const earthMap = grainTexture(0x332d29, 0x181a19, 0x62503b);
   earthMap.repeat.set(10, 7.5);
   const gravelMap = grainTexture(0x5e5b53, 0x353a38, 0x8b8678);
-  const earthMaterial = new MeshStandardMaterial({ map: earthMap, roughness: 1, flatShading: true });
-  const glassMaterial = new MeshStandardMaterial({
-    color: 0xffffff, emissive: 0x65c9ad, emissiveIntensity: 0,
-    roughness: .3, metalness: .04, flatShading: true,
+  const earthMaterial = new MeshLambertMaterial({ map: earthMap, flatShading: true });
+  const glassMaterial = new MeshLambertMaterial({
+    color: 0xffffff, emissive: 0x65c9ad, emissiveIntensity: 0, flatShading: true,
   });
   installNearReadGate(glassMaterial);
-  const gravelMaterial = new MeshStandardMaterial({ map: gravelMap, roughness: 1, flatShading: true });
+  const gravelMaterial = new MeshLambertMaterial({ map: gravelMap, flatShading: true });
   const cube = new BoxGeometry(1, 1, 1);
 
   const earthGeometry = buildScorchedEarth(ground, reserved);

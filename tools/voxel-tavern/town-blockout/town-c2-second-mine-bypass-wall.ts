@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, DataTexture, DoubleSide, Group, InstancedMesh, Matrix4,
-  MeshStandardMaterial, NearestFilter, RGBAFormat, SRGBColorSpace, UnsignedByteType,
+  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4,
+  MeshLambertMaterial, NearestFilter, RGBAFormat, SRGBColorSpace, StaticDrawUsage, UnsignedByteType,
 } from 'three';
 import {
   c2SecondMineBoxAllowed, type C2SecondMineBox,
@@ -181,7 +181,7 @@ export function buildTownC2SecondMineBypassWall(): C2SecondMineBypassWallScene {
   }
 
   const geometry = new BoxGeometry();
-  const materials = new Map<C2SecondMineBypassWallFamily, MeshStandardMaterial>();
+  const materials = new Map<C2SecondMineBypassWallFamily, MeshLambertMaterial>();
   const textures: DataTexture[] = [];
   const meshes: InstancedMesh[] = [];
   const counts = Object.fromEntries(familyOrder.map(family => [family, 0])) as
@@ -191,13 +191,10 @@ export function buildTownC2SecondMineBypassWall(): C2SecondMineBypassWallScene {
     const items = parts.filter(part => part.family === family);
     counts[family] = items.length;
     const texture = pixelTexture(family);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map: texture,
       color: 0xffffff,
-      roughness: family === 'iron' ? .68 : family === 'rust' ? .86 : .96,
-      metalness: family === 'iron' ? .52 : family === 'rust' ? .12 : 0,
       flatShading: true,
-      side: DoubleSide,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
@@ -210,6 +207,7 @@ export function buildTownC2SecondMineBypassWall(): C2SecondMineBypassWallScene {
       matrix.setPosition(part.x, part.y, -part.n);
       mesh.setMatrixAt(index, matrix);
     });
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);

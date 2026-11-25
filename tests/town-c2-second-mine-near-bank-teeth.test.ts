@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  Group, InstancedMesh, Matrix4, MeshStandardMaterial, NearestFilter, Quaternion,
-  StaticDrawUsage, Vector3,
+  FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
+  NearestFilter, Quaternion, StaticDrawUsage, Vector3,
 } from 'three';
 import {
   buildTownC2SecondMineNearBankTeeth, c2SecondMineNearBankTeethBands,
@@ -120,8 +120,12 @@ test('four cold industrial material families use 16px nearest-filtered unit-cube
       assert.equal(mesh.geometry, built.geometry);
       assert.equal(mesh.geometry.type, 'BoxGeometry');
       assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
-      assert.ok(mesh.material instanceof MeshStandardMaterial);
+      assert.ok(mesh.material instanceof Material);
+      assert.ok(mesh.material instanceof MeshLambertMaterial);
+      assert.equal(mesh.material.side, FrontSide);
       assert.equal(mesh.material.flatShading, true);
+      assert.equal(mesh.material.color.getHex(), 0xffffff);
+      assert.equal(mesh.material.emissive.getHex(), 0x000000);
       assert.equal(mesh.material.map?.image.width, 16);
       assert.equal(mesh.material.map?.image.height, 16);
       assert.equal(mesh.material.map?.minFilter, NearestFilter);
@@ -153,8 +157,9 @@ test('four cold industrial material families use 16px nearest-filtered unit-cube
     }
     const iron = built.materials[built.materials.findIndex(material => material.name.endsWith('-iron'))]!;
     const basalt = built.materials[built.materials.findIndex(material => material.name.endsWith('-basalt'))]!;
-    assert.ok(iron.metalness >= .5 && iron.roughness < .75);
-    assert.ok(basalt.metalness <= .05 && basalt.roughness >= .9);
+    assert.ok(iron.name.endsWith('-iron'));
+    assert.ok(basalt.name.endsWith('-basalt'));
+    assert.notEqual(iron.map, basalt.map);
     for (const count of Object.values(built.stats.materialCounts)) assert.ok(count > 100);
   } finally {
     built.dispose();

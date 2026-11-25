@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
-  NearestFilter, Object3D, RGBAFormat, SRGBColorSpace,
+  BoxGeometry, DataTexture, FrontSide, Group, InstancedMesh, MeshLambertMaterial,
+  NearestFilter, Object3D, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
   c2SecondMineBoxAllowed, type C2SecondMineBox,
@@ -215,19 +215,19 @@ export function buildC2SecondMineCampLife(owner?: Group) {
   const geometry = new BoxGeometry(1, 1, 1);
   const pose = new Object3D();
   const meshes: InstancedMesh[] = [];
-  const materials: MeshStandardMaterial[] = [];
+  const materials: MeshLambertMaterial[] = [];
   const textures: DataTexture[] = [];
 
   for (const [index, family] of families.entries()) {
     const members = plan.pieces.filter(piece => piece.family === family);
     const texture = nearestTexture(family, index * 19 + 3);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map: texture,
-      roughness: family === 'iron' ? .68 : family === 'rust' ? .84 : .96,
-      metalness: family === 'iron' ? .42 : family === 'rust' ? .16 : 0,
+      side: FrontSide,
     });
     material.userData.materialFamily = family;
     const mesh = new InstancedMesh(geometry, material, members.length);
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `${c2SecondMineCampLifePrefix}${family}`;
     for (const [pieceIndex, piece] of members.entries()) {
       pose.position.set(piece.x, piece.y, -piece.n);

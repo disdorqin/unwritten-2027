@@ -1,5 +1,5 @@
 import {
-  BufferAttribute, BufferGeometry, DataTexture, Group, Mesh, MeshStandardMaterial,
+  BufferAttribute, BufferGeometry, DataTexture, Group, Mesh, MeshLambertMaterial,
   NearestFilter, RepeatWrapping, SRGBColorSpace,
 } from 'three';
 
@@ -54,7 +54,7 @@ export const townC2CraterCentralMoundPlan: TownC2CraterCentralMoundSettings = Ob
   height: 7.5,
   rimWidth: 4,
   crownRadius: 4,
-  voxelSize: .5,
+  voxelSize: .75,
   workFace: Object.freeze({ east: -120.6, north: 182.7, radius: 8, feather: 2 }),
 });
 
@@ -419,8 +419,8 @@ export function buildTownC2CraterCentralMound(
   group.name = 'town-c2-crater-central-mound';
   group.position.set(anchor.east, anchor.rimHeight, -anchor.north);
   group.rotation.y = -anchor.yaw;
-  const meshes: Mesh<BufferGeometry, MeshStandardMaterial>[] = [];
-  const materials: MeshStandardMaterial[] = [];
+  const meshes: Mesh<BufferGeometry, MeshLambertMaterial>[] = [];
+  const materials: MeshLambertMaterial[] = [];
   const textures: DataTexture[] = [];
   for (const family of familyOrder) {
     const batch = batches[family];
@@ -433,9 +433,8 @@ export function buildTownC2CraterCentralMound(
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     const texture = pixelTexture(family);
-    const material = new MeshStandardMaterial({
-      map: texture, vertexColors: true, flatShading: true, roughness: 1,
-      metalness: family === 'slag' ? .12 : 0,
+    const material = new MeshLambertMaterial({
+      map: texture, vertexColors: true, flatShading: true,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
     });
     const mesh = new Mesh(geometry, material);

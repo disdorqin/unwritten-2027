@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  Group, InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, type EventDispatcher,
+  FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, NearestFilter,
+  StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import {
   buildTownC2SecondMineTimbering,
@@ -30,7 +31,7 @@ function resources(group: Group) {
     found.add(object.geometry);
     for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
       found.add(material);
-      const map = (material as MeshStandardMaterial).map;
+      const map = (material as MeshLambertMaterial).map;
       if (map) found.add(map);
     }
   });
@@ -106,7 +107,9 @@ test('timber, iron and rust use distinct 16px Nearest pixel materials', () => {
     assert.equal(scene.stats.materialFamilies, 3);
     assert.deepEqual(scene.stats.materialFamilyNames, ['timber', 'iron', 'rust']);
     for (const mesh of meshes) {
-      assert.ok(mesh.material instanceof MeshStandardMaterial);
+      assert.ok(mesh.material instanceof MeshLambertMaterial);
+      assert.equal(mesh.material.side, FrontSide);
+      assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
       const map = mesh.material.map;
       assert.ok(map);
       assert.equal(map.image.width, 16);

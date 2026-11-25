@@ -56,9 +56,13 @@ export function buildTownC2SecondMinePrefab(owner?: Group) {
   }
 
   root.userData.stats = stats();
+  let night = false;
   let disposed = false;
-  function setNight(night: boolean) {
+  function setNight(value: boolean) {
     if (disposed) return;
+    const nextNight = !!value;
+    if (night === nextNight) return;
+    night = nextNight;
     upperRelief.setNight(night);
     farBankCrystals.setNight(night);
     lightSources.setNight(night);

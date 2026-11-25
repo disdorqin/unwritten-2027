@@ -1,6 +1,6 @@
 import {
   BufferGeometry, DataTexture, DoubleSide, Float32BufferAttribute, Group, Mesh,
-  MeshStandardMaterial, NearestFilter, SRGBColorSpace,
+  MeshLambertMaterial, NearestFilter, SRGBColorSpace,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius,
@@ -180,7 +180,7 @@ function grain(base: number, fleck: number) {
   return texture;
 }
 function material(base: number, fleck: number) {
-  return new MeshStandardMaterial({ map: grain(base, fleck), roughness: 1, flatShading: true });
+  return new MeshLambertMaterial({ map: grain(base, fleck), flatShading: true });
 }
 
 type Cell = LocalPoint & { top: number; base: number; kind: 'collapse' | 'gully' };

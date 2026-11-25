@@ -25,15 +25,29 @@ test('C2 -140 prefab assembles eight disjoint visual modules without world or pa
   assert.equal(owner.children.length, 0);
 });
 
-test('C2 -140 prefab forwards night state only to its own emissive modules and real lights', () => {
+test('C2 -140 prefab forwards night state only on changes to its own emissive modules and real lights', () => {
   const prefab = buildTownC2SecondMinePrefab();
+  const forwarded: boolean[] = [];
+  const forwardNight = prefab.modules.lightSources.setNight.bind(prefab.modules.lightSources);
+  prefab.modules.lightSources.setNight = value => {
+    forwarded.push(value);
+    return forwardNight(value);
+  };
   assert.equal(prefab.modules.lightSources.isNightLit, false);
   assert.equal(prefab.modules.lightSources.lights.filter(light => light instanceof PointLight && light.visible).length, 0);
+  prefab.setNight(false);
+  assert.deepEqual(forwarded, []);
   prefab.setNight(true);
   assert.equal(prefab.modules.lightSources.isNightLit, true);
   assert.equal(prefab.modules.lightSources.lights.filter(light => light instanceof PointLight && light.visible).length, 3);
+  prefab.setNight(true);
+  assert.deepEqual(forwarded, [true]);
   prefab.setNight(false);
   assert.equal(prefab.modules.lightSources.isNightLit, false);
+  prefab.setNight(false);
+  assert.deepEqual(forwarded, [true, false]);
   prefab.dispose();
+  prefab.setNight(true);
+  assert.deepEqual(forwarded, [true, false]);
   prefab.dispose();
 });

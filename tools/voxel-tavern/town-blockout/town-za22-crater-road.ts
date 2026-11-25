@@ -1,4 +1,4 @@
-import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
+import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
@@ -101,7 +101,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     floorHeightAtLocal: (east, north) => neutralCrater.heightOffsetAt(east, north),
   });
 
-  const tileGround = new MeshStandardMaterial({ color: 0xc1cedc, roughness: 1 });
+  const tileGround = new MeshLambertMaterial({ color: 0xc1cedc });
   const eastCount = -survey.west + 1;
   const samples = new Float32Array(eastCount * (northLimit + 1));
   const inside = new Uint8Array(samples.length);
@@ -158,7 +158,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     group.add(mesh);
   }
 
-  const metal = new MeshStandardMaterial({ color: 0x73534a, roughness: 1 });
+  const metal = new MeshLambertMaterial({ color: 0x73534a });
   const leg = new BoxGeometry(.16, 2.02, .16);
   const crossbar = new BoxGeometry(.075, .1, 2.25);
   const fenceEast = lip.east + 1;
@@ -275,6 +275,19 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   }
   const warmLightChain = mountCraterWarmLightChain(group, surveyCraterWarmLightChain(road));
   let c2Night = false;
+  let lastC2Night: boolean | undefined;
+  let lastLodDistance = -1;
+  surface.onBeforeRender = (_renderer, _scene, camera) => {
+    const distance = Math.hypot(camera.position.x - anchor.east,
+      camera.position.z + anchor.north);
+    if (Math.abs(distance - lastLodDistance) < 2) return;
+    lastLodDistance = distance;
+    crater.interiorDressing.group.visible = distance < 105;
+    centralMound.group.visible = distance < 190;
+    brokenCircle.group.visible = distance < 175;
+    moltenBeads.group.visible = distance < 80;
+    inscription.group.visible = distance < 150;
+  };
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
   // mounts' own placements. The viewer's west index (buildWestGeometry,
@@ -311,6 +324,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     },
     firewood: mouthWorks.firewood,
     setNight(night: boolean) {
+      if (night === lastC2Night) return;
+      lastC2Night = night;
       c2Night = night;
       mouthWorks.setNight(night);
       outerWorks.setNight(night);

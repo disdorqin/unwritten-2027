@@ -29,6 +29,11 @@ const app=await createServer({
   }}],
   server:{host:'127.0.0.1',port:0,hmr:false},
 });
+const angle=process.env.TOWN_C2_ANGLE??'swiftshader';
+assert.ok(['swiftshader','d3d11','gl'].includes(angle),'TOWN_C2_ANGLE must be swiftshader, d3d11 or gl');
+const glArgs=angle==='swiftshader'
+  ?['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']
+  :['--use-gl=angle','--use-angle='+angle];
 const report={
   schema:'town-c2-first-person-review/v1',
   sourceCommit,sourceTree,
@@ -76,10 +81,10 @@ try{
   const executablePath=existsSync('C:/Program Files/Google/Chrome/Application/chrome.exe')
     ?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined;
   browser=await chromium.launch({executablePath,headless:true,args:[
-    '--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader',
+    ...glArgs,
     '--disable-features=PointerLock','--disable-background-timer-throttling','--disable-renderer-backgrounding',
   ]});
-  report.renderer={executablePath:executablePath??'Playwright bundled Chromium',headless:true,gl:'SwiftShader'};
+  report.renderer={executablePath:executablePath??'Playwright bundled Chromium',headless:true,gl:angle};
 
   const crater=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:1});
   watch(crater,'crater');
@@ -125,7 +130,7 @@ try{
     }
     if(name==='crater/warm-chain-night'&&isNight){
       assert.equal(stats.crater.warmLightChain.isNightLit,true);
-      assert.equal(stats.crater.warmLightChain.activeLightCount,16);
+      assert.equal(stats.crater.warmLightChain.activeLightCount,6);
     }
     if(name==='crater/warm-chain-night'&&!isNight){
       assert.equal(stats.crater.warmLightChain.isNightLit,false);

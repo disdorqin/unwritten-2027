@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshStandardMaterial,
+  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
   NearestFilter, Quaternion, SRGBColorSpace, StaticDrawUsage, Vector3,
 } from 'three';
 import {
@@ -251,16 +251,11 @@ export function buildTownC2SecondMineNearBankTeeth() {
   const geometry = new BoxGeometry(1, 1, 1);
   geometry.name = 'c2-second-mine-near-bank-unit-cube';
   const textures = materialOrder.map(pixelTexture);
-  const materials = materialOrder.map(family => {
-    const material = new MeshStandardMaterial({
-      name: `c2-second-mine-near-bank-${family}`, map: textures[materialOrder.indexOf(family)],
-      roughness: family === 'iron' ? .68 : family === 'rust' ? .84 : .97,
-      metalness: family === 'iron' ? .52 : family === 'rust' ? .24 : family === 'gravel' ? .04 : .02,
-      flatShading: true,
-    });
-    return material;
-  });
-  const meshes: InstancedMesh<BoxGeometry, MeshStandardMaterial>[] = [];
+  const materials = materialOrder.map(family => new MeshLambertMaterial({
+    name: `c2-second-mine-near-bank-${family}`, map: textures[materialOrder.indexOf(family)],
+    flatShading: true,
+  }));
+  const meshes: InstancedMesh<BoxGeometry, MeshLambertMaterial>[] = [];
   const matrix = new Matrix4(), position = new Vector3(), scale = new Vector3();
   const rotation = new Quaternion();
   for (let familyIndex = 0; familyIndex < materialOrder.length; familyIndex++) {

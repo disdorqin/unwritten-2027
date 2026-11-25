@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Group, InstancedMesh, Matrix4, NearestFilter, Vector3, type MeshStandardMaterial } from 'three';
+import {
+  FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
+  NearestFilter, StaticDrawUsage, Vector3,
+} from 'three';
 import {
   buildSecondMineUpperRelief, createSecondMineUpperRelief,
   type SecondMineUpperReliefBox, type SecondMineUpperReliefZone,
@@ -139,7 +142,13 @@ test('three instanced batches keep 16px Nearest pixel maps and the local north-t
     assert.ok(mesh instanceof InstancedMesh);
     assert.ok(mesh.count > 100);
     assert.equal(mesh.castShadow, true);
-    const material = mesh.material as MeshStandardMaterial;
+    assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
+    assert.ok(mesh.instanceColor);
+    const material = mesh.material;
+    assert.ok(material instanceof Material);
+    assert.ok(material instanceof MeshLambertMaterial);
+    assert.equal(material.side, FrontSide);
+    assert.equal(material.flatShading, true);
     assert.ok(material.map);
     assert.equal(material.map.image.width, 16);
     assert.equal(material.map.image.height, 16);
@@ -155,10 +164,13 @@ test('three instanced batches keep 16px Nearest pixel maps and the local north-t
       `${family} z ${position.z}/${-expected.n}; expected box ${JSON.stringify(expected)}`);
   }
   const rust = overlay.meshes.find(mesh =>
-    (mesh.material as MeshStandardMaterial).userData.materialFamily === 'rust')!
-    .material as MeshStandardMaterial;
+    mesh.material instanceof MeshLambertMaterial && mesh.material.userData.materialFamily === 'rust')!
+    .material as MeshLambertMaterial;
+  overlay.setNight(false);
+  overlay.setNight(true);
   overlay.setNight(true);
   assert.ok(rust.emissiveIntensity > 0);
+  overlay.setNight(false);
   overlay.setNight(false);
   assert.equal(rust.emissiveIntensity, 0);
   overlay.dispose();
@@ -173,7 +185,7 @@ test('dispose is idempotent, detaches from the host and releases only overlay-ow
   let textureDisposals = 0;
   overlay.meshes[0]!.geometry.addEventListener('dispose', () => { geometryDisposals++; });
   for (const mesh of overlay.meshes) {
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
     material.addEventListener('dispose', () => { materialDisposals++; });
     material.map!.addEventListener('dispose', () => { textureDisposals++; });
   }

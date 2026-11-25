@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, DataTexture, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial,
-  NearestFilter, Quaternion, SRGBColorSpace, Vector3,
+  BoxGeometry, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
+  MeshLambertMaterial, NearestFilter, Quaternion, SRGBColorSpace, StaticDrawUsage, Vector3,
 } from 'three';
 import {
   c2SecondMineBoxAllowed, type C2SecondMineBox,
@@ -106,7 +106,7 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
   group.userData.interactive = false;
   const geometry = new BoxGeometry(1, 1, 1);
   const textures = new Map<Family, DataTexture>();
-  const materials = new Map<Family, MeshStandardMaterial>();
+  const materials = new Map<Family, MeshLambertMaterial>();
   const batches = new Map<Family, Matrix4[]>();
   const visualBoxes: C2SecondMineTimberingVisualBox[] = [];
   const meshes: InstancedMesh[] = [];
@@ -115,10 +115,9 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
 
   for (const family of Object.keys(palette) as Family[]) {
     const map = pixelTexture(family);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map,
-      roughness: family === 'iron' ? .72 : .96,
-      metalness: family === 'iron' ? .48 : family === 'rust' ? .18 : 0,
+      side: FrontSide,
       flatShading: true,
     });
     textures.set(family, map);
@@ -224,6 +223,7 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
 
   for (const [family, matrices] of batches) {
     const mesh = new InstancedMesh(geometry, materials.get(family)!, matrices.length);
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `town-c2-second-mine-timbering/${family}`;
     matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     mesh.instanceMatrix.needsUpdate = true;

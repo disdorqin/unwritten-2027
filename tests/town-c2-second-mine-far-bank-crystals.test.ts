@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import {
-  BoxGeometry, Color, Group, InstancedMesh, Light, Matrix4, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, NearestFilter, type DataTexture,
+  BoxGeometry, Color, FrontSide, Group, InstancedMesh, Light, Material, Matrix4,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, NearestFilter, StaticDrawUsage, DataTexture,
 } from 'three';
 import {
   build, dispose, setNight, stats,
@@ -28,7 +28,11 @@ function instanced(scene: FarBankCrystalsScene) {
 function material(scene: FarBankCrystalsScene, family: string) {
   const mesh = scene.group.getObjectByName(`c2-second-mine-far-bank-crystals:${family}`);
   assert.ok(mesh instanceof InstancedMesh, family);
-  assert.ok(mesh.material instanceof MeshStandardMaterial, family);
+  assert.ok(mesh.material instanceof Material, family);
+  assert.ok(mesh.material instanceof MeshLambertMaterial, family);
+  assert.equal(mesh.material.side, FrontSide, family);
+  assert.equal(mesh.material.flatShading, true, family);
+  assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage, family);
   return mesh.material;
 }
 
@@ -81,7 +85,12 @@ test('C2 -140 far bank adds a denser outer/high-tier instanced crystal landscape
     assert.ok(mesh.geometry instanceof BoxGeometry);
     assert.ok(mesh.count > 0);
     assert.ok(mesh.instanceColor);
-    const map = (mesh.material as MeshStandardMaterial).map as DataTexture;
+    assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
+    assert.ok(mesh.material instanceof Material);
+    assert.ok(mesh.material instanceof MeshLambertMaterial);
+    assert.equal(mesh.material.side, FrontSide);
+    const map = mesh.material.map;
+    assert.ok(map instanceof DataTexture);
     assert.equal(map.image.width, 16);
     assert.equal(map.image.height, 16);
     assert.equal(map.minFilter, NearestFilter);
@@ -102,7 +111,9 @@ test('C2 -140 far bank keeps cyan self-emission subordinate and metal non-emissi
   assert.equal(material(scene, 'ore-vein').emissive.getHex(), 0x4b9fa8);
   assert.equal(material(scene, 'frozen-metal').emissive.getHex(), 0x000000);
 
+  assert.equal(setNight(scene, false).night, false);
   const night = setNight(scene, true);
+  setNight(scene, true);
   assert.equal(night.night, true);
   assert.equal(material(scene, 'crystal').emissiveIntensity, .34);
   assert.equal(material(scene, 'ore-vein').emissiveIntensity, .20);
@@ -121,6 +132,7 @@ test('C2 -140 far bank keeps cyan self-emission subordinate and metal non-emissi
         `${mesh.userData.family} must not use cyan as decoration`);
     }
   }
+  assert.equal(scene.setNight(false).emissiveIntensity, 0);
   assert.equal(scene.setNight(false).emissiveIntensity, 0);
   assert.equal(material(scene, 'crystal').emissiveIntensity, 0);
   assert.equal(material(scene, 'ore-vein').emissiveIntensity, 0);
@@ -175,7 +187,7 @@ test('C2 -140 far bank dispose is idempotent and releases only owned GPU resourc
   let sentinelDisposals = 0;
   (scene.group.children[0] as InstancedMesh).geometry.addEventListener('dispose', () => { geometryDisposals++; });
   for (const mesh of instanced(scene)) {
-    const ownedMaterial = mesh.material as MeshStandardMaterial;
+    const ownedMaterial = mesh.material as MeshLambertMaterial;
     ownedMaterial.addEventListener('dispose', () => { materialDisposals++; });
     ownedMaterial.map!.addEventListener('dispose', () => { textureDisposals++; });
   }

@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, DataTexture, Group, Mesh, MeshStandardMaterial,
+  BoxGeometry, BufferGeometry, DataTexture, Group, Mesh, MeshLambertMaterial,
   NearestFilter, Object3D, SRGBColorSpace,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -181,13 +181,13 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   const group = new Group();
   group.name = 'town-c2-crater-inscription';
   const geometries = new Set<BufferGeometry>();
-  const materials = new Set<MeshStandardMaterial>();
+  const materials = new Set<MeshLambertMaterial>();
   const textures = new Set<DataTexture>();
 
   const makeMaterial = (colors: readonly [number, number, number], seed: number,
     kind: 'stone' | 'wood' | 'paper' | 'ink') => {
     const map = pixelTexture(colors, seed, kind);
-    const material = new MeshStandardMaterial({ map, roughness: 1, flatShading: true });
+    const material = new MeshLambertMaterial({ map, flatShading: true });
     textures.add(map);
     materials.add(material);
     return material;
@@ -196,10 +196,10 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   const woodMaterial = makeMaterial([0x72543e, 0x3e3028, 0x997352], 29, 'wood');
   const paperMaterial = makeMaterial([0xd8d0b8, 0xb8ad92, 0xeee7d2], 53, 'paper');
   const inkMaterial = makeMaterial([0x252a27, 0x111714, 0x454b43], 67, 'ink');
-  const engravingMaterial = new MeshStandardMaterial({ color: 0x24251f, roughness: 1 });
+  const engravingMaterial = new MeshLambertMaterial({ color: 0x24251f });
   materials.add(engravingMaterial);
 
-  const addMerged = (name: string, parts: BufferGeometry[], material: MeshStandardMaterial, parent: Object3D) => {
+  const addMerged = (name: string, parts: BufferGeometry[], material: MeshLambertMaterial, parent: Object3D) => {
     const geometry = mergeGeometries(parts, false);
     if (!geometry) throw new Error(`C2-04 cannot merge ${name}`);
     for (const part of parts) part.dispose();

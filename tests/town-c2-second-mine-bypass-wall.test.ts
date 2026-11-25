@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  DataTexture, Group, InstancedMesh, MeshStandardMaterial, NearestFilter,
+  DataTexture, FrontSide, Group, InstancedMesh, Material, MeshLambertMaterial,
+  NearestFilter, StaticDrawUsage,
 } from 'three';
 import { canStandSecondMine } from '../src/shared/underground-second-mine-layout.js';
 import { c2SecondMineBoxAllowed } from '../tools/voxel-tavern/town-blockout/town-c2-second-mine-contract.js';
@@ -96,7 +97,13 @@ test('C2 bypass uses six pixel material families with 16px nearest textures', ()
       const mesh = meshes.find(candidate => candidate.name.endsWith('/' + family));
       assert.ok(mesh instanceof InstancedMesh);
       assert.equal(mesh.count, scene.stats().materialPieceCounts[family]);
-      assert.ok(mesh.material instanceof MeshStandardMaterial);
+      assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
+      assert.ok(mesh.material instanceof Material);
+      assert.ok(mesh.material instanceof MeshLambertMaterial);
+      assert.equal(mesh.material.side, FrontSide);
+      assert.equal(mesh.material.flatShading, true);
+      assert.equal(mesh.material.color.getHex(), 0xffffff);
+      assert.equal(mesh.material.polygonOffset, true);
       const texture = mesh.material.map;
       assert.ok(texture instanceof DataTexture);
       const image = texture.image as { width: number; height: number };
@@ -118,7 +125,7 @@ test('C2 bypass dispose is idempotent and releases only its own GPU resources', 
   const geometries = new Set(scene.group.children.map(child =>
     (child as InstancedMesh).geometry));
   const materials = new Set(scene.group.children.map(child =>
-    (child as InstancedMesh).material as MeshStandardMaterial));
+    (child as InstancedMesh).material as MeshLambertMaterial));
   const textures = new Set([...materials].map(material => material.map as DataTexture));
   const geometryDisposals = new Map<object, number>();
   const materialDisposals = new Map<object, number>();

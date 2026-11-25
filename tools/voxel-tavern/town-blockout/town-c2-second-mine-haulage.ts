@@ -1,6 +1,7 @@
 import {
-  BoxGeometry, DataTexture, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial,
-  NearestFilter, Quaternion, SRGBColorSpace, Vector3,
+  BoxGeometry, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
+  MeshLambertMaterial, MeshStandardMaterial, NearestFilter, Quaternion, SRGBColorSpace,
+  StaticDrawUsage, Vector3, type Material,
 } from 'three';
 import { createUndergroundMineCartModel } from './underground-mine-cart-model.js';
 import {
@@ -86,13 +87,17 @@ function pixelTexture(family: Family) {
 }
 
 function sceneTally(group: Group) {
-  const materials = new Set<MeshStandardMaterial>();
+  const materials = new Set<Material>();
   let triangles = 0, drawCalls = 0;
   group.traverse(object => {
     if (!(object instanceof Mesh)) return;
     drawCalls++;
     const list = Array.isArray(object.material) ? object.material : [object.material];
-    for (const material of list) if (material instanceof MeshStandardMaterial) materials.add(material);
+    for (const material of list) {
+      if (material instanceof MeshLambertMaterial || material instanceof MeshStandardMaterial) {
+        materials.add(material);
+      }
+    }
     const geometryTriangles = (object.geometry.index?.count ??
       object.geometry.getAttribute('position').count) / 3;
     triangles += geometryTriangles * (object instanceof InstancedMesh ? object.count : 1);
@@ -112,7 +117,7 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
   group.userData.readOnly = true;
   const geometry = new BoxGeometry(1, 1, 1);
   const textures = new Map<Family, DataTexture>();
-  const materials = new Map<Family, MeshStandardMaterial>();
+  const materials = new Map<Family, MeshLambertMaterial>();
   const batches = new Map<Family, Matrix4[]>();
   const visualBoxes: C2SecondMineHaulageVisualBox[] = [];
   const meshes: InstancedMesh[] = [];
@@ -121,10 +126,9 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
 
   for (const family of Object.keys(palette) as Family[]) {
     const map = pixelTexture(family);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map,
-      roughness: family === 'iron' ? .76 : .98,
-      metalness: family === 'iron' ? .5 : family === 'rust' ? .16 : 0,
+      side: FrontSide,
       flatShading: true,
     });
     textures.set(family, map);
@@ -255,6 +259,7 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
 
   for (const [family, matrices] of batches) {
     const mesh = new InstancedMesh(geometry, materials.get(family)!, matrices.length);
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `town-c2-second-mine-haulage/${family}`;
     matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     mesh.instanceMatrix.needsUpdate = true;

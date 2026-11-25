@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  Color, Group, InstancedMesh, MeshStandardMaterial, NearestFilter, PointLight, type EventDispatcher,
+  Color, FrontSide, Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight,
+  StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import { secondMineAnchors } from '../src/shared/underground-second-mine-layout.js';
 import { secondMineDrySites } from '../src/shared/underground-second-mine-dry-wings.js';
@@ -94,7 +95,7 @@ test('fixtures use warm 2200–2700K lamp colours, local ENY positions and a str
   }
   assert.equal(scene.isNightLit, false);
   assert.equal(scene.lights.filter(light => light.visible).length, 0);
-  const amber = scene.meshes.map(mesh => mesh.material as MeshStandardMaterial)
+  const amber = scene.meshes.map(mesh => mesh.material as MeshLambertMaterial)
     .find(material => material.userData.materialFamily === 'amber')!;
   assert.equal(amber.emissiveIntensity, .12);
   setNight(scene, true);
@@ -105,6 +106,46 @@ test('fixtures use warm 2200–2700K lamp colours, local ENY positions and a str
   assert.equal(scene.lights.filter(light => light.visible).length, 0);
   assert.equal(amber.emissiveIntensity, .12);
   scene.dispose();
+});
+
+test('same-value night updates return before rewriting lights or amber emission', () => {
+  const scene = buildC2SecondMineLightSources();
+  try {
+    const light = scene.lights[0]!;
+    const amber = scene.meshes.map(mesh => mesh.material as MeshLambertMaterial)
+      .find(material => material.userData.materialFamily === 'amber')!;
+    let lightVisible = light.visible;
+    let lightWrites = 0;
+    Object.defineProperty(light, 'visible', {
+      configurable: true,
+      get: () => lightVisible,
+      set: (value: boolean) => { lightWrites++; lightVisible = value; },
+    });
+    let emission = amber.emissiveIntensity;
+    let emissionWrites = 0;
+    Object.defineProperty(amber, 'emissiveIntensity', {
+      configurable: true,
+      get: () => emission,
+      set: (value: number) => { emissionWrites++; emission = value; },
+    });
+    assert.equal(scene.setNight(false), scene.data);
+    assert.equal(lightWrites, 0);
+    assert.equal(emissionWrites, 0);
+    scene.setNight(true);
+    assert.equal(lightWrites, 1);
+    assert.equal(emissionWrites, 1);
+    scene.setNight(true);
+    assert.equal(lightWrites, 1);
+    assert.equal(emissionWrites, 1);
+    scene.setNight(false);
+    assert.equal(lightWrites, 2);
+    assert.equal(emissionWrites, 2);
+    scene.setNight(false);
+    assert.equal(lightWrites, 2);
+    assert.equal(emissionWrites, 2);
+  } finally {
+    scene.dispose();
+  }
 });
 
 test('five 16px Nearest material batches render the fixtures and dispose without altering host campfires', () => {
@@ -123,7 +164,10 @@ test('five 16px Nearest material batches render the fixtures and dispose without
   for (const mesh of scene.meshes) {
     assert.ok(mesh instanceof InstancedMesh);
     assert.ok(mesh.name.startsWith(c2SecondMineLightPrefix));
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
+    assert.ok(material instanceof MeshLambertMaterial);
+    assert.equal(material.side, FrontSide);
+    assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
     assert.ok(material.map);
     assert.equal(material.map.image.width, 16);
     assert.equal(material.map.image.height, 16);
@@ -136,7 +180,7 @@ test('five 16px Nearest material batches render the fixtures and dispose without
 
   const resources = new Set<EventDispatcher>();
   for (const mesh of scene.meshes) {
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
     resources.add(mesh);
     resources.add(mesh.geometry);
     resources.add(material);

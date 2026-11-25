@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InstancedMesh, MeshStandardMaterial, NearestFilter, PointLight, type EventDispatcher } from 'three';
+import {
+  FrontSide, Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight,
+  StaticDrawUsage, type EventDispatcher,
+} from 'three';
 import { secondMineAnchors } from '../src/shared/underground-second-mine-layout.js';
 import { secondMineDrySites } from '../src/shared/underground-second-mine-dry-wings.js';
 import { c2SecondMineBoxAllowed } from '../tools/voxel-tavern/town-blockout/town-c2-second-mine-contract.js';
@@ -82,7 +85,10 @@ test('camp-life uses six instanced 16px Nearest material families and disposes s
   for (const mesh of scene.meshes) {
     assert.ok(mesh instanceof InstancedMesh);
     assert.ok(mesh.name.startsWith(c2SecondMineCampLifePrefix));
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
+    assert.ok(material instanceof MeshLambertMaterial);
+    assert.equal(material.side, FrontSide);
+    assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
     assert.ok(material.map);
     assert.equal(material.map.image.width, 16);
     assert.equal(material.map.image.height, 16);
@@ -94,7 +100,7 @@ test('camp-life uses six instanced 16px Nearest material families and disposes s
 
   const resources = new Set<EventDispatcher>();
   for (const mesh of scene.meshes) {
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
     resources.add(mesh);
     resources.add(mesh.geometry);
     resources.add(material);

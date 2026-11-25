@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
-  NearestFilter, Object3D, PointLight, RGBAFormat, SRGBColorSpace,
+  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshLambertMaterial,
+  NearestFilter, Object3D, PointLight, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius, meteorCraterRimRadius,
@@ -41,6 +41,8 @@ const palette: Readonly<Record<MaterialFamily, readonly [number, number, number]
   frost: [0xb9cbd2, 0xe8e6db, 0x8295a1],
 };
 const roleOrder: readonly CraterWarmLightRole[] = ['gatehouse', 'front-gate', 'rim', 'camp', 'winch', 'wellhead'];
+const realLightIds = Object.freeze(['gatehouse', 'front-gate', 'rim-05', 'camp-1', 'winch', 'wellhead']);
+const warmColor = new Color(craterWarmLightColor);
 const rimRadius = meteorCraterRimRadius;
 const rimStartBearing = 180;
 const rimStepBearing = 33;
@@ -207,6 +209,8 @@ function chainStats(nodes: readonly CraterWarmLightSite[], pieces: readonly Piec
     order: Object.freeze(nodes.map(node => node.id)),
     roleCounts: Object.freeze(counts),
     lampCount: nodes.length,
+    realLightCount: nodes.filter(node => realLightIds.includes(node.id)).length,
+    realLightIds,
     pieceCount: pieces.length,
     pieceIds: Object.freeze(pieces.map(piece => piece.id)),
     materialFamilyCount: materialFamilies.length,
@@ -261,18 +265,16 @@ export function mountCraterWarmLightChain(owner: Group, sites: readonly CraterWa
   const geometry = new BoxGeometry(1, 1, 1);
   const matrix = new Object3D();
   const meshes: InstancedMesh[] = [];
-  const materials: MeshStandardMaterial[] = [];
+  const materials: MeshLambertMaterial[] = [];
   const textures: DataTexture[] = [];
   for (const [familyIndex, family] of materialFamilies.entries()) {
     const members = pieces.filter(piece => piece.family === family);
     const texture = nearestPixelTexture(family, familyIndex * 17 + 3);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map: texture,
-      roughness: family === 'worn-iron' ? .82 : 1,
-      metalness: family === 'worn-iron' ? .28 : family === 'brass' ? .42 : 0,
       ...(family === 'amber' ? {
-        color: new Color(craterWarmLightColor),
-        emissive: new Color(craterWarmLightColor),
+        color: warmColor,
+        emissive: warmColor,
         emissiveIntensity: .04,
       } : {}),
     });
@@ -286,6 +288,7 @@ export function mountCraterWarmLightChain(owner: Group, sites: readonly CraterWa
       matrix.updateMatrix();
       mesh.setMatrixAt(index, matrix.matrix);
     }
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);
@@ -294,8 +297,8 @@ export function mountCraterWarmLightChain(owner: Group, sites: readonly CraterWa
     textures.push(texture);
   }
 
-  const lights = nodes.map(site => {
-    const light = new PointLight(new Color(craterWarmLightColor), site.role === 'winch' || site.role === 'wellhead' ? 8 : 6,
+  const lights = nodes.filter(site => realLightIds.includes(site.id)).map(site => {
+    const light = new PointLight(warmColor, site.role === 'winch' || site.role === 'wellhead' ? 8 : 6,
       site.role === 'winch' || site.role === 'wellhead' ? 12 : 10.5, 2);
     light.name = `${craterWarmLightPrefix}${site.id}/source`;
     light.position.set(site.east, site.bulbHeight, -site.north);
@@ -315,7 +318,9 @@ export function mountCraterWarmLightChain(owner: Group, sites: readonly CraterWa
     get isNightLit() { return night; },
     setNight(value: boolean) {
       if (disposed) return;
-      night = !!value;
+      const next = !!value;
+      if (next === night) return;
+      night = next;
       for (const light of lights) light.visible = night;
       for (const material of materials) {
         if (material.userData.materialFamily === 'amber') material.emissiveIntensity = night ? 1.65 : .04;

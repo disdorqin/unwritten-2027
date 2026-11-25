@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import {
-  BoxGeometry, CanvasTexture, DataTexture, Group, Mesh, MeshStandardMaterial, NearestFilter,
+  BoxGeometry, CanvasTexture, DataTexture, Group, Mesh, MeshLambertMaterial, NearestFilter,
 } from 'three';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -88,7 +88,7 @@ test('C2-04 reuses one connected canonical crescent/descending-arc engraving, wi
     if (object instanceof Mesh && object.name.includes('crescent-descending-arc')) matchingMarks.push(object);
   });
   assert.equal(matchingMarks.length, 1);
-  const material = mark.material as MeshStandardMaterial;
+  const material = mark.material as MeshLambertMaterial;
   assert.equal(material.color.getHex(), 0x24251f, 'the mark is incised dark, not a gold ship-name plate');
   mark.geometry.computeBoundingBox();
   assert.ok(mark.geometry.boundingBox!.min.y >= -.25 && mark.geometry.boundingBox!.max.y <= .25,
@@ -153,7 +153,7 @@ test('C2-04 stone/table/paper/ink use nearest-filtered 16px material families', 
     if (!(object instanceof Mesh)) return;
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) {
-      if (!(material instanceof MeshStandardMaterial) || !material.map) continue;
+      if (!(material instanceof MeshLambertMaterial) || !material.map) continue;
       assert.ok(material.map instanceof DataTexture);
       assert.equal(material.map.image.width, 16);
       assert.equal(material.map.image.height, 16);

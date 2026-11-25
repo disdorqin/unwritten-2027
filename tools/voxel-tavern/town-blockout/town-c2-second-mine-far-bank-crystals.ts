@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
+  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshLambertMaterial,
   NearestFilter, Object3D, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
@@ -86,7 +86,7 @@ type State = {
   root: Group;
   meshes: readonly InstancedMesh[];
   geometry: BoxGeometry;
-  materials: Readonly<Record<Family, MeshStandardMaterial>>;
+  materials: Readonly<Record<Family, MeshLambertMaterial>>;
   textures: readonly DataTexture[];
   parts: readonly Part[];
   clusters: readonly Cluster[];
@@ -283,25 +283,25 @@ export function build(parent?: Group): FarBankCrystalsScene {
     grainTexture(0x756f5d, 0x393f3e, 0xb39a63, 5409),
     grainTexture(0x777d7e, 0x343c40, 0xb9b6a6, 5501),
   ];
-  const materials: Record<Family, MeshStandardMaterial> = {
-    basalt: new MeshStandardMaterial({
-      map: textures[0], roughness: .98, flatShading: true,
+  const materials: Record<Family, MeshLambertMaterial> = {
+    basalt: new MeshLambertMaterial({
+      map: textures[0], flatShading: true,
       emissive: 0x000000, emissiveIntensity: 0,
     }),
-    rubble: new MeshStandardMaterial({
-      map: textures[1], roughness: 1, flatShading: true,
+    rubble: new MeshLambertMaterial({
+      map: textures[1], flatShading: true,
       emissive: 0x000000, emissiveIntensity: 0,
     }),
-    crystal: new MeshStandardMaterial({
-      map: textures[2], roughness: .38, metalness: .04, flatShading: true,
+    crystal: new MeshLambertMaterial({
+      map: textures[2], flatShading: true,
       emissive: 0x4b9fa8, emissiveIntensity: 0,
     }),
-    'ore-vein': new MeshStandardMaterial({
-      map: textures[3], roughness: .72, metalness: .08, flatShading: true,
+    'ore-vein': new MeshLambertMaterial({
+      map: textures[3], flatShading: true,
       emissive: 0x4b9fa8, emissiveIntensity: 0,
     }),
-    'frozen-metal': new MeshStandardMaterial({
-      map: textures[4], roughness: .42, metalness: .72, flatShading: true,
+    'frozen-metal': new MeshLambertMaterial({
+      map: textures[4], flatShading: true,
       emissive: 0x000000, emissiveIntensity: 0,
     }),
   };
@@ -395,13 +395,12 @@ export function stats(scene: FarBankCrystalsScene): FarBankCrystalsStats {
 export function setNight(scene: FarBankCrystalsScene, night: boolean): FarBankCrystalsStats {
   if (typeof night !== 'boolean') throw new TypeError('C2 far-bank night must be boolean.');
   const state = stateFor(scene);
-  if (!state.disposed) {
-    state.night = night;
-    state.materials.crystal.emissiveIntensity = night
-      ? c2SecondMineFarBankCrystalsPlan.nightCrystalEmission : 0;
-    state.materials['ore-vein'].emissiveIntensity = night
-      ? c2SecondMineFarBankCrystalsPlan.nightVeinEmission : 0;
-  }
+  if (state.disposed || state.night === night) return stats(scene);
+  state.night = night;
+  state.materials.crystal.emissiveIntensity = night
+    ? c2SecondMineFarBankCrystalsPlan.nightCrystalEmission : 0;
+  state.materials['ore-vein'].emissiveIntensity = night
+    ? c2SecondMineFarBankCrystalsPlan.nightVeinEmission : 0;
   return stats(scene);
 }
 

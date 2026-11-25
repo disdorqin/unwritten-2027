@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
+  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshLambertMaterial,
   NearestFilter, Object3D, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import { secondMineDrySites, secondMineDryWings } from '../../../src/shared/underground-second-mine-dry-wings.js';
@@ -298,7 +298,7 @@ export function createSecondMineUpperRelief() {
   const transform = new Object3D();
   const tint = new Color();
   const meshes: InstancedMesh[] = [];
-  const materials: MeshStandardMaterial[] = [];
+  const materials: MeshLambertMaterial[] = [];
   const textures: DataTexture[] = [];
   let night = false;
   let disposed = false;
@@ -306,8 +306,8 @@ export function createSecondMineUpperRelief() {
   for (const [familyIndex, family] of familyOrder.entries()) {
     const members = data.boxes.filter(box => box.family === family);
     const texture = pixelTexture(family);
-    const material = new MeshStandardMaterial({
-      map: texture, roughness: .96, metalness: 0, flatShading: true,
+    const material = new MeshLambertMaterial({
+      map: texture, flatShading: true,
       ...(family === 'rust' ? { emissive: new Color(0x5b2d18), emissiveIntensity: 0 } : {}),
     });
     material.userData.materialFamily = family;
@@ -340,7 +340,9 @@ export function createSecondMineUpperRelief() {
     boxes: data.boxes,
     setNight(value: boolean) {
       if (disposed) return;
-      night = !!value;
+      const nextNight = !!value;
+      if (night === nextNight) return;
+      night = nextNight;
       for (const material of materials) {
         if (material.userData.materialFamily === 'rust') material.emissiveIntensity = night ? .16 : 0;
       }

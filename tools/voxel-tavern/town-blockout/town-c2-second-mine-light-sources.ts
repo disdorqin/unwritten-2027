@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshStandardMaterial,
-  NearestFilter, Object3D, PointLight, RGBAFormat, SRGBColorSpace,
+  BoxGeometry, Color, DataTexture, FrontSide, Group, InstancedMesh, MeshLambertMaterial,
+  NearestFilter, Object3D, PointLight, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
   c2SecondMineBoxAllowed, type C2SecondMineBox,
@@ -147,16 +147,15 @@ export function buildC2SecondMineLightSources(owner?: Group) {
   const geometry = new BoxGeometry(1, 1, 1);
   const pose = new Object3D();
   const meshes: InstancedMesh[] = [];
-  const materials: MeshStandardMaterial[] = [];
+  const materials: MeshLambertMaterial[] = [];
   const textures: DataTexture[] = [];
 
   for (const [index, family] of families.entries()) {
     const members = pieces.filter(piece => piece.family === family);
     const texture = nearestTexture(family, index * 23 + 5);
-    const material = new MeshStandardMaterial({
+    const material = new MeshLambertMaterial({
       map: texture,
-      roughness: family === 'iron' ? .68 : family === 'rust' ? .84 : .96,
-      metalness: family === 'iron' ? .42 : family === 'rust' ? .16 : 0,
+      side: FrontSide,
       ...(family === 'amber' ? {
         color: 0xffffff,
         emissive: new Color(c2SecondMineLampColors.bypass.hex),
@@ -165,6 +164,7 @@ export function buildC2SecondMineLightSources(owner?: Group) {
     });
     material.userData.materialFamily = family;
     const mesh = new InstancedMesh(geometry, material, members.length);
+    mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `${c2SecondMineLightPrefix}${family}`;
     for (const [pieceIndex, piece] of members.entries()) {
       pose.position.set(piece.x, piece.y, -piece.n);
@@ -229,7 +229,9 @@ export function buildC2SecondMineLightSources(owner?: Group) {
   let disposed = false;
   function setNight(value: boolean) {
     if (disposed) return data;
-    night = !!value;
+    const nextNight = !!value;
+    if (night === nextNight) return data;
+    night = nextNight;
     for (const light of lights) light.visible = night;
     amberMaterial.emissiveIntensity = night ? 1.45 : .12;
     return data;

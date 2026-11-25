@@ -20,7 +20,7 @@ test('C2-01～05 mount through the existing ZA-22 road and share its height/coll
   assert.ok(Math.abs(road.heightAt(-120, 185)! - floor) < 1e-9);
   assert.equal(road.centralMound.stats.materialFamilies, 3);
   assert.equal(road.brokenCircle.features.length, 8);
-  assert.equal(road.moltenBeads.stats.beadCount, 768);
+  assert.equal(road.moltenBeads.stats.beadCount, 640);
   assert.equal(road.inscription.stats.hasText, false);
   assert.equal(road.warmLightChain.data.lampCount, 16);
 
@@ -32,7 +32,7 @@ test('C2-01～05 mount through the existing ZA-22 road and share its height/coll
 
   road.craterActions.setNight(true);
   assert.equal(road.warmLightChain.isNightLit, true);
-  assert.equal(road.warmLightChain.lights.filter(light => light.visible).length, 16);
+  assert.equal(road.warmLightChain.lights.filter(light => light.visible).length, 6);
   road.moltenBeads.update({
     cameraPosition: { x: -88, y: road.heightAt(-88, 168)! + 1.6, z: -168 }, night: true,
   });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { Group, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh, type MeshStandardMaterial } from 'three';
+import { Group, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh, type MeshLambertMaterial } from 'three';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { surveyZa31CraterWinch } from '../tools/voxel-tavern/town-blockout/town-za31-crater-winch';
@@ -78,7 +78,7 @@ test('C2-03 restrains night emission and hides all near-read beads beyond 15 m a
   const scene = mount();
   const mesh = scene.group.getObjectByName('c2-molten-beads-impact-glass') as InstancedMesh;
   assert.ok(mesh?.isInstancedMesh);
-  const material = mesh.material as MeshStandardMaterial;
+  const material = mesh.material as MeshLambertMaterial;
   assert.equal(material.emissive.getHex(), 0x65c9ad);
   assert.equal(scene.stats.beadsVisible, false, 'no camera has been supplied at mount time');
 
@@ -109,7 +109,7 @@ test('C2-03 restrains night emission and hides all near-read beads beyond 15 m a
   const shader = {
     vertexShader: '#include <common>\n#include <begin_vertex>',
     fragmentShader: '#include <common>\n#include <emissivemap_fragment>',
-  } as unknown as Parameters<NonNullable<MeshStandardMaterial['onBeforeCompile']>>[0];
+  } as unknown as Parameters<NonNullable<MeshLambertMaterial['onBeforeCompile']>>[0];
   material.onBeforeCompile(shader, {} as never);
   assert.match(shader.fragmentShader, /smoothstep\(14\.5, 15\.0, distance\(vMoltenBeadWorld, cameraPosition\)\)/);
   assert.match(shader.vertexShader, /instanceMatrix \* moltenWorldPosition/);

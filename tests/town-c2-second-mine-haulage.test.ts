@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  Group, InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, type EventDispatcher,
+  FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, MeshStandardMaterial,
+  NearestFilter, StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import {
   buildTownC2SecondMineHaulage,
@@ -30,7 +31,7 @@ function resources(group: Group) {
     found.add(object.geometry);
     for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
       found.add(material);
-      const map = (material as MeshStandardMaterial).map;
+      const map = (material as MeshLambertMaterial | MeshStandardMaterial).map;
       if (map) found.add(map);
     }
   });
@@ -93,13 +94,15 @@ test('all siding, debris and whole-cart AABBs pass the guard without reducing pr
 test('haulage and reused carts expose at least three 16px Nearest material families', () => {
   const scene = buildTownC2SecondMineHaulage();
   try {
-    const materials = new Set<MeshStandardMaterial>();
+    const materials = new Set<MeshLambertMaterial | MeshStandardMaterial>();
     let meshes = 0;
     scene.group.traverse(object => {
       if (!(object instanceof Mesh)) return;
       meshes++;
       for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
-        if (material instanceof MeshStandardMaterial) materials.add(material);
+        if (material instanceof MeshLambertMaterial || material instanceof MeshStandardMaterial) {
+          materials.add(material);
+        }
       }
     });
     assert.ok(meshes >= 10);
@@ -120,6 +123,15 @@ test('haulage and reused carts expose at least three 16px Nearest material famil
     const instanced = scene.group.getObjectsByProperty('isInstancedMesh', true);
     assert.ok(instanced.length >= 10);
     assert.ok(instanced.every(object => object instanceof InstancedMesh));
+    const ownBatches = instanced.filter(object =>
+      object.name.startsWith('town-c2-second-mine-haulage/'));
+    assert.equal(ownBatches.length, scene.stats.materialFamilies - 4);
+    for (const mesh of ownBatches) {
+      assert.ok(mesh instanceof InstancedMesh);
+      assert.ok(mesh.material instanceof MeshLambertMaterial);
+      assert.equal(mesh.material.side, FrontSide);
+      assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
+    }
   } finally {
     scene.dispose();
   }

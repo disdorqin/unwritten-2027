@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  Group, InstancedMesh, MeshStandardMaterial, NearestFilter, PointLight, type EventDispatcher,
+  Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight, type EventDispatcher,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius,
@@ -48,7 +48,8 @@ test('批95节点按门房、正门、十盏坑沿、两盏集结地、绞盘、
     gatehouse: 1, 'front-gate': 1, rim: 10, camp: 2, winch: 1, wellhead: 1,
   });
   assert.equal(chain.data.lampCount, 16);
-  assert.equal(chain.lights.length, 16);
+  assert.equal(chain.lights.length, 6);
+  assert.equal(chain.data.realLightCount, 6);
   assert.equal(chain.data.pieceCount, 16 * 20);
   assert.equal(chain.data.triangleCount, 16 * 20 * 12);
   assert.ok(chain.data.materialFamilyCount >= 3);
@@ -87,13 +88,17 @@ test('实体灯具备六族16px像素材质、完整五金与真实#e08a3c夜灯
   for (const node of chain.data.nodes) {
     for (const suffix of suffixes) assert.ok(chain.data.pieceIds.includes(`${node.id}/${suffix}`), `${node.id}/${suffix}`);
     const light = chain.lights.find(item => item.name === `${craterWarmLightPrefix}${node.id}/source`);
-    assert.ok(light instanceof PointLight, node.id);
-    assert.equal(light.color.getHex(), craterWarmLightColor);
-    assert.deepEqual(light.position.toArray(), [node.east, node.bulbHeight, -node.north]);
+    if (chain.data.realLightIds.includes(node.id)) {
+      assert.ok(light instanceof PointLight, node.id);
+      assert.equal(light.color.getHex(), craterWarmLightColor);
+      assert.deepEqual(light.position.toArray(), [node.east, node.bulbHeight, -node.north]);
+    } else {
+      assert.equal(light, undefined, node.id + ' keeps emissive-only presentation');
+    }
   }
   for (const mesh of chain.meshes) {
     assert.ok(mesh instanceof InstancedMesh);
-    const material = mesh.material as MeshStandardMaterial;
+    const material = mesh.material as MeshLambertMaterial;
     assert.ok(material.map);
     assert.equal(material.map.image.width, 16);
     assert.equal(material.map.image.height, 16);
@@ -105,7 +110,7 @@ test('实体灯具备六族16px像素材质、完整五金与真实#e08a3c夜灯
   assert.equal(chain.lights.filter(light => light.visible).length, 0);
   chain.setNight(true);
   assert.equal(chain.isNightLit, true);
-  assert.equal(chain.lights.filter(light => light.visible).length, 16);
+  assert.equal(chain.lights.filter(light => light.visible).length, 6);
   chain.setNight(false);
   assert.equal(chain.lights.filter(light => light.visible).length, 0);
   chain.dispose();
@@ -137,15 +142,15 @@ test('换挂不读取或改写宿主已有六灯，dispose仅释放本链资源�
   const chain = mountCraterWarmLightChain(owner, surveyCraterWarmLightChain(road));
   chain.setNight(true);
   assert.ok(hostLights.every(light => !light.visible && light.intensity === 2 && light.color.getHex() === 0x8899aa));
-  assert.equal(chain.group.children.filter(child => child instanceof PointLight).length, 16);
+  assert.equal(chain.group.children.filter(child => child instanceof PointLight).length, 6);
   assert.ok(chain.lights.every(light => light.name.startsWith(craterWarmLightPrefix)));
 
   const resources = new Set<EventDispatcher>();
   for (const mesh of chain.meshes) {
     resources.add(mesh);
     resources.add(mesh.geometry);
-    resources.add(mesh.material as MeshStandardMaterial);
-    resources.add((mesh.material as MeshStandardMaterial).map!);
+    resources.add(mesh.material as MeshLambertMaterial);
+    resources.add((mesh.material as MeshLambertMaterial).map!);
   }
   const disposed = new Map<EventDispatcher, number>();
   for (const resource of resources) {
