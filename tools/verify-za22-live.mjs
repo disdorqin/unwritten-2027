@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['spawn', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
+assert.ok(['spawn', 'entry', 'station', 'cloud', 'gate', 'crater', 'all'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -328,6 +328,32 @@ try {
     args: graphicsArgs,
   });
   report.browser = browser.version();
+  if (segment === 'entry') {
+    // Full compiled production client + real Presence server. This gate
+    // deliberately does NOT confuse successful entry with a crater walk.
+    const { page, evidence } = await openTown('entry');
+    await waitForWire(page, evidence, pose=>pose.area==='town' &&
+      Math.hypot(pose.east-spawn[0],pose.north-spawn[1])<.3);
+    const statusNight=await readPose(page);
+    assert.match(statusNight.status, /(已连接|备用通道)/);
+    assert.equal(await page.locator('#lighting').textContent(),'雪夜');
+    await snapshot(page,evidence,'presence-true-entry-night');
+    await page.locator('#town-panel-toggle').click();
+    await page.locator('#lighting').click();
+    await page.waitForFunction(()=>document.querySelector('#lighting')?.textContent==='白昼');
+    if(await page.locator('#town-settings').evaluate(dialog=>dialog.open))
+      await page.locator('#town-settings-close').click();
+    const statusDay=await readPose(page);
+    assert.match(statusDay.status, /(已连接|备用通道)/);
+    await waitForWire(page,evidence,pose=>pose.area==='town');
+    await snapshot(page,evidence,'presence-true-entry-day');
+    report.entryProof={
+      productionRoot:true,realPresenceSession:true,realNativeCanvas:true,
+      firstPersonViewport:viewport,nightHud:statusNight,dayHud:statusDay,
+      nightAndDayChecked:true,craterWalkCertified:false,
+      campTransferCertified:false,
+    };
+  }
   if (segment === 'spawn') {
     const { page, evidence } = await openTown('spawn');
     await sampleFrameCadence(page, evidence, 'plaza');
@@ -342,7 +368,7 @@ try {
     await page.screenshot({ path: join(output, 'spawn-bare.png'), timeout: 16_000 });
     evidence.checkpoints.push({ label: 'spawn-bare', ...await readPose(page), wire: evidence.poses.at(-1) });
   }
-  if (segment !== 'crater') {
+  if (segment !== 'crater' && segment !== 'entry') {
     const { page, evidence } = await openTown('cable');
     await follow(page, evidence, station, 'station');
     if (segment === 'station') {

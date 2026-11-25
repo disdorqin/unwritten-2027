@@ -1,0 +1,30 @@
+{
+  "url": "http://127.0.0.1:49253/?profile",
+  "segment": "crater",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": null,
+  "paths": [
+    {
+      "name": "crater",
+      "checkpoints": [],
+      "sockets": [],
+      "poses": []
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "failure": "AssertionError [ERR_ASSERTION]: Actual town entry failed to load; do not bypass the error screen\n\ntrue !== false\n\n    at openTown (file:///D:/computer%20learning/game_exe/kuanian/.worktrees/window-c-integration-review/tools/verify-za22-live.mjs:128:10)\n    at async file:///D:/computer%20learning/game_exe/kuanian/.worktrees/window-c-integration-review/tools/verify-za22-live.mjs:371:44",
+  "lastPose": {
+    "hud": "",
+    "action": "",
+    "status": "单人模式"
+  },
+  "errors": 0
+}

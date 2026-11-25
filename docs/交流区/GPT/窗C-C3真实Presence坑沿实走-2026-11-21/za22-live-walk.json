@@ -1,0 +1,30 @@
+{
+  "url": "http://127.0.0.1:65510/?profile",
+  "segment": "crater",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": null,
+  "paths": [
+    {
+      "name": "crater",
+      "checkpoints": [],
+      "sockets": [],
+      "poses": []
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "failure": "locator.waitFor: Timeout 90000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#scene canvas') to be visible\u001b[22m\n\u001b[2m    173 × locator resolved to hidden <canvas width=\"240\" height=\"135\" tabindex=\"0\" aria-label=\"雪镇建模预览\" data-engine=\"three.js r180\"></canvas>\u001b[22m\n\n    at openTown (D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c-integration-review\\tools\\verify-za22-live.mjs:112:39)\n    at async file:///D:/computer%20learning/game_exe/kuanian/.worktrees/window-c-integration-review/tools/verify-za22-live.mjs:351:44",
+  "lastPose": {
+    "hud": "",
+    "action": "",
+    "status": "单人模式"
+  },
+  "errors": 0
+}
