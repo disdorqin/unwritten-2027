@@ -25,7 +25,10 @@ test('R30 middle band keeps sparse recognizable mining relics and crystal outcro
   assert.ok(a.batches.length <= 5, `draw batches stay inside the dressing budget: ${a.batches.length}`);
   assert.equal(a.crystalViews.length,a.placements.filter(p=>p.kind==='ice').length);
   assert.ok(a.crystalViews.length>=3);
-  assert.ok(a.colliders.length>0 && a.colliders.length<=a.placements.length);
+  assert.ok(a.colliders.length>0 && a.colliders.length<=a.placements.length+(a.trestle?.colliders.length??0));
+  assert.ok(a.trestle,'surveyed broken trestle must be present');
+  assert.ok(a.trestle.group.children.length>=2);
+  assert.ok(a.trestle.colliders.length===2);
   assert.deepEqual(a.colliders,b.colliders);
   for(const box of a.colliders){
     assert.ok(box.max[1]-box.min[1]>.46);

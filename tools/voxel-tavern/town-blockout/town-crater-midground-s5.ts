@@ -8,6 +8,7 @@ import type { Box } from './landmark-kit';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import { buildBR30CrystalForm, buildBR30RailFragment, buildBR30TimberFragment } from './town-b-r30-crater-remnant-forms';
 import { surveyBR30RelicView, type BR30RelicView } from './town-b-r30-crater-relic-view';
+import { buildBR30BrokenTrestle } from './town-b-r30-broken-trestle';
 
 type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
 type Piece = 'scorch' | 'black-rock' | 'timber' | 'rust' | 'ice';
@@ -274,5 +275,8 @@ export function buildCraterMidgroundS5(road: Ground,
     group.add(batch);
     batches.push(kind);
   }
-  return { group, placements, batches, crystalViews, colliders };
+  const trestle=buildBR30BrokenTrestle(originE+14.75,originN-46.75,road.heightAt,trail,[...avoid,...placements],reserved,materials.timber,materials.rust);
+  if(trestle){group.add(trestle.group);colliders.push(...trestle.colliders);}
+  const trestleView=trestle?surveyBR30RelicView(road.heightAt,trail,trestle.target):undefined;
+  return { group, placements, batches, crystalViews, colliders, trestle, trestleView };
 }

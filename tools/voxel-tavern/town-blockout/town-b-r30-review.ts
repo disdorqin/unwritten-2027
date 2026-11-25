@@ -38,6 +38,8 @@ for(const {cluster,view} of road.midgroundS5.crystalViews){
   if(seen.has(cluster))continue;seen.add(cluster);
   add(cluster,'晶簇 '+cluster,view.foot,view.target);
 }
+const trestleView=road.midgroundS5.trestleView;
+if(trestleView)add('broken-trestle','断栈道遗址',trestleView.foot,trestleView.target);
 const approach=fixture.mainTrailPoint(.99);
 add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a.east,north:a.north,height:a.rimHeight-33.9});
 for(const p of face.sites){
