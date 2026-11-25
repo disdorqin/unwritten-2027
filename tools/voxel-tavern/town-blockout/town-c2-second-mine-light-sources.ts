@@ -41,11 +41,11 @@ export type C2SecondMineLampEmitter = Readonly<{
 
 const families: readonly C2SecondMineLightFamily[] = ['stone', 'timber', 'iron', 'rust', 'amber'];
 const palette: Readonly<Record<C2SecondMineLightFamily, readonly [number, number, number]>> = {
-  stone: [0x77736c, 0xa49c8b, 0x4b4d4c],
-  timber: [0x71553c, 0xa17b52, 0x45362b],
-  iron: [0x777b82, 0xa0a39d, 0x444a50],
-  rust: [0x815b44, 0xb07950, 0x4d3c33],
-  amber: [0xe5a05a, 0xffd39a, 0x8e5c37],
+  stone: [0x7c7770, 0xb0a793, 0x454c4c],
+  timber: [0x7a5b3e, 0xb08759, 0x403127],
+  iron: [0x727b82, 0xaeb3ad, 0x3f4b52],
+  rust: [0x8a5d42, 0xc08455, 0x49342c],
+  amber: [0xd88b43, 0xffe2ac, 0x754126],
 };
 const roleOrder: readonly C2SecondMineLightRole[] = ['dock', 'bypass', 'workface'];
 const fixturePlan: readonly Readonly<{
@@ -75,24 +75,76 @@ const selectedFixtures = Object.freeze([
   fixturePlan[0]!, fixturePlan[5]!, fixturePlan[8]!,
 ]);
 
+function mixTone(a: number, b: number, amount: number) {
+  const mix = (start: number, end: number) => Math.round(start + (end - start) * amount);
+  return (mix(a >>> 16, b >>> 16) << 16) |
+    (mix((a >>> 8) & 255, (b >>> 8) & 255) << 8) | mix(a & 255, b & 255);
+}
+
 function nearestTexture(family: C2SecondMineLightFamily, seed: number) {
   const [base, light, dark] = palette[family];
+  const middle = mixTone(base, light, .5);
+  const deep = mixTone(base, dark, .6);
   const pixels = new Uint8Array(16 * 16 * 4);
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const border = x === 0 || y === 0 || x === 15 || y === 15;
     const grain = (Math.imul(x + seed, 15731) ^ Math.imul(y + 17, 4817)) >>> 0;
-    const seam = family === 'timber' ? y === 5 || y === 11 :
-      family === 'amber' ? (x + y) % 5 === 0 :
-        (Math.floor(x / 3) * 7 + Math.floor(y / 4) * 11 + seed) % 13 < 3;
-    const color = border || seam && grain % 3 === 0 ? dark : seam || grain % 5 === 0 ? light : base;
+    const fleck = grain % 29;
+    let color = base;
+    if (family === 'amber') {
+      const heat = 1 - Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5)) / 8;
+      color = heat > .78 ? light : heat > .48 ? middle : heat > .2 ? base : dark;
+      if ((x * 3 + y * 7) % 31 === 0) color = deep;
+    } else if (family === 'timber') {
+      const grainLine = (x + Math.floor(y / 4) * 3) % 8;
+      color = grainLine === 0 ? deep : grainLine === 1 ? dark :
+        fleck < 4 ? light : fleck < 11 ? middle : base;
+    } else {
+      const block = (Math.floor(x / 3) * 7 + Math.floor(y / 4) * 11 + seed) % 13;
+      color = block < 3 ? deep : block === 3 ? dark : fleck < 5 ? light :
+        fleck < 11 ? middle : base;
+      if ((x + y * 3) % 19 === 0) color = middle;
+      if ((x * 7 + y * 5) % 43 === 0) color = light;
+    }
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    if (border && grain % 4 === 0 && family !== 'amber') color = dark;
     pixels.set([color >>> 16, (color >>> 8) & 255, color & 255, 255], (y * 16 + x) * 4);
   }
   const texture = new DataTexture(pixels, 16, 16, RGBAFormat);
+  texture.name = `c2-second-mine-light-sources/${family}-worn-16px`;
   texture.minFilter = texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.colorSpace = SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
+}
+
+const roleWarmth: Readonly<Record<C2SecondMineLightRole, readonly [number, number, number]>> = {
+  dock: [1.06, 1.01, .91],
+  bypass: [1.08, .97, .82],
+  workface: [1.1, .91, .73],
+};
+
+function applyInstanceWear(mesh: InstancedMesh, members: readonly C2SecondMineLightPiece[]) {
+  const tint = new Color();
+  members.forEach((piece, index) => {
+    const seed = Math.imul(index + 37, 1597334677) ^ Math.round((piece.x + 60) * 8191) ^
+      Math.round((piece.n + 20) * 4093);
+    const shade = .87 + ((seed >>> 0) % 9) * .018;
+    const worn = /cap|handle|bracket|band/.test(piece.id) ? .07 : 0;
+    if (piece.family === 'amber') {
+      const core = piece.id.includes('/light-core-') ? .05 : 0;
+      const warmth = roleWarmth[piece.role];
+      tint.setRGB((shade + worn + core) * warmth[0], (shade + worn + core) * warmth[1],
+        (shade + worn + core) * warmth[2]);
+    } else {
+      const profile = piece.family === 'rust' ? [1.07, .94, .82] :
+        piece.family === 'timber' ? [1.04, .97, .88] : [.95, .99, 1.04];
+      tint.setRGB((shade + worn) * profile[0], (shade + worn) * profile[1], (shade + worn) * profile[2]);
+    }
+    mesh.setColorAt(index, tint);
+  });
+  mesh.instanceColor!.setUsage(StaticDrawUsage);
+  mesh.instanceColor!.needsUpdate = true;
 }
 
 type Fixture = (typeof fixturePlan)[number];
@@ -156,9 +208,11 @@ export function buildC2SecondMineLightSources(owner?: Group) {
     const material = new MeshLambertMaterial({
       map: texture,
       side: FrontSide,
+      flatShading: true,
       ...(family === 'amber' ? {
-        color: 0xffffff,
-        emissive: new Color(c2SecondMineLampColors.bypass.hex),
+        color: 0xfff4df,
+        emissive: new Color(0xffcb91),
+        emissiveMap: texture,
         emissiveIntensity: .12,
       } : {}),
     });
@@ -173,6 +227,7 @@ export function buildC2SecondMineLightSources(owner?: Group) {
       pose.updateMatrix();
       mesh.setMatrixAt(pieceIndex, pose.matrix.clone());
     }
+    applyInstanceWear(mesh, members);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);

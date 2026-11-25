@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
+  Color, DataTexture, FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
   NearestFilter, Quaternion, StaticDrawUsage, Vector3,
 } from 'three';
 import {
@@ -161,6 +161,50 @@ test('four cold industrial material families use 16px nearest-filtered unit-cube
     assert.ok(basalt.name.endsWith('-basalt'));
     assert.notEqual(iron.map, basalt.map);
     for (const count of Object.values(built.stats.materialCounts)) assert.ok(count > 100);
+  } finally {
+    built.dispose();
+  }
+});
+
+test('coursed pixels and per-piece tints separate stone, gravel, iron and mineral warmth without new geometry', () => {
+  const built = buildTownC2SecondMineNearBankTeeth();
+  try {
+    const tint = new Color();
+    for (const mesh of built.meshes) {
+      const material = mesh.material as MeshLambertMaterial;
+      const texture = material.map;
+      assert.ok(texture instanceof DataTexture);
+      const pixels = texture.image.data as Uint8Array;
+      const colors = new Set<string>();
+      let minLuminance = 255, maxLuminance = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        colors.add(`${pixels[index]}/${pixels[index + 1]}/${pixels[index + 2]}`);
+        const luminance = pixels[index]! * .2126 + pixels[index + 1]! * .7152 + pixels[index + 2]! * .0722;
+        minLuminance = Math.min(minLuminance, luminance);
+        maxLuminance = Math.max(maxLuminance, luminance);
+      }
+      assert.ok(colors.size >= 4, `${mesh.name} needs multiple material tones`);
+      assert.ok(maxLuminance - minLuminance > 45, `${mesh.name} lacks pixel contrast`);
+      assert.equal(material.emissive.getHex(), 0x000000, 'mineral warmth must not become a real light');
+
+      const shades = new Set<string>();
+      let minShade = Infinity, maxShade = -Infinity, materialTint = false;
+      for (let index = 0; index < mesh.count; index++) {
+        assert.ok(mesh.instanceColor);
+        mesh.getColorAt(index, tint);
+        shades.add(tint.g.toFixed(4));
+        minShade = Math.min(minShade, tint.g);
+        maxShade = Math.max(maxShade, tint.g);
+        if (Math.abs(tint.r - tint.b) > .01) materialTint = true;
+      }
+      assert.ok(shades.size > 8, `${mesh.name} instance colour is too uniform`);
+      assert.ok(maxShade - minShade > .12, `${mesh.name} lacks per-piece value variation`);
+      if (mesh.userData.materialFamily === 'rust' || mesh.userData.materialFamily === 'iron') {
+        assert.equal(materialTint, true, `${mesh.name} lacks warm/cool mineral separation`);
+      }
+    }
+    assert.equal(built.meshes.reduce((sum, mesh) => sum + mesh.count * 12, 0),
+      built.stats.pieceCount * 12, 'visual refinement must not add triangles');
   } finally {
     built.dispose();
   }

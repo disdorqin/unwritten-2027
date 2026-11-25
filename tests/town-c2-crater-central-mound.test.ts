@@ -104,6 +104,7 @@ test('the mounted voxel mound exposes three textured material families and agree
   assert.equal(built.meshes.length, 3);
   assert.ok(built.stats.voxelCount > 1500);
   assert.ok(built.stats.triangles > 5000 && built.stats.triangles < 30000);
+  assert.equal(built.stats.triangles, 10720, 'visual refinement must not change the approved triangle budget');
   assert.equal(Object.values(built.stats.materialVoxelCounts).reduce((sum, count) => sum + count, 0),
     built.stats.voxelCount);
   for (const count of Object.values(built.stats.materialVoxelCounts)) assert.ok(count > 100);
@@ -116,8 +117,27 @@ test('the mounted voxel mound exposes three textured material families and agree
     assert.equal(mesh.material.map?.magFilter, NearestFilter);
     assert.equal(mesh.material.map?.wrapS, RepeatWrapping);
     assert.equal(mesh.material.map?.wrapT, RepeatWrapping);
+    assert.equal(mesh.material.vertexColors, true);
+    assert.equal(mesh.material.dithering, true);
     assert.equal(mesh.geometry.getAttribute('position').count % 6, 0);
     assert.deepEqual(Array.from(mesh.geometry.getAttribute('normal').array.slice(0, 3)), [0, 1, 0]);
+    const colors = mesh.geometry.getAttribute('color').array;
+    let minColor = Infinity, maxColor = -Infinity;
+    const colorSteps = new Set<number>();
+    for (const value of colors) {
+      assert.ok(Number.isFinite(value) && value >= 0 && value <= 1.1);
+      minColor = Math.min(minColor, value);
+      maxColor = Math.max(maxColor, value);
+      colorSteps.add(Math.round(value * 1000));
+    }
+    assert.ok(maxColor - minColor > .15, 'course seams and worn arrises need visible vertex-color contrast');
+    assert.ok(colorSteps.size > 20, 'per-block and per-face color variation was lost');
+    const pixels = mesh.material.map!.image.data as Uint8Array;
+    const texelColors = new Set<string>();
+    for (let index = 0; index < pixels.length; index += 4) {
+      texelColors.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]}`);
+    }
+    assert.ok(texelColors.size >= 4, 'pixel skin needs mineral grain, seams, pits and chipped highlights');
   }
 
   built.group.updateMatrixWorld(true);

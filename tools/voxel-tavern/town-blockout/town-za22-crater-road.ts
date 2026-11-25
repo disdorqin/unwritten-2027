@@ -272,8 +272,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const moltenBeads = mountC2CraterMoltenBeads(road);
   group.add(moltenBeads.group);
   const moltenEarth = moltenBeads.group.getObjectByName('c2-molten-beads-scorched-earth');
+  let lastMoltenX = NaN, lastMoltenY = NaN, lastMoltenZ = NaN, lastMoltenNight: boolean | undefined;
   if (moltenEarth instanceof Mesh) {
     moltenEarth.onBeforeRender = (_renderer, _scene, camera) => {
+      if (c2Night === lastMoltenNight && Math.abs(camera.position.x - lastMoltenX) < .05 &&
+          Math.abs(camera.position.y - lastMoltenY) < .05 && Math.abs(camera.position.z - lastMoltenZ) < .05) return;
+      lastMoltenX = camera.position.x; lastMoltenY = camera.position.y; lastMoltenZ = camera.position.z;
+      lastMoltenNight = c2Night;
       updateC2CraterMoltenBeads(moltenBeads, { cameraPosition: camera.position, night: c2Night });
     };
   }
@@ -337,6 +342,10 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       warmLightChain.setNight(night);
     },
   };
+  for (const staticGroup of [centralMound.group, brokenCircle.group, inscription.group, warmLightChain.group]) {
+    staticGroup.updateMatrixWorld(true);
+    staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
+  }
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
     centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, craterActions };
 }

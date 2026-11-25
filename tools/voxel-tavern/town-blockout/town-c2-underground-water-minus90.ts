@@ -1,6 +1,7 @@
 import {
-  BoxGeometry, BufferAttribute, BufferGeometry, DoubleSide, Group, InstancedMesh,
-  Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, OctahedronGeometry, TorusGeometry,
+  BoxGeometry, BufferAttribute, BufferGeometry, Color, DataTexture, DoubleSide, Group, InstancedMesh,
+  LinearFilter, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, Object3D, OctahedronGeometry,
+  RepeatWrapping, RGBAFormat, SRGBColorSpace, TorusGeometry, UnsignedByteType,
 } from 'three';
 import {
   waterFormFor, type WaterForm, type WaterLevel, type WaterPhase,
@@ -95,9 +96,46 @@ export function adaptUndergroundWater90(
 function geometryFrom(positions: Float32Array, name: string) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  const uv = new Float32Array(positions.length / 3 * 2);
+  for (let i = 0; i < positions.length / 3; i++) {
+    uv[i * 2] = positions[i * 3] * .22;
+    uv[i * 2 + 1] = positions[i * 3 + 2] * .22;
+  }
+  geometry.setAttribute('uv', new BufferAttribute(uv, 2));
   geometry.computeVertexNormals();
   geometry.name = name;
   return geometry;
+}
+
+/** A static, broken-current map on the existing triangles; no animated clock or extra pass. */
+function waterCurrentMap() {
+  const width = 128, height = 64;
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const v = y / height;
+    for (let x = 0; x < width; x++) {
+      const u = x / width;
+      const bend = Math.sin(u * Math.PI * 6) * .42 + Math.sin(u * Math.PI * 14) * .12;
+      const center = (v * 5 + bend + 5) % 1;
+      const filament = Math.exp(-Math.pow((center - .5) / .095, 2));
+      const echo = Math.exp(-Math.pow((center - .68) / .18, 2)) * .34;
+      const broken = Math.sin(u * Math.PI * 18 + v * 31) * Math.sin(u * Math.PI * 5 - v * 17);
+      const crest = Math.max(0, broken) * filament;
+      const offset = (y * width + x) * 4;
+      pixels[offset] = Math.round(20 + crest * 102 + echo * 25);
+      pixels[offset + 1] = Math.round(57 + crest * 133 + echo * 38);
+      pixels[offset + 2] = Math.round(69 + crest * 137 + echo * 43);
+      pixels[offset + 3] = 255;
+    }
+  }
+  const texture = new DataTexture(pixels, width, height, RGBAFormat, UnsignedByteType);
+  texture.name = 'water90-broken-current-map';
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function raisedSurface(positions: Float32Array, riseM: number) {
@@ -172,7 +210,7 @@ function surfaceHeightAt(positions: Float32Array, x: number, z: number) {
 function riverbedShortcut(mine: Mine) {
   const group = new Group();
   group.name = 'town-c2-water90-riverbed-shortcut-visual';
-  const transforms: { at: Point; scale: Point; yaw: number }[] = [];
+  const transforms: { at: Point; scale: Point; yaw: number; wayfinder: boolean }[] = [];
   const start = mine.anchors.poolLanding[2] - 1.45;
   const end = mine.anchors.shoreExit[2] - .35;
   for (let i = 0; i < 22; i++) {
@@ -184,6 +222,7 @@ function riverbedShortcut(mine: Mine) {
       at: [x, passage.floor + .012, z],
       scale: [.42 + (i % 3) * .08, .016, .25 + (i % 2) * .07],
       yaw: Math.sin(i * 1.31) * .22,
+      wayfinder: false,
     });
   }
   // Three low-contrast chevrons point out along the existing shore; they are inlays,
@@ -194,23 +233,28 @@ function riverbedShortcut(mine: Mine) {
     if (!passage) continue;
     for (const side of [-1, 1]) transforms.push({
       at: [side * .16, passage.floor + .014, z],
-      scale: [.34, .018, .07], yaw: side * .62,
+      scale: [.34, .018, .07], yaw: side * .62, wayfinder: true,
     });
   }
   const geometry = new BoxGeometry();
-  const material = new MeshStandardMaterial({ color: 0x8a806c, roughness: 1, flatShading: true });
+  const material = new MeshStandardMaterial({
+    color: 0xffffff, roughness: .9, metalness: .06, flatShading: true,
+  });
   const mesh = new InstancedMesh(geometry, material, transforms.length);
   mesh.name = 'water90-exposed-riverbed-inlays';
   mesh.userData.visualOnly = true;
   const pose = new Object3D();
+  const wetTones = [0x35433f, 0x46534b, 0x596052];
   transforms.forEach((transform, index) => {
     pose.position.fromArray(transform.at);
     pose.scale.fromArray(transform.scale);
     pose.rotation.set(0, transform.yaw, 0);
     pose.updateMatrix();
     mesh.setMatrixAt(index, pose.matrix);
+    mesh.setColorAt(index, new Color(transform.wayfinder ? 0xa5aa8d : wetTones[index % wetTones.length]));
   });
   mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   mesh.computeBoundingSphere();
   group.add(mesh);
   return { group, geometry, material, pieces: transforms.length };
@@ -276,12 +320,30 @@ export function mountTownC2UndergroundWaterMinus90(host: Readonly<{
   root.userData.visualOnly = true;
   const highWater = new Group();
   highWater.name = 'water90-high-knee-rise';
+  const currentMap = waterCurrentMap();
   const highSurfaceGeometry = geometryFrom(raisedSurface(waterPositions, highRiseM), 'water90-raised-surface');
   const highVolumeGeometry = geometryFrom(waterVolumeSides(waterPositions, highRiseM), 'water90-raised-volume');
-  const highWaterMaterial = new MeshStandardMaterial({
-    color: 0x497b8c, transparent: true, opacity: .62, roughness: .18,
+  const highWaterMaterial = new MeshLambertMaterial({
+    color: 0xa6d4d4, map: currentMap, emissive: 0x123b43, emissiveMap: currentMap,
+    emissiveIntensity: .42, transparent: true, opacity: .56,
     side: DoubleSide, depthWrite: false,
   });
+  const baselineWaterMaterial = new MeshLambertMaterial({
+    color: 0x93c4c6, map: currentMap, emissive: 0x0c3038, emissiveMap: currentMap,
+    emissiveIntensity: .3, transparent: true, opacity: .68,
+    side: DoubleSide, depthWrite: false, forceSinglePass: true,
+  });
+  const originalWaterMaterial = waterMesh.material;
+  const originalWaterUv = waterMesh.geometry.getAttribute('uv');
+  if (!originalWaterUv) {
+    const uv = new Float32Array(waterPositions.length / 3 * 2);
+    for (let i = 0; i < waterPositions.length / 3; i++) {
+      uv[i * 2] = waterPositions[i * 3] * .22;
+      uv[i * 2 + 1] = waterPositions[i * 3 + 2] * .22;
+    }
+    waterMesh.geometry.setAttribute('uv', new BufferAttribute(uv, 2));
+  }
+  waterMesh.material = baselineWaterMaterial;
   const highSurface = new Mesh(highSurfaceGeometry, highWaterMaterial);
   highSurface.name = 'water90-high-surface';
   const highVolume = new Mesh(highVolumeGeometry, highWaterMaterial);
@@ -339,7 +401,7 @@ export function mountTownC2UndergroundWaterMinus90(host: Readonly<{
   const originalWaterVisible = waterMesh.visible;
   const ownedGeometries = [highSurfaceGeometry, highVolumeGeometry, riverbed.geometry,
     crystalGeometry, ringGeometry];
-  const ownedMaterials = [highWaterMaterial, riverbed.material,
+  const ownedMaterials = [highWaterMaterial, baselineWaterMaterial, riverbed.material,
     underwaterMaterial, riverbedMaterial, ringMaterial];
   let disposed = false;
   let manualAuthority: UndergroundWater90Authority | undefined;
@@ -397,9 +459,13 @@ export function mountTownC2UndergroundWaterMinus90(host: Readonly<{
       disposed = true;
       root.removeFromParent();
       waterMesh.visible = originalWaterVisible;
+      waterMesh.material = originalWaterMaterial;
+      if (originalWaterUv) waterMesh.geometry.setAttribute('uv', originalWaterUv);
+      else waterMesh.geometry.deleteAttribute('uv');
       for (const marker of [...underwaterMarkers, ...riverbedMarkers]) marker.visible = false;
       for (const geometry of ownedGeometries) geometry.dispose();
       for (const material of ownedMaterials) material.dispose();
+      currentMap.dispose();
       root.clear();
     },
   } as const;

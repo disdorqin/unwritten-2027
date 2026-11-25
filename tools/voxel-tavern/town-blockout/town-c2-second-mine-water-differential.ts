@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DoubleSide, Group, InstancedMesh, Matrix4,
+  BoxGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4,
   MeshBasicMaterial, MeshLambertMaterial, Object3D, StaticDrawUsage,
 } from 'three';
 import {
@@ -54,21 +54,32 @@ function instanceBoxes(group: Group, name: string,
 }
 
 function makeBoat(group: Group) {
-  const wood = new MeshLambertMaterial({ color: 0x6f5038, flatShading: true });
-  const iron = new MeshLambertMaterial({ color: 0x59636a, flatShading: true });
-  const parts: { x: number; y: number; n: number; w: number; h: number; d: number }[] = [];
+  // White bases let the existing hull instances carry dry timber, damp grain and iron tones.
+  const wood = new MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const iron = new MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const parts: { x: number; y: number; n: number; w: number; h: number; d: number; iron?: boolean }[] = [];
   for (let n = -2.2; n <= 2.2; n += .38) {
     parts.push({ x: 0, y: 0, n, w: 2.05, h: .16, d: .34 });
   }
   for (const x of [-1, 1]) for (let n = -2; n <= 2; n += .5) {
     parts.push({ x, y: .24, n, w: .14, h: .42, d: .46 });
   }
-  for (const n of [-2.35, 2.35]) parts.push({ x: 0, y: .22, n, w: 2.05, h: .46, d: .16 });
+  for (const n of [-2.35, 2.35]) parts.push({
+    x: 0, y: .22, n, w: 2.05, h: .46, d: .16, iron: true,
+  });
   const hull = instanceBoxes(group, 'town-c2-water/grounded-ferry-hull', parts, wood);
+  const woodTones = [0x76563b, 0x896447, 0x624833, 0x9a7350, 0x554332];
+  const ironTones = [0x465158, 0x5b686d, 0x3d474c];
+  parts.forEach((part, index) => hull.mesh.setColorAt(index,
+    new Color(part.iron ? ironTones[index % ironTones.length] : woodTones[index % woodTones.length])));
+  if (hull.mesh.instanceColor) hull.mesh.instanceColor.needsUpdate = true;
   const pole = instanceBoxes(group, 'town-c2-water/grounded-ferry-pole', [
     { x: .72, y: 1.05, n: 0, w: .07, h: 2.8, d: .07 },
     { x: .72, y: .12, n: 0, w: .5, h: .12, d: .5 },
   ], iron);
+  pole.mesh.setColorAt(0, new Color(0x66747a));
+  pole.mesh.setColorAt(1, new Color(0x765743));
+  if (pole.mesh.instanceColor) pole.mesh.instanceColor.needsUpdate = true;
   group.position.set(0, -.52, -137);
   return { materials: [wood, iron], geometries: [hull.geometry, pole.geometry] };
 }
@@ -93,7 +104,7 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
   root.add(high, mid, low);
 
   const flowMaterial = new MeshBasicMaterial({
-    color: 0x79a8b8, transparent: true, opacity: .28, depthWrite: false,
+    color: 0xffffff, transparent: true, opacity: .4, depthWrite: false,
     side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
   const flowBoxes = Array.from({ length: 18 }, (_, index) => {
@@ -108,6 +119,10 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
     };
   });
   const flow = instanceBoxes(high, 'town-c2-water/high-flow-streaks', flowBoxes, flowMaterial);
+  const flowTones = [0x77c5cf, 0xb5e4df, 0x4d9eaf, 0x8fd6d6];
+  flowBoxes.forEach((_, index) => flow.mesh.setColorAt(index,
+    new Color(flowTones[(index + Math.floor(index / 6)) % flowTones.length])));
+  if (flow.mesh.instanceColor) flow.mesh.instanceColor.needsUpdate = true;
 
   const barrierMaterial = new MeshLambertMaterial({
     color: 0xc98b45, emissive: 0x6b3b16, emissiveIntensity: .2, flatShading: true,
@@ -126,8 +141,10 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
     { x: 0, y: .24, n: secondMineAnchors.farPier.north, w: 2.8, h: .025, d: .18 },
   ], midMaterial);
 
-  const wetMaterial = new MeshLambertMaterial({ color: 0x343d40, flatShading: true });
-  const stoneMaterial = new MeshLambertMaterial({ color: 0x69706c, flatShading: true });
+  const wetMaterial = new MeshLambertMaterial({
+    color: 0xffffff, emissive: 0x061217, emissiveIntensity: .12, flatShading: true,
+  });
+  const stoneMaterial = new MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const wetBoxes = Array.from({ length: 26 }, (_, index) => {
     const n = secondMineRiver.n0 + .8 + (index % 13) * 1.32;
     return {
@@ -140,6 +157,10 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
     };
   });
   const wet = instanceBoxes(low, 'town-c2-water/low-wet-riverbed', wetBoxes, wetMaterial);
+  const wetTones = [0x27383a, 0x35494a, 0x425654, 0x2d4145, 0x4b5b56];
+  wetBoxes.forEach((_, index) => wet.mesh.setColorAt(index,
+    new Color(wetTones[(index * 3 + Math.floor(index / 5)) % wetTones.length])));
+  if (wet.mesh.instanceColor) wet.mesh.instanceColor.needsUpdate = true;
   const stoneBoxes = Array.from({ length: 42 }, (_, index) => {
     const n = secondMineRiver.n0 + .6 + ((index * 7) % 17) * .96;
     const size = .12 + (index % 4) * .045;
@@ -153,6 +174,10 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
     };
   });
   const stones = instanceBoxes(low, 'town-c2-water/low-riverbed-stones', stoneBoxes, stoneMaterial);
+  const stoneTones = [0x68736d, 0x7c8378, 0x515e5c, 0x8a8978, 0x5e6964];
+  stoneBoxes.forEach((_, index) => stones.mesh.setColorAt(index,
+    new Color(stoneTones[(index * 7 + Math.floor(index / 4)) % stoneTones.length])));
+  if (stones.mesh.instanceColor) stones.mesh.instanceColor.needsUpdate = true;
   const boatResources = makeBoat(low);
 
   const ownedGeometries = [
@@ -221,7 +246,10 @@ export function mountTownC2SecondMineWaterDifferential(options: Readonly<{
       if (next === night) return;
       night = next;
       barrierMaterial.emissiveIntensity = night ? .65 : .2;
-      flowMaterial.opacity = night ? .34 : .22;
+      flowMaterial.opacity = night ? .56 : .4;
+      flowMaterial.color.setHex(night ? 0xc6eef2 : 0xffffff);
+      midMaterial.opacity = night ? .7 : .55;
+      wetMaterial.emissiveIntensity = night ? .22 : .12;
     },
     stats: () => state,
     dispose() {

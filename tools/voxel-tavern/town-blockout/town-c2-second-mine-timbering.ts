@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
+  BoxGeometry, Color, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, NearestFilter, Quaternion, SRGBColorSpace, StaticDrawUsage, Vector3,
 } from 'three';
 import {
@@ -8,7 +8,7 @@ import {
 
 type Family = 'timber' | 'iron' | 'rust';
 type Rotation = readonly [number, number, number];
-type Batch = Readonly<{ family: Family; matrices: Matrix4[] }>;
+type Placement = Readonly<{ name: string; pose: Matrix4 }>;
 
 export type C2SecondMineTimberingVisualBox = Readonly<{
   name: string;
@@ -48,38 +48,80 @@ export type C2SecondMineTimberingScene = Readonly<{
 }>;
 
 const palette: Readonly<Record<Family, readonly [number, number, number]>> = Object.freeze({
-  timber: Object.freeze([0x74543a, 0x9a7550, 0x493728] as const),
-  iron: Object.freeze([0x697278, 0x939b9b, 0x3e474b] as const),
-  rust: Object.freeze([0x84563d, 0xb4774d, 0x4d352b] as const),
+  timber: Object.freeze([0x7a5b3e, 0xb08759, 0x403127] as const),
+  iron: Object.freeze([0x657177, 0xa2aaa8, 0x354147] as const),
+  rust: Object.freeze([0x8d5c3e, 0xc08352, 0x4b3228] as const),
 });
+
+function mixTone(a: number, b: number, amount: number) {
+  const mix = (start: number, end: number) => Math.round(start + (end - start) * amount);
+  return (mix(a >>> 16, b >>> 16) << 16) |
+    (mix((a >>> 8) & 255, (b >>> 8) & 255) << 8) | mix(a & 255, b & 255);
+}
 
 function pixelTexture(family: Family) {
   const size = 16;
   const pixels = new Uint8Array(size * size * 4);
   const [base, light, dark] = palette[family];
+  const middle = mixTone(base, light, .52);
+  const deep = mixTone(base, dark, .62);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const fleck = (x * 37 + y * 53 + x * y * 11) % 29;
+    const grain = (Math.imul(x + 3, 15731) ^ Math.imul(y + 7, 4817)) >>> 0;
+    const fleck = grain % 31;
     let tone = base;
     if (family === 'timber') {
-      if (x % 5 === 0 || (x + Math.floor(y / 4) * 3) % 13 === 0) tone = dark;
-      else if (fleck < 5) tone = light;
+      const grainLine = (x + Math.floor(y / 4) * 3) % 8;
+      if (grainLine === 0) tone = deep;
+      else if (grainLine === 1 && y % 3 !== 0) tone = dark;
+      else if (fleck < 4) tone = light;
+      else if (fleck < 10) tone = middle;
+      else if (fleck > 27) tone = deep;
+      if ((x * 7 + y * 11) % 47 === 0) tone = light;
     } else if (family === 'iron') {
-      if (fleck < 4) tone = dark;
-      else if (fleck > 24) tone = light;
+      if (fleck < 3) tone = dark;
+      else if (fleck < 7) tone = deep;
+      else if (fleck > 26) tone = light;
+      else if (fleck > 22) tone = middle;
+      if ((x + y * 3) % 19 === 0) tone = middle;
+      if ((x * 5 + y * 3) % 43 === 0) tone = light;
     } else {
-      if (fleck < 7) tone = dark;
-      else if (fleck > 21) tone = light;
+      if (fleck < 5) tone = dark;
+      else if (fleck < 11) tone = deep;
+      else if (fleck > 24) tone = light;
+      else if (fleck > 19) tone = middle;
+      if ((x * 3 + y * 7) % 41 === 0) tone = light;
     }
     pixels.set([tone >>> 16, (tone >>> 8) & 255, tone & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size);
-  texture.name = `c2-second-mine-timbering/${family}-16px`;
+  texture.name = `c2-second-mine-timbering/${family}-worn-16px`;
   texture.colorSpace = SRGBColorSpace;
   texture.minFilter = NearestFilter;
   texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
+}
+
+const wearProfiles: Readonly<Record<Family, readonly [number, number, number]>> = {
+  timber: [1.04, .97, .88],
+  iron: [.94, .99, 1.04],
+  rust: [1.07, .94, .81],
+};
+
+function applyInstanceWear(mesh: InstancedMesh, family: Family, placements: readonly Placement[]) {
+  const tint = new Color();
+  const [red, green, blue] = wearProfiles[family];
+  placements.forEach(({ name, pose }, index) => {
+    const seed = Math.imul(index + 11, 1597334677) ^ Math.round((pose.elements[12]! + 80) * 8191) ^
+      Math.round((pose.elements[14]! + 120) * 4093);
+    const shade = .86 + ((seed >>> 0) % 11) * .016;
+    const hardware = /nail|cap|foot/.test(name) ? .06 : 0;
+    tint.setRGB((shade + hardware) * red, (shade + hardware) * green, (shade + hardware) * blue);
+    mesh.setColorAt(index, tint);
+  });
+  mesh.instanceColor!.setUsage(StaticDrawUsage);
+  mesh.instanceColor!.needsUpdate = true;
 }
 
 function triangleCount(group: Group) {
@@ -107,7 +149,7 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
   const geometry = new BoxGeometry(1, 1, 1);
   const textures = new Map<Family, DataTexture>();
   const materials = new Map<Family, MeshLambertMaterial>();
-  const batches = new Map<Family, Matrix4[]>();
+  const batches = new Map<Family, Placement[]>();
   const visualBoxes: C2SecondMineTimberingVisualBox[] = [];
   const meshes: InstancedMesh[] = [];
   const counts = { support: 0, post: 0, postBlock: 0, beam: 0, brace: 0,
@@ -144,7 +186,7 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
     if (!c2SecondMineBoxAllowed(box)) {
       throw new RangeError(`C2 timbering placement rejected: ${name}`);
     }
-    batches.get(family)!.push(pose);
+    batches.get(family)!.push({ name, pose });
     visualBoxes.push(Object.freeze({ name, family, box }));
   }
 
@@ -221,11 +263,12 @@ export function buildTownC2SecondMineTimbering(parent?: Group): C2SecondMineTimb
     workfaceFrame(`east-workface-${index}`, false, north);
   }
 
-  for (const [family, matrices] of batches) {
-    const mesh = new InstancedMesh(geometry, materials.get(family)!, matrices.length);
+  for (const [family, placements] of batches) {
+    const mesh = new InstancedMesh(geometry, materials.get(family)!, placements.length);
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `town-c2-second-mine-timbering/${family}`;
-    matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+    placements.forEach(({ pose }, index) => mesh.setMatrixAt(index, pose));
+    applyInstanceWear(mesh, family, placements);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     meshes.push(mesh);

@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
+  BoxGeometry, Color, DataTexture, Euler, FrontSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, MeshStandardMaterial, NearestFilter, Quaternion, SRGBColorSpace,
   StaticDrawUsage, Vector3, type Material,
 } from 'three';
@@ -10,6 +10,7 @@ import {
 
 type Family = 'sleeper' | 'iron' | 'rust' | 'slag';
 type Rotation = readonly [number, number, number];
+type Placement = Readonly<{ name: string; pose: Matrix4 }>;
 
 export type C2SecondMineHaulageVisualBox = Readonly<{
   name: string;
@@ -48,42 +49,136 @@ export type C2SecondMineHaulageScene = Readonly<{
 }>;
 
 const palette: Readonly<Record<Family, readonly [number, number, number]>> = Object.freeze({
-  sleeper: Object.freeze([0x674b35, 0x94704c, 0x403026] as const),
-  iron: Object.freeze([0x596368, 0x879094, 0x303a3f] as const),
-  rust: Object.freeze([0x805139, 0xad6c43, 0x493126] as const),
-  slag: Object.freeze([0x64635d, 0x8b8678, 0x3f423f] as const),
+  sleeper: Object.freeze([0x715239, 0xa77e52, 0x3d2d23] as const),
+  iron: Object.freeze([0x5c686d, 0x929f9f, 0x2c383e] as const),
+  rust: Object.freeze([0x875438, 0xbb7748, 0x452e25] as const),
+  slag: Object.freeze([0x62665f, 0x969183, 0x353f3e] as const),
 });
+
+function mixTone(a: number, b: number, amount: number) {
+  const mix = (start: number, end: number) => Math.round(start + (end - start) * amount);
+  return (mix(a >>> 16, b >>> 16) << 16) |
+    (mix((a >>> 8) & 255, (b >>> 8) & 255) << 8) | mix(a & 255, b & 255);
+}
 
 function pixelTexture(family: Family) {
   const size = 16;
   const pixels = new Uint8Array(size * size * 4);
   const [base, light, dark] = palette[family];
+  const middle = mixTone(base, light, .5);
+  const deep = mixTone(base, dark, .6);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const fleck = (x * 41 + y * 67 + x * y * 7) % 31;
+    const grain = (Math.imul(x + 5, 15731) ^ Math.imul(y + 13, 4817)) >>> 0;
+    const fleck = grain % 31;
     let tone = base;
     if (family === 'sleeper') {
-      if (x % 6 === 0 || fleck < 4) tone = dark;
-      else if (fleck > 25) tone = light;
+      const grainLine = (x + Math.floor(y / 3) * 2) % 7;
+      if (grainLine === 0) tone = dark;
+      else if (grainLine === 1) tone = deep;
+      else if (fleck < 4) tone = light;
+      else if (fleck < 10) tone = middle;
+      if ((x * 5 + y * 7) % 43 === 0) tone = light;
     } else if (family === 'iron') {
-      if (fleck < 5) tone = dark;
-      else if (fleck > 26) tone = light;
+      if (fleck < 4) tone = dark;
+      else if (fleck < 9) tone = deep;
+      else if (fleck > 25) tone = light;
+      else if (fleck > 21) tone = middle;
+      if ((x + y * 3) % 17 === 0) tone = middle;
+      if ((x * 7 + y * 5) % 47 === 0) tone = light;
     } else if (family === 'rust') {
-      if (fleck < 9) tone = dark;
-      else if (fleck > 22) tone = light;
-    } else {
-      if (fleck < 8) tone = dark;
+      if (fleck < 7) tone = dark;
+      else if (fleck < 13) tone = deep;
       else if (fleck > 23) tone = light;
+      else if (fleck > 18) tone = middle;
+      if ((x * 3 + y * 11) % 37 === 0) tone = middle;
+    } else {
+      if (fleck < 7) tone = dark;
+      else if (fleck < 13) tone = deep;
+      else if (fleck > 24) tone = light;
+      else if (fleck > 19) tone = middle;
+      if ((x * 11 + y * 3) % 29 === 0) tone = dark;
     }
     pixels.set([tone >>> 16, (tone >>> 8) & 255, tone & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size);
-  texture.name = `c2-second-mine-haulage/${family}-16px`;
+  texture.name = `c2-second-mine-haulage/${family}-worn-16px`;
   texture.colorSpace = SRGBColorSpace;
   texture.minFilter = NearestFilter;
   texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
+}
+
+const wearProfiles: Readonly<Record<Family, readonly [number, number, number]>> = {
+  sleeper: [1.05, .96, .86],
+  iron: [.93, .99, 1.05],
+  rust: [1.08, .93, .79],
+  slag: [.97, 1.01, .98],
+};
+
+function applyInstanceWear(mesh: InstancedMesh, family: Family, placements: readonly Placement[]) {
+  const tint = new Color();
+  const [red, green, blue] = wearProfiles[family];
+  placements.forEach(({ name, pose }, index) => {
+    const seed = Math.imul(index + 17, 1597334677) ^ Math.round((pose.elements[12]! + 80) * 8191) ^
+      Math.round((pose.elements[14]! + 120) * 4093);
+    const shade = .85 + ((seed >>> 0) % 11) * .017;
+    const wornEdge = /bolt|joint|fishplate|plate/.test(name) ? .07 : 0;
+    tint.setRGB((shade + wornEdge) * red, (shade + wornEdge) * green, (shade + wornEdge) * blue);
+    mesh.setColorAt(index, tint);
+  });
+  mesh.instanceColor!.setUsage(StaticDrawUsage);
+  mesh.instanceColor!.needsUpdate = true;
+}
+
+function weatherCart(cart: ReturnType<typeof createUndergroundMineCartModel>, cartIndex: number) {
+  const materials = new Set<MeshStandardMaterial>();
+  const grains = new Set<DataTexture>();
+  cart.group.traverse(object => {
+    if (!(object instanceof Mesh)) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      if (!(material instanceof MeshStandardMaterial)) continue;
+      materials.add(material);
+      if (material.map instanceof DataTexture) grains.add(material.map);
+    }
+  });
+  for (const grain of grains) {
+    const image = grain.image as { data: Uint8Array; width: number; height: number };
+    for (let y = 0; y < image.height; y++) for (let x = 0; x < image.width; x++) {
+      const noise = (Math.imul(x + cartIndex * 3 + 2, 15731) ^ Math.imul(y + 5, 4817)) >>> 0;
+      let shade = 158 + (noise % 6) * 15;
+      if (noise % 23 < 3) shade = 82 + (noise % 3) * 18;
+      if ((x + y * 3) % 19 === 0) shade = 218 + (noise % 3) * 10;
+      if (noise % 53 === 0) shade = 58;
+      image.data.set([shade, shade, shade, 255], (y * image.width + x) * 4);
+    }
+    grain.needsUpdate = true;
+  }
+  const tint = new Color();
+  cart.group.traverse(object => {
+    if (!(object instanceof Mesh)) return;
+    const list = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of list) {
+      if (!(material instanceof MeshStandardMaterial)) continue;
+      const base = material.color.getHex();
+      material.roughness = base === 0x785d45 ? 1 : base === 0x787b70 ? .79 : .9;
+      material.metalness = base === 0x785d45 ? .02 : base === 0x787b70 ? .25 : .18;
+    }
+    if (!(object instanceof InstancedMesh)) return;
+    const material = object.material as MeshStandardMaterial;
+    const base = material.color.getHex();
+    const profile = base === 0x785d45 ? [1.1, .93, .78] :
+      base === 0x787b70 ? [1.05, 1.01, .92] : [.94, .99, 1.05];
+    for (let index = 0; index < object.count; index++) {
+      const seed = Math.imul(index + cartIndex * 7 + 29, 1597334677);
+      const shade = .86 + ((seed >>> 0) % 9) * .024;
+      tint.setRGB(shade * profile[0], shade * profile[1], shade * profile[2]);
+      object.setColorAt(index, tint);
+    }
+    object.instanceColor!.setUsage(StaticDrawUsage);
+    object.instanceColor!.needsUpdate = true;
+  });
 }
 
 function sceneTally(group: Group) {
@@ -118,7 +213,7 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
   const geometry = new BoxGeometry(1, 1, 1);
   const textures = new Map<Family, DataTexture>();
   const materials = new Map<Family, MeshLambertMaterial>();
-  const batches = new Map<Family, Matrix4[]>();
+  const batches = new Map<Family, Placement[]>();
   const visualBoxes: C2SecondMineHaulageVisualBox[] = [];
   const meshes: InstancedMesh[] = [];
   const carts: ReturnType<typeof createUndergroundMineCartModel>[] = [];
@@ -155,7 +250,7 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
     if (!c2SecondMineBoxAllowed(box)) {
       throw new RangeError(`C2 haulage placement rejected: ${name}`);
     }
-    batches.get(family)!.push(pose);
+    batches.get(family)!.push({ name, pose });
     visualBoxes.push(Object.freeze({ name, family, box }));
   }
 
@@ -203,6 +298,7 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
     cart.group.position.set(east, .24, -cartNorth);
     cart.group.rotation.y = yaw;
     cart.setWheelTravel(0);
+    weatherCart(cart, carts.length);
     group.add(cart.group);
     carts.push(cart);
     // Conservative whole-model AABB: canonical open bin, wheels and push handle.
@@ -257,11 +353,12 @@ export function buildTownC2SecondMineHaulage(parent?: Group): C2SecondMineHaulag
     counts.debris += 7;
   }
 
-  for (const [family, matrices] of batches) {
-    const mesh = new InstancedMesh(geometry, materials.get(family)!, matrices.length);
+  for (const [family, placements] of batches) {
+    const mesh = new InstancedMesh(geometry, materials.get(family)!, placements.length);
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.name = `town-c2-second-mine-haulage/${family}`;
-    matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+    placements.forEach(({ pose }, index) => mesh.setMatrixAt(index, pose));
+    applyInstanceWear(mesh, family, placements);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     meshes.push(mesh);

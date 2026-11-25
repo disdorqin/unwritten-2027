@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  DataTexture, FrontSide, Group, InstancedMesh, Material, MeshLambertMaterial,
+  Color, DataTexture, FrontSide, Group, InstancedMesh, Light, Material, MeshLambertMaterial,
   NearestFilter, StaticDrawUsage,
 } from 'three';
 import { canStandSecondMine } from '../src/shared/underground-second-mine-layout.js';
@@ -113,6 +113,57 @@ test('C2 bypass uses six pixel material families with 16px nearest textures', ()
       assert.equal(texture.magFilter, NearestFilter);
       assert.equal(texture.generateMipmaps, false);
     }
+  } finally {
+    scene.dispose();
+  }
+});
+
+test('stratified pixels and per-slab tints enrich the bypass without changing its triangle budget', () => {
+  const scene = buildTownC2SecondMineBypassWall();
+  try {
+    const meshes: InstancedMesh[] = [];
+    scene.group.traverse(object => { if (object instanceof InstancedMesh) meshes.push(object); });
+    const tint = new Color();
+    for (const mesh of meshes) {
+      const material = mesh.material as MeshLambertMaterial;
+      const texture = material.map;
+      assert.ok(texture instanceof DataTexture);
+      const pixels = texture.image.data as Uint8Array;
+      const colors = new Set<string>();
+      let minLuminance = 255, maxLuminance = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        colors.add(`${pixels[index]}/${pixels[index + 1]}/${pixels[index + 2]}`);
+        const luminance = pixels[index]! * .2126 + pixels[index + 1]! * .7152 + pixels[index + 2]! * .0722;
+        minLuminance = Math.min(minLuminance, luminance);
+        maxLuminance = Math.max(maxLuminance, luminance);
+      }
+      assert.ok(colors.size >= 4, `${mesh.name} needs layered material tones`);
+      assert.ok(maxLuminance - minLuminance > 45, `${mesh.name} lacks pixel contrast`);
+      assert.equal(material.emissive.getHex(), 0x000000);
+
+      const shades = new Set<string>();
+      let minShade = Infinity, maxShade = -Infinity, materialTint = false;
+      for (let index = 0; index < mesh.count; index++) {
+        assert.ok(mesh.instanceColor);
+        mesh.getColorAt(index, tint);
+        shades.add(tint.g.toFixed(4));
+        minShade = Math.min(minShade, tint.g);
+        maxShade = Math.max(maxShade, tint.g);
+        if (Math.abs(tint.r - tint.b) > .01) materialTint = true;
+      }
+      assert.ok(shades.size > Math.min(8, mesh.count - 1),
+        `${mesh.name} instance colour is too uniform`);
+      assert.ok(maxShade - minShade > .12, `${mesh.name} lacks course/fragment value separation`);
+      if (mesh.name.endsWith('/rust') || mesh.name.endsWith('/wood') ||
+        mesh.name.endsWith('/iron') || mesh.name.endsWith('/basalt')) {
+        assert.equal(materialTint, true, `${mesh.name} lacks material-specific tint`);
+      }
+    }
+    assert.equal(meshes.reduce((sum, mesh) => sum + mesh.count * 12, 0),
+      scene.boxes.length * 12, 'wall dressing must keep its original triangle budget');
+    let lights = 0;
+    scene.group.traverse(object => { if (object instanceof Light) lights++; });
+    assert.equal(lights, 0);
   } finally {
     scene.dispose();
   }

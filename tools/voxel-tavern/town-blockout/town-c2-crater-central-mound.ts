@@ -306,20 +306,26 @@ type VoxelCell = {
   family: TownC2CraterMoundFamily; shade: number;
 };
 
-const familyPalette: Readonly<Record<TownC2CraterMoundFamily, readonly [number, number, number]>> = {
-  'scorched-earth': [0x493a30, 0x6a5140, 0x282420],
-  basalt: [0x555552, 0x77736a, 0x343634],
-  slag: [0x76503b, 0xa2764e, 0x40352d],
+const familyPalette: Readonly<Record<TownC2CraterMoundFamily,
+  readonly [base: number, grain: number, outline: number, wear: number]>> = {
+  'scorched-earth': [0x554336, 0x80664e, 0x2c2722, 0xa18461],
+  basalt: [0x555a57, 0x7c8076, 0x2f3431, 0x99978a],
+  slag: [0x704b37, 0xa37148, 0x342b26, 0xc39159],
 };
 
 function pixelTexture(family: TownC2CraterMoundFamily) {
-  const [base, grain, outline] = familyPalette[family];
+  const [base, grain, outline, wear] = familyPalette[family];
   const size = 16, pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const border = x === 0 || y === 0 || x === size - 1 || y === size - 1;
-    const cluster = (Math.floor(x / 3) * 5 + Math.floor(y / 4) * 7) % 11;
-    const pit = (x * 7 + y * 13) % 17 === 0;
-    const color = border || pit ? outline : cluster < 3 ? grain : base;
+    const cluster = hash2(Math.floor(x / 2), Math.floor(y / 2));
+    const fleck = hash2(x + size, y);
+    const seam = border || ((x + Math.floor(y / 3)) % 9 === 0 && y % 5 !== 0);
+    const pit = fleck % 29 === 0;
+    // Chipped seams expose a warmer/lighter mineral edge instead of a uniform ink border.
+    const chipped = border && fleck % 5 < 2;
+    const color = pit ? outline : chipped ? wear : seam ? outline :
+      cluster % 13 < 4 ? grain : fleck % 11 < 2 ? outline : base;
     pixels.set([color >> 16, (color >> 8) & 255, color & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size);
@@ -332,14 +338,19 @@ function pixelTexture(family: TownC2CraterMoundFamily) {
 }
 
 function addBlockFace(batch: GeometryBatch, corners: readonly (readonly [number, number, number])[],
-  normal: readonly [number, number, number], shade: number) {
+  normal: readonly [number, number, number], shade: number, variation: number) {
   const order = [0, 1, 2, 0, 2, 3];
   const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const warmth = ((variation >>> 8) % 5 - 2) * .008;
   for (const index of order) {
     batch.positions.push(...corners[index]);
     batch.normals.push(...normal);
     batch.uvs.push(...uvs[index]);
-    batch.colors.push(shade, shade, shade);
+    // Side-course vertices share the quad UVs: worn upper arrises, darker lower seams.
+    const edgeWear = normal[1] === 0 ? (uvs[index][1] === 1 ? 1.045 : .93) : 1;
+    const cornerWear = index === 1 || index === 2 ? 1.008 : .988;
+    const value = shade * (.94 + (variation % 9) * .011) * edgeWear * cornerWear;
+    batch.colors.push(value * (1 + warmth), value, value * (1 - warmth));
   }
 }
 
@@ -376,7 +387,7 @@ export function buildTownC2CraterCentralMound(
     const family: TownC2CraterMoundFamily = layers >= 7 && random % 11 < 2 ? 'slag' :
       random % 12 < 5 ? 'basalt' : 'scorched-earth';
     const cell: VoxelCell = {
-      east, north, base, top, layers, family, shade: .88 + (random % 9) * .025,
+      east, north, base, top, layers, family, shade: .82 + (random % 9) * .022,
     };
     cells.set(`${x},${z}`, cell);
     counts[family]++;
@@ -394,7 +405,10 @@ export function buildTownC2CraterCentralMound(
   let exposedBlockFaces = 0;
   const face = (cell: VoxelCell, corners: readonly (readonly [number, number, number])[],
     normal: readonly [number, number, number]) => {
-    addBlockFace(batches[cell.family], corners, normal, cell.shade);
+    const origin = corners[0];
+    const variation = hash2(Math.round((origin[0] + 256) * 32),
+      Math.round((origin[1] - origin[2] + 512) * 32));
+    addBlockFace(batches[cell.family], corners, normal, cell.shade, variation);
     exposedBlockFaces++;
   };
   const neighbour = (x: number, z: number, dx: number, dz: number) =>
@@ -448,7 +462,7 @@ export function buildTownC2CraterCentralMound(
     geometry.computeBoundingSphere();
     const texture = pixelTexture(family);
     const material = new MeshLambertMaterial({
-      map: texture, vertexColors: true, flatShading: true,
+      map: texture, vertexColors: true, flatShading: true, dithering: true,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
     });
     const mesh = new Mesh(geometry, material);

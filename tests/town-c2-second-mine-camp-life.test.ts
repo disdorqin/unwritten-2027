@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  FrontSide, Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight,
+  Color, FrontSide, Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight,
   StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import { secondMineAnchors } from '../src/shared/underground-second-mine-layout.js';
@@ -14,6 +14,14 @@ import {
 function pointBoxDistance(east: number, north: number, piece: ReturnType<typeof buildC2SecondMineCampLife>['pieces'][number]) {
   return Math.hypot(Math.max(piece.x - piece.w / 2 - east, 0, east - piece.x - piece.w / 2),
     Math.max(piece.n - piece.d / 2 - north, 0, north - piece.n - piece.d / 2));
+}
+
+function textureTones(texture: NonNullable<MeshLambertMaterial['map']>) {
+  const data = (texture.image as { data: Uint8Array }).data;
+  return Array.from({ length: texture.image.width * texture.image.height }, (_, index) => {
+    const offset = index * 4;
+    return `${data[offset]}/${data[offset + 1]}/${data[offset + 2]}`;
+  });
 }
 
 test('C2 camp life adds a dense, non-interactive set of nine daily-use prop types in four surveyed areas', () => {
@@ -70,6 +78,32 @@ test('every camp-life entity passes the C2 box guard and preserves routes, wing 
     assert.ok(scene.pieces.every(piece => pointBoxDistance(east, north, piece) >= .72));
   }
   scene.dispose();
+});
+
+test('camp-life materials combine worn pixel tones with per-prop instance colour in the same six batches', () => {
+  const scene = buildC2SecondMineCampLife();
+  try {
+    for (const mesh of scene.meshes) {
+      assert.ok(mesh.instanceColor);
+      assert.equal(mesh.instanceColor.count, mesh.count);
+      assert.equal(mesh.instanceColor.usage, StaticDrawUsage);
+      const colors = new Set<string>();
+      const color = new Color();
+      for (let index = 0; index < mesh.count; index++) {
+        color.fromBufferAttribute(mesh.instanceColor, index);
+        colors.add([color.r, color.g, color.b].map(value => value.toFixed(3)).join('/'));
+      }
+      assert.ok(colors.size >= 4, `${mesh.name} must vary worn pieces`);
+      const material = mesh.material as MeshLambertMaterial;
+      assert.equal(material.flatShading, true);
+      assert.ok(new Set(textureTones(material.map!)).size >= 5);
+    }
+    assert.equal(scene.stats().drawCount, 6);
+    assert.equal(scene.stats().triangleCount, scene.pieces.length * 12);
+    assert.equal(scene.group.children.some(child => child instanceof PointLight), false);
+  } finally {
+    scene.dispose();
+  }
 });
 
 test('camp-life uses six instanced 16px Nearest material families and disposes shared resources exactly once', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Raycaster, Vector3, type Group, type Mesh } from 'three';
+import { NearestFilter, Raycaster, RepeatWrapping, Vector3, type Group, type Mesh, type MeshLambertMaterial } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
@@ -62,7 +62,7 @@ function walkVertexSample(kind: 'collapse' | 'gully') {
   return best;
 }
 
-test('批95卡19 exports exactly three collapse fans and five radial gullies', () => {
+test('批95卡19 exports exactly three collapse fans and five radial gullies', t => {
   assert.deepEqual(collapses.map(feature => feature.bearingDeg), [40, 95, 150]);
   assert.deepEqual(gullies.map(feature => feature.bearingDeg), [65, 125, 200, 255, 320]);
   assert.equal(built.features.length, 8);
@@ -71,12 +71,70 @@ test('批95卡19 exports exactly three collapse fans and five radial gullies', (
   assert.ok(built.group.getObjectByName('town-c2-broken-circle-gully-voxels'));
   assert.ok(built.group.getObjectByName('town-c2-haul-compacted-trace-west'));
   assert.ok(built.group.getObjectByName('town-c2-haul-compacted-trace-east'));
+  const skinTriangles = ['collapse', 'gully'].reduce((sum, kind) => {
+    const geometry = namedMesh(built.group, `town-c2-broken-circle-${kind}-voxels`).geometry;
+    return sum + (geometry.index?.count ?? geometry.getAttribute('position').count) / 3;
+  }, 0);
+  assert.equal(skinTriangles, 2382, 'skin refinement must preserve the approved triangle budget');
   assert.deepEqual(new Set(built.placements.filter(piece => piece.kind === 'collapse-voxel')
     .map(piece => piece.featureId)), new Set(collapses.map(feature => feature.id)));
   assert.deepEqual(new Set(built.placements.filter(piece => piece.kind === 'gully-voxel')
     .map(piece => piece.featureId)), new Set(gullies.map(feature => feature.id)));
   assert.equal(new Set(built.placements.filter(piece => piece.kind === 'haul-track')
     .map(piece => piece.featureId)).size, 1);
+  t.diagnostic(`${skinTriangles} collapse/gully skin triangles across 2 material batches`);
+});
+
+test('voxel skins and haul traces retain four batches while gaining pixel UVs and worn vertex colors', () => {
+  const names = [
+    'town-c2-broken-circle-collapse-voxels', 'town-c2-broken-circle-gully-voxels',
+    'town-c2-haul-compacted-trace-west', 'town-c2-haul-compacted-trace-east',
+  ];
+  assert.equal(built.group.children.length, 4, 'visual refinement must not add geometry batches');
+  for (const name of names) {
+    const mesh = namedMesh(built.group, name);
+    const material = mesh.material as MeshLambertMaterial;
+    const positions = mesh.geometry.getAttribute('position');
+    const uvs = mesh.geometry.getAttribute('uv');
+    const colors = mesh.geometry.getAttribute('color');
+    assert.ok(uvs && colors, `${name} needs mapped pixel grain and instance-like cell variation`);
+    assert.equal(uvs.count, positions.count);
+    assert.equal(colors.count, positions.count);
+    assert.equal(material.vertexColors, true);
+    assert.equal(material.dithering, true);
+    assert.equal(material.map?.minFilter, NearestFilter);
+    assert.equal(material.map?.magFilter, NearestFilter);
+    assert.equal(material.map?.wrapS, RepeatWrapping);
+    assert.equal(material.map?.wrapT, RepeatWrapping);
+    let minUv = Infinity, maxUv = -Infinity, minColor = Infinity, maxColor = -Infinity;
+    const colorSteps = new Set<number>();
+    for (let index = 0; index < positions.count; index++) {
+      for (const value of [uvs.getX(index), uvs.getY(index)]) {
+        assert.ok(Number.isFinite(value));
+        minUv = Math.min(minUv, value);
+        maxUv = Math.max(maxUv, value);
+      }
+      for (const value of [colors.getX(index), colors.getY(index), colors.getZ(index)]) {
+        assert.ok(Number.isFinite(value) && value >= 0 && value <= 1.1);
+        minColor = Math.min(minColor, value);
+        maxColor = Math.max(maxColor, value);
+        colorSteps.add(Math.round(value * 1000));
+      }
+    }
+    assert.ok(maxUv - minUv > 1, `${name} must repeat its texture across the surface`);
+    assert.ok(maxColor - minColor > .12 && colorSteps.size > 8,
+      `${name} needs visible worn-edge and per-cell shade steps`);
+    const pixels = material.map!.image.data as Uint8Array;
+    const texelColors = new Set<string>();
+    for (let index = 0; index < pixels.length; index += 4) {
+      texelColors.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]}`);
+    }
+    assert.ok(texelColors.size >= 4, `${name} needs grain, seam, pit and chip texels`);
+  }
+  for (const side of ['west', 'east']) {
+    const geometry = namedMesh(built.group, `town-c2-haul-compacted-trace-${side}`).geometry;
+    assert.equal(geometry.index!.count / 3, 360, 'transport trace triangle budget changed');
+  }
 });
 
 test(' bearings and widths use the live crater centre and clockwise anchor transform', () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
+  Color, DataTexture, FrontSide, Group, InstancedMesh, Material, Matrix4, MeshLambertMaterial,
   NearestFilter, StaticDrawUsage, Vector3,
 } from 'three';
 import {
@@ -184,6 +184,53 @@ test('three instanced batches keep 16px Nearest pixel maps and the local north-t
   overlay.setNight(false);
   assert.equal(rust.emissiveIntensity, 0);
   overlay.dispose();
+});
+
+test('pixel facets, spatial instance tints and masked rust emission add visual hierarchy without batches', () => {
+  const overlay = createSecondMineUpperRelief();
+  try {
+    assert.equal(overlay.stats().drawCount, 3);
+    assert.equal(overlay.stats().triangles, overlay.stats().voxelCount * 12);
+    for (const mesh of overlay.meshes) {
+      const material = mesh.material as MeshLambertMaterial;
+      const texture = material.map;
+      assert.ok(texture instanceof DataTexture);
+      const pixels = texture.image.data as Uint8Array;
+      const colors = new Set<string>();
+      let minLuminance = 255, maxLuminance = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        colors.add(`${pixels[index]}/${pixels[index + 1]}/${pixels[index + 2]}`);
+        const luminance = pixels[index]! * .2126 + pixels[index + 1]! * .7152 + pixels[index + 2]! * .0722;
+        minLuminance = Math.min(minLuminance, luminance);
+        maxLuminance = Math.max(maxLuminance, luminance);
+      }
+      assert.ok(colors.size >= 4, `${mesh.name} needs base, facet, seam and chip tones`);
+      assert.ok(maxLuminance - minLuminance > 45, `${mesh.name} lacks pixel contrast`);
+
+      const tint = new Color();
+      const shades = new Set<string>();
+      let minShade = Infinity, maxShade = -Infinity, warmOrCool = false;
+      for (let index = 0; index < mesh.count; index++) {
+        mesh.getColorAt(index, tint);
+        shades.add(tint.g.toFixed(4));
+        minShade = Math.min(minShade, tint.g);
+        maxShade = Math.max(maxShade, tint.g);
+        if (Math.abs(tint.r - tint.b) > .01) warmOrCool = true;
+      }
+      assert.ok(shades.size > 12, `${mesh.name} instance colour is too uniform`);
+      assert.ok(maxShade - minShade > .12, `${mesh.name} lacks instance value separation`);
+      if (material.userData.materialFamily === 'rust' || material.userData.materialFamily === 'basalt') {
+        assert.equal(warmOrCool, true, `${mesh.name} lacks material-specific tint`);
+      }
+      if (material.userData.materialFamily === 'rust') {
+        assert.equal(material.emissiveMap, texture, 'ore pixels must also mask the existing glow');
+      } else {
+        assert.equal(material.emissiveMap, null);
+      }
+    }
+  } finally {
+    overlay.dispose();
+  }
 });
 
 test('dispose is idempotent, detaches from the host and releases only overlay-owned resources', () => {

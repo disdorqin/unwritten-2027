@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, BufferGeometry, DataTexture, Group, Mesh, MeshLambertMaterial,
-  NearestFilter, Object3D, SRGBColorSpace,
+  BoxGeometry, BufferGeometry, Color, DataTexture, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial,
+  NearestFilter, Object3D, RepeatWrapping, SRGBColorSpace,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Box } from './landmark-kit';
@@ -152,16 +152,23 @@ function pixelTexture(colors: readonly [number, number, number], seed: number, k
     const blockX = Math.floor(x / 4), blockY = Math.floor(y / 4);
     const layer = Math.floor((blockY + bends[(blockX + seed) % bends.length]! + 8) / 2);
     const fleck = (Math.imul(x + 11, 733) ^ Math.imul(y + 13, 199) ^ seed) & 15;
+    const pore = fleck < 2 || (Math.imul(x + seed, 37) ^ Math.imul(y, 71)) % 29 === 0;
+    const vein = (x + y * 2 + Math.floor(y / 3) + seed) % 13 === 0 && y < 14;
     let tone = kind === 'stone'
-      ? colors[[0, 0, 1, 1, 0, 2, 2, 1][(layer + seed) % 8]!]!
+      ? vein || pore ? colors[1]! : colors[[0, 0, 1, 1, 0, 2, 2, 1][(layer + seed) % 8]!]!
       : kind === 'wood'
-        ? (x + Math.floor(y / 3) * 3 + seed) % 8 === 0 ? colors[1]! : colors[fleck < 3 ? 2 : 0]!
-        : colors[fleck < 2 ? 1 : fleck > 13 ? 2 : 0]!;
+        ? (x + Math.floor(y / 3) * 3 + seed) % 8 === 0 || pore ? colors[1]!
+          : (x * 3 + y + seed) % 17 === 0 ? colors[2]! : colors[0]!
+        : kind === 'paper'
+          ? y === 0 || y === 15 || x === 0 || x === 15 ? colors[1]!
+            : (x + y * 3 + seed) % 11 === 0 || fleck < 2 ? colors[2]! : colors[0]!
+          : colors[pore ? 1 : fleck > 13 ? 2 : 0]!;
     if (kind === 'stone' && blockX === (seed * 3 + 2) % 4 && blockY === (seed + 5) % 4) tone = colors[2]!;
     pixels.set([tone >>> 16, (tone >>> 8) & 255, tone & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size);
   texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
   texture.minFilter = texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
@@ -171,6 +178,31 @@ function pixelTexture(colors: readonly [number, number, number], seed: number, k
 function box(width: number, height: number, depth: number, x: number, y: number, z: number) {
   const geometry = new BoxGeometry(width, height, depth);
   geometry.translate(x, y, z);
+  return geometry;
+}
+
+function tintGeometry(geometry: BufferGeometry, tint: Color) {
+  const colors = new Float32Array(geometry.getAttribute('position').count * 3);
+  for (let vertex = 0; vertex < colors.length; vertex += 3) {
+    colors[vertex] = tint.r;
+    colors[vertex + 1] = tint.g;
+    colors[vertex + 2] = tint.b;
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  return geometry;
+}
+
+function weatherStone(geometry: BufferGeometry) {
+  const normals = geometry.getAttribute('normal');
+  const colors = new Float32Array(normals.count * 3);
+  const top = new Color(1.12, 1.04, .92);
+  const west = new Color(.72, .78, .74);
+  const side = new Color(.88, .86, .8);
+  for (let vertex = 0; vertex < normals.count; vertex++) {
+    const tint = normals.getY(vertex) > .5 ? top : normals.getX(vertex) < -.5 ? west : side;
+    colors.set([tint.r, tint.g, tint.b], vertex * 3);
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   return geometry;
 }
 
@@ -193,11 +225,20 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
     return material;
   };
   const stoneMaterial = makeMaterial([0x55534c, 0x747064, 0x343630], 41, 'stone');
+  stoneMaterial.map!.repeat.set(2, 1);
+  stoneMaterial.vertexColors = true;
   const woodMaterial = makeMaterial([0x72543e, 0x3e3028, 0x997352], 29, 'wood');
   const paperMaterial = makeMaterial([0xd8d0b8, 0xb8ad92, 0xeee7d2], 53, 'paper');
+  paperMaterial.vertexColors = true;
   const inkMaterial = makeMaterial([0x252a27, 0x111714, 0x454b43], 67, 'ink');
+  inkMaterial.vertexColors = true;
   const engravingMaterial = new MeshLambertMaterial({ color: 0x24251f });
   materials.add(engravingMaterial);
+  engravingMaterial.vertexColors = true;
+  // Vertex tint keeps the canonical mark in its original single incised draw call.
+  // The crescent catches a warmer worn edge; the falling arc stays cooler and deeper.
+  const crescentWear = new Color(1.65, 1.5, 1.25);
+  const arcWear = new Color(.65, .78, .68);
 
   const addMerged = (name: string, parts: BufferGeometry[], material: MeshLambertMaterial, parent: Object3D) => {
     const geometry = mergeGeometries(parts, false);
@@ -212,7 +253,7 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   };
 
   // 2.4 m is the west-face width (north-south); 1.6 m runs into the slab from that face.
-  const stoneGeometry = new BoxGeometry(spec.eastWest, spec.height, spec.northSouth);
+  const stoneGeometry = weatherStone(new BoxGeometry(spec.eastWest, spec.height, spec.northSouth));
   geometries.add(stoneGeometry);
   const stone = new Mesh(stoneGeometry, stoneMaterial);
   stone.name = 'town-c2-crater-inscription/stone';
@@ -221,11 +262,15 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
 
   // Reuse the canonical crescent + descending-arc cells as ONE incised mesh.
   // Its first arc cell is the crescent tip cell; no second arc or gold plate is added.
-  const markParts = SHIP_EMBLEM_CELLS.map(cell => box(
-    .008, .104 * spec.emblemScale, .104 * spec.emblemScale,
-    -spec.eastWest / 2 - .002, cell.y * spec.emblemScale,
-    cell.x * spec.emblemScale,
-  ));
+  const markParts = SHIP_EMBLEM_CELLS.map(cell => {
+    const geometry = box(
+      .008, .104 * spec.emblemScale, .104 * spec.emblemScale,
+      -spec.eastWest / 2 - .002, cell.y * spec.emblemScale,
+      cell.x * spec.emblemScale,
+    );
+    const wear = cell.part === 'crescent' ? crescentWear : arcWear;
+    return tintGeometry(geometry, wear);
+  });
   const mark = addMerged('town-c2-crater-inscription/crescent-descending-arc',
     markParts, engravingMaterial, stone);
   mark.userData.cellCount = SHIP_EMBLEM_CELLS.length;
@@ -241,7 +286,7 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   table.position.set(survey.east, tableHeight, -tableNorth);
   group.add(table);
   addMerged('town-c2-crater-inscription/table-stone', [
-    box(spec.tableWidth, .12, spec.tableDepth, 0, .74, 0),
+    weatherStone(box(spec.tableWidth, .12, spec.tableDepth, 0, .74, 0)),
   ], stoneMaterial, table);
   addMerged('town-c2-crater-inscription/table-timber', [
     box(.14, .68, .14, -.48, .34, -.27),
@@ -252,20 +297,25 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
     box(1.02, .09, .09, 0, .22, .27),
   ], woodMaterial, table);
 
-  const blankStele = new Mesh(new BoxGeometry(.12, .62, .42), stoneMaterial);
+  const blankStele = new Mesh(weatherStone(new BoxGeometry(.12, .62, .42)), stoneMaterial);
   blankStele.name = 'town-c2-crater-inscription/blank-stone-slab';
   blankStele.position.set(.42, spec.tableHeight + .31, 0);
   geometries.add(blankStele.geometry);
   table.add(blankStele);
 
   addMerged('town-c2-crater-inscription/paper', [
-    box(.42, .012, .34, -.30, .812, .04),
-    box(.42, .012, .34, -.295, .824, .035),
-    box(.42, .012, .34, -.30, .836, .03),
+    tintGeometry(box(.42, .012, .34, -.30, .812, .04), new Color(.82, .8, .73)),
+    tintGeometry(box(.42, .012, .34, -.295, .824, .035), new Color(.93, .9, .82)),
+    tintGeometry(box(.42, .012, .34, -.30, .836, .03), new Color(1, .98, .91)),
+    // A few raised fibres suggest deckled paper without a second material or draw call.
+    tintGeometry(box(.065, .002, .005, -.40, .843, .198), new Color(1.08, 1.04, .94)),
+    tintGeometry(box(.045, .002, .005, -.15, .843, -.138), new Color(1.08, 1.04, .94)),
   ], paperMaterial, table);
   addMerged('town-c2-crater-inscription/inkstone-and-stick', [
-    box(.18, .05, .14, .20, .825, -.18),
-    box(.16, .035, .035, .20, .867, -.18),
+    tintGeometry(box(.18, .05, .14, .20, .825, -.18), new Color(.72, .78, .72)),
+    tintGeometry(box(.12, .003, .085, .20, .852, -.18), new Color(.16, .2, .18)),
+    tintGeometry(box(.16, .035, .035, .20, .867, -.18), new Color(1.25, 1.08, .82)),
+    tintGeometry(box(.022, .037, .039, .255, .867, -.18), new Color(.55, .48, .38)),
   ], inkMaterial, table);
 
   const useFootHeight = ground.heightAt(survey.east - 1.55, survey.north - 1.75);

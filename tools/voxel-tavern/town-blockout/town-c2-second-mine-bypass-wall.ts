@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4,
+  BoxGeometry, Color, DataTexture, Group, InstancedMesh, Matrix4,
   MeshLambertMaterial, NearestFilter, RGBAFormat, SRGBColorSpace, StaticDrawUsage, UnsignedByteType,
 } from 'three';
 import {
@@ -49,32 +49,44 @@ const familyOrder: readonly C2SecondMineBypassWallFamily[] = [
 ];
 const wallEast = Object.freeze({ west: 48.08, east: 54.92 });
 const palette = Object.freeze({
-  rock: Object.freeze([0x62666a, 0x3e444a, 0x85867e]),
-  basalt: Object.freeze([0x464c52, 0x292f35, 0x697077]),
-  rust: Object.freeze([0x805038, 0x452e28, 0xb27449]),
-  wood: Object.freeze([0x715137, 0x3f3028, 0x967252]),
-  iron: Object.freeze([0x737a7f, 0x363d42, 0xa1a5a3]),
-  gravel: Object.freeze([0x5d5c55, 0x373a36, 0x888276]),
+  rock: Object.freeze([0x5a6065, 0x343c43, 0x93958b, 0x737974]),
+  basalt: Object.freeze([0x3c454e, 0x202832, 0x78848d, 0x505d68]),
+  rust: Object.freeze([0x744832, 0x332521, 0xc08450, 0x9b6240]),
+  wood: Object.freeze([0x66492f, 0x30251e, 0xa88056, 0x846044]),
+  iron: Object.freeze([0x65727b, 0x29343c, 0xb4bfc0, 0x849198]),
+  gravel: Object.freeze([0x57574f, 0x2d322e, 0x999581, 0x747568]),
 } as const);
 
 function pixelTexture(family: C2SecondMineBypassWallFamily) {
-  const [base, dark, light] = palette[family];
+  const [base, dark, light, mid] = palette[family];
   const size = 16, pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const shiftedX = x + (Math.floor(y / 4) % 2) * 2;
+    const chip = (shiftedX * 17 + y * 23) % 43 < 3;
     let color = base;
     if (family === 'rock' || family === 'basalt') {
-      const seam = family === 'rock' ? y % 5 === 0 : (x + y * 3) % 11 === 0;
-      color = seam ? dark : (x * 7 + y * 13) % 19 < 3 ? light : base;
+      const seam = family === 'rock'
+        ? y % 5 === 0 || shiftedX % 12 === 0
+        : (shiftedX + y * 2) % 13 === 0 || y % 7 === 0;
+      const facet = (Math.floor(x / 3) * 3 + Math.floor(y / 2)) % 8 < 3;
+      color = seam ? dark : chip ? light : facet ? mid : base;
     } else if (family === 'rust') {
-      color = (x * 5 + y * 7) % 13 < 4 ? dark :
-        (x + y * 3) % 17 < 3 ? light : base;
+      const seam = y % 6 === 5 || (shiftedX + Math.floor(y / 2)) % 11 === 0;
+      const pocket = (x * 5 + y * 7) % 13 < 3;
+      const ore = (x * 11 + y * 3) % 29 < 4;
+      color = seam ? dark : pocket ? mid : ore ? light : base;
     } else if (family === 'wood') {
-      color = x % 5 === 0 ? dark : (x * 3 + y * 11) % 23 < 3 ? light : base;
+      const split = x % 5 === 0 || (x + Math.floor(y / 3)) % 13 === 0;
+      const grain = (x * 3 + y * 11) % 23 < 4;
+      color = split ? dark : chip ? light : grain ? mid : base;
     } else if (family === 'iron') {
-      color = (x + y * 5) % 17 === 0 ? light : y % 7 === 0 ? dark : base;
+      const plateJoint = y % 7 === 0 || shiftedX % 12 === 0;
+      const scratch = (x + y * 5) % 17 < 3;
+      color = plateJoint ? dark : scratch ? light : (x * 7 + y * 3) % 19 < 3 ? mid : base;
     } else {
-      color = (x * 7 + y * 11) % 17 < 5 ? dark :
-        (x * 3 + y * 5) % 19 < 4 ? light : base;
+      const joint = x % 3 === 0 || y % 3 === 0;
+      const pebble = (Math.floor(x / 3) * 5 + Math.floor(y / 3) * 3) % 7 < 3;
+      color = joint ? dark : chip ? light : pebble ? mid : base;
     }
     pixels.set([color >> 16, color >> 8 & 255, color & 255, 255], (y * size + x) * 4);
   }
@@ -186,8 +198,8 @@ export function buildTownC2SecondMineBypassWall(): C2SecondMineBypassWallScene {
   const meshes: InstancedMesh[] = [];
   const counts = Object.fromEntries(familyOrder.map(family => [family, 0])) as
     Record<C2SecondMineBypassWallFamily, number>;
-  const matrix = new Matrix4();
-  for (const family of familyOrder) {
+  const matrix = new Matrix4(), tint = new Color();
+  for (const [familyIndex, family] of familyOrder.entries()) {
     const items = parts.filter(part => part.family === family);
     counts[family] = items.length;
     const texture = pixelTexture(family);
@@ -206,9 +218,22 @@ export function buildTownC2SecondMineBypassWall(): C2SecondMineBypassWallScene {
       matrix.makeScale(part.w, part.h, part.d);
       matrix.setPosition(part.x, part.y, -part.n);
       mesh.setMatrixAt(index, matrix);
+      const seed = familyIndex * 31 + part.n * 12.9898 + part.x * 78.233 + part.y * 37.719;
+      const random = Math.sin(seed) * 43758.5453;
+      const variation = random - Math.floor(random);
+      const courseTone = part.feature === 'layer-slab'
+        ? .94 + (Math.round(part.y / .48) % 3) * .035 : 1;
+      const featureTone = part.feature === 'wall-foot-fragment' ? .84 :
+        part.feature === 'iron-nail' ? 1.05 : part.feature === 'rust-seep' ? 1.02 : 1;
+      const warmth = family === 'rust' ? .045 : family === 'wood' ? .035 :
+        family === 'iron' || family === 'basalt' ? -.025 : 0;
+      const shade = (.82 + variation * .25) * courseTone * featureTone;
+      mesh.setColorAt(index, tint.setRGB(
+        Math.min(1.16, shade + warmth), shade, Math.min(1.16, shade - warmth)));
     });
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);
     materials.set(family, material);

@@ -104,12 +104,36 @@ function noise(seed: number) {
   return value - Math.floor(value);
 }
 
-function grainTexture(base: number, dark: number, light: number, seed: number) {
+function grainTexture(base: number, dark: number, light: number, mid: number, seed: number,
+  style: 'stone' | 'rubble' | 'crystal' | 'vein' | 'metal') {
   const size = c2SecondMineFarBankCrystalsPlan.textureSize;
   const pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const grain = noise(seed + x * 31 + y * 131);
-    const color = grain < .24 ? dark : grain > .83 ? light : base;
+    const shiftedX = x + (Math.floor(y / 4) % 2) * 2;
+    const chip = (shiftedX * 17 + y * 29 + seed) % 47 < 3;
+    let color = base;
+    if (style === 'stone') {
+      const seam = y % 5 === 0 || shiftedX % 13 === 0;
+      const facet = (Math.floor(x / 3) * 3 + Math.floor(y / 2)) % 8 < 3;
+      color = seam ? dark : chip ? light : facet ? mid : base;
+    } else if (style === 'rubble') {
+      const joint = x % 3 === 0 || y % 3 === 0;
+      const pebble = (Math.floor(x / 3) * 5 + Math.floor(y / 3) * 3) % 7 < 3;
+      color = joint ? dark : chip ? light : pebble ? mid : base;
+    } else if (style === 'crystal') {
+      // Angular cyan facets and bright tips give the shared emission mask levels.
+      const facet = (x + Math.floor(y / 2) * 2) % 9 < 3;
+      const tip = x + y === 8 || (x > 10 && y < 4);
+      color = facet ? mid : tip ? light : chip ? dark : base;
+    } else if (style === 'vein') {
+      const seam = y % 6 === 5 || (shiftedX + Math.floor(y / 2)) % 11 === 0;
+      const pocket = (x * 5 + y * 7) % 13 < 3;
+      color = seam ? dark : pocket ? mid : chip ? light : base;
+    } else {
+      const plateJoint = y % 7 === 0 || shiftedX % 12 === 0;
+      const scratch = (x + y * 5) % 17 < 3;
+      color = plateJoint ? dark : scratch ? light : chip ? mid : base;
+    }
     pixels.set([color >> 16, color >> 8 & 255, color & 255, 255], 4 * (x + size * y));
   }
   const texture = new DataTexture(pixels, size, size, RGBAFormat);
@@ -277,11 +301,11 @@ export function build(parent?: Group): FarBankCrystalsScene {
   }
 
   const textures = [
-    grainTexture(0x3e464c, 0x20282e, 0x68747a, 5101),
-    grainTexture(0x74766f, 0x454b48, 0xa2a197, 5203),
-    grainTexture(0x769a9e, 0x3c6268, 0xc1dedc, 5307),
-    grainTexture(0x756f5d, 0x393f3e, 0xb39a63, 5409),
-    grainTexture(0x777d7e, 0x343c40, 0xb9b6a6, 5501),
+    grainTexture(0x364149, 0x1c262e, 0x73828a, 0x4c5b65, 5101, 'stone'),
+    grainTexture(0x6d7068, 0x39423f, 0xb0afa1, 0x8a8c81, 5203, 'rubble'),
+    grainTexture(0x638e95, 0x2e5964, 0xd0e9e2, 0x87b6b8, 5307, 'crystal'),
+    grainTexture(0x6c6652, 0x303a37, 0xc5ad6b, 0x928664, 5409, 'vein'),
+    grainTexture(0x6c777b, 0x2c373d, 0xc5c8bc, 0x919c9d, 5501, 'metal'),
   ];
   const materials: Record<Family, MeshLambertMaterial> = {
     basalt: new MeshLambertMaterial({
@@ -293,11 +317,11 @@ export function build(parent?: Group): FarBankCrystalsScene {
       emissive: 0x000000, emissiveIntensity: 0,
     }),
     crystal: new MeshLambertMaterial({
-      map: textures[2], flatShading: true,
+      map: textures[2], emissiveMap: textures[2], flatShading: true,
       emissive: 0x4b9fa8, emissiveIntensity: 0,
     }),
     'ore-vein': new MeshLambertMaterial({
-      map: textures[3], flatShading: true,
+      map: textures[3], emissiveMap: textures[3], flatShading: true,
       emissive: 0x4b9fa8, emissiveIntensity: 0,
     }),
     'frozen-metal': new MeshLambertMaterial({
@@ -308,7 +332,7 @@ export function build(parent?: Group): FarBankCrystalsScene {
   const geometry = new BoxGeometry(1, 1, 1);
   const dummy = new Object3D();
   const color = new Color();
-  const meshes = materialFamilies.map(family => {
+  const meshes = materialFamilies.map((family, familyIndex) => {
     const items = parts.filter(part => part.family === family);
     const mesh = new InstancedMesh(geometry, materials[family], items.length);
     mesh.name = `${plan.id}:${family}`;
@@ -320,7 +344,12 @@ export function build(parent?: Group): FarBankCrystalsScene {
       dummy.scale.set(part.w, part.h, part.d);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
-      mesh.setColorAt(index, color.setHex(part.color));
+      const seed = 6100 + familyIndex * 97 + Math.round(part.x * 101) +
+        Math.round(part.n * 53) + Math.round(part.y * 79);
+      const heightTone = family === 'crystal' ? .96 + Math.min(part.y / 12, .12) :
+        family === 'ore-vein' ? 1.02 : family === 'rubble' ? .94 : .98;
+      mesh.setColorAt(index, color.setHex(part.color)
+        .multiplyScalar((.86 + noise(seed) * .22) * heightTone));
     });
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;

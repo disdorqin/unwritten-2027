@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BufferAttribute, BufferGeometry, Group, Mesh, MeshBasicMaterial } from 'three';
+import { BufferAttribute, BufferGeometry, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial } from 'three';
 import {
   adaptUndergroundWater90, mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90Authority, type UndergroundWater90OreVisual,
@@ -40,6 +40,7 @@ function fixture(options: Readonly<{
   const mine = createUndergroundMineLayout(spec);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(mine.mesh.water, 3));
+  const originalWaterUv = geometry.getAttribute('uv');
   const material = new MeshBasicMaterial();
   const waterMesh = new Mesh(geometry, material);
   waterMesh.name = 'underground-mine-water';
@@ -48,8 +49,62 @@ function fixture(options: Readonly<{
     parent, mine, waterMesh, highWaterOffsetM: fixtureHighRiseM,
     readAcceptedWater: options.readAcceptedWater, oreVisuals: options.oreVisuals,
   });
-  return { parent, mine, geometry, material, waterMesh, overlay };
+  return { parent, mine, geometry, material, waterMesh, overlay, originalWaterUv };
 }
+
+function renderCensus(parent: Group) {
+  let meshes = 0, triangles = 0;
+  parent.traverse(object => {
+    if (!(object instanceof Mesh)) return;
+    meshes++;
+    const geometry = object.geometry;
+    const vertices = geometry.index
+      ? geometry.index.count
+      : geometry.getAttribute('position')?.count ?? 0;
+    triangles += vertices / 3 * (object instanceof InstancedMesh ? object.count : 1);
+  });
+  return { meshes, triangles };
+}
+
+test('the -90 beauty pass reuses the water triangles and adds current/wet tones without another render pass', () => {
+  const f = fixture({ oreVisuals });
+  const originalUv = f.originalWaterUv;
+  assert.equal(originalUv, undefined);
+  const census = renderCensus(f.parent);
+  assert.equal(census.meshes, 7, 'host water, two high-water meshes, inlays and three ore meshes');
+  assert.ok(f.waterMesh.material instanceof MeshLambertMaterial);
+  const baselineMaterial = f.waterMesh.material;
+  assert.equal(baselineMaterial.forceSinglePass, true);
+  assert.ok(baselineMaterial.transparent);
+  assert.ok(baselineMaterial.opacity < .7);
+  assert.ok(baselineMaterial.map);
+  assert.equal(baselineMaterial.map.wrapS, baselineMaterial.map.wrapT);
+  const pixels = baselineMaterial.map.image.data as Uint8Array;
+  assert.ok(new Set(pixels).size > 20, 'the static current map contains varied broken-flow tones');
+
+  const highSurface = f.overlay.group.getObjectByName('water90-high-surface');
+  const highVolume = f.overlay.group.getObjectByName('water90-high-volume-sides');
+  assert.ok(highSurface instanceof Mesh);
+  assert.ok(highVolume instanceof Mesh);
+  assert.equal(highSurface.geometry.getAttribute('position').count, f.overlay.stats().waterMeshVertices);
+  assert.equal(highSurface.material, highVolume.material);
+
+  f.overlay.setLevel('low');
+  const inlays = f.overlay.group.getObjectByName('water90-exposed-riverbed-inlays');
+  assert.ok(inlays instanceof InstancedMesh);
+  assert.ok(inlays.instanceColor, 'wet slabs and dry wayfinders share the original instanced draw');
+  assert.ok(inlays.count <= 28);
+  assert.deepEqual(renderCensus(f.parent), census);
+  f.overlay.setLevel('high');
+  assert.deepEqual(renderCensus(f.parent), census);
+  f.overlay.setLevel('mid');
+  assert.deepEqual(renderCensus(f.parent), census);
+  f.overlay.dispose();
+  assert.equal(f.waterMesh.material, f.material);
+  assert.equal(f.geometry.getAttribute('uv'), undefined, 'the overlay removes its generated UVs');
+  f.geometry.dispose();
+  f.material.dispose();
+});
 
 test('the sole adapter maps all -90 forms and defaults missing authority to explicit mid/unconfigured', () => {
   const missing = adaptUndergroundWater90(undefined);
@@ -211,7 +266,14 @@ test('dispose is idempotent, restores the host water mesh and releases only over
   }, oreVisuals });
   let baseDisposals = 0;
   let highDisposals = 0;
+  let styleDisposals = 0;
+  let mapDisposals = 0;
   f.geometry.addEventListener('dispose', () => { baseDisposals++; });
+  assert.ok(f.waterMesh.material instanceof MeshLambertMaterial);
+  const styledMaterial = f.waterMesh.material;
+  styledMaterial.addEventListener('dispose', () => { styleDisposals++; });
+  assert.ok(styledMaterial.map);
+  styledMaterial.map.addEventListener('dispose', () => { mapDisposals++; });
   const high = f.overlay.group.getObjectByName('water90-high-surface');
   assert.ok(high instanceof Mesh);
   high.geometry.addEventListener('dispose', () => { highDisposals++; });
@@ -221,8 +283,12 @@ test('dispose is idempotent, restores the host water mesh and releases only over
   f.overlay.dispose();
   assert.equal(f.overlay.group.parent, null);
   assert.equal(f.waterMesh.visible, true);
+  assert.equal(f.waterMesh.material, f.material, 'the host material is restored, never disposed here');
+  assert.equal(f.geometry.getAttribute('uv'), undefined);
   assert.equal(baseDisposals, 0, 'the domain-owned water geometry survives');
   assert.equal(highDisposals, 1);
+  assert.equal(styleDisposals, 1);
+  assert.equal(mapDisposals, 1);
   assert.equal(f.overlay.stats().disposed, true);
   assert.equal(f.overlay.stats().highWaterVisible, false);
   f.overlay.sync();

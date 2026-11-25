@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  Group, InstancedMesh, MeshLambertMaterial, NearestFilter, PointLight, type EventDispatcher,
+  Group, InstancedMesh, MeshLambertMaterial, NearestFilter, NoColorSpace, PointLight, type EventDispatcher,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius,
@@ -83,6 +83,7 @@ test('实体灯具备六族16px像素材质、完整五金与真实#e08a3c夜灯
   const owner = new Group();
   const chain = mountCraterWarmLightChain(owner, surveyCraterWarmLightChain(road));
   assert.equal(chain.meshes.length, 6);
+  assert.equal(chain.data.drawCount, 6);
   assert.equal(owner.children[0], chain.group);
   const suffixes = ['foot', 'plinth', 'shaft', 'lamp-base', 'light-core', 'roof', 'top-cap', 'snow-cap'];
   for (const node of chain.data.nodes) {
@@ -96,9 +97,12 @@ test('实体灯具备六族16px像素材质、完整五金与真实#e08a3c夜灯
       assert.equal(light, undefined, node.id + ' keeps emissive-only presentation');
     }
   }
-  for (const mesh of chain.meshes) {
-    assert.ok(mesh instanceof InstancedMesh);
-    const material = mesh.material as MeshLambertMaterial;
+  for (const mesh of chain.meshes) assert.ok(mesh instanceof InstancedMesh);
+  const materials = new Map(chain.meshes.map(mesh => [
+    (mesh.material as MeshLambertMaterial).userData.materialFamily, mesh.material as MeshLambertMaterial,
+  ]));
+  assert.deepEqual([...materials.keys()], ['stone', 'timber', 'worn-iron', 'brass', 'amber', 'frost']);
+  for (const material of materials.values()) {
     assert.ok(material.map);
     assert.equal(material.map.image.width, 16);
     assert.equal(material.map.image.height, 16);
@@ -106,13 +110,78 @@ test('实体灯具备六族16px像素材质、完整五金与真实#e08a3c夜灯
     assert.equal(material.map.magFilter, NearestFilter);
     assert.equal(material.map.generateMipmaps, false);
   }
+  const timber = materials.get('timber')!.map!.image.data as Uint8Array;
+  const iron = materials.get('worn-iron')!.map!.image.data as Uint8Array;
+  const brass = materials.get('brass')!.map!.image.data as Uint8Array;
+  const pixel = (data: Uint8Array, x: number, y: number) => [...data.slice((y * 16 + x) * 4, (y * 16 + x) * 4 + 3)];
+  assert.deepEqual(pixel(timber, 2, 2), pixel(timber, 2, 3), 'timber fibres continue vertically');
+  assert.notDeepEqual(pixel(timber, 2, 2), pixel(timber, 3, 2), 'adjacent timber fibres differ');
+  assert.notDeepEqual([...timber], [...iron], 'forged iron does not reuse the timber grain');
+  assert.notDeepEqual([...iron], [...brass], 'worn iron and brass keep distinct wear');
+  const ironColors = new Set<string>();
+  for (let index = 0; index < iron.length; index += 4) ironColors.add(`${iron[index]},${iron[index + 1]},${iron[index + 2]}`);
+  assert.ok(ironColors.size >= 4, 'iron keeps pit, base, edge and scratch tones');
+
+  const amber = materials.get('amber')!;
+  assert.equal(amber.color.getHex(), 0xffffff, 'diffuse tint does not shift the authored amber texels');
+  assert.equal(amber.emissive.getHex(), craterWarmLightColor);
+  assert.equal(amber.emissiveIntensity, .04);
+  assert.ok(amber.emissiveMap);
+  assert.equal(amber.emissiveMap.image.width, 16);
+  assert.equal(amber.emissiveMap.image.height, 16);
+  assert.equal(amber.emissiveMap.minFilter, NearestFilter);
+  assert.equal(amber.emissiveMap.magFilter, NearestFilter);
+  assert.equal(amber.emissiveMap.generateMipmaps, false);
+  assert.equal(amber.emissiveMap.colorSpace, NoColorSpace);
+  const glow = amber.emissiveMap.image.data as Uint8Array;
+  const luminance = (x: number, y: number) => glow[(y * 16 + x) * 4]!;
+  assert.ok(luminance(7, 7) > luminance(4, 7));
+  assert.ok(luminance(4, 7) > luminance(3, 7));
+  assert.ok(luminance(3, 7) > luminance(0, 0), 'shade rim, pane and core form distinct night layers');
+  assert.ok(pixel(amber.map!.image.data as Uint8Array, 7, 7).every((value, index) => value === [0xff, 0xdf, 0xa1][index]));
+
   assert.equal(chain.isNightLit, false);
   assert.equal(chain.lights.filter(light => light.visible).length, 0);
   chain.setNight(true);
   assert.equal(chain.isNightLit, true);
   assert.equal(chain.lights.filter(light => light.visible).length, 6);
+  assert.equal(amber.emissiveIntensity, 1.65);
   chain.setNight(false);
   assert.equal(chain.lights.filter(light => light.visible).length, 0);
+  assert.equal(amber.emissiveIntensity, .04);
+  chain.dispose();
+});
+
+test('setNight同值早退，不重复点亮或改写发光材质', () => {
+  const chain = mountCraterWarmLightChain(new Group(), surveyCraterWarmLightChain(road));
+  const amber = chain.meshes.find(mesh =>
+    (mesh.material as MeshLambertMaterial).userData.materialFamily === 'amber')!.material as MeshLambertMaterial;
+  let lightWrites = 0;
+  let materialWrites = 0;
+  for (const light of chain.lights) {
+    let visible = light.visible;
+    Object.defineProperty(light, 'visible', {
+      configurable: true,
+      get: () => visible,
+      set: (value: boolean) => { lightWrites++; visible = value; },
+    });
+  }
+  let intensity = amber.emissiveIntensity;
+  Object.defineProperty(amber, 'emissiveIntensity', {
+    configurable: true,
+    get: () => intensity,
+    set: (value: number) => { materialWrites++; intensity = value; },
+  });
+  chain.setNight(false);
+  assert.deepEqual([lightWrites, materialWrites], [0, 0]);
+  chain.setNight(true);
+  assert.deepEqual([lightWrites, materialWrites], [6, 1]);
+  chain.setNight(true);
+  assert.deepEqual([lightWrites, materialWrites], [6, 1]);
+  chain.setNight(false);
+  assert.deepEqual([lightWrites, materialWrites], [12, 2]);
+  chain.setNight(false);
+  assert.deepEqual([lightWrites, materialWrites], [12, 2]);
   chain.dispose();
 });
 
@@ -125,9 +194,28 @@ test('survey and mount are wired through the real ZA-22 return object without to
   assert.equal(road.warmLightChain.group.parent, road.group);
   for (const site of sites) assert.equal(site.footHeight, road.heightAt(site.east, site.north), site.id);
   assert.equal(road.group.getObjectsByProperty('name', 'town-c2-crater-warm-light-chain').length, 1);
+  const colliders = road.group.userData.colliders;
+  const floors = road.group.userData.floors;
+  const ramps = road.group.userData.ramps;
+  const hostKeys = Object.keys(road.group.userData).sort();
   const legacyLights = road.group.getObjectByName('c2-physical-worklights-authority-free');
   assert.ok(legacyLights);
   assert.equal(legacyLights.children.filter(child => child instanceof PointLight).length, 6);
+  const legacyPointLights = legacyLights.children.filter((child): child is PointLight => child instanceof PointLight);
+  const legacySnapshot = legacyPointLights.map(light => ({
+    name: light.name, visible: light.visible, intensity: light.intensity,
+    color: light.color.getHex(), position: light.position.toArray(),
+  }));
+  road.warmLightChain.setNight(true);
+  road.warmLightChain.setNight(false);
+  assert.equal(road.group.userData.colliders, colliders);
+  assert.equal(road.group.userData.floors, floors);
+  assert.equal(road.group.userData.ramps, ramps);
+  assert.deepEqual(Object.keys(road.group.userData).sort(), hostKeys);
+  assert.deepEqual(legacyLights.children.filter((child): child is PointLight => child instanceof PointLight).map(light => ({
+    name: light.name, visible: light.visible, intensity: light.intensity,
+    color: light.color.getHex(), position: light.position.toArray(),
+  })), legacySnapshot);
 });
 
 test('换挂不读取或改写宿主已有六灯，dispose仅释放本链资源且可重复调用', () => {
@@ -150,7 +238,9 @@ test('换挂不读取或改写宿主已有六灯，dispose仅释放本链资源�
     resources.add(mesh);
     resources.add(mesh.geometry);
     resources.add(mesh.material as MeshLambertMaterial);
-    resources.add((mesh.material as MeshLambertMaterial).map!);
+    const material = mesh.material as MeshLambertMaterial;
+    resources.add(material.map!);
+    if (material.emissiveMap) resources.add(material.emissiveMap);
   }
   const disposed = new Map<EventDispatcher, number>();
   for (const resource of resources) {

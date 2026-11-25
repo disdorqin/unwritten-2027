@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, MeshStandardMaterial,
+  Color, FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, MeshStandardMaterial,
   NearestFilter, StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import {
@@ -21,6 +21,14 @@ function pointBoxDistance(east: number, north: number, box: C2SecondMineBox) {
   const dx = Math.max(box.x - box.w / 2 - east, 0, east - box.x - box.w / 2);
   const dn = Math.max(box.n - box.d / 2 - north, 0, north - box.n - box.d / 2);
   return Math.hypot(dx, dn);
+}
+
+function textureTones(texture: NonNullable<MeshLambertMaterial['map'] | MeshStandardMaterial['map']>) {
+  const data = (texture.image as { data: Uint8Array }).data;
+  return Array.from({ length: texture.image.width * texture.image.height }, (_, index) => {
+    const offset = index * 4;
+    return `${data[offset]}/${data[offset + 1]}/${data[offset + 2]}`;
+  });
 }
 
 function resources(group: Group) {
@@ -132,6 +140,48 @@ test('haulage and reused carts expose at least three 16px Nearest material famil
       assert.equal(mesh.material.side, FrontSide);
       assert.equal(mesh.instanceMatrix.usage, StaticDrawUsage);
     }
+  } finally {
+    scene.dispose();
+  }
+});
+
+test('haulage weathers both canonical carts and siding instances without increasing draw calls', () => {
+  const scene = buildTownC2SecondMineHaulage();
+  try {
+    const carts = scene.group.children.filter(child => child.name.endsWith('-static-cart'));
+    assert.equal(carts.length, 2);
+    const batches: InstancedMesh[] = [];
+    for (const cart of carts) {
+      const cartBatches = cart.getObjectsByProperty('isInstancedMesh', true) as InstancedMesh[];
+      assert.equal(cartBatches.length, 5);
+      for (const mesh of cartBatches) {
+        assert.ok(mesh.instanceColor);
+        assert.equal(mesh.instanceColor.count, mesh.count);
+        assert.equal(mesh.instanceColor.usage, StaticDrawUsage);
+        const colors = new Set<string>();
+        const color = new Color();
+        for (let index = 0; index < mesh.count; index++) {
+          color.fromBufferAttribute(mesh.instanceColor, index);
+          colors.add([color.r, color.g, color.b].map(value => value.toFixed(3)).join('/'));
+        }
+        assert.ok(colors.size >= 4, `${mesh.name} must retain per-piece wear`);
+        const map = (mesh.material as MeshStandardMaterial).map!;
+        assert.ok(new Set(textureTones(map)).size >= 6, 'pitted iron needs broad tonal steps');
+      }
+      batches.push(...cartBatches);
+    }
+    const ownBatches = scene.group.getObjectsByProperty('isInstancedMesh', true)
+      .filter(object => object.name.startsWith('town-c2-second-mine-haulage/')) as InstancedMesh[];
+    assert.equal(ownBatches.length, 4);
+    for (const mesh of ownBatches) {
+      assert.ok(mesh.instanceColor);
+      assert.equal(mesh.instanceColor.count, mesh.count);
+      assert.ok(new Set(textureTones((mesh.material as MeshLambertMaterial).map!)).size >= 5);
+    }
+    batches.push(...ownBatches);
+    assert.ok(batches.every(mesh => mesh.instanceColor !== null));
+    assert.equal(scene.stats.drawCalls, 16, 'four siding batches plus six meshes per cart');
+    assert.equal(scene.stats.cartCount, 2);
   } finally {
     scene.dispose();
   }

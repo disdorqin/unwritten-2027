@@ -122,13 +122,18 @@ function randomSource(seed: number) {
   };
 }
 
-function grainTexture(base: number, dark: number, light: number) {
+function grainTexture(base: number, dark: number, light: number, seed = base, charred = false) {
   const size = 16;
   const pixels = new Uint8Array(size * size * 4);
-  const random = randomSource(base);
+  const random = randomSource(seed);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const noise = random();
-    const color = noise < .22 ? dark : noise > .82 ? light : base;
+    const cluster = ((x >> 2) * 17 + (y >> 2) * 31 + seed) % 7;
+    const crack = (x === (seed + Math.floor(y / 3) * 2 + (y % 3 === 0 ? 1 : 0)) % size ||
+      x === (seed + 7 + Math.floor(y / 4) * 3) % size) && y % 5 !== 0;
+    let color = noise < (charred ? .3 : .2) ? dark : noise > .86 ? light : base;
+    if (cluster === 0 && noise < .42) color = dark;
+    if (charred && (crack || (noise > .93 && cluster < 3))) color = dark;
     pixels.set([color >> 16, color >> 8 & 255, color & 255, 255], 4 * (x + size * y));
   }
   const texture = new DataTexture(pixels, size, size);
@@ -157,10 +162,11 @@ function installNearReadGate(material: MeshLambertMaterial) {
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
-      '#include <common>\nvarying vec3 vMoltenBeadWorld;',
+      '#include <common>\nvarying vec3 vMoltenBeadWorld;\nvarying vec3 vMoltenBeadLocal;',
     ).replace(
       '#include <begin_vertex>',
       `#include <begin_vertex>
+      vMoltenBeadLocal = transformed;
       vec4 moltenWorldPosition = vec4(transformed, 1.0);
       #ifdef USE_INSTANCING
         moltenWorldPosition = instanceMatrix * moltenWorldPosition;
@@ -169,15 +175,21 @@ function installNearReadGate(material: MeshLambertMaterial) {
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
-      '#include <common>\nvarying vec3 vMoltenBeadWorld;',
+      '#include <common>\nvarying vec3 vMoltenBeadWorld;\nvarying vec3 vMoltenBeadLocal;',
     ).replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
       float moltenNearRead = 1.0 - smoothstep(14.5, 15.0, distance(vMoltenBeadWorld, cameraPosition));
-      totalEmissiveRadiance *= moltenNearRead;`,
+      float moltenTop = smoothstep(0.46, 0.5, vMoltenBeadLocal.y);
+      float moltenCore = 1.0 - smoothstep(0.06, 0.46, length(vMoltenBeadLocal.xz));
+      float moltenLayer = moltenTop * moltenCore;
+      vec3 moltenEdgeTint = mix(vec3(0.32, 0.55, 0.48), vColor, 0.7);
+      vec3 moltenCoreTint = mix(vColor, vec3(0.72, 1.0, 0.86), 0.55);
+      totalEmissiveRadiance *= moltenNearRead * mix(0.52, 1.0, moltenCore)
+        * mix(moltenEdgeTint, moltenCoreTint, moltenLayer);`,
     );
   };
-  material.customProgramCacheKey = () => 'c2-molten-beads-near-read-15-v1';
+  material.customProgramCacheKey = () => 'c2-molten-beads-near-read-15-v2';
   material.userData.nearReadDistance = c2CraterMoltenBeadsPlan.nearReadDistance;
 }
 
@@ -187,7 +199,10 @@ function buildScorchedEarth(ground: MoltenBeadsGround,
   const west = centreE - c2CraterMoltenBeadsPlan.width / 2;
   const south = centreN - c2CraterMoltenBeadsPlan.depth / 2;
   const columns = 40, rows = 30;
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [], colors: number[] = [];
+  const random = randomSource(9533);
+  const earthTones = [0x9a8b79, 0x786a5b, 0x5e5c52, 0xb0a28c, 0x48514b].map(value => new Color(value));
+  const tint = new Color();
   const heightAt = (east: number, north: number) => {
     const height = ground.heightAt(east, north);
     if (height === undefined || !Number.isFinite(height)) {
@@ -201,10 +216,17 @@ function buildScorchedEarth(ground: MoltenBeadsGround,
     if (reserved.some(site => circleIntersectsCell(e0, e1, n0, n1, site))) continue;
     const corners = [[e0, n0], [e1, n0], [e0, n1], [e1, n1]] as const;
     const offset = positions.length / 3;
+    const centreEast = (e0 + e1) / 2, centreNorth = (n0 + n1) / 2;
+    const impact = Math.hypot(centreEast - centreE, centreNorth - centreN) / 12;
+    const patch = random();
+    tint.copy(earthTones[Math.floor(patch * earthTones.length)]!);
+    // Broad impact-darkening breaks up the small texel noise without another mesh.
+    tint.multiplyScalar(1 - Math.min(impact, 1) * .22);
     corners.forEach(([east, north]) => {
       positions.push(east, heightAt(east, north) + .018, -north);
       uvs.push((east - west) / c2CraterMoltenBeadsPlan.width,
         (north - south) / c2CraterMoltenBeadsPlan.depth);
+      colors.push(tint.r, tint.g, tint.b);
     });
     indices.push(offset, offset + 1, offset + 2, offset + 1, offset + 3, offset + 2);
   }
@@ -212,6 +234,7 @@ function buildScorchedEarth(ground: MoltenBeadsGround,
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -293,10 +316,10 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
 
   const group = new Group();
   group.name = c2CraterMoltenBeadsPlan.id;
-  const earthMap = grainTexture(0x332d29, 0x181a19, 0x62503b);
+  const earthMap = grainTexture(0x8b8175, 0x504d46, 0xb7aa95, 3317, true);
   earthMap.repeat.set(10, 7.5);
-  const gravelMap = grainTexture(0x5e5b53, 0x353a38, 0x8b8678);
-  const earthMaterial = new MeshLambertMaterial({ map: earthMap, flatShading: true });
+  const gravelMap = grainTexture(0x5e5b53, 0x2c3231, 0x938a79, 7331);
+  const earthMaterial = new MeshLambertMaterial({ map: earthMap, vertexColors: true, flatShading: true });
   const glassMaterial = new MeshLambertMaterial({
     color: 0xffffff, emissive: 0x65c9ad, emissiveIntensity: 0, flatShading: true,
   });
@@ -316,8 +339,16 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
   beadMesh.name = 'c2-molten-beads-impact-glass';
   beadMesh.visible = false;
   beadMesh.receiveShadow = true;
-  const glassTones = [0x397f73, 0x4f9b87, 0x69b39c, 0x80bfa8].map(value => new Color(value));
-  beads.forEach((_, index) => beadMesh.setColorAt(index, glassTones[index % glassTones.length]!));
+  const glassRandom = randomSource(47053);
+  const glassTones = [
+    0x285f59, 0x397f73, 0x4f9b87, 0x69b39c, 0x80bfa8, 0x9bd0bd, 0x527c70, 0xb99462,
+  ].map(value => new Color(value));
+  beads.forEach((_, index) => {
+    const roll = glassRandom();
+    // Most beads stay sea-glass cool; sparse warm inclusions read as trapped impact debris.
+    const tone = glassTones[roll < .09 ? 7 : Math.min(6, Math.floor(roll * 7))]!;
+    beadMesh.setColorAt(index, tone);
+  });
   if (beadMesh.instanceColor) beadMesh.instanceColor.needsUpdate = true;
   group.add(beadMesh);
 
@@ -326,6 +357,11 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
   const gravelMesh = stampInstances(cube, gravelMaterial, gravel, .24, true);
   gravelMesh.name = 'c2-molten-beads-basalt-gravel';
   gravelMesh.receiveShadow = true;
+  const gravelRandom = randomSource(47061);
+  const basaltTones = [0x343a38, 0x454b47, 0x5b6159, 0x6c6b5e, 0x292f30].map(value => new Color(value));
+  gravel.forEach((_, index) => gravelMesh.setColorAt(index,
+    basaltTones[Math.min(basaltTones.length - 1, Math.floor(gravelRandom() * basaltTones.length))]!));
+  if (gravelMesh.instanceColor) gravelMesh.instanceColor.needsUpdate = true;
   group.add(gravelMesh);
 
   const hostBead = beads.reduce((best, piece) =>

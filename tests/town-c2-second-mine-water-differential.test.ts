@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Mesh } from 'three';
+import { Group, InstancedMesh, Mesh, MeshBasicMaterial } from 'three';
 import {
   mountTownC2SecondMineWaterDifferential,
 } from '../tools/voxel-tavern/town-blockout/town-c2-second-mine-water-differential.js';
@@ -16,6 +16,57 @@ import type { AcceptedUndergroundWaterSnapshot } from '../src/shared/town-c-wate
 function snapshot(level: 'low' | 'mid' | 'high', phase: 'rise' | 'level' | 'fall'): AcceptedUndergroundWaterSnapshot {
   return { nightOrdinal: 0, phase, baseLevel: level, pumpOffset: 0, level };
 }
+
+function renderCensus(parent: Group) {
+  let meshes = 0, triangles = 0, lights = 0;
+  parent.traverse(object => {
+    if (object.type === 'DirectionalLight' || object.type === 'PointLight' || object.type === 'SpotLight') lights++;
+    if (!(object instanceof Mesh)) return;
+    meshes++;
+    const vertices = object.geometry.index
+      ? object.geometry.index.count
+      : object.geometry.getAttribute('position')?.count ?? 0;
+    triangles += vertices / 3 * (object instanceof InstancedMesh ? object.count : 1);
+  });
+  return { meshes, triangles, lights };
+}
+
+test('C2-07 beauty pass keeps seven meshes/1488 triangles while strengthening current, wet bed and grounded boat tones', () => {
+  const parent = new Group();
+  let accepted: AcceptedUndergroundWaterSnapshot | undefined = snapshot('high', 'level');
+  const fx = mountTownC2SecondMineWaterDifferential({ parent, readAcceptedWater: () => accepted });
+  const census = renderCensus(parent);
+  assert.deepEqual(census, { meshes: 7, triangles: 1488, lights: 0 });
+  const flow = fx.group.getObjectByName('town-c2-water/high-flow-streaks');
+  assert.ok(flow instanceof InstancedMesh);
+  assert.equal(flow.count, 18);
+  assert.ok(flow.instanceColor);
+  assert.ok(flow.material instanceof MeshBasicMaterial);
+  assert.equal(flow.material.opacity, .4);
+  fx.setNight(true);
+  assert.equal(flow.material.opacity, .56, 'night brightens the same flow draw without adding a light');
+  fx.setNight(false);
+  assert.equal(flow.material.opacity, .4);
+
+  accepted = snapshot('low', 'level');
+  assert.equal(fx.sync().level, 'low');
+  for (const [name, count] of [
+    ['town-c2-water/low-wet-riverbed', 26],
+    ['town-c2-water/low-riverbed-stones', 42],
+    ['town-c2-water/grounded-ferry-hull', 32],
+    ['town-c2-water/grounded-ferry-pole', 2],
+  ] as const) {
+    const detail = fx.group.getObjectByName(name);
+    assert.ok(detail instanceof InstancedMesh);
+    assert.equal(detail.count, count);
+    assert.ok(detail.instanceColor, name + ' uses per-instance material tone variation');
+  }
+  assert.deepEqual(renderCensus(parent), census);
+  accepted = snapshot('mid', 'level');
+  fx.sync();
+  assert.deepEqual(renderCensus(parent), census);
+  fx.dispose();
+});
 
 test('C2-07 uses effective level rather than phase and renders high/mid/low differential forms', () => {
   const parent = new Group();

@@ -182,8 +182,6 @@ setRiverState('middle');
 setNight(false);
 if (!setView('entry')) throw new Error('C2 registered second-mine review initial standing point is blocked');
 function frame() {
-  mine.sync();
-  water.sync();
   renderer.render(scene, camera);
   frames++;
   requestAnimationFrame(frame);

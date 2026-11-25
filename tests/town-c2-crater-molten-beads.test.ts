@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { Group, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh, type MeshLambertMaterial } from 'three';
+import { Color, Group, Matrix4, Quaternion, Vector3, type InstancedMesh, type Mesh, type MeshLambertMaterial } from 'three';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { surveyZa31CraterWinch } from '../tools/voxel-tavern/town-blockout/town-za31-crater-winch';
@@ -36,17 +36,18 @@ function beadMatrices(scene: MoltenBeadsScene) {
   });
 }
 
-test('C2-03 fixes the 20×15 m east-west beach and 600–900 instanced voxel beads across three material families', () => {
+test('C2-03 fixes the 20×15 m east-west beach and exactly 640 instanced voxel beads across three material families', () => {
   const scene = mount();
   const mesh = scene.group.getObjectByName('c2-molten-beads-impact-glass') as InstancedMesh;
   assert.ok(mesh?.isInstancedMesh);
   assert.equal(c2CraterMoltenBeadsPlan.east, -88);
   assert.equal(c2CraterMoltenBeadsPlan.north, 168);
+  assert.equal(c2CraterMoltenBeadsPlan.beadCount, 640);
   assert.equal(scene.stats.width, 20);
   assert.equal(scene.stats.depth, 15);
   assert.equal(scene.stats.longAxis, 'east-west');
-  assert.ok(scene.stats.beadCount >= 600 && scene.stats.beadCount <= 900);
-  assert.equal(mesh.count, scene.stats.beadCount);
+  assert.equal(scene.stats.beadCount, 640);
+  assert.equal(mesh.count, 640);
   assert.deepEqual(scene.stats.materialFamilies, ['charred-earth', 'impact-glass', 'basalt-gravel']);
   assert.equal(scene.stats.drawCalls, 3);
   assert.ok(scene.stats.triangles < 80_000);
@@ -54,6 +55,13 @@ test('C2-03 fixes the 20×15 m east-west beach and 600–900 instanced voxel bea
   const gravel = scene.group.getObjectByName('c2-molten-beads-basalt-gravel') as InstancedMesh | undefined;
   assert.ok(earth?.isMesh);
   assert.ok(gravel?.isInstancedMesh);
+  const earthColors = earth.geometry.getAttribute('color');
+  assert.equal(earthColors.count, earth.geometry.getAttribute('position').count);
+  assert.equal((earth.material as MeshLambertMaterial).vertexColors, true);
+  assert.ok(new Set(Array.from({ length: earthColors.count }, (_, index) =>
+    [earthColors.getX(index), earthColors.getY(index), earthColors.getZ(index)].map(value => value.toFixed(3)).join(','),
+  )).size >= 5, 'scorched earth needs broad tonal patches as well as texel grain');
+  assert.equal(scene.group.getObjectsByProperty('isLight', true).length, 0);
 
   const position = new Vector3(), scale = new Vector3(), rotation = new Quaternion();
   let minEast = Infinity, maxEast = -Infinity, minNorth = Infinity, maxNorth = -Infinity;
@@ -112,7 +120,38 @@ test('C2-03 restrains night emission and hides all near-read beads beyond 15 m a
   } as unknown as Parameters<NonNullable<MeshLambertMaterial['onBeforeCompile']>>[0];
   material.onBeforeCompile(shader, {} as never);
   assert.match(shader.fragmentShader, /smoothstep\(14\.5, 15\.0, distance\(vMoltenBeadWorld, cameraPosition\)\)/);
+  assert.match(shader.fragmentShader, /moltenCore = 1\.0 - smoothstep\(0\.06, 0\.46, length\(vMoltenBeadLocal\.xz\)\)/);
+  assert.match(shader.fragmentShader, /mix\(moltenEdgeTint, moltenCoreTint, moltenLayer\)/);
+  assert.match(shader.vertexShader, /vMoltenBeadLocal = transformed/);
   assert.match(shader.vertexShader, /instanceMatrix \* moltenWorldPosition/);
+});
+
+test('C2-03 layers cool glass, sparse warm inclusions and basalt tints without extra draw calls', () => {
+  const scene = mount();
+  const glass = scene.group.getObjectByName('c2-molten-beads-impact-glass') as InstancedMesh;
+  const gravel = scene.group.getObjectByName('c2-molten-beads-basalt-gravel') as InstancedMesh;
+  assert.ok(glass.instanceColor);
+  assert.ok(gravel.instanceColor);
+  const glassTones = new Set<string>(), gravelTones = new Set<string>();
+  const color = new Color();
+  let warmInclusions = 0, coolGlass = 0;
+  for (let index = 0; index < glass.count; index++) {
+    glass.getColorAt(index, color);
+    glassTones.add(color.getHexString());
+    if (color.r > color.b * 1.4) warmInclusions++;
+    else coolGlass++;
+  }
+  for (let index = 0; index < gravel.count; index++) {
+    gravel.getColorAt(index, color);
+    gravelTones.add(color.getHexString());
+  }
+  assert.ok(glassTones.size >= 7);
+  assert.ok(gravelTones.size >= 4);
+  assert.ok(warmInclusions > 0 && warmInclusions < glass.count * .2);
+  assert.ok(coolGlass > glass.count * .8);
+  assert.equal(scene.stats.drawCalls, 3);
+  assert.equal(scene.group.children.length, 3);
+  assert.equal(scene.group.getObjectsByProperty('isLight', true).length, 0);
 });
 
 test('C2-03 leaves the winch workface, snake-stone reservation and caller exclusions untouched', () => {

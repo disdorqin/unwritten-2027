@@ -138,6 +138,48 @@ test('C2 -140 far bank keeps cyan self-emission subordinate and metal non-emissi
   assert.equal(material(scene, 'ore-vein').emissiveIntensity, 0);
 });
 
+test('far-bank pixel facets and spatial tints preserve five batches while layering cyan emission', () => {
+  const { scene } = fixture();
+  const tint = new Color();
+  for (const mesh of instanced(scene)) {
+    const material = mesh.material as MeshLambertMaterial;
+    const texture = material.map;
+    assert.ok(texture instanceof DataTexture);
+    const pixels = texture.image.data as Uint8Array;
+    const colors = new Set<string>();
+    let minLuminance = 255, maxLuminance = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      colors.add(`${pixels[index]}/${pixels[index + 1]}/${pixels[index + 2]}`);
+      const luminance = pixels[index]! * .2126 + pixels[index + 1]! * .7152 + pixels[index + 2]! * .0722;
+      minLuminance = Math.min(minLuminance, luminance);
+      maxLuminance = Math.max(maxLuminance, luminance);
+    }
+    assert.ok(colors.size >= 4, `${mesh.name} needs layered pixel tones`);
+    assert.ok(maxLuminance - minLuminance > 45, `${mesh.name} lacks pixel contrast`);
+
+    const shades = new Set<string>();
+    let minShade = Infinity, maxShade = -Infinity;
+    for (let index = 0; index < mesh.count; index++) {
+      mesh.getColorAt(index, tint);
+      shades.add(tint.g.toFixed(5));
+      minShade = Math.min(minShade, tint.g);
+      maxShade = Math.max(maxShade, tint.g);
+    }
+    assert.ok(shades.size > 8, `${mesh.name} instance colour is too uniform`);
+    assert.ok(maxShade - minShade > .08, `${mesh.name} lacks spatial value variation`);
+    if (mesh.userData.family === 'crystal' || mesh.userData.family === 'ore-vein') {
+      assert.equal(material.emissiveMap, texture,
+        `${mesh.name} should reuse its mineral pixels as the existing glow mask`);
+    } else {
+      assert.equal(material.emissiveMap, null);
+    }
+  }
+  const snapshot = stats(scene);
+  assert.equal(snapshot.drawCalls, 5);
+  assert.equal(snapshot.triangles, snapshot.pieceCount * 12);
+  assert.equal(snapshot.lightCount, 0);
+});
+
 test('C2 -140 far bank keeps every oriented entity in the contract and avoids all 28 old clusters', () => {
   const { scene } = fixture();
   const meshes = instanced(scene);

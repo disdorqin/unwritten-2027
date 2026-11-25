@@ -18,6 +18,14 @@ function pointBoxDistance(east: number, north: number,
     Math.max(piece.n - piece.d / 2 - north, 0, north - piece.n - piece.d / 2));
 }
 
+function textureTones(texture: NonNullable<MeshLambertMaterial['map']>) {
+  const data = (texture.image as { data: Uint8Array }).data;
+  return Array.from({ length: texture.image.width * texture.image.height }, (_, index) => {
+    const offset = index * 4;
+    return `${data[offset]}/${data[offset + 1]}/${data[offset + 2]}`;
+  });
+}
+
 test('C2 light sources provide ten visible dock, bypass and workface fixtures but only three real lights', () => {
   assert.equal(build, buildC2SecondMineLightSources);
   const scene = build();
@@ -65,6 +73,42 @@ test('all lamp entities pass the C2 guard without touching routes, wing doors, c
     assert.ok(scene.pieces.every(piece => pointBoxDistance(east, north, piece) >= .72));
   }
   scene.dispose();
+});
+
+test('lamp wear keeps ten warm cores in one amber batch with role-specific warmth and texture emission', () => {
+  const scene = buildC2SecondMineLightSources();
+  try {
+    for (const mesh of scene.meshes) {
+      assert.ok(mesh.instanceColor);
+      assert.equal(mesh.instanceColor.count, mesh.count);
+      assert.equal(mesh.instanceColor.usage, StaticDrawUsage);
+      const material = mesh.material as MeshLambertMaterial;
+      assert.equal(material.flatShading, true);
+      assert.ok(new Set(textureTones(material.map!)).size >= 5);
+    }
+    const amber = scene.meshes.map(mesh => mesh.material as MeshLambertMaterial)
+      .find(material => material.userData.materialFamily === 'amber')!;
+    assert.equal(amber.emissiveMap, amber.map, 'reuse the warm gradient instead of adding a texture or batch');
+    assert.ok(amber.emissive.r > amber.emissive.g && amber.emissive.g > amber.emissive.b);
+    const amberMesh = scene.meshes.find(mesh => mesh.material === amber)!;
+    const cores = scene.pieces.filter(piece => piece.family === 'amber');
+    assert.equal(cores.length, 10);
+    const ratios = { dock: [] as number[], bypass: [] as number[], workface: [] as number[] };
+    const color = new Color();
+    for (const [index, core] of cores.entries()) {
+      color.fromBufferAttribute(amberMesh.instanceColor!, index);
+      assert.ok(color.r > color.g && color.g > color.b, `${core.fixtureId} keeps a warm core`);
+      ratios[core.role].push(color.b / color.r);
+    }
+    assert.ok(ratios.dock.every(value => value > .83));
+    assert.ok(ratios.bypass.every(value => value > .70 && value < .81));
+    assert.ok(ratios.workface.every(value => value < .70));
+    assert.equal(scene.stats().drawCount, 5);
+    assert.equal(scene.stats().pointLightCount, 3);
+    assert.equal(scene.stats().triangleCount, 128 * 12);
+  } finally {
+    scene.dispose();
+  }
 });
 
 test('fixtures use warm 2200–2700K lamp colours, local ENY positions and a strict physical-light budget', () => {

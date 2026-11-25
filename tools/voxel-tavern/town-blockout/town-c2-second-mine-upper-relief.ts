@@ -36,9 +36,9 @@ const familyOrder: readonly SecondMineUpperReliefFamily[] = ['rock', 'basalt', '
 const roleOrder: readonly SecondMineUpperReliefRole[] = ['wall', 'ceiling', 'rubble', 'stalagmite', 'stalactite'];
 const zoneOrder: readonly SecondMineUpperReliefZone[] = ['upper-west', 'upper-east'];
 const palette = Object.freeze({
-  rock: Object.freeze([0x555b62, 0x69717a, 0x3c434b]),
-  basalt: Object.freeze([0x353b44, 0x4b535e, 0x242a32]),
-  rust: Object.freeze([0x815b44, 0xa37552, 0x573d32]),
+  rock: Object.freeze([0x596068, 0x78828b, 0x343c45, 0x626b74]),
+  basalt: Object.freeze([0x303843, 0x505b68, 0x1c232c, 0x3d4754]),
+  rust: Object.freeze([0x775039, 0xb57b4c, 0x402a26, 0x936044]),
 });
 
 function requiredWing(id: 'west-workface' | 'east-workface') {
@@ -271,14 +271,28 @@ function statsFor(data: SecondMineUpperReliefBuild, disposed: boolean): SecondMi
 }
 
 function pixelTexture(family: SecondMineUpperReliefFamily): DataTexture {
-  const [base, highlight, shadow] = palette[family];
+  const [base, highlight, shadow, mid] = palette[family];
   const size = 16;
   const pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const crack = ((x * 7 + y * 11) % 19 < 2) || (x % 8 === 3 && y > 3 && y < 12);
-    const facet = (Math.floor(x / 3) * 5 + Math.floor(y / 4) * 7) % 11 < 3;
-    const fleck = family === 'rust' && (x * 13 + y * 3) % 17 < 3;
-    const color = crack ? shadow : fleck ? highlight : facet ? highlight : base;
+    const shiftedX = x + (Math.floor(y / 4) % 2) * 3;
+    const chip = (shiftedX * 17 + y * 29) % 47 < 3;
+    let color = base;
+    if (family === 'rock') {
+      const bedding = y % 5 === 0 || (shiftedX + Math.floor(y / 5) * 2) % 13 === 0;
+      const facet = (Math.floor(x / 3) + Math.floor(y / 3) * 2) % 7 < 2;
+      color = bedding ? shadow : chip ? highlight : facet ? mid : base;
+    } else if (family === 'basalt') {
+      const column = x % 6 === 1 && y % 7 < 5;
+      const facet = (Math.floor(x / 2) * 3 + Math.floor(y / 4)) % 9 < 3;
+      color = column ? shadow : chip ? highlight : facet ? mid : base;
+    } else {
+      // Oxidised cells with darker seams and isolated bright mineral grains.
+      const seam = y % 6 === 5 || (shiftedX + Math.floor(y / 3)) % 11 === 0;
+      const pocket = (x * 5 + y * 7) % 13 < 3;
+      const ore = (x * 11 + y * 3) % 29 < 4;
+      color = seam ? shadow : pocket ? mid : ore ? highlight : base;
+    }
     pixels.set([color >> 16, (color >> 8) & 255, color & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size, RGBAFormat);
@@ -308,7 +322,11 @@ export function createSecondMineUpperRelief() {
     const texture = pixelTexture(family);
     const material = new MeshLambertMaterial({
       map: texture, flatShading: true,
-      ...(family === 'rust' ? { emissive: new Color(0x5b2d18), emissiveIntensity: 0 } : {}),
+      // Reuse the ore-bearing pixels as an emission mask: no extra texture,
+      // batch or lamp, but rust knots glow more strongly than their dark seams.
+      ...(family === 'rust' ? {
+        emissive: new Color(0x5b2d18), emissiveMap: texture, emissiveIntensity: 0,
+      } : {}),
     });
     material.userData.materialFamily = family;
     const mesh = new InstancedMesh(geometry, material, members.length);
@@ -319,8 +337,13 @@ export function createSecondMineUpperRelief() {
       transform.rotation.set(0, 0, 0);
       transform.updateMatrix();
       mesh.setMatrixAt(index, transform.matrix);
-      const variation = .91 + random(box.x, box.n, familyIndex * 37 + 601) * .16;
-      mesh.setColorAt(index, tint.setRGB(variation, variation, variation));
+      const variation = random(box.x, box.n, familyIndex * 37 + 601);
+      const roleTone = box.role === 'ceiling' ? .88 : box.role === 'rubble' ? .93 :
+        box.face === 'spike' ? 1.04 : .98;
+      const warmth = family === 'rust' ? .045 : family === 'basalt' ? -.018 : 0;
+      const shade = (.83 + variation * .24) * roleTone;
+      mesh.setColorAt(index, tint.setRGB(
+        Math.min(1.12, shade + warmth), shade, Math.min(1.12, shade - warmth)));
     }
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     mesh.instanceMatrix.needsUpdate = true;

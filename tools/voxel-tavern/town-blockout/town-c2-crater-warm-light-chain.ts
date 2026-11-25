@@ -1,6 +1,6 @@
 import {
   BoxGeometry, Color, DataTexture, Group, InstancedMesh, MeshLambertMaterial,
-  NearestFilter, Object3D, PointLight, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
+  NearestFilter, NoColorSpace, Object3D, PointLight, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius, meteorCraterRimRadius,
@@ -32,13 +32,13 @@ type Piece = Readonly<{
 }>;
 
 const materialFamilies: readonly MaterialFamily[] = ['stone', 'timber', 'worn-iron', 'brass', 'amber', 'frost'];
-const palette: Readonly<Record<MaterialFamily, readonly [number, number, number]>> = {
-  stone: [0x77736c, 0x99968c, 0x474a4b],
-  timber: [0x72543e, 0x997352, 0x47362d],
-  'worn-iron': [0x5f6262, 0x86847b, 0x3a4144],
-  brass: [0xa98a56, 0xc6a86d, 0x6f533a],
-  amber: [craterWarmLightColor, 0xffc37a, 0x91603d],
-  frost: [0xb9cbd2, 0xe8e6db, 0x8295a1],
+const palette: Readonly<Record<MaterialFamily, readonly [number, number, number, number]>> = {
+  stone: [0x77736c, 0x99968c, 0x474a4b, 0xb5b1a6],
+  timber: [0x72543e, 0x997352, 0x47362d, 0xbc9565],
+  'worn-iron': [0x5f6262, 0x86847b, 0x3a4144, 0xb7b5a9],
+  brass: [0xa98a56, 0xc6a86d, 0x6f533a, 0xe1ca8c],
+  amber: [craterWarmLightColor, 0xffc37a, 0x91603d, 0xffdfa1],
+  frost: [0xb9cbd2, 0xe8e6db, 0x8295a1, 0xf7faf9],
 };
 const roleOrder: readonly CraterWarmLightRole[] = ['gatehouse', 'front-gate', 'rim', 'camp', 'winch', 'wellhead'];
 const realLightIds = Object.freeze(['gatehouse', 'front-gate', 'rim-05', 'camp-1', 'winch', 'wellhead']);
@@ -222,24 +222,74 @@ function chainStats(nodes: readonly CraterWarmLightSite[], pieces: readonly Piec
   });
 }
 
+function writePixel(pixels: Uint8Array, index: number, color: number) {
+  pixels[index] = color >> 16;
+  pixels[index + 1] = (color >> 8) & 255;
+  pixels[index + 2] = color & 255;
+  pixels[index + 3] = 255;
+}
+
 function nearestPixelTexture(family: MaterialFamily, seed: number) {
-  const [base, shine, outline] = palette[family];
+  const [base, shine, outline, highlight] = palette[family];
   const size = 16;
   const pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const border = x < 1 || y < 1 || x > 14 || y > 14;
-    const seam = family === 'timber'
-      ? (x + Math.floor(y / 3) * 3) % 8 === 0
-      : family === 'worn-iron' || family === 'brass'
-        ? (Math.floor(x / 3) * 7 + Math.floor(y / 4) * 11 + seed) % 13 < 3
+    const fleck = (x * 17 + y * 31 + seed * 13) % 47;
+    let color = base;
+    if (family === 'timber') {
+      // Long vertical fibres and a small offset knot read as timber rather than tile noise.
+      const fibre = (x * 7 + Math.floor(y / 4) * 3 + seed) % 19;
+      const knot = Math.hypot(x - 11, y - (4 + seed % 4));
+      color = fibre < 2 ? outline : fibre < 5 ? shine : fibre === 12 ? highlight : base;
+      if (knot < 1.4) color = outline;
+      else if (knot < 2.1) color = shine;
+      if (y === 0 || y === 15) color = outline;
+    } else if (family === 'worn-iron' || family === 'brass') {
+      // Hammered pits plus diagonal wear distinguish forged metal from the wood shaft.
+      const pit = (Math.floor(x / 2) * 11 + Math.floor(y / 2) * 7 + seed) % 23;
+      const scratch = (x + y * 2 + seed) % 17 === 0 || (x * 2 - y + seed) % 29 === 0;
+      color = pit < 3 ? outline : pit < 7 ? shine : pit === 15 ? highlight : base;
+      if (scratch) color = highlight;
+      if (border) color = pit % 2 === 0 ? shine : outline;
+    } else if (family === 'amber') {
+      // A dark shade rim, bright panes and a hot centre remain visible on the existing cube.
+      const edge = Math.min(x, y, 15 - x, 15 - y);
+      const pane = x === 3 || x === 12 || y === 4 || y === 11;
+      const core = Math.hypot(x - 7.5, y - 7.5);
+      color = edge < 2 ? outline : pane ? shine : core < 3.2 ? highlight : core < 5.2 ? shine : base;
+      if (fleck === 0 && core > 5.2) color = shine;
+    } else {
+      const seam = family === 'stone'
+        ? x === 7 || y === 8
         : (Math.floor(x / 4) * 5 + Math.floor(y / 3) * 7 + seed) % 9 < 2;
-    const color = border ? outline : seam ? shine : base;
-    pixels.set([color >> 16, (color >> 8) & 255, color & 255, 255], (y * size + x) * 4);
+      color = border ? outline : seam ? shine : fleck < 2 ? highlight : base;
+    }
+    writePixel(pixels, (y * size + x) * 4, color);
   }
   const texture = new DataTexture(pixels, size, size, RGBAFormat);
   texture.magFilter = texture.minFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function amberEmissiveMask() {
+  // Linear masks keep #e08a3c as the light hue while making the core hotter than its shade.
+  const size = 16;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const edge = Math.min(x, y, 15 - x, 15 - y);
+    const pane = x === 3 || x === 12 || y === 4 || y === 11;
+    const core = Math.hypot(x - 7.5, y - 7.5);
+    const value = edge < 2 ? 34 : pane ? 112 : core < 3.2 ? 255 : core < 5.2 ? 204 : 154;
+    writePixel(pixels, (y * size + x) * 4, (value << 16) | (value << 8) | value);
+  }
+  const texture = new DataTexture(pixels, size, size, RGBAFormat);
+  texture.magFilter = texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.colorSpace = NoColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
@@ -270,11 +320,14 @@ export function mountCraterWarmLightChain(owner: Group, sites: readonly CraterWa
   for (const [familyIndex, family] of materialFamilies.entries()) {
     const members = pieces.filter(piece => piece.family === family);
     const texture = nearestPixelTexture(family, familyIndex * 17 + 3);
+    const emissiveMap = family === 'amber' ? amberEmissiveMask() : null;
+    if (emissiveMap) textures.push(emissiveMap);
     const material = new MeshLambertMaterial({
       map: texture,
       ...(family === 'amber' ? {
-        color: warmColor,
+        color: 0xffffff,
         emissive: warmColor,
+        emissiveMap,
         emissiveIntensity: .04,
       } : {}),
     });

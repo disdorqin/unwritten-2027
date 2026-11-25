@@ -29,6 +29,8 @@ export function buildTownC2SecondMinePrefab(owner?: Group) {
     timbering, haulage, campLife, lightSources,
   });
   for (const module of Object.values(modules)) root.add(module.group);
+  root.updateMatrixWorld(true);
+  root.traverse(object => { object.matrixAutoUpdate = false; });
 
   function stats() {
     const moduleStats = Object.freeze({

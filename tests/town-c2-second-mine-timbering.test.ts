@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, NearestFilter,
+  Color, FrontSide, Group, InstancedMesh, Mesh, MeshLambertMaterial, NearestFilter,
   StaticDrawUsage, type EventDispatcher,
 } from 'three';
 import {
@@ -21,6 +21,14 @@ function pointBoxDistance(east: number, north: number, box: C2SecondMineBox) {
   const dx = Math.max(box.x - box.w / 2 - east, 0, east - box.x - box.w / 2);
   const dn = Math.max(box.n - box.d / 2 - north, 0, north - box.n - box.d / 2);
   return Math.hypot(dx, dn);
+}
+
+function textureTones(texture: NonNullable<MeshLambertMaterial['map']>) {
+  const data = (texture.image as { data: Uint8Array }).data;
+  return Array.from({ length: texture.image.width * texture.image.height }, (_, index) => {
+    const offset = index * 4;
+    return `${data[offset]}/${data[offset + 1]}/${data[offset + 2]}`;
+  });
 }
 
 function resources(group: Group) {
@@ -118,6 +126,39 @@ test('timber, iron and rust use distinct 16px Nearest pixel materials', () => {
       assert.equal(map.magFilter, NearestFilter);
       assert.equal(map.generateMipmaps, false);
     }
+  } finally {
+    scene.dispose();
+  }
+});
+
+test('timbering wear adds five-step pixel grain and deterministic instance colour without new batches', () => {
+  const scene = buildTownC2SecondMineTimbering();
+  try {
+    const meshes: InstancedMesh[] = [];
+    scene.group.traverse(object => { if (object instanceof InstancedMesh) meshes.push(object); });
+    const textures = new Set<string>();
+    for (const mesh of meshes) {
+      assert.ok(mesh.instanceColor);
+      assert.equal(mesh.instanceColor.count, mesh.count);
+      assert.equal(mesh.instanceColor.usage, StaticDrawUsage);
+      const colors = new Set<string>();
+      const color = new Color();
+      let minimum = Infinity, maximum = -Infinity;
+      for (let index = 0; index < mesh.count; index++) {
+        color.fromBufferAttribute(mesh.instanceColor, index);
+        colors.add([color.r, color.g, color.b].map(value => value.toFixed(3)).join('/'));
+        minimum = Math.min(minimum, color.r, color.g, color.b);
+        maximum = Math.max(maximum, color.r, color.g, color.b);
+      }
+      assert.ok(colors.size >= 8, `${mesh.name} must vary piece to piece`);
+      assert.ok(minimum >= .65 && maximum <= 1.2, `${mesh.name} tint range`);
+      const material = mesh.material as MeshLambertMaterial;
+      assert.ok(new Set(textureTones(material.map!)).size >= 5);
+      textures.add(Array.from(material.map!.image.data as Uint8Array).join(','));
+    }
+    assert.equal(textures.size, 3, 'wood, iron and rust retain distinct worn pixel maps');
+    assert.equal(scene.stats.drawCalls, 3);
+    assert.equal(scene.stats.triangles, scene.stats.pieceCount * 12);
   } finally {
     scene.dispose();
   }

@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, FrontSide, Group, InstancedMesh, MeshLambertMaterial,
+  BoxGeometry, Color, DataTexture, FrontSide, Group, InstancedMesh, MeshLambertMaterial,
   NearestFilter, Object3D, RGBAFormat, SRGBColorSpace, StaticDrawUsage,
 } from 'three';
 import {
@@ -22,36 +22,88 @@ export type C2SecondMineCampLifePiece = C2SecondMineBox & Readonly<{
 
 const families: readonly C2SecondMineCampFamily[] = ['iron', 'rust', 'timber', 'cloth', 'stone', 'slag'];
 const palette: Readonly<Record<C2SecondMineCampFamily, readonly [number, number, number]>> = {
-  iron: [0x777b82, 0xa0a39d, 0x444a50],
-  rust: [0x815b44, 0xb07950, 0x4d3c33],
-  timber: [0x71553c, 0xa17b52, 0x45362b],
-  cloth: [0x6a7073, 0x989b91, 0x42494d],
-  stone: [0x77736c, 0xa49c8b, 0x4b4d4c],
-  slag: [0x494b49, 0x747269, 0x292e30],
+  iron: [0x727b82, 0xaeb3ad, 0x3f4b52],
+  rust: [0x8a5d42, 0xc08455, 0x49342c],
+  timber: [0x7a5b3e, 0xb08759, 0x403127],
+  cloth: [0x6d7475, 0xa5a79c, 0x3d484c],
+  stone: [0x7c7770, 0xb0a793, 0x454c4c],
+  slag: [0x4b504f, 0x808078, 0x252e31],
 };
 const propOrder: readonly C2SecondMineCampProp[] = [
   'pick', 'chisel', 'scrap-rail', 'slag', 'boots', 'blanket', 'bowl', 'jug', 'crate',
 ];
 const areaOrder: readonly C2SecondMineCampArea[] = ['entry', 'west-workface', 'east-workface', 'river-camp'];
 
+function mixTone(a: number, b: number, amount: number) {
+  const mix = (start: number, end: number) => Math.round(start + (end - start) * amount);
+  return (mix(a >>> 16, b >>> 16) << 16) |
+    (mix((a >>> 8) & 255, (b >>> 8) & 255) << 8) | mix(a & 255, b & 255);
+}
+
 function nearestTexture(family: C2SecondMineCampFamily, seed: number) {
   const [base, light, dark] = palette[family];
+  const middle = mixTone(base, light, .48);
+  const deep = mixTone(base, dark, .58);
   const pixels = new Uint8Array(16 * 16 * 4);
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const border = x === 0 || y === 0 || x === 15 || y === 15;
     const grain = (Math.imul(x + seed, 15731) ^ Math.imul(y + 17, 4817)) >>> 0;
-    const seam = family === 'timber' ? y === 5 || y === 11 :
-      family === 'cloth' ? (x + y * 3) % 7 === 0 :
-        (Math.floor(x / 3) * 7 + Math.floor(y / 4) * 11 + seed) % 13 < 3;
-    const color = border || seam && grain % 3 === 0 ? dark : seam || grain % 5 === 0 ? light : base;
+    const fleck = grain % 29;
+    let color = base;
+    if (family === 'timber') {
+      const grainLine = (x + Math.floor(y / 4) * 3) % 8;
+      color = grainLine === 0 ? deep : grainLine === 1 ? dark :
+        fleck < 4 ? light : fleck < 11 ? middle : base;
+    } else if (family === 'cloth') {
+      const weave = (x + y * 3) % 7;
+      color = weave === 0 ? dark : weave === 1 ? deep : weave === 2 ? middle :
+        fleck < 5 ? light : base;
+      if ((x * 5 + y * 11) % 37 === 0) color = light;
+    } else if (family === 'stone' || family === 'slag') {
+      const block = (Math.floor(x / 3) * 7 + Math.floor(y / 4) * 11 + seed) % 13;
+      color = block < 3 ? deep : block === 3 ? dark : fleck < 5 ? light :
+        fleck < 11 ? middle : base;
+    } else {
+      color = fleck < 5 ? dark : fleck < 10 ? deep : fleck > 23 ? light :
+        fleck > 18 ? middle : base;
+      if ((x + y * 3) % 19 === 0) color = middle;
+      if ((x * 7 + y * 5) % 43 === 0) color = light;
+    }
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    if (border && grain % 4 === 0) color = dark;
     pixels.set([color >>> 16, (color >>> 8) & 255, color & 255, 255], (y * 16 + x) * 4);
   }
   const texture = new DataTexture(pixels, 16, 16, RGBAFormat);
+  texture.name = `c2-second-mine-camp-life/${family}-worn-16px`;
   texture.minFilter = texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.colorSpace = SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
+}
+
+const wearProfiles: Readonly<Record<C2SecondMineCampFamily, readonly [number, number, number]>> = {
+  iron: [.94, .99, 1.04],
+  rust: [1.07, .94, .82],
+  timber: [1.05, .97, .87],
+  cloth: [.97, 1.01, 1.02],
+  stone: [1.01, .99, .94],
+  slag: [.96, 1.01, .99],
+};
+
+function applyInstanceWear(mesh: InstancedMesh, family: C2SecondMineCampFamily,
+  members: readonly C2SecondMineCampLifePiece[]) {
+  const tint = new Color();
+  const [red, green, blue] = wearProfiles[family];
+  members.forEach((piece, index) => {
+    const seed = Math.imul(index + 31, 1597334677) ^ Math.round((piece.x + 40) * 8191) ^
+      Math.round((piece.n + 20) * 4093);
+    const shade = .86 + ((seed >>> 0) % 9) * .02;
+    const worn = /tip|head|rim|cuff|top|corner|strap|plate-lip/.test(piece.id) ? .07 : 0;
+    tint.setRGB((shade + worn) * red, (shade + worn) * green, (shade + worn) * blue);
+    mesh.setColorAt(index, tint);
+  });
+  mesh.instanceColor!.setUsage(StaticDrawUsage);
+  mesh.instanceColor!.needsUpdate = true;
 }
 
 function makePieces() {
@@ -224,6 +276,7 @@ export function buildC2SecondMineCampLife(owner?: Group) {
     const material = new MeshLambertMaterial({
       map: texture,
       side: FrontSide,
+      flatShading: true,
     });
     material.userData.materialFamily = family;
     const mesh = new InstancedMesh(geometry, material, members.length);
@@ -236,6 +289,7 @@ export function buildC2SecondMineCampLife(owner?: Group) {
       pose.updateMatrix();
       mesh.setMatrixAt(pieceIndex, pose.matrix.clone());
     }
+    applyInstanceWear(mesh, family, members);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     group.add(mesh);

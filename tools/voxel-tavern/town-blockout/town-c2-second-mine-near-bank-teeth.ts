@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
+  BoxGeometry, Color, DataTexture, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
   NearestFilter, Quaternion, SRGBColorSpace, StaticDrawUsage, Vector3,
 } from 'three';
 import {
@@ -54,10 +54,10 @@ const materialOrder: readonly C2SecondMineNearBankMaterial[] = Object.freeze([
   'basalt', 'gravel', 'iron', 'rust',
 ]);
 const palette = Object.freeze({
-  basalt: Object.freeze({ base: 0x505b65, dark: 0x303943, fleck: 0x74818c }),
-  gravel: Object.freeze({ base: 0x626a70, dark: 0x3b444b, fleck: 0x899198 }),
-  iron: Object.freeze({ base: 0x66737d, dark: 0x35414b, fleck: 0x9aa7af }),
-  rust: Object.freeze({ base: 0x80533f, dark: 0x4b3028, fleck: 0xb87950 }),
+  basalt: Object.freeze({ base: 0x46515b, dark: 0x242e38, fleck: 0x82909b, mid: 0x596672 }),
+  gravel: Object.freeze({ base: 0x62686b, dark: 0x353d42, fleck: 0x9ba19d, mid: 0x7b817d }),
+  iron: Object.freeze({ base: 0x5d6b76, dark: 0x2b3741, fleck: 0xa9b7bf, mid: 0x788792 }),
+  rust: Object.freeze({ base: 0x744733, dark: 0x352622, fleck: 0xc78955, mid: 0x9d6543 }),
 });
 
 function hash(...values: readonly number[]) {
@@ -69,14 +69,31 @@ const noise = (...values: readonly number[]) => hash(...values) / 0x1_0000_0000;
 
 function pixelTexture(family: C2SecondMineNearBankMaterial) {
   const size = 16, pixels = new Uint8Array(size * size * 4);
-  const { base, dark, fleck } = palette[family];
+  const { base, dark, fleck, mid } = palette[family];
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const course = Math.floor(y / 4), offset = course % 2 ? 2 : 0;
-    const joint = y % 4 === 0 || (x + offset) % 8 === 0;
-    const grain = (x * 7 + y * 11 + course * 13) % 19;
-    const scratch = family === 'iron' && (x * 3 + y * 5) % 17 < 2;
-    const pit = family === 'rust' && (x * 5 + y * 7) % 23 < 3;
-    const color = joint || pit ? dark : scratch || grain < 3 ? fleck : base;
+    const shiftedX = x + offset;
+    const grain = (shiftedX * 7 + y * 11 + course * 13) % 23;
+    let color: number = base;
+    if (family === 'basalt') {
+      const joint = y % 4 === 0 || shiftedX % 9 === 0;
+      const facet = (Math.floor(x / 2) + Math.floor(y / 3) * 2) % 7 < 3;
+      color = joint ? dark : grain < 3 ? fleck : facet ? mid : base;
+    } else if (family === 'gravel') {
+      // Chunky pebbles with dark joints read as aggregate rather than noise.
+      const joint = x % 3 === 0 || y % 3 === 0;
+      const pebble = (Math.floor(x / 3) * 5 + Math.floor(y / 3) * 3) % 6 < 2;
+      color = joint ? dark : grain < 2 ? fleck : pebble ? mid : base;
+    } else if (family === 'iron') {
+      const plateJoint = y % 6 === 0 || shiftedX % 11 === 0;
+      const scratch = (x * 3 + y * 5) % 17 < 3;
+      color = plateJoint ? dark : scratch ? fleck : grain < 3 ? mid : base;
+    } else {
+      const seam = y % 5 === 4 || (shiftedX + Math.floor(y / 2)) % 10 === 0;
+      const pit = (x * 5 + y * 7) % 23 < 3;
+      const ore = (x * 11 + y * 3) % 31 < 4;
+      color = seam ? dark : pit ? mid : ore ? fleck : base;
+    }
     pixels.set([color >>> 16, color >>> 8 & 255, color & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(pixels, size, size);
@@ -257,7 +274,7 @@ export function buildTownC2SecondMineNearBankTeeth() {
   }));
   const meshes: InstancedMesh<BoxGeometry, MeshLambertMaterial>[] = [];
   const matrix = new Matrix4(), position = new Vector3(), scale = new Vector3();
-  const rotation = new Quaternion();
+  const rotation = new Quaternion(), tint = new Color();
   for (let familyIndex = 0; familyIndex < materialOrder.length; familyIndex++) {
     const family = materialOrder[familyIndex]!;
     const items = placements.filter(placement => placement.family === family);
@@ -270,8 +287,18 @@ export function buildTownC2SecondMineNearBankTeeth() {
       matrix.compose(position.set(placement.x, placement.y, -placement.n), rotation,
         scale.set(placement.w, placement.h, placement.d));
       mesh.setMatrixAt(index, matrix);
+      const variation = noise(1301 + familyIndex,
+        Math.round(placement.x * 100), Math.round(placement.n * 100), Math.round(placement.y * 100));
+      const featureTone = placement.kind === 'collapse-rubble' ? .89 :
+        placement.kind === 'scarp' ? .95 : placement.kind === 'industrial-brace' ? 1.03 :
+        placement.kind === 'rust-vein' ? 1.01 : .98;
+      const warmth = family === 'rust' ? .04 : family === 'iron' ? -.025 : 0;
+      const shade = (.82 + variation * .25) * featureTone;
+      mesh.setColorAt(index, tint.setRGB(
+        Math.min(1.14, shade + warmth), shade, Math.min(1.14, shade - warmth)));
     });
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
     mesh.castShadow = mesh.receiveShadow = true;

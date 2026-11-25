@@ -1,6 +1,6 @@
 import {
   BufferGeometry, DataTexture, DoubleSide, Float32BufferAttribute, Group, Mesh,
-  MeshLambertMaterial, NearestFilter, SRGBColorSpace,
+  MeshLambertMaterial, NearestFilter, RepeatWrapping, SRGBColorSpace,
 } from 'three';
 import {
   createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan, meteorCraterFloorRadius,
@@ -194,23 +194,35 @@ export function applyCraterBrokenCircleToWalkMesh(
   geometry.computeBoundingSphere();
 }
 
-function grain(base: number, fleck: number) {
+function hash2(x: number, z: number) {
+  let value = Math.imul(x, 374761393) + Math.imul(z, 668265263);
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
+function grain(base: number, fleck: number, wear: number) {
   const size = 16;
   const bytes = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    const color = (x * 7 + y * 11 + Math.floor(x / 4) * 13) % 17 < 3 ? fleck : base;
+    const cluster = hash2(Math.floor(x / 2), Math.floor(y / 2));
+    const detail = hash2(x + size, y);
+    const seam = x === 0 || y === 0 || ((x + Math.floor(y / 3)) % 11 === 0 && y % 4 !== 0);
+    const chipped = (x === 0 || y === 0) && detail % 5 < 2;
+    const color = detail % 31 === 0 ? fleck - 0x060606 : chipped ? wear : seam ? fleck :
+      cluster % 11 < 4 ? wear : detail % 13 < 3 ? fleck : base;
     bytes.set([color >> 16, color >> 8 & 255, color & 255, 255], (y * size + x) * 4);
   }
   const texture = new DataTexture(bytes, size, size);
   texture.colorSpace = SRGBColorSpace;
   texture.minFilter = texture.magFilter = NearestFilter;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
 }
-function material(base: number, fleck: number) {
+function material(base: number, fleck: number, wear: number) {
   return new MeshLambertMaterial({
-    map: grain(base, fleck), flatShading: true,
+    map: grain(base, fleck, wear), vertexColors: true, flatShading: true, dithering: true,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
   });
 }
@@ -218,18 +230,25 @@ function material(base: number, fleck: number) {
 type Cell = LocalPoint & { top: number; base: number; kind: 'collapse' | 'gully' };
 
 function voxelGeometry(cells: readonly Cell[], size: number) {
-  const positions: number[] = [], indices: number[] = [];
+  const positions: number[] = [], indices: number[] = [], uvs: number[] = [], colors: number[] = [];
   const lookup = new Map(cells.map((cell, index) => [`${cell.east.toFixed(3)},${cell.north.toFixed(3)}`, index]));
   const half = size / 2;
-  const vertex = (east: number, height: number, north: number) => {
+  const vertex = (east: number, height: number, north: number, shade = 1) => {
     positions.push(east, height, -north);
+    // One compact pixel tile spans two voxels; the height term keeps side grain legible.
+    uvs.push(east / 1.6, (north + height) / 1.6);
+    colors.push(shade, shade, shade);
     return positions.length / 3 - 1;
   };
   const quad = (a: number, b: number, c: number, d: number) => indices.push(a, b, c, a, c, d);
   cells.forEach((cell, index) => {
     const e = cell.east, n = cell.north;
-    const a = vertex(e - half, cell.top, n - half), b = vertex(e + half, cell.top, n - half);
-    const c = vertex(e + half, cell.top, n + half), d = vertex(e - half, cell.top, n + half);
+    const random = hash2(Math.round(e * 10), Math.round(n * 10));
+    const cellShade = (cell.kind === 'collapse' ? .87 : .81) + (random % 9) * .018;
+    const a = vertex(e - half, cell.top, n - half, cellShade * 1.04);
+    const b = vertex(e + half, cell.top, n - half, cellShade * .98);
+    const c = vertex(e + half, cell.top, n + half, cellShade * 1.03);
+    const d = vertex(e - half, cell.top, n + half, cellShade * .96);
     quad(a, b, c, d);
     const neighbours = [
       { key: `${(e - size).toFixed(3)},${n.toFixed(3)}`, edge: [a, d] },
@@ -242,14 +261,16 @@ function voxelGeometry(cells: readonly Cell[], size: number) {
       const lower = other === undefined ? cell.base - .08 : Math.min(cell.base - .08, cells[other]!.top - .035);
       if (other !== undefined && Math.abs(cells[other]!.top - cell.top) < .035) continue;
       const bottomA = vertex(cells[index]!.east + (edge[0] === a ? -half : half), lower,
-        cells[index]!.north + (edge[0] === a || edge[0] === b ? -half : half));
+        cells[index]!.north + (edge[0] === a || edge[0] === b ? -half : half), cellShade * .74);
       const bottomB = vertex(cells[index]!.east + (edge[1] === b || edge[1] === c ? half : -half), lower,
-        cells[index]!.north + (edge[1] === c || edge[1] === d ? half : -half));
+        cells[index]!.north + (edge[1] === c || edge[1] === d ? half : -half), cellShade * .79);
       quad(edge[0], bottomA, bottomB, edge[1]);
     }
   });
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -257,7 +278,7 @@ function voxelGeometry(cells: readonly Cell[], size: number) {
 }
 
 function trackGeometry(points: readonly (LocalPoint & { height: number })[], width: number, heightDatum: number) {
-  const positions: number[] = [], indices: number[] = [];
+  const positions: number[] = [], indices: number[] = [], uvs: number[] = [], colors: number[] = [];
   points.forEach((point, index) => {
     const before = points[Math.max(0, index - 1)]!, after = points[Math.min(points.length - 1, index + 1)]!;
     const length = Math.hypot(after.east - before.east, after.north - before.north) || 1;
@@ -265,6 +286,9 @@ function trackGeometry(points: readonly (LocalPoint & { height: number })[], wid
     const sideN = (after.east - before.east) / length * width / 2;
     positions.push(point.east - sideE, point.height - heightDatum, -(point.north - sideN),
       point.east + sideE, point.height - heightDatum, -(point.north + sideN));
+    uvs.push(index / 4, 0, index / 4, 1);
+    const shade = .9 + (hash2(index, 23) % 7) * .015;
+    colors.push(shade * .9, shade * .9, shade * .9, shade * 1.06, shade * 1.06, shade * 1.06);
     if (index > 0) {
       const a = (index - 1) * 2;
       indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
@@ -272,6 +296,8 @@ function trackGeometry(points: readonly (LocalPoint & { height: number })[], wid
   });
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -328,8 +354,8 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
     });
   }
   const materials = {
-    collapse: material(0x746b62, 0x4b4540),
-    gully: material(0x49433c, 0x292723),
+    collapse: material(0x746b62, 0x4b4540, 0xa39787),
+    gully: material(0x49433c, 0x292723, 0x716656),
   };
   for (const kind of ['collapse', 'gully'] as const) {
     const subset = cells.filter(cell => cell.kind === kind);
@@ -359,7 +385,7 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
     const sideN = (after.east - before.east) / length;
     return { local, sideE, sideN };
   });
-  const trackMaterial = material(0x5b5045, 0x36312c);
+  const trackMaterial = material(0x5b5045, 0x36312c, 0x8d795f);
   trackMaterial.side = DoubleSide; // The two flanking strips wind with the spiral.
   for (const side of [-1, 1]) {
     const points = trackPoints.map(({ local, sideE, sideN }) => {

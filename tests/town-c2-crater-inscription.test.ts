@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import {
-  BoxGeometry, CanvasTexture, DataTexture, Group, Mesh, MeshLambertMaterial, NearestFilter,
+  BoxGeometry, CanvasTexture, DataTexture, Group, Mesh, MeshLambertMaterial, NearestFilter, RepeatWrapping,
 } from 'three';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -90,6 +90,17 @@ test('C2-04 reuses one connected canonical crescent/descending-arc engraving, wi
   assert.equal(matchingMarks.length, 1);
   const material = mark.material as MeshLambertMaterial;
   assert.equal(material.color.getHex(), 0x24251f, 'the mark is incised dark, not a gold ship-name plate');
+  assert.equal(material.vertexColors, true);
+  const colors = mark.geometry.getAttribute('color');
+  assert.equal(colors.count, mark.geometry.getAttribute('position').count);
+  const verticesPerCell = colors.count / SHIP_EMBLEM_CELLS.length;
+  let crescentLight = 0, arcLight = 0;
+  SHIP_EMBLEM_CELLS.forEach((cell, index) => {
+    const vertex = index * verticesPerCell;
+    if (cell.part === 'crescent') crescentLight += colors.getX(vertex);
+    else arcLight += colors.getX(vertex);
+  });
+  assert.ok(crescentLight > arcLight * 2, 'the half moon reads warmer/brighter than its descending arc');
   mark.geometry.computeBoundingBox();
   assert.ok(mark.geometry.boundingBox!.min.y >= -.25 && mark.geometry.boundingBox!.max.y <= .25,
     'all emblem cells stay on the 0.5 m-high west face');
@@ -128,6 +139,15 @@ test('C2-04 has a blank stele, paper and ink on a table immediately south, and n
   close(blankStele.height, table.height + .8);
   assert.ok(paper.height > table.height && ink.height > table.height);
   assert.equal(scene.stats.hasText, false);
+  assert.equal(scene.stats.drawCalls, 7);
+  assert.equal(scene.stats.emblemMeshCount, 1);
+  assert.equal(scene.group.getObjectsByProperty('isLight', true).length, 0);
+  const paperMesh = scene.group.getObjectByName('town-c2-crater-inscription/paper') as Mesh;
+  const inkMesh = scene.group.getObjectByName('town-c2-crater-inscription/inkstone-and-stick') as Mesh;
+  assert.ok(paperMesh.geometry.getAttribute('color'));
+  assert.ok(inkMesh.geometry.getAttribute('color'));
+  assert.ok(inkMesh.geometry.getAttribute('position').count >= 4 * 24,
+    'ink pool and stick binding share the existing single ink draw call');
 
   scene.group.traverse(object => {
     assert.doesNotMatch(object.name, /sign|plaque|caption|label|translation|ship-name/i);
@@ -164,6 +184,14 @@ test('C2-04 stone/table/paper/ink use nearest-filtered 16px material families', 
     }
   });
   assert.ok(textured.size >= 4);
+  const stone = scene.group.getObjectByName('town-c2-crater-inscription/stone') as Mesh;
+  const stoneMap = (stone.material as MeshLambertMaterial).map as DataTexture;
+  assert.equal(stoneMap.wrapS, RepeatWrapping);
+  assert.equal(stoneMap.wrapT, RepeatWrapping);
+  assert.equal(stoneMap.repeat.x, 2, 'the west face resolves finer stone grain rather than stretching 16 pixels over 2.4 m');
+  const stoneColors = stone.geometry.getAttribute('color');
+  assert.ok(stoneColors);
+  assert.ok(stoneColors.getX(0) !== stoneColors.getX(4), 'stone faces retain distinct top/side tonal variation');
 });
 
 test('C2-04 appends one tight slab collider to the existing za22 channel and exports only a rubbing host marker', () => {
