@@ -44,6 +44,9 @@ import {
 import {
   skyCityPresenceEndpoint, toSkyCityPresencePose, fromSkyCityPresencePose,
 } from '../../../src/shared/sky-city-presence-domain';
+import {
+  fromMinePresencePose, minePresenceEndpoint, toMinePresencePose,
+} from '../../../src/shared/underground-mine-presence-domain';
 
 type Actor = PresencePose & {
   id: number; name: string; history: PresenceSample[]; seen: number; throwGestureStarted?: number;
@@ -187,10 +190,11 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let domain: 'town' | 'mountain' | 'west' | 'sky' = 'town';
+  let domain: 'town' | 'mountain' | 'west' | 'sky' | 'mine' = 'town';
   function presencePath(path: string) {
     if (domain === 'town') return path;
     if (domain === 'sky') return skyCityPresenceEndpoint(path);
+    if (domain === 'mine') return minePresenceEndpoint(path);
     const room = domain === 'mountain' ? mountainPresencePath : westPresencePath;
     return room + path.slice('/presence'.length);
   }
@@ -684,9 +688,11 @@ export function createTownPresence(
     const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
       const received = domain === 'sky'
         ? fromSkyCityPresencePose({ east: localEast, north: localNorth, height: localHeight })
-        : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
-            north: localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0),
-            height: localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0) };
+        : domain === 'mine'
+          ? fromMinePresencePose({ east: localEast, north: localNorth, height: localHeight })
+          : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
+              north: localNorth + (domain === 'mountain' ? mountainPresenceNorthOrigin : 0),
+              height: localHeight + (domain === 'west' ? westPresenceHeightOrigin : 0) };
       if (!received) return; // Invalid sky-room record must not be painted in another domain.
       const { east, north, height } = received;
       if (isSharedHomePosition(east, north, height) !== insideSharedHome) return;
@@ -752,6 +758,10 @@ export function createTownPresence(
     } else if (domain === 'sky') {
       const safe = toSkyCityPresencePose(local);
       if (!safe) return; // Never let the legacy uint16 centimetres clamp world Y750+.
+      writePresencePose(safe, seq, outgoing);
+    } else if (domain === 'mine') {
+      const safe = toMinePresencePose(local);
+      if (!safe) return; // Never let the legacy uint16 centimetres clamp world -90.
       writePresencePose(safe, seq, outgoing);
     } else writePresencePose(local, seq, outgoing);
     const position = outgoing.getUint32(2, true);
@@ -898,8 +908,13 @@ export function createTownPresence(
       else if (domain === 'mountain') switchDomain('town');
     },
     setWestDomain(enabled: boolean) {
-      if (enabled && domain !== 'mountain' && domain !== 'sky') switchDomain('west');
+      if (enabled && domain !== 'mountain' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
       else if (!enabled && domain === 'west') switchDomain('town');
+    },
+    /** Only the dream-chain transition may call this, at the descent blackout / return landing. */
+    setMineDomain(enabled: boolean) {
+      if (enabled) switchDomain('mine');
+      else if (domain === 'mine') switchDomain('west');
     },
     /** Only the starport transition authority may call this after a successful transfer. */
     setSkyCityDomain(enabled: boolean, skyScene?: Scene, returnMountainScene?: Scene) {
