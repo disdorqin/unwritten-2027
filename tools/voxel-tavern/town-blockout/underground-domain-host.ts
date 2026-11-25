@@ -141,10 +141,13 @@ export type UndergroundCampBridge = Readonly<{
  */
 export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
-  /** Production water loop (batch 103): the mine presence room relays
-   * the single presence-side tonight() snapshot; the host validates it
-   * through the certified port and feeds C2-06's scene adapter. Absent
-   * bridge (or no snapshot yet) leaves the scene's baseline untouched. */
+  /** Production water loop (batch 103, interface aligned to C2's fix
+   * round): the mine presence room relays the single presence-side
+   * tonight() snapshot; the host forwards the raw snapshot reader
+   * plus the scene's display parameters into the scene adapter,
+   * which validates the snapshot via the certified port (single
+   * validation point). Absent bridge (or no snapshot yet) leaves
+   * the scene's baseline untouched. */
   waterBridge?: Readonly<{
     readWaterSnapshot?: () => AcceptedUndergroundWaterSnapshot | undefined;
     highWaterOffsetM?: number;
@@ -292,7 +295,13 @@ export function mountUndergroundDomainHost(options: Readonly<{
   };
   const readGateStage = () => 'closed' as const;
 
-  // The C2 adapter validates the raw accepted snapshot on every sync.
+  // Water loop consumption (interface aligned to C2's fix round): the
+  // host forwards the bridge's raw snapshot reader as the adapter's
+  // AcceptedWaterReader, plus the scene's display parameters; the
+  // adapter validates the snapshot via the certified port (single
+  // validation point — the host does not pre-validate). The high-water
+  // rise defaults to C2's fixture value (1 m) until the scene
+  // difference verification certifies a layout datum.
   const waterRuntime = options.waterBridge ? {
     highWaterOffsetM: options.waterBridge.highWaterOffsetM ?? 1,
     readAcceptedWater: () => options.waterBridge?.readWaterSnapshot?.(),
