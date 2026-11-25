@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
+import { orientedSupportBox, type OrientedSupportBox } from './town-a-r30-oriented-support';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
@@ -95,6 +96,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   });
 
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
+  const colliders:OrientedSupportBox[]=[],floors:OrientedSupportBox[]=[];
+  const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   function push(mat: MeshStandardMaterial, g: BufferGeometry) {
     const batch = batches.get(mat) ?? [];
     batch.push(g);
@@ -254,13 +257,44 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       east: east + Math.cos(yaw) * dx + fr.e * dz,
       north: north - Math.sin(yaw) * dx + fr.n * dz,
     });
-    // Platform slab with its top just under rail level.
-    const pc = at(0, 2.6);
-    box(stone, pc.east, topY - .42, pc.north, 13, .5, 3.1, yaw);
-    box(snow, pc.east, topY - .14, pc.north, 13, .07, 3, yaw);
-    for (const [px, pz] of [[-2.4, 1.6], [2.4, 1.6], [-2.4, 4.4], [2.4, 4.4]] as const) {
-      const p = at(px, pz);
-      box(timber, p.east, topY + 1.15, p.north, .2, 2.3, .2, yaw);
+    // at() uses clockwise bearings in EN; Three's +Y yaw is the inverse.
+    // Keep the original station anchors and timetable positions, but align
+    // platform, roof and colliders with the actual station frame.
+    const rotation=-yaw,deckY=topY-.105;
+    const pc=at(0,2.6);
+    const slabBottom=Math.min(...[-6.5,0,6.5].flatMap(x=>[1.05,2.6,4.15].map(z=>{
+      const p=at(x,z);return groundAt(p.east,p.north);
+    })))-.08;
+    const base=Math.min(deckY-.10,slabBottom);
+    box(stone,pc.east,(base+deckY-.07)/2,pc.north,13,deckY-.07-base,3.1,rotation);
+    box(snow,pc.east,deckY-.035,pc.north,13,.07,3.1,rotation);
+    floors.push(orientedSupportBox(pc.east,pc.north,rotation,13,3.1,base,deckY));
+    // Three or more broad entrance steps along the outside face. Each tread
+    // samples real ground, with <= 0.24m rise from the surveyed approach.
+    const start=at(0,7.35),startY=groundAt(start.east,start.north);
+    const steps=Math.max(3,Math.ceil(Math.abs(deckY-startY)/.20));
+    const run=.64,edge=4.15;
+    const points=[{...start,height:startY}];
+    for(let i=0;i<steps;i++){
+      const z=edge+(steps-i-.5)*run,p=at(0,z);
+      const h=startY+(deckY-startY)*(i+1)/steps;
+      const low=Math.min(h-.14,groundAt(p.east,p.north)-.03);
+      box(stone,p.east,(h+low)/2,p.north,2.3,h-low,run+.008,rotation);
+      floors.push(orientedSupportBox(p.east,p.north,rotation,2.3,run+.008,low,h));
+      points.push({...p,height:h});
+      for(const s of [-1,1]){
+        const edgeP=at(s*1.07,z);
+        box(timber,edgeP.east,h+.44,edgeP.north,.11,.88,run+.01,rotation);
+        colliders.push(orientedSupportBox(edgeP.east,edgeP.north,rotation,.11,run+.01,h,h+.88));
+      }
+    }
+    // The platform bench is split so the middle arrival lane is not blocked.
+    points.push({...at(0,3.4),height:deckY},{...at(0,2.6),height:deckY});
+    stationWalkRoutes.push({id:label==='坑口站'?'kengkou-station':'shankou-station',points});
+    for (const [px,pz] of [[-2.4,1.6],[2.4,1.6],[-2.4,4.4],[2.4,4.4]] as const) {
+      const p=at(px,pz);
+      box(timber,p.east,deckY+1.2,p.north,.2,2.4,.2,rotation);
+      colliders.push(orientedSupportBox(p.east,p.north,rotation,.2,.2,deckY,deckY+2.4));
     }
     const rc = at(0, 3);
     if (label === '坑口站') {
@@ -268,10 +302,10 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       // ridge and uneven snow caps. No roof/awning collider added to paths.
       for (const side of [-1, 1]) {
         const half = at(side * 1.7, 3);
-        box(timberWarm, half.east, topY + 2.48, half.north, 3.8, .17, 4.9, yaw, 0, -side * .16);
-        box(snow, half.east, topY + 2.61, half.north, 3.6, .09, 4.7, yaw, 0, -side * .16);
+        box(timberWarm, half.east, topY + 2.48, half.north, 3.8, .17, 4.9, rotation, 0, -side * .16);
+        box(snow, half.east, topY + 2.61, half.north, 3.6, .09, 4.7, rotation, 0, -side * .16);
       }
-      box(timber, rc.east, topY + 2.92, rc.north, .16, .28, 5.15, yaw);
+      box(timber, rc.east, topY + 2.92, rc.north, .16, .28, 5.15, rotation);
       for (const s of [-1, 1]) {
         const lamp = at(s * 2.4, 1.65);
         box(glow, lamp.east, topY + 2.08, lamp.north, .25, .30, .25, yaw);
@@ -280,8 +314,15 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
       box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
     }
-    const bc = at(0, 3.4);
-    box(timberWarm, bc.east, topY + .45, bc.north, 3.4, .1, .5, yaw);
+    for(const side of [-1,1]){
+      const bc=at(side*3.8,3.45);
+      box(timberWarm,bc.east,deckY+.44,bc.north,2.2,.12,.52,rotation);
+      for(const offset of [-.85,.85]){
+        const p=at(side*3.8+offset,3.45);
+        box(timber,p.east,deckY+.19,p.north,.13,.38,.45,rotation);
+      }
+      colliders.push(orientedSupportBox(bc.east,bc.north,rotation,2.2,.52,deckY,deckY+.50));
+    }
     const sc = at(-4.6, 2.6);
     stationSign(sc.east, topY + 1.7, sc.north, yaw, label);
     return at;
@@ -535,5 +576,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     ],
     divergence: { east: 477, north: 335 },
   };
-  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples };
+  group.userData.colliders=colliders;
+  group.userData.floors=floors;
+  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes };
 }

@@ -883,6 +883,7 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad());
 scene.add(railExtension.group);
+const railWestGeometry=buildWestGeometry(railExtension.group);
 scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -1178,7 +1179,7 @@ function geometry() {
     }
   }
   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
+  const groups = [...architecture.values(), slide, railway.group, railExtension.group, bridgeCollision, tigerPine, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -1221,7 +1222,12 @@ function geometryAt(east: number, north: number) {
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
-  if (east < 0) return westWalkGeometry?.get(westCellKey(east, north)) ?? emptyGeometry;
+  if (east < 0) {
+    const key=westCellKey(east,north),base=westWalkGeometry?.get(key),rail=railWestGeometry.get(key);
+    if(!rail)return base??emptyGeometry;
+    if(!base)return rail;
+    return {colliders:[...base.colliders,...rail.colliders],floors:[...base.floors,...rail.floors],ramps:[...base.ramps,...rail.ramps]};
+  }
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
