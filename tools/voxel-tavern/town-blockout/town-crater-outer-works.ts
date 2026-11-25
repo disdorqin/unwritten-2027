@@ -989,6 +989,34 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       });
     }
   }
+  // Worn stone road flanks the gate, using the same batches as the wall.
+  // Keep the swing leaves and pillar returns clear, and leave the north
+  // station turn open. The individual stones are real low step supports,
+  // with foundations sunk into the sampled surface, never floating decals.
+  const roadStone=(e:number,n:number,w:number,d:number,rise:number)=>{
+    const ys=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)??heightAt(e,n)??anchor.rimHeight));
+    const bottom=Math.min(...ys)-.09,top=Math.max(...ys)+rise;
+    box(workshopBrick,e,(bottom+top)/2,n,w,top-bottom,d);
+    hitBox(floors,e,n,0,w,d,bottom,top);
+  };
+  for(const [start,end] of [[-14,-7],[-35,-23]] as const){
+    for(let e=start+.35;e<end-.25;e+=.82){
+      for(const side of [-1,1]){
+        // Keep the exit to the passenger station free of curbs.
+        if(side===1&&e<-28.5&&e>-34.5)continue;
+        const n=wallGateNorth+side*(3.13+.07*Math.sin(e*2.1));
+        roadStone(e,n,.74,.37,.10+.035*hash(e+side*13));
+      }
+      // Sparse exposed flagstones within the snow rather than a second
+      // coplanar road sheet; the slight rise is comfortably walkable.
+      for(let j=0;j<5;j++){
+        const n=wallGateNorth+(j-2)*.95+.08*Math.sin(e*3+j);
+        if(hash(e*11+j*23)>.48)
+          roadStone(e+.08*Math.sin(j+e),n,.65,.80,.014);
+      }
+    }
+  }
+
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.
   const gatehouse = siteAt('gatehouse', -13, 150.5, 4);
   if (gatehouse) {
