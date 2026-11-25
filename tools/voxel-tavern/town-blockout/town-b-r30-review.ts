@@ -3,8 +3,7 @@ import {createTerrainGrid,worldBounds} from './terrain';
 import {mountWestCraterRoad} from './town-za22-crater-road';
 import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
-import {installBR30Workface} from './town-b-r30-crater-workface';
-import {installCraterWorkshopWorld} from './town-b-r30-crater-workstations';
+import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
 
@@ -13,10 +12,8 @@ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>gri
 // production reservation/collision consumers. The retired plates had no boxes.
 const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
-// The A-owned production host must append this same data before indexing.
-road.group.userData.colliders.push(...road.midgroundS5.colliders);
 const rail=buildCraterRailExtension(grid,road);
-const face=installBR30Workface(road),machines=installCraterWorkshopWorld(road,rail);
+const {face,machines}=attachBR30PhysicalKit(road,rail);
 const scene=new Scene();scene.add(road.group,rail.group);
 const sky=new HemisphereLight(0xc6d9f6,0x776650,1.75),sun=new DirectionalLight(0xffe7c7,2.1);
 sun.position.set(-30,75,45);scene.add(sky,sun);
