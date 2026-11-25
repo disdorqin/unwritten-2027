@@ -246,7 +246,7 @@ export function createZa22CloudRoute(host: Host) {
     // so their original trajectory and parent transforms remain untouched.
     function batchBoxes(parent:Group){
       for(const material of [iron,brass,wood,stone]){
-        const boxes=parent.children.filter((child):child is Mesh=>child instanceof Mesh&&child.geometry===boxGeometry&&child.material===material);
+        const boxes=parent.children.filter((child):child is Mesh=>child instanceof Mesh&&!(child instanceof InstancedMesh)&&child.geometry===boxGeometry&&child.material===material);
         if(boxes.length<2)continue;
         const batch=new InstancedMesh(boxGeometry,material,boxes.length);
         batch.name='za22-box-batch-'+material.color.getHexString();
