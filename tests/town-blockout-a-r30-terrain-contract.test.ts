@@ -38,12 +38,14 @@ test('A-R01 samples unchanged H0 at the real E0 seam and publishes bounded ready
   const edge=grid.boundarySamples(points);
   for(const p of edge)assert.ok(Math.abs(p.height-road.heightAt(p.east,p.north)!)<1e-5);
   assert.equal(road.terrainReadyAt(-10,336),true);
-  assert.equal(road.terrainReadyAt(-10,336.1),false);
+  assert.equal(road.terrainReadyAt(-100,336.1),false);
+  assert.equal(road.terrainReadyAt(-10,336.1),true); // A-R04 real north connector
   assert.equal(grid.terrainReadyAt(-1,1),false);
   const support=createTerrainSupportContract({town:grid.heightAt,townReady:grid.terrainReadyAt,
     west:road.heightAt,westReady:road.terrainReadyAt});
   assert.equal(support.sample({east:-1,north:159})?.surfaceId,'west-ground');
-  assert.equal(support.sample({east:-1,north:337}),undefined);
+  assert.equal(support.sample({east:-100,north:337}),undefined);
+  assert.equal(support.sample({east:-1,north:337})?.surfaceId,'west-ground');
   const datum=support.sample({east:2,north:159});
   assert.ok(datum&&datum.ready&&Math.abs(Math.hypot(...datum.normal)-1)<1e-12);
   assert.throws(()=>grid.boundarySamples([[-1,3]]));

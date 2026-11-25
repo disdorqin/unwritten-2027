@@ -12,6 +12,7 @@ import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing'
 import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
 import { buildCraterOuterWorks, craterBeltTrackCorridor } from './town-crater-outer-works';
 import { createWestLandscape } from './town-a-r30-west-landscape';
+import { mountWestNorthConnector } from './town-a-r30-north-connector';
 import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
@@ -237,9 +238,12 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     return collar.heightAt(east,north) ?? sampleCarrier(east,north);
   }
 
+  const northConnector=mountWestNorthConnector(northLimit,sampleCarrier);
+  group.add(northConnector.group);
   const terrainBoundary={inner:collar.inner,outer:collar.outer,renderNorth:sheetNorthLimit,apronRadius:sharedApronRadius};
   const terrainReadyAt=(east:number,north:number)=>Number.isFinite(east)&&Number.isFinite(north)
-    &&east>=survey.west&&east<=0&&north>=0&&north<=sheetNorthLimit;
+    &&((east>=survey.west&&east<=0&&north>=0&&north<=sheetNorthLimit)
+      ||northConnector.readyAt(east,north));
   const road = { group, anchor, lip, heightAt, fenceBlocks,terrainBoundary,terrainReadyAt };
   mountZa31CraterEntrance(road);
   const camp = mountZa31CraterCamp(road);

@@ -3119,8 +3119,14 @@ function walkable(x: number, n: number) {
 function outdoorWalkable(x: number, n: number) {
   if (x < 0) {
     const road=ensureWestCraterRoad();
-    return x>=craterWestSurvey.west+bodyRadius && n>=1
-      && n<=road.terrainBoundary.renderNorth-bodyRadius && road.terrainReadyAt(x,n);
+    // The north rail strip is narrower than the crater carrier. Require
+    // support around the footprint, including at their L-shaped boundary;
+    // the E0 crossing itself is shared with the existing town lattice.
+    return n>=1 && n<=worldBounds.depth-1 && road.terrainReadyAt(x,n)
+      && road.terrainReadyAt(x-bodyRadius,n)
+      && road.terrainReadyAt(Math.min(0,x+bodyRadius),n)
+      && road.terrainReadyAt(x,n-bodyRadius)
+      && road.terrainReadyAt(x,n+bodyRadius);
   }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
