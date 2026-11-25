@@ -155,6 +155,35 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
     assert.equal(gl, wantLights, `C2 group ${name} carries exactly ${wantLights} real lights`);
     c2Draws += gd; c2Triangles += gt; c2Lights += gl;
   }
+  // Window B batch-107 groups carve-out (window A wiring package, same
+  // precedent as the C2 five above): the mid-band clusters and the mound
+  // planting ride their own budgets and are subtracted from the
+  // remainder below, so the W-1 pin does not move. Measured on the
+  // wired tree: midground S5 5 draws / 2,306 triangles / 0 lights (85
+  // pieces, window B's production configuration), mound planting
+  // 2 draws / 396 triangles / 0 lights (36 charred trees + 3 wind flags,
+  // batch-64 counts).
+  const bGroups = [
+    ['crater-midground-s5', 5, 2306, 0],
+    ['mound-planting', 2, 396, 0],
+  ] as const;
+  let bDraws = 0, bTriangles = 0, bLights = 0;
+  for (const [name, maxDraws, maxTriangles, wantLights] of bGroups) {
+    const g = crater.group.getObjectByName(name);
+    assert.ok(g, `B group ${name} mounted`);
+    let gd = 0, gt = 0, gl = 0;
+    g.traverse(node => {
+      if ((node as Light).isLight) gl++;
+      if (!(node as Mesh).isMesh) return;
+      const mesh = node as Mesh & { count?: number };
+      gd++;
+      gt += (mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count) * (mesh.count ?? 1) / 3;
+    });
+    assert.ok(gd <= maxDraws, `B group ${name} stays inside its own draw budget (${gd} <= ${maxDraws})`);
+    assert.ok(gt <= maxTriangles, `B group ${name} stays inside its own triangle budget (${Math.round(gt)} <= ${maxTriangles})`);
+    assert.equal(gl, wantLights, `B group ${name} carries exactly ${wantLights} real lights`);
+    bDraws += gd; bTriangles += gt; bLights += gl;
+  }
   // Remainder baseline re-pinned 2026-11-22 (was 46 draws / 283,027 triangles
   // / 7 lights): the +12 draws, +74,040 triangles and +6 lights over the old
   // pin are exactly the two C-line landings itemized above (6+6 draws,
@@ -165,12 +194,12 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
   // 800 — 3 fewer ground batch meshes (−3 draws) and the sheet rows north
   // of 336 removed (20 full tiles + the 12 m partial row at 528:
   // −97,920 triangles) against the pin above.
-  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - lampDraws - c2Draws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
+  assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - lampDraws - c2Draws - bDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
   // Batch98 haulage-turn relocation restores eight 12-triangle floor shards net.
   // K-34 warning post merges into the winch's darkWood batch (+12
   // triangles, no new draw); its board face and the K-35 cast plate are
   // document-guarded textBoards, invisible to this node run.
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles - c2Triangles, 259255, 'W-1 remainder 259243 + 12 triangles from the K-34 warning post');
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles - c2Triangles - bTriangles, 259255, 'W-1 remainder 259243 + 12 triangles from the K-34 warning post');
   assert.ok(dressingDraws <= 17, 'added story details must stay batched (17 since C3 segments 1-4, crater offensive order 2026-11-21)');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');

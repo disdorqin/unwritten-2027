@@ -30,6 +30,8 @@ import { mountC2CraterInscription } from './town-c2-crater-inscription';
 import {
   mountCraterWarmLightChain, surveyCraterWarmLightChain,
 } from './town-c2-crater-warm-light-chain';
+import { buildCraterMidgroundS5 } from './town-crater-midground-s5';
+import { buildMoundPlanting } from './town-mound-planting';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -64,6 +66,8 @@ type WestCraterRoad = {
   readonly moltenBeads: ReturnType<typeof mountC2CraterMoltenBeads>;
   readonly inscription: ReturnType<typeof mountC2CraterInscription>;
   readonly warmLightChain: ReturnType<typeof mountCraterWarmLightChain>;
+  readonly midgroundS5: ReturnType<typeof buildCraterMidgroundS5>;
+  readonly moundPlanting: ReturnType<typeof buildMoundPlanting>;
   readonly craterActions: {
     actions: CraterActionSpot[];
     actionAt(east: number, north: number, height: number): CraterActionSpot | undefined;
@@ -296,6 +300,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     brokenCircle.group.visible = distance < 175;
     moltenBeads.group.visible = distance < 80;
     inscription.group.visible = distance < 150;
+    midgroundS5.group.visible = distance < 105;
+    moundPlanting.group.visible = distance < 190;
   };
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
@@ -316,6 +322,17 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     extra: lampRoom?.boxes,
   })];
   const inscription = mountC2CraterInscription(group, { ...road, ejecta });
+  // Batch-107 wiring (window A): window B's mid-band clusters and mound
+  // planting ride the same crater group as the C2 five. The S5 builder
+  // takes za36's placements as its deconfliction list (window B's
+  // production configuration, 85 pieces measured); the planting reads
+  // only the live height authority (the C2 mound included).
+  const midgroundS5 = buildCraterMidgroundS5(road, {
+    avoid: story.placements,
+  });
+  group.add(midgroundS5.group);
+  const moundPlanting = buildMoundPlanting(road);
+  group.add(moundPlanting.group);
   // Salvage ①: one E-action surface for the crater — the mouth-works
   // spots (registration / map / telescope / firewood) plus the M1 station.
   const surveySpot: CraterActionSpot | undefined = surveyM1 ? {
@@ -347,5 +364,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
   }
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
-    centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, craterActions };
+    centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, midgroundS5, moundPlanting, craterActions };
 }
