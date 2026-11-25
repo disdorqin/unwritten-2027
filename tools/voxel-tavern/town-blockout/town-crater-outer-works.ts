@@ -359,15 +359,29 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(rustIron, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
     put(stoneDark, 10.5, g + 22.25, -2, 1.9, .5, 1.9);
     // Ingot stacks and crates left where the last shift dropped them.
-    for (let s = 0; s < 3; s++) {
-      for (let layer = 0; layer < 3 - s; layer++) {
-        for (let i = 0; i < 4 - layer; i++) {
-          put(iron, 6 + s * 2.6, g + .45 + layer * .62, 9.5, 1.9, .55, .8);
+    // Actual staggered billets on pallets rather than coincident meshes.
+    // Preserve the center service lane.
+    for(let s=0;s<3;s++){
+      const x=7.6+s*2.65,z=10.35,levels=3-s;
+      hall.piece(timber,x,z,2.05,2.3,0,.16);
+      for(let layer=0;layer<levels;layer++){
+        const count=4-layer;
+        for(let i=0;i<count;i++){
+          const q=z+(i-(count-1)/2)*.47;
+          hall.piece(workshopSheet,x,q,1.75-layer*.19,.43,.16+layer*.32,.47+layer*.32);
         }
       }
     }
-    put(timberWarm, -9, g + .8, 9, 1.6, 1.6, 1.6);
-    put(timberWarm, -7.2, g + .7, 9.4, 1.4, 1.4, 1.4, 0, .2);
+    hall.piece(timberWarm,-9,10.65,1.6,1.6,0,1.6);
+    hall.piece(timber,-7.2,10.85,1.4,1.4,0,1.4);
+    for(const side of [-1,1])for(let bay=0;bay<7;bay++){
+      const x=-12.8+bay*4.25;
+      put(snow,x,g+12.98,side*6.31,1.05,.11,.37);
+      for(let j=0;j<3;j++){
+        const h=.22+.14*((bay+j*2)%4);
+        put(snow,x-.35+j*.25,g+12.90-h/2,side*6.42,.105,h,.105);
+      }
+    }
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
     cyl(rustIron, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
@@ -551,8 +565,22 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     hall.slab(stone,0,6.65,8,3.30,.9,.9);
     for(const dx of [-1.48,1.48])put(timber,dx,g+2.3,5.04,.16,2.8,.18);
     put(timber,0,g+3.78,5.04,3.1,.22,.18);
-    put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
-    put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);
+    // Collision follows framed crates. Leave the central stair lane clear.
+    for(const [dx,dz,w,h] of [[2.8,6.8,1.4,1.35],[-2.9,7.0,1.3,1.0]] as const){
+      hall.piece(workshopWood,dx,dz,w,w,.9,.9+h);
+      for(const s of [-1,1]){
+        put(timber,dx+s*w*.39,g+.9+h/2,dz,.12,h+.04,w+.05);
+        put(iron,dx,g+.9+h*.32,dz+s*w*.5,w,.07,.06);
+      }
+    }
+    for(const side of [-1,1])for(let bay=0;bay<5;bay++){
+      const dx=-8.7+bay*4.3;
+      put(snow,dx,g+12.67,side*5.81,1.1,.09,.33);
+      for(let k=0;k<3;k++){
+        const h=.18+.12*((bay+k)%4);
+        put(snow,dx-.32+k*.24,g+12.59-h/2,side*5.91,.09,h,.09);
+      }
+    }
     for (let i = 0; i < 5; i++) {
       const p = fr.at(-3.6 + hash(i * 3) * 1.6, 8 + hash(i * 7) * .8);
       box(brass, p.east, g + 1.05, p.north, .34, .22, .34, hash(i) * 3);
