@@ -60,11 +60,56 @@ export const craterBeltTrackCorridor: readonly (readonly [number, number])[] = [
  * the road's heightAt everywhere; gates stand open or are guarded by people —
  * nothing here is a collision wall.
  */
+export type CraterHitBox = { min: number[]; max: number[] };
+export type CraterHitRamp = CraterHitBox & { axis: 'x' | 'z'; ascending: 1 | -1 };
+
+/** A doorway ramp in a local frame (the landmark-culture door-ramp
+ * precedent): rises from yLow at dzOuter to yHigh at dzInner along the
+ * dominant world axis of the frame's facing bearing. */
+function hitRamp(list: CraterHitRamp[], fr: { at(dx: number, dz: number): { east: number; north: number } },
+  dzOuter: number, dzInner: number, halfW: number, yLow: number, yHigh: number) {
+  const corners = [fr.at(-halfW, dzOuter), fr.at(halfW, dzOuter), fr.at(-halfW, dzInner), fr.at(halfW, dzInner)];
+  const es = corners.map(p => p.east), ns = corners.map(p => p.north);
+  const o = fr.at(0, dzOuter), i = fr.at(0, dzInner);
+  const axis: 'x' | 'z' = Math.abs(i.east - o.east) > Math.abs(i.north - o.north) ? 'x' : 'z';
+  const innerCoord = axis === 'x' ? i.east : -i.north;
+  const outerCoord = axis === 'x' ? o.east : -o.north;
+  list.push({
+    min: [Math.min(...es), yLow, -Math.max(...ns)],
+    max: [Math.max(...es), yHigh, -Math.min(...ns)],
+    axis, ascending: innerCoord > outerCoord ? 1 : -1,
+  });
+}
+
+/** World-space AABB of a yaw-rotated box centred at (east, north). */
+function hitBox(list: CraterHitBox[], east: number, north: number, yaw: number,
+  sx: number, sz: number, y0: number, y1: number) {
+  const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+  const hx = (sx * c + sz * s) / 2, hz = (sx * s + sz * c) / 2;
+  list.push({ min: [east - hx, y0, -(north + hz)], max: [east + hx, y1, -(north - hz)] });
+}
+
+/** AABB covering the straight segment (e0, n0)-(e1, n1) padded on all sides. */
+function hitSegment(list: CraterHitBox[], e0: number, n0: number, e1: number, n1: number,
+  pad: number, y0: number, y1: number) {
+  list.push({
+    min: [Math.min(e0, e1) - pad, y0, -(Math.max(n0, n1) + pad)],
+    max: [Math.max(e0, e1) + pad, y1, -(Math.min(n0, n1) - pad)],
+  });
+}
+
 export function buildCraterOuterWorks(road: CraterRoad) {
   const { anchor, heightAt } = road;
   const group = new Group();
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
+  // S-1 collision (分支窗 A): structural wall boxes + standable floors in
+  // world coordinates, exported for the za22 top group's userData. Solid
+  // shells get one mass box each; designed gaps (wall gate, fence-ring
+  // crossings, the gatehouse doorway) stay open.
+  const colliders: CraterHitBox[] = [];
+  const floors: CraterHitBox[] = [];
+  const ramps: CraterHitRamp[] = [];
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 43, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 89, palette.stone);
@@ -79,6 +124,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const snow = pixelMaterial(palette.snow, palette.stone, 199);
   const dark = new MeshStandardMaterial({ color: 0x14100d, roughness: 1 });
   const ore = new MeshStandardMaterial({ color: 0x3d3a44, roughness: .95, flatShading: true });
+  // Ore-pile families (card 05: piles sorted by material family — soot-black ore,
+  // ochre timber, lime-grey slag); the K-18/19/20 plates name each pile.
+  const oreOchre = new MeshStandardMaterial({ color: 0xa98a56, roughness: .95, flatShading: true });
+  const oreGrey = new MeshStandardMaterial({ color: 0x8a8378, roughness: .95, flatShading: true });
   const slag = new MeshStandardMaterial({ color: 0x2e2c30, roughness: 1, flatShading: true });
   const brass = new MeshStandardMaterial({ color: palette.brass, roughness: .45, metalness: .65 });
   const glow = new MeshStandardMaterial({
@@ -145,8 +194,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
   }
 
-  /** A text-bearing board: batched backing plus a canvas face. All crater
-   * signage text is 《文本-坑区牌面-2026-11-21》 verbatim — never paraphrased. */
+  /** A text-bearing board: batched backing plus a canvas face. Crater signage
+   * text is 《文本-坑区牌面-2026-11-21》 verbatim — never paraphrased — except
+   * K-06/07/09/10, which are 《设计-全图文字件总表-2026-11-22》 verbatim
+   * (总控裁定 批55). */
   function sign(east: number, h: number, north: number, yaw: number, w: number, hh: number,
     back: MeshStandardMaterial,
     draw: (c: CanvasRenderingContext2D, w: number, h: number) => void) {
@@ -182,18 +233,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
     put(stone, 0, g + .6, 0, 28, 1.2, 11);
-    put(corrugated, 0, g + 5.1, 0, 28, 7.8, 11);
-    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 5.1, 5.45, .45, 7.8, .3);
-    put(slate, -7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, .5);
-    put(slate, 7.05, g + 10.6, 0, 14.6, .28, 12.6, 0, -.5);
-    put(timber, 0, g + 12.3, 0, 28.6, .4, .5);
+    // A-4: 28m long hall, real 18m gable ridge (not the former 12.3m
+    // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
+    put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
+    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
+    put(slate, -7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, .43);
+    put(slate, 7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, -.43);
+    put(timber, 0, g + 18.45, 0, 28.6, .38, .55);
+    for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
+      put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
+      put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
+    }
+    // Oxidized seams and coherent short snow caps break the old solar-panel silhouette.
+    for (const side of [-1, 1]) for (const dz of [-4.5, 0, 4.5])
+      put(snow, side * 8.65, g + 15.3, dz, 3.8, .08, 1.5, 0, -side * .43);
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
     // Tall brick chimney, cold.
-    put(rustIron, 10.5, g + 9.5, -2, 1.5, 13, 1.5);
-    put(stoneDark, 10.5, g + 16.2, -2, 1.9, .5, 1.9);
+    put(rustIron, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
+    put(stoneDark, 10.5, g + 22.25, -2, 1.9, .5, 1.9);
     // Ingot stacks and crates left where the last shift dropped them.
     for (let s = 0; s < 3; s++) {
       for (let layer = 0; layer < 3 - s; layer++) {
@@ -212,6 +272,11 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
     cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
     cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
+    // S-1 collision: the hall is a solid mass (the furnace mouth is a dark
+    // inset, the iron door ajar ON the face — no enterable interior), so one
+    // mass box for the hall and one for the blast-furnace stack.
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 12.9); }
+    hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
     // Hand cart, handles down, mid-yard.
     const cart = fr.at(2, 8);
     box(timber, cart.east, g + .75, cart.north, 1.7, .18, 1.05, fr.yaw);
@@ -221,6 +286,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
+    // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口
+    // 正上方、料口木牌挂锭垛侧墙面。值班牌人名留空（总控裁定 批58 追补六：
+    // 白望山/石沉皆灵魂，活人值班牌不许出现魂名；名册定版后填活人守卫名）。
     const plateP = fr.at(1.8, 5.58);
     siteAt('smelter-sign', plateP.east, plateP.north, 1);
     sign(plateP.east, g + 3.6, plateP.north, fr.yaw, 1.9, .62, iron, (c, w, h) => {
@@ -242,8 +310,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillStyle = '#e8e2d2'; c.textBaseline = 'middle';
       c.font = '44px "Noto Sans SC", sans-serif'; c.textAlign = 'left';
       c.fillText('腊月廿三', 40, h * .15);
-      c.fillText('一班　白望山　到', 40, h * .37);
-      c.fillText('二班　石　沉　到', 40, h * .59);
+      // Roster fill (名册定版 批64): 一班 孙长炉 / 二班 焦二锤 take the
+      // slots blanked by 批58 追补六; the trailing 到 stays in its old place.
+      c.fillText('一班', 40, h * .37);
+      c.fillText('孙长炉', 160, h * .37);
+      c.fillText('到', 348, h * .37);
+      c.fillText('二班', 40, h * .59);
+      c.fillText('焦二锤', 160, h * .59);
+      c.fillText('到', 348, h * .59);
       c.font = '37px "Noto Sans SC", sans-serif';
       c.fillText('三班　炉火看住，莫等我——', 40, h * .81);
       // The stroke drags a little past the last dash and stops.
@@ -251,6 +325,26 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillRect(452, h * .815, 42, 3);
       c.fillStyle = 'rgba(232, 226, 210, .16)';
       c.fillRect(452, h * .835, 26, 2);
+    });
+    // K-06 furnace-mouth iron plate, above the cold arch (总表定稿）.
+    const furnaceP = fr.at(-4, 5.58);
+    siteAt('smelter-furnace-plate', furnaceP.east, furnaceP.north, 1);
+    sign(furnaceP.east, g + 5.0, furnaceP.north, fr.yaw, 1.5, .45, iron, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('一号炉 · 冷封', w / 2, h / 2 + 2);
+    });
+    // K-07 material-opening wooden plate, ingot-stack end of the yard face.
+    const materialP = fr.at(9.5, 5.58);
+    siteAt('smelter-material-plate', materialP.east, materialP.north, 1);
+    sign(materialP.east, g + 2.2, materialP.north, fr.yaw, 1.1, .4, timber, (c, w, h) => {
+      c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 56px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('料不过夜', w / 2, h / 2 + 2);
     });
   }
 
@@ -267,9 +361,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
     put(stone, 0, g + 2.1, 0, 20, 4.2, 10);
-    put(timberWarm, 0, g + 6.3, 0, 20, 4.2, 10);
-    put(slate, -5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, .48);
-    put(slate, 5.05, g + 9.6, 0, 10.6, .26, 11.4, 0, -.48);
+    // A-4: two full storeys plus pitched attic, ridge at g+17m;
+    // the original g+10m lid read as a squat one-storey workshop.
+    put(timberWarm, 0, g + 8.4, 0, 20, 8.4, 10);
+    put(slate, -5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, .48);
+    put(slate, 5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, -.48);
+    put(timber, 0, g + 17.02, 0, 20.6, .31, .42);
+    for(const side of [-1,1]) for(const dz of [-3.6,0,3.6])
+      put(snow, side * 6.15, g + 14.4, dz, 2.9, .08, 1.45, 0, -side * .48);
     // Two rows of dark windows; two boarded up.
     for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
       put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
@@ -279,11 +378,16 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, -.6);
     }
-    // Chimney twice the ridge height above the roof.
-    put(rustIron, -8, g + 11, -2, 1.1, 13, 1.1);
-    put(stoneDark, -8, g + 17.7, -2, 1.5, .45, 1.5);
+    // Tall independent chimney: ~34m total, near twice the 17m roof ridge.
+    put(rustIron, -8, g + 18.0, -2, 1.1, 31, 1.1);
+    put(stoneDark, -8, g + 33.75, -2, 1.5, .45, 1.5);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
+    // S-1 collision: solid two-storey shell (no enterable interior — the
+    // K-09/K-10 facade precedent) as one mass box; the loading platform is a
+    // raised face with no steps, so it blocks as a low mass.
+    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 12.6); }
+    { const pf = fr.at(0, 6.8); hitBox(colliders, pf.east, pf.north, fr.yaw, 8, 2.6, g, g + .9); }
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
     put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);
     for (let i = 0; i < 5; i++) {
@@ -332,6 +436,42 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.beginPath(); c.arc(w * nx, h * ny, 5, 0, 7); c.fill();
       }
     });
+    // K-09/K-10 (《设计-全图文字件总表》，总控裁定 批55)：卡03 一层工位区
+    // （校准台/仪表墙/零件柜）在本栋无可入内景——两牌改挂立面：校准台标牌
+    // 挂两排窗之间（仪表墙外立面），柜门小牌挂装台木箱面（零件柜代位）。
+    const calibP = fr.at(0, 5.16);
+    siteAt('instrument-calibration-plate', calibP.east, calibP.north, 1);
+    sign(calibP.east, g + 4.7, calibP.north, fr.yaw, 1.2, .4, brass, (c, w, h) => {
+      c.fillStyle = '#86652c'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 60px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('校准台', w / 2, h / 2 + 2);
+    });
+    const cabinetP = fr.at(2.5, 7.56);
+    siteAt('instrument-cabinet-plate', cabinetP.east, cabinetP.north, 1);
+    sign(cabinetP.east, g + 1.7, cabinetP.north, fr.yaw, .8, .3, timberWarm, (c, w, h) => {
+      c.fillStyle = '#a36b48'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 52px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#2e2410'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('精密件 · 轻放', w / 2, h / 2 + 2);
+    });
+    // K-11 second-floor duty roster (《设计-全图文字件总表》，名册定版
+    // 批64：三班轮值：陆衡／周文测／陆箬）. The plant has no enterable
+    // second floor, so the roster board hangs on the upper facade between
+    // the second-row windows — the same facade precedent as K-09/K-10.
+    const rosterP = fr.at(0, 5.16);
+    siteAt('instrument-duty-roster', rosterP.east, rosterP.north, 1);
+    sign(rosterP.east, g + 6.8, rosterP.north, fr.yaw, 1.5, 1.0, timber, (c, w, h) => {
+      c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#5d4630'; c.lineWidth = 5; c.strokeRect(10, 10, w - 20, h - 20);
+      c.fillStyle = '#3a3125'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 54px "Noto Sans SC", sans-serif';
+      c.fillText('值班表', w / 2, h * .17);
+      c.font = '42px "Noto Sans SC", sans-serif';
+      c.fillText('一班 陆衡', w / 2, h * .44);
+      c.fillText('二班 周文测', w / 2, h * .65);
+      c.fillText('三班 陆箬', w / 2, h * .86);
+    });
   }
 
   // ---------- ore yard (bearing 186°): piles, sorting shed, small derrick ----------
@@ -344,10 +484,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    const piles: [number, number, number, number][] = [[-6, -2, 3.6, 2.6], [-1, 3.5, 2.8, 2], [4.5, -3, 3.1, 2.2], [8, 2.5, 2.2, 1.5]];
-    for (const [dx, dz, r, h] of piles) {
+    const piles: [number, number, number, number, MeshStandardMaterial][] = [
+      [-6, -2, 3.6, 2.6, ore], [-1, 3.5, 2.8, 2, oreOchre], [4.5, -3, 3.1, 2.2, oreGrey], [8, 2.5, 2.2, 1.5, ore],
+    ];
+    for (const [dx, dz, r, h, mat] of piles) {
       const p = fr.at(dx, dz);
-      cone(ore, p.east, g + h / 2, p.north, r, h, 10);
+      cone(mat, p.east, g + h / 2, p.north, r, h, 10);
+      // S-1 collision: a cone pile blocks as its base square.
+      hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
     }
     // Sorting shed: four posts, flat roof, sorted boxes beneath.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
@@ -372,6 +516,67 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const s = .3 + hash(i * 5) * .5;
       part(ore, new DodecahedronGeometry(s, 0), p.east, g + s * .4, p.north, hash(i) * 3);
     }
+    // K-16 (总表）: shed plate on the sorting shed's roof fascia, yard side.
+    const shedPlateP = fr.at(-8, -3.14);
+    siteAt('ore-shed-plate', shedPlateP.east, shedPlateP.north, 1);
+    sign(shedPlateP.east, g + 3.2, shedPlateP.north, fr.yaw, 1.2, .4, timber, (c, w, h) => {
+      c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('料棚', w / 2, h / 2 + 2);
+    });
+    // K-18/19/20 (总表）: one labelled post at each sorted pile, on the clear
+    // side (measured ≥5 m off the narrow-gauge corridor), facing the yard centre.
+    const faceYard = (east: number, north: number) => Math.atan2(yard.east - east, -(yard.north - north));
+    const pileSigns: [string, string, number, number][] = [
+      ['ore-pile-ore-sign', '矿料', -1.8, -2.0],
+      ['ore-pile-timber-sign', '木料', -1, 0.1],
+      ['ore-pile-slag-sign', '渣料', 8.2, -3.0],
+    ];
+    for (const [id, word, dx, dz] of pileSigns) {
+      const p = fr.at(dx, dz);
+      put(timber, dx, g + .55, dz, .12, 1.1, .12);
+      siteAt(id, p.east, p.north, 1);
+      sign(p.east, g + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
+        c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
+        c.font = 'bold 56px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(word, w / 2, h / 2 + 2);
+      });
+    }
+    // K-17 (总表）: the sealed storehouse itself was never built (card 05
+    // structure, crater-outside) — this package builds the closed hut and
+    // hangs the plate above its iron door. The door is sealed with a white band.
+    const store = fr.at(-1.5, -7.5);
+    siteAt('sealed-storehouse', store.east, store.north, 3);
+    put(stone, -1.5, g + .15, -7.5, 4.8, .3, 3.6);
+    put(timber, -1.5, g + 1.6, -9.2, 4.6, 2.6, .2);
+    put(timber, -3.7, g + 1.6, -7.5, .2, 2.6, 3.4);
+    put(timber, 0.7, g + 1.6, -7.5, .2, 2.6, 3.4);
+    put(timber, -2.95, g + 1.6, -5.8, 1.7, 2.6, .2);
+    put(timber, -0.05, g + 1.6, -5.8, 1.7, 2.6, .2);
+    put(timber, -1.5, g + 2.55, -5.8, 1.2, .7, .2);
+    put(slate, -1.5, g + 3.15, -8.35, 5.0, .14, 2.0, -.42, 0);
+    put(slate, -1.5, g + 3.15, -6.65, 5.0, .14, 2.0, .42, 0);
+    put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
+    put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
+    // S-1 collision: the storehouse is sealed — the iron door fills the
+    // front span flush between the two front segments, so the front reads
+    // as one continuous wall. Four wall boxes, no opening.
+    for (const [dx, dz, sx, sz] of [[-1.5, -9.2, 4.6, .2], [-3.7, -7.5, .2, 3.4], [0.7, -7.5, .2, 3.4], [-1.5, -5.8, 4.6, .2]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .3, g + 2.9);
+    }
+    const storePlateP = fr.at(-1.5, -5.64);
+    siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);
+    sign(storePlateP.east, g + 2.45, storePlateP.north, fr.yaw, 1.1, .4, iron, (c, w, h) => {
+      c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.font = 'bold 64px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('封存仓', w / 2, h / 2 + 2);
+    });
   }
 
   // ---------- salvage-era ruins layer （修订一 §五） ----------
@@ -391,6 +596,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(corrugated, 0, g + 2.1, .4, 5.8, .16, 5.6, .62);
     put(timberWarm, -1, g + .6, .5, 1.3, 1.2, 1.3, 0, .2);
     put(timber, 1.2, g + .5, -.8, 1.1, 1, 1.1);
+    // S-1 collision: the ruin's three standing walls (front is collapsed
+    // open where the roof came down).
+    for (const [dx, dz, sx, sz] of [[0, -2.4, 5.4, .14], [-2.65, 0, .14, 4.8], [2.65, 0, .14, 4.8]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g, g + 2.6);
+    }
   }
   // Rusted pipe sections east of the smelter, one half-buried.
   for (let i = 0; i < 3; i++) {
@@ -422,6 +633,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(earthWall, wallEast, g + 3, n, 1.15, 3.6, 6.15);
     box(stoneDark, wallEast, g + 5.15, n, 1.45, .7, 6.3);
     box(snow, wallEast, g + 5.56, n, 1.3, .12, 6.2);
+    // S-1 collision: base + rammed earth + cap read as one wall mass.
+    hitBox(colliders, wallEast, n, 0, 1.5, 6.15, g, g + 5.5);
   }
   {
     // Gate frame and two leaves standing open — the guard turns you back, not the door.
@@ -432,6 +645,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         const leafN = wallGateNorth + s * 2.2;
         box(timber, wallEast - 1.1, g + 2.2, leafN, .14, 4.4, 2.7, s * .85);
         box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
+      }
+      // S-1 collision: gate posts and the two leaves standing open — the
+      // guard turns you back, not the door (design), so the channel between
+      // the leaves' inner edges (≈2.6 m) stays walkable.
+      for (const s of [-1, 1]) {
+        hitBox(colliders, wallEast, wallGateNorth + s * 3.4, 0, 1.7, 1.1, g, g + 6.2);
+        hitBox(colliders, wallEast - 1.1, wallGateNorth + s * 2.2, s * .85, .14, 2.7, g, g + 4.4);
       }
       box(timber, wallEast, g + 6.35, wallGateNorth, 1.2, .45, 8.2);
       // Town-office notice, fresh paint, on the south post's passage face
@@ -455,6 +675,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.font = '600 36px "Noto Sans SC", sans-serif'; c.textAlign = 'right';
         c.fillText('未写镇公所', w - 40, h * .93);
       });
+      // K-27 (《设计-全图文字件总表》卡08): direction board on the north
+      // post's passage face, mirroring the town-office notice opposite.
+      siteAt('wall-gate-direction', wallEast, 161.8, 1);
+      sign(wallEast, g + 3.3, 161.82, Math.PI, 1.6, .48, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = '600 46px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北行坑区 · 请走正门', w / 2, h / 2 + 2);
+      });
     }
   }
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.
@@ -474,6 +705,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(timber, -1.55, g + 2.2, 1.93, 1.75, 2.6, .16);
     put(timber, 1.85, g + 2.2, 1.93, 1.15, 2.6, .16);
     put(timber, .15, g + 3.35, 1.93, 2.25, .35, .16);
+    // K-26 (《设计-全图文字件总表》卡08): hut name board on the front wall
+    // over the doorway, centred on the door gap (dx +0.3), under the lintel.
+    const gateSignP = fr.at(.3, 2.02);
+    siteAt('gatehouse-sign', gateSignP.east, gateSignP.north, 1);
+    sign(gateSignP.east, g + 2.92, gateSignP.north, fr.yaw, .95, .32, timber, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('门房', w / 2, h / 2 + 4);
+    });
+    // S-1 collision: stone base as a standable floor (a doorway ramp
+    // bridges the 1 m rise), walls as colliders; the front doorway
+    // between the two segments stays 1.95 m open.
+    { const c = fr.at(0, 0); hitBox(floors, c.east, c.north, fr.yaw, 5, 4, g, g + 1); }
+    hitRamp(ramps, fr, 3.05, 1.45, .95, g, g + 1);
+    for (const [dx, dz, sx, sz] of [[0, -1.93, 5, .16], [-2.43, 0, .16, 4], [2.43, 0, .16, 4], [-1.55, 1.93, 1.75, .16], [1.85, 1.93, 1.15, .16]] as const) {
+      const p = fr.at(dx, dz);
+      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .9, g + 3.5);
+    }
     put(slate, 0, g + 4.35, -1.05, 5.7, .2, 2.6, .5);
     put(slate, 0, g + 4.35, 1.05, 5.7, .2, 2.6, -.5);
     // Interior: table, bench, duty board; lamp by the door.
@@ -534,6 +786,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
           }
         }
       }
+      // S-1 collision: one segment box per drawn panel span. The skip
+      // conditions above (station / rail / collapsed gaps and the
+      // 146–184° arc owned by the mouth-works fence) break the chain, so
+      // every designed crossing stays open.
+      if (prev && b - prev.b === 2) {
+        hitSegment(colliders, prev.east, prev.north, east, north, .3,
+          Math.min(prev.h, h), Math.max(prev.h, h) + 4.7);
+      }
       prev = { b, east, north, h };
     }
     // Fallen panels at the two collapsed gaps — passable at night, never walled.
@@ -584,6 +844,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const h = heightAt(e, n);
       if (h === undefined) continue;
       box(iron, e, h + 2.6, n, .3, 5.2, .3, -rad);
+      hitBox(colliders, e, n, -rad, .3, .3, h, h + 5.2);
       fencePosts.push({ bearing: b, radius: r });
     }
   }
@@ -611,6 +872,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(stone, 0, g + shaftH * .78, 0, 3.3, shaftH * .44, 3.3);
     for (const fy of [.3, .62, .92]) put(iron, 0, g + shaftH * fy, 0, 4, .28, 4);
     put(stoneDark, 0, g + shaftH + .25, 0, 4.7, .5, 4.7);
+    // S-1 collision: shaft mass + platform slab (the cabin sits on the slab).
+    hitBox(colliders, origin.east, origin.north, fr.yaw, 3.9, 3.9, g, g + shaftH);
+    hitBox(colliders, origin.east, origin.north, fr.yaw, 4.7, 4.7, g + shaftH, g + shaftH + .5);
     for (let m = 0; m < 8; m++) {
       const a = m * Math.PI / 4;
       const p = fr.at(Math.sin(a) * 2.15, Math.cos(a) * 2.15);
@@ -638,6 +902,29 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       light.position.set(lampP.east, g + shaftH + 2.6, -lampP.north);
       group.add(light);
       northTowerLight = light;
+      // K-29/K-30 (《设计-全图文字件总表》卡10, north tower only — the west
+      // tower takes no board per K-31): name plate on the shaft's ladder
+      // face, duty plate on the cabin's front wall over the platform.
+      const nameP = fr.at(-.85, 1.96);
+      siteAt('north-tower-sign', nameP.east, nameP.north, 1);
+      sign(nameP.east, g + 1.6, nameP.north, fr.yaw, .7, .3, iron, (c, w, h) => {
+        c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(8, 8, w - 16, h - 16);
+        c.font = 'bold 100px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北塔', w / 2, h / 2 + 4);
+      });
+      const dutyP = fr.at(.6, .66);
+      siteAt('north-tower-duty', dutyP.east, dutyP.north, 1);
+      sign(dutyP.east, g + shaftH + 1.55, dutyP.north, fr.yaw, .8, .5, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = 'bold 110px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('守塔', w / 2, h / 2 + 4);
+      });
     }
   }
   const northTower = site('north-tower', 358, 67.5, 4, 13.5);
@@ -703,5 +990,6 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   return {
     group, sites, fencePosts, setNight,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
+    colliders, floors, ramps,
   };
 }

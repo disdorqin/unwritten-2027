@@ -2,7 +2,10 @@ import { Group, Mesh, MeshBasicMaterial, PlaneGeometry } from 'three';
 import { createMainSummitApproach, mountMainSummitApproachSigns } from './main-summit-approach';
 import { createMainSummitBannerCloud } from './main-summit-banner-cloud';
 import { createMainSummitBellPosts } from './main-summit-bell-posts';
+import { makeCloudGlowTexture } from './front-ridge-cloud-band';
 import { createMainSummitWindGround } from './main-summit-wind-ground';
+import { mountCloudTerraceArt } from './main-summit-cloud-terrace-art';
+import { mountMainSummitTerraceEdge } from './main-summit-terrace-edge';
 import { createGlideRingEntities } from './main-summit-glide-ring-entities';
 import {
   buildWindShelter, createSkyWatchRelic, createTrailMarkers, createWishLockPoint,
@@ -15,9 +18,8 @@ import {
   cloudTerminal, cloudTerraceTurnNorth, mountMainSummitAssembly, supportsCloudTerrace,
   summitAssemblyAnchor,
 } from './main-summit-assembly';
-import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { mainSummitBounds, mainSummitSpec } from './main-summit-block';
 import { createMainSummitCableTravel } from './main-summit-cable-travel';
-import { createMainSummitCloudLayer } from './main-summit-cloud-layer';
 import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
 import { createSummitGlideRingProgress, surveySummitGlideRings } from './main-summit-glide-rings';
 import { cloudPavilionSites } from './main-summit-pavilion-site';
@@ -97,13 +99,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
       [110, 165, 220, 275, 330, 385, 440, 495, 550], -6),
   } : { high: [], low: [] };
 
-  const cloud = createMainSummitCloudLayer({
-    bounds: mainSummitBounds,
-    summit: mainSummitLayout.summit,
-    shoulders: mainSummitLayout.shoulders,
-    heightAt: assembly.block.heightAt,
-  });
-  group.add(cloud.group);
+  const cloud = assembly.clouds;
 
   const paint = buildMainSummitPaint(assembly.block.heightAt);
   group.add(paint.mesh);
@@ -129,6 +125,9 @@ export function mountMainSummitExtras(assembly: Assembly) {
   group.add(hutFurnishings.group);
   const wishLock = createWishLockPoint({ east: 12, north: -19, height: assembly.arrivalHeight });
   group.add(wishLock.group);
+  // D4 / m03-m34-m36-m82 is an additive scenery package only; it preserves
+  // the ZA-22 flight runway, the B-window starport rack and portal authority.
+  const cloudTerraceArt = mountCloudTerraceArt(group);
   const shelterMidPoint = trail.points[Math.floor(trail.points.length * .55)]!;
   const shelterMid = buildWindShelter('wind-shelter-trail-mid',
     shelterMidPoint.east + 6, shelterMidPoint.north + 5,
@@ -153,23 +152,41 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const windGround = createMainSummitWindGround(
     { east: 62.5, north: 975, height: 800 }, assembly.block.heightAt);
   group.add(windGround.group);
+  // D-6 item 4: terrace platform-edge staging (parapet + day cloud
+  // seam + line-2 station approach sign). Transfer code untouched.
+  const terraceEdge = mountMainSummitTerraceEdge(assembly);
+  group.add(terraceEdge.group);
 
-  // Cloud-sea glow band (§5.21, default plan): a soft lit sheet under the
-  // cloud tops south of the terrace, visible only at night.
+  // Cloud-sea glow band, rebuilt to the settled plan B (batch 63,
+  // 《设计-全图云层》): light floats ON the cloud surface south of the
+  // terrace as slow river-like streams -- flowing spot texture in
+  // crystal teal #7fd4c8 to snow white, never saturated blue/purple,
+  // brightness capped under the town lights. Two depths (near/far
+  // sheets, different repeats and flow speeds) replace the old
+  // single static blue sheet. Night only.
   const glowBand = new Group();
   glowBand.name = 'cloud-glow-band';
+  const glowTexture = makeCloudGlowTexture();
+  const glowTextureFar = glowTexture ? glowTexture.clone() : null;
+  if (glowTextureFar) glowTextureFar.needsUpdate = true;
   const glowMaterial = new MeshBasicMaterial({
-    color: '#86b4d9', transparent: true, opacity: .16, depthWrite: false,
+    map: glowTexture ?? undefined, color: '#dff7f1', transparent: true, opacity: 0, depthWrite: false,
+  });
+  const glowMaterialFar = new MeshBasicMaterial({
+    map: glowTextureFar ?? undefined, color: '#cfe9e2', transparent: true, opacity: 0, depthWrite: false,
   });
   const glowGeometry = new PlaneGeometry(130, 34);
   for (let i = 0; i < 4; i++) {
-    const sheet = new Mesh(glowGeometry, glowMaterial);
+    const far = i >= 2;
+    const sheet = new Mesh(glowGeometry, far ? glowMaterialFar : glowMaterial);
     sheet.rotation.x = -Math.PI / 2;
-    sheet.position.set(-140 + i * 125, assembly.arrivalHeight + 5, 10);
+    sheet.position.set(-140 + (i % 2) * 250 + (far ? 60 : 0), assembly.arrivalHeight + (far ? 3.2 : 5), far ? 44 : 10);
+    if (far) sheet.scale.setScalar(1.35);
     glowBand.add(sheet);
   }
   glowBand.visible = false;
   group.add(glowBand);
+  let glowNight = false;
   const coarseMaterial = assembly.block.coarse.material;
   const coarseDayColor = coarseMaterial.color.getHex();
 
@@ -177,7 +194,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
   return {
     approach, posts, signs, wingRack, cableTravel, glideRings, glideProgress, cloud, paint, bannerCloud, icefall, rockTowers,
     surveyStations, hutFurnishings, wishLock, shelterMid, shelterIce, skyWatch, trailMarkers, machineRoom,
-    bellPosts, windGround, glideEntities, glideLines,
+    bellPosts, windGround, glideEntities, glideLines, cloudTerraceArt, terraceEdge,
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       return posts.blocked(east, north, feet, radius, bodyHeight) ||
         signs.blocked(east, north, feet, radius, bodyHeight) ||
@@ -186,13 +203,16 @@ export function mountMainSummitExtras(assembly: Assembly) {
         surveyStations.blocked(east, north, feet, radius, bodyHeight) ||
         hutFurnishings.blocked(east, north, feet, radius, bodyHeight) ||
         machineRoom.blocked(east, north, feet, radius, bodyHeight) ||
-        windGround.blocked(east, north, feet, radius, bodyHeight);
+        windGround.blocked(east, north, feet, radius, bodyHeight) ||
+        cloudTerraceArt.blocked(east, north, feet, radius, bodyHeight);
     },
     /** Night material version (§2.4): paint and massif darken together. */
     setNight(night: boolean) {
       paint.setNight(night);
       coarseMaterial.color.setHex(night ? 0x2f3f52 : coarseDayColor);
-      glowBand.visible = night;
+      glowNight = night;
+      glowBand.visible = true;
+      cloudTerraceArt.setNight(night);
     },
     update(nowMs: number) {
       // Calm wind until the ZB-20 wind feed is wired into the mountain domain.
@@ -200,13 +220,30 @@ export function mountMainSummitExtras(assembly: Assembly) {
       bannerCloud.update(nowMs / 1000);
       windGround.update(nowMs / 1000);
       glideEntities.update(nowMs / 1000);
+      // Glow flow: river-slow texture drift, far layer slower (parallax);
+      // opacity ramps toward the night target and the band hides at 0.
+      const secs = nowMs / 1000;
+      if (glowTexture) { glowTexture.offset.x = (secs * 0.0045) % 1; glowTexture.offset.y = (secs * 0.0011) % 1; }
+      if (glowTextureFar) { glowTextureFar.offset.x = (secs * 0.0026) % 1; glowTextureFar.offset.y = (secs * 0.0007) % 1; }
+      const ramp = (mat: MeshBasicMaterial, target: number) => {
+        mat.opacity += (target - mat.opacity) * 0.04;
+        if (Math.abs(target - mat.opacity) < 0.004) mat.opacity = target;
+      };
+      ramp(glowMaterial, glowNight ? 0.30 : 0);
+      ramp(glowMaterialFar, glowNight ? 0.17 : 0);
+      glowBand.visible = glowNight || glowMaterial.opacity > 0.01;
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       glowGeometry.dispose();
       glowMaterial.dispose();
+      glowMaterialFar.dispose();
+      glowTexture?.dispose();
+      glowTextureFar?.dispose();
       windGround.dispose();
+      cloudTerraceArt.dispose();
+      terraceEdge.dispose();
       bellPosts.dispose();
       glideEntities.dispose();
       machineRoom.dispose();
@@ -221,7 +258,6 @@ export function mountMainSummitExtras(assembly: Assembly) {
       icefall.dispose();
       bannerCloud.dispose();
       paint.dispose();
-      cloud.dispose();
       glideVisuals.dispose();
       wingRack.dispose();
       posts.dispose();

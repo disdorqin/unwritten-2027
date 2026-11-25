@@ -82,7 +82,10 @@ test('a real 15% uphill can be restarted after the old stall timer and rolls bac
   near(rider.spot.n, 0);
   for (let frame = 0; frame < 480; frame++) rider.step(tick, push);
   const uphillSpeed = rider.speed();
-  assert.ok(uphillSpeed >= 3.5 && uphillSpeed <= 4 + 1e-9, `uphill speed ${uphillSpeed}`);
+  // Slope-behaviour package (2026-11-22): the low gear rose from the old
+  // 4 m/s crawl and the push cap blends with grade, so a 15% climb now
+  // sustains roughly 5 m/s and keeps building toward the blended cap.
+  assert.ok(uphillSpeed >= 4.5 && uphillSpeed <= 15, `uphill speed ${uphillSpeed}`);
   assert.ok(rider.spot.n > 6);
   let farthest = rider.spot.n;
   for (let frame = 0; frame < 480; frame++) {
@@ -94,10 +97,10 @@ test('a real 15% uphill can be restarted after the old stall timer and rolls bac
 
   const edge = createSledMotion();
   edge.reset(0);
-  const slope = { ...snow, grade: .25 };
+  const slope = { ...snow, grade: .35 };
   assert.ok(edge.step(.1, push, slope).north > 0, 'the steepest allowed push starts uphill');
   edge.reset(0);
-  assert.ok(edge.step(.1, push, { ...slope, grade: .251 }).north <= 0, 'beyond the cutoff, pushing cannot start uphill');
+  assert.ok(edge.step(.1, push, { ...slope, grade: .351 }).north <= 0, 'beyond the cutoff, pushing cannot start uphill');
 });
 
 test('brake or drift-key with turning enters at 8 m/s and keeps slip at or below 35°', () => {

@@ -53,8 +53,8 @@ test('the plaza stays flat and each crossing uses its bridge deck', () => {
 });
 
 test('town expansion keeps landmark origins except for the approved stage relocation', () => {
-  assert.deepEqual(worldBounds, { width: 640, depth: 540 });
-  assert.deepEqual([gridWidth, gridDepth], [641, 541]);
+  assert.deepEqual(worldBounds, { width: 640, depth: 800 });
+  assert.deepEqual([gridWidth, gridDepth], [641, 801]);
   assert.deepEqual([layout.width, layout.depth], [448, 384]);
   assert.deepEqual(layout.plaza.spawn, [223, 180]);
   assert.deepEqual(Object.fromEntries(layout.plots.map(({ id, origin }) => [id, origin])), {
@@ -91,13 +91,13 @@ test('expanded streets cross the legacy seams and the northern river stays outsi
       }
     }
   }
-  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231], [540, 231]]) {
+  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231], [540, 231], [650, 231]]) {
     assert.equal(riverX(n), x);
     assert.ok(!canEnter(x, n));
   }
   assert.ok(!canEnter(640, 224));
   assert.ok(canEnter(93, 512));
-  assert.ok(!canEnter(93, 540));
+  assert.ok(!canEnter(93, 800));
 });
 
 test('legacy houses reserve rail clearance while nearby open sites stay occupied', () => {

@@ -14,7 +14,7 @@ const page = new Promise(resolve => {
     response.setEncoding('utf8');
     let text = '';
     response.on('data', chunk => { if (text.length < 65_536) text += chunk.slice(0, 65_536 - text.length); });
-    response.on('end', () => resolve({ status: response.statusCode, townPage: text.includes('id="scene"') && text.includes('id="walk"') }));
+    response.on('end', () => resolve({ status: response.statusCode, townPage: text.includes('id="scene"') && text.includes('id="walk-crosshair"') }));
     response.on('error', error => resolve({ status: response.statusCode, error: error.message }));
   });
   request.on('timeout', () => request.destroy(new Error('HTTPS timeout')));

@@ -263,8 +263,23 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       box(timber, p.east, topY + 1.15, p.north, .2, 2.3, .2, yaw);
     }
     const rc = at(0, 3);
-    box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
-    box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
+    if (label === '坑口站') {
+      // A-4 canonical terminal: low rustic two-leaf canopy, visible timber
+      // ridge and uneven snow caps. No roof/awning collider added to paths.
+      for (const side of [-1, 1]) {
+        const half = at(side * 1.7, 3);
+        box(timberWarm, half.east, topY + 2.48, half.north, 3.8, .17, 4.9, yaw, 0, -side * .16);
+        box(snow, half.east, topY + 2.61, half.north, 3.6, .09, 4.7, yaw, 0, -side * .16);
+      }
+      box(timber, rc.east, topY + 2.92, rc.north, .16, .28, 5.15, yaw);
+      for (const s of [-1, 1]) {
+        const lamp = at(s * 2.4, 1.65);
+        box(glow, lamp.east, topY + 2.08, lamp.north, .25, .30, .25, yaw);
+      }
+    } else {
+      box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
+      box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
+    }
     const bc = at(0, 3.4);
     box(timberWarm, bc.east, topY + .45, bc.north, 3.4, .1, .5, yaw);
     const sc = at(-4.6, 2.6);
@@ -352,9 +367,10 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   const boards: { id: string; east: number; north: number }[] = [];
   boards.push({ id: 'shankou-timetable', east: 308, north: 506 });
   {
-    // Timetable board at the shelter's east end (《文本-坑区牌面》 §四,
-    // verbatim chalk in two hands — the corner note's night empty run is
-    // the timetable working as designed, never a defect to "fix").
+    // Timetable board at the shelter's east end — reworded per 总控裁定 批55
+    // (《设计-全图文字件总表》K-15)：班次行改为班距文案，与墙表 K-15 同文；
+    // 「夜车空驶，亦准点。乘车请至山口站换乘。」保留作第二行。
+    // 「货运矿料，随正班附挂。」一行随改字撤下（其义已由「货列过站」承接）。
     const bp = kengkouAt(4.9, 2.6);
     const g = groundAt(bp.east, bp.north);
     boards.push({ id: 'kengkou-timetable', east: bp.east, north: bp.north });
@@ -370,14 +386,42 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       }
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = '#e7e1cf';
-      c.font = '33px "Noto Sans SC", sans-serif';
-      c.fillText('晨一班　午一班　暮一班　夜一班', w / 2, h * .24);
       c.font = '30px "Noto Sans SC", sans-serif';
-      c.fillText('货运矿料，随正班附挂。', w / 2, h * .5);
-      c.fillStyle = '#cfc8b2'; c.textAlign = 'right';
-      c.font = '23px "Noto Sans SC", sans-serif';
-      c.fillText('夜车空驶，亦准点。', w - 26, h * .76);
-      c.fillText('乘车请至山口站换乘。', w - 26, h * .9);
+      c.fillText('货列过站 · 每班约隔六分半', w / 2, h * .17);
+      c.fillText('首班随晨钟 · 夜班照走（空车）', w / 2, h * .5);
+      c.font = '26px "Noto Sans SC", sans-serif';
+      c.fillText('夜车空驶，亦准点。乘车请至山口站换乘。', w / 2, h * .83);
+    });
+  }
+  {
+    // Timetable WALL (《设计-区域分册-陨石坑区》卡04 结构件，文字件 K-14/15)：
+    //此前未建（仓内无「北延支线」文本），本次按卡04 新建于站棚西端，与东端
+    //粉笔板对称。表头＋列头＋班距文案——总控 2026-11-22 裁定：不刻钟点，
+    //以班距文案落字（与列车实测班次 392.3 秒对表）。
+    const wp = kengkouAt(-4.9, 2.6);
+    const g = groundAt(wp.east, wp.north);
+    boards.push({ id: 'kengkou-timetable-wall', east: wp.east, north: wp.north });
+    for (const s of [-1, 1]) {
+      const pp = kengkouAt(-4.9 + s * 1.1, 2.6);
+      box(timber, pp.east, g + 1.6, pp.north, .13, 3.2, .13);
+    }
+    sign(wp.east, g + 2.35, wp.north, 1.7, 2.6, 1.6, (c, w, h) => {
+      c.fillStyle = '#e8e0cc'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#3d2c1c'; c.lineWidth = 3;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.fillStyle = '#3d2c1c'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 34px "Noto Sans SC", sans-serif';
+      c.fillText('北延支线 · 坑口站', w / 2, h * .14);
+      c.strokeStyle = 'rgba(61, 44, 28, .6)'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(w * .06, h * .28); c.lineTo(w * .94, h * .28); c.stroke();
+      c.beginPath(); c.moveTo(w * .06, h * .44); c.lineTo(w * .94, h * .44); c.stroke();
+      c.font = '28px "Noto Sans SC", sans-serif';
+      c.fillText('班次', w * .2, h * .36);
+      c.fillText('开往', w * .5, h * .36);
+      c.fillText('开车', w * .8, h * .36);
+      c.font = '28px "Noto Sans SC", sans-serif';
+      c.fillText('货列过站 · 每班约隔六分半', w / 2, h * .6);
+      c.fillText('首班随晨钟 · 夜班照走（空车）', w / 2, h * .78);
     });
   }
   {
@@ -426,6 +470,16 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     box(timberWarm, sx - 1.6, g + .65, sn + .6, 1.5, 1.3, 1.5);
     box(timberWarm, sx + .2, g + .55, sn + 1.1, 1.3, 1.1, 1.3, .4);
     part(ore, new ConeGeometry(1.7, 1.4, 9), sx + 2.2, g + .7, sn - .8, 0);
+    // K-13 (《设计-全图文字件总表》卡04): shed name board under the roof
+    // edge on the east face, toward the siding.
+    sign(sx + 3.55, g + 2.8, sn, Math.PI / 2, 1.1, .42, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('货棚', w / 2, h / 2 + 4);
+    });
   }
 
   // ---------- narrow-gauge mine track along the reserved belt corridor ----------

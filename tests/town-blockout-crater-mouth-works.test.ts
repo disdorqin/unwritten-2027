@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { InstancedMesh, Matrix4, PointLight, Vector3 } from 'three';
+import { Matrix4, Vector3, type InstancedMesh, type PointLight } from 'three';
 import { buildCraterMouthWorks } from '../tools/voxel-tavern/town-blockout/town-crater-mouth-works';
 
 const anchor = { east: -120, north: 185, rimHeight: 12, yaw: 1.364 };
@@ -20,6 +20,15 @@ test('crater mouth works: the five named sites land in their surveyed bands', ()
   const byId = new Map(sites.map(s => [s.id, s]));
   for (const id of ['assembly-ground', 'supply-station', 'guard-shed', 'zb35-anchor', 'fence-main-gate']) {
     assert.ok(byId.has(id), `missing site ${id}`);
+  }
+  // K-01/02/03 (总表，批58 追补六）: all three supply-station signs land
+  // on the station itself (within its 7.4 x 5.6 m footprint + sign offset).
+  const supplySite = byId.get('supply-station')!;
+  for (const id of ['supply-station-plaque', 'supply-registration-notice', 'supply-duty-room-plate']) {
+    assert.ok(byId.has(id), `missing sign ${id}`);
+    const s = byId.get(id)!;
+    assert.ok(Math.hypot(s.east - supplySite.east, s.north - supplySite.north) < 6,
+      `${id} is ${Math.hypot(s.east - supplySite.east, s.north - supplySite.north).toFixed(1)} m from the station`);
   }
   const assembly = polar(byId.get('assembly-ground')!.east, byId.get('assembly-ground')!.north);
   assert.ok(assembly.radius > 64 && assembly.radius < 76, `assembly radius ${assembly.radius}`);
@@ -48,7 +57,8 @@ test('crater mouth works: rim lamp chain has ten lamps and three real lights bur
     assert.ok(radius > 59 && radius < 63, `lamp radius ${radius}`);
   }
   let lights = 0;
-  group.traverse(obj => { if (obj instanceof PointLight) lights++; });
+  // Root tests and voxel-tavern use separate Three.js constructors.
+  group.traverse(obj => { if ((obj as PointLight).isPointLight) lights++; });
   assert.equal(lights, 3);
 });
 
@@ -56,7 +66,7 @@ test('crater mouth works: wreckage stays on the outer slope, clear of the belt a
   const { group, debrisCount } = buildCraterMouthWorks(road);
   assert.ok(debrisCount >= 40 && debrisCount <= 110, `debris ${debrisCount}`);
   let ring: InstancedMesh | undefined;
-  group.traverse(obj => { if (obj instanceof InstancedMesh) ring = obj; });
+  group.traverse(obj => { if ((obj as InstancedMesh).isInstancedMesh) ring = obj as InstancedMesh; });
   assert.ok(ring, 'wreckage instanced mesh exists');
   const m = new Matrix4();
   const v = new Vector3();
@@ -78,7 +88,7 @@ test('crater mouth works: draw and triangle ledger stays inside the mainline-1 s
     draws++;
     const geo = mesh.geometry;
     const per = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
-    tris += mesh instanceof InstancedMesh ? per * mesh.count : per;
+    tris += mesh.isInstancedMesh ? per * mesh.count : per;
   });
   assert.ok(draws <= 40, `draws ${draws}`);
   assert.ok(tris <= 60000, `tris ${tris}`);

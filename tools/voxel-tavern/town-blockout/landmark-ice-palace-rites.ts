@@ -1,16 +1,27 @@
 import {
-  BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial,
+  BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  icePalaceRiteReach, icePalaceRiteSites, type IcePalaceRite, type IcePalaceRiteState,
+} from '../../../src/shared/ice-palace-rites';
 import type { Box } from './landmark-kit';
+import type { TownActivityContext, TownActivitySpot } from './town-activity';
 
-export const icePalaceRiteSites = {
-  lever: { stand: [-13, .12, -1.30], fixture: [-13, .12, -2.63] },
-  harvest: { stand: [-5.95, .12, -5.43], fixture: [-5.95, .12, -6.62] },
-  solstice: { stand: [1.40, .12, 6.97], fixture: [1.40, .12, 8.25] },
+export const icePalaceRites = {
+  lever: { ...icePalaceRiteSites.lever, label: '拨动引寒机关' },
+  harvest: { ...icePalaceRiteSites.harvest, label: '采集冰晶片' },
+  solstice: { ...icePalaceRiteSites.solstice, label: '行安雪礼' },
 } as const;
 
 type Point = readonly [x: number, y: number, z: number];
+export type { IcePalaceRiteState } from '../../../src/shared/ice-palace-rites';
+
+export type IcePalaceRiteHost = {
+  read(): IcePalaceRiteState;
+  /** The room validates the accepted player's current footpoint and returns only after commit. */
+  request(rite: IcePalaceRite): Promise<boolean>;
+};
 
 export function mountIcePalaceRites(palace: Group, colliders: Box[]) {
   const shelf = new MeshLambertMaterial({ color: '#41677a' });
@@ -42,7 +53,7 @@ export function mountIcePalaceRites(palace: Group, colliders: Box[]) {
     return group;
   }
 
-  const lever = fixture('引寒机关', icePalaceRiteSites.lever.fixture, .86, 1.63, .67);
+  const lever = fixture('引寒机关', icePalaceRites.lever.fixture, .86, 1.63, .67);
   tile(lever, shelf, .86, .15, .67, 0, .075, 0);
   tile(lever, edge, .65, .93, .48, 0, .57, 0);
   tile(lever, shelf, .78, .12, .64, 0, 1.08, 0);
@@ -54,7 +65,7 @@ export function mountIcePalaceRites(palace: Group, colliders: Box[]) {
   tile(arm, frost, .31, .13, .15, 0, .37, 0);
   arm.rotation.x = .55;
 
-  const pillar = fixture('采晶冰柱', icePalaceRiteSites.harvest.fixture, .76, 1.96, .65);
+  const pillar = fixture('采晶冰柱', icePalaceRites.harvest.fixture, .76, 1.96, .65);
   tile(pillar, shelf, .76, .68, .65, 0, .34, 0);
   tile(pillar, edge, .63, .13, .55, 0, .72, 0);
   const prism = new Mesh(new CylinderGeometry(.26, .33, 1.18, 6), ice);
@@ -69,7 +80,7 @@ export function mountIcePalaceRites(palace: Group, colliders: Box[]) {
   shard.rotation.z = -.28;
   pillar.add(shard);
 
-  const altar = fixture('安雪礼仪式点', icePalaceRiteSites.solstice.fixture, 1.32, .78, .73);
+  const altar = fixture('安雪礼仪式点', icePalaceRites.solstice.fixture, 1.32, .78, .73);
   tile(altar, shelf, 1.32, .20, .73, 0, .10, 0);
   tile(altar, edge, .98, .48, .60, 0, .40, 0);
   tile(altar, shelf, 1.33, .12, .74, 0, .69, 0);
@@ -83,4 +94,61 @@ export function mountIcePalaceRites(palace: Group, colliders: Box[]) {
       for (const piece of pieces) piece.dispose();
     }
   }
+
+  return {
+    sync(state: IcePalaceRiteState) {
+      arm.rotation.x = state.frozen ? -.55 : .55;
+      shard.visible = state.harvestAvailable;
+      lantern.emissiveIntensity = state.solsticeRite === 'completed' ? .8 : .18;
+    },
+  };
+}
+
+type PalaceRiteVisuals = ReturnType<typeof mountIcePalaceRites>;
+
+export function createIcePalaceRiteActivity(palace: Group, visuals: PalaceRiteVisuals, host: IcePalaceRiteHost,
+  context: Pick<TownActivityContext, 'announce'> & { notifyPickup(message: string): void },
+  canStand?: (x: number, n: number, feet: number) => boolean) {
+  let pending = false;
+  const ready: Record<IcePalaceRite, (state: IcePalaceRiteState) => boolean> = {
+    lever: state => state.leverAvailable,
+    harvest: state => state.harvestAvailable,
+    solstice: state => state.solsticeRite === 'ready',
+  };
+  const update = () => visuals.sync(host.read());
+  async function use(rite: IcePalaceRite) {
+    const before = host.read();
+    if (pending || !ready[rite](before)) return;
+    pending = true;
+    try {
+      if (!await host.request(rite)) {
+        context.announce('现在不能进行这项交互');
+        return;
+      }
+      const state = host.read();
+      visuals.sync(state);
+      if (rite === 'lever') {
+        if (state.frozen === before.frozen) context.announce('引寒机关已拨动');
+        else context.announce(state.frozen ? '镜湖坚冰开放' : '镜湖坚冰时段结束');
+      }
+      if (rite === 'harvest') context.notifyPickup('冰晶片入包');
+      if (rite === 'solstice') context.announce('安雪礼已完成');
+    } catch {
+      context.announce('交互暂未成功');
+    } finally {
+      pending = false;
+    }
+  }
+
+  const spots: TownActivitySpot[] = [];
+  for (const rite of Object.keys(icePalaceRites) as IcePalaceRite[]) {
+    const { stand, label } = icePalaceRites[rite];
+    const { x, y: ground, z } = palace.localToWorld(new Vector3(...stand));
+    const n = -z;
+    if (canStand?.(x, n, ground) === false) continue;
+    spots.push({ x, n, ground, label, range: icePalaceRiteReach, available: () => !pending && ready[rite](host.read()),
+      run: () => { void use(rite); } });
+  }
+  update();
+  return { spots, update };
 }

@@ -1,3 +1,5 @@
+import type { TownC2CraterCentralMoundModel } from './town-c2-crater-central-mound';
+
 export const meteorCraterRimRadius = 55;
 export const meteorCraterFloorRadius = 20;
 export const meteorCraterDepth = 35;
@@ -29,6 +31,11 @@ export type MeteorCraterPlan = Readonly<{
   mainTrail: MeteorCraterTrail;
 }>;
 
+export type MeteorCraterOptions = Readonly<{
+  /** Optional C2-01 height-authority overlay. Omit it to keep the neutral B-01 fixture unchanged. */
+  centralMound?: TownC2CraterCentralMoundModel;
+}>;
+
 /** B-01's reviewed relative shape. The enclosing town host supplies its absolute datum. */
 export const meteorCraterFixturePlan: MeteorCraterPlan = {
   terraces: [
@@ -44,7 +51,8 @@ function positiveAngle(angle: number) {
   return remainder < 0 ? remainder + fullTurn : remainder;
 }
 
-export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
+export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan,
+  { centralMound }: MeteorCraterOptions = {}) {
   if (terraces.length !== 3) throw new RangeError('The crater needs three terraces.');
 
   const profile = [{ radius: meteorCraterRimRadius, depth: 0 }];
@@ -104,8 +112,13 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
   function heightOffsetAt(east: number, north: number) {
     const radius = Math.hypot(east, north);
     const bowlHeight = terraceHeightOffsetAt(radius);
+    // C2-01: compose once against the existing bowl, then max the finished trail blend.
+    // The neutral fixture remains byte-for-byte equivalent when no mound is supplied.
+    const moundOverride = bowlHeight === undefined ? undefined :
+      centralMound?.heightOverrideAtLocal(east, north, bowlHeight);
+    const groundHeight = moundOverride ?? bowlHeight;
     if (bowlHeight === undefined || radius <= meteorCraterFloorRadius || radius >= meteorCraterRimRadius) {
-      return bowlHeight;
+      return groundHeight;
     }
 
     const angle = positiveAngle(Math.atan2(east, north) - bearing);
@@ -129,7 +142,7 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
       }
     }
 
-    if (distance >= corridorRadius) return bowlHeight;
+    if (distance >= corridorRadius) return groundHeight;
     const shoulder = Math.max(0, distance - halfWidth) / shoulderWidth;
     const shoulderBlend = shoulder * shoulder * (3 - 2 * shoulder);
     const trailBoundaryDistance = descentRadius * Math.min(trailProgress, 1 - trailProgress);
@@ -138,7 +151,8 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     const boundaryBlend = boundaryFeather === 0 ? 1 : Math.min(1,
       Math.min(meteorCraterRimRadius - radius, radius - meteorCraterFloorRadius) / boundaryFeather);
     const trailHeight = -meteorCraterDepth * trailProgress;
-    return bowlHeight + (trailHeight - bowlHeight) * (1 - shoulderBlend) * boundaryBlend;
+    const trailBlend = bowlHeight + (trailHeight - bowlHeight) * (1 - shoulderBlend) * boundaryBlend;
+    return moundOverride === undefined ? trailBlend : Math.max(moundOverride, trailBlend);
   }
 
   /** Preview mesh only. Its indexed Float32 triangles are also the walk sample surface. */
@@ -171,7 +185,10 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     }
     const radiusAt = (angle: number) => meteorCraterRimRadius - descentRadius * angle / sweep;
     function vertexHeight(angle: number, radius: number) {
-      const ground = terraceHeightOffsetAt(radius) ?? 0;
+      const baseGround = terraceHeightOffsetAt(radius) ?? 0;
+      const localEast = radius * Math.sin(angle + bearing);
+      const localNorth = radius * Math.cos(angle + bearing);
+      const ground = centralMound?.heightOverrideAtLocal(localEast, localNorth, baseGround) ?? baseGround;
       let distance = corridorRadius, trailAngle = 0;
       for (const turn of turnsAt(angle)) {
         const candidate = angle + turn * fullTurn;

@@ -35,6 +35,7 @@ import type {
   Za36CableRepairEvent, Za36CableRepairLine, Za36CableRepairState,
 } from './town-za36-cable-repair';
 import type { CableLineFlags } from '../../../src/presence/cable-line-authority';
+import type { IcePalaceRite, IcePalaceRiteState } from '../../../src/shared/ice-palace-rites';
 import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
@@ -118,6 +119,7 @@ export function createTownPresence(
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
   const townNight = createTownPresenceNight(clock.now);
+  let undergroundWaterSnapshot: unknown;
   const townWeather = createTownPresenceWeather(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
@@ -150,6 +152,12 @@ export function createTownPresence(
   let cableLineSupported = false;
   const cableLineStates = new Map<Za36CableRepairLine, Za36CableRepairState>();
   let cableLineFlags: CableLineFlags = { cableLine1Open: false, cableLine2Open: false };
+  let icePalaceSupported = false;
+  const icePalaceRiteClosed: IcePalaceRiteState = { frozen: false, leverAvailable: false, harvestAvailable: false, solsticeRite: 'closed' };
+  let icePalaceRiteState: IcePalaceRiteState = icePalaceRiteClosed;
+  let icePalaceFragmentPresent = true;
+  const icePalacePending = new Map<string, (accepted: boolean) => void>();
+  let icePalaceRequestSeq = 0;
   let crownedId: number | null = null;
   const bellEvents: BellEvent[] = [];
   let onBellEvent: ((event: BellEvent) => void) | undefined;
@@ -475,12 +483,20 @@ export function createTownPresence(
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
         cableLine?: boolean; line?: unknown; flags?: unknown;
+        icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
+        undergroundWater?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
       if (message.type === 'event' && (message.kind === 'town-outdoor-weather' || message.kind === 'town-outdoor-weather-warning')) {
         if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) townWeather.accept(message);
+        return;
+      }
+      if (message.type === 'event' && message.kind === 'underground-water') {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
+          undergroundWaterSnapshot = message.state;
+        }
         return;
       }
       if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
@@ -501,6 +517,23 @@ export function createTownPresence(
             cableLineFlags = { cableLine1Open: flags.cableLine1Open, cableLine2Open: flags.cableLine2Open };
           }
         }
+        return;
+      }
+      if (message.type === 'ice-palace-rite') {
+        const state = message.state as IcePalaceRiteState | undefined;
+        if (state && typeof state === 'object' && typeof state.frozen === 'boolean' &&
+          typeof state.leverAvailable === 'boolean' && typeof state.harvestAvailable === 'boolean' &&
+          (state.solsticeRite === 'closed' || state.solsticeRite === 'ready' || state.solsticeRite === 'completed')) {
+          icePalaceRiteState = state;
+        }
+        return;
+      }
+      if (message.type === 'ice-palace-fragment') {
+        if (typeof message.present === 'boolean') icePalaceFragmentPresent = message.present;
+        return;
+      }
+      if (message.type === 'ice-palace-rite-result' || message.type === 'ice-palace-fragment-result') {
+        if (typeof message.requestId === 'string') icePalacePending.get(message.requestId)?.(message.accepted === true);
         return;
       }
       if (message.type === 'event' && message.kind === 'summit-passport-result') {
@@ -631,6 +664,12 @@ export function createTownPresence(
           iceThroneSupported = message.iceThrone === true;
           cableLineSupported = message.cableLine === true;
           if (!cableLineSupported) { cableLineStates.clear(); cableLineFlags = { cableLine1Open: false, cableLine2Open: false }; }
+          icePalaceSupported = message.icePalaceRites === true;
+          if (!icePalaceSupported) {
+            icePalaceRiteState = icePalaceRiteClosed;
+            icePalaceFragmentPresent = true;
+            for (const settle of [...icePalacePending.values()]) settle(false);
+          }
           haveId = true;
           link.joined(roster.size + 1);
           joinedId = id;
@@ -649,6 +688,9 @@ export function createTownPresence(
             if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
+          if (message.undergroundWater !== undefined) {
+            undergroundWaterSnapshot = message.undergroundWater;
+          }
           townWeather.join(message.townOutdoorWeather, message.townOutdoorWeatherDawnEpoch);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
@@ -821,6 +863,20 @@ export function createTownPresence(
     catch { connectionLost(); return false; }
   }
 
+  /** One ice-palace request/response round trip: the server's result frame
+   * (matched by requestId) is the only verdict; a missing reply settles
+   * false after the timeout so the activity never hangs on a dead room. */
+  function requestIcePalace(kind: 'ice-palace-rite' | 'ice-palace-fragment', payload: Readonly<Record<string, string>>): Promise<boolean> {
+    if (!icePalaceSupported) return Promise.resolve(false);
+    const requestId = 'ip' + (++icePalaceRequestSeq).toString(36) + Date.now().toString(36);
+    return new Promise<boolean>(resolve => {
+      const settle = (accepted: boolean) => { if (icePalacePending.delete(requestId)) resolve(accepted); };
+      icePalacePending.set(requestId, settle);
+      setTimeout(() => settle(false), 6_000);
+      if (!sendEvent(JSON.stringify({ type: 'event', kind, requestId, ...payload }))) settle(false);
+    });
+  }
+
   function samplePhotoClock() {
     if (!haveId || (!photoSupported && !townNight.state())) return;
     const sentAt = performance.now();
@@ -926,7 +982,19 @@ export function createTownPresence(
      * only state change a client ever applies. Returns false offline. */
     sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
       cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
+    /** Latest per-peer ice-palace rite snapshot from the room authority;
+     * every rite reads unavailable until its policy store exists. */
+    getIcePalaceRiteState: (): IcePalaceRiteState => icePalaceRiteState,
+    requestIcePalaceRite: (rite: IcePalaceRite) => requestIcePalace('ice-palace-rite', { rite }),
+    /** Whether the palace wreckage fragment is still unclaimed in this room. */
+    icePalaceFragmentPresent: () => icePalaceFragmentPresent,
+    requestIcePalaceFragment: (id: string) => requestIcePalace('ice-palace-fragment', { id }),
     getTownNightWindow: townNight.state,
+    /** Latest underground river snapshot relayed by the mine room, or
+     * undefined until one arrives. Raw on purpose: the certified port
+     * (town-c-water-snapshot-port) validates it at consumption. */
+    getUndergroundWater: () => undergroundWaterSnapshot as
+      import('../../../src/shared/town-c-water-snapshot-port.js').AcceptedUndergroundWaterSnapshot | undefined,
     /** True server-authored weather state or undefined when a legacy room lacks G-09. */
     getTownOutdoorWeather: townWeather.state,
     getTownWeatherDawnEpoch: townWeather.dawnEpoch,

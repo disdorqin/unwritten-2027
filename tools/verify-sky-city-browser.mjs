@@ -25,7 +25,11 @@ const { buildSkyCityTower } = await import(pathToFileURL(path.join(root, sceneMo
 
 let server, browser, page;
 const viewSize = { width: 760, height: 500 };
-const shot = name => page.screenshot({ path: path.join(output, name + '.jpg'), quality: 78 });
+const shot = async name => {
+  const header=page.locator('header');await header.evaluate(el=>{el.style.visibility='hidden'});
+  try{return await page.screenshot({path:path.join(output,name+'.jpg'),quality:78})}
+  finally{await header.evaluate(el=>{el.style.visibility=''})}
+};
 const snapshot = () => page.evaluate(() => window.lastSkyCityFrame);
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -97,6 +101,59 @@ try {
   assert.equal(landed.flight.recovery, null);
   result.checks.push({ landed });
   await shot('03-landing');
+  if(process.argv.includes('--observatory')){
+    result.step='observatory hall and return';
+    const route=[[-14,31],[8,29],[15,20],[15,12],[15,7],[16,1],[16,-4],[16,-6]];
+    for(const [x,z]of route.slice(0,6))await walk([x,0,z],.22);
+    await turn(0);await shot('18-observatory-front-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('18-observatory-front-night');await page.keyboard.press('n');
+    for(const [x,z]of route.slice(6))await walk([x,0,z],.22);
+    await turn(-Math.PI/2);await shot('19-star-chart-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('19-star-chart-night');await page.keyboard.press('n');
+    await turn(Math.PI/2);await shot('20-telescope-day');
+    await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+    await shot('20-telescope-night');await page.keyboard.press('n');
+    result.checks.push({observatory:await snapshot()});
+    for(const [x,z]of route.slice(0,-1).reverse())await walk([x,0,z],.22);
+    await walk([-14,0,37.4],.25);
+    result.checks.push({returnToLanding:await snapshot()});await shot('21-return');
+    assert.deepEqual(result.errors,[]);result.status='passed';
+  }else if(process.argv.includes('--district')){
+    result.step='new district first-person circuit';
+    async function visit(name,points,heading){
+      for(const [x,z] of points)await walk([x,0,z],.22);
+      await turn(heading);await shot(name+'-day');
+      await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+      await shot(name+'-night');result.checks.push({name,...await snapshot()});
+      await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===false);
+    }
+    await visit('13-wing-rack',[[-14,31],[8,29],[12,29.5]],Math.PI);
+    await visit('14-residences',[[12,31],[22,19],[27.8,19],[30,19]],Math.PI);
+    await visit('14b-residence-front',[[35,19],[35,23],[35,32.5],[30,35]],0);
+    await visit('15-greenhouse',[[35,32.5],[35,23],[35,19],[30,19],[27.3,19],[27.3,12],[27.3,5],[27.3,0],[37,-1],[39,-12],[39,-21],[39,-24.5]],0);
+    await visit('16-ship-gallery',[[39,-21],[32,-18],[24,-18],[14,-16],[0,-17],[-14,-14],[-24,-17],[-32,-18],[-32,-21.5]],0);
+    await visit('17-beacon',[[-32,-18],[-22,-18],[-16,-25]],0);
+    assert.deepEqual(result.errors,[]);result.status='passed';
+  }else{
+  // B91 expanded district: ordinary WASD walking, never camera teleport.
+  result.step='walk new clinic and seed storage';
+  const clinic=[[-14,0,31],[8,0,29],[17,0,20],[22,0,19],[22,0,15]];
+  for(const point of clinic)await walk(point);
+  await turn(0);await shot('07-clinic-day');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('08-clinic-night');
+  result.checks.push({clinic:await snapshot()});
+  await page.keyboard.press('n');
+  const seed=[[22,0,19],[27.8,0,19],[28.5,0,12],[34,0,11.3],[34,0,7.0]];
+  for(const point of seed)await walk(point);
+  await turn(0);await shot('09-seed-store-day');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('10-seed-store-night');result.checks.push({seedStore:await snapshot()});
+  await page.keyboard.press('n');
+  for(const point of [...seed].reverse().slice(1))await walk(point);
+  for(const point of [...clinic].reverse().slice(2))await walk(point);
   result.step = 'walk into dormitory';
   const dorm = buildSkyCityBuildings().dormRoute;
   for (const stop of dorm) await walk(stop);
@@ -110,7 +167,9 @@ try {
   await page.keyboard.down('ArrowDown');
   try { await page.waitForTimeout(320); } finally { await page.keyboard.up('ArrowDown'); }
   await shot('05-crystal-court');
-  result.checks.push({ crystal: await snapshot() });
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('11-crystal-court-night');
+  result.checks.push({ crystal: await snapshot() });await page.keyboard.press('n');
   for (const stop of [[-9, 0, 5.8], [-13, 0, 7], [-13, 0, 2], [-14, 0, -11], [-11, 0, -17], [-5, 0, -19]]) await walk(stop);
   result.step = 'stairs to locked gate';
   const tower = buildSkyCityTower();
@@ -122,6 +181,8 @@ try {
   await turn(0);
   await page.getByText('未央门 · 锁闭', { exact: true }).waitFor();
   await shot('06-locked-gate');
+  await page.keyboard.press('n');await page.waitForFunction(()=>window.lastSkyCityFrame?.night===true);
+  await shot('12-locked-gate-night');await page.keyboard.press('n');
   try {
     await page.keyboard.down('w');
     await page.waitForTimeout(700);
@@ -132,6 +193,7 @@ try {
   result.checks.push({ lockedGate: blocked });
   assert.deepEqual(result.errors, []);
   result.status = 'passed';
+  }
 } catch (error) {
   result.failure = error.stack;
   result.last = await snapshot().catch(() => undefined);

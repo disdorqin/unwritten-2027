@@ -28,6 +28,15 @@ type WellHost = Readonly<{
   canBoardCage(playerId: string, direction: UndergroundEntryDirection): boolean;
   load(): UndergroundEntrySnapshot | undefined;
   save(snapshot: UndergroundEntrySnapshot): undefined;
+  /**
+   * External feel-model attestor for the winch (乙案): when present, the
+   * bridge exposes holdWinchExternal alongside the sample-driven holdWinch.
+   * The entry still issues the opening; the attestor only reports pace.
+   */
+  winchExternal?: {
+    isComplete(playerId: string): boolean;
+    progress(playerId: string): number;
+  };
 }>;
 
 function validFoot(playerId: string, foot: Foot | undefined, domainId: string): foot is Foot {
@@ -48,6 +57,7 @@ export function createUndergroundWellBridge(host: WellHost) {
   const canUseWinch = createUndergroundWinchAccess(connection.winch, host.readAcceptedFoot);
   const winding = createUndergroundWinchWinding({
     canUseWinch, now: host.now, maxSampleGapMs: host.maxSampleGapMs,
+    external: host.winchExternal,
   });
   const entry = createUndergroundEntry({
     depthLine: connection.depthLine,
@@ -66,6 +76,20 @@ export function createUndergroundWellBridge(host: WellHost) {
     save: host.save,
   });
 
+  function driveWinch(playerId: string, sample: () => { kind: string; turns?: number }) {
+    if (!entry.sceneState().coverVisible) return { kind: 'already-open' } as const;
+    const progress = sample();
+    if (progress.kind !== 'ready') return progress;
+    const result = entry.openWell(playerId);
+    if (result.kind === 'opened') {
+      winding.cancel(playerId);
+      // Opening only lifts the cover; the opener must walk from the handle into the shaft.
+      return { kind: 'opened', turns: 3 } as const;
+    }
+    if (result.kind === 'denied') winding.cancel(playerId);
+    return { kind: result.kind } as const;
+  }
+
   return {
     kind: 'ready',
     snapshot: entry.snapshot,
@@ -73,17 +97,11 @@ export function createUndergroundWellBridge(host: WellHost) {
     modeOf: entry.modeOf,
     /** This call must originate from one continuously held and movement-authorized E stream. */
     holdWinch(playerId: string) {
-      if (!entry.sceneState().coverVisible) return { kind: 'already-open' } as const;
-      const progress = winding.sample(playerId);
-      if (progress.kind !== 'ready') return progress;
-      const result = entry.openWell(playerId);
-      if (result.kind === 'opened') {
-        winding.cancel(playerId);
-        // Opening only lifts the cover; the opener must walk from the handle into the shaft.
-        return { kind: 'opened', turns: 3 } as const;
-      }
-      if (result.kind === 'denied') winding.cancel(playerId);
-      return { kind: result.kind } as const;
+      return driveWinch(playerId, () => winding.sample(playerId));
+    },
+    /** Same stream discipline, paced by the host's external feel model. */
+    holdWinchExternal(playerId: string) {
+      return driveWinch(playerId, () => winding.sampleExternal(playerId));
     },
     releaseWinch: winding.cancel,
     /** No teleport order can be obtained while the opener is still standing at the handle. */
