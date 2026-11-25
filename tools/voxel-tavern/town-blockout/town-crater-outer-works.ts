@@ -41,6 +41,32 @@ function pixelMaterial(base: string, shade: string, seed: number, accent = shade
   return new MeshStandardMaterial({ map, roughness: 1 });
 }
 
+/** Calm, continuous industrial surfaces. The random high-contrast legacy
+ * pixels stay on the old props; walls and equipment use joined boards,
+ * staggered brick courses or rolled sheet, with restrained tonal variation. */
+function industrialSurface(kind:'wood'|'brick'|'sheet',base:number){
+  const size=32,data=new Uint8Array(size*size*4);
+  const r=base>>16&255,g=base>>8&255,b=base&255;
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    let tone=0;
+    if(kind==='wood'){
+      const board=Math.floor(x/8),seam=x%8===0;
+      tone=seam?-23:((board*13)%15-7)+((x*7+Math.floor(y/9)*3)%7-3);
+    }else if(kind==='brick'){
+      const row=Math.floor(y/8),bx=(x+(row%2)*8)%16;
+      tone=y%8===0||bx===0?-24:((row*17+Math.floor((x+(row%2)*8)/16)*11)%13-6);
+    }else{
+      tone=x%8===0?-18:x%8===1?8:((Math.floor(y/8)+x*3)%5-2);
+    }
+    const c=(v:number)=>Math.max(0,Math.min(255,v+tone));
+    data.set([c(r),c(g),c(b),255],(y*size+x)*4);
+  }
+  const map=new DataTexture(data,size,size);
+  map.magFilter=map.minFilter=NearestFilter;
+  map.colorSpace=SRGBColorSpace;map.needsUpdate=true;
+  return new MeshStandardMaterial({map,roughness:kind==='sheet'?.86:1});
+}
+
 function hash(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -139,6 +165,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     color: palette.windowWarm, emissive: palette.ember, emissiveIntensity: 1.25, roughness: .8,
   });
 
+  const workshopWood=industrialSurface('wood',0x7b6148);
+  const workshopBrick=industrialSurface('brick',0x74665d);
+  const workshopSheet=industrialSurface('sheet',0x54575a);
   const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
   const coldGlass=new MeshStandardMaterial({color:0x6c8291,roughness:.65,emissive:0x657786,emissiveIntensity:.06});
   const windowRows=(xs:readonly number[],width:number,low:number,high:number):IndustryWindow[]=>
@@ -242,10 +271,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
     const hall=industrialBuilder(fr,g,put,colliders,floors);
-    hall.slab(stone,0,0,28,11,1.2,1.2);
+    hall.slab(workshopBrick,0,0,28,11,1.2,1.2);
     // The cold-sealed furnace aperture remains decorative; a separate
     // service entrance at +4.7m gives the actual hall its walkable interior.
-    hall.shell(corrugated,28,11,1.2,12.9,4.7,3.2,3.5,
+    hall.shell(workshopSheet,28,11,1.2,12.9,4.7,3.2,3.5,
       {openings:windowRows([-10.5,-3.5,3.5,10.5],2.25,9.4,11.1),frame:timber,glass:coldGlass});
     const access=hall.stairs(stone,4.7,8.30,'z',-1,5,.56,2.65,0,1.2);
     industrialRoutes.push({id:'smelter-plant',points:[hall.point(4.7,8.85,0),...access,hall.point(4.7,3.4,1.2),hall.point(4.7,0,1.2),hall.point(8,0,1.2)]});
@@ -435,14 +464,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
     const hall=industrialBuilder(fr,g,put,colliders,floors);
     hall.slab(stone,0,0,20,10,.9,.9);
-    hall.shell(stone,20,10,.9,4.2,0,2.8,2.8,
+    hall.shell(workshopBrick,20,10,.9,4.2,0,2.8,2.8,
       {openings:windowRows([-8,-4.8,4.8,8],1.7,1.65,3.55),frame:timber,glass:coldGlass});
     // Upper shell is separate, with a genuine mezzanine and stair opening.
-    hall.shell(timberWarm,20,10,4.2,12.6,0,0,0,
+    hall.shell(workshopWood,20,10,4.2,12.6,0,0,0,
       {openings:windowRows([-8,-4.8,-1.6,1.6,4.8,8],1.7,5.95,7.65),frame:timber,glass:frostedGlass});
-    hall.slab(timber,0,1.05,19.5,7.45,4.2,.24);
-    hall.slab(timber,5.5,-3.55,8.5,2.15,4.2,.24);
-    hall.slab(timber,-9.1,-3.55,1.1,2.15,4.2,.24);
+    hall.slab(workshopWood,0,1.05,19.5,7.45,4.2,.24);
+    hall.slab(workshopWood,5.5,-3.55,8.5,2.15,4.2,.24);
+    hall.slab(workshopWood,-9.1,-3.55,1.1,2.15,4.2,.24);
     const access=hall.stairs(stone,0,9.98,'z',-1,3,.56,2.4,0,.9);
     const stair=hall.stairs(timber,-8.05,-3.55,'x',1,12,.63,1.45,.9,4.2);
     hall.slab(timber,.3,-3.55,1.65,1.45,4.2,.20);
@@ -450,12 +479,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     hall.piece(iron,4.85,-2.8,7.1,.12,4.2,5.2);
     // Real calibration benches, instrument cases and stock shelves.
     for(const dx of [-6,-3,3,6]){
-      hall.piece(timberWarm,dx,2.4,1.6,1.0,.9,1.85);
+      hall.piece(workshopWood,dx,2.4,1.6,1.0,.9,1.85);
       for(let k=0;k<3;k++)put(brass,dx-.5+k*.5,g+2.02,2.4,.24,.32,.35);
     }
     hall.piece(iron,0,0,1.45,1.35,.9,2.7);
     for(const dx of [-5,0,5]){
-      hall.piece(timber,dx,2.75,2.0,1.05,4.2,5.5);
+      hall.piece(workshopWood,dx,2.75,2.0,1.05,4.2,5.5);
       put(brass,dx,g+5.65,2.75,.7,.25,.6);
     }
     industrialRoutes.push({id:'instrument-plant',points:[hall.point(0,10.5,0),...access,hall.point(0,6.2,.9),hall.point(0,3.4,.9),hall.point(-8,3.4,.9),hall.point(-8,-1.0,.9),hall.point(-8.05,-3.55,.9),...stair,hall.point(.3,-3.55,4.2),hall.point(.3,-1.6,4.2),hall.point(3,-1.6,4.2)]});
