@@ -136,7 +136,8 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
   // of 336 removed (20 full tiles + the 12 m partial row at 528:
   // −97,920 triangles) against the pin above.
   assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - lampDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles, 259147, 'crater remainder stays at the W-1 re-pinned triangle baseline (357,067 − 97,920 capped ground-sheet rows)');
+  // Batch98 haulage-turn relocation restores eight 12-triangle floor shards net.
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles, 259243, 'W-1 remainder 259147 + 96 triangles from relocated lamp clearance');
   assert.ok(dressingDraws <= 17, 'added story details must stay batched (17 since C3 segments 1-4, crater offensive order 2026-11-21)');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');
