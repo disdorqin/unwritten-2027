@@ -1,11 +1,12 @@
 import {
   BoxGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
-  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace,
+  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace, Vector3,
 } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import { buildBR30CrystalForm, buildBR30RailFragment, buildBR30TimberFragment } from './town-b-r30-crater-remnant-forms';
+import { surveyBR30RelicView, type BR30RelicView } from './town-b-r30-crater-relic-view';
 
 type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
 type Piece = 'scorch' | 'black-rock' | 'timber' | 'rust' | 'ice';
@@ -100,6 +101,7 @@ export function buildCraterMidgroundS5(road: Ground,
   const group = new Group();
   group.name = 'crater-midground-s5';
   const placements: CraterMidgroundPiece[] = [];
+  const crystalViews: {cluster:string;view:BR30RelicView}[]=[];
   const stamps = new Map<Piece, Object3D[]>();
   const trail = Array.from({ length: 801 }, (_, i) => {
     const at = fixture.mainTrailPoint(i / 800);
@@ -141,6 +143,13 @@ export function buildCraterMidgroundS5(road: Ground,
     part.rotation.set(tilt, angle, 0);
     part.scale.set(sx * scale, sy * scale, sz * scale);
     part.updateMatrix();
+    if(kind==='ice'){
+      // Aim at the real asymmetric tip, not a stale fixture height.
+      const tip=new Vector3(.12,.5,-.035).applyMatrix4(part.matrix);
+      const view=surveyBR30RelicView(road.heightAt,trail,{east:tip.x,north:-tip.z,height:tip.y});
+      if(!view)return;
+      crystalViews.push({cluster,view});
+    }
     const entries = stamps.get(kind) ?? [];
     entries.push(part);
     stamps.set(kind, entries);
@@ -209,7 +218,7 @@ export function buildCraterMidgroundS5(road: Ground,
       };
       // Place the signature object first; loose rock is subordinate.
       if(band.theme==='crystal'){
-        if(!place('ice',-.3,0,1.24,.13))continue;
+        if(!place('ice',-.3,0,1.55,.13))continue;
         place('ice',.2,-1.25,.82,-.24);
         place('ice',.15,1.4,.65,.18);
       }else if(band.theme==='rail'){
@@ -252,5 +261,5 @@ export function buildCraterMidgroundS5(road: Ground,
     group.add(batch);
     batches.push(kind);
   }
-  return { group, placements, batches };
+  return { group, placements, batches, crystalViews };
 }

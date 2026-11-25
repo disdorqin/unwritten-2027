@@ -23,6 +23,12 @@ test('R30 middle band keeps sparse recognizable mining relics and crystal outcro
   for (const kind of ['ice', 'rust', 'timber']) assert.ok(a.placements.some(p => p.kind === kind), `missing ${kind} relic`);
   assert.ok(a.placements.every(p => p.kind !== 'scorch'), 'no decorative scorch scatter');
   assert.ok(a.batches.length <= 5, `draw batches stay inside the dressing budget: ${a.batches.length}`);
+  assert.equal(a.crystalViews.length,a.placements.filter(p=>p.kind==='ice').length);
+  assert.ok(a.crystalViews.length>=3);
+  for(const {view} of a.crystalViews){
+    assert.ok(view.clearance>=.15 && view.distance<=12 && Math.abs(view.pitch)<=.65);
+    assert.ok(Math.abs(road.heightAt(view.foot.east,view.foot.north)!-view.foot.height)<1e-6);
+  }
 });
 
 test('every piece honours the guards: off the lane, off the lip, out of the mound disc', () => {
