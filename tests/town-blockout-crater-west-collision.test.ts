@@ -93,13 +93,21 @@ test('town-era wall: segments block, the gate channel stays walkable', () => {
   assert.equal(blocked(outer.colliders, -18, 100), true, 'wall segment blocks');
 });
 
-test('gatehouse: walls block, doorway open, base is a floor with a ramp', () => {
+test('gatehouse: walls block, doorway open, base is reached by physical steps', () => {
   const back = frameAt({ east: -13, north: 150.5 }, 90, 0, -1.93);
   assert.equal(blocked(outer.colliders, back.east, back.north), true, 'gatehouse back wall blocks');
   const door = frameAt({ east: -13, north: 150.5 }, 90, 0, 1.93);
   assert.equal(blocked(outer.colliders, door.east, door.north), false, 'gatehouse doorway open');
   assert.ok(Math.abs(floorTopAt(outer.floors, -13, 150.5) - 13) < .01, 'gatehouse base floor top');
-  assert.ok(outer.ramps.length >= 1, 'gatehouse doorway ramp exported');
+  const route=outer.industrialRoutes.find(r=>r.id==='gatehouse');
+  assert.ok(route,'gatehouse route exported');
+  assert.equal(route.points.length,7);
+  const steps=route.points.slice(1,5);
+  for(const [i,p] of steps.entries()){
+    assert.ok(Math.abs(p.height-(12+(i+1)/4))<.01,'one quarter metre riser on flat ground');
+    assert.ok(outer.floors.some(b=>p.east>=b.min[0]&&p.east<=b.max[0]&&-p.north>=b.min[2]&&-p.north<=b.max[2]&&Math.abs(b.max[1]-p.height)<.01),'physical tread support');
+  }
+  assert.ok(!outer.ramps.some(r=>r.min[0]<=door.east&&r.max[0]>=door.east&&r.min[2]<=-door.north&&r.max[2]>=-door.north),'no invisible doorway ramp');
 });
 
 test('fence ring: panels block, station / rail / collapsed gaps stay open', () => {

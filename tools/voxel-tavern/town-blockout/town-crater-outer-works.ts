@@ -903,18 +903,35 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    put(stone, 0, g + .5, 0, 5, 1, 4);
-    put(timber, 0, g + 2.2, -1.93, 5, 2.6, .16);
-    put(timber, -2.43, g + 2.2, 0, .16, 2.6, 4);
-    put(timber, 2.43, g + 2.2, 0, .16, 2.6, 4);
-    put(timber, -1.55, g + 2.2, 1.93, 1.75, 2.6, .16);
-    put(timber, 1.85, g + 2.2, 1.93, 1.15, 2.6, .16);
-    put(timber, .15, g + 3.35, 1.93, 2.25, .35, .16);
+    const hut=industrialBuilder(fr,g,put,colliders,floors);
+    hut.slab(workshopBrick,0,0,5,4,1,1.12);
+    hut.shell(workshopWood,5,4,1,4.05,.3,1.95,2.35,{
+      openings:[{side:-1,x:0,width:1.7,low:2.15,high:3.35}],
+      frame:timber,glass:frostedGlass,
+    });
+    // Actual entry treads, not the old invisible ramp. Each tread extends
+    // down to the local ground and the last meets the original stone floor.
+    const entry=fr.at(.3,5.05);
+    const low=(heightAt(entry.east,entry.north)??g)-g;
+    const count=4,run=.68,doorZ=2.0;
+    const path=[hut.point(.3,5.05,low)];
+    for(let i=0;i<count;i++){
+      const z=doorZ+(count-i-.5)*run,top=low+(1-low)*(i+1)/count;
+      const p=fr.at(.3,z);
+      const base=Math.min(top-.12,(heightAt(p.east,p.north)??g)-g-.07);
+      hut.slab(workshopBrick,.3,z,1.85,run+.008,top,top-base);
+      put(timber,.3,g+top+.018,z+run/2-.04,1.72,.036,.085);
+      path.push(hut.point(.3,z,top));
+    }
+    path.push(hut.point(.3,1.35,1),hut.point(.3,.35,1));
+    industrialRoutes.push({id:'gatehouse',points:path});
+    for(const dx of [-2.36,2.36])for(const dz of [-1.86,1.86])
+      put(timber,dx,g+2.53,dz,.20,3.06,.20);
     // K-26 (《设计-全图文字件总表》卡08): hut name board on the front wall
     // over the doorway, centred on the door gap (dx +0.3), under the lintel.
     const gateSignP = fr.at(.3, 2.02);
     siteAt('gatehouse-sign', gateSignP.east, gateSignP.north, 1);
-    sign(gateSignP.east, g + 2.92, gateSignP.north, fr.yaw, .95, .32, timber, (c, w, h) => {
+    sign(gateSignP.east, g + 3.68, gateSignP.north, fr.yaw, .95, .32, timber, (c, w, h) => {
       c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
       c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
       c.strokeRect(10, 10, w - 20, h - 20);
@@ -922,20 +939,32 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText('门房', w / 2, h / 2 + 4);
     });
-    // S-1 collision: stone base as a standable floor (a doorway ramp
-    // bridges the 1 m rise), walls as colliders; the front doorway
-    // between the two segments stays 1.95 m open.
-    { const c = fr.at(0, 0); hitBox(floors, c.east, c.north, fr.yaw, 5, 4, g, g + 1); }
-    hitRamp(ramps, fr, 3.05, 1.45, .95, g, g + 1);
-    for (const [dx, dz, sx, sz] of [[0, -1.93, 5, .16], [-2.43, 0, .16, 4], [2.43, 0, .16, 4], [-1.55, 1.93, 1.75, .16], [1.85, 1.93, 1.15, .16]] as const) {
-      const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .9, g + 3.5);
+    // A continuous pitched roof with real gable infill and exposed rafters.
+    const eaves=4.05,rise=1.22,runRoof=2.30,pitch=Math.atan2(rise,runRoof);
+    for(const side of [-1,1]){
+      put(slate,0,g+eaves+rise/2,side*runRoof/2,5.7,.18,Math.hypot(rise,runRoof),side*pitch);
+      put(snow,0,g+eaves+rise/2+.14,side*runRoof/2,5.55,.08,Math.hypot(rise,runRoof)-.1,side*pitch);
+      put(timber,0,g+eaves,side*runRoof,5.75,.18,.18);
+      for(let k=0;k<6;k++){
+        const t=(k+.5)/6;
+        put(workshopWood,side*2.42,g+eaves+rise*t,0,.18,rise/6+.01,4*(1-t)+.02);
+      }
     }
-    put(slate, 0, g + 4.35, -1.05, 5.7, .2, 2.6, .5);
-    put(slate, 0, g + 4.35, 1.05, 5.7, .2, 2.6, -.5);
-    // Interior: table, bench, duty board; lamp by the door.
-    put(timberWarm, 0, g + 1.35, -.6, 1.7, .12, .9);
-    put(timber, -.8, g + 1.3, .6, 1.5, .1, .45);
+    put(timber,0,g+eaves+rise+.12,0,5.8,.22,.31);
+    for(const x of [-1.75,0,1.75])put(timber,x,g+3.97,0,.15,.18,4);
+    // Furniture occupies its actual footprint. Keep the center walk lane
+    // and a clear turning circle at the inside end of the stairs.
+    hut.piece(workshopWood,-1.23,-.95,1.65,.68,1,1.77);
+    put(timberWarm,-1.23,g+1.81,-.95,1.80,.10,.79);
+    hut.piece(workshopWood,1.6,-.62,.48,1.7,1,1.48);
+    put(timber,1.6,g+1.52,-.62,.56,.10,1.82);
+    put(timber,1.86,g+1.86,-.62,.13,.62,1.8);
+    hut.piece(workshopWood,-1.72,1.03,.64,.72,1,2.32);
+    for(let y=0;y<3;y++)put(timberWarm,-1.72,g+1.28+y*.41,1.03,.72,.07,.8);
+    put(timber,-1.23,g+2.59,-1.81,1.62,.72,.10);
+    for(let k=0;k<3;k++)put(brass,-1.72+k*.48,g+2.52,-1.72,.035,.25,.035);
+    put(glow,-1.23,g+2.05,-.95,.21,.36,.21);
+    put(iron,-1.23,g+2.27,-.95,.27,.08,.27);
     const lampP = fr.at(1.4, 2.6);
     box(timber, lampP.east, g + 1, lampP.north, .14, 2, .14);
     box(glow, lampP.east, g + 2.15, lampP.north, .3, .38, .3);
