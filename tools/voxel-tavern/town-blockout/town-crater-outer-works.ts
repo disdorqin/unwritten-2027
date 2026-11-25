@@ -175,6 +175,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const workshopBrick=industrialSurface('brick',0x74665d);
   const workshopSheet=industrialSurface('sheet',0x54575a);
   const workshopRust=industrialSurface('sheet',0x715044);
+  const towerMasonry=industrialSurface('brick',0x686d62);
   const wallPlaster=industrialSurface('plaster',0x9b885f);
   const cleanSnow=new MeshStandardMaterial({color:0xdce5ee,roughness:1});
   const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
@@ -1240,20 +1241,20 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const shaftH=totalH-2.6, deck=shaftH+.5, half=2.3, c=1.48, width=1.2;
     // Keep a genuine load-bearing center (the former center-blocking test
     // remains valid), while all four stair lanes are now hollow.
-    solid(stone,0,0,.88,.88,0,shaftH);
+    solid(towerMasonry,0,0,.88,.88,0,shaftH);
     const wall=.18, outer=half-wall/2;
     // Ground doorway, 1.28m clear, centred on the first stair corner.
     const doorL=-c-.64,doorR=-c+.64;
-    solid(stone,(doorL-half)/2,outer,doorL+half,wall,0,deck);
-    solid(stone,(doorR+half)/2,outer,half-doorR,wall,0,deck);
-    solid(stone,-c,outer,1.28,wall,2.35,deck);
+    solid(towerMasonry,(doorL-half)/2,outer,doorL+half,wall,0,deck);
+    solid(towerMasonry,(doorR+half)/2,outer,half-doorR,wall,0,deck);
+    solid(towerMasonry,-c,outer,1.28,wall,2.35,deck);
     // Side/back walls have repeated small narrow light slots. Their 0.30m
     // aperture is smaller than the .54m player diameter; no false passage.
     function flank(axis:'x'|'z',side:number){
       const slot=.30, bands=Math.floor(deck/2.4);
       const panel=(a:number,b:number,low:number,high:number)=>{
-        if(axis==='x')solid(stone,side*outer,(a+b)/2,wall,b-a,low,high);
-        else solid(stone,(a+b)/2,side*outer,b-a,wall,low,high);
+        if(axis==='x')solid(towerMasonry,side*outer,(a+b)/2,wall,b-a,low,high);
+        else solid(towerMasonry,(a+b)/2,side*outer,b-a,wall,low,high);
       };
       let low=0;
       for(let k=0;k<bands;k++){
@@ -1268,8 +1269,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     flank('x',-1);flank('x',1);flank('z',-1);
     for(const y of [deck*.31,deck*.62,deck-.28]){
       for(const side of [-1,1]){
-        put(iron,side*half,g+y,0,.08,.18,4.6);
-        put(iron,0,g+y,side*half,4.6,.18,.08);
+        put(workshopRust,side*half,g+y,0,.08,.18,4.6);
+        put(workshopRust,0,g+y,side*half,4.6,.18,.08);
+        for(const z of [-1.76,1.76]){
+          put(workshopSheet,side*(half+.045),g+y,z,.065,.11,.14);
+          put(workshopSheet,z,g+y,side*(half+.045),.14,.11,.065);
+        }
       }
     }
     // 8 straight flights, 5 treads per flight. Every tread is an actual
@@ -1285,13 +1290,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       for(let k=0;k<treads;k++){
         const dist=(k+.5)*depth, x=startX+dx*dist,z=startZ+dz*dist;
         const h=climb*(flight+(k+1)/treads);
-        slab(k%2===0?stoneDark:stone,x,z,dx?depth+.006:width,dz?depth+.006:width,h);
+        slab(k%2===0?workshopBrick:towerMasonry,x,z,dx?depth+.006:width,dz?depth+.006:width,h);
         // Embedded contrasting nosing, never a second collision surface.
         put(iron,x+dx*(depth/2-.025),g+h-.016,z+dz*(depth/2-.025),
           dx?.045:width,.026,dz?.045:width);
       }
       const landing=climb*(flight+1);
-      slab(stoneDark,b[0],b[1],width,width,landing);
+      slab(workshopBrick,b[0],b[1],width,width,landing);
       stairs.push(wp(b[0],b[1],landing));
       // Small visible warm fixtures do not add point-light budget.
       const lightX=b[0]*1.38,lightZ=b[1]*1.38;
@@ -1300,16 +1305,20 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Open BOTH uppermost stair flights for player headroom: the rear
     // penultimate run and left-hand final run are uncovered until the top
     // landing. The deck occupies the inner/front quadrant and exit tongue.
-    slab(stoneDark,.75,.75,3.1,3.1,deck,.22);
-    slab(stoneDark,-1.55,1.57,1.5,1.46,deck,.22);
+    slab(workshopBrick,.75,.75,3.1,3.1,deck,.22);
+    slab(workshopBrick,-1.55,1.57,1.5,1.46,deck,.22);
     solid(iron,-.80,.02,.10,1.64,deck,deck+1.02);
     solid(iron,.75,-.80,3.10,.10,deck,deck+1.02);
     for(const side of [-1,1]){
-      solid(stone,side*2.23,0,.19,4.6,deck,deck+.92);
-      solid(stone,0,side*2.23,4.6,.19,deck,deck+.92);
+      solid(towerMasonry,side*2.23,0,.19,4.6,deck,deck+.92);
+      solid(towerMasonry,0,side*2.23,4.6,.19,deck,deck+.92);
+      put(cleanSnow,side*2.23,g+deck+.94,0,.17,.04,4.45);
+      put(cleanSnow,0,g+deck+.94,side*2.23,4.45,.04,.17);
       for(const x of [-1.75,0,1.75]){
-        put(stoneDark,x,g+deck+1.02,side*2.23,.48,.20,.35);
-        put(stoneDark,side*2.23,g+deck+1.02,x,.35,.20,.48);
+        put(workshopBrick,x,g+deck+1.02,side*2.23,.48,.20,.35);
+        put(workshopBrick,side*2.23,g+deck+1.02,x,.35,.20,.48);
+        put(cleanSnow,x,g+deck+1.145,side*2.23,.44,.045,.31);
+        put(cleanSnow,side*2.23,g+deck+1.145,x,.31,.045,.44);
       }
     }
     // Open canopy, rather than an inaccessible cabin mass. Preserve the

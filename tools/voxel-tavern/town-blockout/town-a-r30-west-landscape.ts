@@ -87,6 +87,8 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
   // actual entrance / station / warehouse approach. Keep the new B apron
   // and frozen town seam byte-for-byte the old snow color.
   const civilRoutes:readonly {points:readonly Point[];half:number;strength:number}[]=[
+    {points:[[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-120,256],[-123.84,255.71]],half:1.25,strength:.63},
+    {points:[[-40,159],[-80,126],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-186.63,174.61]],half:1.25,strength:.63},
     {points:[[0,159],[-12,159],[-40,159],[-67,159]],half:3.5,strength:1},
     {points:[[-29,159],[-35,164],[-36,167],[-37.21,167.05]],half:1.6,strength:.78},
     {points:[[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5],[-58.11,138.36]],half:1.45,strength:.7},
