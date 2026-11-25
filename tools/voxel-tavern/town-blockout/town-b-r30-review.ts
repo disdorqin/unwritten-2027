@@ -5,8 +5,12 @@ import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {installBR30Workface} from './town-b-r30-crater-workface';
 import {installCraterWorkshopWorld} from './town-b-r30-crater-workstations';
+import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+// Preview only: A must consume retireBR30LegacyTerracePlates before
+// production reservation/collision consumers. The retired plates had no boxes.
+const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const rail=buildCraterRailExtension(grid,road);
 const face=installBR30Workface(road),machines=installCraterWorkshopWorld(road,rail);
 const scene=new Scene();scene.add(road.group,rail.group);
@@ -73,5 +77,5 @@ renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null})});
 requestAnimationFrame(tick);
