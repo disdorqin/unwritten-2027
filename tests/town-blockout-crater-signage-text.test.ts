@@ -62,6 +62,8 @@ test('crater signage text: settled K-texts land verbatim (总表为准）', () =
     '值班表', '一班 陆衡', '二班 周文测', '三班 陆箬',
     // Continuation package (落牌续补， 总控 2026-11-25 续派）: K-13/26/27/29/30/39.
     '货棚', '门房', '北行坑区 · 请走正门', '北塔', '守塔', '坑沿速降 · 个人最佳',
+    // Continuation package (落牌续补， 总控 2026-11-25 续派，批104 退役包入干后）: K-34/35.
+    '井口重地 · 稳绳慢放', '开井',
   ]) assert.ok(texts.includes(expected), `missing sign text: ${expected}`);
 });
 

@@ -4134,6 +4134,12 @@ renderer.setAnimationLoop(now => {
   // Batch-67: clouds hang off the same single authoritative weather state
   // (ZB-20 / G-09 presence weather) — never a second weather source.
   skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
+  // Batch-103 ruling: the cloud band reads the same ZB-20 single
+  // weather state (no second weather source); forward every frame once
+  // the presence weather has joined (until then the band keeps its
+  // shipped defaults, same as the pre-wiring behaviour).
+  const outdoorWeather = presence.getTownOutdoorWeather();
+  if (outdoorWeather) frontRidgeCloudBand.applyOutdoorWeather(outdoorWeather);
   frontRidgeCloudBand.update(dt);
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
   const overnightBoard = architecture.get('railway-station')?.userData.railOvernightBoard as Group | undefined;
