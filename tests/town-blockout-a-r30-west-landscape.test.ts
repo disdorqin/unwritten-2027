@@ -29,6 +29,19 @@ test('A-R02 creates substantial asymmetric terrain while preserving the civil fo
   for(let n=0;n<=336;n++)assert.equal(field.offsetAt(0,n),0);
 });
 
+test('A-R02 civil materials preserve exact shared snow boundary and distinguish used routes',()=>{
+  for(let n=0;n<=336;n++)assert.deepEqual(field.surfaceWeightsAt(0,n),{packed:0,ballast:0,yard:0});
+  for(let i=0;i<360;i++){
+    const a=i*Math.PI/180;
+    assert.deepEqual(field.surfaceWeightsAt(road.anchor.east+59*Math.sin(a),road.anchor.north+59*Math.cos(a)),{packed:0,ballast:0,yard:0});
+  }
+  assert.ok(field.surfaceWeightsAt(-35,159).packed>.9);
+  assert.ok(field.surfaceWeightsAt(-64,146).packed>.5);
+  const [b,r]=craterBeltTrackCorridor[3]!;
+  const a=b*Math.PI/180;
+  assert.ok(field.surfaceWeightsAt(road.anchor.east+r*Math.sin(a),road.anchor.north+r*Math.cos(a)).ballast>.8);
+  assert.ok(field.surfaceWeightsAt(field.pads[0]!.center[0],field.pads[0]!.center[1]).yard>.8);
+});
 test('A-R02 relief is real rendered collision support, not decorative overlay',()=>{
   const carriers=road.group.children.filter(o=>o.name==='meteor-crater-west-ground') as Mesh[];
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));

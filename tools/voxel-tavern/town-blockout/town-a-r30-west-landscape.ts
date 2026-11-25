@@ -82,5 +82,39 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
       +.28*Math.sin((e-n)*.112+.8);
     return w*(broad+drift);
   }
-  return {offsetAt,protectionAt,pads};
+  // These are the already surveyed civil routes, not new gameplay anchors.
+  // The broad road to the gate and the industrial footways follow the
+  // actual entrance / station / warehouse approach. Keep the new B apron
+  // and frozen town seam byte-for-byte the old snow color.
+  const civilRoutes:readonly {points:readonly Point[];half:number;strength:number}[]=[
+    {points:[[0,159],[-12,159],[-40,159],[-67,159]],half:3.5,strength:1},
+    {points:[[-29,159],[-35,164],[-36,167],[-37.21,167.05]],half:1.6,strength:.78},
+    {points:[[-40,159],[-36,145],[-58.11,138.36]],half:1.45,strength:.7},
+    {points:[[-67,159],[-67.5,142],[-74,126],[-70,120],[-72.9,116.85],[-74.8,115.8]],half:1.45,strength:.78},
+    {points:[[-67.5,142],[-65,112],[-84,97],[-111,79],[-132,86],[-151.75,112.34]],half:1.75,strength:.7},
+    {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
+  ];
+  const workYards=pads.filter(p=>p.id==='smelter-plant'||p.id==='instrument-plant'||p.id==='ore-yard')
+    .map(p=>({...p,radius:p.radius*.72}));
+  function surfaceWeightsAt(e:number,n:number){
+    const radial=Math.hypot(e-anchor.east,n-anchor.north);
+    const seam=smooth((radial-apronRadius-1.2)/5)*smooth(-e/9)
+      *smooth((e+240)/8)*smooth(n/8)*smooth((northLimit-n)/8);
+    if(seam===0)return {packed:0,ballast:0,yard:0};
+    let packed=0,ballast=0,yard=0;
+    for(const route of civilRoutes)for(let i=1;i<route.points.length;i++){
+      const d=segmentDistance(e,n,route.points[i-1]!,route.points[i]!);
+      packed=Math.max(packed,route.strength*(1-smooth((d-route.half*.68)/1.8)));
+    }
+    for(let i=1;i<belt.length;i++){
+      const d=segmentDistance(e,n,belt[i-1]!,belt[i]!);
+      ballast=Math.max(ballast,1-smooth((d-.9)/2.2));
+    }
+    for(const p of workYards){
+      const d=Math.hypot(e-p.center[0],n-p.center[1]);
+      yard=Math.max(yard,1-smooth((d-p.radius*.55)/(p.radius*.6)));
+    }
+    return {packed:seam*packed,ballast:seam*ballast,yard:seam*yard};
+  }
+  return {offsetAt,protectionAt,pads,surfaceWeightsAt};
 }

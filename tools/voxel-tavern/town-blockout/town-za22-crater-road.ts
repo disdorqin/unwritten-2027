@@ -190,7 +190,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     // don't disguise invisible or mismatched support with a second overlay.
     const pos=joined.getAttribute('position'), colors=new Float32Array(pos.count*3);
     const snow=new Color(0xc1cedc), rock=new Color(0x8995a4), powder=new Color(0xe1e8ef);
-    const tint=new Color();
+    const tint=new Color(),packedSnow=new Color(0xa0a5aa),railGravel=new Color(0x767d82),yardGravel=new Color(0x9a9288);
     for(let k=0;k<pos.count;k++){
       const e=pos.getX(k),n=-pos.getZ(k),h=pos.getY(k);
       const rad=Math.hypot(e-anchor.east,n-anchor.north);
@@ -202,6 +202,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       const d=h-base;
       const shade=Math.min(1,Math.abs(d)/2.8)*weight;
       tint.copy(snow).lerp(d<0?rock:powder,shade*(.58+.22*Math.sin(e*.13+n*.08)));
+      // Snow worn by people and ore transport is a material of this very
+      // carrier, never another coplanar road mesh. Warm gravel in work yards,
+      // subdued ballast along the narrow track, compacted snow on the road.
+      const civil=landscape.surfaceWeightsAt(e,n);
+      tint.lerp(yardGravel,civil.yard*(.42+.06*Math.sin(e*.43+n*.27)));
+      tint.lerp(packedSnow,civil.packed*(.66+.09*Math.cos(n*.91+e*.37)));
+      tint.lerp(railGravel,civil.ballast*(.66+.07*Math.sin(e*.59-n*.52)));
       colors[k*3]=tint.r;colors[k*3+1]=tint.g;colors[k*3+2]=tint.b;
     }
     joined.setAttribute('color',new Float32BufferAttribute(colors,3));
