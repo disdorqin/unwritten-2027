@@ -9,6 +9,10 @@ import {
 } from './underground-camp-offerings';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import {
+  readUndergroundWaterPresentation,
+  type AcceptedUndergroundWaterSnapshot,
+} from '../../../src/shared/town-c-water-snapshot-port.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -139,6 +143,13 @@ export type UndergroundCampBridge = Readonly<{
  */
 export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
+  /** Production water loop (batch 103): the mine presence room relays
+   * the single presence-side tonight() snapshot; the host validates it
+   * through the certified port and feeds C2-06's scene adapter. Absent
+   * bridge (or no snapshot yet) leaves the scene's baseline untouched. */
+  waterBridge?: Readonly<{
+    readWaterSnapshot?: () => AcceptedUndergroundWaterSnapshot | undefined;
+  }>;
 }>) {
   const { parent, road } = options;
   const campBridge = options.campBridge;
@@ -281,6 +292,23 @@ export function mountUndergroundDomainHost(options: Readonly<{
   };
   const readGateStage = () => 'closed' as const;
 
+  // Water loop consumption: the bridge's raw snapshot is validated by
+  // the certified port on every read; the scene adapter receives only
+  // the effective authority (level incl. pump offset + phase). The
+  // high-water rise adopts C2's fixture value (1 m) until the scene
+  // difference verification certifies a layout datum.
+  const waterRuntime = options.waterBridge ? {
+    highWaterOffsetM: 1,
+    readWater: () => {
+      const snapshot = options.waterBridge?.readWaterSnapshot?.();
+      if (!snapshot) return undefined;
+      const presentation = readUndergroundWaterPresentation(() => snapshot);
+      return presentation
+        ? { level: presentation.level, phase: presentation.phase }
+        : undefined;
+    },
+  } : undefined;
+
   const mounted = mountUndergroundMineDomain({
     parent, registration, mine,
     camp: undergroundMineSpec.camp, walker: undergroundMineSpec.walker,
@@ -295,6 +323,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     campRuntime,
     recoveryRuntime,
     readGateStage,
+    ...(waterRuntime ? { waterRuntime } : {}),
   });
   if (mounted.kind !== 'ready') return { kind: 'unregistered', reason: mounted.kind } as const;
   // World -> mine-local passage query, for the movement host: the layout's own

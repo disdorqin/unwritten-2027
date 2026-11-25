@@ -675,6 +675,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.font = '600 36px "Noto Sans SC", sans-serif'; c.textAlign = 'right';
         c.fillText('未写镇公所', w - 40, h * .93);
       });
+      // K-27 (《设计-全图文字件总表》卡08): direction board on the north
+      // post's passage face, mirroring the town-office notice opposite.
+      siteAt('wall-gate-direction', wallEast, 161.8, 1);
+      sign(wallEast, g + 3.3, 161.82, Math.PI, 1.6, .48, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = '600 46px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北行坑区 · 请走正门', w / 2, h / 2 + 2);
+      });
     }
   }
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.
@@ -694,6 +705,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(timber, -1.55, g + 2.2, 1.93, 1.75, 2.6, .16);
     put(timber, 1.85, g + 2.2, 1.93, 1.15, 2.6, .16);
     put(timber, .15, g + 3.35, 1.93, 2.25, .35, .16);
+    // K-26 (《设计-全图文字件总表》卡08): hut name board on the front wall
+    // over the doorway, centred on the door gap (dx +0.3), under the lintel.
+    const gateSignP = fr.at(.3, 2.02);
+    siteAt('gatehouse-sign', gateSignP.east, gateSignP.north, 1);
+    sign(gateSignP.east, g + 2.92, gateSignP.north, fr.yaw, .95, .32, timber, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('门房', w / 2, h / 2 + 4);
+    });
     // S-1 collision: stone base as a standable floor (a doorway ramp
     // bridges the 1 m rise), walls as colliders; the front doorway
     // between the two segments stays 1.95 m open.
@@ -879,6 +902,29 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       light.position.set(lampP.east, g + shaftH + 2.6, -lampP.north);
       group.add(light);
       northTowerLight = light;
+      // K-29/K-30 (《设计-全图文字件总表》卡10, north tower only — the west
+      // tower takes no board per K-31): name plate on the shaft's ladder
+      // face, duty plate on the cabin's front wall over the platform.
+      const nameP = fr.at(-.85, 1.96);
+      siteAt('north-tower-sign', nameP.east, nameP.north, 1);
+      sign(nameP.east, g + 1.6, nameP.north, fr.yaw, .7, .3, iron, (c, w, h) => {
+        c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(8, 8, w - 16, h - 16);
+        c.font = 'bold 100px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北塔', w / 2, h / 2 + 4);
+      });
+      const dutyP = fr.at(.6, .66);
+      siteAt('north-tower-duty', dutyP.east, dutyP.north, 1);
+      sign(dutyP.east, g + shaftH + 1.55, dutyP.north, fr.yaw, .8, .5, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = 'bold 110px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('守塔', w / 2, h / 2 + 4);
+      });
     }
   }
   const northTower = site('north-tower', 358, 67.5, 4, 13.5);

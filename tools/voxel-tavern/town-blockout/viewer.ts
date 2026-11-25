@@ -270,6 +270,9 @@ function ensureWestCraterRoad() {
     scene.add(undergroundParent);
     undergroundDomain = mountUndergroundDomainHost({
       parent: undergroundParent, road: westCraterRoad,
+      waterBridge: {
+        readWaterSnapshot: () => presence.getUndergroundWater(),
+      },
       campBridge: {
         now: () => performance.now(),
         readWorldFoot: () => ({ east: x, north: n, height: airHeight ?? ground }),

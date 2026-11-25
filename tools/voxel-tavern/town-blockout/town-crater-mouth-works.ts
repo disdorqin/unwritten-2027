@@ -259,6 +259,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     if (boardH !== undefined) {
       actions.push({ id: 'registration', label: '阅读入坑告示', east: board.east, north: board.north, height: boardH, range: 2.1 });
     }
+    // K-39 (《设计-全图文字件总表》卡15; 分册: 速降榜小牌挂告示牌侧):
+    // descent leaderboard head board beside the notice board.
+    for (const s of [-1, 1]) {
+      const p = fr.at(-2.2 + s * .55, 2.2);
+      box(timber, p.east, g + .8, p.north, .12, 1.6, .12, fr.yaw);
+    }
+    const lb = fr.at(-2.2, 2.2);
+    sign(lb.east, g + 1.35, lb.north, fr.yaw, 1.3, .55, (c, w, h) => {
+      c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#5d4630'; c.lineWidth = 6; c.strokeRect(12, 12, w - 24, h - 24);
+      c.fillStyle = '#3d2c1c'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = 'bold 44px "Noto Sans SC", sans-serif';
+      c.fillText('坑沿速降 · 个人最佳', w / 2, h / 2 + 2);
+    });
     // Sled slots: six stake pairs with a rope line.
     for (let i = 0; i < 6; i++) {
       const p = fr.at(-5 + i * 1.7, -2.8);

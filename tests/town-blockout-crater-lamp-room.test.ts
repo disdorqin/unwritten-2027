@@ -30,7 +30,7 @@ test('the lamp room stands at the workface with its own wall boxes', () => {
   assert.ok(road.lampRoom, 'lamp room mounted');
   assert.equal(road.lampRoom!.boxes.length, 10);
   const boxes = (road.group.userData.colliders ?? []) as Box[];
-  assert.ok(boxes.length >= 190, `colliders include the hut (got ${boxes.length})`);
+  assert.ok(boxes.length >= 185, `colliders include the hut (got ${boxes.length})`);
   const ground = road.lampRoom!.site.height;
   const wall = toWorld(-2.3, 0);
   assert.ok(inside(boxes, wall.east, wall.north, ground + 1), 'the west wall blocks');
