@@ -15,6 +15,7 @@ const palette: Record<TownD2R30SurfaceBand, Color> = {
   'summit-cap': new Color('#e8f3f5'),
 };
 const ochre = new Color('#a9784f');
+const iceHighlight = new Color('#cfe9f2');
 const deepRock = new Color('#414b53');
 const dayColor = new Color('#ffffff');
 const nightColor = new Color('#738aa8');
@@ -56,10 +57,19 @@ function surfaceColor(east: number, north: number, arrivalHeight: number, target
     const strata = .88 + .12 * Math.sin(height * .16 + east * .004);
     target.multiplyScalar(strata);
   } else if (band === 'glacier') {
+    // M08: read ice as layered, slope-facing surfaces rather than a flat fill.
+    // Crevasses cut dark lines; shallow shelves catch a cold blue highlight.
     const crevasse = Math.pow(Math.max(0, Math.sin(east * .055 + north * .021)), 18);
     target.multiplyScalar(1 - crevasse * .18);
+    const shelf = smoothstep(.02, .22, slope) * (1 - smoothstep(.4, .7, slope));
+    target.lerp(iceHighlight, shelf * .28);
   } else if (band === 'summit-cap') {
     target.lerp(palette.glacier, smoothstep(.08, .3, slope) * .34);
+    // Soft, aspect-aware snow line: leeward shallow faces keep brighter snow,
+    // while steep windward faces reveal the rock beneath (no random speckle).
+    const windward = clamp01(.5 + .5 * Math.sin(east * .012 - north * .009));
+    const exposure = smoothstep(.12, .42, slope) * windward;
+    target.lerp(palette['alpine-rock'], exposure * .26);
   }
   const grain = .95 + .05 * Math.sin(east * .17 + north * .11) * Math.cos(north * .09);
   target.multiplyScalar(grain * (1 - Math.min(.16, slope * .14)));

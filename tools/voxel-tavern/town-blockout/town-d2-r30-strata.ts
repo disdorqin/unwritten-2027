@@ -390,7 +390,9 @@ export function createTownD2R30Strata(options: TownD2R30StrataOptions = {}) {
   const materials = new Set<MeshLambertMaterial>();
   const rockMaterial = contours.dark?.mesh.material;
   const ochreMaterial = contours.ochre?.mesh.material;
-  const iceMaterial = glaciers[0]!.mesh.material;
+  // Every valley glacier owns its own material. Tinting only glaciers[0]
+  // left three ice ribs bright at night — collect them all.
+  const iceMaterials = glaciers.map(glacier => glacier.mesh.material);
   let vertices = 0, triangles = 0;
   const addMesh = (mesh: Mesh<BufferGeometry, MeshLambertMaterial>) => {
     group.add(mesh);
@@ -435,7 +437,7 @@ export function createTownD2R30Strata(options: TownD2R30StrataOptions = {}) {
       // Material tints only: rock loses more luminance than ice, with no new lights or draws.
       rockMaterial?.color.set(night ? '#64717d' : '#ffffff');
       ochreMaterial?.color.set(night ? '#7d817d' : '#ffffff');
-      iceMaterial.color.set(night ? '#c4d6df' : '#ffffff');
+      for (const material of iceMaterials) material.color.set(night ? '#c4d6df' : '#ffffff');
       group.userData.night = night;
     },
     dispose() {

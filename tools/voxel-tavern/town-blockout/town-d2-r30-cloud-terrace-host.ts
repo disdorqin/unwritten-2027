@@ -10,6 +10,8 @@ import {
 } from './town-d2-r30-domain';
 
 export const TOWN_D2_R30_CLOUD_TERRACE_HOST_MAX_DRAWS = 12;
+/** Multiplicative blue-hour tint for the exterior ring's base material colors. */
+const RING_NIGHT_TINT = new Color('#8fa4bf');
 export const TOWN_D2_R30_LOWLAND_FOREST_MAX_HEIGHT = 320;
 
 export type TownD2R30CloudTerraceTrailPoint = Readonly<{ east: number; north: number; height?: number }>;
@@ -428,6 +430,17 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
   });
   const outerRing = createTownD2CloudTerraceOuterRing();
   const forest = createLowlandForest(sample, trail, exclusions);
+  // The reviewed outer ring owns its own vertex-colored materials. Collect
+  // their base colors so night tinting can cover the whole terrace, not just
+  // the cloud wall and lowland forest.
+  const ringMaterials: MeshLambertMaterial[] = [];
+  const ringDayColors: Color[] = [];
+  outerRing.group.traverse(object => {
+    if (object instanceof InstancedMesh && object.material instanceof MeshLambertMaterial) {
+      ringMaterials.push(object.material);
+      ringDayColors.push(object.material.color.clone());
+    }
+  });
   const group = new Group();
   group.name = 'town-d2-r30-cloud-terrace-host';
   group.add(cloud.group, outerRing.group, forest.group);
@@ -463,6 +476,13 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
       cloud.setNight(value);
       forest.setNight(value);
+      // Keep the exterior ring's stone/timber/pine/snow in step with the rest
+      // of the terrace; restore exact base colors on the day pass.
+      for (let index = 0; index < ringMaterials.length; index++) {
+        const color = ringMaterials[index]!.color.copy(ringDayColors[index]!);
+        if (value) color.multiply(RING_NIGHT_TINT);
+      }
+      group.userData.night = value;
     },
     dispose() {
       if (disposed) return;

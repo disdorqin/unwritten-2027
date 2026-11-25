@@ -86,6 +86,9 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     terrainStats = () => massif.stats();
     children.push(massif.group);
     disposers.push(() => massif.dispose());
+    // The massif tints by a continuous 0..1 blend, while the assembly hooks are
+    // boolean; adapt here so the static terrain darkens with every other layer.
+    nightHooks.push(value => massif.setNight(Number(value)));
   } else {
     const lod = createTownD2R30ChunkLod({ arrivalHeight });
     terrainStats = () => lod.stats();
