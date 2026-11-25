@@ -49,6 +49,8 @@ export function projectBR30Workshop(f:BR30WorkshopFacts):CraterWorkstationView {
     bellowsStroke:clamp(f.bellows.stroke),
     bellowsPressure:clamp(f.bellows.pressure),
     bellowsInBand:f.bellows.inBand&&f.bellows.pressure>=bellowsBand.low&&f.bellows.pressure<=bellowsBand.high,
+    bellowsHeld:clamp(f.bellows.heldMs/bellowsBand.holdMs),
+    bellowsCast:f.bellows.cast,
     gaugeNeedle:0,
     calibrationAngles:f.calibration.angles,
     calibrationLocked:f.calibration.locked,

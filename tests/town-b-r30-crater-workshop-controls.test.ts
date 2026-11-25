@@ -46,8 +46,14 @@ test('R30 physical subtargets forward existing rule actions without fabricating 
   held=true;aim('sorting',0);assert.equal((await controls.interact()).accepted,true);
   assert.equal(sorting.state().bins.stardust,1);
   aim('weighing');assert.equal((await controls.interact()).accepted,true);assert.ok(kg>=2);
+  const beforeGrip={...station.targets.find(t=>t.station==='turnout')!.point};
   aim('turnout');assert.equal((await controls.interact()).accepted,true);assert.equal(track.nextTrainRoute(),'siding');
+  const afterGrip=station.targets.find(t=>t.station==='turnout')!.point;
+  assert.ok(Math.hypot(afterGrip.east-beforeGrip.east,afterGrip.north-beforeGrip.north)>.5);
   assert.equal(projectBR30Workshop(facts()).turnout,'branch');
+  aim('turnout');assert.equal((await controls.interact()).accepted,true);assert.equal(track.nextTrainRoute(),'main');
+  const heldProjection=projectBR30Workshop({...facts(),bellows:{pressure:.65,heldMs:6000,inBand:true,cast:false,stroke:.2}});
+  assert.equal(heldProjection.bellowsHeld,.6);assert.equal(heldProjection.bellowsInBand,true);
   assert.equal(projectBR30Workshop(facts()).sortingFill[0],1/6);
   assert.ok(sent.every(a=>!('lumpId' in a)));
   station.dispose();

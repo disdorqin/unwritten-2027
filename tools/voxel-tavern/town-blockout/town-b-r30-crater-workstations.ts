@@ -81,6 +81,8 @@ export type CraterWorkstationView = Readonly<{
   bellowsPressure?:number;
   calibrationTargets?:readonly [number,number,number];
   bellowsInBand?:boolean;
+  bellowsHeld?:number;
+  bellowsCast?:boolean;
 }>;
 const clamped=(v:number)=>Number.isFinite(v)?Math.max(0,Math.min(1,v)):0;
 
@@ -127,6 +129,10 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   const dialMarks:Group[]=[];
   const pressureStatus=new MeshStandardMaterial({color:0x69463a,roughness:.85});
   let pressurePointer:Group|undefined;
+  let leverGrip:Mesh|undefined;
+  const pressureSteps:Mesh[]=[];
+  const pressureStepMaterial=new MeshStandardMaterial({color:0x82a987,roughness:.8});
+  const pressureStepOff=new MeshStandardMaterial({color:0x483f36,roughness:.95});
   let bellowsFold:Group|undefined,scalePlatform:Group|undefined;
   const needle=(group:Group,x:number,y:number,z:number)=>{
     const pivot=new Group();pivot.position.set(x,y,z);group.add(pivot);
@@ -188,7 +194,17 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(iron,.53,1.37,-.25,.09,.66,.09);
       fixed(iron,.53,1.54,-.25,.39,.31,.11);
       fixed(paper,.53,1.54,-.185,.32,.24,.025);
-      fixed(brass,.60,1.61,-.167,.10,.027,.026);
+      // The ruled 0.55–0.80 band is painted on the actual gauge face
+      // with the same angular mapping as the pointer below.
+      for(let i=0;i<=10;i++){
+        const v=i/10,a=(.5-v)*2.2;
+        const tick=moving(v>=.55&&v<=.8?pressureStepMaterial:dark,g,.53-Math.sin(a)*.115,1.48+Math.cos(a)*.115,-.164,.013,.027,.014);
+        tick.rotation.z=a;
+      }
+      for(let i=0;i<5;i++){
+        fixed(iron,.35+i*.09,1.397,-.15,.075,.058,.022);
+        pressureSteps.push(moving(pressureStepOff,g,.35+i*.09,1.397,-.132,.052,.031,.018));
+      }
       pressurePointer=needle(g,.53,1.48,-.15);pressurePointer.scale.set(.49,.49,.49);
       moving(pressureStatus,g,.53,1.68,-.19,.085,.045,.035);
       sign(g,site.label,1.31,-.12,1.35);
@@ -257,7 +273,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(stone,0,.12,0,.91,.24,.64);
       fixed(iron,0,.35,0,.61,.27,.42);fixed(rust,-.30,.72,0,.11,.73,.15);
       lever=new Group();lever.position.set(0,.48,0);g.add(lever);
-      moving(iron,lever,0,.39,0,.075,.78,.075);moving(timber,lever,0,.83,0,.34,.095,.095);
+      moving(iron,lever,0,.39,0,.075,.78,.075);leverGrip=moving(timber,lever,0,.83,0,.34,.095,.095);
       fixed(rust,-.22,.42,.14,.20,.21,.12);fixed(rust,.22,.42,.14,.20,.21,.12);
       fixed(brass,0,.48,.23,.19,.19,.10);
       fixed(iron,-.35,.29,-.12,.25,.085,.35);
@@ -326,7 +342,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     bellowsFold!.scale.y=1-stroke*.53;
     gauge!.rotation.z=(gaugeValue-.5)*2.1;
     if(pressurePointer)pressurePointer.rotation.z=(.5-clamped(view.bellowsPressure??0))*2.2;
-    pressureStatus.color.set(view.bellowsInBand?0x83b47d:0x69463a);
+    pressureStatus.color.set(view.bellowsCast?0xd9ba72:view.bellowsInBand?0x83b47d:0x69463a);
+    pressureSteps.forEach((step,i)=>{step.material=view.bellowsCast||clamped(view.bellowsHeld??0)>=(i+1)/pressureSteps.length?pressureStepMaterial:pressureStepOff;});
     dialMarks.forEach((m,i)=>{const a=view.calibrationTargets?.[i];m.visible=a!==undefined&&Number.isFinite(a);m.rotation.z=-(a??0);});
     if(view.calibrationAngles){
       dialPointers.forEach((p,i)=>{const a=view.calibrationAngles![i];p.rotation.z=Number.isFinite(a)?-a:0;});
@@ -341,6 +358,14 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     scalePlatform!.position.y=.37-weight*.035;
     weighNeedle!.rotation.z=(weight-.5)*2;
     lever!.rotation.z=view.turnout==='branch'?.44:-.44;
+    if(leverGrip){
+      // Match the real moved grip, not the old neutral-position sphere.
+      // Object matrices are refreshed even before the next rendered frame.
+      root.updateMatrixWorld(true);
+      const v=leverGrip.getWorldPosition(new Vector3());
+      const hit=targets.find(t=>t.station==='turnout');
+      if(hit)hit.point={east:v.x,north:-v.z,height:v.y};
+    }
     signal!.color.set(view.turnout==='branch'?0x78ac7d:0xaa4c3f);
     signal!.emissive.set(view.turnout==='branch'?0x294e2d:0x68251b);
   }
@@ -350,7 +375,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     const geometries=new Set<import('three').BufferGeometry>();
     root.traverse(o=>{if(o instanceof Mesh){geometries.add(o.geometry);if(o.material instanceof MeshBasicMaterial){o.material.map?.dispose();o.material.dispose();}}});
     for(const geo of geometries)geo.dispose();
-    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
+    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();pressureStepMaterial.dispose();pressureStepOff.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
   }
   return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,aimControl,targets,show,dispose};
 }
