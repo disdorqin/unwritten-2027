@@ -28,6 +28,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
+import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
 import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
@@ -3175,11 +3176,8 @@ function storeWalkView(position: Vector3) {
   position.set(x, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), -n);
 }
 
-function overlapsBody(east: number, north: number, { min, max }: Box, radius = bodyRadius) {
-  const z = -north;
-  const dx = Math.max(min[0] - east, east - max[0], 0);
-  const dz = Math.max(min[2] - z, z - max[2], 0);
-  return dx * dx + dz * dz < radius * radius;
+function overlapsBody(east: number, north: number, box: Box, radius = bodyRadius) {
+  return supportFootprintOverlaps(east,north,box,radius);
 }
 
 function mascotOutdoorGround(east: number, north: number) {

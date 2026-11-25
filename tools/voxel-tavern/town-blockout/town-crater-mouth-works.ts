@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterRimRadius } from './meteor-crater';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import { orientedSupportBox } from './town-a-r30-oriented-support';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
 export type CraterMouthSite = Readonly<{
@@ -240,6 +241,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   let doorLamp: PointLight | undefined;
   let brazierLight: PointLight | undefined;
   const actions: CraterActionSpot[] = [];
+  const supplyDeckRoute: {east:number;north:number;height:number}[]=[];
   /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
   const gateFencePosts: { bearing: number; radius: number }[] = [];
 
@@ -392,16 +394,16 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // exceed the .43 step height), the four walls as colliders; the 2.8 m
     // doorway between the front segments stays open, the lintel above it
     // is above head height.
-    hitBox(floors, c0.east, c0.north, fr.yaw, W + .5, D + .5, g - .1, g + foundH - .1);
-    hitBox(floors, c0.east, c0.north, fr.yaw, W, D, g + foundH - .1, g + foundH + .06);
+    floors.push(orientedSupportBox(c0.east,c0.north,fr.yaw,W+.5,D+.5,g-.1,g+foundH-.1));
+    floors.push(orientedSupportBox(c0.east,c0.north,fr.yaw,W,D,g+foundH-.1,g+foundH+.06));
     hitRamp(ramps, fr, D / 2 + 1.1, D / 2 - .5, .85, g, g + foundH + .06);
     for (const s of [-1, 1]) {
       const seg = fr.at(s * 2.55, D / 2);
-      hitBox(colliders, seg.east, seg.north, fr.yaw, 2.3, .22, g + foundH, g + foundH + wallH);
-      const sd = fr.at(s * W / 2, 0);
-      hitBox(colliders, sd.east, sd.north, fr.yaw, .22, D, g + foundH, g + foundH + wallH);
+      colliders.push(orientedSupportBox(seg.east,seg.north,fr.yaw,2.3,.22,g+foundH,g+foundH+wallH));
+      const sd=fr.at(s*W/2,0);
+      colliders.push(orientedSupportBox(sd.east,sd.north,fr.yaw,.22,D,g+foundH,g+foundH+wallH));
     }
-    hitBox(colliders, back.east, back.north, fr.yaw, W, .22, g + foundH, g + foundH + wallH);
+    colliders.push(orientedSupportBox(back.east,back.north,fr.yaw,W,.22,g+foundH,g+foundH+wallH));
     // A-4: replace the two huge glossy dark planes (solar-panel reading)
     // with short overlapping timber shingles, warm eaves and snow-frost ridge.
     // Keep the approved front half as an actual lookout deck.
@@ -452,8 +454,23 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       .30, .16, roofNorthSouth + .07, fr.yaw);
     box(snow, ridgeP.east, roofY + rise + .34, ridgeP.north,
       .24, .09, roofNorthSouth * .74, fr.yaw);
-    const deck = fr.at(0, D / 4);
-    box(timber, deck.east, roofY + .06, deck.north, W, .12, D / 2, fr.yaw);
+    const deckY=roofY+.12;
+    const floor=(dx:number,dz:number,w:number,d:number,top:number,thick=.12)=>{
+      const p=fr.at(dx,dz);
+      box(timber,p.east,top-thick/2,p.north,w,thick,d,fr.yaw);
+      floors.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,top-thick,top));
+    };
+    const guard=(dx:number,dz:number,w:number,d:number,top:number)=>{
+      const p=fr.at(dx,dz);
+      box(timber,p.east,top+.49,p.north,w,.98,d,fr.yaw);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,top,top+.98));
+    };
+    floor(0,D/4,W,D/2,deckY);
+    // Real support and guarded deck; leave the east landing opening only.
+    const frontGuard=fr.at(0,D/2-.12);
+    colliders.push(orientedSupportBox(frontGuard.east,frontGuard.north,fr.yaw,W,.10,deckY,deckY+.95));
+    const backGuard=fr.at(0,.06);
+    colliders.push(orientedSupportBox(backGuard.east,backGuard.north,fr.yaw,W,.15,deckY,deckY+1.6));
     for (let i = 0; i < 7; i++) {
       const p = fr.at(-W / 2 + .4 + i * (W - .8) / 6, D / 2 - .12);
       box(timber, p.east, roofY + .5, p.north, .09, .9, .09, fr.yaw);
@@ -461,21 +478,38 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const rail = fr.at(0, D / 2 - .12);
     box(timber, rail.east, roofY + .95, rail.north, W, .08, .08, fr.yaw);
     for (const s of [-1, 1]) {
-      for (const dz of [.15, D / 4, D / 2 - .12]) {
-        const post = fr.at(s * (W / 2 - .12), dz);
-        box(timber, post.east, roofY + .5, post.north, .13, .9, .13, fr.yaw);
+      // Gap on the east edge at the raised stair landing, not a railing
+      // across the player's route. Solid low timber guards match collision.
+      if(s<0)guard(s*(W/2-.12),D/4,.12,D/2,deckY);
+      else {
+        guard(s*(W/2-.12),.38,.12,.76,deckY);
+        guard(s*(W/2-.12),2.50,.12,.60,deckY);
       }
-      const sideRail = fr.at(s * (W / 2 - .12), D / 4);
-      box(timber, sideRail.east, roofY + .95, sideRail.north, .10, .09, D / 2, fr.yaw);
-      // Visible structural posts tie the raised deck to the cabin sides.
       const pillar = fr.at(s * (W / 2 - .07), D / 4);
       box(timberWarm, pillar.east, wallY, pillar.north, .17, wallH, .17, fr.yaw);
     }
-    // Exterior stair up the east side, climbing from the back toward the deck.
-    for (let i = 0; i < 6; i++) {
-      const p = fr.at(W / 2 + .55, -D / 2 + .4 + i * .55);
-      box(timber, p.east, g + .3 + i * (foundH + wallH) / 6, p.north, 1, .14, .5, fr.yaw);
+    // Exterior stair: 15 real treads, 0.245m rise / 0.56m run, supported
+    // by timber posts. Exact rotated footprints prevent diagonal ghost walls.
+    const steps=15,run=.56,stairX=W/2+.83,stairW=1.65,endZ=1.40,startZ=endZ-steps*run;
+    const wp=(dx:number,dz:number,height:number)=>({...fr.at(dx,dz),height});
+    supplyDeckRoute.push(wp(stairX,startZ-.55,g));
+    for(let i=0;i<steps;i++){
+      const z=startZ+(i+.5)*run,top=g+(deckY-g)*(i+1)/steps;
+      floor(stairX,z,stairW,run+.008,top,.16);
+      if(i%3===2){
+        for(const s of [-1,1]){
+          const p=fr.at(stairX+s*.65,z);
+          box(timber,p.east,(g+top-.16)/2,p.north,.15,Math.max(.1,top-g-.16),.15,fr.yaw);
+        }
+      }
+      guard(stairX+stairW/2-.06,z,.12,run+.012,top);
+      if(i<steps-1)guard(stairX-stairW/2+.06,z,.12,run+.012,top);
+      supplyDeckRoute.push(wp(stairX,z,top));
     }
+    floor(W/2+.78,1.84,1.72,.90,deckY);
+    guard(W/2+1.55,1.84,.12,.90,deckY);
+    guard(W/2+.78,2.27,1.72,.12,deckY);
+    supplyDeckRoute.push(wp(stairX,1.84,deckY),wp(2.85,1.84,deckY),wp(0,1.84,deckY));
     // Brass telescope on the deck, trained on the crater centre.
     const scope = fr.at(-1.8, D / 4 + .4);
     for (const a of [0, 2.1, 4.2]) {
@@ -900,7 +934,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,
     colliders, floors, ramps,
   };
 }
