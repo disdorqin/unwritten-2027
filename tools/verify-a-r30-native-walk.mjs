@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -280,10 +280,13 @@ import { mountWestCraterRoad } from './voxel-tavern/town-blockout/town-za22-crat
 
 async function picture(page,evidence,label){
   await page.screenshot({path:join(output,label+'.png'),timeout:45000});
-  evidence.checkpoints.push({label,...await readPose(page)});
+  evidence.checkpoints.push({label,lighting:await page.locator('#lighting').textContent(),...await readPose(page),wire:evidence.poses.at(-1)});
 }
+import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+const rail=segment==='kengkou'?buildCraterRailExtension(grid,road):undefined;
 const approach={
+ kengkou:[[-12,159],[-29,159],[-35,164],[-36,167]],
  gate:[[-12,159],[-40,159],[-27,171],[-27,175]],
  north:[[-12,159],[-40,159],[-68,220],[-83,235],[-98,243],[-120,256],[-124,256]],
  west:[[-12,159],[-40,159],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-187,174],[-187,175]],
@@ -304,6 +307,7 @@ try{
  for(const [i,target] of approach[segment].entries())await walkTo(page,evidence,target,segment+'-approach-'+i);
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
  const path=tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
+   segment==='kengkou'?rail.stationWalkRoutes.find(t=>t.id==='kengkou-station').points:
    road.outerWorks.industrialRoutes.find(t=>t.id===segment+'-plant').points;
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,.18);
@@ -314,7 +318,25 @@ try{
  }
  for(const [i,point] of path.entries())await step(point,segment+'-up-'+i);
  const top=await readPose(page);
- await picture(page,evidence,segment+'-top');
+ if(segment==='kengkou'){
+   const bench=rail.benchSeats.find(s=>s.id==='坑口站-1');
+   await step({east:bench.useEast,north:bench.useNorth,height:bench.height},'station-bench');
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('站台长椅'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('起身'),null,{timeout:8000});
+   await picture(page,evidence,'kengkou-seated');
+   await page.keyboard.press('e');
+   await step(path.at(-1),'station-stand-return');
+   await face(page,evidence,1.7+Math.PI);
+   for(const lighting of ['雪夜','白昼']){
+     if((await page.locator('#lighting').textContent())!==lighting){
+       await page.locator('#town-panel-toggle').click();
+       await page.locator('#lighting').click();
+       await page.locator('#town-settings-close').click();
+     }
+     await picture(page,evidence,'kengkou-'+(lighting==='雪夜'?'night':'day'));
+   }
+ }else await picture(page,evidence,segment+'-top');
  if(segment==='supply'){
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('屋顶望筒'),null,{timeout:5000});
    await page.keyboard.press('e');await page.waitForTimeout(600);
