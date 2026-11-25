@@ -1,0 +1,161 @@
+import { Group } from 'three';
+import { createTownD2R30ChunkLod } from './town-d2-r30-chunk-lod';
+import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-host';
+import { createTownD2R30Collision } from './town-d2-r30-collision';
+import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
+import { createTownD2R30Massif } from './town-d2-r30-massif';
+import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
+import { createTownD2R30Strata } from './town-d2-r30-strata';
+
+/**
+ * D2-R01/R04 full main-summit domain, assembled as one mountable entity.
+ *
+ * The six R30 packages stay single-owner independent modules; this file only
+ * composes them and never edits the public viewer/terrain/collision authority.
+ * Geometry is local (x=east, y=height, z=-north); the caller places `group`
+ * with the world transform from `worldAnchor` (matching main-summit-assembly).
+ */
+export type TownD2R30AssemblyOptions = Readonly<{
+  arrivalHeight?: number;
+  /** 'static' builds every 256 m tile once (default); 'streaming' uses runtime LOD chunks. */
+  terrainMode?: 'static' | 'streaming';
+  /** Include the snow/ridge + low-rock supplement (default true). */
+  includeSnowRock?: boolean;
+  /** Include the strata + valley glacier band (default true). */
+  includeStrata?: boolean;
+  /** Include the cloud terrace wall + outer ring + lowland forest (default true). */
+  includeCloudTerrace?: boolean;
+}>;
+
+export type TownD2R30Assembly = Readonly<{
+  group: Group;
+  heightAt(east: number, north: number): number | undefined;
+  collision: ReturnType<typeof createTownD2R30Collision>;
+  /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
+  update(east: number, north: number): void;
+  setNight(value: boolean): void;
+  stats(): Readonly<Record<string, unknown>>;
+  dispose(): void;
+}>;
+
+export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}): TownD2R30Assembly {
+  const arrivalHeight = options.arrivalHeight ?? 347;
+  const terrainMode = options.terrainMode ?? 'static';
+  if (!Number.isFinite(arrivalHeight)) throw new RangeError('Invalid D2-R30 arrival height.');
+  if (terrainMode !== 'static' && terrainMode !== 'streaming') {
+    throw new RangeError('terrainMode must be "static" or "streaming".');
+  }
+  const includeSnowRock = options.includeSnowRock ?? true;
+  const includeStrata = options.includeStrata ?? true;
+  const includeCloudTerrace = options.includeCloudTerrace ?? true;
+  if ([includeSnowRock, includeStrata, includeCloudTerrace].some(value => typeof value !== 'boolean')) {
+    throw new TypeError('D2-R30 inclusion flags must be booleans.');
+  }
+
+  const group = new Group();
+  group.name = 'town-d2-r30-assembly';
+  const disposers: (() => void)[] = [];
+  const nightHooks: ((value: boolean) => void)[] = [];
+  const children: Group[] = [];
+
+  // One shared height sampler for every sub-package and the collision grid, so
+  // visual terrain and the walking surface can never drift apart.
+  const heightAt = (east: number, north: number) => sampleTownD2R30Height(east, north, arrivalHeight);
+
+  let terrainStats: () => unknown;
+  let updateLod: ((east: number, north: number) => void) | undefined;
+  if (terrainMode === 'static') {
+    const massif = createTownD2R30Massif({ arrivalHeight });
+    terrainStats = () => massif.stats();
+    children.push(massif.group);
+    disposers.push(() => massif.dispose());
+  } else {
+    const lod = createTownD2R30ChunkLod({ arrivalHeight });
+    terrainStats = () => lod.stats();
+    updateLod = lod.update;
+    children.push(lod.group);
+    disposers.push(() => lod.dispose());
+  }
+
+  if (includeStrata) {
+    const strata = createTownD2R30Strata({ heightAt, arrivalHeight });
+    children.push(strata.group);
+    disposers.push(() => strata.dispose());
+    nightHooks.push(value => strata.setNight(value));
+  }
+
+  if (includeSnowRock) {
+    const snowRock = createTownD2R30SnowRockHost({ heightAt, arrivalHeight });
+    children.push(snowRock.group);
+    disposers.push(() => snowRock.dispose());
+    nightHooks.push(value => snowRock.setNight(value));
+  }
+
+  if (includeCloudTerrace) {
+    const cloud = createTownD2R30CloudTerraceHost({ heightAt, arrivalHeight });
+    children.push(cloud.group);
+    disposers.push(() => cloud.dispose());
+    nightHooks.push(value => cloud.setNight(value));
+  }
+
+  for (const child of children) group.add(child);
+
+  const collision = createTownD2R30Collision({
+    heightAt: (east, north) => heightAt(east, north),
+  });
+  disposers.push(() => collision.dispose());
+
+  group.userData = {
+    owner: 'D2-R01/R04',
+    coordinateConvention: 'x=east,y=height,z=-north',
+    worldAnchor: { ...townD2R30Spec.worldAnchor },
+    modifiesHeightAt: false,
+    visualOnly: false,
+    includesWorldCollision: true,
+    collisionSpacing: collision.stats().spacing,
+    subPackages: Object.freeze(children.map(child => child.name)),
+  };
+
+  let disposed = false;
+  let night = false;
+  return {
+    group,
+    heightAt,
+    collision,
+    update(east: number, north: number) {
+      if (disposed) return;
+      if (!Number.isFinite(east) || !Number.isFinite(north)) {
+        throw new RangeError('D2-R30 LOD observer must be finite.');
+      }
+      updateLod?.(east, north);
+    },
+    setNight(value: boolean) {
+      if (disposed) throw new Error('The D2-R30 assembly is disposed.');
+      if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
+      if (night === value) return;
+      night = value;
+      for (const hook of nightHooks) hook(value);
+      group.userData.night = night;
+    },
+    stats() {
+      return Object.freeze({
+        terrainMode,
+        arrivalHeight,
+        terrain: terrainStats(),
+        subPackages: Object.freeze(children.map(child => child.name)),
+        collision: collision.stats(),
+        worldAnchor: { ...townD2R30Spec.worldAnchor },
+        night,
+        disposed,
+      });
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (let index = disposers.length - 1; index >= 0; index--) disposers[index]!();
+      group.removeFromParent();
+      group.clear();
+      group.userData.disposed = true;
+    },
+  };
+}
