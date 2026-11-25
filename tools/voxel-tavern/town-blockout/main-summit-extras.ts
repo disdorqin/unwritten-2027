@@ -18,9 +18,8 @@ import {
   cloudTerminal, cloudTerraceTurnNorth, mountMainSummitAssembly, supportsCloudTerrace,
   summitAssemblyAnchor,
 } from './main-summit-assembly';
-import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { mainSummitBounds, mainSummitSpec } from './main-summit-block';
 import { createMainSummitCableTravel } from './main-summit-cable-travel';
-import { createMainSummitCloudLayer } from './main-summit-cloud-layer';
 import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
 import { createSummitGlideRingProgress, surveySummitGlideRings } from './main-summit-glide-rings';
 import { cloudPavilionSites } from './main-summit-pavilion-site';
@@ -100,13 +99,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
       [110, 165, 220, 275, 330, 385, 440, 495, 550], -6),
   } : { high: [], low: [] };
 
-  const cloud = createMainSummitCloudLayer({
-    bounds: mainSummitBounds,
-    summit: mainSummitLayout.summit,
-    shoulders: mainSummitLayout.shoulders,
-    heightAt: assembly.block.heightAt,
-  });
-  group.add(cloud.group);
+  const cloud = assembly.clouds;
 
   const paint = buildMainSummitPaint(assembly.block.heightAt);
   group.add(paint.mesh);
@@ -265,7 +258,6 @@ export function mountMainSummitExtras(assembly: Assembly) {
       icefall.dispose();
       bannerCloud.dispose();
       paint.dispose();
-      cloud.dispose();
       glideVisuals.dispose();
       wingRack.dispose();
       posts.dispose();

@@ -1,7 +1,9 @@
 import {
   BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CylinderGeometry, Group,
   InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace,
+  type Material,
 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTerrainGrid } from './terrain';
 
@@ -306,6 +308,7 @@ export function createFrontRidgeSwitchbackRoad(
   const group = new Group();
   group.name = 'front-ridge-switchback-road';
   const disposers: (() => void)[] = [];
+  const unbatchedMeshes = new Set<Mesh>();
   // D-6 entry spur: boundary (270,539) -> junction (270,460), pinned
   // to the main corridor's profile at the junction so the T-junction
   // has one height, not two.
@@ -356,6 +359,7 @@ export function createFrontRidgeSwitchbackRoad(
     ribbonGeometry.computeVertexNormals();
     const ribbon = new Mesh(ribbonGeometry, new MeshLambertMaterial({ vertexColors: true, side: 2 }));
     ribbon.name = name;
+    unbatchedMeshes.add(ribbon);
     group.add(ribbon);
     disposers.push(() => { ribbonGeometry.dispose(); (ribbon.material as MeshLambertMaterial).dispose(); });
   }
@@ -487,7 +491,6 @@ export function createFrontRidgeSwitchbackRoad(
   const stone = new MeshLambertMaterial({ color: '#6d7276' });
   const timber = new MeshLambertMaterial({ color: '#5d4630' });
   disposers.push(() => { stone.dispose(); timber.dispose(); });
-  const lampCores: Mesh[] = [];
   const lampMaterial = new MeshBasicMaterial({ color: '#3a3230' });
   disposers.push(() => lampMaterial.dispose());
   let nextLamp = 30;
@@ -538,18 +541,17 @@ export function createFrontRidgeSwitchbackRoad(
   const postGeometry = new CylinderGeometry(0.05, 0.06, 1.5, 5);
   const posts = new InstancedMesh(postGeometry, timber, Math.max(1, lampPosts.length));
   posts.name = 'switchback-fog-lamp-posts';
+  const coreGeometry = new BoxGeometry(0.16, 0.16, 0.16);
+  const cores = new InstancedMesh(coreGeometry, lampMaterial, Math.max(1, lampPosts.length));
+  cores.name = 'switchback-fog-lamp';
   lampPosts.forEach((lamp, i) => {
     setInstance(posts, i, lamp.east, lamp.height + 0.75, -lamp.north);
-    const core = new Mesh(new BoxGeometry(0.16, 0.16, 0.16), lampMaterial.clone());
-    core.name = 'switchback-fog-lamp';
-    core.position.set(lamp.east, lamp.height + 1.56, -lamp.north);
-    group.add(core);
-    lampCores.push(core);
-    disposers.push(() => { core.geometry.dispose(); (core.material as MeshBasicMaterial).dispose(); });
+    setInstance(cores, i, lamp.east, lamp.height + 1.56, -lamp.north);
   });
+  cores.count = lampPosts.length;
   posts.count = lampPosts.length;
-  group.add(posts);
-  disposers.push(() => { postGeometry.dispose(); });
+  group.add(posts, cores);
+  disposers.push(() => { postGeometry.dispose(); coreGeometry.dispose(); });
 
   function sign(name: string, point: SwitchbackPoint, lines: string[]) {
     if (typeof document === 'undefined') return;
@@ -636,7 +638,9 @@ export function createFrontRidgeSwitchbackRoad(
     group.add(shelter);
     shelters.push(shelter);
     benchAt(point.east + 4.2, point.north, point.height, 0, `${name}-bench`);
-    disposers.push(() => { for (const part of [roof, postA, postB, wall]) part.geometry.dispose(); });
+    disposers.push(() => {
+      for (const geometry of new Set([roof.geometry, postA.geometry, postB.geometry, wall.geometry])) geometry.dispose();
+    });
   }
   const midPoint = centreline.find(p => Math.abs(p.east - 440) < 0.01 && Math.abs(p.north - 520) < 0.01);
   const gatePoint = centreline.find(p => Math.abs(p.east - 347.7) < 0.01 && Math.abs(p.north - 609.8) < 0.01);
@@ -649,21 +653,72 @@ export function createFrontRidgeSwitchbackRoad(
   const deck = new Mesh(new CylinderGeometry(3.6, 3.9, 0.55, 10), stone);
   deck.position.set(0, 0.28, 0);
   platform.add(deck);
+  const parapets: Mesh[] = [];
   for (let k = 0; k < 7; k++) {
     const a = Math.PI * (0.15 + k * 0.12);
     const parapet = new Mesh(new BoxGeometry(1.1, 0.85, 0.28), stone);
     parapet.position.set(Math.cos(a) * 3.3, 0.95, Math.sin(a) * 3.3);
     parapet.rotation.y = -a;
     platform.add(parapet);
+    parapets.push(parapet);
   }
   const lookoutHeight = terrainAt(300, 400);
   platform.position.set(300, lookoutHeight, -400);
   group.add(platform);
-  disposers.push(() => { deck.geometry.dispose(); });
+  disposers.push(() => { deck.geometry.dispose(); for (const parapet of parapets) parapet.geometry.dispose(); });
   // Cable station timetable boards (S-12/S-16/S-19).
   const boards = createStationBoards(terrainAt, timber, stone);
   group.add(boards.group);
   disposers.push(boards.dispose);
+
+  // Collapse the immutable, untextured scenery by shared material. Geometry
+  // is baked into this group's local space, so nested bench/shelter/platform
+  // transforms stay exact while their named containers remain inspectable.
+  // Canvas faces, both ribbons and the instanced night lamps stay separate.
+  group.updateMatrixWorld(true);
+  const inverseRoot = group.matrixWorld.clone().invert();
+  const batches = new Map<Material, { geometries: BufferGeometry[]; sources: Mesh[] }>();
+  group.traverse(object => {
+    if (!(object instanceof Mesh) || object instanceof InstancedMesh || unbatchedMeshes.has(object)) return;
+    const material = object.material;
+    if (Array.isArray(material) || ('map' in material && material.map) || object.userData.noBatch) return;
+    const batch = batches.get(material) ?? { geometries: [], sources: [] };
+    batch.geometries.push(object.geometry.clone().applyMatrix4(new Matrix4().multiplyMatrices(inverseRoot, object.matrixWorld)));
+    batch.sources.push(object);
+    batches.set(material, batch);
+  });
+  const mergedBatches: Mesh[] = [];
+  let batchIndex = 0;
+  for (const [material, batch] of batches) {
+    const geometry = mergeGeometries(batch.geometries, false);
+    for (const part of batch.geometries) part.dispose();
+    if (!geometry) throw new Error(`Unable to batch switchback material ${material.name || material.type}`);
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    const mesh = new Mesh(geometry, material);
+    mesh.name = `switchback-static-batch-${++batchIndex}`;
+    mergedBatches.push(mesh);
+    disposers.push(() => geometry.dispose());
+  }
+  for (const batch of batches.values()) for (const source of batch.sources) {
+    if (!source.name) {
+      source.removeFromParent();
+      continue;
+    }
+    // Mileposts are public named landmarks. Keep their name, transform and
+    // metadata on an empty Group after their geometry joins the static batch.
+    const landmark = new Group();
+    landmark.name = source.name;
+    landmark.position.copy(source.position);
+    landmark.quaternion.copy(source.quaternion);
+    landmark.scale.copy(source.scale);
+    landmark.matrixAutoUpdate = source.matrixAutoUpdate;
+    landmark.matrix.copy(source.matrix);
+    landmark.userData = source.userData;
+    source.parent!.add(landmark);
+    source.removeFromParent();
+  }
+  group.add(...mergedBatches);
 
   let disposed = false;
   return {
@@ -671,7 +726,7 @@ export function createFrontRidgeSwitchbackRoad(
     benches, shelters, platform, boards: boards.group,
     surfaceAt: (east: number, north: number, hintHeight?: number) => heightAt(east, north, hintHeight),
     setNight(night: boolean) {
-      for (const core of lampCores) (core.material as MeshBasicMaterial).color.set(night ? '#ffb45c' : '#3a3230');
+      lampMaterial.color.set(night ? '#ffb45c' : '#3a3230');
     },
     dispose() {
       if (disposed) return;
@@ -736,7 +791,7 @@ export function createStationBoards(
         group.add(legL, legR);
         disposers.push(() => {
           face.geometry.dispose(); face.material.dispose(); texture.dispose();
-          frame.geometry.dispose(); legL.geometry.dispose(); legR.geometry.dispose();
+          for (const geometry of new Set([frame.geometry, legL.geometry, legR.geometry])) geometry.dispose();
         });
       }
     }
