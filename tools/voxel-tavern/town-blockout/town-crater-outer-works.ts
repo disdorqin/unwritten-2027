@@ -1,7 +1,7 @@
 import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  NearestFilter, PlaneGeometry, PointLight, SRGBColorSpace, TorusGeometry,
+  NearestFilter, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
@@ -44,7 +44,7 @@ function pixelMaterial(base: string, shade: string, seed: number, accent = shade
 /** Calm, continuous industrial surfaces. The random high-contrast legacy
  * pixels stay on the old props; walls and equipment use joined boards,
  * staggered brick courses or rolled sheet, with restrained tonal variation. */
-function industrialSurface(kind:'wood'|'brick'|'sheet',base:number){
+function industrialSurface(kind:'wood'|'brick'|'sheet'|'plaster',base:number){
   const size=32,data=new Uint8Array(size*size*4);
   const r=base>>16&255,g=base>>8&255,b=base&255;
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
@@ -55,6 +55,8 @@ function industrialSurface(kind:'wood'|'brick'|'sheet',base:number){
     }else if(kind==='brick'){
       const row=Math.floor(y/8),bx=(x+(row%2)*8)%16;
       tone=y%8===0||bx===0?-24:((row*17+Math.floor((x+(row%2)*8)/16)*11)%13-6);
+    }else if(kind==='plaster'){
+      tone=Math.round(3*Math.sin(x*.47+y*.31)+2*Math.cos(y*.68-x*.16));
     }else{
       tone=x%8===0?-18:x%8===1?8:((Math.floor(y/8)+x*3)%5-2);
     }
@@ -63,8 +65,11 @@ function industrialSurface(kind:'wood'|'brick'|'sheet',base:number){
   }
   const map=new DataTexture(data,size,size);
   map.magFilter=map.minFilter=NearestFilter;
+  map.wrapS=map.wrapT=RepeatWrapping;
   map.colorSpace=SRGBColorSpace;map.needsUpdate=true;
-  return new MeshStandardMaterial({map,roughness:kind==='sheet'?.86:1});
+  const material=new MeshStandardMaterial({map,roughness:kind==='sheet'?.86:1});
+  material.userData.metricTextureSpan=kind==='plaster'?1.6:.84;
+  return material;
 }
 
 function hash(n: number) {
@@ -169,6 +174,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const workshopWood=industrialSurface('wood',0x7b6148);
   const workshopBrick=industrialSurface('brick',0x74665d);
   const workshopSheet=industrialSurface('sheet',0x54575a);
+  const wallPlaster=industrialSurface('plaster',0x9b885f);
+  const cleanSnow=new MeshStandardMaterial({color:0xdce5ee,roughness:1});
   const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
   const coldGlass=new MeshStandardMaterial({color:0x6c8291,roughness:.65,emissive:0x657786,emissiveIntensity:.06});
   const windowRows=(xs:readonly number[],width:number,low:number,high:number):IndustryWindow[]=>
@@ -188,7 +195,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
-    part(mat, new BoxGeometry(sx, sy, sz), east, h, north, yaw, pitch, roll);
+    const geo=new BoxGeometry(sx,sy,sz);
+    const span=mat.userData.metricTextureSpan;
+    if(typeof span==='number'&&span>0){
+      const uv=geo.getAttribute('uv'),normal=geo.getAttribute('normal');
+      // Constant physical texture size on different wall/prop dimensions.
+      for(let i=0;i<uv.count;i++){
+        const x=Math.abs(normal.getX(i))>.5,y=Math.abs(normal.getY(i))>.5;
+        uv.setXY(i,uv.getX(i)*(x?sz:sx)/span,uv.getY(i)*(y?sz:sy)/span);
+      }
+    }
+    part(mat,geo,east,h,north,yaw,pitch,roll);
   }
   function cyl(mat: MeshStandardMaterial, east: number, h: number, north: number,
     rTop: number, rBottom: number, height: number, segments = 10, yaw = 0, pitch = 0, roll = 0) {
@@ -840,9 +857,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const bottom=Math.min(...soils,g)-.12;
     const plinth=g+1.20;
     box(workshopBrick,wallEast,(bottom+plinth)/2,n,1.5,plinth-bottom,length);
-    box(earthWall,wallEast,g+3,n,1.15,3.6,length);
-    box(stoneDark,wallEast,g+5.15,n,1.45,.7,length+.1);
-    box(snow,wallEast,g+5.56,n,1.30,.12,length);
+    box(wallPlaster,wallEast,g+3,n,1.15,3.6,length);
+    box(workshopBrick,wallEast,g+5.15,n,1.45,.7,length+.1);
+    box(cleanSnow,wallEast,g+5.56,n,1.30,.12,length);
     hitBox(colliders,wallEast,n,0,1.5,length,bottom,g+5.62);
     // Weathered masonry blocks set into the plaster face. The shallow
     // relief stays inside the load-bearing stone plinth's footprint.
@@ -882,8 +899,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         box(stoneDark,wallEast,g+6.25,postN,1.92,.20,1.34);
         box(snow,wallEast,g+6.42,postN,1.85,.14,1.30);
         const leafN = wallGateNorth + s * 2.2;
-        box(timber, wallEast - 1.1, g + 2.2, leafN, .14, 4.4, 2.7, s * .85);
-        box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
+        box(workshopWood,wallEast-1.1,g+2.2,leafN,.14,4.4,2.7,s*.85);
+        for(const y of [1.02,3.4])box(workshopSheet,wallEast-1.1,g+y,leafN,.18,.22,2.7,s*.85);
       }
       // S-1 collision: gate posts and the two leaves standing open — the
       // guard turns you back, not the door (design), so the channel between
@@ -893,7 +910,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         hitBox(colliders,wallEast,wallGateNorth+s*3.4,0,1.85,1.1,g+.68,g+6.2);
         hitBox(colliders, wallEast - 1.1, wallGateNorth + s * 2.2, s * .85, .14, 2.7, g, g + 4.4);
       }
-      box(timber,wallEast,g+6.35,wallGateNorth,1.2,.45,8.2);
+      box(workshopWood,wallEast,g+6.35,wallGateNorth,1.2,.45,8.2);
       // Reference gate's warm lantern and timber support, kept outside the
       // walking channel. Emissive glass uses the existing material budget.
       const lampN=wallGateNorth-3.4,lampE=wallEast+.99;
@@ -985,7 +1002,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const eaves=4.05,rise=1.22,runRoof=2.30,pitch=Math.atan2(rise,runRoof);
     for(const side of [-1,1]){
       put(slate,0,g+eaves+rise/2,side*runRoof/2,5.7,.18,Math.hypot(rise,runRoof),side*pitch);
-      put(snow,0,g+eaves+rise/2+.14,side*runRoof/2,5.55,.08,Math.hypot(rise,runRoof)-.1,side*pitch);
+      put(cleanSnow,0,g+eaves+rise/2+.14,side*runRoof/2,5.55,.08,Math.hypot(rise,runRoof)-.1,side*pitch);
       put(timber,0,g+eaves,side*runRoof,5.75,.18,.18);
       for(let k=0;k<6;k++){
         const t=(k+.5)/6;
