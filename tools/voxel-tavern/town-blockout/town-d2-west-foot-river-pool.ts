@@ -329,10 +329,19 @@ export function createTownD2WestFootRiverPool() {
     if (inChannelGap(across, along)) continue;
     const east = centre.x + right.x * across + tangent.x * along;
     const north = site.north - right.z * across - tangent.z * along;
-    const base = groundAt(east, north);
-    const top = Math.max(site.waterLevel + .42, base + .32);
-    put('stone', new BoxGeometry(1.24 + .14 * Math.sin(i * 1.9), top - base, 1.02),
-      local(across, along, base + (top - base) / 2), -angle + Math.PI / 2);
+    const yaw = -angle + Math.PI / 2;
+    const width = 1.24 + .14 * Math.sin(i * 1.9), depth = 1.02;
+    const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+    let base = Infinity, highestGround = -Infinity;
+    for (const localX of [-width / 2, width / 2]) for (const localZ of [-depth / 2, depth / 2]) {
+      const cornerEast = east + cosine * localX + sine * localZ;
+      const cornerNorth = north + sine * localX - cosine * localZ;
+      const ground = groundAt(cornerEast, cornerNorth);
+      base = Math.min(base, ground); highestGround = Math.max(highestGround, ground);
+    }
+    const top = Math.max(site.waterLevel + .42, highestGround + .32);
+    put('stone', new BoxGeometry(width, top - base, depth),
+      local(across, along, base + (top - base) / 2), yaw);
   }
   for (let i = 0; i < 30; i++) {
     const angle = i / 30 * Math.PI * 2 + .11 * Math.sin(i * 4.1);
