@@ -14,12 +14,14 @@ const trail = Array.from({ length: 801 }, (_, i) => {
   return { east: oE + at.east * c + at.north * s, north: oN + at.north * c - at.east * s };
 });
 
-test('segment five fills the middle band deterministically, inside five batches', () => {
+test('R30 middle band keeps sparse recognizable mining relics and crystal outcrops deterministically', () => {
   const a = buildCraterMidgroundS5(road);
   const b = buildCraterMidgroundS5(road);
   assert.equal(a.placements.length, b.placements.length, 'seeded placement is stable');
   assert.deepEqual(a.placements.map(p => [p.east, p.north]), b.placements.map(p => [p.east, p.north]));
-  assert.ok(a.placements.length >= 100, `expected a real mid-ground, got ${a.placements.length} pieces`);
+  assert.ok(a.placements.length >= 12 && a.placements.length <= 55, `sparse thematic band, got ${a.placements.length} pieces`);
+  for (const kind of ['ice', 'rust', 'timber']) assert.ok(a.placements.some(p => p.kind === kind), `missing ${kind} relic`);
+  assert.ok(a.placements.every(p => p.kind !== 'scorch'), 'no decorative scorch scatter');
   assert.ok(a.batches.length <= 5, `draw batches stay inside the dressing budget: ${a.batches.length}`);
 });
 
@@ -42,5 +44,6 @@ test('deconflicts against the za36 dressing when its placements are supplied', (
     assert.ok(za36.placements.every(q => Math.hypot(p.east - q.east, p.north - q.north) >= .72),
       'piece crowds a za36 piece');
   }
-  assert.ok(placements.length >= 60, 'deconfliction must not starve the band');
+  assert.ok(placements.length >= 12 && placements.length <= 55, 'retain sparse themed groups after deconfliction');
+  for (const kind of ['ice', 'rust', 'timber']) assert.ok(placements.some(p => p.kind === kind), `missing ${kind} after deconfliction`);
 });
