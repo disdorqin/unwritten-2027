@@ -7,6 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
+export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
+export type CraterTowerRoute = Readonly<{id:string;entry:CraterTowerWalkPoint;stairs:readonly CraterTowerWalkPoint[];lookout:CraterTowerWalkPoint;rubbing:CraterTowerWalkPoint;rubbingUse:CraterTowerWalkPoint}>;
 export type CraterOuterSite = Readonly<{
   id: string; east: number; north: number; height: number; radius: number;
   topHeight?: number;
@@ -103,6 +105,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const group = new Group();
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
+  const towerRoutes: CraterTowerRoute[] = [];
   // S-1 collision (分支窗 A): structural wall boxes + standable floors in
   // world coordinates, exported for the za22 top group's userData. Solid
   // shells get one mass box each; designed gaps (wall gate, fence-ring
@@ -237,16 +240,42 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
     put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
     for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
-    put(slate, -7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, .43);
-    put(slate, 7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, -.43);
-    put(timber, 0, g + 18.45, 0, 28.6, .38, .55);
+    // The ridge runs along the 28m length, not across the hall.
+    // Both roof halves and snow caps share the same pitch and ridge.
+    const eaves = 12.9, roofRise = 5.55, roofRun = 6.35;
+    const roofPitch = Math.atan2(roofRise, roofRun);
+    const roofSlant = Math.hypot(roofRise, roofRun);
+    for (const side of [-1, 1]) {
+      put(slate, 0, g + eaves + roofRise / 2, side * roofRun / 2,
+        29.2, .22, roofSlant + .05, side * roofPitch);
+      for (let bay = 0; bay < 14; bay++) {
+        const dx = -13.55 + bay * 2.08;
+        for (let row = 0; row < 3; row++) {
+          const t = (row + .5) / 3;
+          put(row === 0 && bay % 4 === 0 ? rustIron : slate,
+            dx, g + eaves + roofRise * t + .19, side * roofRun * (1 - t),
+            2.13, .09, roofSlant / 3 + .14, side * roofPitch);
+        }
+        if (bay % 3 === 0) {
+          const t = .22 + (bay % 2) * .13;
+          put(snow, dx, g + eaves + roofRise * t + .29, side * roofRun * (1-t),
+            1.85, .1, 1.45, side * roofPitch);
+        }
+      }
+      put(timber, 0, g + eaves + .06, side * roofRun, 29.3, .3, .24);
+    }
+    // End walls meet the roof rather than leaving two open triangular gaps.
+    for (const side of [-1, 1]) for (let course = 0; course < 10; course++) {
+      const t = (course + 1) / 10;
+      put(corrugated, side * 13.93, g + eaves + roofRise * (course + .5) / 10,
+        0, .20, roofRise / 10 + .015, Math.max(.14, 11 * (1-t)));
+    }
+    put(timber, 0, g + 18.6, 0, 29.3, .24, .35);
     for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
       put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
       put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
     }
-    // Oxidized seams and coherent short snow caps break the old solar-panel silhouette.
-    for (const side of [-1, 1]) for (const dz of [-4.5, 0, 4.5])
-      put(snow, side * 8.65, g + 15.3, dz, 3.8, .08, 1.5, 0, -side * .43);
+    // Roof snow is now generated on the sloped tile plane above.
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
@@ -364,11 +393,31 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // A-4: two full storeys plus pitched attic, ridge at g+17m;
     // the original g+10m lid read as a squat one-storey workshop.
     put(timberWarm, 0, g + 8.4, 0, 20, 8.4, 10);
-    put(slate, -5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, .48);
-    put(slate, 5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, -.48);
-    put(timber, 0, g + 17.02, 0, 20.6, .31, .42);
-    for(const side of [-1,1]) for(const dz of [-3.6,0,3.6])
-      put(snow, side * 6.15, g + 14.4, dz, 2.9, .08, 1.45, 0, -side * .48);
+    // Longitudinal ridge, pitched panels and end infill share an actual roof
+    // plane, distinct from the taller chimney. Repeat the bay structure on
+    // both long elevations instead of a single unbroken upper mass.
+    const eaves=12.6,rise=4.42,run=5.8,pitch=Math.atan2(rise,run),slant=Math.hypot(rise,run);
+    for(const side of [-1,1]){
+      put(slate,0,g+eaves+rise/2,side*run/2,21.1,.24,slant+.04,side*pitch);
+      put(timber,0,g+eaves,side*run,21.2,.26,.2);
+      for(let bay=0;bay<10;bay++){
+        const x=-9.45+bay*2.1;
+        for(let row=0;row<3;row++){
+          const t=(row+.5)/3;
+          put(slate,x,g+eaves+rise*t+.16,side*run*(1-t),2.15,.075,slant/3+.1,side*pitch);
+        }
+        if(bay%3!==1)put(snow,x,g+eaves+rise*.21+.24,side*run*.79,1.7,.09,1.3,side*pitch);
+      }
+      for(let course=0;course<8;course++){
+        const t=(course+1)/8;
+        put(timberWarm,side*9.96,g+eaves+rise*(course+.5)/8,0,.16,rise/8+.01,Math.max(.12,10*(1-t)));
+      }
+      for(const x of [-9.8,-6.4,-3.2,0,3.2,6.4,9.8])
+        put(timber,x,g+8.4,side*5.08,.21,8.4,.19);
+      put(stoneDark,0,g+4.25,side*5.08,20.2,.31,.22);
+      put(timber,0,g+9.55,side*5.08,20.2,.18,.22);
+    }
+    put(timber,0,g+17.12,0,21.15,.27,.35);
     // Two rows of dark windows; two boarded up.
     for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
       put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
@@ -858,54 +907,129 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   // ---------- layer 3: three stone-iron defense towers ----------
   /** The north tower's real lamp — the warm chain's only outer-works light. */
   let northTowerLight: PointLight | undefined;
-  function tower(origin: { east: number; north: number; height: number }, totalH: number,
+  function tower(origin: CraterOuterSite, totalH: number,
     mode: 'active' | 'tilted' | 'broken-ladder', faceDeg: number) {
-    const fr = frame(origin, faceDeg);
-    const g = origin.height;
-    const put = (mat: MeshStandardMaterial, dx: number, h: number, dz: number,
-      sx: number, sy: number, sz: number, pitch = 0, roll = 0) => {
-      const p = fr.at(dx, dz);
-      box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
+    // Batch 83: each original defense tower becomes a genuinely walkable
+    // two-turn square spiral around a solid masonry core. Cardinal frames
+    // keep the actual rendered wall/tread rectangles and AABB authority equal.
+    const fr = frame(origin, faceDeg), g=origin.height;
+    const put = (mat:MeshStandardMaterial,dx:number,h:number,dz:number,
+      sx:number,sy:number,sz:number,pitch=0,roll=0)=>{
+      const p=fr.at(dx,dz);box(mat,p.east,h,p.north,sx,sy,sz,fr.yaw,pitch,roll);
     };
-    const shaftH = totalH - 2.6;
-    put(stone, 0, g + shaftH * .28, 0, 3.9, shaftH * .56, 3.9);
-    put(stone, 0, g + shaftH * .78, 0, 3.3, shaftH * .44, 3.3);
-    for (const fy of [.3, .62, .92]) put(iron, 0, g + shaftH * fy, 0, 4, .28, 4);
-    put(stoneDark, 0, g + shaftH + .25, 0, 4.7, .5, 4.7);
-    // S-1 collision: shaft mass + platform slab (the cabin sits on the slab).
-    hitBox(colliders, origin.east, origin.north, fr.yaw, 3.9, 3.9, g, g + shaftH);
-    hitBox(colliders, origin.east, origin.north, fr.yaw, 4.7, 4.7, g + shaftH, g + shaftH + .5);
-    for (let m = 0; m < 8; m++) {
-      const a = m * Math.PI / 4;
-      const p = fr.at(Math.sin(a) * 2.15, Math.cos(a) * 2.15);
-      box(stone, p.east, g + shaftH + .95, p.north, .85, .85, .4, fr.yaw + a);
+    const solid=(mat:MeshStandardMaterial,x:number,z:number,w:number,d:number,low:number,high:number)=>{
+      put(mat,x,g+(low+high)/2,z,w,high-low,d);
+      const p=fr.at(x,z);hitBox(colliders,p.east,p.north,fr.yaw,w,d,g+low,g+high);
+    };
+    const slab=(mat:MeshStandardMaterial,x:number,z:number,w:number,d:number,top:number,thickness=.13)=>{
+      put(mat,x,g+top-thickness/2,z,w,thickness,d);
+      const p=fr.at(x,z);hitBox(floors,p.east,p.north,fr.yaw,w,d,g+top-thickness,g+top);
+    };
+    const wp=(x:number,z:number,y:number):CraterTowerWalkPoint=>({...fr.at(x,z),height:g+y});
+    const shaftH=totalH-2.6, deck=shaftH+.5, half=2.3, c=1.48, width=1.2;
+    // Keep a genuine load-bearing center (the former center-blocking test
+    // remains valid), while all four stair lanes are now hollow.
+    solid(stone,0,0,.88,.88,0,shaftH);
+    const wall=.18, outer=half-wall/2;
+    // Ground doorway, 1.28m clear, centred on the first stair corner.
+    const doorL=-c-.64,doorR=-c+.64;
+    solid(stone,(doorL-half)/2,outer,doorL+half,wall,0,deck);
+    solid(stone,(doorR+half)/2,outer,half-doorR,wall,0,deck);
+    solid(stone,-c,outer,1.28,wall,2.35,deck);
+    // Side/back walls have repeated small narrow light slots. Their 0.30m
+    // aperture is smaller than the .54m player diameter; no false passage.
+    function flank(axis:'x'|'z',side:number){
+      const slot=.30, bands=Math.floor(deck/2.4);
+      const panel=(a:number,b:number,low:number,high:number)=>{
+        if(axis==='x')solid(stone,side*outer,(a+b)/2,wall,b-a,low,high);
+        else solid(stone,(a+b)/2,side*outer,b-a,wall,low,high);
+      };
+      let low=0;
+      for(let k=0;k<bands;k++){
+        const sill=k*2.4+1.02,head=sill+.62;
+        panel(-half,half,low,sill);
+        panel(-half,-slot/2,sill,head);
+        panel(slot/2,half,sill,head);
+        low=head;
+      }
+      panel(-half,half,low,deck);
     }
-    // Cabin on the platform; the west tower's cabin lists where its frame gave.
-    const tilt = mode === 'tilted' ? .13 : 0;
-    put(timber, .6, g + shaftH + 1.55, -.5, 2.3, 2.1, 2.3, 0, tilt);
-    const roofP = fr.at(.6, -.5);
-    part(slate, new ConeGeometry(2, 1.1, 4), roofP.east, g + shaftH + 3.15, roofP.north, fr.yaw + Math.PI / 4, 0, tilt);
-    // Ladder up the crater-facing side; the gate tower's ladder ends mid-shaft.
-    const ladderTop = mode === 'broken-ladder' ? .55 : 1;
-    const rungs = Math.floor(shaftH * ladderTop / .45);
-    for (const s of [-1, 1]) put(iron, s * .42, g + shaftH * ladderTop / 2, 2.02, .07, shaftH * ladderTop, .07);
-    for (let i = 0; i < rungs; i++) put(iron, 0, g + .3 + i * .45, 2.02, .9, .06, .06);
-    if (mode === 'broken-ladder') {
-      const fallen = fr.at(1.6, 3.4);
-      box(iron, fallen.east, g + .25, fallen.north, .85, .08, 3.4, fr.yaw + .4, 0, .04);
+    flank('x',-1);flank('x',1);flank('z',-1);
+    for(const y of [deck*.31,deck*.62,deck-.28]){
+      for(const side of [-1,1]){
+        put(iron,side*half,g+y,0,.08,.18,4.6);
+        put(iron,0,g+y,side*half,4.6,.18,.08);
+      }
     }
-    if (mode === 'active') {
-      const lampP = fr.at(-1.7, 1.7);
-      box(iron, lampP.east, g + shaftH + 1.5, lampP.north, .1, 2, .1);
-      box(glow, lampP.east, g + shaftH + 2.6, lampP.north, .34, .42, .34);
-      const light = new PointLight(new Color(palette.ember), 14, 32, 2);
-      light.position.set(lampP.east, g + shaftH + 2.6, -lampP.north);
-      group.add(light);
-      northTowerLight = light;
+    // 8 straight flights, 5 treads per flight. Every tread is an actual
+    // standable floor slab. Corner landings connect the next 90-degree run.
+    const corners=[[-c,c],[c,c],[c,-c],[-c,-c]] as const;
+    const rises=8, treads=5, climb=deck/rises;
+    const stairs:CraterTowerWalkPoint[]=[wp(-c,c,0)];
+    for(let flight=0;flight<rises;flight++){
+      const a=corners[flight%4]!,b=corners[(flight+1)%4]!;
+      const dx=Math.sign(b[0]-a[0]),dz=Math.sign(b[1]-a[1]);
+      const startX=a[0]+dx*width/2,startZ=a[1]+dz*width/2;
+      const length=2*c-width, depth=length/treads;
+      for(let k=0;k<treads;k++){
+        const dist=(k+.5)*depth, x=startX+dx*dist,z=startZ+dz*dist;
+        const h=climb*(flight+(k+1)/treads);
+        slab(k%2===0?stoneDark:stone,x,z,dx?depth+.006:width,dz?depth+.006:width,h);
+        // Embedded contrasting nosing, never a second collision surface.
+        put(iron,x+dx*(depth/2-.025),g+h-.016,z+dz*(depth/2-.025),
+          dx?.045:width,.026,dz?.045:width);
+      }
+      const landing=climb*(flight+1);
+      slab(stoneDark,b[0],b[1],width,width,landing);
+      stairs.push(wp(b[0],b[1],landing));
+      // Small visible warm fixtures do not add point-light budget.
+      const lightX=b[0]*1.38,lightZ=b[1]*1.38;
+      put(glow,lightX,g+landing+1.4,lightZ,.13,.24,.13);
+    }
+    // Open BOTH uppermost stair flights for player headroom: the rear
+    // penultimate run and left-hand final run are uncovered until the top
+    // landing. The deck occupies the inner/front quadrant and exit tongue.
+    slab(stoneDark,.75,.75,3.1,3.1,deck,.22);
+    slab(stoneDark,-1.55,1.57,1.5,1.46,deck,.22);
+    solid(iron,-.80,.02,.10,1.64,deck,deck+1.02);
+    solid(iron,.75,-.80,3.10,.10,deck,deck+1.02);
+    for(const side of [-1,1]){
+      solid(stone,side*2.23,0,.19,4.6,deck,deck+.92);
+      solid(stone,0,side*2.23,4.6,.19,deck,deck+.92);
+      for(const x of [-1.75,0,1.75]){
+        put(stoneDark,x,g+deck+1.02,side*2.23,.48,.20,.35);
+        put(stoneDark,side*2.23,g+deck+1.02,x,.35,.20,.48);
+      }
+    }
+    // Open canopy, rather than an inaccessible cabin mass. Preserve the
+    // three towers' active / tilted / damaged silhouettes.
+    const tilt=mode==='tilted'?.10:0;
+    for(const x of [-.58,2.06])for(const z of [-.54,.94])
+      solid(timber,x,z,.12,.12,deck,deck+2.15);
+    const roofP=fr.at(.74,.20);
+    part(slate,new ConeGeometry(1.90,.65,4),roofP.east,g+deck+2.35,roofP.north,
+      fr.yaw+Math.PI/4,0,tilt);
+    // The different tower-number rubbings share the stone plinth form.
+    solid(stone,1.55,.15,.66,.65,deck,deck+.83);
+    put(stoneDark,1.55,g+deck+.89,.15,.74,.12,.73);
+    const marks=mode==='active'?1:mode==='tilted'?2:3;
+    for(let i=0;i<marks;i++)
+      put(brass,1.55+(i-(marks-1)/2)*.14,g+deck+.96,.15,.07,.025,.37);
+    if(mode==='broken-ladder'){
+      const fallen=fr.at(1.55,3.1);
+      box(iron,fallen.east,g+.15,fallen.north,.65,.08,2.6,fr.yaw+.4,0,.04);
+    }
+    if(mode==='active'){
+      const lampP=fr.at(-1.96,1.98);
+      box(iron,lampP.east,g+deck+1.5,lampP.north,.1,2,.1);
+      box(glow,lampP.east,g+deck+2.45,lampP.north,.34,.42,.34);
+      const light=new PointLight(new Color(palette.ember),14,32,2);
+      light.position.set(lampP.east,g+deck+2.45,-lampP.north);
+      group.add(light);northTowerLight=light;
       // K-29/K-30 (《设计-全图文字件总表》卡10, north tower only — the west
-      // tower takes no board per K-31): name plate on the shaft's ladder
-      // face, duty plate on the cabin's front wall over the platform.
-      const nameP = fr.at(-.85, 1.96);
+      // tower takes no board per K-31): name plate on the shaft's entrance
+      // face, duty plate on the platform parapet.
+      const nameP = fr.at(.20, 2.34);
       siteAt('north-tower-sign', nameP.east, nameP.north, 1);
       sign(nameP.east, g + 1.6, nameP.north, fr.yaw, .7, .3, iron, (c, w, h) => {
         c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
@@ -915,9 +1039,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.fillText('北塔', w / 2, h / 2 + 4);
       });
-      const dutyP = fr.at(.6, .66);
+      const dutyP = fr.at(.6, 2.34);
       siteAt('north-tower-duty', dutyP.east, dutyP.north, 1);
-      sign(dutyP.east, g + shaftH + 1.55, dutyP.north, fr.yaw, .8, .5, timber, (c, w, h) => {
+      sign(dutyP.east, g + deck + .52, dutyP.north, fr.yaw, .8, .5, timber, (c, w, h) => {
         c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
         c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
         c.strokeRect(10, 10, w - 20, h - 20);
@@ -926,11 +1050,15 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.fillText('守塔', w / 2, h / 2 + 4);
       });
     }
+    const entry=wp(-c,3.25,0),lookout=wp(1.38,1.39,deck);
+    const rubbing=wp(1.55,.15,deck),rubbingUse=wp(.16,.15,deck);
+    stairs.push(wp(.1,1.48,deck),lookout,wp(.16,1.1,deck),rubbingUse);
+    towerRoutes.push({id:origin.id,entry,stairs,lookout,rubbing,rubbingUse});
   }
   const northTower = site('north-tower', 358, 67.5, 4, 13.5);
-  if (northTower) tower(northTower, 13.5, 'active', 358 + 180);
+  if (northTower) tower(northTower, 13.5, 'active', 0);
   const westTower = site('west-tower', 262, 64, 4, 12.5);
-  if (westTower) tower(westTower, 12.5, 'tilted', 262 + 180);
+  if (westTower) tower(westTower, 12.5, 'tilted', 270);
   const gateTower = siteAt('gate-tower', -30, 174, 4, 12);
   if (gateTower) tower(gateTower, 12, 'broken-ladder', 90);
 
@@ -988,7 +1116,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight,
+    group, sites, fencePosts, setNight, towerRoutes,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

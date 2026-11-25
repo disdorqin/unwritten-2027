@@ -46,6 +46,30 @@ function pixelMaterial(base: string, shade: string, seed: number, accent = shade
   return new MeshStandardMaterial({ map, roughness: 1 });
 }
 
+/** Low-contrast joined planks/shingles for the supply cabin (ref-01).
+ * A board is a continuous strip, not a 16x16 hash of square dark flecks.
+ * The narrow seams and staggered joints remain readable at a normal player distance.
+ */
+function supplyWoodMaterial(name: string, tones: readonly [number, number, number], roofing = false) {
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const row = Math.floor(y / 8);
+    const phase = (x + (row % 2) * 16) % 32;
+    const seam = y % 8 === 0 || (roofing && phase === 0);
+    const grain = (Math.floor(x / 8) + row * 3) % 4 === 2 && y % 8 >= 2 && y % 8 <= 4;
+    const tone = tones[seam ? 1 : grain ? 2 : 0]!;
+    data.set([tone >>> 16, (tone >>> 8) & 255, tone & 255, 255], (y * size + x) * 4);
+  }
+  const map = new DataTexture(data, size, size);
+  map.magFilter = map.minFilter = NearestFilter;
+  map.colorSpace = SRGBColorSpace;
+  map.needsUpdate = true;
+  const material = new MeshStandardMaterial({ map, roughness: 1 });
+  material.name = name;
+  return material;
+}
+
 function hash(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -115,6 +139,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 41, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
+  const supplyPlanks = supplyWoodMaterial('supply-cabin-joined-timber', [0x795038, 0x4b3024, 0x876047]);
+  const supplyShingles = supplyWoodMaterial('supply-cabin-continuous-shingles', [0x493e33, 0x322b25, 0x5c4b3d], true);
   const timber = pixelMaterial(palette.earth, palette.night, 23, palette.stone);
   const timberWarm = pixelMaterial(palette.ochre, palette.earth, 61, palette.timberLight);
   const slate = pixelMaterial(palette.slate, palette.night, 133, palette.stone);
@@ -314,19 +340,52 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // back and sides solid. Interior stays enterable through the open doorway.
     const wallY = g + foundH + wallH / 2;
     const front = fr.at(0, D / 2);
-    box(timber, fr.at(-2.55, D / 2).east, wallY, front.north, 2.3, wallH, .22, fr.yaw);
-    box(timber, fr.at(2.55, D / 2).east, wallY, fr.at(2.55, D / 2).north, 2.3, wallH, .22, fr.yaw);
-    box(timber, front.east, g + foundH + wallH - .35, front.north, 2.9, .7, .22, fr.yaw);
+    for (const dx of [-2.55, 2.55]) {
+      const seg = fr.at(dx, D / 2);
+      box(supplyPlanks, seg.east, wallY, seg.north, 2.3, wallH, .22, fr.yaw);
+    }
+    box(supplyPlanks, front.east, g + foundH + wallH - .35, front.north, 2.9, .7, .22, fr.yaw);
     for (const dx of [-2.55, 2.55]) {
       const wp = fr.at(dx, D / 2 + .13);
       box(glow, wp.east, g + foundH + 1.65, wp.north, .92, 1.05, .06, fr.yaw);
-      box(timber, wp.east, g + foundH + 1.65, wp.north, 1.06, .09, .09, fr.yaw);
+      for (const dy of [-.56, 0, .56]) {
+        const p = fr.at(dx, D / 2 + .18);
+        box(timber, p.east, g + foundH + 1.65 + dy, p.north, 1.08, .10, .10, fr.yaw);
+      }
+      for (const wx of [-.51, 0, .51]) {
+        const p = fr.at(dx + wx, D / 2 + .18);
+        box(timber, p.east, g + foundH + 1.65, p.north, .09, 1.18, .10, fr.yaw);
+      }
     }
     const back = fr.at(0, -D / 2);
-    box(timber, back.east, wallY, back.north, W, wallH, .22, fr.yaw);
+    box(supplyPlanks, back.east, wallY, back.north, W, wallH, .22, fr.yaw);
     for (const s of [-1, 1]) {
       const side = fr.at(s * W / 2, 0);
-      box(timber, side.east, wallY, side.north, .22, wallH, D, fr.yaw);
+      box(supplyPlanks, side.east, wallY, side.north, .22, wallH, D, fr.yaw);
+      // Warm, framed side windows make the reference's three-quarter view
+      // legible, without changing the existing side-wall collision envelope.
+      for (const dz of [-1.4, 1.15]) {
+        const pane = fr.at(s * (W / 2 + .13), dz);
+        box(glow, pane.east, g + foundH + 1.57, pane.north, .065, .88, .9, fr.yaw);
+        for (const dy of [-.49, 0, .49]) {
+          const trim = fr.at(s * (W / 2 + .18), dz);
+          box(timber, trim.east, g + foundH + 1.57 + dy, trim.north, .11, .09, 1.04, fr.yaw);
+        }
+        for (const z of [-.48, 0, .48]) {
+          const trim = fr.at(s * (W / 2 + .18), dz + z);
+          box(timber, trim.east, g + foundH + 1.57, trim.north, .11, 1.04, .09, fr.yaw);
+        }
+      }
+    }
+    // Framed open door and four corner posts; the pre-existing clear opening
+    // is unchanged. These sit on the wall line, outside the doorway centre.
+    for (const s of [-1, 1]) {
+      const jamb = fr.at(s * 1.43, D / 2 + .07);
+      box(timberWarm, jamb.east, g + foundH + 1.10, jamb.north, .16, 2.2, .20, fr.yaw);
+      for (const side of [-1, 1]) {
+        const post = fr.at(s * (W / 2 - .07), side * (D / 2 - .04));
+        box(timber, post.east, wallY, post.north, .19, wallH + .08, .19, fr.yaw);
+      }
     }
     // S-1 collision: foundation ledge + interior slab as standable floors
     // (a doorway ramp bridges the .91 rise — three plain steps would each
@@ -347,16 +406,52 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // with short overlapping timber shingles, warm eaves and snow-frost ridge.
     // Keep the approved front half as an actual lookout deck.
     const roofY = g + foundH + wallH;
-    const backRoof = fr.at(0, -D / 4);
-    box(timberWarm, backRoof.east, roofY + .38, backRoof.north,
-      W + .95, .12, D / 2 + .9, fr.yaw, .27);
-    for (let row = 0; row < 5; row++) {
-      const p = fr.at(0, -D / 2 + .3 + row * .47);
-      box(row % 3 === 0 ? stone : timber, p.east,
-        roofY + .42 + row * .04, p.north, W + 1.03, .08, .52, fr.yaw, .27);
+    // Ref-01: real gabled timber cabin, with a separate forward lookout deck.
+    // The two roof planes meet at one ridge; shingles sit on the SAME plane
+    // (along-slope overlap), instead of unrelated tilted boards in the air.
+    const halfRun = W / 2 + .43, rise = 1.52;
+    const slope = Math.atan2(rise, halfRun);
+    const slant = Math.hypot(halfRun, rise);
+    const roofNorthSouth = D / 2 + .54;
+    const rearZ = -D / 4 - .09;
+    for (const side of [-1, 1]) {
+      // The box yaw uses Three's +X opposite frame.at's +dx, so roll
+      // must have this sign for the high edges to meet at local x=0.
+      const pitchRoll = side * slope;
+      const base = fr.at(side * halfRun / 2, rearZ);
+      box(supplyShingles, base.east, roofY + rise / 2 + .10, base.north,
+        slant + .08, .16, roofNorthSouth, fr.yaw, 0, pitchRoll);
+      for (let row = 0; row < 6; row++) {
+        const t = (row + .5) / 6;
+        const dx = side * halfRun * (1 - t);
+        for (let strip = 0; strip < 3; strip++) {
+          const dz = rearZ + (strip - 1) * roofNorthSouth / 3;
+          const p = fr.at(dx, dz);
+          box(row === 5 && strip !== 1 ? snow : supplyShingles,
+            p.east, roofY + rise * t + .22, p.north,
+            slant / 6 + .11, .09, roofNorthSouth / 3 + .04, fr.yaw, 0, pitchRoll);
+        }
+      }
+      const fascia = fr.at(side * (halfRun - .04), rearZ);
+      box(timberWarm, fascia.east, roofY + .11, fascia.north,
+        .16, .22, roofNorthSouth + .08, fr.yaw);
     }
-    const ridgeP = fr.at(0, -D / 3);
-    box(snow, ridgeP.east, roofY + .96, ridgeP.north, W + .75, .13, .45, fr.yaw);
+    // Close both ends of the rear roof with joined stepped gables; the
+    // front gable borders the open deck rather than creating a false wall.
+    for (const dz of [-D / 2 + .02, -.12]) {
+      for (let row = 0; row < 5; row++) {
+        const y = (row + .5) * rise / 5;
+        const span = 2 * (W / 2) * (1 - (row + 1) / 5) + .08;
+        const p = fr.at(0, dz);
+        box(supplyPlanks, p.east, roofY + y, p.north,
+          span, rise / 5 + .012, .21, fr.yaw);
+      }
+    }
+    const ridgeP = fr.at(0, rearZ);
+    box(timberWarm, ridgeP.east, roofY + rise + .23, ridgeP.north,
+      .30, .16, roofNorthSouth + .07, fr.yaw);
+    box(snow, ridgeP.east, roofY + rise + .34, ridgeP.north,
+      .24, .09, roofNorthSouth * .74, fr.yaw);
     const deck = fr.at(0, D / 4);
     box(timber, deck.east, roofY + .06, deck.north, W, .12, D / 2, fr.yaw);
     for (let i = 0; i < 7; i++) {
@@ -365,6 +460,17 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
     const rail = fr.at(0, D / 2 - .12);
     box(timber, rail.east, roofY + .95, rail.north, W, .08, .08, fr.yaw);
+    for (const s of [-1, 1]) {
+      for (const dz of [.15, D / 4, D / 2 - .12]) {
+        const post = fr.at(s * (W / 2 - .12), dz);
+        box(timber, post.east, roofY + .5, post.north, .13, .9, .13, fr.yaw);
+      }
+      const sideRail = fr.at(s * (W / 2 - .12), D / 4);
+      box(timber, sideRail.east, roofY + .95, sideRail.north, .10, .09, D / 2, fr.yaw);
+      // Visible structural posts tie the raised deck to the cabin sides.
+      const pillar = fr.at(s * (W / 2 - .07), D / 4);
+      box(timberWarm, pillar.east, wallY, pillar.north, .17, wallH, .17, fr.yaw);
+    }
     // Exterior stair up the east side, climbing from the back toward the deck.
     for (let i = 0; i < 6; i++) {
       const p = fr.at(W / 2 + .55, -D / 2 + .4 + i * .55);
