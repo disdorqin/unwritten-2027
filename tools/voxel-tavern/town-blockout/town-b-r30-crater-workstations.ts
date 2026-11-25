@@ -22,7 +22,7 @@ export type WorkstationSite = Readonly<{
  * All five stay on the exterior; no opening a solid A-4 building by magic.
  */
 const plans = [
-  {id:'bellows',label:'风箱 · 冷炉',parentSite:'smelter-plant',east:-161,north:122,yaw:Math.PI,w:1.65,d:1.30,h:1.5,targetY:1.16,targetZ:.05},
+  {id:'bellows',label:'风箱 · 冷炉',parentSite:'smelter-plant',east:-161,north:122,yaw:Math.PI,w:1.72,d:1.30,h:1.72,targetY:1.16,targetZ:.05},
   {id:'calibration',label:'校准台',parentSite:'instrument-plant',east:-64,north:139,yaw:-Math.PI/2,w:1.70,d:.85,h:1.75,targetY:.89,targetZ:.29},
   {id:'sorting',label:'分拣台',parentSite:'ore-yard',east:-135,north:111,yaw:Math.PI,w:2.1,d:.95,h:1.45,targetY:.99,targetZ:.13},
   {id:'weighing',label:'过秤',parentSite:'kengkou-freight-shed',east:-60,north:150,yaw:Math.PI,w:1.50,d:1.1,h:1.70,targetY:.40,targetZ:.20},
@@ -79,6 +79,8 @@ export type CraterWorkstationView = Readonly<{
   calibrationAngles?:readonly [number,number,number];
   calibrationLocked?:readonly [boolean,boolean,boolean];
   bellowsPressure?:number;
+  calibrationTargets?:readonly [number,number,number];
+  bellowsInBand?:boolean;
 }>;
 const clamped=(v:number)=>Number.isFinite(v)?Math.max(0,Math.min(1,v)):0;
 
@@ -122,6 +124,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   const dialKnobs:Mesh[]=[];
   const dialPointers:Group[]=[];
   const dialStatus:MeshStandardMaterial[]=[];
+  const dialMarks:Group[]=[];
+  const pressureStatus=new MeshStandardMaterial({color:0x69463a,roughness:.85});
   let pressurePointer:Group|undefined;
   let bellowsFold:Group|undefined,scalePlatform:Group|undefined;
   const needle=(group:Group,x:number,y:number,z:number)=>{
@@ -186,6 +190,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(paper,.53,1.54,-.185,.32,.24,.025);
       fixed(brass,.60,1.61,-.167,.10,.027,.026);
       pressurePointer=needle(g,.53,1.48,-.15);pressurePointer.scale.set(.49,.49,.49);
+      moving(pressureStatus,g,.53,1.68,-.19,.085,.045,.035);
       sign(g,site.label,1.31,-.12,1.35);
     }else if(site.id==='calibration'){
       table(1.58,.76,.73);fixed(iron,0,1.22,-.22,1.48,.86,.15);
@@ -199,6 +204,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
           tick.rotation.z=-a;
         }
         const p=needle(g,x,1.30,-.055);p.rotation.z=x*.9;dialPointers.push(p);
+        const mark=new Group();mark.position.set(x,1.30,-.045);g.add(mark);dialMarks.push(mark);
+        moving(brass,mark,0,.171,0,.032,.041,.027);
         const status=new MeshStandardMaterial({color:0x553b32,roughness:.8});
         dialStatus.push(status);moving(status,g,x,1.52,-.12,.07,.05,.025);
         moving(brass,g,x,1.30,-.025,.045,.045,.045);
@@ -224,7 +231,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
           ore.rotation.set(j*.73,i+j*1.1,j*.51);
           ore.visible=false;g.add(ore);orePiles[i].push(ore);
         }
-        sign(g,['矿料','木料','渣料'][i],.79,.455,.49);
+        sign(g,['星尘','废料','碎石'][i],.79,.455,.49);
       }
       for(let i=0;i<3;i++)fixed(ores[i],(i-1)*.38,1.02,-.38,.17,.16,.12);
       sign(g,site.label,1.34,-.31,1.66);
@@ -268,6 +275,33 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     }
   }
   const ray=new Ray(),point=new Vector3(),delta=new Vector3();
+  type ControlTarget={station:CraterWorkstationId;index?:0|1|2;point:Point;radius:number};
+  const targets:ControlTarget[]=sites.flatMap<ControlTarget>(s=>{
+    if(s.id!=='calibration'&&s.id!=='sorting')return [{station:s.id,point:s.target,radius:.36}];
+    const xStep=s.id==='calibration'?.43:.61;
+    return ([0,1,2] as const).map(index=>{
+      const x=(index-1)*xStep;
+      return {station:s.id,index,point:{east:s.target.east+x*Math.cos(s.yaw),north:s.target.north+x*Math.sin(s.yaw),height:s.target.height},radius:s.id==='calibration'?.16:.22};
+    });
+  });
+  function aimControl(feet:Point,heading:number,pitch:number,eyeHeight:number):ControlTarget|null{
+    if(![feet.east,feet.north,feet.height,heading,pitch,eyeHeight].every(Number.isFinite))return null;
+    ray.origin.set(feet.east,feet.height+eyeHeight,-feet.north);
+    ray.direction.set(Math.sin(heading)*Math.cos(pitch),Math.sin(pitch),-Math.cos(heading)*Math.cos(pitch));
+    let best:ControlTarget|null=null,score=Infinity;
+    for(const t of targets){
+      const s=sites.find(s=>s.id===t.station)!;
+      const dx=feet.east-s.center.east,dn=feet.north-s.center.north;
+      if(dx*Math.sin(s.yaw)-dn*Math.cos(s.yaw)<.38||
+        Math.hypot(feet.east-s.foot.east,feet.north-s.foot.north)>1.2||
+        Math.abs(feet.height-s.foot.height)>.45)continue;
+      point.set(t.point.east,t.point.height,-t.point.north);delta.subVectors(point,ray.origin);
+      if(delta.dot(ray.direction)<=0||delta.length()>2.5)continue;
+      const miss=ray.distanceSqToPoint(point);
+      if(miss<=t.radius*t.radius&&miss<score){best=t;score=miss;}
+    }
+    return best;
+  }
   function aim(feet:Point,heading:number,pitch:number,eyeHeight:number):CraterWorkstationId|null{
     if(![feet.east,feet.north,feet.height,heading,pitch,eyeHeight].every(Number.isFinite))return null;
     ray.origin.set(feet.east,feet.height+eyeHeight,-feet.north);
@@ -292,6 +326,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     bellowsFold!.scale.y=1-stroke*.53;
     gauge!.rotation.z=(gaugeValue-.5)*2.1;
     if(pressurePointer)pressurePointer.rotation.z=(.5-clamped(view.bellowsPressure??0))*2.2;
+    pressureStatus.color.set(view.bellowsInBand?0x83b47d:0x69463a);
+    dialMarks.forEach((m,i)=>{const a=view.calibrationTargets?.[i];m.visible=a!==undefined&&Number.isFinite(a);m.rotation.z=-(a??0);});
     if(view.calibrationAngles){
       dialPointers.forEach((p,i)=>{const a=view.calibrationAngles![i];p.rotation.z=Number.isFinite(a)?-a:0;});
       dialKnobs.forEach((k,i)=>{const a=view.calibrationAngles![i];k.rotation.set(Math.PI/2,0,0);k.rotateY(Number.isFinite(a)?a:0);});
@@ -314,9 +350,9 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     const geometries=new Set<import('three').BufferGeometry>();
     root.traverse(o=>{if(o instanceof Mesh){geometries.add(o.geometry);if(o.material instanceof MeshBasicMaterial){o.material.map?.dispose();o.material.dispose();}}});
     for(const geo of geometries)geo.dispose();
-    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());unit.dispose();wheel.dispose();oreGeometry.dispose();
+    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
   }
-  return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,show,dispose};
+  return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,aimControl,targets,show,dispose};
 }
 
 /** Production attachment for the A-window's sole viewer writer. Invoke once
