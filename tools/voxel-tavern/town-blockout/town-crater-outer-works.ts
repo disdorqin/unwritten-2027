@@ -831,23 +831,56 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   siteAt('wall-south-end', wallEast, 10, 3);
   siteAt('wall-gate', wallEast, wallGateNorth, 3.4);
   siteAt('wall-north-end', wallEast, 310, 3);
-  for (let n = 13; n <= 307; n += 6) {
-    if (Math.abs(n - wallGateNorth) < 4.2) continue;
-    const g = heightAt(wallEast, n);
-    if (g === undefined) continue;
-    box(stone, wallEast, g + .6, n, 1.5, 1.2, 6.15);
-    box(earthWall, wallEast, g + 3, n, 1.15, 3.6, 6.15);
-    box(stoneDark, wallEast, g + 5.15, n, 1.45, .7, 6.3);
-    box(snow, wallEast, g + 5.56, n, 1.3, .12, 6.2);
-    // S-1 collision: base + rammed earth + cap read as one wall mass.
-    hitBox(colliders, wallEast, n, 0, 1.5, 6.15, g, g + 5.5);
+  function wallBay(n:number,length:number,index:number){
+    const g=heightAt(wallEast,n);
+    if(g===undefined)return;
+    // A footing reaches the lowest surveyed point along this real bay.
+    // It cannot float over the town-height seam; the cap remains stepped.
+    const soils=[-1,0,1].flatMap(side=>[-.5,0,.5].map(t=>heightAt(wallEast+side*.75,n+t*length)??g));
+    const bottom=Math.min(...soils,g)-.12;
+    const plinth=g+1.20;
+    box(workshopBrick,wallEast,(bottom+plinth)/2,n,1.5,plinth-bottom,length);
+    box(earthWall,wallEast,g+3,n,1.15,3.6,length);
+    box(stoneDark,wallEast,g+5.15,n,1.45,.7,length+.1);
+    box(snow,wallEast,g+5.56,n,1.30,.12,length);
+    hitBox(colliders,wallEast,n,0,1.5,length,bottom,g+5.62);
+    // Weathered masonry blocks set into the plaster face. The shallow
+    // relief stays inside the load-bearing stone plinth's footprint.
+    for(const side of [-1,1]){
+      for(let k=0;k<3;k++){
+        const z=n+length*((k+.5)/3-.5);
+        const y=g+1.54+((index+k)%3)*.28;
+        box(workshopBrick,wallEast+side*.605,y,z,.12,.39,Math.min(.74,length/4));
+      }
+      if(length>4&&index%4===0){
+        box(workshopBrick,wallEast+side*.65,g+2.78,n,.18,3.22,.66);
+        box(stoneDark,wallEast+side*.65,g+4.47,n,.20,.23,.84);
+      }
+    }
   }
+  for(let n=13;n<=307;n+=6){
+    if(Math.abs(n-wallGateNorth)<4.2)continue;
+    wallBay(n,6.15,Math.round((n-13)/6));
+  }
+  // Restore the two unequal side returns left by the old skipped bay
+  // arithmetic. The only opening in this local span is the intended gate.
+  wallBay((154.075+155.05)/2,155.05-154.075,24);
+  wallBay((162.95+165.925)/2,165.925-162.95,25);
   {
     // Gate frame and two leaves standing open — the guard turns you back, not the door.
     const g = heightAt(wallEast, wallGateNorth);
     if (g !== undefined) {
       for (const s of [-1, 1]) {
-        box(stone, wallEast, g + 3.1, wallGateNorth + s * 3.4, 1.7, 6.2, 1.1);
+        const postN=wallGateNorth+s*3.4;
+        box(workshopBrick,wallEast,g+3.1,postN,1.7,6.2,1.1);
+        box(stoneDark,wallEast,g+.34,postN,1.88,.68,1.30);
+        for(let course=0;course<7;course++){
+          const y=g+.82+course*.74;
+          for(const side of [-1,1])
+            box(workshopBrick,wallEast+side*.875,y,postN,.10,.52,.92);
+        }
+        box(stoneDark,wallEast,g+6.25,postN,1.92,.20,1.34);
+        box(snow,wallEast,g+6.42,postN,1.85,.14,1.30);
         const leafN = wallGateNorth + s * 2.2;
         box(timber, wallEast - 1.1, g + 2.2, leafN, .14, 4.4, 2.7, s * .85);
         box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
@@ -856,10 +889,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       // guard turns you back, not the door (design), so the channel between
       // the leaves' inner edges (≈2.6 m) stays walkable.
       for (const s of [-1, 1]) {
-        hitBox(colliders, wallEast, wallGateNorth + s * 3.4, 0, 1.7, 1.1, g, g + 6.2);
+        hitBox(colliders,wallEast,wallGateNorth+s*3.4,0,1.88,1.30,g,g+.68);
+        hitBox(colliders,wallEast,wallGateNorth+s*3.4,0,1.85,1.1,g+.68,g+6.2);
         hitBox(colliders, wallEast - 1.1, wallGateNorth + s * 2.2, s * .85, .14, 2.7, g, g + 4.4);
       }
-      box(timber, wallEast, g + 6.35, wallGateNorth, 1.2, .45, 8.2);
+      box(timber,wallEast,g+6.35,wallGateNorth,1.2,.45,8.2);
+      // Reference gate's warm lantern and timber support, kept outside the
+      // walking channel. Emissive glass uses the existing material budget.
+      const lampN=wallGateNorth-3.4,lampE=wallEast+.99;
+      box(timber,lampE,g+4.72,lampN,.13,.24,.66);
+      box(iron,lampE+.13,g+4.41,lampN,.06,.48,.06);
+      box(glow,lampE+.13,g+4.07,lampN,.30,.32,.30);
+      for(const h of [3.88,4.27])box(iron,lampE+.13,g+h,lampN,.38,.06,.38);
       // Town-office notice, fresh paint, on the south post's passage face
       // (牌面 §一, verbatim — the town era still speaks gently).
       siteAt('wall-gate-notice', wallEast, 156.2, 1);
