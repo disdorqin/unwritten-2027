@@ -4,8 +4,10 @@ import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 import type {IndustryPoint} from '../tools/voxel-tavern/town-blockout/town-a-r30-industrial-shell';
+import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const boxes=road.group.userData.colliders as OrientedSupportBox[],floors=road.group.userData.floors as OrientedSupportBox[];
+const rail=buildCraterRailExtension(grid,road);
+const boxes=[...road.group.userData.colliders,...rail.group.userData.colliders] as OrientedSupportBox[],floors=[...road.group.userData.floors,...rail.group.userData.floors] as OrientedSupportBox[];
 function walk(id:string,path:readonly IndustryPoint[]){
  let h=path[0]!.height;
  for(let j=1;j<path.length;j++){
@@ -23,6 +25,11 @@ function walk(id:string,path:readonly IndustryPoint[]){
  }
  assert.ok(Math.abs(h-path.at(-1)!.height)<.03,JSON.stringify({id,h,last:path.at(-1)}));
 }
+test('instrument public road bends around actual masonry and approaches the open entrance',()=>{
+ const route=road.outerWorks.industrialRoutes.find(r=>r.id==='instrument-plant')!;
+ const access=[[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]].map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
+ walk(route.id,[...access,...route.points]);walk(route.id,[...access,...route.points].reverse());
+});
 for(const route of road.outerWorks.industrialRoutes)test(route.id+' physical entry, interior route and return',()=>{
  walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });

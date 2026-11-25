@@ -89,7 +89,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
   const civilRoutes:readonly {points:readonly Point[];half:number;strength:number}[]=[
     {points:[[0,159],[-12,159],[-40,159],[-67,159]],half:3.5,strength:1},
     {points:[[-29,159],[-35,164],[-36,167],[-37.21,167.05]],half:1.6,strength:.78},
-    {points:[[-40,159],[-36,145],[-58.11,138.36]],half:1.45,strength:.7},
+    {points:[[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5],[-58.11,138.36]],half:1.45,strength:.7},
     {points:[[-67,159],[-67.5,142],[-74,126],[-70,120],[-72.9,116.85],[-74.8,115.8]],half:1.45,strength:.78},
     {points:[[-67.5,142],[-65,112],[-84,97],[-111,79],[-132,86],[-151.75,112.34]],half:1.75,strength:.7},
     {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
