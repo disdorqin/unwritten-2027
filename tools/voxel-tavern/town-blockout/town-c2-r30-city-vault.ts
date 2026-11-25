@@ -428,7 +428,7 @@ export function mountTownC2R30CityVault(options: Readonly<{
   const matrix = new Matrix4(), pose = new Object3D();
   for (const family of familyOrder) matrices.set(family, []);
   for (const piece of pieces) {
-    pose.position.set(piece.e, piece.y, -piece.n);
+    pose.position.set(piece.e, piece.y + piece.h / 2, -piece.n);
     pose.rotation.set(0, 0, 0);
     pose.scale.set(piece.w, piece.h, piece.d);
     pose.updateMatrix();

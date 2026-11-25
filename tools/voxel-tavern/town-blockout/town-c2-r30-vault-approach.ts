@@ -260,7 +260,7 @@ export function mountTownC2R30VaultApproach(options: Readonly<{
     const mesh = new InstancedMesh(geometry, material, items.length);
     mesh.name = `town-c2-r30-vault/${family}`;
     items.forEach((piece, index) => {
-      pose.position.set(piece.e, piece.y, -piece.n);
+      pose.position.set(piece.e, piece.y + piece.h / 2, -piece.n);
       pose.rotation.set(0, 0, 0);
       pose.scale.set(piece.w, piece.h, piece.d);
       pose.updateMatrix();
