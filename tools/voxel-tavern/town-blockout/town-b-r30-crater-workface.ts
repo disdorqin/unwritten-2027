@@ -51,13 +51,36 @@ const palette={
 } as const;
 type Family=keyof typeof palette;
 function material(f:Family){
-  const colors=palette[f],pixels=new Uint8Array(16*16*4);
-  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
-    const r=(Math.imul(x+13,733)^Math.imul(y+11,197)^Math.imul(x*y,31))>>>0;
-    const v=colors[f==='wood'&&(y===4||y===11)?1:r%13<3?2:r%7===0?1:0];
-    pixels.set([v>>16,v>>8&255,v&255,255],4*(y*16+x));
+  const colors=palette[f],size=32,pixels=new Uint8Array(size*size*4);
+  const mix=(a:number,b:number,t:number)=>[16,8,0].map(s=>Math.round(((a>>s)&255)*(1-t)+((b>>s)&255)*t));
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    // Continuous weathering across a piece, not an independent random
+    // color for each texel. Preserve the original pixel-art palette.
+    const broad=.5+.5*Math.sin(x*.24+y*.17+1.1*Math.sin(y*.24));
+    const grain=.5+.5*Math.sin(y*1.7+.18*Math.sin(x*.28)+.09*x);
+    const p=(Math.imul(x+13,733)^Math.imul(y+11,197)^Math.imul(x*y,31))>>>0;
+    let base:number=colors[0],t=.09+.10*broad,accent:number=colors[2];
+    if(f==='wood'){
+      const seam=y===0||y===15||y===31;
+      base=seam?colors[1]:colors[0];t=seam?.12:.09+.19*grain;
+      accent=seam?colors[0]:colors[2];
+    }else if(f==='stone'){
+      // A staggered joint and fine pitting instead of a checkerboard.
+      const row=Math.floor(y/11),j=y%11===0||((x+row*8)%17===0);
+      base=j?colors[1]:colors[0];t=j?.12:.05+.15*broad;accent=colors[2];
+    }else if(f==='iron'||f==='rust'){
+      t=.05+.24*broad*broad;accent=colors[1];
+      if((y===0||y===31)&&f==='iron'){accent=colors[2];t=.34;}
+    }else if(f==='cloth'){
+      t=.07+.11*((x+y)%2)+.07*broad;
+    }else{
+      t=.08+.18*broad;accent=colors[1];
+    }
+    const rgb=mix(base,accent,t);
+    const speck=p%41===0?5:0;
+    pixels.set([...rgb.map(v=>Math.min(255,v+speck)),255],4*(y*size+x));
   }
-  const map=new DataTexture(pixels,16,16);map.colorSpace=SRGBColorSpace;
+  const map=new DataTexture(pixels,size,size);map.colorSpace=SRGBColorSpace;
   map.magFilter=map.minFilter=NearestFilter;map.generateMipmaps=false;map.needsUpdate=true;
   return new MeshStandardMaterial({map,roughness:.96,metalness:f==='iron'?.16:0});
 }
