@@ -657,7 +657,8 @@ export function createTownD2FrontRidgeRestStops(options: CreateOptions = {}) {
     const uphill = a >= b ? 1 : -1;
     const east = point.east + perpEast * uphill * 4.7;
     const north = point.north + perpNorth * uphill * 4.7;
-    const yaw = Math.atan2(-perpEast * uphill, -perpNorth * uphill); // opening faces the road
+    const roadPoint = nearestPlanPoint(survey, east, north).point;
+    const yaw = Math.atan2(roadPoint.east - east, -(roadPoint.north - north)); // local +Z opening faces the road
     const extent = groundExtentAt(east, north, yaw, groundAt, SHELTER_HALF_WIDTH, SHELTER_HALF_DEPTH);
     const height = extent.base;
     const built = new Group();

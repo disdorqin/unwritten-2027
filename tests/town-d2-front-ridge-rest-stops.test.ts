@@ -474,6 +474,17 @@ test('D-5: shelter and lookout foundations span true footprint ground without fl
     foundation.geometry.computeBoundingBox();
     assert.ok(Math.abs(lookout.position.y + foundation.position.y + foundation.geometry.boundingBox!.min.y -
       data.minGround) < 1e-6, 'lookout foundation bottom must meet the lowest ground');
+    for (const shelter of stops.shelters) {
+      const a = line[0]!, b = line[1]!;
+      const dx = b.east - a.east, dn = b.north - a.north;
+      const t = Math.max(0, Math.min(1, ((shelter.east - a.east) * dx + (shelter.north - a.north) * dn) /
+        (dx * dx + dn * dn)));
+      const roadEast = a.east + dx * t - shelter.east, roadNorth = a.north + dn * t - shelter.north;
+      const openingEast = Math.sin(shelter.yaw), openingNorth = -Math.cos(shelter.yaw);
+      const dot = (roadEast * openingEast + roadNorth * openingNorth) /
+        Math.hypot(roadEast, roadNorth);
+      assert.ok(dot > .99, `${shelter.id} opening must face the road, got dot ${dot.toFixed(3)}`);
+    }
     const deck = lookout.getObjectByName('lookout-deck') as Mesh;
     deck.geometry.computeBoundingBox();
     const deckTop = lookout.position.y + deck.position.y + deck.geometry.boundingBox!.max.y;
