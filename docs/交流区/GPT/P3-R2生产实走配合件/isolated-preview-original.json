@@ -1,0 +1,111 @@
+{
+  "viewport": {
+    "width": 768,
+    "height": 432
+  },
+  "errors": [],
+  "screenshots": [
+    "01-absolute-summit.png",
+    "02-engineered-snow-belt.png",
+    "03-lower-preview-seam.png"
+  ],
+  "browser": "153.0.8010.12",
+  "summit": {
+    "start": {
+      "east": 79,
+      "north": 1004,
+      "height": 800,
+      "yaw": -0.27202384729354057,
+      "ticks": 0,
+      "started": false,
+      "finished": false,
+      "lowerPreview": false,
+      "active": false,
+      "airborne": false,
+      "speed": 0,
+      "seamOffset": -230.7170684687335,
+      "draws": 3,
+      "triangles": 441258
+    },
+    "mounted": {
+      "east": 79,
+      "north": 1004,
+      "height": 800,
+      "yaw": -0.27202384729354057,
+      "ticks": 0,
+      "started": true,
+      "finished": false,
+      "lowerPreview": false,
+      "active": true,
+      "airborne": false,
+      "speed": 0,
+      "seamOffset": -230.7170684687335,
+      "draws": 3,
+      "triangles": 441258
+    },
+    "forward": {
+      "east": 78.53206972352946,
+      "north": 1005.6775408899515,
+      "height": 799.7216340576009,
+      "yaw": -0.27202384729354057,
+      "ticks": 74,
+      "started": true,
+      "finished": false,
+      "lowerPreview": false,
+      "active": true,
+      "airborne": false,
+      "speed": 2.7703243798473522,
+      "seamOffset": -229.95174683694324,
+      "draws": 3,
+      "triangles": 441258
+    },
+    "left": {
+      "east": 78.44897734082338,
+      "north": 1005.9551795226162,
+      "height": 799.6755254358449,
+      "yaw": -0.4220238472935407,
+      "ticks": 80,
+      "started": true,
+      "finished": false,
+      "lowerPreview": false,
+      "active": true,
+      "airborne": false,
+      "speed": 2.9897695753294733,
+      "seamOffset": -229.82930383626126,
+      "draws": 3,
+      "triangles": 441258
+    },
+    "right": {
+      "east": 78.35000679111701,
+      "north": 1006.2508206687637,
+      "height": 799.6256564716213,
+      "yaw": -0.27202384729354057,
+      "ticks": 86,
+      "started": true,
+      "finished": false,
+      "lowerPreview": false,
+      "active": true,
+      "airborne": false,
+      "speed": 3.208858997759348,
+      "seamOffset": -229.70675952129943,
+      "draws": 3,
+      "triangles": 441258
+    }
+  },
+  "lowerPreview": {
+    "east": 1074.8071458438515,
+    "north": 179.0786598363277,
+    "height": 179.82714547962547,
+    "yaw": 0.7295147384758626,
+    "ticks": 0,
+    "started": true,
+    "finished": false,
+    "lowerPreview": true,
+    "active": true,
+    "airborne": false,
+    "speed": 0,
+    "seamOffset": -34.946584753321595,
+    "draws": 3,
+    "triangles": 441258
+  }
+}

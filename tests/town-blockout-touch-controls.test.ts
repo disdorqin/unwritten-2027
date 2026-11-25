@@ -36,11 +36,11 @@ function touchEvent(pointerId: number, clientX: number, clientY: number, timeSta
 
 function lookFixture(sensitivity: () => number, hold?: {
   delay: number; start(): void; finish(milliseconds: number): boolean; cancel(): void;
-}) {
+}, onTap?: (x: number, y: number) => boolean) {
   const canvas = new FakeCanvas();
   const turns: { yaw: number; pitch: number }[] = [];
   createTouchLook(canvas as unknown as HTMLCanvasElement, () => true,
-    (yaw, pitch) => turns.push({ yaw, pitch }), () => 0, hold, sensitivity);
+    (yaw, pitch) => turns.push({ yaw, pitch }), () => 0, hold, sensitivity, onTap);
   return { canvas, turns, totalYaw: () => turns.reduce((sum, turn) => sum + turn.yaw, 0) };
 }
 
@@ -97,6 +97,43 @@ test('tap turns toward the tap only inside the look zone', () => {
   outside.canvas.emit('pointerdown', touchEvent(1, 200, 200, 0));
   outside.canvas.emit('pointerup', touchEvent(1, 200, 200, 100));
   assert.equal(outside.turns.length, 0);
+});
+
+test('a short unconsumed touch forwards actual screen coordinates without turning', () => {
+  const taps: [number, number][] = [];
+  const { canvas, turns } = lookFixture(() => 1.4, undefined, (x, y) => {
+    taps.push([x, y]);
+    return true;
+  });
+  for (const x of [200, 800]) {
+    canvas.emit('pointerdown', touchEvent(1, x, 100, 0));
+    canvas.emit('pointerup', touchEvent(1, x + 2, 101, 100));
+  }
+  assert.deepEqual(taps, [[202, 101], [802, 101]]);
+  assert.equal(turns.length, 0);
+  const fallback = lookFixture(() => 1.4, undefined, () => false);
+  fallback.canvas.emit('pointerdown', touchEvent(1, 800, 200, 0));
+  fallback.canvas.emit('pointerup', touchEvent(1, 800, 200, 100));
+  assert.equal(fallback.turns.length, 1);
+});
+
+test('drag, long press, handled hold and cancellation never trigger the touch primary action', () => {
+  let taps = 0;
+  const tap = () => { taps++; return true; };
+  const { canvas, turns } = lookFixture(() => 1.4, undefined, tap);
+  canvas.emit('pointerdown', touchEvent(1, 800, 200, 0));
+  canvas.emit('pointermove', touchEvent(1, 860, 200, 50));
+  canvas.emit('pointerup', touchEvent(1, 860, 200, 90));
+  assert.ok(turns.length > 0);
+  canvas.emit('pointerdown', touchEvent(1, 800, 200, 100));
+  canvas.emit('pointerup', touchEvent(1, 800, 200, 500));
+  canvas.emit('pointerdown', touchEvent(1, 800, 200, 600));
+  canvas.emit('pointercancel', touchEvent(1, 800, 200, 640));
+  canvas.emit('pointerup', touchEvent(1, 800, 200, 650));
+  const held = lookFixture(() => 1.4, { delay: 150, start() {}, finish: () => true, cancel() {} }, tap);
+  held.canvas.emit('pointerdown', touchEvent(1, 800, 200, 0));
+  held.canvas.emit('pointerup', touchEvent(1, 800, 200, 200));
+  assert.equal(taps, 0);
 });
 
 test('the snowball hold survives the look zone: quick swipe cancels, held drag aims', () => {

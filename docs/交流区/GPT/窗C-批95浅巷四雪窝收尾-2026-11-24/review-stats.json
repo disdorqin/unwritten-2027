@@ -1,0 +1,103 @@
+{
+  "scope": "actual shared first mine layout and mounted workface artwork; fixture movement not live Presence",
+  "errors": [],
+  "views": {
+    "shallow-1": {
+      "frames": 10,
+      "view": "shallow-1",
+      "eye": [
+        -32,
+        1.67,
+        52
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 4565,
+      "calls": 14,
+      "fps": 16.39881928489126
+    },
+    "shallow-2": {
+      "frames": 19,
+      "view": "shallow-2",
+      "eye": [
+        -82,
+        1.67,
+        52
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 4565,
+      "calls": 12,
+      "fps": 16.441675320158794
+    },
+    "shallow-3": {
+      "frames": 29,
+      "view": "shallow-3",
+      "eye": [
+        -55,
+        1.67,
+        59
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 4565,
+      "calls": 14,
+      "fps": 17.254715297167
+    },
+    "shallow-4": {
+      "frames": 40,
+      "view": "shallow-4",
+      "eye": [
+        -65,
+        1.67,
+        66
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 4565,
+      "calls": 14,
+      "fps": 16.422383708975268
+    },
+    "shallow-walk": {
+      "frames": 49,
+      "view": "shallow-walk",
+      "eye": [
+        -5,
+        1.67,
+        52
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 4565,
+      "calls": 15,
+      "fps": 16.89189189186586
+    }
+  },
+  "passed": true,
+  "walk": {
+    "frames": 13,
+    "view": "shallow-walk",
+    "eye": [
+      -6.499999999999992,
+      1.67,
+      52
+    ],
+    "trustedW": 1,
+    "walked": 1.5000000000000002,
+    "rejected": 0,
+    "pieces": 1174,
+    "deepPieces": 4565,
+    "calls": 15,
+    "fps": 15.93918587540001
+  }
+}

@@ -1,15 +1,17 @@
 import {
   BoxGeometry, Color, CylinderGeometry, DodecahedronGeometry, DoubleSide, Float32BufferAttribute, Group, IcosahedronGeometry,
-  Mesh, MeshLambertMaterial, MeshStandardMaterial, OctahedronGeometry, Quaternion, Vector3,
+  Mesh, MeshLambertMaterial, MeshStandardMaterial, OctahedronGeometry, PointLight, Quaternion, Vector3,
   type BufferGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {skyCityInscribedPlate} from './sky-city-inscribed-plate';
 
 type Point = readonly [number, number, number];
 const up = new Vector3(0, 1, 0);
 const turn = Math.PI * 2;
 const railRadius = 5.75;
 const guardianPoint: Point = [10, 0, 8];
+const watchPoints:readonly Point[]=[[-4.5,0,-24.2],[4.5,0,-24.2],[-8.0,0,43.5]];
 const sandstone = '#c4c8b3';
 const shadedStone = '#8c988b';
 const capstone = '#e0dec3';
@@ -54,17 +56,21 @@ function createSculpture() {
   }
 
   function finish(owner: Group, name: string) {
+    const colored:BufferGeometry[]=[];
     for (const [color, geometries] of layers) {
       // Standardize the index state so angular rubble and square masonry batch together.
       const parts = geometries.map(geometry => geometry.index ? geometry.toNonIndexed() : geometry);
       const geometry = mergeGeometries(parts);
       if (!geometry) throw new Error(`Couldn't batch ${name} (${color})`);
-      const mesh = new Mesh(geometry, new MeshLambertMaterial({ color, flatShading: true }));
-      mesh.name = name;
-      owner.add(mesh);
+      const tint=new Color(color),count=geometry.getAttribute('position').count;
+      const rgb=new Float32Array(count*3);
+      for(let i=0;i<count;i++)rgb.set([tint.r,tint.g,tint.b],i*3);
+      geometry.setAttribute('color',new Float32BufferAttribute(rgb,3));colored.push(geometry);
       for (const part of parts) part.dispose();
       for (const source of geometries) if (source.index) source.dispose();
     }
+    const geometry=mergeGeometries(colored);colored.forEach(g=>g.dispose());
+    if(geometry){const mesh=new Mesh(geometry,new MeshLambertMaterial({vertexColors:true,flatShading:true}));mesh.name=name;owner.add(mesh)}
   }
 
   return { panel, fragment, branch, finish };
@@ -89,6 +95,21 @@ function buildRing(owner: Group) {
       stone.fragment(radial(railRadius + .34, angle, .11), [.34, .17, .27], olive, yaw);
     }
   }
+  // The maintenance structure remains inside the existing closed ring.
+  for(let i=0;i<16;i++){
+    const a=i*turn/16,yaw=Math.PI/2-a;
+    stone.panel(radial(5.04,a,.095),[1.81,.16,.64],i%3?shadedStone:'#879c98',yaw);
+    stone.panel(radial(4.97,a,.30),[1.74,.25,.50],i%2?copper:'#65756c',yaw);
+    stone.panel(radial(5.16,a,.48),[1.80,.11,.55],capstone,yaw);
+    for(let j=0;j<3;j++)stone.panel(radial(5.23,a+(j-1)*.07,.33),[.095,.08,.075],'#af9b75',yaw);
+    if(i%4===0){
+      const postA=radial(4.66,a,.62),postB=radial(4.66,a,2.11);
+      stone.branch(postA,postB,.075,.075,darkBark,5);
+      stone.branch(radial(4.66,a-.17,.62),postB,.047,.047,lightBark,5);
+      stone.panel(radial(4.66,a,1.17),[.88,.14,.40],lightBark,yaw);
+    }
+    stone.panel(radial(5.70,a+.09,.978),[.50,.018,.22],'#d8e5db',yaw);
+  }
   stone.finish(owner, 'sky-city-root-vault-rail');
 }
 
@@ -105,6 +126,9 @@ const crownBoughs: readonly { shoulder: Point; tip: Point; spread: number }[] = 
 
 function buildTree(owner: Group) {
   const living = createSculpture();
+  const leaves = createSculpture();
+  const crown = new Group(); crown.name = 'sky-city-crown-opening-axis'; crown.position.y = 12;
+  const roots = createSculpture();
   for (let i = 0; i < 8; i++) {
     const a = .18 + i * turn / 8;
     const foot = radial(7.4 - (i % 3) * .32, a, .02);
@@ -122,6 +146,7 @@ function buildTree(owner: Group) {
     const strand = radial(1.85 + i % 2 * .31, a + .13, -5.3 - i % 3 * .44);
     living.branch(slope, hanging, .25, .19, darkBark);
     living.branch(hanging, strand, .19, .045, lightBark);
+    roots.branch(hanging, strand, .035, .008, '#9fdac2', 5);
     living.branch(shoulder, radial(4.42, a + .19, .64), .16, .06, lightBark, 5);
     living.fragment(radial(6.64 - i % 2 * .14, a + .09, .14), [.52, .30, .39], lichen, a);
   }
@@ -132,17 +157,26 @@ function buildTree(owner: Group) {
     const elbow: Point = [x * .66, Math.max(y - 1.2, shoulder[1]) - .37, z * .62];
     living.branch(shoulder, elbow, .67 - index * .035, .32, index % 2 ? lightBark : bark);
     living.branch(elbow, tip, .33, .12, lightBark);
-    living.fragment(tip, [spread, spread * .66, spread * .93], foliage[index % 4]!, index, true);
+    leaves.fragment([tip[0],tip[1]-12,tip[2]], [spread, spread * .66, spread * .93], foliage[index % 4]!, index, true);
     for (let twig = 0; twig < 6; twig++) {
       const angle = twig * turn / 6 + index * .67;
       const end: Point = [x + Math.cos(angle) * spread * .86, y + Math.sin(twig * 2.4) * .83,
         z + Math.sin(angle) * spread * .78];
       const tuft = .76 + (twig + index * 2) % 5 * .13;
       if (twig % 2 === 0) living.branch(elbow, end, .12, .037, lightBark, 5);
-      living.fragment(end, [tuft * 1.35, tuft, tuft * 1.30], foliage[(twig + index * 2) % foliage.length]!, angle);
+      leaves.fragment([end[0],end[1]-12,end[2]], [tuft * 1.35, tuft, tuft * 1.30], foliage[(twig + index * 2) % foliage.length]!, angle);
     }
   }
   living.finish(owner, 'sky-city-ancient-tree');
+  leaves.finish(crown, 'sky-city-crown-leaves'); owner.add(crown);
+  const rootGlow = new Group(); rootGlow.name='sky-city-root-pulse'; roots.finish(rootGlow,'sky-city-root-vein');
+  rootGlow.traverse(object=>{ if(object instanceof Mesh && object.material instanceof MeshLambertMaterial){
+    object.material.emissive.set('#94dac3'); object.material.emissiveIntensity=.05;
+  }}); owner.add(rootGlow);
+  const petals = new Group(); petals.name='sky-city-falling-petals-reserved'; owner.add(petals);
+  const warm = new PointLight('#efb578',9,15,2); warm.position.set(0,8,0); owner.add(warm);
+  crown.scale.set(.69,.78,.69); petals.visible=false; warm.visible=false;
+  return {crown,rootGlow,petals,warm};
 }
 
 function buildCrystal(owner: Group) {
@@ -230,7 +264,19 @@ function buildGuardian(owner: Group) {
   rock.fragment([.88, 2.36, .025], [.055, .089, .054], seed, -.22);
   rock.fragment([1.00, 2.36, -.05], [.057, .079, .056], '#b1d3bd', .35);
   rock.finish(guardian, 'sky-city-guardian-stonework');
-  owner.add(guardian);
+  // The flower stays in the same hand in the empty city; later animation
+  // can move this attachment point without creating a second statue.
+  const flower=new Group(); flower.name='sky-city-guardian-flower-hand'; flower.position.set(.94,1.16,.60);
+  const stem=new Mesh(new CylinderGeometry(.018,.024,.37,5),new MeshLambertMaterial({color:'#648658'}));
+  stem.position.y=.15; flower.add(stem);
+  const petalMaterial=new MeshLambertMaterial({color:'#efd6a4'});
+  for(let i=0;i<5;i++){
+    const petal=new Mesh(new IcosahedronGeometry(.085,0),petalMaterial);
+    petal.position.set(Math.cos(i*turn/5)*.075,.35,Math.sin(i*turn/5)*.075);flower.add(petal);
+  }
+  guardian.add(flower); owner.add(guardian);
+  guardian.userData.patrolRoute=[[10,0,8],[13,0,8],[15,0,1],[10,0,-4]];
+  return guardian;
 }
 
 /** Standalone tree, suspended crystal and guardian for the modelled sky city. */
@@ -238,20 +284,43 @@ export function buildSkyCityTree() {
   const group = new Group();
   group.name = 'sky-city-tree-court';
   buildRing(group);
-  buildTree(group);
-  buildGuardian(group);
+  const inscription=skyCityInscribedPlate('T-03',1.12,.38);inscription.position.set(0,.74,railRadius+.19);group.add(inscription);
+  const tree = buildTree(group);
+  const guardian = buildGuardian(group);
+  for(const [i,point]of watchPoints.entries()){
+    const watcher=guardian.clone(true);watcher.name=i===2?'sky-city-arrival-sentinel':'sky-city-star-terrace-guard-'+i;
+    watcher.position.set(...point);watcher.rotation.y=i===2?0:Math.PI;
+    watcher.getObjectByName('sky-city-guardian-flower-hand')?.removeFromParent();
+    watcher.userData.patrolRoute=[];group.add(watcher);
+  }
   const crystal = buildCrystal(group);
+  const crystalMaterials:MeshStandardMaterial[]=[];
+  crystal.traverse(object=>{if(object instanceof Mesh&&object.material instanceof MeshStandardMaterial)crystalMaterials.push(object.material)});
+  let dream=false;
+  function setDreamPresentation(active:boolean){
+    dream=active;
+    tree.crown.scale.set(active?1:.69,active?1:.78,active?1:.69);
+    tree.petals.visible=active;tree.warm.visible=active;
+    crystalMaterials.forEach(m=>m.emissiveIntensity=active?.60:.14);
+    if(!active){crystal.rotation.y=0;crystal.position.y=.18;
+      tree.rootGlow.traverse(object=>{if(object instanceof Mesh&&object.material instanceof MeshLambertMaterial)object.material.emissiveIntensity=.05});}
+  }
+  setDreamPresentation(false);
 
   return {
-    group,
+    group, guardian, setDreamPresentation,
     update(seconds: number) {
+      if(!dream)return;
       crystal.rotation.y = seconds * .36;
       crystal.position.y = .18 + Math.sin(seconds * 1.07) * .15;
+      crystalMaterials.forEach(m=>m.emissiveIntensity=.46+Math.sin(seconds*1.5)*.14);
+      tree.rootGlow.traverse(object=>{if(object instanceof Mesh&&object.material instanceof MeshLambertMaterial)
+        object.material.emissiveIntensity=.30+Math.sin(seconds*1.5)*.15});
     },
     blocked(x: number, z: number, feet: number, radius: number) {
       const insideRing = feet < 1.03 && feet > -8 && Math.hypot(x, z) < railRadius + radius;
       const atGuardian = feet < 3.2 && feet > -1.8 &&
-        Math.hypot(x - guardianPoint[0], z - guardianPoint[2]) < .95 + radius;
+        [guardianPoint,...watchPoints].some(point=>Math.hypot(x-point[0],z-point[2]) < .95 + radius);
       return insideRing || atGuardian;
     },
   };

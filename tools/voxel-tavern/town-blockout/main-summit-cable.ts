@@ -115,20 +115,9 @@ export function createMainSummitCable(epochMs: number, terminalDwellMs: number, 
   const rideSeconds = rideMs / 1000;
   const cruiseSeconds = rideSeconds - rampSeconds;
 
-  function clockAt(nowMs: number) {
-    if (!Number.isFinite(nowMs)) throw new RangeError('The summit cable needs finite world time.');
-    const remainder = (nowMs - epochMs) % cycleMs;
-    const phaseMs = remainder < 0 ? remainder + cycleMs : remainder;
-    return { halfCycle: phaseMs >= legMs, legTimeMs: phaseMs % legMs };
-  }
-
-  function departureCabinIndex(halfCycle: boolean, station: Station): 0 | 1 {
-    return halfCycle === (station === 'summit') ? 0 : 1;
-  }
-
   function cabinAt(legTimeMs: number, halfCycle: boolean, index: 0 | 1) {
     const rope = ropes[index];
-    const direction: Direction = index === departureCabinIndex(halfCycle, 'cloud-deck') ? 'up' : 'down';
+    const direction: Direction = halfCycle === (index === 1) ? 'up' : 'down';
     const station: Station | null = legTimeMs < terminalDwellMs
       ? direction === 'up' ? 'cloud-deck' : 'summit'
       : null;
@@ -154,20 +143,12 @@ export function createMainSummitCable(epochMs: number, terminalDwellMs: number, 
   return {
     ropes, rideMs, legMs, cycleMs,
     cabinsAt(nowMs: number) {
-      const { halfCycle, legTimeMs } = clockAt(nowMs);
+      if (!Number.isFinite(nowMs)) throw new RangeError('The summit cable needs finite world time.');
+      const remainder = (nowMs - epochMs) % cycleMs;
+      const phaseMs = remainder < 0 ? remainder + cycleMs : remainder;
+      const halfCycle = phaseMs >= legMs;
+      const legTimeMs = phaseMs % legMs;
       return [cabinAt(legTimeMs, halfCycle, 0), cabinAt(legTimeMs, halfCycle, 1)] as const;
-    },
-    timetableAt(nowMs: number, station: Station) {
-      const { halfCycle, legTimeMs } = clockAt(nowMs);
-      const boarding = legTimeMs < terminalDwellMs;
-      const untilBoardingMs = boarding ? 0 : legMs - legTimeMs;
-      return {
-        cabinIndex: departureCabinIndex(boarding ? halfCycle : !halfCycle, station),
-        boarding,
-        untilBoardingMs,
-        untilDepartureMs: boarding ? terminalDwellMs - legTimeMs : untilBoardingMs + terminalDwellMs,
-        rideMs,
-      };
     },
   };
 }

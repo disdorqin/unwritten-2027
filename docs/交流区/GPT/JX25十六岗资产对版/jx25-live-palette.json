@@ -1,0 +1,215 @@
+{
+  "base": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "stationSourceSha256": "8e6ff16c7ce6e1f9c37cd3261a3f82f867687c9dd82a53e32341c26a77fc23b8",
+  "files": {
+    "town-npc.ts": "7ef40cc0f3591d8c31418ccfd6d665a8d9d29166",
+    "town-npc-residents.ts": "e54aa401b07dda51cece7db7220701226da568fd",
+    "town-npc-stations.ts": "b570e6ee6fad1cef7944e5aafc806944400c41e8",
+    "town-voxel-person.ts": "5e885d743755ed306a43a17ead13c1163660716d",
+    "viewer.ts": "72cc9c1d1eb946211844850a95392381c5a8871d"
+  },
+  "batch": {
+    "name": "town-npc-shared-skins",
+    "geometry": "BoxGeometry",
+    "activeSlots": 427,
+    "visibleParts": 395
+  },
+  "rendered": [
+    {
+      "name": "罗大江",
+      "anchor": [
+        157.75,
+        230.46,
+        16.9
+      ],
+      "source": "fixed",
+      "bodyColor": "#913b38",
+      "visibleParts": 33,
+      "accessoryParts": 11,
+      "shapeColorSha256": "c0a3d7f58e1feb8da31c5741983fff7c52fcb2c7183b76ee673d088a65fda499",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "苏小满",
+      "anchor": [
+        264,
+        198,
+        12.600000381469727
+      ],
+      "source": "fixed",
+      "bodyColor": "#3f7180",
+      "visibleParts": 34,
+      "accessoryParts": 12,
+      "shapeColorSha256": "fc0298d35e01483a64b2b20195eb85aaf7b18330834f7e474233c7ad1eb32964",
+      "matchesNamedJx19Role": true
+    },
+    {
+      "name": "顾长明",
+      "anchor": [
+        408,
+        87.5,
+        11.919768333435059
+      ],
+      "source": "fixed",
+      "bodyColor": "#3a5374",
+      "visibleParts": 34,
+      "accessoryParts": 12,
+      "shapeColorSha256": "a7c52461fd33f1fb9372b34086b48e24a007f1d17cef648c9fed110d8b585331",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "乔麦",
+      "anchor": [
+        115,
+        115,
+        9.739726066589355
+      ],
+      "source": "fixed",
+      "bodyColor": "#65744a",
+      "visibleParts": 34,
+      "accessoryParts": 12,
+      "shapeColorSha256": "1bb701d04f648a40b8ee49c031acea7c42e9563803ba6c9b737c43cb5660ffc9",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "柳三弦",
+      "anchor": [
+        230,
+        152.5,
+        12
+      ],
+      "source": "fixed",
+      "bodyColor": "#804371",
+      "visibleParts": 35,
+      "accessoryParts": 13,
+      "shapeColorSha256": "ae23c8655317936fe64f8b6826955144bd81f3cc95d1102dbaaead0967da4759",
+      "matchesNamedJx19Role": true
+    },
+    {
+      "name": "钟铁生",
+      "anchor": [
+        526,
+        309,
+        25.855018615722656
+      ],
+      "source": "fixed",
+      "bodyColor": "#36536b",
+      "visibleParts": 34,
+      "accessoryParts": 12,
+      "shapeColorSha256": "9ac47052962942440a16201d035783abc3e2c0e4c1031403f387780a53a29a19",
+      "matchesNamedJx19Role": true
+    },
+    {
+      "name": "田小勤",
+      "anchor": [
+        159.35,
+        231.1,
+        16.9
+      ],
+      "source": "fixed",
+      "bodyColor": "#426d62",
+      "visibleParts": 27,
+      "accessoryParts": 5,
+      "shapeColorSha256": "4674eb72ea75897b15f248cf1675842b37cf3a82c7d37a8a6a6d7f4ff52993f9",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "纪守信",
+      "anchor": [
+        419.25,
+        334.1,
+        52.30056800842286
+      ],
+      "source": "fixed",
+      "bodyColor": "#4d566d",
+      "visibleParts": 26,
+      "accessoryParts": 4,
+      "shapeColorSha256": "a8a05865b2bb624f990b28529a74551fab12468bb30b9ac6b067affa508995b6",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "樊樵",
+      "anchor": [
+        122.35,
+        405.75,
+        18.94552
+      ],
+      "source": "station",
+      "bodyColor": "#4c6850",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "de07d124c04f8e96635332eb220e90239a53c7bcbb4ec8920fadc375574d464d",
+      "matchesNamedJx19Role": true
+    },
+    {
+      "name": "翁寒江",
+      "anchor": [
+        338.7,
+        110.45,
+        8.313988
+      ],
+      "source": "station",
+      "bodyColor": "#466577",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "76c3ca50fc28588f0aa1ef69414d1a4ae77f3ccc66cecaed69bcbce1548a2fef",
+      "matchesNamedJx19Role": true
+    },
+    {
+      "name": "秦知礼",
+      "anchor": [
+        491.75,
+        74,
+        12.17
+      ],
+      "source": "station",
+      "bodyColor": "#637890",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "3baf93b6c03d71db334d18c30ce1ade075092ac24fa1905a2da41a7e22aa3b2d",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "贾明灯",
+      "anchor": [
+        137.55,
+        116,
+        10.042731
+      ],
+      "source": "station",
+      "bodyColor": "#9d4d39",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "675d762a0ef9272db8e5d5caec5cd873a4660bd26428a66c014b570726e81bd1",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "文墨生",
+      "anchor": [
+        141,
+        89.75,
+        9.587506
+      ],
+      "source": "station",
+      "bodyColor": "#566371",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "176ed7ab1de1211963764dc5dbe48f0caecb9557a1e1495fe789c6f658ccbb0c",
+      "matchesNamedJx19Role": false
+    },
+    {
+      "name": "胡六环",
+      "anchor": [
+        167,
+        89.75,
+        8.758675
+      ],
+      "source": "station",
+      "bodyColor": "#805344",
+      "visibleParts": 23,
+      "accessoryParts": 1,
+      "shapeColorSha256": "9b34a68f306acae05dbdef26f5dcccb3f366813bd4932e3da67731f047ce5b9f",
+      "matchesNamedJx19Role": false
+    }
+  ]
+}

@@ -13,6 +13,7 @@ function atDispenser(foot: StarportFuelFoot | undefined, area: string, point: Fl
     Math.hypot(foot.at.east - point.east, foot.at.north - point.north) <= 1.1);
 }
 
+/** F-6 host-owned refill. No player-supplied inventory or position is trusted. */
 export function createStarportFuelDispenser(station: { area: string; point: FlightFieldPoint }, host: {
   foot(player: number): StarportFuelFoot | undefined;
   profile(player: number): StarportFuelProfile | undefined;

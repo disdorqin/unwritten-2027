@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
   <title>未写镇 · 主峰三岗走查</title>
   <style>
     :root { color-scheme: dark; font: 15px system-ui, sans-serif; color: #f4f2ec; background: #344254; }
@@ -15,8 +14,6 @@
     button { border: 1px solid #788ca6; border-radius: .25rem; padding: .35rem .55rem; background: #364e63; color: inherit; }
     button[aria-pressed="true"] { background: #dbebf5; color: #172536; }
     p { margin: .55rem 0 0; font-size: .85rem; }
-    #dispatch-action { margin-top: .55rem; }
-    #dispatch-reading:not([hidden]) { display: block; margin-top: .4rem; }
     output { font-variant-numeric: tabular-nums; }
   </style>
 </head>
@@ -30,8 +27,6 @@
     </nav>
     <p>WASD 行走，拖动视角。</p>
     <p><output id="position"></output></p>
-    <button type="button" id="dispatch-action" aria-controls="dispatch-reading" aria-expanded="false" hidden>查看二线班次（E）</button>
-    <output id="dispatch-reading" aria-live="off" hidden></output>
   </main>
   <script type="module" src="./town-blockout/main-summit-posts-review.ts"></script>
 </body>

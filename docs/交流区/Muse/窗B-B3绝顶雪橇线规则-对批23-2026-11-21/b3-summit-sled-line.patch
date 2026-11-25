@@ -1,0 +1,183 @@
+diff --git a/tests/town-blockout-summit-sled-line.test.ts b/tests/town-blockout-summit-sled-line.test.ts
+new file mode 100644
+index 00000000..4502f420
+--- /dev/null
++++ b/tests/town-blockout-summit-sled-line.test.ts
+@@ -0,0 +1,58 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import {
++  createSummitSledRun, segmentSplitMs, summitSledGateCount, summitSledRecordBeats,
++  type SledGate,
++} from '../tools/voxel-tavern/town-blockout/town-summit-sled-line';
++
++// A straight test descent: gates every 500 m heading north.
++const gates: SledGate[] = Array.from({ length: summitSledGateCount }, (_, i) => ({
++  east: 0, north: (i + 1) * 500, halfWidth: 6,
++}));
++
++test('a full descent scores all 12 gates in order and finishes on time', () => {
++  const run = createSummitSledRun(gates);
++  run.arm();
++  let result;
++  for (let north = 0; north <= 6_500; north += 100) {
++    result = run.step({ east: 0, north }, north * 10) ?? result;
++  }
++  assert.equal(result?.status, 'finished');
++  assert.equal(result?.gatesPassed, 12);
++  assert.equal(result?.splitsMs.length, 12);
++  assert.equal(result?.totalMs, 60_000, 'last gate at 6000 m × 10 ms/m');
++  assert.equal(segmentSplitMs(result!.splitsMs, 2, 4), 10_000);
++});
++
++test('out-of-order and wide crossings do not count; the clock survives a long stop', () => {
++  const run = createSummitSledRun(gates);
++  run.arm();
++  run.step({ east: 0, north: 0 }, 0);
++  // Jump straight past gate 2's line before gate 1: no credit for gate 2 later out of order.
++  run.step({ east: 0, north: 400 }, 4_000);
++  run.step({ east: 20, north: 600 }, 6_000); // crosses gate 1 line 20 m wide of centre: no credit
++  assert.equal(run.state().nextGate, 0);
++  run.step({ east: 0, north: 400 }, 30_000); // walk back (host feeds only sled steps; a re-mount step)
++  run.step({ east: 0, north: 600 }, 34_000); // through gate 1 properly, 30 s after the fall
++  assert.equal(run.state().nextGate, 1);
++  assert.equal(run.state().splitsMs[0], 34_000, 'the stop cost time, nothing else');
++});
++
++test('abandon keeps a partial practice record that can never be a best', () => {
++  const run = createSummitSledRun(gates);
++  run.arm();
++  run.step({ east: 0, north: 0 }, 0);
++  run.step({ east: 0, north: 600 }, 6_000);
++  const partial = run.abandon(9_000);
++  assert.equal(partial?.status, 'abandoned');
++  assert.equal(partial?.gatesPassed, 1);
++  assert.equal(summitSledRecordBeats(partial!, undefined), false);
++  const full = { courseId: 'summit-sled-line', totalMs: 300_000, splitsMs: [], gatesPassed: 12, finishedAtMs: 1 };
++  assert.equal(summitSledRecordBeats(full, undefined), true);
++  assert.equal(summitSledRecordBeats({ ...full, totalMs: 299_000 }, full), true);
++  assert.equal(summitSledRecordBeats({ ...full, totalMs: 301_000 }, full), false);
++});
++
++test('the course refuses a gate list that is not the canon 12', () => {
++  assert.throws(() => createSummitSledRun(gates.slice(0, 11)), /exactly 12 gates/);
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-summit-sled-line.ts b/tools/voxel-tavern/town-blockout/town-summit-sled-line.ts
+new file mode 100644
+index 00000000..fb40bbbc
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-summit-sled-line.ts
+@@ -0,0 +1,113 @@
++/**
++ * Summit sled line — descent rules (atlas package B3, branch window B).
++ *
++ * The course: from the summit departure platform (atlas m58, night
++ * m84) down the main-peak sled line, canon length 6,037.881 m with 12
++ * flag gates in order. Sleds only ever go DOWN this line; a run can
++ * only start at the platform. Gate geometry is host-supplied (window
++ * D's line survey); everything about timing, order and endings lives
++ * here.
++ *
++ * Falling is part of the course (ZB-16 canon): a crash never ends a
++ * run, never resets position and never stops the clock — the player
++ * walks back to the sled and re-mounts where it lies. The clock also
++ * keeps running through stops and detours. A run ends only by
++ * finishing, by the host signalling abandonment (domain change /
++ * teleport / explicit give-up), or not at all.
++ *
++ * Ledger: records share the course-keyed store shape with the ZB-33
++ * ring race (总包 B3: 计时共用账本). A best must be a full run — all
++ * 12 gates in order — and beats purely on time. Partial runs are
++ * practice records, never bests.
++ */
++export const summitSledLineLengthM = 6037.881;
++export const summitSledGateCount = 12;
++export const summitSledCourseId = 'summit-sled-line';
++
++export type SledGate = Readonly<{ east: number; north: number; halfWidth: number }>;
++export type SledPoint = Readonly<{ east: number; north: number }>;
++
++export type SummitSledRecord = Readonly<{
++  courseId: string;
++  totalMs: number;
++  /** Per-gate split times (ms since start), length = gates passed. */
++  splitsMs: readonly number[];
++  gatesPassed: number;
++  finishedAtMs: number;
++}>;
++
++export function summitSledRecordBeats(candidate: SummitSledRecord, current: SummitSledRecord | undefined): boolean {
++  if (candidate.gatesPassed !== summitSledGateCount) return false;
++  if (!current) return true;
++  return candidate.totalMs < current.totalMs;
++}
++
++/** The ring race's mountain segment = splits between two gate indices. */
++export function segmentSplitMs(splitsMs: readonly number[], fromGate: number, toGate: number): number | undefined {
++  if (fromGate < 0 || toGate >= splitsMs.length || toGate <= fromGate) return undefined;
++  return splitsMs[toGate]! - splitsMs[fromGate]!;
++}
++
++export function createSummitSledRun(gates: readonly SledGate[]) {
++  if (gates.length !== summitSledGateCount) {
++    throw new Error(`summit sled line needs exactly ${summitSledGateCount} gates, got ${gates.length}`);
++  }
++  let startedAt: number | undefined;
++  let previous: SledPoint | undefined;
++  let nextGate = 0;
++  const splitsMs: number[] = [];
++  let result: (SummitSledRecord & { status: 'finished' | 'abandoned' }) | undefined;
++
++  /** Crossing of segment a→b with the gate line through gate g (perpendicular to travel a→b is NOT assumed; gates are crossed along the course direction: use the gate's own line = the line through g perpendicular to the segment direction). */
++  function crossedGate(a: SledPoint, b: SledPoint, gate: SledGate): boolean {
++    const dx = b.east - a.east, dy = b.north - a.north;
++    const length = Math.hypot(dx, dy);
++    if (length < 1e-9) return false;
++    const ux = dx / length, uy = dy / length;
++    const da = (a.east - gate.east) * ux + (a.north - gate.north) * uy;
++    const db = (b.east - gate.east) * ux + (b.north - gate.north) * uy;
++    if (da > 0 || db < 0 || db === da) return false;
++    const mix = -da / (db - da);
++    const crossEast = a.east + dx * mix, crossNorth = a.north + dy * mix;
++    // Lateral distance from the gate centre along the gate line.
++    const lateral = Math.abs((crossEast - gate.east) * -uy + (crossNorth - gate.north) * ux);
++    return lateral <= gate.halfWidth;
++  }
++
++  return {
++    /** Arm the run at the departure platform. The clock starts on the first movement step. */
++    arm() {
++      startedAt = undefined; previous = undefined; nextGate = 0; splitsMs.length = 0; result = undefined;
++    },
++    /**
++     * Feed one sled movement step. Falling, stopping and walking back
++     * are not steps of the sled — the host simply stops feeding while
++     * the player is off the sled, and the clock keeps running.
++     */
++    step(to: SledPoint, atMs: number) {
++      if (result) return result;
++      if (startedAt === undefined) { startedAt = atMs; previous = to; return undefined; }
++      const from = previous!;
++      previous = to;
++      const gate = gates[nextGate];
++      if (gate && crossedGate(from, to, gate)) {
++        splitsMs.push(atMs - startedAt);
++        nextGate += 1;
++        if (nextGate === gates.length) {
++          result = { courseId: summitSledCourseId, totalMs: atMs - startedAt, splitsMs: [...splitsMs], gatesPassed: nextGate, finishedAtMs: atMs, status: 'finished' };
++          return result;
++        }
++      }
++      return undefined;
++    },
++    /** Host-signalled end (domain change / teleport / give-up). Falls never call this. */
++    abandon(atMs: number) {
++      if (result || startedAt === undefined) return result;
++      result = { courseId: summitSledCourseId, totalMs: atMs - startedAt, splitsMs: [...splitsMs], gatesPassed: nextGate, finishedAtMs: atMs, status: 'abandoned' };
++      return result;
++    },
++    state() {
++      return { running: startedAt !== undefined && !result, nextGate, splitsMs: [...splitsMs], result };
++    },
++  };
++}

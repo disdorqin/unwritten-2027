@@ -1,0 +1,145 @@
+{
+  "scope": "REAL B-01 surface mount in offline Chrome; not official town domain/player/server",
+  "views": {
+    "rim": {
+      "current": "rim",
+      "frames": 7,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        41.235992903678365,
+        -0.7800000000000002,
+        32.57445915510782
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 597674
+    },
+    "upper": {
+      "current": "upper",
+      "frames": 16,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        15.808172189355723,
+        -7.780000000000001,
+        -42.71889736441801
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 535313
+    },
+    "middle": {
+      "current": "middle",
+      "frames": 25,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        8.107065949094647,
+        -17.58,
+        -34.818644167988936
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 601576
+    },
+    "floor": {
+      "current": "floor",
+      "frames": 34,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        15,
+        -33.33,
+        7
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 422454
+    },
+    "well": {
+      "current": "well",
+      "frames": 43,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        5,
+        -33.33,
+        4.2
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 316261
+    },
+    "overview": {
+      "current": "overview",
+      "frames": 51,
+      "counts": {
+        "count": 7019,
+        "terraces": 3826,
+        "floor": 2845,
+        "sealedWell": 348,
+        "materialBatches": 6
+      },
+      "materials": 6,
+      "draws": 8,
+      "triangles": 113033,
+      "eye": [
+        72,
+        45,
+        61
+      ],
+      "worldIsLive": false,
+      "sealedCover": true,
+      "surfaceHeightAtWell": -35,
+      "bytes": 235010
+    }
+  },
+  "errors": [],
+  "passed": true
+}

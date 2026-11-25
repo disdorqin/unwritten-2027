@@ -1,0 +1,21 @@
+{
+  "sha256": {
+    "town-entry.ts": "435afb61d7bd32bd58bd86c83d279165e0780091fe00958e5491cc390d55e6ea",
+    "viewer.ts": "332d2599b2e140431319eb4b17102d1e6f84f642acf7bc4064c283ca11a52268",
+    "desktop-look.ts": "5c560d1216b30733edcbabba3711d6c4faf32d7d1fc987d861735a2d35ad43de",
+    "town-zodiac.ts": "e0c3174631a68073944ea6b6c7b888b00edb0ea2bfb2e29030b72ecefda90567"
+  },
+  "nodeDocumentFixture": {
+    "guideVisibleBeforeContinue": true,
+    "clipboard": "https://example.test/town-blockout.html?entry=yd4%2Fprobe#browser",
+    "manualSelection": "https://example.test/town-blockout.html?entry=yd4%2Fprobe#browser"
+  },
+  "storageFixture": {
+    "reopenedInSameStore": 1,
+    "reopenedInFreshStore": 0
+  },
+  "sourceWiring": {
+    "pointerLockFailureInViewer": true,
+    "pointerLockFailureHandlerInEntry": false
+  }
+}

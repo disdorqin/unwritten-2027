@@ -2,8 +2,18 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: #121e35; color: #f3f3f6; height: 100vh; height: 100dvh; }
 #scene, canvas { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; display: block; touch-action: none; }
-.panel { position: fixed; background: #101a2bed; border: 1px solid #788eaa; border-radius: 12px; }
-.panel { top: 16px; left: 16px; padding: 15px; width: min(320px, calc(100vw - 32px)); }
+.panel {
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 15px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: inherit;
+  background: #101a2b;
+  border: 1px solid #788eaa;
+  border-radius: 12px;
+}
+.panel::backdrop { background: #080f1d8c; }
 .panel h1 { margin: 0 0 14px; font-size: 17px; letter-spacing: .11em; }
 nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 button, select { font: inherit; font-size: 13px; padding: 7px 9px; background: #243650; border: 1px solid #6d819d; border-radius: 5px; color: inherit; }
@@ -14,7 +24,7 @@ button[aria-pressed="true"] { background: #edc48a; color: #17202e; border-color:
 label, output, #help { font-size: 12px; }
 #help { margin: 10px 0 6px; color: #c6d3e5; }
 #position:not(:empty) { display: block; }
-.festival-button, #view-museum { margin-top: 11px; }
+.festival-button { margin-top: 11px; }
 .festival-button { background: #592e3c; border-color: #ad7376; }
 .panel .town-progress { margin: 8px 0 0; padding-top: 7px; border-top: 1px solid #475572; }
 .town-progress button { color: #ffdfad; }
@@ -186,7 +196,7 @@ label, output, #help { font-size: 12px; }
   #museum-guide { top: auto; bottom: max(166px, calc(env(safe-area-inset-bottom) + 154px)); }
 }
 
-body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-toggle) { display: none; }
+body.museum-inspecting :is(.panel, .town-hud-button, #town-chat, #festival-status, #fullscreen-toggle) { display: none; }
 #fullscreen-toggle {
   position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
   z-index: 5; min-height: 44px; padding: 8px 14px; touch-action: manipulation; user-select: none;
@@ -255,7 +265,7 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   display: grid; gap: 5px;
   padding: 7px; border: 1px solid #6d819d; border-radius: 10px; background: #101a2beb;
 }
-#snowball-score { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
+:is(#snowball-score, #snow-practice-status) { grid-column: 1 / -1; padding: 2px 3px; color: #d9eeff; }
 #snowball-board { grid-column: 1 / -1; }
 #snowball-action-meter { grid-column: 1 / -1; width: 100%; height: 9px; accent-color: #efc786; }
 #snowball-controls { max-width: min(220px, 56vw); }
@@ -299,27 +309,14 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   .touch-play #snowball-controls { bottom: max(102px, calc(env(safe-area-inset-bottom) + 90px)); right: max(76px, calc(env(safe-area-inset-right) + 72px)); }
 }
 @media (max-width: 580px) and (pointer: coarse) {
-  .panel { top: 11px; left: 11px; padding: 10px; width: min(304px, calc(100vw - 22px)); }
   .panel h1 { margin-bottom: 9px; }
   .panel nav { gap: 4px; margin-bottom: 7px; }
   .panel button, .panel select { font-size: 12px; padding: 5px 7px; min-height: 34px; }
-  .panel #position { display: none; }
-  .panel .festival-button, .panel #view-museum { margin-top: 4px; }
+  .panel .festival-button { margin-top: 4px; }
   .touch-play #museum-map-button { top: auto; bottom: max(103px, calc(env(safe-area-inset-bottom) + 55px)); min-height: 42px; }
   #museum-card { padding: 18px; }
 }
 @media (orientation: portrait) and (pointer: coarse) {
-  /* Portrait play (3.0 M4): no landscape lock. The top strip keeps a right
-     lane clear for the fullscreen / museum buttons, the expanded panel
-     scrolls internally instead of covering the view, the chat yields the
-     right-hand button column, and the snowfight panel drops below the top
-     strip. Layout only — no portrait-specific art. */
-  .panel { width: min(304px, calc(100vw - 76px)); }
-  .panel:not(.town-panel-collapsed) {
-    display: flex; flex-direction: column;
-    max-height: calc(100dvh - max(11px, env(safe-area-inset-top)) - max(11px, env(safe-area-inset-bottom)));
-  }
-  #town-panel-controls { min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
   #town-chat { width: min(320px, calc(100vw - 108px)); }
   #snowfight-panel { top: max(64px, calc(env(safe-area-inset-top) + 52px)); }
 }
@@ -412,3 +409,4 @@ body.museum-inspecting :is(.panel, #town-chat, #festival-status, #fullscreen-tog
   background: #592e3c; color: #ffd9d2; font-size: 12px; line-height: 1.5;
 }
 #env-banner[hidden] { display: none; }
+

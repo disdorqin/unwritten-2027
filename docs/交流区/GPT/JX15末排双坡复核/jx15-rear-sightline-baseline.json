@@ -1,0 +1,284 @@
+{
+  "phase": "baseline",
+  "clearanceModel": "three scene raycasts against the production trim and 36 production seated avatars",
+  "eye": {
+    "east": 224.64,
+    "north": 165.0625,
+    "height": 14.43,
+    "relativeToRearFloor": 1.03
+  },
+  "clear": 7,
+  "points": [
+    {
+      "target": {
+        "east": 234,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 2.302795317882986,
+        "east": 225.67977433544775,
+        "north": 163.02388688921266,
+        "height": 14.17350011318922
+      },
+      "trimDistance": 20.729655824048592
+    },
+    {
+      "target": {
+        "east": 233.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.508745223441654
+    },
+    {
+      "target": {
+        "east": 233,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.297749399710987
+    },
+    {
+      "target": {
+        "east": 232.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 20.096980637493576
+    },
+    {
+      "target": {
+        "east": 232,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.906748373127478
+    },
+    {
+      "target": {
+        "east": 231.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 19.72735742148786
+    },
+    {
+      "target": {
+        "east": 231,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 0.6874493158709529,
+        "east": 224.86353667985597,
+        "north": 164.417494751513,
+        "height": 14.348844938083726
+      },
+      "trimDistance": 19.559106085814573
+    },
+    {
+      "target": {
+        "east": 230.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 0.6819374524950095,
+        "east": 224.84596304150253,
+        "north": 164.417494751513,
+        "height": 14.348844938083726
+      },
+      "trimDistance": 19.40228416743921
+    },
+    {
+      "target": {
+        "east": 230,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 0.6768371162024654,
+        "east": 224.82838940314906,
+        "north": 164.417494751513,
+        "height": 14.348844938083726
+      },
+      "trimDistance": 19.257170896808116
+    },
+    {
+      "target": {
+        "east": 229.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 0.6721576750682187,
+        "east": 224.8108157647956,
+        "north": 164.417494751513,
+        "height": 14.348844938083726
+      },
+      "trimDistance": 19.12403281163735
+    },
+    {
+      "target": {
+        "east": 242,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 25.36688055826118
+    },
+    {
+      "target": {
+        "east": 242.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": true,
+      "trimDistance": 25.711643843749396
+    },
+    {
+      "target": {
+        "east": 243,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.5117312279440027,
+        "east": 225.70499816536903,
+        "north": 163.99799488933718,
+        "height": 14.29606313922456
+      },
+      "trimDistance": 26.06143950428371
+    },
+    {
+      "target": {
+        "east": 243.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.4916788784319472,
+        "east": 225.70499816536903,
+        "north": 164.02621612768985,
+        "height": 14.299613957378734
+      },
+      "trimDistance": 26.416067627865438
+    },
+    {
+      "target": {
+        "east": 244,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.4729175631280305,
+        "east": 225.70499816536903,
+        "north": 164.05297965744992,
+        "height": 14.302981365504282
+      },
+      "trimDistance": 26.775336203330475
+    },
+    {
+      "target": {
+        "east": 244.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.4553398892303984,
+        "east": 225.70499816536903,
+        "north": 164.0783955774537,
+        "height": 14.306179216322402
+      },
+      "trimDistance": 27.13906093953317
+    },
+    {
+      "target": {
+        "east": 245,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.438849406731625,
+        "east": 225.70499816536903,
+        "north": 164.10256317132763,
+        "height": 14.309220001776174
+      },
+      "trimDistance": 27.507065066177255
+    },
+    {
+      "target": {
+        "east": 245.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.4233592860659017,
+        "east": 225.70499816536903,
+        "north": 164.12557220365437,
+        "height": 14.312115016115193
+      },
+      "trimDistance": 27.87917912039412
+    },
+    {
+      "target": {
+        "east": 246,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.4087911809488223,
+        "east": 225.70499816536903,
+        "north": 164.14750403409317,
+        "height": 14.314874496075042
+      },
+      "trimDistance": 28.255240722669985
+    },
+    {
+      "target": {
+        "east": 246.5,
+        "north": 146.711,
+        "height": 12.121
+      },
+      "clear": false,
+      "obstruction": {
+        "kind": "seated avatar",
+        "distance": 1.395074246911663,
+        "east": 225.70499816536903,
+        "north": 164.16843257860157,
+        "height": 14.31750774181898
+      },
+      "trimDistance": 28.635094345259887
+    }
+  ]
+}

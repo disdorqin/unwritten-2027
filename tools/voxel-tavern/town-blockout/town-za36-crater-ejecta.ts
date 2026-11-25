@@ -1,0 +1,167 @@
+import {
+  BoxGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
+  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace,
+} from 'three';
+import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
+import type { mountWestCraterRoad } from './town-za22-crater-road';
+
+type CraterGround = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
+export type Za36EjectaPiece = Readonly<{
+  kind: 'ejecta' | 'blackstone' | 'char';
+  ray: number;
+  east: number;
+  north: number;
+  ground: number;
+  footprint: number;
+  height: number;
+}>;
+
+const tau = Math.PI * 2;
+const fixture = createMeteorCrater(meteorCraterFixturePlan);
+const stone = new DodecahedronGeometry(1, 0);
+const patch = new BoxGeometry();
+
+/** A-3: coherent quarry strata, shared by crater ejecta, midground and rim wreckage.
+ * Four-pixel-wide stepped layers avoid the former one-pixel hash flecks.
+ * Optional rust remains a single 4×4 weathered patch (<2% of the map).
+ * This is a material replacement only; never changes B-01 ground or props.
+ */
+export function createZa36StrataTexture(base: number, streak: number, ochre: number,
+  seed = 0, rust?: number) {
+  const size = 32;
+  const bytes = new Uint8Array(size * size * 4);
+  const bends = [0, 0, 1, 1, 0, -1, -1, 0];
+  const families = [0, 0, 1, 1, 0, 2, 2, 1];
+  const colors = [base, streak, ochre];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const blockX = Math.floor(x / 4), blockY = Math.floor(y / 4);
+    const bend = bends[(blockX + seed) % bends.length]!;
+    const layer = Math.floor((blockY + bend + 8) / 2);
+    let pigment = colors[families[(layer + seed) % families.length]!]!;
+    // Large, isolated rust *patch* rather than scattered red pixels.
+    if (rust !== undefined && blockX === ((seed * 3 + 2) % 8) &&
+      blockY === ((seed + 5) % 8)) pigment = rust;
+    bytes.set([pigment >>> 16, pigment >>> 8 & 255, pigment & 255, 255], (y * size + x) * 4);
+  }
+  const tex = new DataTexture(bytes, size, size);
+  tex.colorSpace = SRGBColorSpace;
+  tex.minFilter = tex.magFilter = NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+const dark = new MeshStandardMaterial({
+  map: createZa36StrataTexture(0x5d4630, 0x8a8378, 0xa98a56, 3), flatShading: true, roughness: 1,
+});
+const grey = new MeshStandardMaterial({
+  map: createZa36StrataTexture(0x8a8378, 0xa98a56, 0x5d4630, 7, 0x8a4a34), flatShading: true, roughness: 1,
+});
+const charcoal = new MeshStandardMaterial({
+  map: createZa36StrataTexture(0x5d4630, 0x5d564c, 0x8a8378, 9, 0x8a4a34), flatShading: true, roughness: 1,
+});
+
+function distanceToSegment(east: number, north: number,
+  startE: number, startN: number, endE: number, endN: number) {
+  const de = endE - startE, dn = endN - startN;
+  const proportion = Math.max(0, Math.min(1,
+    ((east - startE) * de + (north - startN) * dn) / (de * de + dn * dn)));
+  return Math.hypot(east - startE - proportion * de, north - startN - proportion * dn);
+}
+
+/**
+ * Story-board §I.3–4: eight radial impact streaks, with house-size outcrop
+ * rocks that read from town, and a staggered blackstone crown inside the rim.
+ * This is strictly geometry/dressing: ZA-34 alone owns future terrain relief.
+ *
+ * `reserved` are keep-out points the mount supplies (the mainline fence
+ * posts and the town-era wall line): a boulder or scorch patch whose
+ * footprint would swallow one is skipped, never nudged — the V3 ray/step
+ * layout itself is untouched.
+ */
+export function buildZa36CraterEjecta(road: CraterGround,
+  reserved: readonly { east: number; north: number; radius: number }[] = []) {
+  const { east: centerE, north: centerN, yaw } = road.anchor;
+  const group = new Group();
+  group.name = 'za36-crater-ejecta-landmarks';
+  const placements: Za36EjectaPiece[] = [];
+  const matrices = new Map<string, Object3D[]>();
+  const trail = Array.from({ length: 1301 }, (_, index) => {
+    const q = fixture.mainTrailPoint(index / 1300);
+    return { east: centerE + q.east * Math.cos(yaw) + q.north * Math.sin(yaw),
+      north: centerN + q.north * Math.cos(yaw) - q.east * Math.sin(yaw) };
+  });
+  const put = (kind: Za36EjectaPiece['kind'], ray: number, east: number,
+    north: number, width: number, height: number, angle: number) => {
+    const ground = road.heightAt(east, north);
+    if (!Number.isFinite(ground) || ground === undefined) return;
+    if (east < -237 || east > -7 || north < 7 || north > 530) return;
+    const radius = width * .5;
+    if (Math.hypot(east - road.lip.east, north - road.lip.north) < 10 + radius) return;
+    if (distanceToSegment(east, north, road.lip.east, road.lip.north,
+      0, 159) < radius + 4.5) return;
+    if (trail.some(point => Math.hypot(east - point.east, north - point.north) < radius + 3.2)) return;
+    if (placements.some(piece => Math.hypot(east - piece.east, north - piece.north) <
+      (radius + piece.footprint) * (kind === 'char' || piece.kind === 'char' ? .3 : .79))) return;
+    if (reserved.some(piece => Math.hypot(east - piece.east, north - piece.north) < radius + piece.radius)) return;
+    const piece = new Object3D();
+    piece.position.set(east, ground + (kind === 'char' ? .04 : height * .44), -north);
+    piece.rotation.set(kind === 'char' ? 0 : .08, angle, kind === 'char' ? 0 : -.12);
+    piece.scale.set(width * .5, height * .5, width * .38);
+    piece.updateMatrix();
+    const key = kind === 'ejecta' ? (ray % 3 === 0 ? 'ejecta-grey' : 'ejecta-dark') : kind;
+    const items = matrices.get(key) ?? [];
+    items.push(piece);
+    matrices.set(key, items);
+    placements.push({ kind, ray, east, north, ground, footprint: radius, height });
+  };
+
+  // Sixty 2–5 m outcrops on eight visible, irregular impact rays.
+  // The starts avoid the inner spiral and existing surface decorations.
+  for (let ray = 0; ray < 8; ray++) {
+    const bearing = yaw + .18 + ray * tau / 8;
+    for (let step = 0; step < (ray < 4 ? 8 : 7); step++) {
+      const radial = 67 + step * 5.65 + ray % 2 * 1.6;
+      const offset = (step % 3 - 1) * .85;
+      const e = centerE + radial * Math.sin(bearing) + offset * Math.cos(bearing);
+      const n = centerN + radial * Math.cos(bearing) - offset * Math.sin(bearing);
+      const width = 2.6 + (step * 7 + ray * 3) % 6 * .42;
+      const height = 2.15 + (step * 3 + ray * 5) % 7 * .43;
+      put('ejecta', ray, e, n, width, height, bearing + (step % 4) * .23);
+    }
+  }
+
+  // Three overlapping faceted stones at each of 24 rim sectors; omitted
+  // around the guarded mouth or where the signed-off spiral passes.
+  for (let ray = 0; ray < 24; ray++) {
+    const bearing = yaw + .37 + ray * tau / 24;
+    for (let part = 0; part < 3; part++) {
+      const radial = 53.3 + part * 1.8;
+      const tilt = (part - 1) * 1.48;
+      const e = centerE + radial * Math.sin(bearing) + tilt * Math.cos(bearing);
+      const n = centerN + radial * Math.cos(bearing) - tilt * Math.sin(bearing);
+      put('blackstone', ray, e, n, 1.6 + (ray + part) % 4 * .43,
+        1.15 + (ray + 2 * part) % 5 * .36, bearing + .15 * part);
+    }
+  }
+
+  // Large scorched impact patches under outcrops, not standalone visual
+  // noise; intentionally do not register navigation colliders until the
+  // dedicated full-surface/terrain acceptance round.
+  const rocks = placements.filter(piece => piece.kind === 'ejecta');
+  for (let index = 0; index < rocks.length; index += 3) {
+    const rock = rocks[index]!;
+    put('char', rock.ray, rock.east + 3.0, rock.north + 2.2,
+      5.1, .11, (rock.ray * 1.1) % tau);
+  }
+
+  for (const [name, transforms] of matrices) {
+    const geometry = name === 'char' ? patch : stone;
+    const material = name === 'char' ? charcoal : name === 'ejecta-grey' ? grey : dark;
+    const mesh = new InstancedMesh(geometry, material, transforms.length);
+    mesh.name = 'za36-' + name;
+    transforms.forEach((item, index) => mesh.setMatrixAt(index, item.matrix));
+    mesh.computeBoundingSphere();
+    group.add(mesh);
+  }
+  return { group, placements };
+}

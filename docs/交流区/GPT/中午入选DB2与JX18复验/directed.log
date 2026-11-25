@@ -1,0 +1,125 @@
+{"ts":"2026-11-20T03:55:43.782Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:43.793Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:43.811Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:43.814Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:43.814Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:43.814Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+✔ snowfight: start assigns teams, place validates half and roads, three hits clear a wall (514.886675ms)
+{"ts":"2026-11-20T03:55:44.125Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:44.125Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:44.125Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:44.126Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:44.135Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:44.137Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:44.138Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:44.143Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+sled wall m/s, layers cleared across both clients 8 [ 3 ]
+sled wall m/s, layers cleared across both clients 15 [ 1, 2 ]
+sled wall m/s, layers cleared across both clients 22.01 [ 0, 1, 2, 3 ]
+✔ snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity (1251.262734ms)
+✔ free wall placement keeps only outdoors water, mainline and buildings out (2.704287ms)
+{"ts":"2026-11-20T03:55:45.367Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.367Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.369Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.370Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.371Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:45.373Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.374Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.374Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+approved sled speed, wire speed and layers cleared on both clients 45 45 4
+approved sled speed, wire speed and layers cleared on both clients 45.2 46 4
+✔ snowfight: approved upper-band reports 45 and 46 clear all four layers (16.703718ms)
+{"ts":"2026-11-20T03:55:45.388Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.389Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.390Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.390Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.391Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:45.392Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.392Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.393Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+✔ free snow wall server rejects occupied homes and accepts dry exterior (16.953313ms)
+{"ts":"2026-11-20T03:55:45.405Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.405Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.406Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.406Z","transport":"ws","peer":1,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.407Z","transport":"ws","peer":1,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:45.409Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.409Z","transport":"ws","peer":2,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.410Z","transport":"ws","peer":2,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:45.415Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.415Z","transport":"ws","peer":3,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.415Z","transport":"ws","peer":3,"step":"join","result":"ok"}
+{"ts":"2026-11-20T03:55:45.426Z","transport":"ws","peer":"-","step":"attempt","result":"accepted"}
+{"ts":"2026-11-20T03:55:45.426Z","transport":"ws","peer":4,"step":"session","result":"ok"}
+{"ts":"2026-11-20T03:55:45.427Z","transport":"ws","peer":4,"step":"join","result":"ok"}
+✔ free snow walls relay three authored layers, survive joining, and clear before ceremony arrival (32.245382ms)
+{"ts":"2026-11-20T03:55:45.431Z","transport":"ws","peer":4,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.431Z","transport":"ws","peer":3,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.431Z","transport":"ws","peer":2,"step":"drop","result":"closed"}
+{"ts":"2026-11-20T03:55:45.432Z","transport":"ws","peer":1,"step":"drop","result":"closed"}
+✔ the entry guide identifies mobile WeChat and message-app QQ (4.86293ms)
+✔ a mobile guide defers loading until continue and ignores repeated starts (1.051427ms)
+✔ the normal browser opens directly and initialization failure never reveals the scene (0.23783ms)
+✔ a fresh document can enter after the previous viewer load failed (0.234445ms)
+✔ a failed module request displays the static retry before any module can run (10.490645ms)
+✔ a clear line in the actual throne annex is eligible and hits the avatar capsule (3.2641ms)
+✔ a clear line in the actual gallery is eligible and hits the avatar capsule (0.846856ms)
+✔ a clear line in the actual stair chamber is eligible and hits the avatar capsule (0.604197ms)
+✔ a clear line in the actual timed vault is eligible and hits the avatar capsule (0.423185ms)
+✔ a roof or another palace room does not inherit the indoor exception (0.454536ms)
+✔ the palace hall exception requires an actual throne seat and keeps the target hittable (1.07566ms)
+✔ the palace exception does not override actual masonry collision (0.343274ms)
+✔ river crossings transition through shallow water and swimming without an unwalkable bank step (6.905003ms)
+✔ bridge decks and the ice lake keep dry support despite nearby river water (0.205317ms)
+✔ the 60 Hz town physics clock preserves fractional interpolation and drops excess steps (0.24497ms)
+✔ the moving snowman shares one mesh, a registered hit box and its normal walking collision (64.770578ms)
+ℹ 靶中心 E221.84–224.16/N173/Y12，最近仪式点 1.410 m，1 组实例 / 264 tris
+✔ a 60s trial counts each owned hit once against the existing snowball step and resets to practice (10.295192ms)
+ℹ 阈值 59,999 ms 仍在局内 / 60,000 ms 只结算一次；旧球、重复事件、NPC、偏离靶点及超时命中均 0 分
+✔ the standing snowman keeps its original hit box and rebound between rounds (1.986035ms)
+✔ remote scoreboard entries affect received and hit standings but never persist a recycled session ID (6.146193ms)
+✔ snowball board announces each formal streak milestone and resets local aliases when hit (1.103252ms)
+✔ snowball results persist, with accuracy titles gated by 30 throws (6.933502ms)
+✔ sweep finds the nearest capsule, skips the thrower and reports score eligibility (2.884369ms)
+✔ hit zone follows a character above ground and excludes practice props (0.768492ms)
+✔ sweep stops at a thin wall before a capsule and avoids false box-corner hits (0.363719ms)
+✔ chest-height grazes receive a small bonus only with a clear path to the torso (0.317713ms)
+✔ the practice marker stands ten meters from the snowman (0.191513ms)
+✔ remote replay uses the victim capsule and does not score on local simulation (15.197249ms)
+✔ remote replay caps eight balls per shooter, shares the pool, and clears on session loss (2.004803ms)
+✔ snowball sweep intersects thin geometry and misses outside expanded bounds (0.341547ms)
+✔ snowball carries launch and landing metadata, builds a combo, and stops behind a wall (5.324198ms)
+✔ fixed-power aim ring marks the same wall, terrain and person contacts as the released ball (126.466561ms)
+✔ snowball speed remains bounded and every flight expires by the range limit (20.694997ms)
+✔ snowball pool retires oldest projectile and limits catch-up work to two ticks (2.32006ms)
+✔ snow depths cap ammo and indoor impacts keep player and NPC scores unchanged (2.223845ms)
+✔ wall site classifier rejects every no-build category and keeps plaza/lake/forecourt open (3.321163ms)
+✔ build halves split at east 320 by team (0.288252ms)
+✔ wall field: four states stack, damage cracks, third hit collapses the column above (1.329761ms)
+✔ wall field: town cap 400 and unmaintained decay with owner refresh (1.158054ms)
+✔ match: teams alternate, build flows to battle, capture needs 5 s and scores 1 per second (0.91201ms)
+✔ match: a hit on the capturing player inside the circle zeroes capture progress (0.319201ms)
+✔ match: three-hit streak event and finish winner (0.512536ms)
+✔ snowfight codec round-trips and rejects garbage (0.727987ms)
+✔ sled smash codec round-trips and rejects garbage (0.362827ms)
+✔ free wall capacity replaces oldest neutral and match cleanup preserves neutral layers (2.493389ms)
+✔ material bank caps and dig field deepens pits with a cap (0.340955ms)
+✔ touch look boost grows with drag speed and sensitivity scales linearly (8.124657ms)
+✔ a fast right-half swipe turns far more than the raw drag angle (1.023572ms)
+✔ a slow right-half drag stays close to the base sensitivity (0.769608ms)
+✔ drags starting outside the right-half look zone never turn the view (0.646839ms)
+✔ tap turns toward the tap only inside the look zone (0.839171ms)
+✔ the snowball hold survives the look zone: quick swipe cancels, held drag aims (11.514311ms)
+✔ a left-half hold still finishes the snowball action without steering (0.652384ms)
+✔ the joystick double-push sprint gesture still works (1.112592ms)
+✔ a tapped sprint button locks sprint while the stick is pushed (0.786814ms)
+✔ a held sprint button is momentary and never toggles the lock (360.881788ms)
+✔ reset clears the sprint lock (0.456039ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3800.720165

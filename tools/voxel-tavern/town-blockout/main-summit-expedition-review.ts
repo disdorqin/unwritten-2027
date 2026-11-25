@@ -18,7 +18,7 @@ sunlight.position.set(-40, 380, 140);
 scene.add(sunlight);
 const summitOwner = new Group();
 scene.add(summitOwner);
-const mount = mountMainSummitAssembly(summitOwner, 0, { expeditionPreview: true });
+const mount = mountMainSummitAssembly(summitOwner, 0, undefined, { expeditionPreview: true });
 if (!mount.expedition || !mount.workshop || !mount.cloudBells || !mount.plaques ||
     !mount.expeditionDynamics || !mount.expeditionActivities) {
   throw new Error('The seven-round preview must explicitly mount all five model families and actions');

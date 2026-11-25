@@ -1,0 +1,2104 @@
+{
+  "url": "http://127.0.0.1:18525/",
+  "browser": "153.0.8010.0",
+  "mode": "town-rehearsal",
+  "baseline": "9a39267df6b612c9a63a1ae399af9850da912e4f",
+  "tree": "cf2dc0759cd3291bc2df81a8a52583e5ddee7857",
+  "pickup": "d97debc2",
+  "phases": [
+    {
+      "name": "ordinary birth",
+      "at": 1795189660003,
+      "hud": "东 223.0 m · 北 180.0 m · 行走",
+      "pos": [
+        223,
+        180
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": false,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 3,
+        "calls": 172,
+        "triangles": 1135418,
+        "points": 1129,
+        "lines": 0
+      }
+    },
+    {
+      "name": "ordinary tavern menu landing",
+      "at": 1795189660374,
+      "hud": "东 159.0 m · 北 219.5 m · 行走",
+      "pos": [
+        159,
+        219.5
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 11,
+        "calls": 153,
+        "triangles": 703580,
+        "points": 1033,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189660378,
+        "east": 159,
+        "north": 219.5,
+        "height": 15.91,
+        "yaw": 0,
+        "seq": 2
+      }
+    },
+    {
+      "name": "walk through tavern door",
+      "at": 1795189694865,
+      "hud": "东 159.0 m · 北 228.8 m · 行走",
+      "pos": [
+        159,
+        228.8
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 56,
+        "calls": 139,
+        "triangles": 659644,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189694832,
+        "east": 159,
+        "north": 228.78,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 37
+      }
+    },
+    {
+      "name": "centre hall before dining table",
+      "at": 1795189694887,
+      "hud": "东 159.0 m · 北 228.8 m · 行走",
+      "pos": [
+        159,
+        228.8
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 56,
+        "calls": 139,
+        "triangles": 659644,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189694832,
+        "east": 159,
+        "north": 228.78,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 37
+      }
+    },
+    {
+      "name": "turn into west dining aisle",
+      "at": 1795189699061,
+      "hud": "东 157.8 m · 北 228.8 m · 行走",
+      "pos": [
+        157.8,
+        228.8
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 61,
+        "calls": 137,
+        "triangles": 644560,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189699055,
+        "east": 157.81,
+        "north": 228.78,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 42
+      }
+    },
+    {
+      "name": "west side of central table",
+      "at": 1795189699082,
+      "hud": "东 157.8 m · 北 228.8 m · 行走",
+      "pos": [
+        157.8,
+        228.8
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 61,
+        "calls": 137,
+        "triangles": 644560,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189699055,
+        "east": 157.81,
+        "north": 228.78,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 42
+      }
+    },
+    {
+      "name": "walk to the front of the bar stools",
+      "at": 1795189707399,
+      "hud": "东 157.8 m · 北 231.2 m · 行走",
+      "pos": [
+        157.8,
+        231.2
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 71,
+        "calls": 132,
+        "triangles": 643488,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189707395,
+        "east": 157.81,
+        "north": 231.16,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 52
+      }
+    },
+    {
+      "name": "clear bar-stool cross-aisle",
+      "at": 1795189707439,
+      "hud": "东 157.8 m · 北 231.2 m · 行走",
+      "pos": [
+        157.8,
+        231.2
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 71,
+        "calls": 132,
+        "triangles": 643488,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189707395,
+        "east": 157.81,
+        "north": 231.16,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 52
+      }
+    },
+    {
+      "name": "cross to the west end of the bar",
+      "at": 1795189726161,
+      "hud": "东 152.1 m · 北 231.2 m · 行走",
+      "pos": [
+        152.1,
+        231.2
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 94,
+        "calls": 126,
+        "triangles": 608640,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189726155,
+        "east": 152.09,
+        "north": 231.16,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 75
+      }
+    },
+    {
+      "name": "enter the cleared western passage",
+      "at": 1795189726175,
+      "hud": "东 152.1 m · 北 231.2 m · 行走",
+      "pos": [
+        152.1,
+        231.2
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 94,
+        "calls": 126,
+        "triangles": 608640,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189726155,
+        "east": 152.09,
+        "north": 231.16,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 75
+      }
+    },
+    {
+      "name": "walk around the west end into the rear aisle",
+      "at": 1795189736769,
+      "hud": "东 152.1 m · 北 234.7 m · 行走",
+      "pos": [
+        152.1,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 108,
+        "calls": 112,
+        "triangles": 601734,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189736767,
+        "east": 152.09,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 89
+      }
+    },
+    {
+      "name": "align with the rear aisle",
+      "at": 1795189736782,
+      "hud": "东 152.1 m · 北 234.7 m · 行走",
+      "pos": [
+        152.1,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 108,
+        "calls": 112,
+        "triangles": 601734,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189736767,
+        "east": 152.09,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 89
+      }
+    },
+    {
+      "name": "walk to the public rear-room craft bench",
+      "at": 1795189750796,
+      "hud": "东 156.3 m · 北 234.7 m · 行走",
+      "pos": [
+        156.3,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 125,
+        "calls": 124,
+        "triangles": 606588,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189750792,
+        "east": 156.34,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 106
+      }
+    },
+    {
+      "name": "native standing spot faces the craft bench",
+      "at": 1795189750810,
+      "hud": "东 156.3 m · 北 234.7 m · 行走",
+      "pos": [
+        156.3,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 125,
+        "calls": 124,
+        "triangles": 606588,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189750792,
+        "east": 156.34,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 106
+      }
+    },
+    {
+      "name": "look down onto the empty workbench",
+      "at": 1795189755983,
+      "hud": "东 156.3 m · 北 234.7 m · 行走",
+      "pos": [
+        156.3,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 132,
+        "calls": 116,
+        "triangles": 538500,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189752105,
+        "east": 156.34,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 107
+      }
+    },
+    {
+      "name": "last observed position",
+      "at": 1795189773978,
+      "hud": "东 156.3 m · 北 234.7 m · 行走",
+      "pos": [
+        156.3,
+        234.7
+      ],
+      "stand": [
+        -2.6412429378531077,
+        0.9,
+        -4.5600000000000005
+      ],
+      "tavernNear": true,
+      "slots": [
+        {
+          "name": "stardustPowder",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "paper",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "bamboo",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "liquor",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "warmMineral",
+          "materialVisible": false,
+          "drawablePieces": 3
+        },
+        {
+          "name": "wood",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "cloth",
+          "materialVisible": false,
+          "drawablePieces": 2
+        },
+        {
+          "name": "wire",
+          "materialVisible": false,
+          "drawablePieces": 2
+        }
+      ],
+      "render": {
+        "frame": 166,
+        "calls": 116,
+        "triangles": 538500,
+        "points": 90,
+        "lines": 0
+      },
+      "wire": {
+        "at": 1795189752105,
+        "east": 156.34,
+        "north": 234.66,
+        "height": 16.9,
+        "yaw": 0,
+        "seq": 107
+      }
+    }
+  ],
+  "positions": [
+    {
+      "at": 1795189660137,
+      "east": 223,
+      "north": 180,
+      "height": 12,
+      "yaw": 0.06970025204955382,
+      "seq": 0
+    },
+    {
+      "at": 1795189660372,
+      "east": 159,
+      "north": 219.5,
+      "height": 15.91,
+      "yaw": 0,
+      "seq": 1
+    },
+    {
+      "at": 1795189660378,
+      "east": 159,
+      "north": 219.5,
+      "height": 15.91,
+      "yaw": 0,
+      "seq": 2
+    },
+    {
+      "at": 1795189660458,
+      "east": 159,
+      "north": 219.75,
+      "height": 15.92,
+      "yaw": 0,
+      "seq": 3
+    },
+    {
+      "at": 1795189660537,
+      "east": 159,
+      "north": 220.35,
+      "height": 15.96,
+      "yaw": 0,
+      "seq": 4
+    },
+    {
+      "at": 1795189663236,
+      "east": 159,
+      "north": 221.06,
+      "height": 16,
+      "yaw": 0,
+      "seq": 5
+    },
+    {
+      "at": 1795189663666,
+      "east": 159,
+      "north": 221.3,
+      "height": 16.23,
+      "yaw": 0,
+      "seq": 6
+    },
+    {
+      "at": 1795189665569,
+      "east": 159,
+      "north": 221.54,
+      "height": 16.23,
+      "yaw": 0,
+      "seq": 7
+    },
+    {
+      "at": 1795189665655,
+      "east": 159,
+      "north": 221.78,
+      "height": 16.45,
+      "yaw": 0,
+      "seq": 8
+    },
+    {
+      "at": 1795189667474,
+      "east": 159,
+      "north": 222.01,
+      "height": 16.45,
+      "yaw": 0,
+      "seq": 9
+    },
+    {
+      "at": 1795189668842,
+      "east": 159,
+      "north": 222.25,
+      "height": 16.68,
+      "yaw": 0,
+      "seq": 10
+    },
+    {
+      "at": 1795189670332,
+      "east": 159,
+      "north": 222.49,
+      "height": 16.68,
+      "yaw": 0,
+      "seq": 11
+    },
+    {
+      "at": 1795189671912,
+      "east": 159,
+      "north": 222.73,
+      "height": 16.68,
+      "yaw": 0,
+      "seq": 12
+    },
+    {
+      "at": 1795189673502,
+      "east": 159,
+      "north": 222.96,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 13
+    },
+    {
+      "at": 1795189673966,
+      "east": 159,
+      "north": 223.2,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 14
+    },
+    {
+      "at": 1795189676583,
+      "east": 159,
+      "north": 223.44,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 15
+    },
+    {
+      "at": 1795189677399,
+      "east": 159,
+      "north": 223.68,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 16
+    },
+    {
+      "at": 1795189677631,
+      "east": 159,
+      "north": 223.91,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 17
+    },
+    {
+      "at": 1795189678411,
+      "east": 159,
+      "north": 224.15,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 18
+    },
+    {
+      "at": 1795189679267,
+      "east": 159,
+      "north": 224.39,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 19
+    },
+    {
+      "at": 1795189680230,
+      "east": 159,
+      "north": 224.63,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 20
+    },
+    {
+      "at": 1795189681832,
+      "east": 159,
+      "north": 224.86,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 21
+    },
+    {
+      "at": 1795189682593,
+      "east": 159,
+      "north": 225.1,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 22
+    },
+    {
+      "at": 1795189683392,
+      "east": 159,
+      "north": 225.34,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 23
+    },
+    {
+      "at": 1795189684739,
+      "east": 159,
+      "north": 225.58,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 24
+    },
+    {
+      "at": 1795189684946,
+      "east": 159,
+      "north": 225.93,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 25
+    },
+    {
+      "at": 1795189685776,
+      "east": 159,
+      "north": 226.17,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 26
+    },
+    {
+      "at": 1795189686662,
+      "east": 159,
+      "north": 226.41,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 27
+    },
+    {
+      "at": 1795189687536,
+      "east": 159,
+      "north": 226.64,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 28
+    },
+    {
+      "at": 1795189688326,
+      "east": 159,
+      "north": 226.88,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 29
+    },
+    {
+      "at": 1795189689107,
+      "east": 159,
+      "north": 227.12,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 30
+    },
+    {
+      "at": 1795189690041,
+      "east": 159,
+      "north": 227.36,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 31
+    },
+    {
+      "at": 1795189690833,
+      "east": 159,
+      "north": 227.59,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 32
+    },
+    {
+      "at": 1795189691682,
+      "east": 159,
+      "north": 227.83,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 33
+    },
+    {
+      "at": 1795189692423,
+      "east": 159,
+      "north": 228.07,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 34
+    },
+    {
+      "at": 1795189693403,
+      "east": 159,
+      "north": 228.31,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 35
+    },
+    {
+      "at": 1795189693979,
+      "east": 159,
+      "north": 228.54,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 36
+    },
+    {
+      "at": 1795189694832,
+      "east": 159,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 37
+    },
+    {
+      "at": 1795189695770,
+      "east": 158.76,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 38
+    },
+    {
+      "at": 1795189696764,
+      "east": 158.52,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 39
+    },
+    {
+      "at": 1795189697526,
+      "east": 158.29,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 40
+    },
+    {
+      "at": 1795189698946,
+      "east": 158.05,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 41
+    },
+    {
+      "at": 1795189699055,
+      "east": 157.81,
+      "north": 228.78,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 42
+    },
+    {
+      "at": 1795189700498,
+      "east": 157.81,
+      "north": 229.02,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 43
+    },
+    {
+      "at": 1795189701266,
+      "east": 157.81,
+      "north": 229.26,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 44
+    },
+    {
+      "at": 1795189702001,
+      "east": 157.81,
+      "north": 229.49,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 45
+    },
+    {
+      "at": 1795189702817,
+      "east": 157.81,
+      "north": 229.73,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 46
+    },
+    {
+      "at": 1795189703625,
+      "east": 157.81,
+      "north": 229.97,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 47
+    },
+    {
+      "at": 1795189704371,
+      "east": 157.81,
+      "north": 230.21,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 48
+    },
+    {
+      "at": 1795189705141,
+      "east": 157.81,
+      "north": 230.44,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 49
+    },
+    {
+      "at": 1795189705922,
+      "east": 157.81,
+      "north": 230.68,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 50
+    },
+    {
+      "at": 1795189706618,
+      "east": 157.81,
+      "north": 230.92,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 51
+    },
+    {
+      "at": 1795189707395,
+      "east": 157.81,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 52
+    },
+    {
+      "at": 1795189708089,
+      "east": 157.57,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 53
+    },
+    {
+      "at": 1795189708220,
+      "east": 157.33,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 54
+    },
+    {
+      "at": 1795189708943,
+      "east": 157.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 55
+    },
+    {
+      "at": 1795189709672,
+      "east": 156.84,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 56
+    },
+    {
+      "at": 1795189710330,
+      "east": 156.59,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 57
+    },
+    {
+      "at": 1795189710451,
+      "east": 156.34,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 58
+    },
+    {
+      "at": 1795189711200,
+      "east": 156.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 59
+    },
+    {
+      "at": 1795189712592,
+      "east": 155.84,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 60
+    },
+    {
+      "at": 1795189713177,
+      "east": 155.59,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 61
+    },
+    {
+      "at": 1795189713368,
+      "east": 155.34,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 62
+    },
+    {
+      "at": 1795189714156,
+      "east": 155.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 63
+    },
+    {
+      "at": 1795189714865,
+      "east": 154.84,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 64
+    },
+    {
+      "at": 1795189715963,
+      "east": 154.59,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 65
+    },
+    {
+      "at": 1795189716508,
+      "east": 154.34,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 66
+    },
+    {
+      "at": 1795189718340,
+      "east": 154.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 67
+    },
+    {
+      "at": 1795189720056,
+      "east": 153.84,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 68
+    },
+    {
+      "at": 1795189720969,
+      "east": 153.59,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 69
+    },
+    {
+      "at": 1795189721573,
+      "east": 153.34,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 70
+    },
+    {
+      "at": 1795189721805,
+      "east": 153.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 71
+    },
+    {
+      "at": 1795189723579,
+      "east": 152.84,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 72
+    },
+    {
+      "at": 1795189723814,
+      "east": 152.59,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 73
+    },
+    {
+      "at": 1795189725429,
+      "east": 152.34,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 74
+    },
+    {
+      "at": 1795189726155,
+      "east": 152.09,
+      "north": 231.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 75
+    },
+    {
+      "at": 1795189726850,
+      "east": 152.09,
+      "north": 231.41,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 76
+    },
+    {
+      "at": 1795189728235,
+      "east": 152.09,
+      "north": 231.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 77
+    },
+    {
+      "at": 1795189729620,
+      "east": 152.09,
+      "north": 231.91,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 78
+    },
+    {
+      "at": 1795189730272,
+      "east": 152.09,
+      "north": 232.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 79
+    },
+    {
+      "at": 1795189730832,
+      "east": 152.09,
+      "north": 232.41,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 80
+    },
+    {
+      "at": 1795189731000,
+      "east": 152.09,
+      "north": 232.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 81
+    },
+    {
+      "at": 1795189732401,
+      "east": 152.09,
+      "north": 232.91,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 82
+    },
+    {
+      "at": 1795189733117,
+      "east": 152.09,
+      "north": 233.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 83
+    },
+    {
+      "at": 1795189733539,
+      "east": 152.09,
+      "north": 233.41,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 84
+    },
+    {
+      "at": 1795189733893,
+      "east": 152.09,
+      "north": 233.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 85
+    },
+    {
+      "at": 1795189734532,
+      "east": 152.09,
+      "north": 233.91,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 86
+    },
+    {
+      "at": 1795189735373,
+      "east": 152.09,
+      "north": 234.16,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 87
+    },
+    {
+      "at": 1795189736083,
+      "east": 152.09,
+      "north": 234.41,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 88
+    },
+    {
+      "at": 1795189736767,
+      "east": 152.09,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 89
+    },
+    {
+      "at": 1795189737558,
+      "east": 152.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 90
+    },
+    {
+      "at": 1795189738264,
+      "east": 152.59,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 91
+    },
+    {
+      "at": 1795189738922,
+      "east": 152.84,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 92
+    },
+    {
+      "at": 1795189739478,
+      "east": 153.09,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 93
+    },
+    {
+      "at": 1795189739687,
+      "east": 153.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 94
+    },
+    {
+      "at": 1795189740338,
+      "east": 153.59,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 95
+    },
+    {
+      "at": 1795189741017,
+      "east": 153.84,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 96
+    },
+    {
+      "at": 1795189742237,
+      "east": 154.09,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 97
+    },
+    {
+      "at": 1795189742450,
+      "east": 154.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 98
+    },
+    {
+      "at": 1795189742874,
+      "east": 154.59,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 99
+    },
+    {
+      "at": 1795189744228,
+      "east": 154.84,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 100
+    },
+    {
+      "at": 1795189746114,
+      "east": 155.09,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 101
+    },
+    {
+      "at": 1795189747953,
+      "east": 155.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 102
+    },
+    {
+      "at": 1795189748362,
+      "east": 155.59,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 103
+    },
+    {
+      "at": 1795189749020,
+      "east": 155.84,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 104
+    },
+    {
+      "at": 1795189750179,
+      "east": 156.09,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 105
+    },
+    {
+      "at": 1795189750792,
+      "east": 156.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 106
+    },
+    {
+      "at": 1795189752105,
+      "east": 156.34,
+      "north": 234.66,
+      "height": 16.9,
+      "yaw": 0,
+      "seq": 107
+    }
+  ],
+  "sockets": [
+    {
+      "url": "ws://127.0.0.1:18525/presence",
+      "join": true,
+      "received": 3
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "badResponses": [],
+  "requestFailures": [],
+  "nativeKeys": [
+    {
+      "type": "keydown",
+      "code": "KeyW",
+      "at": 8987.099999999627
+    },
+    {
+      "type": "keyup",
+      "code": "KeyW",
+      "at": 43464.199999999255
+    },
+    {
+      "type": "keydown",
+      "code": "KeyA",
+      "at": 43502.199999999255
+    },
+    {
+      "type": "keyup",
+      "code": "KeyA",
+      "at": 47663.40000000037
+    },
+    {
+      "type": "keydown",
+      "code": "KeyW",
+      "at": 47714.199999999255
+    },
+    {
+      "type": "keyup",
+      "code": "KeyW",
+      "at": 56001.699999999255
+    },
+    {
+      "type": "keydown",
+      "code": "KeyA",
+      "at": 56050.90000000037
+    },
+    {
+      "type": "keyup",
+      "code": "KeyA",
+      "at": 74763
+    },
+    {
+      "type": "keydown",
+      "code": "KeyW",
+      "at": 74785.90000000037
+    },
+    {
+      "type": "keyup",
+      "code": "KeyW",
+      "at": 85372.5
+    },
+    {
+      "type": "keydown",
+      "code": "KeyD",
+      "at": 85400.5
+    },
+    {
+      "type": "keyup",
+      "code": "KeyD",
+      "at": 99399.59999999963
+    }
+  ],
+  "elapsedMs": 136150,
+  "canvas": {
+    "width": 480,
+    "height": 296,
+    "timestamp": 105190.1,
+    "source": "WebGL2 default framebuffer after render"
+  },
+  "failure": {
+    "phase": "look down onto the empty workbench",
+    "message": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok(report.nativeKeys.length >= 14)\n\n    at file:///tmp/za25-native-ops/verify.mjs:162:10"
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "scope": "actual shared first mine layout and mounted workface artwork; fixture movement not live Presence",
+  "errors": [],
+  "views": {
+    "deep-west-entry": {
+      "frames": 22,
+      "view": "deep-west-entry",
+      "eye": [
+        0,
+        1.67,
+        131
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 17,
+      "fps": 39.2086972023413
+    },
+    "collapse": {
+      "frames": 30,
+      "view": "collapse",
+      "eye": [
+        -37,
+        1.67,
+        131
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 14,
+      "fps": 32.044434949950066
+    },
+    "dry-bypass": {
+      "frames": 44,
+      "view": "dry-bypass",
+      "eye": [
+        45.5,
+        1.67,
+        110
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 16,
+      "fps": 31.801098583542604
+    },
+    "barracks": {
+      "frames": 56,
+      "view": "barracks",
+      "eye": [
+        38,
+        1.67,
+        132
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 18,
+      "fps": 30.581039755426335
+    },
+    "west-bank": {
+      "frames": 66,
+      "view": "west-bank",
+      "eye": [
+        -5.6,
+        1.67,
+        136.1
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 17,
+      "fps": 27.45424292845258
+    },
+    "east-bank": {
+      "frames": 74,
+      "view": "east-bank",
+      "eye": [
+        16.8,
+        1.67,
+        135.5
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "pieces": 1174,
+      "deepPieces": 2585,
+      "calls": 17,
+      "fps": 27.13107241063245
+    }
+  },
+  "passed": true,
+  "walk": {
+    "frames": 22,
+    "view": "deep-west-entry",
+    "eye": [
+      -1.5000000000000002,
+      1.67,
+      131
+    ],
+    "trustedW": 1,
+    "walked": 1.5000000000000002,
+    "rejected": 0,
+    "pieces": 1174,
+    "deepPieces": 2585,
+    "calls": 16,
+    "fps": 27.130348994993746
+  }
+}

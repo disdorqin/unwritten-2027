@@ -71,7 +71,7 @@ function draw() {
     slot: story.slot === null ? '' : String(story.slot + 1), slots: String(orbitalLogReviewSlots),
     pageText: rooms.cockpit.log.text, lastPageFill: story.lastReached ? String(rooms.cockpit.log.lastPageFill) : '',
   });
-  const line = view === 'airlock' ? '16 红 · 2 绿 · 1 灭' : view === 'life-support' ? '最低维生运行' :
+  const line = view === 'airlock' ? `${status.counts.red} 红 · ${status.counts.green} 绿` : view === 'life-support' ? '最低维生运行' :
     view === 'passage' ? '通往驾驶舱' : story.lastReached ? '航行日志终端与轨道保持运行 · 页灯已灭' :
       story.slot !== null ? '空格翻阅 · 页灯亮' : reach.left && reach.right ? '同时按 Q 与 E 确认' : '走到控制台两手位之间';
   if (message.value !== line) message.value = line;

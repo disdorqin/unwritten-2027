@@ -5,6 +5,9 @@ import { icePalaceDoorBounds, icePalaceInteriorAnchors } from './ice-palace-expa
 import { icePalaceForecourtGrotto } from './ice-palace-forecourt';
 import { createIcePalaceSnowballRules } from './ice-palace-snowball';
 import { createIcePalaceTowerRace } from './ice-palace-race';
+import { createIcePalaceRiteActivity, type IcePalaceRiteHost } from './landmark-ice-palace-rites';
+import { createIcePalaceFragmentActivity, type IcePalaceFragmentPickupHost } from './landmark-ice-palace-wreckage';
+import { announceIcePalacePickup } from './ice-palace-pickup-notice';
 import type { TownActivityContext } from './town-activity';
 
 type ActivityOptions = NonNullable<Parameters<typeof createIcePalaceActivity>[3]>;
@@ -15,6 +18,9 @@ type CastleActivityOptions = ActivityOptions & {
   warmFromDrink?(): void;
   onToast?(durationMs: number): void;
   canStand?(x: number, n: number, ground: number): boolean;
+  rites?: IcePalaceRiteHost;
+  fragmentPickup?: IcePalaceFragmentPickupHost;
+  notifyPickup?(message: string): void;
 };
 
 type Forecourt = Group & { userData: { grottoVisuals?: { update(state: State): void } } };
@@ -87,5 +93,21 @@ export function createIcePalaceLandmarkActivity(
     });
   }
   updateVisuals(activity.state());
-  return { ...activity, snowballRules: createIcePalaceSnowballRules(castle) };
+  const notifyPickup = options.notifyPickup ?? announceIcePalacePickup;
+  const visuals = castle.userData.palaceRiteVisuals as Parameters<typeof createIcePalaceRiteActivity>[1];
+  const rites = options.rites && visuals
+    ? createIcePalaceRiteActivity(castle, visuals, options.rites, { ...context, notifyPickup }, options.canStand) : undefined;
+  const fragment = castle.userData.palaceFragment as Group | undefined;
+  const pickup = options.fragmentPickup && fragment
+    ? createIcePalaceFragmentActivity(castle, fragment, options.fragmentPickup, notifyPickup, options.canStand) : undefined;
+  if (rites) activity.spots.push(...rites.spots);
+  if (pickup) activity.spots.push(pickup.spot);
+  return {
+    ...activity, snowballRules: createIcePalaceSnowballRules(castle),
+    step(...args: Parameters<typeof activity.step>) {
+      activity.step(...args);
+      rites?.update();
+      pickup?.update();
+    },
+  };
 }

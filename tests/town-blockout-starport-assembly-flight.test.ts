@@ -10,10 +10,10 @@ import {
 import {
   createOrdinaryTownNightSchedule, createTownNightWindow, townDayMs, townLayerOverlapMs,
 } from '../src/shared/town-night-window.ts';
-import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain.ts';
 import { mountStarportAssemblySite, starportAssemblyEnvelopeAt } from '../tools/voxel-tavern/town-blockout/starport-assembly-site.ts';
 import { mountStarportFlightAssembly } from '../tools/voxel-tavern/town-blockout/starport-flight-assembly.ts';
 import { createStarportReviewWorld, starportFlightSite } from '../tools/voxel-tavern/town-blockout/starport-flight-site.ts';
+import { za22CloudRunway, za22CloudSurfaceAt } from '../tools/voxel-tavern/town-blockout/town-za22-cloud-route';
 
 type Target = typeof starportAssemblyParts[number] | 'ignition';
 const { Group } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as {
@@ -124,15 +124,10 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   const anchor = { east: 324, north: 657, height: 347 };
   const model = mountStarportAssemblySite(owner, anchor);
   t.after(() => model.dispose());
-  const { runway } = starportFlightSite;
+  const runway = za22CloudRunway;
   const radius = .27;
   const eyeHeight = 1.65;
   const bodyHeight = 1.8;
-  // ZA-22 cloud route apron, using the same North Ridge sampler as the production route.
-  function apronHeight(east: number, north: number, clearance: number) {
-    if (east >= runway.end.east - 2 + clearance && east <= 339 - clearance &&
-        north >= 654 + clearance && north <= 664.65 - clearance) return sampleNorthRidge350(east, north);
-  }
 
   const envelope = starportAssemblyEnvelopeAt(anchor);
   assert.deepEqual(model.group.position.toArray(), [324, 347, -657]);
@@ -154,17 +149,31 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
   map.addEventListener('dispose', () => mapDisposals++);
   for (const east of [envelope.east - envelope.width / 2, envelope.east + envelope.width / 2]) {
     for (const north of [envelope.north - envelope.depth / 2, envelope.north + envelope.depth / 2]) {
-      assert.equal(apronHeight(east, north, 0), anchor.height);
+      assert.equal(za22CloudSurfaceAt(east, north, 0), anchor.height);
     }
   }
   assert.equal(model.blocked(anchor, radius, bodyHeight), true);
   assert.equal(model.blocked({ ...anchor, east: 326.82 }, radius, bodyHeight), true);
   assert.equal(model.blocked({ ...anchor, height: anchor.height + envelope.tall }, radius, bodyHeight), false);
 
+  const approach = [[336, 640], [336, 663.25], [328, 663.25], [328, 655], [324, 655]] as const;
+  for (let part = 1; part < approach.length; part++) {
+    const [fromEast, fromNorth] = approach[part - 1]!;
+    const [toEast, toNorth] = approach[part]!;
+    const steps = Math.ceil(Math.hypot(toEast - fromEast, toNorth - fromNorth) / .15);
+    for (let step = 0; step <= steps; step++) {
+      const east = fromEast + (toEast - fromEast) * step / steps;
+      const north = fromNorth + (toNorth - fromNorth) * step / steps;
+      const height = za22CloudSurfaceAt(east, north, radius);
+      assert.equal(height, anchor.height, `ZA-22 approach support at ${east}/${north}`);
+      assert.equal(model.blocked({ east, north, height }, radius, bodyHeight), false);
+    }
+  }
+
   for (const name of [...starportAssemblyParts, 'ignition'] as const) {
     const target = model.targets[name];
     const feet = { east: target.east, north: 655, height: anchor.height };
-    assert.equal(apronHeight(feet.east, feet.north, radius), feet.height);
+    assert.equal(za22CloudSurfaceAt(feet.east, feet.north, radius), feet.height);
     assert.equal(model.blocked(feet, radius, bodyHeight), false);
     const reachPoint = name === 'ignition' ? model.site.ignitionPoint : model.site.sockets[name];
     assert.deepEqual(reachPoint, { ...target, height: anchor.height });
@@ -173,10 +182,10 @@ test('ZD-03 fitted rack at the ZA-22 bench has a clear south approach and leaves
     assert.equal(model.aim(feet, 0, pitch, eyeHeight), name);
     assert.equal(model.aim(feet, Math.PI, pitch, eyeHeight), null);
   }
-  for (let east = runway.end.east; east <= runway.start.east; east += .5) {
-    const feet = { east, north: runway.start.north, height: runway.start.height };
+  for (let east = runway.start; east <= runway.end; east += .5) {
+    const feet = { east, north: runway.north, height: anchor.height };
     for (const offset of [-runway.width / 2, 0, runway.width / 2]) {
-      assert.equal(apronHeight(east, feet.north + offset, 0), feet.height);
+      assert.equal(za22CloudSurfaceAt(east, feet.north + offset, 0), feet.height);
     }
     assert.equal(model.blocked(feet, runway.width / 2, bodyHeight), false);
   }

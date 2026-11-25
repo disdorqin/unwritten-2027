@@ -126,7 +126,7 @@ try {
   assert.ok(initial.signs.length >= 7);
   assert.equal(initial.bellCount, 9);
   assert.equal(initial.realSignTextures, true, 'Actual canvas-backed Chinese signs are required');
-  assert.deepEqual(initial.mainParts.length, 6);
+  assert.deepEqual(initial.mainParts.length, 7);
   assert.ok(initial.siteCount > 45);
   assert.deepEqual(initial.playableProps, {
     movingStarFragments: 3, hearthLogs: 6, ropeAnchors: 6,

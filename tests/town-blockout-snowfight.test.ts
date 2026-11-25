@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Scene, type BoxGeometry, type InstancedMesh, type MeshBasicMaterial } from 'three';
 import {
   SnowWallField, SnowfightMatch, WALL_DECAY_MS, WALL_TOWN_CAP, buildHalfAllows, classifyWallSite, freeWallTeam, wallCellOf,
 } from '../src/presence/snowfight';
@@ -7,7 +8,8 @@ import {
   SNOWFIGHT_SLED_SMASH, decodeSnowfightClientEvent, decodeSnowfightRelay, encodeSledSmash, encodeWallClear,
   encodeWallHit, encodeWallPlace, encodeWallSet,
 } from '../src/presence/snowfight-events';
-import { DigField, MaterialBank } from '../tools/voxel-tavern/town-blockout/town-snowfight';
+import { createSnowballStock } from '../src/shared/snow-stock';
+import { createTeamSnowfight, DigField } from '../tools/voxel-tavern/town-blockout/town-snowfight';
 
 test('wall site classifier rejects every no-build category and keeps plaza/lake/forecourt open', () => {
   assert.equal(classifyWallSite(183.75, 203.75), 'road');
@@ -164,7 +166,7 @@ test('sled smash codec round-trips and rejects garbage', () => {
   assert.equal(decodeSnowfightClientEvent(stretched), undefined);
   // 越界格拒绝
   assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 1280, gy: 0, speed: 10 })), undefined);
-  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1080, speed: 10 })), undefined);
+  assert.equal(decodeSnowfightClientEvent(encodeSledSmash({ gx: 0, gy: 1600, speed: 10 })), undefined);
   // 撞穿帧不是中继帧
   assert.equal(decodeSnowfightRelay(frame), null);
 });
@@ -190,13 +192,7 @@ test('free wall capacity replaces oldest neutral and match cleanup preserves neu
   assert.equal(field.size, 399);
 });
 
-test('material bank caps and dig field deepens pits with a cap', () => {
-  const bank = new MaterialBank(5);
-  assert.equal(bank.add(3), 3);
-  assert.equal(bank.add(10), 2, 'cap clamps the gain');
-  assert.equal(bank.take(2), true);
-  assert.equal(bank.amount, 3);
-  assert.equal(bank.take(4), false);
+test('dig field deepens pits with a cap', () => {
   const digs = new DigField(2);
   digs.dig(300, 250);
   const pit = digs.dig(300.2, 250.1);
@@ -204,4 +200,107 @@ test('material bank caps and dig field deepens pits with a cap', () => {
   digs.dig(310, 250);
   digs.dig(320, 250);
   assert.equal(digs.size, 2, 'oldest pit is evicted at the cap');
+});
+
+test('aimed wall cells share preview, three-layer stock, and confirmed placement rules', context => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const retiredButtons = new Map(['snowfight-start', 'snowfight-build'].map(id => [id, { hidden: false, onclick: null }]));
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true, value: { getElementById: (id: string) => retiredButtons.get(id) ?? null },
+  });
+  context.after(() => {
+    if (original) Object.defineProperty(globalThis, 'document', original);
+    else Reflect.deleteProperty(globalThis, 'document');
+  });
+  type Presence = Parameters<typeof createTeamSnowfight>[0]['presence'];
+  let onWall: Parameters<Presence['onSnowfightWallEvent']>[0] = () => {};
+  let onState: Parameters<Presence['onSnowfightState']>[0] = () => {};
+  let onReject: Parameters<Presence['onSnowfightRejected']>[0] = () => {};
+  let self: number | null = 7;
+  let connected = true;
+  const sent: [number, number][] = [];
+  const presence = {
+    selfId: () => self,
+    snowfightAvailable: () => connected,
+    onSnowfightState(callback: typeof onState) { onState = callback; },
+    onSnowfightRejected(callback: typeof onReject) { onReject = callback; },
+    onSnowfightWallEvent(callback: typeof onWall) { onWall = callback; },
+    sendSnowfightPlace(gx: number, gy: number) {
+      sent.push([gx, gy]);
+      return connected;
+    },
+  } as unknown as Presence;
+
+  const stock = createSnowballStock();
+  for (let i = 0; i < 12; i++) assert.ok(stock.gather());
+  const scene = new Scene();
+  const session = createTeamSnowfight({
+    scene, presence, stock, heightAt: () => 2, announce() {},
+    playerPose: () => ({ east: 320.25, north: 250.25 }),
+    snowDepthLevel: () => 1, freeBuildAvailable: () => true,
+  });
+  const ghost = scene.getObjectByName('Town snowfight wall ghost') as InstancedMesh<BoxGeometry, MeshBasicMaterial> | undefined;
+  assert.ok(ghost?.isInstancedMesh && ghost.material.isMeshBasicMaterial);
+  assert.deepEqual([...retiredButtons.values()], [{ hidden: true, onclick: null }, { hidden: true, onclick: null }]);
+  const eastCell = { gx: 640, gy: 500 };
+  const westCell = { gx: 626, gy: 500 };
+  const door = { gx: 266, gy: 544 };
+  session.update(0, door);
+  assert.equal(ghost.material.color.getHexString(), 'ff7a6b');
+  assert.ok(session.tryPlace(door));
+  assert.deepEqual(sent, []);
+  for (const cell of [westCell, eastCell]) {
+    session.update(0, cell);
+    assert.ok(ghost.visible);
+    assert.equal(ghost.material.color.getHexString(), '9fe8ff');
+  }
+  session.update(0);
+  assert.equal(ghost.visible, false);
+  assert.ok(session.tryPlace(westCell));
+  assert.deepEqual(sent.pop(), [626, 500]);
+  onReject('door');
+  assert.ok(session.tryPlace(eastCell));
+  assert.equal(stock.amount(), 12);
+  assert.equal(stock.available(), 9);
+  onReject('door');
+  assert.equal(stock.available(), 12);
+  assert.ok(session.tryPlace(eastCell));
+  onWall({ kind: 'wall-set', gx: 641, gy: 500, layer: 0, hp: 3, ownerId: 7, team: 2 });
+  assert.equal(stock.amount(), 12, 'an unrelated snapshot is not a purchase receipt');
+  const receipt = { kind: 'wall-set', gx: 640, gy: 500, hp: 3, ownerId: 7, team: 2 } as const;
+  onWall({ ...receipt, layer: 0 });
+  onWall({ ...receipt, layer: 0 });
+  assert.equal(stock.amount(), 9);
+  for (const layer of [1, 2]) {
+    assert.ok(session.tryPlace(eastCell));
+    onWall({ ...receipt, layer });
+  }
+  assert.equal(stock.amount(), 3);
+  assert.equal(session.wallColumnAt(640, 500)?.height, 3);
+  const sentBefore = sent.length;
+  assert.ok(session.tryPlace(eastCell));
+  assert.equal(sent.length, sentBefore, 'the local fourth layer never reaches the host');
+  assert.equal(stock.amount(), 3);
+
+  onWall({ kind: 'wall-clear', blocks: [{ gx: 640, gy: 500, layer: 2 }] });
+  assert.ok(session.tryPlace(eastCell));
+  assert.equal(stock.available(), 0);
+  self = null;
+  connected = false;
+  session.update(0);
+  assert.equal(stock.available(), 3, 'disconnect releases an unconfirmed wall request');
+
+  self = 7;
+  connected = true;
+  onState({ phase: 'build', endsInMs: 6_000, scores: [0, 0], teams: [[7, 0]],
+    owners: [-1, -1, -1], activePoint: -1, captureTeam: -1, captureProgress: 0 });
+  session.update(0, eastCell);
+  assert.equal(ghost.material.color.getHexString(), 'ff7a6b', 'the formal build phase still enforces team half');
+  const beforeWrongHalf = sent.length;
+  assert.ok(session.tryPlace(eastCell));
+  assert.equal(sent.length, beforeWrongHalf);
+  session.update(0, westCell);
+  assert.equal(ghost.material.color.getHexString(), '9fe8ff');
+  assert.ok(session.tryPlace(westCell));
+  assert.deepEqual(sent.at(-1), [626, 500]);
 });

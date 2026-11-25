@@ -1,5 +1,5 @@
 export const plazaPhotoStand = {
-  centreEast: 224, south: 162, halfWidth: 8, rows: 4, run: .875, rise: .35, base: 12,
+  centreEast: 224, south: 162, halfWidth: 8, rows: 4, run: .875, rise: .35, base: 12, rearLift: .30,
 } as const;
 export const plazaPhotoGatherMs = 30_000;
 export const plazaPhotoCountdownMs = 10_000;
@@ -11,12 +11,16 @@ export type PlazaPhotoInvite = { type: 'event'; kind: 'plaza-photo-invite'; id: 
 export type PlazaPhotoLineup = { type: 'event'; kind: 'plaza-photo-lineup'; id: number; captureAt: number; people: PlazaPhotoPerson[] };
 export type PlazaPhotoNotice = PlazaPhotoInvite | PlazaPhotoLineup;
 
+export function plazaPhotoTierRise(row: number) {
+  return (row + 1) * plazaPhotoStand.rise + (row === plazaPhotoStand.rows - 1 ? plazaPhotoStand.rearLift : 0);
+}
+
 export function inPlazaPhotoStand(east: number, north: number, height: number) {
   const stand = plazaPhotoStand;
   const distance = north - stand.south;
   if (!(Math.abs(east - stand.centreEast) <= stand.halfWidth && distance >= 0 && distance <= stand.rows * stand.run)) return false;
-  const row = Math.min(stand.rows, 1 + Math.floor(distance / stand.run));
-  return Math.abs(height - (stand.base + row * stand.rise)) <= .40;
+  const row = Math.min(stand.rows - 1, Math.floor(distance / stand.run));
+  return Math.abs(height - (stand.base + plazaPhotoTierRise(row))) <= .40;
 }
 
 export function inPlazaPhotoRequestZone(east: number, north: number, height: number) {

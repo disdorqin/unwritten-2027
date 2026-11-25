@@ -4,6 +4,7 @@ COPY tools/voxel-tavern/package.json tools/voxel-tavern/package-lock.json ./
 # The preview uses published builds; the upstream protocol's installer requires pnpm in its own source repo.
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY docs/p0-layout-draft.json /app/docs/p0-layout-draft.json
+COPY tools/fixtures/main-summit-snow-belt-survey.json /app/tools/fixtures/main-summit-snow-belt-survey.json
 COPY tools/voxel-tavern/ ./
 COPY src/presence/ /app/src/presence/
 COPY src/shared/ /app/src/shared/

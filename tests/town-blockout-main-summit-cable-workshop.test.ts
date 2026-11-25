@@ -47,18 +47,18 @@ test('R7: ordinary player world mounts no unapproved new expedition scenery or p
   assert.equal(assembly.group.getObjectByName('main-summit-expedition-sites'), undefined);
   assert.equal(assembly.group.getObjectByName('main-summit-cable-machine-workshop'), undefined);
   assert.equal(assembly.group.getObjectByName('main-summit-nine-cloud-bell-array'), undefined);
-  assert.deepEqual(assembly.mountedParts(), ['P-1', 'P-2', 'P-3', 'P-4', 'P-7', 'P-9']);
+  assert.deepEqual(assembly.mountedParts(), ['P-1', 'P-2', 'P-3', 'P-4', 'P-7', 'P-8', 'P-9']);
 });
 
 test('R3: live main summit mounts scenery in same local survey without damaging P-7 dock', t => {
   const root = new Group();
-  const assembly = mountMainSummitAssembly(root, 0, { expeditionPreview: true });
+  const assembly = mountMainSummitAssembly(root, 0, undefined, { expeditionPreview: true });
   t.after(assembly.dispose);
   assert.ok(assembly.expedition && assembly.workshop && assembly.cloudBells,
     'The review must require explicit candidate opt-in');
   assert.equal(assembly.expedition.group.parent, assembly.group);
   assert.equal(assembly.workshop.group.parent, assembly.group);
-  assert.equal(assembly.mountedParts().length, 6, 'Approved original mountain packages stay present');
+  assert.equal(assembly.mountedParts().length, 7, 'Approved original P-1/2/3/4/7/8/9 stay present');
   assert.equal(assembly.trailSurfaceAt(-21, 7), 347.065);
   assert.ok(!assembly.blocked(-17, 7, 347, .27, 1.8),
     'The new hall entrance remains open in the actual host geometry');

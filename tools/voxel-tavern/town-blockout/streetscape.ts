@@ -3,9 +3,11 @@ import {
   InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, SphereGeometry, Vector3,
   type Material,
 } from 'three';
-import { bridgeAt, isWater, layout, riverX, waterHeight, type createTerrainGrid } from './terrain';
+import { bridgeAt, isWater, layout, riverX, waterHeight, worldBounds, type createTerrainGrid } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addTavernStreetBanner } from './market-stall-banners';
+import { streetInfill, type StreetInfillKind } from './streetscape-infill';
+import { districtParcels, extensionPlots, extensionStreetClearance } from './town-extension';
 
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Dimensions = [width: number, height: number, depth: number];
@@ -54,9 +56,26 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     return keepClear(x, n, radius) || roadCorridorKeepClear(x, n, radius);
   }
 
-  function reserve(x: number, n: number, radius: number, colliderRadius = 0) {
-    if (!Number.isFinite(x + n) || x < 2 + radius || x > layout.width - 2 - radius
-      || n < 2 + radius || n > layout.depth - 2 - radius || isWater(x, n) || protectedArea(x, n, radius)
+  function infillProtectedArea(x: number, n: number, radius: number) {
+    if (extensionStreetClearance(x, n, radius)) return true;
+    const oldMargin = 8 + radius;
+    if (x <= layout.width - oldMargin && n <= layout.depth - oldMargin) return protectedArea(x, n, radius);
+    // The older occupancy callback protects the whole expansion as outside its lots.
+    if (roadCorridorKeepClear(x, n, radius)) return true;
+    for (const { origin: [east, north], footprint: [width, depth] } of extensionPlots) {
+      if (Math.abs(x - east) < width / 2 + radius && Math.abs(n - north) < depth / 2 + radius) return true;
+    }
+    for (const parcels of Object.values(districtParcels)) for (const [east, north, width, depth] of parcels) {
+      if (Math.hypot(x - east, n - north) < Math.hypot(width, depth) / 2 + radius) return true;
+    }
+    return false;
+  }
+
+  function reserve(x: number, n: number, radius: number, colliderRadius = 0, infill = false) {
+    const bounds = infill ? worldBounds : layout;
+    if (!Number.isFinite(x + n) || x < 2 + radius || x > bounds.width - 2 - radius
+      || n < 2 + radius || n > bounds.depth - 2 - radius || isWater(x, n)
+      || (infill ? infillProtectedArea(x, n, radius) : protectedArea(x, n, radius))
       || grid.surfaces[Math.round(n) * grid.gridWidth + Math.round(x)] === 4
       || footprints.some(other => Math.hypot(x - other.x, n - other.n) < radius + other.radius)) return false;
     footprints.push({ x, n, radius });
@@ -188,8 +207,9 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     part('rock', x + fx * .34, y + 1.97, n + fn * .34, [.16, .14, .16], '#f10');
   }
 
+  const benchRadius = 1.7;
   function bench(x: number, n: number, direction: number) {
-    if (!reserve(x, n, 1.7)) return;
+    if (!reserve(x, n, benchRadius)) return;
     const y = grid.heightAt(x, n);
     const point = (u: number, v = 0) => [x + u * Math.cos(direction) - v * Math.sin(direction), n + u * Math.sin(direction) + v * Math.cos(direction)] as const;
     for (const u of [-.88, .88]) {
@@ -414,6 +434,109 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
     }
   }
 
+  const legacyFootprints = footprints.length;
+  const infillPlaced = new Map<string, StreetInfillKind[]>();
+  const infillSize = {
+    lantern: [.55, .22], fence: [1.4, .58], firewood: [.8, .55], sign: [.76, .24],
+    fir: [1.65, .36], lanternFir: [1.65, .36], stall: [1.65, .92], well: [1.28, .95], dryingRack: [1.35, .52],
+  } as const;
+
+  function addInfill(kind: StreetInfillKind, x: number, n: number, yaw: number) {
+    if (kind === 'snowman') {
+      if (!extensionStreetClearance(x, n, 1.25)) snowman(x, n, yaw);
+      return;
+    }
+    if (kind === 'bench') {
+      if (!extensionStreetClearance(x, n, benchRadius)) bench(x, n, yaw);
+      return;
+    }
+    const [radius, collision] = infillSize[kind];
+    if (!reserve(x, n, radius, collision, true)) return;
+    const y = grid.heightAt(x, n);
+    const dx = Math.cos(yaw), dn = Math.sin(yaw);
+    const block = (u: number, h: number, v: number, size: Dimensions, tint: string) =>
+      box(x + dx * u - dn * v, y + h, n + dn * u + dx * v, size, tint, yaw);
+
+    switch (kind) {
+      case 'fir':
+      case 'lanternFir':
+        block(0, .67, 0, [.24, 1.34, .26], timber);
+        for (const [tier, width] of [2.22, 1.63, 1.02, .55].entries()) {
+          const height = 1.04 + tier * .47;
+          block(0, height, 0, [width, .58, width * .86], tier % 2 ? '#395b53' : '#36534e');
+          block(0, height + .33, 0, [width * .91, .10, width * .76], snow);
+        }
+        if (kind === 'lanternFir') {
+          lantern(x - dx * .82, y + 1.36, n - dn * .82, .34);
+          lantern(x + dx * .65, y + 1.85, n + dn * .65, .31);
+        }
+        break;
+      case 'lantern':
+        block(0, .13, 0, [.48, .26, .48], stone);
+        block(0, 1.34, 0, [.15, 2.68, .15], timber);
+        block(.23, 2.61, 0, [.49, .10, .16], wood);
+        lantern(x + dx * .39, y + 2.45, n + dn * .39, .28);
+        break;
+      case 'fence':
+        for (const u of [-1.05, 0, 1.05]) {
+          block(u, .33, 0, [.15, .74, .15], timber);
+          block(u, .74, 0, [.19, .09, .19], snow);
+          if (u) colliders.push({ x: x + dx * u, n: n + dn * u, radius: .26 });
+        }
+        for (const h of [.27, .56]) block(0, h, 0, [2.16, .12, .11], wood);
+        break;
+      case 'firewood':
+        block(0, .11, 0, [1.30, .22, .73], timber);
+        for (const [row, count] of [5, 4, 3].entries()) for (let i = 0; i < count; i++) {
+          const u = (i - (count - 1) / 2) * .19;
+          block(u, .27 + row * .15, 0, [.16, .16, .67], wood);
+          block(u, .27 + row * .15, -.34, [.123, .123, .035], '#bf956a');
+        }
+        block(0, .69, 0, [.84, .09, .72], snow);
+        break;
+      case 'stall':
+        for (const u of [-.88, .88]) for (const v of [-.63, .63]) {
+          block(u, 1.03, v, [.13, 2.18, .13], timber);
+        }
+        block(0, .78, -.07, [1.9, .14, 1.0], wood);
+        block(0, .49, -.52, [1.8, .43, .11], timber);
+        for (const u of [-.75, -.25, .25, .75]) {
+          block(u, 2.17, 0, [.50, .13, 1.54], Math.abs(u) > .5 ? red : '#d6ac79');
+        }
+        block(0, 2.31, .25, [1.99, .10, .69], snow);
+        break;
+      case 'sign':
+        block(0, .9, 0, [.14, 1.80, .14], timber);
+        block(.25, 1.50, 0, [.88, .30, .12], wood);
+        block(.47, 1.50, -.08, [.14, .14, .045], gold);
+        block(.25, 1.68, 0, [.88, .09, .16], snow);
+        break;
+      case 'well':
+        part('pillar', x, y + .34, n, [1.78, .68, 1.78], stone, yaw);
+        part('pillar', x, y + .69, n, [1.92, .13, 1.92], '#8191a1', yaw);
+        part('pillar', x, y + .76, n, [1.40, .037, 1.40], '#293b4d', yaw);
+        for (const u of [-.72, .72]) block(u, .94, 0, [.14, 1.88, .14], timber);
+        block(0, 1.91, 0, [1.58, .14, .13], wood);
+        break;
+      case 'dryingRack':
+        for (const u of [-1.04, 1.04]) block(u, .89, 0, [.13, 1.78, .14], timber);
+        block(0, 1.61, 0, [2.16, .08, .09], wood);
+        block(-.54, 1.33, 0, [.42, .47, .07], '#cbbfb0');
+        block(.28, 1.25, 0, [.67, .61, .07], '#8d4a45');
+        break;
+    }
+  }
+
+  for (const { id, points } of streetInfill) {
+    const placed: StreetInfillKind[] = [];
+    for (const [kind, x, n, yaw = 0] of points) {
+      const before = footprints.length;
+      addInfill(kind, x, n, yaw);
+      if (footprints.length > before) placed.push(kind);
+    }
+    infillPlaced.set(id, placed);
+  }
+
   const lit = new MeshBasicMaterial();
   const neutral = new MeshLambertMaterial();
   const instanceColor = new Color();
@@ -436,8 +559,9 @@ export function addStreetscape(parent: Group, grid: Ground, keepClear: (x: numbe
 
   return {
     count: footprints.length + (batches.get('floe')?.length ?? 0),
-    occupied: (x: number, n: number, radius: number) => footprints.some(other =>
-      Math.hypot(x - other.x, n - other.n) < other.radius + radius),
+    infillPlaced,
+    occupied: (x: number, n: number, radius: number) => footprints.some((other, index) =>
+      index < legacyFootprints && Math.hypot(x - other.x, n - other.n) < other.radius + radius),
     blocked: (x: number, n: number) => colliders.some(other => Math.hypot(x - other.x, n - other.n) < other.radius + .26),
   };
 }

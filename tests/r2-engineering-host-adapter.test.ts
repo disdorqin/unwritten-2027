@@ -163,3 +163,67 @@ test('actual stock ride runs the R2 hinge downhill and rejects swept uphill appr
     assert.ok(position.metres < candidate.gate.metres + r2SledFootRadius + .01);
   }
 });
+
+test('stock sled keeps momentum through both R2 grants and holds at a denied seam', () => {
+  const start = coordinate('entry', -1);
+  const startYaw = candidate.pointsAt(0, 0).yaw;
+  const exitMetres = adapter.track.horizontalMetres;
+
+  for (const deniedPort of [undefined, 'entry', 'exit'] as const) {
+    const grants = new Map<PortName, number>();
+    const port = (name: PortName) => ({
+      ...fixturePort(name),
+      permitsTransfer() {
+        grants.set(name, (grants.get(name) ?? 0) + 1);
+        return name !== deniedPort;
+      },
+    });
+    const world = adapter.sledWorld({ entry: port('entry'), exit: port('exit') }, effects);
+    const driven = rollR2EngineeringCandidate({
+      ...candidate,
+      createRide() {
+        const ride = createSledRide(world);
+        return { ...ride, mount: () => ride.mount(start.east, start.north, start.height, startYaw) };
+      },
+    });
+    const entered = driven.trace.findIndex(({ metres }) => metres >= 0);
+    const exited = driven.trace.findIndex(({ metres }) => metres > exitMetres);
+    assert.ok(driven.trace[0]!.metres < 0 && driven.active);
+    assert.equal(driven.greatestRise, 0);
+    assert.equal(driven.airborneFrames, 0);
+    if (deniedPort) {
+      assert.ok(grants.has(deniedPort));
+      const boundary = deniedPort === 'entry' ? 0 : exitMetres;
+      assert.ok(driven.finishPosition!.metres <= boundary && driven.finishPosition!.metres > boundary - .05);
+      assert.equal(deniedPort === 'entry' ? entered : exited, -1);
+      if (deniedPort === 'entry') assert.equal(grants.has('exit'), false);
+      continue;
+    }
+    assert.deepEqual(Array.from(grants), [['entry', 1], ['exit', 1]]);
+    assert.ok(entered > 0 && exited > entered);
+    for (const seam of [entered, exited]) {
+      const before = driven.trace[seam - 1]!, after = driven.trace[seam]!;
+      assert.ok(before.speed > 0 && after.speed > 0 && Math.abs(after.speed - before.speed) < .1);
+      assert.ok(after.height < before.height);
+    }
+  }
+});
+
+test('stock reboarding keeps the parked pose on R2 when the one-way hinge refuses approach', () => {
+  let impacts = 0;
+  const world = adapter.sledWorld({}, { ...effects, onGateImpact() { impacts++; } });
+  for (const offset of [-1.73, 0, 1.73]) {
+    const point = (along: number) => candidate.pointsAt(candidate.gate.metres + along, offset);
+    for (const [parkedAt, playerAt, allowed] of [[-.8, .8, false], [-.8, -1.2, true], [.8, -.8, true]] as const) {
+      const ride = createSledRide(world);
+      const parked = point(parkedAt), player = point(playerAt);
+      assert.ok(ride.mount(parked.east, parked.north, parked.height, parked.yaw) && ride.leave());
+      const before = { ...ride.parked() };
+      assert.equal(ride.canRemount(player.east, player.north, player.height), allowed);
+      assert.equal(ride.remount(player.east, player.north, player.height), allowed);
+      assert.deepEqual(allowed ? ride.spot : ride.parked(), before);
+      assert.equal(ride.active(), allowed);
+    }
+  }
+  assert.equal(impacts, 0);
+});

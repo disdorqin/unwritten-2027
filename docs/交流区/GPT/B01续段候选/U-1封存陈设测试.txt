@@ -1,0 +1,15 @@
+✔ sealing signs use only the approved short commands and statuses (3.435466ms)
+✔ the actual spiral mesh still clears the broken fence and four other scenery groups (32.466481ms)
+ℹ {"samples":4503,"reversible":true,"clearFenceGapMetres":3.199999999999999,"playerDiameter":0.54,"props":{"renderedBoxes":26,"renderedBeams":29,"blockers":13,"signs":4}}
+✔ a cargo seam is visibly dark but its solid shell and the walls still block movement (0.569092ms)
+✔ the main damaged crane arm points to the physical crater center and leaves the pit-bottom well separate (0.27847ms)
+✔ unsupported geometry and missing alignment are rejected (1.312647ms)
+✔ the Three mesh uses one solid batch, preserves placement and releases all owned sign textures (2.164423ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1003.836514

@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Group} from 'three';
+import {resolveSecondMineSurvey,secondMineSurvey,type SurveyRegistration} from '../src/shared/town-c-second-mine-survey.js';
+import {mountSecondMineDomain} from '../tools/voxel-tavern/town-blockout/town-c-second-mine-domain.js';
+import type {MineRiverState} from '../src/shared/underground-second-mine-layout.js';
+const frame={domainId:'review-only/second-mine',east:712,north:-450,height:-140,yaw:Math.PI/3};
+const registration:SurveyRegistration={frame,acceptsGeometry:()=>true,acceptsFoot:()=>true};
+test('second mine survey refuses unregistered or unsupported poses; C2 uses exact geometry dimensions',()=>{
+ assert.equal(resolveSecondMineSurvey().kind,'unregistered');
+ assert.equal(resolveSecondMineSurvey({...registration,frame:{...frame,domainId:'underground/mine'}}).kind,'invalid-frame');
+ assert.equal(resolveSecondMineSurvey({...registration,acceptsGeometry:()=>false}).kind,'unsupported-geometry');
+ assert.equal(resolveSecondMineSurvey({...registration,acceptsFoot:(_f,role)=>role!=='exit'}).kind,'unsupported-foot');
+ assert.deepEqual(secondMineSurvey.river,{minEast:-48,maxEast:48,minNorth:128,maxNorth:146,bed:-.7});
+ assert.deepEqual(secondMineSurvey.bounds,{minEast:-66,maxEast:66,minNorth:0,maxNorth:198,minHeight:-.7,maxHeight:13});
+});
+test('approved frame is reversible; state and visibility fail closed without accepted source',()=>{
+ const parent=new Group();let phase:MineRiverState|undefined;
+ assert.equal(mountSecondMineDomain({parent,registration,readAcceptedRiverState:()=>phase}).kind,'unregistered-water');
+ assert.equal(parent.children.length,0);phase='high';
+ const m=mountSecondMineDomain({parent,registration,readAcceptedRiverState:()=>phase});
+ assert.equal(m.kind,'ready');if(m.kind!=='ready')assert.fail();
+ assert.equal(parent.children.length,1);assert.equal(m.getRiverState(),'high');
+ const point={east:51.5,north:135,height:0},w=m.toWorld(point),p=m.registered.toLocal(w);
+ for(const k of ['east','north','height'] as const)assert.ok(Math.abs(point[k]-p[k])<1e-8);
+ assert.deepEqual(m.passageAt(w.east,w.north),{floor:-140,domainId:frame.domainId});
+ const wet=m.toWorld({east:10,north:137,height:0});assert.equal(m.passageAt(wet.east,wet.north),undefined);
+ phase='low';assert.ok(m.sync());assert.equal(m.passageAt(wet.east,wet.north)?.floor,-140.7);
+ phase=undefined;assert.equal(m.sync(),false);assert.equal(m.group.visible,false);assert.equal(m.passageAt(w.east,w.north),undefined);
+ phase='middle';assert.ok(m.sync());assert.equal(m.group.visible,true);m.dispose();assert.equal(parent.children.length,0);
+});

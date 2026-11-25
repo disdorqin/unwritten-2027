@@ -66,9 +66,10 @@ function inbox<T>(socket: WebSocket, binary: boolean, decode: (frame: Buffer) =>
   };
 }
 
-async function fixture(context: TestContext, ceremonyStartAt?: number) {
-  const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ceremonyStartAt });
-  const url = "ws://127.0.0.1:" + server.address().port + "/presence";
+async function fixture(context: TestContext, options: { ceremonyStartAt?: number; formalSnowfight?: boolean } = {}) {
+  const server = await createPresenceServer({ host: "127.0.0.1", port: 0, ...options });
+  const address = "127.0.0.1:" + server.address().port;
+  const url = `ws://${address}/presence`;
   const sockets: WebSocket[] = [];
   context.after(async () => {
     for (const socket of sockets) socket.terminate();
@@ -100,12 +101,12 @@ async function fixture(context: TestContext, ceremonyStartAt?: number) {
     socket.send(bytes);
   }
 
-  return { join, sendPose };
+  return { join, sendPose, base: `http://${address}/presence/poll` };
 }
 
-test("snowfight: start assigns teams, place validates half and roads, three hits clear a wall",
+test("snowfight: start assigns teams, place validates half and roads, and hits leave the wall intact",
   { timeout: 9000 }, async context => {
-    const { join, sendPose } = await fixture(context);
+    const { join, sendPose } = await fixture(context, { formalSnowfight: true });
     const a = await join("红队甲");
     const b = await join("金队乙");
     sendPose(a.socket, 224, 188, 1);
@@ -144,36 +145,26 @@ test("snowfight: start assigns teams, place validates half and roads, three hits
     a.socket.send(Buffer.from(encodeWallPlace(367, 407)));
     assert.equal((await roadReject).reason, "road");
 
-    // 三击塌墙：hp 3→2→1→WALL_CLEAR
+    // Legacy clients may still report a hit, but it cannot change wall HP or layers.
     const hit = (ballId: number) =>
       b.socket.send(Buffer.from(encodeWallHit({ gx: 600, gy: 500, layer: 0, ballId, throwerId: b.id })));
-    const damaged1 = a.walls.next(events => events.some(
-      event => event.kind === "wall-set" && event.hp === 2));
     hit(101);
-    await damaged1;
-    const damaged2 = a.walls.next(events => events.some(
-      event => event.kind === "wall-set" && event.hp === 1));
     hit(102);
-    await damaged2;
-    const cleared = a.walls.next(events => events.some(event => event.kind === "wall-clear"));
-    hit(103);
-    const clearEvents = await cleared;
-    const clear = clearEvents.find(event => event.kind === "wall-clear");
-    assert.ok(clear && clear.kind === "wall-clear");
-    if (clear && clear.kind === "wall-clear") {
-      assert.deepEqual(clear.blocks, [{ gx: 600, gy: 500, layer: 0 }]);
-    }
-
-    // 重复 ballId 的命中报告被去重：不再有后续墙事件
     hit(103);
     await new Promise(resolve => setTimeout(resolve, 250));
-    assert.ok(!a.walls.pending().flat().some(event => event.kind === "wall-set" && event.hp < 3),
-      "duplicate wall-hit report is ignored");
+    for (const client of [a, b]) {
+      assert.ok(!client.walls.pending().flat().some(event => event.kind === "wall-clear" ||
+        event.kind === "wall-set" && event.hp < 3));
+    }
+    const next = a.walls.next(events => events.some(event =>
+      event.kind === "wall-set" && event.gx === 600 && event.gy === 500 && event.layer === 1));
+    a.socket.send(Buffer.from(encodeWallPlace(600, 500)));
+    await next;
   });
 
 test("snowfight: sled smash clears a one-layer wall for both clients, enforces four speed bands, hard cap and proximity",
   { timeout: 9000 }, async context => {
-    const { join, sendPose } = await fixture(context);
+    const { join, sendPose } = await fixture(context, { formalSnowfight: true });
     const a = await join("红队甲");
     const b = await join("金队乙");
     sendPose(a.socket, 224, 188, 1);
@@ -223,7 +214,9 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
 
     await place(600, 500, 1);
     await place(600, 500, 2);
-    await place(600, 500, 3);
+    const fourth = a.text.next(message => message.type === "snowfight-rejected" && message.reason === "stack");
+    a.socket.send(Buffer.from(encodeWallPlace(600, 500)));
+    assert.equal((await fourth).reason, "stack");
     async function clearLayers(speed: number, layers: number[]) {
       const awaits = [a, b].map(client => client.walls.next(events =>
         events.some(event => event.kind === "wall-clear")));
@@ -234,12 +227,12 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
     }
     smash(600, 500, sledWallReportSpeed(7.99));
     await noClear();
-    await clearLayers(8, [3]);
-    await clearLayers(15, [1, 2]);
+    await clearLayers(8, [2]);
+    await clearLayers(15, [0, 1]);
+    await place(600, 500, 0);
     await place(600, 500, 1);
     await place(600, 500, 2);
-    await place(600, 500, 3);
-    await clearLayers(22.01, [0, 1, 2, 3]);
+    await clearLayers(22.01, [0, 1, 2]);
 
     // 远报：B 退回广场（距格心约 94 m），同一报告被位置裁定拒绝；
     // 回到墙边后重报同格（二层列旁的一层新格 602,500）立即生效，作为近距正对照。
@@ -254,38 +247,39 @@ test("snowfight: sled smash clears a one-layer wall for both clients, enforces f
     await clearNear;
   });
 
-test("free wall placement keeps only outdoors water, mainline and buildings out", () => {
+test("free wall placement keeps doors and traffic approaches clear", () => {
   const sites = [[183.75, 203.75, "road"], [238.25, 140.25, "stage"],
     [473.75, 224.25, "platform"], [226.25, 215.25, "door"]] as const;
   for (const [east, north, before] of sites) {
     assert.equal(classifyWallSite(east, north), before);
-    assert.equal(classifyFreeWallSite(east, north), undefined);
+    assert.equal(classifyFreeWallSite(east, north), before === "road" || before === "door" ? before : undefined);
   }
   assert.equal(classifyFreeWallSite(291, 197), "river");
   assert.equal(classifyFreeWallSite(297, 71), "river");
   assert.equal(classifyFreeWallSite(478, 224), "rail");
   assert.equal(classifyFreeWallSite(226, 223), "interior");
   assert.equal(classifyFreeWallSite(133.25, 266.25), "interior");
-  assert.equal(classifyFreeWallSite(133.25, 272.25), undefined);
+  assert.equal(classifyFreeWallSite(133.25, 272.25), "door");
+  assert.equal(classifyFreeWallSite(133.25, 274.25), undefined);
   assert.equal(classifyFreeWallSite(80.25, 416.25), undefined);
   assert.equal(classifyFreeWallSite(82.25, 272.25), "interior");
   assert.equal(classifyFreeWallSite(87.25, 266.25), undefined);
   assert.equal(classifyFreeWallSite(484, 72), "secret");
-  assert.equal(classifyFreeWallSite(291, 192), undefined);
+  assert.equal(classifyFreeWallSite(291, 192), "road");
   assert.equal(classifyFreeWallSite(50, 470), undefined);
   const speeds = [7.99, 8, 14.99, 15, 22, 22.01, 30, 45, 45.2];
   assert.deepEqual(speeds.map(sledWallReportSpeed), [7, 8, 14, 15, 22, 23, 30, 45, 46]);
   assert.deepEqual(speeds.map(speed => sledWallImpact(sledWallReportSpeed(speed)).layers), [0, 1, 1, 2, 2, 4, 4, 4, 4]);
 });
 
-test("snowfight: approved upper-band reports 45 and 46 clear all four layers", { timeout: 9000 }, async context => {
+test("snowfight: approved upper-band reports 45 and 46 clear the entire three-layer column", { timeout: 9000 }, async context => {
   const { join, sendPose } = await fixture(context);
   const a = await join("高档橇甲");
   const b = await join("高档橇乙");
   sendPose(a.socket, 320, 250, 1);
   for (const [author, gx, speed] of [[a, 640, 45], [b, 644, 45.2]] as const) {
     const gy = 500;
-    for (let layer = 0; layer < 4; layer++) {
+    for (let layer = 0; layer < 3; layer++) {
       const set = author.walls.next(events => events.some(event =>
         event.kind === "wall-set" && event.gx === gx && event.gy === gy && event.layer === layer));
       author.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
@@ -296,9 +290,9 @@ test("snowfight: approved upper-band reports 45 and 46 clear all four layers", {
     const report = sledWallReportSpeed(speed);
     a.socket.send(Buffer.from(encodeSledSmash({ gx, gy, speed: report })));
     for (const frame of await Promise.all(frames)) {
-      assert.deepEqual(frame, [{ kind: "wall-clear", blocks: [0, 1, 2, 3].map(layer => ({ gx, gy, layer })) }]);
+      assert.deepEqual(frame, [{ kind: "wall-clear", blocks: [0, 1, 2].map(layer => ({ gx, gy, layer })) }]);
     }
-    console.log("approved sled speed, wire speed and layers cleared on both clients", speed, report, 4);
+    console.log("approved sled speed, wire speed and layers cleared on both clients", speed, report, 3);
   }
 });
 
@@ -311,7 +305,10 @@ test("free snow wall server rejects occupied homes and accepts dry exterior", { 
   assert.equal((await rejected).reason, "interior");
   assert.equal(a.walls.pending().length, 0);
   assert.equal(b.walls.pending().length, 0);
-  for (const [gx, gy] of [[266, 544], [160, 832]]) {
+  const door = a.text.next(message => message.type === "snowfight-rejected");
+  a.socket.send(Buffer.from(encodeWallPlace(266, 544)));
+  assert.equal((await door).reason, "door");
+  for (const [gx, gy] of [[266, 548], [160, 832]]) {
     const frames = [a, b].map(client => client.walls.next(events =>
       events.some(event => event.kind === "wall-set" && event.gx === gx && event.gy === gy)));
     a.socket.send(Buffer.from(encodeWallPlace(gx, gy)));
@@ -321,12 +318,65 @@ test("free snow wall server rejects occupied homes and accepts dry exterior", { 
   }
 });
 
+test("public snow walls stay free under legacy start requests on WebSocket and HTTP polling", { timeout: 9000 }, async context => {
+  const { base, join } = await fixture(context);
+  const author = await join("自由雪墙甲");
+  const observer = await join("自由雪墙乙");
+  const legacyStart = JSON.stringify({ type: "event", kind: "snowfight-start" });
+  const west = { gx: 626, gy: 500 };
+  const east = { gx: 800, gy: 500 };
+  const freeWall = (cell: typeof west, ownerId: number) =>
+    ({ kind: "wall-set", ...cell, layer: 0, hp: 3, ownerId, team: 2 });
+  const isAt = (events: SnowfightRelayEvent[], cell: typeof west) => events.some(event =>
+    event.kind === "wall-set" && event.gx === cell.gx && event.gy === cell.gy);
+
+  author.socket.send(legacyStart);
+  for (const cell of [west, east]) {
+    const frames = [author, observer].map(client => client.walls.next(events => isAt(events, cell)));
+    author.socket.send(encodeWallPlace(cell.gx, cell.gy));
+    for (const frame of await Promise.all(frames)) assert.deepEqual(frame, [freeWall(cell, author.id)]);
+  }
+  assert.ok(!author.text.pending().some(message => message.type === "snowfight"));
+  assert.ok(!observer.text.pending().some(message => message.type === "snowfight"));
+  for (const [gx, gy, reason] of [[266, 544, "door"], [367, 407, "road"]] as const) {
+    const rejected = author.text.next(message => message.type === "snowfight-rejected");
+    author.socket.send(encodeWallPlace(gx, gy));
+    assert.equal((await rejected).reason, reason);
+  }
+  assert.equal(author.walls.pending().flat().length, 0);
+  assert.equal(observer.walls.pending().flat().length, 0);
+
+  type PollMessage = { t: string; d: string };
+  const wallsOf = (messages: PollMessage[]) => messages.flatMap(message =>
+    message.t === "bin" ? decodeSnowfightRelay(Buffer.from(message.d, "base64")) ?? [] : []);
+  const joined = await fetch(`${base}/join`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "晚到轮询" }),
+  });
+  assert.equal(joined.status, 200);
+  const poll = await joined.json() as { id: number; session: string; messages: PollMessage[] };
+  assert.deepEqual(wallsOf(poll.messages), [freeWall(west, author.id), freeWall(east, author.id)]);
+  const lake = { gx: 790, gy: 132 };
+  const broadcasts = [author, observer].map(client => client.walls.next(events => isAt(events, lake)));
+  const response = await fetch(base, {
+    method: "POST", headers: { "content-type": "application/json", "x-presence-session": poll.session },
+    body: JSON.stringify({ events: [
+      { t: "text", d: legacyStart },
+      { t: "bin", d: Buffer.from(encodeWallPlace(lake.gx, lake.gy)).toString("base64") },
+    ] }),
+  });
+  assert.equal(response.status, 200);
+  const placed = await response.json() as { messages: PollMessage[] };
+  assert.deepEqual(wallsOf(placed.messages), [freeWall(lake, poll.id)]);
+  for (const frame of await Promise.all(broadcasts)) assert.deepEqual(frame, [freeWall(lake, poll.id)]);
+  assert.ok(!placed.messages.some(message => message.t === "text" && JSON.parse(message.d).type === "snowfight"));
+});
+
 test("free snow walls relay three authored layers, survive joining, and clear before ceremony arrival",
   { timeout: 9000 }, async context => {
     let epoch = Date.now();
     context.mock.method(Date, "now", () => epoch);
     const startAt = epoch + 20_000;
-    const { join } = await fixture(context, startAt);
+    const { join } = await fixture(context, { ceremonyStartAt: startAt });
     const a = await join("雪墙作者");
     const b = await join("雪墙访客");
     const outside = { gx: 640, gy: 500 };

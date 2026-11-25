@@ -1,7 +1,9 @@
 import {
-  BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, ShaderMaterial,
+  BoxGeometry, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, Mesh, MeshBasicMaterial,
+  MeshLambertMaterial, Object3D, ShaderMaterial,
 } from 'three';
+import { insideSkyCityDistrictFootprint } from './sky-city-district';
+import { insideSkyObservatoryHall } from './sky-city-observatory-hall';
 
 type Point = readonly [x: number, y: number, z: number];
 type PlanPoint = readonly [x: number, z: number];
@@ -76,6 +78,22 @@ function paths() {
       path.panel(left, right, nextRight, nextLeft, fieldColor(paving, seed + i));
       const [ax, az] = route[i - 1]!, [bx, bz] = route[i]!;
       const count = Math.ceil(Math.hypot(bx - ax, bz - az) / 1.4);
+      // Staggered ashlar paving drawn in the same vertex-colour mesh.
+      // Tile corners are inset from the ribbon edge and flush with the floor.
+      const span=Math.hypot(bx-ax,bz-az);
+      const rows=Math.max(1,Math.ceil(span/.76)),cols=Math.max(2,Math.floor(width/.74));
+      function tile(t:number,u:number):Point{
+        const lx=left[0]+(nextLeft[0]-left[0])*t,lz=left[2]+(nextLeft[2]-left[2])*t;
+        const rx=right[0]+(nextRight[0]-right[0])*t,rz=right[2]+(nextRight[2]-right[2])*t;
+        return [lx+(rx-lx)*u,.026,lz+(rz-lz)*u];
+      }
+      for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+        const shift=row%2?.20:0;
+        const u0=(col+.055+shift)/cols,u1=(col+.945+shift)/cols;
+        if(u1>=1)continue;
+        const t0=(row+.037)/rows,t1=(row+.963)/rows;
+        path.panel(tile(t0,u0),tile(t0,u1),tile(t1,u1),tile(t1,u0),fieldColor(paving,seed+i*71+row*17+col));
+      }
       for (let j = 0; j < count; j++) {
         const t = (j + .5) / count;
         for (const side of [-1, 1]) {
@@ -99,24 +117,38 @@ function paths() {
   strip([[10.8, 0], [16, -1], [21, -5], [26, -11], [32, -16]], 3.4, 272);
   strip([[-11, -1], [-16, -5], [-23, -10], [-31, -18]], 3.6, 307);
   strip([[0, -10.8], [0, -17], [1, -25], [1, -33]], 3.7, 420);
+  // Connect the new residential and service plots with the same flush paving.
+  // Leave the landing corridor and the tower stair clear.
+  strip([[-14,31],[8,29],[17,20],[22,19],[22,16.6]],2.6,501);
+  strip([[22,19],[27.8,19],[28.5,12],[34,11.3],[34,8.6]],2.25,561);
+  strip([[34,11.3],[38,13.2],[43,13.8]],2.1,611);
+  strip([[32,-16],[37,-18.5],[39,-22.9]],2.45,641);
+  strip([[-31,-18],[-32,-19.9]],2.25,671);
+  strip([[8,29],[12,33]],2.5,701);
+  strip([[15,20],[15,12],[15,7],[16,1],[16,-2]],2.6,741);
   return path.mesh('spring-road-and-landing-lane');
 }
 
 function meadow() {
   const model = facets();
   const tuft = new Color('#7e9e51');
-  for (let patch = 0; patch < 74; patch++) {
+  for (let patch = 0; patch < 168; patch++) {
     const angle = scatter(patch * 31) * turn;
     const radius = 26 + scatter(patch * 31 + 1) * 25;
     const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
-    if ((z > 12 && Math.abs(x + 14) < 7) || (Math.abs(x) < 4 && z < 0)) continue;
+    if ((z > 12 && Math.abs(x + 14) < 7) || (Math.abs(x) < 4 && z < 0) ||
+        (Math.abs(x-12)<6&&Math.abs(z-36)<5)||(Math.abs(x+16)<2.8&&Math.abs(z+39)<2.8)||
+        (Math.abs(x+28)<10&&z>3&&z<22)||Math.hypot(x,z+35)<10) continue;
     const color = fieldColor(flowers, patch);
     for (let stalk = 0; stalk < 6; stalk++) {
       const index = patch * 41 + stalk * 5;
       const dx = x + (scatter(index) - .5) * 2.1;
       const dz = z + (scatter(index + 1) - .5) * 2.1;
-      const h = .16 + scatter(index + 2) * .26;
-      model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], tuft);
+      if(insideSkyCityDistrictFootprint(dx,dz)||insideSkyObservatoryHall(dx,dz,.5))continue;
+      const h = .13 + scatter(index + 2) * .23;
+      const stalkColor=stalk%3?tuft:fieldColor(grass,index);
+      model.triangle([dx - .055, .03, dz], [dx + .055, .03, dz], [dx + .035, h, dz], stalkColor);
+      model.triangle([dx, .03, dz-.055], [dx, .03, dz+.055], [dx-.02, h*.86, dz+.03], stalkColor);
       if (stalk % 2) continue;
       model.panel([dx - .12, h - .028, dz], [dx, h + .082, dz], [dx + .12, h, dz],
         [dx, h - .052, dz], color);
@@ -267,8 +299,49 @@ export function buildSkyCityIsland() {
     return { x, z, endZ, dx, dz, lengthSquared: dx * dx + dz * dz };
   });
 
+  // The actual survey polygon owns the perimeter. Build a continuous inset
+  // barrier from those edges, except the south aircraft corridor. Leave a
+  // deliberate open flight approach rather than a hidden collision wall.
+  const railSegments:{ax:number;az:number;bx:number;bz:number}[]=[];
+  const railGeometry=new BoxGeometry();
+  const railFrame=new Object3D();
+  const railBatch=new Map<string,ReturnType<typeof railFrame.matrix.clone>[]>();
+  function railPart(color:string,x:number,y:number,z:number,w:number,h:number,d:number,yaw:number){
+    railFrame.position.set(x,y,z);railFrame.rotation.set(0,yaw,0);railFrame.scale.set(w,h,d);railFrame.updateMatrix();
+    const batch=railBatch.get(color)??[];batch.push(railFrame.matrix.clone());railBatch.set(color,batch);
+  }
+  for(const edge of edges){
+    const ax=edge.x*.983,az=edge.z*.983,bx=(edge.x+edge.dx)*.983,bz=(edge.z+edge.dz)*.983;
+    const length=Math.hypot(bx-ax,bz-az),yaw=-Math.atan2(bz-az,bx-ax);
+    if(Math.max(az,bz)>45&&Math.min(ax,bx)<-9&&Math.max(ax,bx)>-19)continue;
+    railSegments.push({ax,az,bx,bz});
+    const cx=(ax+bx)/2,cz=(az+bz)/2;
+    railPart('#a99a7e',cx,.19,cz,length+.025,.38,.58,yaw);
+    railPart('#d4c6a5',cx,.42,cz,length+.025,.12,.67,yaw);
+    railPart('#5b6960',cx,.99,cz,length+.025,.11,.15,yaw);
+    railPart('#87795c',cx,.68,cz,length+.025,.065,.10,yaw);
+    const count=Math.ceil(length/1.85);
+    for(let j=0;j<count;j++){
+      const f=j/count,x=ax+(bx-ax)*f,z=az+(bz-az)*f;
+      railPart('#b7a98e',x,.63,z,.29,.68,.34,yaw);
+      railPart('#d4c6a5',x,1.09,z,.39,.12,.43,yaw);
+    }
+  }
+  for(const [color,matrices]of railBatch){
+    const mesh=new InstancedMesh(railGeometry,new MeshLambertMaterial({color}),matrices.length);
+    mesh.name='sky-island-survey-perimeter-'+color;
+    matrices.forEach((matrix,index)=>mesh.setMatrixAt(index,matrix));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
+  }
+  function blocked(x:number,z:number,feet:number,radius:number){
+    if(feet>=1.16||feet+1.8<=0)return false;
+    return railSegments.some(({ax,az,bx,bz})=>{
+      const dx=bx-ax,dz=bz-az;
+      const t=Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/(dx*dx+dz*dz)));
+      return Math.hypot(x-ax-t*dx,z-az-t*dz)<radius+.34;
+    });
+  }
   return {
-    group,
+    group,blocked,
     update(seconds: number) { if (Number.isFinite(seconds)) falls.update(seconds); },
     supports(x: number, z: number, radius = .27) {
       if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius < 0 ||

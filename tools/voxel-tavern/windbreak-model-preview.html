@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>未写镇 · G09 风雪避风庭院模型审阅</title>
+<style>
+html,body{height:100%;margin:0;overflow:hidden;background:#101b2c;color:#e9eff7;font:14px system-ui}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+aside{position:absolute;top:15px;left:15px;max-width:min(380px,91vw);padding:12px 15px;border:1px solid #a7c0d344;border-radius:12px;background:#0d1e32cc;backdrop-filter:blur(13px)}
+h1{font-size:15px;color:#fbe1b0;margin:1px 0 8px}p{margin:4px 0 8px;line-height:1.5;font-size:12px;color:#c7d9e9}
+.controls{display:flex;gap:6px;flex-wrap:wrap}button{border:1px solid #8aacc6aa;background:#24405bc9;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer}
+button.active{background:#b54d3b}#stats{font:11px ui-monospace,monospace;color:#d0e1f4}#model-popup{position:absolute;bottom:11%;left:50%;transform:translateX(-50%);padding:8px 14px;background:#112b43eb;border:1px solid #a7b6c68c;border-radius:11px;max-width:90vw;font-size:12px}
+</style></head>
+<body>
+<aside><h1>G-09 风雪避风庭院 · 结构实景审阅</h1>
+<p>独立建模候选，不占现役镇页和公共 viewer；深木梁、分片灰瓦、积雪、少量新年红与暖色窗光。参考库风格最终通过仍须实图比对。</p>
+<div class="controls">
+<button id="overview" class="active">全景</button><button id="interior">进棚实看</button><button id="weather">风雪牌</button><button id="hearth">暖源</button><button id="wire">线框</button>
+</div><p id="stats">加载模型……</p><p>鼠标拖动转向，滚轮拉近/拉远；点按钮查看内部通行和装饰。这里仅验几何，正式天气玩法在集成后启用。</p></aside>
+<div id="model-popup">三维建模候选 · 模块可独立安装、卸载</div>
+<script type="module">
+import { AmbientLight, BoxGeometry, Color, DirectionalLight, Fog, Group, HemisphereLight, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer } from 'three';
+import { buildTownWindbreakCourt, windbreakEntranceClear } from './town-blockout/town-g09-windbreak-model.ts';
+const renderer=new WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);
+document.body.prepend(renderer.domElement);
+const scene=new Scene();scene.background=new Color('#1b354e');scene.fog=new Fog('#234057',55,145);
+scene.add(new HemisphereLight('#b9d8f0','#6c5f58',2.25));
+const ambient=new AmbientLight('#ffddb9',.6);scene.add(ambient);
+const moon=new DirectionalLight('#ebf7ff',2.1);moon.position.set(-16,24,-20);scene.add(moon);
+const model=buildTownWindbreakCourt();
+scene.add(model.group);
+const ground=new Mesh(new PlaneGeometry(130,95),new MeshLambertMaterial({color:'#b9ced8'}));
+ground.rotation.x=-Math.PI/2;ground.position.y=-.18;scene.add(ground);
+const camera=new PerspectiveCamera(58,innerWidth/innerHeight,.1,300);
+const presets={
+ overview:{position:[19,12,-19],target:[0,1,0]},
+ interior:{position:[0,1.68,-1.25],target:[0,1.5,2.5]},
+ weather:{position:[16,6,-9],target:[11,2,-.5]},
+ hearth:{position:[-17,6,-10],target:[-10,1,-.25]},
+};
+let selection='overview',yaw=0,zoom=1,dragging=false,lastX=0,wireframe=false;
+const vec=(values)=>({x:values[0],y:values[1],z:values[2]});
+const setPos=(p)=>{const preset=presets[p];if(!preset)return;selection=p;for(const button of document.querySelectorAll('button'))button.classList.toggle('active',button.id===p)};
+for(const key of Object.keys(presets))document.getElementById(key).addEventListener('click',()=>setPos(key));
+document.getElementById('wire').addEventListener('click',()=>{wireframe=!wireframe;model.group.traverse(node=>{if(node.isInstancedMesh)node.material.wireframe=wireframe})});
+renderer.domElement.addEventListener('pointerdown',event=>{dragging=true;lastX=event.clientX});
+renderer.domElement.addEventListener('pointermove',event=>{if(dragging){yaw+=.008*(event.clientX-lastX);lastX=event.clientX}});
+window.addEventListener('pointerup',()=>dragging=false);
+renderer.domElement.addEventListener('wheel',event=>{event.preventDefault();zoom=Math.min(2,Math.max(.55,zoom+event.deltaY*.001))},{passive:false});
+let frames=0;const stats=document.querySelector('#stats');
+function animate(){
+const {position,target}=presets[selection];const p=vec(position),t=vec(target);
+const dx=p.x-t.x,dz=p.z-t.z;
+const co=Math.cos(yaw),si=Math.sin(yaw);
+camera.position.set(t.x+(dx*co-dz*si)*zoom,p.y*zoom,t.z+(dx*si+dz*co)*zoom);
+camera.lookAt(t.x,t.y,t.z);
+renderer.render(scene,camera);
+if((frames++%25)===0) {
+const info=renderer.info.render;
+stats.textContent='体素 '+model.blocks+' · 绘制批次 '+info.calls+' · 三角面 '+info.triangles+' · 入口净空 '+(windbreakEntranceClear()?'PASS':'FAIL');
+window.__windbreakStats={blocks:model.blocks,drawBatches:model.drawBatches,calls:info.calls,triangles:info.triangles,entryClear:windbreakEntranceClear(),loaded:true};
+}
+requestAnimationFrame(animate);
+}
+document.body.dataset.modelLoaded='true';animate();
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>

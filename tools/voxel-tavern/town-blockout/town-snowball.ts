@@ -3,6 +3,7 @@ import {
   InstancedMesh, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, MeshBasicMaterial,
   MeshLambertMaterial, Object3D, OctahedronGeometry, Vector3, type Scene,
 } from 'three';
+import { createSnowballStock } from '../../../src/shared/snow-stock';
 
 export type SnowballState = { ammo: number; hits: number; combo: number };
 export type SnowballHitZone = 'head' | 'torso';
@@ -32,12 +33,13 @@ type SnowballOptions = {
   sweep(from: Vector3, to: Vector3, radius: number, thrower: string, shotBy: ShotBy): SnowballContact | undefined;
   relayPlayerThrow?(ballId: number, origin: Vector3, direction: Vector3): boolean;
   canScoreAtLaunch?(origin: Vector3, thrower: string): boolean;
+  /** Optional G-09 wind acceleration in map east/north (m/s²). Snapshot per ball. */
+  windAtLaunch?(origin: Vector3, shotBy: ShotBy): Readonly<{ east: number; north: number }>;
   onEvent?(event: SnowballEvent): void;
   onChange?(state: SnowballState): void;
   now?(): number;
 };
 
-const ammoLimit = 10;
 const shotLimit = 64;
 const sparkLimit = 72;
 const remoteShotLimit = 8;
@@ -87,7 +89,31 @@ function validAim(origin: Vector3, direction: Vector3, power: number) {
     Number.isFinite(direction.z) && direction.lengthSq() > 1e-10;
 }
 
-function flightTime(velocity: Vector3) {
+function flightTime(velocity: Vector3, windEast = 0, windNorth = 0) {
+  if (windEast !== 0 || windNorth !== 0) {
+    // Bound the travelled arc, not just displacement: a tailwind must not
+    // extend the 35 m snowball reach. Midpoint quadrature is deterministic.
+    const distance = (seconds: number) => {
+      let length = 0;
+      const dt = seconds / 32;
+      for (let i = 0; i < 32; i++) {
+        const at = (i + .5) * dt;
+        length += Math.hypot(velocity.x + windEast * at,
+          velocity.y - snowballGravity * at,
+          velocity.z - windNorth * at) * dt;
+      }
+      return length;
+    };
+    if (distance(shotLifetime) <= snowballRange) return shotLifetime;
+    let lower = 0;
+    let upper = shotLifetime;
+    for (let i = 0; i < 16; i++) {
+      const middle = (lower + upper) / 2;
+      if (distance(middle) < snowballRange) lower = middle;
+      else upper = middle;
+    }
+    return lower;
+  }
   const horizontal = Math.hypot(velocity.x, velocity.z);
   // Antiderivative of speed along a ballistic arc (vertical velocity is linear in time).
   const integral = (vertical: number) => horizontal < 1e-6 ? .5 * vertical * Math.abs(vertical) :
@@ -107,9 +133,14 @@ function flightTime(velocity: Vector3) {
   return lower;
 }
 
-function ballisticPosition(result: Vector3, origin: Vector3, velocity: Vector3, seconds: number) {
+function ballisticPosition(result: Vector3, origin: Vector3, velocity: Vector3, seconds: number,
+  windEast = 0, windNorth = 0) {
   result.copy(origin).addScaledVector(velocity, seconds);
-  result.y -= .5 * snowballGravity * seconds * seconds;
+  const halfSquare = .5 * seconds * seconds;
+  result.x += windEast * halfSquare;
+  // Town map north is -Z in Three.js. The wire and weather use +north.
+  result.z -= windNorth * halfSquare;
+  result.y -= snowballGravity * halfSquare;
 }
 
 function createAimMarker() {
@@ -147,7 +178,7 @@ function createAimMarker() {
 }
 
 export function createTownSnowballFight({
-  scene, sweep, relayPlayerThrow, canScoreAtLaunch, onEvent, onChange, now = Date.now,
+  scene, sweep, relayPlayerThrow, canScoreAtLaunch, windAtLaunch, onEvent, onChange, now = Date.now,
 }: SnowballOptions) {
   const shotMesh = new InstancedMesh(new IcosahedronGeometry(snowballRadius, 0),
     new MeshLambertMaterial({ color: '#eef8ff', emissive: '#394755' }), shotLimit);
@@ -179,7 +210,7 @@ export function createTownSnowballFight({
 
   const shots = Array.from({ length: shotLimit }, () => ({
     id: 0, thrower: '', shotBy: 'player' as ShotBy, active: false, age: 0, duration: 0, scoreable: false,
-    ballId: 0, relayed: false,
+    ballId: 0, relayed: false, windEast: 0, windNorth: 0,
     at: new Vector3(), previous: new Vector3(), velocity: new Vector3(),
   }));
   const sparks = Array.from({ length: sparkLimit }, () => ({
@@ -196,7 +227,6 @@ export function createTownSnowballFight({
   const compactEffects = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
   let sparkCursor = 0;
   let shotId = 0;
-  let ammo = 0;
   let hits = 0;
   let combo = 0;
   let simulationTime = 0;
@@ -205,18 +235,21 @@ export function createTownSnowballFight({
   let accumulator = 0;
   let disposed = false;
 
-  function getState(): SnowballState { return { ammo, hits, combo }; }
+  const stock = createSnowballStock(() => onChange?.(getState()));
 
-  function gather(amount = 1) {
-    if (disposed || ammo >= ammoLimit || !Number.isFinite(amount) || amount < 1) return false;
-    ammo = Math.min(ammoLimit, ammo + Math.floor(amount));
-    onChange?.(getState());
-    return true;
-  }
+  function getState(): SnowballState { return { ammo: stock.amount(), hits, combo }; }
 
-  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy, ballId?: number) {
+  // Older host calls can still pass a weather serving count. Each shovel now gives one snowball.
+  function gather(_legacyServings?: number) { return !disposed && stock.gather(); }
+
+  function launch(origin: Vector3, direction: Vector3, thrower: string, power: number, shotBy: ShotBy,
+    ballId?: number, windOverride?: Readonly<{ east: number; north: number }>) {
     if (disposed || !thrower || !validAim(origin, direction, power)) return false;
-    if (shotBy === 'player' && (ammo === 0 || simulationTime + 1e-9 < nextThrow)) return false;
+    if (shotBy === 'player') {
+      if (stock.available() < 1 || simulationTime + 1e-9 < nextThrow) return false;
+      nextThrow = simulationTime + throwCooldown;
+      stock.spendThrow();
+    }
     let shot = shots[0];
     for (const candidate of shots) {
       if (!candidate.active) {
@@ -237,14 +270,16 @@ export function createTownSnowballFight({
     shot.previous.copy(origin);
     shot.age = 0;
     shot.velocity.copy(direction).normalize().multiplyScalar(snowballSpeed(strength));
-    shot.duration = flightTime(shot.velocity);
+    // Remote projectiles must replay the server's launch snapshot. Sampling
+    // the receiver's current weather would diverge after a weather change.
+    const wind = shotBy === 'remote' ? windOverride : windAtLaunch?.(origin, shotBy);
+    shot.windEast = Number.isFinite(wind?.east) ? Math.max(-2, Math.min(2, wind!.east)) : 0;
+    shot.windNorth = Number.isFinite(wind?.north) ? Math.max(-2, Math.min(2, wind!.north)) : 0;
+    shot.duration = flightTime(shot.velocity, shot.windEast, shot.windNorth);
     if (shotBy === 'player') {
       if (shot.scoreable && strength === 1 && relayPlayerThrow) {
         shot.relayed = relayPlayerThrow(shot.ballId, origin, direction);
       }
-      nextThrow = simulationTime + throwCooldown;
-      ammo--;
-      onChange?.(getState());
     }
     if (onEvent) {
       const time = now();
@@ -266,7 +301,8 @@ export function createTownSnowballFight({
     return launch(origin, direction, thrower, power, 'npc');
   }
 
-  function throwRemote(origin: Vector3, direction: Vector3, thrower: string, ballId: number) {
+  function throwRemote(origin: Vector3, direction: Vector3, thrower: string, ballId: number,
+    serverWind?: Readonly<{ east: number; north: number }>) {
     const time = now();
     for (const [key, until] of seenRemoteThrows) {
       if (time < until) break;
@@ -281,7 +317,7 @@ export function createTownSnowballFight({
         return false;
       }
     }
-    return launch(origin, direction, thrower, 1, 'remote', ballId);
+    return launch(origin, direction, thrower, 1, 'remote', ballId, serverWind);
   }
 
   function clearRemote() {
@@ -312,7 +348,10 @@ export function createTownSnowballFight({
       return;
     }
     previewVelocity.copy(direction).normalize().multiplyScalar(snowballSpeed(power));
-    const horizon = flightTime(previewVelocity);
+    const wind = windAtLaunch?.(origin, 'player');
+    const windEast = Number.isFinite(wind?.east) ? Math.max(-2, Math.min(2, wind!.east)) : 0;
+    const windNorth = Number.isFinite(wind?.north) ? Math.max(-2, Math.min(2, wind!.north)) : 0;
+    const horizon = flightTime(previewVelocity, windEast, windNorth);
     previewFrom.copy(origin);
     let arrival = 0;
     let target = false;
@@ -320,7 +359,7 @@ export function createTownSnowballFight({
     // sample the visible arc evenly so a close obstacle still has a smooth guide.
     for (let segment = 1; arrival < horizon; segment++) {
       const time = Math.min(segment * tick, horizon);
-      ballisticPosition(previewTo, origin, previewVelocity, time);
+      ballisticPosition(previewTo, origin, previewVelocity, time, windEast, windNorth);
       const hit = sweep(previewFrom, previewTo, snowballRadius, thrower, 'player');
       if (hit) {
         const stepLength = previewFrom.distanceTo(previewTo);
@@ -340,7 +379,7 @@ export function createTownSnowballFight({
     let length = 0;
     for (let i = 1; i < aimSamples; i++) {
       if (i === aimSamples - 1) previewTo.copy(previewLanding);
-      else ballisticPosition(previewTo, origin, previewVelocity, arrival * i / (aimSamples - 1));
+      else ballisticPosition(previewTo, origin, previewVelocity, arrival * i / (aimSamples - 1), windEast, windNorth);
       length += previewFrom.distanceTo(previewTo);
       aimPositions.setXYZ(i, previewTo.x, previewTo.y, previewTo.z);
       aimDistances.setX(i, length);
@@ -395,11 +434,13 @@ export function createTownSnowballFight({
       const step = Math.min(tick, shot.duration - shot.age);
       shot.age += step;
       shot.previous.copy(shot.at);
-      ballisticPosition(destination, shot.at, shot.velocity, step);
+      ballisticPosition(destination, shot.at, shot.velocity, step, shot.windEast, shot.windNorth);
       const contact = sweep(shot.at, destination, snowballRadius, shot.thrower, shot.shotBy);
       if (contact) {
         const travel = shot.at.distanceTo(destination);
         const hitTime = travel > 0 ? step * Math.min(1, shot.at.distanceTo(contact.at) / travel) : 0;
+        shot.velocity.x += shot.windEast * hitTime;
+        shot.velocity.z -= shot.windNorth * hitTime;
         shot.velocity.y -= snowballGravity * hitTime;
         shot.active = false;
         const target = contact.kind === 'target';
@@ -422,6 +463,8 @@ export function createTownSnowballFight({
         continue;
       }
       shot.at.copy(destination);
+      shot.velocity.x += shot.windEast * step;
+      shot.velocity.z -= shot.windNorth * step;
       shot.velocity.y -= snowballGravity * step;
       if (shot.age < shot.duration - 1e-9) continue;
       shot.active = false;
@@ -489,6 +532,6 @@ export function createTownSnowballFight({
     }
   }
 
-  return { gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
+  return { stock, gather, throwBall, throwNpc, throwRemote, clearRemote, confirmPlayerHit, confirmRemoteImpact, clearCombo,
     showAim, hideAim, update, getState, dispose };
 }

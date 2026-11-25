@@ -119,6 +119,7 @@ export function createTavernActivity(context: TownActivityContext, drinkFeedback
   return {
     spots,
     getMixIds: book.ids,
+    heldCup: () => held,
     carryAction() {
       const drink = held;
       if (!drink || drinkFeedback?.isDrinking()) return undefined;

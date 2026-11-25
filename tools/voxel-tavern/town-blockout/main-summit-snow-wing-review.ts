@@ -7,7 +7,6 @@ import { summitWingPickupAvailability } from '../../../src/shared/summit-wing-pi
 import { createSnowWingVisual } from './flight-equipment-visuals';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
-import { createSummitRingFeedbackAudio } from './main-summit-glide-ring-audio';
 import { createSummitGlideRingScore } from './main-summit-glide-ring-score';
 import { createSummitGlideHostRun } from './main-summit-glide-host-run';
 import { mountSummitGlideCourseDecorations } from './main-summit-glide-course-decorations';
@@ -52,7 +51,6 @@ const camera = new PerspectiveCamera(54, 1, .05, 3000);
 const status = document.querySelector<HTMLElement>('#flight-status')!;
 const reading = document.querySelector<HTMLOutputElement>('#flight-reading')!;
 const ringReading = document.querySelector<HTMLOutputElement>('#ring-reading')!;
-const ringAudioReading = document.querySelector<HTMLOutputElement>('#ring-audio-reading')!;
 const targetReading = document.querySelector<HTMLOutputElement>('#target-reading')!;
 const vignette = document.querySelector<HTMLElement>('#vignette')!;
 const keys = new Set<string>();
@@ -87,9 +85,6 @@ const rings = showRings ? surveySummitGlideRings({
 const course = showRings && !showNineRingCourse ? createSummitGlideRingProgress(rings) : undefined;
 const nineRingScore = showNineRingCourse && rings.length === 9 ? createSummitGlideRingScore(rings) : undefined;
 const ringVisuals = showRings ? mountSummitGlideRingVisuals(scene, rings) : undefined;
-const ringAudio = showNineRingCourse ? createSummitRingFeedbackAudio() : undefined;
-ringAudioReading.hidden = !showNineRingCourse;
-if (ringAudio) ringAudioReading.value = '穿环提示音已静音 · 按 M 开启';
 // Isolated demonstration only. The formal ZD-08 footslope target is registered by the world host.
 const practiceTarget = showPracticeTarget ? surveySummitGlidePracticeTarget({
   east: practiceEast, north: edgeNorth, height: practiceHeight, heading: Math.PI,
@@ -244,7 +239,6 @@ function simulate() {
     course?.advance(from, to);
     for (const hit of nineRingScore?.advance(from, to, true) ?? []) {
       nineRingResults.push({ ringId: hit.ringId, grade: hit.grade, radialMetres: hit.radialMetres });
-      ringAudio?.play(hit.grade, hit.streak);
       events.push({ kind: 'ring-' + hit.grade, value: hit.ringId,
         elapsed: next.elapsed, height: next.height, speed: next.speed });
     }
@@ -276,12 +270,12 @@ function display() {
   const dz = -Math.cos(heading);
   wing.group.visible = air?.usesBothHands === true;
   if (ringVisuals && (course || nineRingScore)) {
-    const scored = nineRingScore?.snapshot();
-    const passed = scored?.nextRing ?? course?.snapshot().length ?? 0;
+    const passed = nineRingScore?.snapshot().nextRing ?? course?.snapshot().length ?? 0;
     ringVisuals.group.visible = air?.usesBothHands === true;
-    ringVisuals.setProgress(passed, scored?.results.map(result => result.grade) ?? []);
+    ringVisuals.setProgress(passed);
     ringReading.hidden = !air || rings.length === 0;
-    if (scored) {
+    if (nineRingScore) {
+      const scored = nineRingScore.snapshot();
       const last = scored.results.at(-1);
       const tag = last ? ({ clean: '干净穿环', graze: '擦环半分', miss: '漏环断连击' } as const)[last.grade] : '尚未穿环';
       ringReading.value = `九环 ${scored.nextRing}/${scored.ringCount} · 得分 ${(scored.scoreHalfPoints / 2).toFixed(1)}/9 · 连击 ${scored.streak} · ${tag}`;
@@ -348,10 +342,6 @@ function animate(now: number) {
 addEventListener('keydown', event => {
   if (proof && event.code === 'KeyP' && !event.repeat) paused = !paused;
   if (event.code === 'KeyN' && !event.repeat) { nightPreview = !nightPreview; setPreviewLighting(); }
-  if (event.code === 'KeyM' && !event.repeat && ringAudio) {
-    const enabled = ringAudio.toggle();
-    ringAudioReading.value = enabled ? '穿环提示音已开启 · 按 M 静音' : '穿环提示音已静音 · 按 M 开启';
-  }
   if (event.code === 'KeyE' && !event.repeat) useLodge();
   if (!movementKeys.has(event.code)) return;
   event.preventDefault();
@@ -368,7 +358,6 @@ addEventListener('resize', resize);
 addEventListener('pagehide', () => {
   cancelAnimationFrame(frameId);
   ringVisuals?.dispose();
-  ringAudio?.dispose();
   targetVisual?.dispose();
   courseDecorations?.dispose();
   rack.dispose();
@@ -388,7 +377,6 @@ Object.defineProperty(window, '__snowWingReview', { value: Object.freeze({ getSt
   nineRingArt: courseDecorations ? { drawCount: decorationDraws, budgetDraws: courseDecorations.drawCount,
     lightCount: courseDecorations.lights.length, text: courseDecorations.signText } : null,
   nineRingAuthority: nineRingHostRun ? { ...nineRingHostRun.snapshot(), rejectedFrames: nineRingRejectedFrames } : null,
-  ringAudio: ringAudio?.snapshot() ?? null,
   practiceTarget: practiceTarget ? { target: { ...practiceTarget }, settlement: targetRun?.snapshot(),
     lamps: targetVisual?.lights.length } : null,
   flight: flight.snapshot(), launchProbe: launchProbe && { ...launchProbe }, events: events.map(event => ({ ...event })),

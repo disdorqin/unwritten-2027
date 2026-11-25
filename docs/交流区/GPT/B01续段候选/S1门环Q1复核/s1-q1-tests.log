@@ -1,0 +1,26 @@
+✔ all four anchors record the first successful physical visit exactly once (2.871723ms)
+✔ cannot register a claimed, unmounted, transported, restored, or wrong-domain site (0.679426ms)
+✔ the two keys count distinct in-range pages and cannot change either closed gate (0.765794ms)
+✔ starport and core each reach the corresponding airlock opening and return to their own ground opening (1.794308ms)
+✔ the host checks each ground and airlock opening independently instead of trusting a claimed route (0.276844ms)
+✔ boarding via starport does not prevent returning via core after walking to its airlock opening (0.199371ms)
+✔ either direction requires the specific gate to be open at traversal time (0.53098ms)
+✔ a missing, mismatched, invalid or obstructed landing is refused instead of falling back (0.955177ms)
+✔ rejects unknown requests and ignores client-supplied positions, lock state and destinations (0.360924ms)
+✔ the two arrivals and door approaches are distinct, walkable and face into the airlock (16.444189ms)
+✔ the two destinations use town-chronicle rings and the status wall has just two green systems (9.157931ms)
+✔ both outside review stops use the shared gap and render an opaque surface when locked (19.599247ms)
+✔ a continuous open route crosses the ramp to the two walkable hand positions (6.484138ms)
+✔ the walking footprint rejects walls, corners, console and captain furniture (6.692048ms)
+✔ the two hand hooks surround a blank, half-page log with its own indicator (8.328872ms)
+✔ all five cockpit console colliders have visible models at the same positions (6.852159ms)
+✔ interior size scales the floor, markers, rendered log and collision bounds together (13.502642ms)
+✔ window motion is driven by an explicit local clock and leaves the walking surface stable (3.811878ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 718.350519

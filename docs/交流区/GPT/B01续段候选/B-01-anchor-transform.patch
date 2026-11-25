@@ -1,0 +1,190 @@
+diff --git a/src/presence/expansion-anchors.ts b/src/presence/expansion-anchors.ts
+new file mode 100644
+index 0000000..0aeb705
+--- /dev/null
++++ b/src/presence/expansion-anchors.ts
+@@ -0,0 +1,116 @@
++export type ExpansionAnchorPose = Readonly<{
++  east: number;
++  north: number;
++  height: number;
++  yaw: number;
++}>;
++
++export const undergroundDepths = Object.freeze({
++  mine: -90,
++  crystalCave: -140,
++  warriorCity: -165,
++  vault: -190,
++} as const);
++
++export type UndergroundSegment = keyof typeof undergroundDepths;
++export type UndergroundDepthSurvey = Readonly<Partial<Record<UndergroundSegment, number>>>;
++type HeightIssue =
++  | { reason: 'missing' }
++  | { reason: 'non-finite'; observed: number };
++type DatumIssue =
++  | HeightIssue
++  | { reason: 'datum-mismatch'; observed: number; difference: number };
++
++export type UndergroundDepthIssue = DatumIssue & {
++  segment: UndergroundSegment;
++  expected: number;
++};
++
++export type FirstFallDepthIssue =
++  | (HeightIssue & { field: 'crossing' })
++  | (DatumIssue & { field: 'landing'; expected: number })
++  | { reason: 'landing-not-below-crossing'; crossingHeight: number; landingHeight: number };
++
++function heightIssue(observed: number | undefined): HeightIssue | undefined {
++  if (observed === undefined) return { reason: 'missing' };
++  if (!Number.isFinite(observed)) return { reason: 'non-finite', observed };
++}
++
++function compareDatum(expected: number, observed: number | undefined): DatumIssue | undefined {
++  const invalid = heightIssue(observed);
++  if (invalid) return invalid;
++  if (observed !== undefined && observed !== expected) {
++    return { reason: 'datum-mismatch', observed, difference: observed - expected };
++  }
++}
++
++/** Keep absent or discrepant absolute levels visible for the B-01 freeze register. */
++export function auditUndergroundDepths(survey: UndergroundDepthSurvey): UndergroundDepthIssue[] {
++  const issues: UndergroundDepthIssue[] = [];
++  for (const segment of Object.keys(undergroundDepths) as UndergroundSegment[]) {
++    const expected = undergroundDepths[segment];
++    const issue = compareDatum(expected, survey[segment]);
++    if (issue) issues.push({ segment, expected, ...issue });
++  }
++  return issues;
++}
++
++/** The measured shaft crossing is separate from the mine landing datum. */
++export function auditFirstFallDepths(
++  crossingHeight: number | undefined,
++  landingHeight: number | undefined,
++): FirstFallDepthIssue[] {
++  const issues: FirstFallDepthIssue[] = [];
++  const crossingIssue = heightIssue(crossingHeight);
++  const landingIssue = compareDatum(undergroundDepths.mine, landingHeight);
++  if (crossingIssue) issues.push({ field: 'crossing', ...crossingIssue });
++  if (landingIssue) issues.push({ field: 'landing', expected: undergroundDepths.mine, ...landingIssue });
++  if (crossingHeight !== undefined && landingHeight !== undefined &&
++      Number.isFinite(crossingHeight) && Number.isFinite(landingHeight) && landingHeight >= crossingHeight) {
++    issues.push({ reason: 'landing-not-below-crossing', crossingHeight, landingHeight });
++  }
++  return issues;
++}
++
++function checkPose(pose: ExpansionAnchorPose) {
++  if (![pose.east, pose.north, pose.height, pose.yaw].every(Number.isFinite)) {
++    throw new RangeError('Expansion anchor coordinates and yaw must be finite');
++  }
++}
++
++function wrapYaw(yaw: number) {
++  return Math.atan2(Math.sin(yaw), Math.cos(yaw));
++}
++
++function convertPose(
++  pose: ExpansionAnchorPose, from: ExpansionAnchorPose, to: ExpansionAnchorPose, turn: number,
++): ExpansionAnchorPose {
++  checkPose(pose);
++  const east = pose.east - from.east;
++  const north = pose.north - from.north;
++  const cosine = Math.cos(turn);
++  const sine = Math.sin(turn);
++  const converted = {
++    east: to.east + east * cosine + north * sine,
++    north: to.north - east * sine + north * cosine,
++    height: to.height + (pose.height - from.height),
++    yaw: wrapYaw(wrapYaw(pose.yaw) + turn),
++  };
++  checkPose(converted);
++  return converted;
++}
++
++/** The caller supplies both measured anchors. Yaw is clockwise from north. */
++export function createExpansionAnchorTransform(
++  fixtureAnchor: ExpansionAnchorPose, worldAnchor: ExpansionAnchorPose,
++) {
++  checkPose(fixtureAnchor);
++  checkPose(worldAnchor);
++  const fixture = { ...fixtureAnchor };
++  const world = { ...worldAnchor };
++  const turn = wrapYaw(wrapYaw(world.yaw) - wrapYaw(fixture.yaw));
++  return {
++    toWorld: (pose: ExpansionAnchorPose) => convertPose(pose, fixture, world, turn),
++    toFixture: (pose: ExpansionAnchorPose) => convertPose(pose, world, fixture, -turn),
++  };
++}
+diff --git a/tests/server/expansion-anchors.test.ts b/tests/server/expansion-anchors.test.ts
+new file mode 100644
+index 0000000..5602d2c
+--- /dev/null
++++ b/tests/server/expansion-anchors.test.ts
+@@ -0,0 +1,62 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import {
++  auditFirstFallDepths, auditUndergroundDepths, createExpansionAnchorTransform, undergroundDepths,
++  type ExpansionAnchorPose,
++} from '../../src/presence/expansion-anchors.ts';
++
++function assertPoseNear(actual: ExpansionAnchorPose, expected: ExpansionAnchorPose) {
++  for (const key of ['east', 'north', 'height', 'yaw'] as const) assert.ok(Math.abs(actual[key] - expected[key]) < 1e-12);
++}
++
++test('an explicit survey anchor rotates fixture north toward world east and preserves signed heights', () => {
++  // Test-only points exercise a western frame and a rotated survey.
++  const fixture = { east: 2, north: 4, height: -35, yaw: 0 };
++  const world = { east: -7, north: 32, height: -58, yaw: Math.PI / 2 };
++  const transform = createExpansionAnchorTransform(fixture, world);
++  assert.deepEqual(transform.toWorld(fixture), world);
++  const next = { east: 2, north: 9, height: -90, yaw: 0 };
++  assertPoseNear(transform.toWorld(next), { east: -2, north: 32, height: -113, yaw: Math.PI / 2 });
++  assertPoseNear(transform.toFixture(transform.toWorld(next)), next);
++});
++
++test('non-cardinal surveys round-trip and retain their measured anchor pair if callers later change it', () => {
++  const fixture = { east: 18.5, north: -5.3, height: -32, yaw: 1.14 };
++  const world = { east: 7.9, north: 203.5, height: -140, yaw: -2.4 };
++  const transform = createExpansionAnchorTransform(fixture, world);
++  const pose = { east: -3.63, north: 17.8, height: -102.7, yaw: 2.95 };
++  const projected = transform.toWorld(pose);
++  world.east = 12;
++  fixture.north = 7;
++  assert.deepEqual(transform.toWorld(pose), projected);
++  assertPoseNear(transform.toFixture(projected), pose);
++});
++
++test('anchor and probe values must be finite before a transform can be used', () => {
++  const pose = { east: 8, north: 7, height: -90, yaw: 0 };
++  assert.throws(() => createExpansionAnchorTransform({ ...pose, height: NaN }, pose), RangeError);
++  assert.throws(() => createExpansionAnchorTransform(pose, { ...pose, yaw: Infinity }), RangeError);
++  assert.throws(() => createExpansionAnchorTransform(pose, pose).toWorld({ ...pose, north: Infinity }), RangeError);
++});
++
++test('depth audit preserves all exact absolute levels and reports missing, invalid and displaced surveys', () => {
++  assert.deepEqual(undergroundDepths, { mine: -90, crystalCave: -140, warriorCity: -165, vault: -190 });
++  assert.deepEqual(auditUndergroundDepths(undergroundDepths), []);
++  assert.deepEqual(auditUndergroundDepths({ mine: -90, crystalCave: -141.5, warriorCity: NaN }), [
++    { segment: 'crystalCave', expected: -140, reason: 'datum-mismatch', observed: -141.5, difference: -1.5 },
++    { segment: 'warriorCity', expected: -165, reason: 'non-finite', observed: NaN },
++    { segment: 'vault', expected: -190, reason: 'missing' },
++  ]);
++});
++
++test('the shaft crossing needs its own surveyed height and the mine landing must be below it', () => {
++  assert.deepEqual(auditFirstFallDepths(undefined, -90), [{ field: 'crossing', reason: 'missing' }]);
++  assert.deepEqual(auditFirstFallDepths(-58, undefined), [{ field: 'landing', expected: -90, reason: 'missing' }]);
++  assert.deepEqual(auditFirstFallDepths(-90, -90), [
++    { reason: 'landing-not-below-crossing', crossingHeight: -90, landingHeight: -90 },
++  ]);
++  assert.deepEqual(auditFirstFallDepths(-58, -88), [
++    { field: 'landing', expected: -90, reason: 'datum-mismatch', observed: -88, difference: 2 },
++  ]);
++  assert.deepEqual(auditFirstFallDepths(-58, -90), []);
++});

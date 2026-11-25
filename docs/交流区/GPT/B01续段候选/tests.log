@@ -1,0 +1,14 @@
+✔ reads both terrain routes independently of opening the separate well (14.82259ms)
+✔ rejects a shaft intrusion, survival mode, or a route that depends on opening the lid (2.497978ms)
+✔ requires actual gravel completion, a downhill trace and a denied reverse attempt in both versions (13.846505ms)
+✔ a side corridor needs both distinct sidesteps, an east outlet, half-open state and positive clearance (5.035496ms)
+✔ sideways labels do not replace sideways displacement in the two tight parts (3.798786ms)
+✔ camera relocation, a missing swept check, an unsupported floor and movement cliffs cannot pass (2.451993ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 215.946399

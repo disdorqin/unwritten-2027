@@ -1,0 +1,412 @@
+{
+  "plaza": {
+    "bounds": [
+      161,
+      152,
+      251,
+      212
+    ],
+    "area": 5400,
+    "samples": 5551,
+    "height": [
+      12,
+      12
+    ],
+    "spawn": [
+      223,
+      180
+    ]
+  },
+  "stage": {
+    "plot": {
+      "id": "stage",
+      "origin": [
+        238,
+        140,
+        12
+      ],
+      "footprint": [
+        18,
+        14
+      ],
+      "door": [
+        238,
+        147
+      ],
+      "connect": [
+        238,
+        152,
+        12
+      ]
+    },
+    "floors": [
+      {
+        "min": [
+          234.5,
+          12.05,
+          -147
+        ],
+        "max": [
+          241.5,
+          12.28,
+          -146.7
+        ]
+      },
+      {
+        "min": [
+          229.05,
+          12.4,
+          -146.7
+        ],
+        "max": [
+          246.95,
+          12.52,
+          -133.3
+        ]
+      }
+    ],
+    "backstageWallNorth": 133.6
+  },
+  "roundTrips": {
+    "N152 present plaza-to-stage stairs": {
+      "maxStep": 0.27999999999999936,
+      "steps": 400,
+      "knots": [
+        {
+          "point": [
+            238,
+            152
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            238,
+            147
+          ],
+          "support": 12.28
+        },
+        {
+          "point": [
+            238,
+            142
+          ],
+          "support": 12.52
+        },
+        {
+          "point": [
+            238,
+            147
+          ],
+          "support": 12.28
+        },
+        {
+          "point": [
+            238,
+            152
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "west ramp to the rear photo tier": {
+      "maxStep": 0.3374999999999986,
+      "steps": 528,
+      "knots": [
+        {
+          "point": [
+            203.8,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            204.8,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            216,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            217,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            216,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            204.8,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            203.8,
+            164.75
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "east ramp to the rear photo tier": {
+      "maxStep": 0.3374999999999986,
+      "steps": 528,
+      "knots": [
+        {
+          "point": [
+            244.2,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            243.2,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            232,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            231,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            232,
+            164.75
+          ],
+          "support": 13.4
+        },
+        {
+          "point": [
+            243.2,
+            164.75
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            244.2,
+            164.75
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "northwest plaza seam": {
+      "maxStep": 0.0055762290954604055,
+      "steps": 240,
+      "knots": [
+        {
+          "point": [
+            159,
+            202
+          ],
+          "support": 12.223048210144043
+        },
+        {
+          "point": [
+            161,
+            202
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            165,
+            202
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            161,
+            202
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            159,
+            202
+          ],
+          "support": 12.223048210144043
+        }
+      ]
+    },
+    "southwest plaza seam": {
+      "maxStep": 0.000689649581909535,
+      "steps": 240,
+      "knots": [
+        {
+          "point": [
+            159,
+            181
+          ],
+          "support": 11.972414016723633
+        },
+        {
+          "point": [
+            161,
+            181
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            165,
+            181
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            161,
+            181
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            159,
+            181
+          ],
+          "support": 11.972414016723633
+        }
+      ]
+    },
+    "southeast plaza seam": {
+      "maxStep": 0,
+      "steps": 200,
+      "knots": [
+        {
+          "point": [
+            245,
+            155
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            245,
+            152
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            245,
+            150
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            245,
+            152
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            245,
+            155
+          ],
+          "support": 12
+        }
+      ]
+    },
+    "central aisle from the plaza spawn": {
+      "maxStep": 0,
+      "steps": 1120,
+      "knots": [
+        {
+          "point": [
+            223,
+            180
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            196
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            208
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            196
+          ],
+          "support": 12
+        },
+        {
+          "point": [
+            223,
+            180
+          ],
+          "support": 12
+        }
+      ]
+    }
+  },
+  "photos": {
+    "first": {
+      "east": 216.96,
+      "north": 162.4375,
+      "height": 12.35,
+      "valid": true,
+      "found": 12.35
+    },
+    "last": {
+      "east": 231.04,
+      "north": 165.0625,
+      "height": 13.4,
+      "valid": true,
+      "found": 13.4
+    },
+    "total": 48,
+    "cameraEligible": 48,
+    "accepted": 48
+  },
+  "ceremony": {
+    "main": 83,
+    "edge": 109,
+    "physicalDry": 192,
+    "rejects": []
+  }
+}

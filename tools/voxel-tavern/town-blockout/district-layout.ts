@@ -102,6 +102,9 @@ export function addDistrictHousing(
   const relocations = phaseThreeBounds.every((edge, i) => edge === plazaBounds[i])
     ? plazaHouseRelocations : south === 152 ? theaterHouseRelocations : new Map<string, readonly [number, number]>();
   const sites: Site[] = [];
+  // Per-site world-axis blocking rects, extracted from each built model's structural
+  // wall blocks (AW-5): the whole-lot rectangle sealed open courtyards and yards.
+  const siteBlockRects: { e0: number; n0: number; e1: number; n1: number }[][] = [];
   const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
@@ -274,6 +277,33 @@ export function addDistrictHousing(
       model.add(cap);
       const cell = cellAt(x, n);
       addModel(model, cell);
+      // AW-5: derive this house's blocking rects from the built model itself.
+      // Structural walls only: tall blocks rooted near the ground with real
+      // thickness — window trim sticks and step-over sills never block.
+      const blockRects: { e0: number; n0: number; e1: number; n1: number }[] = [];
+      {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const instance = new Matrix4();
+        model.traverse(item => {
+          if (!(item instanceof InstancedMesh)) return;
+          for (let i = 0; i < item.count; i++) {
+            item.getMatrixAt(i, instance);
+            const e = instance.elements;
+            const cx = e[12], cy = e[13], cz = e[14];
+            const sx = Math.abs(e[0]), sy = Math.abs(e[5]), sz = Math.abs(e[10]);
+            if (sy < 1.2 || cy - sy / 2 > .6 || sx < .15 || sz < .15) continue;
+            let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+            for (const [lx, lz] of [[cx - sx / 2, cz - sz / 2], [cx - sx / 2, cz + sz / 2],
+              [cx + sx / 2, cz - sz / 2], [cx + sx / 2, cz + sz / 2]] as const) {
+              const we = x + lx * cos + lz * sin, wn = n + lx * sin - lz * cos;
+              e0 = Math.min(e0, we); e1 = Math.max(e1, we);
+              n0 = Math.min(n0, wn); n1 = Math.max(n1, wn);
+            }
+            blockRects.push({ e0, n0, e1, n1 });
+          }
+        });
+      }
+      siteBlockRects.push(blockRects);
       sites.push(site);
       zoneCounts[theme ?? 'central']++;
       if (relocation) movedSites.add(site);
@@ -347,6 +377,17 @@ export function addDistrictHousing(
     if (panorama) panorama.visible = wide;
   }
   const completed = sites.map(footprints);
+  // AW-5: player blocking follows the built walls, not the whole lot. A site with
+  // no extracted wall blocks (never in practice) falls back to its lot rectangle.
+  const blockedSites = completed.map((site, i) => {
+    const rects = siteBlockRects[i].length ? siteBlockRects[i]
+      : [{ e0: site.x - site.w / 2, n0: site.n - site.d / 2, e1: site.x + site.w / 2, n1: site.n + site.d / 2 }];
+    const union = {
+      e0: Math.min(...rects.map(r => r.e0)), n0: Math.min(...rects.map(r => r.n0)),
+      e1: Math.max(...rects.map(r => r.e1)), n1: Math.max(...rects.map(r => r.n1)),
+    };
+    return { rects, union };
+  });
   const keepClear: KeepClear = (x, n, radius) => !openSpace(x, n, radius) || lampBlocked(x, n)
     || paths.some(({ start, end, radius: size }) => lineDistance(x, n, start, end) < radius + size + .6)
     || completed.some(site => within(x, n, site, radius + 2));
@@ -358,5 +399,8 @@ export function addDistrictHousing(
     });
   }
   return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, housingCards, keepClear, setPanorama, sweptAt,
-    blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
+    siteBlockingRects: blockedSites.map(({ rects }) => rects),
+    blocked: (x: number, n: number) => blockedSites.some(({ rects, union }) =>
+      x > union.e0 - .27 && x < union.e1 + .27 && n > union.n0 - .27 && n < union.n1 + .27
+      && rects.some(r => x > r.e0 - .27 && x < r.e1 + .27 && n > r.n0 - .27 && n < r.n1 + .27)) };
 }

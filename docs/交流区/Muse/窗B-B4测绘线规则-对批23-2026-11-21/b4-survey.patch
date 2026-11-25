@@ -1,0 +1,108 @@
+diff --git a/tests/town-blockout-survey-stations.test.ts b/tests/town-blockout-survey-stations.test.ts
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/tests/town-blockout-survey.test.ts b/tests/town-blockout-survey.test.ts
+new file mode 100644
+index 00000000..07e8bd53
+--- /dev/null
++++ b/tests/town-blockout-survey.test.ts
+@@ -0,0 +1,29 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {
++  beaconDriftTableSeconds, createSurveyRubbings, surveyNotesPageText, surveyPlateLines,
++  surveyReadingSeconds, surveyRubbingUnlockCount, surveyStationIds,
++} from '../tools/voxel-tavern/town-blockout/town-survey.ts';
++
++test('station readings are the beacon drift table, entry for entry', () => {
++  assert.deepEqual(beaconDriftTableSeconds, [50, 61, 72, 83, 94, 105, 116, 127, 138, 149, 160, 171]);
++  assert.deepEqual(surveyStationIds.map(id => surveyReadingSeconds(id)),
++    beaconDriftTableSeconds.slice(0, 7));
++});
++
++test('plate lines encode the reading twice and nothing else', () => {
++  assert.deepEqual(surveyPlateLines('M1'), ['觇标 M1', '标尺 0.500', '方位 50°00′']);
++  assert.deepEqual(surveyPlateLines('M7'), ['觇标 M7', '标尺 1.160', '方位 116°00′']);
++  for (const id of surveyStationIds) assert.equal(surveyPlateLines(id).length, 3);
++});
++
++test('any five distinct rubbings unlock the notes page; duplicates do not count', () => {
++  const rubbings = createSurveyRubbings();
++  for (const id of ['M1', 'M2', 'M3', 'M4'] as const) assert.equal(rubbings.record(id), true);
++  assert.equal(rubbings.record('M4'), false);
++  assert.equal(rubbings.notesUnlocked(), false);
++  assert.equal(rubbings.record('M7'), true);
++  assert.equal(rubbings.count(), surveyRubbingUnlockCount);
++  assert.equal(rubbings.notesUnlocked(), true);
++  assert.equal(surveyNotesPageText, '七个站，一条线。他们量的不是地。');
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-survey.ts b/tools/voxel-tavern/town-blockout/town-survey.ts
+new file mode 100644
+index 00000000..4503d841
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-survey.ts
+@@ -0,0 +1,64 @@
++/**
++ * Survey line & rubbings (新图修订章一 · rule 1, branch window B).
++ *
++ * Seven survey stations M1–M7 (M1–M3 sited by window A, M4–M7 by
++ * window D) carry plate readings DERIVED from the ZB-17 beacon drift
++ * table — the same table the night clock runs on
++ * (src/presence/start.ts: beaconOffsetsAfterDusk = 50 s + 11 s·night,
++ * 12 nights). Station Mk's reading is the table's (k−1)-th entry, in
++ * seconds. The derivation is the design; no in-game text explains it,
++ * and this leaf deliberately exports no explanatory copy.
++ *
++ * Players take a rubbing at each station; any 5 distinct rubbings
++ * unlock the atlas page 「测绘手记」, whose entire text is one line
++ * (surveyNotesPageText). The host renders the page; the leaf owns the
++ * unlock rule and the line.
++ */
++
++export const surveyStationIds = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'] as const;
++export type SurveyStationId = (typeof surveyStationIds)[number];
++
++/** The full beacon drift table (seconds after dusk), mirrored from the
++ *  night clock's canonical defaults so tests can pin the isomorphism. */
++export const beaconDriftTableSeconds: readonly number[] =
++  Array.from({ length: 12 }, (_, night) => 50 + night * 11);
++
++/** Station Mk (1-based k) reads the drift table's (k−1)-th entry. */
++export function surveyReadingSeconds(station: SurveyStationId): number {
++  const index = surveyStationIds.indexOf(station);
++  return beaconDriftTableSeconds[index];
++}
++
++/**
++ * The exact plate inscription for a station, three lines, ready to be
++ * carved by the siting window. Both numbers encode the same reading:
++ * the staff reading is seconds/100 (0.500 … 1.160), the bearing is the
++ * seconds as degrees. Nothing else goes on the plate.
++ */
++export function surveyPlateLines(station: SurveyStationId): readonly [string, string, string] {
++  const seconds = surveyReadingSeconds(station);
++  return [
++    `觇标 ${station}`,
++    `标尺 ${(seconds / 100).toFixed(3)}`,
++    `方位 ${seconds}°00′`,
++  ];
++}
++
++export const surveyRubbingUnlockCount = 5;
++export const surveyNotesPageText = '七个站，一条线。他们量的不是地。';
++
++export function createSurveyRubbings() {
++  const taken = new Set<SurveyStationId>();
++  return {
++    /** Returns true when this rubbing is new. */
++    record(station: SurveyStationId): boolean {
++      if (taken.has(station)) return false;
++      taken.add(station);
++      return true;
++    },
++    has: (station: SurveyStationId) => taken.has(station),
++    count: () => taken.size,
++    stations: () => [...taken],
++    notesUnlocked: () => taken.size >= surveyRubbingUnlockCount,
++  };
++}

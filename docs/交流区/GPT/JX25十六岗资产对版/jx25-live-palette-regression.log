@@ -1,0 +1,13 @@
+✔ the three vendors wait for the exact booths and matching live interaction registrations (3.815929ms)
+✔ vendor E prompts stay separate from the fair spots and use a registered vendor activity if present (19.566074ms)
+✔ resident hotspots fail closed until their stations work, share a batch, and move one lakeside actor (1553.249144ms)
+✔ the 25 Qin lines match the manuscript and clue gates do not expose the obsolete bridge or future goat (1.233041ms)
+✔ resident station visibility and 小未 repack the same batch without replacing each other (4.985258ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2795.83204
