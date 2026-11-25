@@ -326,6 +326,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('起身'),null,{timeout:8000});
    await picture(page,evidence,'kengkou-seated');
    await page.keyboard.press('e');
+   await page.waitForFunction(pattern=>new RegExp(pattern).test(document.querySelector('#position')?.textContent??''),positionPattern.source,{timeout:8000});
    await step(path.at(-1),'station-stand-return');
    await face(page,evidence,1.7+Math.PI);
    for(const lighting of ['雪夜','白昼']){
