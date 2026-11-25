@@ -14,6 +14,8 @@ import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
+import { createUndergroundWaterState } from './underground-water-state.js';
+import type { AcceptedUndergroundWaterSnapshot } from '../shared/town-c-water-snapshot-port.js';
 import { createIceThroneAuthority } from './ice-throne-authority.js';
 import { isIcePalaceThroneRecord } from './ice-throne-site.js';
 import {
@@ -79,6 +81,14 @@ type TownWeatherFeed = Readonly<{
   subscribe(receive: (frame: string) => void): () => void;
 }>;
 
+/** Underground river state feed (design: 地下重入变化). The primary
+ * room authors the single water state; the mine room follows it, so
+ * tonight() is computed at exactly one point fleet-wide. */
+type UndergroundWaterFeed = Readonly<{
+  snapshot(): AcceptedUndergroundWaterSnapshot;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
 type TownWeatherOptions = Readonly<{
   dawnEpoch: number;
   restoredWarningAt?: number | null;
@@ -102,6 +112,10 @@ type Options = {
   townOutdoorWeather?: TownWeatherOptions;
   /** Secondary rooms relay primary-town weather rather than running a second schedule. */
   townOutdoorWeatherFeed?: TownWeatherFeed;
+  /** Author the underground river state only in the primary room, on the ZB-17 dawn anchor. */
+  undergroundWater?: Readonly<{ dawnEpoch: number }>;
+  /** The mine room follows the primary room's river state rather than running a second one. */
+  undergroundWaterFeed?: UndergroundWaterFeed;
   /** Optional G-09 server-authoritative shot-time wind. Leave disabled until clients support relay kind 3. */
   snowballWindForThrow?: (shot: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
@@ -276,6 +290,27 @@ export async function createPresenceServer(options: Options = {}) {
     },
   };
   const weatherFeed = ownedWeatherFeed ?? options.townOutdoorWeatherFeed;
+  const waterConfig = options.undergroundWater;
+  if (waterConfig && options.undergroundWaterFeed) {
+    throw new Error('A presence room cannot author and follow the same underground water.');
+  }
+  if (waterConfig && nightConfig?.dawnEpoch !== undefined &&
+      waterConfig.dawnEpoch !== nightConfig.dawnEpoch) {
+    throw new Error('Underground water must use the town night dawn anchor.');
+  }
+  const waterListeners = new Set<(frame: string) => void>();
+  const undergroundWater = waterConfig && createUndergroundWaterState({
+    dawnEpoch: waterConfig.dawnEpoch, now: wallNow,
+  });
+  const ownedWaterFeed: UndergroundWaterFeed | undefined = undergroundWater && {
+    snapshot: undergroundWater.tonight,
+    subscribe(receive) {
+      waterListeners.add(receive);
+      return () => { waterListeners.delete(receive); };
+    },
+  };
+  const waterFeed = ownedWaterFeed ?? options.undergroundWaterFeed;
+  let lastWaterSnapshot: AcceptedUndergroundWaterSnapshot | undefined;
   let weatherErrorReported = false;
   let lastTownNightWindow = townNight?.snapshot();
   let nightErrorReported = false;
@@ -561,6 +596,21 @@ export async function createPresenceServer(options: Options = {}) {
   function publishTownWeather(frame: string) {
     broadcast(frame);
     for (const receive of weatherListeners) receive(frame);
+  }
+
+  function publishUndergroundWater(frame: string) {
+    broadcast(frame);
+    for (const receive of waterListeners) receive(frame);
+  }
+
+  function updateUndergroundWater() {
+    if (!undergroundWater) return;
+    const snapshot = undergroundWater.tonight();
+    if (lastWaterSnapshot?.nightOrdinal === snapshot.nightOrdinal &&
+        lastWaterSnapshot?.level === snapshot.level &&
+        lastWaterSnapshot?.phase === snapshot.phase) return;
+    lastWaterSnapshot = snapshot;
+    publishUndergroundWater(JSON.stringify({ type: 'event', kind: 'underground-water', state: snapshot }));
   }
 
   function updateTownWeather() {
@@ -1295,6 +1345,7 @@ export async function createPresenceServer(options: Options = {}) {
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true, icePalaceRites: true,
       ...(summitPassport ? { summitPassport: true } : {}),
       townNightWindow: nightFeed?.snapshot(),
+      undergroundWater: waterFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
       townOutdoorWeatherDawnEpoch: weatherFeed?.dawnEpoch,
     }));
@@ -1454,6 +1505,7 @@ export async function createPresenceServer(options: Options = {}) {
     });
   });
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
+  const stopFollowingWater = options.undergroundWaterFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
   const tick = setInterval(() => {
     const time = now();
@@ -1468,6 +1520,7 @@ export async function createPresenceServer(options: Options = {}) {
     iceThrone.tick(time);
     const epoch = wallNow();
     updateTownNight();
+    updateUndergroundWater();
     updateTownWeather();
     updateCeremony(epoch);
     updateBell(epoch);
@@ -1505,6 +1558,7 @@ export async function createPresenceServer(options: Options = {}) {
     address: () => http.address() as AddressInfo,
     stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
     townNightFeed: ownedNightFeed,
+    undergroundWaterFeed: ownedWaterFeed,
     townOutdoorWeatherFeed: ownedWeatherFeed,
     close() {
       if (stop) return stop;
@@ -1512,6 +1566,7 @@ export async function createPresenceServer(options: Options = {}) {
       clearInterval(tick);
       clearInterval(heartbeat);
       stopFollowingNight?.();
+      stopFollowingWater?.();
       stopFollowingWeather?.();
       nightListeners.clear();
       weatherListeners.clear();

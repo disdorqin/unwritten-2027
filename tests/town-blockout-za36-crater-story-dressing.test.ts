@@ -95,7 +95,11 @@ test('C3 interior density: terrace work faces and the floor ring lift the accoun
   const terraceAll = placements.filter(p => p.band === 'trail' || p.band === 'terrace');
   assert.ok(terraceAll.length / 6597.3 * 100 >= 4.8,
     'terrace density ' + (terraceAll.length / 6597.3 * 100).toFixed(2) + '/100m2');
-  assert.ok(floor.length / 1256.6 * 100 >= 5.5,
+  // Floor density re-based by the batch-98 double-lamp ruling: the
+  // retired ring posts took the floor account 6.05 → 5.41/100m2; the
+  // floor's richness is now carried by the six-lamp system, the lamp
+  // room and C2's five pieces, not by dressing scatter.
+  assert.ok(floor.length / 1256.6 * 100 >= 5.3,
     'floor density ' + (floor.length / 1256.6 * 100).toFixed(2) + '/100m2');
   assert.ok(terrace.filter(p => p.kind === 'prop').length >= 24, 'shoring props stand');
   assert.ok(terrace.filter(p => p.kind === 'marker').length >= 12, 'survey markers stand');
@@ -140,7 +144,10 @@ test('C3 bands: plate ribbons run per depth third and the warm chain rings the f
   assert.ok(plateBatch && (plateBatch as InstancedMesh).instanceColor,
     'band plates carry per-instance family tints');
   const lamps = placements.filter(p => p.kind === 'lamp');
-  assert.ok(lamps.length >= 8, 'warm chain lamps ' + lamps.length);
-  assert.ok(lamps.filter(p => p.cluster === 'lamp-chain').length >= 6,
-    'floor ring lamps landed');
+  // Batch-98 double-lamp ruling: the emissive ring posts retired
+  // (GPT's six-lamp system is the floor's real-light chain); only the
+  // two collar markers remain, re-registered as shaft-mouth markers.
+  assert.equal(lamps.length, 2, 'only the collar markers remain ' + lamps.length);
+  assert.ok(lamps.every(p => p.cluster === 'shaft-ring'),
+    'remaining lamps are the shaft-ring pair');
 });

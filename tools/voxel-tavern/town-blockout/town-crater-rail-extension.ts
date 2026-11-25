@@ -470,6 +470,16 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     box(timberWarm, sx - 1.6, g + .65, sn + .6, 1.5, 1.3, 1.5);
     box(timberWarm, sx + .2, g + .55, sn + 1.1, 1.3, 1.1, 1.3, .4);
     part(ore, new ConeGeometry(1.7, 1.4, 9), sx + 2.2, g + .7, sn - .8, 0);
+    // K-13 (《设计-全图文字件总表》卡04): shed name board under the roof
+    // edge on the east face, toward the siding.
+    sign(sx + 3.55, g + 2.8, sn, Math.PI / 2, 1.1, .42, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('货棚', w / 2, h / 2 + 4);
+    });
   }
 
   // ---------- narrow-gauge mine track along the reserved belt corridor ----------

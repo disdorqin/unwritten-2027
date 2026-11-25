@@ -33,11 +33,19 @@ test('cloud band: ring coverage, gaps, high clusters, weather + night hooks', ()
     'cloud-fall mouth must be open');
   assert.equal(band.densityAt(100, 100, 220), 0); // off the mountain body
 
-  band.setWeather({ density: 0.4 });
-  const scaled = band.densityAt(south.east, south.north, cloudBandCoreHeightAt(-0.75));
-  assert.ok(scaled < 0.5 && scaled > 0.35,
-    `weather density must scale the field (got ${scaled})`);
-  band.setWeather({ density: 1 });
+  // ZB-20 wiring: the band consumes only TownOutdoorWeatherState.
+  const clearState = { weather: 'clear-snow', startedAt: 0, nextChangeAt: 600_000, windEast: 1, windNorth: 0, windStrength: 0 } as const;
+  const whiteoutState = { weather: 'whiteout', startedAt: 0, nextChangeAt: 600_000, windEast: 1, windNorth: 0, windStrength: 1 } as const;
+  band.applyOutdoorWeather(clearState);
+  const probeHeight = cloudBandCoreHeightAt(-0.75) + 10; // skirt band: mid-range field, unsaturated
+  const clearDensity = band.densityAt(south.east, south.north, probeHeight);
+  assert.ok(clearDensity > 0.09 && clearDensity < 0.19,
+    `clear-snow amount must thin the field (got ${clearDensity})`);
+  band.applyOutdoorWeather(whiteoutState);
+  const whiteoutDensity = band.densityAt(south.east, south.north, probeHeight);
+  assert.ok(whiteoutDensity > 0.27 && whiteoutDensity < 0.43 && whiteoutDensity > clearDensity * 1.7,
+    `whiteout visibility must thicken the field (got ${whiteoutDensity} vs ${clearDensity})`);
+  band.applyOutdoorWeather({ ...clearState, weather: 'wind', windStrength: 0.5 });
   band.setNight(true);
   band.update(1.5);
   band.setNight(false);

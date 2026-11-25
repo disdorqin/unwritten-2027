@@ -292,16 +292,12 @@ export function buildZa36CraterStoryDressing(road: Ground,
       angle + yaw, 2, 0, new Color(family[i % family.length]!));
   }
 
-  // C3 warm chain (same order): lamp posts ring the floor workface and
-  // flank the shaft collar, so the floor reads warm at night at town
-  // standard — emissive posts, no real lights spent.
-  for (let i = 0; i < 8; i++) {
-    const angle = i * tau / 8 + .75;
-    const localE = 13.5 * Math.sin(angle);
-    const localN = 13.5 * Math.cos(angle);
-    add('lamp', 'floor', 'lamp-chain', originE + localE * c + localN * s,
-      originN + localN * c - localE * s, angle + yaw, 1);
-  }
+  // C3 warm chain — RETIRED by the batch-98 double-lamp ruling
+  // (2026-11-24): the crater floor's real-light chain is GPT window
+  // C's six-lamp system; this dressing's emissive ring posts formed a
+  // second, parallel post system (measured 3.0–8.5 m from the six,
+  // no coincidences), so the ring stands down. The two collar posts
+  // below stay, re-registered as shaft-mouth markers.
 
   // C3 shaft ring (the 10.6 m2 shaft-mouth zone): flat stained boards and a
   // rust drum base around the collar — workface grime, never in the walk-up

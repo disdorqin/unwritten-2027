@@ -4,6 +4,9 @@ import {
   Object3D, PlaneGeometry, RepeatWrapping, SphereGeometry,
 } from 'three';
 import { sampleNorthRidge350 } from './north-ridge-350-terrain';
+import {
+  townOutdoorWeatherEffects, type TownOutdoorWeatherState,
+} from '../../../src/shared/town-outdoor-weather';
 
 /**
  * Mid-mountain cloud band + high drifting clusters for the front
@@ -25,27 +28,23 @@ import { sampleNorthRidge350 } from './north-ridge-350-terrain';
  * blue/purple, brightness capped under the town lights. High
  * clusters never glow.
  *
- * Weather: cloud amount / density / drift all hang off the ZB-20
- * single weather state. Until that object lands, setWeather accepts
- * the documented field shape and the module runs on stand-in
- * defaults -- the same consumer pattern as the summit wind stand-in.
- * No private weather system is created here.
+ * Weather (wiring, 2026-11-25, batch-103 ruling): the band's ONLY
+ * weather input is the ZB-20 single state object
+ * (TownOutdoorWeatherState, src/shared/town-outdoor-weather.ts),
+ * consumed through applyOutdoorWeather -- no second weather state
+ * exists here. Mapping: windStrength -> drift multiplier
+ * (0.3 + 1.4 * strength, so a calm day still creeps); weather kind
+ * -> cloud amount (clear-snow 0.75, wind / whiteout 1); the kind's
+ * visibilityMeters -> density (unlimited 1, whiteout 12 m -> 1.8).
+ * Wind direction is deliberately not consumed: the band is a ring
+ * and its drift is azimuthal, with no heading to align to. Night
+ * thinning stays on the separate setNight axis (day/night system),
+ * not on the weather object.
  *
  * Visual only: nothing registers a collider; the road corridor's
  * feather band stays physically clear (walkers enter cloud, never
  * geometry).
  */
-
-export interface CloudBandWeather {
-  /** 0..1 overall coverage/opacity scale. */
-  cloudAmount: number;
-  /** 0..1 band density multiplier (fog + puff opacity). */
-  density: number;
-  /** Drift speed multiplier (wind). */
-  windSpeed: number;
-  /** Clear night: thin the layer out for the star window. */
-  clearNight: boolean;
-}
 
 const CENTRE = { east: 320, north: 650, radiusE: 330, radiusN: 380 };
 const dOfHeight = (h: number) => 1 - Math.pow(Math.max(0, (h - 18) / 332), 1 / 1.6);
@@ -125,7 +124,9 @@ interface PuffSeed {
 export function createFrontRidgeCloudBand() {
   const group = new Group();
   group.name = 'front-ridge-cloud-band';
-  const weather: CloudBandWeather = { cloudAmount: 1, density: 1, windSpeed: 1, clearNight: false };
+  // Derived working multipliers, fed ONLY by applyOutdoorWeather
+  // (defaults = the pre-wiring shipped behaviour).
+  const weather = { cloudAmount: 1, density: 1, windSpeed: 1 };
   let night = false;
   let elapsed = 0;
 
@@ -247,7 +248,7 @@ export function createFrontRidgeCloudBand() {
   placePuffs(corePuffs); placePuffs(skirtPuffs); placeClusters();
 
   const applyWeather = () => {
-    const amount = weather.cloudAmount * (weather.clearNight ? 0.45 : 1);
+    const amount = weather.cloudAmount;
     corePuffs.mat.opacity = 0.88 * amount;
     skirtPuffs.mat.opacity = 0.42 * amount;
     clusterMat.opacity = 0.5 * amount;
@@ -266,7 +267,7 @@ export function createFrontRidgeCloudBand() {
     const radial = Math.exp(-Math.pow((dHere - dOfHeight(core)) / 0.11, 2));
     const coreTerm = Math.exp(-Math.pow((height - core) / 2.6, 2));
     const skirtTerm = 0.22 * Math.exp(-Math.pow((height - core) / 26, 2));
-    const amount = weather.cloudAmount * (weather.clearNight ? 0.5 : 1);
+    const amount = weather.cloudAmount;
     return Math.min(1, (coreTerm + skirtTerm) * radial * gap * weather.density * amount);
   };
 
@@ -285,8 +286,13 @@ export function createFrontRidgeCloudBand() {
       clusterMat.color.copy(tint);
       glowMesh.visible = on;
     },
-    setWeather(patch: Partial<CloudBandWeather>) {
-      Object.assign(weather, patch);
+    /** Consume the ZB-20 single weather state (see header mapping).
+     * Idempotent: the host may forward the current state every frame. */
+    applyOutdoorWeather(state: TownOutdoorWeatherState) {
+      weather.windSpeed = 0.3 + 1.4 * state.windStrength;
+      weather.cloudAmount = state.weather === 'clear-snow' ? 0.75 : 1;
+      weather.density =
+        townOutdoorWeatherEffects[state.weather].visibilityMeters == null ? 1 : 1.8;
       applyWeather();
     },
     update(dtSeconds: number) {

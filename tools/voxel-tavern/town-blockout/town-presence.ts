@@ -119,6 +119,7 @@ export function createTownPresence(
   const link = createPresenceLinkStatus(() => updateStatus());
   const clock = createTownPresenceClock();
   const townNight = createTownPresenceNight(clock.now);
+  let undergroundWaterSnapshot: unknown;
   const townWeather = createTownPresenceWeather(clock.now);
   const ownerPanel = document.querySelector<HTMLDetailsElement>('#town-mascot-owner');
   const ownerInput = document.querySelector<HTMLInputElement>('#town-mascot-owner-key');
@@ -484,11 +485,18 @@ export function createTownPresence(
         cableLine?: boolean; line?: unknown; flags?: unknown;
         icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
+        undergroundWater?: unknown;
       };
       try { message = JSON.parse(data); } catch { return; }
       if (!message) return;
       if (message.type === 'event' && (message.kind === 'town-outdoor-weather' || message.kind === 'town-outdoor-weather-warning')) {
         if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) townWeather.accept(message);
+        return;
+      }
+      if (message.type === 'event' && message.kind === 'underground-water') {
+        if (haveId && (receivingFrom === 'ws' ? socketJoined : !socketJoined)) {
+          undergroundWaterSnapshot = message.state;
+        }
         return;
       }
       if (message.type === 'event' && (message.kind === 'town-night-window' || message.kind === 'town-night-beacon')) {
@@ -680,6 +688,9 @@ export function createTownPresence(
             if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
+          if (message.undergroundWater !== undefined) {
+            undergroundWaterSnapshot = message.undergroundWater;
+          }
           townWeather.join(message.townOutdoorWeather, message.townOutdoorWeatherDawnEpoch);
           if (receivingFrom === 'ws') {
             // 轮询入镇不算 WS 恢复：不清重试状态，后台探测要继续。
@@ -979,6 +990,11 @@ export function createTownPresence(
     icePalaceFragmentPresent: () => icePalaceFragmentPresent,
     requestIcePalaceFragment: (id: string) => requestIcePalace('ice-palace-fragment', { id }),
     getTownNightWindow: townNight.state,
+    /** Latest underground river snapshot relayed by the mine room, or
+     * undefined until one arrives. Raw on purpose: the certified port
+     * (town-c-water-snapshot-port) validates it at consumption. */
+    getUndergroundWater: () => undergroundWaterSnapshot as
+      import('../../../src/shared/town-c-water-snapshot-port.js').AcceptedUndergroundWaterSnapshot | undefined,
     /** True server-authored weather state or undefined when a legacy room lacks G-09. */
     getTownOutdoorWeather: townWeather.state,
     getTownWeatherDawnEpoch: townWeather.dawnEpoch,

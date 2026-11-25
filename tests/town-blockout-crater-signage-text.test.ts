@@ -60,6 +60,8 @@ test('crater signage text: settled K-texts land verbatim (总表为准）', () =
     // second-line roster names; K-11 roster board is new on the facade.
     '孙长炉', '焦二锤', '罗大年', '田守义', '三班 孙小山', '夜里不入',
     '值班表', '一班 陆衡', '二班 周文测', '三班 陆箬',
+    // Continuation package (落牌续补， 总控 2026-11-25 续派）: K-13/26/27/29/30/39.
+    '货棚', '门房', '北行坑区 · 请走正门', '北塔', '守塔', '坑沿速降 · 个人最佳',
   ]) assert.ok(texts.includes(expected), `missing sign text: ${expected}`);
 });
 

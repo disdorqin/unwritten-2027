@@ -43,6 +43,9 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     onMascotClaimRejected: total => console.info('Mascot actor rejected claims:', total),
     requestListener,
     townNight,
+    // The underground river state is authored once, on the same dawn
+    // anchor as the night clock; the mine room follows it via the feed.
+    undergroundWater: { dawnEpoch: townNight!.dawnEpoch! },
     // G-09 reuses the exact ZB-17 dawn origin; no second weather calendar.
     townOutdoorWeather: townWeather,
     ceremonyStartAt,
@@ -57,6 +60,10 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
+        // Only the mine room follows the river state; the other rooms
+        // never see a water field.
+        ...(bounds === minePresenceBounds
+          ? { undergroundWaterFeed: server.undergroundWaterFeed } : {}),
       }));
     }
   } catch (error) {
