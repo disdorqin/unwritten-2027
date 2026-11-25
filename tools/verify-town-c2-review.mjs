@@ -40,12 +40,12 @@ const report={
   scope:'C2-01..06 independent offline first-person visual and ground-step review; real mounts, fixture input',
   uncertified:[
     'not production world/Presence/multiplayer certification',
-    'highWaterOffsetM=1 and high/mid/low selection are explicit fixture-only inputs',
+    'highWaterOffsetM=1 and high/mid/low selection are explicit fixture-only inputs; production host wiring is tested separately',
     'water overlay adds no collider; underground step uses mine.queryPassage, not production swimming authority',
     'SwiftShader headless FPS is a review sample, not a device performance benchmark',
     'screenshots and API checks do not replace human visual acceptance',
   ],
-  errors:{pageerror:[],consoleError:[],requestFailed:[]},views:{},walks:{},fpsSample:null,passed:false,
+  errors:{pageerror:[],consoleError:[],requestFailed:[]},views:{},walks:{},undergroundWalksByLevel:{},fpsSample:null,passed:false,
 };
 let browser,problem;
 async function settle(page){
@@ -97,6 +97,8 @@ try{
   const craterShots=[
     ['crater/central-mound',false,'town-c2-crater-central-mound-day.png'],
     ['crater/central-mound',true,'town-c2-crater-central-mound-night.png'],
+    ['crater/lamp-room',false,'town-c2-crater-lamp-room-day.png'],
+    ['crater/lamp-room',true,'town-c2-crater-lamp-room-night.png'],
     ['crater/collapse-fan',false,'town-c2-crater-collapse-fan-day.png'],
     ['crater/collapse-fan',true,'town-c2-crater-collapse-fan-night.png'],
     ['crater/gully',false,'town-c2-crater-gully-day.png'],
@@ -116,6 +118,7 @@ try{
     assert.equal(stats.mode,'crater');assert.ok(stats.crater.colliderCount>0);
     assert.ok(Object.values(stats.crater.mounted).every(Boolean),file+' is missing a real C2 mount');
     assert.equal(stats.crater.centralMound.materialFamilies,3);
+    assert.ok(Math.abs(stats.crater.lampRoomRiseM)<=.22,file+' lamp-room rise '+stats.crater.lampRoomRiseM);
     assert.equal(stats.crater.brokenCircle.featureCount,8);
     assert.equal(stats.crater.inscription.hasText,false);
     assert.equal(stats.crater.warmLightChain.lampCount,16);
@@ -144,7 +147,7 @@ try{
   const sampleStarted=Date.now();
   await crater.waitForTimeout(20000);
   report.fpsSample={scene:'crater/molten-near-night',requestedMs:20000,wallMs:Date.now()-sampleStarted,
-    stats:await crater.evaluate(()=>window.townC2Review.inspect()),certification:'fixture-only SwiftShader sample'};
+    stats:await crater.evaluate(()=>window.townC2Review.inspect()),certification:'fixture-only '+angle+' sample'};
   assert.ok(report.fpsSample.wallMs>=19000);
   assert.ok(report.fpsSample.stats.frames>0&&Number.isFinite(report.fpsSample.stats.fps));
 
@@ -174,14 +177,45 @@ try{
     assert.equal(stats.underground.water.surfaceRiseM,level==='high'?1:0);
     assert.equal(stats.underground.water.waterMode,level==='high'?'raised':level==='low'?'hidden':'baseline');
     assert.equal(stats.underground.water.riverbedShortcutVisible,level==='low');
+    assert.equal(stats.underground.water.underwaterOreMarkers,level==='high'?1:0);
+    assert.equal(stats.underground.water.riverbedOreMarkers,level==='low'?1:0);
   }
-  assert.equal(await underground.evaluate(()=>window.townC2Review.setWater('mid')&&window.townC2Review.setView('underground/gallery-walk')),true);
-  await underground.keyboard.down('w');
-  const mineStep=await underground.evaluate(()=>window.townC2Review.step(.7));
-  await underground.keyboard.up('w');
-  assert.equal(mineStep,true,'mine queryPassage ground step rejected');
-  report.walks.underground=await underground.evaluate(()=>window.townC2Review.inspect());
-  assert.ok(report.walks.underground.walked>1.5&&report.walks.underground.trustedW>0&&report.walks.underground.rejected===0);
+  for(const level of ['high','mid','low']){
+    assert.equal(await underground.evaluate(level=>{
+      window.townC2Review.resetWalkStats();
+      return window.townC2Review.setWater(level)&&window.townC2Review.setView('underground/route-start');
+    },level),true);
+    const before=await underground.evaluate(()=>window.townC2Review.inspect());
+    const route=before.underground.routePoints;
+    for(let index=1;index<route.length;index++){
+      const target=route[index].to;
+      assert.equal(await underground.evaluate(target=>window.townC2Review.faceLocal(target[0],target[2]),target),true);
+      let remaining=Math.hypot(before.eye[0]-target[0],before.eye[2]-target[2]);
+      if(index>1){
+        const previous=route[index-1].to;
+        remaining=Math.hypot(previous[0]-target[0],previous[2]-target[2]);
+      }
+      await underground.keyboard.down('w');
+      while(remaining>1e-6){
+        const seconds=Math.min(2,remaining/before.walkSpeed);
+        assert.equal(await underground.evaluate(seconds=>window.townC2Review.step(seconds),seconds),true,'mine route rejected at '+level+' segment '+index);
+        remaining-=seconds*before.walkSpeed;
+      }
+      await underground.keyboard.up('w');
+      const eye=(await underground.evaluate(()=>window.townC2Review.inspect())).eye;
+      assert.ok(Math.hypot(eye[0]-target[0],eye[2]-target[2])<.02,'route segment '+index+' did not reach its surveyed foot');
+    }
+    const after=await underground.evaluate(()=>window.townC2Review.inspect());
+    report.undergroundWalksByLevel[level]={
+      walked:after.walked-before.walked,rejected:after.rejected-before.rejected,
+      trustedW:after.trustedW-before.trustedW,eye:after.eye,crouching:after.underground.crouching,
+      crouchObserved:after.underground.crouchObserved,
+    };
+    assert.equal(report.undergroundWalksByLevel[level].crouchObserved,true);
+    assert.ok(report.undergroundWalksByLevel[level].walked>20);
+    assert.equal(report.undergroundWalksByLevel[level].rejected,0);
+    assert.ok(report.undergroundWalksByLevel[level].trustedW>0);
+  }
   await underground.close();
 
   assert.deepEqual(report.errors.pageerror,[]);
@@ -199,5 +233,5 @@ finally{
   await writeFile(resolve(out,'review-stats.json'),JSON.stringify(report,null,2),'utf8');
 }
 console.log(JSON.stringify({passed:report.passed,out,sourceCommit,views:Object.keys(report.views),walks:report.walks,
-  fps:report.fpsSample?.stats.fps,errors:report.errors,failure:report.failure},null,2));
+  undergroundWalksByLevel:report.undergroundWalksByLevel,fps:report.fpsSample?.stats.fps,errors:report.errors,failure:report.failure},null,2));
 if(problem)throw problem;

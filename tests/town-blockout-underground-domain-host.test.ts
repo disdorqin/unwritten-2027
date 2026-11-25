@@ -58,6 +58,43 @@ test('the host resolves the registration and mounts the mine domain', () => {
   result.mounted.dispose();
 });
 
+test('batch 104: the water bridge feeds the accepted snapshot and host visual anchors', () => {
+  const parent = new Group();
+  let snapshot: { nightOrdinal: number; phase: 'rise' | 'level' | 'fall'; baseLevel: 'low' | 'mid' | 'high'; pumpOffset: number; level: 'low' | 'mid' | 'high' } | undefined = {
+    nightOrdinal: 0, phase: 'rise', baseLevel: 'high', pumpOffset: 0, level: 'high',
+  };
+  const result = mountUndergroundDomainHost({
+    parent, road: fakeRoad(),
+    waterBridge: {
+      readWaterSnapshot: () => snapshot,
+      highWaterOffsetM: .8,
+      oreVisuals: [
+        { id: 'fixture/underwater', kind: 'underwater', at: [0, -91, 2] },
+        { id: 'fixture/riverbed', kind: 'riverbed', at: [0, -90.2, 10], normal: [0, 1, 0] },
+      ],
+    },
+  });
+  assert.equal(result.kind, 'ready');
+  if (result.kind !== 'ready') return;
+  const water = result.mounted.waterOverlay;
+  assert.ok(water);
+  result.mounted.sync();
+  assert.equal(water.stats().configuration, 'host');
+  assert.equal(water.stats().level, 'high');
+  assert.equal(water.stats().surfaceRiseM, .8);
+  assert.equal(water.stats().underwaterOreMarkers, 1);
+  snapshot = { nightOrdinal: 2, phase: 'fall', baseLevel: 'low', pumpOffset: 0, level: 'low' };
+  result.mounted.sync();
+  assert.equal(water.stats().level, 'low');
+  assert.equal(water.stats().riverbedOreMarkers, 1);
+  snapshot = undefined;
+  result.mounted.sync();
+  assert.equal(water.stats().configuration, 'unconfigured');
+  assert.equal(water.stats().baselineWaterVisible, true);
+  result.mounted.dispose();
+  assert.equal(parent.children.length, 0);
+});
+
 test('a route whose surveyed heights disagree with its anchor cannot register or mount', () => {
   const parent = new Group();
   const road = fakeRoad({ rimHeight: liveAnchor.rimHeight + 5 });

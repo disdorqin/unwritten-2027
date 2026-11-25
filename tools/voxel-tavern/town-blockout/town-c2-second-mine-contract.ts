@@ -105,7 +105,7 @@ export function c2SecondMineBoxAllowed(box: C2SecondMineBox, clearance = visualC
     Math.abs(box.x) - box.w / 2 < 5 + clearance) return false;
 
   for (const door of doorStrips) {
-    if (box.y < 3.2 && Math.abs(box.x - door.x) - box.w / 2 < clearance + .27 &&
+    if (box.y - box.h / 2 < 3.2 && Math.abs(box.x - door.x) - box.w / 2 < clearance + .27 &&
       box.n + box.d / 2 > door.n0 - clearance && box.n - box.d / 2 < door.n1 + clearance) return false;
   }
   for (const centre of reservedCentres) {

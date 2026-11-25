@@ -129,6 +129,9 @@ test('the mounted voxel mound exposes three textured material families and agree
   near(top.point.y, anchor.rimHeight - meteorCraterDepth + 7.5, .001);
   ray.ray.origin.set(-120, anchor.rimHeight + 20, -185);
   assert.equal(ray.intersectObject(built.group, true).length, 0, 'the well notch must remain visually open');
+  const lamp = townC2CraterCentralMoundProtectedSites.lampRoom;
+  ray.ray.origin.set(lamp.east, anchor.rimHeight + 20, -lamp.north);
+  assert.equal(ray.intersectObject(built.group, true).length, 0, 'the lamp-room footprint must remain visually open');
   t.diagnostic(`${built.stats.voxelCount} voxels, ${built.stats.triangles} triangles, ` +
     `${built.stats.materialFamilies} families, sampled footprint ${built.survey.sampledFootprintM2.toFixed(2)} m²`);
   built.dispose();

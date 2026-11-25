@@ -39,10 +39,11 @@ const report = {
   schema: 'town-c2-second-mine-review/v1',
   sourceCommit,
   sourceTree,
-  scope: 'C2-07 visual differential over the registered second-mine domain; formal water snapshot, no viewer or production transition wiring',
+  scope: 'C2-07 visual differential and segmented first-person entry/bypass/exit evidence over the registered second-mine domain; formal water snapshot, no viewer or production transition wiring',
   uncertified: [
     'viewer/town-presence production switching, real descent facility and online walkthrough are not wired',
     'prefab and water differential remain visual-only and do not change floor, canStand, collision, ore or inventory authority',
+    'trusted-W bypass walks use the fixture camera and existing passageAt; they do not certify a production player controller',
     'high/mid/low selection is fixture input; the accepted water reader is tested separately',
     'Headless FPS is a review sample, not a device benchmark',
     'screenshots do not replace human visual acceptance',
@@ -104,10 +105,13 @@ try {
   const shots = [
     ['entry', false, 'middle', 'town-c2-m140-entry-day.png'],
     ['entry', true, 'middle', 'town-c2-m140-entry-night.png'],
+    ['support', true, 'middle', 'town-c2-m140-support-night.png'],
     ['upperWest', true, 'middle', 'town-c2-m140-upper-west-night.png'],
     ['upperEast', true, 'middle', 'town-c2-m140-upper-east-night.png'],
     ['nearWest', true, 'middle', 'town-c2-m140-near-bank-night.png'],
+    ['nearBankEast', true, 'middle', 'town-c2-m140-near-bank-east-night.png'],
     ['farWest', true, 'middle', 'town-c2-m140-far-bank-night.png'],
+    ['farBankEast', true, 'middle', 'town-c2-m140-far-bank-east-night.png'],
     ['bypass', true, 'high', 'town-c2-m140-bypass-high-night.png'],
     ['collapse', true, 'middle', 'town-c2-m140-collapse-night.png'],
     ['barracks', true, 'middle', 'town-c2-m140-barracks-night.png'],
@@ -146,18 +150,68 @@ try {
   assert.ok(report.fpsSample.wallMs >= 19000);
   assert.ok(report.fpsSample.stats.frames > 0 && Number.isFinite(report.fpsSample.stats.fps));
 
-  assert.equal(await page.evaluate(() => {
-    window.townC2MineReview.setRiverState('middle');
-    window.townC2MineReview.setNight(false);
-    window.townC2MineReview.setView('bypass');
-    return true;
-  }), true);
-  await page.keyboard.down('w');
-  const step = await page.evaluate(() => window.townC2MineReview.step(2));
-  await page.keyboard.up('w');
-  assert.equal(step, true, 'bypass ground step rejected');
-  report.walks.bypass = await page.evaluate(() => window.townC2MineReview.inspect());
-  assert.ok(report.walks.bypass.walked > 5.99 && report.walks.bypass.trustedW > 0 && report.walks.bypass.rejected === 0);
+  const walkRoute = await page.evaluate(() => window.townC2MineReview.walkRoute);
+  assert.equal(walkRoute.length, 6, 'entry, four bypass points and exit must form the surveyed route');
+  const routeLength = walkRoute.slice(1).reduce((total, point, index) => total +
+    Math.hypot(point.east - walkRoute[index].east, point.north - walkRoute[index].north), 0);
+  for (const state of ['high', 'middle', 'low']) {
+    const start = await page.evaluate(value => {
+      window.townC2MineReview.setRiverState(value);
+      window.townC2MineReview.setNight(true);
+      return window.townC2MineReview.setView('entry') ? window.townC2MineReview.inspect() : null;
+    }, state);
+    assert.ok(start, state + ' entry is blocked');
+    assert.equal(start.state, state);
+    const legs = [];
+    let segmentCount = 0;
+    for (let index = 1; index < walkRoute.length; index++) {
+      const target = walkRoute[index];
+      const length = Math.hypot(target.east - walkRoute[index - 1].east,
+        target.north - walkRoute[index - 1].north);
+      const segments = Math.ceil(length / 6);
+      const seconds = length / segments / 3;
+      for (let segment = 0; segment < segments; segment++) {
+        assert.equal(await page.evaluate(point => window.townC2MineReview.faceLocal(point), target), true,
+          state + ' cannot face surveyed bypass point ' + index);
+        await page.keyboard.down('w');
+        let accepted = false;
+        try {
+          accepted = await page.evaluate(value => window.townC2MineReview.step(value), seconds);
+        } finally {
+          await page.keyboard.up('w');
+        }
+        assert.equal(accepted, true, state + ' rejected W segment ' + segment + ' toward point ' + index);
+        segmentCount++;
+      }
+      const leg = await page.evaluate(() => window.townC2MineReview.inspect());
+      const distance = Math.hypot(leg.localFoot.east - target.east, leg.localFoot.north - target.north);
+      legs.push({ point: target, distance, eye: leg.eye, localFoot: leg.localFoot, room: leg.room });
+      assert.ok(distance < .05, state + ' did not reach surveyed bypass point ' + index);
+    }
+    const end = await page.evaluate(() => window.townC2MineReview.inspect());
+    const exit = walkRoute[walkRoute.length - 1];
+    const endpointDistance = Math.hypot(end.localFoot.east - exit.east, end.localFoot.north - exit.north);
+    const walk = {
+      ...end,
+      walked: end.walked - start.walked,
+      rejected: end.rejected - start.rejected,
+      trustedW: end.trustedW - start.trustedW,
+      route: walkRoute,
+      segmentCount,
+      legs,
+      endpoint: {
+        name: 'exit', reached: endpointDistance < .05, distance: endpointDistance,
+        localFoot: end.localFoot, room: end.room,
+      },
+    };
+    report.walks[state] = walk;
+    assert.equal(walk.rejected, 0, state + ' bypass walk was rejected');
+    assert.ok(walk.trustedW > 0, state + ' bypass walk did not receive trusted W input');
+    assert.ok(Math.abs(walk.walked - routeLength) < .05, state + ' bypass walk distance is incomplete');
+    assert.equal(walk.endpoint.reached, true, state + ' bypass walk did not reach exit');
+    assert.equal(walk.endpoint.room, 'exit');
+    assert.ok(Math.abs(walk.localFoot.height) < 1e-6, state + ' bypass walk ended off the surveyed exit floor');
+  }
 
   assert.deepEqual(report.errors.pageerror, []);
   assert.deepEqual(report.errors.consoleError, []);

@@ -113,7 +113,7 @@ test('all relief stays in its surveyed wing and preserves doors, routes and work
     assert.ok(pointBoxDistance(box, secondMineDrySites.workfaceEast.east, secondMineDrySites.workfaceEast.north) >= 1.95 - 1e-9);
   }
   for (const [doorX, n0, n1] of [[-4, 38, 56], [4, 68, 90]] as const) {
-    assert.ok(!boxes.some(box => box.y < 3.2 && Math.abs(box.x - doorX) - box.w / 2 < .72 &&
+    assert.ok(!boxes.some(box => box.y - box.h / 2 < 3.2 && Math.abs(box.x - doorX) - box.w / 2 < .72 &&
       box.n + box.d / 2 > n0 - .45 && box.n - box.d / 2 < n1 + .45), `low door ${doorX}`);
   }
   for (const [east, north] of [[-4, 47], [4, 79], [-24, 48], [29, 82]] as const) {
@@ -128,6 +128,16 @@ test('all relief stays in its surveyed wing and preserves doors, routes and work
   assert.equal(overlay.group.position.y, 0);
   assert.equal(overlay.group.position.z, 0);
   overlay.dispose();
+});
+
+test('door clearance uses the box bottom and still permits high boxes', () => {
+  const doorBox = { x: 4.8, n: 79, w: 1, h: 2, d: 1 } as const;
+  assert.equal(c2SecondMineBoxAllowed({ ...doorBox, y: 3.1 }), false,
+    'a centre below 3.2 with a bottom at 2.1 must be rejected');
+  assert.equal(c2SecondMineBoxAllowed({ ...doorBox, y: 3.3 }), false,
+    'a centre above 3.2 with a bottom at 2.3 must also be rejected');
+  assert.equal(c2SecondMineBoxAllowed({ ...doorBox, y: 4.3 }), true,
+    'a box with its bottom at 3.3 must remain allowed');
 });
 
 test('three instanced batches keep 16px Nearest pixel maps and the local north-to-negative-z convention', () => {

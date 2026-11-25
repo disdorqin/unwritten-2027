@@ -58,9 +58,18 @@ export const townC2CraterCentralMoundPlan: TownC2CraterCentralMoundSettings = Ob
   workFace: Object.freeze({ east: -120.6, north: 182.7, radius: 8, feather: 2 }),
 });
 
+const lampRoomFixture = Object.freeze({ east: -10, south: 10, radius: 3.3 });
+const lampRoomC = Math.cos(townC2CraterCentralMoundAnchor.yaw);
+const lampRoomS = Math.sin(townC2CraterCentralMoundAnchor.yaw);
 export const townC2CraterCentralMoundProtectedSites = Object.freeze({
   well: Object.freeze({ east: -120, north: 185, radius: 3.8 }),
   winch: Object.freeze({ east: -120.7468, north: 180.605, radius: 1.4 }),
+  // Mirror the read-only lamp-room fixture transform so its whole base stays on B-01 ground.
+  lampRoom: Object.freeze({
+    east: townC2CraterCentralMoundAnchor.east + lampRoomFixture.east * lampRoomC - lampRoomFixture.south * lampRoomS,
+    north: townC2CraterCentralMoundAnchor.north - lampRoomFixture.south * lampRoomC - lampRoomFixture.east * lampRoomS,
+    radius: lampRoomFixture.radius,
+  }),
 });
 
 export type TownC2CraterCentralMoundModel = Readonly<{
@@ -212,6 +221,11 @@ export function createTownC2CraterCentralMound(
     if (workDistance <= workFace.radius) return 0;
     if (workDistance < workFace.radius + workFace.feather) {
       rise *= smoothstep((workDistance - workFace.radius) / workFace.feather);
+    }
+    for (const site of Object.values(townC2CraterCentralMoundProtectedSites)) {
+      const distance = Math.hypot(world.east - site.east, world.north - site.north);
+      if (distance <= site.radius) return 0;
+      if (distance < site.radius + 2) rise *= smoothstep((distance - site.radius) / 2);
     }
     return Math.max(0, rise);
   }

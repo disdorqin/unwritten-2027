@@ -9,10 +9,8 @@ import {
 } from './underground-camp-offerings';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
-import {
-  readUndergroundWaterPresentation,
-  type AcceptedUndergroundWaterSnapshot,
-} from '../../../src/shared/town-c-water-snapshot-port.js';
+import type { AcceptedUndergroundWaterSnapshot } from '../../../src/shared/town-c-water-snapshot-port.js';
+import type { UndergroundWater90OreVisual } from './town-c2-underground-water-minus90.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -149,6 +147,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
    * bridge (or no snapshot yet) leaves the scene's baseline untouched. */
   waterBridge?: Readonly<{
     readWaterSnapshot?: () => AcceptedUndergroundWaterSnapshot | undefined;
+    highWaterOffsetM?: number;
+    oreVisuals?: readonly UndergroundWater90OreVisual[];
   }>;
 }>) {
   const { parent, road } = options;
@@ -292,21 +292,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
   };
   const readGateStage = () => 'closed' as const;
 
-  // Water loop consumption: the bridge's raw snapshot is validated by
-  // the certified port on every read; the scene adapter receives only
-  // the effective authority (level incl. pump offset + phase). The
-  // high-water rise adopts C2's fixture value (1 m) until the scene
-  // difference verification certifies a layout datum.
+  // The C2 adapter validates the raw accepted snapshot on every sync.
   const waterRuntime = options.waterBridge ? {
-    highWaterOffsetM: 1,
-    readWater: () => {
-      const snapshot = options.waterBridge?.readWaterSnapshot?.();
-      if (!snapshot) return undefined;
-      const presentation = readUndergroundWaterPresentation(() => snapshot);
-      return presentation
-        ? { level: presentation.level, phase: presentation.phase }
-        : undefined;
-    },
+    highWaterOffsetM: options.waterBridge.highWaterOffsetM ?? 1,
+    readAcceptedWater: () => options.waterBridge?.readWaterSnapshot?.(),
+    oreVisuals: options.waterBridge.oreVisuals,
   } : undefined;
 
   const mounted = mountUndergroundMineDomain({

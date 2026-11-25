@@ -20,7 +20,9 @@ import { mountZa31CraterLampRoom } from './town-za31-crater-lamp-room';
 import {
   createTownC2CraterCentralMound, mountTownC2CraterCentralMound,
 } from './town-c2-crater-central-mound';
-import { buildTownC2CraterBrokenCircle } from './town-c2-crater-broken-circle';
+import {
+  applyCraterBrokenCircleToWalkMesh, buildTownC2CraterBrokenCircle,
+} from './town-c2-crater-broken-circle';
 import {
   mountC2CraterMoltenBeads, updateC2CraterMoltenBeads,
 } from './town-c2-crater-molten-beads';
@@ -210,6 +212,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     oldWorkPlacements: story.placements.filter(piece => piece.cluster.startsWith('old-work-')),
   });
   group.add(brokenCircle.group);
+  // Cut B-01 before exposing the wrapped authority so render and walk share one offset.
+  applyCraterBrokenCircleToWalkMesh(surface as Mesh, anchor, brokenCircle.heightOffsetAt);
   road.heightAt = brokenCircle.heightAt;
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);

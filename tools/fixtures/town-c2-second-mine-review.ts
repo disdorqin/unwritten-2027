@@ -7,7 +7,10 @@ import { mountTownC2SecondMineWaterDifferential } from '../voxel-tavern/town-blo
 import { createUndergroundWaterState } from '../../src/presence/underground-water-state.js';
 import { townDayMs } from '../../src/shared/town-night-window.js';
 import { secondMineWorldFrame } from '../../src/shared/underground-second-mine-presence-domain.js';
-import type { MineRiverState } from '../../src/shared/underground-second-mine-layout.js';
+import {
+  secondMineAnchors, secondMineRoomAt, secondMineRooms,
+  type MineLocalPoint, type MineRiverState,
+} from '../../src/shared/underground-second-mine-layout.js';
 
 let now = 0;
 const authority = createUndergroundWaterState({ dawnEpoch: 0, now: () => now });
@@ -30,20 +33,32 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.domElement.setAttribute('aria-label', 'town-c2-registered-second-mine-first-person-review');
 document.body.append(renderer.domElement);
 
+const nearShore = secondMineRooms.find(room => room.id === 'near-shore');
+const farShore = secondMineRooms.find(room => room.id === 'far-shore');
+if (!nearShore || !farShore) throw new Error('C2 registered second-mine review surveyed shores are unavailable');
+// Local camera sites only: anchors and surveyed room edges, never new world registration.
 const views = {
-  entry: [0, 12, 0, 48],
-  support: [0, 9, -5, 9],
+  entry: [secondMineAnchors.entry.east, secondMineAnchors.entry.north, 0, 48],
+  support: [secondMineAnchors.supportCamp.east, secondMineAnchors.supportCamp.north,
+    secondMineAnchors.entry.east, secondMineAnchors.entry.north],
   upperWest: [-20, 47, -26, 47],
   upperEast: [20, 79, 30, 79],
   nearWest: [-40, 112, -45, 112],
   nearEast: [40, 112, 45, 112],
+  nearBankEast: [nearShore.x1 - 8, secondMineAnchors.bypass[0]!.north,
+    nearShore.x1 - 3, secondMineAnchors.bypass[0]!.north],
   farWest: [-40, 158, -45, 160],
   farEast: [40, 158, 45, 160],
+  farBankEast: [farShore.x1 - 8, secondMineAnchors.bypass[2]!.north - 1,
+    farShore.x1 - 3, secondMineAnchors.bypass[2]!.north + 1],
   bypass: [51.5, 120, 51.5, 150],
   collapse: [-52, 167, -64, 170],
   barracks: [55, 174, 63, 176],
   river: [0, 126, 0, 137],
 } as const;
+const walkRoute = Object.freeze([
+  secondMineAnchors.entry, ...secondMineAnchors.bypass, secondMineAnchors.exit,
+]);
 
 type ViewName = keyof typeof views;
 let view: ViewName = 'entry';
@@ -66,6 +81,16 @@ function setView(name: ViewName) {
   view = name;
   camera.position.set(world.east, world.height + eyeHeight, -world.north);
   camera.lookAt(target.east, target.height + eyeHeight, -target.north);
+  camera.updateMatrixWorld(true);
+  return true;
+}
+// Orientation helper for the surveyed walk route; it grants no passage or movement.
+function faceLocal(point: MineLocalPoint) {
+  if (![point.east, point.north].every(Number.isFinite)) return false;
+  const target = mine.toWorld({ east: point.east, north: point.north, height: 0 });
+  const distance = Math.hypot(target.east - camera.position.x, -target.north - camera.position.z);
+  if (distance < 1e-6) return true;
+  camera.lookAt(target.east, camera.position.y, -target.north);
   camera.updateMatrixWorld(true);
   return true;
 }
@@ -118,6 +143,10 @@ addEventListener('resize', () => {
 
 function inspect() {
   const summary = prefab.stats();
+  const localEye = mine.registered.toLocal({
+    east: camera.position.x, north: -camera.position.z, height: camera.position.y,
+  });
+  const localFoot = { east: localEye.east, north: localEye.north, height: localEye.height - eyeHeight };
   return {
     view,
     state: mine.getRiverState(),
@@ -125,6 +154,9 @@ function inspect() {
     frames,
     fps: frames * 1000 / Math.max(1, performance.now() - fpsStart),
     eye: camera.position.toArray(),
+    localEye: { east: localEye.east, north: localEye.north, height: localEye.height },
+    localFoot,
+    room: secondMineRoomAt(localFoot.east, localFoot.north)?.id,
     trustedW,
     walked,
     rejected,
@@ -158,7 +190,10 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-const api = { setView, setRiverState, setNight, step, resetFPS() { frames = 0; fpsStart = performance.now(); }, inspect };
+const api = {
+  setView, faceLocal, setRiverState, setNight, step, walkRoute,
+  resetFPS() { frames = 0; fpsStart = performance.now(); }, inspect,
+};
 Object.assign(window, { townC2MineReview: api });
 declare global {
   interface Window { townC2MineReview: typeof api }

@@ -22,7 +22,12 @@ import { mountTownC2UndergroundWaterMinus90 } from
 // production world, movement host, water authority, multiplayer session or art sign-off.
 const mode = new URLSearchParams(location.search).get('mode') === 'underground' ? 'underground' : 'crater';
 const fixtureHighWaterOffsetM = 1;
+const fixtureOreVisuals = [
+  { id: 'fixture/underwater', kind: 'underwater' as const, at: [0, -91, 2] as const },
+  { id: 'fixture/riverbed', kind: 'riverbed' as const, at: [0, -90.2, 10] as const, normal: [0, 1, 0] as const },
+];
 const eyeHeight = 1.67;
+const crouchEyeHeight = 1.2;
 const walkerRadius = undergroundMineSpec.walker.radius;
 const standingHeight = undergroundMineSpec.walker.standingHeight;
 const walkSpeed = 2.6;
@@ -49,6 +54,7 @@ type ViewSpec = Readonly<{
 type ReviewStats = Record<string, unknown>;
 
 let road: ReturnType<typeof mountWestCraterRoad> | undefined;
+let neutralCrater: ReturnType<typeof createMeteorCrater> | undefined;
 let mine: ReturnType<typeof createUndergroundMineLayout> | undefined;
 let water: ReturnType<typeof mountTownC2UndergroundWaterMinus90> | undefined;
 let waterMesh: Mesh | undefined;
@@ -63,6 +69,7 @@ let rejected = 0;
 let collisionChecks = 0;
 let trustedW = 0;
 let placementAdjustmentM = 0;
+let crouchObserved = false;
 const keys = new Set<string>();
 const direction = new Vector3();
 
@@ -81,6 +88,7 @@ function craterBlocked(east: number, north: number, floor: number, radius = walk
 if (mode === 'crater') {
   const terrain = createTerrainGrid();
   road = mountWestCraterRoad(worldBounds.depth, north => terrain.groundHeightAt(0, north));
+  neutralCrater = createMeteorCrater(meteorCraterFixturePlan);
   scene.add(road.group);
   scene.background = new Color(0x283746);
   scene.fog = new FogExp2(0x283746, .0045);
@@ -116,6 +124,13 @@ if (mode === 'crater') {
   const inscription = road.inscription.layout;
   addGround('crater/inscription', [inscription.useFoot.east, inscription.useFoot.north],
     [inscription.stone.east, inscription.stone.north], inscription.stone.height + .3 - inscription.useFoot.height);
+  const lampRoom = road.lampRoom?.site;
+  if (lampRoom) {
+    const c = Math.cos(road.anchor.yaw), s = Math.sin(road.anchor.yaw);
+    const door = { east: lampRoom.east + 2.3 * c + .65 * s, north: lampRoom.north + .65 * c - 2.3 * s };
+    const eye = { east: lampRoom.east + 6 * c + .65 * s, north: lampRoom.north + .65 * c - 6 * s };
+    addGround('crater/lamp-room', [eye.east, eye.north], [door.east, door.north], 1.2);
+  }
   const wellhead = road.warmLightChain.data.nodes.find(node => node.role === 'wellhead')!;
   views['crater/warm-chain-night'] = {
     eye: [mound.workFace.east, mound.workFace.north],
@@ -152,6 +167,7 @@ if (mode === 'crater') {
   }
   water = mountTownC2UndergroundWaterMinus90({
     parent: root, mine, waterMesh: waterMesh!, highWaterOffsetM: fixtureHighWaterOffsetM,
+    oreVisuals: fixtureOreVisuals,
   });
   const landing = mine.anchors.poolLanding;
   views['underground/high'] = {
@@ -165,6 +181,21 @@ if (mode === 'crater') {
   };
   views['underground/gallery-walk'] = {
     eye: [0, 18], target: [0, -90.7, 25],
+  };
+  const routeStart = mine.route[0]!.from;
+  views['underground/route-start'] = {
+    eye: [routeStart[0], routeStart[2]], target: [0, -90.7, 25],
+  };
+}
+
+function mineStance(z: number) {
+  const [start, end] = mine!.crouchInterval;
+  const crouching = z >= start && z <= end;
+  if (crouching) crouchObserved = true;
+  return {
+    crouching,
+    bodyHeight: crouching ? undergroundMineSpec.walker.crouchingHeight : undergroundMineSpec.walker.standingHeight,
+    eyeHeight: crouching ? crouchEyeHeight : eyeHeight,
   };
 }
 
@@ -223,10 +254,11 @@ function setView(name: string) {
     camera.lookAt(target[0], targetY, target[2]);
   } else {
     const [x, z] = spec.eye;
-    const passage = mine!.queryPassage(x, z, walkerRadius, standingHeight, 'open');
+    const stance = mineStance(z);
+    const passage = mine!.queryPassage(x, z, walkerRadius, stance.bodyHeight, 'open');
     if (!passage) return false;
     collisionChecks++;
-    camera.position.set(x, passage.floor + eyeHeight, z);
+    camera.position.set(x, passage.floor + stance.eyeHeight, z);
     camera.lookAt(...spec.target);
     placementAdjustmentM = 0;
   }
@@ -254,14 +286,15 @@ function step(seconds: number) {
       }
       camera.position.set(x, floor + eyeHeight, z);
     } else {
-      const passage = mine!.queryPassage(x, z, walkerRadius, standingHeight, 'open');
+      const stance = mineStance(z);
+      const passage = mine!.queryPassage(x, z, walkerRadius, stance.bodyHeight, 'open');
       if (!passage) {
         collisionChecks++;
         rejected++;
         return false;
       }
       collisionChecks++;
-      camera.position.set(x, passage.floor + eyeHeight, z);
+      camera.position.set(x, passage.floor + stance.eyeHeight, z);
     }
     walked += delta;
   }
@@ -288,7 +321,7 @@ function inspect(): ReviewStats {
   const common = {
     mode, view, night, frames,
     fps: frames * 1000 / Math.max(1, performance.now() - fpsStart),
-    eye: camera.position.toArray(), firstPersonEyeHeight: eyeHeight,
+    eye: camera.position.toArray(), firstPersonEyeHeight: eyeHeight, walkSpeed,
     walked, rejected, collisionChecks, trustedW, placementAdjustmentM,
     render: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles },
     pointerLock: document.pointerLockElement === null,
@@ -309,6 +342,12 @@ function inspect(): ReviewStats {
           warmLightChain: road.warmLightChain.group.parent === road.group,
         },
         centralMound: road.centralMound.stats,
+        lampRoomRiseM: (() => {
+          const lamp = road.lampRoom?.site;
+          if (!lamp || !neutralCrater) return undefined;
+          const local = road.centralMound.model.worldToLocal(lamp.east, lamp.north);
+          return lamp.height - (road.anchor.rimHeight + neutralCrater.heightOffsetAt(local.east, local.north)!);
+        })(),
         brokenCircle: { featureCount: road.brokenCircle.features.length },
         moltenBeads: road.moltenBeads.stats,
         moltenInsideRimGuard: cameraRadius! < meteorCraterRimRadius - c2CraterMoltenBeadsPlan.rimGuardInset,
@@ -330,7 +369,10 @@ function inspect(): ReviewStats {
       fixtureHighWaterOffsetM,
       highWaterOffsetAuthority: 'fixture-only; not a production-certified host value',
       waterCollisionAuthority: 'none; step uses mine.queryPassage at every substep',
+      crouching: mineStance(camera.position.z).crouching,
+      crouchObserved,
       route: mine!.route.map(item => item.zone),
+      routePoints: mine!.route,
     },
   };
 }
@@ -351,8 +393,15 @@ const api = {
   setView,
   setNight,
   setWater,
+  faceLocal(east: number, north: number) {
+    if (mode !== 'underground' || ![east, north].every(Number.isFinite)) return false;
+    camera.lookAt(east, camera.position.y, north);
+    camera.updateMatrixWorld(true);
+    return true;
+  },
   step,
   resetFPS() { frames = 0; fpsStart = performance.now(); },
+  resetWalkStats() { walked = 0; rejected = 0; collisionChecks = 0; trustedW = 0; crouchObserved = false; },
   inspect,
 };
 Object.assign(window, { townC2Review: api });

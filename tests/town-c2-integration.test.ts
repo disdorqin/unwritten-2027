@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PointLight } from 'three';
-import { meteorCraterDepth } from '../tools/voxel-tavern/town-blockout/meteor-crater';
+import { createMeteorCrater, meteorCraterDepth, meteorCraterFixturePlan } from '../tools/voxel-tavern/town-blockout/meteor-crater';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 
-test('C2-01～05 mount through the existing ZA-22 road and share its height/collider/night channels', () => {
+test('C2-01～05 mount through the existing ZA-22 road and share its height/collider/night channels', t => {
   const terrain = createTerrainGrid();
   const road = mountWestCraterRoad(worldBounds.depth, north => terrain.groundHeightAt(0, north));
 
@@ -18,6 +18,22 @@ test('C2-01～05 mount through the existing ZA-22 road and share its height/coll
   const floor = road.anchor.rimHeight - meteorCraterDepth;
   assert.ok(Math.abs(road.heightAt(-120, 196)! - (floor + 7.5)) < 1e-9);
   assert.ok(Math.abs(road.heightAt(-120, 185)! - floor) < 1e-9);
+  assert.ok(road.lampRoom);
+  const neutral = createMeteorCrater(meteorCraterFixturePlan);
+  const lamp = road.lampRoom.site;
+  const lampLocal = road.centralMound.model.worldToLocal(lamp.east, lamp.north);
+  const lampBaseline = road.anchor.rimHeight + neutral.heightOffsetAt(lampLocal.east, lampLocal.north)!;
+  const lampRise = lamp.height - lampBaseline;
+  assert.ok(Math.abs(lampRise) <= .22, `lamp-room rise ${lampRise}`);
+  t.diagnostic(`lamp-room rise ${lampRise.toFixed(9)} m`);
+  for (let index = 0; index < 16; index++) {
+    const angle = index * Math.PI / 8;
+    const east = lamp.east + Math.cos(angle) * 3.3;
+    const north = lamp.north + Math.sin(angle) * 3.3;
+    const local = road.centralMound.model.worldToLocal(east, north);
+    const baseline = road.anchor.rimHeight + neutral.heightOffsetAt(local.east, local.north)!;
+    assert.ok(Math.abs(road.heightAt(east, north)! - baseline) <= .22);
+  }
   assert.equal(road.centralMound.stats.materialFamilies, 3);
   assert.equal(road.brokenCircle.features.length, 8);
   assert.equal(road.moltenBeads.stats.beadCount, 640);

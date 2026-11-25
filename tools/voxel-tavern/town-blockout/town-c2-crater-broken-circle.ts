@@ -20,6 +20,8 @@ export const craterBrokenCircleSpec = Object.freeze({
   haulCorridorHalfWidth: 4.5,
   oldWorkClearance: 10,
   voxelSize: .8,
+  /** Visual-only separation from the cut walk mesh; heightAt stays authoritative. */
+  voxelSkinLift: .025,
 });
 
 export type CraterBrokenCircleFeature = Readonly<{
@@ -165,6 +167,33 @@ export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnc
   };
 }
 
+/** Cut the anchored walk mesh with the final reserved-work-filtered offset field. */
+export function applyCraterBrokenCircleToWalkMesh(
+  mesh: Mesh,
+  anchor: MeteorCraterWorldAnchor,
+  heightOffsetAt: (east: number, north: number) => number,
+) {
+  const geometry = mesh.geometry;
+  const positions = geometry.getAttribute('position');
+  if (!positions) throw new Error('Broken-circle walk mesh has no position attribute.');
+  if (![anchor.east, anchor.north, anchor.rimHeight, anchor.yaw].every(Number.isFinite)) {
+    throw new RangeError('Broken-circle terrain requires the live crater anchor.');
+  }
+  const c = Math.cos(anchor.yaw), s = Math.sin(anchor.yaw);
+  for (let index = 0; index < positions.count; index++) {
+    // B-01 is fixture-local: +X east, -Z north; world space applies final reservations.
+    const east = positions.getX(index), north = -positions.getZ(index);
+    const worldEast = anchor.east + east * c + north * s;
+    const worldNorth = anchor.north + north * c - east * s;
+    const offset = heightOffsetAt(worldEast, worldNorth);
+    if (Number.isFinite(offset)) positions.setY(index, positions.getY(index) + offset);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
 function grain(base: number, fleck: number) {
   const size = 16;
   const bytes = new Uint8Array(size * size * 4);
@@ -180,7 +209,10 @@ function grain(base: number, fleck: number) {
   return texture;
 }
 function material(base: number, fleck: number) {
-  return new MeshLambertMaterial({ map: grain(base, fleck), flatShading: true });
+  return new MeshLambertMaterial({
+    map: grain(base, fleck), flatShading: true,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+  });
 }
 
 type Cell = LocalPoint & { top: number; base: number; kind: 'collapse' | 'gully' };
@@ -224,15 +256,15 @@ function voxelGeometry(cells: readonly Cell[], size: number) {
   return geometry;
 }
 
-function trackGeometry(points: readonly (LocalPoint & { height: number })[], width: number) {
+function trackGeometry(points: readonly (LocalPoint & { height: number })[], width: number, heightDatum: number) {
   const positions: number[] = [], indices: number[] = [];
   points.forEach((point, index) => {
     const before = points[Math.max(0, index - 1)]!, after = points[Math.min(points.length - 1, index + 1)]!;
     const length = Math.hypot(after.east - before.east, after.north - before.north) || 1;
     const sideE = -(after.north - before.north) / length * width / 2;
     const sideN = (after.east - before.east) / length * width / 2;
-    positions.push(point.east - sideE, point.height, -(point.north - sideN),
-      point.east + sideE, point.height, -(point.north + sideN));
+    positions.push(point.east - sideE, point.height - heightDatum, -(point.north - sideN),
+      point.east + sideE, point.height - heightDatum, -(point.north + sideN));
     if (index > 0) {
       const a = (index - 1) * 2;
       indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
@@ -263,6 +295,9 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
   const field = createCraterBrokenCircleHeightField(anchor);
   const group = new Group();
   group.name = 'town-c2-crater-broken-circle';
+  // Skins and traces are authored in fixture coordinates, just like B-01.
+  group.position.set(anchor.east, anchor.rimHeight, -anchor.north);
+  group.rotation.y = -anchor.yaw;
   group.userData.features = craterBrokenCircleFeatures;
   group.userData.heightAuthority = 'town-za22-crater-road.heightAt + brokenCircle.heightOffsetAt';
   const placements: CraterBrokenCirclePlacement[] = [];
@@ -285,7 +320,8 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
     if (base === undefined || !Number.isFinite(base)) continue;
     const footprint = size * Math.SQRT1_2;
     if (!clearOfOldWork(world, footprint)) continue;
-    cells.push({ ...local, top: base + sample.offset, base, kind: sample.kind });
+    cells.push({ ...local, top: base + sample.offset + craterBrokenCircleSpec.voxelSkinLift - anchor.rimHeight,
+      base: base - anchor.rimHeight, kind: sample.kind });
     placements.push({
       id: `${sample.kind}-${row}-${column}`, featureId: '', kind: `${sample.kind}-voxel`,
       east: world.east, north: world.north, height: base + sample.offset, footprint,
@@ -328,17 +364,19 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
   for (const side of [-1, 1]) {
     const points = trackPoints.map(({ local, sideE, sideN }) => {
       const offset = side * 3.15;
-      const point = field.toWorld({ east: local.east + sideE * offset, north: local.north + sideN * offset });
-      const base = baseHeightAt(point.east, point.north);
+      const point = { east: local.east + sideE * offset, north: local.north + sideN * offset };
+      const world = field.toWorld(point);
+      const base = baseHeightAt(world.east, world.north);
       return { ...point, height: (base ?? anchor.rimHeight) + .035 };
     });
-    const mesh = new Mesh(trackGeometry(points, 1.05), trackMaterial);
+    const mesh = new Mesh(trackGeometry(points, 1.05, anchor.rimHeight), trackMaterial);
     mesh.name = `town-c2-haul-compacted-trace-${side < 0 ? 'west' : 'east'}`;
     group.add(mesh);
     points.forEach((point, index) => {
-      if (!clearOfOldWork(point, .55)) return;
+      const world = field.toWorld(point);
+      if (!clearOfOldWork(world, .55)) return;
       placements.push({ id: `haul-${side}-${index}`, featureId: 'south-haul-notch',
-        kind: 'haul-track', east: point.east, north: point.north, height: point.height, footprint: .55 });
+        kind: 'haul-track', east: world.east, north: world.north, height: point.height, footprint: .55 });
     });
   }
 

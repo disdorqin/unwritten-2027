@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Raycaster, Vector3, type Group, type Mesh } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from '../tools/voxel-tavern/town-blockout/meteor-crater';
+import { mountMeteorCraterSurface } from '../tools/voxel-tavern/town-blockout/meteor-crater-surface';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { buildZa36CraterStoryDressing } from '../tools/voxel-tavern/town-blockout/town-za36-crater-story-dressing';
 import {
-  buildTownC2CraterBrokenCircle, craterBrokenCircleFeatures, craterBrokenCircleSpec,
-  craterCollapseWidthAtRadius, createCraterBrokenCircleHeightField,
+  applyCraterBrokenCircleToWalkMesh, buildTownC2CraterBrokenCircle,
+  craterBrokenCircleFeatures, craterBrokenCircleSpec, craterCollapseWidthAtRadius,
+  createCraterBrokenCircleHeightField,
 } from '../tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle';
 
 const grid = createTerrainGrid();
@@ -20,6 +23,44 @@ const collapses = built.features.filter(feature => feature.kind === 'collapse');
 const gullies = built.features.filter(feature => feature.kind === 'gully');
 const localBearing = (east: number, north: number) =>
   (Math.atan2(east - road.anchor.east, north - road.anchor.north) - road.anchor.yaw + Math.PI * 4) % (Math.PI * 2);
+const mounted = road.brokenCircle;
+
+function namedMesh(group: Group, name: string) {
+  const mesh = group.getObjectByName(name) as Mesh | undefined;
+  assert.ok(mesh?.isMesh, `${name} is absent`);
+  return mesh;
+}
+function rayHeight(mesh: Mesh, east: number, north: number) {
+  mesh.updateWorldMatrix(true, false);
+  const hit = new Raycaster(
+    new Vector3(east, road.anchor.rimHeight + 100, -north),
+    new Vector3(0, -1, 0),
+  ).intersectObject(mesh, false)[0];
+  assert.ok(hit, `no surface below ${east},${north}`);
+  return hit.point.y;
+}
+const baselineFixture = createMeteorCrater(meteorCraterFixturePlan, {
+  centralMound: road.centralMound.model,
+});
+const baselineHeightAt = (east: number, north: number) => {
+  const local = field.toLocal(east, north);
+  const offset = baselineFixture.heightOffsetAt(local.east, local.north);
+  return offset === undefined ? undefined : road.anchor.rimHeight + offset;
+};
+function walkVertexSample(kind: 'collapse' | 'gully') {
+  const positions = namedMesh(road.group, 'meteor-crater-walk-mesh').geometry.getAttribute('position');
+  let best: { east: number; north: number; offset: number } | undefined;
+  for (let index = 0; index < positions.count; index++) {
+    const local = { east: positions.getX(index), north: -positions.getZ(index) };
+    if (field.sampleAt(local.east, local.north).kind !== kind) continue;
+    const world = field.toWorld(local);
+    const offset = mounted.heightOffsetAt(world.east, world.north);
+    if (offset === 0 || (best && offset >= best.offset)) continue;
+    best = { ...world, offset };
+  }
+  assert.ok(best, `no cut ${kind} vertex in the original walk mesh`);
+  return best;
+}
 
 test('批95卡19 exports exactly three collapse fans and five radial gullies', () => {
   assert.deepEqual(collapses.map(feature => feature.bearingDeg), [40, 95, 150]);
@@ -114,6 +155,22 @@ test('south haul notch keeps the existing descent geometry and adds side traces 
     if (piece.kind === 'haul-track') assert.ok(field.inHaulCorridor(local));
     else assert.ok(!field.inHaulCorridor(local), 'no cut/fill voxel is placed in the haul corridor');
   }
+  for (const side of ['west', 'east']) {
+    const trace = namedMesh(built.group, `town-c2-haul-compacted-trace-${side}`);
+    const positions = trace.geometry.getAttribute('position');
+    trace.updateWorldMatrix(true, false);
+    for (let index = 0; index < positions.count; index += 2) {
+      const point = trace.localToWorld(new Vector3(
+        (positions.getX(index) + positions.getX(index + 1)) / 2,
+        positions.getY(index),
+        (positions.getZ(index) + positions.getZ(index + 1)) / 2,
+      ));
+      const local = field.toLocal(point.x, -point.z);
+      assert.ok(field.inHaulCorridor(local), `${side} trace left the existing haul route`);
+      assert.ok(Math.abs(point.y - road.heightAt(point.x, -point.z)! - .035) < .002,
+        `${side} trace changed the transport-road height`);
+    }
+  }
   assert.deepEqual(built.colliders, [], 'surface relief and compacted traces introduce no air wall');
 });
 
@@ -132,4 +189,99 @@ test('new placements and collider channel keep at least 10 m from the read-only 
       'the read-only old-work reservation also suppresses terrain relief');
   }
   assert.equal(built.heightAt(road.anchor.east, road.anchor.north), road.heightAt(road.anchor.east, road.anchor.north));
+});
+
+test('the original walk triangles are cut at collapse and gully world vertices with fresh normals and bounds', () => {
+  const walk = namedMesh(road.group, 'meteor-crater-walk-mesh');
+  assert.ok(walk.geometry.getAttribute('normal'));
+  assert.ok(walk.geometry.boundingBox);
+  assert.ok(walk.geometry.boundingSphere);
+  const neutralMount = mountMeteorCraterSurface(road.anchor);
+  const neutralWalk = namedMesh(neutralMount.group, 'meteor-crater-walk-mesh');
+  for (const kind of ['collapse', 'gully'] as const) {
+    const point = walkVertexSample(kind);
+    const expected = road.heightAt(point.east, point.north);
+    const neutralLocal = field.toLocal(point.east, point.north);
+    const neutralOffset = fixture.heightOffsetAt(neutralLocal.east, neutralLocal.north);
+    assert.ok(expected !== undefined && neutralOffset !== undefined);
+    const neutralExpected = road.anchor.rimHeight + neutralOffset;
+    assert.ok(point.offset <= (kind === 'collapse' ? -3 : -1));
+    assert.ok(Math.abs(rayHeight(walk, point.east, point.north) - expected) < .002,
+      `${kind} rendered height differs from road.heightAt`);
+    assert.ok(Math.abs(rayHeight(neutralWalk, point.east, point.north) - neutralExpected) < .002,
+      `${kind} changed the neutral meteor crater`);
+    assert.ok(Math.abs(expected - neutralExpected - point.offset) < .002,
+      `${kind} does not apply exactly one final offset`);
+  }
+});
+
+test('voxel skins sit just above the cut surface without lifting the height authority', () => {
+  for (const kind of ['collapse', 'gully'] as const) {
+    const skin = namedMesh(mounted.group, `town-c2-broken-circle-${kind}-voxels`);
+    const material = skin.material as unknown as {
+      polygonOffset: boolean; polygonOffsetFactor: number; polygonOffsetUnits: number;
+    };
+    assert.equal(material.polygonOffset, true);
+    assert.ok(material.polygonOffsetFactor < 0 && material.polygonOffsetUnits < 0);
+    const placement = mounted.placements.find(piece =>
+      piece.kind === `${kind}-voxel` && mounted.heightOffsetAt(piece.east, piece.north) < -.5);
+    assert.ok(placement, `no ${kind} skin sample`);
+    const authority = road.heightAt(placement.east, placement.north);
+    assert.ok(authority !== undefined);
+    assert.ok(Math.abs(placement.height - authority) < 1e-8,
+      'placement metadata must not contain the visual-only lift');
+    assert.ok(Math.abs(rayHeight(skin, placement.east, placement.north) -
+      authority - craterBrokenCircleSpec.voxelSkinLift) < .002,
+      `${kind} skin is not one small lift above the authoritative surface`);
+  }
+});
+
+test('the final old-work filter protects both heightAt and the cut mesh while neutral geometry stays untouched', () => {
+  const walk = namedMesh(road.group, 'meteor-crater-walk-mesh');
+  const baselineMount = mountMeteorCraterSurface(road.anchor, {
+    centralMound: road.centralMound.model,
+  });
+  const baselineWalk = namedMesh(baselineMount.group, 'meteor-crater-walk-mesh');
+  for (const old of oldWorkRing) {
+    const expected = baselineHeightAt(old.east, old.north);
+    const actual = road.heightAt(old.east, old.north);
+    assert.ok(expected !== undefined && actual !== undefined);
+    assert.equal(mounted.heightOffsetAt(old.east, old.north), 0);
+    assert.ok(Math.abs(actual - expected) < 1e-8);
+    assert.ok(Math.abs(rayHeight(walk, old.east, old.north) -
+      rayHeight(baselineWalk, old.east, old.north)) < .002,
+      `${old.cluster} changed height on the rendered walk mesh`);
+  }
+
+  // Exercise a reservation overlapping a fan, not only neutral floor pieces.
+  const protectedPoint = walkVertexSample('collapse');
+  assert.ok(field.heightOffsetAt(protectedPoint.east, protectedPoint.north) < -3);
+  const reserved = buildTownC2CraterBrokenCircle(
+    { anchor: road.anchor, heightAt: baselineHeightAt },
+    { oldWorkPlacements: [protectedPoint] },
+  );
+  assert.equal(reserved.heightOffsetAt(protectedPoint.east, protectedPoint.north), 0);
+  assert.equal(reserved.heightAt(protectedPoint.east, protectedPoint.north),
+    baselineHeightAt(protectedPoint.east, protectedPoint.north));
+  for (const piece of reserved.placements) {
+    assert.ok(Math.hypot(piece.east - protectedPoint.east, piece.north - protectedPoint.north) >=
+      craterBrokenCircleSpec.oldWorkClearance + piece.footprint - 1e-8);
+  }
+
+  const originalPositions = new Float32Array(baselineWalk.geometry.getAttribute('position').array);
+  baselineWalk.geometry.computeBoundingBox();
+  const originalBounds = baselineWalk.geometry.boundingBox!.clone();
+  const isolated = baselineWalk.clone();
+  isolated.geometry = baselineWalk.geometry.clone();
+  baselineMount.group.add(isolated);
+  applyCraterBrokenCircleToWalkMesh(isolated, road.anchor, reserved.heightOffsetAt);
+  assert.deepEqual(new Float32Array(baselineWalk.geometry.getAttribute('position').array), originalPositions,
+    'cutting one walk mesh must not mutate a neutral crater mesh');
+  assert.ok(isolated.geometry.boundingBox &&
+    (isolated.geometry.boundingBox.min.y < originalBounds.min.y - .01 ||
+      isolated.geometry.boundingBox.max.y > originalBounds.max.y + .01),
+    'the deformed mesh bounds were not recomputed');
+  assert.ok(Math.abs(rayHeight(isolated, protectedPoint.east, protectedPoint.north) -
+    baselineHeightAt(protectedPoint.east, protectedPoint.north)!) < .002,
+    'the reserved world vertex moved despite the final old-work filter');
 });
