@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group } from 'three';
+import { Group, Mesh } from 'three';
 import {
   mountTownC2SecondMineWaterDifferential,
 } from '../tools/voxel-tavern/town-blockout/town-c2-second-mine-water-differential.js';
@@ -28,25 +28,42 @@ test('C2-07 uses effective level rather than phase and renders high/mid/low diff
   assert.equal(fx.stats().ferryRunning, false);
   assert.equal(fx.stats().groundedBoat, false);
   assert.equal(fx.stats().flowStreakCount, 18);
-  assert.equal(fx.group.getObjectByName('town-c2-water/high-flow')?.visible, true);
+  assert.deepEqual(['high-flow', 'mid-ferry', 'low-dry-bed'].map(name =>
+    fx.group.getObjectByName('town-c2-water/' + name)?.visible), [true, false, false]);
 
   accepted = { nightOrdinal: 0, phase: 'rise', baseLevel: 'high', pumpOffset: -1, level: 'mid' };
   assert.equal(fx.sync().waterMode, 'baseline');
   assert.equal(fx.stats().ferryRunning, true);
   assert.equal(fx.stats().groundedBoat, false);
-  assert.equal(fx.group.getObjectByName('town-c2-water/mid-ferry')?.visible, true);
+  assert.deepEqual(['high-flow', 'mid-ferry', 'low-dry-bed'].map(name =>
+    fx.group.getObjectByName('town-c2-water/' + name)?.visible), [false, true, false]);
 
-  accepted = snapshot('low', 'level');
+  accepted = { nightOrdinal: 2, phase: 'fall', baseLevel: 'mid', pumpOffset: -1, level: 'low' };
   assert.equal(fx.sync().waterMode, 'hidden');
   assert.equal(fx.stats().ferryRunning, false);
   assert.equal(fx.stats().groundedBoat, true);
   assert.equal(fx.stats().riverbedPatchCount, 26);
   assert.equal(fx.stats().riverbedStoneCount, 42);
-  assert.equal(fx.group.getObjectByName('town-c2-water/low-dry-bed')?.visible, true);
+  assert.deepEqual(['high-flow', 'mid-ferry', 'low-dry-bed'].map(name =>
+    fx.group.getObjectByName('town-c2-water/' + name)?.visible), [false, false, true]);
   assert.equal(fx.stats().realLightCount, 0);
   assert.equal(fx.stats().colliderCount, 0);
+  const resources = new Set<{ dispose(): void }>();
+  fx.group.traverse(object => {
+    if (!(object instanceof Mesh)) return;
+    resources.add(object.geometry);
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      resources.add(material);
+    }
+  });
+  let disposeCount = 0;
+  for (const resource of resources) {
+    const dispose = resource.dispose.bind(resource);
+    resource.dispose = () => { disposeCount++; dispose(); };
+  }
   fx.dispose();
   fx.dispose();
+  assert.equal(disposeCount, resources.size);
   assert.equal(fx.group.parent, null);
   assert.equal(parent.children.length, 0);
 });
