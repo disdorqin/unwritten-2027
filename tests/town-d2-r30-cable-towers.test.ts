@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { Group, Mesh } from 'three';
+import { Group, InstancedMesh, Matrix4, Mesh, Quaternion, Vector3 } from 'three';
 import { createTownD2R30CableTowers } from '../tools/voxel-tavern/town-blockout/town-d2-r30-cable-towers';
 import { createMainSummitCable } from '../tools/voxel-tavern/town-blockout/main-summit-cable';
 import { summitCableSpec } from '../tools/voxel-tavern/town-blockout/main-summit-cable';
@@ -25,19 +25,32 @@ test('D2-R02 cable towers densely support the canonical 1920 m line on R30 terra
   assert.ok(stats.drawCalls > 0 && stats.triangles > 0);
   assert.ok(stats.minClearance >= 1);
 
-  const towerGroups = towers.group.children.filter(child => child.type === 'Group');
-  assert.equal(towerGroups.length, stats.towers);
-  // Every tower is positioned over the domain and contains a pole whose base
-  // sits on the R30 ground directly below the sampled rope point.
-  for (const tower of towerGroups) {
-    const east = tower.position.x, north = -tower.position.z;
+  // D2-R10: the towers ship as three instanced batches, so the whole 1,920 m
+  // line costs three draw calls instead of one mesh per tower part.
+  const batches = towers.group.children.filter(child => child instanceof InstancedMesh);
+  assert.equal(batches.length, 3, 'mast, crossbar and brace batches');
+  assert.equal(stats.drawCalls, 3, JSON.stringify(stats));
+  const mast = batches.find(batch => batch.name.endsWith('-mast'))!;
+  const crossbar = batches.find(batch => batch.name.endsWith('-crossbar'))!;
+  assert.ok(mast && crossbar);
+  assert.equal(mast.count, stats.towers);
+  assert.equal(crossbar.count, stats.towers);
+
+  // Every tower is positioned over the domain and its mast base sits on the
+  // R30 ground directly below the sampled rope point.
+  const matrix = new Matrix4();
+  const position = new Vector3();
+  const quaternion = new Quaternion();
+  const scale = new Vector3();
+  for (let index = 0; index < mast.count; index++) {
+    mast.getMatrixAt(index, matrix);
+    matrix.decompose(position, quaternion, scale);
+    const east = position.x, north = -position.z;
     const ground = sampleTownD2R30Height(east, north);
     assert.ok(ground !== undefined, `tower outside domain E${east}/N${north}`);
-    const pole = tower.children[0] as Mesh;
-    const geometry = pole.geometry;
-    geometry.computeBoundingBox();
-    const base = geometry.boundingBox!.min.y;
-    assert.ok(Math.abs(base - (ground - 0.3)) < 1.5, `tower base ${base} != ground ${ground}`);
+    const base = position.y - scale.y / 2;
+    assert.ok(Math.abs(base - ground) < 1.5, `tower base ${base} != ground ${ground}`);
+    assert.ok(scale.y > 1, `mast height ${scale.y}`);
   }
 });
 

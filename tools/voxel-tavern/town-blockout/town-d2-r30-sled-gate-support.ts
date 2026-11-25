@@ -139,6 +139,11 @@ export function createTownD2R30SledGateSupport(options: {
     group,
     reports: () => Object.freeze(reports.map(report => ({ ...report }))),
     stats: () => stats,
+    setNight(value: boolean) {
+      if (disposed) throw new Error('The D2-R03 sled gate stands are disposed.');
+      if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
+      stone.color.set(value ? '#514b43' : DEFAULTS.stoneColor);
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

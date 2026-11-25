@@ -148,3 +148,33 @@ test('D2-R30 assembly supports minimal composition without supplements', context
   assert.throws(() => createTownD2R30Assembly({ terrainMode: 'fly' as never }), /terrainMode/);
   assert.throws(() => createTownD2R30Assembly({ includeStrata: 'yes' as never }), /booleans/);
 });
+
+test('D2-R10 assembly reports a per-package draw and triangle budget', context => {
+  const assembly = cleanup(context, createTownD2R30Assembly({
+    includeTrailSupport: true, includeCableTowers: true,
+    includeFacilityFoundations: true, includeSledGateSupport: true,
+    includeSummitFacilities: true,
+  }));
+  const stats = assembly.stats() as {
+    budget: {
+      meshes: number;
+      draws: number;
+      triangles: number;
+      packages: ReadonlyArray<{ package: string; meshes: number; triangles: number }>;
+    };
+  };
+  const budget = stats.budget;
+  assert.ok(budget.meshes > 0 && budget.triangles > 0);
+  assert.equal(budget.draws, budget.meshes);
+  assert.equal(budget.packages.length, 9);
+  const summedMeshes = budget.packages.reduce((sum, item) => sum + item.meshes, 0);
+  const summedTriangles = budget.packages.reduce((sum, item) => sum + item.triangles, 0);
+  assert.equal(summedMeshes, budget.meshes);
+  assert.equal(summedTriangles, budget.triangles);
+
+  // The ropeway towers must not cost one draw per tower any more.
+  const towers = budget.packages.find(item => item.package === 'town-d2-r30-cable-towers');
+  assert.ok(towers);
+  assert.ok(towers.meshes <= 3, `expected instanced cable towers, got ${towers.meshes}`);
+  assert.ok(towers.triangles > 0);
+});
