@@ -116,13 +116,25 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan,
     return naturalRelief ? bR30CraterBed(east, north) : terraceHeightOffsetAt(Math.hypot(east, north));
   }
 
+  function moundAt(east:number,north:number,bed:number) {
+    const original=centralMound?.heightOverrideAtLocal(east,north,bed);
+    if(!naturalRelief || original===undefined || !centralMound)return original;
+    // Skew the hill shoulders, not the protected well/return corridor. The
+    // approved center and maximum height remain exact; zero rise stays zero.
+    const de=east-centralMound.localCenter.east,dn=north-centralMound.localCenter.north;
+    const r=Math.hypot(de,dn),a=Math.atan2(de,dn);
+    const envelope=Math.min(1,r/5)*Math.min(1,Math.max(0,(centralMound.settings.radius-r)/5));
+    const rise=(original-bed)*(1+envelope*(.13*Math.sin(a*3+.4)+.07*Math.cos(a*5-r*.12)));
+    return bed+Math.max(0,Math.min(centralMound.settings.height,rise));
+  }
+
   function heightOffsetAt(east: number, north: number) {
     const radius = Math.hypot(east, north);
     const bowlHeight = bedAt(east, north);
     // C2-01: compose once against the existing bowl, then max the finished trail blend.
     // The neutral fixture remains byte-for-byte equivalent when no mound is supplied.
     const moundOverride = bowlHeight === undefined ? undefined :
-      centralMound?.heightOverrideAtLocal(east, north, bowlHeight);
+      moundAt(east, north, bowlHeight);
     const groundHeight = moundOverride ?? bowlHeight;
     if (bowlHeight === undefined || radius <= meteorCraterFloorRadius || radius >= meteorCraterRimRadius) {
       return groundHeight;
@@ -196,7 +208,7 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan,
       const localEast = radius * Math.sin(angle + bearing);
       const localNorth = radius * Math.cos(angle + bearing);
       const baseGround = bedAt(localEast, localNorth) ?? 0;
-      const ground = centralMound?.heightOverrideAtLocal(localEast, localNorth, baseGround) ?? baseGround;
+      const ground = moundAt(localEast, localNorth, baseGround) ?? baseGround;
       let distance = corridorRadius, trailAngle = 0;
       for (const turn of turnsAt(angle)) {
         const candidate = angle + turn * fullTurn;

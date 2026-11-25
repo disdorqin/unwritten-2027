@@ -516,6 +516,27 @@ export function buildTownC2CraterCentralMound(
 /** Convenience mount for the world-space ZA-22 road/root owner. */
 export function mountTownC2CraterCentralMound(owner: Group,
   anchor: TownC2CraterMoundAnchor, options: TownC2CraterCentralMoundOptions = {}) {
+  // R30's actual B01 walk mesh includes the mound, including its protected
+  // workface. The previous voxel overlay must not float above that mesh.
+  // Keep the reviewed survey and the legacy standalone builder available.
+  if(owner.getObjectByName('meteor-crater-walk-mesh')?.userData.bR30UnifiedRelief===true){
+    const model=createTownC2CraterCentralMound(anchor,options),survey=model.survey();
+    const group=new Group();group.name='town-c2-crater-central-mound';
+    group.position.set(anchor.east,anchor.rimHeight,-anchor.north);group.rotation.y=-anchor.yaw;
+    group.userData.walkHeightAuthority='meteor-crater-walk-mesh (unified R30)';
+    const r=model.settings.radius,center=model.localCenter;
+    const stats:TownC2CraterCentralMoundGeometryStats=Object.freeze({
+      voxelCount:0,exposedBlockFaces:0,triangles:0,materialFamilies:0,
+      materialVoxelCounts:{'scorched-earth':0,basalt:0,slag:0},
+      maxVisualRise:survey.maxSurfaceHeight,
+      bounds:{minEast:center.east-r,maxEast:center.east+r,minNorth:center.north-r,maxNorth:center.north+r,
+        minHeightOffset:-35,maxHeightOffset:-35+model.settings.height}
+    });
+    group.userData.townC2CraterCentralMound={survey,stats,integrated:true};
+    owner.add(group);
+    return {group,model,survey,stats,meshes:[] as Mesh<BufferGeometry,MeshLambertMaterial>[],
+      materials:[] as MeshLambertMaterial[],textures:[] as DataTexture[],dispose(){group.removeFromParent();}};
+  }
   const built = buildTownC2CraterCentralMound(anchor, options);
   owner.add(built.group);
   return built;

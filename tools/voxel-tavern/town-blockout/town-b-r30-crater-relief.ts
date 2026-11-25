@@ -47,6 +47,28 @@ export function bR30CraterBed(east:number,north:number):number|undefined {
   return Math.max(-depth,Math.min(0,bowl+(cut+ribs)*blend+shoulder));
 }
 
+/** Signed radial cross-section of the existing B01 centerline. This keeps the
+ * original endpoints and road grade, and lets geology fade out of its actual
+ * 2m tread plus shoulders without drawing a second ribbon on top. */
+export function bR30HaulCrossSection(east:number,north:number,startBearing=.7,turns=3.5) {
+  const r=Math.hypot(east,north),tau=Math.PI*2,sweep=turns*tau;
+  const a=((Math.atan2(east,north)-startBearing)%tau+tau)%tau;
+  const desired=sweep*(55-r)/35;
+  const last=Math.floor((sweep-a)/tau);
+  let progress=0,signed=r-55,distance=Math.hypot(east-55*Math.sin(startBearing),north-55*Math.cos(startBearing));
+  const end=startBearing+sweep,exitDistance=Math.hypot(east-20*Math.sin(end),north-20*Math.cos(end));
+  if(exitDistance<distance){progress=1;signed=r-20;distance=exitDistance;}
+  if(last>=0){
+    const turn=Math.max(0,Math.min(last,Math.round((desired-a)/tau)));
+    const p=(a+turn*tau)/sweep,d=r-(55-35*p);
+    if(Math.abs(d)<distance){signed=d;progress=p;distance=Math.abs(d);}
+  }
+  const fade=smooth((55-r)/1.5)*smooth((r-20)/1.5);
+  const tread=(1-smooth((distance-.94)/.65))*fade;
+  const rut=tread*(1-smooth(Math.abs(Math.abs(signed)-.54)/.22));
+  return {progress,signed,distance,tread,rut};
+}
+
 /** Rock layers dip across the crater instead of following horizontal radii.
  * Used by the real ground material; no extra mesh, light or collision. */
 export function bR30StrataShade(east:number,height:number,north:number) {

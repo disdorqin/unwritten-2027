@@ -7,7 +7,7 @@ import {
 } from './meteor-crater';
 import { mountCraterInteriorDressing } from './meteor-crater-interior-dressing.js';
 import { mountCraterFloorWorklightChain } from './meteor-crater-floor-worklight-chain.js';
-import { bR30StrataShade } from './town-b-r30-crater-relief';
+import { bR30HaulCrossSection, bR30StrataShade } from './town-b-r30-crater-relief';
 
 export type MeteorCraterWorldAnchor = Readonly<{
   east: number;
@@ -48,6 +48,7 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   const colors = new Float32Array(surface.positions.length);
   const snowRoughnessFeather = new Float32Array(surface.positions.length / 3);
   const strata = new Float32Array(surface.positions.length / 3);
+  const geology = new Float32Array(surface.positions.length);
   for (let i = 0; i < surface.positions.length; i += 3) {
     const radial = Math.hypot(surface.positions[i], surface.positions[i + 2]);
     const snowWeight = Math.min(1, Math.max(0, (radial - 47) / 10));
@@ -57,12 +58,20 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
     const eased = u * u * (3 - 2 * u);
     snowRoughnessFeather[i / 3] = Math.sin(Math.PI * eased);
     strata[i / 3] = naturalRelief ? bR30StrataShade(surface.positions[i],surface.positions[i+1],-surface.positions[i+2]) : 1;
+    if(naturalRelief){
+      const e=surface.positions[i],n=-surface.positions[i+2];
+      const cross=bR30HaulCrossSection(e,n);
+      geology[i]=cross.tread;
+      geology[i+1]=cross.rut;
+      geology[i+2]=Math.min(1,(options.centralMound?.surfaceHeightAtLocal(e,n)??0)/2.3);
+    }
     const grain = 0.96 + .04 * Math.sin(surface.positions[i] * 4.32 + surface.positions[i + 2] * 1.71);
     tone.copy(exposedRock).lerp(snow, snowWeight).multiplyScalar(grain).toArray(colors, i);
   }
   bowl.setAttribute('color', new BufferAttribute(colors, 3));
   bowl.setAttribute('aCraterSnowFeather', new BufferAttribute(snowRoughnessFeather, 1));
   bowl.setAttribute('aCraterStrata', new BufferAttribute(strata, 1));
+  bowl.setAttribute('aCraterGeology', new BufferAttribute(geology, 3));
   bowl.computeVertexNormals();
   const groundMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
   // Use the original ONE B-01 walk mesh and add a per-vertex transition.
@@ -71,14 +80,14 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   groundMaterial.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
-      '#include <common>\nattribute float aCraterSnowFeather;\nvarying float vCraterSnowFeather;\nattribute float aCraterStrata;\nvarying float vCraterStrata;');
+      '#include <common>\nattribute float aCraterSnowFeather;\nvarying float vCraterSnowFeather;\nattribute float aCraterStrata;\nvarying float vCraterStrata;\nattribute vec3 aCraterGeology;\nvarying vec3 vCraterGeology;');
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      '#include <begin_vertex>\nvCraterSnowFeather = aCraterSnowFeather;\nvCraterStrata = aCraterStrata;');
+      '#include <begin_vertex>\nvCraterSnowFeather = aCraterSnowFeather;\nvCraterStrata = aCraterStrata;\nvCraterGeology = aCraterGeology;');
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
-      '#include <common>\nvarying float vCraterSnowFeather;\nvarying float vCraterStrata;');
-    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vCraterStrata;');
+      '#include <common>\nvarying float vCraterSnowFeather;\nvarying float vCraterStrata;\nvarying vec3 vCraterGeology;');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vCraterStrata;\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.115,0.086,0.064), vCraterGeology.z*0.68);\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.215,0.171,0.124), vCraterGeology.x*0.82);\ndiffuseColor.rgb *= 1.0-0.24*vCraterGeology.y;');
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <roughnessmap_fragment>',
       '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.97, vCraterSnowFeather);');
