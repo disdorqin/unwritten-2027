@@ -203,12 +203,20 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       }
       segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
       segBox(stoneDark, center, quat, 0, -.5, 0, opts.ballastWidth, .26, segLen + .08);
-      // Stone piers where the grade-limited profile bridges a dip (the loop
-      // line's own idiom for rises over ~1.5 m), every fifth segment.
-      if (i % 5 === 2) {
-        const mid = samples[i];
-        const rise = center.y - mid.ground;
-        if (rise > 2.2) segBox(stone, center, quat, 0, -rise / 2 - .1, 0, 1.9, rise - .4, 1.3);
+      // Physical bearing below the existing rail bed, including the many
+      // 1–2m rises that the former >2.2m pier threshold left floating.
+      // Keep the surveyed alignment; a future grade redesign can reuse these
+      // foundations. Short spans are stone plinths, taller ones masonry piers.
+      const e=center.x,n=-center.z,soil=groundAt(e,n),underside=center.y-.63;
+      if(underside>soil+.12){
+        const yaw=Math.atan2(vb.x-va.x,vb.z-va.z);
+        if(i%3===0||underside-soil<.85&&i%2===0){
+          const length=underside-soil<.85?Math.min(segLen*1.85,3.1):1.35;
+          const width=opts.ballastWidth-.24;
+          const low=soil-.12;
+          box(stone,e,(low+underside)/2,n,width,underside-low,length,yaw);
+          colliders.push(orientedSupportBox(e,n,yaw,width,length,low,underside));
+        }
       }
     }
     let minRadius = Infinity;
@@ -341,7 +349,9 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
 
   // Portal stub: the line's scenic continuation into the ridge face north of
   // Shankou station (the fake tunnel mouth of §五.21).
-  buildTrackway([[296, 502], [294, 524], [293, 540]], {
+  // Scenic dead-end portal branch leaves west of the passenger platform,
+  // not through its middle approach. It is not a passenger service line.
+  buildTrackway([[282, 504], [285, 514], [289, 530], [293, 540]], {
     gauge: 1.66, sleeperWidth: 2.5, ballastWidth: 2.9, railH: .18,
   });
   {
@@ -489,7 +499,19 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     const yaw = Math.atan2(50, -7) + Math.PI / 2;
     const cy = car.y;
     box(iron, car.east, cy + .55, car.north, 5.9, .3, 2.3, yaw);
-    box(rustIron, car.east, cy + 1.75, car.north, 5.7, 1.9, 2.45, yaw);
+    // Empty-looking hopper shell now has an actual rim and wheel frame.
+    for(const side of [-1,1]){
+      const e=car.east+Math.sin(yaw)*side*1.16,n=car.north-Math.cos(yaw)*side*1.16;
+      box(rustIron,e,cy+1.75,n,5.7,1.9,.15,yaw);
+      box(iron,e,cy+2.73,n,5.9,.14,.22,yaw);
+    }
+    for(const side of [-1,1]){
+      const e=car.east+Math.cos(yaw)*side*2.78;
+      // Match the Three yaw used by the actual boxes.
+      box(rustIron,e,cy+1.75,car.north+Math.sin(yaw)*side*2.78,.15,1.9,2.45,yaw);
+    }
+    box(rustIron,car.east,cy+.85,car.north,5.55,.17,2.3,yaw);
+    colliders.push(orientedSupportBox(car.east,car.north,yaw,5.9,2.45,cy-.2,cy+2.8));
     part(rustIron, new CylinderGeometry(.75, 1.55, 1.15, 4), car.east, cy + .95, car.north, yaw + Math.PI / 4);
     part(ore, new ConeGeometry(1.05, .85, 8), car.east, cy + 3.1, car.north, yaw);
     for (const [lx, lz] of [[-2.2, -0.95], [2.2, -0.95], [-2.2, 0.95], [2.2, 0.95]] as const) {
@@ -502,15 +524,34 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     // Freight shed west of the siding.
     const sx = -64, sn = 146;
     const g = groundAt(sx, sn);
+    // A real freight staging area: raised timber surface, exposed braces,
+    // a clear aisle facing the siding and a low unloading apron.
+    const deck=g+.24;
+    box(stoneDark,sx,g+.06,sn,7.8,.20,5.4);
+    box(timberWarm,sx,deck-.08,sn,7.8,.16,5.4);
+    floors.push(orientedSupportBox(sx,sn,0,7.8,5.4,g-.04,deck));
+    const apronX=sx+4.75;
+    box(timber,apronX,g+.095,sn,1.7,.19,2.2);
+    floors.push(orientedSupportBox(apronX,sn,0,1.7,2.2,g,g+.19));
     for (const [px, pz] of [[-3.4, -2.4], [3.4, -2.4], [-3.4, 2.4], [3.4, 2.4]] as const) {
       box(timber, sx + px, g + 1.6, sn + pz, .26, 3.2, .26);
+      colliders.push(orientedSupportBox(sx+px,sn+pz,0,.26,.26,g,g+3.2));
+      box(timberWarm,sx+px,g+2.78,sn+pz,.17,.9,.18,0,0,px>0?.55:-.55);
     }
+    for(const dn of [-2.35,2.35])box(timber,sx,g+3.05,sn+dn,7.6,.23,.24);
     box(slate, sx, g + 3.45, sn, 8.4, .22, 6.2, 0, .05);
     box(snow, sx, g + 3.62, sn, 8.2, .14, 6, 0, .05);
     box(timber, sx, g + 1.5, sn - 2.55, 7.2, 3, .14);
-    box(timberWarm, sx - 1.6, g + .65, sn + .6, 1.5, 1.3, 1.5);
-    box(timberWarm, sx + .2, g + .55, sn + 1.1, 1.3, 1.1, 1.3, .4);
-    part(ore, new ConeGeometry(1.7, 1.4, 9), sx + 2.2, g + .7, sn - .8, 0);
+    colliders.push(orientedSupportBox(sx,sn-2.55,0,7.2,.14,g,g+3));
+    // Stock goes on the back wall, leaving a 2m east-west cargo aisle.
+    for(const [dx,dn,w,h] of [[-2.2,-1.3,1.5,1.25],[-.4,-1.4,1.3,1.1]] as const){
+      box(timberWarm,sx+dx,deck+h/2,sn+dn,w,h,w);
+      colliders.push(orientedSupportBox(sx+dx,sn+dn,0,w,w,deck,deck+h));
+      for(const side of [-1,1])box(iron,sx+dx+side*w*.36,deck+h/2,sn+dn,.07,h+.025,w+.025);
+    }
+    part(ore,new ConeGeometry(.9,1.15,9),sx+2.25,deck+.575,sn-1.4,0);
+    colliders.push(orientedSupportBox(sx+2.25,sn-1.4,0,1.8,1.8,deck,deck+1.15));
+    stationWalkRoutes.push({id:'freight-shed',points:[{east:sx+6.1,north:sn,height:groundAt(sx+6.1,sn)},{east:apronX,north:sn,height:g+.19},{east:sx+3.1,north:sn,height:deck},{east:sx,north:sn,height:deck}]});
     // K-13 (《设计-全图文字件总表》卡04): shed name board under the roof
     // edge on the east face, toward the siding.
     sign(sx + 3.55, g + 2.8, sn, Math.PI / 2, 1.1, .42, (c, w, h) => {
