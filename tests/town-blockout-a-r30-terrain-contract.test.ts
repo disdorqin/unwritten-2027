@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {Raycaster,Vector3,type Mesh} from 'three';
+import {Raycaster,Vector3,BufferGeometry,Float32BufferAttribute,Mesh,Color} from 'three';
+import {featherSharedCraterApron} from '../tools/voxel-tavern/town-blockout/town-a-r30-crater-material-seam';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {createTerrainSupportContract} from '../tools/voxel-tavern/town-blockout/town-a-r30-terrain-contract';
 
+test('A/B apron color handoff preserves geology inside R55 and matches R59 carrier exactly',()=>{
+ const geo=new BufferGeometry();
+ geo.setAttribute('position',new Float32BufferAttribute([54,0,0,55,0,0,57,0,0,59,0,0],3));
+ geo.setAttribute('color',new Float32BufferAttribute([.1,.2,.3,.2,.3,.4,.3,.4,.5,.4,.5,.6],3));
+ const mesh=new Mesh(geo),colors=geo.getAttribute('color'),old=Array.from(colors.array);
+ assert.equal(featherSharedCraterApron(mesh,55,59),2);
+ assert.deepEqual(Array.from(colors.array).slice(0,6),old.slice(0,6));
+ const snow=new Color(0xc1cedc);
+ assert.ok(Math.abs(colors.getX(3)-snow.r)<1e-7);
+ assert.ok(Math.abs(colors.getY(3)-snow.g)<1e-7);
+ assert.ok(Math.abs(colors.getZ(3)-snow.b)<1e-7);
+ geo.dispose();
+});
 const grid=createTerrainGrid();
 const road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 road.group.updateMatrixWorld(true);

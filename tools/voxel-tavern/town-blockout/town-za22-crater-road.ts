@@ -1,6 +1,7 @@
 import { BufferGeometry, BoxGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildCraterSeamCollar, type SurfaceVertex } from './town-a-r30-crater-seam';
+import { featherSharedCraterApron } from './town-a-r30-crater-material-seam';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
@@ -101,8 +102,12 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const crater = mountMeteorCraterSurface(anchor, { centralMound: centralMoundModel });
   const surface = crater.group.getObjectByName('meteor-crater-walk-mesh');
   if (!surface || !(surface as Mesh).isMesh) throw new Error('B-01 crater walk surface absent');
-  const paletteEnabled = options.za34DistantPaletteCandidate !== false;
+  const unifiedRelief=surface.userData.bR30UnifiedRelief===true;
+  const paletteEnabled = !unifiedRelief && options.za34DistantPaletteCandidate !== false;
   const paletteAudit = paletteEnabled ? applyCraterDistancePalette(surface as Mesh) : undefined;
+  // B's geology remains intact. Only the 55–59m shared snow apron is A's
+  // material blend; do not overwrite its interior with the legacy five bands.
+  if(unifiedRelief)featherSharedCraterApron(surface as Mesh,meteorCraterRimRadius,sharedApronRadius);
   const lip = crater.trailPoint(0);
   const group = new Group();
   group.name = 'meteor-crater-west-road';
@@ -264,7 +269,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // wrapper; B-R01's new sampler reads the same mutable vertex array
   // as the BufferAttribute, so wrapping it would double the offset.
   applyCraterBrokenCircleToWalkMesh(surface as Mesh, anchor, brokenCircle.heightOffsetAt);
-  if(surface.userData.bR30UnifiedRelief!==true)road.heightAt=brokenCircle.heightAt;
+  if(!unifiedRelief)road.heightAt=brokenCircle.heightAt;
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
