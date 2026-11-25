@@ -99,7 +99,7 @@ const POST_COLOUR = '#4a423a';
  */
 export const townD2R30NightTintFactor = Object.freeze({ r: 0.50, g: 0.56, b: 0.68 });
 
-const tintCache = new WeakMap<Material, Color>();
+const tintCache = new WeakMap<Material, { colour: Color; emissive: Color }>();
 
 /**
  * Darkens every lit (Lambert) surface under `root` for the night, and
@@ -119,17 +119,21 @@ export function applyTownD2R30NightTint(root: Object3D, night: boolean): void {
       if (item.userData?.noNightTint) continue;
       let base = tintCache.get(item);
       if (!base) {
-        base = item.color.clone();
+        base = { colour: item.color.clone(), emissive: item.emissive.clone() };
         tintCache.set(item, base);
       }
       if (night) {
         item.color.setRGB(
-          base.r * townD2R30NightTintFactor.r,
-          base.g * townD2R30NightTintFactor.g,
-          base.b * townD2R30NightTintFactor.b,
+          base.colour.r * townD2R30NightTintFactor.r,
+          base.colour.g * townD2R30NightTintFactor.g,
+          base.colour.b * townD2R30NightTintFactor.b,
         );
+        // A lamp must not glow at noon, so the emissive term follows the
+        // night state and comes back exactly as it was.
+        item.emissive.copy(base.emissive);
       } else {
-        item.color.copy(base);
+        item.color.copy(base.colour);
+        item.emissive.setRGB(0, 0, 0);
       }
     }
   });

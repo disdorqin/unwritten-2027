@@ -9,6 +9,7 @@ import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
 import { createTownD2R30Massif } from './town-d2-r30-massif';
 import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
+import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { createTownD2R30SledGateSupport } from './town-d2-r30-sled-gate-support';
 import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
 import { createTownD2R30Strata } from './town-d2-r30-strata';
@@ -45,6 +46,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeSummitFacilities?: boolean;
   /** D2-R08: include the summit night lights (trail lamps, window glow) (default false). */
   includeNightLights?: boolean;
+  /** D2-R09: include the canonical ropeway, cabins and station buildings (default false). */
+  includeRopeway?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -52,7 +55,7 @@ export type TownD2R30Assembly = Readonly<{
   heightAt(east: number, north: number): number | undefined;
   collision: ReturnType<typeof createTownD2R30Collision>;
   /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
-  update(east: number, north: number): void;
+  update(east: number, north: number, nowMs?: number): void;
   setNight(value: boolean): void;
   stats(): Readonly<Record<string, unknown>>;
   dispose(): void;
@@ -74,8 +77,10 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeSledGateSupport = options.includeSledGateSupport ?? false;
   const includeSummitFacilities = options.includeSummitFacilities ?? false;
   const includeNightLights = options.includeNightLights ?? false;
+  const includeRopeway = options.includeRopeway ?? false;
   if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
-    includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights]
+    includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights,
+    includeRopeway]
     .some(value => typeof value !== 'boolean')) {
     throw new TypeError('D2-R30 inclusion flags must be booleans.');
   }
@@ -94,6 +99,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   let terrainStats: () => unknown;
   let updateLod: ((east: number, north: number) => void) | undefined;
+  let updateRopeway: ((nowMs: number) => void) | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
     terrainStats = () => massif.stats();
@@ -189,6 +195,16 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     nightHooks.push(value => lights.setNight(value));
   }
 
+  if (includeRopeway) {
+    // D2-R09: the rope, the cabins and the station buildings, rebuilt on
+    // the R30 massif so the line has a deck to land on.
+    const ropeway = createTownD2R30Ropeway({ heightAt, arrivalHeight });
+    children.push(ropeway.group);
+    disposers.push(() => ropeway.dispose());
+    nightHooks.push(value => ropeway.setNight(value));
+    updateRopeway = nowMs => ropeway.update(nowMs);
+  }
+
   for (const child of children) group.add(child);
 
   const measure = (root: Group) => {
@@ -235,12 +251,17 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     group,
     heightAt,
     collision,
-    update(east: number, north: number) {
+    update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {
         throw new RangeError('D2-R30 LOD observer must be finite.');
       }
       updateLod?.(east, north);
+      // The ropeway cabins only move when the host supplies a timestamp.
+      if (nowMs !== undefined) {
+        if (!Number.isFinite(nowMs)) throw new RangeError('D2-R30 ropeway time must be finite.');
+        updateRopeway?.(nowMs);
+      }
     },
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R30 assembly is disposed.');
