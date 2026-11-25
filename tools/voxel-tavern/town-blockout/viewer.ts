@@ -2735,6 +2735,7 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 let craterTelescopeActive = false;
+let craterTelescopeSpot:{east:number;north:number;height:number;range:number}|undefined;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2842,6 +2843,7 @@ function currentAction() {
         break;
       case 'telescope':
         craterTelescopeActive = !craterTelescopeActive;
+        craterTelescopeSpot=craterTelescopeActive?craterSpot:undefined;
         if (craterTelescopeActive) {
           activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
           announceActivity('望筒已对准坑心 · E 收起 · 离开底座自动退出');
@@ -3703,10 +3705,10 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
   // The ground-level crater scope needs persistent optical framing.
   // The sled's per-frame camera FOV reconciliation also performs automatic
   // recovery when the player walks away, boards, or changes world domain.
-  const scopeSpot = westCraterRoad?.craterActions.actions.find(site => site.id === 'telescope');
+  const scopeSpot = craterTelescopeSpot;
   if (craterTelescopeActive && (!scopeSpot || !walking || cloudRoute.active() || sledRide.active() ||
       Math.hypot(x - scopeSpot.east, n - scopeSpot.north) > scopeSpot.range + .8 ||
-      Math.abs(ground - scopeSpot.height) > 3)) craterTelescopeActive = false;
+      Math.abs(ground - scopeSpot.height) > .65)) {craterTelescopeActive = false;craterTelescopeSpot=undefined;}
   const targetFov = craterTelescopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;

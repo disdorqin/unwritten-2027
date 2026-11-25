@@ -516,6 +516,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(brass, scope.east + Math.sin(a) * .3, roofY + .45, scope.north + Math.cos(a) * .3, .06, .95, .06, fr.yaw, .3 * Math.cos(a), .3 * Math.sin(a));
     }
     cyl(brass, scope.east, roofY + 1.12, scope.north, .11, .16, 1.25, 9, fr.yaw, Math.PI / 2 - .18);
+    // Reuse the existing optical affordance, not a new story/ledger event.
+    const scopeUse=fr.at(-.85,1.84);
+    actions.push({id:'telescope',label:'使用屋顶望筒观坑',...scopeUse,height:deckY,range:1.15});
+    colliders.push(orientedSupportBox(scope.east,scope.north,fr.yaw,.65,.65,deckY,deckY+1.65));
     // Door lanterns (one real light) and the doorway step.
     for (const s of [-1, 1]) {
       const lp = fr.at(s * 1.05, D / 2 + .3);
@@ -925,7 +929,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     let nearest: CraterActionSpot | undefined; let best = Infinity;
     for (const spot of actions) {
       const horizontal = Math.hypot(east - spot.east, north - spot.north);
-      if (horizontal > spot.range || Math.abs(height - spot.height) > 3.3 || horizontal >= best) continue;
+      const heightTolerance=spot.id==='telescope'?.65:3.3;
+      if (horizontal > spot.range || Math.abs(height - spot.height) > heightTolerance || horizontal >= best) continue;
       best = horizontal; nearest = spot;
     }
     return nearest;
