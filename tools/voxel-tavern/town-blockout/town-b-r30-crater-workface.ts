@@ -93,6 +93,21 @@ export function buildBR30Workface(road:Road){
       box('rust',0,.94,0,1.37,.21,1.43);
       for(const x of [-.73,.73]){box('iron',x,1.14,0,.10,.52,1.62,x<0?.17:-.17);box('rust',x,1.39,0,.13,.08,1.69);}
       for(const z of [-.77,.77])box('rust',0,1.13,z,1.45,.50,.10);
+      // External pressed-steel ribs and riveted corner angles make the
+      // tub read as a mining wagon rather than an open decorative crate.
+      for(const x of [-.80,.80])for(const z of [-.54,0,.54]){
+        box('iron',x,1.12,z,.052,.43,.09,x<0?.17:-.17);
+        for(const y of [.93,1.30])box('rust',x+(x<0?-.035:.035),y,z,.03,.045,.045);
+      }
+      for(const z of [-.83,.83]){
+        box('iron',0,.91,z,1.46,.085,.065);
+        for(const x of [-.62,.62])box('iron',x,1.13,z,.09,.40,.045);
+      }
+      // An old towing eye, secured to the frame rather than floating.
+      box('rust',0,.78,1.12,.29,.10,.12);
+      box('iron',-.105,.78,1.20,.08,.10,.19);
+      box('iron',.105,.78,1.20,.08,.10,.19);
+      box('iron',0,.78,1.27,.21,.10,.055);
       for(let i=0;i<9;i++)part('ore',new DodecahedronGeometry(.14+(i%3)*.03,0),((i%3)-1)*.38,1.12+Math.floor(i/3)*.035,((i*7)%5-2)*.22,0,i*.7);
       box('iron',0,.78,1.04,.26,.12,.31);
     }else if(site.id==='repair-rack'){
@@ -101,7 +116,36 @@ export function buildBR30Workface(road:Road){
       for(const x of [-.98,.98]){box('iron',x,1.36,-.65,.11,.91,.10);box('wood',x,.44,0,.12,.13,1.55);}
       box('wood',0,1.71,-.65,2.08,.10,.18);
       box('wood',0,1.37,-.66,2.05,.16,.11);
-      for(let i=0;i<5;i++){box('iron',-.76+i*.37,1.31,-.54,.055,.09,.24);box('wood',-.76+i*.37,1.14,-.44,.045,.39,.05);box('iron',-.76+i*.37,1.34,-.44,.23,.10,.085);}
+      // Individual silhouettes in the historic rack: pick, hammer,
+      // shovel, wrench and tongs. All five hang from actual iron pegs.
+      for(let i=0;i<5;i++)box('iron',-.78+i*.39,1.40,-.53,.055,.065,.25);
+      // Pickaxe: curved angular tips and a long wooden shaft.
+      box('wood',-.78,1.17,-.39,.045,.38,.05);
+      box('iron',-.78,1.40,-.39,.20,.07,.08);
+      box('iron',-.90,1.38,-.39,.10,.055,.07,-.36);
+      box('iron',-.66,1.38,-.39,.10,.055,.07,.36);
+      // Hammer: short grip, heavier rectangular head.
+      box('wood',-.39,1.19,-.40,.05,.31,.05);
+      box('iron',-.39,1.37,-.40,.22,.12,.10);
+      box('rust',-.49,1.37,-.40,.055,.14,.11);
+      // Scoop/shovel with flared blade and a small D grip.
+      box('wood',0,1.22,-.39,.046,.30,.045);
+      box('iron',0,1.04,-.39,.16,.16,.065);
+      box('iron',-.075,1.06,-.39,.055,.13,.055,-.23);
+      box('iron',.075,1.06,-.39,.055,.13,.055,.23);
+      box('iron',0,1.40,-.39,.13,.045,.05);
+      // Open-jaw spanner: iron neck with two opposed teeth.
+      box('iron',.39,1.20,-.39,.064,.32,.055);
+      box('iron',.39,1.36,-.39,.17,.055,.06);
+      for(const dx of [-.062,.062])box('iron',.39+dx,1.405,-.39,.043,.09,.065);
+      // Crossed blacksmith tongs, not another hammer.
+      box('iron',.78,1.23,-.38,.055,.37,.055,.18);
+      box('iron',.78,1.23,-.36,.055,.37,.055,-.18);
+      cylinder('rust',.78,1.22,-.33,.041,.025,Math.PI/2);
+      // Low shelf of spare fasteners and a measured steel ruler.
+      box('wood',0,1.54,-.63,1.66,.07,.24);
+      for(const x of [-.45,-.30,-.15])cylinder('rust',x,1.61,-.60,.045,.075);
+      box('iron',.44,1.59,-.61,.46,.035,.085);
       // Fixed bench vice with actual jaws and transverse handle.
       box('iron',.74,1.04,.43,.36,.17,.35);
       for(const z of [.30,.56])box('rust',.74,1.21,z,.38,.19,.10);
@@ -112,12 +156,23 @@ export function buildBR30Workface(road:Road){
         box('wood',x,.24,0,1.05,.17,1.73);
         for(const z of [-.77,.77])box('wood',x,.50,z,1.05,.40,.12);
         for(const dx of [-.46,.46])box('wood',x+dx,.50,0,.13,.40,1.62);
-        for(const dx of [-.40,.40])for(const z of [-.65,.65])box('iron',x+dx,.66,z,.09,.09,.09);
+        for(const dx of [-.40,.40])for(const z of [-.65,.65]){
+          box('iron',x+dx,.66,z,.09,.09,.09);
+          box('iron',x+dx,.48,z,.055,.33,.065);
+        }
+        // Visible individual slat edges, nails, and metal straps.
+        for(const z of [-.84,.84])for(const y of [.40,.56])box('wood',x,y,z,1.04,.025,.025);
+        for(const dx of [-.22,.22])for(const z of [-.84,.84]){
+          box('rust',x+dx,.47,z,.065,.34,.026);
+          for(const y of [.33,.61])box('iron',x+dx,y,z+(z<0?-.018:.018),.034,.034,.018);
+        }
         for(let i=0;i<6;i++)part(x<0?'ore':'rust',new DodecahedronGeometry(.17,0),x+((i%3)-1)*.28,.53,((i*3)%5-2)*.22,i*.37,i*.62);
       }
       box('wood',0,.86,-.63,2.08,.08,.17);
       for(const x of [-.94,.94])box('wood',x,.83,-.63,.10,.49,.10);
       box('cloth',0,.93,-.61,.8,.17,.12);
+      box('iron',-.63,.91,-.53,.29,.10,.045);
+      box('rust',.63,.91,-.53,.29,.10,.045);
     }
     for(const [f,parts] of batches){
       const joined=mergeGeometries(parts);parts.forEach(p=>p.dispose());
