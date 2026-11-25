@@ -30,6 +30,16 @@ test('supply actual stairs lead up to the deck and back down with body and step 
   }
   assert.ok(Math.abs(h-points.at(-1)!.height)<.03);
  };
+ // Check the surveyed ground detour as well as the stairs. Markers must
+ // stand outside the actual approach envelope, not block the next waypoint.
+ const approach=[[-74.3,126.1],[-70,120],[-72.9,116.85],[-74.8,115.8],[path[0]!.east,path[0]!.north]];
+ for(let j=1;j<approach.length;j++){
+  const a=approach[j-1]!,b=approach[j]!;
+  for(let i=0;i<=100;i++){
+   const t=i/100,e=a[0]!+(b[0]!-a[0]!)*t,n=a[1]!+(b[1]!-a[1]!)*t,y=road.heightAt(e,n)!;
+   assert.ok(![...boxes,...floors].some(q=>y+.025<q.max[1]&&y+1.775>q.min[1]&&supportFootprintOverlaps(e,n,q,.4)),JSON.stringify({j,e,n}));
+  }
+ }
  walk(path);walk([...path].reverse());
  const deck=path.at(-1)!;
  const prompt=road.craterActions.actionAt(deck.east,deck.north,deck.height);

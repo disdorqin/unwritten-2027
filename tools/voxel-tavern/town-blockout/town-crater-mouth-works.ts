@@ -495,7 +495,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     supplyDeckRoute.push(wp(stairX,startZ-.55,g));
     // Physical approach markers make the side-to-rear turn readable without
     // exposing a second false doorway through the stair rail. No story text.
-    for(const [dx,dz,angle] of [[7.25,1.5,0],[6.6,startZ-1.45,Math.PI/2]] as const){
+    for(const [dx,dz,angle] of [[7.25,1.5,0],[7.8,startZ-3.3,Math.PI/2]] as const){
       const p=fr.at(dx,dz),h=heightAt(p.east,p.north);
       if(h===undefined)continue;
       box(stone,p.east,h+.11,p.north,.38,.22,.38,fr.yaw);
