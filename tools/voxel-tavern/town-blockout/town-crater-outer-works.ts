@@ -912,10 +912,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     });
     // Actual entry treads, not the old invisible ramp. Each tread extends
     // down to the local ground and the last meets the original stone floor.
-    const entry=fr.at(.3,5.05);
+    const entry=fr.at(.3,5.55);
     const low=(heightAt(entry.east,entry.north)??g)-g;
     const count=4,run=.68,doorZ=2.0;
-    const path=[hut.point(.3,5.05,low)];
+    const path=[hut.point(.3,5.55,low)];
     for(let i=0;i<count;i++){
       const z=doorZ+(count-i-.5)*run,top=low+(1-low)*(i+1)/count;
       const p=fr.at(.3,z);

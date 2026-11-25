@@ -357,6 +357,7 @@ try{
  }
  for(const [i,point] of path.slice().reverse().slice(1).entries())await step(point,segment+'-down-'+i);
  const returned=await readPose(page);
+ if(segment==='gatehouse')assert.ok(Math.abs(returned.height-path[0].height)<.08,JSON.stringify({returned,ground:path[0]}));
  await picture(page,evidence,segment+'-return');
  report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:path[0]};
 }catch(e){report.failure=String(e.stack||e);process.exitCode=1;try{await picture(lastPage,lastEvidence,'failed-position');}catch{}}
