@@ -295,10 +295,18 @@ test('AW-3 bank blocks, shore rocks, reeds, basin and inlet posts all meet measu
     const vertices = nearestGeometryComponent(pool.group, centre, stoneMeshes);
     const minimumY = Math.min(...vertices.map(vertex => vertex.y));
     const maximumY = Math.max(...vertices.map(vertex => vertex.y));
-    const ground = grid.groundHeightAt(centre.x, -centre.z);
-    assert.ok(Math.abs(minimumY - ground) < 1e-5, `bank ${i} must start at measured ground`);
-    assert.ok(Math.abs(maximumY - Math.max(site.waterLevel + .42, ground + .32)) < 1e-5,
-      `bank ${i} must retain its low crest`);
+    const yaw = -angle + Math.PI / 2;
+    const width = 1.24 + .14 * Math.sin(i * 1.9), depth = 1.02;
+    const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+    const corners = [-width / 2, width / 2].flatMap(localX => [-depth / 2, depth / 2].map(localZ => {
+      const east = centre.x + cosine * localX + sine * localZ;
+      const north = -centre.z + sine * localX - cosine * localZ;
+      return grid.groundHeightAt(east, north);
+    }));
+    const ground = Math.min(...corners), highestGround = Math.max(...corners);
+    assert.ok(Math.abs(minimumY - ground) < 1e-5, `bank ${i} must start at its lowest rotated corner`);
+    assert.ok(Math.abs(maximumY - Math.max(site.waterLevel + .42, highestGround + .32)) < 1e-5,
+      `bank ${i} must crest above its highest rotated corner`);
   }
   for (let i = 0; i < 30; i++) {
     const angle = i / 30 * Math.PI * 2 + .11 * Math.sin(i * 4.1);
