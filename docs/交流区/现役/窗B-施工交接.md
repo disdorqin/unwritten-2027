@@ -57,3 +57,12 @@
 - 独立同源浏览器审图6张（断栈道、风箱、道岔昼夜），错误0，已实际复看缩图：栈道局部受坡面遮挡但主体可读，风箱/道岔可见，准星命中两个对应对象。原件 D:/computer learning/game_exe/kuanian/.evidence/B-R03-R04-0198b680/。此为独立候选审图，不冒充生产机械事务实玩；图册实际图片本轮未逐张重看，仅按现役图注和场景复看。
 - 最新原生往返最终报告：D:/computer learning/game_exe/kuanian/.evidence/B-R04-roundtrip-0198b680/za22-live-walk.json，源码0198b680、树78c3739c45fe1a61815b4fbb490f9505229836ad。完整下行105/105，实际坑底E-136.0/N193.6/H-24.22；返程95/105，最后t=.06、E-132.8/N133.7/H8.67；208检查点、1983组联机位姿、0浏览器错误。最终失败为 Native route evidence budget exhausted（225秒），不是已证实的路线碰撞阻断。剩余10路点及出坑未验，不报往返通过。临时构建目录已自动清理；保留全部原件。两次长路线未完成后暂停同类全程重跑，不空转。
 - 下一项：B依赖窄包交总控，A消费地貌/遗迹/机械生产挂载，C配对审核与井口联调；在联合宿主中采用有充足执行预算的完整原生返程验收，并针对最后入口过渡实走。不擅自重开旧任务。无独立审签和入干SHA，未达到收工门。
+
+## 2026-11-25 续建增量（截至 2d2d91d1）
+已读 integration=f8380557 最新看板、项目脑§7、本线及A最新交接3180c8f8；C仍a6e3b98f，无新Muse裁定/审签。实际能力内串行本机重负载，未建新工作树。
+- ea874974：新增 attachBR30PhysicalKit(road,rail)，把22个S5碰撞盒、3作业实物、5机械挂入同一西域根；已有同对象盒不重复添加，失败回滚，重复安装/拆除安全，既有floor/ramp数组不变。真实宿主测绘、1项定向挂载/冲突回滚通过、check通过。独立审图已经改用同一接口。
+- 98712abc：实际矿车铆接加强筋/牵引环，检修架五种不同工具（镐、锤、铲、扳手、钳）、备用紧固件与尺，物料箱板条/金属带；原实体包围盒内、合批保留。check及2/2定向。昼夜6张，0浏览器错。原件 D:/computer learning/game_exe/kuanian/.evidence/B-R04-physical-kit-98712abc/。
+- 2d2d91d1：对照上述画面修石基随机棋盘、木纹、锈铁与布料；32像素连续材质，未改几何/灯数/碰撞；修正初次TS颜色常量类型错误，check及1/1通过。复验同机位6张、0错，实际缩图复看材质更连贯，夜间仍偏暗、工具细节需联合照明审查。三个机位draw 232/231/210，三角276686/274934/274222，改材质前后相同；仅独立审图，不是P-OPT或生产玩法过门。原件 D:/computer learning/game_exe/kuanian/.evidence/B-R04-workface-material-2d2d91d1/。
+- 总控窄包精确范围：53372f1a..2d2d91d1，27个非merge提交，起点树3ebd250b86da5e53aad8f60ee35b7abd4d11d993与当前integration树逐字相同；diff --check通过，32路径皆B现役、独立测试/工具/本卡。由总控在配对审后按该范围分包挑取，不合lane-build历史父链；本次交接提交仅更新本卡。
+- A正式消费顺序：road内 story 构建后 retireBR30LegacyTerracePlates；实际破圆切坡与heightAt接管后、下游story消费者之前 refitBR30LegacyStory(...).story；完成road与rail后唯一调用 attachBR30PhysicalKit(road,rail)，再建立westWalkGeometry。不要另外手工追加S5或再安装face/machines。使用kit.machines消费createBR30WorkshopControls，现役事务、持有物与权限仍由A/总控权威接入。C井口/灯房/绞盘的保护与联调不改权威。B生产挂载及C配对审仍待，不能把独立场景报作实玩。未重跑长路线。
+- 下一步：总控安排具体依赖入干及C配对审核、A单写接入；联合宿主核新增模型与路轨、井口安全、机械真实事务、剩余返程。若发现接线或模型打回优先返工。P-OPT后置，不扩大冻结区；未取得入干SHA，不报收工。
