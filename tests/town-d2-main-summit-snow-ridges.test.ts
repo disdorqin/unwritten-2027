@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
-import { BoxGeometry, Group, Mesh, type BufferGeometry, type Material } from 'three';
+import { BoxGeometry, Group, Mesh, MeshPhongMaterial, type BufferGeometry, type Material } from 'three';
 import {
   createTownD2MainSummitSnowRidges, townD2MainSummitSnowRidgeSpec,
   type TownD2SnowRidgeExclusion, type TownD2SnowRidgePlacement,
@@ -126,23 +126,86 @@ test('D2 snow ridges: seeded output is deterministic and a different seed change
   assert.notDeepEqual(geometrySignature(first), geometrySignature(other));
 });
 
-test('D2 snow ridges: at least three material families merge into at most twelve non-box meshes', context => {
-  const result = cleanup(context, create());
-  const meshes: Mesh[] = [];
-  result.group.traverse(object => { if (object instanceof Mesh) meshes.push(object); });
-  const materialFamilies = new Set(meshes.map(mesh => mesh.userData.materialFamily));
-  assert.ok(materialFamilies.size >= 3);
-  assert.deepEqual([...materialFamilies].sort(), ['darkRock', 'ice', 'snow', 'yellowRock']);
-  assert.ok(meshes.length <= 12);
-  assert.equal(result.stats.meshes, meshes.length);
-  assert.equal(result.stats.drawCalls, meshes.length);
-  assert.ok(result.stats.triangles > 5000, 'large formations must contain real faceted surface area');
-  for (const mesh of meshes) {
-    assert.ok(!(mesh.geometry instanceof BoxGeometry), `${mesh.name} must not be a placeholder box`);
-    assert.ok(mesh.geometry.getAttribute('position').count > 100);
-    assert.ok(mesh.geometry.getAttribute('color'));
-    assert.ok(mesh.geometry.getAttribute('normal'));
+test('D2 snow ridges: four faceted material batches stay within four draws and 8k triangles across seeds', context => {
+  for (const seed of [undefined, 0, 1, 'north-wind', 'south-wind']) {
+    const result = cleanup(context, create(seed));
+    const meshes: Mesh[] = [];
+    result.group.traverse(object => { if (object instanceof Mesh) meshes.push(object); });
+    const materialFamilies = new Set(meshes.map(mesh => mesh.userData.materialFamily));
+    assert.deepEqual([...materialFamilies].sort(), ['darkRock', 'ice', 'snow', 'yellowRock']);
+    assert.equal(meshes.length, 4);
+    assert.equal(result.stats.meshes, 4);
+    assert.equal(result.stats.drawCalls, 4);
+    assert.equal(result.stats.materialFamilies, 4);
+    assert.ok(result.stats.triangles > 5000, 'large formations must contain real faceted surface area');
+    assert.ok(result.stats.triangles <= 8000, `${String(seed)} exceeds the triangle budget: ${result.stats.triangles}`);
+    for (const mesh of meshes) {
+      assert.ok(!(mesh.geometry instanceof BoxGeometry), `${mesh.name} must not be a placeholder box`);
+      assert.ok(mesh.material instanceof MeshPhongMaterial);
+      assert.ok(mesh.geometry.getAttribute('position').count > 100);
+      assert.ok(mesh.geometry.getAttribute('color'));
+      assert.ok(mesh.geometry.getAttribute('normal'));
+    }
   }
+});
+
+test('D2 snow ridges: richer snow/ice/rock colour steps and peak heights retain crown-to-base hierarchy', context => {
+  const result = cleanup(context, create());
+  for (const family of ['snow', 'ice', 'darkRock', 'yellowRock']) {
+    const mesh = result.group.children.find(child => child.userData.materialFamily === family) as Mesh;
+    const colors = mesh.geometry.getAttribute('color');
+    const positions = mesh.geometry.getAttribute('position');
+    const unique = new Set<string>();
+    let lower = 0, lowerCount = 0, upper = 0, upperCount = 0;
+    let minimum = Infinity, maximum = -Infinity;
+    for (let index = 0; index < positions.count; index++) {
+      minimum = Math.min(minimum, positions.getY(index));
+      maximum = Math.max(maximum, positions.getY(index));
+    }
+    for (let index = 0; index < colors.count; index++) {
+      unique.add(`${colors.getX(index).toFixed(3)},${colors.getY(index).toFixed(3)},${colors.getZ(index).toFixed(3)}`);
+      const fraction = (positions.getY(index) - minimum) / (maximum - minimum);
+      const luminance = colors.getX(index) * .2126 + colors.getY(index) * .7152 + colors.getZ(index) * .0722;
+      if (fraction < .35) { lower += luminance; lowerCount++; }
+      if (fraction > .65) { upper += luminance; upperCount++; }
+    }
+    assert.ok(unique.size >= 4, `${family} needs at least four readable colour steps`);
+    assert.ok(lowerCount > 0 && upperCount > 0, `${family} needs both base and crown faces`);
+    assert.ok(upper / upperCount > lower / lowerCount,
+      `${family} crowns must read brighter than their bases: ${upper / upperCount} <= ${lower / lowerCount}`);
+  }
+  const peaks = result.placements.filter(item => item.kind === 'distant-peak');
+  const tops = [...new Set(peaks.map(item => item.top))];
+  assert.ok(tops.length >= 4, 'distant peaks need several skyline tiers');
+  assert.ok(Math.max(...tops) - Math.min(...tops) >= 80, 'main peaks need a dominant skyline tier');
+});
+
+test('D2 snow ridges: setNight changes only material response, is reversible and adds no light authority', context => {
+  const result = cleanup(context, create());
+  const meshes = result.group.children as Mesh[];
+  const materials = meshes.map(mesh => mesh.material as MeshPhongMaterial);
+  const geometryBefore = geometrySignature(result);
+  const day = materials.map(material => ({ color: material.color.getHex(), emissive: material.emissive.getHex(),
+    intensity: material.emissiveIntensity, specular: material.specular.getHex(), shininess: material.shininess }));
+  result.setNight(false);
+  result.setNight(true);
+  assert.equal(result.group.userData.night, true);
+  assert.deepEqual(geometrySignature(result), geometryBefore);
+  materials.forEach((material, index) => {
+    assert.notEqual(material.color.getHex(), day[index]!.color);
+    assert.notEqual(material.emissive.getHex(), 0);
+    assert.ok(material.emissiveIntensity > 0);
+  });
+  const ice = materials[materials.findIndex(material => material.name.endsWith('-ice'))]!;
+  assert.ok(ice.shininess > day[materials.indexOf(ice)]!.shininess, 'ice crystals catch more moonlight');
+  assert.equal(result.group.children.length, 4, 'night mode must not add lights or meshes');
+  result.setNight(true);
+  result.setNight(false);
+  assert.equal(result.group.userData.night, false);
+  assert.deepEqual(geometrySignature(result), geometryBefore);
+  assert.deepEqual(materials.map(material => ({ color: material.color.getHex(), emissive: material.emissive.getHex(),
+    intensity: material.emissiveIntensity, specular: material.specular.getHex(), shininess: material.shininess })), day);
+  assert.throws(() => result.setNight('night' as never), /boolean/);
 });
 
 test('D2 snow ridges: all transforms and vertices are finite, with no NaN instance or world data', context => {
@@ -185,6 +248,7 @@ test('D2 snow ridges: dispose detaches the group and releases every geometry/mat
   assert.equal(parent.children.length, 0);
   assert.equal(result.group.children.length, 0);
   assert.equal(result.group.userData.disposed, true);
+  assert.throws(() => result.setNight(true), /disposed/);
 });
 
 test('D2 snow ridges: invalid terrain/exclusion inputs fail rather than emitting NaN geometry', () => {

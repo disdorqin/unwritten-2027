@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Mesh, Vector3, type BufferGeometry, type Material } from 'three';
+import { DoubleSide, Group, Mesh, MeshBasicMaterial, Texture, Vector3, type BufferGeometry, type Material } from 'three';
 import { buildSwitchbackCenterline } from '../tools/voxel-tavern/town-blockout/front-ridge-switchback-road';
 import { sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 import { createTerrainGrid, riverX, waterHeight } from '../tools/voxel-tavern/town-blockout/terrain';
@@ -133,7 +133,7 @@ test('AW-3 geometry has water, stone and timber families, finite attributes and 
   assert.equal(pool.group.userData.includesWorldCollision, false);
   assert.equal(pool.group.userData.waterLevelAuthority, 'terrain.waterHeight');
   const names = new Set(pool.group.children.map(child => child.name));
-  for (const name of ['pool-water', 'pool-stone-bank-light', 'pool-stone-bank-dark',
+  for (const name of ['pool-water', 'pool-stone-bank',
     'pool-timber-weir-and-driftwood', 'pool-inlet-water', 'pool-outflow-water', 'pool-shore-reeds']) {
     assert.ok(names.has(name), `missing ${name}`);
   }
@@ -169,6 +169,52 @@ test('AW-3 geometry has water, stone and timber families, finite attributes and 
   pool.dispose();
 });
 
+test('AW-3 beauty stays within eight draws and bakes water depth, ripples and material grain', () => {
+  const pool = createTownD2WestFootRiverPool();
+  assert.equal(pool.group.children.length, 8, 'the complete pool must fit the eight-draw budget');
+  assert.ok(pool.group.children.every(child => child instanceof Mesh), 'each budgeted draw must be one merged mesh');
+  const waterNames = ['pool-water', 'pool-inlet-water', 'pool-outflow-water'];
+  const waterTextures = new Set<Texture>();
+  for (const name of waterNames) {
+    const mesh = namedMesh(pool.group, name);
+    const material = mesh.material as MeshBasicMaterial;
+    assert.ok(material instanceof MeshBasicMaterial);
+    assert.ok(material.map, `${name} must carry the procedural water material`);
+    assert.equal(material.vertexColors, true);
+    assert.equal(material.transparent, true);
+    assert.equal(material.depthWrite, false);
+    assert.equal(material.side, DoubleSide);
+    assert.ok(material.opacity > .7 && material.opacity < .95);
+    assert.ok(mesh.geometry.getAttribute('uv'), `${name} must sample its water texture`);
+    waterTextures.add(material.map);
+  }
+  assert.equal(waterTextures.size, 2, 'pool and creek need distinct depth/flow layers');
+  const poolTexture = (namedMesh(pool.group, 'pool-water').material as MeshBasicMaterial).map!;
+  const image = poolTexture.image as { width: number; height: number; data: Uint8Array };
+  assert.equal(image.width, 128);
+  assert.equal(image.height, 128);
+  const luminance = (x: number, y: number) => {
+    const offset = (y * image.width + x) * 4;
+    return (image.data[offset]! + image.data[offset + 1]! + image.data[offset + 2]!) / 3;
+  };
+  assert.ok(luminance(8, 64) > luminance(64, 64) + 25, 'the shallow rim must read lighter than the deep centre');
+  assert.ok(new Set(image.data).size > 100, 'the water texture must retain ripple and colour detail');
+  for (const name of ['pool-stone-bank', 'pool-timber-weir-and-driftwood']) {
+    const mesh = namedMesh(pool.group, name);
+    const material = mesh.material as Material & { vertexColors: boolean };
+    assert.equal(material.vertexColors, true, `${name} must use baked colour steps/grain`);
+    const color = mesh.geometry.getAttribute('color');
+    assert.ok(color, `${name} must carry per-vertex colour`);
+    let minimum = Infinity, maximum = -Infinity;
+    for (let i = 0; i < color.count; i++) {
+      minimum = Math.min(minimum, color.getX(i));
+      maximum = Math.max(maximum, color.getX(i));
+    }
+    assert.ok(maximum - minimum > .15, `${name} must have visible tonal variation`);
+  }
+  pool.dispose();
+});
+
 test('AW-3 shallow shelf top lies between the old and new water surfaces', () => {
   const pool = createTownD2WestFootRiverPool();
   const position = namedMesh(pool.group, 'pool-shallow-shelf').geometry.getAttribute('position');
@@ -190,7 +236,7 @@ test('AW-3 inlet and outlet stones meet the river bed while driftwood floats ins
   const grid = createTerrainGrid();
   const cases: { label: string; across: number; along: number; halfHeight: number;
     waterOffset: number; meshNames: ReadonlySet<string> }[] = [];
-  const stoneMeshes = new Set(['pool-stone-bank-light', 'pool-stone-bank-dark']);
+  const stoneMeshes = new Set(['pool-stone-bank']);
   const timberMeshes = new Set(['pool-timber-weir-and-driftwood']);
   for (const side of [-1, 1]) {
     for (let i = 0; i < 4; i++) cases.push({
@@ -233,6 +279,111 @@ test('AW-3 inlet and outlet stones meet the river bed while driftwood floats ins
   pool.dispose();
 });
 
+test('AW-3 bank blocks, shore rocks, reeds, basin and inlet posts all meet measured support', () => {
+  const { site } = surveyTownD2WestFootRiverPool();
+  const pool = createTownD2WestFootRiverPool();
+  const grid = createTerrainGrid();
+  const stoneMeshes = new Set(['pool-stone-bank']);
+  const inGap = (across: number, along: number) =>
+    (along > site.radius * .7 && Math.abs(across) < 3.7) ||
+    (along < -site.radius * .7 && Math.abs(across) < 3.1);
+  for (let i = 0; i < 56; i++) {
+    const angle = i / 56 * Math.PI * 2 + .018 * Math.sin(i * 1.7);
+    const across = Math.cos(angle) * (site.radius + .48), along = Math.sin(angle) * (site.radius + .48);
+    if (inGap(across, along)) continue;
+    const centre = localPosition(site, across, along);
+    const vertices = nearestGeometryComponent(pool.group, centre, stoneMeshes);
+    const minimumY = Math.min(...vertices.map(vertex => vertex.y));
+    const maximumY = Math.max(...vertices.map(vertex => vertex.y));
+    const ground = grid.groundHeightAt(centre.x, -centre.z);
+    assert.ok(Math.abs(minimumY - ground) < 1e-5, `bank ${i} must start at measured ground`);
+    assert.ok(Math.abs(maximumY - Math.max(site.waterLevel + .42, ground + .32)) < 1e-5,
+      `bank ${i} must retain its low crest`);
+  }
+  for (let i = 0; i < 30; i++) {
+    const angle = i / 30 * Math.PI * 2 + .11 * Math.sin(i * 4.1);
+    const radial = site.radius + 2.1 + .22 * Math.sin(i * 2.3);
+    const across = Math.cos(angle) * radial, along = Math.sin(angle) * radial;
+    if (inGap(across, along)) continue;
+    const centre = localPosition(site, across, along);
+    const vertices = nearestGeometryComponent(pool.group, centre, stoneMeshes);
+    const minimumY = Math.min(...vertices.map(vertex => vertex.y));
+    const maximumY = Math.max(...vertices.map(vertex => vertex.y));
+    const ground = grid.groundHeightAt(centre.x, -centre.z);
+    assert.ok(Math.abs(minimumY - ground) < 1e-5, `shore rock ${i} must meet the bank ground`);
+    assert.ok(maximumY > site.waterLevel + .11, `shore rock ${i} must break the water surface`);
+  }
+  const reedMeshes = new Set(['pool-shore-reeds']);
+  for (let i = 0; i < 18; i++) {
+    const angle = i / 18 * Math.PI * 2 + .17;
+    const across = Math.cos(angle) * (site.radius - .55), along = Math.sin(angle) * (site.radius - .55);
+    if (inGap(across, along) || i % 4 === 0) continue;
+    for (let stem = 0; stem < 3; stem++) {
+      const centre = localPosition(site, across + (stem - 1) * .13, along + .08 * Math.sin(stem * 2));
+      const vertices = nearestGeometryComponent(pool.group, centre, reedMeshes);
+      const minimumY = Math.min(...vertices.map(vertex => vertex.y));
+      const maximumY = Math.max(...vertices.map(vertex => vertex.y));
+      const ground = grid.groundHeightAt(centre.x, -centre.z);
+      assert.ok(Math.abs(minimumY - ground) < 1e-5, `reed ${i}/${stem} must be rooted`);
+      assert.ok(Math.abs(maximumY - minimumY - (.72 + .22 * Math.sin(i * 3.1 + stem))) < 1e-5);
+    }
+  }
+  const timberMeshes = new Set(['pool-timber-weir-and-driftwood']);
+  for (const side of [-1, 1]) {
+    const centre = localPosition(site, side * 2.75, site.radius + 1.8);
+    const vertices = nearestGeometryComponent(pool.group, centre, timberMeshes);
+    const minimumY = Math.min(...vertices.map(vertex => vertex.y));
+    const maximumY = Math.max(...vertices.map(vertex => vertex.y));
+    assert.ok(Math.abs(minimumY - grid.groundHeightAt(centre.x, -centre.z)) < 1e-5,
+      'inlet post must stand on the bed');
+    assert.ok(Math.abs(maximumY - (site.waterLevel + 1.32)) < 1e-5,
+      'inlet post must meet, not penetrate, the timber beam');
+  }
+  const bed = namedMesh(pool.group, 'pool-basin-bed').geometry.getAttribute('position');
+  let bedMinimumY = Infinity;
+  for (let i = 0; i < bed.count; i++) bedMinimumY = Math.min(bedMinimumY, bed.getY(i));
+  assert.ok(Math.abs(bedMinimumY - site.groundHeight) < 1e-5, 'basin bed must meet the measured centre bed');
+  pool.dispose();
+});
+
+test('AW-3 support footprints remain separated at banks, rocks, reeds and channel stones', () => {
+  const { site } = surveyTownD2WestFootRiverPool();
+  const inGap = (across: number, along: number) =>
+    (along > site.radius * .7 && Math.abs(across) < 3.7) ||
+    (along < -site.radius * .7 && Math.abs(across) < 3.1);
+  const banks: { x: number; y: number; tx: number; ty: number; rx: number; ry: number; halfWidth: number }[] = [];
+  for (let i = 0; i < 56; i++) {
+    const angle = i / 56 * Math.PI * 2 + .018 * Math.sin(i * 1.7);
+    const across = Math.cos(angle) * (site.radius + .48), along = Math.sin(angle) * (site.radius + .48);
+    if (!inGap(across, along)) banks.push({
+      x: across, y: along, tx: Math.sin(angle), ty: Math.cos(angle), rx: Math.cos(angle), ry: -Math.sin(angle),
+      halfWidth: (1.24 + .14 * Math.sin(i * 1.9)) / 2,
+    });
+  }
+  for (let i = 0; i < banks.length; i++) for (let j = i + 1; j < banks.length; j++) {
+    const a = banks[i]!, b = banks[j]!;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const separated = [[a.tx, a.ty], [a.rx, a.ry], [b.tx, b.ty], [b.rx, b.ry]].some(([x, y]) =>
+      Math.abs(dx * x! + dy * y!) >
+      a.halfWidth * Math.abs(a.tx * x! + a.ty * y!) + .51 * Math.abs(a.rx * x! + a.ry * y!) +
+      b.halfWidth * Math.abs(b.tx * x! + b.ty * y!) + .51 * Math.abs(b.rx * x! + b.ry * y!) + 1e-6);
+    assert.ok(separated, `bank blocks ${i}/${j} must not overlap`);
+  }
+  for (let i = 0; i < 30; i++) {
+    const angle = i / 30 * Math.PI * 2 + .11 * Math.sin(i * 4.1);
+    const radial = site.radius + 2.1 + .22 * Math.sin(i * 2.3);
+    const across = Math.cos(angle) * radial, along = Math.sin(angle) * radial;
+    if (inGap(across, along)) continue;
+    const size = .42 + .22 * (Math.sin(i * 8.3) * .5 + .5);
+    assert.ok(radial - (site.radius + .48) > .51 + size * 1.25 + .02,
+      `shore rock ${i} must stay outside the block-bank footprint`);
+  }
+  assert.ok((site.radius - .55 + .13 + .026) < (site.radius + .48 - .51),
+    'reed clumps must stay inside the block-bank footprint');
+  assert.ok(.57 > .46 * Math.cos(.12) + .72 * Math.sin(.12), 'adjacent inlet stones must not overlap');
+  assert.ok(1.15 > .86 * Math.cos(.09) + .68 * Math.sin(.09), 'adjacent outlet stones must not overlap');
+});
+
 test('AW-3 pool and creek water bodies have disjoint footprints and zero volume', () => {
   const { site } = surveyTownD2WestFootRiverPool();
   const pool = createTownD2WestFootRiverPool();
@@ -271,20 +422,28 @@ test('AW-3 dispose is idempotent and releases every owned geometry/material once
   host.add(pool.group);
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
-  let geometryDisposals = 0, materialDisposals = 0;
+  const textures = new Set<Texture>();
+  let geometryDisposals = 0, materialDisposals = 0, textureDisposals = 0;
   pool.group.traverse(object => {
     if (!(object instanceof Mesh)) return;
     geometries.add(object.geometry);
     const list = Array.isArray(object.material) ? object.material : [object.material];
-    list.forEach(material => materials.add(material));
+    list.forEach(material => {
+      materials.add(material);
+      if ('map' in material && material.map instanceof Texture) textures.add(material.map);
+    });
   });
+  assert.equal(textures.size, 2, 'both shared water textures must be owned and released');
   geometries.forEach(geometry => geometry.addEventListener('dispose', () => { geometryDisposals++; }));
   materials.forEach(material => material.addEventListener('dispose', () => { materialDisposals++; }));
+  textures.forEach(texture => texture.addEventListener('dispose', () => { textureDisposals++; }));
   pool.dispose();
   assert.equal(pool.group.parent, null);
   assert.equal(geometryDisposals, geometries.size);
   assert.equal(materialDisposals, materials.size);
+  assert.equal(textureDisposals, textures.size);
   pool.dispose();
   assert.equal(geometryDisposals, geometries.size);
   assert.equal(materialDisposals, materials.size);
+  assert.equal(textureDisposals, textures.size);
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InstancedMesh, Matrix4, Vector3, type BufferGeometry, type Material } from 'three';
+import { Color, Group, InstancedMesh, Matrix4, MeshLambertMaterial, Vector3,
+  type BufferGeometry, type Material } from 'three';
 import { buildEntryApproach, buildSwitchbackCenterline } from '../tools/voxel-tavern/town-blockout/front-ridge-switchback-road';
 import { northRidgeCableAnchors, sampleNorthRidge350 } from '../tools/voxel-tavern/town-blockout/north-ridge-350-terrain';
 import {
@@ -74,7 +75,14 @@ test('D2 micro-relief: deterministic unsigned seed produces the same complete cl
     assert.deepEqual(first.stats, second.stats);
     assert.equal(first.stats.seed, TOWN_D2_MICRO_RELIEF.defaultSeed);
     assert.ok(first.placements.length >= 100, `expected dense relief, got ${first.placements.length}`);
+    assert.deepEqual(first.stats.byKind, { gully: 26, scree: 30, 'snow-ridge': 31, shrub: 36, gravel: 26 },
+      'visual enrichment must not change the established placement ledger');
     for (const kind of ALL_KINDS) assert.ok(first.stats.byKind[kind] >= 10, `${kind} must form real clusters`);
+    for (const kind of ALL_KINDS) {
+      const a = first.group.getObjectByName(`town-d2-micro-relief-${kind}`) as InstancedMesh;
+      const b = second.group.getObjectByName(`town-d2-micro-relief-${kind}`) as InstancedMesh;
+      assert.deepEqual(a.instanceColor!.array, b.instanceColor!.array, `${kind} instance tint determinism`);
+    }
     assert.equal(first.stats.placementCount, first.placements.length);
     assert.equal(first.stats.instanceCount, first.placements.length);
     assert.throws(() => createTownD2FrontRidgeMicroRelief({ seed: -1 }), RangeError);
@@ -162,7 +170,7 @@ test('D2 micro-relief: actual instanced footprints clear road, cable, stations, 
   } finally { relief.dispose(); }
 });
 
-test('D2 micro-relief: every cluster has at least three real material families and faceted non-box geometry', () => {
+test('D2 micro-relief: every cluster has rich material families and faceted non-box geometry', () => {
   const relief = createTownD2FrontRidgeMicroRelief();
   try {
     const allFamilies = new Set<string>();
@@ -170,12 +178,20 @@ test('D2 micro-relief: every cluster has at least three real material families a
       assert.ok(new Set(placement.materialFamilies).size >= 3, placement.id);
       placement.materialFamilies.forEach(family => allFamilies.add(family));
     }
-    assert.ok(allFamilies.size >= 12, 'stone, snow, wood, leaf, berry, moss and grit must remain distinct');
+    assert.ok(allFamilies.size >= 24, 'stone, snow, wood, leaf, berry, moss and grit must remain distinct');
+    for (const family of ['sediment', 'ironStain', 'quartzGrit', 'fractureShade', 'blueIce',
+      'windScour', 'leafLight', 'barkLichen', 'quartz', 'slateChip']) {
+      assert.ok(allFamilies.has(family), `${family} visual material family must be authored`);
+    }
     for (const kind of ALL_KINDS) {
       const mesh = relief.group.getObjectByName(`town-d2-micro-relief-${kind}`);
       assert.ok(mesh instanceof InstancedMesh);
       assert.deepEqual(mesh.userData.materialFamilies,
         relief.placements.find(placement => placement.kind === kind)!.materialFamilies);
+      assert.equal(mesh.userData.surfaceDetail, 'facet-grain,micro-chips,tonal-ramps');
+      assert.ok(mesh.material instanceof MeshLambertMaterial);
+      assert.equal(mesh.material.vertexColors, true);
+      assert.equal(mesh.material.flatShading, true);
       const colors = new Set<string>();
       const color = mesh.geometry.getAttribute('color');
       const position = mesh.geometry.getAttribute('position');
@@ -183,7 +199,7 @@ test('D2 micro-relief: every cluster has at least three real material families a
       for (let i = 0; i < color.count; i++) {
         colors.add(`${color.getX(i).toFixed(4)},${color.getY(i).toFixed(4)},${color.getZ(i).toFixed(4)}`);
       }
-      assert.ok(colors.size >= 3, `${kind} must contain at least three visible material colours`);
+      assert.ok(colors.size >= 100, `${kind} needs rich tonal ramps and per-face mineral grain`);
       mesh.geometry.computeBoundingBox();
       const size = mesh.geometry.boundingBox!.getSize(new Vector3());
       assert.ok(size.x > .2 && size.y > .2 && size.z > .2);
@@ -192,7 +208,35 @@ test('D2 micro-relief: every cluster has at least three real material families a
   } finally { relief.dispose(); }
 });
 
-test('D2 micro-relief: at most 12 draws, finite attributes/transforms and idempotent resource disposal', () => {
+test('D2 micro-relief: five instanced draws retain varied instance colours and the 80k triangle budget', () => {
+  assert.equal(typeof globalThis.document, 'undefined', 'construction must remain Node/DOM-free');
+  const relief = createTownD2FrontRidgeMicroRelief();
+  try {
+    assert.equal(relief.stats.meshCount, 5);
+    assert.equal(relief.stats.drawCalls, 5);
+    assert.ok(relief.stats.triangles > 59_392, 'micro-detail geometry must enrich the original silhouette');
+    assert.ok(relief.stats.triangles <= 80_000, `triangle budget exceeded: ${relief.stats.triangles}`);
+    assert.equal(relief.stats.materialFamilyCount, 26);
+    for (const kind of ALL_KINDS) {
+      const mesh = relief.group.getObjectByName(`town-d2-micro-relief-${kind}`);
+      assert.ok(mesh instanceof InstancedMesh);
+      assert.equal(mesh.instanceColor?.count, mesh.count, `${kind} needs one tint per instance`);
+      const tints = new Set<string>();
+      const tint = new Color();
+      for (let index = 0; index < mesh.count; index++) {
+        mesh.getColorAt(index, tint);
+        for (const channel of [tint.r, tint.g, tint.b]) {
+          assert.ok(Number.isFinite(channel) && channel >= .8 && channel <= 1.1,
+            `${kind} instance tint must stay in a natural pixel-material range`);
+        }
+        tints.add(`${tint.r.toFixed(4)},${tint.g.toFixed(4)},${tint.b.toFixed(4)}`);
+      }
+      assert.ok(tints.size >= Math.min(10, mesh.count), `${kind} needs visible cluster-to-cluster colour rhythm`);
+    }
+  } finally { relief.dispose(); }
+});
+
+test('D2 micro-relief: five draws, finite attributes/transforms and idempotent resource disposal', () => {
   const parent = new Group();
   const relief = createTownD2FrontRidgeMicroRelief();
   parent.add(relief.group);
@@ -210,10 +254,13 @@ test('D2 micro-relief: at most 12 draws, finite attributes/transforms and idempo
         for (const value of Array.from(attribute.array)) assert.ok(Number.isFinite(value), `${object.name} attribute`);
       }
       for (const value of object.instanceMatrix.array) assert.ok(Number.isFinite(value), `${object.name} instance`);
+      assert.equal(object.instanceColor?.count, object.count, `${object.name} instance colours`);
+      for (const value of object.instanceColor!.array) assert.ok(Number.isFinite(value), `${object.name} colour`);
     });
     assert.equal(meshes, relief.stats.meshCount);
     assert.equal(meshes, relief.stats.drawCalls);
-    assert.ok(meshes <= 12, `draw target exceeded: ${meshes}`);
+    assert.equal(meshes, 5, 'the five relief kinds must remain five instanced draws');
+    assert.ok(relief.stats.triangles <= 80_000, `triangle budget exceeded: ${relief.stats.triangles}`);
     assert.equal(relief.group.children.length, meshes, 'no unbatched per-cluster draw objects');
     assert.ok(Number.isInteger(relief.stats.triangles) && relief.stats.triangles > 1000);
     let disposed = 0;
