@@ -30,6 +30,11 @@ test('instrument public road bends around actual masonry and approaches the open
  const access=[[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]].map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
  walk(route.id,[...access,...route.points]);walk(route.id,[...access,...route.points].reverse());
 });
+test('smelter public approach avoids the actual freight and fence geometry',()=>{
+ const route=road.outerWorks.industrialRoutes.find(r=>r.id==='smelter-plant')!;
+ const access=[[-43,159],[-67,136],[-144,105]].map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
+ walk(route.id,[...access,...route.points]);walk(route.id,[...access,...route.points].reverse());
+});
 test('gatehouse bench has a grounded stand point and actual seat',()=>{
  const [seat]=road.outerWorks.gatehouseSeats;
  assert.ok(seat);

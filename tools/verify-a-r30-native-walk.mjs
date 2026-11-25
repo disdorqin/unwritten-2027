@@ -294,7 +294,7 @@ const approach={
  west:[[-12,159],[-40,159],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-187,174],[-187,175]],
  supply:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-74,126],[-70,120],[-72.9,116.85],[-74.8,115.8]],
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
- smelter:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-65,112],[-84,97],[-111,79],[-132,86]],
+ smelter:[[-12,159],[-43,159],[-67,136],[-144,105]],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
@@ -356,7 +356,7 @@ try{
      await picture(page,evidence,segment+'-'+(lighting==='雪夜'?'night':'day'));
    }
  }else if(segment==='instrument'||segment==='smelter'){
-   await face(page,evidence,(segment==='instrument'?307:27)*Math.PI/180);
+   await face(page,evidence,(segment==='instrument'?307:297)*Math.PI/180);
    for(const lighting of ['雪夜','白昼']){
      if((await page.locator('#lighting').textContent())!==lighting){
        await page.locator('#town-panel-toggle').click();

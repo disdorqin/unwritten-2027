@@ -304,8 +304,25 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     hall.piece(stoneDark,0,-.3,3.2,3.1,1.2,2.1);
     hall.piece(rustIron,0,-.3,2.5,2.5,2.1,6.1);
+    // Cold furnace: structural rings, bolted access cover and an overhead
+    // duct. The cover remains closed; no heat, reward or process authority.
+    for(const h of [2.24,3.64,5.89]){
+      for(const s of [-1,1]){
+        put(workshopSheet,s*1.26,g+h,-.3,.12,.18,2.64);
+        put(workshopSheet,0,g+h,-.3+s*1.26,2.64,.18,.12);
+      }
+    }
+    put(workshopSheet,0,g+3.25,1.01,1.42,1.78,.16);
+    put(dark,0,g+3.25,1.10,1.05,1.41,.035);
+    for(const x of [-.59,.59])for(const h of [2.49,3.12,3.90])
+      put(brass,x,g+h,1.12,.10,.10,.075);
+    put(workshopSheet,.35,g+3.2,1.18,.13,.13,.30);
     put(iron,0,g+7.25,-.3,1.25,2.3,1.25);
     put(rustIron,-4.7,g+8.6,-.3,10.5,.65,.65);
+    for(const x of [-8.9,-6.2,-3.5,-.8]){
+      put(workshopSheet,x,g+8.6,-.3,.16,.80,.80);
+      put(timber,x,g+10.65,-.3,.12,3.45,.12);
+    }
     for(const dx of [-9,-6,9,12]){
       hall.piece(timberWarm,dx,-3.6,2.0,1.2,1.2,2.35);
       for(let k=0;k<3;k++)put(iron,dx-.6+k*.6,g+2.48,-3.6,.45,.25,.7);
@@ -412,12 +429,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // interior furniture are already registered with their actual footprints.
     hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
     // Hand cart, handles down, mid-yard.
-    const cart = fr.at(2, 8);
-    box(timber, cart.east, g + .75, cart.north, 1.7, .18, 1.05, fr.yaw);
-    for (const s of [-1, 1]) {
-      const w = fr.at(2 + s * .95, 8);
-      cyl(iron, w.east, g + .42, w.north, .42, .42, .12, 10, fr.yaw, Math.PI / 2);
+    hall.piece(workshopWood,1.55,8,1.7,1.05,.62,.80);
+    for(const s of [-1,1]){
+      hall.piece(workshopWood,1.55+s*.79,8,.12,1.05,.80,1.05);
+      const w=fr.at(1.55+s*.95,8);
+      cyl(iron,w.east,g+.42,w.north,.42,.42,.12,10,fr.yaw,Math.PI/2);
+      put(timber,1.55+s*.42,g+.73,9.04,.10,.12,1.2);
     }
+    // Wheel axle and cart footprint match the solid body instead of
+    // allowing a player to walk through the decorative vehicle.
+    hall.piece(workshopSheet,1.55,8,2.10,.32,.22,.59);
+    put(workshopWood,1.55,g+.91,7.54,1.58,.26,.12);
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
     // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口
