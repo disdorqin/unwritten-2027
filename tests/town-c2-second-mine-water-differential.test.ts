@@ -10,7 +10,7 @@ import { townDayMs } from '../src/shared/town-night-window.js';
 import {
   secondMineRegisteredFeet, secondMineToWorld,
 } from '../src/shared/underground-second-mine-presence-domain.js';
-import { secondMineAnchors } from '../src/shared/underground-second-mine-layout.js';
+import { secondMineAnchors, secondMineBed } from '../src/shared/underground-second-mine-layout.js';
 import type { AcceptedUndergroundWaterSnapshot } from '../src/shared/town-c-water-snapshot-port.js';
 
 function snapshot(level: 'low' | 'mid' | 'high', phase: 'rise' | 'level' | 'fall'): AcceptedUndergroundWaterSnapshot {
@@ -107,6 +107,13 @@ test('C2-07 rides the registered second-mine frame without locking the all-water
           });
           assert.equal(host.passageAt(p.east, p.north)?.floor, -140);
         }
+      }
+      for (let step = 0; step <= 40; step++) {
+        const north = 132 + step / 4;
+        const p = secondMineToWorld({ east: 0, north, height: 0 });
+        const passage = host.passageAt(p.east, p.north);
+        if (level === 'low') assert.equal(passage?.floor, -140 + secondMineBed(north));
+        else assert.equal(passage, undefined);
       }
     }
     assert.equal(host.toWorld({ east: 0, height: 0, north: 2 })?.height, secondMineRegisteredFeet.entry.height);
