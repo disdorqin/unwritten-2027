@@ -137,7 +137,10 @@ test('ZA-36 batches thirty-five surveyed ground tiles into nine visible-size gro
   // −97,920 triangles) against the pin above.
   assert.equal(draws - dressingDraws - mouthDraws - outerDraws - salvageDraws - densityDraws - lampDraws, 55, 'crater remainder stays at the W-1 re-pinned draw baseline (58 − 3 capped ground-sheet batches)');
   // Batch98 haulage-turn relocation restores eight 12-triangle floor shards net.
-  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles, 259243, 'W-1 remainder 259147 + 96 triangles from relocated lamp clearance');
+  // K-34 warning post merges into the winch's darkWood batch (+12
+  // triangles, no new draw); its board face and the K-35 cast plate are
+  // document-guarded textBoards, invisible to this node run.
+  assert.equal(triangles - dressingTriangles - mouthTriangles - outerTriangles - salvageTriangles - densityTriangles - lampTriangles, 259255, 'W-1 remainder 259243 + 12 triangles from the K-34 warning post');
   assert.ok(dressingDraws <= 17, 'added story details must stay batched (17 since C3 segments 1-4, crater offensive order 2026-11-21)');
   assert.ok(dressingTriangles < 9000, 'keep 200+ extra pieces under a small triangle budget');
   assert.ok(mouthDraws <= 40, 'crater-mouth works stay inside the approved mainline-1 draw budget');

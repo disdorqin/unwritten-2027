@@ -1,6 +1,7 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, DataTexture, Group,
-  Mesh, MeshStandardMaterial, NearestFilter, SRGBColorSpace,
+  BoxGeometry, BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture, Group,
+  Mesh, MeshBasicMaterial, MeshStandardMaterial, NearestFilter, PlaneGeometry,
+  SRGBColorSpace,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
@@ -42,6 +43,12 @@ export function surveyZa31CraterWinch({ anchor, heightAt }: Road) {
   const outlet = onFloor(trailEnd.east, -trailEnd.north);
   if (!plinth || !crane || !useFoot || !stoneSpace || !bend || !outlet) return;
 
+  // K-34 warning post (《设计-全图文字件总表》卡13): work-face edge
+  // beside the descent approach (bend -> useFoot), 1.3 m off its
+  // centreline, clear of the snake-stone reservation and the winch
+  // foot. Optional: the winch never fails over a sign post.
+  const warningPost = onFloor(-0.95, 2.79);
+
   return {
     plinth, crane, useFoot,
     axle: {
@@ -50,6 +57,7 @@ export function surveyZa31CraterWinch({ anchor, heightAt }: Road) {
     },
     descentApproach: [outlet, bend, useFoot] as const,
     snakeStoneReservation: { ...stoneSpace, radius: 1.05 },
+    warningPost,
   };
 }
 
@@ -124,6 +132,56 @@ export function mountZa31CraterWinch(road: Road) {
   box(group, oldRust, .28, 1.50, .29, craneEast, craneRise + 1.14, craneSouth, .15);
   box(group, oldRust, 1.23, .25, .31, craneEast - .43, craneRise + 1.71, craneSouth, -.34);
   box(group, iron, .69, .20, .05, craneEast, craneRise + .37, craneSouth + .62);
+
+  // Sign faces (K-34/K-35, 《设计-全图文字件总表》卡13): same
+  // document-guarded textBoard pattern as the lamp room — browser-only
+  // like drawSign; node tests see the blank boards.
+  function textBoard(text: string, w: number, h: number, x: number, y: number, z: number,
+    ry: number, bg: string, fg: string, border: string) {
+    if (typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = Math.round(512 * h / w);
+    const pen = canvas.getContext('2d');
+    if (!pen) return;
+    pen.fillStyle = bg;
+    pen.fillRect(0, 0, canvas.width, canvas.height);
+    pen.strokeStyle = border;
+    pen.lineWidth = 6;
+    pen.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+    pen.fillStyle = fg;
+    pen.textAlign = 'center';
+    pen.textBaseline = 'middle';
+    pen.font = `bold ${Math.round(canvas.height * .52)}px "Noto Sans SC", sans-serif`;
+    pen.fillText(text, canvas.width / 2, canvas.height / 2 + 2, canvas.width - 48);
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.minFilter = texture.magFilter = NearestFilter;
+    texture.generateMipmaps = false;
+    const face = new Mesh(new PlaneGeometry(w, h), new MeshBasicMaterial({ map: texture }));
+    face.position.set(x, y, z);
+    face.rotation.y = ry;
+    group.add(face);
+  }
+
+  // K-34: warning post + board at the work-face edge. The post merges
+  // into the winch's darkWood batch (no new draw); the board faces the
+  // descent approach (toward the bend). Local coords: x = e - winchEast,
+  // z = south - winchSouth (same frame as the crane above).
+  if (survey.warningPost) {
+    const postRise = survey.warningPost.height - survey.plinth.height;
+    const postLX = -0.95 - winchEast, postLZ = 2.79 - winchSouth;
+    box(group, darkWood, .12, 1.5, .12, postLX, postRise + .75, postLZ);
+    const bendLX = -3.4 - winchEast, bendLZ = 6 - winchSouth;
+    const postYaw = Math.atan2(bendLX - postLX, bendLZ - postLZ);
+    const bx = postLX + Math.sin(postYaw) * .08, bz = postLZ + Math.cos(postYaw) * .08;
+    textBoard('井口重地 · 稳绳慢放', .9, .3, bx, postRise + 1.18, bz, postYaw,
+      '#d9c69c', '#3d2c1c', '#5d4630');
+  }
+  // K-35: cast letters on the winch body — a dark iron plate with pale
+  // brass letters on the base box's approach face (local -x, toward the
+  // useFoot where the player stands to turn the crank).
+  textBoard('开井', .34, .12, -.40, .145, 0, -Math.PI / 2,
+    '#2c3648', '#c8a86a', '#5d4630');
   for (const [parent, materials] of batches) {
     for (const [material, parts] of materials) {
       const merged = mergeGeometries(parts)!;
