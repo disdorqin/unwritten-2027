@@ -1,24 +1,33 @@
 import {
-  AmbientLight, Color, FogExp2, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
+  AmbientLight, Color, FogExp2, Group, PerspectiveCamera, PointLight, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { createSecondMineScene } from '../voxel-tavern/town-blockout/underground-second-mine.js';
+import { mountRegisteredSecondMineDomain } from '../voxel-tavern/town-blockout/town-c-second-mine-domain.js';
 import { buildTownC2SecondMinePrefab } from '../voxel-tavern/town-blockout/town-c2-second-mine-prefab.js';
+import { mountTownC2SecondMineWaterDifferential } from '../voxel-tavern/town-blockout/town-c2-second-mine-water-differential.js';
+import { createUndergroundWaterState } from '../../src/presence/underground-water-state.js';
+import { townDayMs } from '../../src/shared/town-night-window.js';
+import { secondMineWorldFrame } from '../../src/shared/underground-second-mine-presence-domain.js';
 import type { MineRiverState } from '../../src/shared/underground-second-mine-layout.js';
 
-const mine = createSecondMineScene();
+let now = 0;
+const authority = createUndergroundWaterState({ dawnEpoch: 0, now: () => now });
+const parent = new Group();
+const mine = mountRegisteredSecondMineDomain({ parent, readAcceptedWater: authority.tonight });
+if (mine.kind !== 'ready') throw new Error('C2 registered second-mine review host is unavailable: ' + mine.kind);
 const prefab = buildTownC2SecondMinePrefab(mine.group);
+const water = mountTownC2SecondMineWaterDifferential({ parent: mine.group, readAcceptedWater: authority.tonight });
 const scene = new Scene();
 scene.background = new Color(0x10171e);
 scene.fog = new FogExp2(0x10171e, .024);
-scene.add(mine.group, new AmbientLight(0xa0b3c6, .62));
-const camera = new PerspectiveCamera(65, innerWidth / innerHeight, .06, 180);
+scene.add(parent, new AmbientLight(0xa0b3c6, .62));
+const camera = new PerspectiveCamera(65, innerWidth / innerHeight, .06, 320);
 const headlamp = new PointLight(0xffd6ac, 26, 22, 2);
 camera.add(headlamp);
 scene.add(camera);
 const renderer = new WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
 renderer.setPixelRatio(1);
 renderer.setSize(innerWidth, innerHeight);
-renderer.domElement.setAttribute('aria-label', 'town-c2-second-mine-first-person-review');
+renderer.domElement.setAttribute('aria-label', 'town-c2-registered-second-mine-first-person-review');
 document.body.append(renderer.domElement);
 
 const views = {
@@ -46,23 +55,30 @@ let trustedW = 0;
 let night = false;
 const keys = new Set<string>();
 const direction = new Vector3();
+const eyeHeight = 1.67;
 
 function setView(name: ViewName) {
   const [east, north, targetEast, targetNorth] = views[name];
-  if (!mine.canStand(east, north)) return false;
+  const world = mine.toWorld({ east, north, height: 0 });
+  if (!world || !mine.passageAt(world.east, world.north)) return false;
+  const target = mine.toWorld({ east: targetEast, north: targetNorth, height: 0 });
+  if (!target) return false;
   view = name;
-  camera.position.set(east, (mine.floor(east, north) ?? 0) + 1.67, -north);
-  camera.lookAt(targetEast, 1.67, -targetNorth);
+  camera.position.set(world.east, world.height + eyeHeight, -world.north);
+  camera.lookAt(target.east, target.height + eyeHeight, -target.north);
   camera.updateMatrixWorld(true);
   return true;
 }
 function setRiverState(state: MineRiverState) {
-  mine.setRiverState(state);
+  now = (state === 'high' ? 0 : state === 'middle' ? 1 : 2) * townDayMs;
+  mine.sync();
+  water.sync();
   return true;
 }
 function setNight(value: boolean) {
   night = value;
   prefab.setNight(value);
+  water.setNight(value);
   headlamp.intensity = value ? 5 : 0;
   return true;
 }
@@ -75,11 +91,12 @@ function step(seconds: number) {
   const count = Math.ceil(distance / .08);
   for (let index = 0; index < count; index++) {
     const next = camera.position.clone().addScaledVector(direction, distance / count);
-    if (!mine.canStand(next.x, -next.z)) {
+    const floor = mine.passageAt(next.x, -next.z)?.floor;
+    if (floor === undefined) {
       rejected++;
       return false;
     }
-    next.y = (mine.floor(next.x, -next.z) ?? 0) + 1.67;
+    next.y = floor + eyeHeight;
     camera.position.copy(next);
     walked += distance / count;
   }
@@ -103,7 +120,7 @@ function inspect() {
   const summary = prefab.stats();
   return {
     view,
-    state: mine.riverState,
+    state: mine.getRiverState(),
     night,
     frames,
     fps: frames * 1000 / Math.max(1, performance.now() - fpsStart),
@@ -111,16 +128,15 @@ function inspect() {
     trustedW,
     walked,
     rejected,
-    basePieces: mine.pieces,
+    registered: true,
+    worldFrame: secondMineWorldFrame,
     prefab: {
       moduleCount: summary.moduleCount,
       pieceCount: summary.pieceCount,
       realLightCount: summary.realLightCount,
       visualOnly: summary.visualOnly,
-      domainRegistered: summary.domainRegistered,
     },
-    boatVisible: mine.boat.visible,
-    waterVisible: mine.water.visible,
+    water: water.stats(),
     render: {
       calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -132,8 +148,10 @@ function inspect() {
 
 setRiverState('middle');
 setNight(false);
-if (!setView('entry')) throw new Error('C2 second-mine review initial standing point is blocked');
+if (!setView('entry')) throw new Error('C2 registered second-mine review initial standing point is blocked');
 function frame() {
+  mine.sync();
+  water.sync();
   renderer.render(scene, camera);
   frames++;
   requestAnimationFrame(frame);

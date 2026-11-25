@@ -39,12 +39,12 @@ const report = {
   schema: 'town-c2-second-mine-review/v1',
   sourceCommit,
   sourceTree,
-  scope: 'C2 -140 local visual prefab over the real unregistered second-mine scene; no production domain or collision authority',
+  scope: 'C2-07 visual differential over the registered second-mine domain; formal water snapshot, no viewer or production transition wiring',
   uncertified: [
-    'second-mine world transform, Presence room and entry/exit registration are not installed',
-    'prefab is visual-only and does not change floor, canStand, collision, ore or inventory authority',
+    'viewer/town-presence production switching, real descent facility and online walkthrough are not wired',
+    'prefab and water differential remain visual-only and do not change floor, canStand, collision, ore or inventory authority',
     'high/mid/low selection is fixture input; the accepted water reader is tested separately',
-    'SwiftShader headless FPS is a review sample, not a device benchmark',
+    'Headless FPS is a review sample, not a device benchmark',
     'screenshots do not replace human visual acceptance',
   ],
   errors: { pageerror: [], consoleError: [], requestFailed: [] },
@@ -123,8 +123,10 @@ try {
     }, { name, isNight, state }), true, 'blocked view: ' + name);
     const stats = await capture(page, file);
     assert.equal(stats.state, state);
-    assert.equal(stats.boatVisible, state === 'middle');
-    assert.equal(stats.waterVisible, state !== 'low');
+    assert.equal(stats.registered, true);
+    assert.equal(stats.water.waterMode, state === 'high' ? 'raised' : state === 'low' ? 'hidden' : 'baseline');
+    assert.equal(stats.water.ferryRunning, state === 'middle');
+    assert.equal(stats.water.groundedBoat, state === 'low');
   }
 
   assert.equal(await page.evaluate(() => {
@@ -139,7 +141,7 @@ try {
   report.fpsSample = {
     scene: 'near-bank-night', requestedMs: 20000, wallMs: Date.now() - sampleStarted,
     stats: await page.evaluate(() => window.townC2MineReview.inspect()),
-    certification: 'fixture-only SwiftShader sample',
+    certification: 'fixture-only ' + angle + ' sample',
   };
   assert.ok(report.fpsSample.wallMs >= 19000);
   assert.ok(report.fpsSample.stats.frames > 0 && Number.isFinite(report.fpsSample.stats.fps));
