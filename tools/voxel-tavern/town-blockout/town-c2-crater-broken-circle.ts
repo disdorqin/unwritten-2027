@@ -8,6 +8,7 @@ import {
 } from './meteor-crater';
 import type { MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { bR30HaulCrossSection } from './town-b-r30-crater-relief';
+import { smoothBR30GroundNormals } from './town-b-r30-ground-normals';
 import type { Box } from './landmark-kit';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
@@ -226,7 +227,8 @@ export function applyCraterBrokenCircleToWalkMesh(
     }
   }
   positions.needsUpdate = true;
-  geometry.computeVertexNormals();
+  if(unified)smoothBR30GroundNormals(geometry);
+  else geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   if (unified) integratedR30Cuts.add(heightOffsetAt);
