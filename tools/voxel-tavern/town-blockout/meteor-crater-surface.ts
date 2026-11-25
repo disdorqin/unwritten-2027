@@ -7,6 +7,7 @@ import {
 } from './meteor-crater';
 import { mountCraterInteriorDressing } from './meteor-crater-interior-dressing.js';
 import { mountCraterFloorWorklightChain } from './meteor-crater-floor-worklight-chain.js';
+import { bR30StrataShade } from './town-b-r30-crater-relief';
 
 export type MeteorCraterWorldAnchor = Readonly<{
   east: number;
@@ -16,7 +17,7 @@ export type MeteorCraterWorldAnchor = Readonly<{
   yaw: number;
 }>;
 
-const neutralCrater = createMeteorCrater(meteorCraterFixturePlan);
+const neutralCrater = createMeteorCrater(meteorCraterFixturePlan, { naturalRelief: true });
 const shaftRadius = meteorCraterRimRadius / 30;
 const coveredRadius = shaftRadius + .03;
 
@@ -27,8 +28,9 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   if (![east, north, rimHeight, yaw].every(Number.isFinite)) {
     throw new RangeError('A live crater mount requires a finite B-01 anchor.');
   }
-  const crater = options.centralMound
-    ? createMeteorCrater(meteorCraterFixturePlan, options)
+  const naturalRelief = options.naturalRelief !== false;
+  const crater = options.centralMound || !naturalRelief
+    ? createMeteorCrater(meteorCraterFixturePlan, { ...options, naturalRelief })
     : neutralCrater;
   const c = Math.cos(yaw), s = Math.sin(yaw);
   const group = new Group();
@@ -45,6 +47,7 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   const tone = new Color();
   const colors = new Float32Array(surface.positions.length);
   const snowRoughnessFeather = new Float32Array(surface.positions.length / 3);
+  const strata = new Float32Array(surface.positions.length / 3);
   for (let i = 0; i < surface.positions.length; i += 3) {
     const radial = Math.hypot(surface.positions[i], surface.positions[i + 2]);
     const snowWeight = Math.min(1, Math.max(0, (radial - 47) / 10));
@@ -53,11 +56,13 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
     const u = Math.min(1, Math.max(0, (radial - 50) / 9));
     const eased = u * u * (3 - 2 * u);
     snowRoughnessFeather[i / 3] = Math.sin(Math.PI * eased);
+    strata[i / 3] = naturalRelief ? bR30StrataShade(surface.positions[i],surface.positions[i+1],-surface.positions[i+2]) : 1;
     const grain = 0.96 + .04 * Math.sin(surface.positions[i] * 4.32 + surface.positions[i + 2] * 1.71);
     tone.copy(exposedRock).lerp(snow, snowWeight).multiplyScalar(grain).toArray(colors, i);
   }
   bowl.setAttribute('color', new BufferAttribute(colors, 3));
   bowl.setAttribute('aCraterSnowFeather', new BufferAttribute(snowRoughnessFeather, 1));
+  bowl.setAttribute('aCraterStrata', new BufferAttribute(strata, 1));
   bowl.computeVertexNormals();
   const groundMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
   // Use the original ONE B-01 walk mesh and add a per-vertex transition.
@@ -66,19 +71,21 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   groundMaterial.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
-      '#include <common>\nattribute float aCraterSnowFeather;\nvarying float vCraterSnowFeather;');
+      '#include <common>\nattribute float aCraterSnowFeather;\nvarying float vCraterSnowFeather;\nattribute float aCraterStrata;\nvarying float vCraterStrata;');
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      '#include <begin_vertex>\nvCraterSnowFeather = aCraterSnowFeather;');
+      '#include <begin_vertex>\nvCraterSnowFeather = aCraterSnowFeather;\nvCraterStrata = aCraterStrata;');
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
-      '#include <common>\nvarying float vCraterSnowFeather;');
+      '#include <common>\nvarying float vCraterSnowFeather;\nvarying float vCraterStrata;');
+    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vCraterStrata;');
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <roughnessmap_fragment>',
       '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.97, vCraterSnowFeather);');
   };
   const ground = new Mesh(bowl, groundMaterial);
   ground.name = 'meteor-crater-walk-mesh';
+  ground.userData.bR30UnifiedRelief = naturalRelief;
   group.add(ground);
 
   // This surface mount keeps the sealed well walkable until the underground
@@ -93,7 +100,7 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
 
   // C3 is a strictly visual add-on to the original B-01 authoritative mesh.
   // It follows this same approved anchor/yaw and owns no new colliders or E.
-  const interiorDressing = mountCraterInteriorDressing(group);
+  const interiorDressing = mountCraterInteriorDressing(group, { slopeDressing: !naturalRelief });
   // C2: physical lamp carriers with six actual warm night sources. The
   // existing road.craterActions.setNight is the sole day/night switch.
   const floorWorklights = mountCraterFloorWorklightChain(group);
@@ -101,9 +108,11 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   function heightAt(worldEast: number, worldNorth: number) {
     const dx = worldEast - east, dn = worldNorth - north;
     const fixtureEast = dx * c - dn * s, fixtureNorth = dx * s + dn * c;
-    const height = options.centralMound
-      ? crater.heightOffsetAt(fixtureEast, fixtureNorth)
-      : surface.heightAt(fixtureEast, fixtureNorth);
+    // Rendered triangles are the authoritative foot surface, including the
+    // in-place broken-circle cut installed later by the A-owned road host.
+    const height = naturalRelief || !options.centralMound
+      ? surface.heightAt(fixtureEast, fixtureNorth)
+      : crater.heightOffsetAt(fixtureEast, fixtureNorth);
     if (height !== undefined) return rimHeight + height;
     if (Math.hypot(fixtureEast, fixtureNorth) <= shaftRadius) return rimHeight - meteorCraterDepth;
   }

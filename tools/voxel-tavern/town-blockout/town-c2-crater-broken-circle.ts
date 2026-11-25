@@ -167,12 +167,18 @@ export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnc
   };
 }
 
+// Only R30's live triangle sampler observes the in-place mesh update. Do not
+// add the same cut a second time when the A-owned host wraps road.heightAt.
+const integratedR30Cuts = new WeakSet<(east:number,north:number)=>number>();
+
 /** Cut the anchored walk mesh with the final reserved-work-filtered offset field. */
 export function applyCraterBrokenCircleToWalkMesh(
   mesh: Mesh,
   anchor: MeteorCraterWorldAnchor,
   heightOffsetAt: (east: number, north: number) => number,
 ) {
+  const unified = mesh.userData.bR30UnifiedRelief === true;
+  if (unified && integratedR30Cuts.has(heightOffsetAt)) return;
   const geometry = mesh.geometry;
   const positions = geometry.getAttribute('position');
   if (!positions) throw new Error('Broken-circle walk mesh has no position attribute.');
@@ -186,12 +192,16 @@ export function applyCraterBrokenCircleToWalkMesh(
     const worldEast = anchor.east + east * c + north * s;
     const worldNorth = anchor.north + north * c - east * s;
     const offset = heightOffsetAt(worldEast, worldNorth);
-    if (Number.isFinite(offset)) positions.setY(index, positions.getY(index) + offset);
+    if (Number.isFinite(offset)) {
+      const next = positions.getY(index) + offset;
+      positions.setY(index, unified ? Math.max(-meteorCraterDepth, Math.min(0, next)) : next);
+    }
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+  if (unified) integratedR30Cuts.add(heightOffsetAt);
 }
 
 function hash2(x: number, z: number) {
@@ -412,7 +422,8 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
   }
   function heightAt(east: number, north: number) {
     const base = baseHeightAt(east, north);
-    return base === undefined || !Number.isFinite(base) ? base : base + heightOffsetAt(east, north);
+    return base === undefined || !Number.isFinite(base) || integratedR30Cuts.has(heightOffsetAt)
+      ? base : base + heightOffsetAt(east, north);
   }
   return { group, placements, colliders, features: craterBrokenCircleFeatures, heightOffsetAt, heightAt };
 }
