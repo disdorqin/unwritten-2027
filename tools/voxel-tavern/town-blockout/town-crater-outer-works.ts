@@ -174,6 +174,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const workshopWood=industrialSurface('wood',0x7b6148);
   const workshopBrick=industrialSurface('brick',0x74665d);
   const workshopSheet=industrialSurface('sheet',0x54575a);
+  const workshopRust=industrialSurface('sheet',0x715044);
   const wallPlaster=industrialSurface('plaster',0x9b885f);
   const cleanSnow=new MeshStandardMaterial({color:0xdce5ee,roughness:1});
   const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
@@ -299,11 +300,13 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Working hall: columns, riveted furnace mass, ducting, ingot bench
     // and overhead crossbeams. The center remains occupied by real equipment.
     for(const side of [-1,1])for(const dx of [-12,-6,6,12]){
-      hall.piece(iron,dx,side*4.7,.38,.38,1.2,12.9);
-      put(timber,dx,g+12.45,0,.3,.4,10.3);
+      hall.piece(workshopSheet,dx,side*4.7,.38,.38,1.2,12.9);
+      put(workshopWood,dx,g+12.45,0,.3,.4,10.3);
+      put(workshopRust,dx,g+1.44,side*4.7,.60,.48,.60);
+      put(workshopSheet,dx,g+12.7,side*4.7,.62,.25,.62);
     }
-    hall.piece(stoneDark,0,-.3,3.2,3.1,1.2,2.1);
-    hall.piece(rustIron,0,-.3,2.5,2.5,2.1,6.1);
+    hall.piece(workshopBrick,0,-.3,3.2,3.1,1.2,2.1);
+    hall.piece(workshopRust,0,-.3,2.5,2.5,2.1,6.1);
     // Cold furnace: structural rings, bolted access cover and an overhead
     // duct. The cover remains closed; no heat, reward or process authority.
     for(const h of [2.24,3.64,5.89]){
@@ -317,14 +320,26 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     for(const x of [-.59,.59])for(const h of [2.49,3.12,3.90])
       put(brass,x,g+h,1.12,.10,.10,.075);
     put(workshopSheet,.35,g+3.2,1.18,.13,.13,.30);
+    // Flush plates and pipework fit inside the masonry footing.
+    for(const s of [-1,1]){
+      put(workshopSheet,s*1.32,g+3.62,-.3,.14,2.0,1.72);
+      put(workshopRust,s*1.40,g+3.62,-.3,.06,1.72,1.42);
+      for(const z of [-.94,.34])for(const h of [2.86,3.62,4.38])
+        put(workshopSheet,s*1.44,g+h,z,.07,.11,.11);
+      put(workshopSheet,s*1.34,g+3.32,-.19,.21,.13,.58);
+      for(const z of [-1.16,.56]){
+        put(workshopSheet,s*1.36,g+4.22,z,.18,3.88,.18);
+        for(const h of [2.48,4.68,5.72])put(workshopRust,s*1.40,g+h,z,.23,.15,.23);
+      }
+    }
     put(iron,0,g+7.25,-.3,1.25,2.3,1.25);
-    put(rustIron,-4.7,g+8.6,-.3,10.5,.65,.65);
+    put(workshopRust,-4.7,g+8.6,-.3,10.5,.65,.65);
     for(const x of [-8.9,-6.2,-3.5,-.8]){
       put(workshopSheet,x,g+8.6,-.3,.16,.80,.80);
       put(timber,x,g+10.65,-.3,.12,3.45,.12);
     }
     for(const dx of [-9,-6,9,12]){
-      hall.piece(timberWarm,dx,-3.6,2.0,1.2,1.2,2.35);
+      hall.piece(workshopWood,dx,-3.6,2.0,1.2,1.2,2.35);
       for(let k=0;k<3;k++)put(iron,dx-.6+k*.6,g+2.48,-3.6,.45,.25,.7);
     }
     for(const dx of [3.1,6.3])put(iron,dx,g+3.0,5.5,.18,3.6,.34);
