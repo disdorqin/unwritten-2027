@@ -109,6 +109,35 @@ test('D2-R30 assembly toggles night on every layer and disposes exactly once', c
   context.after(() => {});
 });
 
+test('D2-R30 assembly can include D2-R02 walkway support and cable towers', context => {
+  const assembly = cleanup(context, createTownD2R30Assembly({
+    includeTrailSupport: true, includeCableTowers: true,
+  }));
+  const stats = assembly.stats() as { subPackages: readonly string[] };
+  assert.ok(stats.subPackages.includes('town-d2-r30-trail-support'));
+  assert.ok(stats.subPackages.includes('town-d2-r30-cable-towers'));
+  const names = meshesOf(assembly).map(mesh => mesh.name);
+  assert.ok(names.includes('town-d2-r30-trail-tread'));
+  assert.ok(names.includes('town-d2-r30-trail-earthwork'));
+  assert.ok(names.some(name => name.includes('cable-tower')));
+  assert.doesNotThrow(() => assembly.setNight(true));
+  assert.doesNotThrow(() => assembly.setNight(false));
+});
+
+test('D2-R30 assembly can include D2-R03 facility and sled support', context => {
+  const assembly = cleanup(context, createTownD2R30Assembly({
+    includeFacilityFoundations: true, includeSledGateSupport: true,
+  }));
+  const stats = assembly.stats() as { subPackages: readonly string[] };
+  assert.ok(stats.subPackages.includes('town-d2-r30-facility-foundations'));
+  assert.ok(stats.subPackages.includes('town-d2-r30-sled-gate-support'));
+  const foundationGroup = assembly.group.getObjectByName('town-d2-r30-facility-foundations');
+  const sledGroup = assembly.group.getObjectByName('town-d2-r30-sled-gate-support');
+  assert.ok(foundationGroup && sledGroup);
+  assert.ok(foundationGroup.children.some(child => child.name.includes('upper-cloud')));
+  assert.ok(sledGroup.children.length > 0);
+});
+
 test('D2-R30 assembly supports minimal composition without supplements', context => {
   const assembly = cleanup(context, createTownD2R30Assembly({
     includeStrata: false, includeSnowRock: false, includeCloudTerrace: false,

@@ -1,11 +1,15 @@
 import { Group } from 'three';
+import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30ChunkLod } from './town-d2-r30-chunk-lod';
 import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-host';
 import { createTownD2R30Collision } from './town-d2-r30-collision';
 import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
+import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
 import { createTownD2R30Massif } from './town-d2-r30-massif';
+import { createTownD2R30SledGateSupport } from './town-d2-r30-sled-gate-support';
 import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
 import { createTownD2R30Strata } from './town-d2-r30-strata';
+import { createTownD2R30TrailSupport } from './town-d2-r30-trail-support';
 
 /**
  * D2-R01/R04 full main-summit domain, assembled as one mountable entity.
@@ -25,6 +29,14 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeStrata?: boolean;
   /** Include the cloud terrace wall + outer ring + lowland forest (default true). */
   includeCloudTerrace?: boolean;
+  /** D2-R02: include cut/fill + pier support for the canonical walkway (default false). */
+  includeTrailSupport?: boolean;
+  /** D2-R02: include dense terrain-supported towers for the ropeway (default false). */
+  includeCableTowers?: boolean;
+  /** D2-R03: include facility pedestals where surveyed floors float (default false). */
+  includeFacilityFoundations?: boolean;
+  /** D2-R03: include solid stands for floating sled gates (default false). */
+  includeSledGateSupport?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -48,7 +60,12 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeSnowRock = options.includeSnowRock ?? true;
   const includeStrata = options.includeStrata ?? true;
   const includeCloudTerrace = options.includeCloudTerrace ?? true;
-  if ([includeSnowRock, includeStrata, includeCloudTerrace].some(value => typeof value !== 'boolean')) {
+  const includeTrailSupport = options.includeTrailSupport ?? false;
+  const includeCableTowers = options.includeCableTowers ?? false;
+  const includeFacilityFoundations = options.includeFacilityFoundations ?? false;
+  const includeSledGateSupport = options.includeSledGateSupport ?? false;
+  if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
+    includeFacilityFoundations, includeSledGateSupport].some(value => typeof value !== 'boolean')) {
     throw new TypeError('D2-R30 inclusion flags must be booleans.');
   }
 
@@ -96,6 +113,31 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     children.push(cloud.group);
     disposers.push(() => cloud.dispose());
     nightHooks.push(value => cloud.setNight(value));
+  }
+
+  if (includeTrailSupport) {
+    const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight });
+    children.push(support.group);
+    disposers.push(() => support.dispose());
+    nightHooks.push(value => support.setNight(value));
+  }
+
+  if (includeCableTowers) {
+    const towers = createTownD2R30CableTowers({ heightAt, arrivalHeight });
+    children.push(towers.group);
+    disposers.push(() => towers.dispose());
+  }
+
+  if (includeFacilityFoundations) {
+    const foundations = createTownD2R30FacilityFoundations({ heightAt, arrivalHeight });
+    children.push(foundations.group);
+    disposers.push(() => foundations.dispose());
+  }
+
+  if (includeSledGateSupport) {
+    const sled = createTownD2R30SledGateSupport({ heightAt, arrivalHeight });
+    children.push(sled.group);
+    disposers.push(() => sled.dispose());
   }
 
   for (const child of children) group.add(child);
