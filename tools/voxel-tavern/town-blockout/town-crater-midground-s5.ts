@@ -1,9 +1,10 @@
 import {
-  BoxGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
+  Box3, BoxGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
   MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace, Vector3,
 } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import type { Box } from './landmark-kit';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import { buildBR30CrystalForm, buildBR30RailFragment, buildBR30TimberFragment } from './town-b-r30-crater-remnant-forms';
 import { surveyBR30RelicView, type BR30RelicView } from './town-b-r30-crater-relic-view';
@@ -102,6 +103,7 @@ export function buildCraterMidgroundS5(road: Ground,
   group.name = 'crater-midground-s5';
   const placements: CraterMidgroundPiece[] = [];
   const crystalViews: {cluster:string;view:BR30RelicView}[]=[];
+  const colliders:Box[]=[];
   const stamps = new Map<Piece, Object3D[]>();
   const trail = Array.from({ length: 801 }, (_, i) => {
     const at = fixture.mainTrailPoint(i / 800);
@@ -143,6 +145,16 @@ export function buildCraterMidgroundS5(road: Ground,
     part.rotation.set(tilt, angle, 0);
     part.scale.set(sx * scale, sy * scale, sz * scale);
     part.updateMatrix();
+    // Exact transformed vertices, not the placement keep-out disk. Only
+    // protruding solids block a player; low shards remain traversable.
+    const bounds=new Box3(),vertex=new Vector3();
+    const positions=geometry[kind].getAttribute('position');
+    for(let i=0;i<positions.count;i++)bounds.expandByPoint(vertex.fromBufferAttribute(positions,i).applyMatrix4(part.matrix));
+    const base=Math.max(bounds.min.y,low);
+    const exposed=bounds.max.y-base;
+    const solid=kind!=='scorch'&&exposed>.46;
+    if(solid&&trail.some(p=>Math.hypot(Math.max(bounds.min.x-p.east,0,p.east-bounds.max.x),
+      Math.max(bounds.min.z+p.north,0,-p.north-bounds.max.z))<2.1))return;
     if(kind==='ice'){
       // Aim at the real asymmetric tip, not a stale fixture height.
       const tip=new Vector3(.12,.5,-.035).applyMatrix4(part.matrix);
@@ -154,6 +166,7 @@ export function buildCraterMidgroundS5(road: Ground,
     entries.push(part);
     stamps.set(kind, entries);
     placements.push({ kind, cluster, east, north, height });
+    if(solid)colliders.push({min:[bounds.min.x,base,bounds.min.z],max:bounds.max.toArray()});
     return true;
   }
 
@@ -261,5 +274,5 @@ export function buildCraterMidgroundS5(road: Ground,
     group.add(batch);
     batches.push(kind);
   }
-  return { group, placements, batches, crystalViews };
+  return { group, placements, batches, crystalViews, colliders };
 }

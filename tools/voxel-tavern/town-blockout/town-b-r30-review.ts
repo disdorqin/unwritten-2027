@@ -13,6 +13,8 @@ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>gri
 // production reservation/collision consumers. The retired plates had no boxes.
 const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
+// The A-owned production host must append this same data before indexing.
+road.group.userData.colliders.push(...road.midgroundS5.colliders);
 const rail=buildCraterRailExtension(grid,road);
 const face=installBR30Workface(road),machines=installCraterWorkshopWorld(road,rail);
 const scene=new Scene();scene.add(road.group,rail.group);

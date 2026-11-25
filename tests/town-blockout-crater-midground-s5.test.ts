@@ -25,6 +25,12 @@ test('R30 middle band keeps sparse recognizable mining relics and crystal outcro
   assert.ok(a.batches.length <= 5, `draw batches stay inside the dressing budget: ${a.batches.length}`);
   assert.equal(a.crystalViews.length,a.placements.filter(p=>p.kind==='ice').length);
   assert.ok(a.crystalViews.length>=3);
+  assert.ok(a.colliders.length>0 && a.colliders.length<=a.placements.length);
+  assert.deepEqual(a.colliders,b.colliders);
+  for(const box of a.colliders){
+    assert.ok(box.max[1]-box.min[1]>.46);
+    assert.ok(trail.every(p=>Math.hypot(Math.max(box.min[0]-p.east,0,p.east-box.max[0]),Math.max(box.min[2]+p.north,0,-p.north-box.max[2]))>=2.1));
+  }
   for(const {view} of a.crystalViews){
     assert.ok(view.clearance>=.15 && view.distance<=12 && Math.abs(view.pitch)<=.65);
     assert.ok(Math.abs(road.heightAt(view.foot.east,view.foot.north)!-view.foot.height)<1e-6);
