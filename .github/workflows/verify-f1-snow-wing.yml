@@ -1,0 +1,48 @@
+name: Verify snow-wing F-1 browser candidate
+
+on:
+  push:
+    branches: [town-review-f1-20261120]
+    paths:
+      - .github/workflows/verify-f1-snow-wing.yml
+      - src/shared/snow-wing.ts
+      - tests/town-blockout-snow-wing.test.ts
+      - tools/verify-snow-wing-browser.mjs
+      - tools/voxel-tavern/main-summit-snow-wing-review.html
+      - tools/voxel-tavern/town-blockout/main-summit-*.ts
+      - tools/voxel-tavern/town-blockout/flight-equipment-visuals.ts
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked dependencies and Chromium
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify flight mechanics and preview types
+        run: |
+          node --import tsx --test tests/town-blockout-snow-wing.test.ts
+          npx tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler tools/voxel-tavern/town-blockout/main-summit-snow-wing-review.ts
+      - name: Register, glide, stall, recover and land with keyboard input
+        timeout-minutes: 5
+        run: timeout --signal=TERM --kill-after=6s 285s node tools/verify-snow-wing-browser.mjs . /tmp/f1-snow-wing-evidence
+      - name: Upload snow-wing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: f1-snow-wing-browser-evidence
+          path: |
+            /tmp/f1-snow-wing-evidence/*.png
+            /tmp/f1-snow-wing-evidence/*.json
+          if-no-files-found: warn

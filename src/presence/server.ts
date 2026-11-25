@@ -1,33 +1,98 @@
-import { randomBytes } from 'node:crypto';
-import { createServer, type RequestListener } from 'node:http';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createServer, type IncomingMessage, type RequestListener, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
-import { createTownNightWindow, type TownNightSchedule } from '../shared/town-night-window.js';
+import { createTownNightWindow, type TownNightSchedule, type TownNightWindowState } from '../shared/town-night-window.js';
 import {
-  BASE_TIER, CELL_METRES, MAX_SESSIONS, MAX_VISIBLE, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
+  BASE_TIER, CELL_METRES, MASCOT_ACTOR_ID, MAX_SESSIONS, MAX_VISIBLE, POLL_JOIN_PATH, POLL_LEAVE_PATH,
+  POLL_PATH, POLL_SESSION_TIMEOUT_MS, PRESENCE_PATH, RECORD_BYTES, TOWN_BOUNDS,
   checkTiers, readRecord, validName, writeSnapshot, type PresenceRecord, type PresenceTier,
 } from './protocol.js';
 import {
   fireworksCooldownMs, fireworksShowMs, fireworksSiteRangeMetres, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from './firework-sites.js';
 import { createPresenceEgress } from './egress.js';
+import { createUndergroundWaterState } from './underground-water-state.js';
+import type { AcceptedUndergroundWaterSnapshot } from '../shared/town-c-water-snapshot-port.js';
+import { createIceThroneAuthority } from './ice-throne-authority.js';
+import { isIcePalaceThroneRecord } from './ice-throne-site.js';
+import {
+  createCableLineAuthority, type CableLineFrame,
+} from './cable-line-authority.js';
+import { createIcePalaceRiteAuthority } from './ice-palace-rite-authority.js';
+import { createIcePalaceFragment } from './ice-palace-fragment.js';
+import type {
+  Za36CableRepairEvent, Za36CableRepairLine,
+} from '../shared/za36-cable-repair.js';
+import { isSummitPassportAction } from '../shared/summit-passport.js';
+import { snowWallBuildLayers } from '../shared/snow-stock.js';
+import {
+  createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
+} from './summit-passport-authority.js';
+import { personalFireworkCooldownMs, personalFireworkRestricted, readPersonalFirework } from './personal-fireworks.js';
 import { decodeSnowballClientEvent, encodeSnowballRelay, SNOWBALL_EVENT_PREFIX, type SnowballThrow } from './snowball-events.js';
+import {
+  SNOWFIGHT_POINTS, SNOWFIGHT_TEAM_NAMES, SnowWallField, SnowfightMatch, WALL_CELL, buildHalfAllows,
+  classifyFreeWallSite, classifyWallSite, freeWallTeam, sledWallImpact, sledWallMaximumReportSpeed, wallCellCentre,
+} from './snowfight.js';
+import {
+  SNOWFIGHT_PLACE, SNOWFIGHT_SLED_SMASH, SNOWFIGHT_WALL_HIT, decodeSnowfightClientEvent, encodeWallClear,
+  encodeWallSet,
+} from './snowfight-events.js';
 import { createTestFireworksSchedule } from './test-fireworks.js';
 import { createTownNightBeaconHost } from './town-night-beacon.js';
+import { createTownOutdoorWeatherHost } from './town-outdoor-weather.js';
+import type { TownOutdoorWeatherState } from '../shared/town-outdoor-weather.js';
 import {
-  ceremonyLandingAnnouncement, ceremonyLandingLeadMs, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
+  ceremonyLandingAnnouncement, ceremonyLandingCentre, ceremonyLandingLeadMs, ceremonyLandingOuterRadius,
+  ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival,
 } from './ceremony-arrival.js';
 import {
-  inPlazaPhotoArc, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
+  inPlazaPhotoRequestZone, plazaPhotoCountdownMs, plazaPhotoGatherMs, plazaPhotoLineup, plazaPhotoLockMs,
   type PlazaPhotoInvite, type PlazaPhotoNotice, type PlazaPhotoPerson,
 } from './plaza-photo.js';
+import {
+  applyBellTouch, bellStandings, bellTitleDue, createBellMatch, defaultBellConfig, dropBell, endBellMatch,
+  inBellVenue, tryBellTouch, type BellConfig, type BellState, type BellStateEvent,
+} from './bell-game.js';
+
+/** S2 连接日志出口：每个连接事件调用一次，参数为一行完整的 JSON 文本。 */
+export type PresenceConnectionLog = (line: string) => void;
 
 export type PresenceTownNightOptions = Readonly<{
+  /** Same authoritative calendar anchor as the G-09 weather cycle. */
+  dawnEpoch?: number;
   scheduleAt: (now: number) => TownNightSchedule | undefined;
   restoredBeaconAt?: number | null;
   saveBeacon?: (at: number) => void;
+  onSaveError?: (error: unknown) => void;
+}>;
+
+type TownNightFeed = Readonly<{
+  snapshot(): TownNightWindowState;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherFeed = Readonly<{
+  dawnEpoch: number;
+  snapshot(): TownOutdoorWeatherState;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+/** Underground river state feed (design: 地下重入变化). The primary
+ * room authors the single water state; the mine room follows it, so
+ * tonight() is computed at exactly one point fleet-wide. */
+type UndergroundWaterFeed = Readonly<{
+  snapshot(): AcceptedUndergroundWaterSnapshot;
+  subscribe(receive: (frame: string) => void): () => void;
+}>;
+
+type TownWeatherOptions = Readonly<{
+  dawnEpoch: number;
+  restoredWarningAt?: number | null;
+  saveWarning?: (at: number) => void;
   onSaveError?: (error: unknown) => void;
 }>;
 
@@ -41,38 +106,74 @@ type Options = {
   now?: () => number;
   wallNow?: () => number;
   townNight?: PresenceTownNightOptions;
-  /** Optional server-authoritative G-09 wind for the relay; clients cannot supply it. */
-  snowballWindForThrow?: (event: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
+  /** Secondary rooms consume the primary town's committed frames. */
+  townNightFeed?: TownNightFeed;
+  /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
+  townOutdoorWeather?: TownWeatherOptions;
+  /** Secondary rooms relay primary-town weather rather than running a second schedule. */
+  townOutdoorWeatherFeed?: TownWeatherFeed;
+  /** Author the underground river state only in the primary room, on the ZB-17 dawn anchor. */
+  undergroundWater?: Readonly<{ dawnEpoch: number }>;
+  /** The mine room follows the primary room's river state rather than running a second one. */
+  undergroundWaterFeed?: UndergroundWaterFeed;
+  /** Optional G-09 server-authoritative shot-time wind. Leave disabled until clients support relay kind 3. */
+  snowballWindForThrow?: (shot: Readonly<SnowballThrow>, epoch: number) => Readonly<{ east: number; north: number }> | undefined;
   testFireworks?: boolean;
+  /** Enables legacy team matches in an isolated room. */
+  formalSnowfight?: boolean;
+  ownerKey?: string;
+  onMascotClaimRejected?: (total: number) => void;
   requestListener?: RequestListener;
   ceremonyStartAt?: number;
+  bellConfig?: Partial<BellConfig>;
+  summitPassportHost?: SummitPassportHost;
+  /** S2 结构化连接日志的注入点；默认 console.log。 */
+  connectionLog?: PresenceConnectionLog;
 };
 
+type PollFrame = { t: 'text'; d: string } | { t: 'bin'; d: Uint8Array };
+
 type Peer = {
-  socket: WebSocket;
+  transport: 'ws' | 'poll';
+  socket?: WebSocket;
+  /** 轮询通道的待发队列（WS 通道为空）；快照帧只保留最新一帧。 */
+  outbox: PollFrame[];
+  outboxBytes: number;
+  /** 轮询会话令牌与最近一次轮询时刻（now() 时钟）。 */
+  session?: string;
+  lastPollAt: number;
+  /** S2 连接日志：断开原因码，由各断开路径在回收前置入，remove() 统一记录。 */
+  dropReason?: string;
   id: number;
   name?: string;
   record?: PresenceRecord;
   version: number;
   visible: { id: number; version: number }[];
-  joinTimer: ReturnType<typeof setTimeout>;
+  joinTimer?: ReturnType<typeof setTimeout>;
   alive: boolean;
   tokens: number;
   tokenAt: number;
   throws: TokenBucket;
   chat: TokenBucket;
   poseRate: TokenBucket;
+  snowPlace: TokenBucket;
+  nextSnowfightRequest: number;
   pose: number;
   floodAt: number;
   floodCount: number;
   pendingThrows: Map<number, PendingThrow>;
   nextClockSample: number;
+  nextBellRequest: number;
   nextFireworksRequest: number;
   nextPersonalFireworks: number;
+  nextFirecracker: number;
   nextPhotoRequest: number;
   joinedAt?: number;
   ceremonyWarned?: boolean;
   ceremonyArrival?: CeremonyArrival;
+  ownerChallenge?: { nonce: string; expiresAt: number };
+  ownerFailures?: number;
+  ownerRetryAt?: number;
 };
 
 type TokenBucket = { tokens: number; at: number };
@@ -85,6 +186,9 @@ const throwRate = 4;
 const throwBurst = 6;
 const throwWindowMs = 3000;
 const eventFloodPerSecond = 128;
+const pollOutboxLimitBytes = 512 * 1024;
+const pollBodyLimitBytes = 64 * 1024;
+const pollEventsPerRequest = 64;
 const eventVisibleLimits = [MAX_VISIBLE, 40, 32] as const;
 const fallbackLoadTier = { minOnline: 49, radius: 48, hz: 2.5 } as const;
 
@@ -101,8 +205,36 @@ function horizontalDistanceSquared(a: PresenceRecord, b: PresenceRecord) {
 }
 
 function metresToLimit(value: number): number {
-  if (!Number.isFinite(value) || value <= 0 || value > 655.35) throw new Error('Invalid presence coordinate limit.');
+  if (!Number.isFinite(value) || value <= 0 || value > 900) throw new Error('Invalid presence coordinate limit.'); // follows TOWN_BOUNDS.height (ZD-05: island surface Y750)
   return Math.round(value * 100);
+}
+
+function isCableRepairLine(value: unknown): value is Za36CableRepairLine {
+  return value === 1 || value === 2;
+}
+
+const cableWakeImpacts: ReadonlySet<string> = new Set(['sled', 'snow-wall', 'snowball', 'night-window']);
+
+/** Shape-check a client cable-repair event before it reaches the authority. */
+function isCableRepairEvent(value: unknown): value is Za36CableRepairEvent {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return false;
+  const event = value as { kind: unknown; impact?: unknown; effort?: unknown; index?: unknown };
+  switch (event.kind) {
+    case 'wake':
+      return typeof event.impact === 'string' && cableWakeImpacts.has(event.impact);
+    case 'strike-rust':
+    case 'pull-brake':
+    case 'release-cable':
+    case 'tighten-cable':
+      return true;
+    case 'pry-cable':
+      return typeof event.effort === 'number' && Number.isFinite(event.effort);
+    case 'take-weight':
+    case 'hang-weight':
+      return Number.isInteger(event.index);
+    default:
+      return false;
+  }
 }
 
 function refuse(socket: Duplex, status: string): void {
@@ -119,26 +251,150 @@ export async function createPresenceServer(options: Options = {}) {
   const now = options.now ?? (() => performance.now());
   const wallNow = options.wallNow ?? Date.now;
   const nightConfig = options.townNight;
+  if (nightConfig && options.townNightFeed) throw new Error('A presence room cannot author and follow the same night clock.');
+  const nightListeners = new Set<(frame: string) => void>();
   const townNight = nightConfig && createTownNightBeaconHost(createTownNightWindow({
     now: wallNow,
     scheduleAt: nightConfig.scheduleAt,
     saveBeacon: nightConfig.saveBeacon,
-  }, nightConfig.restoredBeaconAt), cue => broadcast(JSON.stringify(cue)));
+  }, nightConfig.restoredBeaconAt), cue => publishTownNight(JSON.stringify(cue)));
+  const ownedNightFeed: TownNightFeed | undefined = townNight && {
+    snapshot: townNight.snapshot,
+    subscribe(receive) {
+      nightListeners.add(receive);
+      return () => { nightListeners.delete(receive); };
+    },
+  };
+  const nightFeed = ownedNightFeed ?? options.townNightFeed;
+  const weatherConfig = options.townOutdoorWeather;
+  if (weatherConfig && options.townOutdoorWeatherFeed) {
+    throw new Error('A presence room cannot author and follow the same outdoor weather.');
+  }
+  if (weatherConfig && nightConfig?.dawnEpoch !== undefined &&
+      weatherConfig.dawnEpoch !== nightConfig.dawnEpoch) {
+    throw new Error('Outdoor weather must use the town night dawn anchor.');
+  }
+  const weatherListeners = new Set<(frame: string) => void>();
+  const townWeather = weatherConfig && createTownOutdoorWeatherHost({
+    now: wallNow,
+    dawnEpoch: weatherConfig.dawnEpoch,
+    saveWarning: weatherConfig.saveWarning,
+    broadcast: frame => publishTownWeather(JSON.stringify(frame)),
+  }, weatherConfig.restoredWarningAt);
+  const ownedWeatherFeed: TownWeatherFeed | undefined = townWeather && {
+    dawnEpoch: weatherConfig!.dawnEpoch,
+    snapshot: townWeather.snapshot,
+    subscribe(receive) {
+      weatherListeners.add(receive);
+      return () => { weatherListeners.delete(receive); };
+    },
+  };
+  const weatherFeed = ownedWeatherFeed ?? options.townOutdoorWeatherFeed;
+  const waterConfig = options.undergroundWater;
+  if (waterConfig && options.undergroundWaterFeed) {
+    throw new Error('A presence room cannot author and follow the same underground water.');
+  }
+  if (waterConfig && nightConfig?.dawnEpoch !== undefined &&
+      waterConfig.dawnEpoch !== nightConfig.dawnEpoch) {
+    throw new Error('Underground water must use the town night dawn anchor.');
+  }
+  const waterListeners = new Set<(frame: string) => void>();
+  const undergroundWater = waterConfig && createUndergroundWaterState({
+    dawnEpoch: waterConfig.dawnEpoch, now: wallNow,
+  });
+  const ownedWaterFeed: UndergroundWaterFeed | undefined = undergroundWater && {
+    snapshot: undergroundWater.tonight,
+    subscribe(receive) {
+      waterListeners.add(receive);
+      return () => { waterListeners.delete(receive); };
+    },
+  };
+  const waterFeed = ownedWaterFeed ?? options.undergroundWaterFeed;
+  let lastWaterSnapshot: AcceptedUndergroundWaterSnapshot | undefined;
+  let weatherErrorReported = false;
   let lastTownNightWindow = townNight?.snapshot();
   let nightErrorReported = false;
+  const connectionLog = options.connectionLog ?? ((line: string) => console.log(line));
+  const summitPassport = options.summitPassportHost && createSummitPassportAuthority(options.summitPassportHost);
+  /**
+   * S2 结构化连接日志：一行一个 JSON，字段只有时间戳/传输/peer/步骤/结果码。
+   * 与客户端四步故障码（PG-1/WS-2/FR-3/HB-4）对位：attempt≈页面/握手到达、
+   * session≈握手与会话建立、join≈首帧完成、drop≈心跳超时或会话回收。
+   * 绝不记录聊天文本、昵称、IP 或任何口令类信息。
+   */
+  function connLog(transport: 'ws' | 'poll' | '-', peer: number | '-', step: 'attempt' | 'session' | 'join' | 'drop', result: string) {
+    try {
+      connectionLog(JSON.stringify({ ts: new Date().toISOString(), transport, peer, step, result }));
+    } catch { /* 日志出口异常不得影响连接服务本身。 */ }
+  }
   const egress = createPresenceEgress();
   const fireworks = options.testFireworks ? createTestFireworksSchedule() : undefined;
   const eastLimit = metresToLimit(options.width ?? TOWN_BOUNDS.width);
   const northLimit = metresToLimit(options.depth ?? TOWN_BOUNDS.depth);
   const heightLimit = metresToLimit(options.height ?? TOWN_BOUNDS.height);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 512, perMessageDeflate: false });
-  const http = createServer(options.requestListener ?? ((_req, res) => { res.writeHead(404).end(); }));
+  const fallbackListener: RequestListener = (_req, res) => { res.writeHead(404).end(); };
+  const http = createServer((req, res) => {
+    if (req.url === POLL_JOIN_PATH || req.url === POLL_PATH || req.url === POLL_LEAVE_PATH) {
+      void handlePoll(req, res);
+      return;
+    }
+    (options.requestListener ?? fallbackListener)(req, res);
+  });
   const peers = new Map<number, Peer>();
+  const pollSessions = new Map<string, Peer>();
+  let crownOwner: number | null = null;
+  // Cable repair authority (window B's module): one repair state machine
+  // per line, this server the only writer. The wire frame is B's
+  // CableLineFrame plus the full snapshot the client repair host syncs
+  // from; flags stay derived inside the authority, never set here.
+  const cableLine = createCableLineAuthority();
+  const cableLineWire = (frame: CableLineFrame) =>
+    JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
+  // Ice palace rites: the authority validates the caller's alcove pose and
+  // delegates to policy stores. None of the three stores (ice window, forge
+  // inventory, solstice) exists yet, so snapshots honestly report every rite
+  // unavailable until its store lands; the transport and pose gate are live.
+  const icePalaceRites = createIcePalaceRiteAuthority({
+    groundPeer: peerId => {
+      const peer = peers.get(peerId);
+      return peer?.record ? { pose: peer.record } : undefined;
+    },
+  });
+  // The palace wreckage fragment is room-local: one per room, consumed by
+  // the first admitted pickup, then gone for everyone in the room.
+  const icePalaceFragment = createIcePalaceFragment();
+  const iceThrone = createIceThroneAuthority(({ ownerId, message }) => {
+    const oldOwner = crownOwner;
+    crownOwner = ownerId;
+    for (const id of [oldOwner, ownerId]) {
+      if (id === null) continue;
+      const actor = peers.get(id);
+      if (actor) broadcast(poseMessage(actor, true));
+    }
+    broadcast(JSON.stringify({ type: 'event', kind: 'announce', message }));
+  });
   const ceremonyStartAt = options.ceremonyStartAt ?? townCeremonyMidnight;
   const ceremonyEndAt = ceremonyStartAt + ceremonyLateWindowMs;
   const ceremonyWaiting = new Set<Peer>();
+  const snowMatch = new SnowfightMatch();
+  const snowWalls = new SnowWallField(snowWallBuildLayers);
+  let snowStateAt = 0;
+  let snowDecayAt = 0;
   const ceremonyPreannouncement = JSON.stringify({ type: 'event', kind: 'announce', message: ceremonyLandingAnnouncement });
+  const bellConfig: BellConfig = { ...defaultBellConfig, ...options.bellConfig };
+  let bell: BellState | undefined;
+  let bellAnnounced = new Set<string>();
+  const bellNames = new Map<number, string>();
+  let bellSyncAt = 0;
+  let owner: Peer | undefined;
+  let mascot: { id: number; record: PresenceRecord; version: number; pose: number } | undefined;
+  let mascotUntil = 0;
+  let nextMascotSample = 0;
+  let mascotVersion = 0;
+  let rejectedMascotClaims = 0;
   let fireworksOccupiedUntil = 0;
+  const personalFireworkBudget = { tokens: 10, at: now() };
   let photo: { invite: PlazaPhotoInvite; ended: boolean; optedOut: Set<number> } | undefined;
   let photoId = 0;
   let nextId = 1;
@@ -151,14 +407,226 @@ export async function createPresenceServer(options: Options = {}) {
   let stop: Promise<void> | undefined;
 
   function send(peer: Peer, data: string | Uint8Array) {
-    if (peer.socket.readyState !== WebSocket.OPEN || peer.socket.bufferedAmount > backlogLimit) return false;
-    peer.socket.send(data);
-    egress.record(now(), typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength);
+    const bytes = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
+    if (peer.transport === 'poll') {
+      // 快照是状态而非事件：队列里只保留最新一帧，慢轮询者不会积压旧位置。
+      if (typeof data !== 'string' && data[0] !== SNOWBALL_EVENT_PREFIX) {
+        const stale = peer.outbox.findIndex(frame => frame.t === 'bin' && frame.d[0] !== SNOWBALL_EVENT_PREFIX);
+        if (stale >= 0) {
+          peer.outboxBytes -= (peer.outbox[stale] as { d: Uint8Array }).d.byteLength;
+          peer.outbox.splice(stale, 1);
+        }
+      }
+      if (peer.outboxBytes + bytes > pollOutboxLimitBytes) return false;
+      peer.outbox.push(typeof data === 'string' ? { t: 'text', d: data } : { t: 'bin', d: data });
+      peer.outboxBytes += bytes;
+      egress.record(now(), bytes);
+      return true;
+    }
+    const socket = peer.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > backlogLimit) return false;
+    socket.send(data);
+    egress.record(now(), bytes);
     return true;
+  }
+
+  /** 协议错误时断开该对等端：WS 关连接（1008），轮询直接回收会话。 */
+  function failPeer(peer: Peer) {
+    peer.dropReason ??= 'protocol-error';
+    if (peer.transport === 'ws') peer.socket?.close(1008);
+    else remove(peer);
+  }
+
+  /** 对等端主动离开（leave 消息）：与 failPeer 同路，只是 WS 侧用普通关闭。 */
+  function closePeer(peer: Peer) {
+    peer.dropReason ??= 'leave';
+    if (peer.transport === 'ws') peer.socket?.close();
+    else remove(peer);
+  }
+
+  function drainOutbox(peer: Peer) {
+    const messages = peer.outbox.map(frame => frame.t === 'text'
+      ? { t: 'text', d: frame.d }
+      : { t: 'bin', d: Buffer.from(frame.d).toString('base64') });
+    peer.outbox = [];
+    peer.outboxBytes = 0;
+    return messages;
+  }
+
+  function createPeer(transport: 'ws' | 'poll', socket?: WebSocket): Peer {
+    while (nextId === MASCOT_ACTOR_ID || peers.has(nextId)) nextId = nextId % 65535 + 1;
+    const id = nextId;
+    nextId = nextId % 65535 + 1;
+    const t = now();
+    const peer: Peer = {
+      transport, socket, id, visible: [], version: 0, alive: true, tokens: rateBurst,
+      tokenAt: t, outbox: [], outboxBytes: 0, lastPollAt: t,
+      throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t },
+      snowPlace: { tokens: 6, at: t }, nextSnowfightRequest: 0, pose: 0,
+      floodAt: t, floodCount: 0, pendingThrows: new Map(),
+      nextClockSample: 0, nextBellRequest: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0, nextFirecracker: 0,
+    };
+    peers.set(id, peer);
+    return peer;
+  }
+
+  function readBody(req: IncomingMessage): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      req.on('data', chunk => {
+        size += (chunk as Buffer).byteLength;
+        if (size > pollBodyLimitBytes) { reject(new Error('body too large')); req.destroy(); return; }
+        chunks.push(chunk as Buffer);
+      });
+      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      req.on('error', reject);
+    });
+  }
+
+  /**
+   * S3 备用通道端点（与 WS 共用 peers 与全部接收逻辑，只是传输换成 HTTP 往返）：
+   * - POST /presence/poll/join {name} → {session, id, messages}（messages 为入队帧：text 原文 / bin base64）
+   * - POST /presence/poll（头 x-presence-session）{state?: base64(12B), events?: [{t,d}]} → {messages}
+   * - POST /presence/poll/leave（头 x-presence-session）→ {}
+   */
+  async function handlePoll(req: IncomingMessage, res: ServerResponse) {
+    const reply = (status: number, payload: unknown) => {
+      res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(payload));
+    };
+    if (req.method !== 'POST') {
+      if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'method');
+      reply(405, { error: 'method' });
+      return;
+    }
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const source = new URL(origin);
+        if ((source.protocol !== 'https:' && source.protocol !== 'http:') || source.host !== req.headers.host) {
+          if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'origin');
+          reply(403, { error: 'origin' });
+          return;
+        }
+      } catch {
+        if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'origin');
+        reply(403, { error: 'origin' });
+        return;
+      }
+    }
+    let body: { name?: unknown; state?: unknown; events?: unknown };
+    try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
+    catch {
+      if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
+      reply(400, { error: 'body' });
+      return;
+    }
+
+    if (req.url === POLL_JOIN_PATH) {
+      if (closing || peers.size >= MAX_SESSIONS) {
+        connLog('poll', '-', 'attempt', 'full');
+        reply(503, { error: 'full' });
+        return;
+      }
+      connLog('poll', '-', 'attempt', 'accepted');
+      const peer = createPeer('poll');
+      connLog('poll', peer.id, 'session', 'ok');
+      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name }), 'utf8'));
+      if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
+      const session = randomBytes(16).toString('hex');
+      peer.session = session;
+      pollSessions.set(session, peer);
+      reply(200, { session, id: peer.id, messages: drainOutbox(peer) });
+      return;
+    }
+
+    const token = req.headers['x-presence-session'];
+    const peer = typeof token === 'string' ? pollSessions.get(token) : undefined;
+    if (!peer || !peers.has(peer.id)) {
+      connLog('poll', '-', 'session', 'unknown');
+      reply(401, { error: 'session' });
+      return;
+    }
+    peer.lastPollAt = now();
+
+    if (req.url === POLL_LEAVE_PATH) {
+      peer.dropReason ??= 'leave';
+      remove(peer);
+      reply(200, {});
+      return;
+    }
+    if (typeof body.state === 'string') {
+      const bytes = Buffer.from(body.state, 'base64');
+      if (bytes.byteLength === RECORD_BYTES) receiveState(peer, bytes);
+      if (!peers.has(peer.id)) { reply(410, { error: 'gone' }); return; }
+    }
+    if (Array.isArray(body.events)) {
+      for (const item of body.events.slice(0, pollEventsPerRequest)) {
+        if (!peers.has(peer.id)) break;
+        const frame = item as { t?: unknown; d?: unknown };
+        if (frame.t === 'text' && typeof frame.d === 'string') {
+          const pending = receiveText(peer, Buffer.from(frame.d, 'utf8'));
+          if (pending) await pending;
+        } else if (frame.t === 'bin' && typeof frame.d === 'string') {
+          const bytes = Buffer.from(frame.d, 'base64');
+          if (bytes.byteLength === RECORD_BYTES && bytes.readUInt16LE(0) === MASCOT_ACTOR_ID) {
+            receiveState(peer, bytes);
+          } else if (bytes.byteLength > 0 && bytes[0] === SNOWBALL_EVENT_PREFIX) {
+            // 与 WS 分发同口径：snowfight 帧（放墙/命中/撞穿）先行裁定，其余才是雪球。
+            if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
+              bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);
+            else receiveSnowball(peer, bytes);
+          }
+        }
+      }
+    }
+    if (!peers.has(peer.id)) { reply(410, { error: 'gone' }); return; }
+    reply(200, { messages: drainOutbox(peer) });
   }
 
   function broadcast(data: string, exclude?: Peer) {
     for (const peer of peers.values()) if (peer !== exclude && peer.name) send(peer, data);
+  }
+
+  function publishTownNight(frame: string) {
+    broadcast(frame);
+    for (const receive of nightListeners) receive(frame);
+  }
+
+  function publishTownWeather(frame: string) {
+    broadcast(frame);
+    for (const receive of weatherListeners) receive(frame);
+  }
+
+  function publishUndergroundWater(frame: string) {
+    broadcast(frame);
+    for (const receive of waterListeners) receive(frame);
+  }
+
+  function updateUndergroundWater() {
+    if (!undergroundWater) return;
+    const snapshot = undergroundWater.tonight();
+    if (lastWaterSnapshot?.nightOrdinal === snapshot.nightOrdinal &&
+        lastWaterSnapshot?.level === snapshot.level &&
+        lastWaterSnapshot?.phase === snapshot.phase) return;
+    lastWaterSnapshot = snapshot;
+    publishUndergroundWater(JSON.stringify({ type: 'event', kind: 'underground-water', state: snapshot }));
+  }
+
+  function updateTownWeather() {
+    if (!townWeather) return;
+    try {
+      townWeather.tick();
+      weatherErrorReported = false;
+    } catch (error) {
+      // A failed durable warning receipt must not be followed by a false cue.
+      // Retry while the warning remains fresh without killing player sessions.
+      if (!weatherErrorReported) {
+        weatherErrorReported = true;
+        if (weatherConfig?.onSaveError) weatherConfig.onSaveError(error);
+        else console.error('Town weather warning could not advance:', error);
+      }
+    }
   }
 
   function updateTownNight() {
@@ -179,7 +647,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (lastTownNightWindow?.phase === state.phase && lastTownNightWindow.layersOverlap === state.layersOverlap &&
         lastTownNightWindow.beaconAt === state.beaconAt && lastTownNightWindow.morningBellAt === state.morningBellAt) return;
     lastTownNightWindow = state;
-    broadcast(JSON.stringify({ type: 'event', kind: 'town-night-window', state }));
+    publishTownNight(JSON.stringify({ type: 'event', kind: 'town-night-window', state }));
   }
 
   function updateFireworks(time: number) {
@@ -187,8 +655,26 @@ export async function createPresenceServer(options: Options = {}) {
     if (event) broadcast(JSON.stringify(event));
   }
 
+  function inCeremonyArrivalWindow(time: number) {
+    return time >= ceremonyStartAt - ceremonyLandingLeadMs && time < ceremonyEndAt;
+  }
+
+  function blocksCeremonyArrival(east: number, north: number) {
+    const dx = Math.max(0, Math.abs(east - ceremonyLandingCentre[0]) - WALL_CELL / 2);
+    const dn = Math.max(0, Math.abs(north - ceremonyLandingCentre[1]) - WALL_CELL / 2);
+    return Math.hypot(dx, dn) <= ceremonyLandingOuterRadius;
+  }
+
+  function clearCeremonyWalls(time: number) {
+    if (!inCeremonyArrivalWindow(time)) return;
+    const cleared = snowWalls.clearWhere(block => block.team === freeWallTeam &&
+      blocksCeremonyArrival(wallCellCentre(block.gx), wallCellCentre(block.gy)));
+    for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+  }
+
   function updateCeremony(time: number) {
-    if (time < ceremonyStartAt - ceremonyLandingLeadMs || time >= ceremonyEndAt || !ceremonyWaiting.size) return;
+    if (!inCeremonyArrivalWindow(time) || !ceremonyWaiting.size) return;
+    clearCeremonyWalls(time);
     for (const peer of ceremonyWaiting) {
       if (time < ceremonyStartAt && !peer.ceremonyWarned) {
         if (!send(peer, ceremonyPreannouncement)) continue;
@@ -203,6 +689,96 @@ export async function createPresenceServer(options: Options = {}) {
         peer.ceremonyArrival = { type: 'event', kind: 'ceremony-arrival', startAt: ceremonyStartAt, slot, edge };
       }
       if (send(peer, JSON.stringify(peer.ceremonyArrival))) ceremonyWaiting.delete(peer);
+    }
+  }
+
+  function bellStateEvent(): BellStateEvent | undefined {
+    if (!bell) return undefined;
+    const holderPeer = bell.holderId === null ? undefined : peers.get(bell.holderId);
+    return {
+      type: 'event', kind: 'bell-state',
+      phase: bell.phase,
+      endsAt: bell.endsAt,
+      holderSince: bell.holderSince,
+      holder: holderPeer?.name && holderPeer.record ? {
+        id: holderPeer.id, name: holderPeer.name,
+        east: holderPeer.record.east / 100, north: holderPeer.record.north / 100, height: holderPeer.record.height / 100,
+      } : null,
+      loose: bell.loose ? { ...bell.loose } : null,
+      pickableAt: bell.pickableAt,
+      totals: [...bell.totals.entries()],
+    };
+  }
+
+  function publishBell() {
+    const event = bellStateEvent();
+    if (event) broadcast(JSON.stringify(event));
+  }
+
+  function requestBell(peer: Peer) {
+    const throttleNow = performance.now();
+    if (throttleNow < peer.nextBellRequest) return;
+    peer.nextBellRequest = throttleNow + 500;
+    if (bell?.phase === 'running') {
+      send(peer, JSON.stringify({ type: 'bell-rejected', reason: 'busy' }));
+      return;
+    }
+    const position = peer.record;
+    if (!position || !inBellVenue({ east: position.east / 100, north: position.north / 100 })) {
+      send(peer, JSON.stringify({ type: 'bell-rejected', reason: 'position' }));
+      return;
+    }
+    bell = createBellMatch(Date.now(), bellConfig);
+    bellAnnounced = new Set();
+    bellNames.clear();
+    bellSyncAt = Date.now();
+    publishBell();
+  }
+
+  function requestBellTouch(peer: Peer) {
+    if (!bell || bell.phase !== 'running' || !peer.record) return;
+    const holderPeer = bell.holderId === null ? undefined : peers.get(bell.holderId);
+    const result = tryBellTouch(bell, peer.id,
+      { east: peer.record.east / 100, north: peer.record.north / 100 },
+      holderPeer?.record ? { east: holderPeer.record.east / 100, north: holderPeer.record.north / 100 } : null,
+      Date.now(), bellConfig);
+    if (!result.ok) return;
+    if (peer.name) bellNames.set(peer.id, peer.name);
+    applyBellTouch(bell, peer.id, Date.now());
+    publishBell();
+  }
+
+  function dropHeldBell(holder: Peer, dirEast: number, dirNorth: number, pickupDelayMs?: number) {
+    if (!bell || bell.phase !== 'running' || bell.holderId !== holder.id || !holder.record) return;
+    dropBell(bell,
+      { east: holder.record.east / 100, north: holder.record.north / 100 },
+      dirEast, dirNorth, Date.now(), bellConfig, pickupDelayMs);
+    publishBell();
+  }
+
+  function updateBell(wallNow: number) {
+    if (!bell || bell.phase !== 'running') return;
+    const due = bellTitleDue(bell, wallNow, bellAnnounced, bellConfig);
+    if (due) {
+      bellAnnounced.add(due.key);
+      const name = bellNames.get(due.id) ?? peers.get(due.id)?.name;
+      if (name) broadcast(JSON.stringify({ type: 'event', kind: 'bell-title', id: due.id, name, tier: due.tier }));
+    }
+    if (wallNow >= bell.endsAt) {
+      endBellMatch(bell, wallNow);
+      publishBell();
+      const standings = bellStandings(bell, wallNow)
+        .map(({ id, ms }) => ({ id, name: bellNames.get(id) ?? peers.get(id)?.name ?? '', ms }))
+        .filter(entry => entry.name);
+      broadcast(JSON.stringify({
+        type: 'event', kind: 'bell-end',
+        winner: standings[0] ?? null, standings: standings.slice(0, 8),
+      }));
+      return;
+    }
+    if (wallNow - bellSyncAt >= 5000) {
+      bellSyncAt = wallNow;
+      publishBell();
     }
   }
 
@@ -228,12 +804,12 @@ export async function createPresenceServer(options: Options = {}) {
       peer.floodCount = 0;
     }
     if (++peer.floodCount <= eventFloodPerSecond) return true;
-    peer.socket.close(1008);
+    failPeer(peer);
     return false;
   }
 
   function receiveSnowball(peer: Peer, bytes: Uint8Array) {
-    if (!peer.name) { peer.socket.close(1008); return; }
+    if (!peer.name) { failPeer(peer); return; }
     const time = now();
     if (!allowEvent(peer, time)) return;
     const event = decodeSnowballClientEvent(bytes);
@@ -244,9 +820,23 @@ export async function createPresenceServer(options: Options = {}) {
       const pending = thrower?.pendingThrows.get(event.ballId);
       if (!thrower || !pending || pending.expiresAt <= time || pending.confirmed || !pending.recipients.has(peer)) return;
       pending.confirmed = true;
+      iceThrone.confirmedHit(time, peer.id, event.throwerId, event.ballId);
       const relay = encodeSnowballRelay({ ...event, confirmerId: peer.id });
       send(thrower, relay);
       for (const recipient of pending.recipients) send(recipient, relay);
+      // 持铃人被雪球命中：铃按投掷方向滚出（D3 规则，服务端权威触发）。
+      if (bell?.phase === 'running' && bell.holderId === peer.id && peer.record && thrower.record) {
+        dropHeldBell(peer,
+          (peer.record.east - thrower.record.east) / 100,
+          (peer.record.north - thrower.record.north) / 100);
+      }
+      const victimPos = peer.record ? { east: peer.record.east / 100, north: peer.record.north / 100 } : undefined;
+      for (const matchEvent of snowMatch.onHit(peer.id, event.throwerId, victimPos)) {
+        if (matchEvent.type === 'streak') {
+          const name = peers.get(matchEvent.playerId)?.name;
+          if (name) announceSnowfight(`${name} 三连中！`);
+        } else if (matchEvent.type === 'capture-reset') broadcastSnowfightState();
+      }
       return;
     }
 
@@ -262,19 +852,160 @@ export async function createPresenceServer(options: Options = {}) {
       if (pending.expiresAt <= time) peer.pendingThrows.delete(ballId);
     }
     if (peer.pendingThrows.has(event.ballId)) return;
-    // Only the server may add the windy relay variant. On invalid/unconfigured
-    // weather, preserve the original 18-byte packet for older consumers.
-    const candidateWind = options.snowballWindForThrow?.(event, wallNow());
-    const wind = candidateWind && Number.isFinite(candidateWind.east) && Number.isFinite(candidateWind.north) &&
-      Math.abs(candidateWind.east) <= 2 && Math.abs(candidateWind.north) <= 2 ? candidateWind : undefined;
+    // Wind is snapshotted only after all origin/rate/identity checks. Client
+    // packets are still legacy 16 B and contain no trusted weather field.
+    // An unconfigured or invalid authority falls back to the old 18 B relay.
+    let wind: Readonly<{ east: number; north: number }> | undefined;
+    if (options.snowballWindForThrow) {
+      try {
+        const sampled = options.snowballWindForThrow(event, wallNow());
+        if (sampled && Number.isFinite(sampled.east) && Number.isFinite(sampled.north) &&
+            Math.abs(sampled.east) <= 2 && Math.abs(sampled.north) <= 2) wind = sampled;
+      } catch { /* Fail closed: old no-wind relay, never crash the presence room. */ }
+    }
     const relay = encodeSnowballRelay({ ...event, throwerId: peer.id,
-      ...(wind ? { windEast: wind.east, windNorth: wind.north } : {}),
+      ...(wind && { windEast: wind.east, windNorth: wind.north }),
     });
     const recipients = new Set<Peer>();
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) {
       if (send(recipient, relay)) recipients.add(recipient);
     }
     peer.pendingThrows.set(event.ballId, { expiresAt: time + throwWindowMs, recipients, confirmed: false });
+  }
+
+  function broadcastBinary(data: Uint8Array) {
+    for (const peer of peers.values()) if (peer.name) send(peer, data);
+  }
+
+  function announceSnowfight(message: string) {
+    broadcast(JSON.stringify({ type: 'event', kind: 'announce', message }));
+  }
+
+  function sendSnowfightStateTo(peer: Peer) {
+    send(peer, JSON.stringify({ type: 'snowfight', ...snowMatch.state(now()) }));
+  }
+
+  function broadcastSnowfightState() {
+    snowStateAt = now();
+    for (const peer of peers.values()) if (peer.name) sendSnowfightStateTo(peer);
+  }
+
+  function rejectSnowfight(peer: Peer, reason: string) {
+    send(peer, JSON.stringify({ type: 'snowfight-rejected', reason }));
+  }
+
+  function handleMatchEvents(events: ReturnType<SnowfightMatch['tick']>) {
+    for (const event of events) {
+      if (event.type === 'phase' && event.phase === 'battle') {
+        announceSnowfight('建造结束 · 开打！在光圈里站满 5 秒占领据点');
+        broadcastSnowfightState();
+      } else if (event.type === 'captured') {
+        announceSnowfight(`${SNOWFIGHT_TEAM_NAMES[event.team]}占领${SNOWFIGHT_POINTS[event.index].label}！`);
+        broadcastSnowfightState();
+      } else if (event.type === 'score' || event.type === 'capture-reset') {
+        broadcastSnowfightState();
+      } else if (event.type === 'finished') {
+        const [a, b] = event.scores;
+        announceSnowfight(event.winner === 'draw'
+          ? `团队雪仗结束 · ${a} : ${b} 平局！`
+          : `团队雪仗结束 · ${SNOWFIGHT_TEAM_NAMES[event.winner]}胜 ${a} : ${b}！`);
+        const cleared = snowWalls.clearWhere(block => block.team !== freeWallTeam);
+        for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+        broadcastSnowfightState();
+      }
+    }
+  }
+
+  function updateSnowfight(time: number) {
+    const matchActive = snowMatch.phase === 'build' || snowMatch.phase === 'battle';
+    if (matchActive) {
+      const positions = new Map<number, { east: number; north: number }>();
+      for (const peer of peers.values()) {
+        if (peer.name && peer.record) positions.set(peer.id, { east: peer.record.east / 100, north: peer.record.north / 100 });
+      }
+      handleMatchEvents(snowMatch.tick(time, positions));
+    }
+    if (time - snowDecayAt >= 1000) {
+      snowDecayAt = time;
+      for (const peer of peers.values()) {
+        if (peer.name && peer.record) snowWalls.refreshFor(peer.id, peer.record.east / 100, peer.record.north / 100, time);
+      }
+      const removed = snowWalls.decay(time);
+      for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
+      if (matchActive && time - snowStateAt >= 1000) broadcastSnowfightState();
+    }
+  }
+
+  function requestSnowfightStart(peer: Peer) {
+    if (options.formalSnowfight !== true) return;
+    const wallNow = performance.now();
+    if (wallNow < peer.nextSnowfightRequest) return;
+    peer.nextSnowfightRequest = wallNow + 1000;
+    if (snowMatch.phase === 'build' || snowMatch.phase === 'battle') {
+      sendSnowfightStateTo(peer);
+      return;
+    }
+    const cleared = snowWalls.clearWhere(block => block.team !== freeWallTeam);
+    for (const frame of encodeWallClear(cleared)) broadcastBinary(frame);
+    snowMatch.start([...peers.values()].filter(other => other.name).map(other => other.id), now());
+    announceSnowfight('团队雪仗开始 · 先堆墙备战，三分钟后开打！');
+    broadcastSnowfightState();
+  }
+
+  function receiveSnowfight(peer: Peer, bytes: Uint8Array) {
+    if (!peer.name) { failPeer(peer); return; }
+    const time = now();
+    if (!allowEvent(peer, time)) return;
+    const event = decodeSnowfightClientEvent(bytes);
+    if (!event || event.kind === 'wall-hit') return;
+    if (event.kind === 'place') {
+      const matchActive = snowMatch.phase === 'build' || snowMatch.phase === 'battle';
+      const team = matchActive ? snowMatch.teamOf(peer.id) : freeWallTeam;
+      if (team === undefined) {
+        rejectSnowfight(peer, 'phase');
+        return;
+      }
+      const east = wallCellCentre(event.gx);
+      const north = wallCellCentre(event.gy);
+      if (team !== freeWallTeam && snowMatch.phase === 'build' && !buildHalfAllows(team, east)) {
+        rejectSnowfight(peer, 'half');
+        return;
+      }
+      const site = team === freeWallTeam ? classifyFreeWallSite(east, north) : classifyWallSite(east, north);
+      if (site) {
+        rejectSnowfight(peer, site);
+        return;
+      }
+      if (team === freeWallTeam && inCeremonyArrivalWindow(Date.now()) && blocksCeremonyArrival(east, north)) {
+        rejectSnowfight(peer, 'phase');
+        return;
+      }
+      if (!consume(peer.snowPlace, time, 4, 6)) {
+        rejectSnowfight(peer, 'rate');
+        return;
+      }
+      const placed = snowWalls.place(event.gx, event.gy, peer.id, team, time);
+      if ('reason' in placed) {
+        rejectSnowfight(peer, placed.reason);
+        return;
+      }
+      for (const frame of encodeWallClear(placed.cleared)) broadcastBinary(frame);
+      broadcastBinary(encodeWallSet(placed.block));
+      return;
+    }
+    if (event.kind === 'sled-smash') {
+      if (event.speed > sledWallMaximumReportSpeed || !peer.record) return;
+      const impact = sledWallImpact(event.speed);
+      if (impact.layers === 0) return;
+      // 位置记录 10 Hz、30 m/s 下每 100 ms 位移 3 m；6 m 容差覆盖记录滞后，
+      // 同时把裁定范围钉在墙边，杜绝隔图遥报。
+      const distance = Math.hypot(peer.record.east / 100 - wallCellCentre(event.gx),
+        peer.record.north / 100 - wallCellCentre(event.gy));
+      if (distance > 6) return;
+      const removed = snowWalls.breakTop(event.gx, event.gy, impact.layers);
+      for (const frame of encodeWallClear(removed)) broadcastBinary(frame);
+      return;
+    }
   }
 
   function receiveChat(peer: Peer, text: unknown, requestedScope: unknown) {
@@ -287,17 +1018,61 @@ export async function createPresenceServer(options: Options = {}) {
     else for (const recipient of relevantPeers(peer, 40, MAX_SESSIONS, true)) send(recipient, relay);
   }
 
+  function poseMessage(actor: { id: number; pose: number }, crownChanged = false) {
+    const crowned = actor.id === crownOwner;
+    return JSON.stringify({
+      type: 'pose', id: actor.id, pose: actor.pose,
+      ...(crowned || crownChanged ? { crowned } : {}),
+    });
+  }
+
+  function observeIceThrone(peer: Peer, time: number) {
+    if (!peer.record || !peer.name) return;
+    iceThrone.observe(time, peer.id, peer.name, peer.pose === 1 && isIcePalaceThroneRecord(peer.record));
+  }
+
   function receivePose(peer: Peer, pose: unknown) {
-    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || (pose > 5 && pose !== 7) ||
+    // The existing pose event carries pose 7 (sled) or 8 (drift); 6 stays reserved.
+    if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 8 || pose === 6 ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
-    const relay = JSON.stringify({ type: 'pose', id: peer.id, pose });
+    observeIceThrone(peer, now());
+    const relay = poseMessage(peer);
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) send(recipient, relay);
+  }
+
+  function issueOwnerChallenge(peer: Peer) {
+    const time = now();
+    if (!options.ownerKey || peer === owner || time < (peer.ownerRetryAt ?? 0)) return;
+    if (peer.ownerRetryAt !== undefined) {
+      peer.ownerRetryAt = undefined;
+      peer.ownerFailures = 0;
+    }
+    const nonce = randomBytes(24).toString('hex');
+    peer.ownerChallenge = { nonce, expiresAt: time + 120_000 };
+    send(peer, JSON.stringify({ type: 'owner-challenge', nonce }));
+  }
+
+  function releaseMascot() {
+    if (!mascot) return;
+    mascot = undefined;
+    broadcast(JSON.stringify({ type: 'leave', id: MASCOT_ACTOR_ID }));
   }
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    summitPassport?.forget(peer.id);
+    if (peer.session) pollSessions.delete(peer.session);
+    connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
+    snowMatch.removePlayer(peer.id);
+    iceThrone.remove(now(), peer.id);
     ceremonyWaiting.delete(peer);
+    // 持铃人离镇：铃原地掉落、立即拾取，不让对局卡死。
+    if (bell?.phase === 'running' && bell.holderId === peer.id) dropHeldBell(peer, 0, 0, 0);
+    if (peer === owner) {
+      owner = undefined;
+      releaseMascot();
+    }
     clearTimeout(peer.joinTimer);
     if (!peer.name) return;
     online--;
@@ -329,6 +1104,35 @@ export async function createPresenceServer(options: Options = {}) {
       type: 'event', kind: 'fireworks', from: peer.id, seed, theme, startAt: wallNow() + startDelayMs,
     });
     for (const recipient of peers.values()) if (recipient.name) send(recipient, event);
+  }
+
+  function requestPersonalFirework(peer: Peer, message: unknown) {
+    const event = readPersonalFirework(message);
+    if (!event) return;
+    const time = now();
+    if (!allowEvent(peer, time)) return;
+    const position = peer.record;
+    // The existing presence poses also cover indoor or vehicle areas whose position alone is ambiguous.
+    const onTrainOrInBath = peer.pose === 5 || peer.pose === 2;
+    if (!position || onTrainOrInBath ||
+        Math.hypot(event.east - position.east / 100, event.north - position.north / 100) > 2.4 ||
+        Math.abs(event.height - position.height / 100) > 2.2 ||
+        personalFireworkRestricted(position.east / 100, position.north / 100, position.height / 100) ||
+        personalFireworkRestricted(event.east, event.north, event.height)) {
+      send(peer, JSON.stringify({ type: 'personal-firework-rejected', seed: event.seed, reason: 'position' }));
+      return;
+    }
+    const startAt = Date.now();
+    const festival = startAt >= ceremonyStartAt - 10_000 && startAt < ceremonyEndAt;
+    if (time < peer.nextFirecracker || !consume(personalFireworkBudget, time, 16, 10)) {
+      send(peer, JSON.stringify({ type: 'personal-firework-rejected', seed: event.seed, reason: 'cooldown' }));
+      return;
+    }
+    peer.nextFirecracker = time + personalFireworkCooldownMs * (festival ? 2 : 1);
+    const data = JSON.stringify({ ...event, type: 'event', kind: 'personal-firework', from: peer.id, startAt: startAt + 120 });
+    send(peer, data);
+    const recipients = Math.min(eventVisibleLimits[tierIndex], egressBytesPerSecond > 300_000 ? 16 : MAX_VISIBLE);
+    for (const recipient of relevantPeers(peer, tier.radius, recipients)) send(recipient, data);
   }
 
   function photoPerson(peer: Peer): PlazaPhotoPerson | undefined {
@@ -370,7 +1174,7 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     const person = photoPerson(peer);
-    if (!person || !inPlazaPhotoArc(person.east, person.north, person.height)) {
+    if (!person || !inPlazaPhotoRequestZone(person.east, person.north, person.height)) {
       send(peer, JSON.stringify({ type: 'plaza-photo-rejected', reason: 'position' }));
       return;
     }
@@ -385,9 +1189,9 @@ export async function createPresenceServer(options: Options = {}) {
   function receiveText(peer: Peer, bytes: Uint8Array) {
     let message: unknown;
     try { message = JSON.parse(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('utf8')); }
-    catch { peer.socket.close(1008); return; }
+    catch { failPeer(peer); return; }
     if (!message || typeof message !== 'object' || !('type' in message)) {
-      peer.socket.close(1008);
+      failPeer(peer);
       return;
     }
     if (message.type === 'event' && 'kind' in message && message.kind === 'fireworks' && peer.name) {
@@ -396,8 +1200,39 @@ export async function createPresenceServer(options: Options = {}) {
       }
       return;
     }
+    if (message.type === 'owner-challenge-request' && peer.name) {
+      if (allowEvent(peer, now())) issueOwnerChallenge(peer);
+      return;
+    }
+    if (message.type === 'owner-mascot-stop' && peer.name) {
+      if (peer === owner) releaseMascot();
+      return;
+    }
+    if (message.type === 'owner-proof' && peer.name) {
+      if (!allowEvent(peer, now())) return;
+      const challenge = peer.ownerChallenge;
+      peer.ownerChallenge = undefined;
+      const proof = 'proof' in message ? message.proof : undefined;
+      const key = options.ownerKey;
+      let accepted = false;
+      if (key && challenge && now() < challenge.expiresAt && typeof proof === 'string' && /^[0-9a-f]{64}$/.test(proof)) {
+        const expected = createHash('sha256').update(key).update(challenge.nonce).digest();
+        accepted = timingSafeEqual(expected, Buffer.from(proof, 'hex')) && (!owner || owner === peer);
+        if (accepted) {
+          owner = peer;
+          nextMascotSample = 0;
+        }
+      }
+      if (!accepted && challenge) {
+        peer.ownerFailures = (peer.ownerFailures ?? 0) + 1;
+        if (peer.ownerFailures >= 5) peer.ownerRetryAt = now() + 600_000;
+      }
+      send(peer, JSON.stringify({ type: 'owner-result', accepted }));
+      if (!accepted) issueOwnerChallenge(peer);
+      return;
+    }
     if (message.type === 'leave' && peer.name) {
-      peer.socket.close();
+      closePeer(peer);
       return;
     }
     if (message.type === 'chat' && peer.name) {
@@ -407,6 +1242,72 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'cable-repair') {
+        const line = 'line' in message ? message.line : undefined;
+        const event = 'event' in message ? message.event : undefined;
+        if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
+          const frame = cableLine.applyEvent(line, event);
+          if (frame) broadcast(cableLineWire(frame));
+        }
+        return;
+      }
+      if (message.kind === 'summit-passport') {
+        const action = 'action' in message ? message.action : undefined;
+        if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
+          if (summitPassport) return summitPassport.request(peer.id, action).then(reply => {
+            if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
+          });
+          send(peer, JSON.stringify(summitPassportUnavailable(action)));
+        }
+        return;
+      }
+      if (message.kind === 'ice-palace-rite') {
+        if (allowEvent(peer, now())) {
+          const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+          return icePalaceRites.request(peer.id, message).then(accepted => {
+            if (peers.get(peer.id) !== peer) return;
+            if (requestId) send(peer, JSON.stringify({ type: 'ice-palace-rite-result', requestId, accepted }));
+            send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
+          });
+        }
+        return;
+      }
+      if (message.kind === 'ice-palace-fragment') {
+        if (allowEvent(peer, now())) {
+          const requestId = 'requestId' in message && typeof message.requestId === 'string' ? message.requestId : undefined;
+          const accepted = icePalaceFragment.request(peer.id, peer.record, message);
+          if (requestId) send(peer, JSON.stringify({ type: 'ice-palace-fragment-result', requestId, accepted }));
+          if (accepted) broadcast(JSON.stringify(icePalaceFragment.frame()));
+        }
+        return;
+      }
+      if (message.kind === 'bell-start') {
+        if (allowEvent(peer, now())) requestBell(peer);
+        return;
+      }
+      if (message.kind === 'bell-touch') {
+        if (allowEvent(peer, now())) requestBellTouch(peer);
+        return;
+      }
+      if (message.kind === 'snowfight-start') {
+        requestSnowfightStart(peer);
+        return;
+      }
+      if (message.kind === 'grand-prix') {
+        // 3.0 D2 town leaderboard relay: the server only validates and relays;
+        // timing authority stays with the finishing client, boards are per-client.
+        if (allowEvent(peer, now())) {
+          const totalMs = 'totalMs' in message ? message.totalMs : undefined;
+          if (typeof totalMs === 'number' && Number.isInteger(totalMs) && totalMs >= 45_000 && totalMs <= 1_800_000) {
+            broadcast(JSON.stringify({ type: 'event', kind: 'grand-prix', id: peer.id, name: peer.name, totalMs, at: Date.now() }));
+          }
+        }
+        return;
+      }
+      if (message.kind === 'personal-firework') {
+        requestPersonalFirework(peer, message);
+        return;
+      }
       if (message.kind === 'plaza-photo-request') {
         if (allowEvent(peer, now())) requestPhoto(peer);
         return;
@@ -429,32 +1330,72 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type !== 'join' || peer.name || !('name' in message)) {
-      peer.socket.close(1008);
+      failPeer(peer);
       return;
     }
     const name = validName(message.name);
-    if (!name) { peer.socket.close(1008); return; }
+    if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
     const joinedAt = wallNow();
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
-    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex,
-      fireworks: true, plazaPhoto: true, townNightWindow: townNight?.snapshot() }));
+    connLog(peer.transport, peer.id, 'join', 'ok');
+    send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true, icePalaceRites: true,
+      ...(summitPassport ? { summitPassport: true } : {}),
+      townNightWindow: nightFeed?.snapshot(),
+      undergroundWater: waterFeed?.snapshot(),
+      townOutdoorWeather: weatherFeed?.snapshot(),
+      townOutdoorWeatherDawnEpoch: weatherFeed?.dawnEpoch,
+    }));
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
+    const bellEvent = bellStateEvent();
+    if (bellEvent) send(peer, JSON.stringify(bellEvent));
+    send(peer, cableLineWire(cableLine.hello(1)));
+    send(peer, cableLineWire(cableLine.hello(2)));
+    send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
+    send(peer, JSON.stringify(icePalaceFragment.frame()));
     for (const other of peers.values()) {
-      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose }));
+      if (other !== peer && other.name) send(peer, JSON.stringify({ type: 'join', id: other.id, name: other.name, pose: other.pose, ...(other.id === crownOwner ? { crowned: true } : {}) }));
     }
+    issueOwnerChallenge(peer);
     broadcast(JSON.stringify({ type: 'join', id: peer.id, name }), peer);
+    if (snowMatch.phase === 'build' || snowMatch.phase === 'battle') {
+      snowMatch.addPlayer(peer.id);
+      sendSnowfightStateTo(peer);
+      broadcastSnowfightState();
+    }
+    clearCeremonyWalls(joinedAt);
+    const blocks = snowWalls.snapshot();
+    for (let i = 0; i < blocks.length; i += 20) {
+      send(peer, Buffer.concat(blocks.slice(i, i + 20).map(block => encodeWallSet(block))));
+    }
     updateFireworks(now());
     updateCeremony(joinedAt);
   }
 
   function receiveState(peer: Peer, bytes: Uint8Array) {
     const record = readRecord(bytes);
-    if (!peer.name || !record) { peer.socket.close(1008); return; }
+    if (!peer.name || !record) { failPeer(peer); return; }
     const time = now();
+    if (record.id === MASCOT_ACTOR_ID) {
+      if (peer !== owner) {
+        rejectedMascotClaims++;
+        if (rejectedMascotClaims === 1 || rejectedMascotClaims % 100 === 0)
+          options.onMascotClaimRejected?.(rejectedMascotClaims);
+        return;
+      }
+      if (time < nextMascotSample || !peer.record || mascot?.record.seq === record.seq) return;
+      if (record.east > eastLimit || record.north > northLimit || record.height > heightLimit ||
+          // Follow permits a 30 m gap with room for one position sample in flight.
+          horizontalDistanceSquared(peer.record, record) > 3_200 ** 2 ||
+          Math.abs(peer.record.height - record.height) > 500) return;
+      nextMascotSample = time + 1000 / BASE_TIER.hz;
+      mascotUntil = time + 2250;
+      mascot = { id: MASCOT_ACTOR_ID, record, version: ++mascotVersion, pose: 0 };
+      return;
+    }
     peer.tokens = Math.min(rateBurst, peer.tokens + (time - peer.tokenAt) * BASE_TIER.hz / 1000);
     peer.tokenAt = time;
     if (peer.tokens < 1) return;
@@ -466,6 +1407,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (peer.record?.seq === record.seq) return;
     peer.record = record;
     peer.version++;
+    observeIceThrone(peer, time);
   }
 
   function sendSnapshots() {
@@ -501,13 +1443,20 @@ export async function createPresenceServer(options: Options = {}) {
         }
       }
       nearby.sort((a, b) => a.distance - b.distance || a.peer.id - b.peer.id);
-      const visible = nearby.slice(0, eventVisibleLimits[tierIndex]).map(entry => entry.peer).sort((a, b) => a.id - b.id);
+      const visible: { id: number; record?: PresenceRecord; version: number; pose: number }[] =
+        nearby.slice(0, eventVisibleLimits[tierIndex]).map(entry => entry.peer);
+      if (mascot && horizontalDistanceSquared(state, mascot.record) <= radiusSquared &&
+          Math.abs(state.height - mascot.record.height) <= 1000) {
+        if (visible.length === eventVisibleLimits[tierIndex]) visible.pop();
+        visible.push(mascot);
+      }
+      visible.sort((a, b) => a.id - b.id);
       if (visible.length === peer.visible.length &&
           visible.every((other, i) => other.id === peer.visible[i].id && other.version === peer.visible[i].version)) continue;
       if (send(peer, writeSnapshot(visible.map(other => other.record!)))) {
         // The returning peer may have cached another pose before it moved beyond interest.
-        for (const other of visible) if (!peer.visible.some(previous => previous.id === other.id)) {
-          send(peer, JSON.stringify({ type: 'pose', id: other.id, pose: other.pose }));
+        for (const other of visible) if (other.id !== MASCOT_ACTOR_ID && !peer.visible.some(previous => previous.id === other.id)) {
+          send(peer, poseMessage(other));
         }
         peer.visible = visible.map(other => ({ id: other.id, version: other.version }));
       }
@@ -515,39 +1464,34 @@ export async function createPresenceServer(options: Options = {}) {
   }
 
   http.on('upgrade', (req, socket, head) => {
-    if (req.url !== PRESENCE_PATH) { refuse(socket, '404 Not Found'); return; }
+    if (req.url !== PRESENCE_PATH) { connLog('ws', '-', 'attempt', 'path'); refuse(socket, '404 Not Found'); return; }
     const origin = req.headers.origin;
     if (origin) {
       try {
         const source = new URL(origin);
         if ((source.protocol !== 'https:' && source.protocol !== 'http:') || source.host !== req.headers.host) {
+          connLog('ws', '-', 'attempt', 'origin');
           refuse(socket, '403 Forbidden');
           return;
         }
-      } catch { refuse(socket, '403 Forbidden'); return; }
+      } catch { connLog('ws', '-', 'attempt', 'origin'); refuse(socket, '403 Forbidden'); return; }
     }
-    if (closing || peers.size >= MAX_SESSIONS) { refuse(socket, '503 Service Unavailable'); return; }
+    if (closing || peers.size >= MAX_SESSIONS) { connLog('ws', '-', 'attempt', 'full'); refuse(socket, '503 Service Unavailable'); return; }
+    connLog('ws', '-', 'attempt', 'accepted');
     wss.handleUpgrade(req, socket, head, ws => {
-      while (peers.has(nextId)) nextId = nextId % 65535 + 1;
-      const id = nextId;
-      nextId = nextId % 65535 + 1;
-      const t = now();
-      const peer: Peer = {
-        socket: ws, id, visible: [], version: 0, alive: true, tokens: rateBurst,
-        tokenAt: t, joinTimer: setTimeout(() => ws.close(1008), 5000),
-        throws: { tokens: throwBurst, at: t }, chat: { tokens: 2, at: t }, poseRate: { tokens: 5, at: t }, pose: 0,
-        floodAt: t, floodCount: 0, pendingThrows: new Map(),
-        nextClockSample: 0, nextPhotoRequest: 0, nextFireworksRequest: 0, nextPersonalFireworks: 0,
-      };
-      peers.set(id, peer);
-      ws.on('error', () => { remove(peer); ws.terminate(); });
+      const peer = createPeer('ws', ws);
+      connLog('ws', peer.id, 'session', 'ok');
+      peer.joinTimer = setTimeout(() => { connLog('ws', peer.id, 'join', 'timeout'); ws.close(1008); }, 5000);
+      ws.on('error', () => { peer.dropReason ??= 'socket-error'; remove(peer); ws.terminate(); });
       ws.on('close', () => remove(peer));
       ws.on('pong', () => { peer.alive = true; });
       ws.on('message', (data, binary) => {
-        if (!peers.has(id)) return;
+        if (!peers.has(peer.id)) return;
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
+        else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
+          bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);
         else receiveSnowball(peer, bytes);
       });
     });
@@ -560,13 +1504,28 @@ export async function createPresenceServer(options: Options = {}) {
       resolve();
     });
   });
+  const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
+  const stopFollowingWater = options.undergroundWaterFeed?.subscribe(frame => broadcast(frame));
+  const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
   const tick = setInterval(() => {
     const time = now();
+    // 轮询会话回收：超时未轮询的对等端视为离线（WS 侧由心跳负责）。
+    for (const peer of [...peers.values()]) {
+      if (peer.transport === 'poll' && time - peer.lastPollAt > POLL_SESSION_TIMEOUT_MS) {
+        peer.dropReason ??= 'poll-timeout';
+        remove(peer);
+      }
+    }
     updateFireworks(time);
+    iceThrone.tick(time);
     const epoch = wallNow();
     updateTownNight();
+    updateUndergroundWater();
+    updateTownWeather();
     updateCeremony(epoch);
+    updateBell(epoch);
     if (photo) updatePhoto(epoch);
+    if (mascot && time >= mascotUntil) releaseMascot();
     const pressure = egress.sample(time);
     egressBytesPerSecond = pressure.bytesPerSecond;
     let nextTier = 0;
@@ -584,10 +1543,12 @@ export async function createPresenceServer(options: Options = {}) {
   }, 10);
   const heartbeat = setInterval(() => {
     for (const peer of peers.values()) {
-      if (!peer.alive) { peer.socket.terminate(); continue; }
-      if (peer.socket.readyState === WebSocket.OPEN) {
+      const socket = peer.socket;
+      if (!socket) continue;
+      if (!peer.alive) { peer.dropReason ??= 'heartbeat-timeout'; socket.terminate(); continue; }
+      if (socket.readyState === WebSocket.OPEN) {
         peer.alive = false;
-        peer.socket.ping();
+        socket.ping();
         egress.record(now(), 0);
       }
     }
@@ -596,17 +1557,26 @@ export async function createPresenceServer(options: Options = {}) {
   return {
     address: () => http.address() as AddressInfo,
     stats: () => ({ online, tier: tierIndex, egressBytesPerSecond }),
+    townNightFeed: ownedNightFeed,
+    undergroundWaterFeed: ownedWaterFeed,
+    townOutdoorWeatherFeed: ownedWeatherFeed,
     close() {
       if (stop) return stop;
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
+      stopFollowingNight?.();
+      stopFollowingWater?.();
+      stopFollowingWeather?.();
+      nightListeners.clear();
+      weatherListeners.clear();
       for (const peer of peers.values()) {
         clearTimeout(peer.joinTimer);
-        peer.socket.terminate();
+        peer.socket?.terminate();
       }
       wss.close();
-      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()));
+      stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()))
+        .then(() => summitPassport?.flush());
       return stop;
     },
   };

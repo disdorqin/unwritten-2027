@@ -1,22 +1,38 @@
 import layout from './layout.json';
+import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
+import { terrainReliefOffset } from './terrain-undulations';
 
 export { layout, worldBounds };
 
 type Point = { x: number; north: number; height: number };
 type Segment = { a: Point; dx: number; dn: number; dh: number; lengthSquared: number; halfWidth: number };
 
-export const plazaCoreBounds = [161, 152, 251, 212] as const;
-const plazaBlendWidth = 10;
-const roadBlendWidth = 5;
-const plazaPlotCuts = layout.plots.filter(plot => plot.id === 'post-office' || plot.id === 'stage')
-  .map(({ id, origin: [x, n], footprint: [width, depth] }) => {
-    const setback = id === 'post-office' ? 1 : 0;
-    return [x - width / 2 - setback, n - depth / 2 - setback,
-      x + width / 2 + setback, n + depth / 2 + setback];
-  });
+const [west, south, east, north] = layout.plaza.bounds;
+const clocktower = layout.plots.find(plot => plot.id === 'clocktower')!;
+const [towerEast] = clocktower.origin;
+const towerHalfWidth = clocktower.footprint[0] / 2;
 const memorial = layout.plots.find(plot => plot.id === 'memorial')!;
 const [memorialEast, memorialNorth, memorialLevel] = memorial.origin;
+const [marketEast, marketNorth] = layout.plots.find(plot => plot.id === 'market-stalls')!.origin;
+const gradedMarketCounters = new Set([5, 6, 7, 13, 14, 15, 16].map(index => `market-stall-${index}`));
+const marketCounterAprons = marketStallLayouts.filter(stall => gradedMarketCounters.has(stall.id)).map(stall => {
+  const [x, z] = marketStallLocalPoint(stall, 0, 2.6);
+  const [nearX, nearZ] = marketStallLocalPoint(stall, 1.05, 2.6);
+  const northRadius = Math.abs(nearZ - z) + 1;
+  const shifted = stall.id === 'market-stall-5';
+  return {
+    east: marketEast + x,
+    north: marketNorth - z,
+    eastRadius: Math.abs(nearX - x) + 1,
+    // Keep stall 5's old north edge and stop the new south shoulder above N104.
+    northRadius: northRadius + (shifted ? 1.25 : 0),
+    southRadius: shifted ? .75 : northRadius,
+    southBlendScale: shifted ? 2 : 1,
+    level: stall.counterGround,
+  };
+});
+
 // Extend the paved apron datum below a full terrain grid cell at the south lip.
 const memorialApron = [memorialEast - 11, memorialNorth - memorial.footprint[1] / 2 - 1,
   memorialEast + 11, memorial.door[1] + 1];
@@ -45,21 +61,18 @@ function nearestRoad(x: number, north: number) {
   let distance = Infinity;
   let height = 0;
   let edge = Infinity;
-  let corridorEdge = Infinity;
   for (const { a, dx, dn, dh, lengthSquared, halfWidth } of roads) {
     const px = x - a.x;
     const pn = north - a.north;
     const t = clamp((px * dx + pn * dn) / lengthSquared, 0, 1);
     const d = Math.hypot(px - dx * t, pn - dn * t);
-    const roadEdge = d - halfWidth;
-    corridorEdge = Math.min(corridorEdge, roadEdge);
     if (d < distance) {
       distance = d;
       height = a.height + dh * t;
-      edge = roadEdge;
+      edge = d - halfWidth;
     }
   }
-  return { height, edge, corridorEdge };
+  return { height, edge };
 }
 
 export function riverX(north: number) {
@@ -91,26 +104,9 @@ export function bridgeAt(x: number, north: number) {
   return layout.bridges.find(b => x >= b.west && x <= b.east && Math.abs(north - b.north) <= 4);
 }
 
-function boxDistance(x: number, north: number, bounds: readonly number[]) {
+function boxDistance(x: number, north: number, bounds: number[]) {
   const [x0, n0, x1, n1] = bounds;
   return Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(n0 - north, 0, north - n1));
-}
-
-function plazaEdgeDepth(x: number, north: number, [west, south, east, top]: readonly number[]) {
-  return Math.min(x - west, north - south, east - x, top - north);
-}
-
-function nearestPlazaCut(x: number, north: number) {
-  let distance = Infinity;
-  for (const cut of plazaPlotCuts) distance = Math.min(distance, boxDistance(x, north, cut));
-  return distance;
-}
-
-// The caller lays tiles inside the rectangle. The radius guards each tile's
-// entire footprint against protected road corridors and landmark cuts.
-export function plazaPavingAllowed(x: number, north: number, radius = 0, bounds: readonly number[] = layout.plaza.bounds) {
-  return plazaEdgeDepth(x, north, bounds) >= 0 &&
-    nearestRoad(x, north).corridorEdge > radius && nearestPlazaCut(x, north) > radius;
 }
 
 function raisedHill(x: number, north: number, cx: number, cn: number, rx: number, rn: number, height: number) {
@@ -122,11 +118,11 @@ export const gridStep = 1;
 const gridWidth = worldBounds.width / gridStep + 1;
 const gridDepth = worldBounds.depth / gridStep + 1;
 
-function sample(x: number, n: number, plazaBounds: readonly number[], coreBounds: readonly number[], hasAnnex: boolean) {
+function sample(x: number, n: number) {
   const r = Math.abs(x - riverX(n));
   const ld = lakeDistance(x, n);
   const road = nearestRoad(x, n);
-  const plazaDistance = boxDistance(x, n, coreBounds);
+  const plazaDistance = boxDistance(x, n, [west, south, east, north]);
   let elevation = 8.6 + 1.25 * Math.sin(x * .079 + n * .009) * Math.cos(n * .092)
     + raisedHill(x, n, 91, 275, 110, 112, 16)
     + raisedHill(x, n, 386, 313, 93, 91, 30)
@@ -134,7 +130,7 @@ function sample(x: number, n: number, plazaBounds: readonly number[], coreBounds
     + raisedHill(x, n, 418, 369, 88, 66, 26);
   elevation = mix(3, elevation, fade((r - 6.8) / 18));
   elevation = mix(layout.lake.height, elevation, fade(ld / 13));
-  elevation = mix(elevation, layout.plaza.height, 1 - fade(plazaDistance / plazaBlendWidth));
+  elevation = mix(elevation, layout.plaza.height, 1 - fade(plazaDistance / 10));
   let plotSurface = false;
   for (const plot of layout.plots) {
     const [cx, cn, level] = plot.origin;
@@ -143,48 +139,43 @@ function sample(x: number, n: number, plazaBounds: readonly number[], coreBounds
     elevation = mix(elevation, level, 1 - fade(dist / 5));
     plotSurface ||= dist === 0;
   }
-  elevation = mix(elevation, road.height, 1 - fade(road.edge / roadBlendWidth));
+  elevation = mix(elevation, road.height, 1 - fade(road.edge / 5));
   const apronDistance = boxDistance(x, n, memorialApron);
   elevation = mix(elevation, memorialLevel, 1 - fade(apronDistance / 5));
-  if (plazaDistance === 0) elevation = layout.plaza.height;
-
-  let plaza = plazaDistance === 0;
-  let roadSurface = road.edge < 0;
-  if (hasAnnex) {
-    const annexEdge = plazaEdgeDepth(x, n, plazaBounds);
-    if (annexEdge >= 0) {
-      const plotCut = nearestPlazaCut(x, n);
-      roadSurface = road.corridorEdge <= 0;
-      // Grade the annex inward from its perimeter. Existing ground beyond
-      // the new border, including the market stations, keeps its old datum.
-      if (plazaDistance > 0) {
-        const transition = Math.min(annexEdge / plazaBlendWidth,
-          road.corridorEdge / roadBlendWidth, plotCut / roadBlendWidth);
-        elevation = mix(elevation, layout.plaza.height, fade(transition));
-      }
-      plaza = !roadSurface && plotCut > 0 && elevation === layout.plaza.height;
-    }
+  for (const apron of marketCounterAprons) {
+    const dx = Math.max(0, Math.abs(x - apron.east) - apron.eastRadius);
+    const dn = Math.max(0, (apron.north - n - apron.southRadius) * apron.southBlendScale,
+      n - apron.north - apron.northRadius);
+    const distance = Math.hypot(dx, dn);
+    if (distance < 1.5) elevation = mix(elevation, apron.level, 1 - fade(distance / 1.5));
   }
-
-  const water = isWater(x, n);
-  if (water) elevation = Math.min(elevation, 3.4);
-  return { elevation, plaza, road: roadSurface, plot: plotSurface, ice: ld < -.5 && !water };
+  // The tower apron is a level walking slab. Keep the terrain beneath its pavers,
+  // leaving the shared boundary with the plaza at the original datum.
+  if (Math.abs(x - towerEast) <= towerHalfWidth && n > clocktower.connect[1] && n <= clocktower.door[1]) {
+    elevation = Math.min(elevation, layout.plaza.height - 1 / 32);
+  }
+  if (plazaDistance === 0) elevation = layout.plaza.height;
+  if (isWater(x, n)) elevation = Math.min(elevation, 3.4);
+  return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };
 }
 
-export function createTerrainGrid(plazaBounds: readonly number[] = layout.plaza.bounds) {
-  const coreBounds = plazaBounds.map((edge, index) =>
-    index < 2 ? Math.max(edge, plazaCoreBounds[index]) : Math.min(edge, plazaCoreBounds[index]));
-  const hasAnnex = coreBounds.some((edge, index) => edge !== plazaBounds[index]);
+/** Default relief is active on the shipped town grid; relief=false is an audit-only baseline. */
+export function createTerrainGrid(options: { relief?: boolean } = {}) {
   const elevation = new Float32Array(gridWidth * gridDepth);
   const surfaces = new Uint8Array(elevation.length);
   for (let j = 0; j < gridDepth; j++) {
     for (let i = 0; i < gridWidth; i++) {
       const east = i * gridStep, north = j * gridStep;
-      const cell = sample(east, north, plazaBounds, coreBounds, hasAnnex);
+      const cell = sample(east, north);
       const outsideLegacy = east > layout.width || north > layout.depth;
       const extension = outsideLegacy && !isWater(east, north) ? sampleExtension(east, north, cell.elevation) : cell;
       const index = j * gridWidth + i;
-      elevation[index] = extension.elevation;
+      // Shared physical height authority: render geometry, feet, sled and
+      // scene fixtures all consume this 1m sampled field. Never use a
+      // separate visual-only mound or an opt-in production flag.
+      const relief = options.relief === false || isWater(east, north) || cell.ice
+        ? 0 : terrainReliefOffset(east, north);
+      elevation[index] = extension.elevation + relief;
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }

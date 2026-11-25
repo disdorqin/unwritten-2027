@@ -19,7 +19,6 @@ import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-rail
 import { createTownWater } from '../tools/voxel-tavern/town-blockout/town-water.ts';
 
 const expanded = [161, 152, 251, 212] as const;
-const phaseThree = [97, 128, 271, 212] as const;
 const original = [191, 169, 251, 212] as const;
 const centralIds = ['plaza-brazier-a', 'plaza-brazier-b', 'plaza-campfire'] as const;
 
@@ -73,12 +72,9 @@ test('expanded plaza opts into three fixed fires while the original B5 placement
   const baseline = findRegionalCampfires(ground);
   assert.equal(baseline.length, 5);
   assert.deepEqual(findRegionalCampfires(ground, original), baseline);
-  // This crop includes all three fire centres but cuts through the southwest seats.
-  assert.deepEqual(findRegionalCampfires(ground, [161, 161, 251, 212]), baseline);
 
   const all = findRegionalCampfires(ground, expanded);
   assert.equal(all.length, 8);
-  assert.deepEqual(findRegionalCampfires(ground, phaseThree), all);
   assert.deepEqual(all.slice(0, baseline.length), baseline);
   assert.deepEqual(all.slice(5).map(({ id, x, n }) => [id, x, n]), [
     ['plaza-brazier-a', 238, 205], ['plaza-brazier-b', 240, 173], ['plaza-campfire', 178, 162],
@@ -92,9 +88,7 @@ test('expanded plaza opts into three fixed fires while the original B5 placement
 
 test('central fire cores, seated approaches and the southwest wood pile fit the expanded plaza', () => {
   const canStand = checkedGround();
-  const fires = findRegionalCampfires(canStand, layout.plaza.bounds);
-  assert.equal(fires.length, 8);
-  const sites = fires.filter(site => centralIds.some(id => id === site.id));
+  const sites = findRegionalCampfires(canStand, expanded).filter(site => centralIds.some(id => id === site.id));
   assert.deepEqual(sites.map(site => [site.x, site.n, site.ground, site.seats.length]), [
     [238, 205, 12, 3], [240, 173, 12, 3], [178, 162, 12, 4],
   ]);

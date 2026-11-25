@@ -1,3 +1,5 @@
+import { touchLookDelta, touchLookSensitivity } from './touch-look-curve';
+
 const verticalFov = 58 * Math.PI / 180;
 const lookThreshold = 5;
 const tapLimit = 380;
@@ -8,10 +10,12 @@ export function createTouchLook(
   turn: (yawDelta: number, pitchDelta: number) => void,
   viewPitch: () => number = () => 0,
   hold?: { delay: number; start(): void; finish(milliseconds: number): boolean; cancel(): void },
+  sensitivity: () => number = touchLookSensitivity,
+  onTap?: (clientX: number, clientY: number) => boolean,
 ) {
   let gesture: {
     pointer: number; startX: number; startY: number; x: number; y: number; started: number; dragged: boolean;
-    holdCancelled: boolean;
+    holdCancelled: boolean; inZone: boolean; lastAt: number;
   } | undefined;
 
   function reset() {
@@ -45,20 +49,29 @@ export function createTouchLook(
       hold.cancel();
     }
     gesture.dragged = true;
-    const { height } = canvas.getBoundingClientRect();
-    const focal = Math.max(1, height) / (2 * Math.tan(verticalFov / 2));
-    const yaw = Math.atan2(x - gesture.x, focal);
-    const pitch = Math.atan2(gesture.y - y, focal);
+    const dx = x - gesture.x;
+    const dy = y - gesture.y;
+    const dt = Math.min(100, Math.max(1, event.timeStamp - gesture.lastAt));
     gesture.x = x;
     gesture.y = y;
+    gesture.lastAt = event.timeStamp;
+    // Only touches that start in the right-half look zone may turn the view.
+    // A hold outside the zone still scoops and throws, it just cannot steer,
+    // so the snowball long-press is never swallowed by the look zone.
+    if (!gesture.inZone) return;
+    const { height } = canvas.getBoundingClientRect();
+    const focal = Math.max(1, height) / (2 * Math.tan(verticalFov / 2));
+    const { yaw, pitch } = touchLookDelta(dx, dy, focal, dt, sensitivity());
     if (yaw || pitch) turn(yaw, pitch);
   }
 
   canvas.addEventListener('pointerdown', event => {
     if (event.pointerType !== 'touch' || gesture || !allowed()) return;
+    const { left, width } = canvas.getBoundingClientRect();
     gesture = {
       pointer: event.pointerId, startX: event.clientX, startY: event.clientY,
       x: event.clientX, y: event.clientY, started: event.timeStamp, dragged: false, holdCancelled: false,
+      inZone: event.clientX - left >= width / 2, lastAt: event.timeStamp,
     };
     canvas.setPointerCapture(event.pointerId);
     hold?.start();
@@ -73,9 +86,11 @@ export function createTouchLook(
     if (!gesture || event.pointerId !== gesture.pointer) return;
     if (allowed()) {
       drag(event);
-      const heldFor = event.timeStamp - gesture.started;
-      const usedHold = !gesture.holdCancelled && hold?.finish(heldFor);
-      if (!gesture.dragged && !usedHold && heldFor <= tapLimit) {
+      const { started, holdCancelled, dragged, inZone } = gesture;
+      const heldFor = event.timeStamp - started;
+      const usedHold = !holdCancelled && hold?.finish(heldFor);
+      if (!dragged && !usedHold && heldFor <= tapLimit &&
+          !onTap?.(event.clientX, event.clientY) && inZone) {
         const { yaw, pitch } = pointAngles(event.clientX, event.clientY);
         if (yaw || pitch) turn(yaw, pitch);
       }

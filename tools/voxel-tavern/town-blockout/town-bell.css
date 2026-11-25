@@ -1,0 +1,52 @@
+#bell-controls:not([hidden]) {
+  position: fixed;
+  left: max(14px, env(safe-area-inset-left));
+  bottom: 66px;
+  z-index: 4;
+  display: grid;
+  gap: 5px;
+  max-width: min(300px, 62vw);
+  padding: 7px;
+  border: 1px solid #8a6d35;
+  border-radius: 10px;
+  background: #1a1407eb;
+}
+
+#bell-status {
+  padding: 2px 3px;
+  color: #ffe1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#bell-status:empty {
+  display: none;
+}
+
+#bell-start {
+  min-height: 38px;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+.touch-play #bell-controls {
+  bottom: max(217px, calc(env(safe-area-inset-bottom) + 205px));
+}
+
+/* 称号飘字：全镇播报，居中大字金字。 */
+#bell-title {
+  position: fixed;
+  top: 24%;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  font-size: clamp(30px, 5vw, 68px);
+  font-weight: 800;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  color: #ffd76e;
+  text-shadow: 0 2px 26px #6b4a00, 0 0 4px #fff2c4;
+  pointer-events: none;
+}

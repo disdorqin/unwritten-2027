@@ -7,6 +7,7 @@ import { theaterPhotoPositions } from '../tools/voxel-tavern/town-blockout/commu
 import { buildVillageLandmark } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
 import { layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { inPlazaPhotoStand } from '../src/presence/plaza-photo.ts';
 
 test('the stage front tread gives a direct route onto a single deck', () => {
   const plot = layout.plots.find(({ id }) => id === 'stage')!;
@@ -26,31 +27,63 @@ test('the stage front tread gives a direct route onto a single deck', () => {
   assert.deepEqual([...centerlineFloors].map(height => Math.round(height * 100)), [0, 28, 52]);
 });
 
-test('the south theater joins four walkable photo tiers to its western ramp', () => {
+test('the south theater joins the rear steps to both ramps and retains all 48 photo positions', () => {
   const current = layout.plots.find(({ id }) => id === 'stage')!;
   const stage = buildVillageLandmark({ ...current, origin: [238, 140, 12] });
   stage.position.set(238, 12, -140);
   const { floors, ramps, colliders } = readWalkGeometry(stage);
-  const mouthColumns = colliders.filter(box => box.min[1] === 12.5 && box.max[1] > 17 && box.max[2] < -143 && box.max[2] > -145);
-  assert.equal(mouthColumns.length, 2);
-  const [left, right] = mouthColumns.sort((one, two) => one.min[0] - two.min[0]);
+  const columns = colliders.filter(({ min, max }) => min[1] === 12.5 &&
+    Math.abs(max[1] - 19.3) < .01 && Math.abs(max[0] - min[0] - .92) < .01 &&
+    Math.abs(max[2] - min[2] - .86) < .01);
+  assert.equal(columns.length, 6);
+  const front = columns.filter(({ min, max }) => Math.abs((min[2] + max[2]) / 2 + 144.7) < .01)
+    .sort((one, two) => one.min[0] - two.min[0]);
+  assert.equal(front.length, 4);
+  assert.deepEqual(front.map(({ min, max }) => Math.round(((min[0] + max[0]) / 2 - 238) * 100)),
+    [-852, -300, 300, 852]);
+  const [left, innerLeft, innerRight, right] = front;
   assert.ok(Math.abs(right.min[0] - left.max[0] - 16.12) < .01);
+  assert.ok(Math.abs(innerRight.min[0] - innerLeft.max[0] - 5.08) < .01);
   assert.ok(left.min[0] >= 229 && right.max[0] <= 247);
-  const tiers = floors.filter(floor => floor.min[0] === 216 && floor.max[0] === 232);
-  assert.deepEqual(tiers.map(floor => Math.round((floor.max[1] - 12) * 100)), [35, 70, 105, 140]);
-  assert.equal(tiers[0].max[2], -162);
-  assert.equal(tiers.at(-1)!.min[2], -165.5);
-  tiers.slice(1).forEach((floor, i) => assert.equal(floor.max[2], tiers[i].min[2]));
+  const rear = columns.filter(({ min, max }) => Math.abs((min[2] + max[2]) / 2 + 134.4) < .01);
+  assert.deepEqual(rear.map(({ min, max }) => Math.round(((min[0] + max[0]) / 2 - 238) * 100)).sort((a, b) => a - b),
+    [-750, 750]);
+  const tiers = floors.filter(floor => floor.min[0] === 213.6 && floor.max[0] === 234.4);
+  assert.deepEqual(tiers.map(({ min, max }) => [min[2], max[2], max[1]]), [
+    [-162.875, -162, 12.35],
+    [-163.75, -162.875, 12.7],
+    [-164.53, -163.75, 13.05],
+    [-164.79, -164.53, 13.375],
+    [-165.5, -164.79, 13.7],
+  ]);
   assert.equal(theaterPhotoPositions.length, 48);
   for (const [index, photo] of theaterPhotoPositions.entries()) {
-    assert.ok(tiers.some(tier => tier.min[0] <= photo.east && photo.east <= tier.max[0] &&
-      tier.min[2] <= -photo.north && -photo.north <= tier.max[2] && tier.max[1] === photo.height));
+    const row = Math.floor(index / 12);
+    const column = index % 12;
+    assert.equal(Math.round(photo.east * 100), 21696 + column * 128);
+    assert.equal(photo.north, 162.4375 + row * .875);
+    const tier = row === 3 ? tiers[4] : tiers[row];
+    assert.equal(photo.height, tier.max[1]);
+    assert.ok(-photo.north - .27 >= tier.min[2] && -photo.north + .27 <= tier.max[2]);
+    assert.ok(inPlazaPhotoStand(photo.east, photo.north, photo.height));
     assert.ok(theaterPhotoPositions.slice(index + 1).every(other =>
       Math.hypot(other.east - photo.east, other.north - photo.north) > .54));
   }
-  assert.equal(ramps.length, 1);
-  assert.deepEqual(ramps[0], { min: [204.8, 12, -165.5], max: [216, 13.4, -164.1], axis: 'x', ascending: 1 });
-  assert.ok(floors.some(floor => floor.max[0] === 216 && floor.max[1] === 13.4));
+  for (const x of [213.6, 234.4]) {
+    for (const { min, max } of tiers) {
+      assert.equal(inPlazaPhotoStand(x, -(min[2] + max[2]) / 2, max[1]), false);
+    }
+  }
+  assert.deepEqual(ramps, [
+    { min: [204.8, 12, -164.4], max: [216, 13.4, -164.1], axis: 'x', ascending: 1 },
+    { min: [204.8, 12, -165.5], max: [216, 13.7, -164.4], axis: 'x', ascending: 1 },
+    { min: [232, 12, -164.4], max: [243.2, 13.4, -164.1], axis: 'x', ascending: -1 },
+    { min: [232, 12, -165.5], max: [243.2, 13.7, -164.4], axis: 'x', ascending: -1 },
+  ]);
+  for (const [west, east] of [[215.75, 216], [232, 232.25]]) {
+    assert.ok(floors.some(({ min, max }) =>
+      min[0] === west && max[0] === east && min[2] === -165.5 && max[2] === -164.79 && max[1] === 13.7));
+  }
 });
 
 test('five-minute stage repeat uses continuous formations, closing bow and two prop intervals', () => {

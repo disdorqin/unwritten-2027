@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  inPlazaPhotoArc, plazaPhotoCapacity, plazaPhotoLineup, plazaPhotoLockMs, readPlazaPhotoNotice, type PlazaPhotoPerson,
+  inPlazaPhotoStand, inPlazaPhotoRequestZone, plazaPhotoCapacity, plazaPhotoLineup, plazaPhotoLockMs, readPlazaPhotoNotice, type PlazaPhotoPerson,
 } from '../src/presence/plaza-photo.ts';
 import { createPlazaGroupPhoto } from '../tools/voxel-tavern/town-blockout/plaza-group-photo.ts';
 
-const person = (id: number, east = 224, north = 182, height = 12): PlazaPhotoPerson =>
+const person = (id: number, east = 224, north = 162.44, height = 12.35): PlazaPhotoPerson =>
   ({ id, name: `镇民 ${id}`, east, north, height });
 
-test('the temporary capture zone uses both northern rows and rejects births, roofs and other areas', () => {
-  assert.equal(inPlazaPhotoArc(224, 182, 12), true);
-  assert.equal(inPlazaPhotoArc(227, 183, 12), true);
-  assert.equal(inPlazaPhotoArc(223, 180, 12), false);
-  assert.equal(inPlazaPhotoArc(224, 182, 160), false);
-  assert.equal(inPlazaPhotoArc(224, 170, 12), false);
-  assert.equal(inPlazaPhotoArc(224, 193, 12), false);
-  assert.equal(inPlazaPhotoArc(Infinity, 182, 12), false);
+test('the new stand admits every physical tier and only the apron may launch without joining', () => {
+  assert.equal(inPlazaPhotoStand(224, 162.44, 12.35), true);
+  assert.equal(inPlazaPhotoStand(227, 165.06, 13.4), true);
+  assert.equal(inPlazaPhotoStand(224, 183, 12), false);
+  assert.equal(inPlazaPhotoStand(224, 165.06, 12), false);
+  assert.equal(inPlazaPhotoStand(224, 162.44, 160), false);
+  assert.equal(inPlazaPhotoStand(224, 161, 12), false);
+  assert.equal(inPlazaPhotoRequestZone(224, 161, 12), true);
+  assert.equal(inPlazaPhotoRequestZone(224, 159.99, 12), false);
+  assert.equal(inPlazaPhotoStand(Infinity, 162.44, 12.35), false);
 });
 
 test('one authoritative roster is sorted and capped, with malformed or duplicate names packets rejected', () => {

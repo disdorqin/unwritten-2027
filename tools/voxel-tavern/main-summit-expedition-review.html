@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>未写镇 · 主峰七轮建模实走</title>
+  <style>
+    :root { font: 14px/1.55 system-ui, "Microsoft YaHei", sans-serif; color: #f4e8d9; color-scheme: dark; background: #16273a; }
+    body { margin: 0; overflow: hidden; }
+    #viewport { position: fixed; inset: 0; }
+    canvas { display: block; }
+    #hud { position: fixed; left: 12px; top: 12px; max-width: min(410px, calc(100vw - 24px));
+      padding: 14px 17px; border: 1px solid #c4a6787e; border-radius: 9px; background: #172633e5;
+      box-shadow: 0 9px 24px #07112088; }
+    h1 { font-size: 17px; margin: 0 0 6px; letter-spacing: .6px; }
+    p { margin: 4px 0; }
+    kbd { font: inherit; padding: 0 4px; border: 1px solid #c5a88788; border-radius: 4px; }
+    output { display: block; font-variant-numeric: tabular-nums; margin: 3px 0; }
+    #action { color: #ffd69a; min-height: 22px; }
+    #reference { position: fixed; right: 12px; bottom: 12px; width: min(27vw, 290px);
+      border-radius: 8px; overflow: hidden; background: #172633ef; border: 1px solid #c4a67886; }
+    #reference[hidden] { display: none; }
+    #reference img { display: block; width: 100%; max-height: 250px; object-fit: contain; }
+    #reference figcaption { padding: 7px 9px; color: #d8c6a9; }
+    @media(max-width: 700px) { #reference { display: none; } #hud { font-size: 12px; max-width: 320px; } }
+  </style>
+</head>
+<body>
+  <main id="viewport" aria-label="主峰真实三维场景"></main>
+  <section id="hud" role="group" aria-label="主峰模型审查">
+    <h1>UNWRITTEN 2027 · 主峰七轮实体建模审查</h1>
+    <p>按 <kbd>1</kbd> 至 <kbd>7</kbd> 切换七处实物审查起点；<kbd>WASD</kbd> 第一人称行走，方向键转头，<kbd>Shift</kbd> 疾跑。</p>
+    <p><kbd>V</kbd> 看、<kbd>L</kbd> 听、<kbd>E</kbd> 动手；<kbd>N</kbd> 夜景，<kbd>R</kbd> 对照参考图。第七站首铃：连续按 E 四次，间隔按「短 0.38s、长 0.72s、短 0.38s」敲响，雾灯逐盏点亮。右侧为仓内原始参考图。</p>
+    <output id="name"></output>
+    <output id="position"></output>
+    <output id="rendering"></output>
+    <output id="action" role="status">请沿地形走到模型前体验。此为隔离施工场景，非正式多人上线。</output>
+  </section>
+  <figure id="reference" aria-label="设计参考对照">
+    <img id="ref-image" alt="仓库主峰概念图">
+    <figcaption id="ref-label">仓库建模参照</figcaption>
+  </figure>
+  <script type="module" src="./town-blockout/main-summit-expedition-review.ts"></script>
+</body>
+</html>

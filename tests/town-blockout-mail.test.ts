@@ -19,9 +19,13 @@ function fixture() {
   return { data, storage, time, events, create, mail: create() };
 }
 
-test('the local 19:59 to 20:00 boundary keeps envelopes private until opening', () => {
+test('the mailbox unlock uses the same Beijing epoch on every device', () => {
+  assert.equal(unlock, Date.UTC(2026, 11, 31, 12));
+});
+
+test('the Beijing 19:59 to 20:00 boundary keeps envelopes private until opening', () => {
   const { mail, time, data, events, create } = fixture();
-  assert.equal(UNLOCK_AT, '2026-12-31T20:00:00');
+  assert.equal(UNLOCK_AT, '2026-12-31T20:00:00+08:00');
   assert.equal(mail.sealLetter(self('只在开箱后再读的句子')).ok, true);
   const status = mail.timeboxStatus();
   const { id } = status.envelopes[0];

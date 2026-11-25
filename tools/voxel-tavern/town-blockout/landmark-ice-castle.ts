@@ -18,6 +18,8 @@ import {
 } from './ice-palace-expansion';
 import { mountIcePalaceForecourt } from './ice-palace-forecourt';
 import { mountCastleIceSlide } from './ice-palace-slide';
+import { mountIcePalaceRites } from './landmark-ice-palace-rites';
+import { mountIcePalaceWreckage } from './landmark-ice-palace-wreckage';
 
 const palette = {
   foundation: '#31546f',
@@ -37,7 +39,7 @@ type IceDetail = 'frame' | 'crown' | 'core';
 
 export const iceThrone = {
   stand: [17.98, .57, -4.92],
-  seat: [18.96, 1.07 + .98, -4.92],
+  seat: icePalaceInteriorAnchors.throneSeat,
   photo: [17.46, .35, -6.15],
   hallDoor: [7.2, 2.15, 0],
 } as const;
@@ -579,6 +581,8 @@ export function buildIceCastle() {
   group.userData.palaceBanquetSeats = icePalaceBanquetSeats;
   group.userData.palaceBanquetDrinkStand = icePalaceBanquetDrinkStand;
   group.userData.palaceForecourt = mountIcePalaceForecourt(group);
+  group.userData.palaceRiteVisuals = mountIcePalaceRites(group, colliders);
+  group.userData.palaceFragment = mountIcePalaceWreckage(group, colliders);
   mountCastleIceSlide(group);
   const plaqueStyle = { background: '#18394b', color: '#d7f3ff', accent: '#79b9cc' };
   addLandmarkNameplate(group, '冰雪城堡', -22.42, 5.91, 0, 3.06, .72, -Math.PI / 2, plaqueStyle);

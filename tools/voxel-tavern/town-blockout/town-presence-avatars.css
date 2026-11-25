@@ -24,3 +24,11 @@
   white-space: nowrap;
   unicode-bidi: isolate;
 }
+
+/* 抢铃铛持铃人：名牌鎏金高亮，全场可认。 */
+.town-presence-nameplate.is-bell-holder {
+  color: #2a1c02;
+  background: #e9bc58f2;
+  border-color: #ffe9ad;
+  box-shadow: 0 0 10px #e9bc5888;
+}

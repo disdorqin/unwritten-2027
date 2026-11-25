@@ -1,0 +1,145 @@
+{
+  "chromium": "153.0.8010.12",
+  "baseline": {
+    "samples": [
+      {
+        "view": "fixed",
+        "position": [
+          224.64,
+          14.43,
+          -165.0625
+        ],
+        "quaternion": [
+          0.01684900371148361,
+          0.928136716358664,
+          0.04232931198911154,
+          -0.36944089671747987
+        ],
+        "aspect": 1.5384615384615385,
+        "fov": 58,
+        "width": 1000,
+        "height": 650,
+        "seat": {
+          "east": 224.64,
+          "north": 165.0625,
+          "height": 13.4
+        },
+        "audience": 36,
+        "avatarParts": 792,
+        "frames": 4,
+        "daylight": true,
+        "draws": 179,
+        "triangles": 538252,
+        "filename": "baseline-fixed.png",
+        "sha256": "f899053221d4bd8ccfcb8776510207167856be697be896c1afb1dd9a32b46005"
+      },
+      {
+        "view": "rear-seat",
+        "position": [
+          224.64,
+          14.43,
+          -165.0625
+        ],
+        "quaternion": [
+          0.01684900371148361,
+          0.928136716358664,
+          0.04232931198911154,
+          -0.36944089671747987
+        ],
+        "aspect": 1.5384615384615385,
+        "fov": 58,
+        "width": 1000,
+        "height": 650,
+        "seat": {
+          "east": 224.64,
+          "north": 165.0625,
+          "height": 13.4
+        },
+        "audience": 36,
+        "avatarParts": 792,
+        "frames": 23,
+        "daylight": true,
+        "draws": 209,
+        "triangles": 616754,
+        "filename": "baseline-rear-seat.png",
+        "sha256": "93f0254ffe95ac8f805aef69a4e27cef2e62785a45681955639dd587411452de"
+      }
+    ],
+    "errors": [],
+    "presence": []
+  },
+  "candidate": {
+    "samples": [
+      {
+        "view": "fixed",
+        "position": [
+          224.64,
+          14.43,
+          -165.0625
+        ],
+        "quaternion": [
+          0.01684900371148361,
+          0.928136716358664,
+          0.04232931198911154,
+          -0.36944089671747987
+        ],
+        "aspect": 1.5384615384615385,
+        "fov": 58,
+        "width": 1000,
+        "height": 650,
+        "seat": {
+          "east": 224.64,
+          "north": 165.0625,
+          "height": 13.7
+        },
+        "audience": 36,
+        "avatarParts": 792,
+        "frames": 4,
+        "daylight": true,
+        "draws": 186,
+        "triangles": 542740,
+        "filename": "candidate-fixed.png",
+        "sha256": "65af87d3edf22dae42737f0b59a22124e4c86878c7b94cf1eb250242f64f6510"
+      },
+      {
+        "view": "rear-seat",
+        "position": [
+          224.64,
+          14.729999999999999,
+          -165.0625
+        ],
+        "quaternion": [
+          0.019021777213834475,
+          0.9278716776425189,
+          0.04778791411405499,
+          -0.36933539917683555
+        ],
+        "aspect": 1.5384615384615385,
+        "fov": 58,
+        "width": 1000,
+        "height": 650,
+        "seat": {
+          "east": 224.64,
+          "north": 165.0625,
+          "height": 13.7
+        },
+        "audience": 36,
+        "avatarParts": 792,
+        "frames": 24,
+        "daylight": true,
+        "draws": 216,
+        "triangles": 621242,
+        "filename": "candidate-rear-seat.png",
+        "sha256": "fcf45e99d2bb67f1a397cafbb30197a8c6a2e743753517d36df4d49806db5768"
+      }
+    ],
+    "errors": [],
+    "presence": []
+  },
+  "status": "matched-browser-frames",
+  "archive": {
+    "run": 44673105289,
+    "artifact": 14600089885,
+    "sha256": "b05ced146a63440ac4997c7e9084b6d8ff8457766c7dab70d8aeb78b25463a89"
+  }
+}

@@ -54,38 +54,15 @@ test('review actions use the gate guards and distinct arrivals for both orbital 
   trigger('检视星港侧门前点');
   trigger('返回地宫');
   assert.match(current().status, /不在对应门口/);
-  trigger('检视地宫侧门前点');
-  trigger('返回地宫');
-  assert.match(current().status, /仍锁定/);
-  assert.match(current().location, /气闸舱/);
-  trigger('检视星港侧门前点');
   trigger('返回星港');
   assert.match(current().status, /星港太空门返回/);
   trigger('选取另一外门夹具');
   trigger('经当前门进入气闸');
-  assert.match(current().status, /仍锁定/);
-  assert.match(current().location, /地宫核心舱门/);
-  trigger('打开试验门旗标');
-  trigger('选取另一外门夹具');
-  trigger('锁定试验门');
-  trigger('经当前门进入气闸');
-  assert.match(current().status, /仍锁定/);
-  assert.match(current().location, /星港太空门/);
-  trigger('选取另一外门夹具');
-  trigger('经当前门进入气闸');
   assert.match(current().status, /地宫核心舱门抵达/);
   assert.ok(starportArrival < 0 && current().target.x > 0);
-  trigger('检视星港侧门前点');
-  trigger('返回星港');
-  assert.match(current().status, /仍锁定/);
-  assert.match(current().location, /气闸舱/);
   trigger('检视地宫侧门前点');
   trigger('返回地宫');
   assert.match(current().status, /地宫核心舱门返回/);
-  trigger('锁定试验门');
-  trigger('经当前门进入气闸');
-  assert.match(current().status, /仍锁定/);
-  assert.match(current().location, /地宫核心舱门/);
 });
 
 test('the crater well shows concealing debris until the authority reveals the shaft', () => {

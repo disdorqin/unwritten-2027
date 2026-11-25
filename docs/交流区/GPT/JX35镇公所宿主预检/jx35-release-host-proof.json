@@ -1,0 +1,173 @@
+{
+  "release": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "blobs": {
+    "tools/voxel-tavern/town-blockout/layout.json": "9dae6c135cd19d845c9f5b9153d66d845fb5f7c0",
+    "tools/voxel-tavern/town-blockout/town-extension.ts": "dc9b53d5d0f25c99013a4f640fc2fb0484f8a0ac",
+    "tools/voxel-tavern/town-blockout/town-npc.ts": "7ef40cc0f3591d8c31418ccfd6d665a8d9d29166",
+    "tools/voxel-tavern/town-blockout/town-npc-stations.ts": "b570e6ee6fad1cef7944e5aafc806944400c41e8",
+    "tools/voxel-tavern/town-blockout/town-passport.ts": "ee19e2007f0c85b2f7e543b15eab9cc21a51b53d",
+    "tools/voxel-tavern/town-blockout/viewer.ts": "72cc9c1d1eb946211844850a95392381c5a8871d",
+    "tools/voxel-tavern/town-blockout/town-presence.ts": "27ac80e7617be99b332a291f107839641bd523eb",
+    "src/presence/server.ts": "d11570d95a28972fbbc49283c84e35c9e8f08a7e"
+  },
+  "terrainPlots": [
+    {
+      "id": "clocktower",
+      "origin": [
+        226,
+        223,
+        12
+      ]
+    },
+    {
+      "id": "tavern",
+      "origin": [
+        159,
+        230,
+        16
+      ]
+    },
+    {
+      "id": "post-office",
+      "origin": [
+        264,
+        210,
+        13
+      ]
+    },
+    {
+      "id": "memorial",
+      "origin": [
+        337,
+        277,
+        25
+      ]
+    },
+    {
+      "id": "long-hall",
+      "origin": [
+        378,
+        316,
+        35
+      ]
+    },
+    {
+      "id": "cabins",
+      "origin": [
+        91,
+        271,
+        23
+      ]
+    },
+    {
+      "id": "lantern-workshop",
+      "origin": [
+        126,
+        115,
+        10
+      ]
+    },
+    {
+      "id": "market-stalls",
+      "origin": [
+        154,
+        105,
+        10
+      ]
+    },
+    {
+      "id": "glasshouse",
+      "origin": [
+        372,
+        96,
+        11
+      ]
+    },
+    {
+      "id": "lighthouse",
+      "origin": [
+        408,
+        78,
+        12
+      ]
+    },
+    {
+      "id": "stage",
+      "origin": [
+        238,
+        140,
+        12
+      ]
+    },
+    {
+      "id": "railway-station",
+      "origin": [
+        526,
+        329,
+        26
+      ]
+    },
+    {
+      "id": "hot-spring",
+      "origin": [
+        548,
+        158,
+        15
+      ]
+    },
+    {
+      "id": "ice-castle",
+      "origin": [
+        484,
+        72,
+        12
+      ]
+    },
+    {
+      "id": "coaster-station",
+      "origin": [
+        478,
+        224,
+        19
+      ]
+    }
+  ],
+  "existingPlazaSpawn": {
+    "east": 223,
+    "north": 180,
+    "height": 12
+  },
+  "hostSourceReadback": {
+    "matchedCivicPlots": [],
+    "registeredJobLabels": [
+      "酒馆老板",
+      "邮局邮差",
+      "灯塔看守",
+      "灯坊匠人",
+      "舞台班主",
+      "火车站站长",
+      "酒馆跑堂",
+      "新区信箱管理员"
+    ],
+    "civicRoleFoundInAuditedRoster": false
+  },
+  "localPassportStorageFixture": {
+    "before": {
+      "collected": 15,
+      "total": 16,
+      "complete": false
+    },
+    "after": {
+      "collected": 15,
+      "total": 16,
+      "complete": false
+    },
+    "extensionRecovered": true,
+    "duplicateExtensionRejected": true,
+    "ordinaryCompleted": {
+      "collected": 16,
+      "total": 16,
+      "complete": true
+    }
+  }
+}

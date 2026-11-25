@@ -409,3 +409,20 @@ test('frost level styles match the design bands', () => {
   assert.equal(frostLevelStyles[3].breath, true);
   assert.equal(frostLevelStyles[2].breath, false);
 });
+
+test('a clock correction cannot replay ceremony cues already delivered by the director', () => {
+  const midnight = ceremonyMidnight(2026, 480);
+  let now = midnight - 100;
+  const times: number[] = [];
+  const director = createCeremonyDirector({ now: () => now, utcOffsetMinutes: 480 }, {
+    onCue: cue => { if (cue.type === 'fireworks-main') times.push(cue.at); },
+  });
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  now = midnight - 50;
+  director.update();
+  now = midnight + 1_100;
+  director.update();
+  assert.deepEqual(times, [midnight + 1000]);
+});

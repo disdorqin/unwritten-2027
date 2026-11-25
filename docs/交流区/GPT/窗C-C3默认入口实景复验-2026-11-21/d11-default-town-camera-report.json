@@ -1,0 +1,170 @@
+{
+  "passed": true,
+  "screenshots": [
+    "default-town-plaza-initial-night.png",
+    "default-town-plaza-day.png",
+    "default-town-crater-mouth-night-not-interior.png",
+    "default-town-crater-mouth-day-not-interior.png"
+  ],
+  "frames": [
+    {
+      "name": "default-town-plaza-initial-night",
+      "view": "town-plaza-spawn",
+      "mode": "night",
+      "position": "东 223.0 m · 北 180.0 m · 行走",
+      "sceneEntryHidden": true,
+      "dayButton": "雪夜",
+      "renderer": {
+        "frameMs": 12.5,
+        "feedbackMs": 0,
+        "drinkEffectsMs": 0,
+        "movementMs": 0.10000002384185791,
+        "snowballMs": 0,
+        "calls": 317,
+        "triangles": 1245522,
+        "cameraY": 13.65,
+        "detailMs": 0.10000002384185791,
+        "weatherMs": 0.10000002384185791,
+        "weatherTier": "medium",
+        "snowIntensity": 2.45,
+        "snowCover": 0.012851090909090902,
+        "fogNear": 200,
+        "fogFar": 890,
+        "points": 1406
+      },
+      "title": "UNWRITTEN 2027 · 雪夜小镇预览",
+      "settingsOpen": false,
+      "canvasSize": [
+        797,
+        489
+      ]
+    },
+    {
+      "name": "default-town-plaza-day",
+      "view": "town-plaza-spawn",
+      "mode": "day",
+      "position": "东 223.0 m · 北 180.0 m · 行走",
+      "sceneEntryHidden": true,
+      "dayButton": "白昼",
+      "renderer": {
+        "frameMs": 12.400000000001455,
+        "feedbackMs": 0,
+        "drinkEffectsMs": 0,
+        "movementMs": 0,
+        "snowballMs": 0,
+        "calls": 312,
+        "triangles": 1244164,
+        "cameraY": 13.65,
+        "detailMs": 0.10000002384185791,
+        "weatherMs": 0,
+        "weatherTier": "medium",
+        "snowIntensity": 2.45,
+        "snowCover": 0.030330181818181794,
+        "fogNear": 200,
+        "fogFar": 890,
+        "points": 1406
+      },
+      "title": "UNWRITTEN 2027 · 雪夜小镇预览",
+      "settingsOpen": false,
+      "canvasSize": [
+        797,
+        489
+      ]
+    },
+    {
+      "name": "mountain-gate-visit-blocked",
+      "view": "NOT_VISITED",
+      "gateHud": "东 223.0 m · 北 180.0 m · 行走",
+      "reason": "The built-in location chooser refuses to land here; never label spawn as mountain"
+    },
+    {
+      "name": "default-town-crater-mouth-night-not-interior",
+      "view": "crater-mouth-not-interior",
+      "mode": "night",
+      "position": "东 2.0 m · 北 159.0 m · 行走",
+      "sceneEntryHidden": true,
+      "dayButton": "雪夜",
+      "renderer": {
+        "frameMs": 4.200000000000728,
+        "feedbackMs": 0,
+        "drinkEffectsMs": 0,
+        "movementMs": 0,
+        "snowballMs": 0,
+        "calls": 425,
+        "triangles": 730877,
+        "cameraY": 12.505027198791504,
+        "detailMs": 0.09999996423721313,
+        "weatherMs": 0,
+        "weatherTier": "medium",
+        "snowIntensity": 2.45,
+        "snowCover": 0.05952700000000003,
+        "fogNear": 200,
+        "fogFar": 890,
+        "points": 1310
+      },
+      "title": "UNWRITTEN 2027 · 雪夜小镇预览",
+      "settingsOpen": false,
+      "canvasSize": [
+        797,
+        489
+      ]
+    },
+    {
+      "name": "default-town-crater-mouth-day-not-interior",
+      "view": "crater-mouth-not-interior",
+      "mode": "day",
+      "position": "东 2.0 m · 北 159.0 m · 行走",
+      "sceneEntryHidden": true,
+      "dayButton": "白昼",
+      "renderer": {
+        "frameMs": 8.399999999997817,
+        "feedbackMs": 0,
+        "drinkEffectsMs": 0,
+        "movementMs": 0.09999996423721313,
+        "snowballMs": 0,
+        "calls": 424,
+        "triangles": 730875,
+        "cameraY": 12.505027198791504,
+        "detailMs": 0,
+        "weatherMs": 0,
+        "weatherTier": "medium",
+        "snowIntensity": 2.45,
+        "snowCover": 0.07577699999999991,
+        "fogNear": 200,
+        "fogFar": 890,
+        "points": 1310
+      },
+      "title": "UNWRITTEN 2027 · 雪夜小镇预览",
+      "settingsOpen": false,
+      "canvasSize": [
+        797,
+        489
+      ]
+    }
+  ],
+  "errors": [
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "http:404:http://127.0.0.1:5173/presence/poll/join",
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "cleanupErrors": [],
+  "elapsedMs": 31433,
+  "fullD11QualityGatePassed": false,
+  "realPresenceLinked": false,
+  "cameraAnglesMeasuredFromServer": false,
+  "unmetCameras": [
+    "crater-interior-facing-north-day/night",
+    "mountain-winding-road-midpoint-day/night"
+  ],
+  "caveat": "Not a full quality-gate pass: missing crater-interior, mountain-road midpoint, exact accepted yaw, and production Presence/WS. Built-in mountain-gate visit currently rejects landing."
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Points, Scene } from 'three';
+import { type Points, Scene } from 'three';
 import { createFestival } from '../tools/voxel-tavern/town-blockout/festival.ts';
 import {
   createPersonalFireworkInventory, hangingFireworkGround, nearestPersonalFireworks, samplePersonalFirework,
@@ -22,6 +22,21 @@ test('test-period claim is capped at ten and all named indoor contexts reject us
   assert.equal(inventory.use('string', 'open', 6_000, true), 'fired');
 });
 
+test('stock and cooldown survive reload and corrupted stock is discarded', () => {
+  let saved: unknown;
+  const inventory = createPersonalFireworkInventory(undefined, stock => { saved = stock; });
+  const timestamp = Date.now();
+  inventory.claim('sparkler', 3);
+  inventory.claim('rocket', 5);
+  assert.equal(inventory.use('sparkler', 'open', timestamp), 'fired');
+  const restored = createPersonalFireworkInventory(saved);
+  assert.deepEqual(restored.stock(), { sparkler: 2, rocket: 5, string: 0 });
+  assert.equal(restored.use('rocket', 'open', timestamp + 1_999), 'cooldown');
+  assert.equal(restored.use('rocket', 'open', timestamp + 2_000), 'fired');
+  assert.equal(createPersonalFireworkInventory({ stock: { sparkler: 11, rocket: 0, string: 0 } }).total(), 0);
+  assert.equal(createPersonalFireworkInventory({ stock: { sparkler: -1, rocket: 0, string: 0 } }).total(), 0);
+});
+
 test('seeded personal effects replay, are capped, and use the shared festival Points', () => {
   const point = { x: 0, y: 12, z: 0 };
   const rocket: PersonalFirework = { ...point, at: 0, kind: 'rocket', owner: 1, seed: 987, yaw: 0 };
@@ -41,7 +56,8 @@ test('seeded personal effects replay, are capped, and use the shared festival Po
 
   const scene = new Scene();
   const festival = createFestival(scene);
-  const cloud = scene.children.find(child => child instanceof Points) as Points;
+  const cloud = scene.getObjectByName('广场烟花') as Points | undefined;
+  assert.ok(cloud?.isPoints);
   festival.setPersonalFireworkFrame(samplePersonalFirework(rocket, 1_300));
   festival.update(1 / 60);
   assert.equal(cloud.geometry.drawRange.count, 16);

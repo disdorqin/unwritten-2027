@@ -1,5 +1,6 @@
 import { BoxGeometry, CylinderGeometry, Mesh, MeshLambertMaterial, type BufferGeometry, type Group } from 'three';
 import type { Box } from './landmark-kit';
+import { icePalaceThroneSeat } from '../../../src/presence/ice-throne-site';
 
 type Finish = 'foundation' | 'deepIce' | 'blueIce' | 'ice' | 'paleIce' | 'snow' | 'recess' | 'glint' | 'brass' | 'lantern';
 type Parts = {
@@ -11,7 +12,7 @@ type Parts = {
 
 export const icePalaceInteriorAnchors = {
   throneDoor: [19.35, .15, -6.7],
-  throneSeat: [18.96, 2.05, -4.92],
+  throneSeat: icePalaceThroneSeat,
   levers: { pine: [-8.5, .12, -15.2], sailboat: [-4.5, .12, -15.2], lighthouse: [-.6, .12, -15.2] },
   mirrors: [[3, .12, -12.5], [5.8, .12, -12.5]],
   bells: { low: [9.7, 24.5, -12.65], mid: [12.3, 24.5, -12.65], high: [11, 24.5, -13.9] },

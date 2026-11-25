@@ -1,0 +1,17 @@
+✔ review actions take the covered shaft through first fall, camp checks and repeat cage travel (57.581072ms)
+✔ review actions use the gate guards and distinct arrivals for both orbital routes (9.805195ms)
+✔ the two arrivals and door approaches are distinct, walkable and face into the airlock (20.483042ms)
+✔ the two destinations use town-chronicle rings and the status wall has just two green systems (20.306817ms)
+✔ a continuous open route crosses the ramp to the two walkable hand positions (9.520712ms)
+✔ the walking footprint rejects walls, corners, console and captain furniture (6.304599ms)
+✔ the two hand hooks surround a blank, half-page log with its own indicator (5.856751ms)
+✔ interior size scales the floor, markers, rendered log and collision bounds together (8.332072ms)
+✔ window motion is driven by an explicit local clock and leaves the walking surface stable (5.259575ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 904.22292

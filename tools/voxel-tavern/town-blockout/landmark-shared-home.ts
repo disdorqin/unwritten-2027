@@ -135,6 +135,7 @@ export function createSharedHomeSpots(
   leave: () => void,
   photo: (filename: string) => void,
   room: SharedHome,
+  openDoorBook: () => void,
 ): TownActivitySpot[] {
   const spots: TownActivitySpot[] = seats.map(({ label, x, z, yaw, approach }) => ({
     ...world(x - Math.sin(yaw) * approach, z + Math.cos(yaw) * approach), label: `就座 · ${label}`, range: .65,
@@ -145,6 +146,7 @@ export function createSharedHomeSpots(
   }));
   spots.push(
     { ...world(doorX, 5.39), range: .81, label: '出门 · 返回来时的屋门', run: leave },
+    { ...world(.59, 4.42), range: .78, label: '百门册 · 选一扇门出去', run: openDoorBook },
     { ...world(hearth.x, -3.83), range: .85, label: '烤火 · 壁炉回暖',
       run() {
         const at = world(hearth.x, -5.52, 1.06);
@@ -231,6 +233,15 @@ export function buildSharedHome(): SharedHome {
   put(doorX, 2.57, 5.66, 1.72, .18, .32, trim);
   put(doorX + .48, 1.06, 5.48, .11, .11, .15, brass);
   put(doorX, 2.90, 5.72, .67, .19, .10, brass, true);
+
+  table(.59, 5.33, .78, .51);
+  put(.59, .90, 5.30, .61, .055, .38, '#782e38');
+  put(.59, .955, 5.30, .58, .065, .35, '#fcdfaa');
+  for (const side of [-1, 1]) {
+    put(.59 + side * .15, 1.02, 5.30, .285, .025, .34, '#fff1c9');
+    for (let row = 0; row < 3; row++) put(.59 + side * .15, 1.045, 5.19 + row * .09, .20, .008, .018, '#8a6048');
+  }
+  put(.59, 1.02, 5.30, .028, .03, .37, brass);
 
   const hills = [.14, .29, .48, .67, .58, .39, .54, .32];
   for (const x of [-5.32, 2.65]) {
@@ -357,6 +368,14 @@ export function buildSharedHome(): SharedHome {
   put(4.85, 0, -1.18, .57, .63, .57, timber);
   put(4.56, .34, -1.18, .061, .06, .12, brass);
   block(4.85, 0, -1.18, .57, .63, .57);
+  put(4.85, .63, -1.18, .31, .052, .29, trim);
+  put(4.85, .682, -1.18, .073, .17, .073, brass);
+  put(4.85, .852, -1.18, .27, .17, .25, '#e7ad73', true);
+  for (const offset of [-.117, .117]) {
+    put(4.85 + offset, .852, -1.18, .038, .17, .27, dark);
+    put(4.85, .852, -1.18 + offset, .29, .028, .036, trim);
+  }
+  put(4.85, 1.022, -1.18, .23, .043, .21, brass);
 
   const shelfZ = -2.69;
   put(6.65, 0, shelfZ, .17, 2.53, 2.85, dark);
@@ -387,12 +406,29 @@ export function buildSharedHome(): SharedHome {
     put(artX + .074, 2.11 - height * .5, -.82 + i * .238, .03, height, .19, i % 2 ? '#d3ac77' : '#ad786b');
   }
   for (const z of [-.99, 1.03]) put(artX + .07, 1.56, z, .039, 1.45, .076, '#d3ac77');
-  const galleryX = 1.80;
-  put(galleryX, 1.26, 5.64, 2.08, 1.17, .11, timber);
-  put(galleryX, 1.35, 5.567, 1.89, 1.00, .07, '#af8a64');
+  const postcardBoardX = 1.80;
+  put(postcardBoardX, 1.26, 5.64, 2.08, 1.17, .11, timber);
+  put(postcardBoardX, 1.35, 5.567, 1.89, 1.00, .07, '#af8a64');
   for (const [dx, y] of [[-.67, 1.52], [-.25, 1.66], [.20, 1.46], [.66, 1.73]]) {
-    put(galleryX + dx, y, 5.518, .32, .22, .032, '#f0dfbc');
-    put(galleryX + dx, y + .17, 5.499, .058, .04, .022, '#a66160');
+    put(postcardBoardX + dx, y, 5.518, .32, .22, .032, '#f0dfbc');
+    put(postcardBoardX + dx, y + .17, 5.499, .058, .04, .022, '#a66160');
+  }
+
+  // The east wall has a large central frame for the midnight group photo.
+  const photoFrames = [
+    { z: .75, y: 1.77, span: 1.40, height: .90, rim: brass },
+    { z: -.45, y: 1.96, span: .66, height: .52, rim: timber },
+    { z: 1.95, y: 1.96, span: .66, height: .52, rim: timber },
+    { z: .75, y: 1.20, span: .74, height: .43, rim: timber },
+  ];
+  const rimWidth = .055;
+  for (const { z, y, span, height, rim } of photoFrames) {
+    put(6.738, y, z, .044, height, span, '#bfab8d');
+    for (const offset of [-1, 1]) {
+      put(6.710, y + (offset > 0 ? height - rimWidth : 0), z, .062, rimWidth, span, rim);
+      put(6.710, y + rimWidth, z + offset * (span - rimWidth) / 2,
+        .062, height - 2 * rimWidth, rimWidth, rim);
+    }
   }
 
   for (const [x, z] of [[-5.45, -5.61], [5.14, -5.63], [3.94, 5.64]]) {

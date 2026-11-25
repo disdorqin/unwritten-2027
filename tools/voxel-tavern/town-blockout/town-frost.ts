@@ -1,11 +1,9 @@
 // 原冻纹基线继续由仪式曲线驱动。寒意设计 v1 把个人暴露与基线取较高值，
 // 两条通道共用该等级。移动系数仅由 viewer 在着地步行分支消费。
 import type { CeremonyState, FrostLevel } from './town-ceremony';
-import { townOutdoorWeatherEffects, type TownOutdoorWeather } from '../../../src/shared/town-outdoor-weather';
 import { bridgeAt, gridStep, isWater, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import { extensionRoadClearance, extensionStreetClearance } from './town-extension';
-import { townWeatherExposureFor, type TownWeatherArea } from './town-weather-exposure';
 
 type FrostGround = Pick<ReturnType<typeof createTerrainGrid>, 'heightAt' | 'gridWidth' | 'gridDepth' | 'surfaces'>;
 
@@ -25,23 +23,8 @@ export function isExposedSnowAt(
 
 export type WarmthSource = 'interior' | 'onsen' | 'hot-drink' | 'fire-source';
 export type FrostExposure = 'none' | 'dark-snow' | 'lamp' | 'water';
-export type OutdoorFrostExposure = {
-  weather: TownOutdoorWeather;
-  exposed: boolean;
-  night: boolean;
-  stillOnIce: boolean;
-  wet: boolean;
-  area?: TownWeatherArea;
-  sledding?: boolean;
-};
 const naturalThawRate = 1 / 120;
 const exposureRate = 1 / 270;
-const stillIceDelay = 10;
-const coldExposureCap = 3;
-const outdoorWalkingScales = [1, .92, .82, .75] as const;
-const outdoorThrowScales = [1, 1.25, 1.6, 1.6] as const;
-const snowballAimRadius = 2 * Math.PI / 180;
-const snowballAimPitchLimit = 1.42;
 // 清晰区与模糊程度随冻纹等级插值。
 const maskClear = [100, 70, 58, 40] as const;
 const blurByLevel = [0, 1.2, 2.6, 4.8] as const;
@@ -64,16 +47,6 @@ const exposureWarmRates: Record<WarmthSource, number> = {
   'fire-source': 1 / 5, onsen: 1 / 8, interior: 1 / 10, 'hot-drink': 1 / 10,
 };
 
-/** Uniform disc in aim angles, using the same pitch limits as the town camera. */
-export function scatterTownSnowballAim(yaw: number, pitch: number, scale: number, random: () => number = Math.random) {
-  const radius = snowballAimRadius * scale * Math.sqrt(random());
-  const bearing = 2 * Math.PI * random();
-  return {
-    yaw: yaw + radius * Math.cos(bearing),
-    pitch: Math.max(-snowballAimPitchLimit, Math.min(snowballAimPitchLimit, pitch + radius * Math.sin(bearing))),
-  };
-}
-
 export function hasFrostCeremonyRelief({ phase, now }: Pick<CeremonyState, 'phase' | 'now'>) {
   return phase === 'converge' || phase === 'approach' || phase === 'countdown' ||
     phase === 'climax' || (phase === 'afterglow' && new Date(now).getMinutes() < 30);
@@ -81,16 +54,6 @@ export function hasFrostCeremonyRelief({ phase, now }: Pick<CeremonyState, 'phas
 
 function clampLevel(value: number): number {
   return Math.min(3, Math.max(0, value));
-}
-
-function outdoorExposureGrowth(dt: number, conditions: OutdoorFrostExposure, iceSeconds: number) {
-  const base = townOutdoorWeatherEffects[conditions.weather].exposureScale *
-    (conditions.night ? 1.5 : 1) * (conditions.wet ? wetColdMultiplier : 1) *
-    townWeatherExposureFor(conditions.area ?? 'open-ground');
-  const delayedSeconds = conditions.stillOnIce ? Math.min(dt, Math.max(0, stillIceDelay - iceSeconds)) : dt;
-  const normal = Math.min(coldExposureCap, base) * delayedSeconds;
-  const afterDelay = Math.min(coldExposureCap, base * 1.5) * (dt - delayedSeconds);
-  return (normal + afterDelay) * exposureRate;
 }
 
 export function sampleFrostStyle(personal: number) {
@@ -116,11 +79,8 @@ export interface FrostTracker {
   setWarmth(source: WarmthSource, active: boolean): void;
   drinkHot(): void;
   setExposure(intensity: number, depth: number, surface: FrostExposure | boolean, ceremonyRelief: boolean, mobilityFactor?: number, sledding?: boolean): void;
-  setOutdoorExposure(conditions: OutdoorFrostExposure): void;
-  outdoor(): boolean;
   exposure(): number;
   walkingScale(enabled?: boolean): number;
-  throwScatterScale(): number;
   warming(): boolean;
   /** 推进 dt 秒，返回当前个人等级（浮点，便于渲染平滑插值）。 */
   update(dtSeconds: number): number;
@@ -134,8 +94,6 @@ export function createFrostTracker(): FrostTracker {
   let baselinePersonal = 0;
   let exposure = 0;
   let exposureGrowth = 0;
-  let outdoorExposure: OutdoorFrostExposure | undefined;
-  let stillIceSeconds = 0;
   let sledding = false;
   let naturallyThaws = true;
   let warmRate = 0;
@@ -144,7 +102,6 @@ export function createFrostTracker(): FrostTracker {
   const warmth = new Set<WarmthSource>();
   const personal = () => Math.max(baselinePersonal, exposure);
   const displayLevel = () => Math.round(personal()) as FrostLevel;
-  const outdoorLevel = () => Math.floor(personal()) as FrostLevel;
 
   function setWarmth(source: WarmthSource, active: boolean) {
     if (warmth.has(source) === active) return;
@@ -163,8 +120,6 @@ export function createFrostTracker(): FrostTracker {
       setWarmth('hot-drink', true);
     },
     setExposure(intensity, depth, input, ceremonyRelief, mobilityFactor = 1, sleddingActive = false) {
-      outdoorExposure = undefined;
-      stillIceSeconds = 0;
       const surface = input === true ? 'dark-snow' : input === false ? 'none' : input;
       const snowIntensity = Number.isFinite(intensity) ? Math.min(4, Math.max(0, intensity)) : 0;
       relief = ceremonyRelief;
@@ -180,21 +135,14 @@ export function createFrostTracker(): FrostTracker {
         (Number.isFinite(mobilityFactor) ? Math.max(0, mobilityFactor) : 1);
       if (sledding) exposureGrowth = 0;
     },
-    setOutdoorExposure(conditions) {
-      if (!conditions.stillOnIce || conditions.sledding) stillIceSeconds = 0;
-      outdoorExposure = conditions;
-    },
-    outdoor: () => outdoorExposure !== undefined,
     exposure: () => exposure,
     walkingScale(enabled = true) {
-      if (outdoorExposure) return outdoorWalkingScales[outdoorLevel()];
       if (!enabled) return 1;
       const level = displayLevel();
       if (level === 3) return relief ? .90 : .65;
       if (level === 2) return relief ? .90 : .88;
       return level === 1 ? .95 : 1;
     },
-    throwScatterScale: () => outdoorExposure ? outdoorThrowScales[outdoorLevel()] : 1,
     warming: () => warmth.size > 0,
     update(dtSeconds: number) {
       const dt = Number.isFinite(dtSeconds) ? Math.max(0, dtSeconds) : 0;
@@ -208,20 +156,8 @@ export function createFrostTracker(): FrostTracker {
         else if (baselinePersonal > goal) baselinePersonal = Math.max(goal, baselinePersonal - step);
       }
       // 雪橇豁免的「反退」：无回暖源时也按自然消退速率回落（与灯下消退同速）。
-      let change: number;
-      if (warmRate > 0) {
-        change = -warmRate * dt;
-      } else if (outdoorExposure) {
-        const { exposed, wet, sledding: onSled, stillOnIce } = outdoorExposure;
-        change = onSled || !(exposed || wet || stillOnIce)
-          ? -naturalThawRate * dt : outdoorExposureGrowth(dt, outdoorExposure, stillIceSeconds);
-      } else {
-        change = ((naturallyThaws || sledding) ? -naturalThawRate : exposureGrowth) * dt;
-      }
-      if (outdoorExposure?.stillOnIce && !outdoorExposure.sledding) {
-        stillIceSeconds = Math.min(stillIceDelay, stillIceSeconds + dt);
-      }
-      exposure = clampLevel(exposure + change);
+      const rate = warmRate > 0 ? -warmRate : (naturallyThaws || sledding) ? -naturalThawRate : exposureGrowth;
+      exposure = clampLevel(exposure + rate * dt);
       return personal();
     },
     personal,
@@ -258,7 +194,6 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   let fireActive = false;
   let lastPaint = '';
   let lastReduced = false;
-  let lastOutdoor = false;
 
   function paintOpacity(node: HTMLElement | null, value: number) {
     if (!node) return;
@@ -269,17 +204,13 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
   function render() {
     const reduced = options.reducedMotion?.matches === true;
     lastReduced = reduced;
-    const outdoor = tracker.outdoor();
-    lastOutdoor = outdoor;
     const style = sampleFrostStyle(visibleLevel);
-    const level = outdoor ? Math.floor(visibleLevel) : style.level;
-    const breathing = !reduced && (outdoor ? level === 3 : style.breath);
     const blur = enabled ? Math.round(style.blur * 10) / 10 : 0;
     const clear = Math.round(style.clearPercent * 2) / 2;
     const film = enabled ? Math.round(meltFilm * 24) / 100 : 0;
     const opacity = Math.round(style.opacity * 100);
     const tintOpacity = Math.round(style.tint * 100);
-    const paint = `${enabled}:${level}:${opacity}:${tintOpacity}:${blur}:${clear}:${film}:${breathing}`;
+    const paint = `${enabled}:${style.level}:${opacity}:${tintOpacity}:${blur}:${clear}:${film}:${reduced}`;
     if (paint === lastPaint) return;
     lastPaint = paint;
     root.hidden = !enabled || (opacity <= 0 && tintOpacity <= 0 && film <= 0);
@@ -290,8 +221,8 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
     paintOpacity(tint, style.tint);
     paintOpacity(melt, film);
     root.style.setProperty('--frost-clear', `${clear}%`);
-    root.dataset.level = String(level);
-    if (breath) breath.hidden = !breathing;
+    root.dataset.level = String(style.level);
+    if (breath) breath.hidden = !(style.breath && !reduced);
   }
 
   render();
@@ -327,7 +258,6 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
       tracker.setWarmth(source, active);
     },
     setExposure: tracker.setExposure,
-    setOutdoorExposure: tracker.setOutdoorExposure,
     drinkHot: tracker.drinkHot,
     walkingScale: () => tracker.walkingScale(enabled),
     setEnabled(next: boolean) { enabled = next; render(); },
@@ -342,15 +272,14 @@ export function createCeremonyFrost(root: HTMLElement, options: CeremonyFrostOpt
       visibleLevel = target >= visibleLevel ? target : Math.max(target, visibleLevel - dt * 2.75);
       meltFilm = visibleLevel < wasVisible ? Math.min(1, meltFilm + dt * 3)
         : Math.max(0, meltFilm - dt * 1.2);
-      if (enabled && !tracker.outdoor() && previousLevel < 3 && tracker.displayLevel() === 3) {
+      if (enabled && previousLevel < 3 && tracker.displayLevel() === 3) {
         options.announce?.('冷得迈不开步了——找个火堆烤烤火。');
       }
       if (fireActive && fireRecovery && tracker.exposure() <= 1e-8) {
         fireRecovery = false;
         if (enabled) options.announce?.('身上暖和过来了。');
       }
-      if (wasVisible !== visibleLevel || previousFilm !== meltFilm || lastOutdoor !== tracker.outdoor() ||
-          lastReduced !== (options.reducedMotion?.matches === true)) render();
+      if (wasVisible !== visibleLevel || previousFilm !== meltFilm || lastReduced !== (options.reducedMotion?.matches === true)) render();
     },
     tracker,
   };

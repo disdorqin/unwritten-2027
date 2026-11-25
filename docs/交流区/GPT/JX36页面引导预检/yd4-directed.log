@@ -1,0 +1,30 @@
+✔ desktop look: missing Pointer Lock API reports unsupported and stays retryable (2.043076ms)
+✔ desktop look: rejected request reports rejected and clears the pending flag (20.171646ms)
+✔ desktop look: pointerlockerror reports error and clears the pending flag (0.422097ms)
+✔ desktop look: pending request auto-clears after 1.5 s when the browser stays silent (1652.95086ms)
+✔ desktop look: lock and unlock report onLockChange, engage is a no-op while locked (10.835205ms)
+✔ desktop look: engage() requests once and ignores repeats while pending (0.531403ms)
+✔ the entry guide identifies mobile WeChat and message-app QQ (1.098425ms)
+✔ a mobile guide defers loading until continue and ignores repeated starts (1.089192ms)
+✔ the normal browser opens directly and initialization failure never reveals the scene (0.249916ms)
+✔ a fresh document can enter after the previous viewer load failed (0.287458ms)
+✔ a failed module request displays the static retry before any module can run (3.941296ms)
+✔ touch look boost grows with drag speed and sensitivity scales linearly (2.098542ms)
+✔ a fast right-half swipe turns far more than the raw drag angle (0.803109ms)
+✔ a slow right-half drag stays close to the base sensitivity (1.217571ms)
+✔ drags starting outside the right-half look zone never turn the view (0.288487ms)
+✔ tap turns toward the tap only inside the look zone (0.863245ms)
+✔ the snowball hold survives the look zone: quick swipe cancels, held drag aims (1.322175ms)
+✔ a left-half hold still finishes the snowball action without steering (0.718356ms)
+✔ the joystick double-push sprint gesture still works (1.378677ms)
+✔ a tapped sprint button locks sprint while the stick is pushed (1.084732ms)
+✔ a held sprint button is momentary and never toggles the lock (361.961939ms)
+✔ reset clears the sprint lock (0.535386ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3618.201206

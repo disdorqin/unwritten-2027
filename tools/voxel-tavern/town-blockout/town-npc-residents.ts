@@ -3,7 +3,6 @@ import type { TownActivityContext, TownActivitySpot } from './town-activity';
 import { npcAddedDialogue } from './town-npc-added-dialogue';
 import { palaceStewardDialogue } from './town-npc-palace-dialogue';
 import { voxelPersonParts, type VoxelPersonPart } from './town-voxel-person';
-import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
 
 const costumes = {
   樊樵: { job: '守林人', palette: ['#d6aa83', '#483a2b', '#4c6850', '#b69a71', '#423a36', '#89534b', '#e1c17f', '#695b48'],
@@ -40,16 +39,6 @@ const residentDialogue = {
   翁寒江: npcAddedDialogue.翁寒江,
   樊樵: npcAddedDialogue.樊樵,
   秦知礼: palaceStewardDialogue,
-};
-
-// Existing manuscript excerpts turn the conversation back to each resident's trade.
-const residentDeflections: Readonly<Record<TownResidentName, string>> = {
-  贾明灯: '灯这东西，得上手才知道好赖。',
-  文墨生: '字这东西，看顺眼了再请回家，讲究个眼缘。',
-  胡六环: '套不中也别恼，圈儿还我，笑脸留下。',
-  翁寒江: '冰钓先钓的是性子，性子坐稳了，鱼自己会来。',
-  樊樵: '先去烤烤手，再听我唠叨——冻木了的人，什么都听不进去。',
-  秦知礼: '冰面上走路和做人一个理：不贪快，就不摔跤。',
 };
 
 type ResidentRegistration = {
@@ -158,25 +147,11 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
     let turn = 0;
     action(label, () => { speech.textContent = lines[turn++ % lines.length]; });
   }
-  const guides = options.guides?.().map(index => role.guides[index]).filter((line): line is NonNullable<typeof line> => !!line)
-    ?? role.guides;
-  rotate('请讲讲这里的玩法', guides);
-  rotate('问生肖线索', options.clues?.() ?? []);
+  const guides = options.guides?.().map(index => role.guides[index]).filter((line): line is NonNullable<typeof line> => !!line);
+  rotate('请讲讲这里的玩法', guides ?? role.guides);
+  rotate('问生肖线索', options.clues?.() ?? (name === '秦知礼' ? [palaceStewardDialogue.clues[0]] : []));
   rotate('聊聊镇民', role.gossip);
   rotate('聊聊跨年', role.newYear);
-  // Keep the three chapter slots empty pending review. An existing in-character line redirects to the resident's work.
-  const questions: ReadonlyArray<readonly [label: string, answer?: string]> = [
-    ['问附近的去处', guides[0]],
-    ['问镇民的故事', role.gossip[0]],
-    ['问镇上的节庆', role.newYear[0]],
-    ['问生肖星石收集令'],
-    ['问开镇传说'],
-    ['问镇志讲古'],
-  ];
-  for (const [label, answer] of questions) {
-    action(label, () => { speech.textContent = answer ?? residentDeflections[name]; });
-  }
-  action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
   const activity = options.activity?.();
   if (activity && activity.available?.() !== false) action(activity.label, () => {
     if (activity.available?.() === false) return;
@@ -189,8 +164,10 @@ function openResidentDialog({ name, options }: ResidentRegistration, panel: HTML
 
 type ResidentClueId = 'ox' | 'monkey' | 'dragon' | 'rooster' | 'rabbit' | 'snake' | 'tiger';
 
-export function residentZodiacClues(name: TownResidentName, available: (id: ResidentClueId) => boolean) {
-  if (name === '秦知礼') return [];
+export function residentZodiacClues(
+  name: TownResidentName, available: (id: ResidentClueId) => boolean, awakenedGoldGoat = false,
+) {
+  if (name === '秦知礼') return [palaceStewardDialogue.clues[awakenedGoldGoat ? 1 : 0]];
   const ids = {
     贾明灯: ['ox', 'monkey'], 文墨生: ['ox', 'dragon'], 胡六环: ['ox', 'rooster'],
     翁寒江: ['rabbit', 'snake'], 樊樵: ['tiger'],

@@ -1,6 +1,6 @@
 import {
   BoxGeometry, CanvasTexture, Color, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
+  NearestFilter, Object3D, PlaneGeometry, PointLight, SRGBColorSpace, type Material,
 } from 'three';
 import type { TownPlot } from './landmark-kit';
 import { addTownWindow } from './town-window';
@@ -9,11 +9,14 @@ type Point = [number, number, number];
 type Solid = { min: Point; max: Point };
 type Block = { position: Point; size: Point; roll: number };
 
+const brickColors = {
+  brick1: new Color('#9a4c36'),
+  brick2: new Color('#824030'),
+  brick3: new Color('#a6573b'),
+  brick4: new Color('#b26c51'),
+};
+const brickMaterial = new MeshLambertMaterial();
 const palette: Record<string, Material> = {
-  brick1: new MeshLambertMaterial({ color: '#9a4c36' }),
-  brick2: new MeshLambertMaterial({ color: '#824030' }),
-  brick3: new MeshLambertMaterial({ color: '#a6573b' }),
-  brick4: new MeshLambertMaterial({ color: '#b26c51' }),
   mortar: new MeshLambertMaterial({ color: '#513833' }),
   stone: new MeshLambertMaterial({ color: '#818997' }),
   stoneTrim: new MeshLambertMaterial({ color: '#a1a7b5' }),
@@ -26,6 +29,7 @@ const palette: Record<string, Material> = {
   parcel: new MeshLambertMaterial({ color: '#b77a3f' }),
   brass: new MeshLambertMaterial({ color: '#d3a258', emissive: '#55201a', emissiveIntensity: .38 }),
   red: new MeshLambertMaterial({ color: '#b64734', emissive: '#602519', emissiveIntensity: .23 }),
+  postGreen: new MeshLambertMaterial({ color: '#44503c' }), // 邮筒墨绿（总控 2026-11-21 定版：邮政绿，不与灯笼红撞色）
   redDark: new MeshLambertMaterial({ color: '#672c2a' }),
   dark: new MeshLambertMaterial({ color: '#30262b' }),
   glass: new MeshBasicMaterial({ color: '#ffd482' }),
@@ -203,6 +207,11 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     }
   }
 
+  // Slate cap and drip edge run below the standing gable on both eaves.
+  for (const side of [-1, 1]) {
+    box('slateLight', side * 7.57, eave - .035, 0, .33, .19, 15.65);
+    box('slate', side * 7.70, eave - .146, 0, .09, .105, 15.65);
+  }
   // B13 shows a snow-covered standing gable with tile courses and two chimneys.
   for (let course = 0; course < 16; course++) {
     const x = (course + .5) * .475;
@@ -256,6 +265,8 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     ctx.fillText(text, 160, 66);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = SRGBColorSpace;
+    texture.magFilter = NearestFilter; // 风格规范：像素贴图最近邻，禁平滑
+    texture.minFilter = NearestFilter;
     const sign = new Mesh(new PlaneGeometry(width, width * .4), new MeshBasicMaterial({ map: texture }));
     sign.position.set(x, y, z);
     model.add(sign);
@@ -271,6 +282,17 @@ export function buildPostLandmark(_plot: TownPlot): Group {
     box('timberWarm', x, 1.64, front + .12, .24, 3.28, .32);
     box('timber', x, 3.59, 7.73, .24, .37, .41);
     lantern(x * 1.31, 2.68, front + .61, true);
+    // Both leaves sit open against the returns of the existing 2.5 m opening.
+    const leafX = Math.sign(x) * (doorWidth / 2 + .12);
+    const leafZ = front - doorWidth / 4;
+    box('timber', leafX, 1.57, leafZ, .12, 2.51, doorWidth / 2);
+    for (const offset of [-.36, 0, .36]) {
+      box('timberWarm', leafX - Math.sign(x) * .064, 1.57, leafZ + offset, .018, 2.34, .323);
+    }
+    for (const offset of [-.11, .11]) {
+      box('brass', leafX - Math.sign(x) * .086, 1.41 + offset, leafZ - .38, .050, .041, .20);
+      box('brass', leafX - Math.sign(x) * .086, 1.41, leafZ - .38 + offset, .050, .20, .041);
+    }
   }
   box('timberWarm', 0, 3.27, front + .15, 3.24, .31, .31);
   box('timber', 0, 3.93, 7.61, 4.18, .24, .71);
@@ -283,7 +305,7 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   // with their local positions translated to this larger building.
   const mailboxX = 3.26;
   const mailboxZ = 7.6;
-  box('red', mailboxX, .85, mailboxZ, .65, 1.35, .65);
+  box('postGreen', mailboxX, .85, mailboxZ, .65, 1.35, .65);
   box('snow', mailboxX, 1.57, mailboxZ, .75, .14, .75);
   box('dark', mailboxX, 1.19, mailboxZ + .34, .4, .075, .035);
   box('brass', mailboxX, .88, mailboxZ + .34, .30, .22, .035);
@@ -426,6 +448,15 @@ export function buildPostLandmark(_plot: TownPlot): Group {
   }
   parcel(-5.8, mezzanine, -4.72, .61);
   parcel(-5.9, mezzanine, -5.5, .62);
+  for (const [x, y, z] of [[4.14, ground, -6.45], [-4.91, mezzanine, -6.45]]) {
+    for (const edge of [-.62, .62]) box('timber', x + edge, y + .64, z, .095, 1.28, .54);
+    for (const shelf of [.19, .63, 1.16]) {
+      box('timberWarm', x, y + shelf, z, 1.28, .085, .57);
+      parcel(x - .30, y + shelf + .0425, z, .38);
+      parcel(x + .25, y + shelf + .0425, z - .07, .43);
+    }
+    colliders.push(bounds([x, y + .64, z], [1.28, 1.28, .57]));
+  }
   for (let z = -4; z <= 5; z += 4.5) {
     for (const x of [-3.37, 3.37]) {
       box('timber', x, 6.22, z, .065, 2.4, .065);
@@ -457,16 +488,36 @@ export function buildPostLandmark(_plot: TownPlot): Group {
 
   const geometry = new BoxGeometry();
   const dummy = new Object3D();
+  function placeBlock(mesh: InstancedMesh, { position, size, roll }: Block, index: number) {
+    dummy.position.set(...position);
+    dummy.scale.set(...size);
+    dummy.rotation.z = roll;
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  }
+
+  // The brick materials differed only in color. Preserve their opaque draw order
+  // inside the combined batch and keep the lighting and interactive batches separate.
+  const bricks = Object.entries(brickColors).map(([tint, color]) => {
+    const blocks = batches.get(tint) ?? [];
+    batches.delete(tint);
+    return { blocks, color };
+  });
+  const brickMesh = new InstancedMesh(geometry, brickMaterial, bricks.reduce((total, { blocks }) => total + blocks.length, 0));
+  brickMesh.name = 'Postal bricks';
+  let brickIndex = 0;
+  for (const { blocks, color } of bricks) {
+    for (const block of blocks) {
+      placeBlock(brickMesh, block, brickIndex);
+      brickMesh.setColorAt(brickIndex++, color);
+    }
+  }
+  model.add(brickMesh);
+
   for (const [tint, blocks] of batches) {
     const mesh = new InstancedMesh(geometry, palette[tint], blocks.length);
     mesh.name = 'Postal ' + tint;
-    blocks.forEach(({ position, size, roll }, index) => {
-      dummy.position.set(...position);
-      dummy.scale.set(...size);
-      dummy.rotation.z = roll;
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
-    });
+    blocks.forEach((block, index) => placeBlock(mesh, block, index));
     if (tint === 'goldLight') {
       let openingReady: boolean | undefined;
       const setReady = (ready: boolean) => {

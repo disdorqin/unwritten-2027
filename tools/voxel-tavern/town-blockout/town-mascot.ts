@@ -158,83 +158,12 @@ export function sampleMascotLocation(now: number, patrol: MascotPatrol) {
   return home;
 }
 
-export type TownMascotFinaleFrame = Readonly<{
-  progress: Readonly<{ ringCount: number; goatRevealed: boolean; firstKeyLit: boolean }>;
-  phase: 'background' | 'ring-passage' | 'witness';
-  point: Readonly<MascotFollowPoint>;
-  /** Live host cue from the persisted reveal edge. Leave absent in snapshots. */
-  resonanceAt?: number;
-}>;
-
 export type TownMascotOptions = {
   now: () => number;
   groundAt: GroundAt;
   follow?: () => MascotFollowPoint | undefined;
   visible: (east: number, north: number, ground: number) => boolean;
-  bell?: {
-    runningAudio: () => AudioContext | undefined;
-    listenerDistance: (east: number, north: number, ground: number) => number | undefined;
-  };
-  finale?: {
-    // The host supplies the live presentation phase and its approved model pose.
-    read: () => TownMascotFinaleFrame | undefined;
-    ringResonance?: Pick<Object3D, 'visible'>;
-    onRingResonance?: (at: number, point: Readonly<MascotFollowPoint>) => void;
-  };
 };
-
-type MascotBellSource = 'patrol' | 'follow' | TownMascotFinaleFrame['phase'];
-
-function trackMascotBell(bell: NonNullable<TownMascotOptions['bell']>) {
-  let last: { x: number; n: number; tick: number; source: MascotBellSource } | undefined;
-  let travelled = 0;
-  let lastBell = -Infinity;
-  return (point: { x: number; n: number; speed: number; seated?: boolean; sliding?: boolean } | undefined,
-    ground: number | undefined, tick: number, source: MascotBellSource) => {
-    if (!point || ground === undefined || point.speed <= 0 || point.seated || point.sliding) {
-      last = undefined;
-      travelled = 0;
-      return;
-    }
-    const previous = last;
-    if (previous?.tick === tick && previous.source === source) return;
-    last = { x: point.x, n: point.n, tick, source };
-    const gap = previous ? Math.hypot(point.x - previous.x, point.n - previous.n) : Infinity;
-    if (!previous || previous.source !== source || tick <= previous.tick || tick - previous.tick > 240 || gap > 1.9) {
-      travelled = 0;
-      return;
-    }
-    // Ignore interpolation jitter and accumulate actual walking distance, not animation time.
-    if (gap < .002) return;
-    travelled += gap;
-    const stride = .36;
-    if (travelled < stride || tick - lastBell < 220) return;
-    travelled %= stride;
-    const distance = bell.listenerDistance(point.x, point.n, ground);
-    if (distance === undefined || !Number.isFinite(distance) || distance < 0 || distance >= 16) return;
-    const context = bell.runningAudio();
-    if (context?.state !== 'running') return;
-    lastBell = tick;
-    const at = context.currentTime;
-    const level = (1 - distance / 16) ** 2;
-    for (const [frequency, amplitude, duration] of [[920, .030, .15], [1470, .014, .082]]) {
-      const tone = context.createOscillator();
-      const envelope = context.createGain();
-      tone.frequency.setValueAtTime(frequency, at);
-      envelope.gain.setValueAtTime(0, at);
-      envelope.gain.linearRampToValueAtTime(amplitude * level, at + .006);
-      envelope.gain.linearRampToValueAtTime(0, at + duration);
-      tone.connect(envelope);
-      envelope.connect(context.destination);
-      tone.onended = () => {
-        tone.disconnect();
-        envelope.disconnect();
-      };
-      tone.start(at);
-      tone.stop(at + duration);
-    }
-  };
-}
 
 export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, options: TownMascotOptions) {
   const root = new Object3D();
@@ -242,56 +171,32 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
   const partTransform = new Object3D();
   const matrix = new Matrix4(), color = new Color();
   const animated = pivots.map(() => new Matrix4());
-  const finale = options.finale;
-  const resonance = finale?.ringResonance;
-  const onRingResonance = finale?.onRingResonance;
-  const observingFrom = onRingResonance ? options.now() : Infinity;
-  let playedResonanceAt = -Infinity;
-  if (resonance) resonance.visible = false;
   batch.count = initialStart;
   let patrol: MascotPatrol;
   let planned = false;
   let lastTick = NaN, lastStart = initialStart, shown = false;
-  let lastPhase: TownMascotFinaleFrame['phase'] | undefined;
-  const updateBell = options.bell && trackMascotBell(options.bell);
 
   return function update(start = initialStart) {
-    if (!finale && !planned) {
+    if (!planned) {
       patrol = makeMascotPatrol(options.groundAt);
       planned = true;
     }
-    const frame = finale?.read();
-    const phase = frame?.phase;
-    const modelPose = frame?.point;
-    const authorityPose = modelPose && Number.isFinite(modelPose.x) && Number.isFinite(modelPose.n) &&
-      Number.isFinite(modelPose.ground) && Number.isFinite(modelPose.yaw) && Number.isFinite(modelPose.speed)
-      ? modelPose : undefined;
     const now = options.now();
-    const ringPose = frame?.phase === 'ring-passage' && frame.progress.ringCount === 11 &&
-      frame.progress.goatRevealed === true && frame.progress.firstKeyLit === false ? authorityPose : undefined;
-    if (resonance) resonance.visible = ringPose !== undefined;
-    const at = frame?.resonanceAt;
-    if (ringPose && onRingResonance && at !== undefined && Number.isSafeInteger(at) &&
-        at >= observingFrom && at <= now && at > playedResonanceAt) {
-      playedResonanceAt = at;
-      onRingResonance(at, ringPose);
-    }
     // Share repeatable location and movement phase while limiting instance writes to 25 Hz.
     const tick = Math.floor(now / 40) * 40;
-    const follow = finale ? undefined : options.follow?.();
-    const point = finale ? authorityPose : follow ?? sampleMascotLocation(tick, patrol);
-    const ground = finale ? authorityPose?.ground : follow?.ground ?? (point && options.groundAt(point.x, point.n));
-    updateBell?.(point, ground, tick, phase ?? (follow ? 'follow' : 'patrol'));
-    const visible = point && ground !== undefined && options.visible(point.x, point.n, ground);
+    const follow = options.follow?.();
+    const point = follow ?? sampleMascotLocation(tick, patrol);
+    const ground = follow ? follow.ground : options.groundAt(point.x, point.n);
+    const visible = ground !== undefined && options.visible(point.x, point.n, ground);
     if (visible && follow && isSharedHomePosition(follow.x, follow.n, follow.ground)) batch.layers.enable(sharedHomeLayer);
     else batch.layers.disable(sharedHomeLayer);
-    if (!point || ground === undefined || !visible) {
+    if (ground === undefined || !visible) {
       if (shown) { batch.count = start; shown = false; }
       return false;
     }
     const count = start + townMascotParts.length;
     const repack = lastStart !== start || batch.count !== count;
-    if (shown && tick === lastTick && phase === lastPhase && !repack) return false;
+    if (shown && tick === lastTick && !repack) return false;
     // Station changes repack the shared tail, so restore the mascot's palette even on the same tick.
     if (repack) {
       townMascotParts.forEach(({ tint }, index) => batch.setColorAt(start + index, color.set(tint)));
@@ -301,7 +206,6 @@ export function addMascotToNpcBatch(batch: InstancedMesh, initialStart: number, 
     batch.count = count;
     lastStart = start;
     lastTick = tick;
-    lastPhase = phase;
     const seconds = tick / 1000;
     const idlePhase = seconds % 60;
     const rest = 'seated' in point && point.seated ? 1

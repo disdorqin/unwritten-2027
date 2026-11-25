@@ -6,10 +6,18 @@ import { playTowerBell, playTowerChime } from '../tower-chime';
 import {
   fireworksShowMs, isFireworksSeed, isFireworksTheme, publicFireworksStand, type FireworksTheme,
 } from '../../../src/presence/firework-sites';
-import { testFireworksShowMs } from '../../../src/presence/test-fireworks';
 import {
   personalFireworkParticleLimit, personalFireworkVisibleLimit, type PersonalFireworkKind, type PersonalFireworkParticle,
 } from './personal-fireworks';
+import { createCeremonyFireworksDispatch } from './ceremony-fireworks-clock';
+import {
+  burstEchoes, burstEnd, burstLifetime, burstSparks, ceremonyCueOffsets, makeCelebrationTestScore, makeCeremonyScores,
+  scorePeak, showBurstTail, showFlightSeconds, showPointLimit, type CeremonyFireworksCue, type ShellGrade, type ShellShape,
+} from './celebration-fireworks-score';
+
+import { createFireworksAudio, fireworksBed, type FireworksSoundEvent } from './celebration-fireworks-audio';
+
+export type { CeremonyFireworksCue } from './celebration-fireworks-score';
 
 type Burst = {
   time: number;
@@ -17,16 +25,18 @@ type Burst = {
   y: number;
   z: number;
   radius: number;
-  shape: 'peony' | 'ring' | 'willow';
+  shape: ShellShape;
+  grade?: ShellGrade;
   outer: Color;
   inner: Color;
   launch?: readonly [x: number, y: number, z: number];
 };
 
-type FireworksProgram = { duration: number; bursts: readonly Burst[] };
+type FireworksProgram = { duration: number; bursts: readonly Burst[]; sound?: 'overture' | 'main' | 'test' };
 
 export type FireworksTable = {
   duration?: number;
+  sound?: FireworksProgram['sound'];
   bursts: readonly (Omit<Burst, 'outer' | 'inner' | 'launch'> & {
     outer: ColorRepresentation;
     inner: ColorRepresentation;
@@ -36,10 +46,9 @@ export type FireworksTable = {
 };
 
 const countdown = 3;
-const sparkCount = 96;
 const trailCount = 3;
-const lifetime = 2.65;
-const flight = .8;
+const burstTail = showBurstTail;
+const flight = showFlightSeconds;
 const gold = new Color('#ffc26b');
 const cream = new Color('#fff1c7');
 const red = new Color('#ff5767');
@@ -60,30 +69,6 @@ const previewBursts: readonly Burst[] = [
   { time: 8.76, x: 224, y: 67, z: -197, radius: 20, shape: 'peony', outer: gold, inner: cream },
 ];
 
-export type CeremonyFireworksCue = 'fireworks-main' | 'fireworks-far' | 'fireworks-finale';
-
-const lakeLaunch = [344, 7, -66] as const;
-const memorialLaunch = [373, 28, -264] as const;
-const ceremonyBursts: Record<CeremonyFireworksCue, readonly Burst[]> = {
-  'fireworks-main': previewBursts,
-  'fireworks-far': [
-    { time: .85, x: 326, y: 60, z: -70, radius: 16, shape: 'ring', outer: blue, inner: cream, launch: lakeLaunch },
-    { time: .85, x: 355, y: 79, z: -271, radius: 19, shape: 'peony', outer: gold, inner: cream, launch: memorialLaunch },
-    { time: 1.35, x: 363, y: 70, z: -58, radius: 19, shape: 'willow', outer: jade, inner: cream, launch: lakeLaunch },
-    { time: 1.5, x: 388, y: 73, z: -273, radius: 18, shape: 'ring', outer: pink, inner: blue, launch: memorialLaunch },
-    { time: 2.3, x: 345, y: 77, z: -71, radius: 21, shape: 'peony', outer: gold, inner: cream, launch: lakeLaunch },
-    { time: 2.45, x: 376, y: 86, z: -292, radius: 21, shape: 'willow', outer: red, inner: gold, launch: memorialLaunch },
-  ],
-  'fireworks-finale': [
-    { time: .85, x: 204, y: 61, z: -202, radius: 21, shape: 'willow', outer: red, inner: gold },
-    { time: 1.12, x: 244, y: 63, z: -199, radius: 21, shape: 'peony', outer: blue, inner: cream },
-    { time: 1.39, x: 224, y: 73, z: -199, radius: 24, shape: 'peony', outer: gold, inner: cream },
-    { time: 4.6, x: 215, y: 57, z: -200, radius: 13, shape: 'willow', outer: gold, inner: cream },
-    { time: 7.5, x: 238, y: 55, z: -197, radius: 12, shape: 'ring', outer: jade, inner: cream },
-  ],
-};
-
-const burstTail = lifetime + .22;
 const workshopSparkCount = 36;
 const patterns = [
   ['peony', 'ring', 'willow', 'peony', 'ring', 'peony', 'willow', 'ring', 'peony', 'willow', 'ring', 'willow', 'peony', 'ring', 'peony'],
@@ -103,16 +88,6 @@ const themeColors = {
   ],
 } as const;
 
-const testLaunchPoints = [
-  { id: 'plaza', x: 223, y: 15, z: -195 },
-  { id: 'lake', x: 344, y: 7, z: -66 },
-] as const;
-const testShapes = ['peony', 'ring', 'willow'] as const;
-const testColors = [
-  ['#ff5767', '#fff1c7'], ['#ffc26b', '#fff1c7'], ['#7ad9ff', '#d5fbff'],
-  ['#76f6db', '#fff1c7'], ['#f599df', '#ffc26b'],
-] as const;
-
 function makeFireworksRandom(seed: number) {
   let rng = seed >>> 0;
   return () => {
@@ -121,19 +96,8 @@ function makeFireworksRandom(seed: number) {
   };
 }
 
-export function makeTestFireworksTable(seed: number): FireworksTable {
-  const random = makeFireworksRandom(seed);
-  const beats = [.85, 4.1, 7.35, 10.6, 13.9, 17.15, 20.4, 23.65, 26.9, 30.05, 32.45];
-  const bursts = beats.flatMap(time => testLaunchPoints.map(({ id, x, z }, index) => {
-    const [outer, inner] = testColors[Math.floor(random() * testColors.length)];
-    return {
-      time: time + index * .24, x: x + random() * 28 - 14,
-      y: 44 + random() * 17, z: z + random() * 15 - 10,
-      radius: 12 + random() * 5, shape: testShapes[Math.floor(random() * testShapes.length)],
-      outer, inner, launchId: id,
-    };
-  }));
-  return { duration: testFireworksShowMs / 1000, launchPoints: testLaunchPoints, bursts };
+export function makeTestFireworksTable(seed: number, groundHeight: (x: number, n: number) => number = () => 15): FireworksTable {
+  return { ...makeCelebrationTestScore(seed, groundHeight), sound: 'test' };
 }
 
 export function makePlayerFireworksTable(seed: number, theme: FireworksTheme): FireworksTable {
@@ -166,34 +130,30 @@ function compileShow(table: FireworksTable): FireworksProgram | undefined {
         ![burst.time, burst.x, burst.y, burst.z, burst.radius].every(Number.isFinite) ||
         (launch && !launch.every(Number.isFinite))) return undefined;
     bursts.push({ ...burst, outer: new Color(outer), inner: new Color(inner), launch });
-    end = Math.max(end, burst.time + burstTail);
+    end = Math.max(end, burstEnd(burst));
   }
   const duration = table.duration ?? end;
-  return bursts.length && Number.isFinite(duration) && duration > 0 ? { duration, bursts } : undefined;
+  return bursts.length && Number.isFinite(duration) && duration > 0 && scorePeak(bursts).points <= showPointLimit
+    ? { duration, bursts, sound: table.sound }
+    : undefined;
 }
 
 const previewProgram: FireworksProgram = { duration: 15, bursts: previewBursts };
-const ceremonyPrograms = Object.fromEntries(Object.entries(ceremonyBursts).map(([cue, bursts]) =>
-  [cue, { duration: bursts.at(-1)!.time + burstTail, bursts }])) as Record<CeremonyFireworksCue, FireworksProgram>;
-
-function maxLiveBursts(program: FireworksProgram) {
-  return Math.max(0, ...program.bursts.map(({ time }) => {
-    const start = Math.max(0, time - flight);
-    return start >= program.duration ? 0 : program.bursts.filter(burst =>
-      start >= burst.time - flight && start <= burst.time + burstTail).length;
-  }));
-}
-
 export function createFestival(
   scene: Scene,
   setMessage: (message: string) => void = () => {},
   complete?: () => void,
+  groundHeight: (x: number, n: number) => number = () => 15,
 ) {
-  // One rehearsal or player show, or the three concurrent acts of the same ceremony.
-  const ceremonyPeak = Object.values(ceremonyPrograms).reduce((total, program) => total + maxLiveBursts(program), 0);
-  const maxShowBursts = Math.max(playerBeatTimes.length, ceremonyPeak, maxLiveBursts(previewProgram));
+  const { prelude, scores } = makeCeremonyScores(groundHeight);
+  const ceremonyPrograms = Object.fromEntries(Object.entries(scores).map(([cue, score]) =>
+    [cue, compileShow({ ...score, sound: 'main' })])) as Record<CeremonyFireworksCue, FireworksProgram | undefined>;
+  const preludeProgram = compileShow({ ...prelude, sound: 'overture' });
+  const ceremonyPeak = scorePeak(Object.entries(scores).flatMap(([cue, score]) => score.bursts.map(burst =>
+    ({ ...burst, time: burst.time + ceremonyCueOffsets[cue as CeremonyFireworksCue] }))));
+  const ceremonyFits = ceremonyPeak.points <= showPointLimit && ceremonyPeak.blooms <= 20;
   const personalCapacity = personalFireworkVisibleLimit * personalFireworkParticleLimit;
-  const capacity = maxShowBursts * sparkCount * trailCount + workshopSparkCount * trailCount + personalCapacity;
+  const capacity = showPointLimit + workshopSparkCount * trailCount + personalCapacity;
   const positions = new Float32Array(capacity * 3);
   const colors = new Float32Array(capacity * 3);
   const strengths = new Float32Array(capacity);
@@ -249,6 +209,7 @@ export function createFestival(
 
   let elapsed = -1;
   const tracks = new Map<FireworksProgram, { age: number; clockMs?: () => number; startedAt: number }>();
+  const hasMainTrack = () => [...tracks.keys()].some(program => program.sound !== 'overture');
   let playerProgram: FireworksProgram | undefined;
   let workshop: { burst: Burst; elapsed: number } | undefined;
   let used = 0;
@@ -259,6 +220,9 @@ export function createFestival(
   let audio: AudioContext | undefined;
   let nextManualBell = 0;
   const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const showAudio = createFireworksAudio(() => audio, reducedMotion);
+  let bedThrough: number | undefined;
 
   function announce(next: string) {
     if (next === message) return;
@@ -304,25 +268,29 @@ export function createFestival(
     }
   }
 
-  function drawBurst(burst: Burst, t: number, maxSparks = sparkCount) {
+  function drawBurst(burst: Burst, t: number, maxSparks = burstSparks(burst)) {
     const particleCount = reducedMotion ? Math.min(32, maxSparks) : maxSparks;
-    const echoes = reducedMotion ? 1 : trailCount;
+    const echoes = reducedMotion ? 1 : burstEchoes(burst);
+    const lifetime = burstLifetime(burst);
+    const brocade = burst.shape === 'brocade';
+    const willow = burst.shape === 'willow' || brocade;
+    const ring = burst.shape === 'ring' || burst.shape === 'double-ring';
+    const trailSpacing = willow ? .105 : burst.shape === 'chrysanthemum' ? .03 : .055;
     for (let i = 0; i < particleCount; i++) {
       const angle = i * 2.399963 + burst.x;
       const height = 1 - 2 * (i + .5) / particleCount;
       const circle = Math.sqrt(1 - height * height);
-      const ring = burst.shape === 'ring';
-      const willow = burst.shape === 'willow';
       const dx = Math.cos(angle) * (ring ? 1 : circle);
       const dy = ring ? Math.sin(angle) : height;
       const dz = ring ? Math.sin(angle) * .25 : Math.sin(angle) * circle;
-      const speed = (.76 + ((i * 17) % 31) / 86) * burst.radius;
+      const innerRing = burst.shape === 'double-ring' && i >= particleCount / 1.6;
+      const speed = (.76 + ((i * 17) % 31) / 86) * burst.radius * (innerRing ? .6 : 1);
       const tint = i % 5 === 0 ? burst.inner : burst.outer;
       for (let trail = 0; trail < echoes; trail++) {
-        const age = t - trail * (willow ? .105 : .055);
+        const age = t - trail * trailSpacing;
         if (age < 0 || age > lifetime) continue;
         const spread = speed * (1 - Math.exp(-age * 1.52));
-        const gravity = age * age * (willow ? 2.1 : 1.15);
+        const gravity = age * age * (brocade ? 2.6 : willow ? 2.1 : 1.15);
         const intensity = Math.pow(1 - age / lifetime, 1.28) * (1 - trail * .23);
         const flicker = age < .35 || i % 4 !== 0 || Math.sin(i * 8 + age * 24) > -.43 ? 1 : .3;
         emit(burst.x + dx * spread, burst.y + dy * spread - gravity, burst.z + dz * spread,
@@ -334,15 +302,15 @@ export function createFestival(
   function drawSequence(sequence: readonly Burst[], time: number) {
     for (const burst of sequence) {
       const age = time - burst.time;
-      if (age < -flight || age > burstTail) continue;
+      if (age < -flight || time > burstEnd(burst)) continue;
       if (age < 0) drawRocket(burst, age);
       else drawBurst(burst, age);
     }
   }
 
-  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number) {
+  function launch(program: FireworksProgram, ageSeconds: number, clockMs?: () => number, startAt?: number) {
     if (tracks.has(program) || !Number.isFinite(ageSeconds) || ageSeconds >= program.duration) return false;
-    tracks.set(program, { age: ageSeconds, clockMs, startedAt: clockMs ? clockMs() - ageSeconds * 1000 : 0 });
+    tracks.set(program, { age: ageSeconds, clockMs, startedAt: startAt ?? (clockMs ? clockMs() - ageSeconds * 1000 : 0) });
     return true;
   }
 
@@ -353,37 +321,54 @@ export function createFestival(
   }
 
   function startShow(table: FireworksTable, opts: { ageSeconds?: number; interruptPreview?: boolean; clockMs?: () => number } = {}) {
-    if (tracks.size || (elapsed >= 0 && !opts.interruptPreview && !opts.clockMs)) return false;
+    if (hasMainTrack() || (elapsed >= 0 && !opts.interruptPreview && !opts.clockMs)) return false;
     const program = compileShow(table);
-    if (!program || maxLiveBursts(program) > maxShowBursts || !launch(program, opts.ageSeconds ?? 0, opts.clockMs)) return false;
+    if (!program || !launch(program, opts.ageSeconds ?? 0, opts.clockMs)) return false;
     stopPreview();
     playerProgram = program;
     return true;
   }
 
-  return {
-    startShow,
-    showActive() { return elapsed >= 0 || tracks.size > 0; },
-    getAudioContext,
-    enableAudio() { void tryEnableAudio(); },
-    playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
-      if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
-    },
-    launchCeremony(cue: CeremonyFireworksCue, ageSeconds = 0) {
-      if (!launch(ceremonyPrograms[cue], ageSeconds)) return false;
+  const dispatchCeremony = createCeremonyFireworksDispatch(flight);
+  function launchTimedCeremony(program: FireworksProgram, startAt: number, clockMs: () => number) {
+    return dispatchCeremony(program, startAt, clockMs(), clockMs, (remaining, playback) => {
+      if (!launch(remaining, playback.ageSeconds, playback.clockMs, playback.startAt)) return false;
+      if (program.sound === 'overture') return true;
       stopPreview();
       if (playerProgram) {
         tracks.delete(playerProgram);
         playerProgram = undefined;
       }
       return true;
+    });
+  }
+
+  return {
+    startShow,
+    showActive() { return elapsed >= 0 || hasMainTrack(); },
+    mountAudioSettings: showAudio.mountSettings,
+    getAudioContext,
+    enableAudio() { void tryEnableAudio(); },
+    playCeremonyBell(kind: 'tick' | 'hourly' | 'grand', distance: number) {
+      if (audio) playTowerBell(audio, kind === 'hourly' ? 'small' : kind, distance, kind === 'hourly' ? 3 : 1);
+    },
+    /** Never claim the first hearing while browser audio is suspended. */
+    playThirteenthBell(distance: number) {
+      return !!audio && Number.isFinite(distance) && distance >= 0 && playTowerBell(audio, 'small', distance);
+    },
+    launchCeremony(cue: CeremonyFireworksCue, startAt: number, clockMs: () => number) {
+      const program = ceremonyPrograms[cue];
+      return Boolean(ceremonyFits && program && launchTimedCeremony(program, startAt, clockMs));
+    },
+    launchOverture(startAt: number, clockMs: () => number) {
+      return Boolean(preludeProgram && launchTimedCeremony(preludeProgram, startAt, clockMs));
     },
     launchPublicFireworks(seed: number, theme: FireworksTheme, ageSeconds = 0) {
       if (!isFireworksSeed(seed) || !isFireworksTheme(theme)) return false;
       return startShow(makePlayerFireworksTable(seed, theme), { ageSeconds, interruptPreview: true });
     },
     start() {
-      if (elapsed >= 0 || tracks.size) return false;
+      if (elapsed >= 0 || hasMainTrack()) return false;
       elapsed = 0;
       tryEnableAudio();
       announce('3');
@@ -422,15 +407,18 @@ export function createFestival(
       return true;
     },
     setPersonalFireworkFrame(particles: readonly PersonalFireworkParticle[]) { personalFrame = particles; },
-    playPersonalFirework(kind: PersonalFireworkKind, distance: number, ceremony = false) {
+    playPersonalFirework(kind: PersonalFireworkKind, distance: number, ceremony = false, delaySeconds = 0) {
       if (!audio || audio.state !== 'running' || !Number.isFinite(distance) || distance < 0) return;
       const hits = kind === 'string' ? 10 : 1;
       const wait = kind === 'string' ? 2 : kind === 'rocket' ? 1.2 : 0;
       const gain = (.13 / (1 + (distance / 16) ** 2)) * (ceremony ? .35 : 1);
+      const audioNow = audio.currentTime;
       for (let i = 0; i < hits; i++) {
+        const offset = delaySeconds + wait + .30 * i;
+        if (offset < -.2) continue;
+        const time = audioNow + Math.max(0, offset);
         const pop = audio.createOscillator();
         const volume = audio.createGain();
-        const time = audio.currentTime + wait + .30 * i;
         pop.type = 'triangle';
         const pitch = kind === 'sparkler' ? 920 : kind === 'rocket' ? 132 : 330 + (i % 3) * 52;
         pop.frequency.setValueAtTime(pitch, time);
@@ -443,8 +431,18 @@ export function createFestival(
       }
     },
     active() { return elapsed >= 0; },
-    update(dt: number) {
-      if (elapsed < 0 && !workshop && !tracks.size && !personalFrame.length && !drewPersonal) return;
+    update(dt: number, sound?: { listener: { x: number; y: number; z: number }; ceremonyElapsed?: number; musicLevel: number }) {
+      const events: FireworksSoundEvent[] = [];
+      const formalTime = sound?.ceremonyElapsed;
+      let musicTime = formalTime;
+      if (sound && formalTime !== undefined && formalTime >= 8 && formalTime < 24 && !reducedMotion) {
+        events.push(...fireworksBed(Math.max(bedThrough ?? formalTime, formalTime - .15), formalTime, 8, 24, sound.listener));
+        bedThrough = formalTime;
+      } else bedThrough = undefined;
+      if (elapsed < 0 && !workshop && !tracks.size && !personalFrame.length && !drewPersonal) {
+        if (sound) showAudio.music(musicTime, sound.musicLevel);
+        return;
+      }
       const delta = Math.max(0, dt);
       used = 0;
       if (elapsed >= 0) {
@@ -470,9 +468,33 @@ export function createFestival(
           tracks.delete(program);
           if (program === playerProgram) playerProgram = undefined;
         } else {
+          const previous = Math.max(track.age, time - .20);
+          if (sound && program.sound && time >= 0) {
+            const { listener } = sound;
+            const distanceTo = (x: number, y: number, z: number) =>
+              Math.hypot(listener.x - x, listener.y - y, listener.z - z);
+            for (const burst of program.bursts) {
+              const rocket = burst.time - flight;
+              const seed = Math.round(burst.x * 997 + burst.z * 37 + burst.time * 1000);
+              if (burst.launch && rocket >= previous && rocket < time) {
+                events.push({ kind: 'whoosh', offset: rocket - time, distance: distanceTo(...burst.launch), seed });
+              }
+              if (burst.time >= previous && burst.time < time) {
+                events.push({ kind: 'boom', offset: burst.time - time, distance: distanceTo(burst.x, burst.y, burst.z), grade: burst.grade, seed });
+              }
+            }
+            if (program.sound === 'test') {
+              if (musicTime === undefined) musicTime = (time - 5) * 1.5;
+              if (!reducedMotion) events.push(...fireworksBed(previous, time, 5, 27, listener));
+            }
+          }
           track.age = time;
           if (time >= 0) drawSequence(program.bursts, time);
         }
+      }
+      if (sound) {
+        showAudio.play(events);
+        showAudio.music(musicTime, sound.musicLevel);
       }
       if (workshop) {
         workshop.elapsed += delta;

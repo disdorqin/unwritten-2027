@@ -102,16 +102,16 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
   const sparkMesh = scene.getObjectByName('Town snowball impacts');
   assert.ok(sparkMesh && !sparkMesh.visible);
   assert.equal(game.throwBall(origin, direction), false);
-  for (let i = 0; i < 50; i++) assert.ok(game.gather());
+  for (let i = 0; i < 10; i++) assert.ok(game.gather());
   assert.equal(game.gather(), false);
   assert.equal(game.throwBall(origin, new Vector3()), false);
-  assert.equal(game.getState().ammo, 50);
+  assert.equal(game.getState().ammo, 10);
 
   assert.ok(game.throwBall(origin, direction, 'guest'));
   assert.equal(game.throwBall(origin, direction, 'guest'), false);
   step(20);
   assert.ok(sparkMesh.visible);
-  assert.deepEqual(game.getState(), { ammo: 49, hits: 1, combo: 1 });
+  assert.deepEqual(game.getState(), { ammo: 9, hits: 1, combo: 1 });
   const [launch, impact] = events;
   assert.equal(launch.type, 'throw');
   assert.equal(impact.type, 'impact');
@@ -134,7 +134,7 @@ test('snowball carries launch and landing metadata, builds a combo, and stops be
   wall = true;
   assert.ok(game.throwBall(origin, direction));
   step(20);
-  assert.deepEqual(game.getState(), { ammo: 47, hits: 2, combo: 0 });
+  assert.deepEqual(game.getState(), { ammo: 7, hits: 2, combo: 0 });
   const last = events.at(-1);
   assert.ok(last?.type === 'impact' && last.kind === 'world' && last.at.x < 3);
   step(65);
@@ -233,7 +233,7 @@ test('snowball pool retires oldest projectile and limits catch-up work to two ti
   game.dispose();
 });
 
-test('each weather serving gives one shovel and indoor impacts keep player and NPC scores unchanged', () => {
+test('snow depths cap ammo and indoor impacts keep player and NPC scores unchanged', () => {
   const scene = new Scene();
   const events: SnowballEvent[] = [];
   const from = new Vector3(0, 1.7, 0);
@@ -248,8 +248,7 @@ test('each weather serving gives one shovel and indoor impacts keep player and N
   });
   const step = () => { for (let i = 0; i < 16; i++) game.update(1 / 60); };
   assert.ok(game.gather(3) && game.gather(4) && game.gather(5));
-  assert.equal(game.getState().ammo, 3);
-  assert.ok(game.gather());
+  assert.equal(game.getState().ammo, 10);
   assert.ok(game.throwBall(from, direction, 'local', 0));
   step();
   assert.equal(game.getState().hits, 0);
@@ -276,7 +275,7 @@ test('each weather serving gives one shovel and indoor impacts keep player and N
   targetOutdoors = true;
   assert.ok(game.throwNpc(from, direction, 'npc', 1));
   step();
-  assert.deepEqual(game.getState(), { ammo: 0, hits: 1, combo: 0 });
+  assert.deepEqual(game.getState(), { ammo: 6, hits: 1, combo: 0 });
   const last = events.at(-1);
   assert.ok(last?.type === 'impact' && last.shotBy === 'npc' && last.scored && last.target === 'local-player');
   game.dispose();

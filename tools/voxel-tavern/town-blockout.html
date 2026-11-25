@@ -2,48 +2,98 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
-  <script type="module" src="./town-blockout/town-panel.ts"></script>
-  <script type="module" src="./town-blockout/viewer.ts"></script>
+  <link rel="stylesheet" href="./town-blockout/town-entry.css">
+  <script>
+    // Keep a recovery path when the entry module itself cannot be fetched.
+    addEventListener('error', event => {
+      const moduleFailure = event.target instanceof HTMLScriptElement && event.target.type === 'module';
+      const startupError = event.target === window && event instanceof ErrorEvent;
+      if (!moduleFailure && !startupError) return;
+      const showFailure = () => {
+        if (!document.body.classList.contains('town-entry-pending')) return;
+        document.getElementById('town-entry-loading').hidden = true;
+        document.getElementById('town-entry-error').hidden = false;
+        document.getElementById('town-entry-retry').hidden = false;
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showFailure, { once: true });
+      } else showFailure();
+    }, true);
+  </script>
+  <script type="module" src="./town-blockout/town-entry.ts"></script>
 </head>
-<body>
-  <main id="scene" aria-label="雪镇三维场景"></main>
-  <aside class="panel" aria-label="小镇控制">
-    <div class="town-panel-heading">
-      <h1>UNWRITTEN 2027</h1>
-      <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
-      <button id="town-panel-toggle" class="town-panel-toggle" type="button"
-        aria-expanded="true" aria-controls="town-panel-controls" hidden>收起控制</button>
+<body class="town-entry-pending">
+  <section id="town-entry" aria-labelledby="town-entry-title">
+    <div class="town-entry-content">
+      <h1 id="town-entry-title">进入未写镇</h1>
+      <p id="town-entry-loading" role="status">正在加载小镇…</p>
+      <p id="town-entry-guide" hidden>内置浏览器可能限制转向。请点右上角菜单，选择「在浏览器中打开」，也可以继续进入并拖动转向。</p>
+      <p id="town-entry-error" role="alert" hidden>小镇没有加载成功。请重试，或在系统浏览器中打开。</p>
+      <div class="town-entry-actions">
+        <button type="button" id="town-entry-copy" hidden>复制链接</button>
+        <button type="button" id="town-entry-continue" hidden>继续进入</button>
+        <button type="button" id="town-entry-retry" onclick="location.reload()" hidden>重试加载</button>
+      </div>
+      <input id="town-entry-link" aria-label="小镇链接" readonly hidden>
+      <output id="town-entry-copy-status" role="status" hidden></output>
     </div>
-    <p id="env-banner" role="note" hidden>当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</p>
+  </section>
+  <main id="scene" aria-label="雪镇三维场景"></main>
+  <button id="town-music-toggle" class="town-hud-button" type="button" aria-label="背景音乐" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9h4l5-4v14l-5-4H3z"/>
+      <path class="speaker-waves" d="M16 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/>
+      <path class="speaker-cross" d="m16 9 5 6m0-6-5 6"/>
+    </svg>
+  </button>
+  <dialog id="town-settings" class="panel" aria-labelledby="town-settings-title">
+    <div class="town-panel-heading">
+      <h1 id="town-settings-title">小镇设置</h1>
+      <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
+      <button id="town-settings-close" type="button" autofocus>关闭</button>
+    </div>
+    <p id="env-banner" role="note" hidden><span id="env-banner-message">当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</span> <button id="env-banner-dismiss" type="button" hidden>关闭提示</button></p>
     <div id="town-panel-controls">
       <label class="town-presence-name">昵称
         <input id="town-presence-name" type="text" maxlength="48" placeholder="留空使用游客名"
           autocomplete="nickname" aria-describedby="town-presence-name-hint">
       </label>
       <small id="town-presence-name-hint">最多 24 字，下次连接时生效</small>
-      <nav aria-label="查看方式">
-        <button id="overview" type="button" aria-pressed="true">全镇俯瞰</button>
-        <button id="walk" type="button" aria-pressed="false">第一人称</button>
+      <details id="town-mascot-owner" hidden>
+        <summary>镇长</summary>
+        <input id="town-mascot-owner-key" type="password" maxlength="128" autocomplete="off"
+          aria-label="镇长口令" placeholder="口令至少 10 字">
+        <button id="town-mascot-owner-verify" type="button">验证</button>
+        <output id="town-mascot-owner-status" aria-live="polite">未验证</output>
+        <label hidden><input id="town-mascot-follow" type="checkbox" checked> 小未跟随</label>
+      </details>
+      <nav aria-label="场景显示">
         <button id="lighting" type="button" aria-pressed="true" aria-label="切换白昼和雪夜">雪夜</button>
         <button id="snow" type="button" aria-pressed="true">降雪</button>
       </nav>
       <label>前往 <select id="jump"></select></label>
-      <button id="view-valley" type="button">雪谷取景</button>
+      <label>触屏转向灵敏度 <input id="touch-look-sensitivity" type="range" min="0.5" max="2.5" step="0.1" value="1.4"></label>
+      <label>画质 <select id="quality-tier">
+        <option value="smooth">流畅</option>
+        <option value="balanced" selected>均衡</option>
+        <option value="fine">精美</option>
+      </select></label>
       <p id="help"></p>
       <output id="position"></output>
       <button id="rehearse" class="festival-button" type="button">跨年预演</button>
-      <button id="view-museum" type="button">纪念馆取景</button>
       <nav class="town-progress" aria-label="小镇进度">
         <button id="town-passport-button" type="button">纪念戳册</button>
         <button id="town-lights-button" type="button">点亮小镇</button>
+        <button id="town-firecracker-bag" type="button">爆竹背包</button>
       </nav>
     </div>
-  </aside>
+  </dialog>
   <section id="town-chat" aria-label="小镇聊天" hidden>
+    <button id="town-chat-toggle" type="button" aria-expanded="true">聊天<span id="town-chat-unread" aria-hidden="true" hidden></span></button>
     <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
     <form id="town-chat-form">
       <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
@@ -83,14 +133,38 @@
   <span id="walk-crosshair" aria-hidden="true" hidden></span>
   <button id="lock-look" type="button" hidden>点击锁定鼠标视角</button>
   <button id="touch-jump" type="button" hidden>跳跃</button>
+  <button id="touch-sprint" type="button" hidden aria-pressed="false">疾跑</button>
+  <button id="fullscreen-toggle" type="button" hidden aria-pressed="false">全屏</button>
+  <button id="town-panel-toggle" class="town-hud-button" type="button" aria-label="小镇设置" aria-haspopup="dialog" aria-controls="town-settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M4 6h7m4 0h5M4 12h12m4 0h0M4 18h3m4 0h9M12 4v4m5 2v4M8 16v4"/>
+    </svg>
+  </button>
   <div id="touch-walk" aria-label="移动摇杆" hidden><span aria-hidden="true"></span></div>
   <button id="world-action" type="button" hidden></button>
+  <button id="touch-sled-brake" type="button" aria-pressed="false" hidden>刹车</button>
   <aside id="snowball-controls" aria-label="打雪仗" hidden>
     <output id="snowball-score" aria-live="polite">雪球 0/10 · 薄雪</output>
     <output id="snow-practice-status" aria-label="移动靶场计时" aria-live="off" hidden></output>
     <progress id="snowball-action-meter" aria-label="雪球动作进度" value="0" max="1" hidden></progress>
+    <button id="snowball-primary" type="button" hidden>投雪球</button>
     <button id="snowball-board" type="button">雪仗榜</button>
+    <button id="snowfight-start" type="button" hidden>团队雪仗</button>
+    <button id="snowfight-build" type="button" aria-pressed="false" hidden>堆墙</button>
+    <output id="snowfight-material" hidden>雪料 0</output>
   </aside>
+  <aside id="bell-controls" aria-label="抢铃铛" hidden>
+    <output id="bell-status" aria-live="polite"></output>
+    <button id="bell-start" type="button">抢铃铛 · 开局</button>
+  </aside>
+  <div id="bell-title" aria-hidden="true" hidden></div>
+  <section id="snowfight-panel" aria-label="团队雪仗" hidden>
+    <output id="snowfight-phase">团队雪仗</output>
+    <output id="snowfight-score">红围巾 0 : 0 金铃</output>
+    <progress id="snowfight-capture" aria-label="占领进度" value="0" max="1" hidden></progress>
+  </section>
+  <div id="snowfight-hit-flash" aria-hidden="true"></div>
+  <output id="snowfight-pop" aria-hidden="true"></output>
   <span id="snowball-action-ring" aria-hidden="true" hidden></span>
   <div id="snowball-frost" aria-hidden="true"></div>
   <div id="ceremony-frost" aria-hidden="true" hidden>
@@ -105,6 +179,10 @@
   <output id="snowball-hit-mark" aria-hidden="true"></output>
   <output id="town-activity-status" aria-live="polite"></output>
   <output id="ice-palace-race-status" aria-label="冰雪城堡观景台计时" aria-live="off"></output>
+  <output id="long-hall-relay-status" aria-label="长殿点灯接力" aria-live="off"></output>
+  <output id="sled-status" aria-live="off"></output>
+  <output id="grand-prix-status" aria-live="off"></output>
+  <output id="grand-prix-board" aria-live="polite"></output>
   <output id="festival-status" aria-live="polite"></output>
   <dialog id="place-card" aria-labelledby="place-title">
     <form method="dialog"><button class="close-card" aria-label="关闭">×</button></form>
@@ -120,3 +198,4 @@
   </dialog>
 </body>
 </html>
+

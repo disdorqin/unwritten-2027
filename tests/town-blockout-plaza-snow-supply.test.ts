@@ -55,7 +55,7 @@ test('P23 ray target is mapped to the three authored coordinates and respects ne
   assert.equal(supply.aimed(from, to, grid.heightAt, wall), undefined);
 });
 
-test('ambient and authored snow both award one per shovel up to fifty', () => {
+test('authorized supply gathers award five while ambient weather servings and the ten-ball cap remain intact', () => {
   const cover = createTownSnowCover(grid);
   cover.setIntensity(4);
   const supply = createPlazaSnowSupply(() => 0);
@@ -65,17 +65,17 @@ test('ambient and authored snow both award one per shovel up to fifty', () => {
     assert.equal(cover.depth().servings, ambient);
     const ordinary = createAmmo();
     assert.ok(supply.gather(ordinary, cover.depth().servings));
-    assert.equal(ordinary.getState().ammo, 1);
+    assert.equal(ordinary.getState().ammo, ambient);
     for (const site of plazaSnowSupplySites) {
       const { from, to } = gatherRay(site);
       const target = supply.aimed(from, to, grid.heightAt, sweep(from, to, 0, 'local'));
       assert.equal(target, site);
       const game = createAmmo();
       assert.ok(supply.gather(game, cover.depth().servings, target));
-      assert.equal(game.getState().ammo, 1);
-      for (let i = 1; i < 49; i++) assert.ok(game.gather());
+      assert.equal(game.getState().ammo, 5);
+      assert.ok(game.gather(3));
       assert.ok(supply.gather(game, cover.depth().servings, target));
-      assert.equal(game.getState().ammo, 50);
+      assert.equal(game.getState().ammo, 10);
       assert.equal(supply.gather(game, cover.depth().servings, target), false);
     }
     if (index < 2) cover.update(22, true);
@@ -94,7 +94,6 @@ test('a successful dig shrinks only its local pile and restores height in sixty 
   now += 1000;
   assert.ok(supply.gather(game, 3, west));
   assert.equal(supply.heightScale(west), .65);
-  for (let i = 2; i < 50; i++) assert.ok(game.gather());
   now += 30_000;
   assert.equal(supply.gather(game, 3, west), false);
   assert.ok(Math.abs(supply.heightScale(west) - .825) < 1e-9);

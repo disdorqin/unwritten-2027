@@ -1,9 +1,10 @@
+import { TOWN_BOUNDS } from '../../../src/presence/protocol';
 import layout from './layout.json';
 import { icePalaceSite } from './ice-palace-site';
 
-export const worldBounds = { width: 640, depth: 512 };
+export const worldBounds = { width: TOWN_BOUNDS.width, depth: TOWN_BOUNDS.depth };
 
-export const northernRiver = [[231, 512], [239, 470], [225, 429], layout.river[0]];
+export const northernRiver = [[231, worldBounds.depth], [231, 512], [239, 470], [225, 429], layout.river[0]];
 
 type Point = [east: number, north: number, height: number];
 type Road = { id: string; width: number; points: Point[] };
@@ -21,7 +22,7 @@ export const extensionRoads: Road[] = [
 export const extensionPlots: Plot[] = [
   { id: 'railway-station', origin: [526, 329, 26], footprint: [58, 34] },
   { id: 'hot-spring', origin: [548, 158, 15], footprint: [48, 32] },
-  { id: 'ice-castle', origin: [484, 72, 12], footprint: [48, 38] },
+  { id: 'ice-castle', origin: [...icePalaceSite.buildingOrigin], footprint: [48, 38] },
   { id: 'coaster-station', origin: [478, 224, 19], footprint: [28, 48] },
 ];
 

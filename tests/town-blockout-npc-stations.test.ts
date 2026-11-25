@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { livingMayorDeflection, livingMayorQuestion } from '../src/shared/soul-mayor.ts';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Color, Matrix4, Scene, Vector3, type InstancedMesh } from 'three';
@@ -80,27 +79,27 @@ test('resident hotspots fail closed until their stations work, share a batch, an
   assert.equal(scene.children.length, 1);
 });
 
-test('the 17 current Qin town lines match the manuscript and exclude the retired goat route', () => {
+test('the 19 Qin town lines match the manuscript and clue gates protect hidden progression', () => {
   const source = readFileSync(new URL('../docs/交流区/Muse/NPC补供稿二-汤守礼仪官戏台联-v1.md', import.meta.url), 'utf8');
-  const lines = [...source.matchAll(/^- \[秦知礼 · (?!问答\/|线索\/金羊)[^\]]+\] (.*)$/gm)]
-    .map(([, value]) => value.trim());
+  const lines = [...source.matchAll(/^- \[秦知礼 · [^\]]+\] (.*)$/gm)].map(([, value]) =>
+    value.trim().replace(/\[(挡回式·门控口径|挡回|可答)\]$/, ''));
   const role = palaceStewardDialogue;
-  assert.equal(lines.length, 17);
-  assert.equal(Object.hasOwn(role, 'questions'), false);
+  assert.equal(lines.length, 25);
   assert.deepEqual([
-    ...Object.values(role.familiar).flat(), ...role.guides, ...role.newYear, ...role.gossip,
-  ], lines);
+    ...Object.values(role.familiar).flat(), ...role.guides, ...role.clues, ...role.newYear,
+    ...role.gossip,
+  ], [...lines.slice(0, 18), lines.at(-1)]);
   assert.ok(residentZodiacClues('翁寒江', () => true).every(line => !line.includes('桥洞')));
   assert.deepEqual(residentZodiacClues('翁寒江', id => id === 'snake'), [lighthouseSnakeClue]);
-  assert.deepEqual(residentZodiacClues('秦知礼', () => true), []);
-  assert.deepEqual(residentZodiacClues('秦知礼', () => false), []);
+  assert.deepEqual(residentZodiacClues('秦知礼', () => true), [role.clues[0]]);
+  assert.deepEqual(residentZodiacClues('秦知礼', () => false, true), [role.clues[1]]);
   const initial = { key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false };
   assert.equal(palaceStewardGuides(initial)[0], 0);
   assert.equal(palaceStewardGuides({ ...initial, key: true })[0], 4);
   assert.equal(palaceStewardGuides({ ...initial, key: true, throneRoom: true, gallery: true, mirrorCache: true })[0], 3);
 });
 
-test('each resident station offers only town topics and its available activity', t => {
+test('three resident menus retain authored town dialogue and omit the withdrawn personal questions', t => {
   class Element {
     children: Element[] = [];
     textContent = '';
@@ -108,7 +107,6 @@ test('each resident station offers only town topics and its available activity',
     constructor(readonly tagName: string) {}
     append(...nodes: Element[]) { this.children.push(...nodes); }
     setAttribute() {}
-    closest() { return undefined; }
   }
   const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {
@@ -128,57 +126,30 @@ test('each resident station offers only town topics and its available activity',
   }, grid.heightAt);
   const forest = fire('forest', 122.47759, 407.65367, grid.heightAt(122.47759, 407.65367));
   const lake = fire('lakeside', 337, 109.65, grid.heightAt(337, 109.65));
-  const activities = {
-    贾明灯: feature('挑灯笼'), 文墨生: feature('挑春联年画'), 胡六环: feature('玩套圈'),
-  };
-  let activated: string | undefined;
-  for (const activity of Object.values(activities)) activity.run = () => { activated = activity.label; };
-  const [woodcutter, fisherman, steward, lantern, words, toss] = registerTownResidentStations(npc, {
+  const [woodcutter, fisherman, steward] = registerTownResidentStations(npc, {
     campfires: [forest, lake], canStand: () => true, isNight: () => false,
     forestChop: () => feature('篝火旁劈柴'), mainFishing: () => feature('冰湖冰钓'),
     palaceProgress: () => ({ key: false, throneRoom: false, gallery: false, mirrorCache: false, stairOpen: false }),
-    marketStall: name => ({ station: townResidentStations.palace, activity: activities[name] }),
   });
   const cases = [
-    [woodcutter, npcAddedDialogue.樊樵, undefined], [fisherman, npcAddedDialogue.翁寒江, undefined],
-    [steward, palaceStewardDialogue, undefined], [lantern, npcAddedDialogue.贾明灯, activities.贾明灯],
-    [words, npcAddedDialogue.文墨生, activities.文墨生], [toss, npcAddedDialogue.胡六环, activities.胡六环],
+    [woodcutter, npcAddedDialogue.樊樵], [fisherman, npcAddedDialogue.翁寒江], [steward, palaceStewardDialogue],
   ] as const;
-  const protectedTopics = ['问生肖星石收集令', '问开镇传说', '问镇志讲古', '问镇志讲古'];
-  for (const [spot, role, activity] of cases) {
+  for (const [spot, role] of cases) {
     assert.equal(spot.available?.(), true, spot.label);
     spot.run();
     const [speech, controls] = panel.children;
     assert.deepEqual(panel.children.map(child => child.tagName), ['p', 'div']);
     assert.ok(controls.children.every(child => child.tagName === 'button'));
-    assert.deepEqual(controls.children.map(button => button.textContent), [
-      '请讲讲这里的玩法', '聊聊镇民', '聊聊跨年',
-      '问附近的去处', '问镇民的故事', '问镇上的节庆', '问生肖星石收集令', '问开镇传说', '问镇志讲古',
-      livingMayorQuestion,
-      ...(activity ? [activity.label] : []), '道别',
-    ], spot.label);
-    const click = (label: string) => {
+    const ask = (label: string) => {
       const button = controls.children.find(child => child.textContent === label);
       assert.ok(button?.onclick, `${spot.label}: ${label}`);
       button.onclick();
       return speech.textContent;
     };
-    assert.equal(click('请讲讲这里的玩法'), role.guides[0]);
-    assert.equal(click('聊聊镇民'), role.gossip[0]);
-    assert.equal(click('聊聊跨年'), role.newYear[0]);
-    assert.equal(click('问附近的去处'), role.guides[0]);
-    assert.equal(click('问镇民的故事'), role.gossip[0]);
-    assert.equal(click('问镇上的节庆'), role.newYear[0]);
-    assert.equal(click(livingMayorQuestion), livingMayorDeflection);
-    const deflections = protectedTopics.map(click);
-    assert.equal(new Set(deflections).size, 1);
-    const [reply] = deflections;
-    assert.ok([...Object.values(role.familiar).flat(), ...role.guides].some(line => line.includes(reply)));
-    assert.doesNotMatch(reply, /入口|地窖|北坡|木屋那头|灯塔|宝物间|归环|核心舱|飞船|铃铛芯/u);
-    if (spot === woodcutter) assert.equal(click('聊聊镇民'), '小未是镇上的吉祥物。');
-    if (activity) {
-      click(activity.label);
-      assert.equal(activated, activity.label);
+    assert.equal(ask('聊聊镇民'), role.gossip[0]);
+    assert.equal(ask('聊聊跨年'), role.newYear[0]);
+    for (const label of ['问镇长近况', '问联系方式', '问你们怎么认识']) {
+      assert.ok(!controls.children.some(child => child.textContent === label));
     }
   }
 });

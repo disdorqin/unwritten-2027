@@ -1,0 +1,317 @@
+{
+  "eye": {
+    "east": 224.64,
+    "north": 165.0625,
+    "y": 14.729999999999999
+  },
+  "visible": 20,
+  "blockers": {
+    "stage": 0,
+    "spectators": 0
+  },
+  "uniformFaceGrid": {
+    "total": 1787,
+    "geometricallyExposed": 1061,
+    "visible": 1061,
+    "physicallyCovered": 726,
+    "spectatorBlockedEast": []
+  },
+  "historicPassingTargets": [
+    {
+      "east": 242,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 25.395945212769693,
+      "stageDistance": 25.395945133976287,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 233.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.544683819664876,
+      "stageDistance": 20.544683755922982,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 242.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 25.7403192142211,
+      "stageDistance": 25.740319134359233,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 233,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.334060913895183,
+      "stageDistance": 20.33406085080677,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 232.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.133654244821027,
+      "stageDistance": 20.13365418235439,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 232,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.943771790962703,
+      "stageDistance": 19.943771729085206,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 231.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.764716877557333,
+      "stageDistance": 19.764716816235364,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    }
+  ],
+  "frozenStage": {
+    "instances": 511,
+    "sha256": "4225bee2865d4a32c7f22454024117670c2143f1120c4bd7515bac384aca1440"
+  },
+  "roster": {
+    "count": 48,
+    "horizontalSha256": "2a29ed67f1849bc80000ec1fa004f3b4497ec374d6385cf0b29c972fd3581cef",
+    "seatRows": [
+      12.35,
+      12.7,
+      13.05,
+      13.7
+    ],
+    "views": {
+      "stage": {
+        "clipped": 0
+      },
+      "clocktower": {
+        "clipped": 0
+      }
+    }
+  },
+  "samples": [
+    {
+      "east": 229.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.16256854521334,
+      "stageDistance": 19.162568485759596,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 230,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.295440737386635,
+      "stageDistance": 19.295440677520645,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 230.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.440268343055344,
+      "stageDistance": 19.440268282740007,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 231,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.596786299033823,
+      "stageDistance": 19.596786238232877,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 231.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.764716877557333,
+      "stageDistance": 19.764716816235364,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 232,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 19.943771790962703,
+      "stageDistance": 19.943771729085206,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 232.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.133654244821027,
+      "stageDistance": 20.13365418235439,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 233,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.334060913895183,
+      "stageDistance": 20.33406085080677,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 233.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.544683819664876,
+      "stageDistance": 20.544683755922982,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 234,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 20.765212092584072,
+      "stageDistance": 20.765212028157972,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 242,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 25.395945212769693,
+      "stageDistance": 25.395945133976287,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 242.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 25.7403192142211,
+      "stageDistance": 25.740319134359233,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 243,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 26.08973041735004,
+      "stageDistance": 26.0897303364041,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 243.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 26.44397914932622,
+      "stageDistance": 26.443979067281177,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 244,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 26.802873600604844,
+      "stageDistance": 26.802873517446304,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 244.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 27.166229647302917,
+      "stageDistance": 27.16622956301702,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 245,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 27.533870655067734,
+      "stageDistance": 27.533870569641202,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 245.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 27.90562726852776,
+      "stageDistance": 27.905627181947807,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 246,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 28.281337189920848,
+      "stageDistance": 28.28133710217523,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    },
+    {
+      "east": 246.5,
+      "north": 146.711,
+      "y": 12.121,
+      "distance": 28.66084495003593,
+      "stageDistance": 28.66084486111286,
+      "reachesTrim": true,
+      "blockedBySpectator": false,
+      "historicVisible": true
+    }
+  ],
+  "runtimeCommit": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "patchSha256": "4ad584c91a2df8598d7326652521b4d7b350b228c2e0201111ae7411473f9cdf"
+}

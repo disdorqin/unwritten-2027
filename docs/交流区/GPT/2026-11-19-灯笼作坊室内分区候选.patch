@@ -1,0 +1,89 @@
+diff --git a/tools/voxel-tavern/town-blockout/landmark-market.ts b/tools/voxel-tavern/town-blockout/landmark-market.ts
+index 137b6eb..b133f13 100644
+--- a/tools/voxel-tavern/town-blockout/landmark-market.ts
++++ b/tools/voxel-tavern/town-blockout/landmark-market.ts
+@@ -156,10 +156,12 @@ export function makeSign(text: string, width: number, height: number, x: number,
+   return sign;
+ }
+ 
+-function furnishBench(s: Workshop, x: number, z: number, direction = 1) {
+-  const { put } = s;
++function furnishBench({ put }: Workshop, x: number, z: number) {
+   for (const dx of [-.98, .98]) for (const dz of [-.37, .37]) put(wood[0], x + dx, .61, z + dz, .19, 1.22, .19);
+   put(wood[3], x, 1.23, z, 2.47, .2, 1.12);
++}
++
++function layOutBenchTools({ put }: Workshop, x: number, z: number, direction: number) {
+   put(darkRed, x - .45, 1.35, z, .6, .045, .88);
+   put('#e8d1aa', x - .38, 1.38, z, .45, .037, .55);
+   put(gold, x + .56, 1.43, z + .2 * direction, .32, .14, .32, 'cylinder');
+@@ -167,6 +169,46 @@ function furnishBench(s: Workshop, x: number, z: number, direction = 1) {
+   for (let i = 0; i < 4; i++) put('#a78655', x - .15 + i * .13, 1.35, z - .22, .051, .053, .53);
+ }
+ 
++function furnishGuildRooms(s: Workshop) {
++  const { put } = s;
++
++  // Mark the rooms overhead and underfoot so the existing aisles stay open.
++  put(wood[2], -5.51, 4.47, -.42, 6.18, .22, .27);
++  for (const x of [-7.65, -5.51, -3.37]) {
++    put(wood[0], x, 4.18, -.42, .12, .38, .19);
++    put(gold, x, 3.98, -.42, .17, .06, .23);
++  }
++  put('#755143', -5.49, .155, -2.35, 5.76, .01, 2.72);
++  put(darkRed, -5.49, .155, 2.19, 5.76, .01, 3.16);
++  put(gold, -5.49, .163, 3.70, 5.63, .008, .055);
++  lantern(s, -5.49, 3.65, -2.30, .46, '#e16f30');
++  lantern(s, -5.49, 3.65, 2.20, .46, '#e16f30');
++
++  // Rear room: prepare frames and fill the packing tray on the two existing benches.
++  put(trim, -6.98, 1.36, -2.4, 1.24, .055, .69);
++  put('#e8d1aa', -7.27, 1.40, -2.42, .47, .025, .55);
++  for (const x of [-7.02, -6.92, -6.82, -6.72]) put('#a78655', x, 1.42, -2.37, .05, .06, .46);
++  put(wood[0], -3.86, 1.39, -2.4, 1.54, .12, .74);
++  for (const x of [-4.36, -3.86, -3.36]) {
++    put(red, x, 1.58, -2.4, .34, .28, .34, 'round');
++    put(gold, x, 1.73, -2.4, .19, .04, .19, 'cylinder');
++  }
++
++  // Front room: display finished lanterns beside the accounts desk and wrapping supplies.
++  for (const x of [-7.87, -5.97]) put(wood[2], x, 1.79, 1.6, .1, .92, .12);
++  put(wood[2], -6.92, 2.25, 1.6, 2, .10, .15);
++  lantern(s, -7.34, 1.82, 1.60, .38);
++  lantern(s, -6.50, 1.82, 1.60, .38, '#e16f30');
++  put(darkRed, -4.24, 1.37, 1.63, .69, .08, .60);
++  put('#e8d1aa', -4.24, 1.42, 1.63, .60, .028, .51);
++  put(trim, -4.24, 1.44, 1.63, .024, .015, .47);
++  put(wood[0], -3.34, 1.41, 1.62, .72, .16, .63);
++  for (const x of [-3.53, -3.35, -3.17]) {
++    put('#dec09c', x, 1.61, 1.62, .12, .29, .12, 'cylinder');
++    put(darkRed, x, 1.61, 1.62, .128, .048, .128, 'cylinder');
++  }
++}
++
+ // Positions use the unrotated workshop frame; the building and all its stages face west together.
+ export const workshopMonkeySteps = [
+   [6.92, .66, -3.66],
+@@ -221,8 +263,12 @@ function buildGuild() {
+       put(wood[0], x, sashY + edge * (sashHeight / 2 + .07), front + .23, sashWidth + .27, .14, .32);
+     }
+     window(s, x, rear - .21, 2.83, 2.49, .21, 1.62);
+-    furnishBench(s, x, -2.4, x > 0 ? 1 : -1);
+-    furnishBench(s, x, 1.6, x > 0 ? -1 : 1);
++    furnishBench(s, x, -2.4);
++    furnishBench(s, x, 1.6);
++    if (x > 0) {
++      layOutBenchTools(s, x, -2.4, 1);
++      layOutBenchTools(s, x, 1.6, -1);
++    }
+   }
+   put(trim, 0, 5.05, front, width + .32, .45, .62);
+   put(trim, 0, 4.47, 7.37, width + .8, .43, .57);
+@@ -250,6 +296,7 @@ function buildGuild() {
+   put(stone[0], -5.6, 8.52, -2.53, .94, .28, .97);
+   put(snow[0], -5.6, 8.71, -2.53, .92, .15, .97);
+ 
++  furnishGuildRooms(s);
+   const stands: Vector[] = [];
+   put(trim, 0, 2.9, rear + .28, 15.25, .18, .21);
+   put(wood[2], 0, 1.85, rear + .21, 15.18, 1.85, .12);

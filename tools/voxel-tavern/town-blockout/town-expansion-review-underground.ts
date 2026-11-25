@@ -1,18 +1,11 @@
 import * as THREE from 'three';
 import { createUndergroundEntry, type UndergroundEntryPoint } from '../../../src/presence/underground-entry.js';
-import { createMeteorCrater, meteorCraterRimRadius, type MeteorCraterPlan } from './meteor-crater.js';
+import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout.js';
 import type { ExpansionView } from './town-expansion-review-renderer.js';
 
 // Relative review fixtures only. Production coordinates, grade limits, and dimensions come from the host.
-const craterPlan: MeteorCraterPlan = {
-  terraces: [
-    { outerRadius: 50, innerRadius: 46, depth: 7 },
-    { outerRadius: 41, innerRadius: 37, depth: 16 },
-    { outerRadius: 32, innerRadius: 27, depth: 26 },
-  ],
-  mainTrail: { startBearing: .7, turns: 3.5, halfWidth: 1, shoulderWidth: 1, maxGrade: .1 },
-};
+const craterPlan = meteorCraterFixturePlan;
 const crater = createMeteorCrater(craterPlan);
 const mineSpec: UndergroundMineSpec = {
   pool: { length: 4, width: 6, depth: 1.2, shaftAperture: { width: 2, length: 2 } },

@@ -8,6 +8,13 @@
     "rootDir": "src",
     "allowImportingTsExtensions": false
   },
-  "include": ["src/server", "src/shared", "src/presence"],
-  "exclude": ["src/presence/index-rehearsal.ts", "src/presence/rehearsal-clock.ts"]
+  "include": [
+    "src/server",
+    "src/shared",
+    "src/presence"
+  ],
+  "exclude": [
+    "src/presence/index-rehearsal.ts",
+    "src/presence/rehearsal-clock.ts"
+  ]
 }

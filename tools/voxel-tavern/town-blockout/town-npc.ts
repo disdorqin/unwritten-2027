@@ -8,8 +8,8 @@ import { npcAuthoredDialogue, npcExpansion, npcGreeting, npcFarewell, npcPeriod,
 import { tavernWaiterFloor, tavernWaiterHome, tavernWaiterLines, tavernWaiterName, tavernWaiterStroll } from './tavern-waiter';
 import { addMascotToNpcBatch, townMascotParts, type TownMascotOptions } from './town-mascot';
 import { createTownResidentController, townResidentCapacity, townResidentNames, type TownResidentName } from './town-npc-residents';
-import { createSoulMayorActivity, soulMayorCapacity, type SoulMayorClient } from './town-soul-mayor';
-import { livingMayorDeflection, livingMayorQuestion } from '../../../src/shared/soul-mayor';
+
+import { houseDoorBookCopy } from './town-house-door-book';
 
 const memorialClerkName = '纪守信';
 export const memorialClerkHome = [419.25, 334.1] as const;
@@ -43,6 +43,8 @@ const roles: ReadonlyArray<{
   { name: memorialClerkName, job: '新区信箱管理员', home: memorialClerkHome, stroll: memorialClerkHome,
     palette: ['#e0a988', '#514238', '#4d566d', '#dfd2b9', '#333544', '#923d38', '#daaf70', '#49375a'] },
 ];
+
+export const townNpcDoorAnchors = roles.map(({ name, home: [x, n] }) => ({ label: name, x, n }));
 
 type NpcSnowballThrow = (origin: Vector3, direction: Vector3, by: string, power: number) => boolean;
 
@@ -177,7 +179,6 @@ export function createTownNpcActivity(
   zodiacHints?: (name: NpcName | typeof memorialClerkName) => readonly string[] | undefined,
   playTavernDice?: (panel: HTMLElement) => void,
   mascot?: TownMascotOptions,
-  soulMayorHost?: SoulMayorClient,
 ): TownActivity & {
   registerResident: ReturnType<typeof createTownResidentController>['register'];
   snowballTargets: readonly TownSnowballTarget[];
@@ -194,7 +195,7 @@ export function createTownNpcActivity(
   const heldStart = hatStart + roles.length * snowHat.length;
   const residentStart = heldStart + roles.length;
   const villagers = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(),
-    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0) + (soulMayorHost ? soulMayorCapacity : 0));
+    residentStart + townResidentCapacity + (mascot ? townMascotParts.length : 0));
   villagers.name = 'town-npc-shared-skins';
   villagers.instanceMatrix.setUsage(DynamicDrawUsage);
   // Positions change during short walks, so keep one inexpensive batch alive for the town.
@@ -269,9 +270,6 @@ export function createTownNpcActivity(
   const residents = createTownResidentController(villagers, residentStart, context, visit,
     () => npcPeriod(new Date(), isDaytime?.()) === '跨年夜');
   const updateMascot = mascot && addMascotToNpcBatch(villagers, residentStart, mascot);
-  const soulMayor = soulMayorHost && createSoulMayorActivity(villagers, context, soulMayorHost);
-  let soulMayorStart = villagers.count;
-  if (soulMayor) spots.push(soulMayor.spot);
 
   function moveNpc(index: number, x: number, n: number, indoorFloor?: number) {
     const spot = spots[index];
@@ -384,14 +382,6 @@ export function createTownNpcActivity(
 
     const controls = document.createElement('div');
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:12px 0';
-    const selector = document.createElement('select');
-    selector.setAttribute('aria-label', '关于小镇的问题');
-    selector.style.cssText = 'width:100%;min-width:0;font:inherit;padding:7px;border-radius:6px';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '选一个关于小镇的问题';
-    selector.append(placeholder);
-
     function action(label: string, onClick: () => void) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -402,61 +392,21 @@ export function createTownNpcActivity(
     }
     const smallTalk = [...dialogue.smallTalk, ...stories.life, ...stories.weather, ...npcExpansion.通用.weather];
     const newYear = [...stories.newYear, ...npcExpansion.通用.newYear];
-    const topics = [
-      { id: 'town', label: '聊聊雪镇', reply: () => smallTalk[turns.smallTalk++ % smallTalk.length] },
-      { id: 'neighbors', label: '聊聊镇民', reply: () => stories.neighbors[turns.neighbors++ % stories.neighbors.length] },
-      { id: 'new-year', label: '聊聊跨年', reply: () => newYear[turns.newYear++ % newYear.length] },
-      { id: 'activities', label: '附近有什么好玩的？', reply: () => {
-        const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
-        return guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
-      } },
-    ];
-    const [town, neighbors, festival, places] = topics;
-    const deflect = () => dialogue.smallTalk[0];
-    const groups = [
-      { label: '地点与设施', topics: [places] },
-      { label: '镇民与日常', topics: [town, neighbors, festival,
-        { id: 'mayor', label: livingMayorQuestion, reply: () => livingMayorDeflection },
-      ] },
-      { label: '镇史传说', topics: [
-        { id: 'founding', label: '能讲讲开镇的传说吗？', reply: deflect },
-        { id: 'crater', label: '镇外那个坑有什么传说？', reply: deflect },
-        { id: 'mountain', label: '山上有什么老故事？', reply: deflect },
-        { id: 'chronicle', label: '能听一段镇志讲古吗？', reply: deflect },
-      ] },
-      { label: '生肖星石', topics: [
-        { id: 'star-decree', label: '能讲讲生肖星石收集令吗？', reply: deflect },
-      ] },
-    ];
-    const townTopics = groups.flatMap(group => group.topics);
-    const selectedTopic = () => townTopics.find(({ id }) => id === selector.value);
-    const ask = action('问一句', () => {
-      const topic = selectedTopic();
-      if (topic) speech.textContent = topic.reply();
+    action('聊聊雪镇', () => { speech.textContent = smallTalk[turns.smallTalk++ % smallTalk.length]; });
+    action('聊聊镇民', () => { speech.textContent = stories.neighbors[turns.neighbors++ % stories.neighbors.length]; });
+    action('聊聊跨年', () => { speech.textContent = newYear[turns.newYear++ % newYear.length]; });
+    action('附近有什么好玩的？', () => {
+      const guides = Object.entries(stories.guides).filter(([feature]) => guideEnabled(feature as TownNpcGuide));
+      speech.textContent = guides.length ? guides[turns.guides++ % guides.length][1] : '先到街上走走，看看雪和灯吧。';
     });
-    ask.disabled = true;
-    selector.onchange = () => { ask.disabled = !selectedTopic(); };
-    for (const { label, topics } of groups) {
-      const group = document.createElement('optgroup');
-      group.label = label;
-      for (const { id, label } of topics) {
-        const option = document.createElement('option');
-        option.value = id;
-        option.textContent = label;
-        group.append(option);
-      }
-      selector.append(group);
-    }
-    for (const { label, reply } of topics) {
-      action(label, () => { speech.textContent = reply(); });
-    }
+    if (name === '苏小满') action('问百门通', () => { speech.textContent = houseDoorBookCopy.courier; });
     const clues = zodiacHints?.(name);
     if (clues?.length) action('问生肖线索', () => { speech.textContent = clues[turns.zodiac++ % clues.length]; });
     action('道别', () => {
       panel.closest('dialog')?.close();
       context.announce(npcFarewell(name, period));
     });
-    panel.append(speech, selector, controls);
+    panel.append(speech, controls);
   }
 
   function openMemorialClerkConversation(panel: HTMLElement, visitsBefore: number) {
@@ -479,8 +429,8 @@ export function createTownNpcActivity(
     let guideIndex = 0;
     const mailboxGuides = guides.slice(0, 3);
     action('问信箱规矩', () => { speech.textContent = mailboxGuides[guideIndex++ % mailboxGuides.length]; });
+    action('问百门通', () => { speech.textContent = houseDoorBookCopy.clerk; });
     action('聊聊镇民', () => { speech.textContent = gossip[0]; });
-    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
     const clue = zodiacHints?.(memorialClerkName)?.[0];
     if (clue) action('问生肖线索', () => { speech.textContent = clue; });
     action('道别', () => { panel.closest('dialog')?.close(); });
@@ -490,7 +440,7 @@ export function createTownNpcActivity(
   function openWaiterConversation(panel: HTMLElement, visitsBefore: number) {
     const speech = document.createElement('p');
     speech.setAttribute('role', 'status');
-    speech.textContent = tavernWaiterLines.迎客[visitsBefore % tavernWaiterLines.迎客.length];
+    speech.textContent = tavernWaiterLines.迎客[visitsBefore % 3];
     const controls = document.createElement('div');
     controls.className = 'town-mail-form';
     function action(label: string, play: () => void) {
@@ -507,7 +457,6 @@ export function createTownNpcActivity(
       speech.textContent = tavernWaiterLines.上酒[pours++ % tavernWaiterLines.上酒.length];
     });
     action('招呼小二', () => { speech.textContent = tavernWaiterLines.巡堂[rounds++ % 2]; });
-    action(livingMayorQuestion, () => { speech.textContent = livingMayorDeflection; });
     action('道别', () => {
       panel.closest('dialog')?.close();
       context.announce(tavernWaiterLines.送客[visitsBefore % tavernWaiterLines.送客.length]);
@@ -583,14 +532,9 @@ export function createTownNpcActivity(
     snowballTargets,
     updateSnowFight,
     update(dt) {
-      if (soulMayor && villagers.count !== residents.instanceEnd()) villagers.count = soulMayorStart;
       residents.update();
       if (active && (!active.panel.isConnected || !active.panel.closest('dialog')?.open)) active = undefined;
       let changed = updateMascot?.(residents.instanceEnd()) ?? false;
-      if (soulMayor) {
-        soulMayorStart = villagers.count;
-        changed = soulMayor.update(soulMayorStart) || changed;
-      }
       for (let i = 0; i < roles.length; i++) {
         const { name, home, stroll, indoorFloor } = roles[i];
         const flinch = flinches[i];

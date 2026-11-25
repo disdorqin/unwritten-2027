@@ -1,0 +1,151 @@
+{
+  "source": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "rail": {
+    "stops": [
+      "coaster-station",
+      "railway-station",
+      "north-ridge-station",
+      "forest-station",
+      "mirror-lake-station",
+      "market",
+      "plaza",
+      "memorial",
+      "lake-station",
+      "ice-castle",
+      "hot-spring"
+    ],
+    "metreLength": 2069.4293861322944,
+    "dwellSeconds": 12,
+    "cycleSeconds": 392.32131787544716,
+    "memorialNext": "lake-station",
+    "departureToReturnSeconds": 380.32131787109375,
+    "samples": [
+      {
+        "from": "plaza",
+        "next": "memorial",
+        "stopped": true,
+        "time": 1767225834767.6304
+      },
+      {
+        "from": "plaza",
+        "next": "memorial",
+        "stopped": false,
+        "time": 1767225836777.6304
+      },
+      {
+        "from": "market",
+        "next": "plaza",
+        "stopped": false,
+        "time": 1767226217078.9482
+      },
+      {
+        "from": "plaza",
+        "next": "memorial",
+        "stopped": true,
+        "time": 1767226217098.9482
+      }
+    ]
+  },
+  "ceremony": {
+    "midnightUTC": "2026-12-31T16:00:00.000Z",
+    "exactCues": [
+      {
+        "offset": -14400000,
+        "cues": [
+          "mailbox-open"
+        ]
+      },
+      {
+        "offset": -14100000,
+        "cues": []
+      },
+      {
+        "offset": -13500000,
+        "cues": []
+      },
+      {
+        "offset": -10800000,
+        "cues": [
+          "hourly-chime"
+        ]
+      },
+      {
+        "offset": -7200000,
+        "cues": [
+          "hourly-chime"
+        ]
+      },
+      {
+        "offset": -3600000,
+        "cues": [
+          "hourly-chime"
+        ]
+      },
+      {
+        "offset": -1800000,
+        "cues": []
+      },
+      {
+        "offset": -600000,
+        "cues": [
+          "lights-dim"
+        ]
+      },
+      {
+        "offset": 0,
+        "cues": [
+          "lights-dim",
+          "new-year",
+          "grand-strike",
+          "bloom-band"
+        ]
+      },
+      {
+        "offset": 600000,
+        "cues": []
+      }
+    ],
+    "phases": [
+      {
+        "offset": -14400000,
+        "phase": "mailbox"
+      },
+      {
+        "offset": -12600000,
+        "phase": "mailbox"
+      },
+      {
+        "offset": -1800000,
+        "phase": "converge"
+      },
+      {
+        "offset": -1,
+        "phase": "countdown"
+      },
+      {
+        "offset": 0,
+        "phase": "climax"
+      },
+      {
+        "offset": 600000,
+        "phase": "afterglow"
+      }
+    ],
+    "wallWindow": {
+      "leadMs": 10000,
+      "lateMs": 600000,
+      "centre": [
+        224,
+        188
+      ]
+    }
+  },
+  "sharedHome": {
+    "origin": {
+      "east": 626,
+      "north": 498,
+      "height": 150
+    },
+    "visualLayer": 1
+  }
+}

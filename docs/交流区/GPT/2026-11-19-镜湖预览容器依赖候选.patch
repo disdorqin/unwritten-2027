@@ -1,0 +1,13 @@
+diff --git a/tools/Dockerfile.town-preview b/tools/Dockerfile.town-preview
+index a023a98..d13c36a 100644
+--- a/tools/Dockerfile.town-preview
++++ b/tools/Dockerfile.town-preview
+@@ -8,0 +9 @@ COPY src/presence/ /app/src/presence/
++COPY src/shared/mirror-lake.ts /app/src/shared/mirror-lake.ts
+diff --git a/tools/Dockerfile.town-preview.dockerignore b/tools/Dockerfile.town-preview.dockerignore
+index caeea1b..f21db9d 100644
+--- a/tools/Dockerfile.town-preview.dockerignore
++++ b/tools/Dockerfile.town-preview.dockerignore
+@@ -6,0 +7,2 @@
++!src/shared/
++!src/shared/mirror-lake.ts

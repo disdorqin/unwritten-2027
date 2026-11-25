@@ -1,7 +1,5 @@
 # UNWRITTEN 2027：技术总结与后续计划
 
-> **2026-11-21 本地归档位置（用户指定，不得写错）：** `D:\computer learning\game_exe\kuanian`。这是唯一目标工程目录，而非当前已完成迁移的声明。现役 `lane-build` 仍在 `C:\Users\37813\.devspace\worktrees\unwritten-2027-933665db`，主仓位于 `D:\computer learning\vibe_coding\unwritten-2027`；各窗移交前须核对活跃 worktree、脏改、远端 SHA、素材与 Git 连接。迁移操作与跨窗通告详见 [统一路径与安全迁移](统一路径与七轮施工-2026-11-21.md)。
-
 更新：2026-11-16，北京时间。本文为当前需求和后续工作的统一入口；旧方案与执行流水见 Git 历史。
 
 **2026-11-17 进度**：`town-blockout-integration` 已有四区雪夜、四座桥、可进入的重点建筑和本机互动，可在 `/town-blockout.html?visit=museum` 试玩。当前步行与碰撞验收见 [小镇初搭与步行验收](TOWN-BLOCKOUT.md)。下文保留 11 月 16 日的阶段安排。P1 的完整酒馆美术验收和手机真机性能、P2 的新版 Rust 联机及 P3 的同镇同步仍待完成。

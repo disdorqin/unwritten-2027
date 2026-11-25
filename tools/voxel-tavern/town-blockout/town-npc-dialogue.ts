@@ -1,4 +1,4 @@
-// Runtime projection of Muse's authored town dialogue.
+// Runtime projection of the approved town dialogue manuscripts.
 // This module includes only dialogue presented to visitors.
 import script from './town-npc-dialogue.json';
 import expansion from './town-npc-expansion.json';

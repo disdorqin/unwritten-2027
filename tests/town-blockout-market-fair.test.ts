@@ -108,7 +108,7 @@ test('all stalls share the entrance atlas and keep tasting and zodiac spots usab
   const terrain = createTerrainGrid();
   const group = buildMarketLandmark(plot);
   const batches = group.children.filter((child): child is Mesh =>
-    child instanceof Mesh && child.name === 'Museum sign atlas');
+    (child as Mesh).isMesh && child.name === 'Museum sign atlas');
   assert.equal(batches.length, 1);
   assert.equal(batches[0].geometry.index?.count, (marketStalls.length + 2) * 6);
   assert.deepEqual(entranceSigns, ['河畔年集', '爆竹声中一岁除']);

@@ -2,7 +2,9 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
   MeshLambertMaterial, Object3D,
 } from 'three';
-import { buildDistrictHousing, type DistrictTheme } from './district-housing';
+import {
+  buildDistrictHousing, districtHousingCard, type CentralResidentialCard, type DistrictTheme,
+} from './district-housing';
 import { canEnter, layout, riverX, type createTerrainGrid } from './terrain';
 import { bridgeMouthKeepClear } from './road-clearance';
 import type { TownHousePortal } from './town-house-portals';
@@ -10,7 +12,7 @@ import type { TownHousePortal } from './town-house-portals';
 type Ground = ReturnType<typeof createTerrainGrid>;
 type Style = Parameters<typeof buildDistrictHousing>[0];
 type Site = { x: number; n: number; w: number; d: number; angle: number; style: Style; variant: number };
-type HousingRejectionReason = 'rail' | 'slope' | 'plaza' | 'open-space' | 'lamp' | 'path' | 'setback';
+type HousingRejectionReason = 'preserved-clearing' | 'rail' | 'slope' | 'plaza' | 'open-space' | 'lamp' | 'path' | 'setback';
 type HousingRejection = {
   id: string;
   zone: DistrictTheme | 'central';
@@ -23,6 +25,14 @@ type KeepClear = (x: number, n: number, radius: number) => boolean;
 type HousingBatch = { source: Mesh; matrices: Matrix4[]; colors: Color[] };
 type HousingCell = { batches: Map<string, HousingBatch>; walks: number[] };
 const housingCellSize = 96;
+const theaterHouseRelocations = new Map<string, readonly [number, number]>([
+  ['158:184', [160, 130]],
+  ['179:155', [146.5, 129.5]],
+  ['200:151', [147, 182.5]],
+  ['246:135', [146, 199]],
+]);
+
+const phaseThreeBounds = [97, 128, 271, 212] as const;
 const plazaHouseRelocations: ReadonlyMap<string, readonly [east: number, north: number]> = new Map([
   ['117:202', [115.5, 220]],
   ['101:184', [89.5, 166.5]],
@@ -37,6 +47,25 @@ const plazaHouseRelocations: ReadonlyMap<string, readonly [east: number, north: 
   ['197:132', [173, 63]],
   ['200:151', [198.5, 223]],
   ['262:180', [269.5, 241.5]],
+]);
+
+// Relocate nine lots around the central rail corridor without changing their door IDs.
+const centralRailHouseRelocations: ReadonlyMap<string, readonly [east: number, north: number]> = new Map([
+  ['137:70', [136, 71]],
+  ['186:104', [181, 112]],
+  ['206:110', [210.5, 101.5]],
+  ['228:110', [229.5, 105.5]],
+  ['246:114', [246.5, 111.5]],
+  ['349:184', [347.5, 184]],
+  ['351:144', [361, 143]],
+  ['358:163', [365, 160.5]],
+  ['364:207', [368, 207]],
+]);
+
+// Keys stay tied to the original lot and portal, including the relocated C-06.
+const plazaResidentialCards = new Map<string, CentralResidentialCard>([
+  ['200:151', 6], ['262:180', 8], ['264:228', 9], ['253:243', 11], ['221:251', 12],
+  ['202:247', 13], ['179:248', 15], ['249:264', 19], ['199:262', 20],
 ]);
 
 function lineDistance(x: number, n: number, a: number[], b: number[]) {
@@ -70,11 +99,17 @@ export function addDistrictHousing(
   plazaBounds: readonly number[] = layout.plaza.bounds,
 ) {
   const [west, south, east, north] = plazaBounds;
+  const relocations = phaseThreeBounds.every((edge, i) => edge === plazaBounds[i])
+    ? plazaHouseRelocations : south === 152 ? theaterHouseRelocations : new Map<string, readonly [number, number]>();
   const sites: Site[] = [];
+  // Per-site world-axis blocking rects, extracted from each built model's structural
+  // wall blocks (AW-5): the whole-lot rectangle sealed open courtyards and yards.
+  const siteBlockRects: { e0: number; n0: number; e1: number; n1: number }[][] = [];
   const zoneCounts = { forest: 0, memorial: 0, market: 0, lakeside: 0, central: 0 };
   const movedSites = new Set<Site>();
   const housePortals: TownHousePortal[] = [];
   const rejectedHomes: HousingRejection[] = [];
+  const housingCards = new Map<string, ReturnType<typeof districtHousingCard>>();
   const sweptPaths: { x: number; n: number; dx: number; dn: number; start: number; end: number }[] = [];
   const foundation = new BoxGeometry();
   const stone = new MeshLambertMaterial({ color: '#6c6c79' });
@@ -170,10 +205,11 @@ export function addDistrictHousing(
   }
 
   for (const { theme, styles, points } of neighborhoods) {
+    let housingCardIndex = 0;
     for (const [i, [sourceEast, sourceNorth]] of points.entries()) {
       const address = `${sourceEast}:${sourceNorth}`;
       const id = `old-town:${address}`;
-      const relocation = plazaHouseRelocations.get(address);
+      const relocation = relocations.get(address) ?? centralRailHouseRelocations.get(address);
       const [x, n] = relocation ?? [sourceEast, sourceNorth];
       const style = styles[i % styles.length];
       const w = 9.2 + (i * 7 % 6) * .96 + (style === 'courtyard' ? 1.5 : 0);
@@ -191,6 +227,11 @@ export function addDistrictHousing(
           id, zone: theme ?? 'central', location: [x, n], relocated: relocation !== undefined,
           overlapsPlaza: samples.some(([px, pn]) => insidePlaza(px, pn, 1.4)), reason,
         });
+      }
+      // Preserve the established west clearing after the track relocates behind Mirror Lake.
+      if (address === '63:194') {
+        reject('preserved-clearing');
+        continue;
       }
       if (conflictsWithRail(footprint)) {
         reject('rail');
@@ -221,7 +262,9 @@ export function addDistrictHousing(
       }
       const level = Math.max(grid.heightAt(x, n), ...heights) + .14;
       const base = Math.min(...heights) - .28;
-      const model = buildDistrictHousing(style, w, d, site.variant, theme);
+      const centralCard = theme === undefined ? plazaResidentialCards.get(address) : undefined;
+      const cardVariant = housingCardIndex++;
+      const model = buildDistrictHousing(style, w, d, site.variant, theme, centralCard, cardVariant);
       model.position.set(x, level, -n);
       model.rotation.y = angle;
       const plinth = new Mesh(foundation, stone);
@@ -234,6 +277,33 @@ export function addDistrictHousing(
       model.add(cap);
       const cell = cellAt(x, n);
       addModel(model, cell);
+      // AW-5: derive this house's blocking rects from the built model itself.
+      // Structural walls only: tall blocks rooted near the ground with real
+      // thickness — window trim sticks and step-over sills never block.
+      const blockRects: { e0: number; n0: number; e1: number; n1: number }[] = [];
+      {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        const instance = new Matrix4();
+        model.traverse(item => {
+          if (!(item instanceof InstancedMesh)) return;
+          for (let i = 0; i < item.count; i++) {
+            item.getMatrixAt(i, instance);
+            const e = instance.elements;
+            const cx = e[12], cy = e[13], cz = e[14];
+            const sx = Math.abs(e[0]), sy = Math.abs(e[5]), sz = Math.abs(e[10]);
+            if (sy < 1.2 || cy - sy / 2 > .6 || sx < .15 || sz < .15) continue;
+            let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+            for (const [lx, lz] of [[cx - sx / 2, cz - sz / 2], [cx - sx / 2, cz + sz / 2],
+              [cx + sx / 2, cz - sz / 2], [cx + sx / 2, cz + sz / 2]] as const) {
+              const we = x + lx * cos + lz * sin, wn = n + lx * sin - lz * cos;
+              e0 = Math.min(e0, we); e1 = Math.max(e1, we);
+              n0 = Math.min(n0, wn); n1 = Math.max(n1, wn);
+            }
+            blockRects.push({ e0, n0, e1, n1 });
+          }
+        });
+      }
+      siteBlockRects.push(blockRects);
       sites.push(site);
       zoneCounts[theme ?? 'central']++;
       if (relocation) movedSites.add(site);
@@ -243,7 +313,8 @@ export function addDistrictHousing(
       const stand = d / 2 + 1.42;
       const doorX = x + dx * stand - dn * side;
       const doorN = n + dn * stand + dx * side;
-      housePortals.push({ id, x: doorX, n: doorN,
+      if (theme) housingCards.set(id, districtHousingCard(theme, cardVariant));
+      housePortals.push({ id, zone: theme ?? 'central', x: doorX, n: doorN,
         ground: grid.heightAt(doorX, doorN), exitYaw: Math.atan2(dx, dn) });
       const start = d / 2 + .55;
       const reach = Math.min(12, lineDistance(x, n, nearest.start, nearest.end) + 1);
@@ -306,6 +377,17 @@ export function addDistrictHousing(
     if (panorama) panorama.visible = wide;
   }
   const completed = sites.map(footprints);
+  // AW-5: player blocking follows the built walls, not the whole lot. A site with
+  // no extracted wall blocks (never in practice) falls back to its lot rectangle.
+  const blockedSites = completed.map((site, i) => {
+    const rects = siteBlockRects[i].length ? siteBlockRects[i]
+      : [{ e0: site.x - site.w / 2, n0: site.n - site.d / 2, e1: site.x + site.w / 2, n1: site.n + site.d / 2 }];
+    const union = {
+      e0: Math.min(...rects.map(r => r.e0)), n0: Math.min(...rects.map(r => r.n0)),
+      e1: Math.max(...rects.map(r => r.e1)), n1: Math.max(...rects.map(r => r.n1)),
+    };
+    return { rects, union };
+  });
   const keepClear: KeepClear = (x, n, radius) => !openSpace(x, n, radius) || lampBlocked(x, n)
     || paths.some(({ start, end, radius: size }) => lineDistance(x, n, start, end) < radius + size + .6)
     || completed.some(site => within(x, n, site, radius + 2));
@@ -316,6 +398,9 @@ export function addDistrictHousing(
       return along >= start && along <= end && Math.abs(offsetX * dn - offsetN * dx) <= 1.08;
     });
   }
-  return { count: sites.length, zoneCounts, sites, housePortals, relocations: plazaHouseRelocations, rejectedHomes, keepClear, setPanorama, sweptAt,
-    blocked: (x: number, n: number) => completed.some(site => within(x, n, site, .27)) };
+  return { count: sites.length, zoneCounts, sites, housePortals, relocations, rejectedHomes, housingCards, keepClear, setPanorama, sweptAt,
+    siteBlockingRects: blockedSites.map(({ rects }) => rects),
+    blocked: (x: number, n: number) => blockedSites.some(({ rects, union }) =>
+      x > union.e0 - .27 && x < union.e1 + .27 && n > union.n0 - .27 && n < union.n1 + .27
+      && rects.some(r => x > r.e0 - .27 && x < r.e1 + .27 && n > r.n0 - .27 && n < r.n1 + .27)) };
 }

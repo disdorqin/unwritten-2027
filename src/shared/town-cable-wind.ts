@@ -1,4 +1,4 @@
-import type { TownOutdoorWeatherState } from './town-outdoor-weather.js';
+import { townOutdoorWeatherCycleMs, type TownOutdoorWeatherState } from './town-outdoor-weather.js';
 
 /**
  * G-09 cable-clock adapter. One absolute, deterministic clock drives both
@@ -6,7 +6,7 @@ import type { TownOutdoorWeatherState } from './town-outdoor-weather.js';
  * The weather schedule is 100 real minutes per cycle and shares the ZB-17
  * town dawn anchor. A host must explicitly opt in only when weather is active.
  */
-export const townCableWindCycleMs = 100 * 60_000;
+export const townCableWindCycleMs = townOutdoorWeatherCycleMs;
 export const townCableWindDawnEpoch = Date.UTC(2026, 0, 1);
 
 export const townCableWindRates = Object.freeze({

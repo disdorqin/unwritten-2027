@@ -24,6 +24,8 @@ export type CeremonyCue =
   | { type: 'lights-dim'; at: number; level: number }
   | { type: 'countdown-tick'; at: number; secondsLeft: number }
   | { type: 'new-year'; at: number }
+  | { type: 'watch-star-rise'; at: number }
+  | { type: 'watch-star-set'; at: number }
   | { type: 'grand-strike'; at: number; index: number; total: 12 }
   | { type: 'bloom-band'; at: number; band: number; bands: 4 }
   | { type: 'fireworks-main'; at: number }
@@ -41,6 +43,8 @@ export interface CeremonyState {
   dimLevel: number;
   /** 距零点秒数；只在跨年夜 23:00 后给出，其余为 null。 */
   secondsToMidnight: number | null;
+  /** Absolute clock state allows a late join to see the star without replaying its entrance. */
+  watchStarVisible: boolean;
 }
 
 // ---------------------------------------------------------------- 时钟提供者
@@ -52,7 +56,7 @@ export interface CeremonyClock {
   readonly utcOffsetMinutes?: number;
 }
 
-/** 单人版：设备本地时间，与时光信箱 UNLOCK_AT 的本地口径同源（设计 §3）。 */
+/** 单人版默认设备本地时间。正式共用仪式时钟与信箱事件固定使用北京时间。 */
 export function createLocalCeremonyClock(now: () => number = () => Date.now()): CeremonyClock {
   return { now };
 }
@@ -77,6 +81,8 @@ export function createServerCeremonyClock(localNow: () => number = () => Date.no
 
 const minute = 60_000;
 const hour = 60 * minute;
+const watchStarRiseOffset = -8 * minute;
+const watchStarSetOffset = 9 * minute;
 
 /** 某年跨年夜的零点（次年 1 月 1 日 00:00 本地时间）。eveYear = 12-31 所在年份。 */
 export function ceremonyMidnight(eveYear: number, utcOffsetMinutes?: number): number {
@@ -180,6 +186,7 @@ export function ceremonyStateAt(now: number, utcOffsetMinutes?: number): Ceremon
     secondsToMidnight: phase === 'converge' || phase === 'approach' || phase === 'countdown'
       ? (midnight - now) / 1000
       : null,
+    watchStarVisible: now >= midnight + watchStarRiseOffset && now < midnight + watchStarSetOffset,
   };
 }
 
@@ -192,6 +199,7 @@ function cycleCues(eveYear: number, utcOffsetMinutes?: number): CeremonyCue[] {
   const cues: CeremonyCue[] = [
     { type: 'mailbox-open', at: start + 20 * hour },
     { type: 'lights-dim', at: midnight - 10 * minute, level: .6 },
+    { type: 'watch-star-rise', at: midnight + watchStarRiseOffset },
     { type: 'lights-dim', at: midnight - 10_000, level: .3 },
     { type: 'lights-dim', at: midnight, level: 1 },
     { type: 'new-year', at: midnight },
@@ -199,6 +207,7 @@ function cycleCues(eveYear: number, utcOffsetMinutes?: number): CeremonyCue[] {
     { type: 'fireworks-far', at: midnight + 8_000 },
     { type: 'fireworks-finale', at: midnight + 14_000 },
     { type: 'climax-end', at: midnight + 30_000 },
+    { type: 'watch-star-set', at: midnight + watchStarSetOffset },
   ];
   for (const h of [21, 22, 23]) {
     cues.push({ type: 'hourly-chime', at: start + h * hour, hour: h, strikes: 3 });
@@ -267,7 +276,7 @@ export function createCeremonyDirector(clock: CeremonyClock, hooks: CeremonyHook
         if (cue.at > lastNow) hooks.onCue?.(cue);
       }
     }
-    lastNow = now;
+    lastNow = Math.max(lastNow ?? now, now);
     current = ceremonyStateAt(now, utcOffsetMinutes);
     if (lastSnow === undefined || Math.abs(current.snowIntensity - lastSnow) > .001) {
       lastSnow = current.snowIntensity;

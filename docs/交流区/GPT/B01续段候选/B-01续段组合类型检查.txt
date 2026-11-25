@@ -1,0 +1,1 @@
+strict tsc exit status 0

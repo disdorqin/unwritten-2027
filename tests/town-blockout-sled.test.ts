@@ -16,7 +16,7 @@ test('S1 starts outside the long hall and crosses the central bridge before the 
 test('sled motion respects the speed cap and brakes to a stop on the road', () => {
   const motion = createSledMotion();
   const tick = 1 / 120;
-  motion.reset(0, 35);
+  motion.reset(0, 60);
   assert.equal(motion.state.speed, sledMaximumSpeed);
   motion.reset(0, 7.5);
   let position = 0;
@@ -147,6 +147,70 @@ test('manual exit parks one sled at its route position and remounts that same sl
   assert.ok(ride.spot.n > n);
 });
 
+test('a parked sled can only be remounted by a clear boarding path', () => {
+  const barrier = (east: number) => Math.abs(east) < .16;
+  const routes = [
+    { blocked: barrier },
+    { wallBlocked: barrier },
+    { canReachParked: (from: { x: number }, to: { x: number }) => from.x * to.x > 0 },
+  ];
+  for (const route of routes) {
+    const ride = createSledRide({
+      height: () => 12,
+      surface: () => ({ surface: 1, deepSnow: false }),
+      blocked: () => false,
+      snow() {},
+      stopped() {},
+      ...route,
+    });
+    const parked = { x: .9, n: 0, y: 12, yaw: .2 };
+    assert.equal(ride.mount(parked.x, parked.n, parked.y, parked.yaw), true);
+    assert.equal(ride.leave(), true);
+    assert.equal(ride.canRemount(-.9, 0, 12), false);
+    assert.equal(ride.remount(-.9, 0, 12), false);
+    assert.deepEqual(ride.parked(), parked);
+    assert.equal(ride.remount(1.6, 0, 12), true);
+    assert.deepEqual(ride.spot, parked);
+  }
+});
+
+test('holding the dedicated brake overrides W, uses the existing brake pose, and never takes off', () => {
+  const world = {
+    height: () => 12,
+    surface: () => ({ surface: 1, deepSnow: false }),
+    blocked: () => false,
+    snow() {},
+    stopped() {},
+  };
+  const ride = createSledRide(world);
+  const reference = createSledRide(world);
+  assert.equal(ride.mount(0, 0, 12, 0), true);
+  assert.equal(reference.mount(0, 0, 12, 0), true);
+  const dt = 1 / 120;
+  for (let i = 0; i < 600; i++) {
+    ride.step(dt, { forward: 1, turn: 0 });
+    reference.step(dt, { forward: 1, turn: 0 });
+  }
+  const speedBefore = ride.speed();
+  assert.ok(speedBefore > 6);
+  for (let i = 0; i < 600 && ride.speed() > 0; i++) {
+    ride.step(dt, { forward: 1, turn: 0, brake: true }, 3.9);
+    reference.step(dt, { forward: -1, turn: 0 });
+    assert.equal(ride.speed(), reference.speed());
+    assert.equal(ride.airborne(), false);
+    assert.equal(ride.active(), true);
+  }
+  assert.equal(ride.speed(), 0);
+  assert.equal(ride.braking(), true);
+  const stoppedAt = { ...ride.spot };
+  ride.step(dt, { forward: 0, turn: 0 });
+  assert.equal(ride.braking(), false);
+  assert.equal(ride.airborne(), false);
+  assert.deepEqual(ride.spot, stoppedAt);
+  ride.step(dt, { forward: 1, turn: 0 });
+  assert.ok(ride.speed() > 0);
+});
+
 test('manual airborne exit parks at reachable ground support or the last grounded pose', () => {
   const height = 12;
   const dt = 1 / 120;
@@ -207,43 +271,6 @@ test('scripted relocation clears a crash while preserving the mounted sled', () 
   assert.equal(ride.speed(), 0);
   assert.equal(ride.leave(), true);
   assert.equal(ride.remount(37, 20, 12), true);
-});
-
-test('holding the dedicated brake overrides W, uses the existing brake pose, and never takes off', () => {
-  const world = {
-    height: () => 12,
-    surface: () => ({ surface: 1, deepSnow: false }),
-    blocked: () => false,
-    snow() {},
-    stopped() {},
-  };
-  const ride = createSledRide(world);
-  const reference = createSledRide(world);
-  assert.equal(ride.mount(0, 0, 12, 0), true);
-  assert.equal(reference.mount(0, 0, 12, 0), true);
-  const dt = 1 / 120;
-  for (let i = 0; i < 600; i++) {
-    ride.step(dt, { forward: 1, turn: 0 });
-    reference.step(dt, { forward: 1, turn: 0 });
-  }
-  const speedBefore = ride.speed();
-  assert.ok(speedBefore > 6);
-  for (let i = 0; i < 600 && ride.speed() > 0; i++) {
-    ride.step(dt, { forward: 1, turn: 0, brake: true });
-    reference.step(dt, { forward: -1, turn: 0 });
-    assert.equal(ride.speed(), reference.speed());
-    assert.equal(ride.airborne(), false);
-    assert.equal(ride.active(), true);
-  }
-  assert.equal(ride.speed(), 0);
-  assert.equal(ride.braking(), true);
-  const stoppedAt = { ...ride.spot };
-  ride.step(dt, { forward: 0, turn: 0 });
-  assert.equal(ride.braking(), false);
-  assert.equal(ride.airborne(), false);
-  assert.deepEqual(ride.spot, stoppedAt);
-  ride.step(dt, { forward: 1, turn: 0 });
-  assert.ok(ride.speed() > 0);
 });
 
 test('local sled, racks and mist use shared batches', () => {

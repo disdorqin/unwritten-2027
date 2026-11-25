@@ -103,7 +103,7 @@ test('a 60s trial counts each owned hit once against the existing snowball step 
     }
   }
 
-  for (let i = 0; i < 5; i++) assert.ok(game.gather());
+  game.gather(5);
   assert.equal(game.throwBall(spawn(), toward, 'local', 1), true);
   spot.run();
   assert.equal(spot.available?.(), false);

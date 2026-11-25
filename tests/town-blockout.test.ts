@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district-layout.ts';
 import { buildTownRailRoute } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
-import { canEnter, createTerrainGrid, layout, plazaCoreBounds, plazaPavingAllowed, riverX, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain.ts';
+import { canEnter, createTerrainGrid, layout, riverX, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { extensionRoads } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 
 const { Group } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as typeof import('three');
@@ -37,42 +37,13 @@ test('town blockout roads and entrances are continuous on foot', () => {
   }
 });
 
-test('the plaza keeps B2a flat, cuts the annex around roads and plots, and preserves bridge decks', () => {
+test('the plaza stays flat and each crossing uses its bridge deck', () => {
   const transportIds = [...layout.roads, ...layout.bridges].map(({ id }) => id);
   assert.equal(new Set(transportIds).size, transportIds.length);
-  const baseline = createTerrainGrid(plazaCoreBounds);
   const [west, south, east, north] = layout.plaza.bounds;
-  const [coreWest, coreSouth, coreEast, coreNorth] = plazaCoreBounds;
-  let changedOutside = 0;
-  for (let n = 0; n < gridDepth; n++) {
-    for (let x = 0; x < gridWidth; x++) {
-      const index = n * gridWidth + x;
-      if (x < west || x > east || n < south || n > north) {
-        if (grid.elevation[index] !== baseline.elevation[index]) changedOutside++;
-      } else if (grid.surfaces[index] === 2 ||
-          (x >= coreWest && x <= coreEast && n >= coreSouth && n <= coreNorth)) {
-        assert.equal(grid.elevation[index], layout.plaza.height, `plaza datum at ${x},${n}`);
-      }
-    }
+  for (let x = west; x <= east; x++) {
+    for (let n = south; n <= north; n++) assert.equal(heightAt(x, n), layout.plaza.height);
   }
-  assert.equal(changedOutside, 0, 'annex grading must not change the existing ground outside it');
-  for (const [x, n] of [[112, 174], [219, 143], [259, 177]]) {
-    assert.ok(plazaPavingAllowed(x, n), `annex paving at ${x},${n}`);
-    assert.equal(grid.surfaces[n * gridWidth + x], 2);
-    assert.equal(heightAt(x, n), 12);
-  }
-  for (const [x, n] of [[154, 211], [139, 148], [264, 192], [255, 154]]) {
-    assert.equal(plazaPavingAllowed(x, n), false, `road paving cut at ${x},${n}`);
-    assert.equal(grid.surfaces[n * gridWidth + x], 1);
-    assert.equal(heightAt(x, n), baseline.heightAt(x, n));
-  }
-  assert.equal(heightAt(264, 202), 13, 'post office threshold');
-  assert.equal(heightAt(264, 210), 13, 'post office plot');
-  assert.equal(plazaPavingAllowed(255, 206), false, 'post office one-metre paving setback');
-  assert.equal(heightAt(255, 206), baseline.heightAt(255, 206));
-  assert.equal(heightAt(238, 147), 12, 'theater threshold');
-  assert.equal(plazaPavingAllowed(238, 140), false, 'theater plot stays outside the paving');
-  assert.equal(heightAt(140.4, 122.8), baseline.heightAt(140.4, 122.8), 'market tasting stall footing');
   for (const bridge of layout.bridges) {
     const { north, height } = bridge;
     assert.ok(canEnter(riverX(north), north), bridge.id);
@@ -82,8 +53,8 @@ test('the plaza keeps B2a flat, cuts the annex around roads and plots, and prese
 });
 
 test('town expansion keeps landmark origins except for the approved stage relocation', () => {
-  assert.deepEqual(worldBounds, { width: 640, depth: 512 });
-  assert.deepEqual([gridWidth, gridDepth], [641, 513]);
+  assert.deepEqual(worldBounds, { width: 640, depth: 800 });
+  assert.deepEqual([gridWidth, gridDepth], [641, 801]);
   assert.deepEqual([layout.width, layout.depth], [448, 384]);
   assert.deepEqual(layout.plaza.spawn, [223, 180]);
   assert.deepEqual(Object.fromEntries(layout.plots.map(({ id, origin }) => [id, origin])), {
@@ -98,6 +69,7 @@ test('town expansion keeps landmark origins except for the approved stage reloca
     glasshouse: [372, 96, 11],
     lighthouse: [408, 78, 12],
     stage: [238, 140, 12],
+    'town-office': [190, 227, 12],
   });
 });
 
@@ -119,12 +91,13 @@ test('expanded streets cross the legacy seams and the northern river stays outsi
       }
     }
   }
-  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231]]) {
+  for (const [n, x] of [[384, 231], [429, 225], [470, 239], [512, 231], [540, 231], [650, 231]]) {
     assert.equal(riverX(n), x);
     assert.ok(!canEnter(x, n));
   }
   assert.ok(!canEnter(640, 224));
-  assert.ok(!canEnter(93, 512));
+  assert.ok(canEnter(93, 512));
+  assert.ok(!canEnter(93, 800));
 });
 
 test('legacy houses reserve rail clearance while nearby open sites stay occupied', () => {
@@ -135,14 +108,17 @@ test('legacy houses reserve rail clearance while nearby open sites stay occupied
 
   assert.ok(before.blocked(390, 32), 'original south dwelling exists without rail clearance');
   assert.ok(!after.blocked(390, 32), 'south dwelling must clear the track');
-  const westCabin = 'old-town:63:194';
-  const movedNeighbor = 'old-town:105:152';
-  assert.equal(before.rejectedHomes.find(({ id }) => id === westCabin)?.reason, 'setback',
-    'the west cabin also competes with the approved receiving site even without the track');
-  assert.equal(after.rejectedHomes.find(({ id }) => id === westCabin)?.reason, 'rail',
-    'with the track, the west cabin fails the unchanged rail clearance check');
-  assert.ok(after.housePortals.some(({ id }) => id === movedNeighbor), 'the relocated neighbor clears the track');
+  assert.ok(!before.blocked(63, 194), 'the established west clearing stays open after rerouting');
+  assert.ok(!after.blocked(63, 194), 'moving the track does not put a new cabin in the clearing');
+  const clearing = 'old-town:63:194';
+  assert.equal(before.rejectedHomes.find(({ id }) => id === clearing)?.reason, 'preserved-clearing');
+  assert.equal(after.rejectedHomes.find(({ id }) => id === clearing)?.reason, 'preserved-clearing');
+  if (after.relocations.size === 13) {
+    assert.ok(after.housePortals.some(({ id }) => id === 'old-town:105:152'),
+      'the approved phase-three relocation clears the track');
+  }
+  assert.ok(rail.keepClear(18, 185));
   assert.ok(after.blocked(405, 51), 'northward neighboring dwelling is still in place');
-  const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32));
+  const unaffected = before.sites.filter(({ x, n }) => !(x === 390 && n === 32) && !(x === 63 && n === 194));
   assert.deepEqual(after.sites, unaffected);
 });

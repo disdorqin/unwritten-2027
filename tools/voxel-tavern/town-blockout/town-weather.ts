@@ -1,8 +1,8 @@
 import type { CeremonyState } from './town-ceremony';
 import {
-  townOutdoorWeatherEffects, townOutdoorWhiteoutFirePoolMeters, type TownOutdoorWeather,
+  townOutdoorWeatherEffects, townOutdoorWhiteoutFirePoolMeters,
+  type TownOutdoorWeather, type TownOutdoorWeatherState,
 } from '../../../src/shared/town-outdoor-weather';
-import { townWeatherExposureFor, type TownWeatherArea } from './town-weather-exposure';
 
 const minuteMs = 60_000;
 const weatherSlotCount = 64;
@@ -25,10 +25,6 @@ const profiles = {
   heavy: { intensity: 4, fogNear: 112, fogFar: 620, pilingRate: 1.25, targetCover: 1 },
 };
 const weights = [['light', 47], ['medium', 42], ['heavy', 11]] as const;
-const outdoorSnowTiers: Record<TownOutdoorWeather, TownSnowTier> = {
-  'clear-snow': 'light', wind: 'medium', whiteout: 'heavy',
-};
-const firePoolRadius = townOutdoorWhiteoutFirePoolMeters;
 
 function makeSchedule() {
   let seed = 0x20270101;
@@ -65,6 +61,46 @@ export function townSnowWeatherAt(sharedTime: number, ceremonyOverride?: TownSno
   return sampleProfile(slot.tier, next, progress);
 }
 
+const outdoorSnowTiers: Readonly<Record<TownOutdoorWeather, TownSnowTier>> = {
+  'clear-snow': 'light', wind: 'medium', whiteout: 'heavy',
+};
+
+/**
+ * G-09 renders the *authoritative* Presence weather, rather than choosing a
+ * second client-local 64-slot schedule. The old ceremony curve is unchanged.
+ */
+export function townSnowWeatherForOutdoorState(
+  state: TownOutdoorWeatherState, areaExposure = 1,
+  nightFogFar = Infinity, litFireDistance = Infinity,
+) {
+  const tier = outdoorSnowTiers[state.weather];
+  const snow = sampleProfile(tier, tier, 0);
+  const weatherVisibility = townOutdoorWeatherEffects[state.weather].visibilityMeters;
+  const limit = Number.isFinite(nightFogFar) && nightFogFar > 0 ? Math.min(snow.fogFar, nightFogFar) : snow.fogFar;
+  if (weatherVisibility === null) return { ...snow, fogNear: Math.min(snow.fogNear, limit * .95), fogFar: limit, skyColor: undefined };
+  // The G-09 approved exposure table varies the whiteout range from ~12 m
+  // in open ground to 30 m in the sheltered plaza, no new draw passes.
+  const exposure = Number.isFinite(areaExposure) ? Math.max(.25, Math.min(1, areaExposure)) : 1;
+  const fireRadius = townOutdoorWhiteoutFirePoolMeters;
+  const fireNear = Number.isFinite(litFireDistance)
+    ? fireRadius * Math.max(0, Math.min(1, (fireRadius - litFireDistance) / 2)) : 0;
+  return {
+    ...snow,
+    fogNear: fireNear,
+    fogFar: Math.max(fireNear + .1, Math.min(limit, weatherVisibility / exposure)),
+    skyColor: '#d8e2e9',
+  };
+}
+
+export function advanceWeatherCover(
+  cover: number, seconds: number, weather: Pick<TownSnowWeather, 'pilingRate' | 'targetCover'>,
+) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return cover;
+  return cover < weather.targetCover
+    ? Math.min(weather.targetCover, cover + seconds * weather.pilingRate / 55)
+    : Math.max(weather.targetCover, cover - seconds / 150);
+}
+
 function sampleProfile(tier: TownSnowTier, nextTier: TownSnowTier, progress: number): TownSnowWeather {
   const from = profiles[tier], to = profiles[nextTier];
   const interpolate = (a: number, b: number) => a + (b - a) * progress;
@@ -73,28 +109,6 @@ function sampleProfile(tier: TownSnowTier, nextTier: TownSnowTier, progress: num
     intensity: interpolate(from.intensity, to.intensity),
     fogNear: interpolate(from.fogNear, to.fogNear), fogFar: interpolate(from.fogFar, to.fogFar),
     pilingRate: interpolate(from.pilingRate, to.pilingRate), targetCover: interpolate(from.targetCover, to.targetCover),
-  };
-}
-
-export function townSnowWeatherForOutdoorState(
-  state: TownOutdoorWeather,
-  area: TownWeatherArea,
-  nightFogFar = Infinity,
-  litFireDistance = Infinity,
-) {
-  const tier = outdoorSnowTiers[state];
-  const snow = sampleProfile(tier, tier, 0);
-  const visibility = townOutdoorWeatherEffects[state].visibilityMeters;
-  const fogLimit = Math.min(snow.fogFar, nightFogFar);
-  if (visibility === null) {
-    return { ...snow, fogNear: Math.min(snow.fogNear, fogLimit * .95), fogFar: fogLimit, skyColor: undefined };
-  }
-  // Built-in scene fog can keep the foreground clear around a lit fire in
-  // one draw. Let the near plane recede at the edge of its eight-metre pool.
-  const fireNear = firePoolRadius * Math.min(1, Math.max(0, (firePoolRadius - litFireDistance) / 2));
-  return {
-    ...snow, fogNear: fireNear, fogFar: Math.max(fireNear + .1, Math.min(fogLimit, visibility / townWeatherExposureFor(area))),
-    skyColor: '#d8e2e9',
   };
 }
 
@@ -108,21 +122,4 @@ export function townSnowWeatherForFrame(
   const [tier, next] = level < profiles.medium.intensity ? ['light', 'medium'] as const : ['medium', 'heavy'] as const;
   const progress = (level - profiles[tier].intensity) / (profiles[next].intensity - profiles[tier].intensity);
   return { ...sampleProfile(tier, next, progress), intensity: level };
-}
-
-/** Accumulation sent only to the terrain renderer. */
-export function createTownWeatherCover() {
-  let cover = 0;
-  return {
-    update(seconds: number, weather: Pick<TownSnowWeather, 'pilingRate' | 'targetCover'>) {
-      if (Number.isFinite(seconds) && seconds > 0) {
-        if (cover < weather.targetCover) {
-          cover = Math.min(weather.targetCover, cover + seconds * weather.pilingRate / 55);
-        } else {
-          cover = Math.max(weather.targetCover, cover - seconds / 150);
-        }
-      }
-      return cover;
-    },
-  };
 }

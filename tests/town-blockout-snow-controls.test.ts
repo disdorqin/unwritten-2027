@@ -1,26 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createSnowballStock, snowResourceLimit } from '../src/shared/snow-stock.js';
 import { mountTownMobileControls } from '../tools/voxel-tavern/town-blockout/town-mobile-controls.js';
-import { createTownSnowControls } from '../tools/voxel-tavern/town-blockout/town-snow-controls.js';
+import { createTownSnowControls, type SnowWallCell } from '../tools/voxel-tavern/town-blockout/town-snow-controls.js';
 
 function setup(gatheringScale = 1) {
   let now = 0;
-  let amount = 48;
-  let build = false;
+  const stock = createSnowballStock();
+  for (let i = 0; i < 48; i++) stock.gather();
   const actions: string[] = [];
-  const flags = { playing: true, snowTarget: true, interact: false };
+  const flags = { playing: true, snowTarget: true, interact: false, wallAllowed: true,
+    wallTarget: undefined as SnowWallCell | undefined };
   const controls = createTownSnowControls({
     now: () => now,
     canUseSnow: () => flags.playing,
-    canGather: () => flags.snowTarget && amount < 50,
-    gather() { amount++; actions.push('gather'); },
+    canGather: () => flags.snowTarget && stock.amount() < snowResourceLimit,
+    gather() { if (stock.gather()) actions.push('gather'); },
     gatheringScale: () => gatheringScale,
     canInteract: () => flags.interact,
     interact() { actions.push('interact'); },
-    throwSnowball() { actions.push('throw'); },
-    buildMode: () => build,
-    setBuildMode(enabled) { build = enabled; actions.push(build ? 'mode-on' : 'mode-off'); return true; },
-    placeWall() { actions.push('place'); },
+    throwSnowball() { if (stock.spendThrow()) actions.push('throw'); },
+    wallTarget: () => flags.wallTarget,
+    placeWall(cell) {
+      actions.push(`place:${cell.gx},${cell.gy}`);
+      stock.reserveWall()?.(flags.wallAllowed);
+    },
   });
   function advance(ms: number) {
     for (let elapsed = 0; elapsed < ms; elapsed += 10) {
@@ -29,7 +33,7 @@ function setup(gatheringScale = 1) {
       controls.update(step / 1000);
     }
   }
-  return { controls, advance, actions, flags, amount: () => amount };
+  return { controls, advance, actions, flags, amount: stock.amount };
 }
 
 class TestButton extends EventTarget {
@@ -58,45 +62,50 @@ function setupMobile() {
   const document = Object.assign(new EventTarget(), { hidden: false, defaultView: new EventTarget() });
   const action = new TestButton(document);
   const throwButton = new TestButton(document);
-  const wallButton = new TestButton(document);
   const brakeButton = new TestButton(document);
   const direction = new TestButton(document);
   const jump = new TestButton(document);
   const sprint = new TestButton(document);
-  const elements = { action, throwButton, wallButton, brakeButton, direction, jump, sprint };
+  const elements = { action, throwButton, brakeButton, direction, jump, sprint };
   const brakes: boolean[] = [];
   const mobile = mountTownMobileControls(context.controls,
     elements as unknown as Parameters<typeof mountTownMobileControls>[1], brake => brakes.push(brake));
-  const pedestrian = { mobile: true, canMove: true, driving: false, canUseSnow: true, canBuild: true, buildMode: false };
+  const pedestrian = { mobile: true, canMove: true, driving: false, canUseSnow: true };
   mobile.update(pedestrian);
   return { ...context, ...elements, brakes, mobile, document, pedestrian };
 }
 
-test('desktop E is independent of mouse throw and B wall mode', () => {
-  const { controls, advance, actions, flags } = setup();
+test('desktop E, aimed throws and ground placement share no persistent mode', () => {
+  const { controls, advance, actions, flags, amount } = setup();
   flags.interact = true;
   assert.equal(controls.keyDown('KeyE', false), true);
   advance(120);
   controls.keyUp('KeyE');
   controls.primary();
-  controls.keyDown('KeyB', false);
-  controls.keyDown('KeyB', true);
+  assert.equal(amount(), 47);
+  assert.equal(controls.keyDown('KeyB', false), false);
+  assert.equal(controls.keyDown('KeyB', true), false);
+  flags.wallTarget = { gx: 2, gy: 3 };
   controls.primary();
-  assert.deepEqual(actions, ['interact', 'throw', 'mode-on', 'place']);
+  assert.equal(amount(), 44);
+  flags.wallAllowed = false;
+  assert.equal(controls.primary(), true);
+  assert.equal(amount(), 44, 'a rejected wall must not spend stock or fire a snowball');
+  assert.deepEqual(actions, ['interact', 'throw', 'place:2,3', 'place:2,3']);
   flags.playing = false;
   assert.equal(controls.primary(), false);
 });
 
-test('E held without a target only gathers up to 50, including in wall mode', () => {
-  const { controls, advance, actions, amount } = setup();
-  controls.toggleBuild();
+test('E held on snow only gathers up to 50 when aiming at a wall cell', () => {
+  const { controls, advance, actions, amount, flags } = setup();
+  flags.wallTarget = { gx: 2, gy: 3 };
   controls.keyDown('KeyE', false);
   advance(2400);
   controls.keyDown('KeyE', true);
   controls.keyUp('KeyE');
   assert.equal(amount(), 50);
   assert.equal(controls.gatherProgress(), undefined);
-  assert.deepEqual(actions, ['mode-on', 'gather', 'gather']);
+  assert.deepEqual(actions, ['gather', 'gather']);
 });
 
 test('whiteout speeds the shovel stroke while preserving the interaction hold threshold', () => {
@@ -165,33 +174,62 @@ test('mobile action button taps through the common world interaction and long-pr
   assert.deepEqual(actions, ['interact', 'gather']);
 });
 
-test('mobile throw and wall buttons never share the action-button hold', () => {
-  const { throwButton, wallButton, advance, actions, mobile, pedestrian } = setupMobile();
+test('phone ground taps only place on a second tap of the same exact cell', () => {
+  const { controls, actions, flags, amount } = setup();
+  const first = { gx: 2, gy: 3 };
+  controls.touchPrimary(first);
+  assert.deepEqual(controls.touchWallPreview(), first);
+  first.gx = 4;
+  assert.deepEqual(controls.touchWallPreview(), { gx: 2, gy: 3 });
+  controls.touchPrimary(first);
+  assert.deepEqual(controls.touchWallPreview(), first);
+  assert.equal(amount(), 48);
+  assert.deepEqual(actions, []);
+  controls.touchPrimary({ ...first });
+  assert.equal(controls.touchWallPreview(), undefined);
+  assert.equal(amount(), 45);
+  assert.deepEqual(actions, ['place:4,3']);
+  controls.touchPrimary(first);
+  flags.playing = false;
+  assert.equal(controls.touchWallPreview(), undefined);
+  assert.equal(controls.touchPrimary(first), false);
+  flags.playing = true;
+  controls.touchPrimary(first);
+  let touchThrows = 0;
+  controls.touchPrimary(undefined, () => { touchThrows++; });
+  assert.equal(controls.touchWallPreview(), undefined);
+  assert.equal(touchThrows, 1);
+  assert.deepEqual(actions, ['place:4,3']);
+});
+
+test('mobile throw button stays a throw, clears pending preview and does not start a hold', () => {
+  const { controls, throwButton, advance, actions, mobile } = setupMobile();
+  controls.touchPrimary({ gx: 4, gy: 3 });
   throwButton.pointer('pointerdown', 1);
   advance(1500);
   throwButton.pointer('pointerup', 1);
   assert.deepEqual(actions, []);
   throwButton.click(1);
-  wallButton.click(1);
-  mobile.update({ ...pedestrian, buildMode: true });
-  assert.equal(throwButton.textContent, '放雪墙');
-  throwButton.click(1);
-  assert.deepEqual(actions, ['throw', 'mode-on', 'place']);
+  assert.equal(throwButton.textContent, '投雪球');
+  assert.equal(controls.touchWallPreview(), undefined);
+  assert.deepEqual(actions, ['throw']);
   mobile.dispose();
   throwButton.click(1);
-  assert.deepEqual(actions, ['throw', 'mode-on', 'place']);
+  assert.deepEqual(actions, ['throw']);
 });
 
 test('driving exchanges the walking buttons for held brake and keeps the common dismount action', () => {
-  const { action, brakeButton, jump, sprint, throwButton, wallButton, direction, advance,
+  const { controls, action, brakeButton, jump, sprint, throwButton, direction, advance,
     actions, brakes, flags, mobile, pedestrian } = setupMobile();
+  controls.touchPrimary({ gx: 2, gy: 3 });
   flags.playing = false;
   flags.interact = true;
   mobile.update({ ...pedestrian, driving: true, canUseSnow: false, action: '下橇' });
   assert.equal(action.textContent, '下橇');
   assert.equal(action.hidden, false);
   assert.equal(direction.getAttribute('aria-label'), '驾驶摇杆');
-  assert.ok([jump, sprint, throwButton, wallButton].every(button => button.hidden));
+  assert.ok([jump, sprint, throwButton].every(button => button.hidden));
+  assert.equal(controls.touchWallPreview(), undefined);
   assert.equal(brakeButton.hidden, false);
   brakeButton.pointer('pointerdown', 7);
   brakeButton.pointer('pointerup', 8);

@@ -1,7 +1,0 @@
-{
-  "mode": "menu-smoke",
-  "enableIds": ["old-town:137:70", "old-town:228:110", "old-town:246:135", "old-town:173:135"],
-  "menuDoors": ["old-town:137:70", "old-town:228:110", "old-town:246:135", "old-town:173:135"],
-  "touchMenu": "old-town:137:70",
-  "legacyDoor": "district:513:366"
-}

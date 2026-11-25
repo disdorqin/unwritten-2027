@@ -274,7 +274,7 @@ export type MarketFairView = {
 
 export function createMarketFairActivity(
   context: TownActivityContext, view: MarketFairView,
-): TownActivity {
+): TownActivity & { refresh(): void } {
   void context; // 本切片的反馈走气泡 + 图标，不占用活动面板与状态行。
   const board = new HawkingBoard(marketStalls);
   let sessionLedger: string | null = null;
@@ -362,6 +362,11 @@ export function createMarketFairActivity(
 
   return {
     spots,
+    refresh() {
+      if (view.marketPassport && !view.marketPassport.collected()) {
+        collectionComplete = loadTastingLedger(storage, marketStalls.length, new Date()).tastedKinds.length === marketKinds.size;
+      }
+    },
     update(dt) {
       clock += dt;
       const player = view.player();

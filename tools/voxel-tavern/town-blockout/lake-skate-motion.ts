@@ -1,3 +1,5 @@
+import { iceTreasureTurnRadiusMultiplier } from '../../../src/shared/ice-treasure';
+
 const maxSpeed = 10;
 const steeringRate = 4.4;
 const coastRate = 2.9;
@@ -14,7 +16,7 @@ export function createLakeSkateMotion() {
 
   // Inputs and outputs are velocities in east/north world meters per second.
   // The caller owns integration, collision checks and resets at surface changes.
-  function step(eastVelocity: number, northVelocity: number, dt: number) {
+  function step(eastVelocity: number, northVelocity: number, dt: number, carryingTreasure = false) {
     if (!Number.isFinite(dt) || dt <= 0) return { east, north };
 
     let targetEast = Number.isFinite(eastVelocity) ? eastVelocity : 0;
@@ -28,8 +30,20 @@ export function createLakeSkateMotion() {
 
     const steering = requestedSpeed > 0;
     const blend = -Math.expm1(-(steering ? steeringRate : coastRate) * dt);
-    east += (targetEast - east) * blend;
-    north += (targetNorth - north) * blend;
+    const nextEast = east + (targetEast - east) * blend;
+    const nextNorth = north + (targetNorth - north) * blend;
+    if (carryingTreasure && steering && east * east + north * north >= restSpeed * restSpeed) {
+      // Change the angular response at the same speed so the curve radius grows by 1.5×.
+      const heading = Math.atan2(north, east);
+      const turn = Math.atan2(east * nextNorth - north * nextEast, east * nextEast + north * nextNorth);
+      const nextHeading = heading + turn / iceTreasureTurnRadiusMultiplier;
+      const speed = Math.hypot(nextEast, nextNorth);
+      east = Math.cos(nextHeading) * speed;
+      north = Math.sin(nextHeading) * speed;
+    } else {
+      east = nextEast;
+      north = nextNorth;
+    }
 
     if (!steering && east * east + north * north < restSpeed * restSpeed) reset();
     return { east, north };

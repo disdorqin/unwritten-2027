@@ -1,6 +1,5 @@
 import { Vector3, type Group } from 'three';
 import type { buildExtensionStreets } from './extension-streets';
-import type { IceCastleRefinementRuntime } from './ice-castle-refinement';
 import type { iceThrone } from './landmark-ice-castle';
 import type { railwayStationStops } from './landmark-station';
 import { stationSignCopy } from './station-sign-copy';
@@ -34,6 +33,7 @@ export function createRailwayStationSpots(
   const ticket = worldPoint(group, stops.ticketCounter);
   const board = worldPoint(group, stops.timetable);
   const guide = worldPoint(group, stops.guide);
+  const cableGate = worldPoint(group, stops.cableGate);
   const spots: TownActivitySpot[] = [
     {
       x: ticket.x, n: -ticket.z, ground: ticket.y, range: 1.35, label: '车票盖章',
@@ -52,6 +52,12 @@ export function createRailwayStationSpots(
       x: guide.x, n: -guide.z, ground: guide.y, range: 1.35, label: `查看${railHallGuide.title}`,
       run: () => { context.open(railHallGuide.title, railHallGuide.description); },
     },
+    {
+      x: cableGate.x, n: -cableGate.z, ground: cableGate.y, range: 1.55, label: '查看缆车站老闸',
+      run() {
+        context.open('北岭缆车', '山脚站 → 半山站 → 云海台。老闸目前关闭。');
+      },
+    },
   ];
   return spots.filter(({ x, n, ground }) => canStand(x, n, ground));
 }
@@ -61,7 +67,6 @@ export function createIceThroneSpots(
   canStand: TownStand, savePhoto: (filename: string) => void,
 ): TownActivitySpot[] {
   const throne = group.userData.throne as typeof iceThrone;
-  const refinement = group.userData.iceRefinement as IceCastleRefinementRuntime | undefined;
   const stand = worldPoint(group, throne.stand);
   const seat = worldPoint(group, throne.seat);
   const photo = worldPoint(group, throne.photo);
@@ -71,7 +76,6 @@ export function createIceThroneSpots(
       x: stand.x, n: -stand.z, ground: stand.y, range: .95, label: '在冰城堡王座就座',
       run() {
         context.sit({ x: seat.x, n: -seat.z, eyeY: seat.y, yaw: -Math.PI / 2 });
-        refinement?.enthrone();
       },
     },
     {
@@ -96,3 +100,4 @@ export function createCourtyardSeatSpots(
   }
   return spots;
 }
+

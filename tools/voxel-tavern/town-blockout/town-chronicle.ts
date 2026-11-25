@@ -1,8 +1,15 @@
 import { UNLOCK_AT } from './town-mail-store';
+import { houseDoorBookCopy } from './town-house-door-book';
 import { browserTextStorage, isStoredRecord, readCollection, writeCollection, type StorageAccess } from './town-text-store';
 
 export const townChronicleKey = 'unwritten.chronicle.v1';
 export const townChronicleLocalScope = '本机所见';
+/** Dispatched on document after a chronicle write lands, so an open 镇志 book refreshes. */
+export const townChronicleChanged = 'town-chronicle-changed';
+
+function announceChronicleChanged() {
+  if (typeof document !== 'undefined') document.dispatchEvent(new Event(townChronicleChanged));
+}
 
 export type TownChronicleEntry = {
   id: string;
@@ -30,14 +37,24 @@ function isChronicleEntry(value: unknown): value is TownChronicleEntry {
     (value.status === 'draft' || value.status === 'published') && typeof value.pinned === 'boolean';
 }
 
+const houseDoorChronicleEntry: TownChronicleEntry = {
+  id: 'chr-hundred-house-doors', vol: 4, era: '建镇纪', date: null,
+  title: '百门通', body: houseDoorBookCopy.chronicle, source: 'official', actor: null,
+  status: 'published', pinned: false,
+};
+
 export function readPublishedTownChronicle(storage = browserTextStorage()): TownChronicleEntry[] {
-  return readCollection(storage, townChronicleKey, isChronicleEntry).filter(item => item.status === 'published');
+  const entries = readCollection(storage, townChronicleKey, isChronicleEntry)
+    .filter(item => item.status === 'published' && item.id !== houseDoorChronicleEntry.id);
+  return [...entries, { ...houseDoorChronicleEntry }];
 }
 
 function append(entry: TownChronicleEntry, storage: StorageAccess | undefined) {
   const entries = readCollection(storage, townChronicleKey, isChronicleEntry);
   if (entries.some(item => item.id === entry.id)) return true;
-  return writeCollection(storage, townChronicleKey, [...entries, entry]);
+  const written = writeCollection(storage, townChronicleKey, [...entries, entry]);
+  if (written) announceChronicleChanged();
+  return written;
 }
 
 function timestamp(at: number) {

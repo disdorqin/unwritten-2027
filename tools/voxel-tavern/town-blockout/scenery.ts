@@ -3,7 +3,7 @@ import {
   Group, InstancedMesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PointLight, Vector3,
   Points, PointsMaterial, SRGBColorSpace, type BufferGeometry as Geometry, type Material,
 } from 'three';
-import { canEnter, gridStep, layout, plazaCoreBounds, plazaPavingAllowed } from './terrain';
+import { canEnter, layout } from './terrain';
 import { roadCorridorKeepClear } from './road-clearance';
 import { addLandmarkNameplate } from './landmark-label';
 import type { Box } from './landmark-kit';
@@ -56,20 +56,19 @@ function makeGlows(group: Group, positions: Position[]) {
   return material;
 }
 
-type Blocker = { x: number; n: number; radius: number };
-
-function sceneryRandom() {
-  let seed = 271;
-  return () => {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-}
-
+// AW-6: flat or wide props (notice board, ice horse, firework stand) carry a
+// playerRect — the player-facing test follows the prop's actual outline instead
+// of the placement circle. Placement queries keep using the circle for every
+// blocker, so housing placement results are unchanged.
+type Blocker = { x: number; n: number; radius: number; playerRect?: { hw: number; hd: number } };
 export function addScenery(
   group: Group, grid: Ground, keepClear: (east: number, north: number, radius: number) => boolean = () => false,
 ) {
-  const random = sceneryRandom();
+  let seed = 271;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
   const pillars: Instance[] = [];
   const lights: Instance[] = [];
   const caps: Instance[] = [];
@@ -81,8 +80,6 @@ export function addScenery(
     site: PlazaSnowSupplySite; firstCap: number; ground: number; parts: Instance[]; heightScale: number;
   }[] = [];
   const [w, s, e, n] = layout.plaza.bounds;
-  const [coreWest, coreSouth, coreEast, coreNorth] = plazaCoreBounds;
-  const hasPlazaCore = w <= coreWest && s <= coreSouth && e >= coreEast && n >= coreNorth;
   function nearEntrance(x: number, north: number, margin: number) {
     return layout.plots.some(({ connect: [ax, an], door: [bx, bn] }) => {
       const dx = bx - ax;
@@ -108,49 +105,21 @@ export function addScenery(
     caps.push({ at: [x, plazaHeight + y, -north], scale, tint, turn });
   };
 
-  const pavingColors = ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'] as const;
-  function pave(x: number, north: number, width: number, depth: number, tint: string) {
-    const centreEast = x + width / 2, centreNorth = north + depth / 2;
-    const tileRadius = Math.hypot(width, depth) / 2;
-    if (plazaPavingAllowed(centreEast, centreNorth, tileRadius) &&
-        grid.heightAt(centreEast, centreNorth) === plazaHeight &&
-        grid.heightAt(x, north) === plazaHeight &&
-        grid.heightAt(x + width, north) === plazaHeight &&
-        grid.heightAt(x, north + depth) === plazaHeight &&
-        grid.heightAt(x + width, north + depth) === plazaHeight) {
-      pavers.push({ at: [centreEast, plazaHeight - .025, -centreNorth],
-        scale: [width - .035, .085, depth - .035], tint });
-      return;
-    }
-    // Split only at cuts and sloping edges; the full-size stone stays everywhere else.
-    if (Math.max(width, depth) <= gridStep) return;
-    if (width >= depth) {
-      const first = Math.max(gridStep, Math.floor(width / (2 * gridStep)) * gridStep);
-      pave(x, north, first, depth, tint);
-      pave(x + first, north, width - first, depth, tint);
-    } else {
-      const first = Math.max(gridStep, Math.floor(depth / (2 * gridStep)) * gridStep);
-      pave(x, north, width, first, tint);
-      pave(x, north + first, width, depth - first, tint);
-    }
-  }
-
-  if (hasPlazaCore) {
+  if (w === 161 && s === 152 && e === 251 && n === 212) {
     function inlay(x: number, north: number, width: number, depth: number, tint: string, turn = 0) {
-      if (plazaPavingAllowed(x, north, Math.hypot(width, depth) / 2)) {
-        pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
-      }
+      pavers.push({ at: [x, plazaHeight + .022, -north], scale: [width, .012, depth], tint, turn });
     }
-    for (const [west, east] of [[coreWest, 219], [219, 229], [229, coreEast]]) {
+    for (const [west, east] of [[w, 219], [219, 229], [229, e]]) {
       for (let x = west; x < east; x += 4) {
-        for (let north = coreSouth; north < coreNorth; north += 4) {
-          const width = Math.min(4, east - x), depth = Math.min(4, coreNorth - north);
-          const seam = x === west || north === coreSouth || north + depth === coreNorth;
+        for (let north = s; north < n; north += 4) {
+          const width = Math.min(4, east - x), depth = Math.min(4, n - north);
+          const seam = x === west || north === s || north + depth === n;
           const tint = west === 219
             ? ['#a8988a', '#b3a295'][Math.floor(random() * 2)]
-            : seam ? '#6f7887' : pavingColors[Math.floor(random() * pavingColors.length)];
-          pave(x, north, width, depth, tint);
-          if (west !== 219 && (north - coreSouth) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
+            : seam ? '#6f7887' : ['#87919d', '#aab3ba', '#959daa', '#a3a7a7'][Math.floor(random() * 4)];
+          pavers.push({ at: [x + width / 2, plazaHeight - .025, -north - depth / 2],
+            scale: [width - .035, .085, depth - .035], tint });
+          if (west !== 219 && (north - s) % 12 === 0) inlay(x + width / 2, north + .10, width - .08, .08, '#aabfcf');
         }
       }
     }
@@ -174,30 +143,15 @@ export function addScenery(
           1.03, .14, '#d5e8f4', fork);
       }
     }
-    // Leave breaks at road cuts and keep each continuous run in one emissive instance.
-    function edgeLight(x: number, north: number, span: number, alongEast: boolean) {
-      const stripeWidth = .095;
-      const dx = alongEast ? 1 : 0, dn = alongEast ? 0 : 1;
-      let start = 0;
-      function placeRun(end: number) {
-        if (end <= start) return;
-        const length = end - start, mid = (start + end) / 2;
-        lights.push({ at: [x + dx * mid, plazaHeight + .023, -north - dn * mid],
-          scale: [alongEast ? length : stripeWidth, .01, alongEast ? stripeWidth : length] });
-      }
-      for (let along = 0; along < span; along += gridStep) {
-        const step = Math.min(gridStep, span - along);
-        const mid = along + step / 2;
-        if (plazaPavingAllowed(x + dx * mid, north + dn * mid, Math.hypot(step, stripeWidth) / 2)) continue;
-        placeRun(along);
-        start = along + step;
-      }
-      placeRun(span);
+    // Keep the non-colliding edge lights in the existing emissive batch.
+    for (const north of [s + 2, n - 2]) {
+      lights.push({ at: [(w + e) / 2, plazaHeight + .023, -north], scale: [e - w - 4, .01, .095] });
     }
-    for (const north of [coreSouth + 2, coreNorth - 2]) edgeLight(coreWest + 2, north, coreEast - coreWest - 4, true);
-    for (const east of [coreWest + 2, coreEast - 2]) edgeLight(east, coreSouth + 2, coreNorth - coreSouth - 4, false);
+    for (const east of [w + 2, e - 2]) {
+      lights.push({ at: [east, plazaHeight + .023, -(s + n) / 2], scale: [.095, .01, n - s - 4] });
+    }
     for (const east of [216.5, 231.5]) {
-      for (let north = 157; north <= coreNorth; north += 11) {
+      for (let north = 157; north <= n; north += 11) {
         pillars.push({ at: [east, plazaHeight + .18, -north], scale: [.21, .36, .21], tint: '#453f48' });
         pillars.push({ at: [east, plazaHeight + .07, -north], scale: [.42, .14, .42], tint: '#78869b' });
         lights.push({ at: [east, plazaHeight + .44, -north], scale: [.36, .16, .36] });
@@ -216,8 +170,7 @@ export function addScenery(
     const plazaGlow = (x: number, north: number, y: number, scale: Position) => {
       lights.push({ at: [x, plazaHeight + y, -north], scale });
     };
-    // Keep the inner gate on the original plaza core as the outer bounds expand.
-    const gateEast = coreWest, gateNorth = 190;
+    const gateEast = 161, gateNorth = 190;
     for (const north of [187.85, 192.15]) {
       plazaBox(gateEast, north, .18, [.66, .36, .66], '#8b8b94');
       plazaBox(gateEast, north, 1.94, [.41, 3.32, .41], '#7e423e');
@@ -275,7 +228,7 @@ export function addScenery(
         plazaBox(boardEast + (index - 1.5) * .74, boardNorth + side * .083, .84, [.66, .45, .012], '#d2b58b');
       }
     }
-    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55 });
+    blockers.push({ x: boardEast, n: boardNorth, radius: 1.55, playerRect: { hw: 1.73, hd: .24 } });
 
     const moundWidth = plazaSnowSupplySize.halfWidth * 2;
     for (const site of plazaSnowSupplySites) {
@@ -307,20 +260,6 @@ export function addScenery(
     }
     for (const north of [186, 191, 196]) inlay(238, north, 1.40, 1.40, '#d1e3ed');
     inlay(242, 203, .64, .46, '#b58b5d');
-    const annexRandom = sceneryRandom();
-    for (const [west, south, east, top] of [
-      [w, s, e, coreSouth], [w, coreSouth, coreWest, coreNorth],
-      [coreEast, coreSouth, e, coreNorth], [w, coreNorth, e, n],
-    ]) {
-      for (let x = west; x < east; x += 4) {
-        for (let north = south; north < top; north += 4) {
-          const width = Math.min(4, east - x), depth = Math.min(4, top - north);
-          const seam = x === w || north === s || x + width === e || north + depth === n;
-          const tint = seam ? '#6f7887' : pavingColors[Math.floor(annexRandom() * pavingColors.length)];
-          pave(x, north, width, depth, tint);
-        }
-      }
-    }
   } else {
     for (let x = w + 1; x < e; x += 2) {
       for (let north = s + 1; north < n; north += 1.5) {
@@ -373,7 +312,7 @@ export function addScenery(
   iceHorseBox(.88, -.24, 2.22, [.07, .07, .04], '#527e9a');
   iceHorseBox(-.86, 0, 1.5, [.23, .18, .26], '#b6dded');
   iceHorseBox(-1.02, 0, 1.29, [.20, .30, .21], '#abd9ee');
-  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36 });
+  blockers.push({ x: horseEast, n: horseNorth, radius: 1.36, playerRect: { hw: 1.45, hd: .91 } });
 
   for (const [x, north] of [[218, 190], [246, 184], [246, 196]]) {
     for (const [y, width, depth, height, tint] of [
@@ -384,14 +323,9 @@ export function addScenery(
     ] as const) plazaBox(x, north, y, [width, height, depth], tint);
   }
 
-  // Retain the approved east light line inside the annex; the station side stays clear.
-  const perimeterLamps = [[w - 1.1, s, n], hasPlazaCore
-    ? [coreEast + 1.1, coreSouth, coreNorth] : [e + 1.1, s, n]];
-  for (const [x, south, top] of perimeterLamps) {
-    for (const north of [south + 2, south + 18, south + 32, top - 2]) {
-      if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5)) ||
-          roadCorridorKeepClear(x, north, .75) || layout.plots.some(({ origin, footprint }) =>
-            Math.abs(x - origin[0]) <= footprint[0] / 2 + .7 && Math.abs(north - origin[1]) <= footprint[1] / 2 + .7)) continue;
+  for (const x of [w - 1.1, e + 1.1]) {
+    for (const north of [s + 2, s + 18, s + 32, n - 2]) {
+      if (layout.roads.some(road => road.points.some(([rx, rn]) => Math.hypot(x - rx, north - rn) < 5))) continue;
       lamp(x, grid.heightAt(x, north), north);
     }
   }
@@ -427,8 +361,7 @@ export function addScenery(
         const cell = Math.round(north) * grid.gridWidth + Math.round(x);
         const inPlot = layout.plots.some(({ origin, footprint }) =>
           Math.abs(x - origin[0]) <= footprint[0] / 2 + .7 && Math.abs(north - origin[1]) <= footprint[1] / 2 + .7);
-        const freeSnowfightField = hasPlazaCore && w <= x && x < coreWest && north >= 166 && north <= n;
-        if (grid.surfaces[cell] === 0 && canEnter(x, north) && !inPlot && !freeSnowfightField
+        if (grid.surfaces[cell] === 0 && canEnter(x, north) && !inPlot
           && !roadCorridorKeepClear(x, north, .75)
           && blockers.every(b => Math.hypot(x - b.x, north - b.n) > 4)) {
           lamp(x, grid.heightAt(x, north), north);
@@ -460,7 +393,7 @@ export function addScenery(
     standPiece(dx, .83, .13, [.26, .07, .26], '#a87549');
     standPiece(dx, .865, .13, [.147, .021, .147], '#362631');
   }
-  blockers.push({ x: fireworkX, n: fireworkNorth, radius: 1.0 });
+  blockers.push({ x: fireworkX, n: fireworkNorth, radius: 1.0, playerRect: { hw: .93, hd: .65 } });
 
   const box = new BoxGeometry();
   const neutral = new MeshLambertMaterial();
@@ -531,7 +464,12 @@ export function addScenery(
         return dx * dx + dn * dn < radius * radius;
       });
     },
-    blocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
+    blocked: (x: number, north: number) => blockers.some(b => b.playerRect
+      ? Math.abs(x - b.x) < b.playerRect.hw + .27 && Math.abs(north - b.n) < b.playerRect.hd + .27
+      : Math.hypot(x - b.x, north - b.n) < b.radius + .27),
+    // Placement-facing twin of blocked(): legacy circles only (AW-6 guard —
+    // district housing placement must see exactly the pre-AW-6 field).
+    placementBlocked: (x: number, north: number) => blockers.some(b => Math.hypot(x - b.x, north - b.n) < b.radius + .27),
     setNight: (enabled: boolean) => {
       night = enabled;
       glow.opacity = night ? .85 : .18;

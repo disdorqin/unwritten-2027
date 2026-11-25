@@ -1,0 +1,1334 @@
+{
+  "release": "75859a094757c5dcee8b874eef86ec37f4204907",
+  "viewerSha256": "dec3911a3c68eecb3b61816e7af1dab0d76c6c79c9e0ea52e0cce5ac4f0d03e7",
+  "road": {
+    "id": "south-loop",
+    "width": 6,
+    "points": [
+      [
+        108,
+        114,
+        9
+      ],
+      [
+        129,
+        86,
+        9
+      ],
+      [
+        176,
+        74,
+        9
+      ],
+      [
+        218,
+        85,
+        9
+      ],
+      [
+        269,
+        100,
+        9
+      ],
+      [
+        295,
+        100,
+        9
+      ],
+      [
+        350,
+        100,
+        10
+      ]
+    ]
+  },
+  "counts": {
+    "totalDoors": 92,
+    "oldTown": 52,
+    "extension": 38,
+    "decorative": 2,
+    "sourceCandidates": 12,
+    "joined": 3,
+    "retainedJx1": 3,
+    "eligibleJx2": 0,
+    "missing": 9,
+    "market": 17
+  },
+  "candidates": [
+    {
+      "id": "old-town:115:87",
+      "sourceDistance": 10.599999999999998,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:115:87",
+        "zone": "market",
+        "location": [
+          115,
+          87
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:161:68",
+      "sourceDistance": 9.524254942734085,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:161:68",
+        "zone": "market",
+        "location": [
+          161,
+          68
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "rail"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:188:65",
+      "sourceDistance": 11.746662712474409,
+      "door": {
+        "id": "old-town:188:65",
+        "zone": "market",
+        "x": 188,
+        "n": 70.47,
+        "ground": 9.100555801391602,
+        "exitYaw": 1.2246467991473532e-16
+      },
+      "generationRejection": null,
+      "owner": "JX-1"
+    },
+    {
+      "id": "old-town:202:70",
+      "sourceDistance": 10.456833081300747,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:202:70",
+        "zone": "market",
+        "location": [
+          202,
+          70
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:145:85",
+      "sourceDistance": 2.9892142136286632,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:145:85",
+        "zone": "market",
+        "location": [
+          145,
+          85
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:137:70",
+      "sourceDistance": 13.52361740786485,
+      "door": {
+        "id": "old-town:137:70",
+        "zone": "market",
+        "x": 136,
+        "n": 77.72,
+        "ground": 8.620084228515625,
+        "exitYaw": 1.2246467991473532e-16
+      },
+      "generationRejection": null,
+      "owner": "JX-1"
+    },
+    {
+      "id": "old-town:234:74",
+      "sourceDistance": 15.067681701148778,
+      "door": {
+        "id": "old-town:234:74",
+        "zone": "market",
+        "x": 234,
+        "n": 81.345,
+        "ground": 8.915782780647278,
+        "exitYaw": 1.2246467991473532e-16
+      },
+      "generationRejection": null,
+      "owner": "JX-1"
+    },
+    {
+      "id": "old-town:245:80",
+      "sourceDistance": 12.415318255628208,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:245:80",
+        "zone": "market",
+        "location": [
+          245,
+          80
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "setback"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:181:89",
+      "sourceDistance": 13.243786391515263,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:181:89",
+        "zone": "market",
+        "location": [
+          181,
+          89
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "rail"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:311:117",
+      "sourceDistance": 17,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:311:117",
+        "zone": "lakeside",
+        "location": [
+          311,
+          117
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:320:105",
+      "sourceDistance": 5,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:320:105",
+        "zone": "lakeside",
+        "location": [
+          320,
+          105
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "path"
+      },
+      "owner": null
+    },
+    {
+      "id": "old-town:325:87",
+      "sourceDistance": 13,
+      "door": null,
+      "generationRejection": {
+        "id": "old-town:325:87",
+        "zone": "lakeside",
+        "location": [
+          325,
+          87
+        ],
+        "relocated": false,
+        "overlapsPlaza": false,
+        "reason": "open-space"
+      },
+      "owner": null
+    }
+  ],
+  "builtCenterDiagnostic": [
+    {
+      "id": "old-town:137:70",
+      "east": 136,
+      "north": 71,
+      "centerDistance": 12.802082942506207
+    },
+    {
+      "id": "old-town:188:65",
+      "east": 188,
+      "north": 65,
+      "centerDistance": 11.746662712474409
+    },
+    {
+      "id": "old-town:234:74",
+      "east": 234,
+      "north": 74,
+      "centerDistance": 15.067681701148778
+    },
+    {
+      "id": "old-town:206:110",
+      "east": 210.5,
+      "north": 101.5,
+      "centerDistance": 17.861837124556672
+    },
+    {
+      "id": "old-town:228:110",
+      "east": 229.5,
+      "north": 105.5,
+      "centerDistance": 16.42208005630822
+    },
+    {
+      "id": "old-town:246:114",
+      "east": 246.5,
+      "north": 111.5,
+      "centerDistance": 17.38144555787949
+    }
+  ],
+  "doorThresholdDiagnostic": [
+    {
+      "id": "old-town:137:70",
+      "zone": "market",
+      "x": 136,
+      "n": 77.72,
+      "ground": 8.620084228515625,
+      "exitYaw": 1.2246467991473532e-16,
+      "doorDistance": 6.290955927109814
+    },
+    {
+      "id": "old-town:188:65",
+      "zone": "market",
+      "x": 188,
+      "n": 70.47,
+      "ground": 9.100555801391602,
+      "exitYaw": 1.2246467991473532e-16,
+      "doorDistance": 6.455136650584467
+    },
+    {
+      "id": "old-town:206:110",
+      "zone": "market",
+      "x": 210.5,
+      "n": 94.78,
+      "ground": 9.902902145385742,
+      "exitYaw": 3.141592653589793,
+      "doorDistance": 11.361095783441424
+    },
+    {
+      "id": "old-town:217:66",
+      "zone": "market",
+      "x": 217,
+      "n": 72.72,
+      "ground": 7.770080165863037,
+      "exitYaw": 1.2246467991473532e-16,
+      "doorDistance": 11.625971511271732
+    },
+    {
+      "id": "old-town:228:110",
+      "zone": "market",
+      "x": 229.5,
+      "n": 98.155,
+      "ground": 8.689330406188965,
+      "exitYaw": 3.141592653589793,
+      "doorDistance": 9.37554044726724
+    },
+    {
+      "id": "old-town:234:74",
+      "zone": "market",
+      "x": 234,
+      "n": 81.345,
+      "ground": 8.915782780647278,
+      "exitYaw": 1.2246467991473532e-16,
+      "doorDistance": 8.021142092107798
+    },
+    {
+      "id": "old-town:246:114",
+      "zone": "market",
+      "x": 246.5,
+      "n": 106.03,
+      "ground": 7.659191880226135,
+      "exitYaw": 3.141592653589793,
+      "doorDistance": 12.13371626428464
+    },
+    {
+      "id": "old-town:94:100",
+      "zone": "market",
+      "x": 94,
+      "n": 105.47,
+      "ground": 9.17612232208252,
+      "exitYaw": 1.2246467991473532e-16,
+      "doorDistance": 16.393928754267538
+    }
+  ],
+  "roadWalk": [
+    {
+      "start": [
+        108,
+        114,
+        9
+      ],
+      "end": [
+        129,
+        86,
+        9
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 280,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 129,
+          "n": 86,
+          "ground": 9
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 280,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 108,
+          "n": 114,
+          "ground": 9
+        }
+      }
+    },
+    {
+      "start": [
+        129,
+        86,
+        9
+      ],
+      "end": [
+        176,
+        74,
+        9
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 389,
+        "maxStep": 0.0029852604804734284,
+        "startHeight": 9,
+        "finish": {
+          "x": 176,
+          "n": 74,
+          "ground": 9
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 389,
+        "maxStep": 0.0029852604804734284,
+        "startHeight": 9,
+        "finish": {
+          "x": 129,
+          "n": 86,
+          "ground": 9
+        }
+      }
+    },
+    {
+      "start": [
+        176,
+        74,
+        9
+      ],
+      "end": [
+        218,
+        85,
+        9
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 348,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 218,
+          "n": 85,
+          "ground": 9
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 348,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 176,
+          "n": 74,
+          "ground": 9
+        }
+      }
+    },
+    {
+      "start": [
+        218,
+        85,
+        9
+      ],
+      "end": [
+        269,
+        100,
+        9
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 426,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 269,
+          "n": 100,
+          "ground": 9
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 426,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 218,
+          "n": 85,
+          "ground": 9
+        }
+      }
+    },
+    {
+      "start": [
+        269,
+        100,
+        9
+      ],
+      "end": [
+        295,
+        100,
+        9
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 208,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 295,
+          "n": 100,
+          "ground": 9
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 208,
+        "maxStep": 0,
+        "startHeight": 9,
+        "finish": {
+          "x": 269,
+          "n": 100,
+          "ground": 9
+        }
+      }
+    },
+    {
+      "start": [
+        295,
+        100,
+        9
+      ],
+      "end": [
+        350,
+        100,
+        10
+      ],
+      "forward": {
+        "passed": true,
+        "steps": 440,
+        "maxStep": 0.0022728443145751953,
+        "startHeight": 9,
+        "finish": {
+          "x": 350,
+          "n": 100,
+          "ground": 10
+        }
+      },
+      "backward": {
+        "passed": true,
+        "steps": 440,
+        "maxStep": 0.0022728443145751953,
+        "startHeight": 10,
+        "finish": {
+          "x": 295,
+          "n": 100,
+          "ground": 9
+        }
+      }
+    }
+  ],
+  "centerline": {
+    "forward": {
+      "passed": true,
+      "steps": 2091,
+      "maxStep": 0.0029852604804734284,
+      "startHeight": 9,
+      "finish": {
+        "x": 350,
+        "n": 100,
+        "ground": 10
+      }
+    },
+    "backward": {
+      "passed": true,
+      "steps": 2091,
+      "maxStep": 0.0029852604804734284,
+      "startHeight": 10,
+      "finish": {
+        "x": 108,
+        "n": 114,
+        "ground": 9
+      }
+    }
+  },
+  "doors": [
+    {
+      "id": "district:125:470",
+      "zone": "forest",
+      "x": 125,
+      "n": 476.92,
+      "ground": 10.435672645568848,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:145:467",
+      "zone": "forest",
+      "x": 145,
+      "n": 472.92,
+      "ground": 9.181724052429198,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:151:493",
+      "zone": "forest",
+      "x": 151,
+      "n": 486.58,
+      "ground": 8.442885913848876,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:168:489",
+      "zone": "forest",
+      "x": 168,
+      "n": 483.08,
+      "ground": 7.865925388336181,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:211:491",
+      "zone": "forest",
+      "x": 205.08,
+      "n": 491,
+      "ground": 9.205886993408203,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:410:343",
+      "zone": "memorial",
+      "x": 416.42,
+      "n": 343,
+      "ground": 53.811874847412106,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "district:421:363",
+      "zone": "memorial",
+      "x": 421,
+      "n": 356.08,
+      "ground": 54.138416595458985,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:489:438",
+      "zone": "memorial",
+      "x": 489,
+      "n": 431.58,
+      "ground": 16.25320987701416,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:502:401",
+      "zone": "memorial",
+      "x": 502,
+      "n": 394.58,
+      "ground": 20.279340324401858,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:503:451",
+      "zone": "memorial",
+      "x": 503,
+      "n": 444.58,
+      "ground": 12.419103317260744,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:513:366",
+      "zone": "market",
+      "x": 513,
+      "n": 371.92,
+      "ground": 19.873635025024413,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:516:273",
+      "zone": "market",
+      "x": 516,
+      "n": 279.42,
+      "ground": 12.823779029846193,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:520:417",
+      "zone": "memorial",
+      "x": 520,
+      "n": 424.42,
+      "ground": 13.011661949157713,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:521:82",
+      "zone": "lakeside",
+      "x": 521,
+      "n": 88.42,
+      "ground": 8.963701477050781,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:528:207",
+      "zone": "lakeside",
+      "x": 528,
+      "n": 200.08,
+      "ground": 8.721796073913575,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:532:448",
+      "zone": "memorial",
+      "x": 532,
+      "n": 441.08,
+      "ground": 9.334973602294923,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:535:267",
+      "zone": "market",
+      "x": 535,
+      "n": 273.42,
+      "ground": 11.896365909576417,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:539:85",
+      "zone": "lakeside",
+      "x": 539,
+      "n": 91.92,
+      "ground": 8.990051155090333,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:550:412",
+      "zone": "memorial",
+      "x": 543.08,
+      "n": 412,
+      "ground": 11.985442810058586,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:551:385",
+      "zone": "market",
+      "x": 551,
+      "n": 378.08,
+      "ground": 11.738451461791993,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:551:65",
+      "zone": "lakeside",
+      "x": 551,
+      "n": 70.92,
+      "ground": 8.82424503326416,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:552:216",
+      "zone": "lakeside",
+      "x": 552,
+      "n": 209.58,
+      "ground": 10.080424633026123,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:554:272",
+      "zone": "market",
+      "x": 554,
+      "n": 278.92,
+      "ground": 10.777416877746582,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:555:438",
+      "zone": "memorial",
+      "x": 555,
+      "n": 431.08,
+      "ground": 10.024207153320312,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:560:85",
+      "zone": "lakeside",
+      "x": 553.58,
+      "n": 85,
+      "ground": 8.623112659454346,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:571:376",
+      "zone": "market",
+      "x": 571,
+      "n": 369.58,
+      "ground": 11.279743595123291,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:572:280",
+      "zone": "market",
+      "x": 572,
+      "n": 286.42,
+      "ground": 9.100475425720216,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:576:207",
+      "zone": "lakeside",
+      "x": 576,
+      "n": 200.58,
+      "ground": 8.48954475402832,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:586:136",
+      "zone": "lakeside",
+      "x": 586,
+      "n": 129.58,
+      "ground": 8.27560935974121,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "district:589:295",
+      "zone": "market",
+      "x": 589,
+      "n": 301.92,
+      "ground": 9.99809181213379,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "district:590:362",
+      "zone": "market",
+      "x": 582.58,
+      "n": 362,
+      "ground": 9.960221824645993,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:603:314",
+      "zone": "market",
+      "x": 595.58,
+      "n": 314,
+      "ground": 9.3951639175415,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:603:338",
+      "zone": "market",
+      "x": 596.58,
+      "n": 338,
+      "ground": 8.993686275482181,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:619:146",
+      "zone": "lakeside",
+      "x": 612.08,
+      "n": 146,
+      "ground": 8.147334480285647,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:620:175",
+      "zone": "lakeside",
+      "x": 613.58,
+      "n": 175,
+      "ground": 8.85684329986572,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "district:76:449",
+      "zone": "forest",
+      "x": 82.42,
+      "n": 449,
+      "ground": 11.629187850952148,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "district:92:477",
+      "zone": "forest",
+      "x": 98.42,
+      "n": 477,
+      "ground": 8.663027648925782,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "district:94:431",
+      "zone": "forest",
+      "x": 94,
+      "n": 436.92,
+      "ground": 12.886069984436034,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:101:184",
+      "zone": "forest",
+      "x": 94.905,
+      "n": 184,
+      "ground": 16.743192434310913,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:105:152",
+      "zone": "forest",
+      "x": 98.28,
+      "n": 152,
+      "ground": 13.423988151550294,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:117:202",
+      "zone": "forest",
+      "x": 111.53,
+      "n": 202,
+      "ground": 17.58141939163208,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:133:266",
+      "zone": "forest",
+      "x": 126.905,
+      "n": 266,
+      "ground": 23.485147609710694,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:137:168",
+      "zone": "market",
+      "x": 142.47,
+      "n": 168,
+      "ground": 13.521264686584473,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:137:70",
+      "zone": "market",
+      "x": 136,
+      "n": 77.72,
+      "ground": 8.620084228515625,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:149:281",
+      "zone": "forest",
+      "x": 149,
+      "n": 287.72,
+      "ground": 22.736718521118163,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:156:141",
+      "zone": "market",
+      "x": 156,
+      "n": 146.47,
+      "ground": 12.252684030532837,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:158:184",
+      "zone": "market",
+      "x": 160,
+      "n": 136.095,
+      "ground": 12.122746205329895,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:172:282",
+      "zone": "forest",
+      "x": 172,
+      "n": 289.345,
+      "ground": 18.946281967163088,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:172:323",
+      "zone": "forest",
+      "x": 172,
+      "n": 316.905,
+      "ground": 20.83100974082947,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:173:135",
+      "zone": "market",
+      "x": 165.655,
+      "n": 135,
+      "ground": 11.937344088554383,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:179:155",
+      "zone": "market",
+      "x": 146.5,
+      "n": 136.22,
+      "ground": 11.560672130584717,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:179:248",
+      "zone": "central",
+      "x": 179,
+      "n": 241.28,
+      "ground": 17.14085762023926,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:186:104",
+      "zone": "market",
+      "x": 174.905,
+      "n": 112,
+      "ground": 9.418671293258667,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:188:65",
+      "zone": "market",
+      "x": 188,
+      "n": 70.47,
+      "ground": 9.100555801391602,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:191:282",
+      "zone": "forest",
+      "x": 191,
+      "n": 287.47,
+      "ground": 16.111055240631106,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:191:325",
+      "zone": "forest",
+      "x": 191,
+      "n": 318.28,
+      "ground": 17.48825881958008,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:197:132",
+      "zone": "market",
+      "x": 204.345,
+      "n": 132,
+      "ground": 8.558903136253356,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:199:262",
+      "zone": "central",
+      "x": 199,
+      "n": 269.345,
+      "ground": 14.482140822410583,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:200:151",
+      "zone": "central",
+      "x": 153.095,
+      "n": 182.5,
+      "ground": 13.643129000663757,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:202:247",
+      "zone": "central",
+      "x": 204.852,
+      "n": 241.53,
+      "ground": 14.564645051956177,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:206:110",
+      "zone": "market",
+      "x": 210.5,
+      "n": 94.78,
+      "ground": 9.902902145385742,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:216:280",
+      "zone": "forest",
+      "x": 216,
+      "n": 286.095,
+      "ground": 14.478659024238585,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:217:66",
+      "zone": "market",
+      "x": 217,
+      "n": 72.72,
+      "ground": 7.770080165863037,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:220:138",
+      "zone": "market",
+      "x": 226.72,
+      "n": 138,
+      "ground": 11.03494041442871,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:221:251",
+      "zone": "central",
+      "x": 221,
+      "n": 243.655,
+      "ground": 12.174932069778443,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:228:110",
+      "zone": "market",
+      "x": 229.5,
+      "n": 98.155,
+      "ground": 8.689330406188965,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:234:74",
+      "zone": "market",
+      "x": 234,
+      "n": 81.345,
+      "ground": 8.915782780647278,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:246:114",
+      "zone": "market",
+      "x": 246.5,
+      "n": 106.03,
+      "ground": 7.659191880226135,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:246:135",
+      "zone": "market",
+      "x": 152.095,
+      "n": 199,
+      "ground": 16.858622064590456,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:249:264",
+      "zone": "central",
+      "x": 246.148,
+      "n": 270.72,
+      "ground": 13.51812102508545,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:253:243",
+      "zone": "central",
+      "x": 253,
+      "n": 236.28,
+      "ground": 12.291109886169433,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:262:180",
+      "zone": "central",
+      "x": 262,
+      "n": 187.345,
+      "ground": 11.720522108078002,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:264:228",
+      "zone": "central",
+      "x": 264,
+      "n": 222.53,
+      "ground": 11.804763040542603,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:329:155",
+      "zone": "lakeside",
+      "x": 329,
+      "n": 148.905,
+      "ground": 9.868462891578675,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:331:172",
+      "zone": "lakeside",
+      "x": 331,
+      "n": 177.47,
+      "ground": 10.455010957717896,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:337:130",
+      "zone": "lakeside",
+      "x": 330.905,
+      "n": 130,
+      "ground": 9.838777165412903,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:349:184",
+      "zone": "lakeside",
+      "x": 341.405,
+      "n": 184,
+      "ground": 11.994787259101866,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:351:144",
+      "zone": "lakeside",
+      "x": 366.47,
+      "n": 143,
+      "ground": 8.524304714202882,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:358:163",
+      "zone": "lakeside",
+      "x": 371.72,
+      "n": 160.5,
+      "ground": 10.79486301422119,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:364:207",
+      "zone": "memorial",
+      "x": 373.47,
+      "n": 207,
+      "ground": 16.189062175750735,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:375:177",
+      "zone": "lakeside",
+      "x": 381.72,
+      "n": 177,
+      "ground": 11.476669540405272,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:391:234",
+      "zone": "memorial",
+      "x": 391,
+      "n": 227.28,
+      "ground": 20.57421844482422,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "old-town:405:51",
+      "zone": "lakeside",
+      "x": 405,
+      "n": 56.47,
+      "ground": 8.215659828186036,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "old-town:406:165",
+      "zone": "memorial",
+      "x": 399.905,
+      "n": 165,
+      "ground": 9.733953161239643,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:410:119",
+      "zone": "lakeside",
+      "x": 403.905,
+      "n": 119,
+      "ground": 8.848341956138611,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:410:219",
+      "zone": "memorial",
+      "x": 402.655,
+      "n": 219,
+      "ground": 18.978601989746096,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:414:190",
+      "zone": "memorial",
+      "x": 408.53,
+      "n": 190,
+      "ground": 13.305909624099733,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:422:101",
+      "zone": "lakeside",
+      "x": 415.28,
+      "n": 101,
+      "ground": 7.796446685791014,
+      "exitYaw": -1.5707963267948968
+    },
+    {
+      "id": "old-town:70:229",
+      "zone": "forest",
+      "x": 75.47,
+      "n": 229,
+      "ground": 21.15402910232544,
+      "exitYaw": 1.5707963267948968
+    },
+    {
+      "id": "old-town:94:100",
+      "zone": "market",
+      "x": 94,
+      "n": 105.47,
+      "ground": 9.17612232208252,
+      "exitYaw": 1.2246467991473532e-16
+    },
+    {
+      "id": "village:0",
+      "zone": "forest",
+      "x": 82,
+      "n": 265.58,
+      "ground": 23,
+      "exitYaw": 3.141592653589793
+    },
+    {
+      "id": "village:1",
+      "zone": "forest",
+      "x": 92,
+      "n": 269.08,
+      "ground": 23,
+      "exitYaw": 3.141592653589793
+    }
+  ]
+}

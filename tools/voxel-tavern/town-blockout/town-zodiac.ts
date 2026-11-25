@@ -22,13 +22,6 @@ type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
 export const zodiacStorageKey = 'unwritten.zodiac.v1';
 export const sealedGoldenGoatClue = '金羊未醒——先集齐其余十一件。';
 export const postMousePosition = [3.10, .3, -6.64] as const;
-export const lighthouseSnakeSite = {
-  id: 'snake',
-  stand: [-5.95, 0, 0],
-  object: [-5.49, .18, 0],
-  yaw: -Math.PI / 2,
-  range: .35,
-} as const;
 
 export function createZodiacProgress(available: readonly TestPickupId[], storage?: StoragePort) {
   const mounted = new Set<CharmId>(available);

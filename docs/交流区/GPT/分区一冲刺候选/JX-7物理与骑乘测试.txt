@@ -1,0 +1,39 @@
+✔ drift entry needs speed, turn and lateral slide together (2.580796ms)
+✔ charge accumulates at .45/s and caps at full (0.617747ms)
+✔ release fires stages strongest-first according to charge thresholds (1.152026ms)
+✔ unreleased sub-threshold charge decays after the grace window; reset clears all (1.319971ms)
+✔ boost through sled motion never exceeds the hard cap and beats no-boost (4.106634ms)
+sled terminals m/s (flat, 10%, 20%, 30%): 22.600, 21.352, 35.733, 45.200
+15% uphill full push m/s and rollback m: 3.992 6.629
+drift peak slip °, release m/s: 35.000 18.102
+drift peak slip °, release m/s: 35.000 18.102
+glide neutral sink target m/s: 3.333
+✔ retuned snow, ice, wood, stone and deep snow use the specified friction and base drag (2.601602ms)
+✔ new 2x/3x/4x sled speed tiers remain bounded by the shared 45.2 m/s hard limit (30.319375ms)
+✔ a real 15% uphill can be restarted after the old stall timer and rolls back when released (7.156578ms)
+✔ brake or drift-key with turning enters at 8 m/s and keeps slip at or below 35° (1.843526ms)
+✔ the 3x and 4x speed bands retain bounded drift slip and momentum (1.123914ms)
+✔ airborne neutral target uses the 4.5 glide ratio, with the current pitch controls and low-speed fall (0.697918ms)
+sled wall four-layer traversal {
+  before: 24.04400327659376,
+  after: 16.83080229361563,
+  from: 143.1128924005625,
+  to: 143.51402196114262,
+  gx: 20,
+  gy: 287,
+  report: 25
+}
+✔ the sled ride traverses four layers and retains 70 percent of its pre-step speed (12.221855ms)
+✔ S1 starts outside the long hall and crosses the central bridge before the plaza (6.92971ms)
+✔ sled motion respects the speed cap and brakes to a stop on the road (1.690221ms)
+✔ a fast collision detaches the sled and tumbles the rider for two turns (9.05132ms)
+✔ a slower collision stops the sled at contact without making the rider tumble (1.138321ms)
+✔ local sled, racks and mist use shared batches (5.383541ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2120.755845

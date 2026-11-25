@@ -1,0 +1,122 @@
+diff --git a/tools/voxel-tavern/town-blockout/viewer.ts b/tools/voxel-tavern/town-blockout/viewer.ts
+index 70b7eb41..0c18399d 100644
+--- a/tools/voxel-tavern/town-blockout/viewer.ts
++++ b/tools/voxel-tavern/town-blockout/viewer.ts
+@@ -176,6 +176,8 @@ import {
+ import { createRingGateScene } from './town-grand-prix-ring-scene';
+ import { createFortressMatch, fortressGrounds, type FortressGroundId } from './town-fortress-match';
+ import { createFortressScene, fortressGuardOffsets } from './town-fortress-scene';
++import { createIceSculptureField } from './town-ice-sculpture';
++import { createIceSculptureScene, sculpturePedestals, sculptureTable } from './town-ice-sculpture-scene';
+ import { createSledRide, createSledWallCollider } from './sled-ride';
+ import { createTownSledVisuals } from './sled-visuals';
+ import { resolveTownSledRacks } from './town-sled-racks';
+@@ -887,6 +889,92 @@ function driveFortress() {
+     }
+   }
+ }
++// ZB-36 package 2: ice sculpture island wiring (local hosting). Flow per
++// book: take a blank at the table, carry it to a free pedestal, knock
++// voxels off, sign it at the post, visitors vote snowflakes at the sign.
++// Wiring-grade targeting: a knock removes the remaining block nearest
++// the player (position-driven subtraction); pick-point ray targeting is
++// a round-3 refinement. The mining whitelist's 4th category stays
++// untouched pending window C's U-8 alignment — knocking here runs on
++// the leaf's own eligibility, not the mining code.
++const sculptureField = createIceSculptureField(sculpturePedestals.length);
++const sculptureScene = createIceSculptureScene((east, north) => grid.heightAt(east, north));
++landscape.add(sculptureScene.root);
++let carryingBlank = false;
++const blankVisual = new Group();
++{
++  const blankMesh = new Mesh(new BoxGeometry(.7, .5, .7),
++    new MeshLambertMaterial({ color: '#bfe6ef' }));
++  blankMesh.position.y = .25;
++  blankVisual.add(blankMesh);
++  blankVisual.visible = false;
++  landscape.add(blankVisual);
++}
++function sculptureAction() {
++  if (!carryingBlank && !sculptureField.activeOf('local') &&
++      Math.hypot(x - sculptureTable.east, n - sculptureTable.north) <= 2) {
++    return { label: '取一块冰坯', run: () => { carryingBlank = true; blankVisual.visible = true; } };
++  }
++  if (carryingBlank) {
++    const index = sculpturePedestals.findIndex((pedestal, i) =>
++      Math.hypot(x - pedestal.east, n - pedestal.north) <= 2 && !sculptureField.pedestalTaken(i));
++    if (index >= 0) {
++      return { label: '放上基座', run: () => {
++        const work = sculptureField.claim('local', presence.playerName(), index);
++        if (work) { carryingBlank = false; blankVisual.visible = false; sculptureScene.syncWork(work); }
++      } };
++    }
++    return undefined;
++  }
++  // Sign posts: finalise my work, or vote on a finished one.
++  for (const work of [...(sculptureField.activeOf('local') ? [sculptureField.work(sculptureField.activeOf('local')!)] : []), ...sculptureField.ranking()]) {
++    if (!work) continue;
++    const pedestal = sculpturePedestals[work.pedestal];
++    if (Math.hypot(x - (pedestal.east + .85), n - pedestal.north) > 1.3) continue;
++    if (!work.finalised && sculptureField.activeOf('local') === work.id) {
++      return { label: '立牌定稿', run: () => {
++        if (sculptureField.finalise('local', work.id)) announceActivity(`《${work.author}》立牌了。`);
++      } };
++    }
++    if (work.finalised) {
++      return { label: '投一朵雪花', run: () => {
++        const count = sculptureField.vote('local', work.id);
++        if (count !== undefined) announceActivity(`雪花 ${count} 朵`);
++      } };
++    }
++  }
++  // Knock my own work: nearest remaining block to where I stand.
++  const activeId = sculptureField.activeOf('local');
++  if (activeId) {
++    const work = sculptureField.work(activeId)!;
++    const pedestal = sculpturePedestals[work.pedestal];
++    if (Math.hypot(x - pedestal.east, n - pedestal.north) <= 2.2) {
++      return { label: '敲一角', run: () => {
++        let best: readonly [number, number, number] | undefined;
++        let bestDistance = Infinity;
++        for (const cell of work.blocks) {
++          const [bx, by, bz] = cell.split(',').map(Number);
++          const wx = pedestal.east + (bx - 2.5) * .18, wn = pedestal.north + (bz - 2.5) * .18;
++          const distance = Math.hypot(wx - x, wn - n) - by * .05;
++          if (distance < bestDistance) { bestDistance = distance; best = [bx, by, bz]; }
++        }
++        if (!best) return;
++        const outcome = sculptureField.knock('local', work.id, best[0], best[1], best[2]);
++        if (outcome === 'carved') sculptureScene.syncWork(work);
++        else if (outcome === 'shattered') {
++          sculptureScene.removeWork(work.id);
++          announceActivity('敲碎了……回取冰台再领一块吧。');
++        }
++      } };
++    }
++  }
++  return undefined;
++}
++function driveSculpture() {
++  if (carryingBlank) {
++    blankVisual.position.set(x + Math.sin(yaw) * .6, (airHeight ?? ground) + .7, -(n + Math.cos(yaw) * .6));
++  }
++}
+ function anchorRunAction() {
+   const phase = presence.getTownNightWindow()?.phase;
+   if (phase !== 'night-window') return undefined;
+@@ -2788,6 +2876,7 @@ function currentAction() {
+   if (airHeight !== undefined) return undefined;
+   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
+   if (guardAction) return guardAction;
++  if (!homeReturn) { const sculpture = sculptureAction(); if (sculpture) return sculpture; }
+   if (!homeReturn) { const fort = fortressAction(); if (fort) return fort; }
+   if (!homeReturn) { const anchor = anchorRunAction(); if (anchor) return anchor; }
+   if (!homeReturn) { const climb = treeClimbAction(); if (climb) return climb; }
+@@ -3974,6 +4063,7 @@ renderer.setAnimationLoop(now => {
+   anchorRunScene.tick(dt);
+   driveRingRace();
+   driveFortress();
++  driveSculpture();
+   // ZB-31: leaving a climb (jump-off or climbing down) releases the pinned
+   // altitude so the ordinary fall/landing takes over.
+   if (wasClimbing && !treeClimb.climbing && airHeight !== undefined) airHeight = undefined;

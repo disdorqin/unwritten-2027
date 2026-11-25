@@ -1,0 +1,418 @@
+diff --git a/.github/workflows/verify-jx3.yml b/.github/workflows/verify-jx3.yml
+index f609fce..b72826b 100644
+--- a/.github/workflows/verify-jx3.yml
++++ b/.github/workflows/verify-jx3.yml
+@@ -12,22 +12,25 @@ permissions:
+   contents: read
+ 
+ jobs:
+-  verify:
++  capture:
+     runs-on: ubuntu-latest
+     timeout-minutes: 22
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - role: baseline
++            source: 352aa49b825d88c432ef2dd0a9dd04a5c86441c3
++          - role: candidate
++            source: ${{ github.sha }}
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           persist-credentials: false
+       - uses: actions/checkout@v4
+         with:
+-          ref: 352aa49b825d88c432ef2dd0a9dd04a5c86441c3
+-          path: .jx3/baseline
+-          persist-credentials: false
+-      - uses: actions/checkout@v4
+-        with:
+-          ref: ${{ github.sha }}
+-          path: .jx3/candidate
++          ref: ${{ matrix.source }}
++          path: .jx3/target
+           persist-credentials: false
+       - uses: actions/setup-node@v4
+         with:
+@@ -35,21 +38,57 @@ jobs:
+       - name: Install locked dependencies
+         run: |
+           npm ci --ignore-scripts --no-audit --no-fund
+-          npm --prefix .jx3/baseline/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+-          npm --prefix .jx3/candidate/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
++          npm --prefix .jx3/target/tools/voxel-tavern ci --ignore-scripts --no-audit --no-fund
+           npx playwright install --with-deps chromium
+       - name: Typecheck and run market, puzzle, zodiac and doors regressions
++        if: matrix.role == 'candidate'
+         run: |
+           npm run typecheck
+           node --import tsx --test tests/town-blockout-market-{layout,fair,venue-activities}.test.ts tests/town-blockout-riddle{,-festival}.test.ts tests/town-blockout-{zodiac,house-portals}.test.ts
+       - name: Build production preview
+-        run: npm --prefix .jx3/candidate/tools/voxel-tavern run build -- --mode town-preview
+-      - name: Capture matched views and walk the workshop
+-        run: node tools/verify-jx3-browser.mjs .jx3/baseline .jx3/candidate /tmp/jx3-evidence
++        if: matrix.role == 'candidate'
++        run: npm --prefix .jx3/target/tools/voxel-tavern run build -- --mode town-preview
++      - name: Capture workshop views and keyboard route
++        env:
++          ROLE: ${{ matrix.role }}
++          SOURCE_SHA: ${{ matrix.source }}
++        run: |
++          timeout --signal=TERM --kill-after=10s 17m node tools/verify-jx3-browser.mjs capture \
++            "$ROLE" .jx3/target /tmp/jx3-evidence "$SOURCE_SHA"
+       - name: Upload evidence
+         if: always()
+         uses: actions/upload-artifact@v4
+         with:
+-          name: jx3-workshop-evidence
++          name: jx3-workshop-evidence-${{ matrix.role }}
+           path: /tmp/jx3-evidence
+           if-no-files-found: warn
++
++  compare:
++    needs: capture
++    if: ${{ always() && !cancelled() }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          persist-credentials: false
++      - uses: actions/setup-node@v4
++        with:
++          node-version: '24'
++      - name: Download both captures
++        continue-on-error: true
++        uses: actions/download-artifact@v4
++        with:
++          pattern: jx3-workshop-evidence-*
++          path: .jx3/evidence
++      - name: Compare captures and verify complete routes
++        env:
++          SOURCE_SHA: ${{ github.sha }}
++        run: node tools/verify-jx3-browser.mjs compare .jx3/evidence /tmp/jx3-comparison "$SOURCE_SHA"
++      - name: Upload comparison
++        if: always()
++        uses: actions/upload-artifact@v4
++        with:
++          name: jx3-workshop-comparison
++          path: /tmp/jx3-comparison
++          if-no-files-found: warn
+diff --git a/tools/verify-jx3-browser.mjs b/tools/verify-jx3-browser.mjs
+index 46840ea..b1cf8da 100644
+--- a/tools/verify-jx3-browser.mjs
++++ b/tools/verify-jx3-browser.mjs
+@@ -1,14 +1,11 @@
+ import assert from 'node:assert/strict';
+ import { spawnSync } from 'node:child_process';
+ import { createReadStream } from 'node:fs';
+-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
++import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+ import { createHash } from 'node:crypto';
+ import { createServer } from 'node:http';
+ import path from 'node:path';
+-import { chromium } from 'playwright';
+-
+-const [baseline, candidate, output] = process.argv.slice(2).map(value => path.resolve(value));
+-assert.ok(baseline && candidate && output, 'Pass baseline checkout, candidate checkout, and output path.');
++const baselineSha = '352aa49b825d88c432ef2dd0a9dd04a5c86441c3';
+ const viewSize = { width: 1000, height: 650 };
+ const frozenClock = Date.parse('2026-12-31T14:00:00+08:00');
+ const frameTimeout = 120_000;
+@@ -195,13 +192,45 @@ async function drive(page, east, north) {
+   return { before, arrived, ...endpoint };
+ }
+ 
+-async function run(checkout, label, browser) {
++async function closeWithin(label, close) {
++  let timer;
++  const started = Date.now();
++  try {
++    await Promise.race([close(), new Promise((_, reject) => {
++      timer = setTimeout(() => reject(new Error(`${label} did not close within 15 s`)), 15_000);
++    })]);
++    console.log(`[jx3] ${label} closed in ${Date.now() - started} ms`);
++  } finally {
++    clearTimeout(timer);
++  }
++}
++
++async function run(checkout, label, browser, output, expectedSha) {
+   const log = message => console.log(`[jx3 ${label}] ${message}`);
+-  log(`build starting ${gitInfo(checkout)}`);
++  assert.equal(gitInfo(checkout), expectedSha, `${label}: checkout SHA`);
++  log(`build starting ${expectedSha}`);
+   const built = await build(checkout);
+   log(`build ready ${built.sha}`);
++  const dir = path.join(output, label);
++  await mkdir(dir, { recursive: true });
+   const { server, url, traffic } = await startServer(checkout, built.dist);
+-  const context = await browser.newContext(viewportOptions);
++  let context;
++  try {
++    context = await browser.newContext(viewportOptions);
++    await captureViews(context, browser, label, dir, built, { url, traffic, log });
++  } finally {
++    try {
++      if (context) await closeWithin(`${label} browser context`, () => context.close());
++    } finally {
++      await closeWithin(`${label} HTTP server`, () => new Promise((resolve, reject) => {
++        server.close(error => error ? reject(error) : resolve());
++        server.closeAllConnections();
++      }));
++    }
++  }
++}
++
++async function captureViews(context, browser, label, dir, built, { url, traffic, log }) {
+   const presenceSockets = [];
+   await context.routeWebSocket(`${url.replace('http:', 'ws:')}/presence`, route => {
+     presenceSockets.push(route.url());
+@@ -221,12 +250,28 @@ async function run(checkout, label, browser) {
+   page.on('response', response => {
+     if (response.status() >= 400 && nonPresence(new URL(response.url()).pathname)) errors.push(`${response.status()} ${response.url()}`);
+   });
+-  const dir = path.join(output, label);
+-  await mkdir(dir, { recursive: true });
+   const screenshots = [];
+   const interiorErrors = [];
+-  let walkError;
+   const waypoints = [];
++  let walkError;
++  let captureError;
++  let exit;
++  let renderer;
++  let complete = false;
++  const evidenceFile = path.join(dir, 'evidence.json');
++  async function checkpoint() {
++    const snapshot = {
++      label, complete, tested: built,
++      browser: browser.version(), renderer, viewportOptions, screenshots, waypoints, exit,
++      walkError, captureError, interiorErrors, errors, presenceSockets, traffic,
++      clock: new Date(frozenClock).toISOString(),
++      acceptance: 'Loopback production preview in rehearsal mode, isolated single-player. Frozen weather profile and visual target cover. Walking uses keyboard.',
++    };
++    await writeFile(`${evidenceFile}.part`, JSON.stringify(snapshot, null, 2));
++    await rename(`${evidenceFile}.part`, evidenceFile);
++  }
++  await checkpoint();
++
+   async function image(id, group) {
+     const frames = await renderFrames(page);
+     assert.ok(frames.every(frame => frame.calls > 0 && frame.triangles > 0));
+@@ -235,6 +280,7 @@ async function run(checkout, label, browser) {
+     await page.screenshot({ path: path.join(dir, file), animations: 'disabled', timeout: frameTimeout });
+     assert.ok(matchCamera((await sample(page)).camera, pose.camera), `Camera moved: ${file}`);
+     screenshots.push({ id, group, file, pose, frames });
++    await checkpoint();
+     log(`captured ${file} at ${pose.camera.position.map(number => number.toFixed(3)).join(',')} draws=${frames.at(-1).calls} tris=${frames.at(-1).triangles}`);
+   }
+   async function nativeStreet() {
+@@ -261,6 +307,17 @@ async function run(checkout, label, browser) {
+       } finally { clearTimeout(timer); }
+     }, frameTimeout);
+     assert.deepEqual(errors, [], `${label} did not load the production assets`);
++    renderer = await page.evaluate(() => {
++      const gl = document.querySelector('#scene canvas')?.getContext('webgl2');
++      if (!gl) throw new Error('Production WebGL2 context missing');
++      const debug = gl.getExtension('WEBGL_debug_renderer_info');
++      return {
++        vendor: gl.getParameter(debug?.UNMASKED_VENDOR_WEBGL ?? gl.VENDOR),
++        name: gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER),
++        version: gl.getParameter(gl.VERSION),
++      };
++    });
++    await checkpoint();
+     log(`production scene ready and building queue settled ${traffic.assets.length} HTTP responses`);
+     await nativeStreet();
+     await image('street', 'exterior');
+@@ -276,6 +333,7 @@ async function run(checkout, label, browser) {
+         log(`walking ${waypoints.length + 1}/${travel.length} toward E${east}/N${north}`);
+         const leg = await drive(page, east, north);
+         waypoints.push({ target: [east, north], ...leg });
++        await checkpoint();
+         log(`arrived E${leg.arrived.east.toFixed(3)}/N${leg.arrived.north.toFixed(3)} after ${leg.observed} frames`);
+         if (imageId) {
+           try {
+@@ -293,6 +351,7 @@ async function run(checkout, label, browser) {
+       const endpoint = await sample(page);
+       assert.ok(endpoint.walking && endpoint.east < outsideEastLimit && Math.abs(endpoint.north - 115) <= .45,
+         `The player has not cleared the outside porch: E${endpoint.east}/N${endpoint.north}`);
++      exit = endpoint;
+       log(`verified outside porch at E${endpoint.east.toFixed(3)}/N${endpoint.north.toFixed(3)}`);
+     } catch (error) {
+       walkError = String(error);
+@@ -300,54 +359,127 @@ async function run(checkout, label, browser) {
+     }
+     assert.ok(traffic.clock > 0, 'No rehearsal clock request was observed');
+     assert.deepEqual(errors, [], `${label} page/asset requests failed`);
++    assert.equal(walkError, undefined, walkError);
++    assert.equal(waypoints.length, travel.length, `${label} keyboard route`);
++    assert.deepEqual(interiorErrors, [], `${label} interior capture failed`);
++    assert.equal(screenshots.length, 1 + outside.length + travel.filter(([, , id]) => id).length,
++      `${label} required views`);
++    complete = true;
++  } catch (error) {
++    captureError = String(error);
++    throw error;
+   } finally {
+-    await writeFile(path.join(dir, 'evidence.json'), JSON.stringify({
+-      tested: built,
+-      browser: browser.version(), viewportOptions, screenshots, waypoints, walkError, interiorErrors, errors, presenceSockets, traffic,
+-      clock: new Date(frozenClock).toISOString(), acceptance: 'Loopback production preview in rehearsal mode, isolated single-player. Frozen weather profile and visual target cover. Walking uses keyboard.',
+-    }, null, 2));
+-    await context.close();
+-    await new Promise(resolve => server.close(resolve));
++    await checkpoint();
+   }
+-  return { screenshots, waypoints, walkError, interiorErrors };
+ }
+ 
+-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+-await mkdir(output, { recursive: true });
+-try {
+-  const before = await run(baseline, 'baseline', browser);
+-  const after = await run(candidate, 'candidate', browser);
+-  const exterior = before.screenshots.filter(image => image.group === 'exterior');
+-  assert.equal(exterior.length, 5);
+-  const matches = exterior.map(old => {
+-    const item = after.screenshots.find(image => image.id === old.id && image.group === 'exterior');
+-    assert.ok(item, `Missing candidate exterior ${old.id}`);
+-    assert.ok(matchCamera(item.pose.camera, old.pose.camera), `Camera mismatch at ${old.id}`);
+-    for (const field of ['weatherTier', 'snowIntensity', 'snowCover', 'fogNear', 'fogFar']) {
+-      assert.equal(item.frames.at(-1)[field], old.frames.at(-1)[field], `${field} mismatch at ${old.id}`);
++
++async function compare(evidenceRoot, output, candidateSha) {
++  const expected = {
++    exterior: ['street', ...outside.map(([id]) => id)],
++    interior: travel.flatMap(([, , id]) => id ? [id] : []),
++  };
++  const weather = ['weatherTier', 'snowIntensity', 'snowCover', 'fogNear', 'fogFar'];
++  const report = { sources: { baseline: baselineSha, candidate: candidateSha },
++    captures: {}, matches: [], details: [], problems: [] };
++  const require = (condition, message) => { if (!condition) report.problems.push(message); };
++  const captures = {};
++  for (const label of ['baseline', 'candidate']) {
++    const dir = path.join(evidenceRoot, 'jx3-workshop-evidence-' + label, label);
++    let result;
++    try {
++      result = JSON.parse(await readFile(path.join(dir, 'evidence.json'), 'utf8'));
++    } catch (error) {
++      report.problems.push(label + ' evidence unavailable: ' + error.message);
++      continue;
+     }
+-    return { id: old.id, baseline: old.frames.at(-1), candidate: item.frames.at(-1) };
+-  });
+-  const details = before.screenshots.filter(image => image.group === 'interior').map(old => {
+-    const item = after.screenshots.find(image => image.id === old.id && image.group === 'interior');
+-    return { id: old.id, matchedCamera: Boolean(item) && matchCamera(item.pose.camera, old.pose.camera),
+-      baselineCamera: old.pose.camera, candidateCamera: item?.pose.camera,
+-      baseline: old.frames.at(-1), candidate: item?.frames.at(-1) };
+-  });
+-  await writeFile(path.join(output, 'paired.json'), JSON.stringify({ matches, details,
+-    interiorErrors: { baseline: before.interiorErrors, candidate: after.interiorErrors },
+-    walk: { baseline: before.waypoints.length, candidate: after.waypoints.length, baselineError: before.walkError, candidateError: after.walkError },
+-  }, null, 2));
+-  for (const { id, baseline, candidate } of [...matches, ...details]) {
+-    console.log(`${id}: draws ${baseline.calls} → ${candidate?.calls ?? 'missing'}, tris ${baseline.triangles} → ${candidate?.triangles ?? 'missing'}`);
++    captures[label] = result;
++    report.captures[label] = {
++      complete: result.complete, tested: result.tested, renderer: result.renderer,
++      views: result.screenshots?.length, waypoints: result.waypoints?.length, exit: result.exit,
++      walkError: result.walkError, captureError: result.captureError,
++      interiorErrors: result.interiorErrors, errors: result.errors,
++    };
++    require(result.label === label && result.complete === true && !result.captureError && !result.walkError,
++      label + ' capture incomplete');
++    require(result.tested?.sha === report.sources[label], label + ' SHA mismatch');
++    require(result.interiorErrors?.length === 0 && result.errors?.length === 0 && result.traffic?.clock > 0,
++      label + ' scene did not load and capture cleanly');
++    require(result.clock === new Date(frozenClock).toISOString(), label + ' clock mismatch');
++    require(JSON.stringify(result.viewportOptions) === JSON.stringify(viewportOptions), label + ' viewport mismatch');
++    const waypoints = result.waypoints ?? [];
++    require(waypoints.length === travel.length && waypoints.every(({ target, arrived }, index) =>
++      target?.[0] === travel[index][0] && target?.[1] === travel[index][1] &&
++      arrived?.walking && Math.hypot(arrived.east - target[0], arrived.north - target[1]) <= .45),
++    label + ' keyboard route incomplete');
++    require(result.exit?.walking && result.exit.east < outsideEastLimit && Math.abs(result.exit.north - 115) <= .45,
++      label + ' did not clear the porch');
++
++    const views = result.screenshots ?? [];
++    require(views.length === expected.exterior.length + expected.interior.length, label + ' view count mismatch');
++    for (const [group, ids] of Object.entries(expected)) {
++      for (const id of ids) {
++        const matches = views.filter(view => view.id === id && view.group === group);
++        const file = group + '-' + id + '.png';
++        require(matches.length === 1 && matches[0].file === file &&
++          matches[0].frames?.length === 8 &&
++          matches[0].frames.every(frame => frame.calls > 0 && frame.triangles > 0),
++        label + ' record missing or invalid at ' + id);
++        const image = await stat(path.join(dir, file)).catch(() => undefined);
++        require((image?.size ?? 0) > 0, label + ' PNG missing at ' + id);
++      }
++    }
++  }
++
++  const { baseline, candidate } = captures;
++  if (baseline && candidate) {
++    require(/^[0-9a-f]{64}$/.test(baseline.tested?.fixtureSha256 ?? '') &&
++      candidate.tested?.fixtureSha256 === baseline.tested.fixtureSha256, 'Instrumentation fixture mismatch');
++    require(Boolean(baseline.browser) && baseline.browser === candidate.browser, 'Browser version mismatch');
++    require(Boolean(baseline.renderer?.name) &&
++      JSON.stringify(baseline.renderer) === JSON.stringify(candidate.renderer), 'WebGL renderer mismatch');
++    for (const [group, ids] of Object.entries(expected)) {
++      for (const id of ids) {
++        const old = baseline.screenshots?.find(view => view.id === id && view.group === group);
++        const newer = candidate.screenshots?.find(view => view.id === id && view.group === group);
++        if (!old?.pose?.camera || !newer?.pose?.camera || !old?.frames?.length || !newer?.frames?.length) continue;
++        const matchedCamera = matchCamera(old.pose.camera, newer.pose.camera);
++        const a = old.frames.at(-1);
++        const b = newer.frames.at(-1);
++        require(matchedCamera, 'Camera mismatch at ' + id);
++        require(weather.every(field => a[field] !== undefined && a[field] === b[field]), 'Weather mismatch at ' + id);
++        const result = { id, matchedCamera, baselineCamera: old.pose.camera, candidateCamera: newer.pose.camera,
++          baseline: a, candidate: b, abovePcReference: b.calls > 450 || b.triangles > 2_200_000 };
++        (group === 'exterior' ? report.matches : report.details).push(result);
++        console.log(id + ': draws ' + a.calls + ' → ' + b.calls + ', tris ' + a.triangles + ' → ' + b.triangles);
++      }
++    }
++  }
++  require(report.matches.length === expected.exterior.length && report.details.length === expected.interior.length,
++    'Complete exterior and interior pairs required');
++  await mkdir(output, { recursive: true });
++  await writeFile(path.join(output, 'paired.json'), JSON.stringify(report, null, 2));
++  assert.deepEqual(report.problems, [], 'JX-3 capture comparison incomplete');
++}
++
++const [mode, ...args] = process.argv.slice(2);
++if (mode === 'capture') {
++  const [label, checkout, output, expectedSha] = args;
++  assert.ok(['baseline', 'candidate'].includes(label) && checkout && output && /^[0-9a-f]{40}$/.test(expectedSha),
++    'Usage: capture baseline|candidate CHECKOUT OUTPUT EXPECTED_SHA');
++  if (label === 'baseline') assert.equal(expectedSha, baselineSha);
++  const { chromium } = await import('playwright');
++  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
++  try {
++    await run(path.resolve(checkout), label, browser, path.resolve(output), expectedSha);
++  } finally {
++    await closeWithin('Chromium', () => browser.close());
+   }
+-  console.log(`Key-controlled route: ${before.waypoints.length}/${travel.length} baseline, ${after.waypoints.length}/${travel.length} candidate`);
+-  assert.equal(before.waypoints.length, travel.length, before.walkError);
+-  assert.equal(after.waypoints.length, travel.length, after.walkError);
+-  assert.equal(before.walkError, undefined, before.walkError);
+-  assert.equal(after.walkError, undefined, after.walkError);
+-  assert.equal(details.length, 4, 'The baseline needs all four interior views');
+-  assert.ok(details.every(view => view.matchedCamera), 'The candidate needs all four matched interior views');
+-} finally {
+-  await browser.close();
++} else if (mode === 'compare') {
++  const [evidenceRoot, output, candidateSha] = args;
++  assert.ok(evidenceRoot && output && /^[0-9a-f]{40}$/.test(candidateSha),
++    'Usage: compare EVIDENCE_ROOT OUTPUT EXPECTED_CANDIDATE_SHA');
++  await compare(path.resolve(evidenceRoot), path.resolve(output), candidateSha);
++} else {
++  throw new Error('Pass capture or compare');
+ }

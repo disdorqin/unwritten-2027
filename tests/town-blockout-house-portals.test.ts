@@ -5,12 +5,18 @@ import { addDistrictHousing } from '../tools/voxel-tavern/town-blockout/district
 import { buildExtensionStreets } from '../tools/voxel-tavern/town-blockout/extension-streets.ts';
 import { addForestDensity } from '../tools/voxel-tavern/town-blockout/forest-density.ts';
 import { readWalkGeometry } from '../tools/voxel-tavern/town-blockout/landmark-kit.ts';
+import { buildMarketLandmark } from '../tools/voxel-tavern/town-blockout/landmark-market.ts';
 import { buildVillageLandmark, villageHousePortals } from '../tools/voxel-tavern/town-blockout/landmark-village.ts';
 import { addScenery } from '../tools/voxel-tavern/town-blockout/scenery.ts';
 import { addStreetscape } from '../tools/voxel-tavern/town-blockout/streetscape.ts';
+import { streetInfill } from '../tools/voxel-tavern/town-blockout/streetscape-infill.ts';
 import { canEnter, createTerrainGrid, isWater, layout } from '../tools/voxel-tavern/town-blockout/terrain.ts';
 import { extensionRoadClearance, extensionStreetClearance } from '../tools/voxel-tavern/town-blockout/town-extension.ts';
 import { createTownRailway } from '../tools/voxel-tavern/town-blockout/town-railway.ts';
+import { createHouseDoorBook, findHouseDoorLanding, houseDoorBookCopy, houseDoorVisitKey, recordHouseDoorVisit } from '../tools/voxel-tavern/town-blockout/town-house-door-book.ts';
+import { townNpcDoorAnchors } from '../tools/voxel-tavern/town-blockout/town-npc.ts';
+import { marketStalls } from '../tools/voxel-tavern/town-blockout/market-fair.ts';
+import { readFileSync } from 'node:fs';
 
 const { Group } = createRequire(new URL('../tools/voxel-tavern/package.json', import.meta.url))('three') as typeof import('three');
 
@@ -38,22 +44,28 @@ const baselineDoorIds = [
   'village:0', 'village:1',
 ].sort();
 
-test('every built decorative house has a unique dry, clear portal on its real front', t => {
+test('every built decorative house has a unique dry, clear portal on its real front', async t => {
   const landscape = new Group();
   const grid = createTerrainGrid();
   const track = createTownRailway(grid);
-  // Only the street lamp sprite texture needs a DOM canvas during geometry construction.
+  // Street lamp glows and the expanded plaza nameplate need an offscreen canvas.
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {
     configurable: true,
     value: { createElement: () => ({ getContext: () => ({
       createRadialGradient: () => ({ addColorStop() {} }),
-      fillRect() {}, strokeRect() {}, fillText() {}, drawImage() {},
+      fillRect() {},
+      strokeRect() {},
+      fillText() {},
+      drawImage() {},
     }) }) },
   });
+  const guildPlot = layout.plots.find(({ id }) => id === 'lantern-workshop')!;
   let scenery: ReturnType<typeof addScenery>;
+  let guild: ReturnType<typeof buildMarketLandmark>;
   try {
     scenery = addScenery(landscape, grid);
+    guild = buildMarketLandmark(guildPlot);
   } finally {
     if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
     else Reflect.deleteProperty(globalThis, 'document');
@@ -61,6 +73,14 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   const district = addDistrictHousing(landscape, grid, scenery.blocked, track.keepClear);
   const streetscape = addStreetscape(landscape, grid, (x, n, r) =>
     district.keepClear(x, n, r) || extensionRoadClearance(x, n, r));
+  assert.deepEqual(
+    [...streetscape.infillPlaced],
+    streetInfill.map(({ id, points }) => [id, points.map(([kind]) => kind)]),
+    'all configured streetscape clusters survive door and road clearance',
+  );
+  assert.deepEqual(streetscape.infillPlaced.get('market-south-loop'),
+    ['well', 'dryingRack', 'lantern', 'firewood', 'stall', 'bench', 'lantern', 'fir'],
+    'the old-town infill retains every south market furnishing');
   const forest = addForestDensity(landscape, grid,
     (x, n, r) => district.keepClear(x, n, r) || streetscape.occupied(x, n, r),
     (x, n, r) => extensionRoadClearance(x, n, r) || track.keepClear(x, n, r) || extensionStreetClearance(x, n, r));
@@ -89,7 +109,6 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   });
   const diff = [`missing ${missing.length}: ${details.join('; ') || 'none'}`,
     `added ${added.length}: ${added.join(', ') || 'none'}`].join('\n');
-  t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   assert.equal(portals.length, 92, `the plaza work preserves the 92-door registry\n${diff}`);
   assert.deepEqual(actualIds, baselineDoorIds, `the 92-door registry preserves every B2a ID\n${diff}`);
   t.diagnostic(`old-town zones: ${JSON.stringify(district.zoneCounts)}`);
@@ -98,8 +117,35 @@ test('every built decorative house has a unique dry, clear portal on its real fr
   t.diagnostic(`added ${added.length}: ${added.join(', ') || 'none'}`);
   t.diagnostic(`portal IDs: ${actualIds.join(', ')}`);
 
+  const anchors = [
+    ...layout.plots.map(({ id, door: [x, n] }) => ({ label: id, x, n })),
+    ...marketStalls.map(({ kind, east: x, north: n }) => ({ label: kind + '摊', x, n })),
+    ...townNpcDoorAnchors,
+  ];
+  const book = createHouseDoorBook(portals, anchors);
+  assert.equal(book.length, 5);
+  assert.equal(book.reduce((count, group) => count + group.rows.length, 0), 92);
+  assert.ok(book.every(group => group.rows.length > 0 && group.rows.every(row => row.door.zone === group.zone)));
+  t.diagnostic(`百门册 ${book.map(group => group.label + ' ' + group.rows.length).join(' / ')}`);
+  const oldCards = district.housePortals.filter(({ zone }) => zone !== 'central');
+  assert.equal(district.housingCards.size, oldCards.length);
+  assert.equal(extensions.housingCards.size, extensions.housePortals.length);
+  for (const [houses, cards] of [[oldCards, district.housingCards], [extensions.housePortals, extensions.housingCards]] as const) {
+    for (const zone of ['forest', 'memorial', 'market', 'lakeside'] as const) {
+      const local = houses.filter(house => house.zone === zone).map(({ id }) => {
+        const card = cards.get(id);
+        assert.ok(card, `${id} must have a physical roof and window card`);
+        return card;
+      });
+      assert.equal(new Set(local.map(({ roof }) => roof)).size, 3, `${zone} roof forms`);
+      assert.equal(new Set(local.map(({ window }) => window)).size, 3, `${zone} window forms`);
+    }
+  }
+  t.diagnostic(`checked ${district.count} old-town homes, ${extensions.counts.buildings} district homes, and ${cottagePortals.length} decorative cottages`);
   const [west, south, plazaEast, plazaNorth] = layout.plaza.bounds;
-  const moved = Array.from(district.relocations, ([address, [east, north]]) => [address, east, north] as const);
+  const moved = district.relocations.size === 13
+    ? Array.from(district.relocations, ([address, [east, north]]) => [address, east, north] as const)
+    : [];
   for (const [address, east, north] of moved) {
     const site = district.sites.find(site => site.x === east && site.n === north);
     assert.ok(site, `${address} was built at its approved receiving location [${east}, ${north}]`);
@@ -137,10 +183,73 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     const door = portals.find(({ id }) => id === 'old-town:' + address)!;
     t.diagnostic(`${address} receiving [${east}, ${north}] door [${door.x.toFixed(3)}, ${door.n.toFixed(3)}] ground ${door.ground.toFixed(4)} m, footprint/expanded/nine-point road gaps ${footprintGap.toFixed(3)}/${expandedGap.toFixed(3)}/${sampleGap.toFixed(3)} m, grade spread ${(Math.max(...heights) - Math.min(...heights)).toFixed(3)} m`);
   }
-  const colliders = [...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders];
-  function clear(x: number, n: number) {
-    return canEnter(x, n) && !isWater(x, n) && !district.blocked(x, n) &&
-      !scenery.blocked(x, n) && !forest.blocked(x, n) && !streetscape.blocked(x, n);
+  const railGeometry = readWalkGeometry(track.group);
+  const colliders = [
+    ...readWalkGeometry(extensions.group).colliders, ...readWalkGeometry(village).colliders,
+    ...railGeometry.colliders, ...railGeometry.floors,
+  ];
+  function dryGround(x: number, n: number) {
+    const ground = grid.heightAt(x, n);
+    if (!canEnter(x, n) || isWater(x, n) || district.blocked(x, n) || scenery.blocked(x, n) ||
+        forest.blocked(x, n) || streetscape.blocked(x, n) || colliders.some(({ min, max }) => {
+          const dx = Math.max(min[0] - x, x - max[0], 0);
+          const dz = Math.max(min[2] + n, -n - max[2], 0);
+          return Math.hypot(dx, dz) < .27 && ground + .025 < max[1] && ground + 1.8 > min[1];
+        })) return;
+    return ground;
+  }
+  await t.test('the workshop street and both rooms have a clear round trip', t => {
+    const [east, north, height] = guildPlot.origin;
+    guild.position.set(east, height, -north);
+    const walk = readWalkGeometry(guild);
+    const obstacles = [...walk.colliders, ...walk.floors];
+    const points = [
+      guildPlot.connect, [118.1, 115.1], [121.4, 115.4], [122.5, 120.3],
+      [122.5, 117], [126.3, 117], [126.3, 120.2], [126.3, 117],
+      [130, 117], [130, 120.2], [130, 117], [121.4, 115.4], [117.2, 115],
+    ];
+    const radius = .27;
+    const bodyHeight = 1.775;
+    const stepUp = .43;
+    let feet = grid.heightAt(guildPlot.connect[0], guildPlot.connect[1]);
+    let sampled = 0;
+    let peakStep = 0;
+    for (let index = 1; index < points.length; index++) {
+      const [fromX, fromN] = points[index - 1];
+      const [toX, toN] = points[index];
+      const steps = Math.ceil(Math.hypot(toX - fromX, toN - fromN) / .1);
+      for (let step = 0; step <= steps; step++) {
+        const x = fromX + step / steps * (toX - fromX);
+        const n = fromN + step / steps * (toN - fromN);
+        const label = `route ${index} at ${x.toFixed(3)}, ${n.toFixed(3)}`;
+        const ground = dryGround(x, n);
+        assert.ok(ground !== undefined && !scenery.plazaCoverBlocks(x, n, radius), `${label}: street`);
+        const overlaps = ({ min, max }: (typeof obstacles)[number]) => Math.hypot(
+          Math.max(min[0] - x, x - max[0], 0), Math.max(min[2] + n, -n - max[2], 0),
+        ) < radius;
+        const support = walk.floors.reduce((y, floor) =>
+          floor.max[1] <= feet + stepUp && overlaps(floor) ? Math.max(y, floor.max[1]) : y, ground);
+        const rise = Math.abs(support - feet);
+        assert.ok(rise <= stepUp, `${label}: ${rise.toFixed(3)} m step`);
+        assert.ok(!obstacles.some(box => overlaps(box) && support + .025 < box.max[1] &&
+          support + bodyHeight > box.min[1]), `${label}: workshop collision`);
+        peakStep = Math.max(peakStep, rise);
+        feet = support;
+        sampled++;
+      }
+    }
+    assert.equal(sampled, 571);
+    t.diagnostic(`${points.length - 1} route targets, ${sampled} samples, peak step ${peakStep.toFixed(6)} m`);
+  });
+
+  // Check the nine M3 approaches separately from the exact 92-ID catalogue.
+  const m3DoorAddresses = ['137:70', '186:104', '206:110', '228:110', '246:114',
+    '349:184', '351:144', '358:163', '364:207'];
+  for (const address of m3DoorAddresses) {
+    const door = portals.find(portal => portal.id === 'old-town:' + address);
+    assert.ok(door, `M3 approach must preserve ${address}`);
+    assert.equal(dryGround(door.x, door.n), door.ground, `clear M3 approach to ${address}`);
+    t.diagnostic(`M3 approach ${address} E${door.x.toFixed(3)}/N${door.n.toFixed(3)}/Y${door.ground.toFixed(3)}`);
   }
   for (const id of moved.map(([address]) => 'old-town:' + address)) {
     const door = portals.find(portal => portal.id === id)!;
@@ -159,7 +268,7 @@ test('every built decorative house has a unique dry, clear portal on its real fr
         if (visited.has(key)) continue;
         const east = x + ix / 2, north = n + iz / 2;
         if (east < 0 || east > layout.width || north < 0 || north > layout.depth ||
-          !clear(east, north) || !clear(x + ix / 4, n + iz / 4) ||
+          dryGround(east, north) === undefined || dryGround(x + ix / 4, n + iz / 4) === undefined ||
           Math.abs(grid.heightAt(east, north) - grid.heightAt(x, n)) > .4) continue;
         visited.add(key);
         offsets.push([nextX, nextN, steps + 1]);
@@ -180,4 +289,51 @@ test('every built decorative house has a unique dry, clear portal on its real fr
     }), `${id} capsule hits geometry`);
     assert.ok(Math.abs(Math.sin(exitYaw)) < 1e-8 || Math.abs(Math.cos(exitYaw)) < 1e-8, `${id} outward facing`);
   }
+  for (const door of portals) {
+    assert.ok(findHouseDoorLanding(door, dryGround), `${door.id} has an exact or side landing`);
+  }
+
+  let random = 0x577e;
+  const sample = () => {
+    random = (1664525 * random + 1013904223) >>> 0;
+    return random % portals.length;
+  };
+  const entries = new Set<number>();
+  while (entries.size < 6) entries.add(sample());
+  for (const index of entries) {
+    const targets = new Set<number>();
+    while (targets.size < 3) {
+      const target = sample();
+      if (target !== index) targets.add(target);
+    }
+    for (const target of targets) assert.ok(findHouseDoorLanding(portals[target], dryGround));
+  }
+  t.diagnostic('6 reproducibly sampled entries × 3 targets, plus every target sampled against the terrain');
+});
+
+test('door clearance tries the center, left, then right without widening or changing the original stand', () => {
+  const door = { id: 'old-town:10:10', zone: 'central' as const, x: 10, n: 11.42, ground: 0, exitYaw: 0 };
+  const probes: number[][] = [];
+  assert.deepEqual(findHouseDoorLanding(door, (x, n) => {
+    probes.push([x, n]);
+    return x > door.x ? 2 : undefined;
+  }), { x: 10.6, n: 10.9, ground: 2 });
+  assert.deepEqual(probes, [[10, 10.9], [9.4, 10.9], [10.6, 10.9]]);
+  assert.equal(findHouseDoorLanding(door, () => undefined), undefined);
+  assert.equal(door.n, 11.42);
+  assert.match(createHouseDoorBook([door], [])[0].rows[0].name, /第 1 门/);
+});
+
+test('door visits persist without duplicates and the displayed design copy stays exact', () => {
+  const data = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => { data.set(key, value); },
+  };
+  recordHouseDoorVisit('village:0', storage);
+  recordHouseDoorVisit('village:0', storage);
+  recordHouseDoorVisit('village:1', storage);
+  assert.deepEqual(JSON.parse(data.get(houseDoorVisitKey)!), { version: 1, items: ['village:0', 'village:1'] });
+  const design = readFileSync(new URL('../docs/交流区/Muse/屋舍传送百门通设计-v1.md', import.meta.url), 'utf8');
+  for (const copy of Object.values(houseDoorBookCopy)) assert.ok(design.includes(`「${copy}」`), copy);
 });

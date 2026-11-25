@@ -1,0 +1,290 @@
+{
+  "fixtureOnly": true,
+  "nearCameraFoV": 58,
+  "outerStopsShareGeometry": true,
+  "rings": [
+    {
+      "name": "orbital-starport-frame",
+      "center": [
+        -5.21,
+        1.43,
+        0.35
+      ],
+      "faceNormal": [
+        1,
+        0,
+        0
+      ],
+      "approachCamera": [
+        -4.56,
+        1.65,
+        0.35
+      ],
+      "radii": [
+        0.55,
+        0.65
+      ],
+      "segments": 48,
+      "sRGB": "68867e",
+      "roughness": 0.96,
+      "metalness": 0.08,
+      "emissive": "000000",
+      "frontMissing": [
+        25.5,
+        64.5
+      ],
+      "frontMissingCount": 40,
+      "rearVisibleSamples": 0,
+      "closeGapNearestHit": "closed-door-surface",
+      "closeArcNearestHit": "town-chronicle-ring",
+      "closeGapNdc": [
+        0.782498,
+        1.317679,
+        0.821285
+      ],
+      "closeGapOnScreen": false,
+      "closeContourOnScreen": false,
+      "retreatForFullContour": 0.75,
+      "fullContourCamera": [
+        -3.81,
+        1.65,
+        0.35
+      ],
+      "closeContour": [
+        [
+          -1.008837,
+          1.008837
+        ],
+        [
+          -1.241587,
+          2.32452
+        ]
+      ]
+    },
+    {
+      "name": "orbital-core-vault-frame",
+      "center": [
+        5.21,
+        1.43,
+        0.35
+      ],
+      "faceNormal": [
+        -1,
+        0,
+        0
+      ],
+      "approachCamera": [
+        4.56,
+        1.65,
+        0.35
+      ],
+      "radii": [
+        0.55,
+        0.65
+      ],
+      "segments": 48,
+      "sRGB": "68867e",
+      "roughness": 0.96,
+      "metalness": 0.08,
+      "emissive": "000000",
+      "frontMissing": [
+        25.5,
+        64.5
+      ],
+      "frontMissingCount": 40,
+      "rearVisibleSamples": 0,
+      "closeGapNearestHit": "closed-door-surface",
+      "closeArcNearestHit": "town-chronicle-ring",
+      "closeGapNdc": [
+        0.782498,
+        1.317679,
+        0.821285
+      ],
+      "closeGapOnScreen": false,
+      "closeContourOnScreen": false,
+      "retreatForFullContour": 0.75,
+      "fullContourCamera": [
+        3.81,
+        1.65,
+        0.35
+      ],
+      "closeContour": [
+        [
+          -1.008837,
+          1.008837
+        ],
+        [
+          -1.241587,
+          2.32452
+        ]
+      ]
+    },
+    {
+      "name": "星港太空门",
+      "center": [
+        0,
+        1.35,
+        -0.67
+      ],
+      "faceNormal": [
+        0,
+        0,
+        1
+      ],
+      "approachCamera": [
+        0,
+        1.65,
+        1.38
+      ],
+      "radii": [
+        0.8,
+        0.95
+      ],
+      "segments": 48,
+      "sRGB": "68867e",
+      "roughness": 0.96,
+      "metalness": 0.08,
+      "emissive": "000000",
+      "frontMissing": [
+        25.5,
+        64.5
+      ],
+      "frontMissingCount": 40,
+      "rearVisibleSamples": 0,
+      "closeGapNearestHit": "closed-door-surface",
+      "closeArcNearestHit": "town-chronicle-ring",
+      "closeGapNdc": [
+        0.316742,
+        0.557163,
+        0.952807
+      ],
+      "closeGapOnScreen": true,
+      "closeContourOnScreen": true,
+      "retreatForFullContour": 0,
+      "fullContourCamera": [
+        0,
+        1.65,
+        1.38
+      ],
+      "closeContour": [
+        [
+          -0.466333,
+          0.466333
+        ],
+        [
+          -0.767533,
+          0.876702
+        ]
+      ]
+    },
+    {
+      "name": "地宫核心舱门",
+      "center": [
+        0,
+        1.35,
+        -0.67
+      ],
+      "faceNormal": [
+        0,
+        0,
+        1
+      ],
+      "approachCamera": [
+        0,
+        1.65,
+        1.38
+      ],
+      "radii": [
+        0.8,
+        0.95
+      ],
+      "segments": 48,
+      "sRGB": "68867e",
+      "roughness": 0.96,
+      "metalness": 0.08,
+      "emissive": "000000",
+      "frontMissing": [
+        25.5,
+        64.5
+      ],
+      "frontMissingCount": 40,
+      "rearVisibleSamples": 0,
+      "closeGapNearestHit": "closed-door-surface",
+      "closeArcNearestHit": "town-chronicle-ring",
+      "closeGapNdc": [
+        0.316742,
+        0.557163,
+        0.952807
+      ],
+      "closeGapOnScreen": true,
+      "closeContourOnScreen": true,
+      "retreatForFullContour": 0,
+      "fullContourCamera": [
+        0,
+        1.65,
+        1.38
+      ],
+      "closeContour": [
+        [
+          -0.466333,
+          0.466333
+        ],
+        [
+          -0.767533,
+          0.876702
+        ]
+      ]
+    }
+  ],
+  "reviewDenials": [
+    {
+      "door": "星港太空门",
+      "location": "星港太空门 · 局部外门夹具",
+      "result": "试验门仍锁定。"
+    },
+    {
+      "door": "地宫核心舱门",
+      "location": "地宫核心舱门 · 局部外门夹具",
+      "result": "试验门仍锁定。"
+    }
+  ],
+  "keyStatus": {
+    "collectedPages": 12,
+    "fragmentsComplete": true,
+    "flyerAssembled": true
+  },
+  "lockedAuthority": [
+    {
+      "gate": "starport",
+      "direction": "enter",
+      "result": {
+        "ok": false,
+        "reason": "locked"
+      }
+    },
+    {
+      "gate": "starport",
+      "direction": "return",
+      "result": {
+        "ok": false,
+        "reason": "locked"
+      }
+    },
+    {
+      "gate": "core",
+      "direction": "enter",
+      "result": {
+        "ok": false,
+        "reason": "locked"
+      }
+    },
+    {
+      "gate": "core",
+      "direction": "return",
+      "result": {
+        "ok": false,
+        "reason": "locked"
+      }
+    }
+  ]
+}
