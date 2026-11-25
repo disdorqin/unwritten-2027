@@ -5,7 +5,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
-import { industrialBuilder, type IndustryPoint } from './town-a-r30-industrial-shell';
+import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
 export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
@@ -139,6 +139,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     color: palette.windowWarm, emissive: palette.ember, emissiveIntensity: 1.25, roughness: .8,
   });
 
+  const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
+  const coldGlass=new MeshStandardMaterial({color:0x6c8291,roughness:.65,emissive:0x657786,emissiveIntensity:.06});
+  const windowRows=(xs:readonly number[],width:number,low:number,high:number):IndustryWindow[]=>
+    ([1,-1] as const).flatMap(side=>xs.map(x=>({side,x,width,low,high})));
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   function part(mat: MeshStandardMaterial, geo: BufferGeometry, east: number, h: number, north: number,
     yaw = 0, pitch = 0, roll = 0) {
@@ -241,7 +245,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     hall.slab(stone,0,0,28,11,1.2,1.2);
     // The cold-sealed furnace aperture remains decorative; a separate
     // service entrance at +4.7m gives the actual hall its walkable interior.
-    hall.shell(corrugated,28,11,1.2,12.9,4.7,3.2,3.5);
+    hall.shell(corrugated,28,11,1.2,12.9,4.7,3.2,3.5,
+      {openings:windowRows([-10.5,-3.5,3.5,10.5],2.25,9.4,11.1),frame:timber,glass:coldGlass});
     const access=hall.stairs(stone,4.7,8.30,'z',-1,5,.56,2.65,0,1.2);
     industrialRoutes.push({id:'smelter-plant',points:[hall.point(4.7,8.85,0),...access,hall.point(4.7,3.4,1.2),hall.point(4.7,0,1.2),hall.point(8,0,1.2)]});
     // Working hall: columns, riveted furnace mass, ducting, ingot bench
@@ -292,10 +297,30 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         0, .20, roofRise / 10 + .015, Math.max(.14, 11 * (1-t)));
     }
     put(timber, 0, g + 18.6, 0, 29.3, .24, .35);
-    for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
-      put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
-      put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
+    // Recessed stone lintels above actual glazing; no false dark window
+    // plates over the newly constructed openings.
+    for(const side of [-1,1])for(const dx of [-10.5,-3.5,3.5,10.5]){
+      put(stoneDark,dx,g+11.23,side*5.52,2.58,.23,.27);
+      put(stoneDark,dx,g+9.29,side*5.52,2.55,.18,.29);
     }
+    for(const dx of [-10.5,-3.5,3.5,10.5]){
+      // Visible timber trusses under the roof. They span both walls and meet
+      // the ridge; the cold furnace has no animated fire or new authority.
+      put(timber,dx,g+12.58,0,.25,.3,10.8);
+      put(timber,dx,g+15.54,0,.22,5.9,.22);
+      for(const side of [-1,1])put(timber,dx,g+15.4,side*2.85,.25,8.0,.25,side*.78);
+    }
+    // Small hoist and bucket at the original loading side, away from the
+    // open service entrance. Structural footing and hook are separate.
+    hall.piece(stoneDark,-12,8.5,1.15,1.15,0,.48);
+    hall.piece(timber,-12,8.5,.36,.36,.48,4.6);
+    put(timber,-10.5,g+4.50,8.5,3.4,.35,.35);
+    put(timber,-11.1,g+3.35,8.5,2.55,.22,.25,0,.69);
+    put(iron,-9.0,g+3.25,8.5,.07,2.2,.07);
+    const bucket=fr.at(-9.0,8.5);
+    cyl(rustIron,bucket.east,g+1.65,bucket.north,.5,.39,.72,10,fr.yaw);
+    cyl(iron,bucket.east,g+2.03,bucket.north,.52,.52,.08,10,fr.yaw);
+    hall.piece(timberWarm,-11.0,-2.7,1.8,1.0,1.2,2.3);
     // Roof snow is now generated on the sloped tile plane above.
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
@@ -410,11 +435,11 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
     const hall=industrialBuilder(fr,g,put,colliders,floors);
     hall.slab(stone,0,0,20,10,.9,.9);
-    hall.shell(stone,20,10,.9,4.2,0,2.8,2.8);
+    hall.shell(stone,20,10,.9,4.2,0,2.8,2.8,
+      {openings:windowRows([-8,-4.8,4.8,8],1.7,1.65,3.55),frame:timber,glass:coldGlass});
     // Upper shell is separate, with a genuine mezzanine and stair opening.
-    hall.shell(timberWarm,20,10,4.2,12.6,0,.8,2.4);
-    // Close the upper facade's small service window with a solid frame.
-    hall.piece(timberWarm,0,4.88,.8,.24,4.2,6.6);
+    hall.shell(timberWarm,20,10,4.2,12.6,0,0,0,
+      {openings:windowRows([-8,-4.8,-1.6,1.6,4.8,8],1.7,5.95,7.65),frame:timber,glass:frostedGlass});
     hall.slab(timber,0,1.05,19.5,7.45,4.2,.24);
     hall.slab(timber,5.5,-3.55,8.5,2.15,4.2,.24);
     hall.slab(timber,-9.1,-3.55,1.1,2.15,4.2,.24);
@@ -459,10 +484,32 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       put(timber,0,g+9.55,side*5.08,20.2,.18,.22);
     }
     put(timber,0,g+17.12,0,21.15,.27,.35);
-    // Two rows of dark windows; two boarded up.
-    for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
-      if(Math.abs(dx)>2)put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
-      put(dark, dx, g + 6.8, 5.03, 1.7, 1.7, .1);
+    // Reference K08: copper pipework and banded structural bays.
+    // Pipes are mounted outside the wall above entry head clearance.
+    for(const side of [-1,1]){
+      put(rustIron,0,g+4.84,side*5.36,19.4,.28,.28);
+      for(const dx of [-8,-4.8,-1.6,1.6,4.8,8])
+        put(iron,dx,g+4.84,side*5.36,.16,.39,.39);
+      for(const dx of [-9.45,9.45]){
+        put(rustIron,dx,g+7.5,side*5.37,.26,5.4,.28);
+        put(rustIron,dx,g+10.18,side*5.37,.48,.48,.36);
+      }
+    }
+    // A bank of brass analog instrument faces and trays on the real
+    // worktables; decorative readouts, not counterfeit game objectives.
+    for(const dx of [-6,-3,3,6]){
+      const p=fr.at(dx,2.4);
+      cyl(brass,p.east,g+2.31,p.north,.28,.28,.12,12,fr.yaw,Math.PI/2);
+      put(iron,dx,g+2.31,2.35,.045,.34,.06,0,-.35);
+      put(timber,dx,g+1.22,2.38,1.25,.1,.75);
+    }
+    for(const dx of [-5,0,5]){
+      put(iron,dx,g+5.68,2.75,1.55,.14,.65);
+      for(const j of [-1,0,1])put(brass,dx+j*.42,g+5.9,2.75,.22,.30,.22);
+    }
+    for(const side of [-1,1])for(const dx of [-9,-3,3,9]){
+      put(timber,dx,g+12.40,0,.25,.34,9.8);
+      put(timber,dx,g+14.68,side*2.6,.22,6.2,.22,side*.86);
     }
     for (const dx of [-4.8, 4.8]) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
@@ -487,7 +534,21 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(15.5 + lx, -1 + lz);
       box(timber, p.east, g + 3.4, p.north, .32, 6.8, .32, fr.yaw, lz > 0 ? .06 : -.06, lx > 0 ? -.06 : .06);
     }
+    // The reference water tower has a proper ring base, tank bands and
+    // crossing braces. Keep the original independent tower location.
+    for(const side of [-1,1]){
+      for(const dx of [-1.6,1.6]){
+        const p=fr.at(15.5+dx,-1+side*1.6);
+        colliders.push({min:[p.east-.24,g,-p.north-.24],max:[p.east+.24,g+6.8,-p.north+.24]});
+      }
+      put(timber,15.5,g+3.45,-1+side*1.6, .23,7.05,.20,0,side*.42);
+      put(timber,15.5,g+3.45,-1+side*1.6, .23,7.05,.20,0,-side*.42);
+    }
+    cyl(iron,wt.east,g+6.82,wt.north,2.48,2.48,.26,12);
     cyl(corrugated, wt.east, g + 8.4, wt.north, 2.3, 2.3, 3.2, 12);
+    for(const h of [7.05,8.45,9.82])cyl(iron,wt.east,g+h,wt.north,2.36,2.36,.14,12);
+    put(rustIron,13.15,g+3.50,-1,.22,6.7,.22);
+    put(rustIron,11.7,g+1.0,-1,2.9,.25,.25);
     cone(slate, wt.east, g + 10.9, wt.north, 2.7, 1.8, 12);
     // Works signage (牌面 §六): brass name plate between the ground-floor
     // windows; the brittle paper notice nailed beside where the door reads.
@@ -1151,6 +1212,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   // (previously always on — same correction as the mouth-works lights).
   function setNight(value: boolean) {
     if (northTowerLight) northTowerLight.intensity = value ? 14 : 0;
+    frostedGlass.emissiveIntensity=value?.70:.24;
   }
   setNight(true);
   return {
