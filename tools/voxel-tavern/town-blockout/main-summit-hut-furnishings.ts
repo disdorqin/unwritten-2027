@@ -1,7 +1,8 @@
 import {
-  BoxGeometry, CanvasTexture, CylinderGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
+  BoxGeometry, CanvasTexture, CylinderGeometry, DoubleSide, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshLambertMaterial, PlaneGeometry, PointLight, Quaternion, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
+import { createSummitSurveyInscription } from './main-summit-survey-inscription';
 
 const floor = 800;
 // Hut interior frame (registration landmarks): west 56, east 69,
@@ -170,6 +171,32 @@ export function createMainSummitHutFurnishings() {
   marker.position.set(circle.east, floor + .03, -circle.north);
   group.add(marker);
   disposers.push(() => marker.geometry.dispose());
+
+  // D-4/M7: the brass triangle is already the real summit survey monument.
+  // It is NOT a fourth waist-height pillar. Embed an engraved tablet in the
+  // same low stone-circle footing so the exact three B-window survey lines
+  // actually appear on the established marker in the default P1 host.
+  const m7Inscription = createSummitSurveyInscription('M7');
+  group.userData.surveyM7Lines = [...m7Inscription.lines];
+  const m7Foot = new Mesh(new BoxGeometry(1.15, .075, .86), stone);
+  m7Foot.name = 'survey-station-m7-inscription-foot';
+  m7Foot.position.set(circle.east, floor + .045, -circle.north + .49);
+  group.add(m7Foot);
+  disposers.push(() => m7Foot.geometry.dispose());
+  if (m7Inscription.texture) {
+    const m7Face = new Mesh(new PlaneGeometry(1.05, .75),
+      new MeshBasicMaterial({map:m7Inscription.texture, side:DoubleSide}));
+    m7Face.name = 'survey-engraved-plate-m7';
+    m7Face.userData.inscription = [...m7Inscription.lines];
+    m7Face.rotation.x = -Math.PI/2;
+    m7Face.position.set(circle.east, floor + .09, -circle.north + .49);
+    group.add(m7Face);
+    disposers.push(() => {
+      m7Face.geometry.dispose();
+      m7Face.material.dispose();
+      m7Inscription.texture?.dispose();
+    });
+  }
 
   let disposed = false;
   return {

@@ -1,14 +1,18 @@
 import {
-  BoxGeometry, CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  PlaneGeometry, SRGBColorSpace,
+  BoxGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  PlaneGeometry,
 } from 'three';
 import type { MainSummitTrailPoint } from './main-summit-trail';
+import {surveyPlateLines} from './town-survey';
+import {createSummitSurveyInscription} from './main-summit-survey-inscription';
 
 export type SurveyStation = {
   id: 'M4' | 'M5' | 'M6' | 'M7';
   east: number; north: number; height: number;
   /** Rubbing interaction radius in metres; B window's rubbing system consumes this registry. */
   rubRadius: number;
+  /** The B rule leaf is the sole text authority; all three lines are exact. */
+  plateLines: readonly [string,string,string];
   built: boolean;
   note: string;
 };
@@ -54,30 +58,24 @@ export function createMainSummitSurveyStations(sites: SurveyStationSites) {
     stationGroup.add(base, pillar, plate);
     disposers.push(() => { base.geometry.dispose(); pillar.geometry.dispose(); plate.geometry.dispose(); });
 
-    if (typeof document !== 'undefined') {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; canvas.height = 256;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#b08d4f';
-        ctx.fillRect(0, 0, 256, 256);
-        ctx.fillStyle = '#2e2413';
-        ctx.font = 'bold 110px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(id, 128, 128);
-        ctx.fillRect(48, 168, 160, 7);
-        ctx.fillRect(48, 192, 160, 7);
-        const texture = new CanvasTexture(canvas);
-        texture.colorSpace = SRGBColorSpace;
-        const face = new Mesh(new PlaneGeometry(.4, .4), new MeshBasicMaterial({ map: texture, transparent: true }));
-        face.position.set(east, height + .18 + pillarHeight + .16, -north + .1);
-        face.rotation.x = -.5;
-        stationGroup.add(face);
-        disposers.push(() => { face.geometry.dispose(); face.material.dispose(); texture.dispose(); });
-      }
+    // R4/R5: replace the ID-only placeholder and two fake underscores with
+    // the exact B-window three-line survey inscription at native resolution.
+    const inscription = createSummitSurveyInscription(id);
+    if (inscription.texture) {
+      const face = new Mesh(new PlaneGeometry(.86, .60),
+        new MeshBasicMaterial({ map: inscription.texture, transparent: false, side: 2 }));
+      face.name = 'survey-engraved-plate-' + id.toLowerCase();
+      face.userData.inscription = [...inscription.lines];
+      face.position.set(east, height + .18 + pillarHeight + .20, -north + .24);
+      face.rotation.x = -.42;
+      stationGroup.add(face);
+      disposers.push(() => {
+        face.geometry.dispose(); face.material.dispose(); inscription.texture?.dispose();
+      });
     }
     group.add(stationGroup);
-    stations.push({ id, east, north, height, rubRadius: 1.6, built: true, note });
+    stations.push({ id, east, north, height, rubRadius: 1.6,
+      plateLines: surveyPlateLines(id), built: true, note });
     pillars.push({ east, north, height });
   }
 
@@ -88,7 +86,8 @@ export function createMainSummitSurveyStations(sites: SurveyStationSites) {
   buildStation('M5', exit.east + 3, exit.north, exitHeight, '步道二线云海段出云处');
   buildStation('M6', sites.icefallTop.east + 2, sites.icefallTop.north, sites.icefallTop.height, '冰瀑顶');
   stations.push({
-    id: 'M7', east: 62.5, north: 1003.6, height: 800, rubRadius: 1.6, built: false,
+    id: 'M7', east: 62.5, north: 1003.6, height: 800, rubRadius: 1.6,
+    plateLines: surveyPlateLines('M7'), built: false,
     note: '绝顶石圈中心黄铜三角标石（全本§四.17）：石圈与中心牌随§三.12陈设落地，本表登记对齐不另立柱站',
   });
 
