@@ -1,4 +1,4 @@
-import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BufferGeometry, BoxGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildCraterSeamCollar, type SurfaceVertex } from './town-a-r30-crater-seam';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
@@ -10,7 +10,8 @@ import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing';
 import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
-import { buildCraterOuterWorks } from './town-crater-outer-works';
+import { buildCraterOuterWorks, craterBeltTrackCorridor } from './town-crater-outer-works';
+import { createWestLandscape } from './town-a-r30-west-landscape';
 import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
@@ -111,7 +112,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     floorHeightAtLocal: (east, north) => neutralCrater.heightOffsetAt(east, north),
   });
 
-  const tileGround = new MeshLambertMaterial({ color: 0xc1cedc });
+  const tileGround = new MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+  const sheetNorthLimit = Math.min(northLimit, craterGroundSheetNorth);
+  const landscape=createWestLandscape(anchor,sharedApronRadius,sheetNorthLimit,craterBeltTrackCorridor);
+  const oldCarrierAt=(east:number,north:number)=>{
+    const t=Math.max(0,(east+seamBlendWidth)/seamBlendWidth);
+    return rimHeight+(westTownHeightAt(north)-rimHeight)*t*t*(3-2*t);
+  };
   const eastCount = -survey.west + 1;
   const samples = new Float32Array(eastCount * (northLimit + 1));
 
@@ -121,7 +128,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     for (let east = survey.west; east <= 0; east++) {
       const t = Math.max(0, (east + seamBlendWidth) / seamBlendWidth);
       const i = address(east, north);
-      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
+      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t) + landscape.offsetAt(east,north);
 
     }
   }
@@ -137,7 +144,6 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // fewer draw calls than one mesh per tile, without turning the full west
   // expanse into a single always-visible 240×540 m mesh.
   const groundBatches = new Map<string, BufferGeometry[]>();
-  const sheetNorthLimit = Math.min(northLimit, craterGroundSheetNorth);
   for (let north = 0; north < sheetNorthLimit; north += tileSize) {
     for (let east = survey.west; east < 0; east += tileSize) {
       const endN = Math.min(north + tileSize, sheetNorthLimit), endE = Math.min(east + tileSize, 0);
@@ -173,6 +179,26 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     const joined = mergeGeometries(members);
     if (!joined) throw new Error(`West crater terrain batch ${batch} cannot be merged`);
     for (const member of members) member.dispose();
+    // Derive a coherent vertex snow/rock treatment from actual terrain.
+    // Preserve the old color exactly across the B apron and protected pads;
+    // don't disguise invisible or mismatched support with a second overlay.
+    const pos=joined.getAttribute('position'), colors=new Float32Array(pos.count*3);
+    const snow=new Color(0xc1cedc), rock=new Color(0x8995a4), powder=new Color(0xe1e8ef);
+    const tint=new Color();
+    for(let k=0;k<pos.count;k++){
+      const e=pos.getX(k),n=-pos.getZ(k),h=pos.getY(k);
+      const rad=Math.hypot(e-anchor.east,n-anchor.north);
+      const base=oldCarrierAt(e,n);
+      const weight=Math.min(1,Math.max(0,(rad-sharedApronRadius-1.5)/8))
+        *Math.min(1,Math.max(0,(-e-58)/18));
+      // Coherent colors shared at coincident tile vertices; no per-tile
+      // random noise or per-face palette jump.
+      const d=h-base;
+      const shade=Math.min(1,Math.abs(d)/2.8)*weight;
+      tint.copy(snow).lerp(d<0?rock:powder,shade*(.58+.22*Math.sin(e*.13+n*.08)));
+      colors[k*3]=tint.r;colors[k*3+1]=tint.g;colors[k*3+2]=tint.b;
+    }
+    joined.setAttribute('color',new Float32BufferAttribute(colors,3));
     joined.computeBoundingSphere();
     const mesh = new Mesh(joined, tileGround);
     mesh.name = 'meteor-crater-west-ground';
