@@ -1698,6 +1698,13 @@ activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
+// Station seats use the existing first-person sit/stand state. The player
+// remains at the validated stand point when getting up, not inside the bench.
+for(const bench of railExtension.benchSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:1.05,label:'在站台长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {

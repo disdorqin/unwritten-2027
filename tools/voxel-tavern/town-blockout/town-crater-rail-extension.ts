@@ -98,6 +98,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   const colliders:OrientedSupportBox[]=[],floors:OrientedSupportBox[]=[];
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
+  const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   function push(mat: MeshStandardMaterial, g: BufferGeometry) {
     const batch = batches.get(mat) ?? [];
     batch.push(g);
@@ -330,6 +331,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
         box(timber,p.east,deckY+.19,p.north,.13,.38,.45,rotation);
       }
       colliders.push(orientedSupportBox(bc.east,bc.north,rotation,2.2,.52,deckY,deckY+.50));
+      const use=at(side*3.8,2.60);
+      benchSeats.push({id:label+'-'+side,east:bc.east,north:bc.north,height:deckY,useEast:use.east,useNorth:use.north,yaw:yaw+Math.PI});
     }
     const sc = at(-4.6, 2.6);
     stationSign(sc.east, topY + 1.7, sc.north, yaw, label);
@@ -619,5 +622,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   };
   group.userData.colliders=colliders;
   group.userData.floors=floors;
-  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes };
+  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes,benchSeats };
 }

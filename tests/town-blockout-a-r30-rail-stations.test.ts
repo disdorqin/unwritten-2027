@@ -7,6 +7,14 @@ import {supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-t
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=buildCraterRailExtension(grid,road);
 const floors=rail.group.userData.floors as OrientedSupportBox[],walls=rail.group.userData.colliders as OrientedSupportBox[];
+test('both stations expose four real bench seats with unobstructed stand positions',()=>{
+ assert.equal(rail.benchSeats.length,4);
+ for(const s of rail.benchSeats){
+  assert.ok(floors.some(f=>supportFootprintOverlaps(s.useEast,s.useNorth,f,.27)&&Math.abs(f.max[1]-s.height)<.001));
+  assert.ok(!walls.some(q=>supportFootprintOverlaps(s.useEast,s.useNorth,q,.27)&&s.height+.025<q.max[1]&&s.height+1.775>q.min[1]));
+  assert.ok(walls.some(q=>supportFootprintOverlaps(s.east,s.north,q,.27)&&Math.abs(q.max[1]-s.height-.50)<.001));
+ }
+});
 for(const route of rail.stationWalkRoutes)test(route.id+' actual station floor and steps permit entry and return',()=>{
  const ground=(e:number,n:number)=>e<0?road.heightAt(e,n)!:grid.heightAt(e,n);
  for(const points of [route.points,[...route.points].reverse()]){
