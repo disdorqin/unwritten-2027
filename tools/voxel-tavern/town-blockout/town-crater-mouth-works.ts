@@ -493,6 +493,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const steps=15,run=.56,stairX=W/2+.83,stairW=1.65,endZ=1.40,startZ=endZ-steps*run;
     const wp=(dx:number,dz:number,height:number)=>({...fr.at(dx,dz),height});
     supplyDeckRoute.push(wp(stairX,startZ-.55,g));
+    // Physical approach markers make the side-to-rear turn readable without
+    // exposing a second false doorway through the stair rail. No story text.
+    for(const [dx,dz,angle] of [[7.25,1.5,0],[6.6,startZ-1.45,Math.PI/2]] as const){
+      const p=fr.at(dx,dz),h=heightAt(p.east,p.north);
+      if(h===undefined)continue;
+      box(stone,p.east,h+.11,p.north,.38,.22,.38,fr.yaw);
+      box(timber,p.east,h+.64,p.north,.12,1.15,.12,fr.yaw);
+      const arrowYaw=fr.yaw+angle;
+      box(timberWarm,p.east,h+1.16,p.north,.72,.27,.12,arrowYaw);
+      // Chevron made from two physical inset brass strips.
+      const arrowFace={east:p.east+Math.sin(arrowYaw)*.075,north:p.north-Math.cos(arrowYaw)*.075};
+      for(const tilt of [-.6,.6])box(brass,arrowFace.east,h+1.16+(tilt>0?.048:-.048),arrowFace.north,.25,.045,.035,arrowYaw,0,tilt);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.38,.38,h,h+1.3));
+    }
     for(let i=0;i<steps;i++){
       const z=startZ+(i+.5)*run,top=g+(deckY-g)*(i+1)/steps;
       floor(stairX,z,stairW,run+.008,top,.16);
