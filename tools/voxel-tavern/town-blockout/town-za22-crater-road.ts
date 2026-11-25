@@ -1,5 +1,6 @@
 import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildCraterSeamCollar, type SurfaceVertex } from './town-a-r30-crater-seam';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
@@ -47,7 +48,8 @@ export const craterWestSurvey = Object.freeze({
 export const craterGroundSheetNorth = 336;
 
 const seamBlendWidth = 24;
-const carrierHoleRadius = meteorCraterRimRadius + 2;
+// Shared B apron remains R59 until both sides accept the replacement edge.
+const sharedApronRadius = meteorCraterRimRadius + 2 * (meteorCraterFixturePlan.mainTrail.halfWidth + meteorCraterFixturePlan.mainTrail.shoulderWidth);
 const tileSize = 48;
 
 type WestCraterRoad = {
@@ -77,6 +79,8 @@ type WestCraterRoad = {
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
+  readonly terrainBoundary: Readonly<{inner:readonly SurfaceVertex[];outer:readonly SurfaceVertex[];renderNorth:number;apronRadius:number}>;
+  terrainReadyAt(east:number,north:number):boolean;
   fenceBlocks(east: number, north: number, height: number, radius: number): boolean;
 };
 
@@ -110,7 +114,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const tileGround = new MeshLambertMaterial({ color: 0xc1cedc });
   const eastCount = -survey.west + 1;
   const samples = new Float32Array(eastCount * (northLimit + 1));
-  const inside = new Uint8Array(samples.length);
+
   function address(east: number, north: number) { return (east - survey.west) + north * eastCount; }
   for (let north = 0; north <= northLimit; north++) {
     const townHeight = westTownHeightAt(north);
@@ -118,9 +122,17 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       const t = Math.max(0, (east + seamBlendWidth) / seamBlendWidth);
       const i = address(east, north);
       samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
-      inside[i] = Number(Math.hypot(east - anchor.east, north - anchor.north) < carrierHoleRadius);
+
     }
   }
+  const sampleCarrier = (east:number,north:number) => {
+    const x=Math.min(-1,Math.floor(east)), n=Math.min(northLimit-1,Math.floor(north));
+    const u=east-x,v=north-n,i=address(x,n);
+    const a=samples[i],b=samples[i+1],c=samples[i+eastCount],d=samples[i+eastCount+1];
+    return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
+  };
+  const collar=buildCraterSeamCollar(surface as Mesh,anchor,sharedApronRadius,sampleCarrier);
+  const cut=collar.bounds;
   // Batch adjacent 48 m ground tiles into spatially bounded 2×3 clusters:
   // fewer draw calls than one mesh per tile, without turning the full west
   // expanse into a single always-visible 240×540 m mesh.
@@ -138,8 +150,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
           if (e === endE || n === endN) continue;
           const a = (e - east) + (n - north) * width;
           const b = a + 1, c = a + width, d = c + 1;
-          if (!inside[from] && !inside[from + 1] && !inside[from + eastCount]) indices.push(a, b, c);
-          if (!inside[from + 1] && !inside[from + eastCount] && !inside[from + eastCount + 1]) indices.push(b, d, c);
+          // Remove the complete integer rectangle, not a circle tested only
+          // at triangle corners. The zipper collar supplies this exact cut.
+          if(e<cut.west||e>=cut.east||n<cut.south||n>=cut.north)indices.push(a,b,c,b,d,c);
         }
       }
       const footprint = new BufferGeometry();
@@ -153,6 +166,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     }
   }
 
+  // Same material, same spatial batch; do not add a full-map draw.
+  const collarBatch=`${Math.floor((anchor.east-survey.west)/(tileSize*2))}:${Math.floor(anchor.north/(tileSize*3))}`;
+  groundBatches.get(collarBatch)!.push(collar.geometry);
   for (const [batch, members] of groundBatches) {
     const joined = mergeGeometries(members);
     if (!joined) throw new Error(`West crater terrain batch ${batch} cannot be merged`);
@@ -192,15 +208,13 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     if (east > 0 || east < survey.west || north < 0 || north > northLimit) return;
     const bowl = crater.heightAt(east, north);
     if (bowl !== undefined) return bowl;
-    const x = Math.min(-1, Math.floor(east)), n = Math.min(northLimit - 1, Math.floor(north));
-    const u = east - x, v = north - n;
-    const i = address(x, n);
-    const a = samples[i], b = samples[i + 1], c = samples[i + eastCount], d = samples[i + eastCount + 1];
-    return u + v <= 1 ? a + (b - a) * u + (c - a) * v
-      : d + (c - d) * (1 - u) + (b - d) * (1 - v);
+    return collar.heightAt(east,north) ?? sampleCarrier(east,north);
   }
 
-  const road = { group, anchor, lip, heightAt, fenceBlocks };
+  const terrainBoundary={inner:collar.inner,outer:collar.outer,renderNorth:sheetNorthLimit,apronRadius:sharedApronRadius};
+  const terrainReadyAt=(east:number,north:number)=>Number.isFinite(east)&&Number.isFinite(north)
+    &&east>=survey.west&&east<=0&&north>=0&&north<=sheetNorthLimit;
+  const road = { group, anchor, lip, heightAt, fenceBlocks,terrainBoundary,terrainReadyAt };
   mountZa31CraterEntrance(road);
   const camp = mountZa31CraterCamp(road);
   const rim = buildZa31CraterRim(road, camp.placements);

@@ -27,6 +27,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
 import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
@@ -231,6 +232,7 @@ const subcellMask = collisionSubcells - 1;
 const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
 let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
+let outdoorTerrainContract:ReturnType<typeof createTerrainSupportContract>|undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
 let dreamChain: DreamChain | undefined;
@@ -3115,7 +3117,11 @@ function walkable(x: number, n: number) {
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
-  if (x < 0) return x >= craterWestSurvey.west + bodyRadius && n >= 1 && n <= worldBounds.depth - 1;
+  if (x < 0) {
+    const road=ensureWestCraterRoad();
+    return x>=craterWestSurvey.west+bodyRadius && n>=1
+      && n<=road.terrainBoundary.renderNorth-bodyRadius && road.terrainReadyAt(x,n);
+  }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
   const terrainPassable = westSeam || canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
@@ -3131,19 +3137,23 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
   if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north, hintHeight);
 }
+// A-R01 I1: keep the current production sources and share one resolver.
+ // D's replacement ridgeGround will be registered only after its mesh and
+ // boundary are accepted together. Until then the existing road is retained.
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
-  if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
-  // T5 fold (分支窗 A): inside the switchback corridor's band its own
-  // surface wins — the core is the road profile and the feather band
-  // already blends to the host ground, so the seam stays continuous.
-  // Outside the band heightAt is undefined and the water/grid fallback
-  // below applies unchanged.
-  // 甲案 (总控裁定 2026-11-24): the walking step passes the player's
-  // current support height as the hint, so heightAt's leg selection
-  // stays on the leg the walker is on; landings keep the no-hint call.
-  const roadSurface = switchbackRoad?.heightAt(east, north, hintHeight);
-  if (roadSurface !== undefined) return roadSurface;
-  return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+  outdoorTerrainContract??=createTerrainSupportContract({
+    town:grid.heightAt,townReady:grid.terrainReadyAt,
+    west:(e,n)=>ensureWestCraterRoad().heightAt(e,n),
+    westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
+    westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
+    water:(e,n)=>townWater.at(e,n)?.ground,
+    ridgeRoad:(e,n,h)=>switchbackRoad?.heightAt(e,n,h),
+    passable:outdoorWalkable,
+  });
+  // The old numeric caller requires a fallback for off-domain probes.
+  // Actual movement must first pass outdoorWalkable; no fallback is
+  // advertised as ready by the I1 sample contract.
+  return outdoorTerrainContract.heightAt(east,north,hintHeight)??grid.heightAt(east,north);
 }
 function snowCleared(east: number, north: number, feet: number) {
   return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
