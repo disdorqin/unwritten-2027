@@ -30,6 +30,14 @@ test('instrument public road bends around actual masonry and approaches the open
  const access=[[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]].map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
  walk(route.id,[...access,...route.points]);walk(route.id,[...access,...route.points].reverse());
 });
+test('gatehouse bench has a grounded stand point and actual seat',()=>{
+ const [seat]=road.outerWorks.gatehouseSeats;
+ assert.ok(seat);
+ const route=road.outerWorks.industrialRoutes.find(r=>r.id==='gatehouse')!;
+ const points=[...route.points,{east:seat.useEast,north:seat.useNorth,height:seat.height}];
+ walk(route.id,points);walk(route.id,[...points].reverse());
+ assert.ok(boxes.some(b=>supportFootprintOverlaps(seat.east,seat.north,b,.27)&&Math.abs(b.max[1]-(seat.height+.48))<.01));
+});
 for(const route of road.outerWorks.industrialRoutes)test(route.id+' physical entry, interior route and return',()=>{
  walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });

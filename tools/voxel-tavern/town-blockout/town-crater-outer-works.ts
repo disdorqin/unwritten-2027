@@ -134,6 +134,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const sites: CraterOuterSite[] = [];
   const towerRoutes: CraterTowerRoute[] = [];
   const industrialRoutes:{id:string;points:IndustryPoint[]}[]=[];
+  const gatehouseSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   // S-1 collision (分支窗 A): structural wall boxes + standable floors in
   // world coordinates, exported for the za22 top group's userData. Solid
   // shells get one mass box each; designed gaps (wall gate, fence-ring
@@ -959,6 +960,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     hut.piece(workshopWood,1.6,-.62,.48,1.7,1,1.48);
     put(timber,1.6,g+1.52,-.62,.56,.10,1.82);
     put(timber,1.86,g+1.86,-.62,.13,.62,1.8);
+    const seat=fr.at(1.6,-.62),stand=fr.at(.72,-.62);
+    gatehouseSeats.push({id:'gatehouse-bench',...seat,height:g+1,useEast:stand.east,useNorth:stand.north,yaw:0});
     hut.piece(workshopWood,-1.72,1.03,.64,.72,1,2.32);
     for(let y=0;y<3;y++)put(timberWarm,-1.72,g+1.28+y*.41,1.03,.72,.07,.8);
     put(timber,-1.23,g+2.59,-1.81,1.62,.72,.10);
@@ -1302,7 +1305,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };
