@@ -112,7 +112,7 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
   const interiorDressing = mountCraterInteriorDressing(group, { slopeDressing: !naturalRelief });
   // C2: physical lamp carriers with six actual warm night sources. The
   // existing road.craterActions.setNight is the sole day/night switch.
-  const floorWorklights = mountCraterFloorWorklightChain(group);
+  const floorWorklights = mountCraterFloorWorklightChain(group, surface.heightAt);
 
   function heightAt(worldEast: number, worldNorth: number) {
     const dx = worldEast - east, dn = worldNorth - north;

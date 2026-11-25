@@ -69,6 +69,14 @@ for(const post of craterFloorWorklightPosts){
   append(id+'/roof','stone',e,y+2.94,n,.85,.14,.84);
   append(id+'/roof-ridge','frost',e,y+3.02,n,.39,.075,.39);
   append(id+'/snow-foot','frost',e,y+.19,n,.88,.12,.82);
+  // Recessed industrial base plate, four clamping cleats and a small
+  // conduit/strain relief. Keep the complete assembly inside the old
+  // reserved lamp footprint; no new action or collision authority.
+  append(id+'/mounting-plate','worn-iron',e,y+.29,n,.51,.08,.51);
+  for(const [i,dx,dn] of [[0,-.19,0],[1,.19,0],[2,0,-.19],[3,0,.19]] as const)
+    append(id+'/base-cleat-'+i,'worn-iron',e+dx,y+.37,n+dn,.10,.20,.10);
+  append(id+'/conduit','worn-iron',e+.14,y+.87,n,.055,1.06,.058);
+  append(id+'/strain-relief','ochre',e+.14,y+1.42,n,.13,.16,.13);
 }
 export const craterFloorWorklightGeometry = Object.freeze({
   posts:craterFloorWorklightPosts,
@@ -94,12 +102,39 @@ function nearestPixelTexture(material:Material) {
   return map;
 }
 
-export function mountCraterFloorWorklightChain(owner:Group) {
+export function mountCraterFloorWorklightChain(owner:Group,
+  surfaceHeightAt?:(east:number,north:number)=>number|undefined) {
+  // The rebuilt mound can meet a lamp site. Anchor the visible carrier to
+  // the highest sampled point of its existing foundation, embed the lower
+  // plinth into the slope, and move the actual light with its housing.
+  const posts=craterFloorWorklightPosts.map(post=>{
+    const h=[post.footHeight];
+    if(surfaceHeightAt){
+      h.length=0;
+      for(const de of [-.36,0,.36])for(const dn of [-.36,0,.36]){
+        const y=surfaceHeightAt(post.east+de,post.north+dn);
+        if(y!==undefined&&Number.isFinite(y))h.push(y);
+      }
+    }
+    const high=h.length?Math.max(...h):post.footHeight;
+    const low=h.length?Math.min(...h):post.footHeight;
+    return {...post,footHeight:high,bulbHeight:high+2.62,foundationDepth:high-low};
+  });
+  const fittedPieces=pieces.map(piece=>{
+    const post=posts.find(p=>piece.id.startsWith(p.id+'/'))!;
+    const original=craterFloorWorklightPosts.find(p=>p.id===post.id)!;
+    const delta=post.footHeight-original.footHeight;
+    const foot=piece.id===post.id+'/foot';
+    const extra=foot?post.foundationDepth:0;
+    return {...piece,position:[piece.position[0],piece.position[1]+delta-extra/2,piece.position[2]] as const,
+      size:[piece.size[0],piece.size[1]+extra,piece.size[2]] as const};
+  });
+  const data={...craterFloorWorklightGeometry,posts,pieces:fittedPieces};
   const group=new Group();
   group.name='c2-physical-worklights-authority-free';
   const geometry=new BoxGeometry(1,1,1);
   const materialMaps=new Map<Material,Piece[]>();
-  for(const piece of pieces){
+  for(const piece of fittedPieces){
     const groupPieces=materialMaps.get(piece.material)??[];
     groupPieces.push(piece);
     materialMaps.set(piece.material,groupPieces);
@@ -131,7 +166,7 @@ export function mountCraterFloorWorklightChain(owner:Group) {
     textures.push(texture);
     materials.push(material);
   }
-  const lights=craterFloorWorklightPosts.map(post=>{
+  const lights=posts.map(post=>{
     const light=new PointLight(0xffc17f,1.5,13.5,2);
     light.name=post.id+'/light-source';
     light.position.set(post.east,post.bulbHeight,-post.north);
@@ -143,7 +178,7 @@ export function mountCraterFloorWorklightChain(owner:Group) {
   let disposed=false;
   return {
     group,meshes,lights,
-    data:craterFloorWorklightGeometry,
+    data,
     get isNightLit(){return lit;},
     setNight(night:boolean){
       if(disposed)return;
