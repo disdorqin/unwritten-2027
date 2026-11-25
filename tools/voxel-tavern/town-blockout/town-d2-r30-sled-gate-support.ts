@@ -39,7 +39,7 @@ export type TownD2R30SledGateSupportStats = Readonly<{
 const DEFAULTS = Object.freeze({ groundedBand: 2, standRadius: 1.4, stoneColor: '#746b5e' });
 
 /** Derives the 12 survey gates from the canonical P-1 walkway crosswalk. */
-function surveyGates(arrivalHeight: number) {
+export function surveyTownD2R30SledGates(arrivalHeight: number) {
   const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
   try {
     const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
@@ -83,7 +83,7 @@ export function createTownD2R30SledGateSupport(options: {
     throw new RangeError('Invalid D2-R03 sled gate support parameters.');
   }
   const heightAt = options.heightAt ?? ((east, north) => sampleTownD2R30Height(east, north, arrivalHeight));
-  const gates = surveyGates(arrivalHeight);
+  const gates = surveyTownD2R30SledGates(arrivalHeight);
 
   const group = new Group();
   group.name = 'town-d2-r30-sled-gate-support';
