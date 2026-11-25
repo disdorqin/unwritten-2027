@@ -1,7 +1,7 @@
 import {
   BufferGeometry, Color, CylinderGeometry, DodecahedronGeometry, Euler, Float32BufferAttribute,
   Group, IcosahedronGeometry, InstancedMesh, Matrix4, Material, MeshLambertMaterial, Quaternion,
-  Vector3,
+  TetrahedronGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildEntryApproach, buildSwitchbackCenterline } from './front-ridge-switchback-road';
@@ -49,12 +49,45 @@ type ClusterPrototype = Readonly<{
 }>;
 
 const KINDS: readonly TownD2MicroReliefKind[] = ['gully', 'scree', 'snow-ridge', 'shrub', 'gravel'];
+type ReliefColor = string | readonly string[];
+/** Authored tonal ramps keep the five batches while breaking up flat monochrome rocks and plants. */
 const PALETTES = {
-  gully: { wetStone: '#405354', bankStone: '#8a8378', moss: '#44503c' },
-  scree: { darkSchist: '#555b59', paleStone: '#a1a29a', ochreGrit: '#a98a56' },
-  'snow-ridge': { snowCrust: '#e8ecf0', snowShade: '#bfcdd7', exposedRock: '#626c6b' },
-  shrub: { deadwood: '#65513a', alpineLeaf: '#57684c', berry: '#8a4a34', snowCap: '#d6e4f2' },
-  gravel: { granite: '#858b87', rustyPebble: '#8a6f50', lichen: '#697355' },
+  gully: {
+    wetStone: ['#334446', '#405354', '#526062'],
+    bankStone: ['#746f66', '#8a8378', '#a29a8b'],
+    moss: ['#344a37', '#44503c', '#5a6748'],
+    sediment: ['#4b5754', '#66716a', '#7b8275'],
+    ironStain: ['#574c3d', '#705943', '#8a6a49'],
+  },
+  scree: {
+    darkSchist: ['#414947', '#555b59', '#69706a'],
+    paleStone: ['#858b83', '#a1a29a', '#bdc0b4'],
+    ochreGrit: ['#806a43', '#a98a56', '#c0a16d'],
+    quartzGrit: ['#9ca8a5', '#c2ccc5', '#e0e3d8'],
+    fractureShade: ['#303b3c', '#495556', '#627170'],
+  },
+  'snow-ridge': {
+    snowCrust: ['#cdd8df', '#e8ecf0', '#ffffff'],
+    snowShade: ['#91aabd', '#bfcdd7', '#dbe5eb'],
+    exposedRock: ['#465454', '#626c6b', '#7c8580'],
+    blueIce: ['#587f96', '#78a5ba', '#a7cedd'],
+    windScour: ['#aab9bd', '#d2dddc', '#eef2ed'],
+  },
+  shrub: {
+    deadwood: ['#40362d', '#65513a', '#806b4d'],
+    alpineLeaf: ['#344b3b', '#57684c', '#718061'],
+    berry: ['#65362e', '#8a4a34', '#ad6650'],
+    snowCap: ['#b7d1e3', '#d6e4f2', '#f2f6f8'],
+    leafLight: ['#607657', '#80916c', '#9aaa81'],
+    barkLichen: ['#56634c', '#788267', '#99a184'],
+  },
+  gravel: {
+    granite: ['#69716e', '#858b87', '#a4aaa2'],
+    rustyPebble: ['#67543f', '#8a6f50', '#aa8961'],
+    lichen: ['#46543e', '#697355', '#87916d'],
+    quartz: ['#a4b0ad', '#c8d0c8', '#e6e8dd'],
+    slateChip: ['#414f50', '#5b6967', '#79847d'],
+  },
 } as const;
 
 function random(seed: number) {
@@ -127,7 +160,7 @@ function restExclusions() {
 function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPrototype {
   const rand = random(seed);
   const pieces: BufferGeometry[] = [];
-  const add = (geometry: BufferGeometry, color: string, x: number, y: number, z: number,
+  const add = (geometry: BufferGeometry, color: ReliefColor, x: number, y: number, z: number,
     sx: number, sy: number, sz: number, rx = 0, ry = 0, rz = 0) => {
     const flat = geometry.index ? geometry.toNonIndexed() : geometry;
     if (flat !== geometry) geometry.dispose();
@@ -135,9 +168,17 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
       new Quaternion().setFromEuler(new Euler(rx, ry, rz)), new Vector3(sx, sy, sz));
     flat.applyMatrix4(matrix);
     const count = flat.getAttribute('position').count;
-    const tint = new Color(color);
+    const tones = typeof color === 'string' ? [color] : color;
+    const tint = new Color(tones[hash(seed, pieces.length, 0, 607) % tones.length]!);
     const colors = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) colors.set([tint.r, tint.g, tint.b], i * 3);
+    // Face-level mineral variation reads as chipped stone/lichen without another draw or texture fetch.
+    for (let i = 0; i < count; i += 3) {
+      const grain = .90 + hash(seed, i, pieces.length, 911) / 4294967296 * .16;
+      const faceTint = tint.clone().multiplyScalar(grain);
+      for (let vertex = i; vertex < i + 3; vertex++) {
+        colors.set([faceTint.r, faceTint.g, faceTint.b], vertex * 3);
+      }
+    }
     flat.setAttribute('color', new Float32BufferAttribute(colors, 3));
     if (!flat.getAttribute('uv')) {
       flat.setAttribute('uv', new Float32BufferAttribute(new Float32Array(count * 2), 2));
@@ -159,6 +200,10 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
     for (let i = 0; i < 4; i++) add(new IcosahedronGeometry(1, 0), PALETTES.gully.moss,
       -.9 + i * .62, .10, .52 + Math.sin(i * 2.1) * .22,
       .27 + rand() * .12, .08, .22 + rand() * .09, 0, rand() * 3, 0);
+    for (let i = 0; i < 10; i++) add(new TetrahedronGeometry(1, 0),
+      i % 3 === 0 ? PALETTES.gully.ironStain : PALETTES.gully.sediment,
+      -1.65 + i * .36, .16 + rand() * .04, (rand() - .5) * .44,
+      .055 + rand() * .045, .025 + rand() * .025, .05 + rand() * .04, rand(), rand() * 3, rand());
   } else if (kind === 'scree') {
     for (let i = 0; i < 10; i++) {
       const angle = rand() * Math.PI * 2, radius = Math.sqrt(rand()) * 1.55;
@@ -170,6 +215,14 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
     }
     add(new DodecahedronGeometry(1, 0), PALETTES.scree.paleStone,
       -.25, .39, -.12, .76, .56, .62, .08, .6, -.12);
+    for (let i = 0; i < 12; i++) {
+      const angle = i * 2.39996, radius = .55 + (i % 4) * .27;
+      add(new TetrahedronGeometry(1, 0), i % 3 === 0 ? PALETTES.scree.quartzGrit :
+        i % 3 === 1 ? PALETTES.scree.fractureShade : PALETTES.scree.ochreGrit,
+        Math.cos(angle) * radius, .10 + (i % 4) * .035, Math.sin(angle) * radius * .72,
+        .07 + (i % 3) * .018, .035 + (i % 2) * .015, .06 + (i % 4) * .012,
+        i * .73, i * 1.17, i * .41);
+    }
   } else if (kind === 'snow-ridge') {
     for (let i = 0; i < 5; i++) {
       add(new DodecahedronGeometry(1, 0), i % 2 ? PALETTES['snow-ridge'].snowShade : PALETTES['snow-ridge'].snowCrust,
@@ -179,13 +232,18 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
     for (let i = 0; i < 3; i++) add(new DodecahedronGeometry(1, 0), PALETTES['snow-ridge'].exposedRock,
       -.9 + i * .92, .18, (i % 2 ? -1 : 1) * .48,
       .29 + rand() * .13, .25 + rand() * .13, .25, .15, rand() * 3, .12);
+    for (let i = 0; i < 10; i++) add(new TetrahedronGeometry(1, 0),
+      i % 4 === 0 ? PALETTES['snow-ridge'].blueIce : PALETTES['snow-ridge'].windScour,
+      -1.55 + i * .34, .31 + (i % 3) * .035, Math.sin(i * 1.9) * .29,
+      .10 + (i % 3) * .025, .025 + (i % 2) * .012, .08 + (i % 4) * .018,
+      .1 * i, i * .91, (i % 2 ? 1 : -1) * .08);
   } else if (kind === 'shrub') {
     for (let i = 0; i < 5; i++) {
       const angle = i / 5 * Math.PI * 2 + rand() * .3;
       const x = Math.cos(angle) * .38, z = Math.sin(angle) * .38;
       add(new CylinderGeometry(.035, .065, .82 + rand() * .22, 5), PALETTES.shrub.deadwood,
         x, .43, z, 1, 1, 1, Math.sin(angle) * .28, 0, -Math.cos(angle) * .28);
-      add(new IcosahedronGeometry(1, 0), i % 2 ? PALETTES.shrub.alpineLeaf : '#44503c',
+      add(new IcosahedronGeometry(1, 0), i % 2 ? PALETTES.shrub.alpineLeaf : PALETTES.gully.moss,
         x * 1.35, .69 + rand() * .23, z * 1.35, .48 + rand() * .16, .38 + rand() * .17, .45 + rand() * .13,
         rand() * .3, rand() * 3, rand() * .2);
     }
@@ -194,6 +252,15 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
       .065, .07, .065, 0, rand() * 3, 0);
     add(new DodecahedronGeometry(1, 0), PALETTES.shrub.snowCap,
       -.12, 1.03, .05, .55, .10, .41, .04, .3, -.03);
+    for (let i = 0; i < 5; i++) {
+      const angle = i / 5 * Math.PI * 2 + .35;
+      add(new TetrahedronGeometry(1, 0), i % 2 ? PALETTES.shrub.leafLight : PALETTES.shrub.barkLichen,
+        Math.cos(angle) * .54, .86 + (i % 3) * .07, Math.sin(angle) * .50,
+        .08 + (i % 2) * .025, .035, .07, angle, i * .8, .2);
+    }
+    for (let i = 0; i < 4; i++) add(new TetrahedronGeometry(1, 0), PALETTES.shrub.snowCap,
+      -.42 + i * .27, 1.075 + (i % 2) * .025, -.12 + (i % 3) * .13,
+      .09, .022, .07, .04, i * .7, (i % 2 ? 1 : -1) * .04);
   } else {
     for (let i = 0; i < 12; i++) {
       const angle = rand() * Math.PI * 2, radius = Math.sqrt(rand()) * 1.5;
@@ -202,6 +269,14 @@ function clusterPrototype(kind: TownD2MicroReliefKind, seed: number): ClusterPro
         i % 3 === 1 ? PALETTES.gravel.lichen : PALETTES.gravel.granite;
       add(new DodecahedronGeometry(1, 0), color, Math.cos(angle) * radius, size * .35,
         Math.sin(angle) * radius, size * 1.25, size * .7, size, rand() * .4, rand() * 3, rand() * .3);
+    }
+    for (let i = 0; i < 12; i++) {
+      const angle = i * 2.39996, radius = .38 + (i % 5) * .22;
+      add(new TetrahedronGeometry(1, 0), i % 3 === 0 ? PALETTES.gravel.quartz :
+        i % 3 === 1 ? PALETTES.gravel.slateChip : PALETTES.gravel.lichen,
+        Math.cos(angle) * radius, .08 + (i % 4) * .025, Math.sin(angle) * radius * .8,
+        .06 + (i % 3) * .015, .028 + (i % 2) * .012, .05 + (i % 4) * .012,
+        i * .67, i * 1.31, i * .23);
     }
   }
 
@@ -317,8 +392,10 @@ export function createTownD2FrontRidgeMicroRelief(options: CreateOptions = {}) {
     materials.add(material);
     const mesh = new InstancedMesh(prototype.geometry, material, list.length);
     mesh.name = `town-d2-micro-relief-${kind}`;
-    mesh.userData = { kind, materialFamilies: prototype.materialFamilies };
+    mesh.userData = { kind, materialFamilies: prototype.materialFamilies,
+      surfaceDetail: 'facet-grain,micro-chips,tonal-ramps' };
     const matrix = new Matrix4(), tilt = new Matrix4(), yawMatrix = new Matrix4();
+    const instanceTint = new Color();
     list.forEach((placement, index) => {
       const dx = (sampleNorthRidge350(placement.east + .5, placement.north) -
         sampleNorthRidge350(placement.east - .5, placement.north));
@@ -335,8 +412,16 @@ export function createTownD2FrontRidgeMicroRelief(options: CreateOptions = {}) {
       matrix.scale(new Vector3(placement.scale.x, placement.scale.y, placement.scale.z));
       matrix.setPosition(placement.east, placement.height, -placement.north);
       mesh.setMatrixAt(index, matrix);
+      // Per-instance tint varies whole clusters without fragment shaders, textures or extra draws.
+      const variation = hash(seed, index, placement.height, kind.length * 37);
+      const warmth = (variation & 255) / 255;
+      const brightness = .88 + ((variation >>> 8) & 255) / 255 * .18;
+      instanceTint.setRGB(brightness * (.97 + warmth * .06),
+        brightness * (.985 + warmth * .015), brightness * (1.025 - warmth * .05));
+      mesh.setColorAt(index, instanceTint);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor!.needsUpdate = true;
     mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
     group.add(mesh);

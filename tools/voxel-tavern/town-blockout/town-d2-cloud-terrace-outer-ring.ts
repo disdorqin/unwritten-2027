@@ -1,6 +1,5 @@
 import {
-  BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, Object3D, StaticDrawUsage,
-  type BufferGeometry,
+  BufferGeometry, Color, Float32BufferAttribute, Group, InstancedMesh, MeshLambertMaterial, Object3D, StaticDrawUsage,
 } from 'three';
 import { buildSwitchbackCenterline } from './front-ridge-switchback-road';
 import { sampleNorthRidge350 } from './north-ridge-350-terrain';
@@ -75,11 +74,11 @@ type PieceInput = Readonly<{
 }>;
 
 const PALETTE: Readonly<Record<TownD2CloudTerraceMaterialFamily, readonly string[]>> = {
-  stone: ['#8a8378', '#756f66', '#9a9385', '#686d68'],
-  timber: ['#5d4630', '#71543b', '#493a2d'],
-  pine: ['#44503c', '#536348', '#394638'],
-  shrub: ['#57684c', '#667455', '#495b43'],
-  snow: ['#e8ecf0', '#d6e4f2', '#cbd9e2'],
+  stone: ['#8a8378', '#756f66', '#9a9385', '#686d68', '#aaa18f', '#615f59'],
+  timber: ['#5d4630', '#71543b', '#493a2d', '#826246'],
+  pine: ['#44503c', '#536348', '#394638', '#607052', '#2f4035'],
+  shrub: ['#57684c', '#667455', '#495b43', '#758164'],
+  snow: ['#e8ecf0', '#d6e4f2', '#cbd9e2', '#f4f6f7', '#bfceda'],
 };
 
 function makeRandom(seed: number) {
@@ -133,6 +132,148 @@ function terrainFootprintBase(east: number, north: number, width: number, depth:
     }
   }
   return { base: lowest - sink, lowest, highest, variation: highest - lowest };
+}
+
+type Vec3 = readonly [number, number, number];
+
+/** Tiny flat-shaded geometry writer: all detail stays inside the original unit footprint. */
+class DetailGeometryWriter {
+  private readonly positions: number[] = [];
+  private readonly colors: number[] = [];
+  private serial = 0;
+
+  triangle(a: Vec3, b: Vec3, c: Vec3, outward: Vec3) {
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const normal = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
+    if (normal[0]! * outward[0]! + normal[1]! * outward[1]! + normal[2]! * outward[2]! < 0) [b, c] = [c, b];
+    const length = Math.hypot(normal[0]!, normal[1]!, normal[2]!) || 1;
+    const grain = ((Math.imul(++this.serial, 0x45d9f3b) >>> 24) / 255) * .035;
+    const shade = .9 + Math.abs(normal[1]!) / length * .065 + grain;
+    for (const point of [a, b, c]) {
+      this.positions.push(point[0], point[1], point[2]);
+      this.colors.push(shade, shade, shade);
+    }
+  }
+
+  quad(a: Vec3, b: Vec3, c: Vec3, d: Vec3, outward: Vec3) {
+    this.triangle(a, b, c, outward);
+    this.triangle(a, c, d, outward);
+  }
+
+  finish(name: string, family: TownD2CloudTerraceMaterialFamily) {
+    const geometry = new BufferGeometry();
+    geometry.name = name;
+    geometry.setAttribute('position', new Float32BufferAttribute(this.positions, 3));
+    geometry.setAttribute('color', new Float32BufferAttribute(this.colors, 3));
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    geometry.userData.detailFamily = family;
+    return geometry;
+  }
+}
+
+function beveledBlock(family: 'stone' | 'timber') {
+  const writer = new DetailGeometryWriter();
+  const bevel = family === 'stone' ? .065 : .045;
+  const irregularity = family === 'stone' ? .018 : .006;
+  const half = .5, inner = half - bevel;
+  const chip = (point: Vec3): Vec3 => point.map((value, axis) => {
+    const key = Math.imul(Math.round(value * 1000) + axis * 977, 0x85ebca6b);
+    const jitter = (((Math.imul(key ^ (key >>> 13), 0xc2b2ae35) >>> 16) / 65535) - .5) * irregularity;
+    return Math.max(-half, Math.min(half, value + jitter));
+  }) as unknown as Vec3;
+  const point = (axis: number, a: number, b: number, c: number): Vec3 => {
+    const result: [number, number, number] = [0, 0, 0];
+    result[axis] = a;
+    result[(axis + 1) % 3] = b;
+    result[(axis + 2) % 3] = c;
+    return chip(result);
+  };
+
+  for (let axis = 0; axis < 3; axis++) {
+    const outward: [number, number, number] = [0, 0, 0];
+    for (const sign of [-1, 1]) {
+      outward[axis] = sign;
+      writer.quad(point(axis, sign * half, -inner, -inner), point(axis, sign * half, inner, -inner),
+        point(axis, sign * half, inner, inner), point(axis, sign * half, -inner, inner), outward);
+    }
+  }
+  for (let axis = 0; axis < 3; axis++) {
+    const u = (axis + 1) % 3, v = (axis + 2) % 3;
+    for (const signU of [-1, 1]) for (const signV of [-1, 1]) {
+      const edge = (along: number, acrossU: number, acrossV: number): Vec3 => {
+        const result: [number, number, number] = [0, 0, 0];
+        result[axis] = along; result[u] = acrossU; result[v] = acrossV;
+        return chip(result);
+      };
+      const outward: [number, number, number] = [0, 0, 0];
+      outward[u] = signU; outward[v] = signV;
+      writer.quad(edge(-inner, signU * half, signV * inner), edge(inner, signU * half, signV * inner),
+        edge(inner, signU * inner, signV * half), edge(-inner, signU * inner, signV * half), outward);
+    }
+  }
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+    writer.triangle(chip([x * half, y * inner, z * inner]), chip([x * inner, y * half, z * inner]),
+      chip([x * inner, y * inner, z * half]), [x, y, z]);
+  }
+  return writer.finish(`outer-ring-detail-${family}`, family);
+}
+
+function radialDetail(
+  family: 'pine' | 'shrub' | 'snow',
+  levels: readonly (readonly [number, number])[],
+  segments: number,
+  phase: number,
+) {
+  const writer = new DetailGeometryWriter();
+  const radialPattern = family === 'pine'
+    ? [1, .86, 1, .9, .96, .88, 1]
+    : family === 'shrub' ? [1, .9, 1.03, .92, 1, .87, .98] : [1, .97, 1, .95, .99, .96, 1, .98];
+  const rings = levels.map(([height, radius], level) => Array.from({ length: segments }, (_, segment) => {
+    const angle = segment / segments * Math.PI * 2 + (level % 2 ? phase : -phase * .35);
+    const ripple = family === 'snow' ? 1 : 1 + Math.sin(segment * 2.3 + level * 1.7) * .025;
+    const reach = Math.min(.5, radius * radialPattern[segment % radialPattern.length]! * ripple);
+    const y = Math.max(-.5, Math.min(.5, height + (family === 'pine' && segment % 2 ? .012 : 0)));
+    return [Math.cos(angle) * reach, y, Math.sin(angle) * reach] as Vec3;
+  }));
+  for (let level = 0; level < rings.length - 1; level++) {
+    const lower = rings[level]!, upper = rings[level + 1]!;
+    for (let segment = 0; segment < segments; segment++) {
+      const next = (segment + 1) % segments;
+      const angle = (segment + .5) / segments * Math.PI * 2;
+      writer.quad(lower[segment]!, lower[next]!, upper[next]!, upper[segment]!,
+        [Math.cos(angle), levels[level]![1] - levels[level + 1]![1], Math.sin(angle)]);
+    }
+  }
+  const bottom = rings[0]!, top = rings[rings.length - 1]!;
+  for (let segment = 0; segment < segments; segment++) {
+    const next = (segment + 1) % segments;
+    writer.triangle([0, -.5, 0], bottom[next]!, bottom[segment]!, [0, -1, 0]);
+    writer.triangle([0, .5, 0], top[segment]!, top[next]!, [0, 1, 0]);
+  }
+  return writer.finish(`outer-ring-detail-${family}`, family);
+}
+
+function detailGeometry(family: TownD2CloudTerraceMaterialFamily): BufferGeometry {
+  if (family === 'stone' || family === 'timber') return beveledBlock(family);
+  if (family === 'pine') return radialDetail(family, [
+    [-.5, .34], [-.36, .5], [-.27, .41], [-.06, .46], [.06, .27], [.27, .34], [.5, .015],
+  ], 7, .055);
+  if (family === 'shrub') return radialDetail(family, [
+    [-.5, .3], [-.35, .46], [-.1, .5], [.15, .41], [.36, .27], [.5, .03],
+  ], 7, .09);
+  return radialDetail(family, [
+    [-.5, .38], [-.38, .49], [-.16, .5], [.12, .42], [.35, .2], [.5, .05],
+  ], 8, .03);
+}
+
+function weatheredColor(placement: TownD2CloudTerraceOuterRingPlacement, index: number, target: Color) {
+  const hash = Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(Math.round(placement.east * 16), 0x85ebca6b) ^
+    Math.imul(Math.round(placement.north * 16), 0xc2b2ae35) ^ Math.imul(Math.round(placement.base * 32), 0x27d4eb2f);
+  target.set(PALETTE[placement.material][(hash >>> 0) % PALETTE[placement.material].length]!);
+  return target.offsetHSL(0, 0, (((hash >>> 8) & 7) - 3) * .004);
 }
 
 export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: number }> = {}) {
@@ -440,13 +581,15 @@ export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: num
     else rockStep(east, north);
   }
 
-  const geometry: BufferGeometry = new BoxGeometry(1, 1, 1);
+  const geometries = new Map<TownD2CloudTerraceMaterialFamily, BufferGeometry>();
   const materials = new Map<TownD2CloudTerraceMaterialFamily, MeshLambertMaterial>();
   const batches: InstancedMesh[] = [];
   const dummy = new Object3D();
   const tint = new Color();
   for (const family of Object.keys(PALETTE) as TownD2CloudTerraceMaterialFamily[]) {
-    const material = new MeshLambertMaterial({ color: '#ffffff' });
+    const geometry = detailGeometry(family);
+    geometries.set(family, geometry);
+    const material = new MeshLambertMaterial({ color: '#ffffff', vertexColors: true });
     materials.set(family, material);
     const subset = placements.filter(placement => placement.material === family);
     const batch = new InstancedMesh(geometry, material, Math.max(1, subset.length));
@@ -457,7 +600,7 @@ export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: num
       dummy.scale.set(placement.width, placement.tall, placement.depth);
       dummy.updateMatrix();
       batch.setMatrixAt(index, dummy.matrix);
-      batch.setColorAt(index, tint.set(PALETTE[family][index % PALETTE[family].length]!));
+      batch.setColorAt(index, weatheredColor(placement, index, tint));
     });
     batch.count = subset.length;
     batch.instanceMatrix.setUsage(StaticDrawUsage);
@@ -473,6 +616,10 @@ export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: num
     byKind[placement.kind] = (byKind[placement.kind] ?? 0) + 1;
     byMaterial[placement.material] = (byMaterial[placement.material] ?? 0) + 1;
   }
+  const triangleCount = batches.reduce((sum, batch) => {
+    const trianglesPerInstance = (batch.geometry.index?.count ?? batch.geometry.getAttribute('position').count) / 3;
+    return sum + trianglesPerInstance * batch.count;
+  }, 0);
   const stats = Object.freeze({
     seed,
     placements: placements.length,
@@ -485,6 +632,8 @@ export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: num
     meshCount: batches.length,
     materialFamilies: Object.freeze([...materials.keys()]),
     materialFamilyCount: materials.size,
+    geometryVariants: geometries.size,
+    triangleCount,
     byKind: Object.freeze(byKind),
     byMaterial: Object.freeze(byMaterial),
     bounds: Object.freeze({ ...bounds }),
@@ -515,7 +664,7 @@ export function createTownD2CloudTerraceOuterRing(options: Readonly<{ seed?: num
       group.removeFromParent();
       group.clear();
       batches.forEach(batch => batch.dispose());
-      geometry.dispose();
+      geometries.forEach(geometry => geometry.dispose());
       materials.forEach(material => material.dispose());
       group.userData.disposed = true;
     },

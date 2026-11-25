@@ -1,5 +1,5 @@
 import {
-  BufferGeometry, Color, DodecahedronGeometry, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial,
+  BufferGeometry, Color, Float32BufferAttribute, Group, IcosahedronGeometry, Mesh, MeshPhongMaterial,
 } from 'three';
 import { mainSummitBounds } from './main-summit-block';
 import type { MainSummitTrailPoint } from './main-summit-trail';
@@ -52,10 +52,12 @@ type Rejections = Record<'ground' | 'height' | 'bounds' | 'clearance' | 'spacing
 type Batch = GeometryBatch;
 
 const familyColors: Record<Family, readonly string[]> = {
-  snow: ['#dce8ed', '#c6d7df', '#eef4f5', '#aebfc9'],
-  ice: ['#9ed4df', '#c2e8ed', '#6caaba', '#e0f2f3'],
-  darkRock: ['#35414a', '#46525a', '#59646b', '#28343d'],
-  yellowRock: ['#9b8852', '#b4a064', '#756942'],
+  // Bright wind crust, blue shadow pockets and a restrained glacier edge keep the ridge readable at distance.
+  snow: ['#f4f7f4', '#d8e5eb', '#b8cedb', '#e8eff1', '#9fbacf', '#d0dde3'],
+  // Alternating glacial blues make each tower course legible without textures or an extra material batch.
+  ice: ['#a8deeb', '#d9f3f4', '#6daec6', '#86c8dc', '#4f91b2', '#c1e8ee'],
+  darkRock: ['#4c5962', '#65717a', '#3b4852', '#78838a', '#2c3944', '#596b75'],
+  yellowRock: ['#b29a63', '#8d7749', '#c0aa78', '#756440'],
 };
 const families = Object.keys(familyColors) as Family[];
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -181,9 +183,21 @@ class GeometryBatch {
   }
 }
 
-function tint(family: Family, random: () => number) {
+function distantPeakTop(base: number, variant: number) {
+  // Four cardinal summits lead the skyline; secondary and shoulder peaks stay below them.
+  if (variant % 6 === 0) return townD2MainSummitSnowRidgeSpec.maximumHeight;
+  if (variant % 3 === 0) return Math.min(742, Math.max(710, base + 110));
+  return variant % 2 === 0
+    ? Math.min(700, Math.max(660, base + 45))
+    : Math.min(720, Math.max(680, base + 65));
+}
+function tint(family: Family, random: () => number, elevation = .5, shade = 0) {
   const palette = familyColors[family];
-  return palette[Math.floor(random() * palette.length)]!;
+  const index = Math.floor(random() * palette.length);
+  // Elevation tinting gives peaks a readable crown/shoulder/base hierarchy without another draw.
+  const color = new Color(palette[index]!);
+  color.offsetHSL(0, 0, clamp((elevation - .5) * .42 + shade * .025, -.18, .18));
+  return `#${color.getHexString()}`;
 }
 function localPoint(east: number, north: number, yaw: number, x: number, z: number): [number, number] {
   return [east + x * Math.cos(yaw) + z * Math.sin(yaw), north + x * Math.sin(yaw) - z * Math.cos(yaw)];
@@ -192,7 +206,7 @@ function localPoint(east: number, north: number, yaw: number, x: number, z: numb
 /** A many-slice, terrain-draped faceted snow spine, not a box or a replacement height field. */
 function addSnowRidge(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRidgeHeightAt,
   random: () => number, ceiling: number) {
-  const slices = 7 + candidate.variant % 4;
+  const slices = 5 + candidate.variant % 3;
   const halfLength = candidate.radius * .82;
   const halfWidth = candidate.radius * (.32 + candidate.variant % 3 * .035);
   const available = ceiling - groundAt(candidate.east, candidate.north)!;
@@ -214,16 +228,18 @@ function addSnowRidge(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRi
     rings.push(ring);
   }
   for (let slice = 0; slice < slices; slice++) for (let side = 0; side < profile.length - 1; side++) {
+    const rise = (profile[side]![1] + profile[side + 1]![1]) * .5;
+    const taper = .5 + .5 * Math.sin(Math.PI * (slice + .5) / slices);
     batch.quad(rings[slice]![side]!, rings[slice + 1]![side]!, rings[slice + 1]![side + 1]!, rings[slice]![side + 1]!,
-      tint('snow', random));
+      tint('snow', random, rise * taper, side < 3 ? -1 : 1));
   }
   for (const end of [0, slices]) {
     const ring = rings[end]!;
     const centre = ring.reduce((sum, point) => [sum[0]! + point[0]! / ring.length,
       sum[1]! + point[1]! / ring.length, sum[2]! + point[2]! / ring.length] as number[], [0, 0, 0]);
     for (let side = 1; side < ring.length - 1; side++) {
-      if (end === 0) batch.triangle(centre, ring[side + 1]!, ring[side]!, tint('snow', random));
-      else batch.triangle(centre, ring[side]!, ring[side + 1]!, tint('snow', random));
+      if (end === 0) batch.triangle(centre, ring[side + 1]!, ring[side]!, tint('snow', random, 0, -1));
+      else batch.triangle(centre, ring[side]!, ring[side + 1]!, tint('snow', random, 1, 1));
     }
   }
 }
@@ -231,9 +247,11 @@ function addSnowRidge(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRi
 function addFacetedTower(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRidgeHeightAt,
   random: () => number, ceiling: number, family: 'ice' | 'darkRock') {
   const base = groundAt(candidate.east, candidate.north)! + .08;
-  const height = Math.min(candidate.kind === 'distant-peak' ? ceiling - base : 7 + candidate.variant % 7 * 1.7, ceiling - base);
-  const sides = family === 'ice' ? 6 : 7;
-  const courses = family === 'ice' ? 4 : 3;
+  const height = candidate.kind === 'distant-peak'
+    ? distantPeakTop(base, candidate.variant) - base
+    : Math.min(7 + candidate.variant % 7 * 1.7, ceiling - base);
+  const sides = family === 'ice' ? 5 : 6;
+  const courses = 2;
   const radiusLimit = candidate.radius / 1.32;
   const rings: number[][][] = [];
   for (let course = 0; course <= courses; course++) {
@@ -252,14 +270,16 @@ function addFacetedTower(batch: Batch, candidate: Candidate, groundAt: TownD2Sno
   for (let course = 0; course < courses; course++) for (let side = 0; side < sides; side++) {
     const next = (side + 1) % sides;
     batch.quad(rings[course]![side]!, rings[course + 1]![side]!, rings[course + 1]![next]!, rings[course]![next]!,
-      tint(family, random));
+      tint(family, random, (course + .5) / courses, side < sides * .5 ? -1 : 1));
   }
   for (const course of [0, courses]) {
     const ring = rings[course]!;
     const centre: [number, number, number] = [candidate.east, base + height * course / courses, -candidate.north];
     for (let side = 1; side < sides - 1; side++) {
-      if (course === 0) batch.triangle(centre, ring[side + 1]!, ring[side]!, tint(family, random));
-      else batch.triangle(centre, ring[side]!, ring[side + 1]!, tint(family, random));
+      if (course === 0) batch.triangle(centre, ring[side + 1]!, ring[side]!,
+        tint(family, random, course / courses, -1));
+      else batch.triangle(centre, ring[side]!, ring[side + 1]!,
+        tint(family, random, course / courses, 1));
     }
   }
 }
@@ -271,7 +291,8 @@ function addRock(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRidgeHe
   const base = groundAt(east, north)! + .04;
   const actualHeight = Math.min(height, ceiling - base);
   if (actualHeight < .5) return;
-  const source = new DodecahedronGeometry(1, 0);
+  // Twenty faceted triangles give readable rock planes while leaving room for the towers under the 8k gate.
+  const source = new IcosahedronGeometry(1, 0);
   const positions = source.getAttribute('position');
   const transformed: number[][] = [];
   for (let i = 0; i < positions.count; i++) {
@@ -283,14 +304,16 @@ function addRock(batch: Batch, candidate: Candidate, groundAt: TownD2SnowRidgeHe
       -north + z * radius * variation]);
   }
   for (let i = 0; i < transformed.length; i += 3) {
-    batch.triangle(transformed[i]!, transformed[i + 1]!, transformed[i + 2]!, tint(family, random));
+    const elevation = (transformed[i]![1] + transformed[i + 1]![1] + transformed[i + 2]![1]) / 3 - base;
+    batch.triangle(transformed[i]!, transformed[i + 1]!, transformed[i + 2]!,
+      tint(family, random, elevation / actualHeight, transformed[i]![2] > -north ? -1 : 1));
   }
   source.dispose();
 }
 
 function addRockCluster(batches: Record<Family, Batch>, candidate: Candidate, groundAt: TownD2SnowRidgeHeightAt,
   random: () => number, ceiling: number) {
-  const stones = 4 + candidate.variant % 4;
+  const stones = 3 + candidate.variant % 3;
   for (let stone = 0; stone < stones; stone++) {
     const angle = stone / stones * Math.PI * 2 + random() * .5;
     const spread = candidate.radius * (.2 + random() * .45);
@@ -324,11 +347,12 @@ function addRockStratum(batch: Batch, candidate: Candidate, groundAt: TownD2Snow
   }
   for (let side = 0; side < sides; side++) {
     const next = (side + 1) % sides;
-    batch.quad(rings[0]![side]!, rings[1]![side]!, rings[1]![next]!, rings[0]![next]!, tint('yellowRock', random));
+    batch.quad(rings[0]![side]!, rings[1]![side]!, rings[1]![next]!, rings[0]![next]!,
+      tint('yellowRock', random, .5, side < 3 ? -1 : 1));
   }
   const centre: [number, number, number] = [candidate.east, centreHeight, -candidate.north];
   for (let side = 1; side < sides - 1; side++) batch.triangle(centre, rings[1]![side]!, rings[1]![side + 1]!,
-    tint('yellowRock', random));
+    tint('yellowRock', random, 1, 1));
 }
 
 /** Builds the H560–775 snowfield/rock-belt supplement without changing terrain, viewer or colliders. */
@@ -400,7 +424,7 @@ export function createTownD2MainSummitSnowRidges(options: TownD2SnowRidgeOptions
     if (footprintGround.length !== 9) continue;
     const minimumFootprintBase = Math.min(...footprintGround);
     const top = candidate.kind === 'distant-peak'
-      ? Math.min(ceiling, Math.max(610, base + 105 + candidate.variant % 6 * 20))
+      ? distantPeakTop(base, candidate.variant)
       : Math.min(ceiling, base + (candidate.kind === 'snow-ridge' ? 25 : candidate.kind === 'ice-tower' ? 28 : 15));
     if (minimumFootprintBase < townD2MainSummitSnowRidgeSpec.minimumHeight || base >= ceiling ||
         top <= base + 4 || top > ceiling) { rejections.height++; continue; }
@@ -438,7 +462,7 @@ export function createTownD2MainSummitSnowRidges(options: TownD2SnowRidgeOptions
     else {
       addFacetedTower(batches.darkRock, candidate, heightAt, random, ceiling, 'darkRock');
       const base = heightAt(candidate.east, candidate.north)!;
-      const peakHeight = Math.min(ceiling, Math.max(610, base + 105 + candidate.variant % 6 * 20));
+      const peakHeight = distantPeakTop(base, candidate.variant);
       addRockStratum(batches.yellowRock, candidate, heightAt, random, peakHeight);
     }
   }
@@ -447,13 +471,20 @@ export function createTownD2MainSummitSnowRidges(options: TownD2SnowRidgeOptions
     snow: 'snow-ridge-spines', ice: 'ice-tower-serrations', darkRock: 'rock-clusters-and-distant-peaks',
     yellowRock: 'yellow-rock-strata',
   };
-  const materials = new Map<Family, MeshLambertMaterial>();
+  const materials = new Map<Family, MeshPhongMaterial>();
+  const finish: Record<Family, Readonly<{ shininess: number; specular: string }>> = {
+    snow: { shininess: 26, specular: '#b8d5e2' },
+    ice: { shininess: 86, specular: '#dcfbff' },
+    darkRock: { shininess: 7, specular: '#53616b' },
+    yellowRock: { shininess: 10, specular: '#71664e' },
+  };
   let vertices = 0, triangles = 0, meshes = 0;
   for (const family of families) {
     const batch = batches[family];
     if (!batch.data.positions.length) continue;
     const geometry = batch.geometry();
-    const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const material = new MeshPhongMaterial({ vertexColors: true, flatShading: true, emissiveIntensity: 0, ...finish[family] });
+    material.name = `town-d2-snow-ridges-${family}`;
     materials.set(family, material);
     const mesh = new Mesh(geometry, material);
     mesh.name = `town-d2-${meshNames[family]}`;
@@ -476,12 +507,30 @@ export function createTownD2MainSummitSnowRidges(options: TownD2SnowRidgeOptions
     suppliedExclusions: suppliedZones.length, protectedRockTowerClusters: surveyedTowerZones(trailPoints).length,
     rejections: Object.freeze({ ...rejections }),
   });
-  group.userData = { visualOnly: true, includesWorldCollision: false, modifiesHeightAt: false, stats };
+  group.userData = { visualOnly: true, includesWorldCollision: false, modifiesHeightAt: false, stats, night: false };
   let disposed = false;
+  let night = false;
   return {
     group,
     placements: placements as readonly TownD2SnowRidgePlacement[],
     stats,
+    setNight(value: boolean) {
+      if (disposed) throw new Error('The D2 summit snow ridges are disposed.');
+      if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
+      if (night === value) return;
+      night = value;
+      // Material-only moonlight: no new light authority and no geometry/draw-call changes.
+      for (const [family, material] of materials) {
+        const glacial = family === 'ice' || family === 'snow';
+        material.color.set(night ? (glacial ? '#9ebfd4' : '#8b98a8') : '#ffffff');
+        material.emissive.set(night ? (family === 'ice' ? '#17465c' : '#101c2a') : '#000000');
+        material.emissiveIntensity = night ? (family === 'ice' ? .34 : .18) : 0;
+        material.specular.set(night ? (family === 'ice' ? '#9fe9ff' : finish[family].specular) : finish[family].specular);
+        material.shininess = night && family === 'ice' ? 112 : finish[family].shininess;
+        material.needsUpdate = true;
+      }
+      group.userData.night = night;
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
