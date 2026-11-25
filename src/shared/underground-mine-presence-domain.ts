@@ -6,8 +6,8 @@
  *
  * Domain coordinates are never interchangeable with the town, west, mountain
  * or sky rooms; the scene host and presence room must switch together. The
- * deeper layers (-140 / -165 / -190) are NOT part of this room; each gets its
- * own room when its domain scene is wired.
+ * The -140 room is independently registered in underground-second-mine-presence-domain.
+ * Batch103 expands only the first mine horizontal room to fit the actual shell.
  */
 export const minePresencePath = '/presence-mine';
 /** Reuse the established WS and poll URI suffixes in the isolated mine room. */
@@ -15,8 +15,10 @@ export function minePresenceEndpoint(path: string): string {
   if (path !== '/presence' && !path.startsWith('/presence/')) throw new Error('Invalid presence route');
   return minePresencePath + path.slice('/presence'.length);
 }
-export const minePresenceOrigin = Object.freeze({ east: -180, north: 120, height: -128 });
-export const minePresenceBounds = Object.freeze({ width: 130, depth: 140, height: 64 });
+// Batch96 mounted survey: E[-121.575,22.995], N[74.472,269.352].
+// Both client and server consume this shared datum in the same release.
+export const minePresenceOrigin = Object.freeze({ east: -180, north: 70, height: -128 });
+export const minePresenceBounds = Object.freeze({ width: 210, depth: 210, height: 64 });
 export const mineWorldHeightLimit = minePresenceOrigin.height + minePresenceBounds.height;
 
 type Position = { east: number; north: number; height: number };

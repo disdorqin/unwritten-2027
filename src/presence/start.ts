@@ -4,6 +4,7 @@ import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
 import { skyCityPresenceBounds } from '../shared/sky-city-presence-domain.js';
 import { minePresenceBounds } from '../shared/underground-mine-presence-domain.js';
+import { secondMinePresenceBounds } from '../shared/underground-second-mine-presence-domain.js';
 import { readTownNightOptions } from './town-night-config.js';
 import { readTownWeatherOptions } from './town-weather-config.js';
 import { tmpdir } from 'node:os';
@@ -51,7 +52,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
     for (const [port, bounds] of [[process.env.PRESENCE_MOUNTAIN_PORT, mountainPresenceBounds],
       [process.env.PRESENCE_WEST_PORT, westPresenceBounds],
       [process.env.PRESENCE_SKY_PORT, skyCityPresenceBounds],
-      [process.env.PRESENCE_MINE_PORT, minePresenceBounds]] as const) {
+      [process.env.PRESENCE_MINE_PORT, minePresenceBounds],
+      [process.env.PRESENCE_MINE2_PORT, secondMinePresenceBounds]] as const) {
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
