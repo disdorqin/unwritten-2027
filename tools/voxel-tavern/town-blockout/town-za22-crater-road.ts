@@ -292,10 +292,17 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   for (let n = outerWorks.wallLine.northStart; n <= outerWorks.wallLine.northEnd; n += 1.5) {
     fenceExclusions.push({ east: outerWorks.wallLine.east, north: n, radius: 1 });
   }
-  const ejecta = buildZa36CraterEjecta(road, fenceExclusions);
+  // The formerly solid factories are now occupied spaces. Keep both the
+  // visible ejecta and its matching collider out of these actual footprints
+  // and their new entrance/stair routes; do not merely disable collision.
+  const industrialKeepout=outerWorks.sites.filter(s=>s.id==='smelter-plant'||s.id==='instrument-plant');
+  const routeKeepout=outerWorks.industrialRoutes.flatMap(route=>route.points.map(p=>({...p,radius:1.5})));
+  const worksKeepout=[...industrialKeepout,...routeKeepout,
+    ...mouthWorks.supplyDeckRoute.map(p=>({...p,radius:1.5}))];
+  const ejecta = buildZa36CraterEjecta(road, [...fenceExclusions,...worksKeepout]);
   group.add(ejecta.group);
   const midground = buildZa36CraterMidground(road, [
-    ...rim.placements, ...camp.placements,
+    ...worksKeepout, ...rim.placements, ...camp.placements,
     ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),
     ...ejecta.placements.map(site => ({ east: site.east, north: site.north, radius: site.footprint })),
   ]);

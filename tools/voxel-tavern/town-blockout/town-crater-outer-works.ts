@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import { industrialBuilder, type IndustryPoint } from './town-a-r30-industrial-shell';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
 export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
@@ -106,6 +107,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
   const towerRoutes: CraterTowerRoute[] = [];
+  const industrialRoutes:{id:string;points:IndustryPoint[]}[]=[];
   // S-1 collision (分支窗 A): structural wall boxes + standable floors in
   // world coordinates, exported for the za22 top group's userData. Solid
   // shells get one mass box each; designed gaps (wall gate, fence-ring
@@ -235,10 +237,29 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Yard pad and hall: stone base, corrugated walls, timber posts, slate gable.
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
-    put(stone, 0, g + .6, 0, 28, 1.2, 11);
-    // A-4: 28m long hall, real 18m gable ridge (not the former 12.3m
-    // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
-    put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
+    const hall=industrialBuilder(fr,g,put,colliders,floors);
+    hall.slab(stone,0,0,28,11,1.2,1.2);
+    // The cold-sealed furnace aperture remains decorative; a separate
+    // service entrance at +4.7m gives the actual hall its walkable interior.
+    hall.shell(corrugated,28,11,1.2,12.9,4.7,3.2,3.5);
+    const access=hall.stairs(stone,4.7,8.30,'z',-1,5,.56,2.65,0,1.2);
+    industrialRoutes.push({id:'smelter-plant',points:[hall.point(4.7,8.85,0),...access,hall.point(4.7,3.4,1.2),hall.point(4.7,0,1.2),hall.point(8,0,1.2)]});
+    // Working hall: columns, riveted furnace mass, ducting, ingot bench
+    // and overhead crossbeams. The center remains occupied by real equipment.
+    for(const side of [-1,1])for(const dx of [-12,-6,6,12]){
+      hall.piece(iron,dx,side*4.7,.38,.38,1.2,12.9);
+      put(timber,dx,g+12.45,0,.3,.4,10.3);
+    }
+    hall.piece(stoneDark,0,-.3,3.2,3.1,1.2,2.1);
+    hall.piece(rustIron,0,-.3,2.5,2.5,2.1,6.1);
+    put(iron,0,g+7.25,-.3,1.25,2.3,1.25);
+    put(rustIron,-4.7,g+8.6,-.3,10.5,.65,.65);
+    for(const dx of [-9,-6,9,12]){
+      hall.piece(timberWarm,dx,-3.6,2.0,1.2,1.2,2.35);
+      for(let k=0;k<3;k++)put(iron,dx-.6+k*.6,g+2.48,-3.6,.45,.25,.7);
+    }
+    for(const dx of [3.1,6.3])put(iron,dx,g+3.0,5.5,.18,3.6,.34);
+    put(iron,4.7,g+4.83,5.5,3.45,.22,.34);
     for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
     // The ridge runs along the 28m length, not across the hall.
     // Both roof halves and snow caps share the same pitch and ridge.
@@ -301,10 +322,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
     cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
     cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
-    // S-1 collision: the hall is a solid mass (the furnace mouth is a dark
-    // inset, the iron door ajar ON the face — no enterable interior), so one
-    // mass box for the hall and one for the blast-furnace stack.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 12.9); }
+    // The separate cold blast furnace stays a solid mass. Hall walls and
+    // interior furniture are already registered with their actual footprints.
     hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
     // Hand cart, handles down, mid-yard.
     const cart = fr.at(2, 8);
@@ -389,10 +408,32 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
-    put(stone, 0, g + 2.1, 0, 20, 4.2, 10);
-    // A-4: two full storeys plus pitched attic, ridge at g+17m;
-    // the original g+10m lid read as a squat one-storey workshop.
-    put(timberWarm, 0, g + 8.4, 0, 20, 8.4, 10);
+    const hall=industrialBuilder(fr,g,put,colliders,floors);
+    hall.slab(stone,0,0,20,10,.9,.9);
+    hall.shell(stone,20,10,.9,4.2,0,2.8,2.8);
+    // Upper shell is separate, with a genuine mezzanine and stair opening.
+    hall.shell(timberWarm,20,10,4.2,12.6,0,.8,2.4);
+    // Close the upper facade's small service window with a solid frame.
+    hall.piece(timberWarm,0,4.88,.8,.24,4.2,6.6);
+    hall.slab(timber,0,1.05,19.5,7.45,4.2,.24);
+    hall.slab(timber,5.5,-3.55,8.5,2.15,4.2,.24);
+    hall.slab(timber,-9.1,-3.55,1.1,2.15,4.2,.24);
+    const access=hall.stairs(stone,0,9.98,'z',-1,3,.56,2.4,0,.9);
+    const stair=hall.stairs(timber,-8.05,-3.55,'x',1,12,.63,1.45,.9,4.2);
+    hall.slab(timber,.3,-3.55,1.65,1.45,4.2,.20);
+    hall.piece(iron,-4.45,-2.8,8.1,.12,4.2,5.2);
+    hall.piece(iron,4.85,-2.8,7.1,.12,4.2,5.2);
+    // Real calibration benches, instrument cases and stock shelves.
+    for(const dx of [-6,-3,3,6]){
+      hall.piece(timberWarm,dx,2.4,1.6,1.0,.9,1.85);
+      for(let k=0;k<3;k++)put(brass,dx-.5+k*.5,g+2.02,2.4,.24,.32,.35);
+    }
+    hall.piece(iron,0,0,1.45,1.35,.9,2.7);
+    for(const dx of [-5,0,5]){
+      hall.piece(timber,dx,2.75,2.0,1.05,4.2,5.5);
+      put(brass,dx,g+5.65,2.75,.7,.25,.6);
+    }
+    industrialRoutes.push({id:'instrument-plant',points:[hall.point(0,10.5,0),...access,hall.point(0,6.2,.9),hall.point(0,3.4,.9),hall.point(-8,3.4,.9),hall.point(-8,-1.0,.9),hall.point(-8.05,-3.55,.9),...stair,hall.point(.3,-3.55,4.2),hall.point(.3,-1.6,4.2),hall.point(3,-1.6,4.2)]});
     // Longitudinal ridge, pitched panels and end infill share an actual roof
     // plane, distinct from the taller chimney. Repeat the bay structure on
     // both long elevations instead of a single unbroken upper mass.
@@ -420,7 +461,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(timber,0,g+17.12,0,21.15,.27,.35);
     // Two rows of dark windows; two boarded up.
     for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
-      put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
+      if(Math.abs(dx)>2)put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
       put(dark, dx, g + 6.8, 5.03, 1.7, 1.7, .1);
     }
     for (const dx of [-4.8, 4.8]) {
@@ -431,12 +472,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(rustIron, -8, g + 18.0, -2, 1.1, 31, 1.1);
     put(stoneDark, -8, g + 33.75, -2, 1.5, .45, 1.5);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
-    put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
-    // S-1 collision: solid two-storey shell (no enterable interior — the
-    // K-09/K-10 facade precedent) as one mass box; the loading platform is a
-    // raised face with no steps, so it blocks as a low mass.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 12.6); }
-    { const pf = fr.at(0, 6.8); hitBox(colliders, pf.east, pf.north, fr.yaw, 8, 2.6, g, g + .9); }
+    hall.slab(stone,0,6.65,8,3.30,.9,.9);
+    for(const dx of [-1.48,1.48])put(timber,dx,g+2.3,5.04,.16,2.8,.18);
+    put(timber,0,g+3.78,5.04,3.1,.22,.18);
     put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
     put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);
     for (let i = 0; i < 5; i++) {
@@ -455,7 +493,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // windows; the brittle paper notice nailed beside where the door reads.
     const plateP = fr.at(0, 5.16);
     siteAt('instrument-sign', plateP.east, plateP.north, 1);
-    sign(plateP.east, g + 2.5, plateP.north, fr.yaw, 1.9, .62, brass, (c, w, h) => {
+    sign(plateP.east, g + 3.89, plateP.north, fr.yaw, 1.9, .62, brass, (c, w, h) => {
       const grad = c.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, '#a3803c'); grad.addColorStop(1, '#86652c');
       c.fillStyle = grad; c.fillRect(0, 0, w, h);
@@ -1116,7 +1154,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };
