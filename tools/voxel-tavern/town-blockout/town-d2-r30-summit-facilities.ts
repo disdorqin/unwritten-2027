@@ -1,4 +1,4 @@
-import { Group, Mesh, type Object3D } from 'three';
+import { Group, Mesh, type Material, type Object3D } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail } from './main-summit-trail';
 import { createMainSummitIcefall } from './main-summit-icefall';
@@ -23,6 +23,7 @@ import { mountSummitGlideRingVisuals } from './main-summit-glide-ring-visuals';
 import { surveySummitGlidePracticeTarget } from './main-summit-glide-target';
 import { mountSummitGlideTargetVisual } from './main-summit-glide-target-visual';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
+import { applyTownD2R30NightTint } from './town-d2-r30-night-lights';
 /**
  * D2-R07: mounts the actual summit facility bodies onto the R30 solid massif.
  *
@@ -161,6 +162,10 @@ export function createTownD2R30SummitFacilities(
   const disposers: (() => void)[] = [];
   const reports: TownD2R30SummitFacilityReport[] = [];
   let culledPaintQuads = 0;
+  // The canonical facility bodies carry no night response of their own, so
+  // this module owns the darkening of every lit surface it mounts.
+  let paintSetNight: ((night: boolean) => void) | undefined;
+  let bellLampSwitch: ((on: boolean) => void) | undefined;
 
   /**
    * Records how a body meets its support surface.
@@ -270,12 +275,17 @@ export function createTownD2R30SummitFacilities(
     // overlay's empty cells carry no picture — only triangles and depth
     // writes. Trim them here; the visible band grammar is untouched.
     culledPaintQuads = cullTransparentPaintQuads(paint.mesh);
+    // The canonical overlay owns its own night colour, so the generic tint
+    // pass must leave it alone.
+    (paint.mesh.material as Material).userData.noNightTint = true;
+    paintSetNight = paint.setNight;
     group.add(paint.mesh);
     disposers.push(() => paint.dispose());
 
     const bellPosts = createMainSummitBellPosts(trailPoints);
     group.add(bellPosts.group);
     disposers.push(() => bellPosts.dispose());
+    bellLampSwitch = (on: boolean) => bellPosts.setAllLamps(on);
     for (const post of bellPosts.posts) {
       // Bell posts stand beside the surveyed walkway, on the deck that
       // D2-R02 solidifies with its cut/fill shoulders.
@@ -389,13 +399,31 @@ export function createTownD2R30SummitFacilities(
     modifiesHeightAt: false, modifiesFacilityHeight: false,
     reports: Object.freeze(reports.map(report => ({ ...report }))), stats,
     coordinateConvention: 'x=east,y=height,z=-north',
+    // The rules side owns the bell-post lamp cores; D2-R08 asks this hook
+    // instead of reaching into the canonical bell module.
+    bellLampSwitch,
   };
 
   let disposed = false;
+  let night = false;
   return {
     group,
     reports: () => Object.freeze(reports.map(report => ({ ...report }))),
     stats: () => stats,
+    /**
+     * D2-R08: darkens every lit surface the facility bodies own and hands
+     * the emissive bodies over to the night-light package. The overlay keeps
+     * its canonical night colour.
+     */
+    setNight(value: boolean) {
+      if (disposed) throw new Error('The D2-R07 summit facilities are disposed.');
+      if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
+      if (night === value) return;
+      night = value;
+      applyTownD2R30NightTint(group, value);
+      paintSetNight?.(value);
+      group.userData.night = night;
+    },
     dispose() {
       if (disposed) return;
       disposed = true;

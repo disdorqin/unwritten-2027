@@ -1,4 +1,6 @@
 import { Group, type Object3D } from 'three';
+import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
+import { createMainSummitTrail } from './main-summit-trail';
 import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30ChunkLod } from './town-d2-r30-chunk-lod';
 import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-host';
@@ -6,6 +8,7 @@ import { createTownD2R30Collision } from './town-d2-r30-collision';
 import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
 import { createTownD2R30Massif } from './town-d2-r30-massif';
+import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
 import { createTownD2R30SledGateSupport } from './town-d2-r30-sled-gate-support';
 import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
 import { createTownD2R30Strata } from './town-d2-r30-strata';
@@ -40,6 +43,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeSledGateSupport?: boolean;
   /** D2-R07: include the summit facility bodies (hut, icefall, props, glide course) (default false). */
   includeSummitFacilities?: boolean;
+  /** D2-R08: include the summit night lights (trail lamps, window glow) (default false). */
+  includeNightLights?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -68,8 +73,9 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeFacilityFoundations = options.includeFacilityFoundations ?? false;
   const includeSledGateSupport = options.includeSledGateSupport ?? false;
   const includeSummitFacilities = options.includeSummitFacilities ?? false;
+  const includeNightLights = options.includeNightLights ?? false;
   if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
-    includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities]
+    includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights]
     .some(value => typeof value !== 'boolean')) {
     throw new TypeError('D2-R30 inclusion flags must be booleans.');
   }
@@ -79,6 +85,8 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const disposers: (() => void)[] = [];
   const nightHooks: ((value: boolean) => void)[] = [];
   const children: Group[] = [];
+  // The night-light package borrows the emissive bodies it lights.
+  let nightLightsHost: Group | undefined;
 
   // One shared height sampler for every sub-package and the collision grid, so
   // visual terrain and the walking surface can never drift apart.
@@ -155,6 +163,30 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight });
     children.push(facilities.group);
     disposers.push(() => facilities.dispose());
+    // The canonical facility bodies carry no night response of their own,
+    // so the R07 package owns the darkening of every lit surface it mounts.
+    nightHooks.push(value => facilities.setNight(value));
+    nightLightsHost = facilities.group;
+  }
+
+  if (includeNightLights) {
+    // The lamp chain follows the canonical walkway, so it is surveyed against
+    // the P-1 reference block exactly like the bell posts and the trail
+    // markers, and the lamps stand on the D2-R02 roadbed.
+    const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
+    let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] = [];
+    try {
+      trailPoints = createMainSummitTrail(block.heightAt, arrivalHeight).points;
+    } finally {
+      block.dispose();
+    }
+    const lights = createTownD2R30NightLights({
+      hostGroup: nightLightsHost,
+      trailPoints,
+    });
+    children.push(lights.group);
+    disposers.push(() => lights.dispose());
+    nightHooks.push(value => lights.setNight(value));
   }
 
   for (const child of children) group.add(child);
