@@ -17,7 +17,7 @@ export function makeCampGrain(family:'wood'|'rock'|'iron'|'cloth'|'neutral'){
 }
 /** Use the real rock triangles, not a decorative second collision shell.
  * Camp-only material groups preserve the exact original triangle buffer. */
-export function applyR30CampRock(geometry:BufferGeometry,base:MeshStandardMaterial,start:number,end:number){
+export function applyR30CampRock(geometry:BufferGeometry,base:MeshStandardMaterial,start:number,end:number,fullMine=false){
  const size=64,data=new Uint8Array(size*size*4);
  for(let v=0;v<size;v++)for(let u=0;u<size;u++){
   const row=Math.floor((v+((Math.floor(u/9)*7)%5)-2)/8);
@@ -31,12 +31,32 @@ export function applyR30CampRock(geometry:BufferGeometry,base:MeshStandardMateri
  }
  const map=new DataTexture(data,size,size);map.colorSpace=SRGBColorSpace;map.wrapS=map.wrapT=RepeatWrapping;map.minFilter=map.magFilter=NearestFilter;map.generateMipmaps=false;map.needsUpdate=true;
  const stone=new MeshStandardMaterial({map,roughness:1,side:base.side,flatShading:true});
+ // Coarse and fine bands follow the actual face projection. Keep the
+ // original geometry, and use non-periodic-looking pixel strata instead
+ // of painted mortar grids over the entire deep natural rock shell.
+ const naturalMaps:DataTexture[]=[],naturalMats:MeshStandardMaterial[]=[];
+ if(fullMine)for(const deep of [false,true]){
+  const n=64,pixels=new Uint8Array(n*n*4);
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+   const tier=Math.floor((y+Math.floor(x/9)%3+Math.floor(x/17)*2)/8);
+   const grit=((x*17+y*31+x*y*3)%23)/22;
+   const ridge=(y+Math.floor(x/8)%4+Math.floor(x/13)*2)%13;
+   const stripe=(Math.floor(x/9)*11+tier*7+71)%17;
+   const v=(deep?57:70)+stripe+Math.floor(9*grit)+(ridge===0?-15:ridge===1?9:0);
+   const i=(y*n+x)*4;
+   pixels.set([v+(deep?0:7),v+(deep?3:1),v+(deep?8:-3),255],i);
+  }
+  const t=new DataTexture(pixels,n,n);t.colorSpace=SRGBColorSpace;
+  t.wrapS=t.wrapT=RepeatWrapping;t.magFilter=t.minFilter=NearestFilter;t.generateMipmaps=false;t.needsUpdate=true;
+  naturalMaps.push(t);naturalMats.push(new MeshStandardMaterial({map:t,roughness:deep?.91:1,side:base.side,flatShading:true}));
+ }
  const a=geometry.getAttribute('position'),norm=geometry.getAttribute('normal'),uv=new Float32Array(a.count*2);
  let previous=-1,runStart=0,campTriangles=0;
  geometry.clearGroups();
  for(let i=0;i<a.count;i+=3){
   const isCamp=[i,i+1,i+2].every(k=>a.getZ(k)>=start-1e-4&&a.getZ(k)<=end+1e-4);
-  const index=isCamp?1:0;if(isCamp)campTriangles++;
+  const meanZ=(a.getZ(i)+a.getZ(i+1)+a.getZ(i+2))/3;
+  const index=isCamp?1:fullMine?(meanZ<95?2:3):0;if(isCamp)campTriangles++;
   if(index!==previous){if(previous>=0)geometry.addGroup(runStart,i-runStart,previous);runStart=i;previous=index;}
   const nx=Math.abs(norm.getX(i)),ny=Math.abs(norm.getY(i)),nz=Math.abs(norm.getZ(i));
   for(let k=i;k<i+3;k++){
@@ -47,7 +67,7 @@ export function applyR30CampRock(geometry:BufferGeometry,base:MeshStandardMateri
  }
  if(previous>=0)geometry.addGroup(runStart,a.count-runStart,previous);
  geometry.setAttribute('uv',new BufferAttribute(uv,2));
- return {materials:[base,stone],campTriangles,dispose(){stone.dispose();map.dispose();}};
+ return {materials:[base,stone,...naturalMats],campTriangles,dispose(){stone.dispose();map.dispose();naturalMats.forEach(m=>m.dispose());naturalMaps.forEach(t=>t.dispose());}};
 }
 type Family='rock'|'wood'|'iron';
 type Part={family:Family;centre:readonly [number,number,number];size:readonly [number,number,number];angle:number;shade:number};

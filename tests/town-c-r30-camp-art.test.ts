@@ -23,8 +23,9 @@ test('R30 camp roof, hearth and localized rock finish preserve registered feet a
   assert.ok(h.passageAt(recovery.east,recovery.north),'healing foot remains walkable');
   const rock=h.mounted.group.getObjectByName('underground-mine-rock') as Mesh;
   const mats=rock.material as MeshStandardMaterial[];
-  assert.equal(mats.length,2);assert.ok(mats[1].map);
-  assert.ok(rock.geometry.groups.some(g=>g.materialIndex===0)&&rock.geometry.groups.some(g=>g.materialIndex===1));
+  assert.equal(mats.length,4);
+  for(const i of [1,2,3]){assert.ok(mats[i].map);assert.ok(rock.geometry.groups.some(g=>g.materialIndex===i));}
+  assert.equal(rock.geometry.groups.reduce((n,g)=>n+g.count,0),rock.geometry.getAttribute('position').count);
   const source=createUndergroundMineLayout(undergroundMineSpec).mesh.rock;
   assert.deepEqual(rock.geometry.getAttribute('position').array,source,'visual finish keeps source triangles unchanged');
   let lights=0;camp.r30Hearth.group.traverse(o=>{if(o instanceof PointLight)lights++});assert.equal(lights,0);

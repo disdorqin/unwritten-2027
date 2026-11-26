@@ -172,7 +172,7 @@ export function mountUndergroundMineDomain(host: Host) {
     // Preserve the original rock geometry and use a second material only
     // inside the sample camp. Other tunnels keep their prior visual style.
     const campStart=mine.route.at(-2)?.from[2];
-    if(surface==='rock'&&campStart!==undefined)campRock=applyR30CampRock(geometry,materials.rock,campStart,campStart+campSpec.length);
+    if(surface==='rock'&&campStart!==undefined)campRock=applyR30CampRock(geometry,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true);
     const mesh = new Mesh(geometry, surface==='rock'&&campRock?campRock.materials:materials[surface]);
     mesh.name = 'underground-mine-' + surface;
     root.add(mesh);
@@ -277,7 +277,7 @@ export function mountUndergroundMineDomain(host: Host) {
       const g=new BufferGeometry();
       g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
       const campStart=mine.route.at(-2)?.from[2];
-      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length):undefined;
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true):undefined;
       const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
       rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
       previous.dispose();campRock?.dispose();campRock=next;
@@ -292,7 +292,7 @@ export function mountUndergroundMineDomain(host: Host) {
       const previous=rockMesh.geometry,g=new BufferGeometry();
       g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
       const campStart=mine.route.at(-2)?.from[2];
-      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length):undefined;
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true):undefined;
       const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
       rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
       previous.dispose();campRock?.dispose();campRock=next;rockVertices=cut.vertices;crystalMouth=true;return true;
