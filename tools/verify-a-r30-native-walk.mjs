@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -37,7 +37,8 @@ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
 const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1';
+const mobileReview=segment==='mobile-review';
+const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview;
 const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], performanceSamples:[] };
 
 await mkdir(output, { recursive: true });
@@ -47,7 +48,7 @@ let lastEvidence;
 let measuring = true;
 
 async function openTown(name) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN' });
+  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',...(mobileReview?{isMobile:true,hasTouch:true}: {}) });
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
@@ -342,6 +343,46 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
+ if(mobileReview){
+  const cdp=await page.context().newCDPSession(page),touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
+  assert.equal(await page.evaluate(()=>matchMedia('(pointer: coarse)').matches),true);
+  await page.locator('#touch-walk').waitFor({state:'visible',timeout:12000});
+  await picture(page,evidence,'mobile-plaza-idle');
+  const start=await readPose(page),pad=await page.locator('#touch-walk').boundingBox();
+  assert.ok(pad);
+  const p={x:pad.x+pad.width/2,y:pad.y+pad.height/2,id:1};
+  await touch('touchStart',[p]);
+  try{await touch('touchMove',[{...p,y:p.y-36}]);await page.waitForTimeout(650);}
+  finally{await touch('touchEnd',[]);}
+  await page.waitForTimeout(300);
+  const walked=await readPose(page),distance=Math.hypot(walked.east-start.east,walked.north-start.north);
+  assert.ok(distance>.4&&distance<5,JSON.stringify({start,walked,distance}));
+  await page.waitForTimeout(450);const stopped=await readPose(page);
+  assert.ok(Math.hypot(stopped.east-walked.east,stopped.north-walked.north)<.2);
+  const yawBefore=(await waitForWire(page,evidence)).yaw;
+  const anchor=await page.evaluate(()=>{
+   const canvas=document.querySelector('#scene canvas'),w=innerWidth,h=innerHeight;
+   for(const [x,y] of [[.65,.43],[.62,.35],[.68,.53],[.55,.39]]){const a=Math.round(w*x),b=Math.round(h*y);if(document.elementFromPoint(a,b)===canvas&&a+55<w)return {x:a,y:b,id:2};}
+  });
+  assert.ok(anchor,'touch look requires an unobstructed canvas');
+  await touch('touchStart',[anchor]);try{await touch('touchMove',[{...anchor,x:anchor.x+42}]);await page.waitForTimeout(90);}finally{await touch('touchEnd',[]);}
+  await page.waitForTimeout(350);
+  const yawAfter=(await waitForWire(page,evidence)).yaw;
+  assert.ok(Math.abs(yawDistance(yawBefore,yawAfter))>.015);
+  const base=(await readPose(page)).cameraY;
+  await page.evaluate(()=>{window.__aMobileJumpPeak=window.__za22Frame?.cameraY;window.__aMobileJumpListener=e=>{window.__aMobileJumpPeak=Math.max(window.__aMobileJumpPeak??-Infinity,e.detail.cameraY??-Infinity)};document.addEventListener('town-frame-profile',window.__aMobileJumpListener,true);});
+  await page.locator('#touch-jump').tap();await page.waitForTimeout(1100);
+  const peak=await page.evaluate(()=>{document.removeEventListener('town-frame-profile',window.__aMobileJumpListener,true);return window.__aMobileJumpPeak;});
+  assert.ok(peak-base>.25,JSON.stringify({base,peak}));
+  await picture(page,evidence,'mobile-plaza-after-input');
+  await page.locator('#town-panel-toggle').tap();
+  await page.locator('#jump').selectOption({label:'陨石坑口'});
+  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').tap();
+  await page.waitForFunction(pattern=>{const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;},positionPattern.source,{timeout:45000});
+  await picture(page,evidence,'mobile-crater-mouth');
+  report.mobile={scope:'Chromium mobile viewport/touch emulation, not physical phone',walkDistance:distance,stopped:true,yawDelta:yawDistance(yawBefore,yawAfter),jumpRise:peak-base,crater:await readPose(page)};
+  report.traversal={top:report.mobile.crater,returned:stopped};
+ }else{
  await page.locator('#town-panel-toggle').click();
  await page.locator('#jump').selectOption({label:segment==='rail-buffer'?'火车站':['shankou','rail-valley'].includes(segment)?'山口站':'陨石坑口'});
  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
@@ -662,6 +703,7 @@ try{
  if(segment==='gatehouse')assert.ok(Math.abs(returned.height-path[0].height)<.08,JSON.stringify({returned,ground:path[0]}));
  await picture(page,evidence,segment+'-return');
  report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:path[0]};
+ }
 }catch(e){report.failure=String(e.stack||e);process.exitCode=1;try{await picture(lastPage,lastEvidence,'failed-position');}catch{}}
 finally{
  measuring=false;report.errors=report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length;
