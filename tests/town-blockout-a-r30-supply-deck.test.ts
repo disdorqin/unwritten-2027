@@ -41,6 +41,11 @@ test('supply actual stairs lead up to the deck and back down with body and step 
   }
  }
  walk(path);walk([...path].reverse());
+ const interior=road.mouthWorks.supplyInteriorRoute;
+ walk(interior);walk([...interior].reverse());
+ const map=interior.at(-1)!;
+ assert.equal(road.craterActions.actionAt(map.east,map.north,map.height)?.label,'查看坑区手绘图');
+ assert.notEqual(road.craterActions.actionAt(map.east,map.north,map.height+2.76)?.label,'查看坑区手绘图');
  const deck=path.at(-1)!;
  const prompt=road.craterActions.actionAt(deck.east,deck.north,deck.height);
  assert.equal(prompt?.label,'使用屋顶望筒观坑');

@@ -4,6 +4,7 @@ import { buildCraterMouthWorks, type CraterHitBox } from '../tools/voxel-tavern/
 import { buildCraterOuterWorks } from '../tools/voxel-tavern/town-blockout/town-crater-outer-works';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+import { supportFootprintOverlaps } from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 
 const terrain = createTerrainGrid();
 
@@ -53,13 +54,13 @@ test('supply station: walls block, the 2.8 m doorway and interior stay open', ()
   assert.equal(blocked(mouth.colliders, supply.east, supply.north), false, 'interior is enterable');
   const counter = frameAt(supply, 330, 1.4, 1.1);
   assert.equal(blocked(mouth.colliders, counter.east, counter.north), true, 'counter blocks');
-  // Interior slab is a standable floor at g + .91; a doorway ramp exists.
-  assert.ok(Math.abs(floorTopAt(mouth.floors, supply.east, supply.north) - 12.91) < .01, 'slab floor top');
-  assert.ok(mouth.ramps.length >= 1, 'doorway ramp exported');
-  const ramp = mouth.ramps[0];
-  assert.equal(ramp.axis, 'z', 'supply faces 330° — north-dominant ramp');
-  assert.ok(doorPoint.east >= ramp.min[0] && doorPoint.east <= ramp.max[0] &&
-    -doorPoint.north >= ramp.min[2] && -doorPoint.north <= ramp.max[2], 'ramp covers the doorway');
+  // Interior slab and four real treads share the production support list.
+  assert.ok(mouth.floors.some(f=>Math.abs(f.max[1]-12.91)<.01&&supportFootprintOverlaps(supply.east,supply.north,f,.01)), 'interior slab beneath the separate roof deck');
+  const route=mouth.supplyInteriorRoute;
+  assert.equal(route.length,8);
+  for(const p of route.slice(1,5))
+    assert.ok(mouth.floors.some(f=>Math.abs(f.max[1]-p.height)<.01&&supportFootprintOverlaps(p.east,p.north,f,.01)),'physical tread');
+  assert.ok(!mouth.ramps.some(r=>doorPoint.east>=r.min[0]&&doorPoint.east<=r.max[0]&&-doorPoint.north>=r.min[2]&&-doorPoint.north<=r.max[2]),'no hidden doorway ramp');
 });
 
 test('guard shed: back wall and posts block, the open sides stay open', () => {
@@ -135,7 +136,7 @@ test('za22 top group carries the merged west walk geometry, all west of the seam
   };
   assert.ok(colliders.length >= 200, `merged colliders (${colliders.length})`);
   assert.ok(floors.length >= 3, 'merged floors');
-  assert.ok(ramps.length >= 2, 'merged ramps');
+  assert.equal(ramps.length,road.mouthWorks.ramps.length+road.outerWorks.ramps.length,'merge all remaining ramps, not retired invisible door ramps');
   for (const box of [...colliders, ...floors, ...ramps]) {
     assert.ok(box.max[0] < 0, `box stays west of the seam (max east ${box.max[0]})`);
     assert.ok(box.min[0] < box.max[0] && box.min[1] < box.max[1] && box.min[2] < box.max[2], 'box is well-formed');

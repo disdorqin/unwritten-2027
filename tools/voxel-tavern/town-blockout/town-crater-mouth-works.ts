@@ -242,6 +242,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   let brazierLight: PointLight | undefined;
   const actions: CraterActionSpot[] = [];
   const supplyDeckRoute: {east:number;north:number;height:number}[]=[];
+  const supplyInteriorRoute: {east:number;north:number;height:number}[]=[];
   /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
   const gateFencePosts: { bearing: number; radius: number }[] = [];
 
@@ -396,7 +397,20 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // is above head height.
     floors.push(orientedSupportBox(c0.east,c0.north,fr.yaw,W+.5,D+.5,g-.1,g+foundH-.1));
     floors.push(orientedSupportBox(c0.east,c0.north,fr.yaw,W,D,g+foundH-.1,g+foundH+.06));
-    hitRamp(ramps, fr, D / 2 + 1.1, D / 2 - .5, .85, g, g + foundH + .06);
+    // Four visible stone treads connect ground to the actual interior slab.
+    // Use the same oriented support as the exterior stair; no hidden ramp.
+    const entry=fr.at(0,D/2+3.25);
+    const entryY=heightAt(entry.east,entry.north)??g;
+    supplyInteriorRoute.push({...entry,height:entryY});
+    for(let i=0;i<4;i++){
+      const p=fr.at(0,D/2+(3.5-i)*.65);
+      const top=entryY+(g+foundH+.06-entryY)*(i+1)/4;
+      const low=Math.min(top-.12,(heightAt(p.east,p.north)??g)-.06);
+      box(stone,p.east,(low+top)/2,p.north,2.25,top-low,.66,fr.yaw);
+      floors.push(orientedSupportBox(p.east,p.north,fr.yaw,2.25,.66,low,top));
+      supplyInteriorRoute.push({...p,height:top});
+    }
+    for(const z of [2.25,0,-1.45])supplyInteriorRoute.push({...fr.at(0,z),height:g+foundH+.06});
     for (const s of [-1, 1]) {
       const seg = fr.at(s * 2.55, D / 2);
       colliders.push(orientedSupportBox(seg.east,seg.north,fr.yaw,2.3,.22,g+foundH,g+foundH+wallH));
@@ -541,11 +555,16 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     }
     const doorLight = fr.at(0, D / 2 + .6);
     doorLamp = lampLight(doorLight.east, g + foundH + 2.1, doorLight.north, 5, 8.5);
-    const step = fr.at(0, D / 2 + .55);
-    box(stone, step.east, g + .12, step.north, 1.7, .24, 1, fr.yaw);
+    // Entry treads above already provide the visible doorway support.
     // Interior: shelves with dry goods / rope / oil lamps, counter, hand-drawn map.
     for (const s of [-1, 1]) {
       const sh = fr.at(s * (W / 2 - .55), -.6);
+      // Occupied furniture now has a real body, without closing the aisle.
+      colliders.push(orientedSupportBox(sh.east,sh.north,fr.yaw,.54,3.4,g+foundH,g+foundH+2.05));
+      for(const z of [-2.28,1.08])for(const dx of [-.22,.22]){
+        const p=fr.at(s*(W/2-.55)+dx,z);
+        box(timberWarm,p.east,g+foundH+1.025,p.north,.10,2.05,.10,fr.yaw);
+      }
       for (let lvl = 0; lvl < 3; lvl++) {
         box(timber, sh.east, g + foundH + .5 + lvl * .62, sh.north, .5, .07, 3.4, fr.yaw);
         for (let j = 0; j < 4; j++) {
@@ -555,9 +574,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         }
       }
     }
-    const counter = fr.at(1.4, 1.1);
-    box(timberWarm, counter.east, g + foundH + .5, counter.north, 2.4, 1, .6, fr.yaw);
-    hitBox(colliders, counter.east, counter.north, fr.yaw, 2.4, .6, g + foundH, g + foundH + 1);
+    const counter=fr.at(1.9,1.1);
+    box(supplyPlanks,counter.east,g+foundH+.5,counter.north,1.9,1,.6,fr.yaw);
+    box(timberWarm,counter.east,g+foundH+1.06,counter.north,2.0,.12,.72,fr.yaw);
+    colliders.push(orientedSupportBox(counter.east,counter.north,fr.yaw,2.0,.72,g+foundH,g+foundH+1.12));
     const mapP = fr.at(0, -D / 2 + .16);
     sign(mapP.east, g + foundH + 1.75, mapP.north, fr.yaw + Math.PI, 2.1, 1.35, (c, w, h) => {
       c.fillStyle = '#e3d3a8'; c.fillRect(0, 0, w, h);
@@ -572,10 +592,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.strokeStyle = 'rgba(61,44,28,.6)'; c.lineWidth = 3;
       c.strokeRect(w * .74, h * .62, 88, 66);
     });
-    const mapH = heightAt(mapP.east, mapP.north);
-    if (mapH !== undefined) {
-      actions.push({ id: 'map', label: '查看坑区手绘图', east: mapP.east, north: mapP.north, height: mapH, range: 2.1 });
-    }
+    const mapStand=fr.at(0,-1.45);
+    actions.push({id:'map',label:'查看坑区手绘图',...mapStand,height:g+foundH+.06,range:1.25});
     // K-01/02/03 (《设计-全图文字件总表》，总控裁定 批58 追补六）：牌匾挂门楣、
     // 登记台告示立柜台、值班室门牌挂右窗上——总表逐字，不改字。K-03 注：本栋为
     // 一间通房，无独立值班室门；牌挂右前窗上方作房间标牌，不另隔墙。
@@ -589,7 +607,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText('坑口补给站', w / 2, h / 2 + 2);
     });
-    const noticeP = fr.at(1.4, 1.1);
+    const noticeP = fr.at(1.9, 1.1);
     sites.push({ id: 'supply-registration-notice', east: noticeP.east, north: noticeP.north, height: g + foundH + 1.35, radius: 1 });
     sign(noticeP.east, g + foundH + 1.35, noticeP.north, fr.yaw, 1.1, .7, (c, w, h) => {
       c.fillStyle = '#e8e0cc'; c.fillRect(0, 0, w, h);
@@ -943,7 +961,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     let nearest: CraterActionSpot | undefined; let best = Infinity;
     for (const spot of actions) {
       const horizontal = Math.hypot(east - spot.east, north - spot.north);
-      const heightTolerance=spot.id==='telescope'?.65:3.3;
+      const heightTolerance=spot.id==='telescope'||spot.id==='map'?.65:3.3;
       if (horizontal > spot.range || Math.abs(height - spot.height) > heightTolerance || horizontal >= best) continue;
       best = horizontal; nearest = spot;
     }
@@ -953,7 +971,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,
     colliders, floors, ramps,
   };
 }
