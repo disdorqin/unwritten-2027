@@ -129,6 +129,7 @@ import { createHotSpringSoak, hotSpringPools } from './hot-spring-soak';
 import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
+import {protectRailStationRoad} from './town-a-r30-station-protection';
 import { createTownRailway, type TownRailStopId } from './town-railway';
 import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
@@ -3291,7 +3292,7 @@ function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
     westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
     westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
     water:(e,n)=>townWater.at(e,n)?.ground,
-    ridgeRoad:(e,n,h)=>switchbackRoad?.heightAt(e,n,h),
+    ridgeRoad:protectRailStationRoad((e,n,h)=>switchbackRoad?.heightAt(e,n,h)),
     passable:outdoorWalkable,
   });
   // The old numeric caller requires a fallback for off-domain probes.
