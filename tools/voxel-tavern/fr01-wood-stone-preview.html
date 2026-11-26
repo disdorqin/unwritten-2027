@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>FR-01 木石生活构件库 · 独立展台预览</title>
+<style>
+  :root{
+    --bg:#0d1520; --panel:#101c2ad8; --line:#8fb3cf33; --ink:#e9f2f9; --dim:#9ab2c6;
+    --amber:#e3be7f; --green:#7bd8a4;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13.5px/1.5 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+  #hud{position:absolute;top:14px;left:14px;width:min(360px,calc(100vw - 28px));
+    max-height:calc(100vh - 28px);overflow:auto;padding:14px 16px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 16px 44px #0006}
+  h1{font-size:15px;margin:0 0 2px;color:#fbe1b0}
+  .sub{font-size:11.5px;color:var(--dim);margin:0 0 10px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+  button{border:1px solid #8aacc688;background:#1c3246c9;color:#eaf3fa;padding:5px 9px;
+    border-radius:8px;cursor:pointer;font:inherit;font-size:12px}
+  button:hover{background:#284661}
+  button.active{background:#b55b38;border-color:#e99c7f}
+  .list{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:10px 0}
+  .item{text-align:left;padding:6px 8px;font-size:12px;border-radius:7px;
+    border:1px solid #ffffff16;background:#0a141fb8;color:#d6e5f2}
+  .item.active{border-color:var(--amber);background:#2b2318cc;color:#ffe6ba}
+  .meta{margin-top:8px;padding:10px;border-radius:10px;background:#081019b0;border:1px solid #ffffff12;font-size:12px}
+  .meta b{color:var(--amber)}
+  .foot{position:absolute;right:14px;bottom:12px;font-size:11px;color:#8ba3b8;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>FR-01 木石生活构件库（12 类）</h1>
+  <p class="sub">独立展台预览 · 1 单位 = 1 米 · 共享 16px/24px 像素颗粒材质</p>
+  <div class="row">
+    <button id="btn-overview" class="active">全览</button>
+    <button id="btn-front">近景正面</button>
+    <button id="btn-back">背面检查</button>
+    <button id="btn-eye">人眼 1.65m</button>
+  </div>
+  <div class="row">
+    <button id="btn-day">夜间 / 日间</button>
+    <button id="btn-lod">LOD: 高精度</button>
+    <button id="btn-col">碰撞盒: 关</button>
+  </div>
+  <div id="asset-list" class="list"></div>
+  <div id="meta-box" class="meta"></div>
+</div>
+<div class="foot">拖拽旋转 · 滚轮缩放 · 右键平移 · 独立预览未接主线</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {
+  FriendMaterialLibrary,
+  applyAssetLod,
+  createDebugColliderWireframe,
+} from './town-blockout/town-friend-materials.ts';
+import { FR01_WOOD_STONE_CATALOG } from './town-blockout/town-friend-wood-stone-kit.ts';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x162231);
+scene.fog = new THREE.Fog(0x162231, 18, 46);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 120);
+camera.position.set(7.5, 5.2, 10.5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.9, 0);
+
+const hemi = new THREE.HemisphereLight(0xbcd6ef, 0x2c3642, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1dc, 1.35);
+sun.position.set(8, 13, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 40;
+sun.shadow.camera.left = -10;
+sun.shadow.camera.right = 10;
+sun.shadow.camera.top = 10;
+sun.shadow.camera.bottom = -10;
+scene.add(sun);
+
+const warmFill = new THREE.PointLight(0xffb45c, 0, 14, 1.4);
+warmFill.position.set(0, 3.2, 2.5);
+scene.add(warmFill);
+
+const libs = new FriendMaterialLibrary();
+
+// Floor plinth
+const floor = new THREE.Mesh(
+  new THREE.BoxGeometry(16, 0.2, 13),
+  libs.get('cobble'),
+);
+floor.position.set(0, -0.1, 0);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// 1.65m human scale reference pole on left edge
+const scaleRef = new THREE.Group();
+const refBody = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.65, 0.22), libs.get('ceramic_teal'));
+refBody.position.set(-6.6, 0.825, 4.2);
+refBody.castShadow = true;
+scaleRef.add(refBody);
+scene.add(scaleRef);
+
+const entries = [];
+const cols = 4;
+const spacingX = 3.2;
+const spacingZ = 3.4;
+
+FR01_WOOD_STONE_CATALOG.forEach((entry, idx) => {
+  const col = idx % cols;
+  const row = Math.floor(idx / cols);
+  const px = (col - 1.5) * spacingX;
+  const pz = (row - 1) * spacingZ;
+
+  // Individual stone plinth
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 2.2), libs.get('stone_block'));
+  plinth.position.set(px, 0.04, pz);
+  plinth.receiveShadow = true;
+  scene.add(plinth);
+
+  const asset = entry.build(libs);
+  asset.position.set(px, 0.08, pz);
+  scene.add(asset);
+
+  const colWire = createDebugColliderWireframe(entry.meta.colliders);
+  colWire.position.set(px, 0.08, pz);
+  colWire.visible = false;
+  scene.add(colWire);
+
+  entries.push({ entry, asset, colWire, pos: new THREE.Vector3(px, 0.9, pz) });
+});
+
+let selectedIndex = 0;
+let isNight = false;
+let lodLevel = 'high';
+let showColliders = false;
+
+const listEl = document.getElementById('asset-list');
+const metaEl = document.getElementById('meta-box');
+
+function renderMeta() {
+  const { entry } = entries[selectedIndex];
+  const m = entry.meta;
+  metaEl.innerHTML =
+    `<b>${m.name}</b> (${m.id})<br>` +
+    `分类：${m.category} · 尺寸：${m.dimensions.join(' × ')} m<br>` +
+    `碰撞盒：${m.colliders.length} 个 · LOD：近 ${m.lod.nearDistance}m / 远 ${m.lod.farDistance}m<br>` +
+    `净空说明：${m.clearanceNote}<br>` +
+    `授权：${m.license}`;
+}
+
+function selectAsset(idx, moveCam = true) {
+  selectedIndex = idx;
+  [...listEl.children].forEach((b, i) => b.classList.toggle('active', i === idx));
+  renderMeta();
+  if (moveCam) {
+    const t = entries[idx].pos;
+    controls.target.copy(t);
+    camera.position.set(t.x + 1.9, t.y + 1.1, t.z + 2.6);
+  }
+}
+
+entries.forEach(({ entry }, idx) => {
+  const btn = document.createElement('button');
+  btn.className = 'item' + (idx === 0 ? ' active' : '');
+  btn.textContent = `${idx + 1}. ${entry.meta.name}`;
+  btn.onclick = () => selectAsset(idx, true);
+  listEl.appendChild(btn);
+});
+renderMeta();
+
+function setPreset(mode) {
+  const t = entries[selectedIndex].pos;
+  document.querySelectorAll('#btn-overview,#btn-front,#btn-back,#btn-eye').forEach((b) => b.classList.remove('active'));
+  if (mode === 'overview') {
+    document.getElementById('btn-overview').classList.add('active');
+    controls.target.set(0, 0.9, 0);
+    camera.position.set(7.5, 5.2, 10.5);
+  } else if (mode === 'front') {
+    document.getElementById('btn-front').classList.add('active');
+    controls.target.copy(t);
+    camera.position.set(t.x + 0.5, t.y + 0.65, t.z + 2.3);
+  } else if (mode === 'back') {
+    document.getElementById('btn-back').classList.add('active');
+    controls.target.copy(t);
+    camera.position.set(t.x - 0.5, t.y + 0.65, t.z - 2.3);
+  } else if (mode === 'eye') {
+    document.getElementById('btn-eye').classList.add('active');
+    controls.target.set(t.x, 1.35, t.z);
+    camera.position.set(t.x + 0.3, 1.65, t.z + 2.4);
+  }
+}
+
+document.getElementById('btn-overview').onclick = () => setPreset('overview');
+document.getElementById('btn-front').onclick = () => setPreset('front');
+document.getElementById('btn-back').onclick = () => setPreset('back');
+document.getElementById('btn-eye').onclick = () => setPreset('eye');
+
+document.getElementById('btn-day').onclick = (e) => {
+  isNight = !isNight;
+  e.currentTarget.classList.toggle('active', isNight);
+  if (isNight) {
+    scene.background.setHex(0x09111c);
+    scene.fog.color.setHex(0x09111c);
+    hemi.intensity = 0.28;
+    sun.intensity = 0.35;
+    warmFill.intensity = 4.2;
+  } else {
+    scene.background.setHex(0x162231);
+    scene.fog.color.setHex(0x162231);
+    hemi.intensity = 0.9;
+    sun.intensity = 1.35;
+    warmFill.intensity = 0;
+  }
+};
+
+document.getElementById('btn-lod').onclick = (e) => {
+  lodLevel = lodLevel === 'high' ? 'low' : 'high';
+  e.currentTarget.textContent = lodLevel === 'high' ? 'LOD: 高精度' : 'LOD: 远景代理';
+  e.currentTarget.classList.toggle('active', lodLevel === 'low');
+  entries.forEach(({ asset }) => applyAssetLod(asset, lodLevel));
+};
+
+document.getElementById('btn-col').onclick = (e) => {
+  showColliders = !showColliders;
+  e.currentTarget.textContent = showColliders ? '碰撞盒: 开' : '碰撞盒: 关';
+  e.currentTarget.classList.toggle('active', showColliders);
+  entries.forEach(({ colWire }) => { colWire.visible = showColliders; });
+};
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+window.__FR01_PREVIEW__ = {
+  count: entries.length,
+  selectAsset,
+  setPreset,
+  getSelectedMeta: () => entries[selectedIndex].entry.meta,
+};
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
