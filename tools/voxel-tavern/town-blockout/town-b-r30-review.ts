@@ -4,6 +4,7 @@ import {mountWestCraterRoad} from './town-za22-crater-road';
 import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
+import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
 
@@ -14,6 +15,10 @@ const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
 const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
+// Only the independent review consumes the sealed return prefab; no
+// production terrain cut or new lift authority is introduced.
+const returnHeadframe=buildBR30ReturnHeadframe(road);
+road.group.add(returnHeadframe.group);
 const scene=new Scene();scene.add(road.group,rail.group);
 const sky=new HemisphereLight(0xc6d9f6,0x776650,1.75),sun=new DirectionalLight(0xffe7c7,2.1);
 sun.position.set(-30,75,45);scene.add(sky,sun);
@@ -42,6 +47,10 @@ add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a
 for(const site of markers.sites){
   for(const [i,foot] of site.viewFeet.entries())add(site.id+'-'+i,'矿道导向 '+site.id+(i?' 返程':' 下行'),foot,{...site.post,height:site.post.height+1.45});
 }
+const rt=returnHeadframe.survey;
+add('return-headframe','封闭返程井架候选',rt.approach,{...rt.axis,height:rt.axis.height+1.5});
+const back={east:rt.approach.east+(rt.bend.east-rt.approach.east)*.35,north:rt.approach.north+(rt.bend.north-rt.approach.north)*.35};
+add('return-headframe-approach','返程地表接近段', {...back,height:road.heightAt(back.east,back.north)!},{...rt.axis,height:rt.axis.height+1.6});
 for(const p of face.sites){
   const n=p.north-2.65,e=p.east,h=road.heightAt(e,n);
   if(h!==undefined)add(p.id,p.id,{east:e,north:n,height:h},{east:p.east,north:p.north,height:p.height+.8});
@@ -61,7 +70,7 @@ function choose(){
   yaw=Math.atan2(e,n);pitch=Math.atan2(v.target.height-feet-1.65,Math.hypot(e,n));
 }
 function blocked(e:number,n:number,h:number){
-  return (road.group.userData.colliders as {min:number[],max:number[]}[]).some(b=>{
+  return ([...road.group.userData.colliders,...returnHeadframe.worldBoxes] as {min:number[],max:number[]}[]).some(b=>{
     if(h+1.8<=b.min[1]||h>=b.max[1])return false;
     return Math.hypot(Math.max(b.min[0]-e,e-b.max[0],0),Math.max(b.min[2]+n,-n-b.max[2],0))<.27;
   });
