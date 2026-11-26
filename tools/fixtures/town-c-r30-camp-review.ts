@@ -16,13 +16,20 @@ let creatureReview:ReturnType<ReturnType<typeof createMineBestiaryEncounter>['sn
 let reviewTargets:readonly UndergroundMiningTargetView[]=[];
 import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
 let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
-const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>waterConnected?water.tonight():undefined},
+import type {MineCartSnapshot} from '../../src/shared/underground-mine-cart-track.js';
+let tutorialCartReview:MineCartSnapshot|undefined,tutorialCartRevision=0;
+let reviewCampFoot:{east:number;north:number;height:number}|undefined=interlayerSite.upper.foot,reviewPickaxeClaimed=false;
+const hostResult=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>waterConnected?water.tonight():undefined},
  readAcceptedMiningTargets:()=>reviewTargets,
  oreBridge:{acceptsSite:()=>oreReview.length>0,readTargets:()=>oreReview,readCores:()=>oreCores},
  encounterBridge:{acceptGroup:g=>creatureReview.length?'review-room/'+g.id:undefined,readActors:()=>creatureReview},
  mainlineBridge:{acceptsRoute:()=>!!mainlineReview,readSnapshot:()=>mainlineReview,readLightBudget:()=>2,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
- readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
-if(host.kind!=='ready')throw Error(host.reason);
+ tutorialCartBridge:{acceptsTrack:()=>!!tutorialCartReview,readSnapshot:()=>tutorialCartReview,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
+ campBridge:{now:()=>performance.now(),readWorldFoot:()=>reviewCampFoot,sit:()=>false,stand:()=>false,onSeatedChange:()=>{},isAimingAt:()=>false,showPickupNotice:()=>{},onRested:()=>{},
+  pickaxeReceipt:{read:()=>({playerId:'review-only',domainId:domain,claimed:reviewPickaxeClaimed}),claim:async()=>'rejected'}},
+ readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:reviewCampFoot??interlayerSite.upper.foot)})});
+if(hostResult.kind!=='ready')throw Error(hostResult.reason);
+const host=hostResult;
 const camp=host.mounted.camp!;
 const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.05,65);
 const torch=new PointLight(0xffd1a0,35,16,2);camera.add(torch);scene.add(camera);
@@ -80,6 +87,21 @@ let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now()
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
  oreReview=[];oreCores=[];creatureReview=[];
+ tutorialCartReview=undefined;reviewPickaxeClaimed=false;reviewCampFoot=interlayerSite.upper.foot;
+ if(name.startsWith('tutorial-cart-')){
+  const a=host.tutorialCart;if(a?.kind!=='ready')return false;
+  const step=name.endsWith('end')?2:0;
+  tutorialCartReview={step,revision:++tutorialCartRevision};mainlineReview=undefined;host.mounted.sync();a.update(1);
+  const p=a.track.point(step),side=host.mounted.toWorld([1.25,-90.2,step===0?14.8:16.2])!;
+  const q=host.passageAt(side.east,side.north);if(!q)return false;
+  camera.position.set(side.east,q.floor+1.67,-side.north);camera.lookAt(p.east,p.height+.4,-p.north);torch.intensity=22;view=name;return true;
+ }
+ if(name.startsWith('tutorial-pickaxe-')){
+  const c=host.pickaxeContract;if(!c)return false;
+  reviewCampFoot=c.approach;reviewPickaxeClaimed=name.endsWith('taken');mainlineReview=undefined;host.mounted.sync();
+  const p=c.approach,q=host.passageAt(p.east,p.north);if(!q)return false;
+  camera.position.set(p.east,q.floor+1.67,-p.north);camera.lookAt(c.aim.east,c.aim.height,-c.aim.north);torch.intensity=15;view=name;return true;
+ }
  if(name.startsWith('water-')){
   const r=host.waterReadout;if(!r?.face||r.baseline===undefined)return false;
   waterConnected=name!=='water-pending';

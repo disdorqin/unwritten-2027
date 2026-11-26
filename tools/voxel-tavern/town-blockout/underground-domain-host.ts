@@ -21,6 +21,7 @@ import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './
 import {mountR30ThinWallArt} from './town-c-r30-thin-wall-art.js';
 import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
 import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
+import {mountR30TutorialCart,type R30TutorialCartBridge} from './town-c-r30-tutorial-cart.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
 import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
@@ -172,6 +173,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
   crystalBridge?:R30CrystalBridge;
   mainlineBridge?:R30MainlineBridge;
+  /** Original two-push U7 authority; distinct from the U19 freight route. */
+  tutorialCartBridge?:R30TutorialCartBridge;
   oreBridge?:R30OreBridge;
   encounterBridge?:R30EncounterBridge;
   /** Sole existing mining authority's accepted layer snapshot. */
@@ -441,12 +444,16 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const shallowWayfinding=mine.expansion?.deepWorks?mountR30ShallowWayfinding(mounted.group,shallowGallery,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}):undefined;
   deepBank=mountR30DeepBank(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
   waterReadout=mine.expansion?.deepWorks?mountR30WaterReadout(mounted.group,deepBank):undefined;
+  const tutorialCart=mine.expansion?.deepWorks?mountR30TutorialCart({parent,toWorld:worldOf,bridge:options.tutorialCartBridge,
+    supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
+  let tutorialLastFrame=performance.now();
   const mainline=mine.expansion?.hasRunningMainline?mountR30MainlineHost({parent,worldOf,bridge:options.mainlineBridge,
     supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
   function passageAt(east:number,north:number,posture:'standing'|'crouching'='standing'){
     if(posture!=='standing'&&posture!=='crouching')return undefined;
     const h=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
     const q=queryMineClearance(east,north,undergroundMineSpec.walker.radius,h);
+    if(q&&tutorialCart?.kind==='ready'&&tutorialCart.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h))return;
     if(q&&mainline?.kind==='ready'&&(mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h)||mainline.motion.blocked(east,north,q.floor,undergroundMineSpec.walker.radius,h)))return;
     return q;
   }
@@ -547,7 +554,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();waterReadout?.sync(mounted.waterOverlay?.stats());deepHost.sync();deepAssembly.sync();
+  const composed={...mounted,sync(){if(tutorialCart?.kind==='ready'){const t=performance.now();tutorialCart.sync();tutorialCart.update(Math.max(0,Math.min(.15,(t-tutorialLastFrame)/1000)));tutorialLastFrame=t}encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();waterReadout?.sync(mounted.waterOverlay?.stats());deepHost.sync();deepAssembly.sync();
     // When the physically connected passage is active, retain the adjacent
     // second-mine geometry without enabling its movement domain.
     if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
@@ -558,9 +565,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
     crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
