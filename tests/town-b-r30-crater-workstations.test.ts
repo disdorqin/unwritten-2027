@@ -43,4 +43,11 @@ test('R30 recovers five physical tools on the live crater and rail, with an idem
   const railGroup=new Group();
   railGroup.userData.colliders=[{min:[p.east-.1,p.height,-p.north-.1],max:[p.east+.1,p.height+1,-p.north+.1]}];
   assert.throws(()=>surveyCraterWorkstations(road,{...rail,group:railGroup}),/Occupied workshop pad: bellows/);
+  assert.throws(()=>surveyCraterWorkstations(road,{...rail,stationWalkRoutes:[{id:'fixture-existing-walk',points:[
+    {...b.center,east:b.center.east-3},{...b.center,east:b.center.east+3},
+  ]}]}),/Workshop pad crosses an existing walk route: bellows/);
+  const surveyed=surveyCraterWorkstations(road,{...rail,stationWalkRoutes:[{id:'fixture-above',points:[
+    {...b.center,east:b.center.east-3,height:b.center.height+3},{...b.center,east:b.center.east+3,height:b.center.height+3},
+  ]}]});
+  assert.equal(surveyed.length,5);
 });
