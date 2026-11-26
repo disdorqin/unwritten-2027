@@ -268,3 +268,12 @@ A/B新联合测绘：A真实d29109e9宿主、B干净01820404原模块只读调�
 |A公共viewer最后串行|viewer.ts按实际hunk：imports/support contract；railExtension传railway.route.points与railWestGeometry；geometry()/outdoorGeometryAt合并真实轨道碰撞；山口站选择器；activitySpots座椅/时刻牌/双窗及重建索引；currentAction望筒层高；walkable/surfaceAt/overlapsBody、scope退出。冲突边界是B/C新域与工坊E/Q/hold、D ridgeGround就绪、统一west索引；先接完整A依赖再单写这些hunk，禁止B/C/D覆盖整viewer，保留原undergroundDomain/presence/railway权威。|
 |定向测试|tests/town-blockout-a-r30-{industrial-interiors,isolation-wall,north-connector,rail-stations,rail-strips,supply-deck,terrain-contract,tower-walkability,west-landscape}.test.ts；旧 tests/town-blockout-crater-west-collision.test.ts 的实际新支撑口径。真实浏览器 tools/verify-a-r30-native-{local,walk}.mjs 及各目录证据。|
 本轮提交已全推本线，D配审及总控串行接纳尚缺。D新正式山体后重算剩余65段及环线接头、避免在旧前山上立未经裁定的11m高架；B/C正式入干后按上述宿主契约完成原权威接线、真实地表—地下往返、全区/两人/移动端验收。用户要求第九轮结束，当前冻结阶段候选供审核，绝非全A主体完工；不启动P-OPT，不自行发布。
+
+## 2026-11-26 用户确认：三大批次集中收官
+基线A=29681dc6，integration=479e2855，B最新审合清单eba19280。用户明确同意后三次对话各攻一个大批次，最后再统一审核和收工。本表是A线执行节奏，不是新增正典/工包ID，也不替代总控审合权限。每批仍按现役闭环实际施工、自验、逐包push，先接现成成果，不扩大纯装饰。尽力在单次对话完成整批，缺必要接口则列明字段、owner及未完成项，不能以会话数代替验收或擅自宣布完成。
+|批次|范围与出口|
+|---|---|
+|第一批 地表总装|按上一节A源码依赖组与B-S0~S5精确清单推进独立审合；在获准的候选宿主完成退旧板、统一坑面/R59、S5、故事支承refit、三轨、唯一completion装配、东壁历史栈道及最终碰撞索引，消费实际inscription-access阶梯支撑。要求同一真实宿主构建、接缝/碰撞/正常入口往返及昼夜证据，列明总控未接纳部分，不强行改B/C/D或公共入口。|
+|第二批 玩法与地下联动|五台工业设备、拓印、工旗通过真实accepted pose与既有库存/档案/图鉴权威，机械E/Q、拓印hold/release及离位断线释放；正式C井口/lift/域/返程接收契约获准后实际地表→地下→地表，不使用review fixture冒充。要求完整玩家操作、正反例、多客户端状态和真实事务证据。井仍未授权时不得开孔。|
+|第三批 铁路与前山收官|消费D实际坡面与山脚边界，重新测剩余65处纵坡和15m/5.128m环线断差、两处轨道包络重叠；经总控裁定修正接轨/道岔/真实北延乘车，保留唯一时钟和现有环镇服务。补真实全区联动、移动端与多人实玩，基础性能及缺陷返工，不提前启动P-OPT。|
+三批之后另做统一R7审核：检查全部激活范围、实际源SHA/运行证据、配对审签、串行入干、全仓回归和未解决缺件。只有符合项目脑门槛才发本线收工候选，发布仍归总控。下一次续建默认第一批，不需用户逐件派工。
