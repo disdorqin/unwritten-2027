@@ -2,15 +2,17 @@ import {AmbientLight,Color,FogExp2,Group,PerspectiveCamera,PointLight,Scene,Vect
 import {mountWestCraterRoad} from '../voxel-tavern/town-blockout/town-za22-crater-road.js';
 import {mountUndergroundDomainHost} from '../voxel-tavern/town-blockout/underground-domain-host.js';
 import {crystalCavernTrailEast,crystalCavernTrailHeight,crystalCavernToWorld} from '../voxel-tavern/town-blockout/underground-crystal-cavern.js';
-import {r30CrystalDomain} from '../voxel-tavern/town-blockout/town-c-r30-crystal-support.js';
+import {r30CrystalDomain,crystalSideTrailNorth} from '../voxel-tavern/town-blockout/town-c-r30-crystal-support.js';
 import {createUndergroundMineGate} from '../../src/presence/underground-mine-gate.js';
 const scene=new Scene();scene.background=new Color(0x17232a);scene.fog=new FogExp2(0x17232a,.017);
 const root=new Group();scene.add(root,new AmbientLight(0xa2cbdc,.65));
 const road=mountWestCraterRoad(260,()=>10.7773);
-let gate:ReturnType<typeof createUndergroundMineGate>|undefined,now=0;
+let gate:ReturnType<typeof createUndergroundMineGate>|undefined,now=0,reviewStoneAtOrigin=true;
 let foot:{playerId:string;domainId:string;east:number;north:number;height:number}|undefined;
 const hostResult=mountUndergroundDomainHost({parent:root,road,readAcceptedDomainFoot:()=>foot,
- crystalBridge:{acceptsFrame:()=>true,readGateStage:()=>gate?.state(),readLightBudget:()=>3}});
+ crystalBridge:{acceptsFrame:()=>true,readGateStage:()=>gate?.state(),readLightBudget:()=>3,
+  // Review-only presentation receipt. Not a production star-stone authority.
+  monkeySeat:{acceptsSite:()=>true,read:()=>({atOrigin:reviewStoneAtOrigin,resonant:true}),readPlayerId:()=> 'review',isAimingAt:()=>true,dispatch:()=>{}}}});
 if(hostResult.kind!=='ready')throw Error(hostResult.reason);
 const h=hostResult;
 const ch=h.crystalHost!,c=ch.contract!;
@@ -29,6 +31,14 @@ const views:Record<string,{n:number;e?:number;lookN:number;lookE?:number;lookH?:
  entry:{n:-9.6,lookN:17},vestibule:{n:-6.2,lookN:9,lookH:1.6},grove:{n:4.8,lookN:12.5,lookH:.65},returnlever:{n:-7.8,lookN:-7.8,lookE:1.45,lookH:1.08},forest:{n:22,lookN:42,lookE:-8,lookH:4},
  overlook:{n:55,lookN:73,lookE:26,lookH:5},quay:{e:24.5,n:76,lookN:87,lookE:50,lookH:1.7},
  far:{n:91,lookN:105,lookE:22,lookH:5},
+ 'monkey-seat':{e:2.05,n:9.25,lookE:3.15,lookN:9.25,lookH:.46},
+ 'monkey-empty':{e:2.05,n:9.25,lookE:3.15,lookN:9.25,lookH:.46},
+ 'west-join':{e:8.8,n:56,lookE:-17,lookN:56,lookH:1.4},
+ 'west-approach':{e:-11,n:56,lookE:-25,lookN:crystalSideTrailNorth(-25),lookH:1.4},
+ 'west-bend':{e:-29.4,n:crystalSideTrailNorth(-29.4)!,lookE:-40,lookN:crystalSideTrailNorth(-40),lookH:1.4},
+ 'west-end':{e:-49.9,n:crystalSideTrailNorth(-49.9)!,lookE:-53.4,lookN:56,lookH:1.6},
+ 'quay-edge':{e:32.6,n:76,lookE:36,lookN:76,lookH:.7},
+ 'rear-stop':{e:8.7,n:97.5,lookE:8.7,lookN:108,lookH:2},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
@@ -36,6 +46,7 @@ const world=(e:number,n:number,height=crystalCavernTrailHeight(n))=>crystalCaver
 const v=(p:{east:number;north:number;height:number})=>new Vector3(p.east,p.height,-p.north);
 function setView(name:string){
  const q=views[name];if(!q)return false;
+ reviewStoneAtOrigin=name!=='monkey-empty';
  const e=q.e??crystalCavernTrailEast(q.n),p=world(e,q.n),pass=ch.passageAt(r30CrystalDomain,p.east,p.north);
  if(!pass)return false;
  foot={...p,height:pass.floor,domainId:r30CrystalDomain,playerId:'review'};

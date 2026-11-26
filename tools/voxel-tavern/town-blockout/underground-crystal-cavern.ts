@@ -503,9 +503,13 @@ function r30CavernTexture(family:Family){
    const seam=(y+Math.floor(x/7)*2+((Math.floor(x/3)*13)%3))%11;
    k=.66+.24*coarse+.075*hash+(seam===0?-.095:seam===1?.055:0);
    if(family==='moss')k+=.05;
-  }else if(family==='crystal'||family==='moonstone'){
+  }else if(family==='crystal'){
    const vein=(x*5+Math.floor(y/12))%13;
    k=.82+.14*hash+(vein<=1?.16:vein===2?-.14:0);
+  }else if(family==='moonstone'){
+   // Soft mineral bedding, not high contrast repeated vertical stripes.
+   const seam=(y+Math.floor(x/6)*2+Math.floor(x/13))%17;
+   k=.88+.055*coarse+.035*hash+(seam===0?-.035:seam===1?.025:0);
   }else if(family==='water'){
    const ripple=(y+Math.floor(3*Math.sin(x*.25)))%11===0;
    k=.68+.12*hash+(ripple?.22:0);
@@ -573,9 +577,12 @@ export function mountUndergroundCrystalCavern(host: Options) {
     temp.scale.set(...b.size);
     temp.rotation.set(0,0,b.rotationZ);
     temp.updateMatrix();
-    const batch=blocks.get(b.family)??[];
+    // Preserve all authored geometry/clearance but eliminate the
+    // inherited alternating brown squares on the mineral side gallery.
+    const family=host.r30Art&&/^u3\/moonstone-spur\/(bank-|natural-mirror-)/.test(b.name)?'moonstone':b.family;
+    const batch=blocks.get(family)??[];
     batch.push(temp.matrix.clone());
-    blocks.set(b.family,batch);
+    blocks.set(family,batch);
   }
   const geo=new BoxGeometry();
   const meshes:InstancedMesh[]=[];

@@ -40,6 +40,21 @@ export function mountR30CrystalSideArt(parent:Group){
   add(e,n,y-.34,.83,.48,.80,palette[i%5],0,false);
   add(e+.08,n+.05,y-.52,.99,.19,.92,palette[(i+2)%5],0,false);
  }
+ // Inset mineral veins follow the original rock-bank faces, not a
+ // fictitious new partition. Short uneven raised strips break up the
+ // regular tiled look without narrowing the surveyed centreline.
+ for(const bay of [1,4,7,11,14,18,22]){
+  for(const side of [-1,1]){
+   const p=crystalCavernR30Pieces.find(p=>p.name==='u3/moonstone-spur/bank-'+bay+'-'+side+'-1');
+   if(!p)continue;
+   const [e,y,n]=p.center,face=n-side*(p.size[2]/2+.025);
+   for(let k=0;k<4;k++){
+    const x=e-.48+k*.29,yy=y+(k-1.5)*.095;
+    add(x,face,yy,.32,.065+(k%2)*.03,.085,k%2?0x9da6a1:0x7e8b86);
+    if(k===1||k===3)add(x,face-side*.013,yy+.22,.075,.37,.075,0x798984);
+   }
+  }
+ }
  const geo=new BoxGeometry(),map=makeCampGrain('rock'),material=new MeshLambertMaterial({map});
  const batches:InstancedMesh[]=[];
  for(let start=-53;start<9;start+=16){

@@ -45,10 +45,18 @@ export function mountR30CrystalMonkeySeat(parent:Group,frame:CrystalCavernFrame,
  }
  // One authored stone plate, unlettered. An accepted at-origin fact is
  // required even for presentation; without the port only empty seat art.
- put('stone',e,n,y+.43,.33,.32,.17,0x536c68,0,false);
- put('stone',e-.015,n,y+.61,.28,.075,.15,0x758985,0,false);
- put('stone',e-.018,n,y+.248,.28,.05,.15,0x4b605e,0,false);
- for(const s of [-1,1])put('stone',e+s*.18,n,y+.43,.045,.25,.15,0x7d9089,0,false);
+ // Broad west-facing plaque, inset panel and chipped bevel silhouette.
+ // A sculpted, non-letter animal relief, never an inscription.
+ put('stone',e,n,y+.435,.17,.30,.37,0x58655e,0,false);
+ put('stone',e,n,y+.608,.155,.053,.29,0x7d8b7e,0,false);
+ put('stone',e,n,y+.269,.16,.035,.29,0x4b605e,0,false);
+ for(const s of [-1,1])put('stone',e-.02,n+s*.174,y+.435,.135,.24,.045,0x818d80,0,false);
+ put('stone',e-.088,n,y+.435,.018,.255,.30,0x3b514c,0,false);
+ const mask=['..1111..','.111111.','11111111','11211211','11111111','.122221.','..1111..'];
+ for(let row=0;row<mask.length;row++)for(let col=0;col<8;col++){
+  const cell=mask[row][col];if(cell==='.')continue;
+  put('stone',e-.104,n+(col-3.5)*.030,y+.526-row*.030,.016,.028,.028,cell==='2'?0x6b796b:0x96a096,0,false);
+ }
  // No new point light; weak material glow is driven only by accepted
  // resonance and does not mint a stone or make the socket an inventory.
  const geo=new BoxGeometry(),map=makeCampGrain('rock');
@@ -73,7 +81,7 @@ export function mountR30CrystalMonkeySeat(parent:Group,frame:CrystalCavernFrame,
   group.removeFromParent();meshes.forEach(m=>m.dispose());Object.values(materials).forEach(m=>m.dispose());geo.dispose();map.dispose();return {kind:'blocked' as const,reason:'seat-blocks-approach'};
  }
  function receipt(){const s=bridge?.acceptsSite(site)===true?bridge.read():undefined;return s&&typeof s.atOrigin==='boolean'&&typeof s.resonant==='boolean'?s:undefined}
- function sync(){const s=receipt();if(stoneMesh)stoneMesh.visible=s?.atOrigin===true;materials.stone.emissiveIntensity=s?.atOrigin&&s.resonant?.6:0}
+ function sync(){const s=receipt();if(stoneMesh)stoneMesh.visible=s?.atOrigin===true;materials.stone.emissiveIntensity=s?.atOrigin&&s.resonant?.25:0}
  function prompt(){
   const s=receipt(),f=readFoot(),playerId=bridge?.readPlayerId();
   if(!s?.atOrigin||!s.resonant||!playerId?.trim()||!f||f.domainId!==r30CrystalDomain||
