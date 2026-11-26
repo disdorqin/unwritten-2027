@@ -18,9 +18,12 @@ export function mountR30CrystalGrove(parent:Group,existingBlocks:Block){
   return p.y+halfH>y+.025&&p.y-halfH<y+h&&Math.hypot(Math.max(0,Math.abs(e-p.e)-halfW),Math.max(0,Math.abs(n-p.n)-p.d/2-(p.family==='crystal'?.015:0)))<r;
  };
  for(let i=0;i<15;i++){
-  const n=-2.25+i*1.59,side=i%2===0?1:-1,c=crystalCavernTrailEast(n),e=c+side*(2.10+(i%3)*.14),y=crystalCavernTrailHeight(n);
+  // Short groups and irregular gaps rather than two lines of equally
+  // spaced lantern-like crystals. The central spine is kept free.
+  const n=-2.25+i*1.59+[0,.22,-.39,.47,-.20][i%5],side=[1,-1,1,-1,-1,1,-1,1,1,-1,1,-1,1,-1,1][i],c=crystalCavernTrailEast(n);
+  const e=c+side*(1.89+[.24,.47,.11,.35,.19,.43][i%6]),y=crystalCavernTrailHeight(n);
   if(!crystalRoutePassage(e,n,.49,.25)||existingBlocks(e,n,y,.52,1.55))continue;
-  const count=3+i%3,maxH=.76+(i%5)*.145;
+  const count=3+i%3,maxH=[.78,1.23,.68,1.38,.92,1.09,.81][i%7];
   clusters.push({e,n,height:maxH,spikes:count});
   // Uneven socket chips anchor the crystal to the actual walking plane.
   for(let k=0;k<7;k++){
@@ -30,7 +33,7 @@ export function mountR30CrystalGrove(parent:Group,existingBlocks:Block){
   }
   for(let k=0;k<count;k++){
    const a=k*2.399963+i*.17,baseE=e+Math.cos(a)*.27,baseN=n+Math.sin(a)*.24,baseY=crystalCavernTrailHeight(baseN)+.055;
-   const tall=maxH*(k===0?1:.50+(k%3)*.13),width=.18+(k%3)*.055;
+   const tall=maxH*(k===0?1:.45+((k*3+i*2)%5)*.09),width=.16+((k+i)%4)*.046;
    // Three nested taper segments have contiguous ends along the same
    // canonical 20 degree spine, and a subtle brighter inner facet.
    for(const [j,start,end,scale] of [[0,0,.42,1],[1,.42,.77,.75],[2,.77,1,.43]] as const){

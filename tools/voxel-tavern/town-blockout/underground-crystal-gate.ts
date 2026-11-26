@@ -2,6 +2,7 @@ import {
   BoxGeometry, BufferAttribute, BufferGeometry, DataTexture, DynamicDrawUsage, Group, InstancedMesh,
   LinearFilter, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, PointsMaterial, Sphere, Vector3,
 } from 'three';
+import {makeCampGrain} from './town-c-r30-camp-art.js';
 import type { UndergroundMineGateStage } from '../../../src/presence/underground-mine-gate.js';
 import type { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
 
@@ -14,9 +15,9 @@ type SwitchPose = Readonly<{
 
 function createSwitchMaterials() {
   return {
-    iron: new MeshStandardMaterial({ color: 0x414952, metalness: .32, roughness: .79 }),
-    edge: new MeshStandardMaterial({ color: 0x68717a, metalness: .26, roughness: .84 }),
-    timber: new MeshStandardMaterial({ color: 0x635244, roughness: .96 }),
+    iron: new MeshStandardMaterial({ color: 0x555a5c, map:makeCampGrain('iron'), metalness: .32, roughness: .79 }),
+    edge: new MeshStandardMaterial({ color: 0x818b8b, map:makeCampGrain('iron'), metalness: .26, roughness: .84 }),
+    timber: new MeshStandardMaterial({ color: 0x886744, map:makeCampGrain('wood'), roughness: .96 }),
   };
 }
 
@@ -33,14 +34,47 @@ function createBlockFactory(shape: BoxGeometry) {
 
 function buildGateSwitch(block: ReturnType<typeof createBlockFactory>, { iron, edge, timber }: ReturnType<typeof createSwitchMaterials>) {
   const group = new Group();
+  // Foot, riveted socket, two reinforcement collars and actual gearbox.
   block(group, timber, 0, .48, 0, .21, .96, .23);
+  block(group, iron, 0, .045, 0, .30, .09, .30);
+  block(group, edge, 0, .112, 0, .25, .055, .25);
+  for(const x of [-.115,.115])for(const z of [-.115,.115])
+    block(group, edge, x, .101, z, .037, .038, .037);
+  for(const y of [.24,.66]){
+    block(group, iron, 0,y,0,.25,.087,.265);
+    for(const x of [-.105,.105])block(group,edge,x,y,-.142,.038,.039,.023);
+  }
   block(group, iron, 0, .92, 0, .31, .32, .30);
+  // Cutaway-looking voxel frame rather than a bare cube. All panels
+  // are surface hardware; the lever continues to own its old stage.
+  block(group, edge,0,1.087,0,.30,.027,.29);
+  block(group, edge,0,.755,0,.30,.026,.29);
+  for(const s of [-1,1]){
+    block(group,edge,s*.146,.92,0,.024,.27,.28);
+    for(const y of [.813,1.027])block(group,edge,s*.113,y,-.157,.033,.036,.021);
+  }
+  block(group,edge,0,.92,-.158,.18,.18,.022);
+  block(group,iron,0,.92,-.177,.115,.115,.025);
+  for(const y of [.87,.97])block(group,edge,0,y,.158,.22,.023,.019);
   const handle = new Group();
   handle.name = 'crystal-gate-switch-handle';
   handle.position.set(0, .92, -.15);
   group.add(handle);
   block(handle, edge, 0, .18, 0, .065, .4, .07);
+  block(handle, iron,0,.045,0,.103,.116,.09);
+  block(handle, edge,0,.045,-.057,.063,.063,.027);
   block(handle, timber, 0, .38, -.11, .09, .09, .24);
+  for(const z of [-.204,-.016])block(handle,iron,0,.38,z,.102,.102,.033);
+  for(const z of [-.154,-.107,-.060])block(handle,edge,0,.38,z,.096,.096,.018);
+  // The same few materials, batched separately on the fixed frame
+  // and rotating handle. No 30-draw lever for each side of the gate.
+  for(const p of [group,handle])for(const mat of [iron,edge,timber]){
+    const meshes=p.children.filter((child):child is Mesh=>child instanceof Mesh&&child.material===mat);
+    if(meshes.length<2)continue;
+    const batch=new InstancedMesh(meshes[0].geometry,mat,meshes.length);
+    meshes.forEach((mesh,i)=>{mesh.updateMatrix();batch.setMatrixAt(i,mesh.matrix);p.remove(mesh)});
+    batch.computeBoundingSphere();p.add(batch);
+  }
   return {
     group,
     update(stage: UndergroundMineGateStage) {
@@ -52,8 +86,8 @@ function buildGateSwitch(block: ReturnType<typeof createBlockFactory>, { iron, e
 /** Conservative physical envelope of buildGateSwitch, including every
  * accepted handle pose. z is Three local +Z, not geographic north. */
 export function r30GateSwitchBlocks(x:number,y:number,z:number,radius:number,height:number){
- const boxes=[{minX:-.155,maxX:.155,minY:0,maxY:1.08,minZ:-.15,maxZ:.15},
-  {minX:-.41,maxX:.30,minY:.88,maxY:1.36,minZ:-.39,maxZ:-.08}];
+ const boxes=[{minX:-.16,maxX:.16,minY:0,maxY:1.102,minZ:-.19,maxZ:.17},
+  {minX:-.42,maxX:.31,minY:.86,maxY:1.37,minZ:-.39,maxZ:-.08}];
  return boxes.some(b=>b.maxY>y+.025&&b.minY<y+height&&
    Math.hypot(Math.max(0,b.minX-x,x-b.maxX),Math.max(0,b.minZ-z,z-b.maxZ))<radius);
 }
@@ -75,8 +109,9 @@ export function createUndergroundCrystalReturnSwitch({ position, yaw }: SwitchPo
       if (disposed) return;
       disposed = true;
       group.removeFromParent();
+      group.traverse(child=>{if(child instanceof InstancedMesh)child.dispose()});
       shape.dispose();
-      for (const material of Object.values(materials)) material.dispose();
+      for (const material of Object.values(materials)) {material.map?.dispose();material.dispose()}
     },
   };
 }
@@ -250,7 +285,7 @@ export function createUndergroundCrystalGate(gate: Gate) {
       group.traverse(child => { if (child instanceof InstancedMesh) child.dispose(); });
       openingEffects.dispose();
       shape.dispose();
-      for (const material of [iron, edge, oxide, timber, cold, crystal]) material.dispose();
+      for (const material of [iron, edge, oxide, timber, cold, crystal]) {material.map?.dispose();material.dispose()}
     },
   };
 }

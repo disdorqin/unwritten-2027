@@ -13,7 +13,7 @@ test('low crystals have supported roots and exact canonical tilt, real collision
  try{
   h.mounted.sync();const ch=h.crystalHost,c=ch.contract!,g=ch.grove!;
   foot={...c.crystal};h.mounted.sync();parent.updateMatrixWorld(true);
-  assert.equal(g.clusters.length,14);assert.equal(g.parts.length,428);assert.equal(g.group.children.length,3);
+  assert.equal(g.clusters.length,13);assert.equal(g.parts.length,409);assert.equal(g.group.children.length,3);
   assert.ok(g.parts.filter(p=>p.family!=='root').every(p=>p.angle===CRYSTAL_CAVERN_CANT_RAD));
   assert.ok(g.clusters.every(c=>c.height>=.5&&c.height<=1.5));
   const p=(e:number,n:number,y=crystalCavernTrailHeight(n))=>crystalCavernToWorld(c.frame,[e,y,n]);

@@ -25,7 +25,7 @@ const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.05,120);
 const torch=new PointLight(0xc0f4ee,40,22,2);camera.add(torch);scene.add(camera);
 const renderer=new WebGLRenderer({antialias:false,powerPreference:'low-power'});renderer.setSize(innerWidth,innerHeight);document.body.append(renderer.domElement);
 const views:Record<string,{n:number;e?:number;lookN:number;lookE?:number;lookH?:number}>={
- entry:{n:-9.6,lookN:17},forest:{n:22,lookN:42,lookE:-8,lookH:4},
+ entry:{n:-9.6,lookN:17},vestibule:{n:-6.2,lookN:9,lookH:1.6},grove:{n:4.8,lookN:12.5,lookH:.65},returnlever:{n:-7.8,lookN:-7.8,lookE:1.45,lookH:1.08},forest:{n:22,lookN:42,lookE:-8,lookH:4},
  overlook:{n:55,lookN:73,lookE:26,lookH:5},quay:{e:24.5,n:76,lookN:87,lookE:50,lookH:1.7},
  far:{n:91,lookN:105,lookE:22,lookH:5},
 };
