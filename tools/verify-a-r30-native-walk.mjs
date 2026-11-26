@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 
@@ -243,17 +243,19 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     const dx = east - from.east, dn = north - from.north;
     const distance = Math.hypot(dx, dn);
     if (distance <= precision) {
-      evidence.checkpoints.push({ label, target, ...from, wire: evidence.poses.at(-1) });
+      const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
+      evidence.checkpoints.push(checkpoint);
+      if(segment==='joint-historic')await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
     const desired = Math.atan2(dx, dn);
-    await face(page, evidence, desired);
-    // For small final corrections use the slow backward movement, avoiding double-W sprint.
+    // Select the actual travel heading once; previously a backward
+    // correction first turned forward and then rotated another 180°.
     const backwards = precision < .3 || distance < 1.4;
-    if (backwards) await face(page, evidence, desired + Math.PI);
+    await face(page, evidence, desired+(backwards?Math.PI:0));
     const key = backwards ? 's' : 'w';
-    const fast = precision >= .3 && distance > 9 && segment !== 'a4-shots';
+    const fast = !backwards&&precision >= .3 && distance > (segment==='joint-historic'?4.5:9) && segment !== 'a4-shots';
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
@@ -447,6 +449,7 @@ try{
    await page.waitForTimeout(140);
    const pose=await readPose(page);
    assert.ok(Math.abs(pose.height-point.height)<(joint&&Number.isFinite(point.t)?.75:.39),JSON.stringify({label,pose,point}));
+   if(joint)await appendFile(join(output,'native-validated-steps.ndjson'),JSON.stringify({label,pose,point})+'\n');
    return pose;
  }
  async function wallView(label,heading){
