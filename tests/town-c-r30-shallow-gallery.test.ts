@@ -27,6 +27,13 @@ test('three decorated shallow galleries preserve the actual exploratory loop and
    for(let k=0;k<=steps;k++){const x=a[0]+(b[0]-a[0])*k/steps,z=a[1]+(b[1]-a[1])*k/steps;assert.ok(pass(x,z),x+','+z)}
   }
   assert.ok(distance>230);assert.ok(a.bays.every(b=>pass(...b.approach)));
+  const way=h.shallowWayfinding!;assert.equal(way.boards.length,5);assert.equal(way.markers.length,19);
+  for(const m of way.markers){
+   const q=plan.path[m.segment],r=plan.path[m.segment+1];
+   assert.ok((q[0]-r[0])*m.dx+(q[1]-r[1])*m.dz>0);
+   for(let k=0;k<=5;k++)assert.ok(pass(m.x+m.dx*k*.1,m.z+m.dz*k*.1));
+  }
+  for(const b of way.boards)assert.ok(a.frames.some(f=>f.x===b.x&&f.z===b.z));
   assert.equal(h.oreSurvey.kind,'ready');assert.equal(h.encounterSurvey?.ready,true);assert.equal(h.encounterSurvey?.groups.length,16);
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);
