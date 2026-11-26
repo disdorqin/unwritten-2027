@@ -338,6 +338,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
     const localX = dx * bxE + dn * bxN;
     const localZ = dx * bzE + dn * bzN;
+    if(mounted.wreck?.blocks(localX,localZ,undergroundMineSpec.walker.radius))return;
     const passage=mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
       undergroundMineSpec.walker.standingHeight);
     // The camp's real furnishings (including R30 hearth) own their collision

@@ -221,6 +221,12 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     },
     phase: () => phase,
     pendingRide: () => pendingRide,
+    /** Read-only cue for the existing viewer renderer. Empty repositioning
+     * is not a player camera ride; no second motion authority is created. */
+    presentationTrip():DreamChainTrip|undefined{
+      if(firstFall)return {...firstFall.trip};
+      if(activeTrip?.riders.includes(playerId))return {id:activeTrip.id,first:false,departedAt:activeTrip.departedAt,travelMs:activeTrip.travelMs,direction:activeTrip.direction};
+    },
 
     /** The opener walks from the handle into the open bore; this issues the fall order. */
     requestFirstFall() {

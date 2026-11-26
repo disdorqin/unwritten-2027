@@ -17,6 +17,7 @@ import { mountUndergroundMainlineScene } from './underground-mainline-scene.js';
 import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 import {applyR30CampRock} from './town-c-r30-camp-art.js';
+import {mountR30LiftPresentation,mountR30LiftWreck} from './town-c-r30-lift-presentation.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -226,6 +227,14 @@ export function mountUndergroundMineDomain(host: Host) {
       oreVisuals: host.waterRuntime.oreVisuals,
     })
     : undefined;
+  const opening=mine.anchors.poolShaftOpening;
+  // The existing surveyed pool supplies the aperture and dimensions. A
+  // noncanonical fixture must not get the permanent accident set dressing.
+  const wreckProbe=mine.queryPassage(2.7,1.5,.2,1.8);
+  const wreck=opening&&pool[2]===2&&wreckProbe?.zone==='pool'&&Math.abs(wreckProbe.waterDepth-1.2)<.001
+    ?mountR30LiftWreck(root,pool,6,4,1.2):undefined;
+  const shaftRide=opening&&shaftFoot.height>opening.roofY+root.position.y+3?
+    mountR30LiftPresentation(root,shaftFoot,landing,mineYaw,opening.roofY+root.position.y):undefined;
   parent.add(root);
   // The pump room uses a distinct certified ENY site in the between-layer passage,
   // not the mine-local pool frame. Missing site/foot approval leaves it unmounted.
@@ -247,6 +256,8 @@ export function mountUndergroundMineDomain(host: Host) {
     camp: interactiveCamp?.camp ?? staticCamp,
     workfaces,
     deepWorks,
+    wreck,
+    shaftRide,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
     expedition,
@@ -307,6 +318,8 @@ export function mountUndergroundMineDomain(host: Host) {
       staticCamp?.dispose();
       workfaces.dispose();
       deepWorks.dispose();
+      wreck?.dispose();
+      shaftRide?.dispose();
       campRock?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();

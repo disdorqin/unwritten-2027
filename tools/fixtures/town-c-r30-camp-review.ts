@@ -18,10 +18,22 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  canteen:{eye:[0,-91,42.45],look:[-1.4,-90.15,42.45]},
  memorial:{eye:[2.6,-91,43.76],look:[2.6,-89.65,44.6]},
  exit:{eye:[0,-91,43],look:[0,-90.1,35.4]},
+ wreck:{eye:[0,-91.2,2],look:[2.31,-90.05,1.48]},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
+ const ride=host.mounted.shaftRide;
+ if(name.startsWith('lift-')){
+  if(!ride)return false;
+  const at=name==='lift-upper'?4000:name==='lift-mid'?12500:20500;
+  const cue=ride.sample({id:1,first:true,departedAt:0,travelMs:25000,direction:'down'},at);
+  if(!cue)return false;
+  camera.position.set(cue.eye.east,cue.eye.height,-cue.eye.north);
+  camera.lookAt(camera.position.clone().add(new Vector3(.2,-.55,-1)));
+  torch.intensity=5;view=name;return true;
+ }
+ ride?.hide();torch.intensity=35;
  const v=eyes[name];if(!v)return false;const p=vec(v.eye);
  if(!host.passageAt(p.x,-p.z))return false;
  camera.position.copy(p).add(new Vector3(0,1.67,0));camera.lookAt(vec(v.look));view=name;return true;
