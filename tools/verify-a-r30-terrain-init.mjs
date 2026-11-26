@@ -13,6 +13,7 @@ try{
  cpSync(join(root,prefix),join(tmp,prefix),{recursive:true});
  cpSync(join(root,'src'),join(tmp,'src'),{recursive:true});
  cpSync(join(root,'tools','fixtures'),join(tmp,'tools','fixtures'),{recursive:true});
+ mkdirSync(join(tmp,'docs'),{recursive:true});cpSync(join(root,'docs','p0-layout-draft.json'),join(tmp,'docs','p0-layout-draft.json'));
  writeFileSync(join(tmp,prefix,'terrain.ts'),git('show',old+':'+prefix+'/terrain.ts'));
  const {createTerrainGrid:before}=await import(pathToFileURL(join(tmp,prefix,'terrain.ts')).href);
  const hash=g=>createHash('sha256').update(new Uint8Array(g.elevation.buffer)).update(g.surfaces).digest('hex');
