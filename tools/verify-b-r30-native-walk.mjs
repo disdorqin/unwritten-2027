@@ -291,7 +291,24 @@ try{
       errors:report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length,
       lastAcceptedPose:evidence.poses.at(-1)}};
     const dst=join(output,'b-r30-progress.json'),tmp=dst+'.next';
-    await writeFile(tmp,JSON.stringify(progress,null,2));await rename(tmp,dst);
+    const body=JSON.stringify(progress,null,2);
+    await writeFile(tmp,body);
+    let replaced=false;
+    for(let i=0;i<5;i++){
+      try{await rename(tmp,dst);replaced=true;break;}
+      catch(error){
+        if(!['EPERM','EACCES','EBUSY'].includes(error?.code))throw error;
+        await new Promise(done=>setTimeout(done,40*(i+1)));
+      }
+    }
+    if(!replaced){
+      // Windows indexers/readers may hold the previous progress file.
+      // Preserve a new immutable checkpoint, never turn a completed
+      // movement into a geometry failure because replace was locked.
+      const fallback=join(output,'b-r30-progress-'+result.down+'-'+result.up+'-'+Date.now()+'.json');
+      await writeFile(fallback,body,{flag:'wx'});
+      (report.evidenceWarnings??=[]).push({kind:'progress-replace-locked',fallback});
+    }
   };
   await page.locator('#town-panel-toggle').click();
   await page.locator('#jump').selectOption({label:'陨石坑口'});
