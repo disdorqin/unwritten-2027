@@ -133,6 +133,54 @@ try{
  assert.equal(completion.productionReady,false);
  const ids=new Set(road.group.userData.colliders);
  assert.equal(ids.size,road.group.userData.colliders.length,'duplicate box registration');
+ // This is the exact model/control wiring used by the candidate viewer,
+ // not B's standalone review state and not a transport authority.
+ const playBinding=`import {createAR30CraterPlay,type CraterPlayContext} from './town-a-r30-crater-play';
+import {createBR30WorkshopControls} from './town-b-r30-crater-workshop-controls';
+import {createBR30MoundControls} from './town-b-r30-mound-work-flag';
+import {createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
+import type {attachBR30CraterCompletion} from './town-b-r30-crater-completion-proposed';
+export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:string,ctx:CraterPlayContext){
+ const m=c.kit.machines;
+ return createAR30CraterPlay({
+ aimWorkshop:p=>m.aimControl(p,p.heading,p.pitch,p.eyeHeight),
+ aimPaper:p=>c.paper.aimed(p),aimFlag:p=>c.flag.aimed(p),atSummit:p=>c.flag.atSummit(p),
+ workshop:h=>createBR30WorkshopControls(m,h),mound:h=>createBR30MoundControls(c.flag,h),rubbing:h=>createBR30RubbingControls(c.paper,marker,h)
+ },ctx);
+}
+`;
+ writeFileSync(join(temporary,prefix,'town-a-r30-play-candidate.ts'),playBinding);
+ report.playBindingSHA256=createHash('sha256').update(playBinding).digest('hex');
+ const {bindPlay}=await load('town-a-r30-play-candidate');
+ const aimPose=(foot,target)=>{
+  const de=target.east-foot.east,dn=target.north-foot.north;
+  return {...foot,heading:Math.atan2(de,dn),pitch:Math.atan2(target.height-foot.height-1.65,Math.hypot(de,dn)),eyeHeight:1.65};
+ };
+ const machines=completion.kit.machines;
+ let local;
+ const unavailable=bindPlay(completion,road.inscription.rubbingHostMarker.id,{localPose:()=>local,authority:()=>undefined,now:()=>1000,notify(){}});
+ const deniedTargets=[];
+ for(const site of machines.sites){
+  const control=machines.targets.find(t=>t.station===site.id);
+  local=aimPose(site.foot,control.point);
+  unavailable.update();
+  const t=unavailable.target();
+  assert.ok(t&&!t.available&&t.key.startsWith(site.id+':'),'missing unavailable target '+site.id);
+  assert.equal((await unavailable.tap(t.key)).accepted,false);
+  deniedTargets.push(t.key);
+ }
+ local=aimPose(road.inscription.layout.useFoot,completion.paper.paper);
+ unavailable.update();
+ assert.equal(unavailable.target()?.key,'paper');
+ assert.equal(unavailable.beginHold('paper'),false);
+ assert.equal(completion.paper.shown,0);
+ deniedTargets.push('paper');
+ local=aimPose(completion.flag.foot,completion.flag.target());
+ unavailable.update();assert.equal(unavailable.target()?.key,'flag');
+ assert.equal((await unavailable.tap('flag')).accepted,false);assert.equal(completion.flag.straight,false);
+ deniedTargets.push('flag');unavailable.dispose();
+ report.play={scope:'actual B model/input bridge, no accepted production authority',deniedTargets,mechanicsSynced:machines.group.userData.bR30WorkshopSynced,printed:completion.paper.shown,flagStraight:completion.flag.straight};
+ assert.equal(report.play.mechanicsSynced,false);
  const first=completion.historic.firstFoot;
  assert.ok(Math.abs(completion.historic.supportedHeight(first.east,first.north)-first.height)<.015);
  report.stage='rollback';
@@ -148,7 +196,8 @@ try{
    "import {refitBR30LegacyStory} from './town-b-r30-settle-story-supports';\n"+
    "import {attachBR30CraterCompletion} from './town-b-r30-crater-completion-proposed';\n"+
    "import {ar30HostRoutes,ar30HostTracks,surveyAR30InscriptionAccess,type AR30SurfacePort} from './town-a-r30-unified-surface-host';\n"+
-   "export function ar30SurfacePort():AR30SurfacePort{return {story:{retire:retireBR30LegacyTerracePlates,refit:refitBR30LegacyStory},attach(road,rail){const tracks=ar30HostTracks(rail),routes=ar30HostRoutes(road,rail);return attachBR30CraterCompletion(road,rail,tracks,'host-candidate',routes,surveyAR30InscriptionAccess);}};}\n";
+   "import {bindPlay} from './town-a-r30-play-candidate';\n"+
+   "export function ar30SurfacePort():AR30SurfacePort{let mounted:ReturnType<typeof attachBR30CraterCompletion>|undefined;let marker:string;return {story:{retire:retireBR30LegacyTerracePlates,refit:refitBR30LegacyStory},attach(road,rail){const tracks=ar30HostTracks(rail),routes=ar30HostRoutes(road,rail);marker=road.inscription.rubbingHostMarker.id;return mounted=attachBR30CraterCompletion(road,rail,tracks,'host-candidate',routes,surveyAR30InscriptionAccess);},createPlay(assembly,ctx){if(!mounted||assembly!==mounted)throw Error('Wrong play assembly');return bindPlay(mounted,marker,ctx);}};}\n";
   writeFileSync(join(temporary,prefix,'town-a-r30-surface-port.ts'),port);
   report.portSHA256=createHash('sha256').update(port).digest('hex');
   const {createMeteorCrater,meteorCraterFixturePlan}=await load('meteor-crater');
@@ -169,7 +218,7 @@ try{
   const dir=join(dirname(out),browserSegment==='inscription-access'?'原生联合刻石':'原生联合栈道');
   mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,'joint-route.json'),JSON.stringify(report.browserRoute,null,2));
-  writeFileSync(join(dir,'joint-source.json'),JSON.stringify({a,b:bSha,files:report.files,portSHA256:report.portSHA256,exactHost:report.exactHost,bProposal:report.bProposal},null,2));
+  writeFileSync(join(dir,'joint-source.json'),JSON.stringify({a,b:bSha,files:report.files,portSHA256:report.portSHA256,playBindingSHA256:report.playBindingSHA256,exactHost:report.exactHost,bProposal:report.bProposal},null,2));
   report.stage='browser';report.success=false;
   const status=await new Promise((done,reject)=>{
    const child=spawn(process.execPath,[join(root,'tools','verify-a-r30-native-local.mjs'),browserSegment,dir],{cwd:root,windowsHide:true,stdio:'inherit',env:{...process.env,ZA22_HARDWARE:'1',AR30_JOINT_ROOT:temporary,AR30_JOINT_ROUTE:join(dir,'joint-route.json')}});

@@ -198,12 +198,24 @@ import { addTownSnowBoard } from './town-snow-board';
 import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
 import {ar30SurfacePort} from './town-a-r30-surface-port';
+import {createAR30PlayInput,type CraterPlay} from './town-a-r30-crater-play';
 import {ar30HistoricSupport,assertAR30SurfaceLifecycle,assertAR30SurfaceAttachment,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const previewOptions = new URLSearchParams(location.search);
 const westSurfacePort=ar30SurfacePort();
 let westSurfaceAssembly:AR30SurfaceAssembly|undefined;
+let craterPlay:CraterPlay|undefined;
+function currentCraterPlay(){
+  if(!craterPlay&&westSurfaceAssembly&&westSurfacePort?.createPlay){
+    craterPlay=westSurfacePort.createPlay(westSurfaceAssembly,{
+      localPose:()=>moveAllowed()&&!homeReturn&&!cloudRoute.active()&&!sledRide.active()&&airHeight===undefined&&x<0&&dreamChain?.phase()!=='mine'&&!craterTelescopeActive&&!document.hidden&&!currentGuardDuty()?.action({east:x,north:n,height:ground})?{east:x,north:n,height:ground,heading:yaw,pitch,eyeHeight:eye}:undefined,
+      authority:()=>westSurfacePort.readAuthority?.(),now:()=>performance.now(),notify:announceActivity,
+    });
+  }
+  return craterPlay;
+}
+const craterPlayInput=createAR30PlayInput(currentCraterPlay);
 const grid = createTerrainGrid();
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
@@ -1967,6 +1979,8 @@ function ensureTownInputButton(id: string, label: string, after: HTMLElement): H
 }
 const snowPrimaryButton = ensureTownInputButton('snowball-primary', '投雪球', snowballMeter);
 const touchSledBrakeButton = ensureTownInputButton('touch-sled-brake', '刹车', actionButton);
+const craterReverseButton=ensureTownInputButton('crater-reverse','反转校准盘',actionButton);
+craterReverseButton.addEventListener('click',()=>{if(craterPlayInput.down('reverse-touch',-1))craterPlayInput.up('reverse-touch');});
 touchSledBrakeButton.setAttribute('aria-pressed', 'false');
 const snowballRing = element('snowball-action-ring');
 const snowballHitMark = element('snowball-hit-mark');
@@ -2408,7 +2422,7 @@ function tapSnowTarget(clientX: number, clientY: number) {
 
 const canUseSnow = () => moveAllowed() && !cloudRoute.active() && !sledRide.active() && !homeReturn &&
   waterAtFeet()?.mode !== 'swim';
-const snowControls = createTownSnowControls({
+const baseSnowControls = createTownSnowControls({
   canUseSnow,
   canGather: () => snowballs.getState().ammo < snowResourceLimit && aimsAtNearbySnow(),
   gather() {
@@ -2426,6 +2440,23 @@ const snowControls = createTownSnowControls({
   wallTarget: aimedSnowWall,
   placeWall: teamFight.tryPlace,
 });
+// One input owner: captured B interactions never fall through to snow,
+ // the winch, or another action on release. Legacy controls remain intact.
+const snowControls:typeof baseSnowControls={
+  ...baseSnowControls,
+  keyDown(code,repeat){
+    if((code==='KeyE'||code==='KeyQ')&&!repeat&&craterPlayInput.down(code,code==='KeyQ'?-1:1)){baseSnowControls.cancel();dreamEKey=false;return true;}
+    if((code==='KeyE'||code==='KeyQ')&&repeat&&craterPlayInput.target())return true;
+    return baseSnowControls.keyDown(code,repeat);
+  },
+  keyUp(code){return craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
+  pressTouch(pointer){if(craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
+  releaseTouch(pointer){return craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
+  cancelTouch(pointer){craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
+  interact(){return craterPlayInput.click()||baseSnowControls.interact();},
+  cancel(){craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
+  update(dt){craterPlayInput.update();baseSnowControls.update(dt);},
+};
 const mobileControls = mountTownMobileControls(snowControls, {
   action: actionButton,
   throwButton: snowPrimaryButton,
@@ -2890,6 +2921,8 @@ function currentAction() {
       } };
     }
   }
+  const surfacePlay=craterPlayInput.target();
+  if(surfacePlay)return {label:surfacePlay.available?surfacePlay.label:surfacePlay.label+' · 暂不可用',run(){/* Surface input owns its original press, not a legacy release. */}};
   if (craterSpot && works) return { label: craterSpot.label, run() {
     switch (craterSpot.id) {
       case 'registration':
@@ -3148,7 +3181,7 @@ addEventListener('keyup', e => {
 });
 addEventListener('blur', resetMovement);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) cancelSledBrake();
+  if (document.hidden) {cancelSledBrake();snowControls.cancel();}
 });
 let fittedWidth = 0;
 let fittedHeight = 0;
@@ -3730,6 +3763,8 @@ function walkingAxes() {
 }
 
 function refreshPlayerControls() {
+  const craterTarget=craterPlayInput.target();
+  craterReverseButton.hidden=!(touchWalk.active()&&craterTarget?.reverse&&craterTarget.available);
   mobileControls.update({
     mobile: touchWalk.active(),
     canMove: moveAllowed(),

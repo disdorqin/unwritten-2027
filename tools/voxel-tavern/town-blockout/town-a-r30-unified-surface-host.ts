@@ -1,3 +1,4 @@
+import type {CraterPlay,CraterPlayContext,CraterPlayAuthority} from './town-a-r30-crater-play';
 import type {mountWestCraterRoad,AR30StoryLifecycle} from './town-za22-crater-road';
 import type {buildCraterRailExtension} from './town-crater-rail-extension';
 import {supportFootprintOverlaps,type OrientedSupportBox} from './town-a-r30-oriented-support';
@@ -66,7 +67,7 @@ export function surveyAR30InscriptionAccess(road:Road,rail:Rail){
  * Empty in the frozen default host until controller accepts B's exact
  * source package. Candidate overlay supplies the real same-module port. */
 export type AR30SurfaceAssembly={historic:{supportedHeight(east:number,north:number):number|undefined;route:readonly Foot[]};productionReady:false;dispose():void};
-export type AR30SurfacePort={story:AR30StoryLifecycle;attach(road:Road,rail:Rail):AR30SurfaceAssembly};
+export type AR30SurfacePort={story:AR30StoryLifecycle;attach(road:Road,rail:Rail):AR30SurfaceAssembly;createPlay?(assembly:AR30SurfaceAssembly,ctx:CraterPlayContext):CraterPlay;readAuthority?():CraterPlayAuthority|undefined};
 /** A's production entry refuses a half-mounted B surface. A standalone
  * B review can still use its own explicit test fixture; this gate belongs
  * only to the actual public host. */
