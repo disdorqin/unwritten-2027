@@ -617,7 +617,19 @@ export function mountUndergroundDomainHost(options: Readonly<{
     const distance=Math.hypot(to.east-from.east,to.north-from.north);
     if(distance>3)return;
     const initial=domainPassageAt(from.domainId,from.east,from.north,posture);
-    if(!initial||Math.abs(initial.floor-from.height)>.25)return;
+    if(!initial)return;
+    // The registered first-fall receipt is at the water surface (-90),
+    // while the real pool supports the walking body on its bed (-91.2).
+    // Permit exactly a vertical settle at that accepted arrival point;
+    // never waive the ordinary step height or horizontal collision.
+    if(from.domainId===undergroundMineLanding.domainId&&distance<=.001&&
+       Math.hypot(from.east-undergroundMineLanding.east,from.north-undergroundMineLanding.north,from.height-undergroundMineLanding.height)<=.001&&
+       'zone' in initial&&initial.zone==='pool'&&'waterDepth' in initial&&typeof initial.waterDepth==='number'&&initial.waterDepth>0&&
+       Math.abs(initial.floor+initial.waterDepth-from.height)<.001){
+      return {foot:{east:from.east,north:from.north,height:initial.floor,domainId:from.domainId},posture,clearance:initial.clearance,
+       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:initial.requiresCrouch,waterSettle:true as const};
+    }
+    if(Math.abs(initial.floor-from.height)>.25)return;
     const count=Math.max(1,Math.ceil(distance/.08));let previous=initial;
     for(let i=1;i<=count;i++){
       const p=domainPassageAt(from.domainId,from.east+(to.east-from.east)*i/count,from.north+(to.north-from.north)*i/count,posture);
