@@ -5,6 +5,7 @@ import {
   RepeatWrapping, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {mountAR30StaticBatches} from './town-a-r30-static-batches';
 import { meteorCraterRimRadius } from './meteor-crater';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
@@ -171,7 +172,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   function part(mat: MeshStandardMaterial, geo: BufferGeometry, east: number, h: number, north: number,
     yaw = 0, pitch = 0, roll = 0) {
-    const g = geo.index ? geo.toNonIndexed() : geo;
+    const g = geo;
     // Compose roll -> pitch -> yaw (yaw outermost), matching Euler 'YXZ'.
     if (roll) g.rotateZ(roll);
     if (pitch) g.rotateX(pitch);
@@ -180,7 +181,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const batch = batches.get(mat) ?? [];
     batch.push(g);
     batches.set(mat, batch);
-    if (g !== geo) geo.dispose();
+    // Transferred to the static batch; release after merging.
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
@@ -1169,14 +1170,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     debrisCount = placed;
   }
 
-  for (const [mat, parts] of batches) {
-    const merged = mergeGeometries(parts);
-    for (const p of parts) p.dispose();
-    if (!merged) continue;
-    merged.computeBoundingSphere();
-    const mesh = new Mesh(merged, mat);
-    group.add(mesh);
-  }
+  mountAR30StaticBatches(group,batches,'crater-mouth');
 
   // ---------- E 动作接线 + 夜间点亮（抢救包 ①） ----------
   // 坑外三盏实灯是 §六暖光链的坑外段：夜间点亮，白天熄灭（此前常亮）。

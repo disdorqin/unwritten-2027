@@ -5,6 +5,7 @@ import {
   RepeatWrapping, SRGBColorSpace, Vector3, CatmullRomCurve3, TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {mountAR30StaticBatches} from './town-a-r30-static-batches';
 import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
@@ -147,13 +148,13 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   }
   function part(mat: MeshStandardMaterial, geo: BufferGeometry, east: number, h: number, north: number,
     yaw = 0, pitch = 0, roll = 0) {
-    const g = geo.index ? geo.toNonIndexed() : geo;
+    const g = geo;
     if (roll) g.rotateZ(roll);
     if (pitch) g.rotateX(pitch);
     if (yaw) g.rotateY(yaw);
     g.translate(east, h, -north);
     push(mat, g);
-    if (g !== geo) geo.dispose();
+    // Transferred to the static batch; release after merging.
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
@@ -163,11 +164,9 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
     lx: number, ly: number, lz: number, sx: number, sy: number, sz: number) {
     const geo = metricBox(mat,sx,sy,sz);
     geo.translate(lx, ly, lz);
-    const g = geo.toNonIndexed();
-    g.applyQuaternion(quat);
-    g.translate(center.x, center.y, center.z);
-    push(mat, g);
-    geo.dispose();
+    geo.applyQuaternion(quat);
+    geo.translate(center.x, center.y, center.z);
+    push(mat, geo);
   }
 
   function groundAt(east: number, north: number): number {
@@ -1001,14 +1000,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   }
 
   // ---------- merge batches ----------
-  for (const [mat, geos] of batches) {
-    const joined = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g));
-    if (!joined) continue;
-    joined.computeBoundingSphere();
-    const mesh = new Mesh(joined, mat);
-    mesh.name = `crater-rail-${mat.uuid.slice(0, 6)}`;
-    group.add(mesh);
-  }
+  mountAR30StaticBatches(group,batches,'crater-rail',320);
 
   const alignment: RailExtensionAlignment = {
     length: main.length,
