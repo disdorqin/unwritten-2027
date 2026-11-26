@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['descent','roundtrip'].includes(segment), segment);
+assert.ok(['descent','roundtrip','rim-return'].includes(segment), segment);
 
 const spawn = [223, 180];
 const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
@@ -321,6 +321,17 @@ try{
       await save();
     }
   }
+  if(segment==='rim-return'){
+    // Separate actual upper segment; not a full bottom-to-rim round trip.
+    const upper=route.points.filter(p=>p.t<=.12);
+    result.scope='normal entry/actual authorized rim and t0..0.12 round trip only; no floor or full descent claim';
+    await traverse(upper,'down');
+    await snapshot(page,evidence,'upper-turnback');
+    await traverse([...upper].reverse(),'up');
+    await walkTo(page,evidence,[-67,159],'return-outside');
+    await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
+    await snapshot(page,evidence,'return-outside');
+  }else{
   await traverse(route.points,'down');
   await walkTo(page,evidence,[route.floor.east,route.floor.north],'actual-bottom');
   result.floor=await readPose(page);
@@ -333,6 +344,7 @@ try{
     await walkTo(page,evidence,[-67,159],'return-outside');
     await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
     await snapshot(page,evidence,'return-outside');
+  }
   }
   assert.equal(report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length,0);
   result.complete=true;await save();
