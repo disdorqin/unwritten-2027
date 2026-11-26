@@ -79,16 +79,30 @@ try{
   }
  }
  let middleRoad;
- if(process.argv.includes('--middle-road')||process.argv.includes('--extended-road')){
-  const {buildMiddleEastRoadbed,middleEastExtendedControls}=await load('town-d-r30-upper-roadbed');
-  const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0,process.argv.includes('--extended-road')?middleEastExtendedControls:undefined);
+ if(process.argv.includes('--middle-road')||process.argv.includes('--extended-road')||process.argv.includes('--south-road')){
+  const {buildMiddleEastRoadbed,middleEastExtendedControls,middleSouthRoadControls}=await load('town-d-r30-upper-roadbed');
+  const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0,process.argv.includes('--south-road')?middleSouthRoadControls:process.argv.includes('--extended-road')?middleEastExtendedControls:undefined);
   middleRoad={ok:result.ok,reason:result.reason,route:result.route,audit:result.audit,maxCoreGrade:result.maxCoreGrade,cut:result.cut,fill:result.fill,changed:result.changed,protectedChanges:result.protectedChanges,east:result.east,north:result.north};
+  if(process.argv.includes('--south-road')&&result.ok){
+   const {auditRidgeRoadSurface}=await load('town-d-r30-roadbed');
+   const east=buildMiddleEastRoadbed(result.field,(e,n)=>ownership.distance(e,n)>0,middleEastExtendedControls);
+   assert.ok(east.ok,east.reason);
+   const southAudit=auditRidgeRoadSurface(east.field,result.route);
+   let maximumDelta=0,protectedDelta=0;
+   for(let n=270;n<=800;n++)for(let e=0;e<=640;e++){
+    const delta=Math.abs(east.field.vertexAt(e,n)-field.vertexAt(e,n));maximumDelta=Math.max(maximumDelta,delta);
+    if(ownership.distance(e,n)<=0)protectedDelta=Math.max(protectedDelta,delta);
+   }
+   assert.ok(southAudit.maxGrade<=.12&&maximumDelta<=8.00001&&protectedDelta===0);
+   middleRoad.combined={southAudit,eastAudit:east.audit,maximumDelta,protectedDelta};
+  }
  }
  const stationSamples=[];for(let n=344;n<=376;n+=2)for(let e=514;e<=550;e+=4)stationSamples.push([e,n,Math.round(field.heightAt(e,n)*100)/100,Math.round(ownership.distance(e,n)*10)/10]);
  const report={a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,approach,sweep,externalSweep,fullSweep,middleRoad,stationSamples,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
  if(process.argv[3]){const out=resolve(process.argv[3]);mkdirSync(dirname(out),{recursive:true});writeFileSync(out,JSON.stringify(report,null,2))}
  console.log(JSON.stringify({a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,externalSweep,fullSweep,middleRoad:middleRoad&&{...middleRoad,route:middleRoad.route.length,length:middleRoad.route.at(-1)?.cum},approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},stationSamples:stationSamples.filter(p=>p[0]===526||p[0]===538),gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
  terrace.dispose();cable.dispose();
+ if(middleRoad)assert.ok(middleRoad.ok,middleRoad.reason);
  if(aMask)assert.ok(proposalDifference<1e-12);
  if(proposed||aMask){assert.equal(frozenError,0);assert.ok(routes.every(r=>r.height===347&&r.allSupported));assert.equal(report.gateSupported,false)}
 }finally{rmSync(tmp,{recursive:true,force:true,maxRetries:3,retryDelay:100})}

@@ -12,9 +12,9 @@ try{
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,args:['--use-gl=angle','--use-angle=d3d11']});
  const page=await browser.newPage({viewport:{width:1100,height:700}});
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});page.on('response',r=>{if(r.status()>=400)errors.push(String(r.status())+' '+r.url())});
- await page.goto('http://127.0.0.1:'+server.httpServer.address().port+(process.argv.includes('--extended-road')?'/d-r30-front-ridge-preview.html?extended=1':process.argv.includes('--middle-road')?'/d-r30-front-ridge-preview.html?middle=1':process.argv.includes('--dock')?'/d-r30-transport-review.html?dock=1':process.argv.includes('--transport')?'/d-r30-transport-review.html':process.argv.includes('--road')?'/d-r30-front-ridge-preview.html?road=1':'/d-r30-front-ridge-preview.html'),{waitUntil:'domcontentloaded'});
+ await page.goto('http://127.0.0.1:'+server.httpServer.address().port+(process.argv.includes('--south-road')?'/d-r30-front-ridge-preview.html?south=1':process.argv.includes('--extended-road')?'/d-r30-front-ridge-preview.html?extended=1':process.argv.includes('--middle-road')?'/d-r30-front-ridge-preview.html?middle=1':process.argv.includes('--dock')?'/d-r30-transport-review.html?dock=1':process.argv.includes('--transport')?'/d-r30-transport-review.html':process.argv.includes('--road')?'/d-r30-front-ridge-preview.html?road=1':'/d-r30-front-ridge-preview.html'),{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>window.__ridgeR30?.state().frames>10,null,{timeout:60000});
- if(process.argv.includes('--middle-road')||process.argv.includes('--extended-road')){
+ if(process.argv.includes('--middle-road')||process.argv.includes('--extended-road')||process.argv.includes('--south-road')){
    async function snap(name){
     const state=await page.evaluate(()=>window.__ridgeR30.state());
     assert.equal(state.guideFailure,'');assert.ok(Math.abs(state.h-state.ground)<1e-6);assert.ok(state.draws>0);
@@ -24,7 +24,7 @@ try{
    await snap('middle-start-day');
    await page.keyboard.down('w');
    try{
-    await page.waitForFunction(()=>window.__ridgeR30.state().walked>36||window.__ridgeR30.state().guideFailure,null,{timeout:35000});await snap('middle-half-day');
+    await page.waitForFunction(()=>window.__ridgeR30.state().walked>(window.__ridgeR30.state().routeLength+4)/2||window.__ridgeR30.state().guideFailure,null,{timeout:35000});await snap('middle-half-day');
     await page.waitForFunction(()=>window.__ridgeR30.state().arrived||window.__ridgeR30.state().guideFailure,null,{timeout:35000});
    }finally{await page.keyboard.up('w')}
    await snap('middle-end-day');assert.ok(frames.at(-1).arrived&&Math.abs(frames.at(-1).walked-frames.at(-1).routeLength-4)<.01);
