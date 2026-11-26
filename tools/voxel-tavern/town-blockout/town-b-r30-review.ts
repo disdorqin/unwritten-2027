@@ -48,6 +48,10 @@ for(const {cluster,view} of road.midgroundS5.crystalViews){
 }
 const trestleView=road.midgroundS5.trestleView;
 if(trestleView)add('broken-trestle','断栈道遗址',trestleView.foot,trestleView.target);
+const bead=road.moltenBeads.firstPickupHostMarker;
+const beadFoot=Array.from({length:2001},(_,i)=>{const q=fixture.mainTrailPoint(i/2000);return world(q.east,q.north);})
+ .sort((p,q)=>Math.hypot(p.east-bead.east,p.north-bead.north)-Math.hypot(q.east-bead.east,q.north-bead.north))[0];
+add('molten-beads','熔珠滩 · 矿道近读',beadFoot,bead);
 const approach=fixture.mainTrailPoint(.99);
 add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a.east,north:a.north,height:a.rimHeight-33.9});
 for(const site of markers.sites){
@@ -146,5 +150,5 @@ renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,moltenBeads:road.moltenBeads.stats,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
 requestAnimationFrame(tick);
