@@ -1,0 +1,194 @@
+{
+  "a": "ddcbb33a3f37ad9dcfb38fd6c148e24220fa9ba2",
+  "d": "1e6281b7c5ef59b00649c66a285b13e19bff7770",
+  "scope": "joint candidate only; no live ridge replacement or rail service",
+  "files": [
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-d-r30-front-ridge.ts",
+      "blob": "0a44abf34f2af1947d2fc7d26ecd77c738e10d9c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-d-r30-forest.ts",
+      "blob": "86011a103924307cb720055b7004d29eebc6e1bb"
+    }
+  ],
+  "success": true,
+  "westPlan": {
+    "attempts": 2268,
+    "geometries": 0,
+    "rejects": {
+      "radius": 0,
+      "throat": 723,
+      "protected": 211,
+      "ground": 0,
+      "endpoints": 1334,
+      "grade": 0
+    },
+    "accepted": false
+  },
+  "field": {
+    "midPadProbes": 775,
+    "midPadMax": 0,
+    "edgeProbes": 2344,
+    "edgeMax": 0,
+    "frozenProbes": 3789,
+    "frozenMax": 0,
+    "unmaskedMax": 194.86018762129768,
+    "meshProbe": 90,
+    "meshError": 5.684341886080802e-14,
+    "triangles": 678400,
+    "slots": [
+      {
+        "east": 320,
+        "north": 650,
+        "old": 8.950460433959961,
+        "unprotected": 350,
+        "protected": 350,
+        "ownership": 1
+      },
+      {
+        "east": 440,
+        "north": 520,
+        "old": 7.922041416168213,
+        "unprotected": 140,
+        "protected": 140,
+        "ownership": 1
+      },
+      {
+        "east": 526,
+        "north": 329,
+        "old": 26,
+        "unprotected": 18,
+        "protected": 26,
+        "ownership": 0
+      },
+      {
+        "east": 336,
+        "north": 640,
+        "old": 7.931550979614258,
+        "unprotected": 347,
+        "protected": 347,
+        "ownership": 1
+      },
+      {
+        "east": 296,
+        "north": 502,
+        "old": 7.784402370452881,
+        "unprotected": 173.12442016601562,
+        "protected": 7.784402370452881,
+        "ownership": 0
+      },
+      {
+        "east": 296,
+        "north": 520,
+        "old": 8.130139350891113,
+        "unprotected": 192.41879272460938,
+        "protected": 8.130139350891113,
+        "ownership": 0
+      }
+    ],
+    "placements": 151,
+    "feather": 55,
+    "affected": 28528,
+    "maskSlope": 19.983352661132812,
+    "unmaskedSlope": 20.66436767578125
+  },
+  "rail": {
+    "before": 52,
+    "after": 52,
+    "junction": {
+      "start": {
+        "horizontal": 15,
+        "vertical": 5.127583160400391,
+        "loopY": 33.19,
+        "east": 477,
+        "north": 318,
+        "tangentDegrees": 42.756039700452156
+      },
+      "connectionMatches": false,
+      "overlapRuns": [
+        {
+          "from": 16.735427599811427,
+          "to": 27.64859159381146,
+          "minHorizontal": 0.011771098312756705,
+          "minVertical": 0.00927801563381081,
+          "east": 477.3301364527631,
+          "north": 334.32214042239195,
+          "samples": 46
+        },
+        {
+          "from": 37.35089606767318,
+          "to": 51.904044807798705,
+          "minHorizontal": 0.043137493011180555,
+          "minVertical": 0.728063175740985,
+          "east": 472.1207028697716,
+          "north": 357.88682657301126,
+          "samples": 61
+        }
+      ],
+      "geometryReady": false
+    },
+    "closedHead": {
+      "index": 35,
+      "removedLength": 59.42333525528141,
+      "east": 470.90714373704503,
+      "north": 370.928502156438,
+      "y": 36.21722670685221,
+      "box": {
+        "min": [
+          469.59130009432414,
+          35.91722670685221,
+          -371.27944312832454
+        ],
+        "max": [
+          472.2229873797659,
+          37.337226706852206,
+          -370.5775611845515
+        ],
+        "footprint": {
+          "yaw": -3.047642749184439,
+          "halfX": 1.3,
+          "halfZ": 0.23
+        }
+      },
+      "reason": "unapproved stock rail junction"
+    },
+    "eastValley": {
+      "spans": 21,
+      "bearings": 8,
+      "maxFill": 3.6597669274340827
+    },
+    "oldPlan": {
+      "attempts": 600,
+      "best": {
+        "spliceIndex": 130,
+        "loopIndex": 54,
+        "throatLength": 34.804371060852596,
+        "minRadius": 33.86039027486491,
+        "maxGrade": 0.11999928973366422,
+        "maxFill": 7.522342150363135,
+        "length": 225.53603219541094,
+        "outsideClearance": 4.023833953538465,
+        "stockHeadMismatch": 2.9235103649160834,
+        "platformIntrusion": true
+      },
+      "accepted": false
+    },
+    "protectedPlan": {
+      "attempts": 600,
+      "best": {
+        "spliceIndex": 130,
+        "loopIndex": 54,
+        "throatLength": 34.92173860129868,
+        "minRadius": 33.81623129779551,
+        "maxGrade": 0.11999928973366422,
+        "maxFill": 7.0876755189923575,
+        "length": 229.0946233766608,
+        "outsideClearance": 3.8562660371702564,
+        "stockHeadMismatch": 2.895393531749214,
+        "platformIntrusion": true
+      },
+      "accepted": false
+    }
+  }
+}
