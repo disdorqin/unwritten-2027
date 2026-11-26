@@ -24,6 +24,7 @@ import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline
 import {mountR30TutorialCart,type R30TutorialCartBridge} from './town-c-r30-tutorial-cart.js';
 import {mountR30ApproachStory} from './town-c-r30-approach-story.js';
 import {createR30CampReceiptReader,type R30CampStoryBridge} from './town-c-r30-camp-receipts.js';
+import {createR30MineAcoustics,type R30MineAudioBridge} from './town-c-r30-mine-acoustics.js';
 import type {UndergroundRecoveryFireSite} from './underground-recovery-fires.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
@@ -183,6 +184,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   readIntroLightBudget?:()=>number;
   /** Original U-13 recovery registration and self contact receipt.
    * No heal request or health value is authored by this scene. */
+  audioBridge?:R30MineAudioBridge;
   recoveryBridge?:Readonly<{
     acceptsSite(site:UndergroundRecoveryFireSite):boolean;
     readContact():Readonly<{fireId:string;layer:string;foot:Point}>|undefined;
@@ -272,6 +274,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     };
   };
 
+  let mineSeated=false;
   const campRuntime = campBridge && offerings ? {    actions: {
       promptRange: 1.15,
       restAfterMs: 2500,
@@ -298,7 +301,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
       },
       sit: (room: { id: string }) => campBridge.sit(room.id),
       stand: (room: { id: string }) => campBridge.stand(room.id),
-      setSeatedAmbience: (active: boolean) => campBridge.onSeatedChange(active),
+      setSeatedAmbience: (active: boolean) => {mineSeated=active;campBridge.onSeatedChange(active)},
       onRested: (room: { id: string }) => campBridge.onRested(room.id),
       lookAtBowl: (bowl: { position: readonly [number, number, number] }) => {
         const world = toWorldPoint?.(bowl.position);
@@ -488,6 +491,18 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(q&&mainline?.kind==='ready'&&(mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h)||mainline.motion.blocked(east,north,q.floor,undergroundMineSpec.walker.radius,h)))return;
     return q;
   }
+  const soundSites:Parameters<typeof createR30MineAcoustics>[0][number][]=[];
+  const hearth=mounted.camp?.r30Hearth.at;
+  if(hearth)soundSites.push({id:'camp-hearth',kind:'hearth',point:worldOf([hearth[0],hearth[1]+.3,hearth[2]]),radius:8});
+  for(const [id,x,z,radius,kind] of [
+    ['pool-drip',1.6,5.7,7,'drip'],['bank-drip-1',5.8,119,9,'drip'],
+    ['bank-drip-2',5.8,132,9,'drip'],['gate-rumble',0,136.5,22,'rumble']
+  ] as const){
+   const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,.05,.1);
+   if(!q||(kind==='drip'&&q.waterDepth<=0))continue;
+   soundSites.push({id,kind,point:{...p,height:q.floor+(kind==='drip'?1.25:1.0)},radius});
+  }
+  const acoustics=options.audioBridge?createR30MineAcoustics(soundSites,options.audioBridge,()=>options.readAcceptedDomainFoot?.(),()=>mineSeated):undefined;
   const deepRetreat=mountR30DeepRetreat(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01&&!(mainline?.kind==='ready'&&mainline.scene.blocks(p.east,p.north,q.floor,r,h))},mine.expansion?.deepWorks===true);
   const crouchRoute=mountR30CrouchRoute(mounted.group,mine.crouchInterval,(x,z,posture)=>{const p=worldOf([x,-91,z]);return passageAt(p.east,p.north,posture)},mine.expansion?.deepWorks===true);
   const oreSurvey=surveyR30Ore(mounted.group,worldOf,p=>{const q=passageAt(p.east,p.north);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01});
@@ -585,7 +600,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){approachStory?.sync();if(tutorialCart?.kind==='ready'){const t=performance.now();tutorialCart.sync();tutorialCart.update(Math.max(0,Math.min(.15,(t-tutorialLastFrame)/1000)));tutorialLastFrame=t}encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();waterReadout?.sync(mounted.waterOverlay?.stats());deepHost.sync();deepAssembly.sync();
+  const composed={...mounted,sync(){approachStory?.sync();if(tutorialCart?.kind==='ready'){const t=performance.now();tutorialCart.sync();tutorialCart.update(Math.max(0,Math.min(.15,(t-tutorialLastFrame)/1000)));tutorialLastFrame=t}encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();acoustics?.sync();waterReadout?.sync(mounted.waterOverlay?.stats());deepHost.sync();deepAssembly.sync();
     // When the physically connected passage is active, retain the adjacent
     // second-mine geometry without enabling its movement domain.
     if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
@@ -596,9 +611,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){acoustics?.dispose();approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,acoustics,soundSites,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
     crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
