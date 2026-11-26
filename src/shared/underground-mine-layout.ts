@@ -13,7 +13,7 @@ export type UndergroundMineSpec = {
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
-  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean };
+  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean };
   walker: { radius: number; standingHeight: number; crouchingHeight: number; maxGrade: number };
 };
 
@@ -112,7 +112,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const expansion = campBackOpening && createUndergroundMineExpansionShell({
     ...campBackOpening,
     layerStartZ: poolSpan.start,
-    crystalGate: camp.crystalGate,
+    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,
   });
   const workfaces=expansion ? createFirstMineWorkfaces(expansion.bounds,campFloor).filter(a=>
     expansion.queryPassage(a.x,a.z,Math.min(a.depth,a.width)/2,a.height,'open') &&
@@ -235,11 +235,11 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
 
   /** Sweeps the player's footprint across joins and retains the most limiting floor and ceiling. */
   function queryPassage(x: number, z: number, radius: number, bodyHeight: number,
-      gateStage: UndergroundMineGateStage = 'closed') {
+      gateStage: UndergroundMineGateStage = 'closed',openThinWalls:ReadonlySet<string>=new Set()) {
     if (![x, z, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight <= 0 ||
         z - radius < poolSpan.start) return;
     const touchesExpansion = expansion && z + radius >= campSpan.end;
-    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight, gateStage) : undefined;
+    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight, gateStage,openThinWalls) : undefined;
     if ((touchesExpansion || z + radius > campSpan.end) && !rear) return;
     if (rear && z - radius >= campSpan.end) {
       if(workfaceBlocks(staticFixtures,x,z,radius,bodyHeight,rear.floor))return;

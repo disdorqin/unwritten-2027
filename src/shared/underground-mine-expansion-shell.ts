@@ -1,6 +1,7 @@
 import type { UndergroundMineGateStage } from '../presence/underground-mine-gate.js';
 import {firstMineDeepWorks,isCanonicalDeepWorks} from './town-c-first-mine-deep-works.js';
 import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
+import {r30ThinWallRooms,r30ThinWallBlocked} from './town-c-r30-thin-wall-plan.js';
 
 type Point = readonly [x: number, y: number, z: number];
 type Surface = 'rock' | 'rail' | 'water';
@@ -20,6 +21,7 @@ type Options = Readonly<{
   openingHeight: number;
   layerStartZ: number;
   crystalGate?: boolean;
+  thinWalls?: boolean;
 }>;
 
 const layerLength = 140;
@@ -41,7 +43,7 @@ export function createUndergroundMineExpansionShell({
   openingWidth,
   openingHeight,
   layerStartZ,
-  crystalGate = false,
+  crystalGate = false,thinWalls=false,
 }: Options) {
   const endZ = layerStartZ + layerLength;
   const depth = endZ - seamZ;
@@ -77,6 +79,7 @@ export function createUndergroundMineExpansionShell({
   } : undefined;
 
   const deepWorks=isCanonicalDeepWorks(bounds,floor,crystalGate)&&openingWidth===4&&openingHeight===3.5;
+  const hasThinWalls=deepWorks&&thinWalls;
   const rooms: readonly Room[] = [
     { minX: openingLeft, maxX: openingRight, minZ: seamZ, maxZ: collarEnd, floor, ceiling: openingCeiling },
     { minX: galleryLeft, maxX: galleryRight, minZ: collarEnd, maxZ: collarStart, floor, ceiling: galleryCeiling },
@@ -88,6 +91,7 @@ export function createUndergroundMineExpansionShell({
     { minX: shaftX + 72, maxX: bounds.maxX, minZ: eastStart - 1.8, maxZ: eastEnd + 1.8, floor, ceiling: floor + 6.9 },
     { minX: galleryRight, maxX: galleryRight + 3.2, minZ: waterStart, maxZ: waterEnd,
       floor: waterFloor, ceiling: floor + 6.1, water: floor },
+    ...(hasThinWalls?r30ThinWallRooms.map(r=>({...r,floor,ceiling:floor+r.ceiling})):[]),
     ...(deepWorks?[...firstMineDeepWorks.rooms,...firstMineShallowWorks.rooms].map(r=>({...r,minZ:Math.abs(r.minZ-waterStart)<1e-7?waterStart:r.minZ,maxZ:Math.abs(r.maxZ-waterStart)<1e-7?waterStart:r.maxZ,floor,ceiling:floor+r.ceiling})):[]),
   ];
   const railOffset = Math.min(.5, halfOpening / 2);
@@ -168,8 +172,9 @@ export function createUndergroundMineExpansionShell({
 
   /** Sweep the same square footprint as the original mine and clip it at the old camp seam. */
   function queryPassage(x: number, z: number, radius: number, bodyHeight: number,
-      gateStage: UndergroundMineGateStage = 'closed'): Passage | undefined {
+      gateStage: UndergroundMineGateStage = 'closed',openThinWalls:ReadonlySet<string>=new Set()): Passage | undefined {
     if (![x, z, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight <= 0) return;
+    if(hasThinWalls&&r30ThinWallBlocked(x,z,radius,openThinWalls))return;
     const left = x - radius;
     const right = x + radius;
     const start = z - radius;
@@ -223,7 +228,7 @@ export function createUndergroundMineExpansionShell({
     queryPassage,
     route,
     gateApproach,
-    deepWorks,
+    deepWorks,hasThinWalls,
     gate: gate && { ...gate, gapFor: gateGap },
     bounds,
   };

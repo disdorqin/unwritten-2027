@@ -8,7 +8,10 @@ import {createUndergroundWaterState} from '../../src/presence/underground-water-
 import {r30InterlayerLiftSite as interlayerSite,type R30InterlayerRide} from '../voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
 const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
 let domain=interlayerSite.upper.domainId;
+import type {UndergroundMiningTargetView} from '../../src/shared/underground-mining.js';
+let reviewTargets:readonly UndergroundMiningTargetView[]=[];
 const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
+ readAcceptedMiningTargets:()=>reviewTargets,
  readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
 if(host.kind!=='ready')throw Error(host.reason);
 const camp=host.mounted.camp!;
@@ -33,10 +36,17 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  baycart:{eye:[-11.2,-91,76],look:[-10.1,-90.5,73.45]},
  baywreck:{eye:[-16.1,-91,76],look:[-16.1,-90.6,73.45]},
  baydesk:{eye:[-16.1,-91,77],look:[-16.2,-89.85,80.1]},
+ pocketclosed:{eye:[4.7,-91,59.6],look:[6.1,-89.8,59.6]},
+ pocketopen:{eye:[9.1,-91,59.6],look:[18.2,-89.6,59.6]},
+ shortcutclosed:{eye:[-50,-91,67.7],look:[-50,-89.8,70.05]},
+ shortcutopen:{eye:[-50,-91,69],look:[-50,-90,76]},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
+ const wallOpen=name==='pocketopen'||name==='shortcutopen';
+ reviewTargets=host.thinWalls.sites.map(s=>({...s,surface:'rock' as const,hits:wallOpen?s.strikes:2,open:wallOpen}));
+ host.mounted.sync();
  const ride=host.mounted.shaftRide;
  const lift=host.interlayerLift;
  if(name.startsWith('deep-')){
