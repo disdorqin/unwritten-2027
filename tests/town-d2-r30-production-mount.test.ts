@@ -27,6 +27,7 @@ test('D2-R07 production mount uses R30 terrain, tread and ropeway without double
   assert.equal(assembly.r30Mounted, true);
   assert.ok(assembly.r30);
   assert.equal(assembly.r30.group.parent, assembly.group);
+  assert.deepEqual(assembly.mountedParts(), ['P-1', 'P-2', 'P-3', 'P-4', 'P-7', 'P-8', 'P-9']);
   assert.equal(assembly.block.coarse.visible, false);
   assert.equal(assembly.clouds.group.visible, false);
   assert.equal(assembly.group.getObjectByName('main-summit-walkway')!.visible, false);

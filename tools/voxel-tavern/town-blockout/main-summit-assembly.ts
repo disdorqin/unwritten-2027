@@ -1,6 +1,6 @@
 import {
   BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial,
-  type Material,
+  type Material, type Object3D,
 } from 'three';
 import survey from '../../fixtures/main-summit-snow-belt-survey.json';
 import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './main-summit-block';
@@ -210,14 +210,23 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     activeStations = r30.ropeway.stations;
   }
 
+  function mountedWithin(object: Object3D | undefined, ancestor: Group) {
+    let current = object?.parent ?? null;
+    while (current) {
+      if (current === ancestor) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
   function mountedParts() {
     const parts: string[] = [];
-    if (block.coarse.parent === group) parts.push('P-1');
-    if (group.getObjectByName('main-summit-cable')?.parent === group) parts.push('P-2');
-    if (ribbon.parent === group && snow.parent === group) parts.push('P-3');
+    if (r30 ? r30.group.parent === group : block.coarse.parent === group) parts.push('P-1');
+    if (r30?.ropeway ? mountedWithin(r30.ropeway.group, group) : legacyCableGroup?.parent === group) parts.push('P-2');
+    if (r30 ? Boolean(group.getObjectByName('town-d2-r30-trail-support')) : ribbon.parent === group && snow.parent === group) parts.push('P-3');
     if (cabin.group.parent === group && cloudRegistration.group.parent === group) parts.push('P-4');
-    if (activeStations.group.parent === group) parts.push('P-7');
-    if (clouds.group.parent === group) parts.push('P-8');
+    if (mountedWithin(activeStations.group, group)) parts.push('P-7');
+    if (r30 ? Boolean(group.getObjectByName('town-d2-r30-cloud-terrace-host')) : clouds.group.parent === group) parts.push('P-8');
     if (pavilionGroup.parent === group && pavilionGroup.children.length === cloudPavilionSites.length) parts.push('P-9');
     return parts;
   }
