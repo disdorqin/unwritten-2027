@@ -13,6 +13,8 @@ test('R30 recovers five physical tools on the live crater and rail, with an idem
   const original=[...road.group.userData.colliders];
   const station=installCraterWorkshopWorld(road,rail);
   assert.equal(station.sites.length,5);
+  assert.deepEqual(['星尘','废料','碎石'].map(label=>station.group.getObjectByName('b-r30-label-'+label)!.position.x),[-.61,0,.61]);
+  assert.equal(station.group.getObjectByName('b-r30-scale-needle')!.position.y,.99);
   assert.equal(installCraterWorkshopWorld(road,rail),station);
   assert.equal(road.group.userData.colliders.length,original.length+5);
   for(const site of station.sites){

@@ -152,8 +152,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   };
   let bellowsHandle:Group|undefined,bellowsGrip:Mesh|undefined, gauge:Group|undefined, weighNeedle:Group|undefined, lever:Group|undefined;
   let signal:MeshStandardMaterial|undefined;
-  function sign(g:Group,label:string,y:number,z:number,w:number){
-    const backing=new Mesh(unit,timber);backing.scale.set(w,.24,.045);backing.position.set(0,y,z);g.add(backing);
+  function sign(g:Group,label:string,y:number,z:number,w:number,x=0){
+    const backing=new Mesh(unit,timber);backing.name='b-r30-label-'+label;backing.scale.set(w,.24,.045);backing.position.set(x,y,z);g.add(backing);
     if(typeof document==='undefined')return;
     const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
     const c=canvas.getContext('2d');if(!c)return;
@@ -161,7 +161,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     c.fillStyle='#ede0be';c.textAlign='center';c.textBaseline='middle';c.font='bold 70px sans-serif';c.fillText(label,256,65,470);
     const tex=new CanvasTexture(canvas);tex.colorSpace=SRGBColorSpace;
     const mesh=new Mesh(new PlaneGeometry(w-.06,.21),new MeshBasicMaterial({map:tex}));
-    mesh.position.set(0,y,z+.03);g.add(mesh);
+    mesh.position.set(x,y,z+.03);g.add(mesh);
   }
   for(const site of sites){
     const g=new Group();g.name='b-r30-'+site.id;g.position.set(site.center.east,site.center.height,-site.center.north);
@@ -261,7 +261,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
           ore.rotation.set(j*.73,i+j*1.1,j*.51);
           ore.visible=false;g.add(ore);orePiles[i].push(ore);
         }
-        sign(g,['星尘','废料','碎石'][i],.79,.455,.49);
+        sign(g,['星尘','废料','碎石'][i],.79,.455,.49,x);
       }
       for(let i=0;i<3;i++)fixed(ores[i],(i-1)*.38,1.02,-.38,.17,.16,.12);
       sign(g,site.label,1.34,-.31,1.66);
@@ -272,16 +272,16 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       for(let i=0;i<5;i++)moving(iron,scalePlatform,(i-2)*.19,0,0,.13,.06,.78);
       for(const x of [-.57,.57])fixed(rust,x,.29,0,.06,.16,.84);
       for(const x of [-.48,.48])for(const z of [-.32,.32])fixed(brass,x,.41,z,.06,.035,.06);
-      fixed(iron,0,.78,-.37,.13,1.19,.13);
-      fixed(iron,0,1.36,-.30,.65,.36,.16);
-      fixed(paper,0,1.36,-.205,.52,.28,.03);
+      fixed(iron,0,.68,-.37,.13,.99,.13);
+      fixed(iron,0,1.08,-.30,.65,.36,.16);
+      fixed(paper,0,1.08,-.205,.52,.28,.03);
       // The actual 0–18 kg mechanical arc and pointer share the same
       // centre and angle. The accepted rule maximum is 17.9 kg.
-      weighNeedle=needle(g,0,1.27,-.166);weighNeedle.scale.set(.60,.60,.60);
+      weighNeedle=needle(g,0,.99,-.166);weighNeedle.scale.set(.60,.60,.60);
       weighNeedle.name='b-r30-scale-needle';
       for(let i=0;i<=6;i++){
         const a=-1.25+i*2.5/6;
-        const tick=moving(dark,g,Math.sin(a)*.177,1.27+Math.cos(a)*.177,-.17,.010,.026,.013);
+        const tick=moving(dark,g,Math.sin(a)*.177,.99+Math.cos(a)*.177,-.17,.010,.026,.013);
         tick.rotation.z=-a;
       }
       if(typeof document!=='undefined'){
@@ -291,7 +291,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
           const tex=new CanvasTexture(canvas);tex.colorSpace=SRGBColorSpace;
           tex.minFilter=tex.magFilter=NearestFilter;tex.generateMipmaps=false;
           const face=new Mesh(new PlaneGeometry(.50,.27),new MeshBasicMaterial({map:tex}));
-          face.name='b-r30-scale-reading';face.position.set(0,1.36,-.187);g.add(face);
+          face.name='b-r30-scale-reading';face.position.set(0,1.08,-.187);g.add(face);
           let last='';
           paintWeight=(kg)=>{
             const valid=typeof kg==='number'&&Number.isFinite(kg)&&kg>=0&&kg<=17.9;
@@ -310,7 +310,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
         }
       }
       fixed(rust,0,.62,-.25,.26,.07,.23);
-      sign(g,site.label,1.56,-.19,.62);
+      sign(g,site.label,1.37,-.19,.62);
     }else{
       fixed(stone,0,.12,0,.91,.24,.64);
       fixed(iron,0,.35,0,.61,.27,.42);fixed(rust,-.30,.72,0,.11,.73,.15);
