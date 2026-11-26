@@ -99,7 +99,13 @@ export function mountR30LiftPresentation(parent:Group,shaft:Point,landing:Point,
   if(disposed||![now,trip.departedAt,trip.travelMs].every(Number.isFinite)||trip.travelMs<=0)return;
   const t=Math.max(0,Math.min(1,(now-trip.departedAt)/trip.travelMs));
   const u=trip.direction==='down'?t:1-t;
-  const p=point(u),sway=trip.first?Math.sin(t*44)*Math.min(.055,t*.08):Math.sin(t*17)*.012;
+  const route=trip.ridePath;
+  // The replacement bore is supplied by the actual A/B/C mount. Reuse
+  // this original cage, never render the old slanted lining on the new axis.
+  if(route&&(trip.first||![route.shaft.east,route.shaft.north,route.shaft.height,route.landing.east,route.landing.north,route.landing.height].every(Number.isFinite)||
+    Math.hypot(route.shaft.east-route.landing.east,route.shaft.north-route.landing.north)>1e-6||route.shaft.height<=route.landing.height)){root.visible=false;lamp.visible=false;return}
+  lining.root.visible=!route;
+  const p=route?new Vector3(route.shaft.east,route.shaft.height+(route.landing.height-route.shaft.height)*u,-route.shaft.north):point(u),sway=trip.first?Math.sin(t*44)*Math.min(.055,t*.08):Math.sin(t*17)*.012;
   cage.position.copy(p);cage.rotation.z=sway;
   lamp.intensity=trip.first&&t>.66?9*(.35+.65*Math.abs(Math.sin(t*145))):9;
   root.visible=t<1;lamp.visible=root.visible;

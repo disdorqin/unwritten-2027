@@ -4,6 +4,7 @@ import { createUndergroundMineLift, type UndergroundMineLiftTrip } from '../../.
 import { createUndergroundLiftDomainHandoff } from '../../../src/presence/underground-lift-domain-handoff';
 import type { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration';
 import type { UndergroundEntrySnapshot } from '../../../src/presence/underground-entry';
+import type { R30ReturnRidePort,R30ReturnRidePath } from './town-c-r30-return-ride';
 
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
 type Foot = Readonly<{ east: number; north: number; height: number }>;
@@ -11,6 +12,7 @@ type AcceptedFoot = Foot & Readonly<{ playerId: string; domainId: string }>;
 
 export type DreamChainTrip = Readonly<{
   id: number; first: boolean; departedAt: number; travelMs: number; direction: 'down' | 'up';
+  ridePath?:R30ReturnRidePath;
 }>;
 
 export type DreamChainEvent =
@@ -26,6 +28,9 @@ export type DreamChainHost = Readonly<{
   onEvent(event: DreamChainEvent): void;
   /** True while another player stands at the steady-rope stay (duo crank). */
   readRopeHeld?(): boolean;
+  /** Optional relocated route; if supplied but uncertified, deny cage rides
+   * rather than silently falling back to the retired station. */
+  returnRide?:R30ReturnRidePort;
 }>;
 
 const liftTravelMs = 25_000;
@@ -52,6 +57,13 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     height: connection.firstFallLanding.height,
   };
   const playerId = host.playerId;
+  const relocated=host.returnRide;
+  if(relocated&&(relocated.domains['crater-floor']!==surfaceDomain||relocated.domains.mine!==mineDomain||
+    Math.abs(relocated.path.shaft.height-shaftFoot.height)>.025||relocated.path.shaft.height<=connection.depthLine||relocated.path.landing.height>=connection.depthLine))return {kind:'unregistered'} as const;
+  const ridePath=relocated?.path;
+  const rideDock=(stop:'crater-floor'|'mine')=>stop==='mine'?ridePath?.landing??mineLanding:ridePath?.shaft??shaftFoot;
+  let rideRevision:string|undefined,callingEmpty=false,confirmedDockId:number|undefined;
+  const rideCertified=()=>!relocated||!!rideRevision&&relocated.revision()===rideRevision;
 
   let phase: 'surface' | 'mine' = 'surface';
   let dockedStop: 'crater-floor' | 'mine' = 'crater-floor';
@@ -88,6 +100,9 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     readConfirmedFirstFallTransfer: () => confirmedTransfer,
     isFirstFallDeparture: (_id, point) => nearShaft(point),
     isDepthLineCrossing: (point) => {
+      // Repeated cage rides use the relocated vertical bore only after its
+      // live certificate. The original first-fall crossing stays unchanged.
+      if(relocated&&!firstFall)return rideCertified()&&relocated.crossing(point);
       // The transfer segment runs from the bore axis to the pool landing
       // beside it; a crossing counts when it stays inside that corridor.
       const ax = shaftFoot.east, az = shaftFoot.north;
@@ -101,8 +116,9 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     },
     isFirstFallPool: (point) => nearMineLanding(point) && point.height <= -85,
     canBoardCage: (_id, direction) => {
-      const foot = host.readLocalFoot();
+      const foot = acceptedFoot();
       if (!foot) return false;
+      if(relocated)return rideCertified()&&relocated.check(direction==='down'?'crater-floor':'mine',callingEmpty?'call':'board',foot);
       return direction === 'down' ? nearShaft(foot) : nearMineLanding(foot);
     },
     load: () => savedSnapshot,
@@ -123,7 +139,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     allocateTripId: () => ++lastTripId,
     requestCageRide: (id, direction) => bridge.requestCageRide(id, direction),
     readAcceptedFoot: acceptedFoot,
-    isAtBoardingPlatform: (stop, foot) => stop === 'crater-floor' ? nearShaft(foot) : nearMineLanding(foot),
+    isAtBoardingPlatform: (stop, foot) => relocated?rideCertified()&&relocated.check(stop,callingEmpty?'call':'board',foot):stop === 'crater-floor' ? nearShaft(foot) : nearMineLanding(foot),
     // The host reports the physical dock: once a trip's travel has elapsed the
     // cage stands at its destination; before that it stands at the last dock.
     readDockedStop: () => activeTrip && host.now() - activeTrip.departedAt >= activeTrip.travelMs
@@ -136,7 +152,8 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     domains: { 'crater-floor': surfaceDomain, mine: mineDomain },
     readAcceptedLanding: () => acceptedLanding,
     isAtAcceptedLanding: (stop, foot) => {
-      const target = stop === 'mine' ? mineLanding : shaftFoot;
+      if(relocated)return rideCertified()&&relocated.check(stop,'landing',foot);
+      const target = rideDock(stop);
       return Math.abs(foot.east - target.east) <= .01 && Math.abs(foot.north - target.north) <= .01 &&
         Math.abs(foot.height - target.height) <= .01;
     },
@@ -165,9 +182,10 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     const trip = lift.depart(playerId);
     if (!trip) return undefined;
     activeTrip = trip;
+    confirmedDockId=undefined;
     lastLanding=undefined;
     const chainTrip: DreamChainTrip = {
-      id: trip.id, first: false, departedAt: trip.departedAt, travelMs: trip.travelMs, direction,
+      id: trip.id, first: false, departedAt: trip.departedAt, travelMs: trip.travelMs, direction,...(ridePath?{ridePath}:{})
     };
     host.onEvent({ kind: 'trip-started', trip: chainTrip });
     return chainTrip;
@@ -225,7 +243,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      * is not a player camera ride; no second motion authority is created. */
     presentationTrip():DreamChainTrip|undefined{
       if(firstFall)return {...firstFall.trip};
-      if(activeTrip?.riders.includes(playerId))return {id:activeTrip.id,first:false,departedAt:activeTrip.departedAt,travelMs:activeTrip.travelMs,direction:activeTrip.direction};
+      if(activeTrip?.riders.includes(playerId))return {id:activeTrip.id,first:false,departedAt:activeTrip.departedAt,travelMs:activeTrip.travelMs,direction:activeTrip.direction,...(ridePath?{ridePath}:{})};
     },
 
     /** The opener walks from the handle into the open bore; this issues the fall order. */
@@ -252,11 +270,17 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      */
     requestCageRide(direction: 'down' | 'up') {
       if (firstFall || activeTrip || pendingRide) return undefined;
+      rideRevision=relocated?.revision();
+      if(!rideCertified())return undefined;
       const boardingStop = direction === 'down' ? 'crater-floor' : 'mine';
       if (dockedStop !== boardingStop) {
-        const empty = lift.callEmptyCage(playerId, boardingStop);
+        callingEmpty=true;
+        let empty:UndergroundMineLiftTrip|undefined;
+        try{empty=lift.callEmptyCage(playerId, boardingStop)}finally{callingEmpty=false;}
         if (!empty) return undefined;
         activeTrip = empty;
+        confirmedDockId=undefined;
+        lastLanding=undefined;
         pendingRide = direction;
         return undefined;
       }
@@ -295,7 +319,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     update() {
       if (!activeTrip) return;
       const trip = activeTrip;
-      if (host.now() - trip.departedAt < trip.travelMs) return;
+      if (!Number.isFinite(host.now())||host.now() - trip.departedAt < trip.travelMs||!rideCertified()) return;
       if (trip.riders.length === 0) {
         // An empty repositioning leg: confirm the dock, then depart with the
         // waiting rider if one is pending.
@@ -305,34 +329,42 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
         if (pendingRide) {
           const direction = pendingRide;
           pendingRide = undefined;
-          departWithPlayer(direction);
+          // A call foot is outside the cage: wait for a second, explicit
+          // boarding request at the physical dock on the relocated route.
+          if(!relocated)departWithPlayer(direction);
         }
         return;
       }
-      handoff.jolt(playerId, trip.id);
-      if (!handoff.confirmDock(trip.id)) return;
+      if(confirmedDockId!==trip.id){
+        handoff.jolt(playerId, trip.id);
+        if (!handoff.confirmDock(trip.id)) return;
+        confirmedDockId=trip.id;
+      }
       const toMine = trip.destination === 'mine';
       acceptedLanding = {
         tripId: trip.id,
-        foot: { playerId, domainId: toMine ? mineDomain : surfaceDomain, ...(toMine ? mineLanding : shaftFoot) },
+        foot: { playerId, domainId: toMine ? mineDomain : surfaceDomain, ...rideDock(trip.destination) },
       };
+      if(relocated&&(!rideCertified()||!relocated.check(trip.destination,'landing',acceptedLanding.foot)))return;
       const wake = handoff.wake(playerId, trip.id);
       if (!wake) return;
-      handoff.finishWake(playerId, trip.id);
       // The ride physically carried the player through the bore: submit the
       // crossing segment so the entry flips the player's mode (peace above
       // the depth line, survival below it) for the next boarding check.
-      const originFoot = trip.origin === 'mine' ? mineLanding : shaftFoot;
+      const originFoot = rideDock(trip.origin);
       const crossing=bridge.confirmDepthCrossing(playerId, originFoot, {
         east: wake.foot.east, north: wake.foot.north, height: wake.foot.height,
       });
       if(!crossing){
         // Never announce an unaccepted mode change. The cage is physically
         // docked; report failure rather than leave an immortal pending promise.
+        if(relocated)return; // retain the docked cue for a certified retry
+        handoff.finishWake(playerId,trip.id);
         activeTrip=undefined;dockedStop=trip.destination;acceptedLanding=undefined;
         landingWaiters.get(trip.id)?.resolve(undefined);landingWaiters.delete(trip.id);
         return;
       }
+      handoff.finishWake(playerId,trip.id);
       activeTrip = undefined;
       dockedStop = trip.destination;
       phase = toMine ? 'mine' : 'surface';
