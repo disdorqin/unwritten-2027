@@ -73,6 +73,13 @@ export function frontRidgeR30NaturalHeight(e:number,n:number){
  const southBlend=95+24*Math.sin((e-320)*.043);
  const padWeight=rectWeight(e,n,summit.east,summit.north,summit.width,summit.depth,n>summit.north?25:southBlend);
  h=mix(h,pad,padWeight*(1-wallWeight));
+ // Preserve the authorized cloud apron at its actual built datum.
+ // The 350m survey peak is outside the flat route claim and stays pinned.
+ const apron=rectWeight(e,n,319.5,660,68,14,6);
+ const southWalk=rectWeight(e,n,317.5,645,4,26,3);
+ const southView=rectWeight(e,n,319,634,8,6,3);
+ const peakExclusion=smooth(Math.hypot(e-320,n-650)/2);
+ h=mix(h,347,Math.max(apron,southWalk,southView)*peakExclusion);
  h=mix(h,18,rectWeight(e,n,northRidgeCableAnchors[0][0],northRidgeCableAnchors[0][1],14,12,14));
  return h;
 }
@@ -82,6 +89,18 @@ export function frontRidgeR30Weight(e:number,n:number){
  const natural=frontRidgeR30NaturalHeight(e,n);
  // Feather the whole mountain skirt; no vertical curtain at its footprint.
  return rect*smooth((natural-18)/22);
+}
+/** Request to A: local cloud-apron feather of 34m, blended back to
+ * the existing ownership over 14m. It NEVER claims protected core.
+ * This is opt-in and is not applied inside buildFrontRidgeR30Field.
+ * Only A may adopt the returned weight after checking its own distances. */
+export function proposeRidgeCloudApronOwnership(ownership:Ownership,protectedDistance:GroundAt):Ownership{
+ return (e,n)=>{
+  const w=ownership(e,n),distance=protectedDistance(e,n);
+  if(!Number.isFinite(w)||!Number.isFinite(distance)||distance<=0||w<=0)return w;
+  const local=rectWeight(e,n,319.5,660,70,18,14);
+  return mix(w,Math.max(w,smooth(distance/34)),local);
+ };
 }
 export function buildFrontRidgeR30Field(heightBelow:GroundAt,ownership:Ownership){
  const width=B.east-B.west+1,depth=B.north-B.south+1;

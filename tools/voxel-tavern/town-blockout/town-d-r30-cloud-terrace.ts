@@ -18,7 +18,9 @@ export const ridgeCloudHandoff=Object.freeze({
 export function ridgeCloudFootAt(field:FrontRidgeR30Field,e:number,n:number,r=.27){
  if(![e,n,r].every(Number.isFinite)||r<0)return;
  const canonical=za22CloudSurfaceAt(e,n,r),h=field.heightAt(e,n);
- if(canonical===undefined||h===undefined||Math.abs(h-canonical)>.08)return;
+ // This pre-existing cloud apron is a level 347m walking surface.
+ // Reject even tiny crest intrusions instead of rounding a non-level foot.
+ if(canonical===undefined||h===undefined||Math.abs(h-canonical)>.08||Math.abs(h-347)>1e-6)return;
  for(const [dx,dn]of [[r,0],[-r,0],[0,r],[0,-r]]){
   const y=field.heightAt(e+dx!,n+dn!);
   if(y===undefined||Math.abs(y-h)>.09)return;
