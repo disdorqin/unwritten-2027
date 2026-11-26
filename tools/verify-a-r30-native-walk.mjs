@@ -37,7 +37,8 @@ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
 const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1';
+const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], performanceSamples:[] };
 
 await mkdir(output, { recursive: true });
 let browser;
@@ -280,6 +281,21 @@ import {smelterFootway} from './voxel-tavern/town-blockout/town-a-r30-west-lands
 import { mountWestCraterRoad } from './voxel-tavern/town-blockout/town-za22-crater-road.ts';
 
 async function picture(page,evidence,label){
+  if(sampleFrames&&!bare){
+    // Listen to the actual production renderer event, not a synthetic loop.
+    // Exclude the screenshot itself and bound the sample duration/storage.
+    const sample=await page.evaluate(()=>new Promise(resolve=>{
+      const frames=[],start=performance.now();
+      const finish=()=>{document.removeEventListener('town-frame-profile',listener,true);clearTimeout(timer);resolve({elapsedMs:performance.now()-start,frames});};
+      const listener=e=>{const f=e.detail;if(Number.isFinite(f.frameMs)&&f.frameMs>0&&Number.isFinite(f.calls)&&Number.isFinite(f.triangles)){
+        frames.push({frameMs:f.frameMs,calls:f.calls,triangles:f.triangles,movementMs:f.movementMs,detailMs:f.detailMs});
+        if(frames.length>=120)finish();
+      }};
+      const timer=setTimeout(finish,2000);document.addEventListener('town-frame-profile',listener,true);
+    }));
+    const stats=k=>{const values=sample.frames.map(f=>f[k]).filter(Number.isFinite).sort((a,b)=>a-b);return values.length?{median:values[Math.floor((values.length-1)/2)],p95:values[Math.floor((values.length-1)*.95)],max:values.at(-1)}:undefined;};
+    report.performanceSamples.push({label,elapsedMs:sample.elapsedMs,frames:sample.frames.length,frameMs:stats('frameMs'),calls:stats('calls'),triangles:stats('triangles'),movementMs:stats('movementMs'),detailMs:stats('detailMs'),scope:'headless browser, actual renderer event, not physical phone'});
+  }
   await page.screenshot({path:join(output,label+'.png'),timeout:45000});
   evidence.checkpoints.push({label,lighting:await page.locator('#lighting').textContent(),...await readPose(page),wire:evidence.poses.at(-1)});
 }
