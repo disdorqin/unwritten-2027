@@ -24,6 +24,12 @@ test('actual rock closes both cavern ends except original mouth, while terminal 
   assert.equal(pass(8.7,98.85),undefined);assert.equal(pass(33.95,76),undefined);
   for(const b of art.boundary){assert.ok(art.blocks(b.e,b.n,b.y-b.h/2,.27,1.8))}
   assert.ok(art.parts.length>700);
+  assert.equal(art.quayFurniture.length,36);assert.equal(art.terminalArt.length,19);
+  for(const e of [18.8,26.2]){
+   assert.ok(pass(e,76),'survey benches leave the centre path open');
+   assert.equal(pass(e,77.24),undefined,'bench physically blocks the capsule');
+  }
+  assert.ok(pass(8.7,98.5),'terminal viewing foot remains open');
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);
 });
