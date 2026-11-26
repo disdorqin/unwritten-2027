@@ -647,7 +647,10 @@ function endDrag(event: PointerEvent) {
 }
 
 renderer.domElement.addEventListener('pointerup', endDrag);
-renderer.domElement.addEventListener('pointercancel', endDrag);
+renderer.domElement.addEventListener('pointercancel', event => {
+  dragMoved = true;
+  endDrag(event);
+});
 renderer.domElement.addEventListener('pointerleave', () => {
   if (dragging) return;
   hoveredAnchorId = undefined;
