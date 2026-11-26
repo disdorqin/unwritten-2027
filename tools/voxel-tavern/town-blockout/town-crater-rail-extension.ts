@@ -132,6 +132,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   const railBearings:{east:number;north:number;low:number;high:number;cornerMinimum:number;slope:number}[]=[];
   let stringerSegments=0;
   let valleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
+  let eastValleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
+  const eastValleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   const valleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
@@ -223,7 +225,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
     samples.forEach((s, i) => { s.y = smoothed[i]; });
     // A-R04 independent low-valley repair. Keep both existing endpoints,
     // both stations, the loop junction and D's mountain-side profile.
-    let bridgeFirst=-1,bridgeLast=-1;
+    let bridgeFirst=-1,bridgeLast=-1,eastBridgeFirst=-1,eastBridgeLast=-1;
     if(opts.repairValley){
       const first=samples.findIndex(p=>p.east<267&&p.north>495);
       const last=samples.findIndex(p=>p.east<196&&p.north>515);
@@ -234,11 +236,23 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
         bridgeLast=valleyRepair.changed.at(-1)!+1;
       }
     }
+    // Independent eastern low valley, outside either station platform.
+    // Keep the existing horizontal survey and downstream anchor. No D
+    // high-ground substitution or new service is authorized here.
+    if(opts.repairValley){
+      const first=samples.findIndex(p=>p.east<449.5&&p.north>451);
+      const last=samples.findIndex(p=>p.east<397&&p.north>492);
+      eastValleyRepair=repairBoundedRailGrade(samples,first,last);
+      if(!eastValleyRepair.blocked&&eastValleyRepair.changed.length){
+        eastValleyRepair.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
+        eastBridgeFirst=eastValleyRepair.changed[0]!-1;eastBridgeLast=eastValleyRepair.changed.at(-1)!+1;
+      }
+    }
     // Shared cross sections: the rail head, base and ballast are all
     // continuous strips with the same station and curve samples.
     const sections=railSections(samples);
-    if(bridgeFirst>=0){
-      const bridgeSections=sections.slice(bridgeFirst,bridgeLast+1);
+    for(const [first,last] of [[bridgeFirst,bridgeLast],[eastBridgeFirst,eastBridgeLast]])if(first>=0){
+      const bridgeSections=sections.slice(first,last+1);
       for(const side of [-1,1]){
         const offset=side*.76;
         push(iron,buildRailStrip(bridgeSections,offset,.28,-1.02,-.655));
@@ -280,7 +294,10 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
       const horizontal=Math.hypot(b.east-a.east,b.north-a.north);
       const yaw=Math.atan2(vb.x-va.x,vb.z-va.z);
       const slope=(b.y-a.y)/horizontal;
-      const bridge=bridgeFirst>=0&&i>=bridgeFirst&&i<bridgeLast;
+      const westBridge=bridgeFirst>=0&&i>=bridgeFirst&&i<bridgeLast;
+      const eastBridge=eastBridgeFirst>=0&&i>=eastBridgeFirst&&i<eastBridgeLast;
+      const bridge=westBridge||eastBridge;
+      const activeFirst=eastBridge?eastBridgeFirst:bridgeFirst,activeLast=eastBridge?eastBridgeLast:bridgeLast;
       if(bridge){
         // Two continuous iron girders, cross ties and bonded stone piers.
         // All share the same rail sections rather than freestanding props.
@@ -291,7 +308,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
         }
         segBox(iron,center,quat,0,-.84,0,1.85,.18,.16);
         let bearings=0;
-        if(i===bridgeFirst||i===bridgeLast-1||(i-bridgeFirst)%3===0){
+        if(i===activeFirst||i===activeLast-1||(i-activeFirst)%3===0){
           const w=2.55,len=1.42,c=Math.cos(yaw),s=Math.sin(yaw);
           const hs=[-1,0,1].flatMap(x=>[-1,0,1].map(z=>groundAt(e+c*x*w/2+s*z*len/2,n+s*x*w/2-c*z*len/2)));
           const head=center.y-1.00;
@@ -306,7 +323,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
           segBox(stoneDark,center,quat,0,-1.045,0,2.67,.11,1.48);
           bearings=1;
         }
-        valleyBridgeSpans.push({index:i,length:horizontal,bearings,startY:a.y,endY:b.y});
+        (eastBridge?eastValleyBridgeSpans:valleyBridgeSpans).push({index:i,length:horizontal,bearings,startY:a.y,endY:b.y});
       }
       if(!bridge&&underside>soil+.12&&(!opts.stock||distanceToRail(opts.stock,e,n)>opts.ballastWidth)){
         if(i%3===0||underside-soil<.85&&i%2===0){
@@ -982,5 +999,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey,junctionAudit,serviceGeometryReady,valleyRepair,valleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey,junctionAudit,serviceGeometryReady,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

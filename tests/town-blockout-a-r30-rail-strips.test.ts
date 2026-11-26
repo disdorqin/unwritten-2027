@@ -97,6 +97,20 @@ test('the production low-valley bridge repairs the local grade without moving st
  assert.equal(rail.alignment.stations[0]!.railY,8.505400476746466);
  assert.equal(rail.alignment.stations[1]!.railY,11.397305603027343);
 });
+test('second physical valley bridge removes the eastern 13 overgrade spans within existing bounds',()=>{
+ const r=rail.eastValleyRepair!;
+ assert.equal(r.blocked,undefined);assert.ok(r.maxGradeBefore>.20);
+ assert.ok(r.maxGradeAfter<.12);assert.ok(r.maxFill<4.2);assert.equal(r.changed.length,20);
+ assert.equal(rail.eastValleyBridgeSpans.length,21);
+ assert.equal(rail.eastValleyBridgeSpans.reduce((n,s)=>n+s.bearings,0),8);
+ assert.ok(rail.eastValleyBridgeSpans.reduce((n,s)=>n+s.length,0)>35);
+ assert.ok(!rail.verticalSurvey.violations.some(v=>v.index>=r.first&&v.index<r.last));
+ for(const s of rail.eastValleyBridgeSpans){
+   assert.equal(s.startY,rail.samples[s.index]!.y);assert.equal(s.endY,rail.samples[s.index+1]!.y);
+   assert.ok(Math.abs(s.endY-s.startY)/s.length<=.12);
+ }
+ assert.equal(rail.verticalSurvey.violations.length,52);
+});
 test('actual loop junction blocks false branch service on disconnected and overlapping tracks',()=>{
  const audit=rail.junctionAudit!;
  assert.ok(audit.start.horizontal>10);
