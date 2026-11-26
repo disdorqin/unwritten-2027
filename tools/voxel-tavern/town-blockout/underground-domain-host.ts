@@ -20,6 +20,7 @@ import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
 import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './town-c-r30-deep-assembly.js';
 import {mountR30ThinWallArt} from './town-c-r30-thin-wall-art.js';
 import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
+import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
@@ -32,7 +33,7 @@ export const undergroundMineSpec: UndergroundMineSpec = {
   shoreLength: 8,
   gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
   collapse: { length: 3, width: 1.2, height: 1.3 },
-  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true,returnBay:true },
+  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true,returnBay:true,runningMainline:true },
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 };
 
@@ -154,6 +155,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   /** Accepted movement/Presence foot only, never inferred from camera height. */
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
   crystalBridge?:R30CrystalBridge;
+  mainlineBridge?:R30MainlineBridge;
   /** Sole existing mining authority's accepted layer snapshot. */
   readAcceptedMiningTargets?:()=>readonly UndergroundMiningTargetView[]|undefined;
   /** C2 scene roots and A/total-control room/mouth acceptance. */
@@ -355,27 +357,34 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const returnBay=mountR30ReturnBay(mounted.group,mine.hasReturnBay,worldOf);
   let openThinWalls:ReadonlySet<string>=new Set();
   let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
-  function passageAt(east: number, north: number, posture:'standing'|'crouching'='standing') {
-    if(posture!=='standing'&&posture!=='crouching')return undefined;
-    const bodyHeight=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
+  function queryMineClearance(east:number,north:number,radius:number,bodyHeight:number){
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
     const localX = dx * bxE + dn * bxN;
     const localZ = dx * bzE + dn * bzN;
-    if(mounted.wreck?.blocks(localX,localZ,undergroundMineSpec.walker.radius))return;
-    const passage=mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
+    if(mounted.wreck?.blocks(localX,localZ,radius))return;
+    const passage=mine.queryPassage(localX, localZ, radius,
       bodyHeight,readGateStage(),openThinWalls);
     // The camp's real furnishings (including R30 hearth) own their collision
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
-      undergroundMineSpec.walker.radius,bodyHeight))return;
-    if(passage&&thinWalls.blocks(localX,localZ,undergroundMineSpec.walker.radius))return;
-    if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,undergroundMineSpec.walker.radius,bodyHeight))return;
-    if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,undergroundMineSpec.walker.radius,bodyHeight))return;
+      radius,bodyHeight))return;
+    if(passage&&thinWalls.blocks(localX,localZ,radius))return;
+    if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
+  }
+  const mainline=mine.expansion?.hasRunningMainline?mountR30MainlineHost({parent,worldOf,bridge:options.mainlineBridge,
+    supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
+  function passageAt(east:number,north:number,posture:'standing'|'crouching'='standing'){
+    if(posture!=='standing'&&posture!=='crouching')return undefined;
+    const h=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
+    const q=queryMineClearance(east,north,undergroundMineSpec.walker.radius,h);
+    if(q&&mainline?.kind==='ready'&&mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h))return;
+    return q;
   }
   if (originW && basisXW && basisZW) {
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
@@ -467,7 +476,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();deepHost.sync();deepAssembly.sync();
+  const composed={...mounted,sync(){if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();deepHost.sync();deepAssembly.sync();
     // When the physically connected passage is active, retain the adjacent
     // second-mine geometry without enabling its movement domain.
     if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
@@ -478,9 +487,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'

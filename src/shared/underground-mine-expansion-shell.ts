@@ -3,6 +3,7 @@ import {firstMineDeepWorks,isCanonicalDeepWorks} from './town-c-first-mine-deep-
 import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
 import {r30ThinWallRooms,r30ThinWallBlocked} from './town-c-r30-thin-wall-plan.js';
 import {r30SupportAnnexRooms,r30SupportAnnexBlocks} from './town-c-r30-support-annex.js';
+import {r30MainlineRooms} from './town-c-r30-mainline-plan.js';
 
 type Point = readonly [x: number, y: number, z: number];
 type Surface = 'rock' | 'rail' | 'water';
@@ -24,6 +25,7 @@ type Options = Readonly<{
   crystalGate?: boolean;
   thinWalls?: boolean;
   supportAnnex?:boolean;
+  runningMainline?:boolean;
 }>;
 
 const layerLength = 140;
@@ -45,7 +47,7 @@ export function createUndergroundMineExpansionShell({
   openingWidth,
   openingHeight,
   layerStartZ,
-  crystalGate = false,thinWalls=false,supportAnnex=false,
+  crystalGate = false,thinWalls=false,supportAnnex=false,runningMainline=false,
 }: Options) {
   const endZ = layerStartZ + layerLength;
   const depth = endZ - seamZ;
@@ -81,7 +83,7 @@ export function createUndergroundMineExpansionShell({
   } : undefined;
 
   const deepWorks=isCanonicalDeepWorks(bounds,floor,crystalGate)&&openingWidth===4&&openingHeight===3.5;
-  const hasThinWalls=deepWorks&&thinWalls,hasSupportAnnex=deepWorks&&supportAnnex;
+  const hasThinWalls=deepWorks&&thinWalls,hasSupportAnnex=deepWorks&&supportAnnex,hasRunningMainline=deepWorks&&runningMainline;
   const rooms: readonly Room[] = [
     { minX: openingLeft, maxX: openingRight, minZ: seamZ, maxZ: collarEnd, floor, ceiling: openingCeiling },
     { minX: galleryLeft, maxX: galleryRight, minZ: collarEnd, maxZ: collarStart, floor, ceiling: galleryCeiling },
@@ -93,6 +95,7 @@ export function createUndergroundMineExpansionShell({
     { minX: shaftX + 72, maxX: bounds.maxX, minZ: eastStart - 1.8, maxZ: eastEnd + 1.8, floor, ceiling: floor + 6.9 },
     { minX: galleryRight, maxX: galleryRight + 3.2, minZ: waterStart, maxZ: waterEnd,
       floor: waterFloor, ceiling: floor + 6.1, water: floor },
+    ...(hasRunningMainline?r30MainlineRooms.map(r=>({...r,floor,ceiling:floor+r.ceiling})):[]),
     ...(hasSupportAnnex?r30SupportAnnexRooms.map(r=>({...r,floor,ceiling:floor+r.ceiling})):[]),
     ...(hasThinWalls?r30ThinWallRooms.map(r=>({...r,floor,ceiling:floor+r.ceiling})):[]),
     ...(deepWorks?[...firstMineDeepWorks.rooms,...firstMineShallowWorks.rooms].map(r=>({...r,minZ:Math.abs(r.minZ-waterStart)<1e-7?waterStart:r.minZ,maxZ:Math.abs(r.maxZ-waterStart)<1e-7?waterStart:r.maxZ,floor,ceiling:floor+r.ceiling})):[]),
@@ -232,7 +235,7 @@ export function createUndergroundMineExpansionShell({
     queryPassage,
     route,
     gateApproach,
-    deepWorks,hasThinWalls,hasSupportAnnex,
+    deepWorks,hasThinWalls,hasSupportAnnex,hasRunningMainline,
     gate: gate && { ...gate, gapFor: gateGap },
     bounds,
   };

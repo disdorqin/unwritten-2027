@@ -14,7 +14,7 @@ export type UndergroundMineSpec = {
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
-  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean;supportAnnex?:boolean;returnBay?:boolean };
+  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean;supportAnnex?:boolean;returnBay?:boolean;runningMainline?:boolean };
   walker: { radius: number; standingHeight: number; crouchingHeight: number; maxGrade: number };
 };
 
@@ -113,7 +113,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const expansion = campBackOpening && createUndergroundMineExpansionShell({
     ...campBackOpening,
     layerStartZ: poolSpan.start,
-    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,supportAnnex:camp.supportAnnex,
+    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,supportAnnex:camp.supportAnnex,runningMainline:camp.runningMainline,
   });
   const hasReturnBay=!!camp.returnBay&&expansion?.deepWorks===true&&main.start===12&&main.end===32&&main.floorStart===-90&&main.floorEnd===-91;
   const gallerySlice=(start:number,end:number,left=main.left):Span=>({...main,start,end,left,floorStart:floorAt(main,start),floorEnd:floorAt(main,end)});

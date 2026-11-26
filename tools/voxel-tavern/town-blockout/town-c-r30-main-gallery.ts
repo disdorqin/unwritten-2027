@@ -13,6 +13,7 @@ export function mountR30MainGallery(parent:Group,mine:Mine){
  if(canonical){
   // All the low sleepers are flush inlays, not a new grade or rail authority.
   for(const [from,to] of [[12.4,31.5],[45.4,138.1]])for(let z=from;z<=to;z+=.72){
+   if(mine.expansion?.hasRunningMainline&&z>=48.2&&(z<=68||z>=111&&z<=137.3))continue;
    const p=mine.queryPassage(0,z,.27,1.8,'open');if(!p)continue;
    const h=p.floor,grade=z<32?-.05:0;
    add('wood',0,h-.005,z,1.65,.024,.20,0x594536,Math.atan(-grade));
@@ -49,7 +50,7 @@ export function mountR30MainGallery(parent:Group,mine:Mine){
   };
   for(const z of [13.2,17.8,22.4,27,30.4])arch(z,2,3.5);
   for(const z of [46.8])arch(z,2,3.5);
-  for(const z of [70,83,87,103,115,119,123])arch(z,4.2,7.2);
+  for(const z of [67,83,87,103,115,119,123])arch(z,4.2,7.2);
   // Crushed sill around the narrow opening. No model crosses the original
   // 1.2m slot; keep its exact 1.3m roof and crouching affordance.
   for(const z of [31.62,35.38])for(const side of [-1,1]){

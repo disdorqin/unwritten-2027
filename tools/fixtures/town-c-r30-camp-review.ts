@@ -10,8 +10,11 @@ const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
 let domain=interlayerSite.upper.domainId;
 import type {UndergroundMiningTargetView} from '../../src/shared/underground-mining.js';
 let reviewTargets:readonly UndergroundMiningTargetView[]=[];
+import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
+let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
 const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
  readAcceptedMiningTargets:()=>reviewTargets,
+ mainlineBridge:{acceptsRoute:()=>!!mainlineReview,readSnapshot:()=>mainlineReview,readLightBudget:()=>2,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
  readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
 if(host.kind!=='ready')throw Error(host.reason);
 const camp=host.mounted.camp!;
@@ -52,6 +55,21 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
+ if(name.startsWith('rail-')){
+  const m=host.mainline;if(m?.kind!=='ready')return false;
+  const role=name.slice(5),route=m.route,work=route.work;
+  const marks:Record<string,number>={camp:0,sleepers:work.sleepers.chainage,gauge:work.gauge.chainage,curve:60,'turnout-rust':work['turnout-rust'].chainage,turnout:work.turnout.chainage,gate:route.length};
+  const at=marks[role];if(at===undefined)return false;
+  const rolling=role==='curve',chainage=at;
+  mainlineReview={revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:rolling?'rolling':'stopped',chainage,
+   speed:rolling?1.4:0,brakeHeld:rolling,turnout:role==='turnout'?'gate':'unset',cargo:{oreId:'',pieces:0},faults:{sleepers:3,gauge:3,'turnout-rust':4},...(rolling?{riderId:'review'}:{})};
+  host.mounted.sync();
+  const p=route.sample(at),f=p.position,shift=(side:number,along:number)=>({east:f.east+Math.cos(p.heading)*side-Math.sin(p.heading)*along,north:f.north+Math.sin(p.heading)*side+Math.cos(p.heading)*along,height:f.height});
+  const eye=[shift(1.25,-2.2),shift(-1.25,-2.2),shift(0,at===0?2.6:-2.6)].find(q=>host.passageAt(q.east,q.north));
+  if(!eye)return false;
+  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(f.east,f.height+.7,-f.north);torch.intensity=35;view=name;return true;
+ }
+ mainlineReview=undefined;
  const wallOpen=name==='pocketopen'||name==='shortcutopen';
  reviewTargets=host.thinWalls.sites.map(s=>({...s,surface:'rock' as const,hits:wallOpen?s.strikes:2,open:wallOpen}));
  host.mounted.sync();
@@ -104,4 +122,4 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 if(!setView('entry'))throw Error('camp entry blocked');
 function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,returnBayParts:host.returnBay.parts.length,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,returnBayParts:host.returnBay.parts.length,mainlineLength:host.mainline?.kind==='ready'?host.mainline.route.length:0,mainlineParts:host.mainline?.kind==='ready'?host.mainline.scene.r30Dressing?.parts:0,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});
