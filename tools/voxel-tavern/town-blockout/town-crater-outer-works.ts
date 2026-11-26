@@ -788,42 +788,37 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const piles: [number, number, number, number, MeshStandardMaterial][] = [
       [-6, -2, 3.6, 2.6, ore], [-1, 3.5, 2.8, 2, oreOchre], [4.5, -3, 3.1, 2.2, oreGrey], [8, 2.5, 2.2, 1.5, ore],
     ];
-    for (const [dx, dz, r, h, mat] of piles) {
-      const p = fr.at(dx, dz);
+    const yardStructure=industrialBuilder(fr,g,put,colliders,floors);
+    for(const [dx,dz,r,h,mat] of piles){
       if(mat===oreOchre){
-        // Actual stacked timber, not an ochre cone masquerading as wood.
         for(let layer=0;layer<4;layer++){
-          const count=7-layer, width=r*1.70-layer*.38;
+          const count=7-layer,width=r*1.70-layer*.38;
           for(let j=0;j<count;j++){
             const x=dx+(j-(count-1)/2)*.49;
-            put(workshopWood,x,g+.245+layer*.46,dz,.46,.46,width);
+            yardStructure.piece(workshopWood,x,dz,.46,width,.015+layer*.46,.475+layer*.46);
             for(const side of [-1,1])put(timberWarm,x,g+.245+layer*.46,dz+side*(width/2+.005),.38,.38,.012);
           }
         }
-        for(const z of [-1.25,1.25])put(workshopRust,dx,g+.12,dz+z,3.8,.24,.15);
+        for(const z of [-1.25,1.25])yardStructure.piece(workshopRust,dx,dz+z,3.8,.15,0,.24);
       }else{
-        // Irregular faceted mounds, with buried edges and graded fragments.
-        // Keep all exposed rock within the existing pile footprint.
-        const geo=new ConeGeometry(r,h,13,3);
-        const v=geo.getAttribute('position');
-        for(let i=0;i<v.count;i++){
-          const x=v.getX(i),y=v.getY(i),z=v.getZ(i);
-          const angle=Math.atan2(z,x),factor=.84+.11*Math.cos(angle*3+dx)+.05*Math.sin(angle*5+dz);
-          v.setXYZ(i,x*factor,y,z*factor);
-        }
-        geo.computeVertexNormals();part(mat,geo,p.east,g+h/2,p.north,fr.yaw);
-        for(let i=0;i<22;i++){
-          const a=i*2.39996,rr=r*(.52+.31*hash(i+dx*19)),s=.24+.19*hash(i*11+dz);
-          const q=fr.at(dx+rr*Math.cos(a),dz+rr*Math.sin(a));
-          part(i%4===0?stoneDark:mat,new DodecahedronGeometry(s,0),q.east,g+.24+s*.48,q.north,a);
+        // Physical voxel rubble: each tapered tier has its own footprint;
+        // the old square collider no longer blocks empty corners.
+        const step=r/3.7;
+        for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++){
+          const x=i*step,z=j*step,theta=Math.atan2(z,x),rr=Math.hypot(x,z);
+          const edge=r*(.85+.08*Math.cos(theta*3+dx)+.06*Math.sin(theta*5+dz));
+          if(rr>edge-step*.32)continue;
+          const top=Math.max(.24,h*(1-(rr/r)**1.2)*(.87+.13*hash(i*31+j*17+dx)));
+          const tiers=Math.max(1,Math.ceil(top/.53));
+          for(let k=0;k<tiers;k++){
+            const width=step*(.96-.06*(k%3)),depth=step*(.97-.04*((i+j+k+30)%3));
+            const xx=dx+x+.03*step*Math.sin(k+i),zz=dz+z+.02*step*Math.cos(k+j);
+            yardStructure.piece((i+j+k+30)%5===0?stoneDark:mat,xx,zz,width,depth,top*k/tiers,top*(k+1)/tiers);
+          }
         }
       }
-      // S-1 collision: a cone pile blocks as its base square.
-      hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
     }
-    // Sorting shed: visible columns with exact player blockers; no solid
-    // room-sized collider across the open shelter.
-    const yardStructure=industrialBuilder(fr,g,put,colliders,floors);
+    // Sorting shed: visible columns with exact player blockers.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
       yardStructure.piece(workshopWood,-8+px,-6+pz,.26,.26,0,3);
       yardStructure.piece(workshopBrick,-8+px,-6+pz,.38,.38,0,.18);
