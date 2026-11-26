@@ -29,7 +29,8 @@ for(const p of files)assert.equal(refBlob(a,p),refBlob(base,p),'A/B path ownersh
 const temporary=mkdtempSync(join(root,'.a-r30-joint-proof-'));
 const report={a,b:bSha,base:sha(base),files:[],scope:'same-instance candidate, not mainline acceptance',stage:'copy',success:false};
 const out=process.argv[2]&&resolve(process.argv[2]);
-const browser=process.argv[3]==='--browser';
+const browserSegment=process.argv[3]==='--browser=inscription'?'inscription-access':process.argv[3]==='--browser'?'joint-historic':undefined;
+const browser=!!browserSegment;
 const lock=out&&out+'.lock';
 if(lock){mkdirSync(dirname(lock),{recursive:true});try{mkdirSync(lock);}catch(e){rmSync(temporary,{recursive:true,force:true});throw e;}}
 try{
@@ -164,13 +165,14 @@ try{
   }
   const points=[...selected,...completion.historic.route.slice(1)];
   report.browserRoute={points,approach:rimAccess.points,trailKnots:selected.length,historic:completion.historic.route,mode:'unaccepted B narrow host API proposal + actual A support audit'};
-  const dir=join(dirname(out),'原生联合栈道');
+  report.browserRoute.inscriptionPath=[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...inscription.points];
+  const dir=join(dirname(out),browserSegment==='inscription-access'?'原生联合刻石':'原生联合栈道');
   mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,'joint-route.json'),JSON.stringify(report.browserRoute,null,2));
   writeFileSync(join(dir,'joint-source.json'),JSON.stringify({a,b:bSha,files:report.files,portSHA256:report.portSHA256,exactHost:report.exactHost,bProposal:report.bProposal},null,2));
   report.stage='browser';report.success=false;
   const status=await new Promise((done,reject)=>{
-   const child=spawn(process.execPath,[join(root,'tools','verify-a-r30-native-local.mjs'),'joint-historic',dir],{cwd:root,windowsHide:true,stdio:'inherit',env:{...process.env,ZA22_HARDWARE:'1',AR30_JOINT_ROOT:temporary,AR30_JOINT_ROUTE:join(dir,'joint-route.json')}});
+   const child=spawn(process.execPath,[join(root,'tools','verify-a-r30-native-local.mjs'),browserSegment,dir],{cwd:root,windowsHide:true,stdio:'inherit',env:{...process.env,ZA22_HARDWARE:'1',AR30_JOINT_ROOT:temporary,AR30_JOINT_ROUTE:join(dir,'joint-route.json')}});
    child.once('error',reject);child.once('exit',code=>done(code));
   });
   report.browserExit=status;

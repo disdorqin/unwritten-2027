@@ -286,7 +286,9 @@ async function picture(page,evidence,label){
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
-const joint=segment==='joint-historic'?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
+const jointManifest=process.env.AR30_JOINT_ROUTE?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
+const joint=segment==='joint-historic'?jointManifest:undefined;
+const jointInscription=segment==='inscription-access'?jointManifest?.inscriptionPath:undefined;
 const approach={
  'joint-historic':[[-12,159],[-40,159]],
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
@@ -369,7 +371,7 @@ try{
    ...industrial('salvage-pipes'),...industrial('salvage-pipes').slice(0,-1).reverse(),
    ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1)
  ]:null;
- const path=joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const path=jointInscription??joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):

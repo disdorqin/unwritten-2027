@@ -15,7 +15,7 @@ assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gate
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const candidateRoot=process.env.AR30_JOINT_ROOT?resolve(process.env.AR30_JOINT_ROOT):undefined;
-if(candidateRoot)assert.ok(candidateRoot.startsWith(resolve(repo,'.a-r30-joint-proof-'))&&segment==='joint-historic','restricted joint proof root');
+if(candidateRoot)assert.ok(candidateRoot.startsWith(resolve(repo,'.a-r30-joint-proof-'))&&['joint-historic','inscription-access'].includes(segment),'restricted joint proof root');
 const viewer = join(candidateRoot??repo, 'tools', 'voxel-tavern');
 const output = resolve(evidencePath);
 await mkdir(output, { recursive: true });
