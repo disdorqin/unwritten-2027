@@ -9,7 +9,10 @@ import type { buildCraterRailExtension } from './town-crater-rail-extension';
 export const craterWorkstationIds = ['bellows','calibration','sorting','weighing','turnout'] as const;
 export type CraterWorkstationId = typeof craterWorkstationIds[number];
 type Road = Pick<ReturnType<typeof mountWestCraterRoad>, 'heightAt'|'outerWorks'|'mouthWorks'> & {group?:Group};
-type Rails = Pick<ReturnType<typeof buildCraterRailExtension>, 'samples'|'narrowSamples'>;
+type Rails = Pick<ReturnType<typeof buildCraterRailExtension>, 'samples'|'narrowSamples'> & {
+  sidingSamples?: ReturnType<typeof buildCraterRailExtension>['samples'];
+  group?: Group;
+};
 type Point = {east:number; north:number; height:number};
 type Box = {min:number[];max:number[]};
 export type WorkstationSite = Readonly<{
@@ -34,7 +37,7 @@ function gap(e:number,n:number,box:Box) {
 }
 function railGap(e:number,n:number,rail:Rails) {
   let best=Infinity;
-  for(const route of [rail.samples,rail.narrowSamples]){
+  for(const route of [rail.samples,rail.narrowSamples,rail.sidingSamples??[]]){
     for(let i=1;i<route.length;i++){
       const a=route[i-1],b=route[i],dx=b.east-a.east,dn=b.north-a.north;
       const t=Math.max(0,Math.min(1,((e-a.east)*dx+(n-a.north)*dn)/(dx*dx+dn*dn||1)));
@@ -45,7 +48,12 @@ function railGap(e:number,n:number,rail:Rails) {
 }
 /** Fail visibly if a later A/C scene change occupies a surveyed work pad. */
 export function surveyCraterWorkstations(road:Road,rail:Rails): readonly WorkstationSite[] {
-  const walls:Box[]=Array.isArray(road.group?.userData.colliders) ? road.group!.userData.colliders : [...road.outerWorks.colliders,...road.mouthWorks.colliders];
+  const groundWalls:Box[]=Array.isArray(road.group?.userData.colliders) ? road.group!.userData.colliders : [...road.outerWorks.colliders,...road.mouthWorks.colliders];
+  // A now provides the additional freight siding plus real transfer-dock
+  // and rail-support geometry. Do not silently approve a pad against only
+  // the older main/narrow alignment.
+  const railWalls:Box[]=Array.isArray(rail.group?.userData.colliders)?rail.group!.userData.colliders:[];
+  const walls=[...groundWalls,...railWalls];
   return plans.map(p=>{
     const {east,north,yaw}=p;
     const height=road.heightAt(east,north);
@@ -139,7 +147,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     const pointer=new Mesh(unit,rust);pointer.position.y=.13;pointer.scale.set(.035,.26,.035);pivot.add(pointer);
     return pivot;
   };
-  let bellowsHandle:Group|undefined, gauge:Group|undefined, weighNeedle:Group|undefined, lever:Group|undefined;
+  let bellowsHandle:Group|undefined,bellowsGrip:Mesh|undefined, gauge:Group|undefined, weighNeedle:Group|undefined, lever:Group|undefined;
   let signal:MeshStandardMaterial|undefined;
   function sign(g:Group,label:string,y:number,z:number,w:number){
     const backing=new Mesh(unit,timber);backing.scale.set(w,.24,.045);backing.position.set(0,y,z);g.add(backing);
@@ -183,7 +191,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(rust,-.52,.96,-.32,.24,.23,.21);
       fixed(iron,-.65,1.02,-.39,.32,.10,.10);
       bellowsHandle=new Group();bellowsHandle.position.set(0,1.16,-.36);g.add(bellowsHandle);
-      moving(timber,bellowsHandle,0,0,.41,1.16,.10,.12);
+      bellowsGrip=moving(timber,bellowsHandle,0,0,.41,1.16,.10,.12);
       moving(iron,bellowsHandle,0,0,.10,.16,.10,.70);
       // Actual cold iron outlet: no light, flame or invented fuel reward.
       fixed(iron,.63,.91,-.29,.28,.22,.26);
@@ -358,12 +366,13 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     scalePlatform!.position.y=.37-weight*.035;
     weighNeedle!.rotation.z=(weight-.5)*2;
     lever!.rotation.z=view.turnout==='branch'?.44:-.44;
-    if(leverGrip){
-      // Match the real moved grip, not the old neutral-position sphere.
-      // Object matrices are refreshed even before the next rendered frame.
-      root.updateMatrixWorld(true);
-      const v=leverGrip.getWorldPosition(new Vector3());
-      const hit=targets.find(t=>t.station==='turnout');
+    // Both physically moving grips use actual matrix positions; a press
+    // after a pressure stroke must still target the real handle.
+    root.updateWorldMatrix(true,true);
+    for(const [id,grip] of [['turnout',leverGrip],['bellows',bellowsGrip]] as const){
+      if(!grip)continue;
+      const v=grip.getWorldPosition(new Vector3());
+      const hit=targets.find(t=>t.station===id);
       if(hit)hit.point={east:v.x,north:-v.z,height:v.y};
     }
     signal!.color.set(view.turnout==='branch'?0x78ac7d:0xaa4c3f);
