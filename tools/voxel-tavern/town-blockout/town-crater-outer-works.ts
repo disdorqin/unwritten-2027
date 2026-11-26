@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -487,6 +487,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(workshopRust,-19.5,g+1.41,2.84,1.12,1.76,.10);
     for(const h of [.76,1.42,2.08])put(workshopSheet,-19.5,g+h,2.915,1.16,.085,.07);
     put(iron,-19.08,g+1.40,3.01,.22,.08,.18);
+    colliders.push(orientedSupportBox(bfDoor.east,bfDoor.north,fr.yaw,1.38,.25,g+.45,g+2.35));
     // A real polygonal footprint: slice the tapered base in 0.9m strips
     // instead of a rotated enclosing AABB that blocks the empty corners.
     for(let i=-3;i<=3;i++){
@@ -516,6 +517,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         }
       }
     }
+    const furnaceRoute=coldFurnaceFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(furnaceRoute.every(p=>p.height!==undefined))industrialRoutes.push({id:'cold-furnace',points:furnaceRoute as IndustryPoint[]});
     // The hand cart is parked beside the terminal, not across the new
     // narrow-gauge loading throat or the service stairs at local x=4.7.
     const cartX=-3.5,cartZ=8.4;
@@ -737,28 +740,61 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(-3.6 + hash(i * 3) * 1.6, 8 + hash(i * 7) * .8);
       box(brass, p.east, g + 1.05, p.north, .34, .22, .34, hash(i) * 3);
     }
-    // Water tower: four legs, tank, cone cap.
-    const wt = fr.at(15.5, -1);
-    for (const [lx, lz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) {
-      const p = fr.at(15.5 + lx, -1 + lz);
-      box(timber, p.east, g + 3.4, p.north, .32, 6.8, .32, fr.yaw, lz > 0 ? .06 : -.06, lx > 0 ? -.06 : .06);
+    // Water tower: independent grounded piers, actual four-sided bracing
+    // and a clear service aisle. Tall braces stay above the player's head.
+    const wt=fr.at(15.5,-1),cx=15.5,cz=-1,leg=1.65;
+    hall.slab(workshopBrick,cx,cz,4.6,4.6,.20,.26);
+    for(const x of [-leg,leg])for(const z of [-leg,leg]){
+      const p=fr.at(cx+x,cz+z),soil=heightAt(p.east,p.north)??g;
+      const low=Math.min(soil-g-.08,.02);
+      hall.piece(workshopBrick,cx+x,cz+z,.69,.69,low,.48);
+      hall.piece(workshopWood,cx+x,cz+z,.36,.36,.48,6.69);
+      put(workshopRust,cx+x,g+.57,cz+z,.44,.18,.44);
+      put(workshopSheet,cx+x,g+6.42,cz+z,.46,.22,.46);
     }
-    // The reference water tower has a proper ring base, tank bands and
-    // crossing braces. Keep the original independent tower location.
-    for(const side of [-1,1]){
-      for(const dx of [-1.6,1.6]){
-        const p=fr.at(15.5+dx,-1+side*1.6);
-        colliders.push({min:[p.east-.24,g,-p.north-.24],max:[p.east+.24,g+6.8,-p.north+.24]});
+    const dy=3.95,dx=leg*2,angle=Math.atan2(dx,dy),diag=Math.hypot(dx,dy);
+    for(const s of [-1,1]){
+      const x=cx+s*leg,z=cz+s*leg;
+      put(workshopWood,cx,g+6.46,z,3.7,.33,.31);
+      put(workshopWood,x,g+6.46,cz,.31,.33,3.7);
+      for(const sign of [-1,1]){
+        put(workshopWood,cx,g+4.45,z,.20,diag,.21,0,sign*angle);
+        put(workshopWood,x,g+4.45,cz,.21,diag,.20,sign*angle);
       }
-      put(timber,15.5,g+3.45,-1+side*1.6, .23,7.05,.20,0,side*.42);
-      put(timber,15.5,g+3.45,-1+side*1.6, .23,7.05,.20,0,-side*.42);
+      for(const h of [2.45,6.42]){
+        for(const off of [-1,1]){
+          put(workshopRust,cx+off*leg,g+h,z,.44,.27,.09);
+          put(workshopRust,x,g+h,cz+off*leg,.09,.27,.44);
+        }
+      }
     }
-    cyl(iron,wt.east,g+6.82,wt.north,2.48,2.48,.26,12);
-    cyl(corrugated, wt.east, g + 8.4, wt.north, 2.3, 2.3, 3.2, 12);
-    for(const h of [7.05,8.45,9.82])cyl(iron,wt.east,g+h,wt.north,2.36,2.36,.14,12);
-    put(rustIron,13.15,g+3.50,-1,.22,6.7,.22);
-    put(rustIron,11.7,g+1.0,-1,2.9,.25,.25);
-    cone(slate, wt.east, g + 10.9, wt.north, 2.7, 1.8, 12);
+    cyl(workshopSheet,wt.east,g+6.83,wt.north,2.48,2.48,.29,12,fr.yaw);
+    cyl(workshopSheet,wt.east,g+8.41,wt.north,2.3,2.3,3.14,12,fr.yaw);
+    for(const h of [7.05,8.45,9.82]){
+      cyl(workshopRust,wt.east,g+h,wt.north,2.36,2.36,.14,12,fr.yaw);
+      for(let i=0;i<12;i++){
+        const theta=i*Math.PI/6;
+        put(workshopSheet,cx+Math.sin(theta)*2.35,g+h,cz+Math.cos(theta)*2.35,.10,.09,.10);
+      }
+    }
+    // A continuous drain pipe runs along the ground-side service wall.
+    // Its bends and valve are real geometry and the low pipe is solid.
+    hall.piece(workshopRust,13.15,-1,.25,.25,.83,6.86);
+    hall.piece(workshopRust,11.68,-1,2.95,.25,.82,1.08);
+    for(const h of [1.25,3.1,5.3,6.65])put(workshopSheet,13.15,g+h,-1,.40,.16,.40);
+    for(const x of [10.5,12.3])put(workshopSheet,x,g+.95,-1,.14,.40,.40);
+    hall.piece(workshopBrick,12.05,-1,.45,.45,0,.82);
+    put(workshopSheet,13.15,g+1.32,-1,.40,.46,.36);
+    put(workshopRust,13.15,g+1.35,-.72,.10,.10,.51);
+    const valve=fr.at(13.15,-.42);
+    cyl(workshopSheet,valve.east,g+1.35,valve.north,.24,.24,.085,10,fr.yaw,Math.PI/2);
+    // Tank roof has a projecting metal eave, low snow cap and vent.
+    cone(slate,wt.east,g+10.9,wt.north,2.7,1.8,12);
+    cyl(workshopSheet,wt.east,g+10.02,wt.north,2.7,2.7,.10,12,fr.yaw);
+    cyl(snow,wt.east,g+11.57,wt.north,.40,.82,.36,12,fr.yaw);
+    cyl(workshopRust,wt.east,g+11.88,wt.north,.13,.15,.44,8,fr.yaw);
+    const tankRoute=waterTowerFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(tankRoute.every(p=>p.height!==undefined))industrialRoutes.push({id:'water-tower',points:tankRoute as IndustryPoint[]});
     // Works signage (牌面 §六): brass name plate between the ground-floor
     // windows; the brittle paper notice nailed beside where the door reads.
     const plateP = fr.at(0, 5.16);
