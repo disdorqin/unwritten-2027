@@ -1,0 +1,76 @@
+import {Box3,Vector3,type Group} from 'three';
+import type {Box} from './landmark-kit';
+import type {mountWestCraterRoad} from './town-za22-crater-road';
+import type {buildCraterRailExtension} from './town-crater-rail-extension';
+import {installBR30Workface,surveyBR30Workface} from './town-b-r30-crater-workface';
+import {installCraterWorkshopWorld,surveyCraterWorkstations} from './town-b-r30-crater-workstations';
+import {installBR30RouteMarkers} from './town-b-r30-route-markers';
+
+type Road=ReturnType<typeof mountWestCraterRoad>;
+type Rail=ReturnType<typeof buildCraterRailExtension>;
+type Mounted={
+  readonly face:ReturnType<typeof installBR30Workface>;
+  readonly machines:ReturnType<typeof installCraterWorkshopWorld>;
+  readonly addedRelicBoxes:number;
+  readonly addedLampBoxes:number;
+  readonly markers:ReturnType<typeof installBR30RouteMarkers>;
+  dispose():void;
+};
+const mounted=new WeakMap<Group,Mounted>();
+/** These are three small envelopes per actual lantern (base, upright,
+ * hood). The lantern lives under a rotated fixture; convert its measured
+ * local boxes to the existing west-world collision frame exactly once. */
+export function surveyBR30FloorLampBoxes(root:Group):Box[]{
+  const lamps=root.getObjectByName('c2-physical-worklights-authority-free');
+  if(!lamps)throw Error('R30 requires the mounted six floor worklights');
+  const local=lamps.userData.bR30PhysicalSolids as Box[]|undefined;
+  if(!Array.isArray(local)||local.length!==18)throw Error('R30 floor lamp physical parts missing');
+  lamps.updateWorldMatrix(true,false);
+  root.updateWorldMatrix(true,false);
+  const transform=root.matrixWorld.clone().invert().multiply(lamps.matrixWorld);
+  return local.map(b=>{
+    if(![...b.min,...b.max].every(Number.isFinite))throw Error('Invalid lamp solid');
+    const box=new Box3(new Vector3().fromArray(b.min),new Vector3().fromArray(b.max)).applyMatrix4(transform);
+    return {min:box.min.toArray(),max:box.max.toArray()};
+  });
+}
+
+/** A's single post-rail attachment. Call once after the final west height
+ * authority and legacy story refit, before building westWalkGeometry.
+ * Existing floor/ramp arrays, guard/shaft state and authority remain owned
+ * by the host. No second collision channel and no production E binding.
+ */
+export function attachBR30PhysicalKit(road:Road,rail:Rail):Mounted{
+  const group=road.group;
+  const prior=mounted.get(group);if(prior)return prior;
+  const old=group.userData.colliders as Box[];
+  if(!Array.isArray(old))throw Error('R30 requires the existing west collision channel');
+  if(group.getObjectByName('b-r30-pit-workface')||group.getObjectByName('b-r30-crater-workstations'))
+    throw Error('R30 physical kit must be the sole attachment owner');
+  // Do not double-register S5 if the host already consumed the same boxes.
+  const relic=road.midgroundS5.colliders.filter(b=>!old.includes(b));
+  const lamp=surveyBR30FloorLampBoxes(group);
+  const extra=[...relic,...lamp];
+  let face:Mounted['face']|undefined,machines:Mounted['machines']|undefined,markers:Mounted['markers']|undefined;
+  try{
+    group.userData.colliders=[...old,...extra];
+    surveyBR30Workface(road);
+    surveyCraterWorkstations(road,rail);
+    face=installBR30Workface(road);
+    machines=installCraterWorkshopWorld(road,rail);
+    markers=installBR30RouteMarkers(road);
+    const f=face,m=machines,signs=markers;
+    const kit:Mounted={face:f,machines:m,markers:signs,addedRelicBoxes:relic.length,addedLampBoxes:lamp.length,dispose(){
+      if(mounted.get(group)!==kit)return;
+      mounted.delete(group);
+      signs.dispose();m.dispose();f.dispose();
+      group.userData.colliders=(group.userData.colliders as Box[]).filter(b=>!extra.includes(b));
+    }};
+    mounted.set(group,kit);
+    return kit;
+  }catch(error){
+    markers?.dispose();machines?.dispose();face?.dispose();
+    group.userData.colliders=old;
+    throw error;
+  }
+}

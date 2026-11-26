@@ -1,6 +1,6 @@
 import {
   BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial,
-  type Material,
+  type Material, type Object3D,
 } from 'three';
 import survey from '../../fixtures/main-summit-snow-belt-survey.json';
 import { createMainSummitBlock, mainSummitBounds, mainSummitLayout } from './main-summit-block';
@@ -27,6 +27,7 @@ import { mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
 import { mountSummitCloudBellArray } from './main-summit-cloud-bell-array';
 import { northRidgeCableAnchors, northRidgeFrame, sampleNorthRidge350 } from './north-ridge-350-terrain';
 import { createTownSnowField } from './town-snow-field';
+import { createTownD2R30Assembly } from './town-d2-r30-assembly';
 
 // C-01 surveyed terrace alignment for the assembly candidate. The release keeps its current town bounds.
 export const summitAssemblyAnchor = { east: 300, north: 676 } as const;
@@ -102,7 +103,7 @@ function createTrailRibbon(points: readonly MainSummitTrailPoint[], groundAt: (e
 /** The optional official wind is supplied by the shared ZB-20 host, not generated in the summit scene. */
 export function mountMainSummitAssembly(owner: Group, epochMs: number,
   officialWind?: () => Readonly<{ east: number; north: number }> | undefined,
-  options: Readonly<{ expeditionPreview?: boolean }> = {}) {
+  options: Readonly<{ expeditionPreview?: boolean; r30?: boolean }> = {}) {
   const group = new Group();
   group.name = 'main-summit-assembly';
   group.position.set(summitAssemblyAnchor.east, 0, -summitAssemblyAnchor.north);
@@ -123,8 +124,9 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
 
   const cable = createMainSummitCable(epochMs, 10_000, arrivalHeight);
   const cableView = mountMainSummitCable(group, cable, block.heightAt);
+  const legacyCableGroup = group.getObjectByName('main-summit-cable');
   let gateOwner = group;
-  const stations = mountMainSummitCableStations(group, cable, {
+  const legacyStations = mountMainSummitCableStations(group, cable, {
     heightAt: block.heightAt,
     enter(owner) { gateOwner = owner; return block.enter(owner); },
     leave: block.leave,
@@ -185,20 +187,55 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
   for (const site of cloudPavilionSites) pavilionGroup.add(createPlacedCloudPavilion(site, block.heightAt));
   group.add(pavilionGroup);
 
+  const r30 = options.r30 === false ? undefined : createTownD2R30Assembly({
+    arrivalHeight,
+    includeTrailSupport: true,
+    includeCableTowers: true,
+    includeFacilityFoundations: true,
+    includeSledGateSupport: true,
+    includeSummitFacilities: true,
+    includeNightLights: true,
+    includeRopeway: true,
+    ropewayEpochMs: epochMs,
+  });
+  let activeCable = cable;
+  let activeStations = legacyStations;
+  if (r30) {
+    group.add(r30.group);
+    block.coarse.visible = false;
+    clouds.group.visible = false;
+    ribbon.visible = false;
+    if (legacyCableGroup) legacyCableGroup.visible = false;
+    legacyStations.group.visible = false;
+    if (!r30.ropeway) throw new Error('The R30 production mount requires its canonical ropeway.');
+    activeCable = r30.ropeway.cable;
+    activeStations = r30.ropeway.stations;
+  }
+
+  function mountedWithin(object: Object3D | undefined, ancestor: Group) {
+    let current = object?.parent ?? null;
+    while (current) {
+      if (current === ancestor) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
   function mountedParts() {
     const parts: string[] = [];
-    if (block.coarse.parent === group) parts.push('P-1');
-    if (group.getObjectByName('main-summit-cable')?.parent === group) parts.push('P-2');
-    if (ribbon.parent === group && snow.parent === group) parts.push('P-3');
+    if (r30 ? r30.group.parent === group : block.coarse.parent === group) parts.push('P-1');
+    if (r30?.ropeway ? mountedWithin(r30.ropeway.group, group) : legacyCableGroup?.parent === group) parts.push('P-2');
+    if (r30 ? Boolean(group.getObjectByName('town-d2-r30-trail-support')) : ribbon.parent === group && snow.parent === group) parts.push('P-3');
     if (cabin.group.parent === group && cloudRegistration.group.parent === group) parts.push('P-4');
-    if (stations.group.parent === group) parts.push('P-7');
-    if (clouds.group.parent === group) parts.push('P-8');
+    if (mountedWithin(activeStations.group, group)) parts.push('P-7');
+    if (r30 ? Boolean(group.getObjectByName('town-d2-r30-cloud-terrace-host')) : clouds.group.parent === group) parts.push('P-8');
     if (pavilionGroup.parent === group && pavilionGroup.children.length === cloudPavilionSites.length) parts.push('P-9');
     return parts;
   }
 
   return {
-    group, block, stations, cable, clouds, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    group, block, stations: activeStations, cable: activeCable, clouds, arrivalHeight, frontRidgeAt, frontSnowAt, mountedParts,
+    r30, r30Mounted: r30 !== undefined,
     // The host can prefer its plaza surface where it overlaps the P-1 local tread.
     trailSurfaceAt(east: number, north: number, radius = .27) {
       return candidate?.expedition.surfaceAt(east, north, radius) ??
@@ -215,7 +252,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
       withinMainSummitRegistrationReach(position, landmarks.cloudDeck.stampPoint),
     summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
-      if (stations.blocked(east, north, feet, radius, bodyHeight)) return true;
+      if (activeStations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
       if (!front && (
         (candidate?.expedition.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
@@ -235,10 +272,17 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     leaveGate: block.leave,
     setFrontDetail: (visible: boolean) => { cloudRegistration.group.visible = visible; },
     setSummitDetail: (visible: boolean) => { snow.visible = visible; },
+    setNight(night: boolean) {
+      r30?.setNight(night);
+    },
     update(now: number) {
       const wind = officialWind?.();
       clouds.update(now, wind && Number.isFinite(wind.east) && Number.isFinite(wind.north)
         ? wind : { east: 0, north: 0 });
+      if (r30) {
+        r30.update(mainSummitLayout.summit.east, mainSummitLayout.summit.north);
+        return r30.ropeway!.update(now);
+      }
       return cableView.update(now);
     },
     interact(east: number, north: number, height: number) {
@@ -253,7 +297,8 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
       candidate?.workshop.dispose();
       wreckage.dispose();
       clouds.dispose();
-      stations.dispose();
+      r30?.dispose();
+      legacyStations.dispose();
       cableView.dispose();
       cabin.dispose();
       cloudRegistration.dispose();

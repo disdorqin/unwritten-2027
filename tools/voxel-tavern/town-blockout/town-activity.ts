@@ -29,9 +29,13 @@ export function nearestTownActivity(
   let nearest: TownActivitySpot | undefined;
   let bestDistance = Infinity;
   for (const spot of spots) {
-    if (Math.abs(ground - spot.ground) > .55 || spot.available?.() === false) continue;
-    const distance = Math.hypot(x - spot.x, n - spot.n);
-    if (distance <= spot.range && distance < bestDistance) {
+    if (Math.abs(ground - spot.ground) > .55) continue;
+    // Cheap spatial rejection before a potentially expensive visibility,
+    // standing-space or authority check. Keep first-in-order ties.
+    const dx=x-spot.x,dn=n-spot.n;
+    if(Math.abs(dx)>spot.range||Math.abs(dn)>spot.range)continue;
+    const distance = Math.hypot(dx,dn);
+    if (distance <= spot.range && distance < bestDistance && spot.available?.() !== false) {
       nearest = spot;
       bestDistance = distance;
     }
