@@ -13,6 +13,7 @@ import type { AcceptedUndergroundWaterSnapshot } from '../../../src/shared/town-
 import type { UndergroundWater90OreVisual } from './town-c2-underground-water-minus90.js';
 import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
 import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
+import {createR30DeepHost} from './town-c-r30-deep-host.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -143,6 +144,8 @@ export type UndergroundCampBridge = Readonly<{
  */
 export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
+  /** Accepted movement/Presence foot only, never inferred from camera height. */
+  readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
   /** Production water loop (batch 103, interface aligned to C2's fix
    * round): the mine presence room relays the single presence-side
    * tonight() snapshot; the host forwards the raw snapshot reader
@@ -372,8 +375,14 @@ export function mountUndergroundDomainHost(options: Readonly<{
     supportAt: (east,north) => road.heightAt(east,north),
     lampRoom: road.lampRoom?.footprint,
   }) : { kind: 'unregistered-shaft' as const };
+  const deepHost=createR30DeepHost({parent,seamRegistered:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered',
+    readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
+    readAcceptedFoot:options.readAcceptedDomainFoot});
+  // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
+  // entry point and lifecycle, even before A supplies accepted domain feet.
+  const composed={...mounted,sync(){mounted.sync();deepHost.sync()},dispose(){deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted, passageAt, shaftContract,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
