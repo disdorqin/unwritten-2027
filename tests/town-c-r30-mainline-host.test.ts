@@ -54,7 +54,7 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
    const hit=new Raycaster(new Vector3(center.x,b.min.y+.2,center.z),new Vector3(0,-1,0),0,.4).intersectObject(rail)[0];
    // Rear axle extends beyond the exact station datum, so check the two
    // forward wheels; the end cap is checked on the full run below.
-   if(hit)assert.ok(Math.abs(hit.point.y-b.min.y)<.001);
+   assert.ok(hit&&Math.abs(hit.point.y-b.min.y)<.001);
   }
   for(const fault of ['sleepers','gauge','turnout-rust'] as const){
    foot=route.work[fault].position;
@@ -66,7 +66,8 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
    }
   }
   assert.equal(a.snapshot().mode,'stopped');
-  foot=route.work.camp.position;h.mounted.sync();assert.ok(scene.press('board'));assert.ok(a.board('miner',rev()));assert.ok(a.go('miner',rev()));
+  h.mounted.sync();foot=m.motion.boardingFoot();assert.ok(foot&&h.passageAt(foot.east,foot.north));assert.equal(h.passageAt(route.work.camp.position.east,route.work.camp.position.north),undefined);
+  assert.ok(scene.press('board'));assert.ok(a.board('miner',rev()));h.mounted.sync();assert.ok(m.motion.riderPose('miner'));assert.equal(m.motion.riderPose('other'),undefined);assert.ok(a.go('miner',rev()));
   function rollUntilStop(){
    for(let i=0;i<1400&&a.snapshot().mode==='rolling';i++){
     const s=a.snapshot(),brake=s.speed>1.45;
@@ -78,15 +79,24 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
    assert.equal(a.snapshot().riderId,'miner');
   }
   rollUntilStop();assert.equal(a.snapshot().chainage,route.turnoutMetres);
-  assert.ok(a.leave('miner',rev()));h.mounted.sync();assert.ok(scene.press('turnout',false,'gate'));
+  h.mounted.sync();const atSwitch=m.motion.riderPose('miner');assert.ok(atSwitch?.canLeave);const exit=m.motion.leaveFoot('miner');assert.ok(exit);assert.ok(a.leave('miner',rev()));foot=exit;h.mounted.sync();assert.ok(h.passageAt(foot.east,foot.north));assert.ok(scene.press('turnout',false,'gate'));
   assert.equal(intents.at(-1)?.target,'gate');assert.ok(a.switchTurnout('miner',rev(),'gate'));
-  assert.ok(a.board('miner',rev()));assert.ok(a.go('miner',rev()));rollUntilStop();
+  h.mounted.sync();foot=m.motion.boardingFoot();assert.ok(foot);assert.ok(a.board('miner',rev()));assert.ok(a.go('miner',rev()));rollUntilStop();
   assert.equal(a.snapshot().chainage,route.length);h.mounted.sync();
-  assert.ok(a.leave('miner',rev()));foot=route.work.camp.position;h.mounted.sync();
+  assert.ok(m.motion.leaveFoot('miner'));assert.ok(a.leave('miner',rev()));foot=route.work.camp.position;h.mounted.sync();assert.equal(m.motion.riderPose('miner'),undefined);
   assert.ok(scene.press('winch',true));assert.ok(a.recall('miner',rev()));
   for(let i=0;i<100&&a.snapshot().mode==='recalling';i++){now+=1000;assert.ok(a.recallHold('miner',rev()))}
   assert.equal(a.snapshot().chainage,0);assert.equal(a.snapshot().riderId,undefined);h.mounted.sync();
-  assert.equal(scene.cart.visible,true);accepted=false;h.mounted.sync();assert.equal(scene.cart.visible,false);
+  assert.equal(scene.cart.visible,true);
+  foot=m.motion.boardingFoot();assert.ok(foot);assert.ok(a.board('miner',rev()));assert.ok(a.go('miner',rev()));h.mounted.sync();
+  assert.equal(m.motion.leaveFoot('miner'),undefined);assert.equal(m.motion.riderPose('miner')?.canLeave,false);
+  for(let i=0;i<500&&a.snapshot().mode==='rolling';i++){
+   now+=200;assert.ok(a.tick(rev()));foot=route.sample(a.snapshot().chainage).position;
+  }
+  h.mounted.sync();assert.equal(a.snapshot().mode,'derailed');assert.equal(a.snapshot().riderId,'miner');
+  const crash=m.motion.riderPose('miner');assert.equal(crash?.mode,'derailed');assert.ok(crash?.canLeave);
+  assert.ok(m.motion.leaveFoot('miner'));assert.ok(scene.cart.visible);
+  accepted=false;h.mounted.sync();assert.equal(scene.cart.visible,false);assert.equal(m.motion.riderPose('miner'),undefined);
   assert.equal(scene.press('board'),false);
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);

@@ -383,7 +383,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(posture!=='standing'&&posture!=='crouching')return undefined;
     const h=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
     const q=queryMineClearance(east,north,undergroundMineSpec.walker.radius,h);
-    if(q&&mainline?.kind==='ready'&&mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h))return;
+    if(q&&mainline?.kind==='ready'&&(mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h)||mainline.motion.blocked(east,north,q.floor,undergroundMineSpec.walker.radius,h)))return;
     return q;
   }
   if (originW && basisXW && basisZW) {

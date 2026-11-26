@@ -3,6 +3,7 @@ import {createUndergroundMainlineTrack,type UndergroundMainlinePoint} from '../.
 import {r30MainlineLocal,r30MainlineFaults,r30MainlineTurnout} from '../../../src/shared/town-c-r30-mainline-plan.js';
 import {isMinePresenceFoot} from '../../../src/shared/underground-mine-presence-domain.js';
 import {mountUndergroundMainlineScene} from './underground-mainline-scene.js';
+import {createR30MainlineMotion} from './town-c-r30-mainline-motion.js';
 type Route=ReturnType<typeof createUndergroundMainlineTrack>;
 type SceneOptions=Parameters<typeof mountUndergroundMainlineScene>[0];
 export type R30MainlineBridge=Pick<SceneOptions,'readSnapshot'|'readViewer'|'readLightBudget'|'canSee'|'dispatch'|'onNoise'>&Readonly<{
@@ -45,5 +46,6 @@ export function mountR30MainlineHost(options:Readonly<{parent:Group;worldOf:(p:r
   onNoise:(kind,p)=>{if(accepted())bridge?.onNoise?.(kind,p)},
  });
  if(scene.kind!=='ready')return {kind:'blocked' as const,reason:scene.kind};
- return {kind:'ready' as const,route,scene,accepted,sync:()=>scene.sync(),dispose:()=>scene.dispose()};
+ const motion=createR30MainlineMotion(scene,options.supports);
+ return {kind:'ready' as const,route,scene,motion,accepted,sync(){const ok=scene.sync();motion.sync();return ok},dispose(){motion.dispose();scene.dispose()}};
 }

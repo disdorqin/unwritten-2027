@@ -510,6 +510,7 @@ export function mountUndergroundMainlineScene(host: Options) {
     kind: 'ready', group: root, cart: cart.group, sync, prompt, press,
     route, words: undergroundMainlineWords, sleepers: sleepers.length,
     railHead, r30Dressing,
+    acceptedSnapshot:()=>!disposed&&cart.group.visible&&last?structuredClone(last):undefined,
     blocks(east:number,north:number,y:number,radius:number,height:number){return r30Dressing?.blocks(east,north,y,radius,height)??false},
     batches: instances.length,
     dispose() {
