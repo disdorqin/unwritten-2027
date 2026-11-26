@@ -1,0 +1,104 @@
+{
+  "source": "c6ae73ed26041c2e659bc31ac6a1e35e70a51928",
+  "scope": "same production builders, camera frustum only; not GPU FPS",
+  "groups": {
+    "outer": {
+      "triangles": 81816,
+      "vertices": 245448,
+      "bytes": 7854336,
+      "draws": 28,
+      "perView": {
+        "gate": {
+          "draws": 28,
+          "triangles": 81816
+        },
+        "yard": {
+          "draws": 26,
+          "triangles": 81612
+        },
+        "north": {
+          "draws": 26,
+          "triangles": 81612
+        },
+        "shankou": {
+          "draws": 28,
+          "triangles": 81816
+        },
+        "town": {
+          "draws": 0,
+          "triangles": 0
+        },
+        "station": {
+          "draws": 4,
+          "triangles": 23020
+        }
+      }
+    },
+    "mouth": {
+      "triangles": 13936,
+      "vertices": 33972,
+      "bytes": 1088112,
+      "draws": 20,
+      "perView": {
+        "gate": {
+          "draws": 20,
+          "triangles": 13936
+        },
+        "yard": {
+          "draws": 11,
+          "triangles": 13108
+        },
+        "north": {
+          "draws": 13,
+          "triangles": 13460
+        },
+        "shankou": {
+          "draws": 20,
+          "triangles": 13936
+        },
+        "town": {
+          "draws": 0,
+          "triangles": 0
+        },
+        "station": {
+          "draws": 0,
+          "triangles": 0
+        }
+      }
+    },
+    "rail": {
+      "triangles": 57578,
+      "vertices": 172734,
+      "bytes": 5527488,
+      "draws": 13,
+      "perView": {
+        "gate": {
+          "draws": 12,
+          "triangles": 57566
+        },
+        "yard": {
+          "draws": 11,
+          "triangles": 57506
+        },
+        "north": {
+          "draws": 12,
+          "triangles": 57566
+        },
+        "shankou": {
+          "draws": 12,
+          "triangles": 57566
+        },
+        "town": {
+          "draws": 12,
+          "triangles": 57200
+        },
+        "station": {
+          "draws": 12,
+          "triangles": 57200
+        }
+      }
+    }
+  },
+  "colliders": 1821,
+  "floors": 1882
+}
