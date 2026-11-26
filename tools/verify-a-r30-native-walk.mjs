@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -293,6 +293,7 @@ const approach={
  'western-shoulders':[[-12,159],[-23,159],[-23,95],[-60,55]],
  outcrop:[[-12,159],[-23,159],[-23,95],[-60,55]],
  shankou:[[296,516],[296,512]],
+ 'rail-valley':[],
  northwalk:[[-12,159],[-12,240],[-12,320]],
  wall:[[-9,159]],
  gatehouse:[[-3,159],[-6,154],[-7,150.2]],
@@ -319,12 +320,12 @@ try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence}=await openTown(segment);
  await page.locator('#town-panel-toggle').click();
- await page.locator('#jump').selectOption({label:segment==='shankou'?'山口站':'陨石坑口'});
+ await page.locator('#jump').selectOption({label:['shankou','rail-valley'].includes(segment)?'山口站':'陨石坑口'});
  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
  await page.waitForFunction(({pattern,east,north})=>{
    const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
    return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.2;
- },{pattern:positionPattern.source,east:segment==='shankou'?296:2,north:segment==='shankou'?520:159},{timeout:45000});
+ },{pattern:positionPattern.source,east:['shankou','rail-valley'].includes(segment)?296:2,north:['shankou','rail-valley'].includes(segment)?520:159},{timeout:45000});
  for(const [i,target] of approach[segment].entries()){
    await walkTo(page,evidence,target,segment+'-approach-'+i);
    if(segment==='water-tower'&&i===1){
@@ -353,7 +354,7 @@ try{
    ...industrial('salvage-pipes'),...industrial('salvage-pipes').slice(0,-1).reverse(),
    ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1)
  ]:null;
- const path=salvagePath??ruinsPath??(scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const path=salvagePath??ruinsPath??(segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -406,6 +407,10 @@ try{
          for(const [j,p]of [...rest.points].reverse().entries())await step(p,id+'-return-'+j);
        }
      }
+   }
+   if(segment==='rail-valley'&&(i===2||i===path.length-1)){
+     const mid=rail.samples[225];
+     await wallView('rail-valley-'+(i===2?'approach':'bridge'),Math.atan2(mid.east-point.east,mid.north-point.north));
    }
    if(segment==='salvage-pipes'){
      const pipe=industrial('salvage-pipes');
