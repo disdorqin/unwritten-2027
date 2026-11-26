@@ -35,6 +35,7 @@ try{
  cpSync(join(root,prefix),join(temporary,prefix),{recursive:true});
  cpSync(join(root,'src'),join(temporary,'src'),{recursive:true});
  cpSync(join(root,'tools','fixtures'),join(temporary,'tools','fixtures'),{recursive:true});
+ cpSync(join(root,'tools','voxel-tavern','public'),join(temporary,'tools','voxel-tavern','public'),{recursive:true});
  for(const p of ['town-blockout.html','vite.config.ts','package.json','tower-chime.ts','build-grand-clocktower.mjs'])
   cpSync(join(root,'tools','voxel-tavern',p),join(temporary,'tools','voxel-tavern',p));
  mkdirSync(join(temporary,'docs'),{recursive:true});
@@ -55,6 +56,7 @@ try{
  const {attachBR30CraterCompletion}=await load('town-b-r30-crater-completion');
  const {surveyAR30InscriptionAccess,ar30HostTracks,ar30HostRoutes}=await load('town-a-r30-unified-surface-host');
  const {surveyBR30WorkshopApproaches}=await load('town-b-r30-workshop-approaches');
+ const {createAR30RimAccessSurvey}=await load('town-a-r30-rim-access');
  const grid=createTerrainGrid();
  report.stage='surface';
  const road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n),{unifiedStory:{retire:retireBR30LegacyTerracePlates,refit:refitBR30LegacyStory}});
@@ -86,6 +88,8 @@ try{
  const solids=[...road.group.userData.colliders,...rail.group.userData.colliders];
  const approaches=surveyBR30WorkshopApproaches(road,completion.kit.machines.sites,routes,tracks,solids);
  const inscription=surveyAR30InscriptionAccess(road,rail);
+ const rimAccess=createAR30RimAccessSurvey(road,rail,.40).search({east:-40,north:159},{east:-67,north:159});
+ report.rimAccess=rimAccess;
  report.assembly={colliders:road.group.userData.colliders.length,historic:completion.historic.audit,approaches,inscription,productionReady:completion.productionReady,mode:completion.mode};
  assert.equal(completion.productionReady,false);
  const ids=new Set(road.group.userData.colliders);
@@ -122,7 +126,7 @@ try{
    selected.push(dense[j]);i=j;
   }
   const points=[...selected,...completion.historic.route.slice(1)];
-  report.browserRoute={points,trailKnots:selected.length,historic:completion.historic.route,mode:'exact B review geometry + A actual host support audits'};
+  report.browserRoute={points,approach:rimAccess.points,trailKnots:selected.length,historic:completion.historic.route,mode:'exact B review geometry + A actual host support audits'};
   const dir=join(dirname(out),'原生联合栈道');
   mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,'joint-route.json'),JSON.stringify(report.browserRoute,null,2));

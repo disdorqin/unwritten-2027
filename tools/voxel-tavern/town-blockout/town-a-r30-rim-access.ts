@@ -12,7 +12,8 @@ function segmentDistance(e:number,n:number,a:EN,b:EN){
 }
 /** Survey only actual western floor, rail decks and collision bodies.
  * No new support mesh, terrain edits or movement/entry authorization. */
-export function createAR30RimAccessSurvey(road:Road,rail:Rail){
+export function createAR30RimAccessSurvey(road:Road,rail:Rail,radius=.30){
+ if(radius<.27||radius>.40)throw Error('Unsupported rim survey radius');
  const floors=[...road.group.userData.floors,...rail.group.userData.floors] as OrientedSupportBox[];
  const walls=[...road.group.userData.colliders,...rail.group.userData.colliders] as OrientedSupportBox[];
  const tracks=[rail.samples,rail.narrowSamples,rail.sidingSamples];
@@ -32,7 +33,8 @@ export function createAR30RimAccessSurvey(road:Road,rail:Rail){
   const a=points[i-1]!,b=points[i]!;
   index(Math.min(a.east,b.east)-1.7,Math.max(a.east,b.east)+1.7,Math.min(a.north,b.north)-1.7,Math.max(a.north,b.north)+1.7,q=>q.tracks.push({track,a,b}));
  }
- const radius=.30;
+ // The default includes a 3cm player clearance margin; larger values
+ // can be used for conservative corridor search, not larger avatars.
  function step(e:number,n:number,prev:number):Foot|undefined{
   if(e<minE||e>maxE||n<minN||n>maxN||!road.terrainReadyAt(e,n))return;
   const ground=road.heightAt(e,n);if(ground===undefined)return;
