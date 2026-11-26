@@ -1,4 +1,4 @@
-import {Box3,BoxGeometry,CylinderGeometry,Group,Mesh,MeshStandardMaterial,BufferGeometry,DataTexture,NearestFilter,SRGBColorSpace,Vector3,Quaternion} from 'three';
+import {Box3,BoxGeometry,CylinderGeometry,Group,Mesh,MeshStandardMaterial,BufferGeometry,CanvasTexture,PlaneGeometry,DataTexture,NearestFilter,SRGBColorSpace,Vector3,Quaternion} from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import type {Box} from './landmark-kit';
 import type {mountWestCraterRoad} from './town-za22-crater-road';
@@ -70,6 +70,7 @@ export function buildBR30ReturnHeadframe(road:Road){
  group.position.set(survey.axis.east,survey.axis.height,-survey.axis.north);group.rotation.y=yaw;
  const mats=Object.fromEntries(Object.keys(colors).map(f=>[f,material(f as Family)])) as Record<Family,MeshStandardMaterial>;
  const batches=new Map<Family,BufferGeometry[]>(),localBoxes:Box[]=[];
+ let signMaterial:MeshStandardMaterial|undefined;
  let parts=0;
  function part(f:Family,src:BufferGeometry,x:number,y:number,z:number,rx=0,ry=0,rz=0){
   const g=src.index?src.toNonIndexed():src;if(g!==src)src.dispose();
@@ -97,6 +98,11 @@ export function buildBR30ReturnHeadframe(road:Road){
   for(const s of [-1,1])box('iron',x+s*.095,.235,0,.05,.12,.05);
   box('iron',x,.29,0,.24,.055,.055);
  }
+ // The two doors share a removable iron lock bar and a closed hasp.
+ // Its geometry belongs to the sealed cover, not a new key/item rule.
+ box('rust',0,.205,.52,1.85,.055,.13);
+ for(const x of [-.87,.87]){box('iron',x,.24,.52,.13,.13,.19);box('brass',x,.305,.52,.065,.045,.065);}
+ box('iron',0,.25,.52,.19,.12,.14);box('brass',0,.29,.60,.095,.08,.055);
  // Two pairs of timber/iron legs with independently fitted stone feet.
  for(const x of [-1.22,.91])for(const z of [-1.32,1.32]){
   const p=point(x,z),y=road.heightAt(p.east,p.north)!-survey.axis.height;
@@ -117,6 +123,26 @@ export function buildBR30ReturnHeadframe(road:Road){
  }
  box('timber',-.155,3.20,0,.28,.30,2.94);
  box('iron',-.155,3.37,0,.34,.075,2.94);
+ // Industrial identification plate is mounted over the front approach,
+ // outside the aperture, above standing head clearance. Not a live prompt.
+ box('timber',1.17,2.66,0,.105,.49,1.45);
+ for(const z of [-.64,.64]){box('iron',1.245,2.66,z,.04,.49,.05);
+  for(const y of [2.46,2.86])box('brass',1.27,y,z,.035,.04,.04);}
+ for(const y of [2.435,2.885])box('iron',1.24,y,0,.04,.045,1.43);
+ if(typeof document!=='undefined'){
+  const canvas=document.createElement('canvas');canvas.width=384;canvas.height=144;
+  const ctx=canvas.getContext('2d');
+  if(ctx){ctx.fillStyle='#594532';ctx.fillRect(0,0,384,144);
+   ctx.strokeStyle='#b69c6f';ctx.lineWidth=6;ctx.strokeRect(9,9,366,126);
+   ctx.fillStyle='#ecddbd';ctx.textAlign='center';ctx.textBaseline='middle';
+   ctx.font='bold 53px sans-serif';ctx.fillText('返程井',192,49);
+   ctx.fillStyle='#e6af71';ctx.font='bold 34px sans-serif';ctx.fillText('封闭 · 未启用',192,108);
+   const map=new CanvasTexture(canvas);map.colorSpace=SRGBColorSpace;map.minFilter=map.magFilter=NearestFilter;map.generateMipmaps=false;
+   signMaterial=new MeshStandardMaterial({map,roughness:.96});
+   const label=new Mesh(new PlaneGeometry(1.24,.40),signMaterial);label.rotation.y=Math.PI/2;
+   label.position.set(1.273,2.66,0);group.add(label);
+  }
+ }
  // Existing transport owner will eventually supply motion; static parked
  // drum, gearbox and retained cable end are only the sealed prefab art.
  part('iron',new CylinderGeometry(.16,.16,1.28,12),-.30,3.57,0,Math.PI/2);
@@ -140,7 +166,7 @@ export function buildBR30ReturnHeadframe(road:Road){
  });
  // Keep this model inside the previously surveyed cylindrical reservation.
  let extent=0;
- group.traverse(o=>{if(o instanceof Mesh){const p=o.geometry.getAttribute('position');for(let i=0;i<p.count;i++)extent=Math.max(extent,Math.hypot(p.getX(i),p.getZ(i)));}});
+ group.traverse(o=>{if(o instanceof Mesh){o.updateMatrix();const p=o.geometry.getAttribute('position'),v=new Vector3();for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i).applyMatrix4(o.matrix);extent=Math.max(extent,Math.hypot(v.x,v.z));}}});
  if(extent>radius)throw Error('Return prefab exceeded surveyed footprint');
  let candidateGap=Infinity;
  const length=Math.hypot(survey.bend.east-survey.approach.east,survey.bend.north-survey.approach.north);
@@ -151,6 +177,6 @@ export function buildBR30ReturnHeadframe(road:Road){
  if(candidateGap<.35)throw Error('Return prefab narrows its own approach '+candidateGap);
  return {group,survey,worldBoxes,parts,extent,candidateGap,dispose(){
   group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose()});
-  for(const m of Object.values(mats)){m.map?.dispose();m.dispose();}
+  for(const m of Object.values(mats)){m.map?.dispose();m.dispose();}signMaterial?.map?.dispose();signMaterial?.dispose();
  }};
 }
