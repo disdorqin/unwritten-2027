@@ -16,6 +16,17 @@ test('actual ring/branch and protected original town/river/station have zero rid
  for(let e=425;e<=455;e++)for(let n=508;n<=532;n++)assert.equal(ownership.weight(e,n),1);
  assert.equal(ownership.weight(NaN,600),0);
 });
+test('opt-in cloud apron never changes protected core or non-local ground',()=>{
+ const proposed=createAR30RidgeOwnership({loop:loop.points,branch:rail.samples,cloudApron:true});
+ let changed=0;
+ for(let e=265;e<=375;e++)for(let n=630;n<=690;n++){
+  const a=ownership.weight(e,n),b=proposed.weight(e,n);
+  assert.ok(b>=a&&b<=1);
+  if(a===0||e<270.5||e>368.5||n<637||n>683)assert.equal(b,a);
+  if(b>a+1e-8)changed++;
+ }
+ assert.equal(changed,1323);
+});
 test('ownership is continuous outside protected routes and never exceeds one',()=>{
  let max=0;
  for(let e=0;e<=640;e+=2)for(let n=270;n<=800;n+=2){

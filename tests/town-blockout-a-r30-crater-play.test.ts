@@ -4,11 +4,11 @@ import {createAR30CraterPlay,createAR30PlayInput,type CraterAcceptedFrame,type C
 function harness(){
  let now=1000,kind='calibration',local:CraterPose|undefined={east:-60,north:150,height:10,heading:0,pitch:0,eyeHeight:1.65};
  let accepted:CraterAcceptedFrame|undefined={session:'s1',domain:'west',revision:'r1',receivedAt:now,pose:local,workshop:{dayIndex:1,bellows:{pressure:.3,heldMs:0,inBand:false,cast:false,stroke:0},calibration:{angles:[0,0,0],locked:[false,false,false]},sorting:{bins:{stardust:0,scrap:0,rubble:0}},scale:{kg:0},track:{thrown:false}},rubbing:{progress:0,complete:false},mound:{flagStraight:false,overlookKnown:false}};
- const sent:unknown[]=[],holds:boolean[]=[];let active=true;
- const authority:CraterPlayAuthority={read:()=>accepted,async request(f,intent){sent.push({session:f.session,intent});return {accepted:true};},setHeld(_f,_m,held){holds.push(held);}};
+ const sent:unknown[]=[],holds:boolean[]=[];let active=true,fail=false,aimCalls=0;
+ const authority:CraterPlayAuthority={read:()=>accepted,async request(f,intent){sent.push({session:f.session,intent});if(fail)throw Error('transport closed');return {accepted:true};},setHeld(_f,_m,held){holds.push(held);}};
  const intent=(direction:-1|1=1):WorkshopIntent=>kind==='calibration'?{kind:'turn-dial',index:0,direction}:{kind:'pump-bellows'};
  const leaves:CraterPlayLeaves={
- aimWorkshop:()=>kind==='calibration'?{station:'calibration',index:0}:kind==='bellows'?{station:'bellows'}:null,
+ aimWorkshop:()=>{aimCalls++;return kind==='calibration'?{station:'calibration',index:0}:kind==='bellows'?{station:'bellows'}:null;},
  aimPaper:()=>kind==='paper',aimFlag:()=>kind==='flag',atSummit:()=>kind==='summit',
  workshop(host){return {action:()=>host.pose()&&host.facts()?intent():undefined,refresh(){},interact(d){return host.request(intent(d));}};},
  mound(host){const action=(k:'reach-overlook'|'straighten-flag')=>host.pose()&&host.facts()?(k==='reach-overlook'?{kind:k,site:'crater-mound-overlook'} as const:{kind:k,site:'mound-old-work-flag'} as const):undefined;return {action,refresh(){},async interact(k){const i=action(k);return i?host.request(i):{accepted:false};}};},
@@ -16,7 +16,7 @@ function harness(){
  };
  const play=createAR30CraterPlay(leaves,{localPose:()=>local,authority:()=>active?authority:undefined,now:()=>now,notify(){}});
  const input=createAR30PlayInput(()=>play);
- return {play,input,sent,holds,setKind:(v:string)=>kind=v,disconnect:()=>active=false,connect:()=>active=true,expire:()=>now+=1001,move:()=>local=undefined,newSession(){accepted={...accepted!,session:'s2'};},sync(){accepted={...accepted!,receivedAt:now};}};
+ return {play,input,sent,holds,aimCalls:()=>aimCalls,fail:(v:boolean)=>fail=v,setKind:(v:string)=>kind=v,disconnect:()=>active=false,connect:()=>active=true,expire:()=>now+=1001,move:()=>local=undefined,newSession(){accepted={...accepted!,session:'s2'};},sync(){accepted={...accepted!,receivedAt:now};}};
 }
 test('E and Q target capture, no retarget or unintended repeat',async()=>{
  const h=harness();h.input.update();
@@ -44,6 +44,16 @@ test('session change invalidates discrete press and disables stale facts',()=>{
  const h=harness();h.input.update();h.input.down('E');h.newSession();h.input.up('E');assert.equal(h.sent.length,0);
  h.input.down('E');h.input.up('E');assert.equal(h.sent.length,1);
  h.move();assert.equal(h.play.target(),undefined);assert.equal(h.input.down('E'),false);
+});
+test('transport rejection is fail-closed and idle update does not repeat workshop aim',async()=>{
+ const h=harness();
+ for(let i=0;i<300;i++)h.input.update();
+ assert.equal(h.aimCalls(),0);
+ h.fail(true);const result=await h.play.tap('calibration:0');
+ assert.equal(result.accepted,false);assert.equal(result.reason,'receipt-unavailable');
+ h.fail(false);assert.equal((await h.play.tap('calibration:0')).accepted,true);
+ h.input.down('E');h.setKind('bellows');h.input.update();h.input.up('E');
+ assert.equal(h.sent.length,2);
 });
 test('summit registers through one request per entry, never invented flag state',async()=>{
  const h=harness();h.setKind('summit');h.input.update();h.input.update();assert.equal(h.sent.length,1);

@@ -55,7 +55,11 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
   // All seven interactions share one in-flight request slot; the host
   // must independently recheck the accepted pose, target and receipt.
   requestPending=true;
-  try{return await f.authority.request(f.frame,intent);}finally{requestPending=false;}
+  try{
+   const result=await f.authority.request(f.frame,intent);
+   if(disposed||ctx.authority()!==f.authority||frame()?.frame.session!==f.frame.session)return denied('receipt-unavailable');
+   return result&&typeof result.accepted==='boolean'?result:denied('receipt-unavailable');
+  }catch{return denied('receipt-unavailable');}finally{requestPending=false;}
  };
  function release(){
   const old=lastHeld;lastHeld=undefined;
@@ -81,8 +85,9 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
  async function tap(key:string,direction:-1|1=1){
   const t=target();
   if(!t||t.key!==key||!t.available||t.mode!=='tap'||(direction===-1&&!t.reverse))return denied();
-  const result=key==='flag'?await mound.interact('straighten-flag'):await workshop.interact(direction);
-  if(!result.accepted)ctx.notify(result.reason==='receipt-unavailable'?'未收到受理回执':'本次操作未受理');
+  let result:CraterReceipt;
+  try{result=key==='flag'?await mound.interact('straighten-flag'):await workshop.interact(direction);}catch{result=denied('receipt-unavailable');}
+  if(!disposed&&!result.accepted)ctx.notify(result.reason==='receipt-unavailable'?'未收到受理回执':'本次操作未受理');
   return result;
  }
  function beginHold(key:string){
@@ -107,7 +112,7 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
   if(rendered!==key){workshop.refresh();mound.refresh();rendered=key;}
   const summit=!!(q&&p&&leaves.atSummit(p)&&leaves.atSummit(q));
   if(!summit)autoSummit=false;
-  else if(!requestPending&&!autoSummit&&mound.action('reach-overlook')){autoSummit=true;void mound.interact('reach-overlook');}
+  else if(!requestPending&&!autoSummit&&mound.action('reach-overlook')){autoSummit=true;void mound.interact('reach-overlook').catch(()=>{if(!disposed)ctx.notify('未收到受理回执');});}
  }
  function dispose(){cancelHold();disposed=true;}
  return {target,tap,beginHold,cancelHold,update,dispose};
@@ -135,8 +140,10 @@ export function createAR30PlayInput(play:()=>CraterPlay|undefined){
  function cancel(){if(captured){captured.live=false;play()?.cancelHold();}}
  function clear(){cancel();captured=undefined;}
  function update(){
-  const p=play(),t=p?.target();
-  if(captured?.live&&(!t||t.key!==captured.key||t.session!==captured.session||!t.available)){captured.live=false;p?.cancelHold();}
+  const p=play();
+  // Idle input has no captured target to invalidate. The display and
+  // actual press each read a fresh target separately.
+  if(captured?.live){const t=p?.target();if(!t||t.key!==captured.key||t.session!==captured.session||!t.available){captured.live=false;p?.cancelHold();}}
   p?.update();
  }
  return {down,up,cancel,clear,update,cancelSource(source:string){if(captured?.source===source)clear();},target:()=>play()?.target(),click(){

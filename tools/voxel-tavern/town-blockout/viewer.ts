@@ -3811,8 +3811,9 @@ function walkingAxes() {
 }
 
 function refreshPlayerControls() {
-  const craterTarget=craterPlayInput.target();
-  craterReverseButton.hidden=!(touchWalk.active()&&craterTarget?.reverse&&craterTarget.available);
+  const mobile=touchWalk.active();
+  const craterTarget=mobile?craterPlayInput.target():undefined;
+  craterReverseButton.hidden=!(craterTarget?.reverse&&craterTarget.available);
   mobileControls.update({
     mobile: touchWalk.active(),
     canMove: moveAllowed(),
