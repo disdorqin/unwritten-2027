@@ -168,8 +168,14 @@ function tick(now:number){
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 addEventListener('resize',resize);addEventListener('keydown',e=>{
  keys.add(e.code);
- if(!e.repeat&&e.code==='KeyE'&&moundControls?.action('straighten-flag')){e.preventDefault();void moundControls.interact('straighten-flag');}
- else if(workshop&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyQ')){e.preventDefault();void workshop.press(e.code==='KeyQ'?-1:1);}
+ const pose={east,north,height:feet,heading:yaw,pitch,eyeHeight:1.65};
+ // Each E press belongs to one physical target; the paper uses held E
+ // during tick(), not the workshop's discrete transaction.
+ if(e.code==='KeyE'&&rubbingControls&&rubbingPaper.aimed(pose)){e.preventDefault();return;}
+ if(e.code==='KeyE'&&moundControls&&workFlag.aimed(pose)){
+  e.preventDefault();if(!e.repeat&&moundControls.action('straighten-flag'))void moundControls.interact('straighten-flag');return;
+ }
+ if(workshop&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyQ')){e.preventDefault();void workshop.press(e.code==='KeyQ'?-1:1);}
 });addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();rubbingControls?.release();});
 renderer.domElement.addEventListener('pointerdown',e=>{drag=true;renderer.domElement.setPointerCapture(e.pointerId);});
 renderer.domElement.addEventListener('pointerup',()=>drag=false);
