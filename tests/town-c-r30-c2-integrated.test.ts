@@ -4,7 +4,7 @@ import {Group,Raycaster,Vector3} from 'three';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road.js';
 import {mountUndergroundDomainHost} from '../tools/voxel-tavern/town-blockout/underground-domain-host.js';
 import {createUndergroundWaterState} from '../src/presence/underground-water-state.js';
-import {r30DeepDomains,r30LinkDomain} from '../tools/voxel-tavern/town-blockout/town-c-r30-deep-assembly.js';
+import {r30DeepDomains,r30LinkDomain,r30DeepMouths} from '../tools/voxel-tavern/town-blockout/town-c-r30-deep-assembly.js';
 import {r30DeepFrames,r30DepthLinks,r30DeepWorldFeet,r30LayerWorld,r30LinkPoint} from '../tools/voxel-tavern/town-blockout/town-c-r30-deep-layer-contract.js';
 import {r30InterlayerLiftSite as lift,type R30InterlayerRide} from '../tools/voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
 type Foot={domainId:string;east:number;north:number;height:number};
@@ -19,7 +19,20 @@ test('real pinned C2 shells, actual mouths and original C movement host connect 
  try{
   const a=host.deepAssembly;
   host.mounted.sync();assert.equal(a.openLinks().length,0);
-  roomAccepted=true;host.mounted.sync();
+  const stop=parent.getObjectByName('r30-depth-stop/minus140-to-minus165/from')!;
+  assert.ok(stop.visible);
+  const probe=r30LayerWorld(r30DeepFrames.minus140,{east:0,north:197.6,height:0});
+  assert.ok(host.deepHost.mounted!.passageAt(probe.east,probe.north),'C2 physical aperture exists');
+  assert.equal(host.domainPassageAt(foot.domainId,probe.east,probe.north),undefined,'closed physical stop blocks it');
+  const ray=new Raycaster(new Vector3(foot.east,foot.height+1.5,-foot.north),
+   new Vector3(probe.east-foot.east,0,-probe.north+foot.north).normalize(),0,3);
+  parent.updateMatrixWorld(true);assert.ok(ray.intersectObject(stop,true).length);
+  roomAccepted=true;host.mounted.sync();assert.equal(stop.visible,false);
+  assert.ok(host.domainPassageAt(foot.domainId,probe.east,probe.north));
+  linkAccepted=false;
+  assert.equal(host.domainPassageAt(foot.domainId,probe.east,probe.north),undefined,'permission revoked before render sync');
+  host.mounted.sync();assert.ok(stop.visible);
+  linkAccepted=true;host.mounted.sync();assert.equal(stop.visible,false);
   assert.deepEqual(a.availableLayers(),['minus165','minus190']);assert.equal(a.openLinks().length,2);
   assert.ok(parent.getObjectByName('town-c2-r30-tavern-dressing'));assert.ok(parent.getObjectByName('town-c2-r30-remnant-ring'));
   let steps=0,distance=0;
@@ -36,6 +49,15 @@ test('real pinned C2 shells, actual mouths and original C movement host connect 
    assert.ok(result,'handoff '+foot.domainId+' -> '+domain);foot={...result.to};host.mounted.sync();
   }
   const city=r30DeepDomains.minus165,palace=r30DeepDomains.minus190;
+  for(const link of r30DepthLinks)for(const side of ['from','to'] as const){
+   const mouth=r30DeepMouths[link.id as keyof typeof r30DeepMouths][side];
+   const gate=parent.getObjectByName('r30-depth-stop/'+link.id+'/'+side);
+   assert.ok(gate&&!gate.visible);
+   const p=r30LayerWorld(r30DeepFrames[mouth.layer],{east:mouth.axis==='east'?mouth.at:mouth.centre,north:mouth.axis==='north'?mouth.at:mouth.centre,height:0});
+   assert.equal(a.blocksLayerBoundary(r30DeepDomains[mouth.layer],p),false);
+   linkAccepted=false;assert.equal(a.blocksLayerBoundary(r30DeepDomains[mouth.layer],p),true);
+   linkAccepted=true;
+  }
   const cityPoint=(e:number)=>r30LayerWorld(r30DeepFrames.minus165,{east:e,north:0,height:0});
   const palacePoint=(e:number,n:number)=>r30LayerWorld(r30DeepFrames.minus190,{east:e,north:n,height:0});
   const palaceRoute=[[0,.5],[0,8.5],[0,17],[0,38],[0,50],[12,50],[12,64],[8,64],[8,74],[8,89],[0,93],[0,101.5],[0,112],[0,125.4]] as const;

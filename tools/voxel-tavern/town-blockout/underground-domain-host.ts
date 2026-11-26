@@ -570,11 +570,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
         .map(r=>({minE:r.minX,maxE:r.maxX,minN:r.minZ,maxN:r.maxZ}))}:undefined,
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
     readAcceptedFoot:options.readAcceptedDomainFoot,
-    blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true});
+    blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true||deepAssembly.blocksLayerBoundary(domain,point,radius)});
   const c2Consumer=options.deepRooms&&!options.deepAssemblyBridge?createR30C2Consumer(options.deepRooms,deepHost):undefined;
   const deepAssembly=createR30DeepAssembly({parent,seamRegistered:registeredSeam,
     bridge:c2Consumer?.bridge??options.deepAssemblyBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
-    supportsSecondMine:p=>deepHost.supportsArrival('underground/mine-2',p)});
+    supportsSecondMine:p=>deepHost.supportsArrival('underground/mine-2',p),secondMineMouthReady:mouth=>deepHost.acceptsMouth(mouth)});
   // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
   // entry point and lifecycle, even before A supplies accepted domain feet.
   /** Swept local move for the single public movement owner. This returns a

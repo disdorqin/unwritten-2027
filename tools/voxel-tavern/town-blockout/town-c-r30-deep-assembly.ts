@@ -1,6 +1,7 @@
 import {Group,Vector3} from 'three';
 import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DeepRoomProposals,r30DepthLinks,r30LayerWorld,r30LayerLocal,r30LinkPoint,type R30LayerFrame,type R30Point,type R30DepthLink} from './town-c-r30-deep-layer-contract.js';
 import {mountR30DepthCorridor} from './town-c-r30-depth-corridor.js';
+import {mountR30DepthStop} from './town-c-r30-depth-stop.js';
 import {secondMineDomainId} from '../../../src/shared/underground-second-mine-presence-domain.js';
 
 type Layer='minus165'|'minus190';
@@ -73,9 +74,25 @@ export function createR30DeepAssembly(options:Readonly<{
  parent:Group;seamRegistered:boolean;bridge?:R30DeepAssemblyBridge;
  readAcceptedFoot?:()=>Foot|undefined;
  supportsSecondMine:(p:R30Point)=>boolean;
+ /** Actual second-mine shell socket (also when no room bridge was supplied). */
+ secondMineMouthReady?:(mouth:R30DeepMouth)=>boolean;
 }>){
  const scenes=new Map<Layer,ScenePort>(),corridors=new Map<string,MountedCorridor>();
  const available=new Set<Layer>(),openLinks=new Set<string>();
+ const stops=new Map<string,ReturnType<typeof mountR30DepthStop>>();
+ const stopKey=(link:R30DepthLink,side:'from'|'to')=>link.id+'/'+side;
+ function blocksLayerBoundary(domain:string,p:R30Point,radius=.27,height=1.8){
+  if(disposed)return false;
+  for(const link of r30DepthLinks)for(const side of ['from','to'] as const){
+   const mouth=r30DeepMouths[link.id as LinkId][side];
+   if(domain!==r30DeepDomains[mouth.layer])continue;
+   const stop=stops.get(stopKey(link,side));
+   // Short-circuit geometry first: the live link check probes the receiving
+   // foot, which is outside this closure envelope, avoiding recursion.
+   if(stop?.intersects(p.east,p.north,p.height,radius,height)&&!linkCurrent(link))return true;
+  }
+  return false;
+ }
  let activeDomain:string|undefined,acceptedFoot:Foot|undefined,disposed=false;
  function layerCurrent(layer:Layer){
   return available.has(layer)&&options.bridge?.acceptsLayer(layer,r30DeepFrames[layer],r30DeepRoomProposals[layer])===true;
@@ -92,8 +109,10 @@ export function createR30DeepAssembly(options:Readonly<{
   const s=scenes.get(layer),frame=r30DeepFrames[layer];
   if(!s||!layerCurrent(layer)||!includes(r30DeepRoomProposals[layer],p))return;
   const l=r30LayerLocal(frame,p),q=s.passageLocal(l.east,l.north,radius,height);
-  if(q&&[q.floor,q.clearance].every(Number.isFinite)&&q.clearance>=height)
-   return {floor:q.floor+frame.worldOffset.height,clearance:q.clearance};
+  if(q&&[q.floor,q.clearance].every(Number.isFinite)&&q.clearance>=height){
+   const floor=q.floor+frame.worldOffset.height;
+   if(!blocksLayerBoundary(r30DeepDomains[layer],{east:p.east,north:p.north,height:floor},radius,height))return {floor,clearance:q.clearance};
+  }
  }
  function supportsLayer(layer:Layer,p:R30Point){
   const q=localPass(layer,p);return !!q&&Math.abs(q.floor-p.height)<.02;
@@ -141,6 +160,16 @@ export function createR30DeepAssembly(options:Readonly<{
     for(const link of r30DepthLinks)if(openLinks.has(link.id)&&foot.domainId===r30LinkDomain(link)&&includes(r30LinkRoom(link),foot))activeDomain=foot.domainId;
    }
   }
+  // Open C2 source mouths must not expose a false passage into an
+  // unregistered corridor. Mount a tangible closed leaf at the real socket.
+  const currentFoot=options.readAcceptedFoot?.();
+  for(const link of r30DepthLinks)for(const side of ['from','to'] as const){
+   const mouth=r30DeepMouths[link.id as LinkId][side],key=stopKey(link,side);
+   const ready=mouth.layer==='minus140'?options.secondMineMouthReady?.(mouth)===true:
+      available.has(mouth.layer)&&scenes.get(mouth.layer)?.acceptsMouth(mouth)===true;
+   if(ready&&!stops.has(key))stops.set(key,mountR30DepthStop(options.parent,mouth,key));
+   const stop=stops.get(key);if(stop)stop.group.visible=!!ready&&currentFoot?.domainId===r30DeepDomains[mouth.layer]&&!openLinks.has(link.id);
+  }
   // Show adjacent corridor/layer geometry for a physically connected mouth,
   // but never grant its movement query until accepted domain changes.
   for(const [layer,s] of scenes){
@@ -165,7 +194,7 @@ export function createR30DeepAssembly(options:Readonly<{
  }
  return {sync,contracts:r30DeepTransitContracts,activeDomain:()=>activeDomain,
   availableLayers:()=>[...available],openLinks:()=>[...openLinks],
-  supportsArrival:preflight,
+  supportsArrival:preflight,blocksLayerBoundary,
   passageAt(domain:string,east:number,north:number,radius=.27,height=1.8){
    const foot=options.readAcceptedFoot?.();
    if(disposed||activeDomain!==domain||foot?.domainId!==domain||![foot.east,foot.north,foot.height,east,north,radius,height].every(Number.isFinite)||radius<=0||height<=0)return;
@@ -194,6 +223,7 @@ export function createR30DeepAssembly(options:Readonly<{
    }
   },
   dispose(){if(disposed)return;disposed=true;for(const c of corridors.values())c.dispose();for(const s of scenes.values()){s.group.removeFromParent();s.dispose()}
+   for(const stop of stops.values())stop.dispose();stops.clear();
    corridors.clear();scenes.clear();available.clear();openLinks.clear();activeDomain=undefined},
  } as const;
 }
