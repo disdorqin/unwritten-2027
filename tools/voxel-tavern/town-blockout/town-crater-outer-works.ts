@@ -184,6 +184,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const workshopBrick=industrialSurface('brick',0x74665d);
   const workshopSheet=industrialSurface('sheet',0x54575a);
   const workshopRust=industrialSurface('sheet',0x715044);
+  const tankPatina=industrialSurface('sheet',0x43584e);
   const towerMasonry=industrialSurface('brick',0x686d62);
   const shoulderRock=new MeshStandardMaterial({map:createZa36StrataTexture(0x77716a,0x625a50,0xa08c70,37),roughness:1,flatShading:true});
   shoulderRock.name='A-R02-outer-shoulder-strata';
@@ -771,13 +772,25 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         }
       }
     }
-    cyl(workshopSheet,wt.east,g+6.83,wt.north,2.48,2.48,.29,12,fr.yaw);
-    cyl(workshopSheet,wt.east,g+8.41,wt.north,2.3,2.3,3.14,12,fr.yaw);
+    // K06: oxidised green tank plates over dark iron ring girders.
+    // The twelve seams are located on the cylinder's actual vertices.
+    cyl(iron,wt.east,g+6.83,wt.north,2.48,2.48,.29,12,fr.yaw);
+    cyl(tankPatina,wt.east,g+8.41,wt.north,2.3,2.3,3.14,12,fr.yaw);
+    for(let i=0;i<12;i++){
+      const theta=i*Math.PI/6;
+      const x=cx+Math.sin(theta)*2.295,z=cz+Math.cos(theta)*2.295;
+      put(workshopRust,x,g+8.43,z,.095,2.96,.095);
+      for(const h of [7.35,7.72,8.09,8.83,9.20,9.57])
+        put(iron,x,g+h,z,.13,.07,.13);
+      // The real underside reinforcement reaches the ring girder.
+      const q=fr.at(cx+Math.sin(theta)*1.95,cz+Math.cos(theta)*1.95);
+      box(workshopRust,q.east,g+6.62,q.north,1.02,.20,.14,fr.yaw+theta+Math.PI/2);
+    }
     for(const h of [7.05,8.45,9.82]){
-      cyl(workshopRust,wt.east,g+h,wt.north,2.36,2.36,.14,12,fr.yaw);
+      cyl(iron,wt.east,g+h,wt.north,2.36,2.36,.14,12,fr.yaw);
       for(let i=0;i<12;i++){
         const theta=i*Math.PI/6;
-        put(workshopSheet,cx+Math.sin(theta)*2.35,g+h,cz+Math.cos(theta)*2.35,.10,.09,.10);
+        put(workshopRust,cx+Math.sin(theta)*2.35,g+h,cz+Math.cos(theta)*2.35,.10,.09,.10);
       }
     }
     // A continuous drain pipe runs along the ground-side service wall.
@@ -794,7 +807,11 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Tank roof has a projecting metal eave, low snow cap and vent.
     cone(slate,wt.east,g+10.9,wt.north,2.7,1.8,12);
     cyl(workshopSheet,wt.east,g+10.02,wt.north,2.7,2.7,.10,12,fr.yaw);
-    cyl(snow,wt.east,g+11.57,wt.north,.40,.82,.36,12,fr.yaw);
+    // Broken snow patches follow the conical roof instead of a single
+    // unrelated cylinder on top. Same roof pitch, slightly raised skin.
+    for(const [start,arc]of [[0,Math.PI*.57],[Math.PI*.82,Math.PI*.36],[Math.PI*1.47,Math.PI*.39]] as const)
+      part(cleanSnow,new CylinderGeometry(.48,1.38,.60,Math.ceil(12*arc/(2*Math.PI)),1,true,start,arc),wt.east,g+11.19,wt.north,fr.yaw);
+    cyl(cleanSnow,wt.east,g+11.58,wt.north,.30,.58,.18,12,fr.yaw);
     cyl(workshopRust,wt.east,g+11.88,wt.north,.13,.15,.44,8,fr.yaw);
     const tankRoute=waterTowerFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
     if(tankRoute.every(p=>p.height!==undefined))industrialRoutes.push({id:'water-tower',points:tankRoute as IndustryPoint[]});
