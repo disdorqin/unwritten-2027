@@ -31,6 +31,7 @@ test('all three water states preserve continuous dry entry-to-exit route; ferry 
       assert.equal(mine.canStand(0,137),state==='low');
       assert.equal(mine.water.visible,state!=='low');
       assert.equal(mine.waterworks?.stats.waterPresentationState,state);
+      assert.equal(mine.riverTerrace?.stats().waterState,state);
     }
   }finally{mine.dispose()}
 });
@@ -41,6 +42,8 @@ test('missing lift port preserves the single closed entry roof and standing rout
     assert.equal(mine.group.getObjectByName('town-c2-r30-enclosure')?.parent,mine.group);
     assert.ok(mine.waterworks);
     assert.ok(mine.ferry);
+    assert.ok(mine.riverTerrace);
+    assert.equal(mine.group.getObjectByName('town-c2-r30-river-terrace')?.parent,mine.group);
     assert.equal(mine.group.getObjectByName('town-c2-r30-waterworks-trace')?.parent,mine.group);
     assert.equal(mine.group.getObjectByName('town-c2-r30-ferry')?.parent,mine.group);
     assert.equal(mine.liftPlate,null);
@@ -109,11 +112,12 @@ test('invalid fixture splits and out-of-entry holes fail closed without throwing
     }finally{mine.dispose()}
   }
 });
-test('R30 waterworks and ferry can be disabled without changing the legacy scene contract',()=>{
- const mine=createSecondMineScene({r30Waterworks:false,r30Ferry:false});
+test('R30 waterworks, ferry and terrace can be disabled without changing the legacy scene contract',()=>{
+ const mine=createSecondMineScene({r30Waterworks:false,r30Ferry:false,r30RiverTerrace:false});
  try{
     assert.equal(mine.waterworks,undefined);
     assert.equal(mine.ferry,undefined);
+    assert.equal(mine.riverTerrace,undefined);
     assert.equal(mine.boat.visible,true);
     mine.setRiverState('high');assert.equal(mine.boat.visible,false);
     mine.setRiverState('low');assert.equal(mine.boat.visible,false);
