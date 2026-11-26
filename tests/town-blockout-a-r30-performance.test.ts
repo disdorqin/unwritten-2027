@@ -25,15 +25,15 @@ test('indexed spatial batches preserve every authored triangle, normal, UV, wind
  const plane=new BoxGeometry(2,4,2).translate(11,3,-85);
  const parts=[box,line,plane],expected=parts.flatMap(triangleKeys).sort();
  // Make the real large-material threshold active, without simplifying any vertex.
- for(let i=0;i<300;i++)parts.push(new BoxGeometry(1,1,1).translate(i*2-250,0,-80));
+ for(let i=0;i<600;i++)parts.push(new BoxGeometry(1,1,1).translate(i*2-250,0,-80));
  const all=parts.flatMap(triangleKeys).sort();
  assert.ok(all.length>expected.length);
  const originalVertices=parts.reduce((n,g)=>n+(g.index?.count??g.getAttribute('position').count),0);
  let released=0;for(const p of parts)p.addEventListener('dispose',()=>released++);
  const group=new Group(),batches=new Map([[material,parts]]);
- mountAR30StaticBatches(group,batches,'audit',160);
+ mountAR30StaticBatches(group,batches,'audit',160,3);
  const meshes=group.children as Mesh[];
- assert.ok(meshes.length>1);assert.equal(batches.size,0);
+ assert.ok(meshes.length>1&&meshes.length<=3);assert.equal(batches.size,0);
  assert.ok(meshes.every(m=>m.material===material&&m.geometry.index&&m.geometry.boundingSphere));
  assert.deepEqual(meshes.flatMap(m=>triangleKeys(m.geometry)).sort(),all);
  assert.ok(meshes.reduce((n,m)=>n+m.geometry.getAttribute('position').count,0)<originalVertices);

@@ -1000,7 +1000,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   }
 
   // ---------- merge batches ----------
-  mountAR30StaticBatches(group,batches,'crater-rail',320);
+  mountAR30StaticBatches(group,batches,'crater-rail',320,20);
 
   const alignment: RailExtensionAlignment = {
     length: main.length,

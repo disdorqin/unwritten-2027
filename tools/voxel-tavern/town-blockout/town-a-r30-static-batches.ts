@@ -45,17 +45,33 @@ function partition(g:BufferGeometry,cell:number){
 }
 /** Spatially cull long static networks while preserving triangle topology.
  * Small batches stay material-merged when cellSize is omitted. */
-export function mountAR30StaticBatches<M extends Material>(group:Group,batches:Map<M,BufferGeometry[]>,prefix:string,cellSize?:number){
+export function mountAR30StaticBatches<M extends Material>(group:Group,batches:Map<M,BufferGeometry[]>,prefix:string,cellSize?:number,maxDraws=Infinity){
+ let existing=0;group.traverse(o=>{if((o as Mesh).isMesh)existing++;});
+ // Preserve the original one-mesh-per-material baseline, then spend only
+ // the available extra draws on spatial culling. Count existing signs too.
+ let extra=Math.max(0,maxDraws-existing-batches.size);
  for(const [mat,parts] of batches){
   const bins=new Map<string,BufferGeometry[]>();
   // Keep small material batches whole: spatial subdivision of a few
   // screws/signs costs more draw calls than it saves in vertex work.
   const triangles=parts.reduce((n,g)=>n+(g.index?.count??g.getAttribute('position').count)/3,0);
-  const spatial=cellSize&&triangles>=8000?cellSize:undefined;
+  const spatial=cellSize&&triangles>=12000&&extra>0?cellSize:undefined;
   for(const part of parts){
    const entries=spatial?partition(part,spatial):[['all',indexed(part)] as const];
    for(const [k,g] of entries){const list=bins.get(k)??[];list.push(g);bins.set(k,list);}
   }
+  // Coalesce nearest cells until the legacy draw budget is respected.
+  // No triangles are removed; the only tradeoff is culling granularity.
+  while(bins.size>extra+1){
+   const keys=[...bins.keys()];let pair=[keys[0]!,keys[1]!],best=Infinity;
+   for(let i=0;i<keys.length;i++)for(let j=i+1;j<keys.length;j++){
+    const [ae,an]=keys[i]!.split(',').map(Number),[be,bn]=keys[j]!.split(',').map(Number);
+    const d=(ae!-be!)**2+(an!-bn!)**2;
+    if(d<best){best=d;pair=[keys[i]!,keys[j]!];}
+   }
+   bins.get(pair[0]!)!.push(...bins.get(pair[1]!)!);bins.delete(pair[1]!);
+  }
+  extra-=Math.max(0,bins.size-1);
   for(const [k,geos] of bins){
    const merged=mergeGeometries(geos);
    for(const g of geos)g.dispose();
