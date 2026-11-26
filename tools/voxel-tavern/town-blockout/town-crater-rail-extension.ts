@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Group, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, NearestFilter, PlaneGeometry, PointLight, Quaternion,
-  RepeatWrapping, SRGBColorSpace, Vector3, CatmullRomCurve3,
+  RepeatWrapping, SRGBColorSpace, Vector3, CatmullRomCurve3, TorusGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createTerrainGrid } from './terrain';
@@ -696,7 +696,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     // One ore skip standing by the ore yard, and the buffer stop at the smelter door.
     let skip = narrow.samples[0], best = Infinity;
     for (const s of narrow.samples) {
-      const d = (s.east + 118) ** 2 + (s.north - 101.5) ** 2;
+      const d = (s.east + 122.5) ** 2 + (s.north - 109.9) ** 2;
       if (d < best) { best = d; skip = s; }
     }
     const idx = narrow.samples.indexOf(skip);
@@ -718,13 +718,31 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     put(rustIron,0,.70,0,2.1,.10,1.14);
     for(const x of [-.65,0,.65]){const p=at(x,0);part(ore,new DodecahedronGeometry(.36,0),p.e,skip.y+.91,p.n,yaw);}
     colliders.push(orientedSupportBox(skip.east,skip.north,yaw,2.3,1.36,skip.y,skip.y+1.41));
-    const end = narrow.samples.at(-1)!;
-    const prev = narrow.samples.at(-2)!;
-    const eyaw = Math.atan2(-(end.east - prev.east), -(end.north - prev.north)) + Math.PI / 2;
-    box(timber, end.east, end.y + .55, end.north, 1.7, .3, .3, eyaw, 0, .5);
-    box(timber, end.east, end.y + .55, end.north, 1.7, .3, .3, eyaw, 0, -.5);
-    box(iron, end.east, end.y + .6, end.north, 1.5, .5, .12, eyaw);
+    // The ore skip is now parked beside its actual yard loading platform.
+    // Terminal buffers are built below from the same track sample frame.
   }
+
+  function bufferStop(samples:readonly Sample[],gauge:number){
+    const end=samples.at(-1)!,prev=samples.at(-2)!;
+    const yaw=Math.atan2(end.north-prev.north,end.east-prev.east);
+    const at=(x:number,z:number)=>({east:end.east+Math.cos(yaw)*x+Math.sin(yaw)*z,north:end.north+Math.sin(yaw)*x-Math.cos(yaw)*z});
+    const put=(mat:MeshStandardMaterial,x:number,y:number,z:number,w:number,h:number,d:number,roll=0)=>{
+      const p=at(x,z);box(mat,p.east,end.y+y,p.north,w,h,d,yaw,0,roll);
+    };
+    for(const side of [-1,1]){
+      const z=side*gauge/2;
+      put(iron,-.22,.18,z,.18,1.08,.19);
+      put(timber,-.75,.12,z,1.14,.20,.19,.69);
+      put(iron,-.22,-.32,z,.36,.10,.36);
+    }
+    put(timber,-.22,.62,0,.28,.38,gauge+.66);
+    put(iron,-.38,.62,0,.08,.28,gauge+.35);
+    const p=at(-.22,0);
+    colliders.push(orientedSupportBox(p.east,p.north,yaw,.31,gauge+.66,end.y-.36,end.y+.82));
+  }
+  bufferStop(siding.samples,1.66);
+  bufferStop(narrow.samples,.9);
+  bufferStop([...narrow.samples].reverse(),.9);
 
   // True crossing decks use the same rail samples and register walk floors.
   const crossings=[
@@ -739,6 +757,72 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     const entry=freightRoute.points[0]!;
     entry.height=Math.max(entry.height,...crossings.flatMap(c=>c.floors)
       .filter(f=>supportFootprintOverlaps(entry.east,entry.north,f,.27)).map(f=>f.max[1]));
+  }
+
+  // Industrial transfer platforms are actual mounted floors with stepped
+  // approaches. They are not a second vehicle/event authority.
+  function loadingDeck(e:number,n:number,w:number,d:number,rise:number){
+    const g=groundAt(e,n),top=g+rise;
+    const low=Math.min(...[-1,1].flatMap(s=>[-1,1].map(t=>groundAt(e+s*w/2,n+t*d/2))))-.08;
+    box(stone,e,(low+top-.12)/2,n,w,top-.12-low,d);
+    box(timberWarm,e,top-.06,n,w,.12,d);
+    floors.push(orientedSupportBox(e,n,0,w,d,low,top));
+    const count=Math.ceil(rise/.23),run=.67,edge=n-d/2;
+    const points:{east:number;north:number;height:number}[]=[];
+    for(let i=0;i<count;i++){
+      const pn=edge-(count-i-.5)*run,h=g+rise*(i+1)/count,bottom=Math.min(h-.10,groundAt(e,pn)-.04);
+      box(stone,e,(h+bottom)/2,pn,Math.min(1.65,w-.16),h-bottom,run+.01);
+      floors.push(orientedSupportBox(e,pn,0,Math.min(1.65,w-.16),run+.01,bottom,h));
+      points.push({east:e,north:pn,height:h});
+    }
+    points.push({east:e,north:n,height:top});
+    return {g,top,points};
+  }
+  {
+    // Freight-side transfer landing between the two physically separate
+    // gauges. The gantry serves both tracks without crossing head clearance.
+    const e=-55.3,n=171,w=2.2,d=5.0,deck=loadingDeck(e,n,w,d,.90),g=deck.g;
+    for(const side of [-1,1]){
+      const x=e+side*.82;
+      box(timber,x,deck.top+1.78,n+1.55,.24,3.56,.27);
+      colliders.push(orientedSupportBox(x,n+1.55,0,.24,.27,deck.top,deck.top+3.56));
+      box(stone,x,deck.top+.12,n+1.55,.36,.24,.40);
+      box(iron,x,deck.top+3.35,n+1.55,.38,.26,.36);
+      box(timber,x+side*.43,deck.top+2.95,n+1.55,1.12,.18,.21,0,0,side*.74);
+    }
+    box(timber,e,deck.top+3.6,n+1.55,6.45,.28,.35);
+    box(iron,e,deck.top+3.39,n+1.55,6.35,.10,.17);
+    box(iron,e-2.05,deck.top+3.24,n+1.55,.44,.34,.38);
+    box(iron,e-2.05,deck.top+2.53,n+1.55,.055,1.05,.055);
+    part(iron,new TorusGeometry(.18,.05,6,10),e-2.05,deck.top+1.92,n+1.55,0);
+    for(const x of [-.55,.55]){
+      box(timber,e+x,deck.top+.55,n+2.25,.14,1.10,.14);
+      colliders.push(orientedSupportBox(e+x,n+2.25,0,.14,.14,deck.top,deck.top+1.1));
+    }
+    box(timberWarm,e,deck.top+1.02,n+2.25,1.25,.14,.14);
+    const start=freightRoute?.points[0];
+    if(start){
+      const approach=[[-58.7,148],[-58.3,153],[-57.8,159],[-56.3,163],[-55.3,165.4]].map(([east,north])=>({east,north,height:groundAt(east,north)}));
+      stationWalkRoutes.push({id:'transfer-dock',points:[{...start},...approach,...deck.points]});
+    }
+  }
+  {
+    // Ore yard unloading dock: a real small platform on the south of the
+    // narrow rail and adjacent to the parked ore skip.
+    const e=-122.5,n=107.55,deck=loadingDeck(e,n,4.0,1.65,.60);
+    for(const x of [-1.55,1.55]){
+      box(timber,e+x,deck.top+.38,n,.62,.76,.76);
+      colliders.push(orientedSupportBox(e+x,n,0,.62,.76,deck.top,deck.top+.76));
+      for(const s of [-1,1])box(iron,e+x+s*.24,deck.top+.38,n,.07,.78,.78);
+    }
+    const mast=e+1.5;
+    box(timber,mast,deck.top+1.5,n+.40,.18,3,.18);
+    colliders.push(orientedSupportBox(mast,n+.4,0,.18,.18,deck.top,deck.top+3));
+    box(timber,mast,deck.top+2.82,n+1.45,.23,.25,2.35);
+    box(iron,mast,deck.top+2.18,n+2.35,.06,1.16,.06);
+    part(iron,new TorusGeometry(.14,.04,5,10),mast,deck.top+1.55,n+2.35,0);
+    const approach=[[-123,100],[-123.5,100.25],[-122.5,104.65]].map(([east,north])=>({east,north,height:groundAt(east,north)}));
+    stationWalkRoutes.push({id:'ore-yard-dock',points:[...approach,...deck.points]});
   }
 
   // ---------- merge batches ----------

@@ -46,3 +46,8 @@ test('gatehouse bench has a grounded stand point and actual seat',()=>{
 for(const route of road.outerWorks.industrialRoutes)test(route.id+' physical entry, interior route and return',()=>{
  walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });
+for(const id of ['transfer-dock','ore-yard-dock'])test(id+' is reachable and returnable through the combined town, freight and industrial collision index',()=>{
+ const route=rail.stationWalkRoutes.find(r=>r.id===id)!;
+ assert.ok(route);
+ walk(id,route.points);walk(id,[...route.points].reverse());
+});

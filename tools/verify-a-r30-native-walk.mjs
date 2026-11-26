@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -284,7 +284,7 @@ async function picture(page,evidence,label){
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight','shankou'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  outcrop:[[-12,159],[-23,159],[-23,95],[-60,55]],
@@ -302,6 +302,8 @@ const approach={
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
  smelter:[[-12,159],[-43,159],[-67,136],[-144,105]],
  'ore-yard':[[-12,159],[-43,159],[-67,136],[-144,105]],
+ 'transfer-dock':[[-12,159],[-43,159]],
+ 'ore-yard-dock':[[-12,159],[-43,159],[-67,136],[-144,105],[-132,101],[-132,100],[-123,100]],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
@@ -321,6 +323,7 @@ try{
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
    segment==='supplyinterior'?road.mouthWorks.supplyInteriorRoute:
+   ['transfer-dock','ore-yard-dock'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===segment).points:
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'||segment==='ore-yard'?segment:segment+'-plant')).points;
  async function step(point,label){
@@ -385,6 +388,11 @@ try{
    assert.equal(await page.locator('#place-title').textContent(),'坑区手绘图');
    await picture(page,evidence,'supplyinterior-map-open');
    await page.locator('#place-card .close-card').click();
+ }else if(segment==='transfer-dock'){
+   await wallView('transfer-dock-narrow',-Math.PI/2);
+   await wallView('transfer-dock-standard',Math.PI/2);
+ }else if(segment==='ore-yard-dock'){
+   await wallView('ore-yard-dock-loading',0);
  }else if(segment==='freight'){
    await wallView('freight-interior',Math.PI);
  }else if(segment==='instrument'||segment==='smelter'){
