@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -288,6 +288,9 @@ const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>gr
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
+ 'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
+ 'eastern-cluster':[[-12,159],[-12,200]],
+ 'western-shoulders':[[-12,159],[-23,159],[-23,95],[-60,55]],
  outcrop:[[-12,159],[-23,159],[-23,95],[-60,55]],
  shankou:[[296,516],[296,512]],
  northwalk:[[-12,159],[-12,240],[-12,320]],
@@ -322,7 +325,9 @@ try{
  },{pattern:positionPattern.source,east:segment==='shankou'?296:2,north:segment==='shankou'?520:159},{timeout:45000});
  for(const [i,target] of approach[segment].entries())await walkTo(page,evidence,target,segment+'-approach-'+i);
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
- const path=segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const scenic=road.outerWorks.landscapeRoutes.find(r=>r.id===segment);
+ const reverseScenic=segment==='western-clusters';
+ const path=scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -334,7 +339,7 @@ try{
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points;
  async function step(point,label){
-   await walkTo(page,evidence,[point.east,point.north],label,['northwalk','outcrop','outerclusters'].includes(segment)?.46:.18);
+   await walkTo(page,evidence,[point.east,point.north],label,(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
    await page.waitForTimeout(140);
    const pose=await readPose(page);
    assert.ok(Math.abs(pose.height-point.height)<.39,JSON.stringify({label,pose,point}));
@@ -353,6 +358,15 @@ try{
  }
  for(const [i,point] of path.entries()){
    await step(point,segment+'-up-'+i);
+   if(scenic){
+     const view=scenic.views.find(v=>v.index===(reverseScenic?path.length-1-i:i));
+     if(view){
+       const shoulders={'shoulder-west':[-208,105],'shoulder-northwest':[-216,265],'shoulder-north':[-170,304]};
+       const site=road.outerWorks.sites.find(s=>s.id===view.site);
+       const target=site?[site.east,site.north]:shoulders[view.site];
+       await wallView(view.site,Math.atan2(target[0]-point.east,target[1]-point.north));
+     }
+   }
    if(segment==='outerclusters'&&(i===1||i===5)){
      const site=road.outerWorks.sites.find(s=>s.id==='outer-cluster-'+(i===1?7:6));
      await wallView('outerclusters-'+(i===1?7:6),Math.atan2(site.east-point.east,site.north-point.north));
