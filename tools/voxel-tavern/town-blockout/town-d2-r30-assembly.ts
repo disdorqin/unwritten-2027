@@ -48,12 +48,15 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeNightLights?: boolean;
   /** D2-R09: include the canonical ropeway, cabins and station buildings (default false). */
   includeRopeway?: boolean;
+  /** Epoch used by the canonical ropeway clock when includeRopeway is true. */
+  ropewayEpochMs?: number;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
   group: Group;
   heightAt(east: number, north: number): number | undefined;
   collision: ReturnType<typeof createTownD2R30Collision>;
+  ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
   /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
   update(east: number, north: number, nowMs?: number): void;
   setNight(value: boolean): void;
@@ -78,6 +81,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeSummitFacilities = options.includeSummitFacilities ?? false;
   const includeNightLights = options.includeNightLights ?? false;
   const includeRopeway = options.includeRopeway ?? false;
+  const ropewayEpochMs = options.ropewayEpochMs ?? 0;
   if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
     includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights,
     includeRopeway]
@@ -100,6 +104,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let terrainStats: () => unknown;
   let updateLod: ((east: number, north: number) => void) | undefined;
   let updateRopeway: ((nowMs: number) => void) | undefined;
+  let ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
     terrainStats = () => massif.stats();
@@ -198,11 +203,12 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   if (includeRopeway) {
     // D2-R09: the rope, the cabins and the station buildings, rebuilt on
     // the R30 massif so the line has a deck to land on.
-    const ropeway = createTownD2R30Ropeway({ heightAt, arrivalHeight });
-    children.push(ropeway.group);
-    disposers.push(() => ropeway.dispose());
-    nightHooks.push(value => ropeway.setNight(value));
-    updateRopeway = nowMs => ropeway.update(nowMs);
+    const nextRopeway = createTownD2R30Ropeway({ heightAt, arrivalHeight, epochMs: ropewayEpochMs });
+    ropeway = nextRopeway;
+    children.push(nextRopeway.group);
+    disposers.push(() => nextRopeway.dispose());
+    nightHooks.push(value => nextRopeway.setNight(value));
+    updateRopeway = nowMs => nextRopeway.update(nowMs);
   }
 
   for (const child of children) group.add(child);
@@ -251,6 +257,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     group,
     heightAt,
     collision,
+    ropeway,
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {

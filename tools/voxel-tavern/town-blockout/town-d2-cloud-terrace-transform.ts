@@ -203,7 +203,9 @@ export function resolveTownD2CloudTerraceTransform(): TownD2CloudTerraceTransfor
       arrivalHeight: contract.arrivalHeight,
       frontRidgeArrivalHeight: frontRidgeHeight,
       arrivalStep,
-      stepInsideBand: arrivalStep <= bandHigh - bandLow,
+      stepInsideBand: frontRidgeHeight >= bandLow && frontRidgeHeight <= bandHigh &&
+        contract.arrivalHeight >= bandLow && contract.arrivalHeight <= bandHigh &&
+        arrivalStep <= bandHigh - bandLow,
     }),
     footprint: Object.freeze({
       southLimitLocal: mainSummitBounds.south,

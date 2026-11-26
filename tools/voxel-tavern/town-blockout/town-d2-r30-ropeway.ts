@@ -138,14 +138,15 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
   let night = false;
   return {
     group,
-    /** The canonical cable, so a host can drive the cabins itself. */
+    /** The canonical cable and stations, so the legacy host can keep its rules. */
     cable,
+    stations,
     stats: () => stats,
     /** Advances the two cabins along the rope. */
     update(nowMs: number) {
-      if (disposed) return;
+      if (disposed) return [];
       if (!Number.isFinite(nowMs)) throw new RangeError('D2-R09 needs a finite timestamp.');
-      cableView.update(nowMs);
+      return cableView.update(nowMs);
     },
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R09 ropeway is disposed.');

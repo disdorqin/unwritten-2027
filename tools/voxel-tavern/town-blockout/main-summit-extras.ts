@@ -102,6 +102,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const cloud = assembly.clouds;
 
   const paint = buildMainSummitPaint(assembly.block.heightAt);
+  paint.mesh.visible = !assembly.r30Mounted;
   group.add(paint.mesh);
   const bannerCloud = createMainSummitBannerCloud();
   group.add(bannerCloud.group);
@@ -208,6 +209,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
     },
     /** Night material version (§2.4): paint and massif darken together. */
     setNight(night: boolean) {
+      assembly.setNight(night);
       paint.setNight(night);
       coarseMaterial.color.setHex(night ? 0x2f3f52 : coarseDayColor);
       glowNight = night;
