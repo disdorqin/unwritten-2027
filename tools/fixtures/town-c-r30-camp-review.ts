@@ -8,12 +8,14 @@ import {createUndergroundWaterState} from '../../src/presence/underground-water-
 import {r30InterlayerLiftSite as interlayerSite,type R30InterlayerRide} from '../voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
 const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
 let domain=interlayerSite.upper.domainId;
-import type {UndergroundMiningTargetView} from '../../src/shared/underground-mining.js';
+import type {UndergroundMiningTargetView,UndergroundMiningCore} from '../../src/shared/underground-mining.js';
+let oreReview:readonly UndergroundMiningTargetView[]=[],oreCores:readonly UndergroundMiningCore[]=[];
 let reviewTargets:readonly UndergroundMiningTargetView[]=[];
 import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
 let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
 const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
  readAcceptedMiningTargets:()=>reviewTargets,
+ oreBridge:{acceptsSite:()=>oreReview.length>0,readTargets:()=>oreReview,readCores:()=>oreCores},
  mainlineBridge:{acceptsRoute:()=>!!mainlineReview,readSnapshot:()=>mainlineReview,readLightBudget:()=>2,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
  readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
 if(host.kind!=='ready')throw Error(host.reason);
@@ -55,6 +57,20 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
+ oreReview=[];oreCores=[];
+ if(name.startsWith('ore-')){
+  if(host.oreSurvey.kind!=='ready')return false;
+  const match=/^ore-(\d)(?:-(cracked|open))?$/.exec(name);if(!match)return false;
+  const s=host.oreSurvey.ordinary[Number(match[1])-1];if(!s)return false;
+  const hits=match[2]==='open'?3:match[2]==='cracked'?2:0;
+  oreReview=host.oreSurvey.ordinary.map(o=>({...o.target,hits:o===s?hits:0,open:o===s&&hits===3}));
+  if(hits===3)oreCores=[{id:JSON.stringify([s.target.id,1000]),at:s.coreAt,mineral:s.marker.mineral,amount:s.marker.amount}];
+  mainlineReview=undefined;host.mounted.sync();
+  const p=s.foot,a=s.target.at;
+  const back={east:p.east+s.normal.east*.65,north:p.north+s.normal.north*.65,height:p.height};
+  const eye=hits===3&&host.passageAt(back.east,back.north)?back:p;
+  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(hits===3?p.east:a.east,hits===3?p.height+.14:a.height,-(hits===3?p.north:a.north));torch.intensity=18;view=name;return true;
+ }
  if(name.startsWith('rail-')){
   const m=host.mainline;if(m?.kind!=='ready')return false;
   const damaged=name.startsWith('rail-damage-'),loaded=name.startsWith('rail-cargo-'),role=name.slice(damaged?12:loaded?11:5),route=m.route,work=route.work;
