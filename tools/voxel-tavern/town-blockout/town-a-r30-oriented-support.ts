@@ -7,16 +7,17 @@ export function orientedSupportBox(e:number,n:number,yaw:number,w:number,d:numbe
   return {min:[e-hx,low,-n-hz],max:[e+hx,high,-n+hz],footprint:{yaw,halfX:w/2,halfZ:d/2}};
 }
 export function supportFootprintOverlaps(e:number,n:number,b:OrientedSupportBox,radius:number){
+  // Every oriented support retains its enclosing world AABB. Reject
+  // distant candidates from the coarse cell before rotating the point.
+  const r2=radius*radius;
+  const bx=Math.max(b.min[0]-e,e-b.max[0],0);
+  const bz=Math.max(b.min[2]+n,-n-b.max[2],0);
+  if(bx*bx+bz*bz>=r2)return false;
   const p=b.footprint;
-  let dx:number,dz:number;
-  if(p){
-    const x=e-(b.min[0]+b.max[0])/2,z=-n-(b.min[2]+b.max[2])/2;
-    const c=Math.cos(p.yaw),s=Math.sin(p.yaw);
-    dx=Math.max(Math.abs(c*x-s*z)-p.halfX,0);
-    dz=Math.max(Math.abs(s*x+c*z)-p.halfZ,0);
-  }else{
-    dx=Math.max(b.min[0]-e,e-b.max[0],0);
-    dz=Math.max(b.min[2]+n,-n-b.max[2],0);
-  }
-  return dx*dx+dz*dz<radius*radius;
+  if(!p)return bx*bx+bz*bz<r2;
+  const x=e-(b.min[0]+b.max[0])/2,z=-n-(b.min[2]+b.max[2])/2;
+  const c=Math.cos(p.yaw),s=Math.sin(p.yaw);
+  const dx=Math.max(Math.abs(c*x-s*z)-p.halfX,0);
+  const dz=Math.max(Math.abs(s*x+c*z)-p.halfZ,0);
+  return dx*dx+dz*dz<r2;
 }

@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {BoxGeometry,BufferGeometry,Float32BufferAttribute,Group,MeshStandardMaterial,type Mesh} from 'three';
 import {mountAR30StaticBatches} from '../tools/voxel-tavern/town-blockout/town-a-r30-static-batches';
 import {nearestTownActivity,type TownActivitySpot} from '../tools/voxel-tavern/town-blockout/town-activity';
+import {orientedSupportBox,supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 
 function triangleKeys(g:BufferGeometry){
  const names=Object.keys(g.attributes).sort(),count=g.index?.count??g.getAttribute('position').count;
@@ -39,6 +40,24 @@ test('indexed spatial batches preserve every authored triangle, normal, UV, wind
  assert.ok(meshes.reduce((n,m)=>n+m.geometry.getAttribute('position').count,0)<originalVertices);
  assert.equal(released,parts.length);
  for(const m of meshes)m.geometry.dispose();material.dispose();
+});
+test('AABB early reject preserves the exact rotated collision predicate including offsets and edges',()=>{
+ function reference(e:number,n:number,b:OrientedSupportBox,r:number){
+  const p=b.footprint!;
+  const x=e-(b.min[0]+b.max[0])/2,z=-n-(b.min[2]+b.max[2])/2;
+  const c=Math.cos(p.yaw),s=Math.sin(p.yaw),dx=Math.max(Math.abs(c*x-s*z)-p.halfX,0),dz=Math.max(Math.abs(s*x+c*z)-p.halfZ,0);
+  return dx*dx+dz*dz<r*r;
+ }
+ let count=0,rejected=0;
+ for(let i=0;i<32;i++){
+  const b=orientedSupportBox(-123.17,108.54,i*Math.PI/16,.32+i*.11,2.7-i*.04,10,14);
+  for(let e=-128;e<=-118;e+=.17)for(let n=104;n<=113;n+=.19)for(const radius of [.18,.27,.43]){
+   const x=supportFootprintOverlaps(e,n,b,radius);assert.equal(x,reference(e,n,b,radius));count++;
+   const dx=Math.max(b.min[0]-e,e-b.max[0],0),dz=Math.max(b.min[2]+n,-n-b.max[2],0);
+   if(dx*dx+dz*dz>=radius*radius)rejected++;
+  }
+ }
+ assert.ok(count>250000);assert.ok(rejected/count>.8);
 });
 test('nearby activity selection checks live availability only after spatial rejection',()=>{
  let remoteCalls=0,nearCalls=0,enabled=false;
