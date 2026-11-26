@@ -86,7 +86,12 @@ const d2r = (deg: number) => deg * Math.PI / 180;
 /** Narrow-gauge corridor reserved for mainline 3: station (105°) along the belt's
  * inner edge to the smelter door (207°). Nothing in this module may intrude. */
 export const craterBeltTrackCorridor: readonly (readonly [number, number])[] = [
-  [100, 80], [120, 79], [140, 79], [150, 81.5], [160, 84], [176, 84], [190, 80], [207, 80],
+  // Freight-side departure (west of the passenger and freight tracks),
+  // then a single smooth S around the real supply stairs. Coordinates are
+  // local EN offsets from the canonical crater anchor, not world teleports.
+  ...([[62.5,-11],[59,-24],[52,-34],[47,-45],[48,-54],[50.4,-61],[48,-67.5],[42,-75]] as const)
+    .map(([e,n])=>[Math.atan2(e,n)*180/Math.PI,Math.hypot(e,n)] as const),
+  [160,84],[176,76],[190,75],[201,75],[207,80],
 ];
 
 /**
@@ -472,18 +477,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // The separate cold blast furnace stays a solid mass. Hall walls and
     // interior furniture are already registered with their actual footprints.
     hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
-    // Hand cart, handles down, mid-yard.
-    hall.piece(workshopWood,1.55,8,1.7,1.05,.62,.80);
+    // The hand cart is parked beside the terminal, not across the new
+    // narrow-gauge loading throat or the service stairs at local x=4.7.
+    const cartX=-3.5,cartZ=8.4;
+    hall.piece(workshopWood,cartX,cartZ,1.7,1.05,.62,.80);
     for(const s of [-1,1]){
-      hall.piece(workshopWood,1.55+s*.79,8,.12,1.05,.80,1.05);
-      const w=fr.at(1.55+s*.95,8);
+      hall.piece(workshopWood,cartX+s*.79,cartZ,.12,1.05,.80,1.05);
+      const w=fr.at(cartX+s*.95,cartZ);
       cyl(iron,w.east,g+.42,w.north,.42,.42,.12,10,fr.yaw,Math.PI/2);
-      put(timber,1.55+s*.42,g+.73,9.04,.10,.12,1.2);
+      put(timber,cartX+s*.42,g+.73,cartZ+1.04,.10,.12,1.2);
     }
-    // Wheel axle and cart footprint match the solid body instead of
-    // allowing a player to walk through the decorative vehicle.
-    hall.piece(workshopSheet,1.55,8,2.10,.32,.22,.59);
-    put(workshopWood,1.55,g+.91,7.54,1.58,.26,.12);
+    hall.piece(workshopSheet,cartX,cartZ,2.10,.32,.22,.59);
+    put(workshopWood,cartX,g+.91,cartZ-.46,1.58,.26,.12);
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
     // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口

@@ -9,6 +9,7 @@ import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
 import { orientedSupportBox, type OrientedSupportBox } from './town-a-r30-oriented-support';
+import { railSections, buildRailStrip, surveyRailGrade } from './town-a-r30-rail-strip';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
@@ -152,11 +153,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     part(mat, metricBox(mat,sx,sy,sz), east, h, north, yaw, pitch, roll);
   }
   function segBox(mat: MeshStandardMaterial, center: Vector3, quat: Quaternion,
-    lx: number, ly: number, lz: number, sx: number, sy: number, sz: number, joined=false) {
+    lx: number, ly: number, lz: number, sx: number, sy: number, sz: number) {
     const geo = metricBox(mat,sx,sy,sz);
-    // Continuous overlapping longitudinal strips hide both local Z end
-    // faces. Keep the end caps at route endpoints and all separate sleepers.
-    if(joined)geo.setIndex(Array.from(geo.index!.array).slice(0,24));
     geo.translate(lx, ly, lz);
     const g = geo.toNonIndexed();
     g.applyQuaternion(quat);
@@ -225,7 +223,14 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       return Math.max(s.ground + .5, Math.min(s.ground + 2.4, acc + .1));
     });
     samples.forEach((s, i) => { s.y = smoothed[i]; });
-    // Geometry: rails, rail bases, sleepers, ballast per segment.
+    // Shared cross sections: the rail head, base and ballast are all
+    // continuous strips with the same station and curve samples.
+    const sections=railSections(samples);
+    for(const side of [-1,1]){
+      push(steel,buildRailStrip(sections,side*opts.gauge/2,.15,-.08-opts.railH/2,-.08+opts.railH/2));
+      push(darkSteel,buildRailStrip(sections,side*opts.gauge/2,.30,-.255,-.185));
+    }
+    push(stoneDark,buildRailStrip(sections,0,opts.ballastWidth,-.63,-.37,1));
     const orientation = new Matrix4();
     for (let i = 0; i < samples.length - 1; i++) {
       const a = samples[i], b = samples[i + 1];
@@ -234,13 +239,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       const center = new Vector3().lerpVectors(va, vb, .5);
       const quat = new Quaternion().setFromRotationMatrix(orientation.lookAt(vb, va, up));
       const segLen = va.distanceTo(vb);
-      for (const side of [-1, 1]) {
-        const joined=i>0&&i<samples.length-2;
-        segBox(steel, center, quat, side * opts.gauge / 2, -.08, 0, .15, opts.railH, segLen + .07,joined);
-        segBox(darkSteel, center, quat, side * opts.gauge / 2, -.22, 0, .3, .07, segLen + .07,joined);
-      }
       segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
-      segBox(stoneDark, center, quat, 0, -.5, 0, opts.ballastWidth, .26, segLen + .08);
       // Physical bearing below the existing rail bed, including the many
       // 1–2m rises that the former >2.2m pier threshold left floating.
       // Keep the surveyed alignment; a future grade redesign can reuse these
@@ -686,7 +685,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     const rad = b * Math.PI / 180;
     return [road.anchor.east + r * Math.sin(rad), road.anchor.north + r * Math.cos(rad)] as const;
   });
-  const narrow = buildTrackway([[-54, 140], ...corridorWorld], {
+  const narrow = buildTrackway(corridorWorld, {
     gauge: .9, sleeperWidth: 1.7, ballastWidth: 2, railH: .13,
     flatten: [{ east: corridorWorld.at(-1)![0], north: corridorWorld.at(-1)![1], half: 6 }],
   });
@@ -750,5 +749,6 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   };
   group.userData.colliders=colliders;
   group.userData.floors=floors;
-  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
+    verticalSurvey:surveyRailGrade(main.samples),stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }
