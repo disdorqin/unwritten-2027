@@ -29,6 +29,17 @@ test('new B return axis fits a sealed relocated station and real continuous cand
    }
   }
   assert.ok(distance>24);
+  assert.ok(candidate.arrows.length>=4);assert.equal(candidate.lamps.length,3);
+  for(const a of candidate.arrows){
+   assert.ok(candidate.passageAt(a.x,a.z));
+   assert.ok(candidate.passageAt(a.x+.25*a.dx,a.z+.25*a.dz),'arrow points along actual return corridor');
+  }
+  for(const l of candidate.lamps){
+   const q=candidate.passageAt(l.x,l.z)!;assert.ok(q&&q.clearance>2.5&&q.clearance<2.6);
+   assert.equal(candidate.passageAt(l.x,l.z,.27,2.8),undefined,'real hanging lantern limits tall capsule');
+   const hit=new Raycaster(new Vector3(l.x,q.floor+1.8,l.z),new Vector3(0,1,0),0,2).intersectObjects(candidate.group.children,true)[0];
+   assert.ok(hit&&Math.abs(hit.point.y-q.floor-q.clearance)<.002,'lamp underside matches actual clearance');
+  }
   assert.ok(candidate.passageAt(plan.approach[0],plan.approach[2]));
   assert.ok(candidate.passageAt(plan.dock[0],plan.dock[2]));
   for(const f of candidate.feet)assert.equal(candidate.passageAt(f.x,f.z),undefined);

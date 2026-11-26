@@ -89,6 +89,33 @@ export function mountR30ReturnRelocationCandidate(parent:Group){
   put('wood',turnX,3.25,z,2.57,.30,.37,0x604735);
   for(const x of [turnX-1.14,turnX,turnX+1.14])put('iron',x,3.25,z,.14,.34,.41,0x80563d);
  }
+ // Low-cost, legible route dressing: iron-caged amber lenses hang from
+ // the actual roof, and worn floor chevrons point along each straight leg.
+ // No dynamic lights, no transport activation and no extra floor support.
+ const arrows:{x:number;z:number;dx:number;dz:number}[]=[];
+ for(let i=1;i<plan.path.length;i++){
+  const a=plan.path[i-1],b=plan.path[i],len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const ux=(b[0]-a[0])/len,uz=(b[1]-a[1])/len;
+  for(let d=2;d<len-1.25;d+=3.8){
+   const x=a[0]+d*ux,z=a[1]+d*uz;
+   arrows.push({x,z,dx:ux,dz:uz});
+   for(let k=0;k<4;k++)for(const side of (k===0?[1]:[-1,1])){
+    const back=k*.10,wide=k*.09*side;
+    put('iron',x-back*ux-wide*uz,.007,z-back*uz+wide*ux,.09,.014,.09,0x987547);
+   }
+  }
+ }
+ const lamps:{x:number;z:number}[]=[];
+ for(const z of [localZ+4.8,localZ+11.2,localZ+16.0]){
+  const x=turnX;if(!contains(x,z))continue;
+  lamps.push({x,z});
+  put('iron',x,3.36,z,.23,.28,.22,0x565050);
+  put('iron',x,3.13,z,.07,.27,.07,0x80563d);
+  put('iron',x,2.93,z,.31,.08,.30,0x604535);
+  put('iron',x,2.76,z,.22,.26,.22,0xb99359);
+  put('iron',x,2.59,z,.31,.08,.30,0x604535);
+  for(const u of [-1,1])for(const v of [-1,1])put('iron',x+u*.13,2.76,z+v*.13,.045,.30,.045,0x614b38);
+ }
  const block=new BoxGeometry(),resources:{mesh:InstancedMesh;material:MeshLambertMaterial;map:ReturnType<typeof makeCampGrain>}[]=[];
  for(const family of ['rock','wood','iron'] as const){
   const rows=parts.filter(p=>p.family===family);if(!rows.length)continue;
@@ -105,9 +132,19 @@ export function mountR30ReturnRelocationCandidate(parent:Group){
   for(let i=1;i<xe.length;i++)for(let j=1;j<ze.length;j++)if(!contains((xe[i-1]+xe[i])/2,(ze[j-1]+ze[j])/2))return;
   const floor=r30ReturnBayFloor(z);
   if(r30ReturnBayBlocks(x-dx,z-dz,r,h,floor-dy))return;
-  if(feet.some(f=>Math.hypot(Math.max(0,Math.abs(x-f.x)-f.w/2),Math.max(0,Math.abs(z-f.z)-f.d/2))<r))return;
-  return {floor,clearance:plan.ceiling-2*r*.05,requiresCrouch:false,waterDepth:0};
+  let clearance=plan.ceiling-2*r*.05;
+  // Use actual piece envelopes for overhead braces/lamps, not merely
+  // nominal roof height. Low decorative inlays are not support surfaces.
+  for(const p of parts){
+   if(p.y+p.h/2-r30ReturnBayFloor(p.z)<=.025||Math.hypot(Math.max(0,Math.abs(x-p.x)-p.w/2),Math.max(0,Math.abs(z-p.z)-p.d/2))>=r)continue;
+   const bottom=p.y-p.h/2,top=p.y+p.h/2;
+   if(top<=floor+.025)continue;
+   if(bottom<=floor+.025)return;
+   clearance=Math.min(clearance,bottom-floor);
+  }
+  if(clearance<h)return;
+  return {floor,clearance,requiresCrouch:false,waterDepth:0};
  }
- return {group,shell,station,parts:parts.length+station.parts.length,feet,passageAt,survey:surveyR30ReturnRelocation(),
+ return {group,shell,station,parts:parts.length+station.parts.length,feet,arrows,lamps,passageAt,survey:surveyR30ReturnRelocation(),
  dispose(){group.removeFromParent();station.dispose();resources.forEach(r=>{r.mesh.dispose();r.material.dispose();r.map.dispose()});block.dispose();geometry.dispose();rock.dispose();rockMap.dispose();group.clear()}};
 }
