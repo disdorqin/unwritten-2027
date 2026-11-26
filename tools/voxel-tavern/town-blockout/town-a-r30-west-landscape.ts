@@ -13,6 +13,7 @@ export const coldFurnaceFootway=[[-144,105],[-151.5,112.5],[-158.5,112.5],[-171,
 export const waterTowerFootway=[[-36,145],[-38,145],[-44.5,145.5],[-44.5,147.5]] as const;
 export const ruinedShedFootway=[[-144,105],[-143,102],[-143.17252333055055,98.74587451898263]] as const;
 export const sealedStorehouseFootway=[[-123,100],[-130.5,97.5],[-131,95.5]] as const;
+export const sortingShedFootway=[[-131,95.5],[-134.5,94.5],[-135,93],[-137.5,93]] as const;
 export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
 // Surveyed against the combined A collision index. These are optional
 // sightseeing footways, not new story or railway authority.
@@ -118,6 +119,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:oreYardFootway,half:.72,strength:.83},
     {points:ruinedShedFootway,half:.82,strength:.65},
     {points:sealedStorehouseFootway,half:.70,strength:.60},
+    {points:sortingShedFootway,half:.70,strength:.60},
     {points:coldFurnaceFootway,half:1.12,strength:.68},
     {points:waterTowerFootway,half:.92,strength:.62},
   ];

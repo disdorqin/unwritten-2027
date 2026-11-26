@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, sortingShedFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -917,6 +917,16 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         }
       }
     }
+    // A real stone floor and narrow open rear sorting aisle. The
+    // existing poles remain in their original plan.
+    const shedSoils=[-3.05,0,3.05].flatMap(x=>[-2.65,0,2.65].map(z=>{
+      const p=fr.at(-8+x,-6+z);return heightAt(p.east,p.north)??g;
+    }));
+    yardStructure.piece(workshopBrick,-8,-6,6.10,5.30,Math.min(g,...shedSoils)-g-.09,.12,true);
+    for(let i=0;i<6;i++)for(let j=0;j<5;j++){
+      const x=-10.5+i,z=-8.12+j*1.06;
+      yardStructure.slab((i+j)%4===0?stoneDark:stone,x,z,.985,1.04,.16,.04);
+    }
     // Sorting shed: visible columns with exact player blockers.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
       yardStructure.piece(workshopWood,-8+px,-6+pz,.26,.26,0,3);
@@ -931,13 +941,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       for(const x of [-10.6,-8,-5.4])put(workshopWood,x,g+3.43,-6+side*1.4,.13,.15,shedSlant,side*shedPitch);
     }
     put(workshopWood,-8,g+3.91,-6,6.45,.17,.21);
-    for(const x of [-9.4,-7.9,-6.4]){
-      yardStructure.piece(workshopWood,x,-6,1.25,1.25,0,1.1);
+    // Three open sorting bins, with actual walls, ribbed joinery and
+    // contrasting ore/timber/slag contents. No new collection authority.
+    for(const [i,x]of [-9.4,-7.9,-6.4].entries()){
+      yardStructure.piece(workshopWood,x,-6,1.25,1.25,.16,.30,true);
       for(const s of [-1,1]){
-        put(timberWarm,x+s*.52,g+.55,-6,.10,1.12,1.27);
-        put(workshopRust,x,g+.35,-6+s*.63,1.20,.09,.025);
+        yardStructure.piece(workshopWood,x+s*.55,-6,.15,1.25,.30,1.03);
+        yardStructure.piece(workshopWood,x,-6+s*.55,.95,.15,.30,1.03);
+        put(workshopRust,x,g+.43,-6+s*.635,1.2,.09,.035);
+        put(workshopRust,x,g+.92,-6+s*.635,1.2,.075,.035);
+        put(timberWarm,x+s*.56,g+1.06,-6,.18,.085,1.28);
+        put(timberWarm,x,g+1.06,-6+s*.56,1.15,.085,.18);
+      }
+      for(let j=0;j<3;j++)for(let k=0;k<3;k++){
+        const seed=i*101+j*13+k*29,h=.18+.29*hash(seed+5);
+        const dx=x+(j-1)*.28,z=-6+(k-1)*.27;
+        yardStructure.piece(i===0?ore:i===1?workshopWood:oreGrey,dx,z,.24,.23,.30,.30+h);
       }
     }
+    industrialRoutes.push({id:'sorting-shed',points:sortingShedFootway.map(([east,north],i)=>({
+      east,north,height:(heightAt(east,north)??g)+(i===sortingShedFootway.length-1?.16:0)
+    }))});
     // Derrick: four anchored posts and overhead braces, with a clear
     // working bay underneath rather than disconnected floating legs.
     for(const s of [-1,1])for(const z of [-6.65,-5.35]){
