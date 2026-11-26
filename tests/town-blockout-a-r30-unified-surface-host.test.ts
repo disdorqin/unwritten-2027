@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
-import {ar30HistoricSupport,surveyAR30InscriptionAccess,ar30HostTracks} from '../tools/voxel-tavern/town-blockout/town-a-r30-unified-surface-host';
+import {ar30HistoricSupport,surveyAR30InscriptionAccess,ar30HostTracks,assertAR30SurfaceLifecycle,assertAR30SurfaceAttachment} from '../tools/voxel-tavern/town-blockout/town-a-r30-unified-surface-host';
 import {ar30SurfacePort} from '../tools/voxel-tavern/town-blockout/town-a-r30-surface-port';
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),rail=buildCraterRailExtension(grid,road);
 test('actual inscription path consumes stairs and deck, both directions, all three rails',()=>{
@@ -20,6 +20,14 @@ test('missing floor or added blocker invalidates actual route',()=>{
  const p=rail.stationWalkRoutes.find(r=>r.id==='inscription-access')!.points.at(-2)!;
  road.group.userData.colliders=[...old,{min:[p.east-.5,p.height,-p.north-.5],max:[p.east+.5,p.height+2,-p.north+.5]}];
  try{assert.throws(()=>surveyAR30InscriptionAccess(road,rail),/blocked/);}finally{road.group.userData.colliders=old;}
+});
+test('public host rejects half-mounted B ground and incomplete attachment',()=>{
+ assertAR30SurfaceLifecycle(road,undefined);
+ const ground=road.group.getObjectByName('meteor-crater-walk-mesh')!;
+ const previous=ground.userData.bR30UnifiedRelief;
+ ground.userData.bR30UnifiedRelief=true;
+ try{assert.throws(()=>assertAR30SurfaceLifecycle(road,undefined),/installed together/);}finally{ground.userData.bR30UnifiedRelief=previous;}
+ assert.throws(()=>assertAR30SurfaceAttachment(road,rail),/Incomplete/);
 });
 test('legacy port remains dormant, historic supports respect movement ceiling',()=>{
  assert.equal(ar30SurfacePort(),undefined);

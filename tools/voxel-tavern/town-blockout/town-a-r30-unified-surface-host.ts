@@ -67,6 +67,23 @@ export function surveyAR30InscriptionAccess(road:Road,rail:Rail){
  * source package. Candidate overlay supplies the real same-module port. */
 export type AR30SurfaceAssembly={historic:{supportedHeight(east:number,north:number):number|undefined;route:readonly Foot[]};productionReady:false;dispose():void};
 export type AR30SurfacePort={story:AR30StoryLifecycle;attach(road:Road,rail:Rail):AR30SurfaceAssembly};
+/** A's production entry refuses a half-mounted B surface. A standalone
+ * B review can still use its own explicit test fixture; this gate belongs
+ * only to the actual public host. */
+export function assertAR30SurfaceLifecycle(road:Road,port:AR30SurfacePort|undefined){
+ const ground=road.group.getObjectByName('meteor-crater-walk-mesh');
+ const unified=ground?.userData.bR30UnifiedRelief===true;
+ if(unified!==!!port)throw Error('Unified crater ground and reviewed surface port must be installed together');
+ if(port&&(road.group.getObjectByName('za36-dressing-terrace:plate')||!Array.isArray(road.group.userData.aR30SettledSupports)))throw Error('Unified story retirement/refit incomplete');
+}
+export function assertAR30SurfaceAttachment(road:Road,rail:Rail){
+ const expected=['b-r30-pit-workface','b-r30-crater-workstations','b-r30-melt-columns','b-r30-mound-planting','b-r30-east-historic-walkway','mound-old-work-flag','b-r30-rubbing-transfer'];
+ const counts=new Map<string,number>();
+ road.group.traverse(o=>{if(expected.includes(o.name))counts.set(o.name,(counts.get(o.name)??0)+1);});
+ if(expected.some(n=>counts.get(n)!==1))throw Error('Incomplete or duplicate crater geometry: '+JSON.stringify([...counts]));
+ const boxes=[...road.group.userData.colliders,...rail.group.userData.colliders];
+ if(new Set(boxes).size!==boxes.length)throw Error('Duplicate crater collision registration');
+}
 export function ar30HistoricSupport(assembly:AR30SurfaceAssembly|undefined,east:number,north:number,limit:number){
  const h=assembly?.historic.supportedHeight(east,north);
  return h!==undefined&&Number.isFinite(h)&&h<=limit?h:undefined;

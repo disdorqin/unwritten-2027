@@ -198,7 +198,7 @@ import { addTownSnowBoard } from './town-snow-board';
 import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
 import {ar30SurfacePort} from './town-a-r30-surface-port';
-import {ar30HistoricSupport,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
+import {ar30HistoricSupport,assertAR30SurfaceLifecycle,assertAR30SurfaceAttachment,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const previewOptions = new URLSearchParams(location.search);
@@ -269,8 +269,8 @@ function ensureWestCraterRoad() {
     westCraterRoad = mountWestCraterRoad(worldBounds.depth,
       (north) => grid.groundHeightAt(0, north),
       { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff'),unifiedStory:westSurfacePort?.story });
+    assertAR30SurfaceLifecycle(westCraterRoad,westSurfacePort);
     scene.add(westCraterRoad.group);
-    if(!westSurfacePort)westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
@@ -889,9 +889,12 @@ const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),rail
 scene.add(railExtension.group);
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
-  westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group);
+  try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
+  catch(error){westSurfaceAssembly.dispose();westSurfaceAssembly=undefined;throw error;}
 }
-const railWestGeometry=buildWestGeometry(railExtension.group);
+// One final west index includes both real rail and road arrays, after all
+// accepted surface geometry. No early or parallel stale index survives.
+westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
 scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -1201,9 +1204,10 @@ let walkGeometry = geometry();
 // S-1 (分支窗 A): buildWestGeometry fills the west index declared beside
 // westCraterRoad above (the declaration must sit early: ensureWestCraterRoad
 // runs during module init, before this point in the file is reached).
-function buildWestGeometry(group: Group) {
+function buildWestGeometry(...groups: Group[]) {
   const cells = new Map<string, WalkGeometry>();
-  const { colliders, floors, ramps } = readWalkGeometry(group);
+  const parts=groups.map(readWalkGeometry);
+  const colliders=parts.flatMap(p=>p.colliders),floors=parts.flatMap(p=>p.floors),ramps=parts.flatMap(p=>p.ramps);
   function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
     for (const box of boxes) {
       const e0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
@@ -1231,10 +1235,7 @@ function geometryAt(east: number, north: number) {
 }
 function outdoorGeometryAt(east: number, north: number) {
   if (east < 0) {
-    const key=westCellKey(east,north),base=westWalkGeometry?.get(key),rail=railWestGeometry.get(key);
-    if(!rail)return base??emptyGeometry;
-    if(!base)return rail;
-    return {colliders:[...base.colliders,...rail.colliders],floors:[...base.floors,...rail.floors],ramps:[...base.ramps,...rail.ramps]};
+    return westWalkGeometry?.get(westCellKey(east,north))??emptyGeometry;
   }
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
@@ -1743,7 +1744,7 @@ for(const window of ensureWestCraterRoad().mouthWorks.supplyWindowControls)activ
   run:()=>{
     if(homeReturn||Math.hypot(x-window.useEast,n-window.useNorth)>.55||Math.abs(ground-window.useHeight)>.55)return;
     const open=window.toggle();
-    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group);
+    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
     activityContext.face(window.east,window.north,window.height);
     announceActivity(open?'窗户已打开':'窗户已关闭');
   },
