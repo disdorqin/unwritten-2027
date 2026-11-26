@@ -7,6 +7,7 @@ const road=mountWestCraterRoad(260,()=>10.7773);
 import {createUndergroundWaterState} from '../../src/presence/underground-water-state.js';
 import {r30InterlayerLiftSite as interlayerSite,type R30InterlayerRide} from '../voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
 const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
+let waterConnected=true;
 let domain=interlayerSite.upper.domainId;
 import type {UndergroundMiningTargetView,UndergroundMiningCore} from '../../src/shared/underground-mining.js';
 let oreReview:readonly UndergroundMiningTargetView[]=[],oreCores:readonly UndergroundMiningCore[]=[];
@@ -15,7 +16,7 @@ let creatureReview:ReturnType<ReturnType<typeof createMineBestiaryEncounter>['sn
 let reviewTargets:readonly UndergroundMiningTargetView[]=[];
 import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
 let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
-const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
+const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>waterConnected?water.tonight():undefined},
  readAcceptedMiningTargets:()=>reviewTargets,
  oreBridge:{acceptsSite:()=>oreReview.length>0,readTargets:()=>oreReview,readCores:()=>oreCores},
  encounterBridge:{acceptGroup:g=>creatureReview.length?'review-room/'+g.id:undefined,readActors:()=>creatureReview},
@@ -77,6 +78,18 @@ let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now()
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
  oreReview=[];oreCores=[];creatureReview=[];
+ if(name.startsWith('water-')){
+  const r=host.waterReadout;if(!r?.face||r.baseline===undefined)return false;
+  waterConnected=name!=='water-pending';
+  water.shiftPump(1);water.shiftPump(1);water.shiftPump(1);water.shiftPump(1);
+  // Set exactly the effective state using the original pump authority.
+  for(let i=0;i<(name==='water-low'?4:name==='water-mid'?3:0);i++)water.shiftPump(-1);
+  mainlineReview=undefined;host.mounted.sync();
+  const at=vec([5.1,-91.12,r.face.z+.39]),p=host.passageAt(at.x,-at.z);
+  if(!p)return false;
+  camera.position.set(at.x,p.floor+1.67,at.z);camera.lookAt(vec([r.face.x,r.baseline+.99,r.face.z+.39]));torch.intensity=15;view=name;return true;
+ }
+ waterConnected=true;
  if(name.startsWith('creature-')){
   const s=host.encounterSurvey;if(!s?.ready)return false;
   const spawns=s.buildSpawns(g=>'review-room/'+g.id)!;
