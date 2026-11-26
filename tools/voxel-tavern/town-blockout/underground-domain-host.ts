@@ -12,6 +12,7 @@ import type { mountWestCraterRoad } from './town-za22-crater-road';
 import type { AcceptedUndergroundWaterSnapshot } from '../../../src/shared/town-c-water-snapshot-port.js';
 import type { UndergroundWater90OreVisual } from './town-c2-underground-water-minus90.js';
 import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
+import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -373,6 +374,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
   }) : { kind: 'unregistered-shaft' as const };
   return {
     kind: 'ready', registration, mounted, passageAt, shaftContract,
+    // Layout contract only. The actual city/palace receiving shells and
+    // movement/presence host must approve before mounting or allowing travel.
+    deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
+      ?{frames:r30DeepFrames,localFeet:r30DeepLocalFeet,worldFeet:r30DeepWorldFeet,
+        links:r30DepthLinks,roomProposals:r30DeepRoomProposals,productionReady:false as const}:undefined,
     floorAt: (east: number, north: number) => passageAt(east, north)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
     offeringsSnapshot: () => offerings?.snapshot(),
