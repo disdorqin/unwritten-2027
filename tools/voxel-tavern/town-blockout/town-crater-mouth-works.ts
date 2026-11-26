@@ -144,8 +144,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
   const supplyPlanks = supplyWoodMaterial('supply-cabin-joined-timber', [0x795038, 0x4b3024, 0x876047]);
   const supplyShingles = supplyWoodMaterial('supply-cabin-continuous-shingles', [0x493e33, 0x322b25, 0x5c4b3d], true);
-  const timber = pixelMaterial(palette.earth, palette.night, 23, palette.stone);
-  const timberWarm = pixelMaterial(palette.ochre, palette.earth, 61, palette.timberLight);
+  // Structural beams and signage share continuous metre-scaled wood;
+  // the old high-contrast square noise obscured the near-field joinery.
+  const timber=supplyWoodMaterial('mouth-structural-timber',[0x543b2b,0x3b281d,0x624735]);
+  const timberWarm=supplyWoodMaterial('mouth-warm-timber',[0x9b724a,0x725034,0xa98156]);
   const slate = pixelMaterial(palette.slate, palette.night, 133, palette.stone);
   const iron = pixelMaterial(palette.night, palette.rust, 151, palette.earth);
   const rustIron = pixelMaterial(palette.rust, palette.night, 177, palette.earth);

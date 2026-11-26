@@ -388,6 +388,9 @@ try{
      await picture(page,evidence,segment+'-'+(lighting==='雪夜'?'night':'day'));
    }
  }else if(segment==='guard-shed'){
+   await face(page,evidence,-.72);
+   const tilt=async(dy)=>{await page.mouse.move(dragX,dragY);await page.mouse.down();try{await page.mouse.move(dragX,dragY+dy,{steps:4});}finally{await page.mouse.up();}};
+   await tilt(75);
    await wallView('guard-hearth',-.72);
    if((await page.locator('#lighting').textContent())!=='雪夜'){
      await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
@@ -399,6 +402,7 @@ try{
    await picture(page,evidence,'guard-fed');
    await page.keyboard.press('e');
    await page.waitForFunction(()=>document.querySelector('#town-activity-status')?.textContent?.includes('恢复原样'),null,{timeout:8000});
+   await tilt(-75);
    await step(path[0],'guard-hearth-exit');
    const seatPath=road.mouthWorks.guardShedRoutes.find(r=>r.id==='guard-seat').points;
    for(const [i,p]of seatPath.entries())await step(p,'guard-seat-'+i);
@@ -407,6 +411,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('起身'),null,{timeout:8000});
    await picture(page,evidence,'guard-seated');
    await page.keyboard.press('e');
+   await page.waitForFunction(pattern=>new RegExp(pattern).test(document.querySelector('#position')?.textContent??''),positionPattern.source,{timeout:8000});
    for(const [i,p]of [...seatPath].reverse().entries())await step(p,'guard-seat-return-'+i);
    await step(path.at(-1),'guard-hearth-return');
  }else if(segment==='assembly-registration'){
