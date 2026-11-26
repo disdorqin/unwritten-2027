@@ -31,7 +31,7 @@ type Core={e:number;n:number;lo:number;hi:number;natural:number};
  * triangle gradient bound, not just a nominal centreline profile.
  * No road overlay, no write to the source array, no authority claim. */
 export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls){
- if(controls.length<2)throw new RangeError('road controls');
+ if(controls.length<2||controls.some((p,i)=>!Number.isFinite(p.east)||!Number.isFinite(p.north)||(i>0&&p.east===controls[i-1]!.east&&p.north===controls[i-1]!.north)))throw new RangeError('road controls');
  const path=smoothPath(controls);
  let cum=0;
  const route:RidgeRoadPoint[]=path.map((p,i)=>{if(i)cum+=Math.hypot(p.east-path[i-1]!.east,p.north-path[i-1]!.north);return {...p,cum,height:field.heightAt(p.east,p.north)??NaN}});
@@ -79,6 +79,15 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  const audit=auditRidgeRoadSurface(graded,finalRoute);
  let cut=0,fill=0,changed=0,protectedChanges=0;
  for(const [id,p]of near){const d=elevation[id]!-field.elevation[id]!;cut=Math.max(cut,-d);fill=Math.max(fill,d);if(Math.abs(d)>1e-6){changed++;if(pin(p.e,p.n)||!allowed(p.e,p.n))protectedChanges++}}
- const ok=audit.maxGrade<=.12+1e-6&&protectedChanges===0&&cut<=cutLimit+1e-5&&fill<=cutLimit+1e-5;
- return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return (ridgeRoadProject(finalRoute,e,n)?.distance??Infinity)<=1.75}};
+ // Recheck the actual stored Float32 heights, rather than trusting the
+ // feasible interval arithmetic: each fully graded triangle must satisfy
+ // the two-dimensional grade bound, including transverse slope.
+ let maxCoreGrade=0;
+ for(const id of core.keys()){
+  const e=id+1,n=id+field.width,en=n+1;
+  if(core.has(e)&&core.has(n))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[e]!-elevation[id]!,elevation[n]!-elevation[id]!));
+  if(core.has(e)&&core.has(n)&&core.has(en))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[en]!-elevation[n]!,elevation[en]!-elevation[e]!));
+ }
+ const ok=audit.maxGrade<=.12+1e-6&&maxCoreGrade<=.12+1e-5&&protectedChanges===0&&cut<=cutLimit+1e-5&&fill<=cutLimit+1e-5;
+ return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return (ridgeRoadProject(finalRoute,e,n)?.distance??Infinity)<=1.75}};
 }

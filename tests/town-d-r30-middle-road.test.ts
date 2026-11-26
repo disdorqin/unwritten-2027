@@ -4,6 +4,7 @@ import {Group} from 'three';
 import {createTerrainGrid} from '../tools/voxel-tavern/town-blockout/terrain';
 import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-d-r30-front-ridge';
 import {buildMiddleEastRoadbed} from '../tools/voxel-tavern/town-blockout/town-d-r30-upper-roadbed';
+import {auditRidgeRoadSurface} from '../tools/voxel-tavern/town-blockout/town-d-r30-roadbed';
 import {mountNorthRidgeMiddleStation} from '../tools/voxel-tavern/town-blockout/north-ridge-middle-station';
 import {mountRidgeRoadFurniture} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from '../tools/voxel-tavern/town-blockout/town-d-r30-retaining-banks';
@@ -17,7 +18,10 @@ test('middle east road: one actual graded field, fixed station pad, continuous l
  assert.equal(r.protectedChanges,0);
  for(let n=508;n<=532;n++)for(let e=425;e<=455;e++)assert.equal(r.field.vertexAt(e,n),natural.vertexAt(e,n));
  for(const side of ['north','south','west','east']as const)assert.deepEqual(r.field.edge(side),natural.edge(side));
+ assert.ok(r.maxCoreGrade<=.12+1e-5);
  const path=[{east:440,north:520,height:140,cum:-4},...r.route];
+ assert.ok(auditRidgeRoadSurface(r.field,path).maxGrade<=.12);
+ assert.throws(()=>buildMiddleEastRoadbed(natural,()=>true,[{east:440,north:524},{east:440,north:524}]),RangeError);
  const station=mountNorthRidgeMiddleStation(new Group()),furniture=mountRidgeRoadFurniture(r.field,r.route,()=>true),banks=mountRidgeRetainingBanks(r.field,r.route,()=>true),forest=mountRidgeForest(r.field,ridgeForestRouteClearance([path]));
  let probes=0;
  try{

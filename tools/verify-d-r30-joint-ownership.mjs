@@ -82,7 +82,7 @@ try{
  if(process.argv.includes('--middle-road')){
   const {buildMiddleEastRoadbed}=await load('town-d-r30-upper-roadbed');
   const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0);
-  middleRoad={ok:result.ok,reason:result.reason,route:result.route,audit:result.audit,cut:result.cut,fill:result.fill,changed:result.changed,protectedChanges:result.protectedChanges,east:result.east,north:result.north};
+  middleRoad={ok:result.ok,reason:result.reason,route:result.route,audit:result.audit,maxCoreGrade:result.maxCoreGrade,cut:result.cut,fill:result.fill,changed:result.changed,protectedChanges:result.protectedChanges,east:result.east,north:result.north};
  }
  const stationSamples=[];for(let n=344;n<=376;n+=2)for(let e=514;e<=550;e+=4)stationSamples.push([e,n,Math.round(field.heightAt(e,n)*100)/100,Math.round(ownership.distance(e,n)*10)/10]);
  const report={a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,approach,sweep,externalSweep,fullSweep,middleRoad,stationSamples,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
