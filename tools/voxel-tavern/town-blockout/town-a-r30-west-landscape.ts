@@ -6,6 +6,9 @@ type Point=readonly [number,number];
 type Anchor=Readonly<{east:number;north:number}>;
 /** Surveyed against the actual yard rubble, rail and fence. Both the
  * physical route and the packed surface use this one sequence. */
+// Shared surveyed detour along the north of the assembly court, then
+// rejoin the original yard crossing; no path passes through the flagpoles.
+export const smelterFootway=[[-43,159],[-67,136],[-91,129],[-106.94,125.4],[-117,124],[-122,116],[-125,112.65],[-144,105]] as const;
 export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
 const unit=(x:number)=>Math.max(0,Math.min(1,x));
 const smooth=(x:number)=>{const u=unit(x);return u*u*(3-2*u)};
@@ -97,7 +100,9 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:[[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5],[-58.11,138.36]],half:1.45,strength:.7},
     {points:[[-43,159],[-67,136],[-76.5,126],[-74,117.5],[-75.3019,116.6406]],half:1.45,strength:.78},
     {points:[[-67,136],[-86.025,126.15357]],half:1.45,strength:.72},
-    {points:[[-43,159],[-67,136],[-144,105],[-151.75,112.34]],half:1.75,strength:.7},
+    {points:[...smelterFootway,[-151.75,112.34]],half:1.75,strength:.7},
+    {points:[[-106.94,125.4],[-106.94,123.57]],half:1.25,strength:.78},
+    {points:[[-98,243],[-110,244],[-119,245],[-122,245.5]],half:1.15,strength:.68},
     {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
     {points:oreYardFootway,half:.72,strength:.83},
   ];

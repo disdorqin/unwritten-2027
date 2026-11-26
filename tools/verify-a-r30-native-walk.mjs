@@ -276,6 +276,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
   assert.fail(`Native walking did not settle at ${label}: ${JSON.stringify(after)}`);
 }
 import { createTerrainGrid, worldBounds } from './voxel-tavern/town-blockout/terrain.ts';
+import {smelterFootway} from './voxel-tavern/town-blockout/town-a-r30-west-landscape.ts';
 import { mountWestCraterRoad } from './voxel-tavern/town-blockout/town-za22-crater-road.ts';
 
 async function picture(page,evidence,label){
@@ -300,10 +301,10 @@ const approach={
  supplyinterior:[[-12,159],[-43,159],[-67,136]],
  freight:[[-12,159],[-43,159]],
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
- smelter:[[-12,159],[-43,159],[-67,136],[-144,105]],
- 'ore-yard':[[-12,159],[-43,159],[-67,136],[-144,105]],
+ smelter:[[-12,159],...smelterFootway],
+ 'ore-yard':[[-12,159],...smelterFootway],
  'transfer-dock':[[-12,159],[-43,159]],
- 'ore-yard-dock':[[-12,159],[-43,159],[-67,136],[-144,105],[-132,101],[-132,100],[-123,100]],
+ 'ore-yard-dock':[[-12,159],...smelterFootway,[-132,101],[-132,100],[-123,100]],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});

@@ -254,6 +254,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const supplyDeckRoute: {east:number;north:number;height:number}[]=[];
   const supplyInteriorRoute: {east:number;north:number;height:number}[]=[];
   const guardShedRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
+  const assemblyRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const guardShedSeats:{east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
   const gateFencePosts: { bearing: number; radius: number }[] = [];
@@ -266,14 +267,29 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // Grounded rectangular assembly court with a clear central aisle.
     // The old floating circular slab is replaced by a real low deck.
     const pad=fr.at(0,0),padY=g+.18;
-    box(stoneDark,pad.east,g+.035,pad.north,16,.29,12,fr.yaw);
-    floors.push(orientedSupportBox(pad.east,pad.north,fr.yaw,16,12,g-.11,padY));
+    const base=Math.min(g-.08,...[-8,0,8].flatMap(x=>[-6,0,6].map(z=>{
+      const p=fr.at(x,z);return heightAt(p.east,p.north)??g;
+    })))-.06;
+    box(stoneDark,pad.east,(base+padY-.055)/2,pad.north,16,padY-.055-base,12,fr.yaw);
+    // Two tone paving courses and an unobstructed centre aisle. The
+    // stone surface, not an invisible raised floor, carries the player.
+    for(let i=0;i<8;i++)for(let j=0;j<6;j++){
+      const p=fr.at(-7+i*2,-5+j*2);
+      box((i+j)%4===0?stoneDark:stone,p.east,padY-.0275,p.north,1.997,.055,1.997,fr.yaw);
+    }
+    floors.push(orientedSupportBox(pad.east,pad.north,fr.yaw,16,12,base,padY));
+    const solid=(x:number,z:number,w:number,d:number,y0:number,y1:number,yaw=fr.yaw)=>{
+      const p=fr.at(x,z);colliders.push(orientedSupportBox(p.east,p.north,yaw,w,d,y0,y1));
+    };
+    const point=(x:number,z:number,height:number)=>({...fr.at(x,z),height});
     for(const side of [-1,1]){
       const p=fr.at(side*7.8,0);
       box(stone,p.east,g+.13,p.north,.32,.26,12,fr.yaw);
+      floors.push(orientedSupportBox(p.east,p.north,fr.yaw,.32,12,g,g+.26));
       for(const z of [-5.7,5.7]){
         const q=fr.at(side*5.5,z);
         box(stone,q.east,g+.13,q.north,4.8,.26,.32,fr.yaw);
+        floors.push(orientedSupportBox(q.east,q.north,fr.yaw,4.8,.32,g,g+.26));
       }
     }
     // Flagpoles: town flag + survey pennant. The ZB-35 anchor ring sits at the main pole's foot.
@@ -281,19 +297,27 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const p = fr.at(dx, 3.4);
       cyl(timber, p.east, g + tall / 2, p.north, .09, .13, tall, 7);
       box(timber, p.east, g + tall - .3, p.north, .8, .07, .07, fr.yaw);
+      solid(dx,3.4,.26,.26,padY,g+tall);
+      cyl(iron,p.east,g+.58,p.north,.16,.19,.31,8,fr.yaw);
+      cyl(stone,p.east,g+.28,p.north,.42,.48,.23,8,fr.yaw);
     }
     const flagPole = fr.at(-1.6, 3.4);
-    box(new MeshStandardMaterial({ color: 0x883738, roughness: .9 }), flagPole.east + .55, g + 6.55, flagPole.north, 1.05, .68, .05, fr.yaw);
-    const pennant = fr.at(1.6, 3.4);
-    box(timberWarm, pennant.east + .34, g + 5.05, pennant.north, .62, .3, .04, fr.yaw);
+    const flag=fr.at(-1.6+.55,3.4),pennant=fr.at(1.6+.34,3.4);
+    box(new MeshStandardMaterial({ color: 0x883738, roughness: .9 }),flag.east,g+6.55,flag.north,1.05,.68,.05,fr.yaw);
+    box(timberWarm,pennant.east,g+5.05,pennant.north,.62,.3,.04,fr.yaw);
     cyl(stone, flagPole.east, g + .22, flagPole.north, 1.05, 1.25, .44, 12);
+    solid(-1.6,3.4,2.15,2.15,padY,g+.44);
+    solid(1.6,3.4,.84,.84,padY,g+.40);
     sites.push({ id: 'zb35-anchor', east: flagPole.east, north: flagPole.north, height: g + .44, radius: 1.3 });
     // Notice board with the settled text and its empty duty grid.
     const board = fr.at(-4.6, 2.2);
     for (const s of [-1, 1]) {
       const p = fr.at(-4.6 + s * 1.15, 2.2);
       box(timber, p.east, g + .95, p.north, .14, 1.9, .14, fr.yaw);
+      solid(-4.6+s*1.15,2.2,.14,.14,padY,g+1.9);
+      box(stone,p.east,padY+.10,p.north,.32,.20,.32,fr.yaw);
     }
+    solid(-4.6,2.2,2.66,.12,g+.79,g+2.45);
     sign(board.east, g + 1.62, board.north, fr.yaw, 2.5, 1.5, (c, w, h) => {
       c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
       c.strokeStyle = '#5d4630'; c.lineWidth = 6; c.strokeRect(14, 14, w - 28, h - 28);
@@ -307,16 +331,21 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         c.beginPath(); c.moveTo(150, y); c.lineTo(150, y + 40); c.stroke();
       }
     });
-    const boardH = heightAt(board.east, board.north);
-    if (boardH !== undefined) {
-      actions.push({ id: 'registration', label: '阅读入坑告示', east: board.east, north: board.north, height: boardH, range: 2.1 });
-    }
+    const boardStand=point(-4.6,3.55,padY);
+    actions.push({id:'registration',label:'阅读入坑告示',...boardStand,range:1.05});
+    const entry=fr.at(0,7.2);
+    assemblyRoutes.push({id:'assembly-registration',points:[
+      {...entry,height:heightAt(entry.east,entry.north)??g},
+      point(0,5.25,padY),point(-4.6,4.95,padY),boardStand
+    ]});
     // K-39 (《设计-全图文字件总表》卡15; 分册: 速降榜小牌挂告示牌侧):
     // descent leaderboard head board beside the notice board.
     for (const s of [-1, 1]) {
       const p = fr.at(-2.2 + s * .55, 2.2);
       box(timber, p.east, g + .8, p.north, .12, 1.6, .12, fr.yaw);
+      solid(-2.2+s*.55,2.2,.12,.12,padY,g+1.6);
     }
+    solid(-2.2,2.2,1.46,.12,g+.99,g+1.71);
     const lb = fr.at(-2.2, 2.2);
     sign(lb.east, g + 1.35, lb.north, fr.yaw, 1.3, .55, (c, w, h) => {
       c.fillStyle = '#d9c69c'; c.fillRect(0, 0, w, h);
@@ -331,20 +360,31 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(timber, p.east, g + .42, p.north, .12, .84, .12, fr.yaw);
       const q = fr.at(-5 + i * 1.7, -4.1);
       box(timber, q.east, g + .42, q.north, .12, .84, .12, fr.yaw);
+      solid(-5+i*1.7,-2.8,.12,.12,padY,g+.84);
+      solid(-5+i*1.7,-4.1,.12,.12,padY,g+.84);
+      // Open front, actual timber wheel-rest on the rear of each stall.
+      const rest=fr.at(-5+i*1.7,-4.42);
+      box(timberWarm,rest.east,padY+.055,rest.north,1.18,.11,.22,fr.yaw);
+      floors.push(orientedSupportBox(rest.east,rest.north,fr.yaw,1.18,.22,padY,padY+.11));
     }
     // Crate stacks, three groups, one rope coil.
     for (const [dx, dz, n] of [[4.9, 1.8, 3], [6.1, .4, 2], [5.2, -3.6, 2]] as const) {
       for (let i = 0; i < n; i++) {
         const p = fr.at(dx + (i % 2) * .15, dz - Math.floor(i / 2) * .1);
-        box(i % 2 ? timberWarm : timber, p.east, g + .41 + i * .8, p.north, .92, .8, .92, fr.yaw + i * .13);
+        const y=padY+.4+i*.8,yaw=fr.yaw+i*.13;
+        box(i%2?timberWarm:supplyPlanks,p.east,y,p.north,.92,.8,.92,yaw);
+        solid(dx+(i%2)*.15,dz-Math.floor(i/2)*.1,.92,.92,padY+i*.8,padY+(i+1)*.8,yaw);
+        for(const s of [-1,1])box(iron,p.east+Math.cos(yaw)*s*.29,y,p.north+Math.sin(yaw)*s*.29,.08,.82,.94,yaw);
       }
     }
     const coil = fr.at(4.9, 3.1);
-    part(timberWarm, new TorusGeometry(.42, .11, 6, 14), coil.east, g + .85, coil.north, fr.yaw, Math.PI / 2);
+    part(timberWarm,new TorusGeometry(.42,.10,6,14),coil.east,padY+.11,coil.north,fr.yaw,Math.PI/2);
     // Two yard lamps; one carries a real light (chain link toward the rim lamps).
     for (const dx of [-7.6, 7.6]) {
       const p = fr.at(dx, 1.2);
       box(timber, p.east, g + 1.05, p.north, .16, 2.1, .16, fr.yaw);
+      solid(dx,1.2,.16,.16,padY,g+2.1);
+      box(stone,p.east,padY+.10,p.north,.34,.20,.34,fr.yaw);
       box(glow, p.east, g + 2.2, p.north, .3, .38, .3, fr.yaw);
       box(iron, p.east, g + 2.48, p.north, .44, .08, .44, fr.yaw);
     }
@@ -1037,7 +1077,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     let nearest: CraterActionSpot | undefined; let best = Infinity;
     for (const spot of actions) {
       const horizontal = Math.hypot(east - spot.east, north - spot.north);
-      const heightTolerance=spot.id==='telescope'||spot.id==='map'||spot.id==='firewood'?.65:3.3;
+      const heightTolerance=spot.id==='telescope'||spot.id==='map'||spot.id==='firewood'||spot.id==='registration'?.65:3.3;
       if (horizontal > spot.range || Math.abs(height - spot.height) > heightTolerance || horizontal >= best) continue;
       best = horizontal; nearest = spot;
     }
@@ -1047,7 +1087,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,guardShedRoutes,guardShedSeats,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,guardShedRoutes,guardShedSeats,assemblyRoutes,
     colliders, floors, ramps,
   };
 }

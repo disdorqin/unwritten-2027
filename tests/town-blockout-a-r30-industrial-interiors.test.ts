@@ -4,6 +4,7 @@ import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 import type {IndustryPoint} from '../tools/voxel-tavern/town-blockout/town-a-r30-industrial-shell';
+import {smelterFootway} from '../tools/voxel-tavern/town-blockout/town-a-r30-west-landscape';
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=buildCraterRailExtension(grid,road);
@@ -32,7 +33,7 @@ test('instrument public road bends around actual masonry and approaches the open
 });
 test('smelter public approach avoids the actual freight and fence geometry',()=>{
  const route=road.outerWorks.industrialRoutes.find(r=>r.id==='smelter-plant')!;
- const access=[[-43,159],[-67,136],[-144,105]].map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
+ const access=smelterFootway.map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
  walk(route.id,[...access,...route.points]);walk(route.id,[...access,...route.points].reverse());
 });
 test('gatehouse bench has a grounded stand point and actual seat',()=>{
@@ -63,4 +64,11 @@ test('guard shed bench and brazier have distinct accessible interaction points',
  assert.notEqual(road.craterActions.actionAt(fire.east,fire.north,fire.height+2)?.id,'firewood');
  assert.equal(road.craterActions.firewood(),true);
  assert.equal(road.craterActions.firewood(),false);
+});
+test('assembly registration notice has a real unobstructed approach and return',()=>{
+ const r=road.mouthWorks.assemblyRoutes[0]!;
+ walk(r.id,r.points);walk(r.id,[...r.points].reverse());
+ const p=r.points.at(-1)!;
+ assert.equal(road.craterActions.actionAt(p.east,p.north,p.height)?.label,'阅读入坑告示');
+ assert.notEqual(road.craterActions.actionAt(p.east,p.north,p.height+2)?.label,'阅读入坑告示');
 });
