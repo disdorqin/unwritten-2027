@@ -5,6 +5,7 @@ import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
+import {installBR30MoundPlanting} from './town-b-r30-mound-planting';
 import {createBR30WorkshopReviewFixture} from './town-b-r30-workshop-review-fixture';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
@@ -16,6 +17,7 @@ const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
 const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
+const mound=installBR30MoundPlanting(road);
 // Only the independent review consumes the sealed return prefab; no
 // production terrain cut or new lift authority is introduced.
 const returnHeadframe=buildBR30ReturnHeadframe(road);
@@ -48,6 +50,11 @@ add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a
 for(const site of markers.sites){
   for(const [i,foot] of site.viewFeet.entries())add(site.id+'-'+i,'矿道导向 '+site.id+(i?' 返程':' 下行'),foot,{...site.post,height:site.post.height+1.45});
 }
+const summit=mound.route.at(-1)!;
+add('mound-foot','中央丘 · 矿道出口',mound.route[0],{...summit,height:summit.height+1.6});
+add('mound-east','中央丘 · 东侧坡',mound.route[5],{...summit,height:summit.height+1.3});
+const crownTree=mound.sites.find(s=>s.ring==='summit')!;
+add('mound-crown','中央丘 · 焦松与风旗',summit,{...crownTree,height:crownTree.height+1.7});
 const rt=returnHeadframe.survey;
 add('return-headframe','封闭返程井架候选',rt.approach,{...rt.axis,height:rt.axis.height+1.5});
 const back={east:rt.approach.east+(rt.bend.east-rt.approach.east)*.35,north:rt.approach.north+(rt.bend.north-rt.approach.north)*.35};
@@ -112,5 +119,5 @@ renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state()})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit})});
 requestAnimationFrame(tick);
