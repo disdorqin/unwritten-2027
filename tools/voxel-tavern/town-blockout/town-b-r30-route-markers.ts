@@ -1,4 +1,4 @@
-import {BoxGeometry,BufferGeometry,CanvasTexture,ExtrudeGeometry,Group,Mesh,MeshStandardMaterial,NearestFilter,PlaneGeometry,Shape,SRGBColorSpace} from 'three';
+import {BoxGeometry,BufferGeometry,CanvasTexture,Group,Mesh,MeshStandardMaterial,NearestFilter,PlaneGeometry,SRGBColorSpace} from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import type {Box} from './landmark-kit';
 import type {mountWestCraterRoad} from './town-za22-crater-road';
@@ -30,8 +30,9 @@ export function surveyBR30RouteMarkers(road:Road){
   if(Object.values(protectedSites).some(p=>Math.hypot(p.east-east,p.north-north)<p.radius+.5))throw Error('R30 marker at protected site '+i);
   const post={east,north,height:high};
   const yaw=Math.atan2(dn,de);
-  const cos=Math.abs(Math.cos(yaw)),sin=Math.abs(Math.sin(yaw));
-  const hw=.42*cos+.072*sin,hd=.42*sin+.072*cos;
+  const boardYaw=yaw+Math.PI/2;
+  const cos=Math.abs(Math.cos(boardYaw)),sin=Math.abs(Math.sin(boardYaw));
+  const hw=.40*cos+.075*sin,hd=.40*sin+.075*cos;
   const boxes:Box[]=[
    {min:[east-.22,low-.05,-north-.22],max:[east+.22,high+.13,-north+.22]},
    {min:[east-.10,high,-north-.10],max:[east+.10,high+1.78,-north+.10]},
@@ -49,13 +50,13 @@ export function surveyBR30RouteMarkers(road:Road){
    sight=Math.min(sight,p.height+1.65+(high+1.56-p.height-1.65)*u-h);
   }
   if(sight<.25)throw Error('R30 marker not visible from its tread '+i);
-  return {id:'haul-marker-'+(i+1),progress:t,post,low,yaw,boxes,clearance,obstacle,sight,viewFeet,direction:{east:de,north:dn}};
+  return {id:'haul-marker-'+(i+1),progress:t,post,low,yaw,boardYaw,boxes,clearance,obstacle,sight,viewFeet,direction:{east:de,north:dn}};
  });
  return sites;
 }
 type Site=ReturnType<typeof surveyBR30RouteMarkers>[number];
 /** Static visual navigation only. No hotspot, reward, unlock, fast travel,
- * or second shaft. Arrow silhouettes follow the actual B01 tangent. */
+ * or second shaft. The two faces point toward opposite B01 approaches. */
 export function installBR30RouteMarkers(road:Road){
  const sites=surveyBR30RouteMarkers(road);
  const group=new Group();group.name='b-r30-haul-wayfinding';
@@ -64,36 +65,41 @@ export function installBR30RouteMarkers(road:Road){
  const stone=new MeshStandardMaterial({color:0x756f65,roughness:1});
  const inlay=new MeshStandardMaterial({color:0xc3aa7b,roughness:.9});
  const materials=[wood,iron,stone,inlay],batches=new Map<MeshStandardMaterial,BufferGeometry[]>();
- function part(site:Site,mat:MeshStandardMaterial,g:BufferGeometry,x:number,y:number,z:number){
-  g.translate(x,y,z).rotateY(site.yaw).translate(site.post.east,site.post.height,-site.post.north);
+ function part(site:Site,mat:MeshStandardMaterial,g:BufferGeometry,x:number,y:number,z:number,rotation=site.yaw){
+  g.translate(x,y,z).rotateY(rotation).translate(site.post.east,site.post.height,-site.post.north);
   const list=batches.get(mat)??[];list.push(g.index?g.toNonIndexed():g);if(g.index)g.dispose();batches.set(mat,list);
  }
  function box(site:Site,mat:MeshStandardMaterial,x:number,y:number,z:number,w:number,h:number,d:number){part(site,mat,new BoxGeometry(w,h,d),x,y,z)}
- function board(site:Site,down:boolean){
-  const dir=down?1:-1,y=down?1.59:1.30;
-  const sh=new Shape();
-  const path=[[-.40,-.108],[.23,-.108],[.23,-.149],[.42,0],[.23,.149],[.23,.108],[-.40,.108]];
-  for(const [i,p] of path.entries())i?sh.lineTo(dir*p[0],p[1]):sh.moveTo(dir*p[0],p[1]);
-  sh.closePath();
-  const geo=new ExtrudeGeometry(sh,{depth:.09,bevelEnabled:false});geo.translate(0,0,-.045);
-  part(site,wood,geo,0,y,0);
-  for(const x of [-.26,.08])for(const z of [-.052,.052])box(site,iron,x*dir,y,z,.052,.052,.016);
-  // Paint the actual arrow tip (no glow or invisible UI).
-  box(site,inlay,dir*.26,y,0,.045,.15,.096);
+ // Shared paint materials: four boards, two faces, only two text batches.
+ function painted(label:string){
   if(typeof document==='undefined')return;
-  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=96;
+  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=160;
   const ctx=canvas.getContext('2d');if(!ctx)return;
-  ctx.fillStyle='#72563d';ctx.fillRect(0,0,256,96);
-  ctx.fillStyle='#ead7ab';ctx.font='bold 64px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(down?'井口':'坑口',128,49);
+  ctx.fillStyle='#634831';ctx.fillRect(0,0,256,160);
+  ctx.strokeStyle='#bda27c';ctx.lineWidth=7;ctx.strokeRect(9,9,238,142);
+  ctx.fillStyle='#f3e3c0';ctx.font='bold 80px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(label,102,81);
+  // Geometric forward arrow, independent of font glyph support.
+  ctx.beginPath();ctx.moveTo(203,25);ctx.lineTo(177,65);ctx.lineTo(193,65);ctx.lineTo(193,131);ctx.lineTo(213,131);ctx.lineTo(213,65);ctx.lineTo(229,65);ctx.closePath();ctx.fill();
   const map=new CanvasTexture(canvas);map.colorSpace=SRGBColorSpace;map.minFilter=map.magFilter=NearestFilter;map.generateMipmaps=false;
-  const mat=new MeshStandardMaterial({map,roughness:.96});materials.push(mat);
-  for(const sign of [-1,1]){
-   const mesh=new Mesh(new PlaneGeometry(.43,.16),mat);
-   mesh.rotation.y=site.yaw+(sign<0?Math.PI:0);
-   const x=-dir*.075,z=sign*.053;
-   mesh.position.set(site.post.east+Math.cos(site.yaw)*x+Math.sin(site.yaw)*z,site.post.height+y,-site.post.north-Math.sin(site.yaw)*x+Math.cos(site.yaw)*z);
-   group.add(mesh);
+  const mat=new MeshStandardMaterial({map,roughness:.96});materials.push(mat);return mat;
+ }
+ const towardWell=painted('井口'),towardRim=painted('坑口');
+ function board(site:Site){
+  const yaw=site.boardYaw,y=1.46;
+  const panel=(mat:MeshStandardMaterial,x:number,h:number,z:number,w:number,hh:number,d:number)=>
+   part(site,mat,new BoxGeometry(w,hh,d),x,h,z,yaw);
+  panel(wood,0,y,0,.78,.48,.10);
+  for(const h of [y-.228,y+.228])panel(inlay,0,h,0,.79,.035,.13);
+  for(const x of [-.37,.37])panel(iron,x,y,0,.035,.47,.13);
+  for(const x of [-.34,.34])for(const h of [y-.19,y+.19])for(const z of [-.062,.062])panel(iron,x,h,z,.028,.028,.014);
+  // +Z faces the downstream traveller, who needs the upward return;
+  // -Z faces the descending traveller. Both arrows mean continue ahead.
+  for(const [sign,mat] of [[1,towardRim],[-1,towardWell]] as const){
+   if(!mat)continue;
+   const geo=new PlaneGeometry(.69,.39);
+   if(sign<0)geo.rotateY(Math.PI);
+   part(site,mat,geo,0,y,sign*.052,yaw);
   }
  }
  for(const site of sites){
@@ -102,7 +108,7 @@ export function installBR30RouteMarkers(road:Road){
   box(site,wood,0,.89,0,.145,1.78,.145);
   for(const y of [.18,1.12])box(site,iron,0,y,0,.18,.10,.18);
   for(const z of [-.085,.085])box(site,iron,0,1.07,z,.075,.33,.025);
-  board(site,true);board(site,false);
+  board(site);
  }
  for(const [mat,parts] of batches){
   const g=mergeGeometries(parts);parts.forEach(p=>p.dispose());
