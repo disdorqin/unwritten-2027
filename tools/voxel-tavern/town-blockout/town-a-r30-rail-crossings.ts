@@ -9,6 +9,7 @@ export const mainPedestrianCrossings:readonly RailCrossingSpec[]=[
   {id:'instrument-road',east:-50.64,north:142.28,halfLength:4.4},
 ];
 export const freightPedestrianCrossings:readonly RailCrossingSpec[]=[
+  {id:'north-freight-road',east:-49.50,north:186.95,halfLength:4.5},
   {id:'freight-loading-road',east:-55.5,north:147.0,halfLength:4.5},
 ];
 export const narrowPedestrianCrossings:readonly RailCrossingSpec[]=[

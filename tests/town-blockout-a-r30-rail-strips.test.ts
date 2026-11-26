@@ -40,6 +40,21 @@ test('narrow gauge is a single separate line outside the B apron and clear of re
     }
   }
 });
+test('the freight turnout meets a real mainline sample and clears the new route',()=>{
+  const first=rail.sidingSamples[0]!;
+  assert.ok(rail.samples.some(p=>Math.hypot(p.east-first.east,p.north-first.north,p.y-first.y)<.001));
+  assert.ok(rail.sidingMinRadius>=22,`radius ${rail.sidingMinRadius}`);
+  const boxes=road.group.userData.colliders as OrientedSupportBox[];
+  const s=rail.sidingSamples;
+  for(let i=1;i<s.length;i++){
+    const a=s[i-1]!,b=s[i]!;
+    if(b.north<184)continue;
+    for(let j=0;j<=10;j++){
+      const t=j/10,e=a.east+t*(b.east-a.east),n=a.north+t*(b.north-a.north),h=a.y+t*(b.y-a.y);
+      assert.ok(!boxes.some(q=>h+.30>q.min[1]&&h-.63<q.max[1]&&supportFootprintOverlaps(e,n,q,1.45)),JSON.stringify({e,n,h}));
+    }
+  }
+});
 test('grade survey measures violations and computes a genuinely feasible fill-only lower bound',()=>{
   const s=rail.samples,report=surveyRailGrade(s);
   assert.ok(report.violations.length>0,'current D terrain is not grade-certified');
@@ -50,8 +65,8 @@ test('grade survey measures violations and computes a genuinely feasible fill-on
     assert.ok(Math.abs(report.minimum[i]!-report.minimum[i-1]!)<=.12*Math.hypot(b.east-a.east,b.north-a.north)+1e-8);
   }
 });
-test('all six public railway crossings have stepped physical support at rail height',()=>{
-  assert.equal(rail.crossings.length,6);
+test('all seven public railway crossings have stepped physical support at rail height',()=>{
+  assert.equal(rail.crossings.length,7);
   for(const c of rail.crossings){
     assert.ok(c.span>7);
     const ground=road.heightAt(c.east,c.north)!;

@@ -13,6 +13,7 @@ import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing'
 import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
 import { buildCraterOuterWorks, craterBeltTrackCorridor } from './town-crater-outer-works';
 import { createWestLandscape } from './town-a-r30-west-landscape';
+import { freightTurnoutKeepout } from './town-a-r30-rail-network';
 import { mountWestNorthConnector, northFootwayWeight } from './town-a-r30-north-connector';
 import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
@@ -318,7 +319,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // and their new entrance/stair routes; do not merely disable collision.
   const industrialKeepout=outerWorks.sites.filter(s=>s.id==='smelter-plant'||s.id==='instrument-plant');
   const routeKeepout=outerWorks.industrialRoutes.flatMap(route=>route.points.map(p=>({...p,radius:1.5})));
-  const worksKeepout=[...industrialKeepout,...routeKeepout,
+  const turnoutKeepout=freightTurnoutKeepout();
+  const worksKeepout=[...industrialKeepout,...routeKeepout,...turnoutKeepout,
     ...mouthWorks.supplyDeckRoute.map(p=>({...p,radius:1.5}))];
   const ejecta = buildZa36CraterEjecta(road, [...fenceExclusions,...worksKeepout]);
   group.add(ejecta.group);
@@ -331,7 +333,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // A2 density backfill: keeps out of everything already placed — the fence
   // and wall lines, the mainline sites, and every earlier dressing placement.
   const densityA2 = buildCraterDensityA2(road, [
-    ...fenceExclusions,
+    ...fenceExclusions,...turnoutKeepout,
     ...mouthWorks.sites, ...outerWorks.sites,
     ...rim.placements, ...camp.placements,
     ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),

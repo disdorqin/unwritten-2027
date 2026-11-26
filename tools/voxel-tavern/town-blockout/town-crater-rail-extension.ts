@@ -9,7 +9,9 @@ import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
 import { orientedSupportBox, supportFootprintOverlaps, type OrientedSupportBox } from './town-a-r30-oriented-support';
-import { railSections, buildRailStrip, surveyRailGrade } from './town-a-r30-rail-strip';
+import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, type RailSection } from './town-a-r30-rail-strip';
+import { craterBranchControlLine, freightSidingControlLine, sampleRailCenterline } from './town-a-r30-rail-network';
+export { craterBranchControlLine } from './town-a-r30-rail-network';
 import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
@@ -91,11 +93,7 @@ const smooth01 = (t: number) => { const c = Math.max(0, Math.min(1, t)); return 
  * table registers that finding for the pathing integration. From the junction the
  * line runs north-west to Shankou station, west along the northern skirt, then
  * south down the west side to the crater-mouth station. */
-export const craterBranchControlLine: readonly (readonly [number, number])[] = [
-  [492, 318], [477, 335], [468, 392], [452, 448], [420, 482], [372, 500], [326, 508],
-  [296, 502], [262, 506], [200, 522], [140, 532], [80, 539], [20, 536], [-8, 524],
-  [-24, 470], [-32, 395], [-36, 318], [-38, 248], [-41, 196], [-46, 158], [-52, 138],
-];
+// The canonical control line is now shared with the corridor reservation.
 
 /**
  * Railway north extension (crater book §五, mainline 3): the physical plant of the
@@ -174,17 +172,11 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   function buildTrackway(
     control: readonly (readonly [number, number])[],
     opts: { gauge: number; sleeperWidth: number; ballastWidth: number; railH: number;
-      flatten?: readonly { east: number; north: number; half: number }[] },
+      flatten?: readonly { east: number; north: number; half: number }[]; stock?:readonly RailSection[] },
   ): { samples: Sample[]; length: number; minRadius: number; stationY: Map<string, number> } {
-    const curve = new CatmullRomCurve3(
-      control.map(([x, n]) => new Vector3(x, 0, -n)), false, 'centripetal');
-    curve.arcLengthDivisions = 2400;
-    const length = curve.getLength();
-    const count = Math.max(8, Math.ceil(length / 1.7));
-    const step = length / count;
-    const raw = Array.from({ length: count + 1 }, (_, i) => curve.getPointAt(i / count));
-    const samples: Sample[] = raw.map(point => {
-      const east = point.x, north = -point.z;
+    const {length,count,step,points}=sampleRailCenterline(control);
+    const samples: Sample[] = points.map(point => {
+      const {east,north}=point;
       const ground = Math.max(
         groundAt(east, north), groundAt(east - 1.4, north), groundAt(east + 1.4, north),
         groundAt(east, north - 1.4), groundAt(east, north + 1.4));
@@ -228,10 +220,19 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     // continuous strips with the same station and curve samples.
     const sections=railSections(samples);
     for(const side of [-1,1]){
-      push(steel,buildRailStrip(sections,side*opts.gauge/2,.15,-.08-opts.railH/2,-.08+opts.railH/2));
-      push(darkSteel,buildRailStrip(sections,side*opts.gauge/2,.30,-.255,-.185));
+      const offset=side*opts.gauge/2;
+      if(opts.stock){
+        for(const g of buildTurnoutRailStrips(sections,opts.stock,offset,.15,opts.gauge,-.08-opts.railH/2,-.08+opts.railH/2))push(steel,g);
+        for(const g of buildTurnoutRailStrips(sections,opts.stock,offset,.30,opts.gauge,-.255,-.185))push(darkSteel,g);
+      }else{
+        push(steel,buildRailStrip(sections,offset,.15,-.08-opts.railH/2,-.08+opts.railH/2));
+        push(darkSteel,buildRailStrip(sections,offset,.30,-.255,-.185));
+      }
     }
-    push(stoneDark,buildRailStrip(sections,0,opts.ballastWidth,-.63,-.37,1));
+    if(opts.stock){
+      const bed=buildTurnoutBallast(sections,opts.stock,opts.ballastWidth);
+      if(bed)push(stoneDark,bed);
+    }else push(stoneDark,buildRailStrip(sections,0,opts.ballastWidth,-.63,-.37,1));
     const orientation = new Matrix4();
     for (let i = 0; i < samples.length - 1; i++) {
       const a = samples[i], b = samples[i + 1];
@@ -240,7 +241,10 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       const center = new Vector3().lerpVectors(va, vb, .5);
       const quat = new Quaternion().setFromRotationMatrix(orientation.lookAt(vb, va, up));
       const segLen = va.distanceTo(vb);
-      segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
+      if(opts.stock){
+        const extra=Math.min(opts.sleeperWidth,Math.max(0,distanceToRail(opts.stock,center.x,-center.z)-.01));
+        if(extra>.04)segBox(timber,center,quat,-opts.sleeperWidth/2+extra/2,-.32,0,extra,.15,.36);
+      }else segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
       // Physical bearing below the existing rail bed, including the many
       // 1–2m rises that the former >2.2m pier threshold left floating.
       // Keep the surveyed alignment; a future grade redesign can reuse these
@@ -589,8 +593,9 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   }
   // Stop the freight siding beyond the cargo shed, before the instrument
   // plant stair. The former extra 9m passed through its front approach.
-  const siding = buildTrackway([[-50, 184], [-54, 158], [-56.15, 142.4]], {
+  const siding = buildTrackway(freightSidingControlLine(main.samples), {
     gauge: 1.66, sleeperWidth: 2.5, ballastWidth: 2.9, railH: .18,
+    stock:railSections(main.samples).filter(s=>s.east< -30&&s.north>=130&&s.north<=250),
   });
   {
     // Ore hopper car standing on the siding.
@@ -740,6 +745,20 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     const p=at(-.22,0);
     colliders.push(orientedSupportBox(p.east,p.north,yaw,.31,gauge+.66,end.y-.36,end.y+.82));
   }
+  // Static switch stand at the real turnout toe, outside the stock clearance.
+  // No interaction is advertised until the common train authority owns it.
+  {
+    const toe=railSections(siding.samples)[0]!;
+    const e=toe.east-toe.me*2.55,n=toe.north-toe.mn*2.55;
+    const g=groundAt(e,n),yaw=Math.atan2(toe.mn,toe.me);
+    box(stone,e,g+.13,n,.76,.36,.62,yaw);
+    box(iron,e,g+.55,n,.15,.80,.15,yaw);
+    box(iron,e,g+.96,n,.32,.16,.22,yaw);
+    box(iron,e,g+1.16,n,.075,.66,.075,yaw,0,-.55);
+    box(timberWarm,e-.17,g+1.44,n,.24,.12,.12,yaw);
+    box(iron,e+toe.me*.52,g+.16,n+toe.mn*.52,1.02,.065,.065,yaw);
+    colliders.push(orientedSupportBox(e,n,yaw,.76,.62,g-.05,g+1.50));
+  }
   bufferStop(siding.samples,1.66);
   bufferStop(narrow.samples,.9);
   bufferStop([...narrow.samples].reverse(),.9);
@@ -852,5 +871,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey:surveyRailGrade(main.samples),crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey:surveyRailGrade(main.samples),sidingMinRadius:siding.minRadius,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }
