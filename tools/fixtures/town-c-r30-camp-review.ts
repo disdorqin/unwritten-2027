@@ -104,6 +104,19 @@ function setView(name:string){
   const eye=hits===3&&host.passageAt(back.east,back.north)?back:p;
   camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(hits===3?p.east:a.east,hits===3?p.height+.14:a.height,-(hits===3?p.north:a.north));torch.intensity=18;view=name;return true;
  }
+ if(name.startsWith('terminal-')){
+  const m=host.mainline;if(m?.kind!=='ready'||!m.scene.r30Terminal)return false;
+  const t=m.scene.r30Terminal,role=name.includes('camp')?'camp':'gate',board=t.boards.find(b=>b.role===role);
+  if(!board)return false;
+  const route=m.route,empty=name.endsWith('empty'),pending=name.endsWith('pending');
+  mainlineReview=pending?undefined:{revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:'stopped',
+   chainage:role==='camp'?0:route.length,speed:0,brakeHeld:false,turnout:'gate',cargo:empty?{oreId:'',pieces:0}:{oreId:'review-ore',pieces:12},faults:{sleepers:3,gauge:3,'turnout-rust':4}};
+  host.mounted.sync();
+  const target=board.group.getWorldPosition(new Vector3()),forward=new Vector3(0,0,1).applyQuaternion(board.group.quaternion),right=new Vector3(1,0,0).applyQuaternion(board.group.quaternion);
+  const eyes=[...[-.95,.95,-.6,.6,0].flatMap(side=>[1.7,1.4,2.1].map(d=>target.clone().addScaledVector(forward,d).addScaledVector(right,side)))];
+  const eye=eyes.find(v=>host.passageAt(v.x,-v.z));if(!eye)return false;
+  camera.position.set(eye.x,host.passageAt(eye.x,-eye.z)!.floor+1.67,eye.z);camera.lookAt(target);torch.intensity=18;view=name;return true;
+ }
  if(name.startsWith('rail-')){
   const m=host.mainline;if(m?.kind!=='ready')return false;
   const damaged=name.startsWith('rail-damage-'),loaded=name.startsWith('rail-cargo-'),role=name.slice(damaged?12:loaded?11:5),route=m.route,work=route.work;

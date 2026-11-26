@@ -11,6 +11,7 @@ import {mountR30MainlineDressing} from './town-c-r30-mainline-dressing.js';
 import {mountR30MainlineArches} from './town-c-r30-mainline-arches.js';
 import {mountR30MainlineRepairArt,r30RepairSleeperIndices} from './town-c-r30-mainline-repair-art.js';
 import {mountR30MainlineCargoArt} from './town-c-r30-mainline-cargo-art.js';
+import {mountR30MainlineTerminal} from './town-c-r30-mainline-terminal.js';
 
 type Route = ReturnType<typeof createUndergroundMainlineTrack>;
 type Role = 'repair' | 'board' | 'leave' | 'brake' | 'go' | 'turnout' |
@@ -277,6 +278,7 @@ export function mountUndergroundMainlineScene(host: Options) {
   // Hot lamps belong to their real metal cage and must stay inside the shared light budget.
   const r30Dressing=host.r30?mountR30MainlineDressing(root,route,host.r30.supportsProp):undefined;
   const r30Arches=host.r30&&r30Dressing?mountR30MainlineArches(root,route,host.r30.supportsProp,r30Dressing.footprints):undefined;
+  const r30Terminal=host.r30&&r30Dressing?mountR30MainlineTerminal(root,route,host.r30.supportsProp,r30Dressing.footprints):undefined;
   const lampPoints = host.r30?[]:[0, route.length, route.turnoutMetres,
     route.faults.sleepers, route.faults.gauge, route.faults['turnout-rust']];
   const lamps: PointLight[] = [...(r30Dressing?.lamps??[])];
@@ -409,7 +411,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       winchWheel.visible = false;
       brakeSparks.visible = false;
       lamps.forEach(lamp => lamp.visible = false);
-      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset');r30Repair?.sync();r30Cargo?.sync()}
+      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset');r30Repair?.sync();r30Cargo?.sync();r30Terminal?.sync()}
       return false;
     }
     if(host.r30&&(!Number.isFinite(snapshot.lastAtMs)||snapshot.speed<0||
@@ -417,10 +419,10 @@ export function mountUndergroundMainlineScene(host: Options) {
         !snapshot.cargo||!Number.isSafeInteger(snapshot.cargo.pieces)||snapshot.cargo.pieces<0||
         !snapshot.faults||!repairIds.every(k=>Number.isSafeInteger(snapshot.faults[k])&&snapshot.faults[k]>=0&&snapshot.faults[k]<=repairVerbs[k].length)||
         (last&&snapshot.revision<last.revision))){
-      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);r30Repair?.sync();r30Cargo?.sync();return false;
+      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);r30Repair?.sync();r30Cargo?.sync();r30Terminal?.sync();return false;
     }
     const p = at(snapshot.chainage);
-    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);r30Repair?.sync(snapshot);r30Cargo?.sync(snapshot.cargo);
+    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);r30Repair?.sync(snapshot);r30Cargo?.sync(snapshot.cargo);r30Terminal?.sync(snapshot);
     cart.group.visible = true;
     winchWheel.visible = true;
     winchWheel.rotation.z = (route.length - snapshot.chainage) * .45;
@@ -520,9 +522,9 @@ export function mountUndergroundMainlineScene(host: Options) {
   return {
     kind: 'ready', group: root, cart: cart.group, sync, prompt, press,
     route, words: undergroundMainlineWords, sleepers: sleepers.length,
-    railHead, r30Dressing,r30Arches,r30Repair,r30Cargo,
+    railHead, r30Dressing,r30Arches,r30Repair,r30Cargo,r30Terminal,
     acceptedSnapshot:()=>!disposed&&cart.group.visible&&last?structuredClone(last):undefined,
-    blocks(east:number,north:number,y:number,radius:number,height:number){return !!(r30Dressing?.blocks(east,north,y,radius,height)||r30Arches?.blocks(east,north,y,radius,height))},
+    blocks(east:number,north:number,y:number,radius:number,height:number){return !!(r30Dressing?.blocks(east,north,y,radius,height)||r30Arches?.blocks(east,north,y,radius,height)||r30Terminal?.blocks(east,north,y,radius,height))},
     batches: instances.length,
     dispose() {
       if (disposed) return;
@@ -542,7 +544,7 @@ export function mountUndergroundMainlineScene(host: Options) {
         const material = group.userData.material as MeshStandardMaterial;
         material.dispose();
       }
-      r30Repair?.dispose();r30Arches?.dispose();r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
+      r30Terminal?.dispose();r30Repair?.dispose();r30Arches?.dispose();r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
       blockGeo.dispose();
       lampGeometry.dispose(); lampMaterial.dispose();
       root.clear();
