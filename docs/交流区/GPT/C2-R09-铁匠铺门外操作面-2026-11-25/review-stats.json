@@ -1,0 +1,231 @@
+{
+  "schema": "town-c2-r30-forge-exterior-review/v1",
+  "sourceCommit": "63336ffc54572d41ad9757f15903d528b83d4069",
+  "sourceTree": {
+    "root": "D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-c2\\",
+    "commit": "63336ffc54572d41ad9757f15903d528b83d4069",
+    "tree": "330cb28e000ca6ef1abcdf9f00b4f0654c475cf3",
+    "dirty": true,
+    "status": "?? \"docs/\\344\\272\\244\\346\\265\\201\\345\\214\\272/GPT/C2-R09-\\351\\223\\201\\345\\214\\240\\351\\223\\272\\351\\227\\250\\345\\244\\226\\346\\223\\215\\344\\275\\234\\351\\235\\242-2026-11-25/\"\n?? tests/town-c2-r30-forge-exterior.test.ts\n?? tools/verify-town-c2-r30-forge-exterior-review.mjs\n?? tools/voxel-tavern/town-blockout/town-c2-r30-forge-exterior-review.ts\n?? tools/voxel-tavern/town-blockout/town-c2-r30-forge-exterior.ts"
+  },
+  "scope": "C2-R09 local art review over the existing warrior-city candidate and forge hall; no production wiring",
+  "uncertified": [
+    "review-only city/forge host; no C-certified world frame or production mount",
+    "exterior adds no interaction socket, loot, gate, presence or real light",
+    "headless FPS is a fixture sample, not a device benchmark"
+  ],
+  "errors": {
+    "pageerror": [],
+    "consoleError": [],
+    "requestFailed": []
+  },
+  "views": {
+    "gate-front-day.png": {
+      "view": "gate-front",
+      "night": false,
+      "frames": 7,
+      "fps": 15.394765779644384,
+      "foot": {
+        "east": 142,
+        "north": 0.35,
+        "height": 0
+      },
+      "walked": 0,
+      "rejected": 0,
+      "trustedW": 0,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 80,
+        "triangles": 91272
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 98109
+    },
+    "gate-front-night.png": {
+      "view": "gate-front",
+      "night": true,
+      "frames": 24,
+      "fps": 43.620501635790966,
+      "foot": {
+        "east": 142,
+        "north": 0.35,
+        "height": 0
+      },
+      "walked": 0,
+      "rejected": 0,
+      "trustedW": 0,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 80,
+        "triangles": 91272
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 153020
+    },
+    "anvil-yard-day.png": {
+      "view": "anvil-yard",
+      "night": false,
+      "frames": 41,
+      "fps": 61.148396718866515,
+      "foot": {
+        "east": 139.75,
+        "north": 1.65,
+        "height": 0
+      },
+      "walked": 0,
+      "rejected": 0,
+      "trustedW": 0,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 76,
+        "triangles": 88308
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 122956
+    },
+    "quench-edge-day.png": {
+      "view": "quench-edge",
+      "night": false,
+      "frames": 61,
+      "fps": 76.28814407207156,
+      "foot": {
+        "east": 144.75,
+        "north": 1.7,
+        "height": 0
+      },
+      "walked": 0,
+      "rejected": 0,
+      "trustedW": 0,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 113,
+        "triangles": 206076
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 156981
+    },
+    "street-seam-day.png": {
+      "view": "street-seam",
+      "night": false,
+      "frames": 77,
+      "fps": 81.42116950409512,
+      "foot": {
+        "east": 142,
+        "north": 0.25,
+        "height": 0
+      },
+      "walked": 0,
+      "rejected": 0,
+      "trustedW": 0,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 80,
+        "triangles": 91272
+      },
+      "fixtureOnly": true,
+      "productionCertified": false,
+      "bytes": 101076
+    }
+  },
+  "walk": {
+    "view": "gate-front",
+    "night": false,
+    "frames": 93,
+    "fps": 86.68903803133496,
+    "foot": {
+      "east": 142,
+      "north": 8.150000000000011,
+      "height": 0
+    },
+    "walked": 7.800000000000011,
+    "rejected": 0,
+    "trustedW": 1,
+    "pieces": 95,
+    "batches": 9,
+    "colliders": 37,
+    "siteCertified": true,
+    "realLights": 0,
+    "interactionSockets": 0,
+    "worldAnchor": false,
+    "render": {
+      "calls": 74,
+      "triangles": 90288
+    },
+    "fixtureOnly": true,
+    "productionCertified": false
+  },
+  "fpsSample": {
+    "scene": "anvil-yard-night",
+    "requestedMs": 20000,
+    "wallMs": 20008,
+    "stats": {
+      "view": "anvil-yard",
+      "night": true,
+      "frames": 3344,
+      "fps": 167.1256290950496,
+      "foot": {
+        "east": 139.75,
+        "north": 1.65,
+        "height": 0
+      },
+      "walked": 7.800000000000011,
+      "rejected": 0,
+      "trustedW": 1,
+      "pieces": 95,
+      "batches": 9,
+      "colliders": 37,
+      "siteCertified": true,
+      "realLights": 0,
+      "interactionSockets": 0,
+      "worldAnchor": false,
+      "render": {
+        "calls": 76,
+        "triangles": 88308
+      },
+      "fixtureOnly": true,
+      "productionCertified": false
+    },
+    "certification": "fixture-only d3d11 sample"
+  },
+  "passed": true,
+  "renderer": {
+    "executablePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "headless": true,
+    "gl": "d3d11"
+  },
+  "finishedAt": "2026-11-26T01:40:22.708Z"
+}
