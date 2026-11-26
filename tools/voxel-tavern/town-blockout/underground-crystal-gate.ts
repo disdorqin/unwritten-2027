@@ -49,6 +49,14 @@ function buildGateSwitch(block: ReturnType<typeof createBlockFactory>, { iron, e
   };
 }
 
+/** Conservative physical envelope of buildGateSwitch, including every
+ * accepted handle pose. z is Three local +Z, not geographic north. */
+export function r30GateSwitchBlocks(x:number,y:number,z:number,radius:number,height:number){
+ const boxes=[{minX:-.155,maxX:.155,minY:0,maxY:1.08,minZ:-.15,maxZ:.15},
+  {minX:-.41,maxX:.30,minY:.88,maxY:1.36,minZ:-.39,maxZ:-.08}];
+ return boxes.some(b=>b.maxY>y+.025&&b.minY<y+height&&
+   Math.hypot(Math.max(0,b.minX-x,x-b.maxX),Math.max(0,b.minZ-z,z-b.maxZ))<radius);
+}
 /** Mount in the registered crystal domain and dispatch interaction through its accepted-foot authority. */
 export function createUndergroundCrystalReturnSwitch({ position, yaw }: SwitchPose) {
   if (![...position, yaw].every(Number.isFinite)) throw new RangeError('Invalid crystal return switch pose');

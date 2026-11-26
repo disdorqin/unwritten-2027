@@ -17,6 +17,7 @@ import {createR30DeepHost} from './town-c-r30-deep-host.js';
 import {mountR30InterlayerLift,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
 import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
 import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
+import {r30GateSwitchBlocks} from './underground-crystal-gate.js';
 import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './town-c-r30-deep-assembly.js';
 import {mountR30ThinWallArt} from './town-c-r30-thin-wall-art.js';
 import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
@@ -446,6 +447,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   let deepBank:ReturnType<typeof mountR30DeepBank>|undefined;
   let waterReadout:ReturnType<typeof mountR30WaterReadout>|undefined;
   let approachStory:ReturnType<typeof mountR30ApproachStory>|undefined;
+  const gateLayout=mine.expansion?.gate;
+  const gateWinchLocal=gateLayout&&[gateLayout.position[0]-gateLayout.width/2-.28,gateLayout.position[1],gateLayout.position[2]-.78] as const;
   function queryMineClearance(east:number,north:number,radius:number,bodyHeight:number){
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
@@ -460,6 +463,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
       radius,bodyHeight))return;
+    if(passage&&gateWinchLocal&&r30GateSwitchBlocks(localX-gateWinchLocal[0],passage.floor-gateWinchLocal[1],localZ-gateWinchLocal[2],radius,bodyHeight))return;
     if(passage&&thinWalls.blocks(localX,localZ,radius))return;
     if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&mounted.supportAnnex?.blocksRearStorage(localX,localZ,passage.floor,radius,bodyHeight))return;
@@ -537,10 +541,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const registeredSeam=shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered';
   interlayerLift=registeredSeam?mountR30InterlayerLift(mounted.group):undefined;
   const crystalFrame=registeredSeam?makeR30CrystalFrame(mounted.toWorld,road.anchor.yaw):undefined;
-  const mineThreshold=mounted.toWorld([0,-91,139.5])!,mineWinch=mounted.toWorld([-2.28,-91,138.02])!;
+  const mineThreshold=mounted.toWorld([0,-91,139.5])!,mineWinch=mounted.toWorld(gateWinchLocal??[-2.28,-91,138.02])!;
   crystalHost=createR30CrystalHost({parent,frame:crystalFrame,mineThreshold,mineWinch,
     supportsMineThreshold:()=>!!mine.queryPassage(0,139.5,.27,1.8,'open'),
-    installMouth:mounted.installCrystalMouth,bridge:options.crystalBridge,readAcceptedFoot:options.readAcceptedDomainFoot});
+    installMouth:mounted.installCrystalMouth,bridge:options.crystalBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
+    supportsMineInteractionFoot:p=>{const q=passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.025}});
   const deepHost=createR30DeepHost({parent,seamRegistered:registeredSeam,
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
     readAcceptedFoot:options.readAcceptedDomainFoot,

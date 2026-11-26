@@ -1,6 +1,7 @@
 import {BufferGeometry,BufferAttribute,DoubleSide,Group,Mesh,MeshLambertMaterial,RepeatWrapping} from 'three';
 import {crystalCavernArchitecture,crystalCavernPlan,crystalCavernTrailEast,crystalCavernTrailHeight,crystalCavernToWorld,type CrystalCavernFrame,type CrystalCavernPoint} from './underground-crystal-cavern.js';
 import {makeCampGrain} from './town-c-r30-camp-art.js';
+import {r30GateSwitchBlocks} from './underground-crystal-gate.js';
 export const r30CrystalDomain='underground/crystal';
 export const r30CrystalMouth=Object.freeze({north:-10.5,threshold:-9.9,halfWidth:2});
 export const r30CrystalReturnSwitch=Object.freeze({east:1.45,north:-7.8,height:crystalCavernPlan.entry.height});
@@ -28,7 +29,7 @@ export function crystalRoutePassage(e:number,n:number,radius=.27,height=1.8){
  }
  if(solids.some(b=>b.y+b.dy>floor+.04&&b.y-b.dy<floor+height&&
   Math.hypot(Math.max(0,Math.abs(e-b.x)-b.dx),Math.max(0,Math.abs(n-b.n)-b.dz))<radius))return;
- if(Math.hypot(e-r30CrystalReturnSwitch.east,n-r30CrystalReturnSwitch.north)<radius+.23)return;
+ if(r30GateSwitchBlocks(e-r30CrystalReturnSwitch.east,floor-r30CrystalReturnSwitch.height,r30CrystalReturnSwitch.north-n,radius,height))return;
  return {floor,clearance:2.1,waterDepth:0,requiresCrouch:false,encounter:false,zone:'crystal-route' as const};
 }
 export function crystalLocal(frame:CrystalCavernFrame,p:CrystalCavernPoint){
