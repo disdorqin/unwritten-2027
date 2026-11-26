@@ -966,25 +966,25 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const pos = new Vector3();
     const scl = new Vector3();
     let placed = 0;
-    for (let i = 0; i < 110; i++) {
-      const bDeg = hash(i * 3 + 1) * 360;
-      // Keep the industrial-belt arc and the approach corridor clear.
-      if (bDeg > 84 && bDeg < 216) continue;
-      if (Math.abs(bDeg - 118) < 8) continue;
-      const falloff = hash(i * 7 + 2);
-      const r = 59 + falloff * falloff * 34 + hash(i * 13 + 5) * 2.5;
-      const b = d2r(bDeg);
-      const east = anchor.east + r * Math.sin(b);
-      const north = anchor.north + r * Math.cos(b);
-      const h = heightAt(east, north);
-      if (h === undefined) continue;
-      const size = .8 + hash(i * 17 + 3) * 1.9;
-      eul.set(hash(i) * .9 - .45, hash(i * 5) * Math.PI, hash(i * 11) * .7 - .35);
-      quat.setFromEuler(eul);
-      pos.set(east, h + size * .16, -north);
-      scl.set(size, size, size);
-      dummy.compose(pos, quat, scl);
-      inst.setMatrixAt(placed++, dummy);
+    // Six asymmetric deposits outside the shared R59 seam. The earlier
+    // independent polar scatter formed a visually uniform belt of boulders.
+    // Low partly buried fragments leave the spaces between deposits open.
+    const deposits=[[6,84],[39,76],[232,88],[268,86],[305,79],[333,87]] as const;
+    for(const [ci,[bearing,radius]] of deposits.entries()){
+      for(let j=0;j<12;j++){
+        const i=ci*17+j,bDeg=(bearing+(hash(i*3+1)-.5)*9+360)%360;
+        const r=radius+(hash(i*7+2)-.5)*7;
+        const b=d2r(bDeg),east=anchor.east+r*Math.sin(b),north=anchor.north+r*Math.cos(b);
+        const h=heightAt(east,north);
+        if(h===undefined||sites.some(s=>Math.hypot(east-s.east,north-s.north)<s.radius+1))continue;
+        const size=.55+hash(i*17+3)*.78;
+        eul.set((hash(i)-.5)*.15,hash(i*5)*Math.PI,(hash(i*11)-.5)*.15);
+        quat.setFromEuler(eul);
+        pos.set(east,h+.02,-north);
+        scl.set(size,size*.32,size*.78);
+        dummy.compose(pos,quat,scl);
+        inst.setMatrixAt(placed++,dummy);
+      }
     }
     inst.count = placed;
     inst.instanceMatrix.needsUpdate = true;
