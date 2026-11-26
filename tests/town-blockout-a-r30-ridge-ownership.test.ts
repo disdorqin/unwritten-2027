@@ -13,6 +13,7 @@ test('actual ring/branch and protected original town/river/station have zero rid
  for(const p of rail.samples)assert.equal(ownership.weight(p.east,p.north),0);
  for(const [e,n] of [[226,223],[378,316],[526,329],[296,502],[296,520],[riverX(600),600],[riverX(600)+12,600]])assert.equal(ownership.weight(e!,n!),0);
  assert.equal(ownership.weight(320,650),1);
+ for(let e=425;e<=455;e++)for(let n=508;n<=532;n++)assert.equal(ownership.weight(e,n),1);
  assert.equal(ownership.weight(NaN,600),0);
 });
 test('ownership is continuous outside protected routes and never exceeds one',()=>{
@@ -23,5 +24,5 @@ test('ownership is continuous outside protected routes and never exceeds one',()
   if(e<640)max=Math.max(max,Math.abs(v-ownership.weight(e+1,n)));
   if(n<800)max=Math.max(max,Math.abs(v-ownership.weight(e,n+1)));
  }
- assert.ok(max<=1.5/ownership.feather+1e-6);
+ assert.ok(max<=1.5*(1+1.5*(ownership.feather-ownership.padFeather)/36)/ownership.padFeather+1e-6);
 });

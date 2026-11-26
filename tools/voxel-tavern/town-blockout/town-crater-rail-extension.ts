@@ -134,6 +134,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   let valleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
   let eastValleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
   const eastValleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
+  let closedHead:{index:number;removedLength:number;east:number;north:number;y:number;box:OrientedSupportBox;reason:string}|undefined;
   const valleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
@@ -251,8 +252,35 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
     // Shared cross sections: the rail head, base and ballast are all
     // continuous strips with the same station and curve samples.
     const sections=railSections(samples);
+    // Preserve the full survey, but never draw a disconnected branch
+    // through the live ring's stock rails. Physical closure only.
+    let renderStart=0;
+    if(opts.repairValley&&loop){
+      const audit=surveyRailJunction(samples,loop);
+      if(!audit.geometryReady&&audit.overlapRuns.length){
+        const stop=audit.overlapRuns.at(-1)!.to+6;
+        let along=0;
+        for(let i=1;i<samples.length;i++){
+          const a=samples[i-1]!,b=samples[i]!;along+=Math.hypot(b.east-a.east,b.north-a.north);
+          if(along>=stop){renderStart=i;break;}
+        }
+        if(renderStart<=0||renderStart>=samples.length-2)throw Error('Missing safe closed branch head');
+        const p=samples[renderStart]!,q=samples[renderStart+1]!,yaw=Math.atan2(q.east-p.east,p.north-q.north);
+        for(const side of [-1,1]){
+          const e=p.east+side*.83*Math.cos(yaw),n=p.north+side*.83*Math.sin(yaw);
+          box(iron,e,p.y+.45,n,.24,1.16,.28,yaw);
+          box(rustIron,e,p.y-.18,n,.42,.24,.46,yaw);
+        }
+        box(timberWarm,p.east,p.y+.76,p.north,2.60,.24,.35,yaw);
+        box(iron,p.east,p.y+.76,p.north,.24,.27,.38,yaw);
+        box(rustIron,p.east,p.y+.99,p.north,.68,.20,.13,yaw);
+        const solid=orientedSupportBox(p.east,p.north,yaw,2.60,.46,p.y-.30,p.y+1.12);
+        colliders.push(solid);closedHead={index:renderStart,removedLength:along,east:p.east,north:p.north,y:p.y,box:solid,reason:'unapproved stock rail junction'};
+      }
+    }
+    const activeSections=sections.slice(renderStart);
     for(const [first,last] of [[bridgeFirst,bridgeLast],[eastBridgeFirst,eastBridgeLast]])if(first>=0){
-      const bridgeSections=sections.slice(first,last+1);
+      const bridgeSections=sections.slice(Math.max(first,renderStart),last+1);
       for(const side of [-1,1]){
         const offset=side*.76;
         push(iron,buildRailStrip(bridgeSections,offset,.28,-1.02,-.655));
@@ -263,20 +291,20 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
     for(const side of [-1,1]){
       const offset=side*opts.gauge/2;
       if(opts.stock){
-        for(const g of buildTurnoutRailStrips(sections,opts.stock,offset,.15,opts.gauge,-.08-opts.railH/2,-.08+opts.railH/2))push(steel,g);
-        for(const g of buildTurnoutRailStrips(sections,opts.stock,offset,.30,opts.gauge,-.255,-.185))push(darkSteel,g);
+        for(const g of buildTurnoutRailStrips(activeSections,opts.stock,offset,.15,opts.gauge,-.08-opts.railH/2,-.08+opts.railH/2))push(steel,g);
+        for(const g of buildTurnoutRailStrips(activeSections,opts.stock,offset,.30,opts.gauge,-.255,-.185))push(darkSteel,g);
       }else{
-        push(steel,buildRailStrip(sections,offset,.15,-.08-opts.railH/2,-.08+opts.railH/2));
-        push(darkSteel,buildRailStrip(sections,offset,.30,-.255,-.185));
+        push(steel,buildRailStrip(activeSections,offset,.15,-.08-opts.railH/2,-.08+opts.railH/2));
+        push(darkSteel,buildRailStrip(activeSections,offset,.30,-.255,-.185));
       }
     }
     if(opts.stock){
-      const bed=buildTurnoutBallast(sections,opts.stock,opts.ballastWidth);
+      const bed=buildTurnoutBallast(activeSections,opts.stock,opts.ballastWidth);
       if(bed)push(stoneDark,bed);
-    }else push(stoneDark,buildRailStrip(sections,0,opts.ballastWidth,-.63,-.37,1));
+    }else push(stoneDark,buildRailStrip(activeSections,0,opts.ballastWidth,-.63,-.37,1));
     const orientation = new Matrix4();
     let stringerStart=-1;
-    for (let i = 0; i < samples.length - 1; i++) {
+    for (let i = renderStart; i < samples.length - 1; i++) {
       const a = samples[i], b = samples[i + 1];
       const va = new Vector3(a.east, a.y, -a.north);
       const vb = new Vector3(b.east, b.y, -b.north);
@@ -999,5 +1027,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey,junctionAudit,serviceGeometryReady,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey,junctionAudit,serviceGeometryReady,closedHead,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

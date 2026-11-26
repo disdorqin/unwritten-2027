@@ -1,6 +1,7 @@
 import {layout,riverX,isWater} from './terrain';
 import {extensionRoads,extensionPlots} from './town-extension';
 import {railPlatforms} from './town-rail-stops';
+import {northRidgeMidStation} from './north-ridge-350-terrain';
 type EN=Readonly<{east:number;north:number}>;
 type Segment={a:EN;b:EN;radius:number};
 const clamp=(t:number)=>Math.max(0,Math.min(1,t));
@@ -50,5 +51,17 @@ export function createAR30RidgeOwnership(options:{loop:readonly Readonly<{x:numb
   for(const s of bins.get(Math.floor(e/cell)+','+Math.floor(n/cell))??[])d=Math.min(d,segmentGap(e,n,s));
   return Math.max(0,d);
  }
- return {weight:(e:number,n:number)=>smooth(distance(e,n)/feather),distance,feather,routeSegments:routes.length,protectedRectangles:rects.length};
+ // The real 30x24m mid-station pad has 19.98m minimum clearance
+ // from the protected core on the current route. A local 18m ramp
+ // preserves the entire pad, with a continuous transition back to 55m.
+ // If any later alignment reduces the separation, the protected core
+ // still wins; the caller must re-survey the pad before acceptance.
+ const mid=northRidgeMidStation;
+ const midRect={x0:mid.east-mid.width/2,n0:mid.north-mid.depth/2,x1:mid.east+mid.width/2,n1:mid.north+mid.depth/2};
+ const padFeather=18;
+ function localFeather(e:number,n:number){
+  const d=dRect(e,n,midRect.x0,midRect.n0,midRect.x1,midRect.n1);
+  return padFeather+(feather-padFeather)*smooth(d/36);
+ }
+ return {weight:(e:number,n:number)=>Number.isFinite(e)&&Number.isFinite(n)?smooth(distance(e,n)/localFeather(e,n)):0,distance,feather,padFeather,localFeather,routeSegments:routes.length,protectedRectangles:rects.length};
 }

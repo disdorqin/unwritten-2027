@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {Raycaster,Vector3} from 'three';
 import {buildRailStrip,railSections,surveyRailGrade,repairBoundedRailGrade} from '../tools/voxel-tavern/town-blockout/town-a-r30-rail-strip';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -118,6 +119,22 @@ test('actual loop junction blocks false branch service on disconnected and overl
  assert.equal(audit.connectionMatches,false);
  assert.ok(audit.overlapRuns.length>=2);
  assert.ok(audit.overlapRuns.some(r=>r.minHorizontal<.3));
+ assert.equal(rail.serviceGeometryReady,false);
+});
+test('blocked ring throat is physically absent and downstream branch has a real buffer',()=>{
+ const head=rail.closedHead!;
+ assert.ok(head.removedLength>59&&head.removedLength<61);
+ assert.ok(rail.group.userData.colliders.includes(head.box));
+ assert.ok(rail.junctionAudit!.overlapRuns.at(-1)!.to<head.removedLength-6);
+ rail.group.updateMatrixWorld(true);
+ const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
+ function hits(i:number){
+  const p=rail.samples[i]!;ray.ray.origin.set(p.east,p.y+4,-p.north);
+  return ray.intersectObject(rail.group,true).filter(h=>Math.abs(h.point.y-p.y)<2);
+ }
+ for(const i of [5,13,25,32])assert.equal(hits(i).length,0);
+ assert.ok(hits(head.index).some(h=>h.point.y>head.y+.7));
+ assert.ok(hits(head.index+5).length>0);
  assert.equal(rail.serviceGeometryReady,false);
 });
 test('inclined masonry bearings are grounded at the lowest surveyed corner and have structural stringers',()=>{
