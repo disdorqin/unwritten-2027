@@ -37,3 +37,9 @@
 - D-S4 云台：town-d-r30-cloud-terrace.ts、town-d-r30-cloudsea-vista.ts、tests/town-d-r30-cloud-terrace.test.ts；依赖S0/S3及原石环/星港；A已批准掩码候选仅送总控。远景云层仅审图。
 - D-S5 审图工具（不作为生产挂载）：town-d-r30-front-ridge-preview.ts、town-d-r30-transport-review.ts、town-d-r30-cloud-terrace-review.ts；tools/voxel-tavern/d-r30-{front-ridge-preview,transport-review,cloud-terrace-review}.html；tools/verify-d-r30-{front-ridge-browser,cloud-terrace-browser,joint-ownership}.mjs（最后一个取本次审计提交最新版本）。依赖相应候选。
 本期相对479e2855的原33路径全为新增，2029行；没有公共viewer/terrain/presence或D2修改。A配审并由总控串行接纳；禁止将历史父链一并整枝合入。当前下一具体工包仍为D-R02中上段真实路线与完整挖填，不能用新增装饰绕开。
+
+### D-R02 中山站东坡首段实体续建
+- 本轮开工68b352a2；集成仍479e2855，最新A 589dcbde，未见新总控裁定。新增 town-d-r30-upper-roadbed.ts（D-S2增量）：中山站北侧E440/N524/Y140→E505/N526/Y142.286的71.863m同源挖填路基；七控制点圆滑、56路线节点、无自交。实际中心与±1.25m三线960差分最大纵坡11.07635%，挖8m/填7.5218m（8m仍为候选工程约束），1038顶点实际变化；中山站30×24m平台、冻结点及外边界不动。132m尝试不满足挖填约束已拒绝，绝不挂未通过路段。
+- 精确A 589dcbde真实ownership与批准的cloudApron:true联合复测，冻结区修改0，坡度及挖填同上。新增验证参数 --middle-road；不是A正式路基接纳。证据在正式工程根 .evidence/d-r30-middle-road-joint-20261126.json。
+- 同源挡墙23段/1110构件，护栏10柱、2灯，林带避让；测试1176个中心及边缘通行探针无站房、挡墙、护栏、森林碰撞。check及新增定向测试通过，git diff --check通过。独立?middle=1审图从中站E440/N520真实步行75.863m到新路端，再返回原点，累计151.726m；全程无跳点，5张昼夜图、0浏览器错误，最大57 draws/161752 tris。图证 .evidence/d-r30-middle-road-walk-20261126/；非生产正式宿主，未使用真实A全部生产碰撞体。实际图审路面、砌石和栏杆连续，高侧坡仍陡。未实测手机。
+- 下一件：从E505/N526继续沿东坡找不自交的升高段，最终接云海台；基站至中站仍未建齐，不能把新增71.86m报成整段或总控要求2981m完成。站外平台、I3以及此前R7欠账继续保留。

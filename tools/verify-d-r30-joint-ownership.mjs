@@ -12,7 +12,7 @@ const tmp=mkdtempSync(join(root,'.d-r30-joint-proof-'));
 try{
  const tar=git('archive','--format=tar',a,prefix,'src','tools/fixtures','docs/p0-layout-draft.json');
  execFileSync('tar',['-xf','-','-C',tmp],{input:tar,windowsHide:true,maxBuffer:96*1024*1024});
- for(const name of ['front-ridge','forest','road-survey','roadbed','cable-facilities','cloud-terrace','protected-approach'])cpSync(join(root,prefix,'town-d-r30-'+name+'.ts'),join(tmp,prefix,'town-d-r30-'+name+'.ts'));
+ for(const name of ['front-ridge','forest','road-survey','roadbed','cable-facilities','cloud-terrace','protected-approach','upper-roadbed'])cpSync(join(root,prefix,'town-d-r30-'+name+'.ts'),join(tmp,prefix,'town-d-r30-'+name+'.ts'));
  const load=n=>import(pathToFileURL(join(tmp,prefix,n+'.ts')).href);
  const {createTerrainGrid,worldBounds}=await load('terrain');
  const {mountWestCraterRoad}=await load('town-za22-crater-road');
@@ -78,10 +78,16 @@ try{
   approach={scope:'conservative read-only geometry; no crossing grant, no production collision certification',from:{...from,height:support(from.east,from.north)},to:{...to,actualSupport:support(to.east,to.north)},...result};
   }
  }
+ let middleRoad;
+ if(process.argv.includes('--middle-road')){
+  const {buildMiddleEastRoadbed}=await load('town-d-r30-upper-roadbed');
+  const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0);
+  middleRoad={ok:result.ok,reason:result.reason,route:result.route,audit:result.audit,cut:result.cut,fill:result.fill,changed:result.changed,protectedChanges:result.protectedChanges,east:result.east,north:result.north};
+ }
  const stationSamples=[];for(let n=344;n<=376;n+=2)for(let e=514;e<=550;e+=4)stationSamples.push([e,n,Math.round(field.heightAt(e,n)*100)/100,Math.round(ownership.distance(e,n)*10)/10]);
- const report={a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,approach,sweep,externalSweep,fullSweep,stationSamples,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
+ const report={a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,approach,sweep,externalSweep,fullSweep,middleRoad,stationSamples,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
  if(process.argv[3]){const out=resolve(process.argv[3]);mkdirSync(dirname(out),{recursive:true});writeFileSync(out,JSON.stringify(report,null,2))}
- console.log(JSON.stringify({a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,externalSweep,fullSweep,approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},stationSamples:stationSamples.filter(p=>p[0]===526||p[0]===538),gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
+ console.log(JSON.stringify({a,proposed,aApprovedApron:!!aMask,proposalDifference,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,externalSweep,fullSweep,middleRoad:middleRoad&&{...middleRoad,route:middleRoad.route.length,length:middleRoad.route.at(-1)?.cum},approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},stationSamples:stationSamples.filter(p=>p[0]===526||p[0]===538),gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
  terrace.dispose();cable.dispose();
  if(aMask)assert.ok(proposalDifference<1e-12);
  if(proposed||aMask){assert.equal(frozenError,0);assert.ok(routes.every(r=>r.height===347&&r.allSupported));assert.equal(report.gateSupported,false)}
