@@ -10,7 +10,7 @@ import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
 import { orientedSupportBox, supportFootprintOverlaps, type OrientedSupportBox } from './town-a-r30-oriented-support';
-import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, repairBoundedRailGrade, surveyRailJunction, type RailSection } from './town-a-r30-rail-strip';
+import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, repairBoundedRailGrade, capRepairedRailProfile, surveyRailJunction, type RailSection } from './town-a-r30-rail-strip';
 import { craterBranchControlLine, freightSidingControlLine, sampleRailCenterline } from './town-a-r30-rail-network';
 export { craterBranchControlLine } from './town-a-r30-rail-network';
 import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
@@ -134,6 +134,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   let stringerSegments=0;
   let valleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
   let eastValleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
+  let eastValleyEnvelope:ReturnType<typeof capRepairedRailProfile>|undefined;
   const eastValleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   let closedHead:{index:number;removedLength:number;east:number;north:number;y:number;box:OrientedSupportBox;reason:string}|undefined;
   const valleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
@@ -246,6 +247,10 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
       if(!eastValleyRepair.blocked&&eastValleyRepair.changed.length){
         eastValleyRepair.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
         eastBridgeFirst=eastValleyRepair.changed[0]!-1;eastBridgeLast=eastValleyRepair.changed.at(-1)!+1;
+        // Keep the built bridge footprint; reduce the repaired profile
+        // only where a 1.1m structural clearance remains under its girders.
+        eastValleyEnvelope=capRepairedRailProfile(samples,first,last,2.6,1.1);
+        if(!eastValleyEnvelope.blocked)eastValleyEnvelope.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
       }
     }
     // Shared cross sections: the rail head, base and ballast are all
@@ -1019,5 +1024,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey,junctionAudit,serviceGeometryReady,closedHead,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey,junctionAudit,serviceGeometryReady,closedHead,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyEnvelope,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

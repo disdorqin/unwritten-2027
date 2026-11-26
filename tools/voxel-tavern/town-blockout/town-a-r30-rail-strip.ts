@@ -160,6 +160,24 @@ export function repairBoundedRailGrade(samples:readonly RailSample[],first:numbe
     maxFill:Math.max(...ys.map((y,i)=>y-selected[i]!.ground))};
 }
 
+/** Greatest grade-constrained profile no higher than the existing
+ * repaired line or the requested ground clearance cap. A two-pass
+ * min-envelope is exact on the sampled chain. Refuse any change that
+ * cuts below the required clearance or moves either fixed endpoint. */
+export function capRepairedRailProfile(samples:readonly RailSample[],first:number,last:number,maxFill=2.6,minFill=.5,limit=.12){
+ if(first<0||last>=samples.length||last-first<2||![maxFill,minFill,limit].every(Number.isFinite)||maxFill<=minFill||limit<=.00001)throw RangeError('invalid rail cap');
+ const s=samples.slice(first,last+1),y=s.map(p=>Math.min(p.y,p.ground+maxFill-1e-6));
+ const run=s.slice(1).map((p,i)=>Math.hypot(p.east-s[i]!.east,p.north-s[i]!.north));
+ if(s.some(p=>![p.east,p.north,p.y,p.ground].every(Number.isFinite))||run.some(d=>d<=0))throw RangeError('invalid rail samples');
+ for(let i=1;i<y.length;i++)y[i]=Math.min(y[i]!,y[i-1]!+(limit-1e-5)*run[i-1]!);
+ for(let i=y.length-2;i>=0;i--)y[i]=Math.min(y[i]!,y[i+1]!+(limit-1e-5)*run[i]!);
+ const minClearance=Math.min(...y.map((v,i)=>v-s[i]!.ground));
+ const blocked=Math.abs(y[0]!-s[0]!.y)>1e-7||Math.abs(y.at(-1)!-s.at(-1)!.y)>1e-7?'fixed-endpoint':minClearance<minFill?'ground-envelope':undefined;
+ const profile=blocked?samples:samples.map((p,i)=>i>=first&&i<=last?{...p,y:y[i-first]!}:p);
+ const changed=blocked?[]:y.flatMap((v,i)=>Math.abs(v-s[i]!.y)>1e-7?[first+i]:[]);
+ return {profile,first,last,changed,blocked,minClearance,maxClearance:Math.max(...y.map((v,i)=>v-s[i]!.ground)),maxGrade:Math.max(...run.map((d,i)=>Math.abs(y[i+1]!-y[i]!)/d))};
+}
+
 type LoopPoint=Readonly<{x:number;y:number;z:number}>;
 /** Geometric commissioning gate: consume the existing loop's actual
  * samples, never the old approximate divergence coordinate. The audit
