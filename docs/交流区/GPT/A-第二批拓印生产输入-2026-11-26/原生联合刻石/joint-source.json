@@ -1,0 +1,149 @@
+{
+  "a": "997f5277723d443310cc4e70cbc1dde370832ae2",
+  "b": "eac4b4e0f81e3c1b6ef2b127ede48b1d6051fb96",
+  "files": [
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-east-historic-walkway.ts",
+      "blob": "fc083cd92806e811812056eb450a99bb684329f7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater.ts",
+      "blob": "ad6a9e7c0f1c03b642bc68d036b464d6c6c2dd23"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-surface.ts",
+      "blob": "37d636b3f751bf38aef1c56bc50500b93e922345"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-interior-dressing.ts",
+      "blob": "b4591dcc4db9d394fa91f689592bd22d1b02916c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-floor-worklight-chain.ts",
+      "blob": "fabc8c0dd2e6c65159e019246890077e53a9cf22"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relief.ts",
+      "blob": "bb0929da01056dee2c9665142dd20d29cd366678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-ground-normals.ts",
+      "blob": "18dfa42f0925d946668bb9f628b1fd1e9daf0d36"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface-layout.ts",
+      "blob": "3715ede7aa7f53c1decca700d222bb8f9db3df52"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-route.ts",
+      "blob": "6b74f71eb6c62a189a691e895faf9368265c6bd3"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts",
+      "blob": "ad42fa1a7cdc4a61342bd176f3cac675df0a22e4"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts",
+      "blob": "2fa9b576bc25582de2dcafc20c6bb80fe5e85aa1"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-crater-midground-s5.ts",
+      "blob": "e67a396b857c174a4c5773e7ad4459090891f7a0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-remnant-forms.ts",
+      "blob": "f6da057bd31f7bb6a317ebaca7c94d085705ffda"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relic-view.ts",
+      "blob": "9f9f56bef7959e51544c03275fc209f4c0847481"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-broken-trestle.ts",
+      "blob": "d0555fad576cb6cef5ab8713521233c0b3ca4857"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-retire-legacy-terraces.ts",
+      "blob": "d264eabb9d2853dca3fbd40ad285b644603c1bac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-settle-story-supports.ts",
+      "blob": "89939344138c0a919eca367b75da486df25fa346"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface.ts",
+      "blob": "4b5aa9c2d9b06bcce891752dc1816261ac3c5ddb"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workstations.ts",
+      "blob": "394fbfe6667e40173a8f369c8b241b986d175ca5"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workshop-controls.ts",
+      "blob": "ca6db32561f2f23c5a20100f54615bcd38eb4c38"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-physical-kit.ts",
+      "blob": "645a351750e6abe68a5efdf5b6a95c4c15ac43bc"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-route-markers.ts",
+      "blob": "54db1e54ed60f7cea4b1d6fad8112a7efc8be965"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-workshop-approaches.ts",
+      "blob": "23c372ca653c4c0ba29cee879eca8b71ddeba678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-approach.ts",
+      "blob": "46ff05a339cf4ba7584ce76f868e815f7673942b"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-return-headframe.ts",
+      "blob": "5c8a81b4208702eef7e762e5f7d5756a8075fc8f"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts",
+      "blob": "ef9e1b47df7cb08570d5a96dc698ea3a4fae1935"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts",
+      "blob": "f996fbcae7f4b6fc2bbeec4f9f696a29f165c7ac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-melt-columns.ts",
+      "blob": "fa1d20f8ac4d99d2c7c7a611ad9ec2e63f31b426"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-planting.ts",
+      "blob": "473bd1e4b61eb6dbbb3cf9aedfde446ab7322210"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-work-flag.ts",
+      "blob": "cb4e82068b29d18a4c03fae0a1438f70914d174c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-historic-walkway-site.ts",
+      "blob": "d8459f3df6273e3af8f07ab60fff958e4c7ea2c0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-rubbing.ts",
+      "blob": "31138e88e45805e2fc24c5475bf514172f8544e7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-completion.ts",
+      "blob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e"
+    }
+  ],
+  "portSHA256": "0ee8465f9da41cc9028a0bd759d17aca614c2018b9c9e0c8e6c5a93e7f48be1b",
+  "playBindingSHA256": "2baed52b9aa2632d52b1f1cdc23e266851fc1936a86b69eee76f93a39f6e588b",
+  "exactHost": {
+    "accepted": false,
+    "error": "Error: Obstructed inscription approach 0/1.7584227921485638/2.220477057756679e-14"
+  },
+  "bProposal": {
+    "status": "unaccepted owner-interface proposal",
+    "originalBlob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e",
+    "proposedSHA256": "a28144d04d291e62e4e8413f3f9f7544b0dee6c83afcd7de0c0669d9e3bde6d4"
+  }
+}
