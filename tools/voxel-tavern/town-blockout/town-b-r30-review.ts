@@ -7,6 +7,7 @@ import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
 import {installBR30MoundPlanting} from './town-b-r30-mound-planting';
 import {installBR30MeltColumns} from './town-b-r30-melt-columns';
+import {installBR30HistoricEastWall} from './town-b-r30-historic-walkway-site';
 import {installBR30MoundWorkFlag,createBR30MoundControls} from './town-b-r30-mound-work-flag';
 import {createMound} from './town-crater-points-play';
 import {installBR30RubbingPaper,createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
@@ -26,6 +27,7 @@ const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
 const melt=installBR30MeltColumns(road);
 const mound=installBR30MoundPlanting(road);
 const workFlag=installBR30MoundWorkFlag(road);
+const historic=installBR30HistoricEastWall(road,[rail.samples,rail.narrowSamples],rail.group.userData.colliders??[]);
 const rubbingPaper=installBR30RubbingPaper(road.inscription);
 // Only the independent review consumes the sealed return prefab; no
 // production terrain cut or new lift authority is introduced.
@@ -53,6 +55,8 @@ for(const {cluster,view} of road.midgroundS5.crystalViews){
   add(cluster,'晶簇 '+cluster,view.foot,view.target);
 }
 for(const [i,v] of melt.views.entries())add('melt-'+i,'熔柱 · '+(i+1),v.foot,v.target);
+add('historic-entry','东壁历史栈道 · 矿道入口',historic.approach,{...historic.firstFoot,height:historic.firstFoot.height+.6});
+add('historic-first','东壁历史栈道 · 第一段',historic.firstFoot,{...historic.plan[1],height:historic.tops[1]});
 const trestleView=road.midgroundS5.trestleView;
 if(trestleView)add('broken-trestle','断栈道遗址',trestleView.foot,trestleView.target);
 const bead=road.moltenBeads.firstPickupHostMarker;
@@ -142,7 +146,7 @@ function blocked(e:number,n:number,h:number){
     return Math.hypot(Math.max(b.min[0]-e,e-b.max[0],0),Math.max(b.min[2]+n,-n-b.max[2],0))<.27;
   });
 }
-function step(e:number,n:number){const h=road.heightAt(e,n);if(h===undefined||Math.abs(h-feet)>.43||blocked(e,n,h))return;east=e;north=n;feet=h;}
+function step(e:number,n:number){const ground=road.heightAt(e,n);if(ground===undefined)return;const h=Math.max(ground,historic.supportedHeight(e,n)??-Infinity);if(Math.abs(h-feet)>.43||blocked(e,n,h))return;east=e;north=n;feet=h;}
 function tick(now:number){
   const elapsed=Math.max(0,now-last),dt=Math.min(.05,elapsed/1000);last=now;
   if(workshop){
@@ -179,5 +183,5 @@ renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,moltenBeads:road.moltenBeads.stats,inscriptionApproach,rubbing:rubbingMode?{progress:rubbingRule.progress,complete:rubbingRule.complete,entry:rubbingEntry,shown:rubbingPaper.shown,cellCount:rubbingPaper.cellCount,held:rubbingHeld}:undefined,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,moltenBeads:road.moltenBeads.stats,inscriptionApproach,historic:{route:historic.route,plan:historic.plan,tops:historic.tops,audit:historic.audit,gaps:historic.gaps,boxes:historic.boxes.length,pieces:historic.pieces},rubbing:rubbingMode?{progress:rubbingRule.progress,complete:rubbingRule.complete,entry:rubbingEntry,shown:rubbingPaper.shown,cellCount:rubbingPaper.cellCount,held:rubbingHeld}:undefined,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
 requestAnimationFrame(tick);

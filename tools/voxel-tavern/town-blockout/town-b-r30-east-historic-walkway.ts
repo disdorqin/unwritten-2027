@@ -122,7 +122,17 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
    solid('rope',pos(first,a,v,deck+.77),pos(first,mid,v,deck+.68),.025,.025);
    solid('rope',pos(first,mid,v,deck+.68),pos(first,b,v,deck+.77),.025,.025);
   }
-  boxes.push(envelope(pos(first,-.78,v,deck+.68),pos(first,.84,v,deck+.77),.035));
+  // A single diagonal AABB spans the center of the walkable deck.
+  // Segment the actual sagging ropes instead of adding an invisible wall.
+  for(const [a,b] of [[-.78,.12],[.12,.84]]){
+   const mid=(a+b)/2;
+   for(const [u0,u1,y0,y1] of [[a,mid,.77,.68],[mid,b,.68,.77]]){
+    for(let i=0;i<4;i++){
+     const t=i/4,t1=(i+1)/4;
+     boxes.push(envelope(pos(first,u0+(u1-u0)*t,v,deck+y0+(y1-y0)*t),pos(first,u0+(u1-u0)*t1,v,deck+y0+(y1-y0)*t1),.025));
+    }
+   }
+  }
  }
  // Broken end guard: two short splintered uprights, no hidden blockade.
  for(const v of [-.53,.53])solid('wood',pos(first,.94,v,deck),pos(first,.94,v,deck+.32),.085,.085);

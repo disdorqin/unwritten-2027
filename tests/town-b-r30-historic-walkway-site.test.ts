@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
+import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
+import {attachBR30PhysicalKit} from '../tools/voxel-tavern/town-blockout/town-b-r30-physical-kit';
+import {installBR30MeltColumns} from '../tools/voxel-tavern/town-blockout/town-b-r30-melt-columns';
+import {installBR30MoundPlanting} from '../tools/voxel-tavern/town-blockout/town-b-r30-mound-planting';
+import {installBR30HistoricEastWall} from '../tools/voxel-tavern/town-blockout/town-b-r30-historic-walkway-site';
+test('historic first deck has an actual mine-road approach and no support across either break',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),rail=buildCraterRailExtension(grid,road);
+ const kit=attachBR30PhysicalKit(road,rail),melt=installBR30MeltColumns(road),forest=installBR30MoundPlanting(road);
+ const prior=[...road.group.userData.colliders],tracks=[rail.samples,rail.narrowSamples],railBoxes=rail.group.userData.colliders??[];
+ const model=installBR30HistoricEastWall(road,tracks,railBoxes);
+ assert.equal(model.group.parent,road.group);assert.ok(model.audit.minBody>.55);assert.ok(model.audit.maxGrade<.45);assert.ok(model.audit.trackGap>1.3);
+ assert.equal(model.support.length,42);assert.equal(model.boxes.length,64);assert.equal(road.group.userData.colliders.length,prior.length+64);
+ assert.ok(Math.abs(model.supportedHeight(model.firstFoot.east,model.firstFoot.north)!-model.firstFoot.height)<1e-6);
+ for(const p of model.plan.slice(1))assert.equal(model.supportedHeight(p.east,p.north),undefined);
+ assert.throws(()=>installBR30HistoricEastWall(road,tracks,railBoxes),/already attached/);
+ model.dispose();assert.deepEqual(road.group.userData.colliders,prior);
+ assert.throws(()=>installBR30HistoricEastWall(road,tracks,[...railBoxes,{min:[-88,-9,-192],max:[-86,-5,-190]}]),/overlaps existing solid/);
+ assert.deepEqual(road.group.userData.colliders,prior);forest.dispose();melt.dispose();kit.dispose();
+});
