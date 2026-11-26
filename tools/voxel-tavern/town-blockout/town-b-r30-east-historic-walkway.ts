@@ -16,8 +16,9 @@ const distance=(a:EN,b:EN)=>Math.hypot(a.east-b.east,a.north-b.north);
 export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Segment,Segment]){
  if(plan.length!==3||plan.some(p=>![p.east,p.north,p.yaw].every(Number.isFinite)))throw Error('Invalid historical walkway plan');
  const lengths=[2.05,1.60,1.34],widths=[1.42,1.24,1.06];
- const gap12=distance(plan[0],plan[1])-(lengths[0]+lengths[1])/2;
- const gap23=distance(plan[1],plan[2])-(lengths[1]+lengths[2])/2;
+ const radius=lengths.map((l,i)=>Math.hypot(l,widths[i])/2);
+ const gap12=distance(plan[0],plan[1])-radius[0]-radius[1];
+ const gap23=distance(plan[1],plan[2])-radius[1]-radius[2];
  if(gap12<1.25||gap23<1.0||gap12>4.5||gap23>4.5)throw Error('Historical break not preserved');
  const h=(p:EN)=>{const y=ground(p.east,p.north);if(y===undefined||!Number.isFinite(y))throw Error('Historical footing lacks actual ground');return y;};
  const tops=plan.map((p,i)=>{
@@ -37,12 +38,14 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
  function add(f:Family,g:BufferGeometry){const list=batches.get(f)??[];list.push(g);batches.set(f,list);pieces++;}
  function pos(p:Segment,u:number,v:number,y:number){const q=forward(p,u,v);return new Vector3(q.east,y,-q.north);}
  function worldPoint(p:Segment,u:number,v:number,y:number):Point{return {...forward(p,u,v),height:y};}
- function solid(f:Family,a:Vector3,b:Vector3,w:number,d:number){
+ function solid(f:Family,a:Vector3,b:Vector3,w:number,d:number,collide=false){
   const delta=b.clone().sub(a),length=delta.length();if(length<.001)return;
   const g=new BoxGeometry(w,length,d);g.applyQuaternion(new Quaternion().setFromUnitVectors(up,delta.normalize()));g.translate(...a.clone().add(b).multiplyScalar(.5).toArray());add(f,g);
+  if(collide){g.computeBoundingBox();boxes.push({min:g.boundingBox!.min.toArray(),max:g.boundingBox!.max.toArray()});}
  }
- function block(f:Family,p:Segment,u:number,v:number,y:number,len:number,w:number,thick:number,tilt=0){
+ function block(f:Family,p:Segment,u:number,v:number,y:number,len:number,w:number,thick:number,tilt=0,collide=false){
   const g=new BoxGeometry(w,thick,len);g.rotateX(tilt);g.rotateY(-p.yaw);g.translate(...pos(p,u,v,y).toArray());add(f,g);
+  if(collide){g.computeBoundingBox();boxes.push({min:g.boundingBox!.min.toArray(),max:g.boundingBox!.max.toArray()});}
  }
  function topQuad(p:Segment,a:number,b:number,w:number,ha:number,hb:number){
   const q0=worldPoint(p,a,-w/2,ha),q1=worldPoint(p,a,w/2,ha),q2=worldPoint(p,b,w/2,hb),q3=worldPoint(p,b,-w/2,hb);
@@ -89,7 +92,7 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
    for(let i=0;i<6;i++){
     if((j===1&&i>=3)||(j===2&&i%2===0))continue;
     const u=-L/2+(i+.5)*L/6;
-    block(i===0?'endgrain':'wood',p,u,0,y-.27+u*.25,L/6*.87,W*(i%2?.82:1),.09,-.24);
+    block(i===0?'endgrain':'wood',p,u,0,y-.27+u*.25,L/6*.87,W*(i%2?.82:1),.09,.24,true);
    }
    // Only actual solid beam envelopes: no bridge across the break.
    for(const v of [-W*.36,W*.36])boxes.push(envelope(pos(p,-L/2,v,y-.45),pos(p,L/2,v,y-.11),.09));
@@ -123,8 +126,8 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
  block('iron',first,.04,-.39,deck+.21,.12,.12,.035);
  // Dangling snapped ladder, attached to second section only.
  const p=plan[1],y=tops[1];
- for(const v of [-.19,.19])solid('wood',pos(p,-.65,v,y-.18),pos(p,-1.02,v,y-1.08),.065,.065);
- for(const [u,z] of [[-.77,-.47],[-.90,-.77]] as const)solid('wood',pos(p,u,-.19,y+z),pos(p,u,.19,y+z),.055,.055);
+ for(const v of [-.19,.19])solid('wood',pos(p,-.65,v,y-.18),pos(p,-1.02,v,y-1.08),.065,.065,true);
+ for(const [u,z] of [[-.77,-.47],[-.90,-.77]] as const)solid('wood',pos(p,u,-.19,y+z),pos(p,u,.19,y+z),.055,.055,true);
  const materials=new Map<Family,MeshStandardMaterial>();
  for(const [f,list] of batches){
   const geometry=mergeGeometries(list);list.forEach(g=>g.dispose());if(!geometry)throw Error('Historical mesh merge failed');
@@ -132,6 +135,6 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
   const mesh=new Mesh(geometry,material);mesh.name='historic-walkway/'+f;group.add(mesh);
  }
  let disposed=false;
- return {group,plan,tops,entry:{...start,height:entryHeight},firstFoot:{...first,height:deck},support,boxes,pieces,
+ return {group,plan,tops,gaps:[gap12,gap23] as const,entry:{...start,height:entryHeight},firstFoot:{...first,height:deck},support,boxes,pieces,
   productionReady:false as const,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});materials.forEach(m=>m.dispose());}};
 }
