@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -1054,6 +1054,19 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
+    const ruin=industrialBuilder(fr,g,put,colliders,floors);
+    // The surviving floor is a fractured, low masonry foundation. Keep
+    // the open front lip flush with the exterior snow.
+    const soil=[-2.7,0,2.7].flatMap(x=>[-2.4,0,2.4].map(z=>{
+      const p=fr.at(x,z);return heightAt(p.east,p.north)??g;
+    }));
+    ruin.piece(workshopBrick,0,0,5.4,4.8,Math.min(g,...soil)-g-.09,.12,true);
+    for(let i=0;i<6;i++)for(let j=0;j<4;j++){
+      const x=-2.25+i*.9,z=-1.8+j*1.2;
+      put((i+j)%3===0?stoneDark:stone,x,g+.14,z,.88,.04,1.17);
+      const p=fr.at(x,z);
+      floors.push(orientedSupportBox(p.east,p.north,fr.yaw,.88,1.17,g+.12,g+.16));
+    }
     // Keep the three ruined walls, but expose their timber frames and
     // individual distorted metal sheets rather than one featureless slab.
     put(workshopSheet,0,g+1.3,-2.4,5.4,2.6,.14);
@@ -1084,9 +1097,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       }
     }
     // Original interior debris now has actual obstruction bounds.
-    const ruin=industrialBuilder(fr,g,put,colliders,floors);
-    ruin.piece(workshopWood,-1,.5,1.3,1.3,0,1.2);
-    ruin.piece(workshopWood,1.2,-.8,1.1,1.1,0,1);
+    ruin.piece(workshopWood,-1,.5,1.3,1.3,.16,1.2);
+    ruin.piece(workshopWood,1.2,-.8,1.1,1.1,.16,1);
+    // The broken floor retains a low tool rack and discarded planks in
+    // the blocked rear half. Nothing is a new quest item.
+    ruin.piece(workshopWood,-1.5,-1.65,1.7,.45,.16,.88);
+    for(let i=0;i<4;i++){
+      put(workshopRust,-2.05+i*.32,g+.91,-1.65,.20,.07,.29);
+      put(workshopWood,-2.05+i*.32,g+.965,-1.65,.06,.05,.43);
+    }
+    for(let i=0;i<3;i++){
+      const x=-1.7+i*.28,z=1.05+i*.08;
+      ruin.piece(workshopWood,x,z,.19,1.50,.16,.28,true);
+    }
+    // Right front bay is genuinely open to the sky; retain the rear
+    // collapsed roof and make the former blocked inspection bay walkable.
+    const entry=fr.at(1.50,4.7);
+    industrialRoutes.push({id:'ruined-shed',points:[
+      ...ruinedShedFootway.slice(0,-1).map(([east,north])=>({east,north,height:heightAt(east,north)??g})),
+      {...entry,height:heightAt(entry.east,entry.north)??g},
+      ruin.point(1.50,2.85,0),ruin.point(1.50,1.65,.16),ruin.point(1.50,.85,.16)
+    ]});
     // Low fallen roof strips occupy the same existing ruin footprint.
     for(let i=0;i<7;i++){
       const run=i>3?2.05:roofRun,segments=Math.ceil(run/.72),step=run/segments;
@@ -1094,14 +1125,14 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         const x=-2.35+i*.77,z=-2.3+(j+.5)*step;
         const y=2.63-rise*(z+2.3)/roofRun;
         const p=fr.at(x,z),dy=rise*step/(2*roofRun);
-        hitBox(colliders,p.east,p.north,fr.yaw,.74,step,g+y-dy-.18,g+y+dy+.07);
+        colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.74,step,g+y-dy-.18,g+y+dy+.07));
       }
     }
     // S-1 collision: the ruin's three standing walls (front is collapsed
     // open where the roof came down).
-    for (const [dx, dz, sx, sz] of [[0, -2.4, 5.4, .14], [-2.65, 0, .14, 4.8], [2.65, 0, .14, 4.8]] as const) {
-      const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g, g + 2.6);
+    for (const [dx,dz,sx,sz,h] of [[0,-2.4,5.4,.14,2.6],[-2.65,0,.14,4.8,2.6],[2.65,0,.14,4.8,2.1]] as const) {
+      const p=fr.at(dx,dz);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,g,g+h));
     }
   }
   // Rusted pipe sections east of the smelter, one half-buried.

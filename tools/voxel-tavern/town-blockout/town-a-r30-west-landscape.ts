@@ -11,6 +11,7 @@ type Anchor=Readonly<{east:number;north:number}>;
 export const smelterFootway=[[-43,159],[-67,136],[-91,129],[-106.94,125.4],[-117,124],[-122,116],[-125,112.65],[-144,105]] as const;
 export const coldFurnaceFootway=[[-144,105],[-151.5,112.5],[-158.5,112.5],[-171,121],[-172,125.5]] as const;
 export const waterTowerFootway=[[-36,145],[-38,145],[-44.5,145.5],[-44.5,147.5]] as const;
+export const ruinedShedFootway=[[-144,105],[-143,102],[-143.17252333055055,98.74587451898263]] as const;
 export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
 // Surveyed against the combined A collision index. These are optional
 // sightseeing footways, not new story or railway authority.
@@ -114,6 +115,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:[[-98,243],[-110,244],[-119,245],[-122,245.5]],half:1.15,strength:.68},
     {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
     {points:oreYardFootway,half:.72,strength:.83},
+    {points:ruinedShedFootway,half:.82,strength:.65},
     {points:coldFurnaceFootway,half:1.12,strength:.68},
     {points:waterTowerFootway,half:.92,strength:.62},
   ];
