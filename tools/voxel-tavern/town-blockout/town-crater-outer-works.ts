@@ -1414,7 +1414,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
           const t=bar/(count+1),be=prev.east+t*de,bn=prev.north+t*dn;
           const ground=heightAt(be,bn),line=prev.h+t*dh;
           if(ground===undefined)continue;
-          const base=Math.min(ground+.10,line+.10),top=Math.max(ground+.25,line+4.50);
+          const base=Math.min(ground-.06,line+.10),top=Math.max(ground+.25,line+4.50);
           box(rustIron,be,(base+top)/2,bn,.07,top-base,.07,yaw);
         }
       }

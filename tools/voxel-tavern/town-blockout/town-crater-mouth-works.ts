@@ -325,7 +325,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.strokeStyle = '#5d4630'; c.lineWidth = 6; c.strokeRect(14, 14, w - 28, h - 28);
       c.fillStyle = '#3d2c1c'; c.textAlign = 'center';
       c.font = 'bold 54px "Noto Sans SC", sans-serif';
-      c.fillText('入坑登记 · 天黑前出坑', w / 2, 92);
+      c.fillText('入坑登记 · 天黑前出坑', w / 2, 92, w-54);
       c.lineWidth = 3; c.strokeStyle = 'rgba(61,44,28,.75)';
       for (let row = 0; row < 3; row++) {
         const y = 140 + row * 54;
@@ -620,7 +620,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // Separate focus collars share the exact barrel axis. No second scope
     // or interaction, and no extra floor obstruction at the use point.
     for(const t of [-.38,.29]){
-      const p=fr.at(-1.8,D/4+.4-t*Math.cos(.18));
+      const p=fr.at(-1.8,D/4+.4+t*Math.cos(.18));
       cyl(iron,p.east,roofY+1.12+t*Math.sin(.18),p.north,.175,.175,.075,10,fr.yaw,Math.PI/2-.18);
     }
     // Reuse the existing optical affordance, not a new story/ledger event.
