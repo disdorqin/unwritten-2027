@@ -363,6 +363,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
       undergroundMineSpec.walker.radius,bodyHeight))return;
+    if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,undergroundMineSpec.walker.radius,bodyHeight))return;
     if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,undergroundMineSpec.walker.radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
