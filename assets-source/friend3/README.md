@@ -26,7 +26,7 @@
 
 ## 独立验收入口
 
-- FR-05：`vite.fr05-preview.config.ts`（dist-fr05 / 5205）
-- FR-07：`vite.fr07-preview.config.ts`（dist-fr07 / 5207）
-- FR-08：`vite.fr08-preview.config.ts`（dist-fr08 / 5208）
+- FR-05：`friend3-vite.fr05-preview.config.ts`（dist-fr05 / 5205）
+- FR-07：`friend3-vite.fr07-preview.config.ts`（dist-fr07 / 5207）
+- FR-08：`friend3-vite.fr08-preview.config.ts`（dist-fr08 / 5208）
 - 三套配置不修改共享 `tools/voxel-tavern/vite.config.ts`。

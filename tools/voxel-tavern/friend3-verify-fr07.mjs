@@ -8,7 +8,7 @@ const pageUrl = 'http://127.0.0.1:5207/friend3-audio-preview.html';
 const evidenceDir = 'C:/Users/99243/AppData/Local/Temp';
 const server = spawn(
   process.execPath,
-  ['node_modules/vite/bin/vite.js', 'preview', '--config', 'vite.fr07-preview.config.ts'],
+  ['node_modules/vite/bin/vite.js', 'preview', '--config', 'friend3-vite.fr07-preview.config.ts'],
   { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
 );
 let serverOutput = '';
