@@ -58,7 +58,9 @@ export const townC2CraterCentralMoundPlan: TownC2CraterCentralMoundSettings = Ob
   workFace: Object.freeze({ east: -120.6, north: 182.7, radius: 8, feather: 2 }),
 });
 
-const lampRoomFixture = Object.freeze({ east: -10, south: 10, radius: 3.3 });
+// C protects the complete 3.3m lamp footprint plus 0.4m clearance.
+// A further 1m protects triangles crossing that clearance boundary.
+const lampRoomFixture = Object.freeze({ east: -10, south: 10, radius: 4.7 });
 const lampRoomC = Math.cos(townC2CraterCentralMoundAnchor.yaw);
 const lampRoomS = Math.sin(townC2CraterCentralMoundAnchor.yaw);
 export const townC2CraterCentralMoundProtectedSites = Object.freeze({

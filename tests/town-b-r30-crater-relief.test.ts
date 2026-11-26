@@ -56,6 +56,36 @@ test('R30 production west mount uses one final surface and retains the real rout
     assert.ok(Math.abs(road.heightAt(p.east,p.north)!-(a.rimHeight-35))<.01,name);
   }
   assert.ok(Math.abs(road.heightAt(-120,196)!-(a.rimHeight-35+7.5))<.05);
+  // C review: protect the entire 3.3m lamp-room footprint plus .4m
+  // player clearance, not merely the fixture centre. Sample final triangles.
+  const lamp=townC2CraterCentralMoundProtectedSites.lampRoom;
+  let lampError=0,lampCount=0;
+  for(let e=-3.7;e<=3.7;e+=.05)for(let n=-3.7;n<=3.7;n+=.05){
+    if(Math.hypot(e,n)>3.7)continue;
+    lampError=Math.max(lampError,Math.abs(road.heightAt(lamp.east+e,lamp.north+n)!-(a.rimHeight-35)));lampCount++;
+  }
+  assert.ok(lampError<.01,'complete C lamp-room clearance');
+  // The first 1.3m at the haul outlet is a transition, not an asserted
+  // flat pad. Measure the entire C 2.5m-width route separately from B01.
+  const approach=road.winch!.survey.descentApproach;
+  let edgeGrade=0,edgeRise=0,centreGrade=0,routeCount=0;
+  for(let k=1;k<approach.length;k++){
+    const p=approach[k-1],q=approach[k],de=q.east-p.east,dn=q.north-p.north,len=Math.hypot(de,dn);
+    for(let j=-25;j<=25;j++){
+      const off=j*.05;let previous:number|undefined;
+      for(let d=0;d<=len;d+=.05){
+        const h=road.heightAt(p.east+(de*d-dn*off)/len,p.north+(dn*d+de*off)/len)!;
+        assert.ok(Number.isFinite(h));routeCount++;
+        edgeRise=Math.max(edgeRise,Math.abs(h-(a.rimHeight-35)));
+        if(previous!==undefined){const grade=Math.abs(h-previous)/.05;edgeGrade=Math.max(edgeGrade,grade);if(j===0)centreGrade=Math.max(centreGrade,grade);}
+        previous=h;
+      }
+    }
+  }
+  // Guard against a new step at the outlet. 15% is a regression ceiling,
+  // not a new approved road grade; report actual edge and centre grades.
+  assert.ok(edgeRise<.12&&edgeGrade<.15&&centreGrade<.1);
+  t.diagnostic(JSON.stringify({lampCount,lampError,routeCount,edgeRise,edgeGrade,centreGrade}));
   road.group.updateMatrixWorld(true);
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
   let rayError=0;
