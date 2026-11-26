@@ -486,7 +486,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     };
     const guard=(dx:number,dz:number,w:number,d:number,top:number)=>{
       const p=fr.at(dx,dz);
-      box(timber,p.east,top+.49,p.north,w,.98,d,fr.yaw);
+      box(supplyPlanks,p.east,top+.49,p.north,w,.98,d,fr.yaw);
+      box(timberWarm,p.east,top+.94,p.north,w,.08,d,fr.yaw);
       colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,top,top+.98));
     };
     floor(0,D/4,W,D/2,deckY);
@@ -495,12 +496,19 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     colliders.push(orientedSupportBox(frontGuard.east,frontGuard.north,fr.yaw,W,.10,deckY,deckY+.95));
     const backGuard=fr.at(0,.06);
     colliders.push(orientedSupportBox(backGuard.east,backGuard.north,fr.yaw,W,.15,deckY,deckY+1.6));
-    for (let i = 0; i < 7; i++) {
-      const p = fr.at(-W / 2 + .4 + i * (W - .8) / 6, D / 2 - .12);
-      box(timber, p.east, roofY + .5, p.north, .09, .9, .09, fr.yaw);
+    // Front viewing rail and the higher rear safety screen follow the
+    // existing collision strip. Closed rear rails make the roof boundary
+    // readable instead of presenting a walkable-looking invisible edge.
+    for (const [z,h] of [[D/2-.12,.95],[.06,1.6]] as const) {
+      for (let i=0;i<9;i++) {
+        const p=fr.at(-W/2+.10+i*(W-.20)/8,z);
+        box(supplyPlanks,p.east,deckY+h/2,p.north,.10,h,.10,fr.yaw);
+        box(iron,p.east,deckY+.075,p.north,.10,.15,.10,fr.yaw);
+      }
+      const p=fr.at(0,z);
+      for(const y of [.19,h*.51,h-.045])
+        box(supplyPlanks,p.east,deckY+y,p.north,W,.09,.10,fr.yaw);
     }
-    const rail = fr.at(0, D / 2 - .12);
-    box(timber, rail.east, roofY + .95, rail.north, W, .08, .08, fr.yaw);
     for (const s of [-1, 1]) {
       // Gap on the east edge at the raised stair landing, not a railing
       // across the player's route. Solid low timber guards match collision.
@@ -554,6 +562,12 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(brass, scope.east + Math.sin(a) * .3, roofY + .45, scope.north + Math.cos(a) * .3, .06, .95, .06, fr.yaw, .3 * Math.cos(a), .3 * Math.sin(a));
     }
     cyl(brass, scope.east, roofY + 1.12, scope.north, .11, .16, 1.25, 9, fr.yaw, Math.PI / 2 - .18);
+    // Separate focus collars share the exact barrel axis. No second scope
+    // or interaction, and no extra floor obstruction at the use point.
+    for(const t of [-.38,.29]){
+      const p=fr.at(-1.8,D/4+.4-t*Math.cos(.18));
+      cyl(iron,p.east,roofY+1.12+t*Math.sin(.18),p.north,.175,.175,.075,10,fr.yaw,Math.PI/2-.18);
+    }
     // Reuse the existing optical affordance, not a new story/ledger event.
     const scopeUse=fr.at(-.85,1.84);
     actions.push({id:'telescope',label:'使用屋顶望筒观坑',...scopeUse,height:deckY,range:1.15});
