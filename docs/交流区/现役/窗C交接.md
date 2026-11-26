@@ -1,5 +1,5 @@
 # 3.0-R 窗C现役交接卡
-2026-11-26，owner GPT-C / lane-c，正式工作树 D:\computer learning\game_exe\kuanian\.worktrees\window-c，DevSpace ws_c5db0ef9a4。基线 integration f8380557，C当前实际候选 ae0ac6a8、a796f96c、64be686e、9b58826b、4a1f7a41、b098ff81、dd121cc5、1394be4f 均已推远端。未入干，未上线。仅本卡随本线推进更新；公共任务看板由总控登记。迁移后空 node_modules 已用本窗 .npm-cache 离线按锁恢复148依赖，未新建工作树；证据仅落本窗 .evidence/c-r30-camp/，不推缓存或证据堆。
+2026-11-26，owner GPT-C / lane-c，正式工作树 D:\computer learning\game_exe\kuanian\.worktrees\window-c，DevSpace ws_c5db0ef9a4。基线 integration f8380557，C当前实际候选 ae0ac6a8、a796f96c、64be686e、9b58826b、4a1f7a41、b098ff81、dd121cc5、1394be4f、c139c54a、41a1d26d、54331f32 均已推远端。未入干，未上线。仅本卡随本线推进更新；公共任务看板由总控登记。迁移后空 node_modules 已用本窗 .npm-cache 离线按锁恢复148依赖，未新建工作树；证据仅落本窗 .evidence/c-r30-camp/，不推缓存或证据堆。
 
 ## C-R01 井口契约 · 第一独立包待审
 - ae0ac6a8：town-c-r30-shaft-contract.ts、underground-domain-host.ts、对应测试。现役 host.shaftContract 输出已登记入口/返程/保护区、深层接口；不替代进入或故事授权。定向12/12、check通过。现役宿主/旧坑基线实测，B新坑尚未核；变换不符时深接缝 blocked，不创建第二域变换。
@@ -38,5 +38,16 @@ C2等帧已优先交付。C方正式放置坐标契约 town-c-r30-deep-layer-con
 ## B 独立窄范围审回（e2bf9a31）
 已读实际远端差分和B现役卡，diff --check 通过；审查 B 的 relief、meteor-crater(-surface)、中央丘保护、三作业实物 survey、physical-kit 和六灯坐标。井口仍以R55/30封盖及−35底面，旧授权不删；六灯位置含已移位haulage-turn(15,-6)，同一碰撞渠道、安装回滚及拆除原则一致。用B源码已声明的平底20m圆、中央丘21m外界、workFace半径8及保护圆，0.05m平面覆盖采样C保护区：井口8379/8379、绞盘1791/1791、起重机1791/1791、操作脚1174/1174、蛇石2184/2184均覆盖；灯房C r3.7 中1688/17191点未被B r3.3或其他平底圆覆盖（例E−128.146535/N192.723964）。这不等同实测高度异常；B需扩大灯房平底保护至至少3.7m或用实际最终三角+脚底查询证明余边高度/净空合格。半宽1.25m归程走廊采样21100点，51点未在平底圆，第一点约E−138.3173/N193.4143、在进坑坡接头附近，需联合A/B/C检查实际坡度而非假定必平。不得用中心高程代替整个保护区。B尚待联合真实宿主/原生返程/全独立审查，以上为限范围审回，不签全包通过；未切B工作树、未复跑B新网格。总控按窄包串行挑取，本窗无权限推主干。
 
+## 2026-11-26 续建 · C-R03 一矿姿态、晶洞接入及美术
+- c139c54a：宿主 passageAt/floorAt(e,n,posture) 支持1.8m standing /1.1m crouching，原坍塌净高1.3m不改；resolveMineStep 按≤.08m连续步进与≤.22m阶差核实际碰撞、canStandUp 检查起身，给定眼高1.0/1.67。9/9定向及check过。现役公共viewer仍未消费姿态输入，A需接已有移动与镜头，不可直接在矮洞中站立。
+- 41a1d26d：实际晶洞 host + 连续石路实体，原9046件全保留。局部N[-10.5,98.9]连续109.4m北向范围、主路宽4→6.4m，接原观景台与码头；按实际 tall/solid 模型 AABB 扣占位，非正式地面外不开放。真实矿道末端 Z140 处裁开14㎡闭岩墙，仅在晶洞房间及场景认证之后执行；现役铁闸闭/半开拒绝，开门消费现有 createUndergroundMineGate；与上层井孔裁剪可叠加，不覆写前一次网格。实际 return switch 在洞口，物理脚点与原门禁可双向移交。测试使用实际 gate（清敌输入为fixture），不是线上受理。12/12晶洞/井孔定向通过，逐.2m实际支撑与射线吻合。浏览器同源5机位及可信W驱动2.7m、0错，实际复看图后启用R30暗岩层理/晶体细纹/水面去棋盘纹理并复验。证据.evidence/c-r30-crystal-host/；node tools/verify-town-c-r30-camp.mjs crystal。独立相机照明与测试门禁，不是Live。洞室主路之外的地形探索和怪物/矿点授权仍待，不把整180×120m报可行走。
+- A/总控：现役宿主 crystalBridge={acceptsFrame(frame,room),readGateStage(),readLightBudget()} 与 readAcceptedDomainFoot，使用 host.crystalHost.contract 直接接已有 createUndergroundMineGate 的 winch/crystalSwitch/passage。域 underground/crystal，frame E26.310952 N158.389914 H−90.936 yaw4.504772120661；建议独立房 origin(E−9,N35,H−95.936) width169/depth226/height40。矿侧门槛 E15.547177 N160.657328 H−91，洞侧 E16.623555 N160.430586 H−91；同高相距1.1m，连续石面连接；回程开关 E18.379571 N158.578855 H−91。已有门禁不放宽清敌、可达、真实落点条件。房/门认证缺失时默认闭合，不通过高度猜域。禁止将客户端fixture的 acceptsFrame:true 或已清敌输入用作生产授权。
+
+## 2026-11-26 续建 · C-R04 深层总装和统一移动口
+- 54331f32：town-c-r30-deep-assembly.ts / host.deepAssembly。真实接收场景由C2提供本地Group、passageLocal（必须实测支撑高度及净空而不只是canStand任意高度）、acceptsMouth及dispose；由C现役host唯一施加前批r30DeepFrames，非局部单位根直接拒绝。A/总控 acceptsLayer/acceptsLink 确认独立房、C2 acceptsSecondMineMouth 与各scene.acceptsMouth 确认真实墙口，双侧脚点和房间均验才挂254m实体斜廊。撤销认证或水位丢失时相应通路fail-closed。不生产引用旧palace fixture，不重复建城。
+- C2四个墙口必须实物开通：二矿 N198/E0，城 E0/N0；城 E180/N0，地宫 N0/E0；四口净宽3.4/净高3.24m（以各自局部实际地面为底），只切门洞，不整面删墙。与上一批井筒顶孔是独立接口。r30DeepMouths/r30DeepTransitContracts 提供完整数据。域 underground/warrior-city、underground/palace；两条斜廊独立域 underground/link/minus140-to-minus165 和 underground/link/minus165-to-minus190；建议房 origin(195,78,-167) 135×34×31 与 origin(501,17,-190) 121×31×29。前批−165/−190房继续复用。所有域仍待A/总控正式Presence配置。
+- A唯一移动口：domainPassageAt(domain,e,n,posture)、resolveUndergroundStep(fromAcceptedFoot,to,posture)、canStandUpInDomain。根据已受理域而不是高度选地形；拒绝不符accepted foot的请求、>3m单步；连续.08m碰撞扫掠。deepAssembly.resolveHandoff 只识别已有实际接受脚与同坐标的双向域边界，返回待受理proposal，不写玩家位置。C2真实开口未确认时不开廊。实际测试注入既有城体及D旧壳审图快照（仅测试），显式fixture房/墙口接受，检查真实两个场景世界变换、254m实体廊逐.25m支撑、内部射线吻合、域切换前拒绝新域通行、撤销接受及水位缺失；端点射线在浮点精确边界可能丢失，内点用射线，端点用双侧实体支撑验。未将fixture认证冒充真实C2已开口。根check、10/10本组跨包回归及build通过；构建既有大chunk警告，P-OPT仍后置。C2尚未交生产原壳/实际开口；本窗仅提供宿主，未宣布完整多人贯穿。
+- 截止本轮主干仍f8380557、C2 9374d37d、B e2bf9a31。C2交接仍称未收到世界帧，本窗前批4a1f7a41和本次54331f32已在lane-c，需总控直接登记依赖、C2读取后返接；未篡改其他卡。B灯房审回仍待回执。候选全部自审/定向通过，配对与总控串行入干尚未发生，不能合并旧历史父链。未新建工作树。
+
 ## 下一件
-C-R04：C2确认上节新帧、下层顶口与二矿出口/勇士城/地宫墙口实际开门接缝；在现役host挂已认证的城市/地宫/斜廊模型并接统一移动/房间生命周期；A消费正式 accepted foot、lift receipt、gate及现有持久化。C-R03营地样板待美术审定后扩建主巷/晶洞；一矿蹲行和晶洞 gate 的真实移动口仍需接。B灯房保护审回及联合返程未核。不开封库/核心。本轮已读 Muse 新文件：无新增；最新现役看板f8380557、B及C2远端新交接，实际六路只读并行，未运行独立子智能体。
+优先 C-R03 主矿道、旧支护与探索空间的实际精修（先复看营地样板的配对审；不改矿点或遭遇权威）；同时待C2真实二矿顶孔、四墙口/地宫原壳及B返修候选到达即消费，真实跨层和返程由A/总控按统一接口连通并联调。不开封库/核心。此轮新增3个独立源码提交，未满足本线收工门槛。最新现役看板/项目脑无新增裁定，实际多路只读检查，未运行独立子智能体。
