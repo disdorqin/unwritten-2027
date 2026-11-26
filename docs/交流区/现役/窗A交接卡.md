@@ -243,3 +243,28 @@ D仍577d6f49无新正式山体差分，A-R04旧纵坡未解。D请配审aba0c12a
 最终A九份专项60/60；两独立生产报告共2081位姿/96检查点/0浏览器错，两次Vite和Presence编译正常；本轮互斥锁拦住工具重复预览，完整结束，临时目录自动清理。当前Node模型统计outer=28 mesh/81816三角/1灯（30/110000/1）；mouth=20 mesh/13936三角/3灯（40/60000/3），不是全图FPS；上轮root check他线历史类型断言问题仍待总控，本轮未重复全仓check、未做手机/多人联合/独立子智能体。无新工作树。
 A/B新联合测绘：A真实d29109e9宿主、B干净01820404原模块只读调用，五台原接近线仍257点、实体最窄.411178m、轨线3.479545m。新surveyBR30InscriptionApproach直接消费A road.inscription.layout.useFoot、真实transfer-dock和主/窄/侧三轨及实体盒，长23.158549m/293点、实体净距.554369m、轨线最窄1.758423m、坡率近0，终点E-64.630755451/N183.25/H10.777305603；几何通过，非生产拓印受理。待B入干后A消费新marker、实际工旗/植被/kit及installBR30RubbingPaper等，不复制独立审图假状态。D请配对窄审649d2f80、097502fd、e8b63bbe；总控串行接纳，未获A全包审签/入干。
 下一具体件：按最新真实接口复核A-R04铁路纵坡可独立修复段、工坊/刻石等公共活动宿主的实际接线准备；D新前山与B/C正式候选入干后核真实坡面与权威路径。保留旧镇冻结、P-OPT后置。未报收工。
+
+## 2026-11-26 第九轮集中施工收口（用户要求本轮结束）
+恢复de45ead4，登记D盘原树，已读项目脑§7、最新现役入口/看板及B交接。开工integration=9ff4d378，收尾读479e2855第二次收账令：A停止扩纯装饰，先独立审合源码/公共viewer边界，交B真实受理脚及宿主契约，完成独立铁路局部纵坡。本轮按此落盘，F/F3独立收工不替代六主线。用户明确第九轮收口：停止扩大本轮施工，保全候选供下一阶段审合，不报全A收工候选。
+|候选SHA|实物/核验|
+|---|---|
+|d8db3a7e|山口站西低谷74.706859m限定纵断面（样点203–247），保持端点/原站台/旧地形不变。升高16个样点、圆顺谷底，40.299219%→11.999000%，最大填高3.771509m；28.864146m双连续铁梁、17横联、7根实体石墩与帽座/碰撞。不可满足固定锚或4.2m填高门槛时原样拒绝，非D前山11m高架裁定。16/16。|
+|496b0ff9、1e109d74、88f4656d|原生山口站E296/N520→E243.1/N515→原站口，第一次验收脚本未初始化rail（65位姿/5点后中止，保留失败证据，不计通过）。source1e109d74复验295位姿/14点/0浏览器错；实看桥梁昼夜，终点涉浅水，仅机位取证非公共干路。证据 ../GPT/A-R04-山口低谷桥复验-2026-11-26/。|
+|d52c2fb9|生产viewer直接传原railway.route.points到几何核验，首端到真实环线水平15m、高差5.127583m、切向42.756°，两处近包络警告（E477.330/N334.322，E472.121/N357.887）；全线65处坡率仍超标。serviceGeometryReady=false，时刻牌卡如实说明支线未通，保留原时刻正典及唯一原环线时钟/列车，不宣称正式接轨/通车。24/24含原环镇车七项。|
+|6351c1a5|发现旧B地面测绘5f72153d忽略真实floor，支撑测试走到平台后0.9m陡落；纯地面同时满足三轨净空及实际踏面未找到通路。改造装卸平台为真实双端通行：北端四级.225m石阶、侧护栏、拆原横栏留通道，旧装卸前梯及平台高度不改。由A导出rail.stationWalkRoutes中的inscription-access（真实13支撑点），A侧实际压雪只染R59外，B侧不侵地。18/18，完整三轨最小净距2.200059m。|
+|6d3a1893、3e065505|source6d3a1893，正常坑口→转运通道→登平台H11.677→北阶下H10.777→刻石E-64.7/N183.3→原路返E-57.9/N146/H11.23。1149同步位姿/46检查点/0浏览器错，8原图，实看平台、阶梯及原刻石。证据 ../GPT/A-R04-转运平台刻石贯通实走-2026-11-26/。未执行正式拓印/收藏事务；无新增剧情权限。旧地面路径及旧.554m测绘不能冒充此新路线。|
+|9c7c19e2|根check发现A上轮窗洞测试CraterHitBox声明缺旋转足迹字段；改为实际OrientedSupportBox显式类型并保留运行断言，3/3，重跑根check无A报错。|
+最后10文件联合72/72（A九份+旧环镇铁路）；两份有效独立生产报告合计1444位姿/60点/0浏览器错，失败首轮不计；两次生产Vite/Presence成功。根check仍退出2，历史他线Texture.image unknown/null类型错误，未跨线修改。未完成手机/两人/全图性能、独立配审、总控入干。无新工作树、无独立子智能体；预览互斥锁拦重复调用，报告完成后临时目录均自动清理。
+### A/B真实宿主消费契约（替换旧刻石平地接近线）
+收尾B=eac4b4e0，D=7db17117（同步主干，无D新山体）。在干净A9c7c19e2与B eac4b4e0实际登记树只读调用B surveyCraterWorkstations/surveyBR30WorkshopApproaches，五线仍通过：257采样点，风箱/校准/分拣/秤/道岔净距.411178/.464563/1.075/.918545/1.150m，三轨最小3.479545m。五线坐标按B现役测绘，不另定义。新inscription-access长23.031155m/307采样点，真实支撑路线：E-55.442857/N165.057143/H10.777→E-55.3/N166.155/.825/167.495/168.165（四级前梯，H11.002/11.227/11.452/11.677）→N171与173.18平台H11.677→N173.835/174.505/175.175/175.845（四级北阶H11.452/11.227/11.002/10.777）→N176.65地面→E-64.630755451/N183.25/H10.777305603。严格消费实际route.points/support floors，不用groundAt强行覆盖高层，不对阶梯使用连续15%路坡门槛；逐级真实rise=.225m、run=.67m，三轨净距2.200059m。B的surveyBR30InscriptionApproach及attachBR30CraterCompletion目前仍调用旧四点地面方案，应在总控接纳A后由B改为消费新route及真实floor/step核验；A不修改B树。正式接线：退旧板→B统一地形/真实S5→refit story→真实三轨→attachBR30CraterCompletion一次（host-candidate，使用真实数组身份及hostRoutes）；该入口已内含physicalKit/melt/mound/flag/historic/paper，不逐叶重复挂载。B旧面拒绝与晚冲突撤销有效，不在当前unified=false宿主强接；returnSurvey仍封闭。最终单一west碰撞索引建于全部接受几何后（现有ensureWestCraterRoad会早建原索引，接入时应将最终重建移到rail/kit之后）。机械E/Q、拓印hold/release、工旗单次E先按同一accepted pose+域/瞄准/受理facts裁决，离位/过期/断线释放；库存、图鉴、档案、时钟、lift必须现有权威受理，review fixture不得复制；公共presence/协议改动单列总控审批。现阶段不虚构受理状态、不开井。
+### 供总控/D逐包审合的源码清单（f8380557共同祖先→9c7c19e2）
+最新总控479e2855要求独立源码审合而非整历史分支；以下按依赖顺序审，源码前缀 tools/voxel-tavern/town-blockout/，用最终blob而非盲cherry-pick交叉提交。纯叶件可先接受，调用者必须同依赖组或后续一并接合；证据和交接可独立归档。16源码、10测试，源差分范围精确。
+|组|实际文件/审合顺序|
+|---|---|
+|A-Leaf 纯工具|town-a-r30-oriented-support.ts、town-a-r30-industrial-shell.ts、town-a-r30-rail-network.ts、town-a-r30-rail-strip.ts、town-a-r30-rail-crossings.ts、town-a-r30-crater-seam.ts、town-a-r30-crater-material-seam.ts、town-a-r30-terrain-contract.ts、town-a-r30-north-connector.ts。可先纳入定义，不能把仅定义算生产。|
+|A-R01/R02 接地|terrain.ts（新增readyAt/边采样，不改冻结H0）、town-a-r30-west-landscape.ts、town-za22-crater-road.ts（共用R59实际顶点、北带、地层色、真实支撑/碰撞集合）；依赖outer/mouth最终返回数据，应与下一组共同审合，B统一地形/旧板退役另外窄接，不覆盖B源码。|
+|A-R02/R03 实体|town-crater-outer-works.ts、town-crater-mouth-works.ts（真实墙/梯/门窗/地基/建筑陈设/地层/景观，依赖上述工具和地表、返回scenicSeats/supplyWindowControls等）；几何源可先审，E玩法必须viewer对应消费。|
+|A-R04 铁路|town-crater-rail-extension.ts（主支/侧/窄轨及7过路、两站/货棚/转运、低谷桥/双端梯、inscription-access；依赖rail-network/strip/crossings、真实road.inscription及west landscape）。站牌仍如实标未通；不修改原town-railway.ts。|
+|A公共viewer最后串行|viewer.ts按实际hunk：imports/support contract；railExtension传railway.route.points与railWestGeometry；geometry()/outdoorGeometryAt合并真实轨道碰撞；山口站选择器；activitySpots座椅/时刻牌/双窗及重建索引；currentAction望筒层高；walkable/surfaceAt/overlapsBody、scope退出。冲突边界是B/C新域与工坊E/Q/hold、D ridgeGround就绪、统一west索引；先接完整A依赖再单写这些hunk，禁止B/C/D覆盖整viewer，保留原undergroundDomain/presence/railway权威。|
+|定向测试|tests/town-blockout-a-r30-{industrial-interiors,isolation-wall,north-connector,rail-stations,rail-strips,supply-deck,terrain-contract,tower-walkability,west-landscape}.test.ts；旧 tests/town-blockout-crater-west-collision.test.ts 的实际新支撑口径。真实浏览器 tools/verify-a-r30-native-{local,walk}.mjs 及各目录证据。|
+本轮提交已全推本线，D配审及总控串行接纳尚缺。D新正式山体后重算剩余65段及环线接头、避免在旧前山上立未经裁定的11m高架；B/C正式入干后按上述宿主契约完成原权威接线、真实地表—地下往返、全区/两人/移动端验收。用户要求第九轮结束，当前冻结阶段候选供审核，绝非全A主体完工；不启动P-OPT，不自行发布。
