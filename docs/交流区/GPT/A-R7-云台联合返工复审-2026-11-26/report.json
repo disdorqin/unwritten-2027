@@ -1,0 +1,128 @@
+{
+  "a": "b7e694f8606c99d33bb13a1b2d9537cdca6f24a7",
+  "d": "cb9502d0d81034407ef6bfc3dd2bf564395b059b",
+  "scope": "exact-source candidate only",
+  "files": [
+    {
+      "path": "town-d-r30-front-ridge.ts",
+      "blob": "69e6cf3eb10570b14c18651625c5e39985839b15"
+    },
+    {
+      "path": "town-d-r30-forest.ts",
+      "blob": "86011a103924307cb720055b7004d29eebc6e1bb"
+    },
+    {
+      "path": "town-d-r30-road-survey.ts",
+      "blob": "c4e771de2db41c73e29c3a860257718c22bed715"
+    },
+    {
+      "path": "town-d-r30-roadbed.ts",
+      "blob": "b699f90d496b5381d8c556e23e0b6e2618e940aa"
+    },
+    {
+      "path": "town-d-r30-cable-facilities.ts",
+      "blob": "8276700cf93d926fd0ae34956cbadc8c0fbb5683"
+    },
+    {
+      "path": "town-d-r30-cloud-terrace.ts",
+      "blob": "9babe6c9bd15c6be7f4a8cf7ff0ee1a22e3a8522"
+    },
+    {
+      "path": "town-d-r30-protected-approach.ts",
+      "blob": "cf64e6a1590c749824cc58a984a1a7f44b795862"
+    }
+  ],
+  "success": true,
+  "mask": {
+    "changed": 1323,
+    "zero": 81991,
+    "maxFrozen": 0,
+    "maxProposal": 0,
+    "outside": 0,
+    "mid": 0
+  },
+  "routes": [
+    {
+      "east": 336,
+      "north": 640,
+      "height": 347,
+      "points": 1,
+      "supported": true
+    },
+    {
+      "east": 320,
+      "north": 634,
+      "height": 347,
+      "points": 217,
+      "supported": true
+    },
+    {
+      "east": 350,
+      "north": 650,
+      "height": 347,
+      "points": 115,
+      "supported": true
+    },
+    {
+      "east": 291,
+      "north": 660,
+      "height": 347,
+      "points": 255,
+      "supported": true
+    },
+    {
+      "east": 300,
+      "north": 662,
+      "height": 347,
+      "points": 227,
+      "supported": true
+    },
+    {
+      "east": 324,
+      "north": 655,
+      "height": 347,
+      "points": 103,
+      "supported": true
+    },
+    {
+      "east": 310.5,
+      "north": 662,
+      "height": 347,
+      "points": 185,
+      "supported": true
+    },
+    {
+      "east": 351.5,
+      "north": 662,
+      "height": 347,
+      "points": 145,
+      "supported": true
+    },
+    {
+      "east": 300,
+      "north": 665,
+      "height": 347,
+      "points": 239,
+      "supported": true
+    }
+  ],
+  "gateSupported": false,
+  "sweep": {
+    "samples": 30844,
+    "minMoving": 1.3398367437863499,
+    "minDock": 0,
+    "groundHits": 0,
+    "obstacleHits": 18,
+    "firstObstacle": {
+      "east": 524.45,
+      "north": 329,
+      "height": 26
+    },
+    "externalSurveyed": true,
+    "candidateEnvelopeClear": false,
+    "productionReady": false,
+    "scope": "conservative actual station+ring+branch AABB",
+    "indexedBoxes": 2636,
+    "maxTower": 78.05082152684533
+  }
+}

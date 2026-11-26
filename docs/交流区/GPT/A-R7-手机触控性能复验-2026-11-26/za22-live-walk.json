@@ -1,0 +1,448 @@
+{
+  "url": "http://127.0.0.1:63692/?profile",
+  "segment": "mobile-review",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "deviceScaleFactor": 1,
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "mobile-review",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795701499405,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "mobile-plaza-idle",
+          "lighting": "雪夜",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795701499405,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "mobile-plaza-after-input",
+          "lighting": "雪夜",
+          "hud": "东 223.4 m · 北 185.1 m · 行走",
+          "cameraY": 13.65,
+          "action": "领取钟楼广场印章",
+          "status": "已连接 · 1 人",
+          "east": 223.4,
+          "north": 185.1,
+          "height": 12,
+          "wire": {
+            "ms": 1795701503968,
+            "east": 223.36,
+            "north": 185.11,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.1969247836448192,
+            "seq": 20
+          }
+        },
+        {
+          "label": "mobile-crater-mouth",
+          "lighting": "雪夜",
+          "hud": "东 2.0 m · 北 159.0 m · 行走",
+          "cameraY": 12.505027198791504,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 2,
+          "north": 159,
+          "height": 10.86,
+          "wire": {
+            "ms": 1795701507906,
+            "east": 2,
+            "north": 159,
+            "area": "town",
+            "height": 10.86,
+            "yaw": 1.2924746875928956,
+            "seq": 22
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:63692/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795701499405,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795701501071,
+          "east": 223.02,
+          "north": 180.25,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 1
+        },
+        {
+          "ms": 1795701501161,
+          "east": 223.06,
+          "north": 180.87,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 2
+        },
+        {
+          "ms": 1795701501269,
+          "east": 223.11,
+          "north": 181.62,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 3
+        },
+        {
+          "ms": 1795701501363,
+          "east": 223.17,
+          "north": 182.37,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 4
+        },
+        {
+          "ms": 1795701501472,
+          "east": 223.23,
+          "north": 183.24,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 5
+        },
+        {
+          "ms": 1795701501571,
+          "east": 223.28,
+          "north": 183.99,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 6
+        },
+        {
+          "ms": 1795701501669,
+          "east": 223.33,
+          "north": 184.74,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 7
+        },
+        {
+          "ms": 1795701501766,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 8
+        },
+        {
+          "ms": 1795701501864,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 9
+        },
+        {
+          "ms": 1795701502569,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.1969247836448192,
+          "seq": 10
+        },
+        {
+          "ms": 1795701502667,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.1969247836448192,
+          "seq": 11
+        },
+        {
+          "ms": 1795701503171,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12.34,
+          "yaw": 0.1969247836448192,
+          "seq": 12
+        },
+        {
+          "ms": 1795701503265,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12.8,
+          "yaw": 0.1969247836448192,
+          "seq": 13
+        },
+        {
+          "ms": 1795701503364,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 13.14,
+          "yaw": 0.1969247836448192,
+          "seq": 14
+        },
+        {
+          "ms": 1795701503466,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 13.25,
+          "yaw": 0.1969247836448192,
+          "seq": 15
+        },
+        {
+          "ms": 1795701503569,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 13.12,
+          "yaw": 0.1969247836448192,
+          "seq": 16
+        },
+        {
+          "ms": 1795701503660,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12.83,
+          "yaw": 0.1969247836448192,
+          "seq": 17
+        },
+        {
+          "ms": 1795701503769,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12.18,
+          "yaw": 0.1969247836448192,
+          "seq": 18
+        },
+        {
+          "ms": 1795701503865,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.1969247836448192,
+          "seq": 19
+        },
+        {
+          "ms": 1795701503968,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.1969247836448192,
+          "seq": 20
+        },
+        {
+          "ms": 1795701507795,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 1.2924746875928956,
+          "seq": 21
+        },
+        {
+          "ms": 1795701507906,
+          "east": 2,
+          "north": 159,
+          "area": "town",
+          "height": 10.86,
+          "yaw": 1.2924746875928956,
+          "seq": 22
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "performanceSamples": [
+    {
+      "label": "mobile-plaza-idle",
+      "elapsedMs": 1185.8000000044703,
+      "frames": 120,
+      "frameMs": {
+        "median": 8.399999999999636,
+        "p95": 12.600000000000364,
+        "max": 20.69999999999891
+      },
+      "calls": {
+        "median": 182,
+        "p95": 182,
+        "max": 182
+      },
+      "triangles": {
+        "median": 573986,
+        "p95": 573986,
+        "max": 573986
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "detailMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 13.5
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    },
+    {
+      "label": "mobile-plaza-after-input",
+      "elapsedMs": 1148.5,
+      "frames": 120,
+      "frameMs": {
+        "median": 8.399999999997817,
+        "p95": 12.599999999998545,
+        "max": 12.600000000002183
+      },
+      "calls": {
+        "median": 170,
+        "p95": 170,
+        "max": 170
+      },
+      "triangles": {
+        "median": 547864,
+        "p95": 547864,
+        "max": 547864
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "detailMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 6
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    },
+    {
+      "label": "mobile-crater-mouth",
+      "elapsedMs": 1610.7999999970198,
+      "frames": 120,
+      "frameMs": {
+        "median": 12.5,
+        "p95": 20.799999999999272,
+        "max": 21
+      },
+      "calls": {
+        "median": 495,
+        "p95": 496,
+        "max": 496
+      },
+      "triangles": {
+        "median": 1570438,
+        "p95": 1570474,
+        "max": 1570474
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "detailMs": {
+        "median": 0,
+        "p95": 0.20000000298023224,
+        "max": 4.300000004470348
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    }
+  ],
+  "mobile": {
+    "scope": "Chromium mobile viewport/touch emulation, not physical phone",
+    "walkDistance": 5.11566222497146,
+    "stopped": true,
+    "yawDelta": 0.1272245315952656,
+    "jumpRise": 1.2541180668067007,
+    "crater": {
+      "hud": "东 2.0 m · 北 159.0 m · 行走",
+      "cameraY": 12.505027198791504,
+      "action": "长按采雪",
+      "status": "已连接 · 1 人",
+      "east": 2,
+      "north": 159,
+      "height": 10.86
+    }
+  },
+  "traversal": {
+    "top": {
+      "hud": "东 2.0 m · 北 159.0 m · 行走",
+      "cameraY": 12.505027198791504,
+      "action": "长按采雪",
+      "status": "已连接 · 1 人",
+      "east": 2,
+      "north": 159,
+      "height": 10.86
+    },
+    "returned": {
+      "hud": "东 223.4 m · 北 185.1 m · 行走",
+      "cameraY": 13.65,
+      "action": "领取钟楼广场印章",
+      "status": "已连接 · 1 人",
+      "east": 223.4,
+      "north": 185.1,
+      "height": 12
+    }
+  },
+  "errors": 0
+}

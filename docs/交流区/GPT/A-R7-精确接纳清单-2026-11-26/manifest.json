@@ -1,0 +1,357 @@
+{
+  "base": "f83805571fce5354e83463dabc261aabc364f792",
+  "source": "bff75cd75552d3bddc376c2c830c2e07640459aa",
+  "integration": "479e285538df33849d8ba97ed040e133ec659ee5",
+  "scope": "R7 exact blob intake; no branch merge or service approval",
+  "conflicts": [],
+  "packs": [
+    {
+      "id": "A-S0",
+      "name": "独立基础叶件与输入性能",
+      "depends": [],
+      "files": [
+        {
+          "path": "tests/town-blockout-a-r30-performance.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "8f9df269c98102ad0f290113e39e9dd89f1097d7"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-crater-material-seam.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "1d5d76b2500e1a70478c6bd1c41334353c900a30"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-crater-seam.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "7d0eaf6bc731724a2c3bf7dab974cfc6347c2bed"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-industrial-shell.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "07f2d637e8727cebb137ed968b6575e50e74521e"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-oriented-support.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "e1e41cd1c503e287729ab8e7b188fc1c1a10c858"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-crossings.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "f6d3417fe0dab4031d31bc3e63b5f793dec026cc"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-network.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "f5e7a0c02fad725e7110ed35bb2e8f2cae60ea2c"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-strip.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "144bdd1dfb11854c57b60f9b9e693fdc33e3171a"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-static-batches.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "b85009c7d91a36c9501e0f93ced90e431715f0d0"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-terrain-contract.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "ee60981de0070828d384ef90300f6487be5c9aad"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-activity.ts",
+          "base": "928cc42ef24aed2652e88f21e05d2babff0e6304",
+          "integration": "928cc42ef24aed2652e88f21e05d2babff0e6304",
+          "candidate": "6a02ca24d4cb6ec92d8de5bc1c66f54f6a2791ad"
+        }
+      ]
+    },
+    {
+      "id": "A-S1",
+      "name": "坑外地形、工业实体、铁路与步行支撑",
+      "depends": [
+        "A-S0"
+      ],
+      "files": [
+        {
+          "path": "tests/town-blockout-a-r30-industrial-interiors.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "1664badb1b9ddc40e377fb61645bc8906e273011"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-isolation-wall.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "8a43f8dc19891769dcab08920ebaffa3c7fc2480"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-north-connector.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "8f927cfb97cc995c17bd20e9cacd35512ff60d1b"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-rail-stations.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "81c8d6327fcf8a00a324012e7f0f854869843ace"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-rail-strips.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "9e7d1464c6691e3e784261fad0e36ee199154a9a"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-supply-deck.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "4fbb9ae9454664f42753d33db8ce6677c028db48"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-terrain-contract.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "b77e8c6000694ab56317871e2081b8c4f3c56732"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-tower-walkability.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "fe4703d006e8e395f94487378f86c37f8c30e8be"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-west-landscape.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "c1838a79f2878f0f12a25406c6856f9810258415"
+        },
+        {
+          "path": "tests/town-blockout-crater-west-collision.test.ts",
+          "base": "153b95032acc11c1c467cba366af3f267b249fcd",
+          "integration": "153b95032acc11c1c467cba366af3f267b249fcd",
+          "candidate": "ae40a52d1a72534911fa371ae9d887d2f065c31b"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/terrain.ts",
+          "base": "8327a8d20f78d7a5b13b5a9d3d403dca5c285e09",
+          "integration": "8327a8d20f78d7a5b13b5a9d3d403dca5c285e09",
+          "candidate": "141e1a8e3ca56411b3edcde29f40631cbc1bb0ae"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-north-connector.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "bf4660ce5384c163eb83d7be08c5233a773ea0e4"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rim-access.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "27f58de267865f86593bb1117e77cb1863bbae4a"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-west-landscape.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "7bc6c2882becb152fc2f98e92e6a0899e54a27e3"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-crater-mouth-works.ts",
+          "base": "d463f0d2a3da695ea02b56a39887edcaa37881c4",
+          "integration": "d463f0d2a3da695ea02b56a39887edcaa37881c4",
+          "candidate": "ac4f306c5dc391deda08fa08f5d8241bac8d8566"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-crater-outer-works.ts",
+          "base": "d3fc359ece13f6329e7f282c141fab4ba74e078d",
+          "integration": "d3fc359ece13f6329e7f282c141fab4ba74e078d",
+          "candidate": "987e2dc3c1e3b2d43cc0889bc1e94dd06d83e4e4"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-crater-rail-extension.ts",
+          "base": "016da419d5f3574625fe95153969e02985a51b37",
+          "integration": "016da419d5f3574625fe95153969e02985a51b37",
+          "candidate": "11511614afda99f7070d43bc32098dacd08113b5"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-za22-crater-road.ts",
+          "base": "71d8360e23047a8d0225013155fb82c8e3c113e0",
+          "integration": "71d8360e23047a8d0225013155fb82c8e3c113e0",
+          "candidate": "5065a6000b63e1ce39de1e3ee6b6ffd52302228c"
+        }
+      ]
+    },
+    {
+      "id": "A-S2",
+      "name": "公共viewer与安全输入/落点宿主（默认端口关闭）",
+      "depends": [
+        "A-S0",
+        "A-S1"
+      ],
+      "files": [
+        {
+          "path": "tests/town-blockout-a-r30-crater-play.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "9f82f9899f3b395b9d144edca6270db7149f69dd"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-landing-recovery.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "cdc4d695dc83f66ad4b7ab6d5c631bc8a9a68b70"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-station-protection.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "27b205eec6ec603aefca70c2666f93eedea93f18"
+        },
+        {
+          "path": "tests/town-blockout-a-r30-unified-surface-host.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "c1d9de993873d67af2a5e620cd12455c69288859"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-crater-play.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "3c71f9f7e821209910a55f6be545af6499c7a1ca"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-landing-recovery.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "9434375d1bfa3194fdcb83fddd14f015980ecf2d"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-station-protection.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "6d2bc3909d976e4bdc80003d5412e7f57a4c994b"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-surface-port.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "eef00dddcce39d87fdfa7661e53ed98a95ac2b34"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-unified-surface-host.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "09b9c1f632b2ae099ec1576aad69feb3fbbb00ee"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/viewer.ts",
+          "base": "55a0a76435ad0df80fac6cfd898e8c5fab16baaf",
+          "integration": "55a0a76435ad0df80fac6cfd898e8c5fab16baaf",
+          "candidate": "381f1eaba273500aa2b846fdd7d26e6d58ecd660"
+        }
+      ]
+    },
+    {
+      "id": "A-S3",
+      "name": "D山脚保护及铁路审查候选（不授权挂载）",
+      "depends": [
+        "A-S0",
+        "A-S1"
+      ],
+      "files": [
+        {
+          "path": "tests/town-blockout-a-r30-ridge-ownership.test.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "1e102b18c21c5412d1e81d46626392e1ef00b52e"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-junction-plan.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "b0b8058fcd945dc1c54d76ea5f37efd703968507"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-west-junction.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "4fa4482a2076c2c1f93ebd12ffd6911aa917d51f"
+        },
+        {
+          "path": "tools/voxel-tavern/town-blockout/town-a-r30-ridge-ownership.ts",
+          "base": null,
+          "integration": null,
+          "candidate": "439695e9466dbc0d30481b46c7b73dcca67235d4"
+        }
+      ]
+    },
+    {
+      "id": "A-S4",
+      "name": "精确源联合验收工具，不是生产权限",
+      "depends": [
+        "A-S0",
+        "A-S1",
+        "A-S2",
+        "A-S3"
+      ],
+      "files": [
+        {
+          "path": "tools/verify-a-r30-joint-surface.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "a3c5a6eedf19370a51822d209c0f154a62393533"
+        },
+        {
+          "path": "tools/verify-a-r30-native-local.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "720748f9528dada39660252432a4a29252f3fa57"
+        },
+        {
+          "path": "tools/verify-a-r30-native-walk.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "a112127a43c8c9da0c0f9fdb2405003ca0e05bc5"
+        },
+        {
+          "path": "tools/verify-a-r30-performance.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "cdd9269b0659a2c2f072bc958cb4c16f02b6f2a0"
+        },
+        {
+          "path": "tools/verify-a-r30-ridge-apron.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "de7217cf7b8cf9d299f5187413bc59ebc30cab05"
+        },
+        {
+          "path": "tools/verify-a-r30-ridge-rail.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "d9a44fdcab59f60745ffcc1f51fb414b37ec334b"
+        }
+      ]
+    }
+  ],
+  "gates": [
+    "A-S1 legacy profile 2.6m limit remains red; total-control decision needed; no rail service",
+    "A-S2 dormant B/C ports; actual accepted server domain/pose/receipt required; no production authorization",
+    "A-S3 cloud apron opt-in only, D cable envelope blocked",
+    "No direct whole-branch merge; reverify current integration blobs"
+  ]
+}

@@ -1,0 +1,236 @@
+{
+  "url": "http://127.0.0.1:50422/?profile",
+  "segment": "mobile-review",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "deviceScaleFactor": 1,
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "mobile-review",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795701411380,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "mobile-plaza-idle",
+          "lighting": "雪夜",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795701411380,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "failed-position",
+          "lighting": "雪夜",
+          "hud": "东 223.4 m · 北 185.1 m · 行走",
+          "cameraY": 13.65,
+          "action": "领取钟楼广场印章",
+          "status": "已连接 · 1 人",
+          "east": 223.4,
+          "north": 185.1,
+          "height": 12,
+          "wire": {
+            "ms": 1795701414207,
+            "east": 223.36,
+            "north": 185.11,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 8
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:50422/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795701411380,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795701413507,
+          "east": 223.04,
+          "north": 180.62,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 1
+        },
+        {
+          "ms": 1795701413608,
+          "east": 223.1,
+          "north": 181.37,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 2
+        },
+        {
+          "ms": 1795701413707,
+          "east": 223.15,
+          "north": 182.12,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 3
+        },
+        {
+          "ms": 1795701413824,
+          "east": 223.2,
+          "north": 182.87,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 4
+        },
+        {
+          "ms": 1795701413915,
+          "east": 223.26,
+          "north": 183.74,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 5
+        },
+        {
+          "ms": 1795701414009,
+          "east": 223.3,
+          "north": 184.36,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 6
+        },
+        {
+          "ms": 1795701414115,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 7
+        },
+        {
+          "ms": 1795701414207,
+          "east": 223.36,
+          "north": 185.11,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 8
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "performanceSamples": [
+    {
+      "label": "mobile-plaza-idle",
+      "elapsedMs": 1572.1999999955297,
+      "frames": 120,
+      "frameMs": {
+        "median": 12.5,
+        "p95": 16.799999999999272,
+        "max": 29.30000000000109
+      },
+      "calls": {
+        "median": 182,
+        "p95": 182,
+        "max": 182
+      },
+      "triangles": {
+        "median": 573986,
+        "p95": 573986,
+        "max": 573986
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "detailMs": {
+        "median": 0,
+        "p95": 0.20000000298023224,
+        "max": 14.699999995529652
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    },
+    {
+      "label": "failed-position",
+      "elapsedMs": 1450.6999999955297,
+      "frames": 120,
+      "frameMs": {
+        "median": 12.399999999997817,
+        "p95": 29.099999999998545,
+        "max": 41.70000000000073
+      },
+      "calls": {
+        "median": 179,
+        "p95": 179,
+        "max": 179
+      },
+      "triangles": {
+        "median": 557678,
+        "p95": 557678,
+        "max": 557678
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.10000000149011612,
+        "max": 0.20000000298023224
+      },
+      "detailMs": {
+        "median": 0,
+        "p95": 0.20000000298023224,
+        "max": 15.5
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    }
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: {\"start\":{\"hud\":\"东 223.0 m · 北 180.0 m · 行走\",\"cameraY\":13.65,\"action\":\"点亮钟楼广场迎宾灯\",\"status\":\"已连接 · 1 人\",\"east\":223,\"north\":180,\"height\":12},\"walked\":{\"hud\":\"东 223.4 m · 北 185.1 m · 行走\",\"cameraY\":13.65,\"action\":\"领取钟楼广场印章\",\"status\":\"已连接 · 1 人\",\"east\":223.4,\"north\":185.1,\"height\":12},\"distance\":5.11566222497146}\n    at <anonymous> (D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-a-a0-a6\\tools\\verify-a-r30-native-walk.mjs:359:10)",
+  "errors": 0
+}
