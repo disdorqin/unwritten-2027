@@ -135,6 +135,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   let valleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
   let eastValleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
   let eastValleyEnvelope:ReturnType<typeof capRepairedRailProfile>|undefined;
+  let northRampEnvelope:ReturnType<typeof capRepairedRailProfile>|undefined;
   const eastValleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   let closedHead:{index:number;removedLength:number;east:number;north:number;y:number;box:OrientedSupportBox;reason:string}|undefined;
   const valleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
@@ -252,6 +253,14 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
         eastValleyEnvelope=capRepairedRailProfile(samples,first,last,2.6,1.1);
         if(!eastValleyEnvelope.blocked)eastValleyEnvelope.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
       }
+    }
+    // Remove residual grade overshoots on the north ramp between the
+    // closed throat and the genuinely steep mountain segment. Keep
+    // both physical endpoints; do not change the horizontal alignment.
+    if(opts.repairValley){
+      const first=samples.findIndex(p=>p.north>370),last=samples.findIndex(p=>p.north>401);
+      northRampEnvelope=capRepairedRailProfile(samples,first,last);
+      if(!northRampEnvelope.blocked)northRampEnvelope.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
     }
     // Shared cross sections: the rail head, base and ballast are all
     // continuous strips with the same station and curve samples.
@@ -1024,5 +1033,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey,junctionAudit,serviceGeometryReady,closedHead,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyEnvelope,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey,junctionAudit,serviceGeometryReady,closedHead,valleyRepair,valleyBridgeSpans,eastValleyRepair,eastValleyEnvelope,northRampEnvelope,eastValleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

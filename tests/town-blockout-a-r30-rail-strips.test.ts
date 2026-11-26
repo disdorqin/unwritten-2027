@@ -115,7 +115,11 @@ test('second physical valley bridge removes the eastern 13 overgrade spans withi
  assert.ok(cap.changed.length>0);
  assert.ok(cap.maxClearance<=2.6&&cap.minClearance>=1.1&&cap.maxGrade<=.12);
  for(let i=cap.first;i<=cap.last;i++)assert.equal(rail.samples[i]!.y,cap.profile[i]!.y);
- assert.equal(rail.verticalSurvey.violations.length,52);
+ const ramp=rail.northRampEnvelope!;
+ assert.equal(ramp.blocked,undefined);assert.ok(ramp.maxGrade<=.12&&ramp.minClearance>=.5);
+ assert.ok(!rail.verticalSurvey.violations.some(v=>v.index>=ramp.first&&v.index<ramp.last));
+ assert.equal(rail.verticalSurvey.violations.length,46);
+ assert.equal(rail.verticalSurvey.violations.filter(v=>v.index>=rail.closedHead!.index).length,32);
 });
 test('actual loop junction blocks false branch service on disconnected and overlapping tracks',()=>{
  const audit=rail.junctionAudit!;
