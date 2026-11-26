@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -285,7 +285,7 @@ async function picture(page,evidence,label){
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
@@ -310,6 +310,7 @@ const approach={
  'industrial-ruins':[[-12,159],...smelterFootway],
  'salvage-pipes':[[-12,159],...smelterFootway],
  'transfer-dock':[[-12,159],[-43,159]],
+ 'inscription-access':[[-12,159],[-43,159]],
  'ore-yard-dock':[[-12,159],...smelterFootway,[-132,101],[-132,100],[-123,100]],
  'guard-shed':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-110,244],[-119,245]],
  'assembly-registration':[[-12,159],...smelterFootway.slice(0,4)],
@@ -354,7 +355,7 @@ try{
    ...industrial('salvage-pipes'),...industrial('salvage-pipes').slice(0,-1).reverse(),
    ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1)
  ]:null;
- const path=salvagePath??ruinsPath??(segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const path=salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -407,6 +408,11 @@ try{
          for(const [j,p]of [...rest.points].reverse().entries())await step(p,id+'-return-'+j);
        }
      }
+   }
+   if(segment==='inscription-access'){
+     if(Math.abs(point.north-171)<.01)await wallView('transfer-deck-north-exit',0);
+     if(Math.abs(point.north-176.65)<.01)await wallView('transfer-rear-stair',Math.PI);
+     if(i===path.length-1)await wallView('inscription-original-table',Math.atan2(road.inscription.layout.table.east-point.east,road.inscription.layout.table.north-point.north));
    }
    if(segment==='rail-valley'&&(i===2||i===path.length-1)){
      const mid=rail.samples[225];
