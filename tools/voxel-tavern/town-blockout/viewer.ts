@@ -1726,6 +1726,20 @@ for(const bench of ensureWestCraterRoad().outerWorks.scenicSeats)activitySpots.p
   available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
   run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
 });
+// A-owned local furniture uses the same E affordance as old town
+// windows. Reindex the real moving casement body after each toggle.
+for(const window of ensureWestCraterRoad().mouthWorks.supplyWindowControls)activitySpots.push({
+  x:window.useEast,n:window.useNorth,ground:window.useHeight,range:.55,
+  get label(){return window.isOpen()?'关闭补给站窗户':'打开补给站窗户';},
+  available:()=>!homeReturn&&canStandAtActivity(window.useEast,window.useNorth,window.useHeight),
+  run:()=>{
+    if(homeReturn||Math.hypot(x-window.useEast,n-window.useNorth)>.55||Math.abs(ground-window.useHeight)>.55)return;
+    const open=window.toggle();
+    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group);
+    activityContext.face(window.east,window.north,window.height);
+    announceActivity(open?'窗户已打开':'窗户已关闭');
+  },
+});
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {

@@ -146,6 +146,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const supplyGlass=new MeshStandardMaterial({color:0xb9a684,emissive:0xffb767,emissiveIntensity:.16,roughness:.36,transparent:true,opacity:.52,depthWrite:false});
   supplyGlass.name='A-R03-supply-real-glazing';
   const supplyWindows:{east:number;north:number;low:number;high:number;sx:number;sz:number;yaw:number}[]=[];
+  const supplyWindowControls:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;useHeight:number;isOpen():boolean;toggle():boolean}[]=[];
   const supplyShingles = supplyWoodMaterial('supply-cabin-continuous-shingles', [0x493e33, 0x322b25, 0x5c4b3d], true);
   // Structural beams and signage share continuous metre-scaled wood;
   // the old high-contrast square noise obscured the near-field joinery.
@@ -434,7 +435,47 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         if(o.door)continue;
         const p=at(o.center);
         const sx=axis==='x'?o.width:.055,sz=axis==='x'?.055:o.width;
-        piece(supplyGlass,o.center,o.width,.055,o.low,o.high);
+        const operable=axis==='x'&&fixed>0;
+        if(!operable)piece(supplyGlass,o.center,o.width,.055,o.low,o.high);
+        else{
+          // Front casements open outward, away from the interior aisle.
+          // Their moving frame and glazing share a single real hinge and
+          // collision footprint. The fixed reveals never move.
+          const side=Math.sign(o.center),h=o.high-o.low,y=wallBase+(o.high+o.low)/2;
+          const hinge=fr.at(o.center+side*o.width/2,fixed);
+          const leaf=new Group();leaf.name='supply-casement-'+side;
+          leaf.position.set(hinge.east,y,-hinge.north);
+          const cx=side*o.width/2;
+          const pane=new Mesh(new BoxGeometry(o.width-.06,h-.06,.055),supplyGlass);
+          pane.position.x=cx;leaf.add(pane);
+          const bars:BufferGeometry[]=[];
+          const bar=(x:number,y:number,w:number,hh:number,d:number)=>{
+            const geo=new BoxGeometry(w,hh,d);geo.translate(x,y,0);bars.push(geo);
+          };
+          for(const s of [-1,1]){
+            bar(cx+s*(o.width/2-.025),0,.05,h,.07);
+            bar(cx,s*(h/2-.025),o.width,.05,.07);
+          }
+          bar(cx,0,.045,h,.07);bar(cx,0,o.width,.045,.07);
+          const frameGeo=mergeGeometries(bars);
+          for(const b of bars)b.dispose();
+          if(frameGeo)leaf.add(new Mesh(frameGeo,timber));
+          group.add(leaf);
+          const body=orientedSupportBox(p.east,p.north,fr.yaw,o.width,.07,wallBase+o.low,wallBase+o.high);
+          colliders.push(body);
+          const use=fr.at(o.center,1.90);
+          let open=false;
+          const pose=()=>{
+            const angle=fr.yaw-(open?side*1.30:0);
+            leaf.rotation.y=angle;leaf.updateMatrixWorld(true);
+            const e=hinge.east+cx*Math.cos(angle),n=hinge.north+cx*Math.sin(angle);
+            Object.assign(body,orientedSupportBox(e,n,angle,o.width,.07,wallBase+o.low,wallBase+o.high));
+          };
+          pose();
+          supplyWindowControls.push({id:side<0?'supply-window-left':'supply-window-right',...p,height:y,
+            useEast:use.east,useNorth:use.north,useHeight:g+foundH+.06,
+            isOpen:()=>open,toggle:()=>{open=!open;pose();return open;}});
+        }
         supplyWindows.push({...p,low:wallBase+o.low,high:wallBase+o.high,sx,sz,yaw:fr.yaw});
         // Deep reveals, cross muntins and a projecting sill are visible
         // from both the exterior and the interior.
@@ -443,8 +484,10 @@ export function buildCraterMouthWorks(road: CraterRoad) {
           const y=s<0?o.low:o.high;
           piece(timberWarm,o.center,o.width+.14,.33,y-.055,y+.055,false);
         }
-        piece(timber,o.center,.065,.20,o.low,o.high,false);
-        piece(timber,o.center,o.width,.20,(o.low+o.high)/2-.032,(o.low+o.high)/2+.032,false);
+        if(!operable){
+          piece(timber,o.center,.065,.20,o.low,o.high,false);
+          piece(timber,o.center,o.width,.20,(o.low+o.high)/2-.032,(o.low+o.high)/2+.032,false);
+        }
       }
     };
     buildWall('x',D/2,-W/2,W/2,[
@@ -1162,7 +1205,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,supplyWindows,guardShedRoutes,guardShedSeats,assemblyRoutes,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,supplyWindows,supplyWindowControls,guardShedRoutes,guardShedSeats,assemblyRoutes,
     colliders, floors, ramps,
   };
 }

@@ -32,7 +32,7 @@ test('all six supply cabin panes are real wall apertures with closed narrow glas
    assert.ok(Math.abs(hit.distance-.4725)<.002);
    const bodies=colliders.filter(b=>b.min[1]<y&&b.max[1]>y&&supportFootprintOverlaps(mid.x,-mid.z,b,.001));
    assert.equal(bodies.length,1);
-   assert.ok(Math.min(bodies[0]!.footprint!.halfX,bodies[0]!.footprint!.halfZ)<.03);
+   assert.ok(Math.min(bodies[0]!.footprint!.halfX,bodies[0]!.footprint!.halfZ)<.04);
  }
 });
 test('supply actual stairs lead up to the deck and back down with body and step rules',()=>{
@@ -70,6 +70,28 @@ test('supply actual stairs lead up to the deck and back down with body and step 
  walk(path);walk([...path].reverse());
  const interior=road.mouthWorks.supplyInteriorRoute;
  walk(interior);walk([...interior].reverse());
+ const windows=road.mouthWorks.supplyWindowControls;
+ assert.equal(windows.length,2);
+ const center={east:(windows[0]!.useEast+windows[1]!.useEast)/2,north:(windows[0]!.useNorth+windows[1]!.useNorth)/2,height:windows[0]!.useHeight};
+ for(const w of windows){
+   const stand={east:w.useEast,north:w.useNorth,height:w.useHeight};
+   const approach=[...interior,center,stand];
+   walk(approach);
+   const hasPane=()=>boxes.find(b=>b.min[1]<w.height&&b.max[1]>w.height&&supportFootprintOverlaps(w.east,w.north,b,.001));
+   const body=hasPane();
+   assert.ok(body);
+   const closed=JSON.stringify(body);
+   assert.equal(w.toggle(),true);assert.equal(w.isOpen(),true);
+   assert.notEqual(JSON.stringify(body),closed);
+   assert.equal(hasPane(),undefined);
+   // Same object is retained in the real west collision list. A host
+   // reindex changes its occupied cells, not a second phantom collider.
+   assert.ok(road.group.userData.colliders.includes(body));
+   walk([...approach].reverse());walk(approach);
+   assert.equal(w.toggle(),false);assert.equal(w.isOpen(),false);
+   assert.equal(JSON.stringify(body),closed);assert.equal(hasPane(),body);
+   walk([...approach].reverse());
+ }
  const map=interior.at(-1)!;
  assert.equal(road.craterActions.actionAt(map.east,map.north,map.height)?.label,'查看坑区手绘图');
  assert.notEqual(road.craterActions.actionAt(map.east,map.north,map.height+2.76)?.label,'查看坑区手绘图');
