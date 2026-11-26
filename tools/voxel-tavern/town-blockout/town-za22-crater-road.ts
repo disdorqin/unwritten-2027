@@ -56,6 +56,10 @@ const seamBlendWidth = 24;
 const sharedApronRadius = meteorCraterRimRadius + 2 * (meteorCraterFixturePlan.mainTrail.halfWidth + meteorCraterFixturePlan.mainTrail.shoulderWidth);
 const tileSize = 48;
 
+type Story=ReturnType<typeof buildZa36CraterStoryDressing>;
+/** B's exact accepted story lifecycle is injected by the assembly owner.
+ * Never silently apply it to the legacy crater. */
+export type AR30StoryLifecycle={retire(story:Story):Story;refit(story:Story,heightAt:(e:number,n:number)=>number|undefined):{story:Story;changes:readonly unknown[]}};
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
@@ -91,7 +95,7 @@ type WestCraterRoad = {
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
 /** A-2: five-band vertex palette enabled by default; false is explicit rollback. */
 export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number,
-  options: { za34DistantPaletteCandidate?: boolean } = {}): WestCraterRoad {
+  options: { za34DistantPaletteCandidate?: boolean; unifiedStory?:AR30StoryLifecycle } = {}): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
@@ -273,8 +277,14 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // dressing so its footprint reserves the ground it stands on.
   const lampRoom = mountZa31CraterLampRoom(road);
   if (lampRoom) group.add(lampRoom.group);
-  const story = buildZa36CraterStoryDressing(road,
+  let story = buildZa36CraterStoryDressing(road,
     lampRoom ? [lampRoom.footprint] : []);
+  if(options.unifiedStory){
+    if(!unifiedRelief)throw Error('Unified story lifecycle requires B shared ground');
+    const before=story.placements.length;
+    story=options.unifiedStory.retire(story);
+    group.userData.aR30RetiredTerraces=before-story.placements.length;
+  }
   group.add(story.group);
   const brokenCircle = buildTownC2CraterBrokenCircle(road, {
     oldWorkPlacements: story.placements.filter(piece => piece.cluster.startsWith('old-work-')),
@@ -285,6 +295,11 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // as the BufferAttribute, so wrapping it would double the offset.
   applyCraterBrokenCircleToWalkMesh(surface as Mesh, anchor, brokenCircle.heightOffsetAt);
   if(!unifiedRelief)road.heightAt=brokenCircle.heightAt;
+  if(options.unifiedStory){
+    const settled=options.unifiedStory.refit(story,road.heightAt);
+    story=settled.story;
+    group.userData.aR30SettledSupports=settled.changes;
+  }
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
