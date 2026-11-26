@@ -1,6 +1,7 @@
 import {Group,Vector3,Mesh,IcosahedronGeometry} from 'three';
 import {createUndergroundOreVein,createUndergroundOreCoreMaterial} from './underground-ore-vein.js';
 import type {surveyR30Ore} from './town-c-r30-ore-survey.js';
+import type {R30OreInteraction} from './town-c-r30-ore-actions.js';
 import {mountR30OreWallArt} from './town-c-r30-ore-wall-art.js';
 import type {UndergroundMiningTargetView,UndergroundMiningCore} from '../../../src/shared/underground-mining.js';
 type Survey=Extract<ReturnType<typeof surveyR30Ore>,{kind:'ready'}>;
@@ -9,6 +10,7 @@ export type R30OreBridge=Readonly<{
  acceptsSite(site:Survey['ordinary'][number]):boolean;
  readTargets():readonly UndergroundMiningTargetView[]|undefined;
  readCores():readonly UndergroundMiningCore[]|undefined;
+ interaction?:R30OreInteraction;
 }>;
 /** World-space ore view; no input, pickaxe grants, fragment or core rewards. */
 export function mountR30OreArt(parent:Group,survey:Survey,bridge?:R30OreBridge){

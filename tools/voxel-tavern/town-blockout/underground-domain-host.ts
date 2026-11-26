@@ -16,6 +16,7 @@ import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoo
 import {createR30DeepHost} from './town-c-r30-deep-host.js';
 import {mountR30InterlayerLift,r30InterlayerLiftSite,splitR30LiftAperture,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
 import {createR30C2Consumer,type R30DeepRoomPort} from './town-c-r30-c2-consumer.js';
+import {createR30OreActions} from './town-c-r30-ore-actions.js';
 import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
 import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
 import {r30GateSwitchBlocks} from './underground-crystal-gate.js';
@@ -524,6 +525,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const crouchRoute=mountR30CrouchRoute(mounted.group,mine.crouchInterval,(x,z,posture)=>{const p=worldOf([x,-91,z]);return passageAt(p.east,p.north,posture)},mine.expansion?.deepWorks===true);
   const oreSurvey=surveyR30Ore(mounted.group,worldOf,p=>{const q=passageAt(p.east,p.north);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01});
   const oreArt=oreSurvey.kind==='ready'?mountR30OreArt(mounted.group,oreSurvey,options.oreBridge):undefined;
+  const oreActions=oreSurvey.kind==='ready'&&oreArt&&options.oreBridge?.interaction?createR30OreActions({survey:oreSurvey,art:oreArt,bridge:options.oreBridge,interaction:options.oreBridge.interaction,
+    readFoot:()=>options.readAcceptedDomainFoot?.(),supports:p=>{const q=passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.025}}):undefined;
   const safeCenters=[campFireWorld,...(mine.supportStation?[worldOf([mine.supportStation.x,mine.supportStation.y,mine.supportStation.z])]:[])];
   const encounterSurvey=oreSurvey.kind==='ready'?surveyR30Encounters(worldOf,p=>passageAt(p.east,p.north),oreSurvey,safeCenters):undefined;
   const encounterArt=encounterSurvey?.ready?mountR30EncounterArt(mounted.group,encounterSurvey,options.encounterBridge,(e,n)=>passageAt(e,n)):undefined;
@@ -639,7 +642,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     }
   },dispose(){horseSeat?.dispose();acoustics?.dispose();approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();c2Consumer?.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,acoustics,soundSites,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,acoustics,soundSites,oreSurvey,oreArt,oreActions,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
     crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
