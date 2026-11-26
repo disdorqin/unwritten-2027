@@ -12,7 +12,7 @@ const tmp=mkdtempSync(join(root,'.d-r30-joint-proof-'));
 try{
  const tar=git('archive','--format=tar',a,prefix,'src','tools/fixtures','docs/p0-layout-draft.json');
  execFileSync('tar',['-xf','-','-C',tmp],{input:tar,windowsHide:true,maxBuffer:96*1024*1024});
- for(const name of ['front-ridge','forest','road-survey','roadbed','cable-facilities','cloud-terrace'])cpSync(join(root,prefix,'town-d-r30-'+name+'.ts'),join(tmp,prefix,'town-d-r30-'+name+'.ts'));
+ for(const name of ['front-ridge','forest','road-survey','roadbed','cable-facilities','cloud-terrace','protected-approach'])cpSync(join(root,prefix,'town-d-r30-'+name+'.ts'),join(tmp,prefix,'town-d-r30-'+name+'.ts'));
  const load=n=>import(pathToFileURL(join(tmp,prefix,n+'.ts')).href);
  const {createTerrainGrid,worldBounds}=await load('terrain');
  const {mountWestCraterRoad}=await load('town-za22-crater-road');
@@ -20,7 +20,7 @@ try{
  const {buildCraterRailExtension}=await load('town-crater-rail-extension');
  const {createAR30RidgeOwnership}=await load('town-a-r30-ridge-ownership');
  const {buildFrontRidgeR30Field,proposeRidgeCloudApronOwnership}=await load('town-d-r30-front-ridge');
- const {mountRidgeCableFacilities}=await load('town-d-r30-cable-facilities');
+ const {mountRidgeCableFacilities,auditRidgeCableSweep}=await load('town-d-r30-cable-facilities');
  const {mountRidgeCloudTerrace,ridgeCloudHandoff,ridgeCloudFootAt}=await load('town-d-r30-cloud-terrace');
  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),railway=createTownRailway(grid,()=>0),loop=railway.route;
  const rail=buildCraterRailExtension(grid,road,loop.points),ownership=createAR30RidgeOwnership({loop:loop.points,branch:rail.samples});
@@ -37,9 +37,39 @@ try{
  const routes=targets.map(p=>{const path=terrace.survey(h.terminal,p,1.2);return {east:p.east,north:p.north,height:ridgeCloudFootAt(field,p.east,p.north),ground:field.heightAt(p.east,p.north),originalWeight:ownership.weight(p.east,p.north),weight:weight(p.east,p.north),distance:ownership.distance(p.east,p.north),points:path.length,range:path.length?[Math.min(...path.map(q=>q.height)),Math.max(...path.map(q=>q.height))]:[],allSupported:path.length>0&&path.every(q=>Math.abs(q.height-347)<.00001&&!terrace.blocked(q.east,q.north,q.height,.27))}});
  const gridProbes=[];for(let n=630;n<=666;n+=2)for(let e=286;e<=352;e+=2){if(field.heightAt(e,n)<346.999&&ownership.weight(e,n)>0)gridProbes.push({e,n,h:field.heightAt(e,n),d:ownership.distance(e,n)})}
  const roadProbes=[];for(let n=290;n<=400;n+=10)for(let e=290;e<=560;e+=10){const d=ownership.distance(e,n);if(d>8)roadProbes.push([e,n,Math.round(field.heightAt(e,n)*10)/10,Math.round(d)])}
- const report={a,proposed,changed,frozenError,routes,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
+ let approach,sweep=auditRidgeCableSweep(field,cable.survey);
+ if(process.argv.includes('--approach')){
+  const {surveyProtectedFootApproach}=await load('town-d-r30-protected-approach');
+  const {layout,canEnter}=await load('terrain'),{extensionPlots}=await load('town-extension');
+  const {buildRailwayStation}=await load('landmark-station');
+  const {za22StationApproach}=await load('town-za22-cloud-route');
+  const station=buildRailwayStation();
+  const boxes=(station.userData.colliders??[]).map(b=>({min:[b.min[0]+526,b.min[1]+26,b.min[2]-329],max:[b.max[0]+526,b.max[1]+26,b.max[2]-329]}));
+  const floors=(station.userData.floors??[]).map(b=>({min:[b.min[0]+526,b.min[1]+26,b.min[2]-329],max:[b.max[0]+526,b.max[1]+26,b.max[2]-329]}));
+  sweep=auditRidgeCableSweep(field,cable.survey,(p,w,d,top)=>boxes.some(b=>p.east+w>b.min[0]&&p.east-w<b.max[0]&&-p.north+d>b.min[2]&&-p.north-d<b.max[2]&&p.height+top>b.min[1]&&p.height<b.max[1]));
+  const plots=[...layout.plots,...extensionPlots].filter(p=>p.id!=='railway-station');
+  const rails=[...loop.points.map(p=>({east:p.x,north:-p.z,y:p.y})),...rail.samples,...rail.narrowSamples,...rail.sidingSamples],bins=new Map();
+  for(const p of rails){const k=Math.floor(p.east/8)+','+Math.floor(p.north/8),b=bins.get(k)??[];b.push(p);bins.set(k,b)}
+  const support=(e,n)=>{
+   if(!canEnter(e,n))return;
+   let y=field.heightAt(e,n)??grid.groundHeightAt(e,n);
+   if(!Number.isFinite(y))return;
+   for(const p of plots)if(Math.abs(e-p.origin[0])<=p.footprint[0]/2+.27&&Math.abs(n-p.origin[1])<=p.footprint[1]/2+.27)return;
+   for(const b of floors)if(e>=b.min[0]&&e<=b.max[0]&&-n>=b.min[2]&&-n<=b.max[2]&&b.max[1]>=y&&b.max[1]<=y+.43)y=b.max[1];
+   for(const b of boxes)if(e>=b.min[0]-.27&&e<=b.max[0]+.27&&-n>=b.min[2]-.27&&-n<=b.max[2]+.27&&y+.025<b.max[1]&&y+1.775>b.min[1])return;
+   const cx=Math.floor(e/8),cz=Math.floor(n/8);
+   for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)for(const p of bins.get((cx+dx)+','+(cz+dz))??[]){
+    if(Math.hypot(e-p.east,n-p.north)<2.1&&Math.abs(y-p.y)<3.1)return;
+   }
+   return y;
+  };
+  const from={east:290,north:300},to=za22StationApproach;
+  const result=surveyProtectedFootApproach(support,from,to,{west:255,east:575,south:255,north:475});
+  approach={scope:'conservative read-only geometry; no crossing grant, no production collision certification',from:{...from,height:support(from.east,from.north)},to:{...to,actualSupport:support(to.east,to.north)},...result};
+ }
+ const report={a,proposed,changed,frozenError,routes,approach,sweep,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
  if(process.argv[3]){const out=resolve(process.argv[3]);mkdirSync(dirname(out),{recursive:true});writeFileSync(out,JSON.stringify(report,null,2))}
- console.log(JSON.stringify({a,proposed,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
+ console.log(JSON.stringify({a,proposed,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
  terrace.dispose();cable.dispose();
  if(proposed){assert.equal(frozenError,0);assert.ok(routes.every(r=>r.height===347&&r.allSupported));assert.equal(report.gateSupported,false)}
 }finally{rmSync(tmp,{recursive:true,force:true,maxRetries:3,retryDelay:100})}

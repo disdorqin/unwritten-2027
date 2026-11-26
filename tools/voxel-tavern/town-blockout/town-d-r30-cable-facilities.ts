@@ -51,6 +51,34 @@ export function surveyRidgeCableSpans(field:FrontRidgeR30Field){
  }
  return {towers,path,measure,length,lowerMetres,minClearance,maxTower};
 }
+/** Separate a docking contact from a collision during travel. This is a
+ * measured candidate envelope, never a grant of operating authority.
+ * External buildings/railway obstacles must be supplied by their owner. */
+export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<typeof surveyRidgeCableSpans>,obstacle?:(foot:P,halfWidth:number,halfDepth:number,top:number)=>boolean){
+ let minMoving=Infinity,minDock=Infinity,groundHits=0,obstacleHits=0,samples=0;
+ let firstGround:P|undefined,firstObstacle:P|undefined;
+ const stops=survey.towers.filter(p=>p.station);
+ for(const p of survey.path){
+  const dock=stops.some(s=>Math.hypot(s.east-p.east,s.north-p.north)<=4);
+  for(const side of [-1,1]){
+   const foot={east:p.east+side*1.55,north:p.north,height:p.height};
+   // Include actual carriage corners and all one-metre raster vertices
+   // lying under the box. The half-metre route samples are retained.
+   const es=[foot.east-1.12,foot.east+1.12],ns=[foot.north-1.475,foot.north+1.475];
+   for(let e=Math.ceil(es[0]!);e<es[1]!;e++)es.push(e);
+   for(let n=Math.ceil(ns[0]!);n<ns[1]!;n++)ns.push(n);
+   let margin=Infinity;
+   for(const e of es)for(const n of ns){
+    const h=field.heightAt(e,n);samples++;margin=Math.min(margin,h===undefined?-Infinity:foot.height-h);
+   }
+   if(dock)minDock=Math.min(minDock,margin);else minMoving=Math.min(minMoving,margin);
+   if(margin<-.001){groundHits++;firstGround??=foot}
+   if(obstacle?.(foot,1.12,1.475,2.78)){obstacleHits++;firstObstacle??=foot}
+  }
+ }
+ return {samples,minMoving,minDock,groundHits,obstacleHits,firstGround,firstObstacle,externalSurveyed:!!obstacle,
+  candidateEnvelopeClear:!!obstacle&&groundHits===0&&obstacleHits===0&&minMoving>=.25,productionReady:false as const};
+}
 type Part={m:MeshLambertMaterial;matrix:import('three').Matrix4};
 type Solid={e:number;n:number;bottom:number;top:number;w:number;d:number;yaw:number};
 export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field){
@@ -184,7 +212,9 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    function local(m:MeshLambertMaterial,x:number,y:number,z:number,w:number,h:number,d:number){
     const mesh=new Mesh(geometry,m);mesh.position.set(x,y,z);mesh.scale.set(w,h,d);car.add(mesh);
    }
-   local(wood,0,-.09,0,2.2,.18,2.90);
+   // The station datum is the actual bottom support, not the centre of
+   // the floor board. Never sink the moving floor below that datum.
+   local(wood,0,.09,0,2.2,.18,2.90);
    local(iron,0,2.22,0,2.24,.18,2.95);
    local(snow,0,2.36,0,2.14,.10,2.76);
    for(const s of [-1,1]){
