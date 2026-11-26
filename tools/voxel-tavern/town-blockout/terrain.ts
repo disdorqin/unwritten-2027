@@ -66,7 +66,12 @@ function nearestRoad(x: number, north: number) {
     const px = x - a.x;
     const pn = north - a.north;
     const t = clamp((px * dx + pn * dn) / lengthSquared, 0, 1);
-    const d = Math.hypot(px - dx * t, pn - dn * t);
+    // Compare squared bounds first, but keep the original hypot for
+    // potential winners and near-ties so Float32 terrain and tie order
+    // remain identical to the surveyed height authority.
+    const ex=px-dx*t,en=pn-dn*t;
+    if(ex*ex+en*en>distance*distance*(1+8*Number.EPSILON))continue;
+    const d = Math.hypot(ex,en);
     if (d < distance) {
       distance = d;
       height = a.height + dh * t;
