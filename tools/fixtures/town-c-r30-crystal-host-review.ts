@@ -9,9 +9,10 @@ const root=new Group();scene.add(root,new AmbientLight(0xa2cbdc,.65));
 const road=mountWestCraterRoad(260,()=>10.7773);
 let gate:ReturnType<typeof createUndergroundMineGate>|undefined,now=0;
 let foot:{playerId:string;domainId:string;east:number;north:number;height:number}|undefined;
-const h=mountUndergroundDomainHost({parent:root,road,readAcceptedDomainFoot:()=>foot,
+const hostResult=mountUndergroundDomainHost({parent:root,road,readAcceptedDomainFoot:()=>foot,
  crystalBridge:{acceptsFrame:()=>true,readGateStage:()=>gate?.state(),readLightBudget:()=>3}});
-if(h.kind!=='ready')throw Error(h.reason);
+if(hostResult.kind!=='ready')throw Error(hostResult.reason);
+const h=hostResult;
 const ch=h.crystalHost!,c=ch.contract!;
 h.mounted.sync();if(!ch.mounted)throw Error('crystal mount failed');
 gate=createUndergroundMineGate({winch:c.winch,crystalSwitch:c.returnSwitch,readAcceptedFoot:()=>foot,
