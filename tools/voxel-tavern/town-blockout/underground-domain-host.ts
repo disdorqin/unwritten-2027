@@ -24,6 +24,7 @@ import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
 import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
+import {mountR30DeepBank} from './town-c-r30-deep-bank.js';
 import {mountR30ShallowWayfinding} from './town-c-r30-shallow-wayfinding.js';
 import {surveyR30Encounters} from './town-c-r30-encounter-survey.js';
 import {mountR30EncounterArt,type R30EncounterBridge} from './town-c-r30-encounter-art.js';
@@ -366,6 +367,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   let openThinWalls:ReadonlySet<string>=new Set();
   let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
   let shallowGallery:ReturnType<typeof mountR30ShallowGallery>|undefined;
+  let deepBank:ReturnType<typeof mountR30DeepBank>|undefined;
   function queryMineClearance(east:number,north:number,radius:number,bodyHeight:number){
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
@@ -385,11 +387,13 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(passage&&mounted.supportAnnex?.blocksRearStorage(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&shallowGallery?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&deepBank?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
   }
   shallowGallery=mountR30ShallowGallery(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
   const shallowWayfinding=mine.expansion?.deepWorks?mountR30ShallowWayfinding(mounted.group,shallowGallery,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}):undefined;
+  deepBank=mountR30DeepBank(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
   const mainline=mine.expansion?.hasRunningMainline?mountR30MainlineHost({parent,worldOf,bridge:options.mainlineBridge,
     supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
   function passageAt(east:number,north:number,posture:'standing'|'crouching'='standing'){
@@ -505,9 +509,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
