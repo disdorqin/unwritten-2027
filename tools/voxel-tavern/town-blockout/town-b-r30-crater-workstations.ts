@@ -8,16 +8,22 @@ import type { buildCraterRailExtension } from './town-crater-rail-extension';
 
 export const craterWorkstationIds = ['bellows','calibration','sorting','weighing','turnout'] as const;
 export type CraterWorkstationId = typeof craterWorkstationIds[number];
-type Road = Pick<ReturnType<typeof mountWestCraterRoad>, 'heightAt'|'outerWorks'|'mouthWorks'> & {group?:Group};
+type Point = {east:number; north:number; height:number};
+type WalkRoute = Readonly<{id:string;points:readonly Point[]}>;
+type Road = Pick<ReturnType<typeof mountWestCraterRoad>, 'heightAt'> & {
+  group?:Group;
+  outerWorks:ReturnType<typeof mountWestCraterRoad>['outerWorks'] & {industrialRoutes?:readonly WalkRoute[];landscapeRoutes?:readonly WalkRoute[]};
+  mouthWorks:ReturnType<typeof mountWestCraterRoad>['mouthWorks'] & {assemblyRoutes?:readonly WalkRoute[];guardShedRoutes?:readonly WalkRoute[]};
+};
 type Rails = Pick<ReturnType<typeof buildCraterRailExtension>, 'samples'|'narrowSamples'> & {
   sidingSamples?: ReturnType<typeof buildCraterRailExtension>['samples'];
   group?: Group;
+  stationWalkRoutes?:readonly WalkRoute[];
 };
-type Point = {east:number; north:number; height:number};
 type Box = {min:number[];max:number[]};
 export type WorkstationSite = Readonly<{
   id:CraterWorkstationId; label:string; parentSite:string; center:Point; foot:Point; target:Point;
-  yaw:number; footprint:Box; railClearance:number; bodyClearance:number;
+  yaw:number; footprint:Box; railClearance:number; bodyClearance:number; routeClearance?:number;
 }>;
 /**
  * R30 recovery from audited B93: real interaction surfaces, not a second workshop reducer.
@@ -25,10 +31,10 @@ export type WorkstationSite = Readonly<{
  * All five stay on the exterior; no opening a solid A-4 building by magic.
  */
 const plans = [
-  {id:'bellows',label:'风箱 · 冷炉',parentSite:'smelter-plant',east:-161,north:122,yaw:Math.PI,w:1.72,d:1.30,h:1.72,targetY:1.16,targetZ:.05},
+  {id:'bellows',label:'风箱 · 冷炉',parentSite:'smelter-plant',east:-160.5,north:122.5,yaw:Math.PI,w:1.72,d:1.30,h:1.72,targetY:1.16,targetZ:.05},
   {id:'calibration',label:'校准台',parentSite:'instrument-plant',east:-64,north:139,yaw:-Math.PI/2,w:1.70,d:.85,h:1.75,targetY:.89,targetZ:.29},
-  {id:'sorting',label:'分拣台',parentSite:'ore-yard',east:-135,north:111,yaw:Math.PI,w:2.1,d:.95,h:1.45,targetY:.99,targetZ:.13},
-  {id:'weighing',label:'过秤',parentSite:'kengkou-freight-shed',east:-60,north:150,yaw:Math.PI,w:1.50,d:1.1,h:1.70,targetY:.40,targetZ:.20},
+  {id:'sorting',label:'分拣台',parentSite:'ore-yard',east:-141.5,north:100.5,yaw:-Math.PI/2,w:2.1,d:.95,h:1.45,targetY:.99,targetZ:.13},
+  {id:'weighing',label:'过秤',parentSite:'kengkou-freight-shed',east:-60,north:150.25,yaw:Math.PI,w:1.50,d:1.1,h:1.70,targetY:.40,targetZ:.20},
   {id:'turnout',label:'道岔扳杆',parentSite:'kengkou-station',east:-48,north:179,yaw:Math.PI,w:1.15,d:.80,h:1.9,targetY:1.26,targetZ:.06},
 ] as const;
 
@@ -54,6 +60,11 @@ export function surveyCraterWorkstations(road:Road,rail:Rails): readonly Worksta
   // the older main/narrow alignment.
   const railWalls:Box[]=Array.isArray(rail.group?.userData.colliders)?rail.group!.userData.colliders:[];
   const walls=[...groundWalls,...railWalls];
+  // A's latest industrial/landscape/transfer routes are traversable
+  // evidence, not decorative exclusion circles. Keep their full tread
+  // clear even when there is no solid box at the middle of a route.
+  const walkRoutes=[...(road.outerWorks.industrialRoutes??[]),...(road.outerWorks.landscapeRoutes??[]),
+    ...(road.mouthWorks.assemblyRoutes??[]),...(road.mouthWorks.guardShedRoutes??[]),...(rail.stationWalkRoutes??[])];
   return plans.map(p=>{
     const {east,north,yaw}=p;
     const height=road.heightAt(east,north);
@@ -74,8 +85,18 @@ export function surveyCraterWorkstations(road:Road,rail:Rails): readonly Worksta
     const bodyClearance=Math.min(...relevant.map(b=>Math.min(gap(east,north,b)-Math.hypot(hx,hz),gap(foot.east,foot.north,b))));
     const railClearance=Math.min(railGap(east,north,rail)-Math.hypot(hx,hz),railGap(foot.east,foot.north,rail));
     if(bodyClearance<.55||railClearance<1.65)throw Error('Occupied workshop pad: '+p.id+' '+bodyClearance+'/'+railClearance);
+    let routeClearance=Infinity;
+    for(const route of walkRoutes)for(let i=1;i<route.points.length;i++){
+      const a=route.points[i-1],b=route.points[i],len=Math.hypot(b.east-a.east,b.north-a.north),count=Math.max(1,Math.ceil(len/.1));
+      for(let j=0;j<=count;j++){
+        const t=j/count,y=a.height+(b.height-a.height)*t;
+        if(y+1.8<=height||y>=height+p.h)continue;
+        routeClearance=Math.min(routeClearance,gap(a.east+(b.east-a.east)*t,a.north+(b.north-a.north)*t,footprint));
+      }
+    }
+    if(routeClearance<.40)throw Error('Workshop pad crosses an existing walk route: '+p.id);
     const target={east:east+forward.east*p.targetZ,north:north+forward.north*p.targetZ,height:height+p.targetY};
-    return Object.freeze({id:p.id,label:p.label,parentSite:p.parentSite,center:{east,north,height},foot,target,yaw,footprint,railClearance,bodyClearance});
+    return Object.freeze({id:p.id,label:p.label,parentSite:p.parentSite,center:{east,north,height},foot,target,yaw,footprint,railClearance,bodyClearance,routeClearance:Number.isFinite(routeClearance)?routeClearance:undefined});
   });
 }
 
