@@ -789,7 +789,34 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     ];
     for (const [dx, dz, r, h, mat] of piles) {
       const p = fr.at(dx, dz);
-      cone(mat, p.east, g + h / 2, p.north, r, h, 10);
+      if(mat===oreOchre){
+        // Actual stacked timber, not an ochre cone masquerading as wood.
+        for(let layer=0;layer<4;layer++){
+          const count=7-layer, width=r*1.70-layer*.38;
+          for(let j=0;j<count;j++){
+            const x=dx+(j-(count-1)/2)*.49;
+            put(workshopWood,x,g+.245+layer*.46,dz,.46,.46,width);
+            for(const side of [-1,1])put(timberWarm,x,g+.245+layer*.46,dz+side*(width/2+.005),.38,.38,.012);
+          }
+        }
+        for(const z of [-1.25,1.25])put(workshopRust,dx,g+.12,dz+z,3.8,.24,.15);
+      }else{
+        // Irregular faceted mounds, with buried edges and graded fragments.
+        // Keep all exposed rock within the existing pile footprint.
+        const geo=new ConeGeometry(r,h,13,3);
+        const v=geo.getAttribute('position');
+        for(let i=0;i<v.count;i++){
+          const x=v.getX(i),y=v.getY(i),z=v.getZ(i);
+          const angle=Math.atan2(z,x),factor=.84+.11*Math.cos(angle*3+dx)+.05*Math.sin(angle*5+dz);
+          v.setXYZ(i,x*factor,y,z*factor);
+        }
+        geo.computeVertexNormals();part(mat,geo,p.east,g+h/2,p.north,fr.yaw);
+        for(let i=0;i<22;i++){
+          const a=i*2.39996,rr=r*(.52+.31*hash(i+dx*19)),s=.24+.19*hash(i*11+dz);
+          const q=fr.at(dx+rr*Math.cos(a),dz+rr*Math.sin(a));
+          part(i%4===0?stoneDark:mat,new DodecahedronGeometry(s,0),q.east,g+.24+s*.48,q.north,a);
+        }
+      }
       // S-1 collision: a cone pile blocks as its base square.
       hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
     }
@@ -797,9 +824,22 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
       put(timber, -8 + px, g + 1.5, -6 + pz, .26, 3, .26);
     }
-    put(corrugated, -8, g + 3.2, -6, 6.4, .22, 5.6);
-    put(snow, -8, g + 3.42, -6, 6.2, .16, 5.4);
-    for (let i = 0; i < 3; i++) put(timberWarm, -9.4 + i * 1.5, g + .55, -6, 1.25, 1.1, 1.25);
+    // Sorting shelter: a real pitched roof, rafters, snow and framed bins.
+    const shedPitch=Math.atan2(.72,2.8),shedSlant=Math.hypot(.72,2.8);
+    for(const side of [-1,1]){
+      put(workshopSheet,-8,g+3.49,-6+side*1.4,6.4,.14,shedSlant,side*shedPitch);
+      put(snow,-8,g+3.60,-6+side*1.4,6.1,.09,shedSlant-.19,side*shedPitch);
+      put(workshopWood,-8,g+3.04,-6+side*2.2,5.7,.21,.21);
+      for(const x of [-10.6,-8,-5.4])put(workshopWood,x,g+3.43,-6+side*1.4,.13,.15,shedSlant,side*shedPitch);
+    }
+    put(workshopWood,-8,g+3.91,-6,6.45,.17,.21);
+    for(const x of [-9.4,-7.9,-6.4]){
+      put(workshopWood,x,g+.55,-6,1.25,1.1,1.25);
+      for(const s of [-1,1]){
+        put(timberWarm,x+s*.52,g+.55,-6,.10,1.12,1.27);
+        put(workshopRust,x,g+.35,-6+s*.63,1.20,.09,.025);
+      }
+    }
     // Derrick: two A-frames, crossbeam, hook hanging over the yard.
     for (const s of [-1, 1]) {
       const p = fr.at(7 + s * 2.2, -6);
@@ -856,8 +896,16 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(timber, -2.95, g + 1.6, -5.8, 1.7, 2.6, .2);
     put(timber, -0.05, g + 1.6, -5.8, 1.7, 2.6, .2);
     put(timber, -1.5, g + 2.55, -5.8, 1.2, .7, .2);
-    put(slate, -1.5, g + 3.15, -8.35, 5.0, .14, 2.0, -.42, 0);
-    put(slate, -1.5, g + 3.15, -6.65, 5.0, .14, 2.0, .42, 0);
+    const storeRun=1.92,storeRise=.76,storePitch=Math.atan2(storeRise,storeRun);
+    for(const s of [-1,1]){
+      put(slate,-1.5,g+2.98+storeRise/2,-7.5+s*storeRun/2,5.0,.14,Math.hypot(storeRun,storeRise),s*storePitch);
+      put(snow,-1.5,g+3.09+storeRise/2,-7.5+s*storeRun/2,4.78,.09,Math.hypot(storeRun,storeRise)-.14,s*storePitch);
+      for(let i=0;i<4;i++){
+        const t=(i+.5)/4;
+        put(workshopWood,-1.5+s*2.18,g+2.9+storeRise*t,-7.5,.17,storeRise/4+.012,3.4*(1-(i+1)/4)+.08);
+      }
+    }
+    put(workshopWood,-1.5,g+3.84,-7.5,5.05,.14,.24);
     put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
     put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
     // S-1 collision: the storehouse is sealed — the iron door fills the
