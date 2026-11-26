@@ -881,7 +881,7 @@ function stationViewCamera() {
   return stationCullCamera;
 }
 scene.add(railway.group);
-const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad());
+const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
 const railWestGeometry=buildWestGeometry(railExtension.group);
 scene.add(buildShankouNodeScenery(grid).group);

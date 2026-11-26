@@ -4,6 +4,7 @@ import {buildRailStrip,railSections,surveyRailGrade,repairBoundedRailGrade} from
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
+import {buildTownRailRoute} from '../tools/voxel-tavern/town-blockout/town-railway';
 import {supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 
 test('rail strip shares exact curve sections and has only two terminal caps',()=>{
@@ -21,7 +22,7 @@ test('rail strip shares exact curve sections and has only two terminal caps',()=
   geo.dispose();
 });
 const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=buildCraterRailExtension(grid,road);
+const rail=buildCraterRailExtension(grid,road,buildTownRailRoute(grid).points);
 
 test('narrow gauge is a single separate line outside the B apron and clear of real industrial blockers',()=>{
   const boxes=road.group.userData.colliders as OrientedSupportBox[];
@@ -95,6 +96,15 @@ test('the production low-valley bridge repairs the local grade without moving st
  for(const i of report.changed)assert.ok(rail.samples[i]!.east>210&&rail.samples[i]!.east<250);
  assert.equal(rail.alignment.stations[0]!.railY,8.505400476746466);
  assert.equal(rail.alignment.stations[1]!.railY,11.397305603027343);
+});
+test('actual loop junction blocks false branch service on disconnected and overlapping tracks',()=>{
+ const audit=rail.junctionAudit!;
+ assert.ok(audit.start.horizontal>10);
+ assert.ok(audit.start.vertical>3);
+ assert.equal(audit.connectionMatches,false);
+ assert.ok(audit.overlapRuns.length>=2);
+ assert.ok(audit.overlapRuns.some(r=>r.minHorizontal<.3));
+ assert.equal(rail.serviceGeometryReady,false);
 });
 test('inclined masonry bearings are grounded at the lowest surveyed corner and have structural stringers',()=>{
   assert.ok(rail.railBearings.length>0);

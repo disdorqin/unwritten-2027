@@ -160,6 +160,59 @@ export function repairBoundedRailGrade(samples:readonly RailSample[],first:numbe
     maxFill:Math.max(...ys.map((y,i)=>y-selected[i]!.ground))};
 }
 
+type LoopPoint=Readonly<{x:number;y:number;z:number}>;
+/** Geometric commissioning gate: consume the existing loop's actual
+ * samples, never the old approximate divergence coordinate. The audit
+ * is read-only and cannot grant train movement authority. */
+export function surveyRailJunction(branch:readonly RailSample[],loop:readonly LoopPoint[]){
+  if(branch.length<2||loop.length<3)throw new RangeError('missing rail alignment');
+  const cell=8,segments=loop.map((a,i)=>({a,b:loop[(i+1)%loop.length]!,i}));
+  const bins=new Map<string,typeof segments>();
+  for(const segment of segments){
+    const {a,b}=segment;
+    for(let e=Math.floor((Math.min(a.x,b.x)-3.2)/cell);e<=Math.floor((Math.max(a.x,b.x)+3.2)/cell);e++)
+      for(let n=Math.floor((Math.min(-a.z,-b.z)-3.2)/cell);n<=Math.floor((Math.max(-a.z,-b.z)+3.2)/cell);n++){
+        const key=e+','+n,items=bins.get(key)??[];items.push(segment);bins.set(key,items);
+      }
+  }
+  function closest(p:Readonly<{east:number;north:number;y:number}>,pool:typeof segments){
+    let best:{index:number;horizontal:number;vertical:number;loopY:number;loopEast:number;loopNorth:number;loopDe:number;loopDn:number}|undefined;
+    for(const {a,b,i} of pool){
+      const de=b.x-a.x,dn=a.z-b.z,run2=de*de+dn*dn;
+      if(run2<1e-10)continue;
+      const t=Math.max(0,Math.min(1,((p.east-a.x)*de+(p.north+a.z)*dn)/run2));
+      const e=a.x+t*de,n=-a.z+t*dn,y=a.y+t*(b.y-a.y);
+      const horizontal=Math.hypot(p.east-e,p.north-n);
+      if(!best||horizontal<best.horizontal)best={index:i,horizontal,vertical:Math.abs(p.y-y),loopY:y,loopEast:e,loopNorth:n,loopDe:de,loopDn:dn};
+    }
+    return best;
+  }
+  const start=closest(branch[0]!,segments);
+  if(!start)throw new RangeError('loop has no valid segment');
+  const de=branch[1]!.east-branch[0]!.east,dn=branch[1]!.north-branch[0]!.north;
+  const angle=Math.acos(Math.min(1,Math.abs(de*start.loopDe+dn*start.loopDn)/(Math.hypot(de,dn)*Math.hypot(start.loopDe,start.loopDn))))*180/Math.PI;
+  const connectionMatches=start.horizontal<=.08&&start.vertical<=.03&&angle<=6;
+  const overlapRuns:{from:number;to:number;minHorizontal:number;minVertical:number;east:number;north:number;samples:number}[]=[];
+  let along=0,active:typeof overlapRuns[number]|undefined;
+  for(let i=0;i<branch.length-1;i++){
+    const a=branch[i]!,b=branch[i+1]!,run=Math.hypot(b.east-a.east,b.north-a.north),steps=Math.max(1,Math.ceil(run/.25));
+    for(let j=0;j<steps;j++){
+      const t=j/steps,p={east:a.east+t*(b.east-a.east),north:a.north+t*(b.north-a.north),y:a.y+t*(b.y-a.y)};
+      const d=along+t*run,near=closest(p,bins.get(Math.floor(p.east/cell)+','+Math.floor(p.north/cell))??[]);
+      // Clearance warning only: a future accepted turnout must replace
+      // its own coincident initial shared rail, rather than duplicate it.
+      if(near&&near.horizontal<3.2&&near.vertical<3.8){
+        if(!active){active={from:d,to:d,minHorizontal:near.horizontal,minVertical:near.vertical,east:p.east,north:p.north,samples:0};overlapRuns.push(active);}
+        active.to=d;active.minVertical=Math.min(active.minVertical,near.vertical);active.samples++;
+        if(near.horizontal<active.minHorizontal){active.minHorizontal=near.horizontal;active.east=p.east;active.north=p.north;}
+      }else active=undefined;
+    }
+    along+=run;
+  }
+  return {start:{horizontal:start.horizontal,vertical:start.vertical,loopY:start.loopY,east:start.loopEast,north:start.loopNorth,tangentDegrees:angle},
+    connectionMatches,overlapRuns,geometryReady:connectionMatches&&overlapRuns.length===0};
+}
+
 /** Minimum fill-only grade-constrained envelope on the current ground.
  * This is a feasibility survey, NOT production authorization to erect an
  * 11m viaduct or modify another window's new terrain. */

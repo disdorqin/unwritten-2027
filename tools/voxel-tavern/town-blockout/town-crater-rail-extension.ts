@@ -9,7 +9,7 @@ import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
 import { orientedSupportBox, supportFootprintOverlaps, type OrientedSupportBox } from './town-a-r30-oriented-support';
-import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, repairBoundedRailGrade, type RailSection } from './town-a-r30-rail-strip';
+import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, repairBoundedRailGrade, surveyRailJunction, type RailSection } from './town-a-r30-rail-strip';
 import { craterBranchControlLine, freightSidingControlLine, sampleRailCenterline } from './town-a-r30-rail-network';
 export { craterBranchControlLine } from './town-a-r30-rail-network';
 import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
@@ -105,7 +105,7 @@ const smooth01 = (t: number) => { const c = Math.max(0, Math.min(1, t)); return 
  * night empty runs) integrates on this alignment via the exported survey data;
  * the loop's closed-route system is untouched here.
  */
-export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
+export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:readonly {x:number;y:number;z:number}[]) {
   const group = new Group();
   group.name = 'crater-rail-extension';
 
@@ -492,6 +492,11 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       { east: -44.5, north: 168, half: 10 },
     ],
   });
+  const junctionAudit=loop?surveyRailJunction(main.samples,loop):undefined;
+  const verticalSurvey=surveyRailGrade(main.samples);
+  // Neither a matching junction nor a grade pass alone authorizes
+  // passenger service. Keep the old single loop clock and movement host.
+  const serviceGeometryReady=!!junctionAudit?.geometryReady&&verticalSurvey.violations.length===0;
   const shankouY = main.stationY.get('296,502')!;
   const kengkouY = main.stationY.get('-44.5,168')!;
 
@@ -555,7 +560,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     }
     // Face the north arrival shoulder rather than the track.
     colliders.push(orientedSupportBox(bx,bn,0,2.18,.07,g+1.545,g+2.855));
-    timetableReads.push({east:bx,north:bn+2.1,height:groundAt(bx,bn+2.1),title:'山口站时刻牌',description:'环镇线：晨一班、午一班、暮一班、夜一班。北行 · 往坑口：晨一班，其余三格尚未填写。此为站牌记载，北延支线实际乘车服务尚未接通。'});
+    timetableReads.push({east:bx,north:bn+2.1,height:groundAt(bx,bn+2.1),title:'山口站时刻牌',description:'环镇线：晨一班、午一班、暮一班、夜一班。北行 · 往坑口：晨一班，其余三格尚未填写。此为站牌记载，北延支线实际乘车服务尚未接通。'+(junctionAudit&&!serviceGeometryReady?'道岔连接、轨道净空或纵坡尚未通过实际线路核验。':'')});
     sign(bx, g + 2.2, bn, Math.PI, 2, 1.15, (c, w, h) => {
       c.fillStyle = '#35312b'; c.fillRect(0, 0, w, h);
       // Column heads + grid: header rule, vertical divider, four row rules.
@@ -947,5 +952,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey:surveyRailGrade(main.samples),valleyRepair,valleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey,junctionAudit,serviceGeometryReady,valleyRepair,valleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }
