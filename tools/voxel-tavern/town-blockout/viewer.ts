@@ -199,6 +199,7 @@ import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
 import {ar30SurfacePort} from './town-a-r30-surface-port';
 import {createAR30PlayInput,type CraterPlay} from './town-a-r30-crater-play';
+import {createAR30LandingRecovery,type DreamLandingState} from './town-a-r30-landing-recovery';
 import {ar30HistoricSupport,assertAR30SurfaceLifecycle,assertAR30SurfaceAttachment,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
@@ -259,6 +260,10 @@ let dreamHoldE = false;
 let dreamLastTurns = -1;
 let dreamMotion: UndergroundLiftCameraMotion = { yaw: 0, pitch: 0, roll: 0 };
 let dreamFade: HTMLDivElement | undefined;
+let dreamRecoveryStatus:HTMLDivElement|undefined;
+let dreamRecoveryButton:HTMLButtonElement|undefined;
+let dreamActiveTripId:number|undefined;
+let dreamReturnRecovery:ReturnType<typeof createAR30LandingRecovery>|undefined;
 let dreamRopeStay: ReturnType<typeof surveyZa36RopeStay>;
 let dreamTripStartedAt = 0;
 let dreamTripActive = false;
@@ -353,6 +358,21 @@ function dreamFadeTo(black: boolean) {
     document.body.append(dreamFade);
   }
   dreamFade.style.opacity = black ? '1' : '0';
+  dreamFade.style.pointerEvents=black?'auto':'none';
+}
+function showDreamRecovery(state:DreamLandingState,retry?:()=>void){
+  if(!dreamRecoveryStatus){
+    dreamRecoveryStatus=document.createElement('div');
+    dreamRecoveryStatus.setAttribute('role','status');dreamRecoveryStatus.setAttribute('aria-live','polite');
+    dreamRecoveryStatus.style.cssText='position:fixed;left:50%;bottom:max(86px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1002;color:#e4d8c4;text-align:center;max-width:80vw;pointer-events:none';
+    dreamRecoveryButton=document.createElement('button');dreamRecoveryButton.type='button';dreamRecoveryButton.textContent='重试落点';
+    dreamRecoveryButton.style.cssText='position:fixed;left:50%;bottom:max(26px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1002;min-height:44px;padding:8px 18px;background:#302b23;color:#f5f2ea;border:1px solid #a18c6c;border-radius:6px;touch-action:manipulation';
+    document.body.append(dreamRecoveryStatus,dreamRecoveryButton);
+  }
+  dreamRecoveryStatus.hidden=state==='idle'||state==='complete';
+  dreamRecoveryStatus.textContent=state==='failed'?'落点尚未受理 · 保持安全等待':'正在等待升降笼落点';
+  dreamRecoveryButton!.hidden=state!=='failed';
+  dreamRecoveryButton!.onclick=state==='failed'&&retry?()=>retry():null;
 }
 
 function applyDreamLanding(foot: { east: number; north: number; height: number }, toMine: boolean) {
@@ -363,38 +383,62 @@ function applyDreamLanding(foot: { east: number; north: number; height: number }
   airHeight = undefined;
   riseSpeed = 0;
   presence.setMineDomain(toMine);
+  landingFeedback.reset();
+  storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);walkRender.copy(walkCurrent);
 }
 
 function startDreamTrip(trip: DreamChainTrip) {
-  if (!dreamChain) return;
+  if (!dreamChain||dreamTripActive||dreamControlsLocked) return;
+  const chain=dreamChain;
+  dreamActiveTripId=trip.id;
   dreamTripStartedAt = performance.now();
   dreamTripActive = true;
+  resetMovement();
   if (trip.direction === 'up') {
-    // The descent cinematic is down-only; the return ride fades through black.
+    // The existing chain owns the trip and landing. Failure never reveals
+    // an invalid realm or unlocks movement; retry is deliberate and deduped.
     dreamControlsLocked = true;
     dreamFadeTo(true);
-    void dreamChain.requestLanding(trip.id).then((foot) => {
-      if (foot) {
-        applyDreamLanding(foot, false);
-        announceActivity('回到坑底地面');
-      }
-      dreamFadeTo(false);
-      dreamControlsLocked = false;
+    dreamReturnRecovery?.dispose();
+    const recovery=createAR30LandingRecovery({
+      request:id=>chain.requestLanding(id),
+      accept(id,foot){
+        if(dreamChain!==chain||dreamActiveTripId!==id||chain.phase()!=='surface')return false;
+        applyDreamLanding(foot,false);dreamActiveTripId=undefined;
+        announceActivity('回到坑底地面');return true;
+      },
+      show(state){
+        showDreamRecovery(state,()=>recovery.retry());
+        if(state==='complete'){dreamFadeTo(false);dreamControlsLocked=false;}
+      },
     });
+    dreamReturnRecovery=recovery;
+    recovery.start(trip.id);
     return;
   }
   dreamDescent ??= mountUndergroundDescent({
     parent: element('scene'),
-    setControlsLocked: (locked) => { dreamControlsLocked = locked; },
+    setControlsLocked: (locked) => {
+      dreamControlsLocked = locked;
+      if(!locked){dreamActiveTripId=undefined;showDreamRecovery('idle');}
+    },
     cameraMotion: (motion) => { dreamMotion = motion; },
-    requestMineLanding: async (tripId) => {
-      if (!dreamChain) return undefined;
-      const foot = await dreamChain.requestLanding(tripId);
-      if (!foot) return undefined;
-      applyDreamLanding(foot, true);
+    requestMineLanding: async (tripId,signal) => {
+      const current=dreamChain;
+      if (!current||signal.aborted||dreamActiveTripId!==tripId) return undefined;
+      const foot = await current.requestLanding(tripId);
+      if (!foot||signal.aborted||dreamChain!==current||dreamActiveTripId!==tripId||current.phase()!=='mine'||![foot.east,foot.north,foot.height].every(Number.isFinite)) return undefined;
+      applyDreamLanding(foot, true);showDreamRecovery('idle');
       return { tripId, destination: 'mine', fallDamage: 0 } as const;
     },
-    onHandoffError: () => announceActivity('落点没有应答 · 再试一次'),
+    onHandoffError: () => {
+      announceActivity('落点没有应答 · 再试一次');
+      // C's new descent owns its retry button. Supply a fallback only on
+      // the previous implementation, without a second landing request.
+      if(dreamDescent&&!('retryButton' in dreamDescent))showDreamRecovery('failed',()=>{
+        if(dreamDescent?.retry())showDreamRecovery('waiting');
+      });
+    },
   });
   dreamDescent.start(
     { id: trip.id, first: trip.first, departedAt: trip.departedAt, travelMs: trip.travelMs },
@@ -3005,7 +3049,7 @@ function refreshLockHint() {
   else help.textContent = walkDragHelp;
 }
 function visitSelectedDestination() {
-  if (houseDoorTravel) return false;
+  if (houseDoorTravel||dreamControlsLocked||dreamTripActive||dreamInMine()) return false;
   if (sledRide.active()) {
     announceActivity('下橇后再切换地点');
     return false;
@@ -3692,6 +3736,7 @@ function findCeremonySledLanding(x: number, n: number) {
 }
 
 function arriveAtCeremony(event: CeremonyArrival, now: number) {
+  if(dreamControlsLocked||dreamTripActive||dreamInMine())return;
   const landing = ceremonyArrivalAt(event.slot, event.edge);
   if (!landing) return;
   const homeBeforeArrival = homeReturn;
