@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { northFootwayPosts } from './town-a-r30-north-connector';
+import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
 export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
@@ -177,6 +178,8 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const workshopSheet=industrialSurface('sheet',0x54575a);
   const workshopRust=industrialSurface('sheet',0x715044);
   const towerMasonry=industrialSurface('brick',0x686d62);
+  const shoulderRock=new MeshStandardMaterial({map:createZa36StrataTexture(0x77716a,0x625a50,0xa08c70,37),roughness:1,flatShading:true});
+  shoulderRock.name='A-R02-outer-shoulder-strata';
   const wallPlaster=industrialSurface('plaster',0x9b885f);
   const cleanSnow=new MeshStandardMaterial({color:0xdce5ee,roughness:1});
   const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
@@ -1396,6 +1399,38 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const gateTower = siteAt('gate-tower', -30, 174, 4, 12);
   if (gateTower) tower(gateTower, 12, 'broken-ladder', 90);
 
+  // Four outlying lenses sit on the actual fractured carrier, separate
+  // from the B-owned crater interior. Keep the south traverse at N51 free.
+  const shoulderStacks:{east:number;north:number;bottom:number;top:number;width:number;depth:number}[]=[];
+  const shoulderGroups=[
+    [[-208,109],[-203,109],[-212,101],[-206,101]],
+    [[-221,269],[-216,269],[-211,269],[-214,261]],
+    [[-165,308],[-174,300],[-168,300]],
+    [[-169,55],[-164,55],[-162,47],[-167,46]],
+  ] as const;
+  for(const [ci,cluster]of shoulderGroups.entries())for(const [i,[e,n]]of cluster.entries()){
+    const w=1.6+hash(ci*37+i*11)*.95,d=.92+hash(ci*19+i*13)*.64;
+    const samples=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+    if(samples.some(y=>y===undefined))continue;
+    const base=Math.min(...samples as number[])-.12,ground=Math.max(...samples as number[]);
+    if(colliders.some(b=>b.min[0]<e+w/2+.2&&b.max[0]>e-w/2-.2&&b.min[2]<-n+d/2+.2&&b.max[2]>-n-d/2-.2&&b.max[1]>base&&b.min[1]<ground+1.4))continue;
+    const stackHeight=.62+hash(ci*13+i*17)*.52;
+    const layers=[{e,n,w,d,low:base,high:ground+.32},
+      {e:e+w*.07,n:n-d*.09,w:w*.81,d:d*.75,low:ground+.32,high:ground+stackHeight*.78},
+      {e:e+w*.16,n:n-d*.13,w:w*.53,d:d*.54,low:ground+stackHeight*.78,high:ground+stackHeight}];
+    for(const l of layers){
+      if(l.high<=l.low)continue;
+      box(shoulderRock,l.e,(l.low+l.high)/2,l.n,l.w,l.high-l.low,l.d);
+      hitBox(floors,l.e,l.n,0,l.w,l.d,l.low,l.high);
+      shoulderStacks.push({east:l.e,north:l.n,bottom:l.low,top:l.high,width:l.w,depth:l.d});
+    }
+    // Thin snow caps on only selected lee-side fragments.
+    if((ci+i)%3===0){
+      const l=layers[2]!;
+      box(cleanSnow,l.e,l.high+.025,l.n,l.w*.84,.05,l.d*.86);
+      hitBox(floors,l.e,l.n,0,l.w*.84,l.d*.86,l.high,l.high+.05);
+    }
+  }
   // ---------- outer-band mid-ground clusters (north/west band + approach) ----------
   const clusterSpots: [number, number][] = [[232, 84], [258, 96], [288, 86], [315, 102], [340, 90], [22, 98], [48, 84], [72, 106]];
   clusterSpots.forEach(([b, r], ci) => {
@@ -1451,7 +1486,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

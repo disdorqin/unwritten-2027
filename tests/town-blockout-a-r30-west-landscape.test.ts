@@ -58,6 +58,16 @@ test('fractured outer shoulders are local real terrain with no B apron or road i
    assert.equal(field.outcropAt(road.anchor.east+59*Math.sin(a),road.anchor.north+59*Math.cos(a)).exposure,0);
  }
 });
+test('fractured shoulder slabs are physically supported and keep the south traverse clear',()=>{
+ const stacks=road.outerWorks.shoulderStacks;
+ assert.ok(stacks.length>=33,JSON.stringify({count:stacks.length}));
+ for(const s of stacks){
+   assert.ok(s.top>s.bottom);
+   assert.ok(road.outerWorks.floors.some(b=>Math.abs(b.max[1]-s.top)<1e-5&&Math.abs(b.min[1]-s.bottom)<1e-5&&Math.abs((b.min[0]+b.max[0])/2-s.east)<1e-5&&Math.abs((b.min[2]+b.max[2])/2+s.north)<1e-5));
+   assert.ok(Math.hypot(s.east-road.anchor.east,s.north-road.anchor.north)>70);
+   if(s.east>=-175&&s.east<=-150&&s.north>=40&&s.north<=60)assert.ok(Math.abs(s.north-51)>2.4);
+ }
+});
 test('A-R02 relief is real rendered collision support, not decorative overlay',()=>{
   const carriers=road.group.children.filter(o=>o.name==='meteor-crater-west-ground') as Mesh[];
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
