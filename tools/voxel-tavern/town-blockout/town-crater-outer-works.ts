@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -1006,13 +1006,29 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // hangs the plate above its iron door. The door is sealed with a white band.
     const store = fr.at(-1.5, -7.5);
     siteAt('sealed-storehouse', store.east, store.north, 3);
-    put(stone, -1.5, g + .15, -7.5, 4.8, .3, 3.6);
-    put(timber, -1.5, g + 1.6, -9.2, 4.6, 2.6, .2);
-    put(timber, -3.7, g + 1.6, -7.5, .2, 2.6, 3.4);
-    put(timber, 0.7, g + 1.6, -7.5, .2, 2.6, 3.4);
-    put(timber, -2.95, g + 1.6, -5.8, 1.7, 2.6, .2);
-    put(timber, -0.05, g + 1.6, -5.8, 1.7, 2.6, .2);
-    put(timber, -1.5, g + 2.55, -5.8, 1.2, .7, .2);
+    const storeSoil=[-2.4,0,2.4].flatMap(x=>[-1.8,0,1.8].map(z=>{
+      const p=fr.at(-1.5+x,-7.5+z);return heightAt(p.east,p.north)??g;
+    }));
+    yardStructure.piece(workshopBrick,-1.5,-7.5,4.8,3.6,Math.min(...storeSoil,g)-g-.08,.30,true);
+    // Close all four walls, but render the actual surviving timber
+    // panels, posts and frame rather than a textured cube.
+    for(const [x,z,w,d] of [[-1.5,-9.2,4.6,.2],[-3.7,-7.5,.2,3.4],[.7,-7.5,.2,3.4],[-2.95,-5.8,1.7,.2],[-.05,-5.8,1.7,.2]] as const){
+      put(workshopWood,x,g+1.6,z,w,2.6,d);
+      const axis=w>d?'x':'z',count=Math.ceil(Math.max(w,d)/.51);
+      for(let i=0;i<=count;i++){
+        const t=i/count-.5;
+        put(workshopWood,x+(axis==='x'?w*t:0),g+1.6,z+(axis==='z'?d*t:0),axis==='x'?.085:.26,2.6,axis==='x'?.26:.085);
+      }
+    }
+    put(workshopWood,-1.5,g+2.55,-5.8,1.2,.7,.2);
+    for(const x of [-3.7,.7])for(const z of [-9.2,-5.8]){
+      put(workshopWood,x,g+1.60,z,.28,2.6,.28);
+      put(workshopRust,x,g+.47,z,.33,.32,.33);
+    }
+    for(const z of [-9.2,-5.8]){
+      put(workshopWood,-1.5,g+2.85,z,4.6,.19,.27);
+      put(workshopBrick,-1.5,g+.33,z,4.6,.14,.25);
+    }
     const storeRun=1.92,storeRise=.76,storePitch=Math.atan2(storeRise,storeRun);
     for(const s of [-1,1]){
       put(slate,-1.5,g+2.98+storeRise/2,-7.5+s*storeRun/2,5.0,.14,Math.hypot(storeRun,storeRise),s*storePitch);
@@ -1023,14 +1039,26 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       }
     }
     put(workshopWood,-1.5,g+3.84,-7.5,5.05,.14,.24);
-    put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
-    put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
+    put(workshopSheet,-1.5,g+1.4,-5.76,1.2,2.2,.10);
+    for(const s of [-1,1]){
+      put(workshopRust,-1.5+s*.65,g+1.4,-5.70,.13,2.28,.14);
+      for(const h of [.62,1.4,2.18])put(workshopRust,-1.5+s*.48,g+h,-5.69,.22,.12,.09);
+    }
+    for(const h of [.45,2.35])put(workshopRust,-1.5,g+h,-5.68,1.20,.12,.10);
+    put(iron,-1.5,g+1.08,-5.62,.78,.10,.10);
+    put(workshopRust,-1.24,g+1.01,-5.58,.16,.22,.12);
+    put(snow,-1.5,g+1.15,-5.58,.9,.16,.025);
+    // Two shallow real treads outside the locked leaf; not an unlocked
+    // entrance or another salvage interaction.
+    yardStructure.slab(workshopBrick,-1.5,-5.37,1.52,.58,.16,.24);
+    yardStructure.slab(workshopBrick,-1.5,-5.68,1.52,.20,.30,.24);
+    industrialRoutes.push({id:'sealed-storehouse',points:sealedStorehouseFootway.map(([east,north])=>({east,north,height:heightAt(east,north)??g}))});
     // S-1 collision: the storehouse is sealed — the iron door fills the
     // front span flush between the two front segments, so the front reads
     // as one continuous wall. Four wall boxes, no opening.
     for (const [dx, dz, sx, sz] of [[-1.5, -9.2, 4.6, .2], [-3.7, -7.5, .2, 3.4], [0.7, -7.5, .2, 3.4], [-1.5, -5.8, 4.6, .2]] as const) {
       const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .3, g + 2.9);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,g+.3,g+2.9));
     }
     const storePlateP = fr.at(-1.5, -5.64);
     siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);

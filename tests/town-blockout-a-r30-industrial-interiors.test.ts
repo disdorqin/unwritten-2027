@@ -47,7 +47,7 @@ test('gatehouse bench has a grounded stand point and actual seat',()=>{
  walk(route.id,points);walk(route.id,[...points].reverse());
  assert.ok(boxes.some(b=>supportFootprintOverlaps(seat.east,seat.north,b,.27)&&Math.abs(b.max[1]-(seat.height+.48))<.01));
 });
-for(const route of road.outerWorks.industrialRoutes)test(route.id+' physical entry, interior route and return',()=>{
+for(const route of road.outerWorks.industrialRoutes)test(route.id+(route.id==='sealed-storehouse'?' closed-storehouse exterior inspection and return':' physical entry, route and return'),()=>{
  walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });
 for(const id of ['transfer-dock','ore-yard-dock'])test(id+' is reachable and returnable through the combined town, freight and industrial collision index',()=>{
