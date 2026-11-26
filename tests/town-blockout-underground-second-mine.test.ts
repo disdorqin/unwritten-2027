@@ -43,7 +43,11 @@ test('missing lift port preserves the single closed entry roof and standing rout
     assert.ok(mine.waterworks);
     assert.ok(mine.ferry);
     assert.ok(mine.riverTerrace);
+    assert.ok(mine.nearBankTeeth);
+    assert.ok(mine.farBankCrystals);
     assert.equal(mine.group.getObjectByName('town-c2-r30-river-terrace')?.parent,mine.group);
+    assert.equal(mine.group.getObjectByName('town-c2-second-mine-near-bank-teeth')?.parent,mine.group);
+    assert.equal(mine.group.getObjectByName('c2-second-mine-far-bank-crystals')?.parent,mine.group);
     assert.equal(mine.group.getObjectByName('town-c2-r30-waterworks-trace')?.parent,mine.group);
     assert.equal(mine.group.getObjectByName('town-c2-r30-ferry')?.parent,mine.group);
     assert.equal(mine.liftPlate,null);
@@ -112,12 +116,14 @@ test('invalid fixture splits and out-of-entry holes fail closed without throwing
     }finally{mine.dispose()}
   }
 });
-test('R30 waterworks, ferry and terrace can be disabled without changing the legacy scene contract',()=>{
- const mine=createSecondMineScene({r30Waterworks:false,r30Ferry:false,r30RiverTerrace:false});
+test('R30 waterworks, ferry, terrace and bank dressing can be disabled independently',()=>{
+ const mine=createSecondMineScene({r30Waterworks:false,r30Ferry:false,r30RiverTerrace:false,r30BankDressing:false});
  try{
     assert.equal(mine.waterworks,undefined);
     assert.equal(mine.ferry,undefined);
     assert.equal(mine.riverTerrace,undefined);
+    assert.equal(mine.nearBankTeeth,undefined);
+    assert.equal(mine.farBankCrystals,undefined);
     assert.equal(mine.boat.visible,true);
     mine.setRiverState('high');assert.equal(mine.boat.visible,false);
     mine.setRiverState('low');assert.equal(mine.boat.visible,false);
