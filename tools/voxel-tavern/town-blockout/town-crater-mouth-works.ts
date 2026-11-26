@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Euler, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, NearestFilter, PlaneGeometry, PointLight, Quaternion,
-  SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3,
+  RepeatWrapping, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { meteorCraterRimRadius } from './meteor-crater';
@@ -67,7 +67,9 @@ function supplyWoodMaterial(name: string, tones: readonly [number, number, numbe
   map.colorSpace = SRGBColorSpace;
   map.needsUpdate = true;
   const material = new MeshStandardMaterial({ map, roughness: 1 });
-  material.name = name;
+  map.wrapS=map.wrapT=RepeatWrapping;
+  material.name=name;
+  material.userData.metricSpan=roofing?.72:1.12;
   return material;
 }
 
@@ -176,7 +178,15 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
-    part(mat, new BoxGeometry(sx, sy, sz), east, h, north, yaw, pitch, roll);
+    const geo=new BoxGeometry(sx,sy,sz),span=mat.userData.metricSpan;
+    if(typeof span==='number'){
+      const uv=geo.getAttribute('uv'),normal=geo.getAttribute('normal');
+      for(let i=0;i<uv.count;i++){
+        const x=Math.abs(normal.getX(i))>.5,y=Math.abs(normal.getY(i))>.5;
+        uv.setXY(i,uv.getX(i)*(x?sz:sx)/span,uv.getY(i)*(y?sz:sy)/span);
+      }
+    }
+    part(mat,geo,east,h,north,yaw,pitch,roll);
   }
   function cyl(mat: MeshStandardMaterial, east: number, h: number, north: number,
     rTop: number, rBottom: number, height: number, segments = 10, yaw = 0, pitch = 0, roll = 0) {
@@ -338,7 +348,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     // Stone foundation and floor.
     const c0 = fr.at(0, 0);
     box(stone, c0.east, g + foundH / 2 - .1, c0.north, W + .5, foundH, D + .5, fr.yaw);
-    box(timber, c0.east, g + foundH + .03, c0.north, W, .06, D, fr.yaw);
+    box(supplyPlanks,c0.east,g+foundH+.03,c0.north,W,.06,D,fr.yaw);
     // Walls: front (crater side) carries the door gap and two warm windows;
     // back and sides solid. Interior stays enterable through the open doorway.
     const wallY = g + foundH + wallH / 2;
@@ -410,7 +420,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       floors.push(orientedSupportBox(p.east,p.north,fr.yaw,2.25,.66,low,top));
       supplyInteriorRoute.push({...p,height:top});
     }
-    for(const z of [2.25,0,-1.45])supplyInteriorRoute.push({...fr.at(0,z),height:g+foundH+.06});
+    for(const z of [2.25,0,-.65])supplyInteriorRoute.push({...fr.at(0,z),height:g+foundH+.06});
     for (const s of [-1, 1]) {
       const seg = fr.at(s * 2.55, D / 2);
       colliders.push(orientedSupportBox(seg.east,seg.north,fr.yaw,2.3,.22,g+foundH,g+foundH+wallH));
@@ -471,7 +481,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const deckY=roofY+.12;
     const floor=(dx:number,dz:number,w:number,d:number,top:number,thick=.12)=>{
       const p=fr.at(dx,dz);
-      box(timber,p.east,top-thick/2,p.north,w,thick,d,fr.yaw);
+      box(supplyPlanks,p.east,top-thick/2,p.north,w,thick,d,fr.yaw);
       floors.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,top-thick,top));
     };
     const guard=(dx:number,dz:number,w:number,d:number,top:number)=>{
@@ -566,7 +576,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         box(timberWarm,p.east,g+foundH+1.025,p.north,.10,2.05,.10,fr.yaw);
       }
       for (let lvl = 0; lvl < 3; lvl++) {
-        box(timber, sh.east, g + foundH + .5 + lvl * .62, sh.north, .5, .07, 3.4, fr.yaw);
+        box(supplyPlanks,sh.east,g+foundH+.5+lvl*.62,sh.north,.5,.07,3.4,fr.yaw);
         for (let j = 0; j < 4; j++) {
           const gp = fr.at(s * (W / 2 - .55), -1.9 + j * .85);
           if ((j + lvl) % 3 === 2) cyl(glow, gp.east, g + foundH + .68 + lvl * .62, gp.north, .07, .09, .22, 6);
@@ -578,8 +588,9 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     box(supplyPlanks,counter.east,g+foundH+.5,counter.north,1.9,1,.6,fr.yaw);
     box(timberWarm,counter.east,g+foundH+1.06,counter.north,2.0,.12,.72,fr.yaw);
     colliders.push(orientedSupportBox(counter.east,counter.north,fr.yaw,2.0,.72,g+foundH,g+foundH+1.12));
-    const mapP = fr.at(0, -D / 2 + .16);
-    sign(mapP.east, g + foundH + 1.75, mapP.north, fr.yaw + Math.PI, 2.1, 1.35, (c, w, h) => {
+    const mapP=fr.at(0,-D/2+.25);
+    // The map face points into the room, away from the rear wall.
+    sign(mapP.east,g+foundH+1.65,mapP.north,fr.yaw,2.1,1.35, (c, w, h) => {
       c.fillStyle = '#e3d3a8'; c.fillRect(0, 0, w, h);
       c.strokeStyle = '#5d4630'; c.lineWidth = 5; c.strokeRect(12, 12, w - 24, h - 24);
       c.lineWidth = 4; c.beginPath(); c.arc(w * .42, h * .46, 88, 0, Math.PI * 2); c.stroke();
@@ -592,7 +603,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       c.strokeStyle = 'rgba(61,44,28,.6)'; c.lineWidth = 3;
       c.strokeRect(w * .74, h * .62, 88, 66);
     });
-    const mapStand=fr.at(0,-1.45);
+    const mapStand=fr.at(0,-.65);
     actions.push({id:'map',label:'查看坑区手绘图',...mapStand,height:g+foundH+.06,range:1.25});
     // K-01/02/03 (《设计-全图文字件总表》，总控裁定 批58 追补六）：牌匾挂门楣、
     // 登记台告示立柜台、值班室门牌挂右窗上——总表逐字，不改字。K-03 注：本栋为
