@@ -23,6 +23,7 @@ import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
 import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
 import {mountR30TutorialCart,type R30TutorialCartBridge} from './town-c-r30-tutorial-cart.js';
 import {mountR30ApproachStory} from './town-c-r30-approach-story.js';
+import {createR30CampReceiptReader,type R30CampStoryBridge} from './town-c-r30-camp-receipts.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
 import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
@@ -142,6 +143,7 @@ export type UndergroundCampBridge = Readonly<{
   onRested(roomId: string): void;
   /** The existing per-profile grantToolOnce receipt; no separate inventory.
    * The legacy viewer omits this port until A supplies the presence route. */
+  storyReceipts?:R30CampStoryBridge;
   pickaxeReceipt?:Readonly<{
     read():Readonly<{playerId:string;domainId:string;claimed:boolean}>|undefined;
     claim(playerId:string,siteId:typeof undergroundCampPickaxe.siteId):Promise<UndergroundCampPickaxeResult>;
@@ -228,6 +230,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     nicheEmpties = new Set(niches.filter((niche) => !niche.hasSpentLamp).map((niche) => niche.id));
     offerings = createUndergroundCampOfferings(niches);
   }
+  const storyReceipts=campBridge?.storyReceipts?createR30CampReceiptReader(campBridge.storyReceipts,nicheEmpties,()=>options.readAcceptedDomainFoot?.()):undefined;
   const recordedRelics = new Set<string>();
   let pickaxeTaken = false;
   const pickaxeReceipt=campBridge?.pickaxeReceipt;
@@ -249,6 +252,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   }
 
   const readLights = () => {
+    if(storyReceipts)return storyReceipts.lights();
     if (!offerings) {
       return { litNicheIds: new Set<string>(), extraCampLightCount: 0, remainingBudget: 0 };
     }
@@ -271,6 +275,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
         // A camp has no authorized footing before the rigid transform exists;
         // an early synchronous sync() must not kill the entire town entry.
         if (!toLocal) return undefined;
+        if(storyReceipts){const foot=options.readAcceptedDomainFoot?.();return storyReceipts.read()&&foot?toLocal(foot):undefined}
         let foot: Point | undefined;
         try { foot = campBridge.readWorldFoot(); }
         catch (error) {
@@ -292,14 +297,17 @@ export function mountUndergroundDomainHost(options: Readonly<{
         const world = toWorldPoint?.(bowl.position);
         return world !== undefined && campBridge.isAimingAt(world);
       },
+      ...(storyReceipts?{readBowlKnown:()=>storyReceipts.read()?.bowlKnown===true}:{}),
       recordRelic: (entry: { id: string }) => {
+        if(storyReceipts)return storyReceipts.recordBowl(entry.id);
         if (recordedRelics.has(entry.id)) return 'already-recorded' as const;
         recordedRelics.add(entry.id);
         return 'recorded' as const;
       },
       canOfferLamp: (nicheId: string) =>
-        nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
+        storyReceipts?storyReceipts.canOffer(nicheId):nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
       offerLamp: (nicheId: string) => {
+        if(storyReceipts)return storyReceipts.offerLamp(nicheId);
         const offered = offerings?.offerLamp(
           nicheId, () => campBridge.readLampHeld?.() === true).kind === 'offered';
         if (offered) campBridge.onLampPlaced?.();
@@ -587,7 +595,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     canStandUp:(east:number,north:number)=>passageAt(east,north,'standing')!==undefined,
     floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
-    offeringsSnapshot: () => offerings?.snapshot(),
+    offeringsSnapshot: () => storyReceipts?{litNicheIds:[...storyReceipts.lights().litNicheIds],extraCampLightCount:storyReceipts.lights().extraCampLightCount}:offerings?.snapshot(),
     campFireWorld,pickaxeContract,
   } as const;
 }
