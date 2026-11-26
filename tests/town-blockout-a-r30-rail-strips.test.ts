@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {buildRailStrip,railSections,surveyRailGrade} from '../tools/voxel-tavern/town-blockout/town-a-r30-rail-strip';
+import {buildRailStrip,railSections,surveyRailGrade,repairBoundedRailGrade} from '../tools/voxel-tavern/town-blockout/town-a-r30-rail-strip';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
@@ -64,6 +64,37 @@ test('grade survey measures violations and computes a genuinely feasible fill-on
     assert.ok(report.minimum[i]!>=b.ground+.62-1e-9);
     assert.ok(Math.abs(report.minimum[i]!-report.minimum[i-1]!)<=.12*Math.hypot(b.east-a.east,b.north-a.north)+1e-8);
   }
+});
+test('bounded valley repair is fail-closed when a fixed endpoint cannot meet the grade',()=>{
+ const samples=[{east:0,north:0,y:0,ground:-1},{east:1,north:0,y:2,ground:1},{east:2,north:0,y:0,ground:-1}];
+ const report=repairBoundedRailGrade(samples,0,2);
+ assert.equal(report.blocked,'fixed-endpoint');
+ assert.deepEqual(report.profile,samples);
+ assert.deepEqual(report.changed,[]);
+ const low=[{east:0,north:0,y:2,ground:1},{east:10,north:0,y:0,ground:-10},{east:20,north:0,y:2,ground:1}];
+ assert.equal(repairBoundedRailGrade(low,0,2).blocked,'fill-envelope');
+});
+test('the production low-valley bridge repairs the local grade without moving station anchors',()=>{
+ const report=rail.valleyRepair!;
+ assert.equal(report.blocked,undefined);
+ assert.ok(report.maxGradeBefore>.4);
+ assert.ok(report.maxGradeAfter<=.12000001);
+ assert.ok(report.maxFill<4.2);
+ assert.ok(report.changed.length>=15);
+ assert.ok(rail.valleyBridgeSpans.length>=17);
+ assert.ok(rail.valleyBridgeSpans.reduce((n,p)=>n+p.length,0)>28);
+ assert.equal(rail.valleyBridgeSpans.reduce((n,p)=>n+p.bearings,0),7);
+ for(const span of rail.valleyBridgeSpans){
+   assert.ok(Math.abs(span.endY-span.startY)/span.length<=.12000001);
+   assert.equal(span.startY,rail.samples[span.index]!.y);
+   assert.equal(span.endY,rail.samples[span.index+1]!.y);
+ }
+ assert.ok(!rail.verticalSurvey.violations.some(v=>v.index>=report.first&&v.index<report.last));
+ // The changed section is well away from the existing station platforms,
+ // old junction and west pedestrian crossings.
+ for(const i of report.changed)assert.ok(rail.samples[i]!.east>210&&rail.samples[i]!.east<250);
+ assert.equal(rail.alignment.stations[0]!.railY,8.505400476746466);
+ assert.equal(rail.alignment.stations[1]!.railY,11.397305603027343);
 });
 test('inclined masonry bearings are grounded at the lowest surveyed corner and have structural stringers',()=>{
   assert.ok(rail.railBearings.length>0);

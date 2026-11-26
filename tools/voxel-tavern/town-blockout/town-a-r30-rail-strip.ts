@@ -116,6 +116,50 @@ export function buildTurnoutBallast(branch:readonly RailSection[],stock:readonly
   return sections.length>1?buildRailVariableStrip(sections,bounds,-.63,-.37,1):undefined;
 }
 
+/**
+ * Repair only a bounded, already surveyed railway corridor. The existing
+ * station/terrain anchors are immutable. The least raise-only Lipschitz
+ * envelope is rounded at the valley bottom by arc-length averaging;
+ * taking the maximum of the two Lipschitz functions preserves the grade.
+ * If the current terrain invalidates either endpoint or the agreed low
+ * bridge envelope, return the original profile with an explicit blocker.
+ */
+export function repairBoundedRailGrade(samples:readonly RailSample[],first:number,last:number,limit=.12,maxFill=4.2){
+  if(first<0||last>=samples.length||last-first<2||!(limit>0)||!(maxFill>0))throw new RangeError('invalid bounded rail grade repair');
+  const selected=samples.slice(first,last+1),d=[0],old=selected.map(p=>p.y);
+  for(let i=1;i<selected.length;i++){
+    const a=selected[i-1]!,b=selected[i]!,run=Math.hypot(b.east-a.east,b.north-a.north);
+    if(!(run>0))throw new RangeError('duplicate bounded rail sample');
+    d.push(d[i-1]!+run);
+  }
+  const slope=limit-1e-5,env=[...old];
+  for(let i=1;i<env.length;i++)env[i]=Math.max(env[i]!,env[i-1]!-slope*(d[i]!-d[i-1]!));
+  for(let i=env.length-2;i>=0;i--)env[i]=Math.max(env[i]!,env[i+1]!-slope*(d[i+1]!-d[i]!));
+  const interp=(x:number)=>{
+    if(x<=0)return env[0]!;
+    if(x>=d.at(-1)!)return env.at(-1)!;
+    const i=d.findIndex(v=>v>=x);
+    return env[i-1]!+(env[i]!-env[i-1]!)*(x-d[i-1]!)/(d[i]!-d[i-1]!);
+  };
+  // A 6m transition spreads the V-shaped change of gradient; only raise
+  // the repaired envelope, leaving the approach and departure unchanged.
+  const rounded=env.map((y,i)=>{
+    if(y-old[i]!<1e-8)return y;
+    const x=d[i]!;
+    const smooth=(interp(x-3)+2*interp(x-1.5)+3*y+2*interp(x+1.5)+interp(x+3))/9;
+    return Math.max(y,smooth);
+  });
+  const maxGrade=(ys:readonly number[])=>Math.max(...ys.slice(1).map((y,i)=>Math.abs(y-ys[i]!)/(d[i+1]!-d[i]!)));
+  const blocked=rounded[0]!>old[0]!+1e-7||rounded.at(-1)!>old.at(-1)!+1e-7?'fixed-endpoint':
+    Math.max(...rounded.map((y,i)=>y-selected[i]!.ground))>maxFill?'fill-envelope':
+    maxGrade(rounded)>limit+1e-8?'grade-transition':undefined;
+  const ys=blocked?old:rounded;
+  const changed=ys.flatMap((y,i)=>y-old[i]!>1e-7?[first+i]:[]);
+  const profile=samples.map((p,i)=>i>=first&&i<=last?{...p,y:ys[i-first]!}:p);
+  return {profile,first,last,changed,blocked,length:d.at(-1)!,maxGradeBefore:maxGrade(old),maxGradeAfter:maxGrade(ys),
+    maxFill:Math.max(...ys.map((y,i)=>y-selected[i]!.ground))};
+}
+
 /** Minimum fill-only grade-constrained envelope on the current ground.
  * This is a feasibility survey, NOT production authorization to erect an
  * 11m viaduct or modify another window's new terrain. */

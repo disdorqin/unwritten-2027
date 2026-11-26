@@ -9,7 +9,7 @@ import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
 import { orientedSupportBox, supportFootprintOverlaps, type OrientedSupportBox } from './town-a-r30-oriented-support';
-import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, type RailSection } from './town-a-r30-rail-strip';
+import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBallast, distanceToRail, surveyRailGrade, repairBoundedRailGrade, type RailSection } from './town-a-r30-rail-strip';
 import { craterBranchControlLine, freightSidingControlLine, sampleRailCenterline } from './town-a-r30-rail-network';
 export { craterBranchControlLine } from './town-a-r30-rail-network';
 import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
@@ -130,6 +130,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   const colliders:OrientedSupportBox[]=[],floors:OrientedSupportBox[]=[];
   const railBearings:{east:number;north:number;low:number;high:number;cornerMinimum:number;slope:number}[]=[];
   let stringerSegments=0;
+  let valleyRepair:ReturnType<typeof repairBoundedRailGrade>|undefined;
+  const valleyBridgeSpans:{index:number;length:number;bearings:number;startY:number;endY:number}[]=[];
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   const shankouArrival={east:296,north:520,height:groundAt(296,520)};
@@ -174,7 +176,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   function buildTrackway(
     control: readonly (readonly [number, number])[],
     opts: { gauge: number; sleeperWidth: number; ballastWidth: number; railH: number;
-      flatten?: readonly { east: number; north: number; half: number }[]; stock?:readonly RailSection[] },
+      flatten?: readonly { east: number; north: number; half: number }[]; stock?:readonly RailSection[]; repairValley?:boolean },
   ): { samples: Sample[]; length: number; minRadius: number; stationY: Map<string, number> } {
     const {length,count,step,points}=sampleRailCenterline(control);
     const samples: Sample[] = points.map(point => {
@@ -218,9 +220,31 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       return Math.max(s.ground + .5, Math.min(s.ground + 2.4, acc + .1));
     });
     samples.forEach((s, i) => { s.y = smoothed[i]; });
+    // A-R04 independent low-valley repair. Keep both existing endpoints,
+    // both stations, the loop junction and D's mountain-side profile.
+    let bridgeFirst=-1,bridgeLast=-1;
+    if(opts.repairValley){
+      const first=samples.findIndex(p=>p.east<267&&p.north>495);
+      const last=samples.findIndex(p=>p.east<196&&p.north>515);
+      valleyRepair=repairBoundedRailGrade(samples,first,last);
+      if(!valleyRepair.blocked&&valleyRepair.changed.length){
+        valleyRepair.profile.forEach((p,i)=>{samples[i]!.y=p.y;});
+        bridgeFirst=valleyRepair.changed[0]!-1;
+        bridgeLast=valleyRepair.changed.at(-1)!+1;
+      }
+    }
     // Shared cross sections: the rail head, base and ballast are all
     // continuous strips with the same station and curve samples.
     const sections=railSections(samples);
+    if(bridgeFirst>=0){
+      const bridgeSections=sections.slice(bridgeFirst,bridgeLast+1);
+      for(const side of [-1,1]){
+        const offset=side*.76;
+        push(iron,buildRailStrip(bridgeSections,offset,.28,-1.02,-.655));
+        push(darkSteel,buildRailStrip(bridgeSections,offset,.48,-1.02,-.955));
+        push(darkSteel,buildRailStrip(bridgeSections,offset,.48,-.69,-.625));
+      }
+    }
     for(const side of [-1,1]){
       const offset=side*opts.gauge/2;
       if(opts.stock){
@@ -255,7 +279,35 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       const horizontal=Math.hypot(b.east-a.east,b.north-a.north);
       const yaw=Math.atan2(vb.x-va.x,vb.z-va.z);
       const slope=(b.y-a.y)/horizontal;
-      if(underside>soil+.12&&(!opts.stock||distanceToRail(opts.stock,e,n)>opts.ballastWidth)){
+      const bridge=bridgeFirst>=0&&i>=bridgeFirst&&i<bridgeLast;
+      if(bridge){
+        // Two continuous iron girders, cross ties and bonded stone piers.
+        // All share the same rail sections rather than freestanding props.
+        for(const side of [-1,1]){
+          const offset=side*.76;
+          const q={east:e+Math.cos(yaw)*offset,north:n+Math.sin(yaw)*offset};
+          colliders.push(orientedSupportBox(q.east,q.north,yaw,.48,horizontal,Math.min(a.y,b.y)-1.02,Math.max(a.y,b.y)-.625));
+        }
+        segBox(iron,center,quat,0,-.84,0,1.85,.18,.16);
+        let bearings=0;
+        if(i===bridgeFirst||i===bridgeLast-1||(i-bridgeFirst)%3===0){
+          const w=2.55,len=1.42,c=Math.cos(yaw),s=Math.sin(yaw);
+          const hs=[-1,0,1].flatMap(x=>[-1,0,1].map(z=>groundAt(e+c*x*w/2+s*z*len/2,n+s*x*w/2-c*z*len/2)));
+          const head=center.y-1.00;
+          const low=Math.min(...hs,head-Math.abs(slope)*len/2-.12)-.10;
+          const high=head+Math.abs(slope)*len/2;
+          const pier=metricBox(stone,w,1,len),pos=pier.getAttribute('position');
+          for(let k=0;k<pos.count;k++)pos.setY(k,pos.getY(k)>0?head+slope*pos.getZ(k)-low:0);
+          pier.computeVertexNormals();part(stone,pier,e,low,n,yaw);
+          colliders.push(orientedSupportBox(e,n,yaw,w,len,low,high));
+          railBearings.push({east:e,north:n,low,high,cornerMinimum:Math.min(...hs),slope});
+          // Cap rests on the sloping masonry head and the two lower flanges.
+          segBox(stoneDark,center,quat,0,-1.045,0,2.67,.11,1.48);
+          bearings=1;
+        }
+        valleyBridgeSpans.push({index:i,length:horizontal,bearings,startY:a.y,endY:b.y});
+      }
+      if(!bridge&&underside>soil+.12&&(!opts.stock||distanceToRail(opts.stock,e,n)>opts.ballastWidth)){
         if(i%3===0||underside-soil<.85&&i%2===0){
           const length=underside-soil<.85?Math.min(horizontal*1.85,3.1):1.35;
           const width=opts.ballastWidth-.24;
@@ -272,7 +324,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
           railBearings.push({east:e,north:n,low,high,cornerMinimum:Math.min(...cornerHeights),slope});
         }
       }
-      if(!opts.stock&&underside-soil>.85&&a.y-.63-groundAt(a.east,a.north)>.55&&b.y-.63-groundAt(b.east,b.north)>.55){
+      if(!bridge&&!opts.stock&&underside-soil>.85&&a.y-.63-groundAt(a.east,a.north)>.55&&b.y-.63-groundAt(b.east,b.north)>.55){
         // No duplicate coplanar tops: the stringer sits below the ballast
         // and runs across the entire section between the actual pier heads.
         const width=opts.ballastWidth*.54;
@@ -434,7 +486,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
 
   // ---------- the branch line ----------
   const main = buildTrackway(craterBranchControlLine, {
-    gauge: 1.66, sleeperWidth: 2.5, ballastWidth: 2.9, railH: .18,
+    gauge: 1.66, sleeperWidth: 2.5, ballastWidth: 2.9, railH: .18, repairValley:true,
     flatten: [
       { east: 296, north: 502, half: 11 },
       { east: -44.5, north: 168, half: 10 },
@@ -895,5 +947,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey:surveyRailGrade(main.samples),sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey:surveyRailGrade(main.samples),valleyRepair,valleyBridgeSpans,sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }
