@@ -20,6 +20,7 @@ import {applyR30CampRock} from './town-c-r30-camp-art.js';
 import {mountR30LiftPresentation,mountR30LiftWreck} from './town-c-r30-lift-presentation.js';
 import {cutR30UpperLiftFloor} from './town-c-r30-upper-aperture.js';
 import {cutR30CrystalEndWall} from './town-c-r30-crystal-support.js';
+import {mountR30MainGallery} from './town-c-r30-main-gallery.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -224,6 +225,7 @@ export function mountUndergroundMineDomain(host: Host) {
   }
   const workfaces=mountFirstMineWorkfaces(root,mine.workfaces,mine.supportStation);
   const deepWorks=mountFirstMineDeepWorks(root,mine.expansion?.deepWorks===true);
+  const galleryArt=mountR30MainGallery(root,mine);
   const waterOverlay = host.waterRuntime && waterMesh
     ? mountTownC2UndergroundWaterMinus90({
       parent: root, mine, waterMesh,
@@ -261,6 +263,7 @@ export function mountUndergroundMineDomain(host: Host) {
     camp: interactiveCamp?.camp ?? staticCamp,
     workfaces,
     deepWorks,
+    galleryArt,
     wreck,
     shaftRide,
     /** Called only after the C-owned actual seam and C2 ceiling are certified.
@@ -354,7 +357,7 @@ export function mountUndergroundMineDomain(host: Host) {
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       workfaces.dispose();
-      deepWorks.dispose();
+      deepWorks.dispose();galleryArt.dispose();
       wreck?.dispose();
       shaftRide?.dispose();
       campRock?.dispose();

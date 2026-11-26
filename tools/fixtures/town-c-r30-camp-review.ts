@@ -24,6 +24,11 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  memorial:{eye:[2.6,-91,43.76],look:[2.6,-89.65,44.6]},
  exit:{eye:[0,-91,43],look:[0,-90.1,35.4]},
  wreck:{eye:[0,-91.2,2],look:[2.31,-90.05,1.48]},
+ gallery:{eye:[0,-90.25,17],look:[0,-89.8,28]},
+ collapse:{eye:[0,-90.91,30.2],look:[0,-90.25,33]},
+ mainshaft:{eye:[0,-91,69],look:[0,-89.1,86]},
+ oldsupports:{eye:[0,-91,101],look:[0,-88.7,119]},
+ deeptrack:{eye:[0,-91,121],look:[0,-89.7,138]},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
@@ -77,4 +82,4 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 if(!setView('entry'))throw Error('camp entry blocked');
 function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,deepStatus:host.deepHost.status()})}});
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,deepStatus:host.deepHost.status()})}});
