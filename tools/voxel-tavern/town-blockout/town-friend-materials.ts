@@ -50,7 +50,7 @@ export interface FriendLodSpec {
 export interface FriendAssetMeta {
   id: string;
   name: string;
-  pack: 'FR-01' | 'FR-02' | 'FR-03';
+  pack: 'FR-01' | 'FR-02' | 'FR-03' | 'FR-11' | 'FR-12' | 'FR-13';
   category: string;
   /** Bounding box [width, height, depth] in metres */
   dimensions: [number, number, number];
@@ -77,7 +77,13 @@ export type FriendMaterialKind =
   | 'cloth_red'
   | 'pine_green'
   | 'terracotta'
-  | 'roof_slate';
+  | 'roof_slate'
+  | 'rope_hemp'
+  | 'leather_brown'
+  | 'dark_rock'
+  | 'rust_iron'
+  | 'safety_yellow'
+  | 'alpine_blue';
 
 interface PaletteSpec {
   base: number;
@@ -108,6 +114,12 @@ const PALETTE: Record<FriendMaterialKind, PaletteSpec> = {
   pine_green: { base: 0x2f5e42, pattern: 'foliage', roughness: 0.86 },
   terracotta: { base: 0x9c553b, pattern: 'stone', roughness: 0.86 },
   roof_slate: { base: 0x495360, pattern: 'stone', roughness: 0.85 },
+  rope_hemp: { base: 0xb59564, pattern: 'cloth', roughness: 0.92 },
+  leather_brown: { base: 0x6b3e26, pattern: 'cloth', roughness: 0.78 },
+  dark_rock: { base: 0x3b4048, pattern: 'stone', roughness: 0.95 },
+  rust_iron: { base: 0x6f4232, pattern: 'metal', roughness: 0.72, metalness: 0.35 },
+  safety_yellow: { base: 0xd8a334, pattern: 'metal', roughness: 0.6, metalness: 0.15 },
+  alpine_blue: { base: 0x386a92, pattern: 'cloth', roughness: 0.75 },
 };
 
 function hash2d(x: number, y: number, seed: number): number {
