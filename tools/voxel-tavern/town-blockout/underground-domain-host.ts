@@ -24,6 +24,7 @@ import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline
 import {mountR30TutorialCart,type R30TutorialCartBridge} from './town-c-r30-tutorial-cart.js';
 import {mountR30ApproachStory} from './town-c-r30-approach-story.js';
 import {createR30CampReceiptReader,type R30CampStoryBridge} from './town-c-r30-camp-receipts.js';
+import type {UndergroundRecoveryFireSite} from './underground-recovery-fires.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
 import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
@@ -180,6 +181,12 @@ export function mountUndergroundDomainHost(options: Readonly<{
   tutorialCartBridge?:R30TutorialCartBridge;
   /** Residual public light budget AFTER headlamp, camp and other consumers. */
   readIntroLightBudget?:()=>number;
+  /** Original U-13 recovery registration and self contact receipt.
+   * No heal request or health value is authored by this scene. */
+  recoveryBridge?:Readonly<{
+    acceptsSite(site:UndergroundRecoveryFireSite):boolean;
+    readContact():Readonly<{fireId:string;layer:string;foot:Point}>|undefined;
+  }>;
   oreBridge?:R30OreBridge;
   encounterBridge?:R30EncounterBridge;
   /** Sole existing mining authority's accepted layer snapshot. */
@@ -370,17 +377,25 @@ export function mountUndergroundDomainHost(options: Readonly<{
    // Server checks horizontal tool position and actual floor datum, not
    // the height of the head lying on the table.
    site:{domainId:undergroundMineLanding.domainId,...worldOf([localPickaxe.aim[0],localPickaxe.approach[1],localPickaxe.aim[2]])}}:undefined;
+  const recoverySite:UndergroundRecoveryFireSite={
+    fire:{id:'fire/camp-recovery',point:{layer:undergroundMineLanding.domainId,...campFireWorld},
+      healPerSecond:6,recovery:true},
+    radius:2.5,tone:'warm',
+  };
+  function readRecoveryContact(){
+    const bridge=options.recoveryBridge;
+    if(bridge?.acceptsSite(recoverySite)!==true)return;
+    const accepted=options.readAcceptedDomainFoot?.(),s=bridge.readContact();
+    if(!s||!accepted||accepted.domainId!==recoverySite.fire.point.layer||
+       s.layer!==accepted.domainId||s.fireId!==recoverySite.fire.id||
+       ![accepted.east,accepted.north,accepted.height,s.foot.east,s.foot.north,s.foot.height].every(Number.isFinite)||
+       Math.hypot(s.foot.east-accepted.east,s.foot.north-accepted.north,s.foot.height-accepted.height)>.25)return;
+    return {fireId:s.fireId,layer:s.layer};
+  }
   const recoveryRuntime = {
-    sites: [{
-      fire: {
-        id: 'fire/camp-recovery',
-        point: { layer: undergroundMineLanding.domainId, ...campFireWorld },
-        healPerSecond: 6, recovery: true,
-      },
-      radius: 2.5, tone: 'warm' as const,
-    }],
-    supportsFire: () => true,
-    readConfirmedContact: () => undefined,
+    sites:[recoverySite],
+    supportsFire:()=>true, // physical authored anchor, not authority registration
+    readConfirmedContact:readRecoveryContact,
   };
   let crystalHost:ReturnType<typeof createR30CrystalHost>|undefined;
   const readGateStage = () => crystalHost?.stage()??'closed';
@@ -596,6 +611,6 @@ export function mountUndergroundDomainHost(options: Readonly<{
     floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
     offeringsSnapshot: () => storyReceipts?{litNicheIds:[...storyReceipts.lights().litNicheIds],extraCampLightCount:storyReceipts.lights().extraCampLightCount}:offerings?.snapshot(),
-    campFireWorld,pickaxeContract,
+    campFireWorld,pickaxeContract,recoverySite,readRecoveryContact,
   } as const;
 }
