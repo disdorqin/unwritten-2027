@@ -6,6 +6,7 @@ import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
 import {installBR30MoundPlanting} from './town-b-r30-mound-planting';
+import {installBR30MeltColumns} from './town-b-r30-melt-columns';
 import {installBR30MoundWorkFlag,createBR30MoundControls} from './town-b-r30-mound-work-flag';
 import {createMound} from './town-crater-points-play';
 import {installBR30RubbingPaper,createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
@@ -22,6 +23,7 @@ const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
 const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
+const melt=installBR30MeltColumns(road);
 const mound=installBR30MoundPlanting(road);
 const workFlag=installBR30MoundWorkFlag(road);
 const rubbingPaper=installBR30RubbingPaper(road.inscription);
@@ -50,6 +52,7 @@ for(const {cluster,view} of road.midgroundS5.crystalViews){
   if(seen.has(cluster))continue;seen.add(cluster);
   add(cluster,'晶簇 '+cluster,view.foot,view.target);
 }
+for(const [i,v] of melt.views.entries())add('melt-'+i,'熔柱 · '+(i+1),v.foot,v.target);
 const trestleView=road.midgroundS5.trestleView;
 if(trestleView)add('broken-trestle','断栈道遗址',trestleView.foot,trestleView.target);
 const bead=road.moltenBeads.firstPickupHostMarker;
