@@ -3,17 +3,17 @@ import {test} from 'node:test';
 import {Group} from 'three';
 import {createTerrainGrid} from '../tools/voxel-tavern/town-blockout/terrain';
 import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-d-r30-front-ridge';
-import {buildMiddleEastRoadbed} from '../tools/voxel-tavern/town-blockout/town-d-r30-upper-roadbed';
+import {buildMiddleEastRoadbed,middleEastRoadControls,middleEastExtendedControls} from '../tools/voxel-tavern/town-blockout/town-d-r30-upper-roadbed';
 import {auditRidgeRoadSurface} from '../tools/voxel-tavern/town-blockout/town-d-r30-roadbed';
 import {mountNorthRidgeMiddleStation} from '../tools/voxel-tavern/town-blockout/north-ridge-middle-station';
 import {mountRidgeRoadFurniture} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from '../tools/voxel-tavern/town-blockout/town-d-r30-retaining-banks';
 import {mountRidgeForest,ridgeForestRouteClearance} from '../tools/voxel-tavern/town-blockout/town-d-r30-forest';
-test('middle east road: one actual graded field, fixed station pad, continuous lane and protection',()=>{
+for(const [name,controls,minLength,minProbes] of [['first',middleEastRoadControls,70,1000],['extended',middleEastExtendedControls,138,1800]] as const)test('middle east road '+name+': one actual graded field, fixed station pad, continuous lane and protection',()=>{
  const grid=createTerrainGrid(),natural=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
- const r=buildMiddleEastRoadbed(natural,()=>true);
+ const r=buildMiddleEastRoadbed(natural,()=>true,controls);
  assert.ok(r.ok&&'field'in r&&'audit'in r);
- assert.ok(r.audit.maxGrade<=.12&&r.audit.samples>=900&&r.route.at(-1)!.cum>70);
+ assert.ok(r.audit.maxGrade<=.12&&r.audit.samples>=900&&r.route.at(-1)!.cum>minLength);
  assert.ok(r.cut<=8.00001&&r.fill<=8.00001&&r.changed>1000);
  assert.equal(r.protectedChanges,0);
  for(let n=508;n<=532;n++)for(let e=425;e<=455;e++)assert.equal(r.field.vertexAt(e,n),natural.vertexAt(e,n));
@@ -35,7 +35,7 @@ test('middle east road: one actual graded field, fixed station pad, continuous l
     assert.equal(forest.blocked(e,n,y),false,'forest lane');probes++;
    }
   }
-  assert.ok(probes>1000);console.log('Middle road',JSON.stringify({probes,walls:banks.walls.length,bricks:banks.brickCount,posts:furniture.postCount,lanterns:furniture.lanternCount}));
+  assert.ok(probes>minProbes);console.log('Middle road',JSON.stringify({probes,walls:banks.walls.length,bricks:banks.brickCount,posts:furniture.postCount,lanterns:furniture.lanternCount}));
  }finally{station.dispose();furniture.dispose();banks.dispose();forest.dispose()}
  assert.equal(buildMiddleEastRoadbed(natural,()=>false).ok,false);
 });

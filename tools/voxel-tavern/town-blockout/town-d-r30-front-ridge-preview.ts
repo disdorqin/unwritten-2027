@@ -7,15 +7,15 @@ import {mountNorthRidgeMiddleStation} from './north-ridge-middle-station';
 import {solveLowerRidgeRoad,tryConstrainedLowerRoadbed} from './town-d-r30-roadbed';
 import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from './town-d-r30-retaining-banks';
-import {buildMiddleEastRoadbed} from './town-d-r30-upper-roadbed';
+import {buildMiddleEastRoadbed,middleEastExtendedControls} from './town-d-r30-upper-roadbed';
 const grid=createTerrainGrid();
 // Explicit review-only ownership fixture. A must supply the production
 // protected footprint/river/track mask before installing this field.
 const natural=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
-const params=new URLSearchParams(location.search),middleMode=params.has('middle'),roadMode=params.has('road')||middleMode;
+const params=new URLSearchParams(location.search),extendedMode=params.has('extended'),middleMode=params.has('middle')||extendedMode,roadMode=params.has('road')||middleMode;
 const lowerRoute=roadMode&&!middleMode?solveLowerRidgeRoad(natural,()=>true).route:[];
 const lower=lowerRoute.length?tryConstrainedLowerRoadbed(natural,lowerRoute,()=>true):undefined;
-const middle=middleMode?buildMiddleEastRoadbed(natural,()=>true):undefined;
+const middle=middleMode?buildMiddleEastRoadbed(natural,()=>true,extendedMode?middleEastExtendedControls:undefined):undefined;
 const graded=middle??lower;
 if(graded&&!graded.ok)throw new Error('Road candidate failed raster slope gate');
 const route=middle?.route??lowerRoute;

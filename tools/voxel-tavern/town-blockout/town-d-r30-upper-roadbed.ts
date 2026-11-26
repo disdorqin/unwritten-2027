@@ -12,6 +12,12 @@ export const middleEastRoadControls=Object.freeze([
  {east:469,north:533},{east:481,north:531},{east:493,north:526},
  {east:505,north:526}
 ]);
+// Survey continuation along the eastern contour. Regrade the entire
+// alignment as one field so the former terminal does not create a seam.
+export const middleEastExtendedControls=Object.freeze([...middleEastRoadControls,
+ {east:511,north:533},{east:514,north:542},{east:515,north:550},{east:519,north:560},
+ {east:521,north:570},{east:522,north:580},{east:521,north:590}
+]);
 function smoothPath(controls:readonly EN[]){
  let path=[...controls];
  for(let i=0;i<3;i++){
@@ -42,9 +48,19 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  const ix=(e:number,n:number)=>(n-B.south)*field.width+e;
  const core=new Map<number,Core>(),near=new Map<number,{e:number;n:number;distance:number}>();
  const endpoints=[route[0]!,route.at(-1)!];
- for(let n=minN;n<=maxN;n++)for(let e=minE;e<=maxE;e++){
-  const p=ridgeRoadProject(route,e,n);if(!p||p.distance>=shoulder)continue;
-  const id=ix(e,n),old=field.vertexAt(e,n);near.set(id,{e,n,distance:p.distance});
+ // Rasterize segment-local bounding boxes; avoid scanning the whole
+ // mountain rectangle against every segment as the alignment grows.
+ for(let i=1;i<route.length;i++){
+  const a=route[i-1]!,b=route[i]!,dx=b.east-a.east,dn=b.north-a.north,len2=dx*dx+dn*dn;
+  if(!len2)continue;
+  for(let n=Math.floor(Math.min(a.north,b.north)-shoulder);n<=Math.ceil(Math.max(a.north,b.north)+shoulder);n++)for(let e=Math.floor(Math.min(a.east,b.east)-shoulder);e<=Math.ceil(Math.max(a.east,b.east)+shoulder);e++){
+   const t=Math.max(0,Math.min(1,((e-a.east)*dx+(n-a.north)*dn)/len2));
+   const distance=Math.hypot(e-a.east-dx*t,n-a.north-dn*t),id=ix(e,n);
+   if(distance<shoulder&&distance<(near.get(id)?.distance??Infinity))near.set(id,{e,n,distance});
+  }
+ }
+ for(const [id,p]of near){
+  const {e,n}=p,old=field.vertexAt(e,n);
   if(p.distance>half)continue;
   const fixed=pin(e,n)||!allowed(e,n)||endpoints.some(a=>a.east===e&&a.north===n);
   core.set(id,{e,n,natural:old,lo:fixed?old:old-cutLimit,hi:fixed?old:old+cutLimit});

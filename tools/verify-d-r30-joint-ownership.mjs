@@ -79,9 +79,9 @@ try{
   }
  }
  let middleRoad;
- if(process.argv.includes('--middle-road')){
-  const {buildMiddleEastRoadbed}=await load('town-d-r30-upper-roadbed');
-  const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0);
+ if(process.argv.includes('--middle-road')||process.argv.includes('--extended-road')){
+  const {buildMiddleEastRoadbed,middleEastExtendedControls}=await load('town-d-r30-upper-roadbed');
+  const result=buildMiddleEastRoadbed(field,(e,n)=>ownership.distance(e,n)>0,process.argv.includes('--extended-road')?middleEastExtendedControls:undefined);
   middleRoad={ok:result.ok,reason:result.reason,route:result.route,audit:result.audit,maxCoreGrade:result.maxCoreGrade,cut:result.cut,fill:result.fill,changed:result.changed,protectedChanges:result.protectedChanges,east:result.east,north:result.north};
  }
  const stationSamples=[];for(let n=344;n<=376;n+=2)for(let e=514;e<=550;e+=4)stationSamples.push([e,n,Math.round(field.heightAt(e,n)*100)/100,Math.round(ownership.distance(e,n)*10)/10]);
