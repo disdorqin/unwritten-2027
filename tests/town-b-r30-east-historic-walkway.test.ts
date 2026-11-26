@@ -4,7 +4,7 @@ import {Raycaster,Vector3} from 'three';
 import {buildBR30HistoricWalkway} from '../tools/voxel-tavern/town-blockout/town-b-r30-east-historic-walkway';
 test('historical walkway has real first-section plank/ramp support and isolated broken fragments',()=>{
  const plan=[{east:0,north:0,yaw:0},{east:0,north:3.8,yaw:0},{east:.25,north:7,yaw:.16}] as const;
- const model=buildBR30HistoricWalkway((e,n)=>.035*n+.025*e,plan);
+ const model=buildBR30HistoricWalkway((e,n)=>.10*n+.025*e,plan);
  assert.equal(model.productionReady,false);assert.equal(model.group.parent,null);
  assert.ok(model.pieces>70&&model.group.children.length===5);
  assert.equal(model.support.length,42);
@@ -18,7 +18,7 @@ test('historical walkway has real first-section plank/ramp support and isolated 
   assert.ok(hit,'exported support must land on rendered timber');
   error=Math.max(error,Math.abs(hit.point.y-p.height));
  }
- assert.ok(error<.015, 'support deviation '+error);
+ assert.ok(error<.00001, 'support deviation '+error);
  assert.ok(model.support.every(t=>t.every(p=>p.north<=1.026)));
  assert.throws(()=>buildBR30HistoricWalkway(()=>0,[plan[0],{...plan[1],north:1.8},plan[2]]),/break/);
  assert.throws(()=>buildBR30HistoricWalkway(()=>undefined,plan),/ground/);

@@ -62,7 +62,7 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
  // Each ramp slat is tilted along the exact top plane.
  for(let i=0;i<10;i++){
   const a=a0+1.85*i/10,b=a0+1.85*(i+1)/10,ha=entryHeight+dy*i/10,hb=entryHeight+dy*(i+1)/10;
-  block('wood',first,(a+b)/2,0,(ha+hb)/2-.045/Math.cos(slope),Math.hypot(b-a,hb-ha),1.12,.09,-slope);
+  block('wood',first,(a+b)/2+.045*Math.sin(slope),0,(ha+hb)/2-.045*Math.cos(slope),Math.hypot(b-a,hb-ha),1.12,.09,slope);
   topQuad(first,a,b,1.12,ha,hb);
  }
  for(const v of [-.54,.54]){
