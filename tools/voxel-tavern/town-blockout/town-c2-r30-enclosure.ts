@@ -62,6 +62,11 @@ export type C2R30EnclosureStats = Readonly<{
   disposed: boolean;
 }>;
 
+export type C2R30EnclosureRoofRect = Readonly<{ minE: number; maxE: number; minN: number; maxN: number }>;
+export type C2R30EnclosureOptions = Readonly<{
+  entryRoofPieces?: readonly C2R30EnclosureRoofRect[];
+  entryRoofOpening?: C2R30EnclosureRoofRect;
+}>;
 export type C2R30EnclosureScene = Readonly<{
   group: Group;
   boxes: readonly C2R30EnclosurePart[];
@@ -272,8 +277,39 @@ function counts<T extends string>(items: readonly T[], order: readonly T[]) {
   return result;
 }
 
+function validRoofRect(value: C2R30EnclosureRoofRect | undefined): value is C2R30EnclosureRoofRect {
+  return !!value && [value.minE, value.maxE, value.minN, value.maxN].every(Number.isFinite) &&
+    value.minE < value.maxE && value.minN < value.maxN;
+}
+function roofArea(rect: C2R30EnclosureRoofRect) {
+  return (rect.maxE - rect.minE) * (rect.maxN - rect.minN);
+}
+function roofOverlap(a: C2R30EnclosureRoofRect, b: C2R30EnclosureRoofRect) {
+  return Math.min(a.maxE, b.maxE) > Math.max(a.minE, b.minE) &&
+    Math.min(a.maxN, b.maxN) > Math.max(a.minN, b.minN);
+}
+
 /** Standalone -140 hall enclosure in local ENY: x=east, y=up, z=-north. */
-export function buildTownC2R30Enclosure(): C2R30EnclosureScene {
+export function buildTownC2R30Enclosure(options: C2R30EnclosureOptions = {}): C2R30EnclosureScene {
+  const entry = c2R30EnclosureRooms.find(room => room.id === 'entry')!;
+  if (options.entryRoofPieces) {
+    const opening = options.entryRoofOpening;
+    if (opening && (!validRoofRect(opening) || opening.minE < entry.x0 || opening.maxE > entry.x1 ||
+      opening.minN < entry.n0 || opening.maxN > entry.n1)) throw new RangeError('Invalid C2 R30 entry roof opening.');
+    const room = { minE: entry.x0, maxE: entry.x1, minN: entry.n0, maxN: entry.n1 };
+    const pieces = options.entryRoofPieces;
+    if (!pieces.length || pieces.some(piece => !validRoofRect(piece) || piece.minE < room.minE ||
+      piece.maxE > room.maxE || piece.minN < room.minN || piece.maxN > room.maxN ||
+      (opening && roofOverlap(piece, opening)) || pieces.some(other => other !== piece && roofOverlap(piece, other)))) {
+      throw new RangeError('Invalid C2 R30 entry roof partition.');
+    }
+    const expected = roofArea(room) - (opening ? roofArea(opening) : 0);
+    if (Math.abs(pieces.reduce((sum, piece) => sum + roofArea(piece), 0) - expected) > 1e-9) {
+      throw new RangeError('C2 R30 entry roof partition does not cover the room.');
+    }
+  } else if (options.entryRoofOpening) {
+    throw new RangeError('C2 R30 entry roof opening requires split pieces.');
+  }
   const group = new Group();
   group.name = 'town-c2-r30-enclosure';
   group.userData.coordinateFrame = 'second-mine-local-east-up-north';
@@ -303,14 +339,19 @@ export function buildTownC2R30Enclosure(): C2R30EnclosureScene {
 
   // Two-metre overlapping courses close every roof panel, including the river.
   for (const room of c2R30EnclosureRooms) {
-    for (let x = room.x0, column = 0; x < room.x1 - 1e-9; x += 2, column++) {
-      for (let n = room.n0, row = 0; n < room.n1 - 1e-9; n += 2, row++) {
-        const w = Math.min(2.04, room.x1 - x), d = Math.min(2.04, room.n1 - n);
-        const cx = x + w / 2, cn = n + d / 2;
-        const depth = .52 + noise(cx, cn, 71) * .38;
-        const underside = room.ceiling - (hash(cx, cn, 73) % 3) * .06;
-        add(`${room.id}-roof`, 'ceiling', familyAt(cx, cn, 79, 'ceiling'),
-          cx, cn, underside + depth / 2, w, d, depth);
+    const pieces = room.id === 'entry' && options.entryRoofPieces
+      ? options.entryRoofPieces
+      : [{ minE: room.x0, maxE: room.x1, minN: room.n0, maxN: room.n1 }];
+    for (const piece of pieces) {
+      for (let x = piece.minE, column = 0; x < piece.maxE - 1e-9; x += 2, column++) {
+        for (let n = piece.minN, row = 0; n < piece.maxN - 1e-9; n += 2, row++) {
+          const w = Math.min(2.04, piece.maxE - x), d = Math.min(2.04, piece.maxN - n);
+          const cx = x + w / 2, cn = n + d / 2;
+          const depth = .52 + noise(cx, cn, 71) * .38;
+          const underside = room.ceiling - (hash(cx, cn, 73) % 3) * .06;
+          add(`${room.id}-roof`, 'ceiling', familyAt(cx, cn, 79, 'ceiling'),
+            cx, cn, underside + depth / 2, w, d, depth);
+        }
       }
     }
   }

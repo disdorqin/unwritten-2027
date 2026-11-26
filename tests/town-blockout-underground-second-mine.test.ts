@@ -33,6 +33,8 @@ test('all three water states preserve continuous dry entry-to-exit route; ferry 
 test('missing lift port preserves the single closed entry roof and standing route',()=>{
   const mine=createSecondMineScene();
   try{
+    assert.ok(mine.r30Enclosure,'R30 enclosure is the default production structure');
+    assert.equal(mine.group.getObjectByName('town-c2-r30-enclosure')?.parent,mine.group);
     assert.equal(mine.liftPlate,null);
     assert.equal(mine.liftRoofPieces.length,1);
     assert.equal(rectArea(mine.liftRoofPieces[0]),288);
@@ -48,6 +50,9 @@ test('fixture split closes the 2.2m aperture with four roof pieces plus a visibl
   try{
     assert.equal(splitCalls,1);
     assert.equal(mine.liftRoofPieces.length,4);
+    assert.ok(mine.r30Enclosure);
+    const roofHits=mine.r30Enclosure.boxes.filter(p=>p.role==='ceiling'&&p.n+p.d/2>liftSite.lower.minN&&p.n-p.d/2<liftSite.lower.maxN&&p.x+p.w/2>liftSite.lower.minE&&p.x-p.w/2<liftSite.lower.maxE);
+    assert.equal(roofHits.length,0,'R30 roof must contain the real lift opening');
     assert.ok(mine.liftPlate);
     const plate=mine.liftPlate,roofArea=mine.liftRoofPieces.reduce((sum,r)=>sum+rectArea(r),0),plateArea=plate.scale.x*plate.scale.z;
     assert.ok(Math.abs(roofArea-(288-4.84))<1e-9);
@@ -96,12 +101,23 @@ test('invalid fixture splits and out-of-entry holes fail closed without throwing
     }finally{mine.dispose()}
   }
 });
+test('legacy r30Enclosure=false retains the original base shell and exact N198 mouth',()=>{
+  const mine=createSecondMineScene({r30Enclosure:false});
+  try{
+    assert.equal(mine.r30Enclosure,undefined);
+    assert.equal(mine.group.getObjectByName('town-c2-r30-enclosure'),undefined);
+    assert.ok(mine.solids.some(s=>s.n===198&&s.w>3));
+  }finally{mine.dispose()}
+});
 test('N198 exit has the exact C-R04 mouth, real body-height collision and no domain extension',()=>{
   const mine=createSecondMineScene();
   try{
+    assert.ok(mine.r30Enclosure);
     assert.ok(mine.solids.every(s=>[s.x,s.n,s.y,s.w,s.d,s.h].every(Number.isFinite)));
-    const lintel=mine.solids.find(s=>s.n===198&&s.x===0&&Math.abs(s.w-3.4)<1e-9&&Math.abs(s.d-.68)<1e-9);
-    assert.ok(lintel);assert.ok(Math.abs(lintel.y-lintel.h/2-3.24)<1e-9);assert.ok(Math.abs(lintel.y+lintel.h/2-5)<1e-9);
+    const lintelCourses=mine.r30Enclosure.boxes.filter(p=>p.id.startsWith('exit-mouth-lintel/')&&Math.abs(p.x-.72)<1e-9);
+    assert.ok(lintelCourses.length>0);
+    assert.ok(Math.abs(Math.min(...lintelCourses.map(p=>p.y-p.h/2))-3.24)<1e-9);
+    assert.ok(Math.max(...lintelCourses.map(p=>p.y+p.h/2))>=5-1e-9);
     assert.equal(mine.canStand(0,197.5),true);
     assert.equal(mine.canStand(2,197.5),false);assert.equal(mine.canStand(-2,197.5),false);
     assert.equal(mine.canStand(0,197.5,.27,3.3),false,'lintel must block only a body that reaches it');

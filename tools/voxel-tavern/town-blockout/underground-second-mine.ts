@@ -2,13 +2,14 @@ import {BoxGeometry,BufferGeometry,Float32BufferAttribute,Group,InstancedMesh,Me
 import {secondMineRooms,secondMineRoomAt,secondMineBed,secondMineAnchors,canStandSecondMine,secondMineFloor,type MineRiverState} from '../../../src/shared/underground-second-mine-layout.js';
 import {dressSecondMineDryWings} from './underground-second-mine-dry-dressing.js';
 import {c2R30DeepMouths} from './town-c2-r30-deep-mouths.js';
+import {buildTownC2R30Enclosure,c2R30EnclosureRooms} from './town-c2-r30-enclosure.js';
 import {createStaticFootIndex,type StaticBox} from './town-c-static-foot-index.js';
 type Part={x:number;n:number;y:number;w:number;d:number;h:number;rz:number};
 type Solid=Readonly<{x:number;n:number;y:number;w:number;d:number;h:number}>;
 export type LiftApertureRect=Readonly<{minE:number;maxE:number;minN:number;maxN:number}>;
 export type SecondMineLiftApertureSite=Readonly<{lower:LiftApertureRect;height:number;ceiling:number}>;
 export type SecondMineLiftAperturePort=Readonly<{site:SecondMineLiftApertureSite;split:(rect:LiftApertureRect,hole:LiftApertureRect)=>readonly LiftApertureRect[];readOpen:()=>boolean}>;
-export type SecondMineSceneOptions=Readonly<{liftAperture?:SecondMineLiftAperturePort}>;
+export type SecondMineSceneOptions=Readonly<{liftAperture?:SecondMineLiftAperturePort;r30Enclosure?:boolean}>;
 type EntryRoom=Readonly<{x0:number;x1:number;n0:number;n1:number;ceiling:number}>;
 const colors={rock:0x555b62,basalt:0x353b44,iron:0x777b82,rust:0x815b44,wood:0x71553c,crystal:0x82c5d6,ember:0xe5a05a,gravel:0x66645d} as const;
 type Kind=keyof typeof colors;
@@ -102,7 +103,19 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
   const entryRoofRect:LiftApertureRect|undefined=entryRoom&&{minE:entryRoom.x0,maxE:entryRoom.x1,minN:entryRoom.n0,maxN:entryRoom.n1};
   const lift=prepareLiftAperture(options?.liftAperture,entryRoom);
   const entryRoofPieces:readonly LiftApertureRect[]=lift?.pieces??(entryRoofRect?[entryRoofRect]:[]);
+  const enclosure=options.r30Enclosure===false?undefined:buildTownC2R30Enclosure({
+    entryRoofPieces,entryRoofOpening:lift?.hole,
+  });
+  if(enclosure){
+    group.add(enclosure.group);
+    for(const part of enclosure.boxes)solids.push({x:part.x,n:part.n,y:part.y,w:part.w,d:part.d,h:part.h});
+  }
   let liftPlate:Mesh|null=null,liftOpen=false;
+  if(lift){
+    liftPlate=new Mesh(meshGeometry,material.get('iron'));liftPlate.name='second-mine-lift-closure';
+    liftPlate.position.set((lift.hole.minE+lift.hole.maxE)/2,entryRoom!.ceiling+.12,-(lift.hole.minN+lift.hole.maxN)/2);
+    liftPlate.scale.set(lift.hole.maxE-lift.hole.minE,.24,lift.hole.maxN-lift.hole.minN);group.add(liftPlate);
+  }
   function box(k:Kind,x:number,n:number,y:number,w:number,d:number,h:number,rz=0,solid=false){
     const b={x,n,y,w,d,h,rz};const list=parts.get(k)??[];list.push(b);parts.set(k,list);
     if(solid)solids.push({x,n,y,w,d,h});
@@ -113,16 +126,13 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
   }
   const riverGeometries:BufferGeometry[]=[];
   // Rock chambers share exact floor and wall footprints with the passage query.
+  const enclosedRoomIds=new Set(c2R30EnclosureRooms.map(room=>room.id));
   for(const r of secondMineRooms){
+    if(enclosure&&enclosedRoomIds.has(r.id))continue;
     const w=r.x1-r.x0,d=r.n1-r.n0;
     if(!r.river)box('rock',(r.x0+r.x1)/2,(r.n0+r.n1)/2,-.4,w,d,.8);
     if(r===entryRoom){
       for(const p of entryRoofPieces)box('basalt',(p.minE+p.maxE)/2,(p.minN+p.maxN)/2,r.ceiling+.5,p.maxE-p.minE,p.maxN-p.minN,1);
-      if(lift){
-        liftPlate=new Mesh(meshGeometry,material.get('iron'));liftPlate.name='second-mine-lift-closure';
-        liftPlate.position.set((lift.hole.minE+lift.hole.maxE)/2,r.ceiling+.12,-(lift.hole.minN+lift.hole.maxN)/2);
-        liftPlate.scale.set(lift.hole.maxE-lift.hole.minE,.24,lift.hole.maxN-lift.hole.minN);group.add(liftPlate);
-      }
     }else{
       box('basalt',(r.x0+r.x1)/2,(r.n0+r.n1)/2,r.ceiling+.5,w,d,1);
     }
@@ -228,7 +238,13 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     if(bottom<=0+geometryEpsilon)continue;
     overheadBoxes.push({min:[part.x-part.w/2,bottom,-part.n-part.d/2],max:[part.x+part.w/2,part.y+part.h/2,-part.n+part.d/2]});
   }
+  for(const part of enclosure?.boxes??[]){
+    const bottom=part.y-part.h/2;
+    if(bottom<=0+geometryEpsilon)continue;
+    overheadBoxes.push({min:[part.x-part.w/2,bottom,-part.n-part.d/2],max:[part.x+part.w/2,part.y+part.h/2,-part.n+part.d/2]});
+  }
   const overheadIndex=createStaticFootIndex(overheadBoxes);
+  const solidIndex=createStaticFootIndex(solids.map(s=>({min:[s.x-s.w/2,s.y-s.h/2,-s.n-s.d/2],max:[s.x+s.w/2,s.y+s.h/2,-s.n+s.d/2]})));
   const dummy=new Matrix4(),q=new Quaternion(),v=new Vector3(),scale=new Vector3(),axis=new Vector3(0,0,1);
   for(const [kind,items] of parts){
     const m=new InstancedMesh(meshGeometry,material.get(kind),items.length);
@@ -248,9 +264,6 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     if(liftPlate)liftPlate.visible=!liftOpen;
     return liftOpen;
   }
-  function solidDistance(s:Solid,e:number,n:number){
-    return Math.hypot(Math.max(0,Math.abs(e-s.x)-s.w/2),Math.max(0,Math.abs(n-s.n)-s.d/2));
-  }
   /** Local floor and vertical headroom share the visible geometry; body-height
    * collision remains restricted to the explicit solid set. */
   function passageLocal(e:number,n:number,radius=.27,height=1.8){
@@ -261,10 +274,7 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
       const de=Math.max(0,lift.hole.minE-e,e-lift.hole.maxE),dn=Math.max(0,lift.hole.minN-n,n-lift.hole.maxN);
       if(Math.hypot(de,dn)<=radius)return;
     }
-    for(const s of solids){
-      if(s.y+s.h/2<=floor+geometryEpsilon||s.y-s.h/2>=floor+height-geometryEpsilon)continue;
-      if(solidDistance(s,e,n)<radius)return;
-    }
+    if(radius>0&&solidIndex.blocks(e,n,floor,radius,height))return;
     let clearance=Infinity;
     for(const box of overheadIndex.candidates(e,n,radius)){
       const dx=Math.max(0,box.min[0]-e,e-box.max[0]),dz=Math.max(0,box.min[2]+n,-n-box.max[2]);
@@ -282,6 +292,7 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
   }
   function acceptsMouth(mouth:unknown){
     if(disposed||!matchesExitMouth(mouth))return false;
+    if(enclosure)return enclosure.acceptsMouth(c2R30DeepMouths['minus140-to-minus165'].from)&&canStand(0,197.5,.27,1.8);
     const northParts=[...parts.values()].flat().filter(p=>Math.abs(p.n-exitWall.north)<=geometryEpsilon);
     if(northParts.length!==exitWallParts.length||northParts.some(p=>!exitWallParts.some(wall=>sameBox(p,wall))))return false;
     const wallSolids:Solid[]=[];
@@ -305,8 +316,8 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     return !!passage&&passage.floor===0&&passage.clearance+geometryEpsilon>=expected.height&&canStand(expected.centre,probeNorth,.27,1.8);
   }
   setRiverState('middle');syncLiftAperture();
-  return {group,boat,water,solids,anchors:secondMineAnchors,setRiverState,canStand,passageLocal,acceptsMouth,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
+  return {group,boat,water,solids,r30Enclosure:enclosure,anchors:secondMineAnchors,setRiverState,canStand,passageLocal,acceptsMouth,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
     liftPlate,liftRoofPieces:entryRoofPieces,syncLiftAperture,get liftOpen(){return liftOpen;},
-    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+boat.children.length+3+(liftPlate?1:0),
-    dispose(){if(disposed)return;disposed=true;group.removeFromParent();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
+    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+(enclosure?.stats().pieceCount??0)+boat.children.length+3+(liftPlate?1:0),
+    dispose(){if(disposed)return;disposed=true;group.removeFromParent();enclosure?.dispose();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
 }
