@@ -285,7 +285,7 @@ async function picture(page,evidence,label){
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
