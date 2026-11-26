@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Group,Raycaster,Vector3} from 'three';
-import {r30DeepFrames,r30DeepWorldFeet,r30DeepLocalFeet,r30DepthLinks,r30CheckExistingSecondFrame,r30LayerWorld,r30LayerLocal,r30LinkPoint,r30LinkRibs,r30RibProfile,validateR30DeepReceivingFeet} from '../tools/voxel-tavern/town-blockout/town-c-r30-deep-layer-contract.js';
+import {r30DeepFrames,r30DeepWorldFeet,r30DeepLocalFeet,r30DepthLinks,r30CheckExistingSecondFrame,r30LayerWorld,r30LayerLocal,r30LinkPoint,r30LinkRibs,r30RibProfile,r30GuideLantern,validateR30DeepReceivingFeet} from '../tools/voxel-tavern/town-blockout/town-c-r30-deep-layer-contract.js';
 import {mountR30DepthCorridor} from '../tools/voxel-tavern/town-blockout/town-c-r30-depth-corridor.js';
 import {createWarriorCityCandidate} from '../tools/voxel-tavern/town-blockout/underground-warrior-city-candidate.js';
 import {createUndergroundPalaceShell} from '../tools/fixtures/underground-palace-d-shell-snapshot.js';
@@ -46,10 +46,16 @@ test('both actual connector meshes have continuous support, original depth and s
   assert.equal(m.ribCount,ribs.length);assert.equal(m.parts,ribs.length*13);
   assert.equal(m.lanternCount,Math.ceil(ribs.length/2));assert.equal(m.wayfindingCount,m.lanternCount*2);
   const lamps=m.group.getObjectByName('depth-link-lantern-glass')!;
-  const first=r30LinkPoint(link,ribs[0],half-.045)!;
-  assert.ok(new Raycaster(new Vector3(first.east,first.height+3,-first.north),new Vector3(0,-1,0),0,1).intersectObject(lamps,true).length);
+  const first=r30LinkPoint(link,ribs[0],half-r30GuideLantern.inset)!;
+  const center=r30LinkPoint(link,ribs[0])!;
+  const eye=new Vector3(center.east,first.height+2.47,-center.north);
+  const target=new Vector3(first.east,first.height+2.47,-first.north);
+  const sight=new Raycaster(eye,target.sub(eye).normalize(),0,2);
+  const glass=sight.intersectObject(lamps,true)[0],timber=sight.intersectObject(m.group.getObjectByName('depth-link-ribs/wood')!,true)[0];
+  assert.ok(glass&&(!timber||glass.distance<timber.distance),'glass must face the actual walkway');
   const clear=r30LinkPoint(link,ribs[0],half-.46)!;
   assert.ok(m.passageAt(clear.east,clear.north));
+  assert.equal(m.passageAt(clear.east,clear.north,.27,2.6),undefined,'tall capsule contacts lantern');
   for(const t of ribs){
    for(const side of [-1,1]){
     const post=r30LinkPoint(link,t,side*(half-.08))!,near=r30LinkPoint(link,t,side*(half-.32))!,clear=r30LinkPoint(link,t,side*(half-.46))!;

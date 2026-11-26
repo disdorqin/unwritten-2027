@@ -80,6 +80,12 @@ export function r30LinkRibs(link:R30DepthLink){
  for(let t=4;t<link.length-3;t+=7)stations.push(t);
  return stations;
 }
+/** The guide cage projects inward from its support only above 2.265m.
+ * This exact envelope is shared by the visible mounting and tall queries. */
+export const r30GuideLantern=Object.freeze({inset:.25,halfWidth:.105,halfLength:.17,bottom:2.265});
+export function r30LinkLanternStations(link:R30DepthLink){
+ return r30LinkRibs(link).filter((_,i)=>i%2===0).map((along,i)=>({along,side:i%2===0?1:-1}));
+}
 /** Collision query is same geometric support as the visible ramp. No room
  * membership, unlock, water phase, or transition is granted by this function. */
 export function r30LinkPassage(link:R30DepthLink,east:number,north:number,radius=.27,height=1.8){
@@ -93,6 +99,10 @@ export function r30LinkPassage(link:R30DepthLink,east:number,north:number,radius
  // tunnel. Test the capsule against the same along/lateral footprint.
  const sideGap=Math.max(0,link.width/2-r30RibProfile.inset-Math.abs(lateral));
  if(sideGap<radius&&r30LinkRibs(link).some(t=>Math.hypot(sideGap,Math.max(0,Math.abs(along-t)-r30RibProfile.halfLength))<radius))return;
+ if(height>r30GuideLantern.bottom-.035&&r30LinkLanternStations(link).some(s=>{
+  const center=s.side*(link.width/2-r30GuideLantern.inset);
+  return Math.hypot(Math.max(0,Math.abs(lateral-center)-r30GuideLantern.halfWidth),Math.max(0,Math.abs(along-s.along)-r30GuideLantern.halfLength))<radius;
+ }))return;
  const floor=r30LinkFloor(link,Math.max(0,Math.min(link.length,along)));
  return floor===undefined?undefined:{floor,clearance,along,lateral};
 }

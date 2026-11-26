@@ -1,6 +1,6 @@
 import {BufferGeometry,BufferAttribute,DoubleSide,Group,Mesh,MeshLambertMaterial,MeshBasicMaterial,BoxGeometry,InstancedMesh,Matrix4,Color,Vector3,Quaternion,RepeatWrapping} from 'three';
 import {makeCampGrain} from './town-c-r30-camp-art.js';
-import {r30LinkPoint,r30LinkPassage,r30LinkRibs,r30RibProfile,type R30DepthLink} from './town-c-r30-deep-layer-contract.js';
+import {r30LinkPoint,r30LinkPassage,r30LinkRibs,r30RibProfile,r30LinkLanternStations,r30GuideLantern,type R30DepthLink} from './town-c-r30-deep-layer-contract.js';
 /** Continuous enclosed sloping tunnel from the C-owned receiving-foot
  * contract. Mount only after the host has validated both endpoint shells.
  * No automatic teleport, new movement rule, or water clock. */
@@ -73,21 +73,23 @@ export function mountR30DepthCorridor(parent:Group,link:R30DepthLink,acceptsEndp
   parts.forEach((b,i)=>{mx.compose(new Vector3(...b.pos),q,new Vector3(...b.size));batch.setMatrixAt(i,mx);batch.setColorAt(i,color.setHex(b.color))});
   batch.computeBoundingSphere();group.add(batch);resources.push(()=>{batch.dispose();map.dispose();mat.dispose()});
  }
- // Alternating caged signal lanterns sit within the already-reserved
- // timber/strap footprint, not in the 3.4m passage. No extra PointLight:
+ // Alternating caged signal lanterns attach to the inside of a timber
+ // post above standing headroom; the tall-body query shares the envelope.
+ // No extra PointLight:
  // the single player light budget remains owned by the existing host.
  const lanternRows:{pos:readonly [number,number,number];size:readonly [number,number,number];color:number;glow:boolean}[]=[];
  const marks:number[]=[];
- const stations=r30LinkRibs(link).filter((_,i)=>i%2===0);
+ const stations=r30LinkLanternStations(link);
  const amber=link.to==='minus165'?0xf9b967:0x87d5dd;
- for(const [i,t] of stations.entries()){
-  const side=i%2===0?1:-1,l=side*(half-.045);
+ for(const {along:t,side} of stations){
+  const l=side*(half-r30GuideLantern.inset);
   const lamp=(lat:number,y:number,w:number,h:number,d:number,col:number,glow=false,dt=0)=>lanternRows.push({pos:p(t+dt,lat,y),size:[w,h,d],color:col,glow});
   lamp(l,2.30,.19,.07,.30,0x715843);
   lamp(l,2.64,.19,.09,.30,0x715843);
   lamp(l,2.47,.17,.27,.23,amber,true);
   for(const dt of [-.125,.125])lamp(l,2.47,.19,.27,.034,0x4c4035,false,dt);
   lamp(l,2.78,.14,.19,.09,0x806245);
+  lamp(side*(half-.13),2.87,.26,.075,.12,0x806245);
   // Paired inlaid chevrons on the actual graded surface. This identifies
   // the connector, not a one-way rule or a new walk surface.
   for(const sign of [-1,1]){
