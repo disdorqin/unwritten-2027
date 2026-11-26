@@ -6,6 +6,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
+import { orientedSupportBox } from './town-a-r30-oriented-support';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -820,9 +821,12 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       // S-1 collision: a cone pile blocks as its base square.
       hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
     }
-    // Sorting shed: four posts, flat roof, sorted boxes beneath.
+    // Sorting shed: visible columns with exact player blockers; no solid
+    // room-sized collider across the open shelter.
+    const yardStructure=industrialBuilder(fr,g,put,colliders,floors);
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
-      put(timber, -8 + px, g + 1.5, -6 + pz, .26, 3, .26);
+      yardStructure.piece(workshopWood,-8+px,-6+pz,.26,.26,0,3);
+      yardStructure.piece(workshopBrick,-8+px,-6+pz,.38,.38,0,.18);
     }
     // Sorting shelter: a real pitched roof, rafters, snow and framed bins.
     const shedPitch=Math.atan2(.72,2.8),shedSlant=Math.hypot(.72,2.8);
@@ -834,16 +838,22 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     put(workshopWood,-8,g+3.91,-6,6.45,.17,.21);
     for(const x of [-9.4,-7.9,-6.4]){
-      put(workshopWood,x,g+.55,-6,1.25,1.1,1.25);
+      yardStructure.piece(workshopWood,x,-6,1.25,1.25,0,1.1);
       for(const s of [-1,1]){
         put(timberWarm,x+s*.52,g+.55,-6,.10,1.12,1.27);
         put(workshopRust,x,g+.35,-6+s*.63,1.20,.09,.025);
       }
     }
-    // Derrick: two A-frames, crossbeam, hook hanging over the yard.
-    for (const s of [-1, 1]) {
-      const p = fr.at(7 + s * 2.2, -6);
-      box(timber, p.east, g + 2.6, p.north, .3, 5.6, .3, fr.yaw, 0, s * .38);
+    // Derrick: four anchored posts and overhead braces, with a clear
+    // working bay underneath rather than disconnected floating legs.
+    for(const s of [-1,1])for(const z of [-6.65,-5.35]){
+      yardStructure.piece(workshopWood,7+s*2.2,z,.26,.26,0,5.2);
+      yardStructure.piece(workshopBrick,7+s*2.2,z,.46,.46,0,.28);
+      put(workshopRust,7+s*2.2,g+4.95,z,.35,.24,.35);
+    }
+    for(const z of [-6.65,-5.35]){
+      put(workshopWood,7,g+4.9,z,4.7,.28,.26);
+      for(const s of [-1,1])put(workshopWood,7+s*1.82,g+4.31,z,.19,1.40,.19,0,s*.59);
     }
     const beam = fr.at(7, -6);
     box(timber, beam.east, g + 5.2, beam.north, 5.6, .34, .34, fr.yaw);
@@ -1008,7 +1018,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const p = site(`foundation-stub-${i + 1}`, b, 101 + hash(i * 3) * 6, 2.5);
     if (!p) continue;
     const s = 1.6 + hash(i * 11) * 1.8;
-    box(concrete, p.east, p.height + .3 + hash(i) * .3, p.north, s, .6 + hash(i * 5) * .7, s * .8, hash(i * 13) * 3);
+    const yaw=hash(i*13)*3,hh=.6+hash(i*5)*.7;
+    // Footing follows sampled ground corners and its flat top is actually
+    // standable. Bolt stubs are short inlays, not invisible obstacles.
+    const c=Math.cos(yaw),q=Math.sin(yaw);
+    const soils=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(p.east+c*x*s/2+q*z*s*.4,p.north+q*x*s/2-c*z*s*.4)??p.height));
+    const bottom=Math.min(p.height,...soils)-.10,top=p.height+hh;
+    box(workshopBrick,p.east,(bottom+top)/2,p.north,s,top-bottom,s*.8,yaw);
+    floors.push(orientedSupportBox(p.east,p.north,yaw,s,s*.8,bottom,top));
+    for(const x of [-.28,.28])for(const z of [-.25,.25]){
+      const e=p.east+c*x*s+q*z*s,n=p.north+q*x*s-c*z*s;
+      box(workshopRust,e,top-.01,n,.13,.045,.13,yaw);
+    }
   }
 
   // ================= 2b · three-layer isolation + outer band =================
