@@ -498,6 +498,23 @@ try{
    await picture(page,evidence,'assembly-notice-open');
    await page.locator('#place-card .close-card').click();
  }else if(segment==='supplyinterior'){
+   const windows=road.mouthWorks.supplyWindowControls;
+   assert.equal(windows.length,2);
+   const middle={east:(windows[0].useEast+windows[1].useEast)/2,north:(windows[0].useNorth+windows[1].useNorth)/2,height:windows[0].useHeight};
+   await step(middle,'supply-window-aisle');
+   for(const w of windows){
+     await step({east:w.useEast,north:w.useNorth,height:w.useHeight},w.id+'-approach');
+     await wallView(w.id+'-closed',Math.atan2(w.east-w.useEast,w.north-w.useNorth));
+     await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('打开补给站窗户'),null,{timeout:8000});
+     await page.keyboard.press('e');
+     await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('关闭补给站窗户'),null,{timeout:8000});
+     await picture(page,evidence,w.id+'-open');
+     await page.keyboard.press('e');
+     await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('打开补给站窗户'),null,{timeout:8000});
+     await picture(page,evidence,w.id+'-reclosed');
+     await step(middle,w.id+'-return');
+   }
+   await step(path.at(-1),'supply-map-return');
    await wallView('supplyinterior-map',150*Math.PI/180);
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('手绘图'),null,{timeout:8000});
    await page.keyboard.press('e');
