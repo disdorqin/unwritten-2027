@@ -1,0 +1,88 @@
+{
+  "url": "http://127.0.0.1:65181/?profile",
+  "segment": "spawn",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "spawn",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795352795186,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "spawn-bare",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795352795186,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:65181/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795352795186,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        }
+      ],
+      "cadence": {
+        "plaza": {
+          "frames": 256,
+          "durationMs": 2002.699999998882,
+          "meanFrameMs": 7.827734374999999,
+          "p95FrameMs": 12.599999999999454,
+          "rafFps": 127.75088577274317,
+          "source": "native browser requestAnimationFrame cadence; not GPU FPS"
+        }
+      }
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "browser": "146.0.7680.178",
+  "errors": 0
+}

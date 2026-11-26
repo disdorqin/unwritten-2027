@@ -1,0 +1,213 @@
+{
+  "scope": "isolated local forge geometry with original hall collisions, not registered -165 domain or gameplay receipt",
+  "views": {
+    "entrance-handlamp": {
+      "frames": 11,
+      "view": "entrance",
+      "lamp": true,
+      "eye": [
+        0,
+        1.67,
+        -0.35
+      ],
+      "target": [
+        0,
+        1.67,
+        -8.5
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 36,
+      "triangles": 6960,
+      "bytes": 181978
+    },
+    "entrance-fixed-hearth": {
+      "frames": 29,
+      "view": "entrance",
+      "lamp": false,
+      "eye": [
+        0,
+        1.67,
+        -0.35
+      ],
+      "target": [
+        0,
+        1.67,
+        -8.5
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 36,
+      "triangles": 6960,
+      "bytes": 162572
+    },
+    "hearth-handlamp": {
+      "frames": 48,
+      "view": "hearth",
+      "lamp": true,
+      "eye": [
+        0.4,
+        1.67,
+        -4.65
+      ],
+      "target": [
+        2,
+        1.88,
+        -7.12
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 27,
+      "triangles": 6756,
+      "bytes": 235879
+    },
+    "hearth-fixed-hearth": {
+      "frames": 66,
+      "view": "hearth",
+      "lamp": false,
+      "eye": [
+        0.4,
+        1.67,
+        -4.65
+      ],
+      "target": [
+        2,
+        1.88,
+        -7.12
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 27,
+      "triangles": 6756,
+      "bytes": 227172
+    },
+    "quench-handlamp": {
+      "frames": 97,
+      "view": "quench",
+      "lamp": true,
+      "eye": [
+        -0.2,
+        1.67,
+        -6.4
+      ],
+      "target": [
+        -3.55,
+        0.76,
+        -7.63
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 29,
+      "triangles": 6876,
+      "bytes": 216699
+    },
+    "quench-fixed-hearth": {
+      "frames": 127,
+      "view": "quench",
+      "lamp": false,
+      "eye": [
+        -0.2,
+        1.67,
+        -6.4
+      ],
+      "target": [
+        -3.55,
+        0.76,
+        -7.63
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 29,
+      "triangles": 6876,
+      "bytes": 160697
+    },
+    "rack-handlamp": {
+      "frames": 150,
+      "view": "rack",
+      "lamp": true,
+      "eye": [
+        -1.65,
+        1.67,
+        -2.5
+      ],
+      "target": [
+        -4.28,
+        1.2,
+        -2.3
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 24,
+      "triangles": 6720,
+      "bytes": 143514
+    },
+    "rack-fixed-hearth": {
+      "frames": 169,
+      "view": "rack",
+      "lamp": false,
+      "eye": [
+        -1.65,
+        1.67,
+        -2.5
+      ],
+      "target": [
+        -4.28,
+        1.2,
+        -2.3
+      ],
+      "trustedW": 0,
+      "walked": 0,
+      "rejected": 0,
+      "clear": true,
+      "pieces": 551,
+      "calls": 24,
+      "triangles": 6720,
+      "bytes": 82272
+    }
+  },
+  "errors": [],
+  "passed": true,
+  "entryWalk": {
+    "frames": 189,
+    "view": "entrance",
+    "lamp": false,
+    "eye": [
+      0,
+      1.67,
+      -3.349999999999996
+    ],
+    "target": [
+      0,
+      1.67,
+      -8.5
+    ],
+    "trustedW": 1,
+    "walked": 2.9999999999999973,
+    "rejected": 0,
+    "clear": true,
+    "pieces": 551,
+    "calls": 33,
+    "triangles": 6924
+  }
+}

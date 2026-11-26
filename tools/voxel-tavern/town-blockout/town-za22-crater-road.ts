@@ -1,5 +1,7 @@
-import { BufferGeometry, BoxGeometry, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BufferGeometry, BoxGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildCraterSeamCollar, type SurfaceVertex } from './town-a-r30-crater-seam';
+import { featherSharedCraterApron } from './town-a-r30-crater-material-seam';
 import { createMeteorCrater, meteorCraterFixturePlan, meteorCraterRimRadius } from './meteor-crater';
 import { mountMeteorCraterSurface, type MeteorCraterWorldAnchor } from './meteor-crater-surface';
 import { applyCraterDistancePalette } from './town-za34-crater-distance-palette';
@@ -9,7 +11,10 @@ import { mountZa31CraterWinch } from './town-za31-crater-winch';
 import { mountZa31CraterEntrance } from './za31-crater-entrance';
 import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing';
 import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
-import { buildCraterOuterWorks } from './town-crater-outer-works';
+import { buildCraterOuterWorks, craterBeltTrackCorridor } from './town-crater-outer-works';
+import { createWestLandscape } from './town-a-r30-west-landscape';
+import { freightTurnoutKeepout } from './town-a-r30-rail-network';
+import { mountWestNorthConnector, northFootwayWeight } from './town-a-r30-north-connector';
 import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
@@ -30,6 +35,8 @@ import { mountC2CraterInscription } from './town-c2-crater-inscription';
 import {
   mountCraterWarmLightChain, surveyCraterWarmLightChain,
 } from './town-c2-crater-warm-light-chain';
+import { buildCraterMidgroundS5 } from './town-crater-midground-s5';
+import { buildMoundPlanting } from './town-mound-planting';
 
 export const craterWestSurvey = Object.freeze({
   west: -240, east: -120, north: 185, seamNorth: 159,
@@ -45,9 +52,14 @@ export const craterWestSurvey = Object.freeze({
 export const craterGroundSheetNorth = 336;
 
 const seamBlendWidth = 24;
-const carrierHoleRadius = meteorCraterRimRadius + 2;
+// Shared B apron remains R59 until both sides accept the replacement edge.
+const sharedApronRadius = meteorCraterRimRadius + 2 * (meteorCraterFixturePlan.mainTrail.halfWidth + meteorCraterFixturePlan.mainTrail.shoulderWidth);
 const tileSize = 48;
 
+type Story=ReturnType<typeof buildZa36CraterStoryDressing>;
+/** B's exact accepted story lifecycle is injected by the assembly owner.
+ * Never silently apply it to the legacy crater. */
+export type AR30StoryLifecycle={retire(story:Story):Story;refit(story:Story,heightAt:(e:number,n:number)=>number|undefined):{story:Story;changes:readonly unknown[]}};
 type WestCraterRoad = {
   group: Group;
   readonly winch: ReturnType<typeof mountZa31CraterWinch>;
@@ -64,6 +76,8 @@ type WestCraterRoad = {
   readonly moltenBeads: ReturnType<typeof mountC2CraterMoltenBeads>;
   readonly inscription: ReturnType<typeof mountC2CraterInscription>;
   readonly warmLightChain: ReturnType<typeof mountCraterWarmLightChain>;
+  readonly midgroundS5: ReturnType<typeof buildCraterMidgroundS5>;
+  readonly moundPlanting: ReturnType<typeof buildMoundPlanting>;
   readonly craterActions: {
     actions: CraterActionSpot[];
     actionAt(east: number, north: number, height: number): CraterActionSpot | undefined;
@@ -73,13 +87,15 @@ type WestCraterRoad = {
   anchor: MeteorCraterWorldAnchor;
   lip: Readonly<{ east: number; north: number }> & { height: number };
   heightAt(east: number, north: number): number | undefined;
+  readonly terrainBoundary: Readonly<{inner:readonly SurfaceVertex[];outer:readonly SurfaceVertex[];renderNorth:number;apronRadius:number}>;
+  terrainReadyAt(east:number,north:number):boolean;
   fenceBlocks(east: number, north: number, height: number, radius: number): boolean;
 };
 
 /** Same surface and grid diagonals as the town, with the surveyed east edge kept bit-identical. */
 /** A-2: five-band vertex palette enabled by default; false is explicit rollback. */
 export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north: number) => number,
-  options: { za34DistantPaletteCandidate?: boolean } = {}): WestCraterRoad {
+  options: { za34DistantPaletteCandidate?: boolean; unifiedStory?:AR30StoryLifecycle } = {}): WestCraterRoad {
   const survey = craterWestSurvey;
   const rimHeight = westTownHeightAt(survey.seamNorth);
   const northOffset = survey.seamNorth - survey.north;
@@ -91,8 +107,12 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const crater = mountMeteorCraterSurface(anchor, { centralMound: centralMoundModel });
   const surface = crater.group.getObjectByName('meteor-crater-walk-mesh');
   if (!surface || !(surface as Mesh).isMesh) throw new Error('B-01 crater walk surface absent');
-  const paletteEnabled = options.za34DistantPaletteCandidate !== false;
+  const unifiedRelief=surface.userData.bR30UnifiedRelief===true;
+  const paletteEnabled = !unifiedRelief && options.za34DistantPaletteCandidate !== false;
   const paletteAudit = paletteEnabled ? applyCraterDistancePalette(surface as Mesh) : undefined;
+  // B's geology remains intact. Only the 55–59m shared snow apron is A's
+  // material blend; do not overwrite its interior with the legacy five bands.
+  if(unifiedRelief)featherSharedCraterApron(surface as Mesh,meteorCraterRimRadius,sharedApronRadius);
   const lip = crater.trailPoint(0);
   const group = new Group();
   group.name = 'meteor-crater-west-road';
@@ -103,25 +123,38 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     floorHeightAtLocal: (east, north) => neutralCrater.heightOffsetAt(east, north),
   });
 
-  const tileGround = new MeshLambertMaterial({ color: 0xc1cedc });
+  const tileGround = new MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+  const sheetNorthLimit = Math.min(northLimit, craterGroundSheetNorth);
+  const landscape=createWestLandscape(anchor,sharedApronRadius,sheetNorthLimit,craterBeltTrackCorridor);
+  const oldCarrierAt=(east:number,north:number)=>{
+    const t=Math.max(0,(east+seamBlendWidth)/seamBlendWidth);
+    return rimHeight+(westTownHeightAt(north)-rimHeight)*t*t*(3-2*t);
+  };
   const eastCount = -survey.west + 1;
   const samples = new Float32Array(eastCount * (northLimit + 1));
-  const inside = new Uint8Array(samples.length);
+
   function address(east: number, north: number) { return (east - survey.west) + north * eastCount; }
   for (let north = 0; north <= northLimit; north++) {
     const townHeight = westTownHeightAt(north);
     for (let east = survey.west; east <= 0; east++) {
       const t = Math.max(0, (east + seamBlendWidth) / seamBlendWidth);
       const i = address(east, north);
-      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t);
-      inside[i] = Number(Math.hypot(east - anchor.east, north - anchor.north) < carrierHoleRadius);
+      samples[i] = rimHeight + (townHeight - rimHeight) * t * t * (3 - 2 * t) + landscape.offsetAt(east,north);
+
     }
   }
+  const sampleCarrier = (east:number,north:number) => {
+    const x=Math.min(-1,Math.floor(east)), n=Math.min(northLimit-1,Math.floor(north));
+    const u=east-x,v=north-n,i=address(x,n);
+    const a=samples[i],b=samples[i+1],c=samples[i+eastCount],d=samples[i+eastCount+1];
+    return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
+  };
+  const collar=buildCraterSeamCollar(surface as Mesh,anchor,sharedApronRadius,sampleCarrier);
+  const cut=collar.bounds;
   // Batch adjacent 48 m ground tiles into spatially bounded 2×3 clusters:
   // fewer draw calls than one mesh per tile, without turning the full west
   // expanse into a single always-visible 240×540 m mesh.
   const groundBatches = new Map<string, BufferGeometry[]>();
-  const sheetNorthLimit = Math.min(northLimit, craterGroundSheetNorth);
   for (let north = 0; north < sheetNorthLimit; north += tileSize) {
     for (let east = survey.west; east < 0; east += tileSize) {
       const endN = Math.min(north + tileSize, sheetNorthLimit), endE = Math.min(east + tileSize, 0);
@@ -134,8 +167,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
           if (e === endE || n === endN) continue;
           const a = (e - east) + (n - north) * width;
           const b = a + 1, c = a + width, d = c + 1;
-          if (!inside[from] && !inside[from + 1] && !inside[from + eastCount]) indices.push(a, b, c);
-          if (!inside[from + 1] && !inside[from + eastCount] && !inside[from + eastCount + 1]) indices.push(b, d, c);
+          // Remove the complete integer rectangle, not a circle tested only
+          // at triangle corners. The zipper collar supplies this exact cut.
+          if(e<cut.west||e>=cut.east||n<cut.south||n>=cut.north)indices.push(a,b,c,b,d,c);
         }
       }
       const footprint = new BufferGeometry();
@@ -149,10 +183,47 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     }
   }
 
+  // Same material, same spatial batch; do not add a full-map draw.
+  const collarBatch=`${Math.floor((anchor.east-survey.west)/(tileSize*2))}:${Math.floor(anchor.north/(tileSize*3))}`;
+  groundBatches.get(collarBatch)!.push(collar.geometry);
   for (const [batch, members] of groundBatches) {
     const joined = mergeGeometries(members);
     if (!joined) throw new Error(`West crater terrain batch ${batch} cannot be merged`);
     for (const member of members) member.dispose();
+    // Derive a coherent vertex snow/rock treatment from actual terrain.
+    // Preserve the old color exactly across the B apron and protected pads;
+    // don't disguise invisible or mismatched support with a second overlay.
+    const pos=joined.getAttribute('position'), colors=new Float32Array(pos.count*3);
+    const snow=new Color(0xc1cedc), rock=new Color(0x8995a4), powder=new Color(0xe1e8ef);
+    const tint=new Color(),packedSnow=new Color(0xa0a5aa),railGravel=new Color(0x767d82),yardGravel=new Color(0x9a9288);
+    const strataGrey=new Color(0x77716a),strataOchre=new Color(0x9e8d76),strataTint=new Color();
+    for(let k=0;k<pos.count;k++){
+      const e=pos.getX(k),n=-pos.getZ(k),h=pos.getY(k);
+      const rad=Math.hypot(e-anchor.east,n-anchor.north);
+      const base=oldCarrierAt(e,n);
+      const weight=Math.min(1,Math.max(0,(rad-sharedApronRadius-1.5)/8))
+        *Math.min(1,Math.max(0,(-e-58)/18));
+      // Coherent colors shared at coincident tile vertices; no per-tile
+      // random noise or per-face palette jump.
+      const d=h-base;
+      const shade=Math.min(1,Math.abs(d)/2.8)*weight;
+      tint.copy(snow).lerp(d<0?rock:powder,shade*(.58+.22*Math.sin(e*.13+n*.08)));
+      // Snow worn by people and ore transport is a material of this very
+      // carrier, never another coplanar road mesh. Warm gravel in work yards,
+      // subdued ballast along the narrow track, compacted snow on the road.
+      const exposure=landscape.outcropAt(e,n);
+      if(exposure.exposure>0){
+        strataTint.copy(strataGrey).lerp(strataOchre,exposure.band*.75);
+        tint.lerp(strataTint,exposure.exposure*.86);
+      }
+      const civil=landscape.surfaceWeightsAt(e,n);
+      tint.lerp(yardGravel,civil.yard*(.42+.06*Math.sin(e*.43+n*.27)));
+      tint.lerp(packedSnow,civil.packed*(.66+.09*Math.cos(n*.91+e*.37)));
+      tint.lerp(railGravel,civil.ballast*(.66+.07*Math.sin(e*.59-n*.52)));
+      tint.lerp(packedSnow,northFootwayWeight(e,n)*(.76+.04*Math.cos(n*.63+e*.72)));
+      colors[k*3]=tint.r;colors[k*3+1]=tint.g;colors[k*3+2]=tint.b;
+    }
+    joined.setAttribute('color',new Float32BufferAttribute(colors,3));
     joined.computeBoundingSphere();
     const mesh = new Mesh(joined, tileGround);
     mesh.name = 'meteor-crater-west-ground';
@@ -188,15 +259,16 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     if (east > 0 || east < survey.west || north < 0 || north > northLimit) return;
     const bowl = crater.heightAt(east, north);
     if (bowl !== undefined) return bowl;
-    const x = Math.min(-1, Math.floor(east)), n = Math.min(northLimit - 1, Math.floor(north));
-    const u = east - x, v = north - n;
-    const i = address(x, n);
-    const a = samples[i], b = samples[i + 1], c = samples[i + eastCount], d = samples[i + eastCount + 1];
-    return u + v <= 1 ? a + (b - a) * u + (c - a) * v
-      : d + (c - d) * (1 - u) + (b - d) * (1 - v);
+    return collar.heightAt(east,north) ?? sampleCarrier(east,north);
   }
 
-  const road = { group, anchor, lip, heightAt, fenceBlocks };
+  const northConnector=mountWestNorthConnector(northLimit,sampleCarrier);
+  group.add(northConnector.group);
+  const terrainBoundary={inner:collar.inner,outer:collar.outer,renderNorth:sheetNorthLimit,apronRadius:sharedApronRadius};
+  const terrainReadyAt=(east:number,north:number)=>Number.isFinite(east)&&Number.isFinite(north)
+    &&((east>=survey.west&&east<=0&&north>=0&&north<=sheetNorthLimit)
+      ||northConnector.readyAt(east,north));
+  const road = { group, anchor, lip, heightAt, fenceBlocks,terrainBoundary,terrainReadyAt };
   mountZa31CraterEntrance(road);
   const camp = mountZa31CraterCamp(road);
   const rim = buildZa31CraterRim(road, camp.placements);
@@ -205,16 +277,29 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // dressing so its footprint reserves the ground it stands on.
   const lampRoom = mountZa31CraterLampRoom(road);
   if (lampRoom) group.add(lampRoom.group);
-  const story = buildZa36CraterStoryDressing(road,
+  let story = buildZa36CraterStoryDressing(road,
     lampRoom ? [lampRoom.footprint] : []);
+  if(options.unifiedStory){
+    if(!unifiedRelief)throw Error('Unified story lifecycle requires B shared ground');
+    const before=story.placements.length;
+    story=options.unifiedStory.retire(story);
+    group.userData.aR30RetiredTerraces=before-story.placements.length;
+  }
   group.add(story.group);
   const brokenCircle = buildTownC2CraterBrokenCircle(road, {
     oldWorkPlacements: story.placements.filter(piece => piece.cluster.startsWith('old-work-')),
   });
   group.add(brokenCircle.group);
-  // Cut B-01 before exposing the wrapped authority so render and walk share one offset.
+  // Cut B-01 once. The legacy sampler is analytic and requires its
+  // wrapper; B-R01's new sampler reads the same mutable vertex array
+  // as the BufferAttribute, so wrapping it would double the offset.
   applyCraterBrokenCircleToWalkMesh(surface as Mesh, anchor, brokenCircle.heightOffsetAt);
-  road.heightAt = brokenCircle.heightAt;
+  if(!unifiedRelief)road.heightAt=brokenCircle.heightAt;
+  if(options.unifiedStory){
+    const settled=options.unifiedStory.refit(story,road.heightAt);
+    story=settled.story;
+    group.userData.aR30SettledSupports=settled.changes;
+  }
   const mouthWorks = buildCraterMouthWorks(road);
   group.add(mouthWorks.group);
   const outerWorks = buildCraterOuterWorks(road);
@@ -244,10 +329,18 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   for (let n = outerWorks.wallLine.northStart; n <= outerWorks.wallLine.northEnd; n += 1.5) {
     fenceExclusions.push({ east: outerWorks.wallLine.east, north: n, radius: 1 });
   }
-  const ejecta = buildZa36CraterEjecta(road, fenceExclusions);
+  // The formerly solid factories are now occupied spaces. Keep both the
+  // visible ejecta and its matching collider out of these actual footprints
+  // and their new entrance/stair routes; do not merely disable collision.
+  const industrialKeepout=outerWorks.sites.filter(s=>s.id==='smelter-plant'||s.id==='instrument-plant');
+  const routeKeepout=outerWorks.industrialRoutes.flatMap(route=>route.points.map(p=>({...p,radius:1.5})));
+  const turnoutKeepout=freightTurnoutKeepout();
+  const worksKeepout=[...industrialKeepout,...routeKeepout,...turnoutKeepout,
+    ...mouthWorks.supplyDeckRoute.map(p=>({...p,radius:1.5}))];
+  const ejecta = buildZa36CraterEjecta(road, [...fenceExclusions,...worksKeepout]);
   group.add(ejecta.group);
   const midground = buildZa36CraterMidground(road, [
-    ...rim.placements, ...camp.placements,
+    ...worksKeepout, ...rim.placements, ...camp.placements,
     ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),
     ...ejecta.placements.map(site => ({ east: site.east, north: site.north, radius: site.footprint })),
   ]);
@@ -255,7 +348,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   // A2 density backfill: keeps out of everything already placed — the fence
   // and wall lines, the mainline sites, and every earlier dressing placement.
   const densityA2 = buildCraterDensityA2(road, [
-    ...fenceExclusions,
+    ...fenceExclusions,...turnoutKeepout,
     ...mouthWorks.sites, ...outerWorks.sites,
     ...rim.placements, ...camp.placements,
     ...story.placements.map(site => ({ east: site.east, north: site.north, radius: .58 })),
@@ -296,6 +389,8 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     brokenCircle.group.visible = distance < 175;
     moltenBeads.group.visible = distance < 80;
     inscription.group.visible = distance < 150;
+    midgroundS5.group.visible = distance < 105;
+    moundPlanting.group.visible = distance < 190;
   };
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
@@ -316,6 +411,17 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     extra: lampRoom?.boxes,
   })];
   const inscription = mountC2CraterInscription(group, { ...road, ejecta });
+  // Batch-107 wiring (window A): window B's mid-band clusters and mound
+  // planting ride the same crater group as the C2 five. The S5 builder
+  // takes za36's placements as its deconfliction list (window B's
+  // production configuration, 85 pieces measured); the planting reads
+  // only the live height authority (the C2 mound included).
+  const midgroundS5 = buildCraterMidgroundS5(road, {
+    avoid: story.placements,
+  });
+  group.add(midgroundS5.group);
+  const moundPlanting = buildMoundPlanting(road);
+  group.add(moundPlanting.group);
   // Salvage ①: one E-action surface for the crater — the mouth-works
   // spots (registration / map / telescope / firewood) plus the M1 station.
   const surveySpot: CraterActionSpot | undefined = surveyM1 ? {
@@ -347,5 +453,5 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
   }
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
-    centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, craterActions };
+    centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, midgroundS5, moundPlanting, craterActions };
 }

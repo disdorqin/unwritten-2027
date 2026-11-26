@@ -172,7 +172,7 @@ export function createMainSummitBlock(layout: MainSummitBlockLayout, arrivalHeig
   };
 }
 
-function buildMainSummitGate(gate: MainSummitBlockLayout['gate'], floor: number) {
+export function buildMainSummitGate(gate: MainSummitBlockLayout['gate'], floor: number) {
   const group = new Group();
   group.name = 'main-summit-gate';
   const stone = new MeshLambertMaterial({ color: '#687378' });

@@ -1,0 +1,203 @@
+{
+  "source": "5ce6a55dac9ffca2e9d7664a08bd932e40370bb7",
+  "status": "passed",
+  "errors": [],
+  "checks": [
+    {
+      "summit": {
+        "view": "summit",
+        "tier": "silhouette",
+        "yaw": 0,
+        "night": false,
+        "prepared": false,
+        "fps": 120,
+        "drawCalls": 27,
+        "triangles": 3408
+      }
+    },
+    {
+      "valley": {
+        "view": "ground",
+        "tier": "hidden",
+        "yaw": 0,
+        "night": false,
+        "prepared": false,
+        "fps": 233,
+        "drawCalls": 1,
+        "triangles": 4
+      }
+    },
+    {
+      "approach": {
+        "view": "aircraft",
+        "tier": "full",
+        "yaw": 0,
+        "night": false,
+        "prepared": true,
+        "fps": 2,
+        "drawCalls": 132,
+        "triangles": 113368,
+        "flight": {
+          "point": {
+            "east": -14,
+            "north": -143.28466860000478,
+            "height": 767.3069426723052
+          },
+          "heading": 0,
+          "speed": 15,
+          "bank": 0,
+          "phase": "airborne",
+          "elapsed": 7.658799999999999,
+          "metres": 106.71533140000233,
+          "rollMetres": 0,
+          "slideLeft": 0,
+          "recoverLeft": 0,
+          "glideShare": 1,
+          "recovery": null,
+          "touchdown": null,
+          "waterSkims": 0,
+          "ceilingReached": false,
+          "throttle": "off",
+          "fuelSeconds": 600,
+          "thrust": 0,
+          "airspace": "above-clouds",
+          "usesBothHands": true,
+          "damage": 0
+        }
+      }
+    },
+    {
+      "landed": {
+        "view": "city",
+        "tier": "full",
+        "foot": {
+          "x": -14,
+          "y": 0,
+          "z": 37.421668600001254
+        },
+        "yaw": 0,
+        "night": false,
+        "prepared": true,
+        "fps": 238,
+        "drawCalls": 119,
+        "triangles": 111400,
+        "flight": {
+          "point": {
+            "east": -14,
+            "north": -37.421668600001254,
+            "height": 750
+          },
+          "heading": 0,
+          "speed": 0,
+          "bank": 0,
+          "phase": "landed",
+          "elapsed": 14.857900000000507,
+          "metres": 212.57833140000193,
+          "rollMetres": 0,
+          "slideLeft": 0,
+          "recoverLeft": 0,
+          "glideShare": 1,
+          "recovery": null,
+          "touchdown": "roof",
+          "waterSkims": 0,
+          "ceilingReached": false,
+          "throttle": "off",
+          "fuelSeconds": 600,
+          "thrust": 0,
+          "airspace": "above-clouds",
+          "usesBothHands": false,
+          "damage": 0
+        }
+      }
+    },
+    {
+      "observatory": {
+        "view": "city",
+        "tier": "full",
+        "foot": {
+          "x": 16.009051100676782,
+          "y": 0,
+          "z": -5.791252973713152
+        },
+        "yaw": -4.713000000000001,
+        "night": false,
+        "prepared": true,
+        "fps": 238,
+        "drawCalls": 38,
+        "triangles": 63060,
+        "flight": {
+          "point": {
+            "east": -14,
+            "north": -37.421668600001254,
+            "height": 750
+          },
+          "heading": 0,
+          "speed": 0,
+          "bank": 0,
+          "phase": "landed",
+          "elapsed": 14.857900000000507,
+          "metres": 212.57833140000193,
+          "rollMetres": 0,
+          "slideLeft": 0,
+          "recoverLeft": 0,
+          "glideShare": 1,
+          "recovery": null,
+          "touchdown": "roof",
+          "waterSkims": 0,
+          "ceilingReached": false,
+          "throttle": "off",
+          "fuelSeconds": 600,
+          "thrust": 0,
+          "airspace": "above-clouds",
+          "usesBothHands": false,
+          "damage": 0
+        }
+      }
+    },
+    {
+      "returnToLanding": {
+        "view": "city",
+        "tier": "full",
+        "foot": {
+          "x": -13.988869958312591,
+          "y": 0,
+          "z": 37.16958329315902
+        },
+        "yaw": -3.1110000000000007,
+        "night": false,
+        "prepared": true,
+        "fps": 238,
+        "drawCalls": 24,
+        "triangles": 57528,
+        "flight": {
+          "point": {
+            "east": -14,
+            "north": -37.421668600001254,
+            "height": 750
+          },
+          "heading": 0,
+          "speed": 0,
+          "bank": 0,
+          "phase": "landed",
+          "elapsed": 14.857900000000507,
+          "metres": 212.57833140000193,
+          "rollMetres": 0,
+          "slideLeft": 0,
+          "recoverLeft": 0,
+          "glideShare": 1,
+          "recovery": null,
+          "touchdown": "roof",
+          "waterSkims": 0,
+          "ceilingReached": false,
+          "throttle": "off",
+          "fuelSeconds": 600,
+          "thrust": 0,
+          "airspace": "above-clouds",
+          "usesBothHands": false,
+          "damage": 0
+        }
+      }
+    }
+  ],
+  "step": "observatory hall and return"
+}

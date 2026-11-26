@@ -27,6 +27,8 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
+import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
 import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
@@ -127,6 +129,7 @@ import { createHotSpringSoak, hotSpringPools } from './hot-spring-soak';
 import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
+import {protectRailStationRoad} from './town-a-r30-station-protection';
 import { createTownRailway, type TownRailStopId } from './town-railway';
 import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
@@ -195,9 +198,26 @@ import { createTownBellGame } from './town-bell';
 import { addTownSnowBoard } from './town-snow-board';
 import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
+import {ar30SurfacePort} from './town-a-r30-surface-port';
+import {createAR30PlayInput,type CraterPlay} from './town-a-r30-crater-play';
+import {createAR30LandingRecovery,type DreamLandingState} from './town-a-r30-landing-recovery';
+import {ar30HistoricSupport,assertAR30SurfaceLifecycle,assertAR30SurfaceAttachment,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const previewOptions = new URLSearchParams(location.search);
+const westSurfacePort=ar30SurfacePort();
+let westSurfaceAssembly:AR30SurfaceAssembly|undefined;
+let craterPlay:CraterPlay|undefined;
+function currentCraterPlay(){
+  if(!craterPlay&&westSurfaceAssembly&&westSurfacePort?.createPlay){
+    craterPlay=westSurfacePort.createPlay(westSurfaceAssembly,{
+      localPose:()=>moveAllowed()&&!homeReturn&&!cloudRoute.active()&&!sledRide.active()&&airHeight===undefined&&x<0&&dreamChain?.phase()!=='mine'&&!craterTelescopeActive&&!document.hidden&&!currentGuardDuty()?.action({east:x,north:n,height:ground})?{east:x,north:n,height:ground,heading:yaw,pitch,eyeHeight:eye}:undefined,
+      authority:()=>westSurfacePort.readAuthority?.(),now:()=>performance.now(),notify:announceActivity,
+    });
+  }
+  return craterPlay;
+}
+const craterPlayInput=createAR30PlayInput(currentCraterPlay);
 const grid = createTerrainGrid();
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
@@ -231,6 +251,7 @@ const subcellMask = collisionSubcells - 1;
 const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
 let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
+let outdoorTerrainContract:ReturnType<typeof createTerrainSupportContract>|undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
 let dreamChain: DreamChain | undefined;
@@ -240,6 +261,10 @@ let dreamHoldE = false;
 let dreamLastTurns = -1;
 let dreamMotion: UndergroundLiftCameraMotion = { yaw: 0, pitch: 0, roll: 0 };
 let dreamFade: HTMLDivElement | undefined;
+let dreamRecoveryStatus:HTMLDivElement|undefined;
+let dreamRecoveryButton:HTMLButtonElement|undefined;
+let dreamActiveTripId:number|undefined;
+let dreamReturnRecovery:ReturnType<typeof createAR30LandingRecovery>|undefined;
 let dreamRopeStay: ReturnType<typeof surveyZa36RopeStay>;
 let dreamTripStartedAt = 0;
 let dreamTripActive = false;
@@ -261,9 +286,9 @@ function ensureWestCraterRoad() {
     // ?za34PaletteOff is an explicit rollback only; normal entry stays ON.
     westCraterRoad = mountWestCraterRoad(worldBounds.depth,
       (north) => grid.groundHeightAt(0, north),
-      { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff') });
+      { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff'),unifiedStory:westSurfacePort?.story });
+    assertAR30SurfaceLifecycle(westCraterRoad,westSurfacePort);
     scene.add(westCraterRoad.group);
-    westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
@@ -334,6 +359,21 @@ function dreamFadeTo(black: boolean) {
     document.body.append(dreamFade);
   }
   dreamFade.style.opacity = black ? '1' : '0';
+  dreamFade.style.pointerEvents=black?'auto':'none';
+}
+function showDreamRecovery(state:DreamLandingState,retry?:()=>void){
+  if(!dreamRecoveryStatus){
+    dreamRecoveryStatus=document.createElement('div');
+    dreamRecoveryStatus.setAttribute('role','status');dreamRecoveryStatus.setAttribute('aria-live','polite');
+    dreamRecoveryStatus.style.cssText='position:fixed;left:50%;bottom:max(86px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1002;color:#e4d8c4;text-align:center;max-width:80vw;pointer-events:none';
+    dreamRecoveryButton=document.createElement('button');dreamRecoveryButton.type='button';dreamRecoveryButton.textContent='重试落点';
+    dreamRecoveryButton.style.cssText='position:fixed;left:50%;bottom:max(26px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:1002;min-height:44px;padding:8px 18px;background:#302b23;color:#f5f2ea;border:1px solid #a18c6c;border-radius:6px;touch-action:manipulation';
+    document.body.append(dreamRecoveryStatus,dreamRecoveryButton);
+  }
+  dreamRecoveryStatus.hidden=state==='idle'||state==='complete';
+  dreamRecoveryStatus.textContent=state==='failed'?'落点尚未受理 · 保持安全等待':'正在等待升降笼落点';
+  dreamRecoveryButton!.hidden=state!=='failed';
+  dreamRecoveryButton!.onclick=state==='failed'&&retry?()=>retry():null;
 }
 
 function applyDreamLanding(foot: { east: number; north: number; height: number }, toMine: boolean) {
@@ -344,38 +384,62 @@ function applyDreamLanding(foot: { east: number; north: number; height: number }
   airHeight = undefined;
   riseSpeed = 0;
   presence.setMineDomain(toMine);
+  landingFeedback.reset();
+  storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);walkRender.copy(walkCurrent);
 }
 
 function startDreamTrip(trip: DreamChainTrip) {
-  if (!dreamChain) return;
+  if (!dreamChain||dreamTripActive||dreamControlsLocked) return;
+  const chain=dreamChain;
+  dreamActiveTripId=trip.id;
   dreamTripStartedAt = performance.now();
   dreamTripActive = true;
+  resetMovement();
   if (trip.direction === 'up') {
-    // The descent cinematic is down-only; the return ride fades through black.
+    // The existing chain owns the trip and landing. Failure never reveals
+    // an invalid realm or unlocks movement; retry is deliberate and deduped.
     dreamControlsLocked = true;
     dreamFadeTo(true);
-    void dreamChain.requestLanding(trip.id).then((foot) => {
-      if (foot) {
-        applyDreamLanding(foot, false);
-        announceActivity('回到坑底地面');
-      }
-      dreamFadeTo(false);
-      dreamControlsLocked = false;
+    dreamReturnRecovery?.dispose();
+    const recovery=createAR30LandingRecovery({
+      request:id=>chain.requestLanding(id),
+      accept(id,foot){
+        if(dreamChain!==chain||dreamActiveTripId!==id||chain.phase()!=='surface')return false;
+        applyDreamLanding(foot,false);dreamActiveTripId=undefined;
+        announceActivity('回到坑底地面');return true;
+      },
+      show(state){
+        showDreamRecovery(state,()=>recovery.retry());
+        if(state==='complete'){dreamFadeTo(false);dreamControlsLocked=false;}
+      },
     });
+    dreamReturnRecovery=recovery;
+    recovery.start(trip.id);
     return;
   }
   dreamDescent ??= mountUndergroundDescent({
     parent: element('scene'),
-    setControlsLocked: (locked) => { dreamControlsLocked = locked; },
+    setControlsLocked: (locked) => {
+      dreamControlsLocked = locked;
+      if(!locked){dreamActiveTripId=undefined;showDreamRecovery('idle');}
+    },
     cameraMotion: (motion) => { dreamMotion = motion; },
-    requestMineLanding: async (tripId) => {
-      if (!dreamChain) return undefined;
-      const foot = await dreamChain.requestLanding(tripId);
-      if (!foot) return undefined;
-      applyDreamLanding(foot, true);
+    requestMineLanding: async (tripId,signal) => {
+      const current=dreamChain;
+      if (!current||signal.aborted||dreamActiveTripId!==tripId) return undefined;
+      const foot = await current.requestLanding(tripId);
+      if (!foot||signal.aborted||dreamChain!==current||dreamActiveTripId!==tripId||current.phase()!=='mine'||![foot.east,foot.north,foot.height].every(Number.isFinite)) return undefined;
+      applyDreamLanding(foot, true);showDreamRecovery('idle');
       return { tripId, destination: 'mine', fallDamage: 0 } as const;
     },
-    onHandoffError: () => announceActivity('落点没有应答 · 再试一次'),
+    onHandoffError: () => {
+      announceActivity('落点没有应答 · 再试一次');
+      // C's new descent owns its retry button. Supply a fallback only on
+      // the previous implementation, without a second landing request.
+      if(dreamDescent&&!('retryButton' in dreamDescent))showDreamRecovery('failed',()=>{
+        if(dreamDescent?.retry())showDreamRecovery('waiting');
+      });
+    },
   });
   dreamDescent.start(
     { id: trip.id, first: trip.first, departedAt: trip.departedAt, travelMs: trip.travelMs },
@@ -878,8 +942,16 @@ function stationViewCamera() {
   return stationCullCamera;
 }
 scene.add(railway.group);
-const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad());
+const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+if(westSurfacePort){
+  westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
+  try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
+  catch(error){westSurfaceAssembly.dispose();westSurfaceAssembly=undefined;throw error;}
+}
+// One final west index includes both real rail and road arrays, after all
+// accepted surface geometry. No early or parallel stale index survives.
+westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
 scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -1175,7 +1247,7 @@ function geometry() {
     }
   }
   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
-  const groups = [...architecture.values(), slide, railway.group, bridgeCollision, tigerPine, pineCamp.group];
+  const groups = [...architecture.values(), slide, railway.group, railExtension.group, bridgeCollision, tigerPine, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
@@ -1189,9 +1261,10 @@ let walkGeometry = geometry();
 // S-1 (分支窗 A): buildWestGeometry fills the west index declared beside
 // westCraterRoad above (the declaration must sit early: ensureWestCraterRoad
 // runs during module init, before this point in the file is reached).
-function buildWestGeometry(group: Group) {
+function buildWestGeometry(...groups: Group[]) {
   const cells = new Map<string, WalkGeometry>();
-  const { colliders, floors, ramps } = readWalkGeometry(group);
+  const parts=groups.map(readWalkGeometry);
+  const colliders=parts.flatMap(p=>p.colliders),floors=parts.flatMap(p=>p.floors),ramps=parts.flatMap(p=>p.ramps);
   function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
     for (const box of boxes) {
       const e0 = Math.floor((box.min[0] - bodyRadius) / collisionCellSize);
@@ -1218,7 +1291,9 @@ function geometryAt(east: number, north: number) {
   return homeReturn ? sharedHomeGeometry ?? emptyGeometry : outdoorGeometryAt(east, north);
 }
 function outdoorGeometryAt(east: number, north: number) {
-  if (east < 0) return westWalkGeometry?.get(westCellKey(east, north)) ?? emptyGeometry;
+  if (east < 0) {
+    return westWalkGeometry?.get(westCellKey(east,north))??emptyGeometry;
+  }
   const cellEast = Math.floor(east / collisionCellSize);
   const cellNorth = Math.floor(north / collisionCellSize);
   return walkGeometry.get(chunkAtCell(cellEast, cellNorth))?.[subcellAt(cellEast, cellNorth)] ?? emptyGeometry;
@@ -1302,6 +1377,7 @@ const points = new Map<string, number[]>([
   // 不取近似点）。旧点 (300,665) 离走廊线 43.8 m 且镇域无合法落脚点，
   // settleTownLanding 只能回落广场出生点（2026-11-21 live 实证）。
   ['山口', [290, 300]],
+  ['山口站', [railExtension.shankouArrival.east,railExtension.shankouArrival.north]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台', '镇公所'];
 layout.plots.forEach((plot, i) => {
@@ -1689,6 +1765,47 @@ activities.unshift(tavernActivity);
 activities.push(townLights, npcActivity, practiceTarget, lakeSkating, iceFishing, fireworks);
 activities.push(marketFair);
 const activitySpots = activities.flatMap(activity => activity.spots);
+// Station seats use the existing first-person sit/stand state. The player
+// remains at the validated stand point when getting up, not inside the bench.
+for(const bench of railExtension.benchSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:1.05,label:'在站台长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
+for(const board of railExtension.timetableReads)activitySpots.push({
+  x:board.east,n:board.north,ground:board.height,range:1.3,label:'查看山口站时刻牌',
+  available:()=>!homeReturn&&canStandAtActivity(board.east,board.north,board.height),
+  run:()=>openPlace(board.title,board.description),
+});
+for(const bench of ensureWestCraterRoad().outerWorks.gatehouseSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:.95,label:'在门房长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
+for(const bench of ensureWestCraterRoad().mouthWorks.guardShedSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:.65,label:'在哨棚长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
+for(const bench of ensureWestCraterRoad().outerWorks.scenicSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:.65,label:'在观景长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
+// A-owned local furniture uses the same E affordance as old town
+// windows. Reindex the real moving casement body after each toggle.
+for(const window of ensureWestCraterRoad().mouthWorks.supplyWindowControls)activitySpots.push({
+  x:window.useEast,n:window.useNorth,ground:window.useHeight,range:.55,
+  get label(){return window.isOpen()?'关闭补给站窗户':'打开补给站窗户';},
+  available:()=>!homeReturn&&canStandAtActivity(window.useEast,window.useNorth,window.useHeight),
+  run:()=>{
+    if(homeReturn||Math.hypot(x-window.useEast,n-window.useNorth)>.55||Math.abs(ground-window.useHeight)>.55)return;
+    const open=window.toggle();
+    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
+    activityContext.face(window.east,window.north,window.height);
+    announceActivity(open?'窗户已打开':'窗户已关闭');
+  },
+});
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {
@@ -1907,6 +2024,9 @@ function ensureTownInputButton(id: string, label: string, after: HTMLElement): H
 }
 const snowPrimaryButton = ensureTownInputButton('snowball-primary', '投雪球', snowballMeter);
 const touchSledBrakeButton = ensureTownInputButton('touch-sled-brake', '刹车', actionButton);
+const craterReverseButton=ensureTownInputButton('crater-reverse','反转校准盘',actionButton);
+craterReverseButton.style.cssText='position:fixed;right:max(14px,env(safe-area-inset-right));bottom:max(98px,calc(env(safe-area-inset-bottom) + 86px));min-height:48px;min-width:72px;touch-action:manipulation;user-select:none';
+craterReverseButton.addEventListener('click',()=>{if(craterPlayInput.down('reverse-touch',-1))craterPlayInput.up('reverse-touch');});
 touchSledBrakeButton.setAttribute('aria-pressed', 'false');
 const snowballRing = element('snowball-action-ring');
 const snowballHitMark = element('snowball-hit-mark');
@@ -2348,7 +2468,7 @@ function tapSnowTarget(clientX: number, clientY: number) {
 
 const canUseSnow = () => moveAllowed() && !cloudRoute.active() && !sledRide.active() && !homeReturn &&
   waterAtFeet()?.mode !== 'swim';
-const snowControls = createTownSnowControls({
+const baseSnowControls = createTownSnowControls({
   canUseSnow,
   canGather: () => snowballs.getState().ammo < snowResourceLimit && aimsAtNearbySnow(),
   gather() {
@@ -2366,6 +2486,23 @@ const snowControls = createTownSnowControls({
   wallTarget: aimedSnowWall,
   placeWall: teamFight.tryPlace,
 });
+// One input owner: captured B interactions never fall through to snow,
+ // the winch, or another action on release. Legacy controls remain intact.
+const snowControls:typeof baseSnowControls={
+  ...baseSnowControls,
+  keyDown(code,repeat){
+    if((code==='KeyE'||code==='KeyQ')&&!repeat&&craterPlayInput.down(code,code==='KeyQ'?-1:1)){baseSnowControls.cancel();dreamEKey=false;return true;}
+    if((code==='KeyE'||code==='KeyQ')&&repeat&&craterPlayInput.target())return true;
+    return baseSnowControls.keyDown(code,repeat);
+  },
+  keyUp(code){return craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
+  pressTouch(pointer){if(craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
+  releaseTouch(pointer){return craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
+  cancelTouch(pointer){craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
+  interact(){return craterPlayInput.click()||baseSnowControls.interact();},
+  cancel(){craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
+  update(dt){craterPlayInput.update();baseSnowControls.update(dt);},
+};
 const mobileControls = mountTownMobileControls(snowControls, {
   action: actionButton,
   throwButton: snowPrimaryButton,
@@ -2732,6 +2869,7 @@ function openTavernSeatActions() {
 }
 const tavernSeatAction = { label: '酒馆座位', run: openTavernSeatActions };
 let craterTelescopeActive = false;
+let craterTelescopeSpot:{east:number;north:number;height:number;range:number}|undefined;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
@@ -2829,6 +2967,8 @@ function currentAction() {
       } };
     }
   }
+  const surfacePlay=craterPlayInput.target();
+  if(surfacePlay)return {label:surfacePlay.available?surfacePlay.label:surfacePlay.label+' · 暂不可用',run(){/* Surface input owns its original press, not a legacy release. */}};
   if (craterSpot && works) return { label: craterSpot.label, run() {
     switch (craterSpot.id) {
       case 'registration':
@@ -2839,6 +2979,7 @@ function currentAction() {
         break;
       case 'telescope':
         craterTelescopeActive = !craterTelescopeActive;
+        craterTelescopeSpot=craterTelescopeActive?craterSpot:undefined;
         if (craterTelescopeActive) {
           activityContext.face(-120, 185, (westCraterRoad?.lip.height ?? 10) - 18);
           announceActivity('望筒已对准坑心 · E 收起 · 离开底座自动退出');
@@ -2885,7 +3026,7 @@ function landAtSelectedDestination() {
     '爆竹摊': [firecrackerStand.x, firecrackerStand.n],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
-    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329],
+    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329], '山口站':[296,502],
     '雪团练习场': snowPracticeTarget, '南河岸': [303, 120], '北河岸': [246, 400],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
@@ -2910,7 +3051,7 @@ function refreshLockHint() {
   else help.textContent = walkDragHelp;
 }
 function visitSelectedDestination() {
-  if (houseDoorTravel) return false;
+  if (houseDoorTravel||dreamControlsLocked||dreamTripActive||dreamInMine()) return false;
   if (sledRide.active()) {
     announceActivity('下橇后再切换地点');
     return false;
@@ -3086,7 +3227,7 @@ addEventListener('keyup', e => {
 });
 addEventListener('blur', resetMovement);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) cancelSledBrake();
+  if (document.hidden) {cancelSledBrake();snowControls.cancel();}
 });
 let fittedWidth = 0;
 let fittedHeight = 0;
@@ -3115,7 +3256,17 @@ function walkable(x: number, n: number) {
   return homeReturn ? sharedHomeWalkable(x, n) : outdoorWalkable(x, n);
 }
 function outdoorWalkable(x: number, n: number) {
-  if (x < 0) return x >= craterWestSurvey.west + bodyRadius && n >= 1 && n <= worldBounds.depth - 1;
+  if (x < 0) {
+    const road=ensureWestCraterRoad();
+    // The north rail strip is narrower than the crater carrier. Require
+    // support around the footprint, including at their L-shaped boundary;
+    // the E0 crossing itself is shared with the existing town lattice.
+    return n>=1 && n<=worldBounds.depth-1 && road.terrainReadyAt(x,n)
+      && road.terrainReadyAt(x-bodyRadius,n)
+      && road.terrainReadyAt(Math.min(0,x+bodyRadius),n)
+      && road.terrainReadyAt(x,n-bodyRadius)
+      && road.terrainReadyAt(x,n+bodyRadius);
+  }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
   const terrainPassable = westSeam || canEnter(x, n) || bridgeAt(x, n) !== undefined || townWater.at(x, n) !== undefined;
@@ -3131,19 +3282,23 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
   if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north, hintHeight);
 }
+// A-R01 I1: keep the current production sources and share one resolver.
+ // D's replacement ridgeGround will be registered only after its mesh and
+ // boundary are accepted together. Until then the existing road is retained.
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
-  if (east < 0) return ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north);
-  // T5 fold (分支窗 A): inside the switchback corridor's band its own
-  // surface wins — the core is the road profile and the feather band
-  // already blends to the host ground, so the seam stays continuous.
-  // Outside the band heightAt is undefined and the water/grid fallback
-  // below applies unchanged.
-  // 甲案 (总控裁定 2026-11-24): the walking step passes the player's
-  // current support height as the hint, so heightAt's leg selection
-  // stays on the leg the walker is on; landings keep the no-hint call.
-  const roadSurface = switchbackRoad?.heightAt(east, north, hintHeight);
-  if (roadSurface !== undefined) return roadSurface;
-  return townWater.at(east, north)?.ground ?? grid.heightAt(east, north);
+  outdoorTerrainContract??=createTerrainSupportContract({
+    town:grid.heightAt,townReady:grid.terrainReadyAt,
+    west:(e,n)=>ensureWestCraterRoad().heightAt(e,n),
+    westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
+    westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
+    water:(e,n)=>townWater.at(e,n)?.ground,
+    ridgeRoad:protectRailStationRoad((e,n,h)=>switchbackRoad?.heightAt(e,n,h)),
+    passable:outdoorWalkable,
+  });
+  // The old numeric caller requires a fallback for off-domain probes.
+  // Actual movement must first pass outdoorWalkable; no fallback is
+  // advertised as ready by the I1 sample contract.
+  return outdoorTerrainContract.heightAt(east,north,hintHeight)??grid.heightAt(east,north);
 }
 function snowCleared(east: number, north: number, feet: number) {
   return Boolean(homeReturn) || districts.sweptAt(east, north) || roofed(east, north, feet);
@@ -3159,11 +3314,8 @@ function storeWalkView(position: Vector3) {
   position.set(x, (airHeight ?? ground) + (water?.mode === 'swim' ? 1.52 : eye), -n);
 }
 
-function overlapsBody(east: number, north: number, { min, max }: Box, radius = bodyRadius) {
-  const z = -north;
-  const dx = Math.max(min[0] - east, east - max[0], 0);
-  const dz = Math.max(min[2] - z, z - max[2], 0);
-  return dx * dx + dz * dz < radius * radius;
+function overlapsBody(east: number, north: number, box: Box, radius = bodyRadius) {
+  return supportFootprintOverlaps(east,north,box,radius);
 }
 
 function mascotOutdoorGround(east: number, north: number) {
@@ -3235,6 +3387,10 @@ function supportAt(
 ) {
   const z = -north;
   let height = surface;
+  if(!homeReturn&&!cloudRoute.active()&&east<0){
+    const historic=ar30HistoricSupport(westSurfaceAssembly,east,north,limit);
+    if(historic!==undefined)height=Math.max(height,historic);
+  }
   for (const floor of floors) {
     if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
   }
@@ -3350,10 +3506,11 @@ function tryMove(nextX: number, nextN: number) {
   // current support height into the corridor heightAt call — the hint
   // chain D's repair expects (one step's surface is the next step's
   // hint). Landings (dryTownLandingHeight / settle) keep no hint.
+  const localGeometry=geometryAt(nextX,nextN);
   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit,
-    bodyRadius, surfaceAt(nextX, nextN, ground));
+    bodyRadius, surfaceAt(nextX, nextN, ground),localGeometry);
   const nextHeight = airHeight === undefined ? floor : feet;
-  if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
+  if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) return false;
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) return false;
@@ -3582,6 +3739,7 @@ function findCeremonySledLanding(x: number, n: number) {
 }
 
 function arriveAtCeremony(event: CeremonyArrival, now: number) {
+  if(dreamControlsLocked||dreamTripActive||dreamInMine())return;
   const landing = ceremonyArrivalAt(event.slot, event.edge);
   if (!landing) return;
   const homeBeforeArrival = homeReturn;
@@ -3653,6 +3811,9 @@ function walkingAxes() {
 }
 
 function refreshPlayerControls() {
+  const mobile=touchWalk.active();
+  const craterTarget=mobile?craterPlayInput.target():undefined;
+  craterReverseButton.hidden=!(craterTarget?.reverse&&craterTarget.available);
   mobileControls.update({
     mobile: touchWalk.active(),
     canMove: moveAllowed(),
@@ -3689,10 +3850,10 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
   // The ground-level crater scope needs persistent optical framing.
   // The sled's per-frame camera FOV reconciliation also performs automatic
   // recovery when the player walks away, boards, or changes world domain.
-  const scopeSpot = westCraterRoad?.craterActions.actions.find(site => site.id === 'telescope');
+  const scopeSpot = craterTelescopeSpot;
   if (craterTelescopeActive && (!scopeSpot || !walking || cloudRoute.active() || sledRide.active() ||
       Math.hypot(x - scopeSpot.east, n - scopeSpot.north) > scopeSpot.range + .8 ||
-      Math.abs(ground - scopeSpot.height) > 3)) craterTelescopeActive = false;
+      Math.abs(ground - scopeSpot.height) > .65)) {craterTelescopeActive = false;craterTelescopeSpot=undefined;}
   const targetFov = craterTelescopeActive ? 25 : sledRide.active() ? 58 + sledFrame.fov : 58;
   if (Math.abs(camera.fov - targetFov) > .01) {
     camera.fov = targetFov;

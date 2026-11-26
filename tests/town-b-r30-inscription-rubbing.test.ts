@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
+import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import {installBR30RubbingPaper,createBR30RubbingControls} from '../tools/voxel-tavern/town-blockout/town-b-r30-inscription-rubbing';
+import {createCarvedStoneRubbing} from '../tools/voxel-tavern/town-blockout/town-carved-stone-rubbing';
+test('physical paper displays the original accepted hold, grace and one-time result',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const scene=road.inscription,paper=installBR30RubbingPaper(scene),rule=createCarvedStoneRubbing(scene.rubbingHostMarker);
+ const f=scene.layout.useFoot,q=paper.paper,de=q.east-f.east,dn=q.north-f.north;
+ const good={...f,heading:Math.atan2(de,dn),pitch:Math.atan2(q.height-f.height-1.65,Math.hypot(de,dn)),eyeHeight:1.65};
+ let pose={...good,east:good.east+10},held=false,online=true,awards=0;
+ const controls=createBR30RubbingControls(paper,rule.markerId,{pose:()=>pose,facts:()=>online?{progress:rule.progress,complete:rule.complete}:undefined,setHeld(id,h){assert.equal(id,rule.markerId);held=h;}});
+ const tick=(ms:number,key:boolean)=>{controls.frame(key);if(rule.frame(ms,held))awards++;controls.frame(key);};
+ tick(2400,true);assert.equal(rule.progress,0);assert.equal(paper.shown,0);
+ pose=good;assert.equal(paper.aimed(pose),true);
+ tick(1200,true);assert.equal(rule.progress,.5);assert.equal(paper.shown,Math.floor(paper.cellCount*.5));
+ tick(700,false);assert.equal(rule.progress,.5);
+ tick(101,false);assert.equal(rule.progress,0);assert.equal(paper.shown,0);
+ tick(1100,true);online=false;controls.frame(true);assert.equal(held,false);assert.equal(paper.shown,0);
+ online=true;tick(900,false);assert.equal(rule.progress,0);
+ tick(2400,true);assert.equal(awards,1);assert.equal(held,false);assert.equal(paper.shown,paper.cellCount);
+ tick(2400,true);assert.equal(awards,1);
+ assert.throws(()=>installBR30RubbingPaper(scene),/duplicate/);paper.dispose();
+});
