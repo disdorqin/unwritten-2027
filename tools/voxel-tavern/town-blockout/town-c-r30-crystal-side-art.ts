@@ -1,0 +1,58 @@
+import {BoxGeometry,Color,Group,InstancedMesh,Matrix4,MeshLambertMaterial,Quaternion,Vector3} from 'three';
+import {makeCampGrain} from './town-c-r30-camp-art.js';
+import {crystalCavernR30Pieces,crystalCavernTrailHeight} from './underground-crystal-cavern.js';
+import {crystalSideTrailNorth,r30CrystalSideTrail} from './town-c-r30-crystal-support.js';
+type Part={e:number;n:number;y:number;w:number;h:number;d:number;color:number;angle:number};
+const palette=[0x5c625e,0x505650,0x646965,0x444c4e,0x6c716b];
+/** Actual dry-stone branch shoulders and end stop. No ore/mirror mechanics. */
+export function mountR30CrystalSideArt(parent:Group){
+ const group=new Group();group.name='r30-crystal-side-trail-rockwork';parent.add(group);
+ const parts:Part[]=[],bounds:Part[]=[];
+ const add=(e:number,n:number,y:number,w:number,h:number,d:number,color:number,angle=0,solid=true)=>{
+  const p={e,n,y,w,h,d,color,angle};parts.push(p);if(solid)bounds.push(p);
+ };
+ const min=r30CrystalSideTrail.minEast,max=6.65,w=r30CrystalSideTrail.halfWidth;
+ const intervals=Math.ceil((max-min)/1.36);
+ for(let i=0;i<intervals;i++){
+  const a=min+i*(max-min)/intervals,b=min+(i+1)*(max-min)/intervals;
+  const e=(a+b)/2,na=crystalSideTrailNorth(a)!,nb=crystalSideTrailNorth(b)!;
+  const n=crystalSideTrailNorth(e)!,angle=Math.atan2(nb-na,b-a),length=Math.hypot(b-a,nb-na);
+  for(const side of [-1,1]){
+   // Offset outside the actual route; the original light root can
+   // interrupt the dressing, but not the continuous supported strip.
+   const ne=n+side*(w+.09),y=crystalCavernTrailHeight(ne);
+   add(e,ne,y+.085,length+.035,.22,.20,palette[(i+side+5)%5],angle);
+   if(i%3===0)add(e+.13,ne,y+.235,.62,.12,.18,palette[(i+2)%5],angle);
+  }
+ }
+ const terminal=crystalSideTrailNorth(min)!;
+ for(let i=0;i<5;i++){
+  const n=terminal+(i-2)*.66,y=crystalCavernTrailHeight(n);
+  add(min-.18,n,y+.40,.4,.8,.72,palette[i%5]);
+  add(min-.24,n,y+.86,.35,.20,.64,palette[(i+1)%5]);
+ }
+ // The displaced decorative group keeps its original count, tilt and
+ // root sockets. Add low rock beneath each socket rather than floating
+ // roots above the coarse historical ground tiles.
+ const sockets=crystalCavernR30Pieces.filter(p=>p.name.startsWith('u3/crystals/48/socket-'));
+ for(const [i,p] of sockets.entries()){
+  const [e,y,n]=p.center;
+  add(e,n,y-.34,.83,.48,.80,palette[i%5],0,false);
+  add(e+.08,n+.05,y-.52,.99,.19,.92,palette[(i+2)%5],0,false);
+ }
+ const geo=new BoxGeometry(),map=makeCampGrain('rock'),material=new MeshLambertMaterial({map});
+ const batches:InstancedMesh[]=[];
+ for(let start=-53;start<9;start+=16){
+  const list=parts.filter(p=>p.e>=start&&p.e<start+16);if(!list.length)continue;
+  const mesh=new InstancedMesh(geo,material,list.length),matrix=new Matrix4(),q=new Quaternion(),col=new Color(),axis=new Vector3(0,1,0);
+  list.forEach((p,i)=>{matrix.compose(new Vector3(p.e,p.y,-p.n),q.setFromAxisAngle(axis,p.angle),new Vector3(p.w,p.h,p.d));mesh.setMatrixAt(i,matrix);mesh.setColorAt(i,col.setHex(p.color))});
+  mesh.computeBoundingSphere();group.add(mesh);batches.push(mesh);
+ }
+ function blocks(e:number,n:number,y:number,r:number,h:number){
+  return bounds.some(p=>{
+   const de=e-p.e,dn=n-p.n,c=Math.cos(p.angle),s=Math.sin(p.angle),x=de*c+dn*s,z=-de*s+dn*c;
+   return p.y+p.h/2>y+.025&&p.y-p.h/2<y+h&&Math.hypot(Math.max(0,Math.abs(x)-p.w/2),Math.max(0,Math.abs(z)-p.d/2))<r;
+  });
+ }
+ return {group,parts,bounds,blocks,dispose(){group.removeFromParent();batches.forEach(m=>m.dispose());geo.dispose();map.dispose();material.dispose();group.clear()}};
+}

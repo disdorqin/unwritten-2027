@@ -456,6 +456,15 @@ export const crystalCavernArchitecture = Object.freeze({
   }),
 });
 
+/** R30's actual -90 side-pocket connector reuses the authored cavern.
+ * Shift only the purely geological cluster that occluded the original
+ * moonstone alcove. Preserve its original relative taper, sockets and
+ * count; the archived U3 geometry and its review fixture remain intact. */
+export const crystalCavernR30Pieces:readonly CrystalCavernBlock[]=Object.freeze(crystalCavernArchitecture.pieces.map(p=>{
+ if(!p.name.startsWith('u3/crystals/48/'))return p;
+ const [e,y,n]=p.center;
+ return Object.freeze({...p,center:[e,y+crystalCavernTrailHeight(n+6)-crystalCavernTrailHeight(n),n+6] as const});
+}));
 const colors: Readonly<Record<Family, number>> = {
   rock: 0x8a8378, shadow: 0x2c3648, slate: 0x5d4630, timber: 0xa98a56,
   rust: 0x8a4a34, moss: 0x44503c, crystal: 0x7fd4c8, water: 0x2c3648,
@@ -535,7 +544,8 @@ export function mountUndergroundCrystalCavern(host: Options) {
     if(!host.supportsFoot(getWorld([w.east,w.height,w.north])))
       return {kind:'unsupported-foot'} as const;
   }
-  const solids=crystalCavernArchitecture.pieces.filter(p=>p.solid);
+  const pieces=host.r30Art?crystalCavernR30Pieces:crystalCavernArchitecture.pieces;
+  const solids=pieces.filter(p=>p.solid);
   const colliders=solids.map(p=>{
     const [x,y,n]=p.center,[w,h,d]=p.size;
     const corners=[
@@ -558,7 +568,7 @@ export function mountUndergroundCrystalCavern(host: Options) {
   root.rotation.y=frame.yaw;
   const blocks=new Map<Family,Matrix4[]>();
   const temp=new Object3D();
-  for(const b of crystalCavernArchitecture.pieces) {
+  for(const b of pieces) {
     temp.position.set(b.center[0],b.center[1],-b.center[2]);
     temp.scale.set(...b.size);
     temp.rotation.set(0,0,b.rotationZ);

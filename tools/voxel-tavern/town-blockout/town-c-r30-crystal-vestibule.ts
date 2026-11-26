@@ -70,6 +70,7 @@ export function mountR30CrystalVestibule(parent:Group){
   const c=centre(n),y=floor(n);
   for(const s of [-1,1]){
    if(s===1&&n>=72&&n<=80)continue; // real quay junction
+   if(s===-1&&n>=53&&n<=59)continue; // real west alcove junction
    const e=c+s*3.02;
    if(!support(e,n))continue;
    const w=.29,d=1.42;
