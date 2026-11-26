@@ -1196,11 +1196,45 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     part(workshopRust,new CylinderGeometry(.85,.85,5.2,12,1,true),p.east,y,p.north,yaw,0,Math.PI/2);
     const inner=new CylinderGeometry(.73,.73,5.2,12,1,true);inner.scale(-1,1,1);inner.computeVertexNormals();
     part(workshopSheet,inner,p.east,y,p.north,yaw,0,Math.PI/2);
+    const at=(t:number,z:number)=>({east:p.east+Math.cos(yaw)*t+Math.sin(yaw)*z,north:p.north+Math.sin(yaw)*t-Math.cos(yaw)*z});
     for(const t of [-2.58,-.9,.9,2.58]){
-      const e=p.east+Math.cos(yaw)*t,n=p.north+Math.sin(yaw)*t;
-      part(workshopRust,new TorusGeometry(.79,.075,6,12),e,y,n,yaw+Math.PI/2);
+      const q=at(t,0);
+      const rim=Math.abs(t)>2?.87:.84;
+      part(workshopRust,new TorusGeometry(rim,.075,6,12),q.east,y,q.north,yaw+Math.PI/2);
+      for(let k=0;k<10;k++){
+        const theta=k*Math.PI/5,z=Math.sin(theta)*rim,hy=y+Math.cos(theta)*rim;
+        const b=at(t,z);
+        if(hy<(heightAt(b.east,b.north)??p.height)+.04)continue;
+        box(workshopSheet,b.east,hy,b.north,.13,.10,.10,yaw);
+      }
     }
-    hitBox(colliders,p.east,p.north,yaw,5.2,1.7,Math.max(p.height,y-.85),y+.85);
+    // Buried saddle blocks carry the exposed pipe; the middle pipe is
+    // half buried and deliberately has no above-ground cradles.
+    if(i!==1)for(const t of [-1.75,1.75]){
+      const q=at(t,0),soils=[-.5,.5].flatMap(x=>[-.5,.5].map(z=>{
+        const b=at(t+x*.52,z*1.54);return heightAt(b.east,b.north)??p.height;
+      }));
+      const bottom=Math.min(...soils)-.09,top=y-.48;
+      if(top<=bottom)continue;
+      box(workshopBrick,q.east,(bottom+top)/2,q.north,.52,top-bottom,1.54,yaw);
+      colliders.push(orientedSupportBox(q.east,q.north,yaw,.52,1.54,bottom,top));
+      for(const side of [-1,1]){
+        const b=at(t,side*.51);
+        box(workshopRust,b.east,y-.39,b.north,.48,.20,.20,yaw,side*.55);
+      }
+    }
+    // Match the cylindrical envelope with several height bands, avoiding
+    // the old oversized world AABB. Bore is smaller than a standing player.
+    for(let k=0;k<5;k++){
+      const lo=y-.85+k*.34,hi=lo+.34;
+      if(hi<=p.height)continue;
+      const near=Math.max(0,Math.abs((lo+hi)/2-y)-.17),r=Math.sqrt(.85*.85-near*near);
+      colliders.push(orientedSupportBox(p.east,p.north,yaw,5.2,2*r,Math.max(p.height,lo),hi));
+    }
+    for(const t of [-2.58,2.58]){
+      const q=at(t,0);
+      colliders.push(orientedSupportBox(q.east,q.north,yaw,.17,1.89,Math.max(p.height,y-.945),y+.945));
+    }
   }
   // Concrete foundation stubs along the belt's outer edge.
   for (let i = 0; i < 6; i++) {
