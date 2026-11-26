@@ -6,7 +6,7 @@ import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-
 import {solveLowerRidgeRoad,tryConstrainedLowerRoadbed} from '../tools/voxel-tavern/town-blockout/town-d-r30-roadbed';
 import {auditRidgeRoadCrossings} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-survey';
 import {mountRidgeRoadFurniture} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-furniture';
-import {mountRidgeCableFacilities} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
+import {mountRidgeCableFacilities,externalCableDockSupport,auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 
 test('lower road engineering fixture uses one graded field with actual net width and slope',()=>{
  const grid=createTerrainGrid(),field=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
@@ -38,5 +38,17 @@ test('cable candidate preserves the protected railway datum and clocks both cabi
   assert.equal(atMiddle[0]!.station,'middle');assert.ok(Math.abs(atMiddle[0]!.height-140)<1e-6);
   const arrived=model.update(model.clock.oneWayMs);assert.ok(Math.abs(arrived[0]!.height-347)<1e-6);
   assert.equal(model.blocked(336,640,347),false);
+  const proposed=mountRidgeCableFacilities(new Group(),field,true);
+  try{
+   assert.equal(proposed.survey.towers[0]!.north,354);
+   assert.equal(model.survey.towers[0]!.north,329);
+   assert.equal(externalCableDockSupport(526,346),26);
+   assert.equal(externalCableDockSupport(526,354),26);
+   assert.equal(externalCableDockSupport(530,354),undefined);
+   assert.equal(externalCableDockSupport(526,358),undefined);
+   for(let n=347;n<356;n+=.25)assert.equal(proposed.blocked(526,n,26),false);
+   const sweep=auditRidgeCableSweep(field,proposed.survey);
+   assert.equal(sweep.groundHits,0);assert.equal(sweep.productionReady,false);
+  }finally{proposed.dispose()}
  }finally{model.dispose()}
 });

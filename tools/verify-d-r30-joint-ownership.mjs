@@ -20,7 +20,7 @@ try{
  const {buildCraterRailExtension}=await load('town-crater-rail-extension');
  const {createAR30RidgeOwnership}=await load('town-a-r30-ridge-ownership');
  const {buildFrontRidgeR30Field,proposeRidgeCloudApronOwnership}=await load('town-d-r30-front-ridge');
- const {mountRidgeCableFacilities,auditRidgeCableSweep}=await load('town-d-r30-cable-facilities');
+ const {mountRidgeCableFacilities,auditRidgeCableSweep,surveyRidgeCableSpans}=await load('town-d-r30-cable-facilities');
  const {mountRidgeCloudTerrace,ridgeCloudHandoff,ridgeCloudFootAt}=await load('town-d-r30-cloud-terrace');
  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),railway=createTownRailway(grid,()=>0),loop=railway.route;
  const rail=buildCraterRailExtension(grid,road,loop.points),ownership=createAR30RidgeOwnership({loop:loop.points,branch:rail.samples});
@@ -37,7 +37,7 @@ try{
  const routes=targets.map(p=>{const path=terrace.survey(h.terminal,p,1.2);return {east:p.east,north:p.north,height:ridgeCloudFootAt(field,p.east,p.north),ground:field.heightAt(p.east,p.north),originalWeight:ownership.weight(p.east,p.north),weight:weight(p.east,p.north),distance:ownership.distance(p.east,p.north),points:path.length,range:path.length?[Math.min(...path.map(q=>q.height)),Math.max(...path.map(q=>q.height))]:[],allSupported:path.length>0&&path.every(q=>Math.abs(q.height-347)<.00001&&!terrace.blocked(q.east,q.north,q.height,.27))}});
  const gridProbes=[];for(let n=630;n<=666;n+=2)for(let e=286;e<=352;e+=2){if(field.heightAt(e,n)<346.999&&ownership.weight(e,n)>0)gridProbes.push({e,n,h:field.heightAt(e,n),d:ownership.distance(e,n)})}
  const roadProbes=[];for(let n=290;n<=400;n+=10)for(let e=290;e<=560;e+=10){const d=ownership.distance(e,n);if(d>8)roadProbes.push([e,n,Math.round(field.heightAt(e,n)*10)/10,Math.round(d)])}
- let approach,sweep=auditRidgeCableSweep(field,cable.survey);
+ let approach,sweep=auditRidgeCableSweep(field,cable.survey),externalSweep; const external=surveyRidgeCableSpans(field,true);
  if(process.argv.includes('--approach')){
   const {surveyProtectedFootApproach}=await load('town-d-r30-protected-approach');
   const {layout,canEnter}=await load('terrain'),{extensionPlots}=await load('town-extension');
@@ -46,7 +46,9 @@ try{
   const station=buildRailwayStation();
   const boxes=(station.userData.colliders??[]).map(b=>({min:[b.min[0]+526,b.min[1]+26,b.min[2]-329],max:[b.max[0]+526,b.max[1]+26,b.max[2]-329]}));
   const floors=(station.userData.floors??[]).map(b=>({min:[b.min[0]+526,b.min[1]+26,b.min[2]-329],max:[b.max[0]+526,b.max[1]+26,b.max[2]-329]}));
-  sweep=auditRidgeCableSweep(field,cable.survey,(p,w,d,top)=>boxes.some(b=>p.east+w>b.min[0]&&p.east-w<b.max[0]&&-p.north+d>b.min[2]&&-p.north-d<b.max[2]&&p.height+top>b.min[1]&&p.height<b.max[1]));
+  const stationObstacle=(p,w,d,top)=>boxes.some(b=>p.east+w>b.min[0]&&p.east-w<b.max[0]&&-p.north+d>b.min[2]&&-p.north-d<b.max[2]&&p.height+top>b.min[1]&&p.height<b.max[1]);
+  sweep=auditRidgeCableSweep(field,cable.survey,stationObstacle);
+  externalSweep={...auditRidgeCableSweep(field,external,stationObstacle),length:external.length,maxTower:external.maxTower};
   const plots=[...layout.plots,...extensionPlots].filter(p=>p.id!=='railway-station');
   const rails=[...loop.points.map(p=>({east:p.x,north:-p.z,y:p.y})),...rail.samples,...rail.narrowSamples,...rail.sidingSamples],bins=new Map();
   for(const p of rails){const k=Math.floor(p.east/8)+','+Math.floor(p.north/8),b=bins.get(k)??[];b.push(p);bins.set(k,b)}
@@ -67,9 +69,10 @@ try{
   const result=surveyProtectedFootApproach(support,from,to,{west:255,east:575,south:255,north:475});
   approach={scope:'conservative read-only geometry; no crossing grant, no production collision certification',from:{...from,height:support(from.east,from.north)},to:{...to,actualSupport:support(to.east,to.north)},...result};
  }
- const report={a,proposed,changed,frozenError,routes,approach,sweep,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
+ const stationSamples=[];for(let n=344;n<=376;n+=2)for(let e=514;e<=550;e+=4)stationSamples.push([e,n,Math.round(field.heightAt(e,n)*100)/100,Math.round(ownership.distance(e,n)*10)/10]);
+ const report={a,proposed,changed,frozenError,routes,approach,sweep,externalSweep,stationSamples,gateSupported:ridgeCloudFootAt(field,h.gate.east,h.gate.north)!==undefined,cable:{length:cable.survey.length,towers:cable.survey.towers,maxTower:cable.survey.maxTower},gridProbes,roadProbes};
  if(process.argv[3]){const out=resolve(process.argv[3]);mkdirSync(dirname(out),{recursive:true});writeFileSync(out,JSON.stringify(report,null,2))}
- console.log(JSON.stringify({a,proposed,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
+ console.log(JSON.stringify({a,proposed,changed,frozenError,routes,gateSupported:report.gateSupported,cable:report.cable,sweep,externalSweep,approach:approach&&{...approach,route:approach.route.length,length:approach.route.at(-1)?.cum},stationSamples:stationSamples.filter(p=>p[0]===526||p[0]===538),gridProbes:gridProbes.slice(0,12),roadProbes:roadProbes.slice(0,30)}));
  terrace.dispose();cable.dispose();
  if(proposed){assert.equal(frozenError,0);assert.ok(routes.every(r=>r.height===347&&r.allSupported));assert.equal(report.gateSupported,false)}
 }finally{rmSync(tmp,{recursive:true,force:true,maxRetries:3,retryDelay:100})}

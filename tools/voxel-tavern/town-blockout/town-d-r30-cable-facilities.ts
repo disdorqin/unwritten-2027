@@ -11,11 +11,19 @@ const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
 /** Survey physical cable spans against the actual R01 raster.
  * Not a new clock or server authority; A must also check building envelope
  * and the existing rail-station boarding gate before swapping the line. */
-export function surveyRidgeCableSpans(field:FrontRidgeR30Field){
+export const externalCableDock=Object.freeze({east:526,north:354,height:26,approachNorth:346,halfWidth:3.5,halfDepth:3});
+/** Support for the proposed actual deck only; does not grant access to it. */
+export function externalCableDockSupport(e:number,n:number,r=.27){
+ const p=externalCableDock;
+ if(![e,n,r].every(Number.isFinite)||r<0||Math.abs(e-p.east)>p.halfWidth-r||n<p.approachNorth||n>p.north+p.halfDepth-r)return;
+ return p.height;
+}
+export function surveyRidgeCableSpans(field:FrontRidgeR30Field,externalDock=false){
+ const anchors=externalDock?[[externalCableDock.east,externalCableDock.north],northRidgeCableAnchors[1]!,northRidgeCableAnchors[2]!] as const:northRidgeCableAnchors;
  const towers:Tower[]=[];
  const ground=(e:number,n:number)=>Math.max(...[-2.65,0,2.65].flatMap(x=>[-1.45,0,1.45].map(z=>field.heightAt(e+x,n+z)??Infinity)));
  for(let part=0;part<2;part++){
-  const [ae,an]=northRidgeCableAnchors[part]!,[be,bn]=northRidgeCableAnchors[part+1]!;
+  const [ae,an]=anchors[part]!,[be,bn]=anchors[part+1]!;
   const span=Math.hypot(be-ae,bn-an),count=Math.ceil(span/36);
   const points:Tower[]=Array.from({length:count+1},(_,i)=>{
    const t=i/count,east=mix(ae,be,t),north=mix(an,bn,t),g=ground(east,north);
@@ -81,7 +89,7 @@ export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<
 }
 type Part={m:MeshLambertMaterial;matrix:import('three').Matrix4};
 type Solid={e:number;n:number;bottom:number;top:number;w:number;d:number;yaw:number};
-export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field){
+export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false){
  const group=new Group();group.name='d-r30-front-cable-facilities';owner.add(group);
  const geometry=new BoxGeometry(),tmp=new Object3D(),parts:Part[]=[],solids:Solid[]=[];
  const stone=new MeshLambertMaterial({color:'#78818a'}),ash=new MeshLambertMaterial({color:'#9ba9af'}),wood=new MeshLambertMaterial({color:'#73523b'}),oak=new MeshLambertMaterial({color:'#ad8966'}),iron=new MeshLambertMaterial({color:'#384c58'}),brass=new MeshLambertMaterial({color:'#b9a074'}),snow=new MeshLambertMaterial({color:'#dce5eb'}),glass=new MeshLambertMaterial({color:'#7fa3a3'}),lamp=new MeshLambertMaterial({color:'#e9c58e'});
@@ -175,7 +183,31 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  // The known base is the old 26m railway building. Its S-12 sign
  // is a separately mounted candidate; never create a duplicate base hall.
  board('S-12',522.2,324.2,28.0,0);
- const survey=surveyRidgeCableSpans(field);
+ if(externalDock){
+  // Separate proposed dock, not a replacement of the railway hall or gate.
+  // The host must explicitly accept every bearing and the pedestrian seam.
+  const p=externalCableDock,back=p.approachNorth,front=p.north+p.halfDepth;
+  // Continuous floor under decorative wood courses, so seams do not become holes.
+  box(wood,p.east,(back+front)/2,p.height-.15,7,front-back,.30);
+  for(let n=back+.25;n<front;n+=.5){
+   for(let i=0;i<14;i++)box(i%3===0?oak:wood,p.east-3.25+i*.5,n,p.height-.08,.48,.49,.16);
+  }
+  for(const sign of [-1,1]){
+   const e=p.east+sign*3.35;
+   for(const n of [350,353,356]){
+    const h=field.heightAt(e,n);if(h===undefined||h>p.height-.3)continue;
+    const top=p.height-.16;
+    box(stone,e,n,h+.14,.88,.88,.6,true);
+    box(iron,e,n,(h+top)/2,.32,.32,top-h,true);
+    box(iron,e,n,top-.12,.62,.62,.24);
+    box(wood,e,n,p.height+.50,.15,.15,1.0,true);
+    box(brass,e,n,p.height+1.03,.23,.23,.12);
+   }
+   for(const n of [351.5,354.5])for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
+  }
+  for(const n of [350,353,356])box(iron,p.east,n,p.height-.24,7.1,.28,.24);
+ }
+ const survey=surveyRidgeCableSpans(field,externalDock);
  for(const p of survey.towers){
   if(p.station)continue;
   const top=p.height+2.7,base=p.ground;

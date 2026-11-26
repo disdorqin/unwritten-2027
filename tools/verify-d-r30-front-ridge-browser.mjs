@@ -12,11 +12,12 @@ try{
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,args:['--use-gl=angle','--use-angle=d3d11']});
  const page=await browser.newPage({viewport:{width:1100,height:700}});
  page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});page.on('response',r=>{if(r.status()>=400)errors.push(String(r.status())+' '+r.url())});
- await page.goto('http://127.0.0.1:'+server.httpServer.address().port+(process.argv.includes('--transport')?'/d-r30-transport-review.html':process.argv.includes('--road')?'/d-r30-front-ridge-preview.html?road=1':'/d-r30-front-ridge-preview.html'),{waitUntil:'domcontentloaded'});
+ await page.goto('http://127.0.0.1:'+server.httpServer.address().port+(process.argv.includes('--dock')?'/d-r30-transport-review.html?dock=1':process.argv.includes('--transport')?'/d-r30-transport-review.html':process.argv.includes('--road')?'/d-r30-front-ridge-preview.html?road=1':'/d-r30-front-ridge-preview.html'),{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>window.__ridgeR30?.state().frames>10,null,{timeout:60000});
  for(const i of [0,1,2,3,4]){
    await page.keyboard.press(String(i+1));await page.waitForFunction(i=>window.__ridgeR30.state().index===i,i);
-   if(i===2){await page.keyboard.down('w');try{await page.waitForFunction(()=>window.__ridgeR30.state().walked>2,null,{timeout:10000})}finally{await page.keyboard.up('w')}}
+   if(i===0&&process.argv.includes('--dock')){await page.keyboard.down('w');try{await page.waitForFunction(()=>window.__ridgeR30.state().n>353,null,{timeout:15000})}finally{await page.keyboard.up('w')}}
+   if(i===2){const previous=await page.evaluate(()=>window.__ridgeR30.state().walked);await page.keyboard.down('w');try{await page.waitForFunction(p=>window.__ridgeR30.state().walked>p+2,previous,{timeout:10000})}finally{await page.keyboard.up('w')}}
    for(const night of [false,true]){
      await page.waitForFunction(v=>window.__ridgeR30.state().night===v,night);
      const initial=await page.evaluate(()=>window.__ridgeR30.state().frames);
