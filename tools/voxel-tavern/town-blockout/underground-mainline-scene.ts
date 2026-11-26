@@ -10,6 +10,7 @@ import { createUndergroundMineCartModel } from './underground-mine-cart-model.js
 import {mountR30MainlineDressing} from './town-c-r30-mainline-dressing.js';
 import {mountR30MainlineArches} from './town-c-r30-mainline-arches.js';
 import {mountR30MainlineRepairArt,r30RepairSleeperIndices} from './town-c-r30-mainline-repair-art.js';
+import {mountR30MainlineCargoArt} from './town-c-r30-mainline-cargo-art.js';
 
 type Route = ReturnType<typeof createUndergroundMainlineTrack>;
 type Role = 'repair' | 'board' | 'leave' | 'brake' | 'go' | 'turnout' |
@@ -364,6 +365,7 @@ export function mountUndergroundMainlineScene(host: Options) {
   cart.group.name = 'u19-shared-full-line-cart';
   cart.group.visible = false;
   root.add(cart.group);
+  const r30Cargo=host.r30?mountR30MainlineCargoArt(cart.group):undefined;
   // One instanced spark cluster follows the REAL accepted hand-brake snapshot.
   // The visual cannot slow the cart or claim an unconfirmed brake packet.
   const sparkMaterial = new MeshBasicMaterial({ color: swatches.ember, depthWrite: false });
@@ -407,7 +409,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       winchWheel.visible = false;
       brakeSparks.visible = false;
       lamps.forEach(lamp => lamp.visible = false);
-      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset');r30Repair?.sync()}
+      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset');r30Repair?.sync();r30Cargo?.sync()}
       return false;
     }
     if(host.r30&&(!Number.isFinite(snapshot.lastAtMs)||snapshot.speed<0||
@@ -415,10 +417,10 @@ export function mountUndergroundMainlineScene(host: Options) {
         !snapshot.cargo||!Number.isSafeInteger(snapshot.cargo.pieces)||snapshot.cargo.pieces<0||
         !snapshot.faults||!repairIds.every(k=>Number.isSafeInteger(snapshot.faults[k])&&snapshot.faults[k]>=0&&snapshot.faults[k]<=repairVerbs[k].length)||
         (last&&snapshot.revision<last.revision))){
-      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);r30Repair?.sync();return false;
+      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);r30Repair?.sync();r30Cargo?.sync();return false;
     }
     const p = at(snapshot.chainage);
-    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);r30Repair?.sync(snapshot);
+    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);r30Repair?.sync(snapshot);r30Cargo?.sync(snapshot.cargo);
     cart.group.visible = true;
     winchWheel.visible = true;
     winchWheel.rotation.z = (route.length - snapshot.chainage) * .45;
@@ -475,8 +477,8 @@ export function mountUndergroundMainlineScene(host: Options) {
       if (snapshot.riderId === viewer.playerId) {
         candidate.push({ role: 'leave', pos: point, label: '主动下矿车' });
         // Do not advertise a train into a decorative, unregistered branch.
-        if (Math.abs(snapshot.chainage - route.turnoutMetres) >= 1 ||
-            snapshot.turnout === 'gate') {
+        if ((!host.r30||snapshot.chainage<route.length) && (Math.abs(snapshot.chainage - route.turnoutMetres) >= 1 ||
+            snapshot.turnout === 'gate')) {
           candidate.push({ role: 'go', pos: point, label: '松闸滑行 · 盯紧岔口' });
         }
       }
@@ -486,9 +488,10 @@ export function mountUndergroundMainlineScene(host: Options) {
         candidate.push({ role: 'turnout', pos: route.work.turnout.position,
           label: undergroundMainlineWords.switch });
       if (!snapshot.riderId && (snapshot.chainage <= 2 ||
-          snapshot.chainage >= route.length - 2))
-        candidate.push({ role: 'load', pos: point, label: '码入矿石 · 车斗三倍背包容量' },
-          { role: 'unload', pos: point, label: '卸矿入账 · 先检查背包' });
+          snapshot.chainage >= route.length - 2)) {
+        candidate.push({ role: 'load', pos: point, label: '码入矿石 · 车斗三倍背包容量' });
+        if(!host.r30||snapshot.cargo.pieces>0)candidate.push({ role: 'unload', pos: point, label: '卸矿入账 · 先检查背包' });
+      }
     }
     if ((snapshot.mode === 'recalling' || snapshot.mode === 'stopped') &&
         snapshot.chainage > 2 && !snapshot.riderId && snapshot.cargo.pieces === 0)
@@ -517,7 +520,7 @@ export function mountUndergroundMainlineScene(host: Options) {
   return {
     kind: 'ready', group: root, cart: cart.group, sync, prompt, press,
     route, words: undergroundMainlineWords, sleepers: sleepers.length,
-    railHead, r30Dressing,r30Arches,r30Repair,
+    railHead, r30Dressing,r30Arches,r30Repair,r30Cargo,
     acceptedSnapshot:()=>!disposed&&cart.group.visible&&last?structuredClone(last):undefined,
     blocks(east:number,north:number,y:number,radius:number,height:number){return !!(r30Dressing?.blocks(east,north,y,radius,height)||r30Arches?.blocks(east,north,y,radius,height))},
     batches: instances.length,
@@ -525,7 +528,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       if (disposed) return;
       disposed = true;
       root.removeFromParent();
-      cart.dispose();
+      r30Cargo?.dispose();cart.dispose();
       brakeSparks.dispose();
       sparkMaterial.dispose();
       winchWood.dispose();
