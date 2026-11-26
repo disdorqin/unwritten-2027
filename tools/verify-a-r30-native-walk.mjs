@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -284,7 +284,7 @@ async function picture(page,evidence,label){
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=segment==='kengkou'?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
  northwalk:[[-12,159],[-12,240],[-12,320]],
  wall:[[-9,159]],
@@ -293,7 +293,9 @@ const approach={
  gate:[[-12,159],[-40,159],[-27,171],[-27,175]],
  north:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-120,256],[-124,256]],
  west:[[-12,159],[-40,159],[-80,126],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-187,174],[-187,175]],
- supply:[[-12,159],[-43,159],[-67,159],[-67.5,142],[-74,126],[-70,120],[-72.9,116.85],[-74.8,115.8]],
+ supply:[[-12,159],[-43,159],[-67,136],[-76.5,126],[-74,117.5],[-75,116.5]],
+ supplyinterior:[[-12,159],[-43,159],[-67,136]],
+ freight:[[-12,159],[-43,159]],
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
  smelter:[[-12,159],[-43,159],[-67,136],[-144,105]],
 };
@@ -312,7 +314,8 @@ try{
  const path=segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
-   segment==='kengkou'?rail.stationWalkRoutes.find(t=>t.id==='kengkou-station').points:
+   segment==='supplyinterior'?road.mouthWorks.supplyInteriorRoute:
+   ['kengkou','freight'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':'kengkou-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'?'gatehouse':segment+'-plant')).points;
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,segment==='northwalk'?.46:.18);
@@ -358,6 +361,16 @@ try{
      }
      await picture(page,evidence,segment+'-'+(lighting==='雪夜'?'night':'day'));
    }
+ }else if(segment==='supplyinterior'){
+   await wallView('supplyinterior-map',150*Math.PI/180);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('手绘图'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.locator('#place-card[open]').waitFor({timeout:8000});
+   assert.equal(await page.locator('#place-title').textContent(),'坑区手绘图');
+   await picture(page,evidence,'supplyinterior-map-open');
+   await page.locator('#place-card .close-card').click();
+ }else if(segment==='freight'){
+   await wallView('freight-interior',Math.PI);
  }else if(segment==='instrument'||segment==='smelter'){
    await face(page,evidence,(segment==='instrument'?307:297)*Math.PI/180);
    for(const lighting of ['雪夜','白昼']){
