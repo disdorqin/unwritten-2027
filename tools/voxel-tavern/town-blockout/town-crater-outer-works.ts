@@ -1477,16 +1477,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       cone(timber, e, h + 6.4, n, 1.5, 2.6, 7, 0, 0, lean);
     }
   });
-  for (const [e0, n0] of [[-6, 118], [-6, 208]] as const) {
-    const p = siteAt(`approach-cluster-${n0}`, e0, n0, 6);
-    if (!p) continue;
-    for (let i = 0; i < 3; i++) {
-      const e = p.east + (hash(i * 7 + n0) - .5) * 7;
-      const n = p.north + (hash(i * 3 + 1) - .5) * 7;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const s = 1 + hash(i * 11) * 1.8;
-      part(stone, new DodecahedronGeometry(s, 0), e, h + s * .3, n, hash(i) * 3);
+  // Rebuild the two old decorative approach clusters as low, grounded
+  // fractured shelves. Both stay between the town seam and the E-12
+  // north walking lane, with the existing site anchors unchanged.
+  const approachRockSupports:CraterHitBox[]=[];
+  for(const [e0,n0]of [[-6,118],[-6,208]] as const){
+    const p=siteAt(`approach-cluster-${n0}`,e0,n0,6);
+    if(!p)continue;
+    for(const [i,[dx,dn,w,d,rise]]of [[-1.3,-2.9,1.7,1.3,.58],[1.0,.2,1.8,1.4,.82],[-1.6,2.6,1.45,1.1,.46]].entries()){
+      const e=e0+dx,n=n0+dn;
+      const groundSamples=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+      if(groundSamples.some(h=>h===undefined))continue;
+      const bottom=Math.min(...groundSamples as number[])-.12,top=Math.max(...groundSamples as number[]);
+      const before=approachRockSupports.length;
+      const make=(ce:number,cn:number,cw:number,cd:number,lo:number,hi:number,mat:MeshStandardMaterial)=>{
+        box(mat,ce,(lo+hi)/2,cn,cw,hi-lo,cd);
+        hitBox(approachRockSupports,ce,cn,0,cw,cd,lo,hi);
+      };
+      make(e,n,w,d,bottom,top+.27,shoulderRock);
+      make(e+w*.09,n-d*.08,w*.72,d*.76,top+.27,top+rise,shoulderRock);
+      if(i%2===0)make(e+w*.09,n-d*.08,w*.62,d*.65,top+rise,top+rise+.06,cleanSnow);
+      floors.push(...approachRockSupports.slice(before));
     }
   }
 
@@ -1507,7 +1518,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

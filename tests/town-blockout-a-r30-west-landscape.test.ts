@@ -68,6 +68,15 @@ test('fractured shoulder slabs are physically supported and keep the south trave
    if(s.east>=-175&&s.east<=-150&&s.north>=40&&s.north<=60)assert.ok(Math.abs(s.north-51)>2.4);
  }
 });
+test('old approach rocks are replaced by grounded supports outside the north footway',()=>{
+ const pieces=road.outerWorks.approachRockSupports;
+ assert.equal(pieces.length,16);
+ for(const b of pieces){
+   assert.ok(road.outerWorks.floors.includes(b));
+   assert.ok(b.min[0]>-10&&b.max[0]<-2);
+   assert.ok(b.max[1]>b.min[1]);
+ }
+});
 test('A-R02 relief is real rendered collision support, not decorative overlay',()=>{
   const carriers=road.group.children.filter(o=>o.name==='meteor-crater-west-ground') as Mesh[];
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
