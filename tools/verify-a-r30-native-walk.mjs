@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -306,6 +306,7 @@ const approach={
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
  smelter:[[-12,159],...smelterFootway],
  'ore-yard':[[-12,159],...smelterFootway],
+ 'industrial-ruins':[[-12,159],...smelterFootway],
  'transfer-dock':[[-12,159],[-43,159]],
  'ore-yard-dock':[[-12,159],...smelterFootway,[-132,101],[-132,100],[-123,100]],
  'guard-shed':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-110,244],[-119,245]],
@@ -327,7 +328,13 @@ try{
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
  const scenic=road.outerWorks.landscapeRoutes.find(r=>r.id===segment);
  const reverseScenic=segment==='western-clusters';
- const path=scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const industrial=(id)=>road.outerWorks.industrialRoutes.find(r=>r.id===id).points;
+ const ruinsPath=segment==='industrial-ruins'?[
+   ...industrial('ruined-shed'),...industrial('ruined-shed').slice(0,-1).reverse(),
+   ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1),
+   ...industrial('sorting-shed').slice(1),
+ ]:null;
+ const path=ruinsPath??(scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -337,7 +344,7 @@ try{
    segment==='assembly-registration'?road.mouthWorks.assemblyRoutes[0].points:
    ['transfer-dock','ore-yard-dock'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===segment).points:
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
-   road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points;
+   road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points);
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
    await page.waitForTimeout(140);
@@ -365,6 +372,18 @@ try{
        const site=road.outerWorks.sites.find(s=>s.id===view.site);
        const target=site?[site.east,site.north]:shoulders[view.site];
        await wallView(view.site,Math.atan2(target[0]-point.east,target[1]-point.north));
+     }
+   }
+   if(segment==='industrial-ruins'){
+     const landmarks=[
+       ['ruined-shed',industrial('ruined-shed').at(-1)],
+       ['sealed-storehouse',industrial('sealed-storehouse').at(-1)],
+       ['sorting-shed',industrial('sorting-shed').at(-1)]
+     ];
+     const view=landmarks.find(([id,p])=>p===point);
+     if(view){
+       const id=view[0],site=road.outerWorks.sites.find(s=>s.id===(id==='sorting-shed'?'ore-shed-plate':id));
+       await wallView(id,Math.atan2(site.east-point.east,site.north-point.north));
      }
    }
    if(segment==='outerclusters'&&(i===1||i===5)){
