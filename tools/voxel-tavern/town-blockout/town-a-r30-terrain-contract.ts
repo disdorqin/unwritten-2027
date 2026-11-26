@@ -16,6 +16,14 @@ export type TerrainSupportSources=Readonly<{
   passable?:(east:number,north:number)=>boolean;
 }>;
 export function createTerrainSupportContract(s:TerrainSupportSources){
+  // The source registry is immutable for this contract's lifetime.
+  // Avoid rebuilding arrays and closures at every physical substep.
+  const candidates:Source[]=[
+    ...(s.ridgeRoad?[{id:'front-ridge-road' as const,heightAt:s.ridgeRoad}]:[]),
+    ...(s.ridgeGround?[{id:'front-ridge-ground' as const,heightAt:s.ridgeGround}]:[]),
+    ...(s.water?[{id:'town-water' as const,heightAt:s.water}]:[]),
+    {id:'town-ground',heightAt:s.town},
+  ];
   function resolve(q:SupportQuery):{source:Source;height:number}|undefined{
     const {east,north}=q;
     if(!Number.isFinite(east)||!Number.isFinite(north))return;
@@ -29,12 +37,7 @@ export function createTerrainSupportContract(s:TerrainSupportSources){
     if(!s.townReady(east,north))return;
     // Explicit road leg priority. D owns continuous leg selection; the
     // caller's real current support is passed, never replaced with Infinity.
-    const candidates:Source[]=[
-      ...(s.ridgeRoad?[{id:'front-ridge-road' as const,heightAt:s.ridgeRoad}]:[]),
-      ...(s.ridgeGround?[{id:'front-ridge-ground' as const,heightAt:s.ridgeGround}]:[]),
-      ...(s.water?[{id:'town-water' as const,heightAt:s.water}]:[]),
-      {id:'town-ground',heightAt:s.town},
-    ];
+
     for(const source of candidates){
       const height=source.heightAt(east,north,hint);
       if(height!==undefined&&Number.isFinite(height))return {source,height};

@@ -3505,10 +3505,11 @@ function tryMove(nextX: number, nextN: number) {
   // current support height into the corridor heightAt call — the hint
   // chain D's repair expects (one step's surface is the next step's
   // hint). Landings (dryTownLandingHeight / settle) keep no hint.
+  const localGeometry=geometryAt(nextX,nextN);
   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit,
-    bodyRadius, surfaceAt(nextX, nextN, ground));
+    bodyRadius, surfaceAt(nextX, nextN, ground),localGeometry);
   const nextHeight = airHeight === undefined ? floor : feet;
-  if (floor > limit || obstructed(nextX, nextN, nextHeight)) return false;
+  if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) return false;
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) return false;
