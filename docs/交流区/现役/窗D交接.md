@@ -14,3 +14,26 @@
 - 收尾道路与交通：新增只读真实支撑接驳求解器，精确A源码起点12.7893238m、实际站房地板26.14m，66节点/2462探针无合法候选；旧地表不动。轿厢木底板沉入修正，实际地形扫掠独立fixture 30844探针/运行最小1.340m/停靠0/地形穿入0；A联合扫掠超时未验，78.05m塔问题仍待。回执《2026-11-26-窗D-收尾道路缆车联合测绘》，新增接驳及原交通/云台5/5。仍不报收工候选。
 - R7站外登乘返工：精确A e41ccdba复测，原线路旧铁路站实体碰撞16次；opt-in站外E526/N354/Y26候选7×11m真实木平台、钢梁石座、同源支撑，原站内门控及原线路默认不动。新跨距528.688m，29068地形探针、运行净空1.335m、地形穿入及原铁路站碰撞均0；最大塔69.828m仍需裁定。独立Chrome站外实走5.414m/Y26、10昼夜图零错、check及4/4定向通过。详细《2026-11-26-窗D-R7站外登乘候选返工.md》。请A审平台与站厅实际连通、轨道及全体构件扫掠，待总控接受物理站脚变更；生产未启用。道路中上段欠账仍在。
 - R7道路挡墙收尾：下段368.21m候选新增224段同源高程挡墙/10438构件，最高3.197m，错缝砌石/压顶/积雪/碰撞；32m空间分块近远LOD，外肩4轮平滑保留原路面及保护边界；4599差分最大纵坡仍11.986%。check及4/4回归，10昼夜截图0错误、W实走2.006m，同机位第一140896→37360 tris（含肩坡变化）。详《2026-11-26-窗D-R7道路挡墙收尾.md》。仍有天然尖脊，18m夹具不能冒充26m正式站，全线道路及总装门槛未完成。
+
+### 最终收账核对（2026-11-26；以总控479e2855为准）
+实际源码针 a8c9f8a4（D），最新配对A bd0fac2e，D2 0ec2a0fb。复读现役README、看板第二次收账令、项目脑§7、第二轮施工规格及六窗重编、I1/I3规程。仅D-R01~04 active；P-OPT、天空/宇宙后置。当前全部主体收工门槛未通过，不发收工候选。
+
+|总控输入|核对结论|确切欠账|
+|---|---|---|
+|M-A/D-R01 350m实体、前后坡、共享边|独立候选齐；A原联合边线和冻结核验已过|A真实公共地表正式消费与生产视觉验收，剩余尖脊|
+|M-B/M-E 林谷、雪岩、功能陈设|独立模型和分块LOD齐|最终线路避让、全周生产美术及歇脚点|
+|M-C/D-R02 原约2981m、≤12%、宽≥2.5m|仅368.21m下段独立实体通过4599差分11.986%，有挡墙；旧18m夹具|冻结山口→26m站真实接驳、中上段连续路基、最终路线长度或变更裁定、全程实走返程|
+|M-D/D-R03 前山三站约516m及原玩法|站台/双缆/林带候选齐，站外528.688m候选待批|物理站脚E526/N354/Y26替换提案、旧站至新台真实路径、69.828m最大塔、塔站自身及动态扫掠、原首次徒步/维修/联机权威接入|
+|D-R04/I3 贴地、云台和主峰接驳|A已批准局部掩码独立候选，联合九处支持通过|A/总控入干并正式接线；D2几何seam N663.25（676-12.75）与旧ZA22/Presence提案N666（676-10）相差2.75m，明确几何边界与触发点/门脚的分工，再验双向|
+|R7/P0|定向与独立浏览器证据有效，未覆盖全部正式路径|真实生产接线、配对验收、总控入干、真实跨域及回程；P-OPT整体性能/真手机后置，不得宣称完成|
+
+**本次联合验收新增证据**：精确A bd0fac2e 的cloudApron:true 与D提案差0，1323个局部权重点变化、冻结地表最大误差0；9/9真实Y347候选路径。按A审查同口径2636个旧站+环线+支线的碰撞/地板AABB，原线18次相交，站外线0次、29068地形探针、运行净空1.33538957m、地形穿入0，productionReady=false。站外线此前仅站房collider零相交的范围已扩大为该联合包络；尚不含全部建筑动态/自身构件。复测脚本 tools/verify-d-r30-joint-ownership.mjs bd0fac2e <JSON输出> --a-approved-apron --full-sweep，证据 GPT/D-R7-最终A联合净空-2026-11-26.json。D本期最终定向10/10、check通过，git diff --check通过。各独立浏览器证据沿上文；未重跑正式整仓生产/手机/联机，不以旧结果替代。
+
+**精确送审清单**（仅从a8c9f8a4读取本期新增路径；不整枝merge。路径前缀 tools/voxel-tavern/town-blockout/）：
+- D-S0 山体：town-d-r30-front-ridge.ts + tests/town-d-r30-front-ridge.test.ts，独立可审；A消费共享边/ownership；本期含b3c8de05水平云台修正。
+- D-S1 林带：town-d-r30-forest.ts + tests/town-d-r30-forest.test.ts，依赖S0，生产须传最终路线保护。
+- D-S2 道路：town-d-r30-road-survey.ts、town-d-r30-roadbed.ts、town-d-r30-road-furniture.ts、town-d-r30-retaining-banks.ts、town-d-r30-protected-approach.ts + tests/town-d-r30-road-survey.test.ts、tests/town-d-r30-protected-approach.test.ts；依赖S0，独立工程候选，完整道路未交，不得开启。
+- D-S3 三站：town-d-r30-cable-facilities.ts；依赖S0/原时钟与正典站，站外opt-in仍待A/总控；tests/town-d-r30-transport.test.ts联合依赖S2/S3，随其一起审。
+- D-S4 云台：town-d-r30-cloud-terrace.ts、town-d-r30-cloudsea-vista.ts、tests/town-d-r30-cloud-terrace.test.ts；依赖S0/S3及原石环/星港；A已批准掩码候选仅送总控。远景云层仅审图。
+- D-S5 审图工具（不作为生产挂载）：town-d-r30-front-ridge-preview.ts、town-d-r30-transport-review.ts、town-d-r30-cloud-terrace-review.ts；tools/voxel-tavern/d-r30-{front-ridge-preview,transport-review,cloud-terrace-review}.html；tools/verify-d-r30-{front-ridge-browser,cloud-terrace-browser,joint-ownership}.mjs（最后一个取本次审计提交最新版本）。依赖相应候选。
+本期相对479e2855的原33路径全为新增，2029行；没有公共viewer/terrain/presence或D2修改。A配审并由总控串行接纳；禁止将历史父链一并整枝合入。当前下一具体工包仍为D-R02中上段真实路线与完整挖填，不能用新增装饰绕开。
