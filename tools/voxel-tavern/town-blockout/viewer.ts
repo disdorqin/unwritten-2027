@@ -197,9 +197,13 @@ import { createTownBellGame } from './town-bell';
 import { addTownSnowBoard } from './town-snow-board';
 import { createSnowballHitFeedback } from './snowball-hit-feedback';
 import './snowball-impact-texture.css';
+import {ar30SurfacePort} from './town-a-r30-surface-port';
+import {ar30HistoricSupport,type AR30SurfaceAssembly} from './town-a-r30-unified-surface-host';
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const previewOptions = new URLSearchParams(location.search);
+const westSurfacePort=ar30SurfacePort();
+let westSurfaceAssembly:AR30SurfaceAssembly|undefined;
 const grid = createTerrainGrid();
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
@@ -264,9 +268,9 @@ function ensureWestCraterRoad() {
     // ?za34PaletteOff is an explicit rollback only; normal entry stays ON.
     westCraterRoad = mountWestCraterRoad(worldBounds.depth,
       (north) => grid.groundHeightAt(0, north),
-      { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff') });
+      { za34DistantPaletteCandidate: !previewOptions.has('za34PaletteOff'),unifiedStory:westSurfacePort?.story });
     scene.add(westCraterRoad.group);
-    westWalkGeometry = buildWestGeometry(westCraterRoad.group);
+    if(!westSurfacePort)westWalkGeometry = buildWestGeometry(westCraterRoad.group);
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
@@ -883,6 +887,10 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+if(westSurfacePort){
+  westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
+  westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group);
+}
 const railWestGeometry=buildWestGeometry(railExtension.group);
 scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
@@ -3299,6 +3307,10 @@ function supportAt(
 ) {
   const z = -north;
   let height = surface;
+  if(!homeReturn&&!cloudRoute.active()&&east<0){
+    const historic=ar30HistoricSupport(westSurfaceAssembly,east,north,limit);
+    if(historic!==undefined)height=Math.max(height,historic);
+  }
   for (const floor of floors) {
     if (floor.max[1] <= limit && overlapsBody(east, north, floor, radius)) height = Math.max(height, floor.max[1]);
   }
