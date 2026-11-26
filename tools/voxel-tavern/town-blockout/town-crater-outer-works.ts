@@ -1,13 +1,13 @@
 import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  NearestFilter, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TorusGeometry,
+  NearestFilter, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TorusGeometry, RingGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, sortingShedFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, sortingShedFootway, salvagePipeFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -1101,15 +1101,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,g+.3,g+2.9));
     }
-    const storePlateP = fr.at(-1.5, -5.64);
+    // Mount the plate onto the clear lintel, above the locked door,
+    // rather than intersecting its projecting iron strap.
+    put(workshopWood,-1.5,g+2.68,-5.64,1.48,.42,.18);
+    const storePlateP = fr.at(-1.5, -5.51);
     siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);
-    sign(storePlateP.east, g + 2.45, storePlateP.north, fr.yaw, 1.1, .4, iron, (c, w, h) => {
+    sign(storePlateP.east, g + 2.68, storePlateP.north, fr.yaw, 1.1, .30, iron, (c, w, h) => {
       c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
       c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
       c.strokeRect(8, 8, w - 16, h - 16);
       c.font = 'bold 64px "Noto Sans SC", sans-serif';
       c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText('封存仓', w / 2, h / 2 + 2);
+      c.fillText('封存仓', w / 2, h / 2 + 2,w-36);
     });
   }
 
@@ -1225,6 +1228,18 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         box(workshopSheet,b.east,hy,b.north,.13,.10,.10,yaw);
       }
     }
+    // Close the shell thickness with a real annulus, while leaving
+    // the 1.46m bore visually open at each end.
+    for(const s of [-1,1]){
+      const q=at(s*2.63,0);
+      part(workshopRust,new RingGeometry(.73,.91,12),q.east,y,q.north,yaw+s*Math.PI/2);
+    }
+    // Narrow frost skins follow the pipe curvature, not a floating cube.
+    for(const [t,len]of [[-1.92,.57],[.28,.88],[1.78,.36]] as const){
+      if(i===1&&t<0)continue;
+      const q=at(t,0);
+      part(cleanSnow,new CylinderGeometry(.861,.861,len,4,1,true,Math.PI*.34,Math.PI*.31),q.east,y,q.north,yaw,0,Math.PI/2);
+    }
     // Buried saddle blocks carry the exposed pipe; the middle pipe is
     // half buried and deliberately has no above-ground cradles.
     if(i!==1)for(const t of [-1.75,1.75]){
@@ -1253,6 +1268,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       colliders.push(orientedSupportBox(q.east,q.north,yaw,.17,1.89,Math.max(p.height,y-.945),y+.945));
     }
   }
+  industrialRoutes.push({id:'salvage-pipes',points:salvagePipeFootway.map(([east,north])=>({east,north,height:heightAt(east,north)!}))});
   // Concrete foundation stubs along the belt's outer edge.
   for (let i = 0; i < 6; i++) {
     const b = 112 + i * 19 + hash(i * 7) * 6;
