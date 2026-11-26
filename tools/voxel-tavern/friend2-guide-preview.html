@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-06 未写镇导览手册 · 独立预览</title>
+  <link rel="stylesheet" href="./friend2-preview.css">
+</head>
+<body>
+  <main class="f2-shell">
+    <header class="f2-header">
+      <div>
+        <p class="f2-kicker">UNWRITTEN 2027 · FR-06 独立预览</p>
+        <h1>小镇导览手册</h1>
+        <p class="f2-sub">已稳定地点、生活服务与基础操作的图文手册。数据与界面分离；未开放区域明确标注“规划”，不制作正式导航、剧情门或世界状态。</p>
+      </div>
+    </header>
+
+    <section class="f2-guide-toolbar">
+      <label class="f2-guide-search">搜索地点或操作<input id="guide-search" type="search" maxlength="40" placeholder="例如：钟楼、调酒、WASD"></label>
+      <div id="guide-categories" class="f2-guide-categories" role="group" aria-label="导览分类"></div>
+    </section>
+    <p id="guide-count" class="f2-note"></p>
+
+    <section class="f2-guide-layout">
+      <div id="guide-list" class="f2-guide-list" aria-label="导览条目"></div>
+      <aside id="guide-detail" class="f2-guide-detail" aria-label="条目详情"></aside>
+    </section>
+    <p id="guide-status" class="f2-status" role="status" aria-live="polite">导览为静态手册，不改变导航、剧情或游戏世界。</p>
+    <footer class="f2-footer">静态图文组件 · MIT · 使用已稳定老镇地点与基础操作说明，不接导航、剧情或存档</footer>
+  </main>
+  <script type="module" src="./friend2-guide-preview.ts"></script>
+</body>
+</html>

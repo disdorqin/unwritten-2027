@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-09 未写镇可读性 UI 样板 · 独立预览</title>
+  <link rel="stylesheet" href="./friend2-preview.css">
+</head>
+<body>
+  <main class="f2-shell">
+    <header class="f2-header">
+      <div>
+        <p class="f2-kicker">UNWRITTEN 2027 · FR-09 独立预览</p>
+        <h1>可读性与触控 UI 样板</h1>
+        <p class="f2-sub">独立演示文字缩放、对比主题、控件焦点与触控尺寸；即时切换、可重置。只作用于演示面板，不改现有 HUD、公共输入或主线手机适配。</p>
+      </div>
+    </header>
+
+    <section class="f2-a11y-layout">
+      <aside class="f2-a11y-controls" aria-label="可读性设置">
+        <section class="f2-a11y-group">
+          <h2>对比主题</h2>
+          <div id="a11y-themes" class="f2-a11y-options" role="group" aria-label="主题"></div>
+        </section>
+        <section class="f2-a11y-group">
+          <h2>文字缩放</h2>
+          <div id="a11y-texts" class="f2-a11y-options" role="group" aria-label="文字缩放"></div>
+        </section>
+        <section class="f2-a11y-group">
+          <h2>触控尺寸</h2>
+          <div id="a11y-touches" class="f2-a11y-options" role="group" aria-label="触控尺寸"></div>
+        </section>
+        <button id="a11y-reset" type="button" class="f2-a11y-reset">恢复默认</button>
+        <p id="a11y-status" class="f2-status" role="status" aria-live="polite">切换主题、字号或触控尺寸，观察演示面板即时变化。</p>
+      </aside>
+
+      <section id="a11y-demo" class="f2-a11y-demo" aria-label="可读性演示面板">
+        <h2>演示：一张可读的卡片</h2>
+        <p class="a11y-copy">未写镇的雪夜很长。好的界面应该让文字在暗处仍然清楚，让按钮在触屏上容易点中，也让键盘用户始终看得见焦点。这个面板只演示设置变化，不写入正式 HUD。</p>
+        <label class="a11y-field">昵称输入 <input class="a11y-input" type="text" value="未写镇旅人" aria-label="演示昵称"></label>
+        <div class="a11y-actions">
+          <button id="a11y-primary" class="a11y-sample-button" type="button">主要操作</button>
+          <button id="a11y-secondary" class="a11y-secondary" type="button">次要操作</button>
+        </div>
+        <output id="a11y-click-count" class="a11y-count">0 次操作</output>
+        <p class="a11y-hint">Tab 聚焦、Enter/Space 激活；焦点环、主题色与触控高度随设置即时变化。</p>
+      </section>
+    </section>
+    <footer class="f2-footer">独立可读性/触控样板 · MIT · 不修改现有 HUD、公共输入或手机适配</footer>
+  </main>
+  <script type="module" src="./friend2-accessibility-preview.ts"></script>
+</body>
+</html>

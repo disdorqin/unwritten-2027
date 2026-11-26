@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-04 未写镇摄影小工具 · 独立预览</title>
+  <link rel="stylesheet" href="./friend2-preview.css">
+</head>
+<body>
+  <main class="f2-shell">
+    <header class="f2-header">
+      <div>
+        <p class="f2-kicker">UNWRITTEN 2027 · FR-04 独立预览</p>
+        <h1>雪夜摄影小工具</h1>
+        <p class="f2-sub">选一张照片，套上原创边框，加上日期与昵称水印，再点击保存。全程本地 Canvas 处理，不自动上传、不读私密信息、不修改全局相机。</p>
+      </div>
+    </header>
+
+    <section class="f2-photo-layout">
+      <div class="f2-photo-stage">
+        <canvas id="photo-canvas" width="1200" height="800" aria-label="照片构图预览"></canvas>
+      </div>
+      <aside class="f2-panel" aria-label="摄影设置">
+        <section class="f2-section">
+          <h2>照片</h2>
+          <label class="f2-upload">
+            选择本地照片
+            <input id="photo-input" type="file" accept="image/*" hidden>
+          </label>
+          <p class="f2-note">支持用户选择图片或注入 Canvas；不会自动上传。</p>
+        </section>
+        <section class="f2-section">
+          <h2>边框</h2>
+          <div id="frame-list" class="f2-frame-list" role="group" aria-label="边框样式"></div>
+        </section>
+        <section class="f2-section">
+          <h2>水印</h2>
+          <label class="f2-toggle"><input id="date-toggle" type="checkbox" checked> 显示日期</label>
+          <p id="date-text" class="f2-note">2026.11.26</p>
+          <label class="f2-toggle"><input id="nickname-toggle" type="checkbox" checked> 显示昵称</label>
+          <label class="f2-field">昵称 <input id="nickname-input" type="text" maxlength="20" value="未写镇旅人"></label>
+        </section>
+        <section class="f2-section f2-actions">
+          <button id="save-button" class="f2-primary" type="button">保存 PNG</button>
+          <button id="reset-button" type="button">重置</button>
+        </section>
+        <p id="photo-status" class="f2-status" role="status" aria-live="polite">选择照片或直接使用样例构图。</p>
+      </aside>
+    </section>
+    <footer class="f2-footer">原创程序化边框与 Canvas 构图 · MIT · 不接全局相机、存档、星石或多人权威</footer>
+  </main>
+  <script type="module" src="./friend2-photo-preview.ts"></script>
+</body>
+</html>
