@@ -18,3 +18,5 @@ demo-content/
 /artifacts/
 /data/
 /.evidence/
+/.worktrees/
+/.npm-cache/
